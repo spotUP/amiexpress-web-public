@@ -1,0 +1,83 @@
+*- ERROR MESSAGES -**********************************************************
+* HELP TEXTS AND ERROR MESSAGES                                             *
+*****************************************************************************
+GenAbrt	Movem.l	a0,-(SP)
+	Move.l	(ExecBase).w,a6		Using Exec for /X output...
+	Lea	ErrHead(pc),a0		General header for Abort messages...
+	Bsr	Send_String		Send it to them (no return)
+	Movem.l	(SP)+,a0
+GenAbt2	Bsr	Send_Message		Send msg from calling routine.
+	Bra	Finish			End the program.
+Internal Lea	InternM(pc),a0
+	Bra.s	GenAbrt
+BufOver	Lea	BufOvrM(pc),a0
+	Bra.s	GenAbrt
+NoFName	Lea	NoFNamM(pc),a0
+	Bra.s	GenAbrt
+ErrHead	Dc.b	13,10,27,"[0mSuper-Dupe-Check ABORTED",0
+InternM	Dc.b	": Internal Error!",13,10,0
+BufOvrM	Dc.b	": Buffer overflow.",13,10,0
+NoFNamM	Dc.b	": No filename given! This is a FILECHECK door!",13,10,0
+	Even
+;= Bad Line in Config ======================================================;
+; (a0) - Pointer to where the problem is in the config script.              ;
+; CfgAdr(a5) - Start of config script.                                      ;
+; CfgSze(a5) - Size of config script.                                       ;
+;===========================================================================;
+BadCfg	Moveq	#1,d0			Start on the 1st line.
+	Moveq	#10,d2			<Return> for quick compares.
+	Move.l	d0,d3			#1 for quick adding.
+	Move.l	CfgAdr(a5),a1		Start of area into a1
+	Move.l	a1,d5			-._ End of area
+	Add.l	CfgSze(a5),d5		-'  into d5
+
+	Cmp.l	d5,a0			If error after end of file...
+	Bge	Internal		...internal error.
+	Cmp.l	a1,a0			If error before start of file...
+	Blt	Internal		...internal error.
+;;;;;;; Using WORD for number of lines as unlikely to have > 60000 lines!
+GetBadL	Cmp.l	a1,a0			Are we at the error pos. yet?
+	Beq.s	GotBadI			YES = This part done then.
+	Cmp.b	(a1)+,d2		Is this a return? (New Line).
+	Bne.s	GetBadL			Check next char.
+GBadRtn	Add.w	d3,d0			At next line, increment count.
+	Bra.s	GetBadL			Check next char.
+GotBadI	And.l	#$FFFF,d0		-._ Clear any junk in
+	And.l	#$FFFF,d1		-'  the upper word.
+	Move.l	d0,-(SP)		Preserve line count.
+
+	Move.l	(ExecBase).w,a6		Using Exec for /X output...
+	Lea	ErrHead(pc),a0		General header for Abort messages...
+	Bsr	Send_String		Send it to them (no return)
+
+	Lea	BIMsg1(pc),a0
+	Bsr	Send_String		Send it to them (no return)
+
+	BTst	#FF2_ConfCfg,Fil_F_2(a5)	File loaded from conference?
+	Beq.s	BIFromS
+	Lea	CCfgPth(a5),a0		Point to config path in CONFERENCE.
+	Bra.s	BIFSSkp
+BIFromS	Lea	CfgName(pc),a0		Point to config path in S:
+BIFSSkp	Bsr	Send_String		Send it to them (no return)
+
+	Lea	BIMsg2(pc),a0
+	Bsr	Send_String		Send it to them (no return)
+
+;;;;;;; No need to check length of d1 as it's max is $FFFF = 5 chars.
+;;;;;;;	and StdBuff is always > 5 chars long.
+	Move.l	(SP)+,d1		Restore Char count.
+	Lea	StdBuff(a5),a1		Write into 1024char std buffer.
+	Move.l	a1,d5			Preserve a1
+	Bsr	N2AAuto			Convert the number in d1 -> (a1)+.
+	SF	(a1)			Null terminate it.
+	Lea	StdBuff(a5),a0
+	Bsr	Send_String		Write it out.
+
+	Lea	BIMsg3(pc),a0
+	Bsr	Send_Message		Send it to them.
+	Bra	Finish
+
+BIMsg1	Dc.b	"...",13,10,'Error in Config script "',0
+BIMsg2	Dc.b	'"',13,10,"Problem is on Line #",0
+BIMsg3	Dc.b	".",13,10,0
+	Even

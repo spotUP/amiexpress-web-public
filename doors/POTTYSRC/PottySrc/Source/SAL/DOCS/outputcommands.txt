@@ -1,0 +1,139 @@
+Super-AmiLog v3.00 [BETA] Output Commands:
+
+QUICK GUIDE - Please look at the documents for full descriptions.
+
+
+@[Xyyy]			Prints char "X" "yyy" times.
+	Where "X" is any char, and "yyy" is any 1, 2, or 3 digit number
+
+
+
+@Uxx_y			Output Data-"y" About User Number "xx"
+	"XX" is any 1 or 2 digit number from 1 to 20.
+	"y" is any one of the following:
+
+	A = Username  [0 to 31??chars]  (e.g. "P0T-NOoDLE      ")
+	B = Location  [0 to 31??chars]  (e.g. "Your Mum's Bed  ")
+	C = Node (1 digit - i.e. 1,2,3,4,5,6,7,8,9,A,B,C,D, etc.)
+	D = Node (2 digit - i.e. 01,02,03,04,05,06,07,08,09,10,11,12,13, etc.)
+	E = Length of Time Online  [5 chars]  (HH:MM, e.g. "01:23")
+	F = Uploaded Kilobytes [4 chars]  (e.g. "1053", "  25", "17mb", "LOTS")
+	G = Uploaded Files [4 chars] (e.g. "   3", "LOTS", "  34")
+	H = Downloaded Kilobytes [4chars] (e.g. "1053", "17mb", "LOTS")
+	I = Downloaded Files [4 chars] (e.g. "   3", "LOTS", "  34")
+	J = Logon  Time [0 to 8 chars] (e.g. "18:01:23", "18:01")
+	K = Logoff Time [0 to 8 chars] (e.g. "18:24:23", "18:24")
+	L = Average CPS this call. [4 chars] (e.g. "   0", "1657", "HUGE")
+	M = Baud Rate (5 digit - i.e. "14400", " 9600", "LOCAL", " ISDN")
+	N = Baud Rate (4 digit - i.e. "14.4", " 9.6", "LOCL", "ISDN")
+	Oxy = If user is a NEW USER, Then "y", else "x".
+	Pxy = If user PASSWORD HACKED, Then "y", else "x".
+	Qxy = If user DROPPED CARRIER, Then "y", else "x".
+	Rxy = If user PAGED THE SYSOP, Then "y", else "x".
+	Sxy = If user USED SYSOP COMMANDS, Then "y", else "x".
+	Txyz = DIDN'T DOWNLOAD => "x", DOWNLOADED OK => "y", FAILED => "z"
+	Uxyz = DIDN'T UPLOAD => "x", UPLOADED OK => "y", FAILED => "z"
+	V = Date of Login [0 to 9 chars] (DD-MMM-YY e.g. "16-May-94", "16-May")
+
+
+
+
+@Sx[yy]			Set option x to number "yy"
+	"x" is any one of the following: (Valid ranges for "yy" in "[]")
+
+	A = Username Lengths [0-30?? chars]
+	B = Location Lengths [0-30?? chars]
+	C = Time Lengths [0-8 chars; 8 = Full Time, 5 = Time without seconds]
+	D = Date Lengths [0-9 chars; 9 = Full Date, 6 = Date without year]
+	E = Random Line Width [0-76 chars]
+	F = Record-Date Lengths [0-14 chars; 14 = Full, 9 = No DayName]
+
+
+
+@Cxx_y			Output data-"y" about CPS record of rank "xx"
+	"xx" is any 1 or 2 digit number from 1 to 20.
+	"y" is any one of the following:
+
+	A = Username  [0 to 31??chars]  (e.g. "P0T-NOoDLE      ")
+	B = Location  [0 to 31??chars]  (e.g. "Your Mum's Bed  ")
+	C = Date [0 to 14 chars] ("DDD, DD-MMM-YY" e.g. "Fri, 10-Jun-94")
+	D = Filename  [12 chars]  (e.g. "G_G-SAL6.LHA")
+	E = Baud Rate [5 chars]  (e.g. "16800", " ISDN")
+	F = Filesize, or size of batch transfer. [5 chars - e.g. "1245k")
+	Gxy = UPLOAD => "x", DOWNLOAD => "y"
+	Hxy = SINGLE FILE => "x", BATCH TRANSFER => "y"
+	I = CPS Rate Achieved [4 chars]  (e.g. "5029", "HUGE")
+	J = Time Taken (Mins) [4 chars]  (e.g. "  24", " 104")
+	K = Time Taken (Seconds) [2 chars]  (e.g. "32", "59")
+	L = Percent Eficiency [4 chars]  (e.g. " 95%", "100%")
+
+	NOTE: Output dates take on the Record-Date length.
+
+
+
+
+@Tx				Outputs text data-"x"
+	Where "x" is any one of the following:
+
+	A = "Super-AmiLog"		Util Name.
+	B = "by P0T-NOoDLE"		Coder Name.
+	C = "(C)1992-4 Gods'Gift"	Group Name.
+	D = "RELEASE X"			Release Number.
+	E = "vX.XX"			Version Number.
+	F = Random Line [0-76 chars] chosen from 1-liners file.
+	G"«filename»" = If ANSI is off, shows «filename»
+		If ANSI is on, tries «filename».gr and then «filename»
+
+	NOTE: {A,B,C} and {D and/or E} must be used somewhere in the output.
+	NOTE: You *DO* include the quotes for G, but NOT the arrows.
+
+
+
+
+@Ix			IF condition is true....
+	Where "x" is any one of the following:
+
+	A[«String»] = If ANSI is ON,  Output «String».
+	B[«String»] = If ANSI is OFF, Output «String».
+	C[xx] = If number of users to output is less than "xx", skip this line.
+
+
+
+
+@Rx			Output record data-"x"
+	Where "x" is any one of the following:
+
+	A = Number of Callers [4 chars]
+	B = Date of Record Callers
+	C = Kilobytes Uploaded [6 chars - i.e. "29360k"]
+	D = Date of Above Record
+	E = Number of Uploaded Files [4 chars]
+	F = Date of Above Record
+	- = Number of Upload-Fails [4 chars] (NOT IMPLEMENTED)
+	- = Date of Above Record             (NOT IMPLEMENTED)
+	I = Kilobytes Downloaded [6 chars - i.e. " 488mb"]
+	J = Date of Above Record
+	K = Number of Downlaoded Files [4 chars]
+	L = Date of Above Record
+	- = Number of Download-Fails [4 chars] (NOT IMPLEMENTED)
+	- = Date of Above Record               (NOT IMPLEMENTED)
+	O = Total Minutes Used [3 chars]
+	P = Date of Above Record
+	Q = Number of New Users [4 chars]
+	R = Date of Above Record
+	S = Number of Password Hacks [4 chars]
+	T = Date of Above Record
+	U = Number of Drop-Carriers [4 chars]
+	V = Date of Above Record
+	W = Number of Sysop-Pages [4 chars]
+	X = Date of Above Record
+
+	All dates default to the format of "DDD, DD-MMM-YY", for example
+	"Thu, 09-Jun-94". However, you can set the Record-Date length
+	to something else, for example 9 => "09-Jun-94", or 6 => "Jun-94".
+
+
+
+
+
+

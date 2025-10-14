@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { User } from './types';
+import { User, Door, DoorSession } from './types';
 import { db } from './database';
 
 // BBS State definitions (mirroring AmiExpress state machine)
@@ -64,6 +64,8 @@ interface MessageBase {
 }
 
 // Global data caches (loaded from database)
+let doors: Door[] = [];
+let doorSessions: DoorSession[] = [];
 
 const app = express();
 const server = createServer(app);
@@ -701,6 +703,139 @@ function dirLineNewFile(dirLine: string, searchDate: Date): boolean {
   }
 }
 
+// Display door games menu (DOORS command)
+function displayDoorMenu(socket: any, session: BBSSession, params: string) {
+  socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
+
+  // Get available doors for current user
+  const availableDoors = doors.filter(door =>
+    door.enabled &&
+    (!door.conferenceId || door.conferenceId === session.currentConf) &&
+    (session.user?.secLevel || 0) >= door.accessLevel
+  );
+
+  if (availableDoors.length === 0) {
+    socket.emit('ansi-output', 'No doors are currently available.\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    return;
+  }
+
+  socket.emit('ansi-output', 'Available doors:\r\n\r\n');
+
+  availableDoors.forEach((door, index) => {
+    socket.emit('ansi-output', `${index + 1}. ${door.name}\r\n`);
+    socket.emit('ansi-output', `   ${door.description}\r\n`);
+    socket.emit('ansi-output', `   Access Level: ${door.accessLevel}\r\n\r\n`);
+  });
+
+  socket.emit('ansi-output', '\x1b[32mSelect door (1-\x1b[33m' + availableDoors.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
+  session.subState = LoggedOnSubState.FILE_AREA_SELECT; // Reuse for door selection
+  session.tempData = { doorMode: true, availableDoors };
+}
+
+// Execute door game/utility
+function executeDoor(socket: any, session: BBSSession, door: Door) {
+  console.log('Executing door:', door.name);
+
+  // Create door session
+  const doorSession: DoorSession = {
+    doorId: door.id,
+    userId: session.user!.id,
+    startTime: new Date(),
+    status: 'running'
+  };
+  doorSessions.push(doorSession);
+
+  socket.emit('ansi-output', `\r\n\x1b[32mStarting ${door.name}...\x1b[0m\r\n`);
+
+  // Execute based on door type
+  switch (door.type) {
+    case 'web':
+      executeWebDoor(socket, session, door, doorSession);
+      break;
+    case 'native':
+      socket.emit('ansi-output', 'Native door execution not implemented yet.\r\n');
+      break;
+    case 'script':
+      socket.emit('ansi-output', 'Script door execution not implemented yet.\r\n');
+      break;
+    default:
+      socket.emit('ansi-output', 'Unknown door type.\r\n');
+  }
+
+  // Mark session as completed
+  doorSession.endTime = new Date();
+  doorSession.status = 'completed';
+}
+
+// Execute web-compatible door (ported AmiExpress doors)
+function executeWebDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
+  switch (door.id) {
+    case 'sal':
+      executeSAmiLogDoor(socket, session, door, doorSession);
+      break;
+    case 'checkup':
+      executeCheckUPDoor(socket, session, door, doorSession);
+      break;
+    default:
+      socket.emit('ansi-output', 'Door implementation not found.\r\n');
+  }
+}
+
+// Execute SAmiLog callers log viewer door
+function executeSAmiLogDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
+  socket.emit('ansi-output', '\x1b[36m-= Super AmiLog v3.00 =-\x1b[0m\r\n');
+  socket.emit('ansi-output', 'Advanced Callers Log Viewer\r\n\r\n');
+
+  // Simulate callers log display (would read from BBS:NODE{x}/CALLERSLOG)
+  socket.emit('ansi-output', 'Recent callers:\r\n\r\n');
+
+  // Mock some caller entries
+  const mockCallers = [
+    { user: 'ByteMaster', action: 'Logged off', time: '22:15:30' },
+    { user: 'AmigaFan', action: 'Downloaded file', time: '22:10:15' },
+    { user: 'RetroUser', action: 'Posted message', time: '22:05:42' },
+    { user: 'NewUser', action: 'Logged on', time: '21:58:12' }
+  ];
+
+  mockCallers.forEach(caller => {
+    socket.emit('ansi-output', `${caller.time} ${caller.user.padEnd(15)} ${caller.action}\r\n`);
+  });
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to exit SAmiLog...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+}
+
+// Execute CheckUP file checking utility
+function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
+  socket.emit('ansi-output', '\x1b[36m-= CheckUP v0.4 =-\x1b[0m\r\n');
+  socket.emit('ansi-output', 'File checking utility for upload directories\r\n\r\n');
+
+  // Check upload directory for files
+  socket.emit('ansi-output', 'Checking upload directory...\r\n');
+
+  // Simulate checking upload directory
+  const hasFiles = Math.random() > 0.5; // Random for demo
+
+  if (hasFiles) {
+    socket.emit('ansi-output', 'Files found in upload directory!\r\n');
+    socket.emit('ansi-output', 'Processing uploads...\r\n');
+    socket.emit('ansi-output', '- File1.lha: Archive OK\r\n');
+    socket.emit('ansi-output', '- File2.zip: Archive OK\r\n');
+    socket.emit('ansi-output', 'Moving files to download area...\r\n');
+  } else {
+    socket.emit('ansi-output', 'No files found in upload directory.\r\n');
+    socket.emit('ansi-output', 'Running cleanup scripts...\r\n');
+  }
+
+  socket.emit('ansi-output', '\r\n\x1b[32mCheckUP completed. Press any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+}
+
 // Display upload interface (uploadaFile equivalent)
 function displayUploadInterface(socket: any, session: BBSSession, params: string) {
   console.log('displayUploadInterface called with params:', params);
@@ -925,6 +1060,7 @@ function displayMainMenu(socket: any, session: BBSSession) {
       socket.emit('ansi-output', 'D) Download Files\r\n');
       socket.emit('ansi-output', 'U) Upload Files\r\n');
       socket.emit('ansi-output', 'O) Online Users\r\n');
+      socket.emit('ansi-output', 'DOORS) Door Games & Utilities\r\n');
       socket.emit('ansi-output', 'G) Goodbye\r\n');
       socket.emit('ansi-output', '?) Help\r\n');
     }
@@ -1010,6 +1146,23 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
       socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       displayMainMenu(socket, session);
+      return;
+    }
+
+    // Handle door selection
+    if (session.tempData?.doorMode) {
+      const availableDoors = session.tempData.availableDoors;
+      const doorNumber = parseInt(input);
+
+      if (isNaN(doorNumber) || doorNumber < 1 || doorNumber > availableDoors.length) {
+        socket.emit('ansi-output', '\r\nInvalid door number.\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      const selectedDoor = availableDoors[doorNumber - 1];
+      executeDoor(socket, session, selectedDoor);
       return;
     }
 
@@ -1571,6 +1724,10 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       socket.emit('ansi-output', '\r\nQuiet node functionality not implemented yet.\r\n');
       break;
 
+    case 'DOORS': // Door Games Menu (new command for Phase 4)
+      displayDoorMenu(socket, session, params);
+      return;
+
     case '?': // Help (internalCommandQuestionMark)
       socket.emit('ansi-output', '\x1b[36m-= Command Help =-\x1b[0m\r\n');
       socket.emit('ansi-output', '0 - Remote Shell\r\n');
@@ -1588,6 +1745,7 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       socket.emit('ansi-output', 'U - Upload Files\r\n');
       socket.emit('ansi-output', 'O - Online Users\r\n');
       socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
+      socket.emit('ansi-output', 'DOORS - Door Games & Utilities\r\n');
       socket.emit('ansi-output', 'G - Goodbye\r\n');
       socket.emit('ansi-output', 'Q - Quiet Node\r\n');
       socket.emit('ansi-output', '? - This help\r\n');
@@ -1643,13 +1801,45 @@ async function initializeData() {
     // Load some recent messages
     messages = await db.getMessages(1, 1, { limit: 50 });
 
+    // Initialize doors
+    await initializeDoors();
+
     console.log('Database initialized with:', {
       conferences: conferences.length,
       messageBases: messageBases.length,
       fileAreas: fileAreas.length,
-      messages: messages.length
+      messages: messages.length,
+      doors: doors.length
     });
   } catch (error) {
     console.error('Failed to initialize data:', error);
   }
+}
+
+// Initialize door collection
+async function initializeDoors() {
+  doors = [
+    {
+      id: 'sal',
+      name: 'Super AmiLog',
+      description: 'Advanced callers log viewer with statistics and filtering',
+      command: 'SAL',
+      path: 'doors/POTTYSRC/PottySrc/Pot/Source/SAL/SAmiLog.s',
+      accessLevel: 10,
+      enabled: true,
+      type: 'web',
+      parameters: ['-r'] // Read-only mode for web
+    },
+    {
+      id: 'checkup',
+      name: 'CheckUP Utility',
+      description: 'File checking utility for upload directories',
+      command: 'CHECKUP',
+      path: 'doors/Y-CU04/tAJcHECKUP/CheckUP',
+      accessLevel: 1,
+      enabled: true,
+      type: 'web',
+      parameters: []
+    }
+  ];
 }

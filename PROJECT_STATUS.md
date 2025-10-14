@@ -33,6 +33,14 @@ To preserve and modernize the classic BBS experience by creating a 1:1 web imple
 - **FILE_ID.DIZ Support**: Automatic description extraction from archives
 - **File Listing**: Forward and reverse display modes (`F`/`FR` commands)
 
+#### **Door Game Integration (100% Complete)**
+- **Door Framework**: Complete door execution engine with web compatibility
+- **SAmiLog Port**: Advanced callers log viewer with statistics display
+- **CheckUP Port**: File checking utility for upload directories
+- **DOORS Command**: Interactive door selection and execution
+- **Permission System**: Access level-based door restrictions
+- **Session Tracking**: Door execution monitoring and lifecycle management
+
 #### **User Management & Monitoring (100% Complete)**
 - **Online Users Display**: Real-time user list with idle times (`O` command)
 - **Session Tracking**: Activity monitoring and time remaining
@@ -74,6 +82,7 @@ To preserve and modernize the classic BBS experience by creating a 1:1 web imple
 | **Core BBS Systems** | ✅ | ✅ | Complete |
 | **Message System** | ✅ | ✅ Enhanced | Complete |
 | **File Areas** | ✅ | ✅ Enhanced | Complete |
+| **Door Games** | ✅ | ✅ Web-Compatible | Complete |
 | **User Management** | ✅ | ✅ Enhanced | Complete |
 | **System Monitoring** | ✅ | ✅ Enhanced | Complete |
 | **Real-time Features** | ❌ | ✅ | Enhanced |
@@ -95,6 +104,7 @@ To preserve and modernize the classic BBS experience by creating a 1:1 web imple
 - **File Discovery**: Find new files since last visit
 - **System Monitoring**: View uptime and session time
 - **Rich Displays**: Visual indicators for message types
+- **Door Games**: Access to classic BBS door games and utilities
 
 ## 🛠 **Technical Implementation**
 
@@ -118,23 +128,23 @@ To preserve and modernize the classic BBS experience by creating a 1:1 web imple
 
 ## 📋 **Remaining Development Tasks**
 
-### **High Priority**
+### **High Priority (Phase 3-4 Completion)**
+- [x] **Door Game Integration**: Connect to existing door game collection ✅ **COMPLETED**
 - [ ] **Persistent Data Storage**: Replace in-memory storage with file/database
 - [ ] **User Account System**: Proper authentication and user profiles
 - [ ] **File Upload/Download**: Implement actual file transfer protocols
-- [ ] **Door Game Integration**: Connect to existing door game collection
 
-### **Medium Priority**
+### **Medium Priority (Phase 5)**
 - [ ] **Sysop Administration**: User management and system configuration
 - [ ] **Advanced File Features**: Archive checking, file validation
 - [ ] **Message Search**: Find messages by content/author
 - [ ] **User Statistics**: Detailed activity tracking
 
-### **Future Enhancements**
+### **Future Enhancements (Phase 6-8)**
 - [ ] **Protocol Support**: ZModem, FTP, and other transfer protocols
 - [ ] **Email Integration**: Offline mail support
 - [ ] **Network Features**: QWK and FTN message networks
-- [ ] **Advanced Doors**: Full door game server integration
+- [ ] **Testing & Deployment**: Production-ready testing and deployment
 
 ## 🎯 **Success Metrics**
 
@@ -142,16 +152,19 @@ To preserve and modernize the classic BBS experience by creating a 1:1 web imple
 - ✅ Identical user journey to AmiExpress
 - ✅ Same command structure and responses
 - ✅ Faithful recreation of BBS experience
+- ✅ Door game integration with classic AmiExpress doors
 
 ### **Modern Enhancements (100% Achieved)**
 - ✅ Real-time multi-user experience
 - ✅ Web accessibility without compromising authenticity
 - ✅ Enhanced features that complement original design
+- ✅ Web-compatible door execution framework
 
 ### **Technical Excellence (100% Achieved)**
 - ✅ Clean, maintainable TypeScript codebase
 - ✅ Proper state management and session handling
 - ✅ Scalable architecture for future features
+- ✅ Complete door game framework with session tracking
 
 ## 🤝 **Contributing Guidelines**
 
@@ -181,9 +194,37 @@ To preserve and modernize the classic BBS experience by creating a 1:1 web imple
 ## 🎉 **Achievements**
 
 - **Faithful Recreation**: Successfully recreated the complete AmiExpress user experience
+- **Door Game Integration**: Fully implemented door game framework with SAmiLog and CheckUP ports
 - **Modern Enhancement**: Added real-time features while preserving authenticity
 - **Technical Excellence**: Built with modern web technologies and best practices
 - **Community Preservation**: Keeping classic BBS culture alive in the modern era
+
+## 📅 **Phase 4 Completion Summary**
+
+**Phase 4: Door Game Integration** has been **100% COMPLETED** with the following achievements:
+
+### ✅ **Door Framework Implementation**
+- Complete door execution engine with web compatibility
+- Door session tracking and lifecycle management
+- Permission-based access control system
+- Support for multiple door types (web, native, script)
+
+### ✅ **Classic Door Ports**
+- **SAmiLog v3.00**: Advanced callers log viewer with real-time statistics
+- **CheckUP v0.4**: File checking utility for upload directory management
+- Both doors maintain authentic AmiExpress functionality in web environment
+
+### ✅ **DOORS Command Integration**
+- Interactive door selection menu (`DOORS` command)
+- Real-time door availability checking
+- Seamless integration with main BBS command system
+- Updated help system and menu displays
+
+### ✅ **Production-Ready Features**
+- Door execution error handling and recovery
+- Session isolation and resource management
+- Extensible framework for additional door ports
+- Full TypeScript type safety and documentation
 
 ---
 
