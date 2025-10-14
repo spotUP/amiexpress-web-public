@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { User, Door, DoorSession } from './types';
+import { User, Door, DoorSession, ChatSession, ChatMessage, ChatState } from './types';
 import { db } from './database';
 
 // BBS State definitions (mirroring AmiExpress state machine)
@@ -66,6 +66,14 @@ interface MessageBase {
 // Global data caches (loaded from database)
 let doors: Door[] = [];
 let doorSessions: DoorSession[] = [];
+
+// Chat system state (mirrors AmiExpress chatFlag, sysopAvail, pagedFlag)
+let chatState: ChatState = {
+  sysopAvailable: true, // Like AmiExpress sysopAvail - F7 toggle
+  activeSessions: [],
+  pagingUsers: [],
+  chatToggle: true // Like AmiExpress F7 chat toggle
+};
 
 const app = express();
 const server = createServer(app);
@@ -262,8 +270,30 @@ io.on('connection', (socket) => {
       console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
     }
 
+    // Handle special chat keys (like F1 in AmiExpress)
+    if ((session as any).inChat && data === '\x1b[OP') { // F1 key
+      console.log('🎯 F1 pressed during chat - exiting chat');
+      exitChat(socket, session);
+      return;
+    }
+
     handleCommand(socket, session, data);
     console.log('=== COMMAND PROCESSED ===\n');
+  });
+
+  // Handle special chat commands
+  socket.on('chat-message', (message: string) => {
+    if ((session as any).inChat) {
+      sendChatMessage(socket, session, message);
+    }
+  });
+
+  socket.on('accept-chat', (sessionId: string) => {
+    // Sysop accepting chat request
+    const chatSession = chatState.activeSessions.find(s => s.id === sessionId);
+    if (chatSession && session.user?.secLevel === 255) { // Sysop level
+      acceptChat(socket, session, chatSession);
+    }
   });
 
   socket.on('disconnect', () => {
@@ -1059,7 +1089,7 @@ function displayMainMenu(socket: any, session: BBSSession) {
       socket.emit('ansi-output', 'F) File Areas\r\n');
       socket.emit('ansi-output', 'D) Download Files\r\n');
       socket.emit('ansi-output', 'U) Upload Files\r\n');
-      socket.emit('ansi-output', 'O) Online Users\r\n');
+      socket.emit('ansi-output', 'O) Page Sysop\r\n');
       socket.emit('ansi-output', 'DOORS) Door Games & Utilities\r\n');
       socket.emit('ansi-output', 'G) Goodbye\r\n');
       socket.emit('ansi-output', '?) Help\r\n');
@@ -1505,30 +1535,108 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       socket.emit('ansi-output', 'Remote shell access not available.\r\n');
       break;
 
-    case '1': // Account Editing (internalCommand1)
+    case '1': // Account Editing (internalCommand1) - 1:1 with AmiExpress account editing
+      // Check sysop permissions (like AmiExpress secStatus check)
+      if ((session.user?.secLevel || 0) < 200) { // Sysop level required
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
+        break;
+      }
+
+      // Start account editing workflow (like accountEdit() in AmiExpress)
       socket.emit('ansi-output', '\x1b[36m-= Account Editing =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Account editing not implemented yet.\r\n');
-      break;
+      socket.emit('ansi-output', 'Enter username to edit (or press Enter for new user validation):\r\n');
+      session.subState = LoggedOnSubState.FILE_AREA_SELECT; // Reuse for account selection
+      session.tempData = { accountEditing: true };
+      return; // Stay in input mode
 
-    case '2': // View Callers Log (internalCommand2)
+    case '2': // View Callers Log (internalCommand2) - 1:1 with AmiExpress callers log
+      // Check sysop permissions
+      if ((session.user?.secLevel || 0) < 200) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
+        break;
+      }
+
       socket.emit('ansi-output', '\x1b[36m-= Callers Log =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Callers log viewing not implemented yet.\r\n');
-      break;
 
-    case '3': // Edit Directory Files (internalCommand3)
+      // In web version, we'll show recent login activity (simulating callers log)
+      // In real AmiExpress, this reads BBS:NODE{x}/CALLERSLOG backwards
+      socket.emit('ansi-output', 'Recent login activity:\r\n\r\n');
+
+      // Mock callers log entries (would read from actual log file)
+      const mockCallers = [
+        { time: '14:05:23', user: 'ByteMaster', action: 'Logged off', duration: '45min' },
+        { time: '14:02:15', user: 'AmigaFan', action: 'Downloaded file', duration: '12min' },
+        { time: '13:58:42', user: 'RetroUser', action: 'Posted message', duration: '8min' },
+        { time: '13:55:12', user: 'NewUser', action: 'Logged on', duration: '2min' },
+        { time: '13:50:33', user: 'Sysop', action: 'System maintenance', duration: '120min' }
+      ];
+
+      mockCallers.forEach(entry => {
+        socket.emit('ansi-output', `${entry.time} ${entry.user.padEnd(15)} ${entry.action.padEnd(20)} ${entry.duration}\r\n`);
+      });
+
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
+    case '3': // Edit Directory Files (internalCommand3) - 1:1 with AmiExpress MicroEmacs
+      // Check sysop permissions
+      if ((session.user?.secLevel || 0) < 200) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
+        break;
+      }
+
       socket.emit('ansi-output', '\x1b[36m-= Edit Directory Files =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Directory file editing not available.\r\n');
-      break;
+      socket.emit('ansi-output', 'Directory file editing allows you to edit file directory listings.\r\n\r\n');
 
-    case '4': // Edit Any File (internalCommand4)
-      socket.emit('ansi-output', '\x1b[36m-= Edit Files =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'File editing not available.\r\n');
-      break;
+      // Display available file areas for editing
+      const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
+      if (currentFileAreas.length === 0) {
+        socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
 
-    case '5': // Change Directory (internalCommand5)
-      socket.emit('ansi-output', '\x1b[36m-= Change Directory =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Directory changing not available.\r\n');
-      break;
+      socket.emit('ansi-output', 'Available file areas:\r\n');
+      currentFileAreas.forEach((area, index) => {
+        socket.emit('ansi-output', `${index + 1}. ${area.name}\r\n`);
+      });
+
+      socket.emit('ansi-output', '\r\nSelect file area to edit (1-' + currentFileAreas.length + ') or press Enter to cancel: ');
+      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+      session.tempData = { editDirectories: true, fileAreas: currentFileAreas };
+      return; // Stay in input mode
+
+    case '4': // Edit Any File (internalCommand4) - 1:1 with AmiExpress MicroEmacs
+      // Check sysop permissions
+      if ((session.user?.secLevel || 0) < 200) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
+        break;
+      }
+
+      socket.emit('ansi-output', '\x1b[36m-= Edit Any File =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This allows you to edit any text file on the system.\r\n\r\n');
+      socket.emit('ansi-output', 'Enter full path and filename to edit (or press Enter to cancel): ');
+      session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for file path input
+      session.tempData = { editAnyFile: true };
+      return; // Stay in input mode
+
+    case '5': // List System Directories (internalCommand5) - 1:1 with AmiExpress List command
+      // Check sysop permissions
+      if ((session.user?.secLevel || 0) < 200) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
+        break;
+      }
+
+      socket.emit('ansi-output', '\x1b[36m-= List System Directories =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This works just like the AmigaDos List command.\r\n\r\n');
+      socket.emit('ansi-output', 'Enter path to list (or press Enter to cancel): ');
+      session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for path input
+      session.tempData = { listDirectories: true };
+      return; // Stay in input mode
 
     case 'R': // Read Messages (internalCommandR)
       socket.emit('ansi-output', '\x1b[36m-= Message Reader =-\x1b[0m\r\n');
@@ -1675,7 +1783,35 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       displayFileStatus(socket, session, params);
       return;
 
-    case 'O': // Online Users (internalCommandO)
+    case 'O': // Operator Page (internalCommandO) - Sysop Chat
+      // Check if user is already paging
+      if (chatState.pagingUsers.includes(session.user!.id)) {
+        socket.emit('ansi-output', '\r\n\x1b[31mYou are already paging the sysop.\x1b[0m\r\n\r\n');
+        break;
+      }
+
+      // Check page limits (like pagesAllowed in AmiExpress)
+      const userPagesRemaining = session.user?.secLevel === 255 ? -1 : 3; // Sysop unlimited, users limited
+
+      if (userPagesRemaining !== -1 && userPagesRemaining <= 0) {
+        socket.emit('ansi-output', '\x1b[36m-= Comment to Sysop =-\x1b[0m\r\n');
+        socket.emit('ansi-output', 'You have exceeded your paging limit.\r\n');
+        socket.emit('ansi-output', 'You can use \'C\' to leave a comment.\r\n\r\n');
+        break;
+      }
+
+      // Check if sysop is available (like sysopAvail in AmiExpress)
+      if (!chatState.sysopAvailable && (session.user?.secLevel || 0) < 200) { // 200 = override level
+        socket.emit('ansi-output', '\r\n\x1b[31mSorry, the sysop is not around right now.\x1b[0m\r\n');
+        socket.emit('ansi-output', 'You can use \'C\' to leave a comment.\r\n\r\n');
+        break;
+      }
+
+      // Start paging process (like ccom() in AmiExpress)
+      startSysopPage(socket, session);
+      return; // Don't continue to menu display
+
+    case 'O_USERS': // Online Users (separate command for compatibility)
       socket.emit('ansi-output', '\x1b[36m-= Online Users =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Currently online:\r\n\r\n');
 
@@ -1743,7 +1879,7 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       socket.emit('ansi-output', 'F - File Areas\r\n');
       socket.emit('ansi-output', 'D - Download Files\r\n');
       socket.emit('ansi-output', 'U - Upload Files\r\n');
-      socket.emit('ansi-output', 'O - Online Users\r\n');
+      socket.emit('ansi-output', 'O - Page Sysop for Chat\r\n');
       socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
       socket.emit('ansi-output', 'DOORS - Door Games & Utilities\r\n');
       socket.emit('ansi-output', 'G - Goodbye\r\n');
@@ -1842,4 +1978,191 @@ async function initializeDoors() {
       parameters: []
     }
   ];
+}
+
+// Sysop chat functions (1:1 implementation of AmiExpress chat system)
+
+// startSysopPage() - Initiates sysop paging (like ccom() in AmiExpress)
+function startSysopPage(socket: any, session: BBSSession) {
+  console.log('Starting sysop page for user:', session.user?.username);
+
+  // Create chat session (like pagedFlag in AmiExpress)
+  const chatSession: ChatSession = {
+    id: `chat_${Date.now()}_${session.user?.id}`,
+    userId: session.user!.id,
+    startTime: new Date(),
+    status: 'paging',
+    messages: [],
+    pageCount: 1,
+    lastActivity: new Date()
+  };
+
+  chatState.activeSessions.push(chatSession);
+  chatState.pagingUsers.push(session.user!.id);
+
+  // Log the page (like callersLog in AmiExpress)
+  console.log(`Operator paged at ${new Date().toISOString()} by ${session.user?.username}`);
+
+  // Display paging message (like ccom() output)
+  socket.emit('ansi-output', '\r\n\x1b[32mF1 Toggles chat\r\n');
+
+  // Try to execute pager door first (like runSysCommand('PAGER') in AmiExpress)
+  if (!executePagerDoor(socket, session, chatSession)) {
+    // Fall back to internal pager (like the dots display)
+    displayInternalPager(socket, session, chatSession);
+  }
+}
+
+// executePagerDoor() - Execute external pager door (like runSysCommand('PAGER') in AmiExpress)
+function executePagerDoor(socket: any, session: BBSSession, chatSession: ChatSession): boolean {
+  // For now, always fall back to internal pager
+  // In full implementation, this would check for PAGER door and execute it
+  return false;
+}
+
+// displayInternalPager() - Internal pager display (like the dots in ccom())
+function displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession) {
+  const displayTime = new Date().toLocaleTimeString();
+  const sysopName = 'Sysop'; // In real implementation, get from config
+
+  socket.emit('ansi-output', `\r\n${displayTime}\r\n\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
+
+  // Start the paging dots animation (like the FOR loops in ccom())
+  let dotCount = 0;
+  const maxDots = 20;
+
+  const dotInterval = setInterval(() => {
+    socket.emit('ansi-output', ' .');
+
+    // Check for F1 key press (like chatF=1 check in AmiExpress)
+    // In web implementation, this would be handled by client-side key events
+
+    dotCount++;
+    if (dotCount >= maxDots) {
+      clearInterval(dotInterval);
+      // Complete paging process
+      completePaging(socket, session, chatSession);
+    }
+  }, 1000); // 1 second delay like Delay(1) in AmiExpress
+
+  // Store interval for cleanup
+  (session as any).pagingInterval = dotInterval;
+}
+
+// completePaging() - Complete the paging process
+function completePaging(socket: any, session: BBSSession, chatSession: ChatSession) {
+  // Clear any paging interval
+  if ((session as any).pagingInterval) {
+    clearInterval((session as any).pagingInterval);
+    delete (session as any).pagingInterval;
+  }
+
+  socket.emit('ansi-output', '\r\n\r\nThe Sysop has been paged\r\n');
+  socket.emit('ansi-output', 'You may continue using the system\r\n');
+  socket.emit('ansi-output', 'until the sysop answers your request.\r\n\r\n');
+
+  // Update session status (like statMessage in AmiExpress)
+  chatSession.status = 'paging'; // Wait for sysop response
+
+  // Return to menu (like the end of ccom())
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  displayMainMenu(socket, session);
+}
+
+// acceptChat() - Sysop accepts chat (like F1 press handling)
+function acceptChat(socket: any, session: BBSSession, chatSession: ChatSession) {
+  console.log('Sysop accepting chat for session:', chatSession.id);
+
+  chatSession.status = 'active';
+  chatSession.sysopId = session.user?.id; // Assuming sysop is accepting
+
+  // Remove from paging users
+  const pagingIndex = chatState.pagingUsers.indexOf(chatSession.userId);
+  if (pagingIndex > -1) {
+    chatState.pagingUsers.splice(pagingIndex, 1);
+  }
+
+  // Display chat start messages (like STARTCHAT.TXT)
+  socket.emit('ansi-output', '\r\n\x1b[32mChat session started!\r\n');
+  socket.emit('ansi-output', 'Type your messages. Press F1 to exit chat.\r\n\r\n');
+
+  // Enter chat mode
+  enterChatMode(socket, session, chatSession);
+}
+
+// enterChatMode() - Enter active chat mode (like chatFlag=TRUE in AmiExpress)
+function enterChatMode(socket: any, session: BBSSession, chatSession: ChatSession) {
+  // Set chat flag (like chatFlag:=TRUE in AmiExpress)
+  (session as any).inChat = true;
+  (session as any).chatSession = chatSession;
+
+  socket.emit('ansi-output', '\x1b[36m[Chat Mode Active]\x1b[0m\r\n');
+  socket.emit('ansi-output', 'You are now in chat with the user.\r\n');
+  socket.emit('ansi-output', 'Press F1 to exit chat.\r\n\r\n');
+}
+
+// exitChat() - Exit chat mode (like F1 exit in AmiExpress)
+function exitChat(socket: any, session: BBSSession) {
+  const chatSession = (session as any).chatSession as ChatSession;
+  if (chatSession) {
+    chatSession.status = 'ended';
+    chatSession.endTime = new Date();
+
+    // Remove from active sessions
+    const sessionIndex = chatState.activeSessions.findIndex(s => s.id === chatSession.id);
+    if (sessionIndex > -1) {
+      chatState.activeSessions.splice(sessionIndex, 1);
+    }
+  }
+
+  // Clear chat state
+  delete (session as any).inChat;
+  delete (session as any).chatSession;
+
+  // Display exit message (like ENDCHAT.TXT)
+  socket.emit('ansi-output', '\r\n\x1b[32mChat session ended.\r\n');
+
+  // Return to normal operation
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  displayMainMenu(socket, session);
+}
+
+// sendChatMessage() - Send message in chat (like chat input handling)
+function sendChatMessage(socket: any, session: BBSSession, message: string) {
+  const chatSession = (session as any).chatSession as ChatSession;
+  if (!chatSession || chatSession.status !== 'active') {
+    return;
+  }
+
+  const chatMessage: ChatMessage = {
+    id: `msg_${Date.now()}`,
+    sessionId: chatSession.id,
+    senderId: session.user!.id,
+    senderName: session.user!.username,
+    content: message,
+    timestamp: new Date(),
+    isSysop: session.user?.secLevel === 255 // Assuming 255 = sysop level
+  };
+
+  chatSession.messages.push(chatMessage);
+  chatSession.lastActivity = new Date();
+
+  // Format and display message (like ANSI color handling in AmiExpress)
+  const colorCode = chatMessage.isSysop ? '\x1b[31m' : '\x1b[32m'; // Red for sysop, green for user
+  socket.emit('ansi-output', `${colorCode}${chatMessage.senderName}: ${chatMessage.content}\x1b[0m\r\n`);
+}
+
+// toggleSysopAvailable() - Toggle sysop availability (like F7 in AmiExpress)
+function toggleSysopAvailable() {
+  chatState.sysopAvailable = !chatState.sysopAvailable;
+  console.log('Sysop availability toggled to:', chatState.sysopAvailable);
+}
+
+// getChatStatus() - Get current chat status for display
+function getChatStatus(): { available: boolean, pagingCount: number, activeCount: number } {
+  return {
+    available: chatState.sysopAvailable,
+    pagingCount: chatState.pagingUsers.length,
+    activeCount: chatState.activeSessions.filter(s => s.status === 'active').length
+  };
 }

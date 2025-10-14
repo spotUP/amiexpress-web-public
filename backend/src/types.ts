@@ -37,3 +37,33 @@ export interface DoorSession {
   output?: string[];
   input?: string[];
 }
+
+// Chat system interfaces - mirrors AmiExpress chat implementation
+export interface ChatSession {
+  id: string;
+  userId: string;
+  sysopId?: string;
+  startTime: Date;
+  endTime?: Date;
+  status: 'paging' | 'active' | 'ended';
+  messages: ChatMessage[];
+  pageCount: number;
+  lastActivity: Date;
+}
+
+export interface ChatMessage {
+  id: string;
+  sessionId: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  timestamp: Date;
+  isSysop: boolean;
+}
+
+export interface ChatState {
+  sysopAvailable: boolean;
+  activeSessions: ChatSession[];
+  pagingUsers: string[]; // User IDs currently paging
+  chatToggle: boolean; // F7 chat toggle state
+}
