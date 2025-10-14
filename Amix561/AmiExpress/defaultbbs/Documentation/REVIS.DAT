@@ -1,0 +1,106 @@
+
+-------------------------------------------------------------------------
+[03-19-95] The Outlaw
+
+In this release 4.9 there are a few changes.
+ 
+First:> Make sure you make a PartDownLoad Directory in your bbs: 
+        With this version we are working on the bbs remembering flagged
+        files when you logoff, so that next time you call they will still 
+        be flagged.
+ 
+Second:> If you are using Workbench 3.0 and above you will notice that 
+         the Red, White color problem in Express is now working. The
+         Console.Library was corrected by Commodore, and allowed us to 
+         finally make the fix that everyone has been wanting for a long
+         time. Remember you will only notice the fix if you are running 
+         WorkBench 3.0 or above.
+
+-------------------------------------------------------------------------
+[08-21-94] ByteMaster
+
+4.5b
+        1. Added RIP script support to AmiExpress, every place that you
+           have a bulletin or screen you can have a RIP script. AmiExpress
+           recognizes RIP scripts as files with the extension '.RIP'. These
+           screens follow the same rule as other screens.
+ 
+           For the system to recognize a user as having RIP capability they
+           must select 'R' from the ANSI prompt.
+
+-------------------------------------------------------------------------
+[08-21-94] ByteMaster
+
+/X 4.5b
+ 
+        1. Added new access tooltype ACS.TRANSLATION, this tooltype
+           specifies the language the user prefers.
+           
+           AmiExpress will look for a directory icon called Languages.info
+           This icon will stores a list of languages that the users may
+           select from. The tooltypes for this icon are as follows:
+ 
+           a. HOSTLANGUAGE=<language> there should be only one of these
+              tooltypes in the icon. This specifies your system's default
+              language.
+ 
+           b. LANGUAGE.x=<language> this tool type can occur several times
+              as long as you replace '.x' with an occurance number ie:
+              LANGUAGE.1=English, LANGUAGE.2=Spanish etc.
+           c. TITLE.x=<language title> title works the same as language
+              except it is more of a banner line for the language, and will
+              be used in the menu options when the user asks which language
+              they prefer.
+ 
+        The user can select the language of his choice via the 'W' menu
+        prompt command, it is option '15' , a user's language preference
+        is not saved in the user.data, it is reset to the HOST default
+        at logon time.
+ 
+        NOTE: REGISTERED DEVELOPERS, PLEASE REFER TO THE DEVELOPERS 
+        CONFERENCE ON THIS OPTION.
+ 
+        APPLICATIONS ARE CURRENTLY UNDER DEVELOPEMENT TO TAKE ADVANTAGE
+        OF THIS FEATURE.
+
+-------------------------------------------------------------------------
+[08-21-94] ByteMaster
+
+/X 4.5b
+ 
+        1. Fixed 'EH' bug in internal message bases. You can now change the
+           FROM field in the message. In order to invoke this feature you
+           must have ACS.MESSAGE_EDIT access.
+ 
+        2. Modified the StatBar to make room for a 3 digit conference
+           number.
+ 
+        3. Added SCANMAIL_PROMPT to the NODE icons. If this tooltype is
+           present then the user will be asked if they wish to scan for
+           mail. NOTE if a user chooses 'NO' then they will not get any
+           EALL messages.
+ 
+        4. Fixed bug in Hydra Interface, now /X will scan the other node's
+           playpens directories for duplicate files when uploads occur.
+ 
+
+-------------------------------------------------------------------------
+[08-21-94] ByteMaster
+
+/X 4.5b
+ 
+        1. Added new tooltype ACS.ACCOUNT_VIEW to the access icons.
+           This access will allow the user to use the account editor in
+           READ ONLY mode. This takes effect on the REMOTE side only. If
+           the user has ACS.ACCOUNT_EDIT, then this will overide
+           ACS.ACCOUNT_VIEW.
+ 
+        2. Added new flat file 'LockAccounts', this file goes into the
+           BBS: directory, and can contain a list of users. 
+ 
+           If this file is present then only users listed in the
+           LockAccounts file will be able to edit accounts. 
+ 
+           This overides ACS.ACCOUNT_EDIT and takes effect on the REMOTE
+           side only.
+ 

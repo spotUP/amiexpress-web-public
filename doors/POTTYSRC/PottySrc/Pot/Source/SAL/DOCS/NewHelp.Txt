@@ -1,0 +1,17 @@
+
+Help      Show this help text.         OutANSI   Create ANSI output.
+                                       OutNoANSI Create Non-ANSI output.
+Clear     Clear Storage-File.          Users     Nº users to output.
+                                       Design    External SADeL design.
+Update    Update for the given node.   IntType   Type of internal design.
+NoSysop   Ignore calls by the sysop.   Option    Options for the design.
+MClog     Create the MiniCallerslog.   Top       Header for output.
+                                       Bottom    Tailer for output.
+StripMCL  Strip MClog, except X days.  (No)ANSITop / (No)ANSIBottom.
+
+This help text assumes that you are already familiar with the commands!
+There is no substitute for reading the SAmiLog documentation guide file
+which contains full descriptions and examples of the commands.
+
+Additionally, read the docs for any external design files you have for
+information on extra OPTIONs supported by them.

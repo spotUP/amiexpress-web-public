@@ -1,0 +1,83 @@
+*****************************************************************************
+* Option C - (Create) Blank Storage File                                    *
+*****************************************************************************
+C_STxt	Dc.b	"Clearing New Storage File",10
+C_STxtL	Equ	*-C_STxt
+	Even
+
+OppyC	Tst.l	Clear_S(a5)		Was Clear switch given?
+	Bne.s	OppyCDo
+	RTS				If not, return.
+
+OppyCDo	BSet	#X1_AnyRout,Fil_F_1(a5)	Signal that a routine has been run.
+	Lea	C_STxt(pc),a0		-.
+	Moveq	#C_STxtL,d3		 |_ Progress Text.
+	Bsr	CLIRite			 |
+	Bsr	CkCtrlC			-'
+	
+	Bsr	FilInD8			Fill in date strings.
+
+	Lea	StorFil(a5),a1		Point to StorFile in Pre-Aloc'd Mem
+	Move.l	S_Vers(pc),(a1)+		-._ Version
+	Move.l	S_Vers+4(pc),(a1)+		-'  String.
+
+	Lea	D8_Date(a5),a0
+	Moveq	#8,d7
+D8CLRCO	Move.b	(a0)+,(a1)+		Today's date (Date of Clear)
+	DBra	d7,D8CLRCO
+	SF	(a1)+			Nullterm it.
+
+	Moveq	#4,d6			5 Filenames to write. (-1dbra)
+OpCXFN2	Lea	STD_Filename_String(pc),a0	"Blank" filename...
+	Moveq	#(STD_Filename_Length/2)-1,d7	and it's length (words,-1)
+OpCXFN1	Move.w	(a0)+,(a1)+
+	DBra	d7,OpCXFN1
+	DBra	d6,OpCXFN2
+
+	Move.l	#(Store_Clear/2)-1,d7	Words to Clear (-1)
+_OpC_L	Move.w	#0,(a1)+
+	DBra	d7,_OpC_L
+
+	Moveq	#19,d6			20 Users to write. (-1dbra)
+OM1_L2	Lea	S_Usr(pc),a0		Here's our default(?!) user to stick
+	Moveq	#(SU_Len/2)-1,d7	Length in Words -1word for DBra
+OM1_L1	Move.w	(a0)+,(a1)+
+	DBra	d7,OM1_L1
+	DBra	d6,OM1_L2
+
+	Move.l	#"   0",d0		-.
+	Moveq	#0,d1			 |- For speed.
+	Moveq	#1,d2			-'
+	Moveq	#19,d6			20 CPS records to write. (-1dbra)
+OM2_L2	Move.l	d0,(a1)+		CPS Record (ASCII)
+	Move.l	d1,(a1)+		Nullterm,Even,Word-Displacement.
+	Add.w	d2,d1			Next displacement = old+1
+	DBra	d6,OM2_L2
+
+	Moveq	#19,d6			20 CPS datas to write. (-1dbra)
+OM3_L2	Lea	S_CPS(pc),a0		Here's our default(?!) CPS to stick
+	Moveq	#(SC_Len/2)-1,d7	Length in Words -1word for DBra
+OM3_L1	Move.w	(a0)+,(a1)+
+	DBra	d7,OM3_L1
+	DBra	d6,OM3_L2
+
+	Lea	Store(pc),a0
+	Bsr	FileDel			Delete old file if there.
+;;;;;;;	If for some reason they run more than one copy of SAmiLog, FileDel
+;;;;;;;	fails after 15 seconds because the storage file will be locked...
+;;;;;;;	BTW: FileDel just incase the storage file gets smaller (or someone
+;;;;;;;	re-installs an older version after running a newer one or whatever.
+
+	Lea	Store(pc),a0		Open new file.
+	Move.l	#Mode_New,d2
+	Bsr	FilOpen
+	Move.l	#S_Size,d3		Length of Storage file.
+	Lea	StorFil(a5),a0		Get address
+	Bsr	FilRite			Write Doc File
+	Bsr	FilClos			Close Doc file
+
+;;;;;;;	Bset	#X1_Store,Fil_F_1(a5)	Storage File is in memory.
+;;;;;;;	Above disabled so that the LoadSto routine will load it instead, thus
+;;;;;;;	getting an Exclusive Lock on it too. If above were set ON, the Finish
+;;;;;;; routine would try and close the storage file, which has been closed.
+	RTS				Routine Done.

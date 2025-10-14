@@ -1,0 +1,64 @@
+
+ File Description (Online Help/About)        Copyright (c)1994 Bobo of Mystic
+
+ 1) Use FileID Description : Do you want to use/scan for fileid description?
+
+                             ASK: Will prompt you the found description and
+                                  ask you if you want to use it:
+                                  YES/NO/ALL/EDIT/PRIVATE. (Recommended)
+                             YES: Will use the fileid without asking.
+                              NO: Will skip the search for fileid and
+                                  let you write your own description.
+----------------------------------------------------------------------------
+ 2) Use tagline            : Do you want to add your tagline?
+
+                             ASK: Will ask you if you want to add your
+                                  tagline.
+                             YES: Will add your tagline without asking.
+                              NO: Your tagline will not be added.
+----------------------------------------------------------------------------
+ 3) Timeout (Secs)         : This is how long timeout you want when the
+                             door is asking a question. (1-99 Secs)
+----------------------------------------------------------------------------
+ 4) Use FullScreen Editor  : Do you want to use the Fullscreen Editor?
+
+                             ASK: Will ask you if you want to use the FSE.
+                             YES: Will use it without asking. (Recommended)
+                              NO: Will use the standard lineeditor.
+
+ The Fullscreen Editor should work fine on PC-computers as well.
+----------------------------------------------------------------------------
+ 5) Use Autodetect Logos   : Do you want file description to autodetect
+                             group-logos if no fileid was found?
+
+                             ASK: Will ask you if you want to use the
+                                  found logo.
+                             YES: Will use the logo without asking.
+                              NO: Will skip the scan for logos.
+----------------------------------------------------------------------------
+ 6) List Available Logos   : Do you want to see a list of available group-
+                             logos if no autodetect logo was found?
+
+                             ASK: Will ask you if you want to see a list of
+                                  available logos.
+                             YES: Will list available logos without asking.
+                              NO: Will skip listing the logos.
+----------------------------------------------------------------------------
+ C) Change tagline         : Will let you edit your current tagline.
+ S) Save Config            : Will save your current configuration.
+ D) Defaults               : Will change all settings to program defaults.
+ H) User Help              : This help-text.
+ Q) Quit                   : Will quit the configuration program.
+----------------------------------------------------------------------------
+
+  If you have any suggestions, bugreports or anything else for this program,
+  please leave me a message on one of the following boards >:
+
+  East BBS  +46-8940614 16.8 DS   SYSOP: BOBO/MYSTIC  Username: GUEST
+  East BBS  +46-8940615 16.8 DS   SYSOP: BOBO/MYSTIC  Password: PASSWORD
+  East BBS  +46-8940919 14.4 HST  SYSOP: BOBO/MYSTIC
+
+  Last Outpost  +31-72157682 16.8 DS   SYSOP: EMPIRE/MYSTIC
+  Last Outpost  +31-72201182 16.8 DS   SYSOP: EMPIRE/MYSTIC
+
+  or write me a message on internet: bobo@cyberspace.net

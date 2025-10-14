@@ -1,0 +1,48 @@
+.key ARCHIV/A,DIR/A
+.bra {
+.ket }
+
+;ZIPDepack to Depack ZIPArchivs to any Directory by R/\[>I[]SITY!
+; $VER: ZipDepack 1.1 (16.3.94)
+
+;Procedure Depack
+Skip Check
+Lab Depack
+	set SourceCD `CD`
+	Failat 51
+	makedir T:ZipTemp{$$}               
+	set TempVar "`List {Archiv}(|.zip) LFormat %s%s`"
+	cd "T:ZipTemp{$$}"
+	IF EXISTS $TempVAR
+		CD $SourceCD	
+		SET Command "`List {Archiv}(|.zip) LFormat "Unzip %s%s"`"
+		CD "T:ZipTemp{$$}"
+		$Command
+	Else
+		CD $SourceCD
+		SET Command "`List {Archiv}(|.zip) LFormat "Unzip $SourceCD%s%s"`"
+		CD "T:ZipTemp{$$}"
+		$Command
+	Endif
+	Copy #? to {Dir} CLONE QUIET                   
+	CD $SourceCD           
+	Protect T:ZipTemp{$$} all rwed quiet
+	Delete T:ZipTemp{$$} all quiet        
+	Unset SourceCD
+	Failat 10                           
+	Echo Done
+	Quit
+
+Lab Check
+echo "ZipArchiv={Archiv} | UnPackDir={Dir} | Task = {$$}"
+IF Exists {Archiv}
+	skip Depack back 
+Else
+	IF Exists {Archiv}.Zip	
+		Skip Depack back
+	Else
+		Echo "ZipArchiv={Archiv} does not Exists"
+	EndIF
+Endif
+;Call SECOM CITY to Reach me...++49308034262,3.6 Gigs,3 Nodez Rnd
+;Write a Person Called `R/\[>I[]SITY!` a Message.

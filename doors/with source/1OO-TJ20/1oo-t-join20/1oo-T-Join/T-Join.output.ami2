@@ -1,0 +1,55 @@
+#LOGO=0 ; 0=no 1=yes
+#PAGELINE=3
+#TOP=5
+     [35m__  __  __ .--, __  __  __  __  __  __  __          [33m__
+[34m.-[32m» [35ml__'l__|l  |l-  l_/_l  'l_/_l  |l__'l_/_`--. [32m«[34m------[33m_\/_[34m------------------.
+[34m`--------------------------------------------[35m--'[34m--------[33m\/\/[34m--------[32m[   /[37m@PAGES=%2d; [32m][34m-'
+[33m[44mSelect conference                                                              
+[35m[40m-------------------------------------------------------------------------------
+#MIDDLE=1
+[35m.-----------------------------------------------------------------------------.
+#BOTTOM=3
++------------------.----------------------------------------------------------+
+|[43m [34m1oo% T-Join v2.0 [40;35m|[44m                   [33mcopyr¡ght Anti-G/1oo%/Bad Brothers '97 [40;35m|
+`------------------^----------------------------------------------------------'
+#INFO
+|[44m [37mConference description:                                                     [0;35m|
+
+#DOUBLEAREA
+   [37m@AREA_L=%2d;  [32m@NAME_L=%s;[@XPOS=%d;;40H[35m|  [37m@AREA_R=%2d;  [32m@NAME_R=%s;
+
+#SINGLEAREA
+   [37m@AREA_L=%2d;  [32m@NAME_L=%s;[@XPOS=%d;;40H[35m|
+
+#PAGENR
+[@XPOS=%d;;70H[37m@PAGE=%2d;
+
+#HI_LEFT_BAR
+[@XPOS=%d;;3H[0;32m[[37m@AREA_L=%2d;[32m] [37;44m@NAME_L=%-31.31s;[0m
+
+#HI_RIGHT_BAR
+[@XPOS=%d;;42H[0;32m[[37m@AREA_R=%2d;[32m] [37;44m@NAME_R=%-31.31s;[0m
+
+#CLR_LEFT_BAR
+[@XPOS=%d;;3H[0;37m @AREA_L=%2d;  [32m@NAME_L=%-31.31s;
+
+#CLR_RIGHT_BAR
+[@XPOS=%d;;42H[0;37m @AREA_R=%2d;  [32m@NAME_R=%-31.31s;
+
+#HI_LEFT_NOBAR
+[@XPOS=%d;;3H[0;32m[[2C]
+
+#HI_RIGHT_NOBAR
+[@XPOS=%d;;42H[0;32m[[2C]
+
+#CLR_LEFT_NOBAR
+[@XPOS=%d;;3H[0m [2C 
+
+#CLR_RIGHT_NOBAR
+[@XPOS=%d;;42H[0m [2C 
+
+#NUM_INPUT
+[44;37m[@XPOS=%d;;27H@AREA=%-2d;[0m
+
+#INFOSTRING
+[@XPOS=%d;;29H[44;32m@INFOSTR=%49.49s;[@XPOS=%d;;79H[0;35m|[37m

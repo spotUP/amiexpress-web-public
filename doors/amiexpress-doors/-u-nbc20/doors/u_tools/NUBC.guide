@@ -1,0 +1,139 @@
+@database uNiVeRSaL DoCuMeNtS
+
+@node MAIN "Another Quality Product of -*- UNiVERSAL -*- !"
+
+               ________________________________________________
+              /  /  /     /  /  /  /__   /__  \\   ______   /  /
+             /  /  /  /  /  /  /  /  /  /    _/\\    /     /  /__
+            /  /  /  /  /  /  /  /  ___/  /  / /   /  /  /  /  /
+            \\____/__/__/__/_____/_____/__/__/_____/_____/_____/
+                                                     
+                      -//-    P R E S E N T S   -//- 
+
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+                   NEW-USER BROADCASTER V2.0 BY CRiMSOM!
+
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+                        @{" -//-  Introduction  -//- " Link Introduction}
+                        @{" -//-  Installation  -//- " Link Installation}
+                        @{" -//-     History    -//- " Link History}
+                        @{" -//-    Greetings   -//- " Link Greetings}
+                        @{" -//-    Universal   -//- " Link Universal}
+@endnode
+@node Introduction "Introduction"
+
+                  ----------[ iNTRODUCTiON ]-----------
+
+  New-User BroadCaster is a /X Door !
+
+
+  - Writes an EALL message concerning the appearance of a new-user.
+
+  - Nide Design.
+
+  - Fast C Code.
+ 
+
+
+
+
+
+
+
+
+                              @{"  MAiN MENU  " Link MAIN}
+@endnode
+@node Installation "Installation"
+
+                  ----------[ iNSTALLATiON ]-----------
+
+ - Unpack the archive with the full paths.
+
+ - Edit 'DOORS:U_TOOLS/NUBC.Config' :
+  - ---------------------> cut here <--------------------- -
+  BBS:CONFERENCE_2/
+  - ---------------------> cut here <--------------------- -
+
+  ^^^ This is the conference path where the messagebase is located!
+
+ - Edit 'BBS:SCREENS/JOINED.TXT' :
+  - ---------------------> cut here <--------------------- -
+  ~ 
+  ~CC_NEW
+  - ---------------------> cut here <--------------------- -
+
+ - Please make sure you have atleast 1 msg in your msgbase!!
+
+                              @{"  MAiN MENU  " Link MAIN}
+@endnode
+@node History "History"
+
+                     ----------[ HiSTORY ]-----------
+
+  Version 1.0 : First Release.
+
+  Version 2.0 : This Release : - Fixed bug when there was no msgbase.
+                                 (the door crashed, now an error is given)
+                               - Fixed bug with the config-file.
+                               - New Design.
+
+
+
+
+
+
+
+
+
+
+
+
+                               @{"  MAiN MENU  " Link MAIN}
+@endnode
+@node Greetings "Greetings"
+
+                ----------[ GREETS FLOW OUT 2 ]-----------
+
+
+               STERNONE . ULI . DAMiEN . FRANKY . TCB . ZACK
+
+                       And all the others I know......
+
+
+
+
+
+
+
+
+
+
+
+
+
+                               @{"  MAiN MENU  " Link MAIN}
+@endnode
+@node Universal "Universal 1996"
+
+                   ----------[ UNiVERSAL iS ]-----------
+
+  UNiVERSAL is the new name of S.U.C.K.
+
+  More info given in the nxt releases.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                               @{"  MAiN MENU  " Link MAIN}
+@endnode

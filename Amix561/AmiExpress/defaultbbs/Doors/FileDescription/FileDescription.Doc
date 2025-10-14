@@ -1,0 +1,282 @@
+
+             File Description (Version 1.1) [RELEASE 2]
+                All Coding by Bobo (Mystic/X-Power)
+                -----------------------------------
+                       Release date 07-31-94
+
+Hello, and welcome to the best fileid extractor door you've ever seen on
+Amiexpress.  There  has never  been  anything  like  this  door  before.
+
+File Description  is a fileid extractor  such as FileID by ByteAndi, but
+is much more powerful.   Probably  the  most  powerful  fileid extractor
+available for amiexpress today!
+
+This  door works  and  have been tested  on AmiExpress 3.20+.  I haven't
+tested it  on  any other  amiexpress  clones such  as  S-Express, but it
+should work there too.
+
+New things in version 1.1 (Read Updatefile for more details):
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+* All reported and found bugs  are been removed.  I NEED your bugreports
+  so we can get  filedescription free  from all sorts  of bugs  and make
+  it 'the perfect fileid extractor'.
+* File Description  have now support for removing these lame bbs-ads out
+  of the file_id.diz.
+
+Notable Features:
+~~~~~~~~~~~~~~~~~
+* File Description have  a  powerful Fullscreen Description Editor where
+  the users write/edit/create a description (This is ofcourse configable
+  for each user).
+* File Description have support  for autodetecting grouplogos. The sysop
+  can add how many logos he/she wants (Unlimited).
+* File Description have a nice looking userconfig editor where the users
+  can configure his/her personal settings.
+* File Description (UserConfig Editor)  have built  in  userhelp so even
+  braindead people can use File Description.
+* File Description have  support  for removing thoose  lame bbs-ads that
+  nowadays are available in the fileid description.
+* File Description have been tested and works 100% on multinode systems.
+* File Description is much faster then other fileid extractors. Probably
+  becouse if its high optimized code.
+* File Description is written entirely in C for fast code.
+* File Description  comes  in  68000 and 68020  code  to get the maximum
+  speed on your system.
+* File Description have everything needed built in. No need for external
+  programs such in FileId by Byteandi (SENT.X)
+* File Description is the nicest looking fileid extractor available, and
+  is the easiest one to use and install.
+
+
+
+                               INSTALLATION
+                               ~~~~~~~~~~~~
+File Description  requires  the  following   things  to  run  correctly:
+
+* A fully installed and running amiexpress v3.20+. File Description have
+  not  been  tested  on  any other  amiexpress  clones, but should work.
+* A fully installed and running workbench v37+.
+* DMSDescript (Coded by REMO/MYSTIC) DMS-Support.
+  EXEDescript (Coded by REMO/MYSTIC) EXE-Support.
+  TXTExtract  (Coded by SPY/MYSTIC)  TXT-Support.
+  GIFDesc     (Coded by MIT/MYSTIC)  GIF-Support.
+  --- This four files should be available in this release archive.
+
+If you have the above things, you  can  continue with this installation.
+Otherwise quit and  get/buy  the  missing  thing  becouse it won't work!
+
+To install File Description, start with copying the included icons where
+they should be located. (This installation is ONLY for Amiexpress 3.20+)
+
+------------( Snap this lines )---------------------------
+Copy RAM:Commands/BBSCmd/SENT.info BBS:Commands/BBSCmd/
+Copy RAM:Commands/SYSCmd/EXAMINE.info BBS:Commands/SYSCmd/
+----------------------------------------------------------
+
+Continue with making a  directory in doors: called 'FileDescription' and
+copy the executable files,docs etc.
+
+------------( Snap this lines )---------------------------
+Makedir Doors:FileDescription
+Copy RAM:Doors/FileDescripion/FileDescription.#? Doors:FileDescription/
+----------------------------------------------------------
+
+Now copy the  executable file 'FileDescription.<cpu>' (depending on what
+cpu you have) to 'FileDescription.x'
+
+(THIS IS  JUST TO MAKE SURE YOU HAVE EVERYTHING INCASE YOU LOOSE THE LHA
+PACKAGE)
+
+EG: Copy FileDescription020.x FileDescription.x
+(If you have 68020+ cpu)
+
+That's it!  Please feel  free  to contact me  if  you are having trouble
+installing the tools.  My numbers are  at  the bottom  of this document.
+
+
+
+                              CONFIGURATION
+                              ~~~~~~~~~~~~~
+File Description  is  not running  on  icons, since  the most  of us are
+hating them (Included me).  Instead i am using scriptfiles, looking like
+the one used by Super-Dupecheck (By Pot-Noodle). This will also make the
+door alot faster and smaller.
+
+The following external files are available:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+FileDescription.Config  (Configfile)
+FileDescription.Logos   (Available grouplogos)
+FileDescription.Strip   (Lines to strip)
+FileDescription.Help    (User Onlinehelp)
+
+NOTE  You don't need to change any of  this files  if you don't want to:
+      * Add/Remove filetypes.  The following filetypes are  supported in
+        the default config: (DMS,ZIP,TXT,LHA,LZH).
+      * Add/Remove/Disable description  logos.
+      * Add/Remove striplines.
+
+FileDescription.Config:
+-----------------------
+The following keywords are available:
+
+Template = Pack_<ext>: Packstring
+ Example = Pack_LHA: Lha a %P %Wfile_id.diz
+ Default = NONE
+
+Keywords in string: %P - filename with full path.
+                    %W - work directory.
+
+Eg, the above example would be replaced with >:
+Pack_LHA: Lha a BBS:Node1/playpen/FILE.LHA BBS:Node1/work/file_id.diz
+
+This  is  the Packstring for  each filetype.  The sysop can add how many
+file-types as he wants (Unlimited).
+
+Template = Depack_<ext>: Depackstring
+ Example = Depack_LHA: Lha e %P file_id.diz %W
+ Default = NONE
+
+Keywords in string: %P - filename with full path.
+                    %W - work directory.
+
+Eg, the above example would be replaced with >:
+Depack_LHA: Lha e BBS:Node1/playpen/FILE.LHA file_id.diz BBS:Node1/work/
+
+This is  the Depackstring for each filetype.  The sysop can add how many
+file-types as he wants (Unlimited).
+
+Template = Config_Access: Accesslevel
+ Example = Config_Access: 20
+ Default = 0
+
+This  is the  security  level  needed to let a  user  configure  his/her
+settings.
+
+Template = Disable_Fsde
+ Example = Disable_Fsde
+ Default = FSDE NOT disabled.
+
+If  this  is  specified,  the  fullscreen  description  editor  will  be
+disabled.  Only  use  this  if you are  having  problems with the  FSDE.
+
+
+FileDescription.Logos:
+----------------------
+The following keywords are available:
+
+Template = Group: Groupname
+ Example = Group: Mystic
+
+This the the full name of the group.
+
+Template = Detect: <name>
+ Example = Detect: MST-
+
+This is how File Description should autodetect a grouplogo IE if someone
+uploads a file starting with MST-, file description will ask the user if
+he wants to use a MYSTIC logo.
+
+Example of a group (MYSTIC)
+
+Group: Mystic
+Detect: MST-
+.___/\____/\_ __/\_____/\__/\_/\___ __ ____.
+|______ __  / _   ____  ___  _  __//_//    |
+|\/ / / /  /  /\_  \ /  //  /  /__         |
+¦/ / / /\__  /  /  //  //  /  /  / ____    |
+/_/_/ /___  /___  //  //  /\__  /__\  /____.
+____ /____ /____ /__ /__ /____ /___\\//_   ¦
+|  \/bIS \/    \/  \/  \/    \/     \/     |
+#
+
+Remember: Each LOGO must end with a (#). The description should be 10*44
+          chars, otherwise it will be cut.   If the group don't have any
+          DETECT, enter NONE. (IE Detect: NONE)
+
+
+FileDescription.Strip:
+----------------------
+In this file  you should write the lines you want to  be stripped ie the
+lines  you don't want to  have in your directory (bbs-ads).  You may use
+'?' as  a wildcard  incase the add include  the date/time  of uploading.
+
+ie if an add look like this:
+[11:19:12] DOWNLOADED FROM XXXXXX [07-28-94]
+
+you may enter (in filedescription.strip):
+[??:??:??] DOWNLOADED FROM XXXXXX [??-??-??]
+
+
+
+                                GREETINGS
+                                ~~~~~~~~~
+I personally want to thank all my beta-testers at THE EAST BBS.
+In no particular order, they are (two columns):
+
+L.A.Style  [GER]  (Terminal Obs.)  Demax      [SWE]  (UnderCover)
+Boozer     [SWE]  (Shadow Zone)    FireHawk   [SWE]  (Hardware Tower)
+Uffe       [SWE]  (TNT)            Distler    [SWE]  (The Slammer)
+JLM&Snoopy [SWE]  (Eagles Nest)    BlueLight  [ITA]  (Asylum)
+Danzig     [SWE]  (Kyron Dome)     FCKW       [GER]  (Second World)
+Reverend D [SWE]  (Trespass)       Natas      [ITA]  (Temple of dest.)
+Rhys       [SWE]  (Neurobashing)   Double     [NOR]  (Fatal Chaos)
+Ezco       [SWE]  (Serpent Hill)   Zcandaler  [SWE]  (Total Eclipse)
+[StN]      [FIN]  (MNC)
+
+Also greetings to the following people:
+-- LOOBY/INSANE, PACIFIC/2000 AD, BYTEANDI/TRSI, REMO/MYSTIC, UFOK/MYSTIC,
+   EMPIRE/MYSTIC, KILLRAVEN/MYSTIC, DEMAX/DELIGHT, REACTOR/MYSTIC
+
+Anyone can become a beta-tester, simply make a call to THE EAST BBS.
+You'll find the number at the bottom of this document.
+
+
+
+                        OTHER DOORS COMING SOON
+                        ~~~~~~~~~~~~~~~~~~~~~~~
+Directory Scan (Written by LOOBY/INSANE and BOBO/MYSTIC)
+--- The FASTEST newscan door  available.  Beats  Turbo-NewScan,Newfiles,
+    5D-Newfiles.   The  user  can  use  the  curser-keys   to  move  one
+    description up/down,  one page up/down  or  normal filescan.   DScan
+    will  also  only  take  whole  descriptions.  It will NOT pause in a
+    description  like  all other  stupid  newfiles  doors. Everything is
+    ofcourse  configable.  The  user  can  config  his own colors or use
+    B/W. Filetagging via curserkeys also available.
+    -------- In Progress (Available soon).
+
+Eall Delete UPDATE (Written by BOBO/MYSTIC)
+--- An  update  of the famous EALL-Deleter.  It is now  about 80% faster
+    then the  first  version.  The sysop can  now also  remake EALL msgs
+    to ALL if he wants ----- In Progress (Available soon).
+
+
+
+                             FINAL COMMENTS
+                             ~~~~~~~~~~~~~~
+This program is Copyright (C)1994 by Bobo/Mystic.  File Description  and
+FSDE Fullscreen Description Editor(tm)  are  all  registered  trademarks
+and  may  not  be   used  without  written  permission  of  the  author.
+
+If your hard-drive or  anything else goes wrong  when you are using this
+door, i  am not  responsible.  This tool  has been thouroughly tested on
+many  boards all  around  the  world, but "there is always one more bug"
+
+That's it for now, i hope you enjoy this door.
+
+-Bobo (Mystic/X-Power)
+
+
+                              CONTACT INFO
+                              ~~~~~~~~~~~~
+If you have any questions, bug reports, suggestions, you can  contact me
+at the following boards:
+
+The East BBS: +46(8)940614  [16.8DS]   SYSOP: BOBO/MYSTIC
+              +46(8)940615  [16.8DS]   SYSOP: BOBO/MYSTIC
+              +46(8)940919  [14.4HST]  SYSOP: BOBO/MYSTIC
+              Username: GUEST Password: PASSWORD
+Last Outpost: +31-72157682  [16.8DS]   SYSOP: EMPIRE/MYSTIC
+              +31-72201182  [16.8DS]   SYSOP: EMPIRE/MYSTIC
+Channel-X   : +31-229062244 [16.8DS]
+
+or write me a mail on internet: bobo@cyberspace.net

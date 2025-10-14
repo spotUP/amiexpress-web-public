@@ -1,0 +1,20 @@
+
+[0m NSU ?                         [36m- Show this help text
+[0m NSU W                         [36m- Configure AquaScan
+[0m NSU [S] [dir] [Q] [NS]        [36m- Scan all confs since day of last call
+[0m NSU mm-dd[-yy] [dir] [Q] [NS] [36m- Scan all confs since the specified date
+[0m NSU T [dir] [Q] [NS]          [36m- Scan today's files in all confs
+[0m NSU Y [dir] [Q] [NS]          [36m- Scan all confs since yesterday
+[0m NSU -x [dir] [Q] [NS]         [36m- Scan all confs since x days back
+[0m NSU !x [dir] [Q] [NS]         [36m- Scan the x newest files in all confs
+[0m NSU R [dir] [Q] [NS]          [36m- Scan all confs in reverse chronological order
+        ^     ^   ^
+        |     |   |
+        |     |   `-- Non-stop scrolling
+        |     `--- Quick scan = Show only first line of every description
+        |
+        +-- U -- Upload dir (default)
+        +-- A -- All dirs
+        +-- x -- Dir number x
+        `-- H -- Hold dir
+[0m
