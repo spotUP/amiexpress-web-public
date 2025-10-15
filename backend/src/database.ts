@@ -285,7 +285,7 @@ export class Database {
         CREATE TABLE IF NOT EXISTS message_bases (
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -299,8 +299,8 @@ export class Database {
           body TEXT NOT NULL,
           author TEXT NOT NULL,
           timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
-          "messageBaseId" INTEGER NOT NULL REFERENCES message_bases(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          messagebaseid INTEGER NOT NULL REFERENCES message_bases(id),
           isPrivate BOOLEAN DEFAULT false,
           toUser TEXT,
           parentId INTEGER,
@@ -318,7 +318,7 @@ export class Database {
           name TEXT NOT NULL,
           description TEXT,
           path TEXT NOT NULL,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           maxFiles INTEGER DEFAULT 100,
           uploadAccess INTEGER DEFAULT 10,
           downloadAccess INTEGER DEFAULT 1,
@@ -377,7 +377,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS bulletins (
           id SERIAL PRIMARY KEY,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           filename TEXT NOT NULL,
           title TEXT NOT NULL,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -407,8 +407,8 @@ export class Database {
 
   private async createIndexes(client: any): Promise<void> {
     // Message indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages("messageBaseId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messagebaseid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages("isPrivate", "toUser")`);
@@ -419,9 +419,9 @@ export class Database {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries("uploadDate")`);
 
     // Conference indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins("conferenceId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conferenceid)`);
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
