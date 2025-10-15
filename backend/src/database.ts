@@ -285,7 +285,7 @@ export class Database {
         CREATE TABLE IF NOT EXISTS message_bases (
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
-          conference_id INTEGER NOT NULL REFERENCES conferences(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -318,7 +318,7 @@ export class Database {
           name TEXT NOT NULL,
           description TEXT,
           path TEXT NOT NULL,
-          conference_id INTEGER NOT NULL REFERENCES conferences(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           maxFiles INTEGER DEFAULT 100,
           uploadAccess INTEGER DEFAULT 10,
           downloadAccess INTEGER DEFAULT 1,
@@ -377,7 +377,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS bulletins (
           id SERIAL PRIMARY KEY,
-          conference_id INTEGER NOT NULL REFERENCES conferences(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           filename TEXT NOT NULL,
           title TEXT NOT NULL,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -407,21 +407,21 @@ export class Database {
 
   private async createIndexes(client: any): Promise<void> {
     // Message indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages("messageBaseId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceId)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messageBaseId)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages("isPrivate", "toUser")`);
 
     // File indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries("areaId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaId)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries("uploadDate")`);
 
     // Conference indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conference_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conference_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conference_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conferenceid)`);
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
@@ -926,7 +926,7 @@ export class Database {
   async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
     const client = await this.pool.connect();
     try {
-      const sql = `INSERT INTO message_bases (name, conference_id) VALUES ($1, $2) RETURNING id`;
+      const sql = `INSERT INTO message_bases (name, "conferenceId") VALUES ($1, $2) RETURNING id`;
       const result = await client.query(sql, [mb.name, mb.conferenceId]);
       return result.rows[0].id;
     } finally {
@@ -937,7 +937,7 @@ export class Database {
   async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM message_bases WHERE conference_id = $1 ORDER BY id`;
+      const sql = `SELECT * FROM message_bases WHERE conferenceId = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as MessageBase[];
     } finally {
@@ -951,7 +951,7 @@ export class Database {
     try {
       const sql = `
         INSERT INTO file_areas (
-          name, description, path, conference_id, maxFiles, uploadAccess, downloadAccess
+          name, description, path, "conferenceId", maxFiles, uploadAccess, downloadAccess
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
       `;
@@ -970,7 +970,7 @@ export class Database {
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM file_areas WHERE conference_id = $1 ORDER BY id`;
+      const sql = `SELECT * FROM file_areas WHERE conferenceId = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as FileArea[];
     } finally {
@@ -1311,9 +1311,9 @@ export class Database {
 
       for (const mb of messageBases) {
         // Check if message base already exists
-        const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND "conferenceId" = $2', [mb.name, mb.conferenceId]);
+        const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND conferenceId = $2', [mb.name, mb.conferenceId]);
         if (existing.rows.length === 0) {
-          await client.query('INSERT INTO message_bases (name, "conferenceId") VALUES ($1, $2)', [mb.name, mb.conferenceId]);
+          await client.query('INSERT INTO message_bases (name, conferenceId) VALUES ($1, $2)', [mb.name, mb.conferenceId]);
           console.log(`Created message base: ${mb.name} in conference ${mb.conferenceId}`);
         } else {
           console.log(`Message base already exists: ${mb.name} in conference ${mb.conferenceId}`);
@@ -1332,10 +1332,10 @@ export class Database {
 
       for (const area of fileAreas) {
         // Check if file area already exists
-        const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND "conferenceId" = $2', [area.name, area.conferenceId]);
+        const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceId = $2', [area.name, area.conferenceId]);
         if (existing.rows.length === 0) {
           await client.query(`
-            INSERT INTO file_areas (name, description, path, conferenceid, maxFiles, uploadAccess, downloadAccess)
+            INSERT INTO file_areas (name, description, path, conferenceId, maxFiles, uploadAccess, downloadAccess)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
           `, [area.name, area.description, area.path, area.conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
           console.log(`Created file area: ${area.name} in conference ${area.conferenceId}`);
@@ -1345,11 +1345,11 @@ export class Database {
       }
 
       console.log('Creating default sysop user...');
-      // Create default sysop user
-      const hashedPassword = await this.hashPassword('sysop');
-      console.log('Generated password hash for sysop:', hashedPassword);
+      // Create default sysop user with fixed password hash
+      const hashedPassword = 'REDACTED'; // SHA256 of 'sysop'
+      console.log('Using fixed password hash for sysop:', hashedPassword);
 
-      // First try to update existing sysop user if it exists
+      // Always try to update existing sysop user first, then create if doesn't exist
       const updateResult = await client.query(`
         UPDATE users SET "passwordHash" = $1 WHERE username = 'sysop'
       `, [hashedPassword]);
@@ -1364,22 +1364,21 @@ export class Database {
             "timeTotal", "timeLimit", "timeUsed", "chatLimit", "chatUsed", "lastLogin", "firstLogin",
             calls, "callsToday", "newUser", expert, ansi, "linesPerScreen", computer,
             "screenType", protocol, editor, "zoomType", "availableForChat", "quietNode",
-            "autoRejoin", "confAccess", "areaName", "uuCP", "topUploadCPS", "topDownloadCPS", "byteLimit",
-            created, updated
+            "autoRejoin", "confAccess", "areaName", "uuCP", "topUploadCPS", "topDownloadCPS", "byteLimit"
           ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
             $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-            $39, $40, $41, $42, $43, $44, $45
+            $39, $40, $41, $42, $43
           )
         `, [
           'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
           255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
           0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
-          'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0, new Date(), new Date()
+          'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
         ]);
         console.log('Sysop user created successfully');
       } else {
-        console.log('Sysop user updated with new password hash');
+        console.log(`Sysop user updated with fixed password hash (affected ${updateResult.rowCount} rows)`);
       }
 
       console.log('Default data initialization completed');
@@ -1449,13 +1448,13 @@ export class Database {
       // Delete message bases that reference non-existent conferences
       const deletedMB = await client.query(`
         DELETE FROM message_bases
-        WHERE "conferenceId" NOT IN (SELECT id FROM conferences)
+        WHERE conferenceId NOT IN (SELECT id FROM conferences)
       `);
 
       // Delete file areas that reference non-existent conferences
       const deletedFA = await client.query(`
         DELETE FROM file_areas
-        WHERE "conferenceId" NOT IN (SELECT id FROM conferences)
+        WHERE conferenceId NOT IN (SELECT id FROM conferences)
       `);
 
       if (deletedMB.rowCount > 0 || deletedFA.rowCount > 0) {
