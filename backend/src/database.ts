@@ -414,9 +414,9 @@ export class Database {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isprivate, touser)`);
 
     // File indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaId)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries("uploadDate")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries(uploaddate)`);
 
     // Conference indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conferenceid)`);
