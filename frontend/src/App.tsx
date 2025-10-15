@@ -73,7 +73,7 @@ function App() {
     }, 100);
 
     // Connect to backend WebSocket (supports Render.com deployment)
-    const backendUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
+    const backendUrl = (import.meta as any).env?.VITE_API_URL || 'https://amiexpress-web-three.vercel.app';
     const ws = io(backendUrl, {
       transports: ['websocket', 'polling'], // Prefer WebSocket, fallback to polling
       upgrade: true, // Allow transport upgrades
