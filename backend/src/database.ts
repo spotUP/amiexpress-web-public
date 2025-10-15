@@ -467,7 +467,33 @@ export class Database {
     try {
       const sql = `SELECT * FROM users WHERE username = $1`;
       const result = await client.query(sql, [username]);
-      return result.rows[0] as User || null;
+      if (result.rows[0]) {
+        const user = result.rows[0] as any;
+        // Convert bigint fields to numbers for compatibility
+        return {
+          ...user,
+          bytesUpload: Number(user.bytesupload || user.bytesUpload),
+          bytesDownload: Number(user.bytesdownload || user.bytesDownload),
+          byteLimit: Number(user.bytelimit || user.byteLimit),
+          secLevel: Number(user.seclevel || user.secLevel),
+          uploads: Number(user.uploads),
+          downloads: Number(user.downloads),
+          ratio: Number(user.ratio),
+          ratioType: Number(user.ratiotype || user.ratioType),
+          timeTotal: Number(user.timetotal || user.timeTotal),
+          timeLimit: Number(user.timelimit || user.timeLimit),
+          timeUsed: Number(user.timeused || user.timeUsed),
+          chatLimit: Number(user.chatlimit || user.chatLimit),
+          chatUsed: Number(user.chatused || user.chatUsed),
+          calls: Number(user.calls),
+          callsToday: Number(user.callstoday || user.callsToday),
+          linesPerScreen: Number(user.linesperscreen || user.linesPerScreen),
+          autoRejoin: Number(user.autorejoin || user.autoRejoin),
+          topUploadCPS: Number(user.topuploadcps || user.topUploadCPS),
+          topDownloadCPS: Number(user.topdownloadcps || user.topDownloadCPS),
+        } as User;
+      }
+      return null;
     } finally {
       client.release();
     }
