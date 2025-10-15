@@ -30,10 +30,6 @@
       "destination": "/backend/src/index.ts"
     },
     {
-      "source": "/vite.svg",
-      "destination": "/frontend/vite.svg"
-    },
-    {
       "source": "/(.*)",
       "destination": "/frontend/$1"
     }
