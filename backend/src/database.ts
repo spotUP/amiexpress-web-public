@@ -225,45 +225,45 @@ export class Database {
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
           username TEXT UNIQUE NOT NULL,
-          passwordHash TEXT NOT NULL,
+          "passwordHash" TEXT NOT NULL,
           realname TEXT NOT NULL,
           location TEXT,
           phone TEXT,
           email TEXT,
-          secLevel INTEGER DEFAULT 10,
+          "secLevel" INTEGER DEFAULT 10,
           uploads INTEGER DEFAULT 0,
           downloads INTEGER DEFAULT 0,
-          bytesUpload BIGINT DEFAULT 0,
-          bytesDownload BIGINT DEFAULT 0,
+          "bytesUpload" BIGINT DEFAULT 0,
+          "bytesDownload" BIGINT DEFAULT 0,
           ratio INTEGER DEFAULT 0,
-          ratioType INTEGER DEFAULT 0,
-          timeTotal INTEGER DEFAULT 0,
-          timeLimit INTEGER DEFAULT 0,
-          timeUsed INTEGER DEFAULT 0,
-          chatLimit INTEGER DEFAULT 0,
-          chatUsed INTEGER DEFAULT 0,
-          lastLogin TIMESTAMPTZ,
-          firstLogin TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          "ratioType" INTEGER DEFAULT 0,
+          "timeTotal" INTEGER DEFAULT 0,
+          "timeLimit" INTEGER DEFAULT 0,
+          "timeUsed" INTEGER DEFAULT 0,
+          "chatLimit" INTEGER DEFAULT 0,
+          "chatUsed" INTEGER DEFAULT 0,
+          "lastLogin" TIMESTAMPTZ,
+          "firstLogin" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           calls INTEGER DEFAULT 0,
-          callsToday INTEGER DEFAULT 0,
-          newUser BOOLEAN DEFAULT true,
+          "callsToday" INTEGER DEFAULT 0,
+          "newUser" BOOLEAN DEFAULT true,
           expert BOOLEAN DEFAULT false,
           ansi BOOLEAN DEFAULT true,
-          linesPerScreen INTEGER DEFAULT 23,
+          "linesPerScreen" INTEGER DEFAULT 23,
           computer TEXT,
-          screenType TEXT DEFAULT 'Amiga Ansi',
+          "screenType" TEXT DEFAULT 'Amiga Ansi',
           protocol TEXT DEFAULT '/X Zmodem',
           editor TEXT DEFAULT 'Prompt',
-          zoomType TEXT DEFAULT 'QWK',
-          availableForChat BOOLEAN DEFAULT true,
-          quietNode BOOLEAN DEFAULT false,
-          autoRejoin INTEGER DEFAULT 1,
-          confAccess TEXT DEFAULT 'XXX',
-          areaName TEXT DEFAULT 'Standard',
-          uuCP BOOLEAN DEFAULT false,
-          topUploadCPS INTEGER DEFAULT 0,
-          topDownloadCPS INTEGER DEFAULT 0,
-          byteLimit BIGINT DEFAULT 0,
+          "zoomType" TEXT DEFAULT 'QWK',
+          "availableForChat" BOOLEAN DEFAULT true,
+          "quietNode" BOOLEAN DEFAULT false,
+          "autoRejoin" INTEGER DEFAULT 1,
+          "confAccess" TEXT DEFAULT 'XXX',
+          "areaName" TEXT DEFAULT 'Standard',
+          "uuCP" BOOLEAN DEFAULT false,
+          "topUploadCPS" INTEGER DEFAULT 0,
+          "topDownloadCPS" INTEGER DEFAULT 0,
+          "byteLimit" BIGINT DEFAULT 0,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -478,40 +478,40 @@ export class Database {
           location: user.location,
           phone: user.phone,
           email: user.email,
-          secLevel: Number(user.seclevel),
-          uploads: Number(user.uploads),
-          downloads: Number(user.downloads),
-          bytesUpload: Number(user.bytesupload),
-          bytesDownload: Number(user.bytesdownload),
-          ratio: Number(user.ratio),
-          ratioType: Number(user.ratiotype),
-          timeTotal: Number(user.timetotal),
-          timeLimit: Number(user.timelimit),
-          timeUsed: Number(user.timeused),
-          chatLimit: Number(user.chatlimit),
-          chatUsed: Number(user.chatused),
-          lastLogin: user.lastlogin,
-          firstLogin: user.firstlogin,
-          calls: Number(user.calls),
-          callsToday: Number(user.callstoday),
-          newUser: user.newuser,
+          secLevel: Number(user.secLevel),
+          uploads: isNaN(Number(user.uploads)) ? 0 : Number(user.uploads),
+          downloads: isNaN(Number(user.downloads)) ? 0 : Number(user.downloads),
+          bytesUpload: isNaN(Number(user.bytesUpload)) ? 0 : Number(user.bytesUpload),
+          bytesDownload: isNaN(Number(user.bytesDownload)) ? 0 : Number(user.bytesDownload),
+          ratio: isNaN(Number(user.ratio)) ? 0 : Number(user.ratio),
+          ratioType: isNaN(Number(user.ratioType)) ? 0 : Number(user.ratioType),
+          timeTotal: isNaN(Number(user.timeTotal)) ? 0 : Number(user.timeTotal),
+          timeLimit: isNaN(Number(user.timeLimit)) ? 0 : Number(user.timeLimit),
+          timeUsed: isNaN(Number(user.timeUsed)) ? 0 : Number(user.timeUsed),
+          chatLimit: isNaN(Number(user.chatLimit)) ? 0 : Number(user.chatLimit),
+          chatUsed: isNaN(Number(user.chatUsed)) ? 0 : Number(user.chatUsed),
+          lastLogin: user.lastLogin,
+          firstLogin: user.firstLogin,
+          calls: isNaN(Number(user.calls)) ? 0 : Number(user.calls),
+          callsToday: isNaN(Number(user.callsToday)) ? 0 : Number(user.callsToday),
+          newUser: user.newUser,
           expert: user.expert,
           ansi: user.ansi,
-          linesPerScreen: Number(user.linesperscreen),
+          linesPerScreen: isNaN(Number(user.linesPerScreen)) ? 23 : Number(user.linesPerScreen),
           computer: user.computer,
-          screenType: user.screentype,
+          screenType: user.screenType,
           protocol: user.protocol,
           editor: user.editor,
-          zoomType: user.zoomtype,
-          availableForChat: user.availableforchat,
-          quietNode: user.quietnode,
-          autoRejoin: Number(user.autorejoin),
-          confAccess: user.confaccess,
-          areaName: user.areaname,
-          uuCP: user.uucp,
-          topUploadCPS: Number(user.topuploadcps),
-          topDownloadCPS: Number(user.topdownloadcps),
-          byteLimit: Number(user.bytelimit),
+          zoomType: user.zoomType,
+          availableForChat: user.availableForChat,
+          quietNode: user.quietNode,
+          autoRejoin: isNaN(Number(user.autoRejoin)) ? 1 : Number(user.autoRejoin),
+          confAccess: user.confAccess,
+          areaName: user.areaName,
+          uuCP: user.uuCP,
+          topUploadCPS: isNaN(Number(user.topUploadCPS)) ? 0 : Number(user.topUploadCPS),
+          topDownloadCPS: isNaN(Number(user.topDownloadCPS)) ? 0 : Number(user.topDownloadCPS),
+          byteLimit: isNaN(Number(user.byteLimit)) ? 0 : Number(user.byteLimit),
           created: user.created,
           updated: user.updated,
         } as User;
@@ -1316,22 +1316,35 @@ export class Database {
       console.log('Creating default sysop user...');
       // Create default sysop user
       const hashedPassword = await this.hashPassword('sysop');
-      await client.query(`
-        INSERT INTO users (
-          id, username, passwordHash, realname, location, phone, email, secLevel,
-          uploads, downloads, bytesUpload, bytesDownload, ratio, ratioType,
-          timeTotal, timeLimit, timeUsed, chatLimit, chatUsed, lastLogin, firstLogin,
-          calls, callsToday, newUser, expert, ansi, linesPerScreen, computer,
-          screenType, protocol, editor, zoomType, availableForChat, quietNode,
-          autoRejoin, confAccess, areaName, uuCP, topUploadCPS, topDownloadCPS, byteLimit
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
-        ON CONFLICT (username) DO NOTHING
-      `, [
-        'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
-        255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
-        0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
-        'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
-      ]);
+      console.log('Generated password hash for sysop:', hashedPassword);
+
+      // First try to update existing sysop user if it exists
+      const updateResult = await client.query(`
+        UPDATE users SET passwordHash = $1 WHERE username = 'sysop'
+      `, [hashedPassword]);
+
+      if (updateResult.rowCount === 0) {
+        // User doesn't exist, create it
+        console.log('Creating new sysop user...');
+        await client.query(`
+          INSERT INTO users (
+            id, username, passwordHash, realname, location, phone, email, secLevel,
+            uploads, downloads, bytesUpload, bytesDownload, ratio, ratioType,
+            timeTotal, timeLimit, timeUsed, chatLimit, chatUsed, lastLogin, firstLogin,
+            calls, callsToday, newUser, expert, ansi, linesPerScreen, computer,
+            screenType, protocol, editor, zoomType, availableForChat, quietNode,
+            autoRejoin, confAccess, areaName, uuCP, topUploadCPS, topDownloadCPS, byteLimit
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
+        `, [
+          'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
+          255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
+          0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
+          'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
+        ]);
+        console.log('Sysop user created successfully');
+      } else {
+        console.log('Sysop user updated with new password hash');
+      }
 
       console.log('Default data initialization completed');
     } finally {

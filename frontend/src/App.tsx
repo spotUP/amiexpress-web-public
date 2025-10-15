@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
-import { CanvasAddon } from '@xterm/addon-canvas';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 
