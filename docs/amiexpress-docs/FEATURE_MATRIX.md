@@ -158,9 +158,14 @@ Comprehensive comparison of AmiExpress v5.6.0 features vs. AmiExpress Web implem
 ## 📋 **Testing Coverage**
 
 ### **Automated Testing:**
-- ✅ Unit tests for command handlers (13 test cases covering all major BBS commands)
+- ✅ Unit tests for command handlers (700+ lines of comprehensive tests covering all major BBS commands)
 - ✅ Integration tests for user journeys (database operations, message/file workflows)
 - ✅ End-to-end testing for full sessions (complete user session flows, multi-user scenarios)
+- ✅ Command parsing and routing tests (input validation, parameter handling, error scenarios)
+- ✅ Session state management tests (state transitions, input buffering, menu pause logic)
+- ✅ Permission checking tests (sysop-only commands, security level validation)
+- ✅ Database integration tests (user operations, message persistence, file management)
+- ✅ Error handling tests (invalid commands, malformed input, database errors)
 
 ### **Manual Testing:**
 - ✅ Basic command functionality
@@ -214,6 +219,7 @@ Comprehensive comparison of AmiExpress v5.6.0 features vs. AmiExpress Web implem
 - ✅ **ZModem Protocol Support**: Full ZModem protocol implementation with WebSocket simulation
 - ✅ **FTP Server Support**: Complete FTP protocol implementation with WebSocket simulation
 - ✅ **Enhanced Error Handling**: Comprehensive error responses and recovery mechanisms throughout the system
+- ✅ **Comprehensive Testing**: 700+ lines of automated tests covering command handlers, session management, database operations, and error scenarios
 
 ---
 
