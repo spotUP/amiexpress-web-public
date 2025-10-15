@@ -291,26 +291,35 @@ io.on('connection', (socket: Socket) => {
         return;
       }
 
+      console.log('Step 1: Validating input - OK');
+
       // Authenticate user against database
+      console.log('Step 2: Getting user from database...');
       const user = await db.getUserByUsername(data.username);
+      console.log('Step 2 result:', user ? 'User found' : 'User not found');
       if (!user) {
         console.log('User not found:', data.username);
         socket.emit('login-failed', 'User not found');
         return;
       }
 
+      console.log('Step 3: Verifying password...');
       // Verify password
       const isValidPassword = await db.verifyPassword(data.password, user.passwordHash);
+      console.log('Step 3 result: Password valid =', isValidPassword);
       if (!isValidPassword) {
         console.log('Invalid password for user:', data.username);
         socket.emit('login-failed', 'Invalid password');
         return;
       }
 
+      console.log('Step 4: Updating user login info...');
       // Update last login
       await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
+      console.log('Step 4: User updated successfully');
 
       // Set session user data
+      console.log('Step 5: Setting session data...');
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
@@ -326,7 +335,8 @@ io.on('connection', (socket: Socket) => {
       // Start the proper AmiExpress flow: bulletins first
       displaySystemBulletins(socket, session);
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Login error details:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       socket.emit('login-failed', 'Internal server error');
     }
   });

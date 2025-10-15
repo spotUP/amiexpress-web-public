@@ -285,7 +285,7 @@ export class Database {
         CREATE TABLE IF NOT EXISTS message_bases (
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
-          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -299,15 +299,15 @@ export class Database {
           body TEXT NOT NULL,
           author TEXT NOT NULL,
           timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
-          messagebaseid INTEGER NOT NULL REFERENCES message_bases(id),
-          isprivate BOOLEAN DEFAULT false,
-          touser TEXT,
-          parentid INTEGER,
+          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
+          "messageBaseId" INTEGER NOT NULL REFERENCES message_bases(id),
+          "isPrivate" BOOLEAN DEFAULT false,
+          "toUser" TEXT,
+          "parentId" INTEGER,
           attachments JSONB,
           edited BOOLEAN DEFAULT false,
-          editedby TEXT,
-          editedat TIMESTAMPTZ
+          "editedBy" TEXT,
+          "editedAt" TIMESTAMPTZ
         )
       `);
 
@@ -318,7 +318,7 @@ export class Database {
           name TEXT NOT NULL,
           description TEXT,
           path TEXT NOT NULL,
-          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
           maxFiles INTEGER DEFAULT 100,
           uploadAccess INTEGER DEFAULT 10,
           downloadAccess INTEGER DEFAULT 1,
@@ -335,10 +335,10 @@ export class Database {
           description TEXT,
           size BIGINT NOT NULL,
           uploader TEXT NOT NULL,
-          uploaddate TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          "uploadDate" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           downloads INTEGER DEFAULT 0,
-          areaid INTEGER NOT NULL REFERENCES file_areas(id),
-          fileiddiz TEXT,
+          "areaId" INTEGER NOT NULL REFERENCES file_areas(id),
+          "fileIdDiz" TEXT,
           rating REAL DEFAULT 0,
           votes INTEGER DEFAULT 0,
           status TEXT DEFAULT 'active',
@@ -351,23 +351,23 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS sessions (
           id TEXT PRIMARY KEY,
-          userid TEXT REFERENCES users(id),
-          socketid TEXT NOT NULL,
+          "userId" TEXT REFERENCES users(id),
+          "socketId" TEXT NOT NULL,
           state TEXT NOT NULL,
-          substate TEXT,
-          currentconf INTEGER DEFAULT 0,
-          currentmsgbase INTEGER DEFAULT 0,
-          timeremaining INTEGER DEFAULT 60,
-          lastactivity TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          confrjoin INTEGER DEFAULT 1,
-          msgbaserjoin INTEGER DEFAULT 1,
-          commandbuffer TEXT DEFAULT '',
-          menupause BOOLEAN DEFAULT true,
-          inputbuffer TEXT DEFAULT '',
-          relconfnum INTEGER DEFAULT 0,
-          currentconfname TEXT DEFAULT 'Unknown',
-          cmdshortcuts BOOLEAN DEFAULT false,
-          tempdata JSONB,
+          "subState" TEXT,
+          "currentConf" INTEGER DEFAULT 0,
+          "currentMsgBase" INTEGER DEFAULT 0,
+          "timeRemaining" INTEGER DEFAULT 60,
+          "lastActivity" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          "confRJoin" INTEGER DEFAULT 1,
+          "msgBaseRJoin" INTEGER DEFAULT 1,
+          "commandBuffer" TEXT DEFAULT '',
+          "menuPause" BOOLEAN DEFAULT true,
+          "inputBuffer" TEXT DEFAULT '',
+          "relConfNum" INTEGER DEFAULT 0,
+          "currentConfName" TEXT DEFAULT 'Unknown',
+          "cmdShortcuts" BOOLEAN DEFAULT false,
+          "tempData" JSONB,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -377,7 +377,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS bulletins (
           id SERIAL PRIMARY KEY,
-          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
           filename TEXT NOT NULL,
           title TEXT NOT NULL,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -392,8 +392,8 @@ export class Database {
           timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           level TEXT NOT NULL,
           message TEXT NOT NULL,
-          userid TEXT REFERENCES users(id),
-          conferenceid INTEGER REFERENCES conferences(id),
+          "userId" TEXT REFERENCES users(id),
+          "conferenceId" INTEGER REFERENCES conferences(id),
           node INTEGER
         )
       `);
@@ -407,25 +407,25 @@ export class Database {
 
   private async createIndexes(client: any): Promise<void> {
     // Message indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceid)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messagebaseid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages("conferenceId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages("messageBaseId")`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isprivate, touser)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages("isPrivate", "toUser")`);
 
     // File indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries("areaId")`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries(uploaddate)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries("uploadDate")`);
 
     // Conference indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conferenceid)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conferenceid)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas("conferenceId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases("conferenceId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins("conferenceId")`);
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(seclevel)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users("secLevel")`);
   }
 
 
