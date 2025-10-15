@@ -1,3 +1,12 @@
+// Load environment variables FIRST, before any other imports
+require('dotenv').config({ path: './backend/.env' });
+
+// Debug: Log environment variables
+console.log('Environment variables loaded:');
+console.log('POSTGRES_URL:', process.env.POSTGRES_URL ? 'SET' : 'NOT SET');
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+
 // Import and initialize migrations system
 // import { migrationManager } from './migrations';
 
@@ -499,14 +508,23 @@ function joinConference(socket: any, session: BBSSession, confId: number, msgBas
     return false;
   }
 
-  const messageBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
+  // Find the requested message base first
+  let messageBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
+
+  // If the specific message base doesn't exist, find the first available one for this conference
   if (!messageBase) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid message base for this conference!\x1b[0m\r\n');
-    return false;
+    const availableMessageBases = messageBases.filter(mb => mb.conferenceId === confId);
+    if (availableMessageBases.length === 0) {
+      socket.emit('ansi-output', '\r\n\x1b[31mNo message bases available for this conference!\x1b[0m\r\n');
+      return false;
+    }
+    // Use the first available message base
+    messageBase = availableMessageBases[0];
+    console.log(`Message base ${msgBaseId} not found for conference ${confId}, using ${messageBase.id} instead`);
   }
 
   session.currentConf = confId;
-  session.currentMsgBase = msgBaseId;
+  session.currentMsgBase = messageBase.id;
   session.currentConfName = conference.name;
   session.relConfNum = confId; // For simplicity, use absolute conf number as relative
 
@@ -909,14 +927,26 @@ function dirLineNewFile(dirLine: string, searchDate: Date): boolean {
 
 // Display door games menu (DOORS command)
 function displayDoorMenu(socket: any, session: BBSSession, params: string) {
+  console.log('=== DOORS COMMAND DEBUG ===');
+  console.log('Total doors loaded:', doors.length);
+  console.log('Current conference:', session.currentConf);
+  console.log('User security level:', session.user?.secLevel);
+  console.log('All doors:', doors.map(d => ({ id: d.id, name: d.name, enabled: d.enabled, accessLevel: d.accessLevel, conferenceId: d.conferenceId })));
+
   socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
 
   // Get available doors for current user
-  const availableDoors = doors.filter(door =>
-    door.enabled &&
-    (!door.conferenceId || door.conferenceId === session.currentConf) &&
-    (session.user?.secLevel || 0) >= door.accessLevel
-  );
+  const availableDoors = doors.filter(door => {
+    const enabledCheck = door.enabled;
+    const conferenceCheck = !door.conferenceId || door.conferenceId === session.currentConf;
+    const accessCheck = (session.user?.secLevel || 0) >= door.accessLevel;
+
+    console.log(`Door ${door.id}: enabled=${enabledCheck}, conference=${conferenceCheck}, access=${accessCheck}`);
+
+    return enabledCheck && conferenceCheck && accessCheck;
+  });
+
+  console.log('Available doors after filtering:', availableDoors.length);
 
   if (availableDoors.length === 0) {
     socket.emit('ansi-output', 'No doors are currently available.\r\n');
@@ -1257,16 +1287,19 @@ function displayMainMenu(socket: any, session: BBSSession) {
       console.log('Sending menu header');
       socket.emit('ansi-output', '\x1b[36m-= Main Menu =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Available commands:\r\n');
-      socket.emit('ansi-output', 'R) Read Messages\r\n');
-      socket.emit('ansi-output', 'A) Post Message\r\n');
-      socket.emit('ansi-output', 'J) Join Conference\r\n');
-      socket.emit('ansi-output', 'F) File Areas\r\n');
-      socket.emit('ansi-output', 'D) Download Files\r\n');
-      socket.emit('ansi-output', 'U) Upload Files\r\n');
-      socket.emit('ansi-output', 'O) Page Sysop\r\n');
-      socket.emit('ansi-output', 'DOORS) Door Games & Utilities\r\n');
-      socket.emit('ansi-output', 'G) Goodbye\r\n');
-      socket.emit('ansi-output', '?) Help\r\n');
+      socket.emit('ansi-output', 'R - Read Messages\r\n');
+      socket.emit('ansi-output', 'A - Post Message\r\n');
+      socket.emit('ansi-output', 'E - Post Private Message\r\n');
+      socket.emit('ansi-output', 'J - Join Conference\r\n');
+      socket.emit('ansi-output', 'JM - Join Message Base\r\n');
+      socket.emit('ansi-output', 'F - File Areas\r\n');
+      socket.emit('ansi-output', 'D - Download Files\r\n');
+      socket.emit('ansi-output', 'U - Upload Files\r\n');
+      socket.emit('ansi-output', 'O - Page Sysop\r\n');
+      socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
+      socket.emit('ansi-output', 'DOORS/DOOR - Door Games & Utilities\r\n');
+      socket.emit('ansi-output', 'G - Goodbye\r\n');
+      socket.emit('ansi-output', '? - Help\r\n');
     }
 
     displayMenuPrompt(socket, session);
@@ -1274,12 +1307,9 @@ function displayMainMenu(socket: any, session: BBSSession) {
     console.log('menuPause is FALSE, NOT displaying menu - staying in command mode');
   }
 
-  // Like AmiExpress: Check cmdShortcuts to determine input mode
-  if (session.cmdShortcuts === false) {
-    session.subState = LoggedOnSubState.READ_COMMAND;
-  } else {
-    session.subState = LoggedOnSubState.READ_SHORTCUTS;
-  }
+  // Always use line input mode for traditional BBS experience
+  // Hotkeys should only be used in special contexts (like chat)
+  session.subState = LoggedOnSubState.READ_COMMAND;
 }
 
 // Display menu prompt (displayMenuPrompt equivalent)
@@ -1662,15 +1692,37 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
 
   if (session.subState === LoggedOnSubState.READ_COMMAND) {
     console.log('✅ In READ_COMMAND state, processing line input');
-    // Like AmiExpress: Use lineInput for full command lines (supports "j 2", "f", etc.)
-    // For now, process the input as a command line (split by space, first part is command)
-    const input = data.trim();
-    if (input.length > 0) {
-      const parts = input.split(' ');
-      const command = parts[0].toUpperCase();
-      const params = parts.slice(1).join(' ');
-      console.log('🚀 Processing command:', command, 'with params:', params);
-      processBBSCommand(socket, session, command, params);
+
+    // Handle line-based input like the message posting system
+    if (data === '\r' || data === '\n') { // Handle both carriage return and newline
+      console.log('🎯 ENTER KEY DETECTED in READ_COMMAND!');
+      // Enter pressed - process the complete command line
+      const input = session.inputBuffer.trim();
+      console.log('🎯 ENTER PRESSED - Processing command:', JSON.stringify(input), 'length:', input.length);
+
+      if (input.length > 0) {
+        const parts = input.split(' ');
+        const command = parts[0].toUpperCase();
+        const params = parts.slice(1).join(' ');
+        console.log('🚀 Processing command:', command, 'with params:', params);
+        processBBSCommand(socket, session, command, params);
+      }
+
+      // Clear the input buffer after processing
+      session.inputBuffer = '';
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b'); // Erase character from terminal
+        console.log('📝 Backspace - command buffer now:', JSON.stringify(session.inputBuffer));
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') { // Only printable characters
+      // Regular character - add to buffer and echo
+      session.inputBuffer += data;
+      socket.emit('ansi-output', data);
+      console.log('📝 Added character to command buffer, current buffer:', JSON.stringify(session.inputBuffer));
+    } else {
+      console.log('📝 Ignoring non-printable character in READ_COMMAND:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
     }
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
     console.log('🔥 In READ_SHORTCUTS state, processing single key');
@@ -2038,16 +2090,21 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       displayDoorMenu(socket, session, params);
       return;
 
+    case 'DOOR': // Alternative spelling for DOORS
+      displayDoorMenu(socket, session, params);
+      return;
+
     case '?': // Help (internalCommandQuestionMark)
       socket.emit('ansi-output', '\x1b[36m-= Command Help =-\x1b[0m\r\n');
       socket.emit('ansi-output', '0 - Remote Shell\r\n');
-      socket.emit('ansi-output', '1 - Account Editing\r\n');
-      socket.emit('ansi-output', '2 - View Callers Log\r\n');
-      socket.emit('ansi-output', '3 - Edit Directory Files\r\n');
-      socket.emit('ansi-output', '4 - Edit Any File\r\n');
-      socket.emit('ansi-output', '5 - Change Directory\r\n');
+      socket.emit('ansi-output', '1 - Account Editing (Sysop)\r\n');
+      socket.emit('ansi-output', '2 - View Callers Log (Sysop)\r\n');
+      socket.emit('ansi-output', '3 - Edit Directory Files (Sysop)\r\n');
+      socket.emit('ansi-output', '4 - Edit Any File (Sysop)\r\n');
+      socket.emit('ansi-output', '5 - Change Directory (Sysop)\r\n');
       socket.emit('ansi-output', 'R - Read Messages\r\n');
       socket.emit('ansi-output', 'A - Post Message\r\n');
+      socket.emit('ansi-output', 'E - Post Private Message\r\n');
       socket.emit('ansi-output', 'J - Join Conference\r\n');
       socket.emit('ansi-output', 'JM - Join Message Base\r\n');
       socket.emit('ansi-output', 'F - File Areas\r\n');
@@ -2055,7 +2112,7 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       socket.emit('ansi-output', 'U - Upload Files\r\n');
       socket.emit('ansi-output', 'O - Page Sysop for Chat\r\n');
       socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
-      socket.emit('ansi-output', 'DOORS - Door Games & Utilities\r\n');
+      socket.emit('ansi-output', 'DOORS/DOOR - Door Games & Utilities\r\n');
       socket.emit('ansi-output', 'G - Goodbye\r\n');
       socket.emit('ansi-output', 'Q - Quiet Node\r\n');
       socket.emit('ansi-output', '? - This help\r\n');
@@ -2076,6 +2133,8 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
 (async () => {
   try {
     console.log('Starting database initialization...');
+    // Wait for database to be ready before initializing data
+    await new Promise(resolve => setTimeout(resolve, 1000));
     await initializeData();
     console.log('Database initialization completed');
 
@@ -2159,8 +2218,24 @@ async function initializeData() {
     if (conferences.length === 0) {
       console.log('No conferences found, initializing default data...');
       await db.initializeDefaultData();
+      // Refresh all data after initialization and cleanup
       conferences = await db.getConferences();
       console.log(`After initialization: ${conferences.length} conferences`);
+    } else {
+      // Check if we need to clean up duplicates in existing data
+      console.log('Checking for duplicate conferences in existing data...');
+      const needsCleanup = conferences.some((conf, index) =>
+        conferences.findIndex(c => c.name === conf.name) !== index
+      );
+
+      if (needsCleanup) {
+        console.log('Found duplicates, running cleanup...');
+        await db.cleanupDuplicateConferences();
+
+        // Refresh all data after cleanup
+        conferences = await db.getConferences();
+        console.log(`After cleanup: ${conferences.length} conferences`);
+      }
     }
 
     // Load message bases for all conferences
@@ -2207,6 +2282,7 @@ async function initializeData() {
 
 // Initialize door collection
 async function initializeDoors() {
+  console.log('🔧 Initializing doors...');
   doors = [
     {
       id: 'sal',
@@ -2231,6 +2307,7 @@ async function initializeDoors() {
       parameters: []
     }
   ];
+  console.log('✅ Doors initialized:', doors.map(d => `${d.id} (${d.name}) - enabled: ${d.enabled}, accessLevel: ${d.accessLevel}`));
 }
 
 // Sysop chat functions (1:1 implementation of AmiExpress chat system)
@@ -2300,6 +2377,38 @@ function displayInternalPager(socket: any, session: BBSSession, chatSession: Cha
 
   // Store interval for cleanup
   (session as any).pagingInterval = dotInterval;
+
+  // Handle Ctrl+C to abort paging
+  const abortHandler = (data: string) => {
+    if (data === '\x03') { // Ctrl+C
+      console.log('Ctrl+C detected, aborting sysop page');
+      clearInterval(dotInterval);
+      delete (session as any).pagingInterval;
+
+      // Remove from paging users
+      const pagingIndex = chatState.pagingUsers.indexOf(session.user!.id);
+      if (pagingIndex > -1) {
+        chatState.pagingUsers.splice(pagingIndex, 1);
+      }
+
+      // Remove chat session
+      const sessionIndex = chatState.activeSessions.findIndex(s => s.id === chatSession.id);
+      if (sessionIndex > -1) {
+        chatState.activeSessions.splice(sessionIndex, 1);
+      }
+
+      socket.emit('ansi-output', '\r\n\r\nPaging aborted.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+
+      // Remove this handler after use
+      socket.removeListener('command', abortHandler);
+    }
+  };
+
+  // Listen for Ctrl+C during paging
+  socket.on('command', abortHandler);
 }
 
 // completePaging() - Complete the paging process

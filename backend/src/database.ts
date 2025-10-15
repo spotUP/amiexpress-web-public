@@ -1,4 +1,3 @@
-import type { Pool } from 'pg';
 import { Pool as PoolConstructor } from 'pg';
 import * as crypto from 'crypto';
 
@@ -285,7 +284,7 @@ export class Database {
         CREATE TABLE IF NOT EXISTS message_bases (
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
-          conferenceId INTEGER NOT NULL REFERENCES conferences(id),
+          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -377,7 +376,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS bulletins (
           id SERIAL PRIMARY KEY,
-          conferenceId INTEGER NOT NULL REFERENCES conferences(id),
+          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
           filename TEXT NOT NULL,
           title TEXT NOT NULL,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -420,7 +419,7 @@ export class Database {
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(secLevel)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users("secLevel")`);
   }
 
 
@@ -431,13 +430,13 @@ export class Database {
       const id = crypto.randomUUID();
       const sql = `
         INSERT INTO users (
-          id, username, passwordHash, realname, location, phone, email,
-          secLevel, uploads, downloads, bytesUpload, bytesDownload, ratio,
-          ratioType, timeTotal, timeLimit, timeUsed, chatLimit, chatUsed,
-          lastLogin, firstLogin, calls, callsToday, newUser, expert, ansi,
-          linesPerScreen, computer, screenType, protocol, editor, zoomType,
-          availableForChat, quietNode, autoRejoin, confAccess, areaName, uuCP,
-          topUploadCPS, topDownloadCPS, byteLimit
+          id, username, "passwordHash", realname, location, phone, email,
+          "secLevel", uploads, downloads, "bytesUpload", "bytesDownload", ratio,
+          "ratioType", "timeTotal", "timeLimit", "timeUsed", "chatLimit", "chatUsed",
+          "lastLogin", "firstLogin", calls, "callsToday", "newUser", expert, ansi,
+          "linesPerScreen", computer, "screenType", protocol, editor, "zoomType",
+          "availableForChat", "quietNode", "autoRejoin", "confAccess", "areaName", "uuCP",
+          "topUploadCPS", "topDownloadCPS", "byteLimit"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
       `;
 
@@ -470,48 +469,54 @@ export class Database {
       if (result.rows[0]) {
         const user = result.rows[0] as any;
         // Convert bigint fields to numbers for compatibility
+        // Helper function to safely convert to number with default
+        const safeNumber = (value: any, defaultValue: number = 0): number => {
+          const num = Number(value);
+          return isNaN(num) ? defaultValue : num;
+        };
+
         return {
           id: user.id,
           username: user.username,
-          passwordHash: user.passwordhash,
+          passwordHash: user["passwordHash"],
           realname: user.realname,
           location: user.location,
           phone: user.phone,
           email: user.email,
-          secLevel: Number(user.secLevel),
-          uploads: isNaN(Number(user.uploads)) ? 0 : Number(user.uploads),
-          downloads: isNaN(Number(user.downloads)) ? 0 : Number(user.downloads),
-          bytesUpload: isNaN(Number(user.bytesUpload)) ? 0 : Number(user.bytesUpload),
-          bytesDownload: isNaN(Number(user.bytesDownload)) ? 0 : Number(user.bytesDownload),
-          ratio: isNaN(Number(user.ratio)) ? 0 : Number(user.ratio),
-          ratioType: isNaN(Number(user.ratioType)) ? 0 : Number(user.ratioType),
-          timeTotal: isNaN(Number(user.timeTotal)) ? 0 : Number(user.timeTotal),
-          timeLimit: isNaN(Number(user.timeLimit)) ? 0 : Number(user.timeLimit),
-          timeUsed: isNaN(Number(user.timeUsed)) ? 0 : Number(user.timeUsed),
-          chatLimit: isNaN(Number(user.chatLimit)) ? 0 : Number(user.chatLimit),
-          chatUsed: isNaN(Number(user.chatUsed)) ? 0 : Number(user.chatUsed),
-          lastLogin: user.lastLogin,
-          firstLogin: user.firstLogin,
-          calls: isNaN(Number(user.calls)) ? 0 : Number(user.calls),
-          callsToday: isNaN(Number(user.callsToday)) ? 0 : Number(user.callsToday),
-          newUser: user.newUser,
+          secLevel: safeNumber(user["secLevel"], 10), // Default to 10 if NaN
+          uploads: safeNumber(user.uploads, 0),
+          downloads: safeNumber(user.downloads, 0),
+          bytesUpload: safeNumber(user["bytesUpload"], 0),
+          bytesDownload: safeNumber(user["bytesDownload"], 0),
+          ratio: safeNumber(user.ratio, 0),
+          ratioType: safeNumber(user["ratioType"], 0),
+          timeTotal: safeNumber(user["timeTotal"], 0),
+          timeLimit: safeNumber(user["timeLimit"], 0),
+          timeUsed: safeNumber(user["timeUsed"], 0),
+          chatLimit: safeNumber(user["chatLimit"], 0),
+          chatUsed: safeNumber(user["chatUsed"], 0),
+          lastLogin: user["lastLogin"],
+          firstLogin: user["firstLogin"],
+          calls: safeNumber(user.calls, 0),
+          callsToday: safeNumber(user["callsToday"], 0),
+          newUser: user["newUser"],
           expert: user.expert,
           ansi: user.ansi,
-          linesPerScreen: isNaN(Number(user.linesPerScreen)) ? 23 : Number(user.linesPerScreen),
+          linesPerScreen: safeNumber(user["linesPerScreen"], 23),
           computer: user.computer,
-          screenType: user.screenType,
+          screenType: user["screenType"],
           protocol: user.protocol,
           editor: user.editor,
-          zoomType: user.zoomType,
-          availableForChat: user.availableForChat,
-          quietNode: user.quietNode,
-          autoRejoin: isNaN(Number(user.autoRejoin)) ? 1 : Number(user.autoRejoin),
-          confAccess: user.confAccess,
-          areaName: user.areaName,
-          uuCP: user.uuCP,
-          topUploadCPS: isNaN(Number(user.topUploadCPS)) ? 0 : Number(user.topUploadCPS),
-          topDownloadCPS: isNaN(Number(user.topDownloadCPS)) ? 0 : Number(user.topDownloadCPS),
-          byteLimit: isNaN(Number(user.byteLimit)) ? 0 : Number(user.byteLimit),
+          zoomType: user["zoomType"],
+          availableForChat: user["availableForChat"],
+          quietNode: user["quietNode"],
+          autoRejoin: safeNumber(user["autoRejoin"], 1),
+          confAccess: user["confAccess"],
+          areaName: user["areaName"],
+          uuCP: user["uuCP"],
+          topUploadCPS: safeNumber(user["topUploadCPS"], 0),
+          topDownloadCPS: safeNumber(user["topDownloadCPS"], 0),
+          byteLimit: safeNumber(user["byteLimit"], 0),
           created: user.created,
           updated: user.updated,
         } as User;
@@ -539,7 +544,7 @@ export class Database {
       const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
       if (fields.length === 0) return;
 
-      const sql = `UPDATE users SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
+      const sql = `UPDATE users SET ${fields.map((f, i) => `"${f}" = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
       const values = [...fields.map(f => updates[f as keyof User]), id];
 
       await client.query(sql, values);
@@ -556,7 +561,7 @@ export class Database {
       let paramIndex = 1;
 
       if (filter?.secLevel !== undefined) {
-        sql += ` AND secLevel >= $${paramIndex++}`;
+        sql += ` AND "secLevel" >= $${paramIndex++}`;
         params.push(filter.secLevel);
       }
 
@@ -585,8 +590,8 @@ export class Database {
     try {
       const sql = `
         INSERT INTO messages (
-          subject, body, author, timestamp, conferenceId, messageBaseId,
-          isPrivate, toUser, parentId, attachments, edited, editedBy, editedAt
+          subject, body, author, timestamp, "conferenceId", "messageBaseId",
+          "isPrivate", "toUser", "parentId", attachments, edited, "editedBy", "editedAt"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
       `;
@@ -693,8 +698,8 @@ export class Database {
     try {
       const sql = `
         INSERT INTO file_entries (
-          filename, description, size, uploader, uploadDate, downloads,
-          areaId, fileIdDiz, rating, votes, status, checked, comment
+          filename, description, size, uploader, "uploadDate", downloads,
+          "areaId", "fileIdDiz", rating, votes, status, checked, comment
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
       `;
@@ -785,28 +790,28 @@ export class Database {
     try {
       const sql = `
         INSERT INTO sessions (
-          id, userId, socketId, state, subState, currentConf, currentMsgBase,
-          timeRemaining, lastActivity, confRJoin, msgBaseRJoin, commandBuffer,
-          menuPause, inputBuffer, relConfNum, currentConfName, cmdShortcuts, tempData
+          id, "userId", "socketId", state, "subState", "currentConf", "currentMsgBase",
+          "timeRemaining", "lastActivity", "confRJoin", "msgBaseRJoin", "commandBuffer",
+          "menuPause", "inputBuffer", "relConfNum", "currentConfName", "cmdShortcuts", "tempData"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         ON CONFLICT (id) DO UPDATE SET
-          userId = EXCLUDED.userId,
-          socketId = EXCLUDED.socketId,
+          "userId" = EXCLUDED."userId",
+          "socketId" = EXCLUDED."socketId",
           state = EXCLUDED.state,
-          subState = EXCLUDED.subState,
-          currentConf = EXCLUDED.currentConf,
-          currentMsgBase = EXCLUDED.currentMsgBase,
-          timeRemaining = EXCLUDED.timeRemaining,
-          lastActivity = EXCLUDED.lastActivity,
-          confRJoin = EXCLUDED.confRJoin,
-          msgBaseRJoin = EXCLUDED.msgBaseRJoin,
-          commandBuffer = EXCLUDED.commandBuffer,
-          menuPause = EXCLUDED.menuPause,
-          inputBuffer = EXCLUDED.inputBuffer,
-          relConfNum = EXCLUDED.relConfNum,
-          currentConfName = EXCLUDED.currentConfName,
-          cmdShortcuts = EXCLUDED.cmdShortcuts,
-          tempData = EXCLUDED.tempData,
+          "subState" = EXCLUDED."subState",
+          "currentConf" = EXCLUDED."currentConf",
+          "currentMsgBase" = EXCLUDED."currentMsgBase",
+          "timeRemaining" = EXCLUDED."timeRemaining",
+          "lastActivity" = EXCLUDED."lastActivity",
+          "confRJoin" = EXCLUDED."confRJoin",
+          "msgBaseRJoin" = EXCLUDED."msgBaseRJoin",
+          "commandBuffer" = EXCLUDED."commandBuffer",
+          "menuPause" = EXCLUDED."menuPause",
+          "inputBuffer" = EXCLUDED."inputBuffer",
+          "relConfNum" = EXCLUDED."relConfNum",
+          "currentConfName" = EXCLUDED."currentConfName",
+          "cmdShortcuts" = EXCLUDED."cmdShortcuts",
+          "tempData" = EXCLUDED."tempData",
           updated = CURRENT_TIMESTAMP
       `;
 
@@ -915,7 +920,7 @@ export class Database {
   async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
     const client = await this.pool.connect();
     try {
-      const sql = `INSERT INTO message_bases (name, conferenceId) VALUES ($1, $2) RETURNING id`;
+      const sql = `INSERT INTO message_bases (name, "conferenceId") VALUES ($1, $2) RETURNING id`;
       const result = await client.query(sql, [mb.name, mb.conferenceId]);
       return result.rows[0].id;
     } finally {
@@ -926,7 +931,7 @@ export class Database {
   async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM message_bases WHERE conferenceId = $1 ORDER BY id`;
+      const sql = `SELECT * FROM message_bases WHERE "conferenceId" = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as MessageBase[];
     } finally {
@@ -940,7 +945,7 @@ export class Database {
     try {
       const sql = `
         INSERT INTO file_areas (
-          name, description, path, conferenceId, maxFiles, uploadAccess, downloadAccess
+          name, description, path, "conferenceId", maxFiles, uploadAccess, downloadAccess
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
       `;
@@ -959,7 +964,7 @@ export class Database {
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM file_areas WHERE conferenceId = $1 ORDER BY id`;
+      const sql = `SELECT * FROM file_areas WHERE "conferenceid" = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as FileArea[];
     } finally {
@@ -1279,7 +1284,14 @@ export class Database {
       ];
 
       for (const conf of conferences) {
-        await client.query('INSERT INTO conferences (name, description) VALUES ($1, $2) ON CONFLICT DO NOTHING', [conf.name, conf.description]);
+        // Check if conference already exists
+        const existing = await client.query('SELECT id FROM conferences WHERE name = $1', [conf.name]);
+        if (existing.rows.length === 0) {
+          await client.query('INSERT INTO conferences (name, description) VALUES ($1, $2)', [conf.name, conf.description]);
+          console.log(`Created conference: ${conf.name}`);
+        } else {
+          console.log(`Conference already exists: ${conf.name}`);
+        }
       }
 
       console.log('Creating default message bases...');
@@ -1292,7 +1304,14 @@ export class Database {
       ];
 
       for (const mb of messageBases) {
-        await client.query('INSERT INTO message_bases (name, conferenceId) VALUES ($1, $2) ON CONFLICT DO NOTHING', [mb.name, mb.conferenceId]);
+        // Check if message base already exists
+        const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND "conferenceId" = $2', [mb.name, mb.conferenceId]);
+        if (existing.rows.length === 0) {
+          await client.query('INSERT INTO message_bases (name, "conferenceId") VALUES ($1, $2)', [mb.name, mb.conferenceId]);
+          console.log(`Created message base: ${mb.name} in conference ${mb.conferenceId}`);
+        } else {
+          console.log(`Message base already exists: ${mb.name} in conference ${mb.conferenceId}`);
+        }
       }
 
       console.log('Creating default file areas...');
@@ -1306,11 +1325,17 @@ export class Database {
       ];
 
       for (const area of fileAreas) {
-        await client.query(`
-          INSERT INTO file_areas (name, description, path, conferenceId, maxFiles, uploadAccess, downloadAccess)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-          ON CONFLICT DO NOTHING
-        `, [area.name, area.description, area.path, area.conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
+        // Check if file area already exists
+        const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceid = $2', [area.name, area.conferenceId]);
+        if (existing.rows.length === 0) {
+          await client.query(`
+            INSERT INTO file_areas (name, description, path, conferenceid, maxFiles, uploadAccess, downloadAccess)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `, [area.name, area.description, area.path, area.conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
+          console.log(`Created file area: ${area.name} in conference ${area.conferenceId}`);
+        } else {
+          console.log(`File area already exists: ${area.name} in conference ${area.conferenceId}`);
+        }
       }
 
       console.log('Creating default sysop user...');
@@ -1320,7 +1345,7 @@ export class Database {
 
       // First try to update existing sysop user if it exists
       const updateResult = await client.query(`
-        UPDATE users SET passwordHash = $1 WHERE username = 'sysop'
+        UPDATE users SET "passwordHash" = $1 WHERE username = 'sysop'
       `, [hashedPassword]);
 
       if (updateResult.rowCount === 0) {
@@ -1328,13 +1353,13 @@ export class Database {
         console.log('Creating new sysop user...');
         await client.query(`
           INSERT INTO users (
-            id, username, passwordHash, realname, location, phone, email, secLevel,
-            uploads, downloads, bytesUpload, bytesDownload, ratio, ratioType,
-            timeTotal, timeLimit, timeUsed, chatLimit, chatUsed, lastLogin, firstLogin,
-            calls, callsToday, newUser, expert, ansi, linesPerScreen, computer,
-            screenType, protocol, editor, zoomType, availableForChat, quietNode,
-            autoRejoin, confAccess, areaName, uuCP, topUploadCPS, topDownloadCPS, byteLimit
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
+            id, username, "passwordHash", realname, location, phone, email, "secLevel",
+            uploads, downloads, "bytesUpload", "bytesDownload", ratio, "ratioType",
+            "timeTotal", "timeLimit", "timeUsed", "chatLimit", "chatUsed", "lastLogin", "firstLogin",
+            calls, "callsToday", "newUser", expert, ansi, "linesPerScreen", computer,
+            "screenType", protocol, editor, "zoomType", "availableForChat", "quietNode",
+            "autoRejoin", "confAccess", "areaName", "uuCP", "topUploadCPS", "topDownloadCPS", "byteLimit"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
         `, [
           'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
           255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
@@ -1347,6 +1372,82 @@ export class Database {
       }
 
       console.log('Default data initialization completed');
+
+      // Clean up duplicate conferences (in case they exist from previous runs)
+      await this.cleanupDuplicateConferences();
+    } finally {
+      client.release();
+    }
+  }
+
+  // Clean up duplicate conferences by name, keeping only the first occurrence
+  async cleanupDuplicateConferences(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Cleaning up duplicate conferences...');
+
+      // Find duplicate conference names
+      const duplicates = await client.query(`
+        SELECT name, COUNT(*) as count
+        FROM conferences
+        GROUP BY name
+        HAVING COUNT(*) > 1
+      `);
+
+      if (duplicates.rows.length > 0) {
+        console.log(`Found ${duplicates.rows.length} conference names with duplicates`);
+
+        for (const dup of duplicates.rows) {
+          // Get all IDs for this conference name, ordered by creation date
+          const ids = await client.query(`
+            SELECT id FROM conferences
+            WHERE name = $1
+            ORDER BY created ASC
+          `, [dup.name]);
+
+          // Keep the first one, delete the rest
+          const idsToDelete = ids.rows.slice(1).map((row: any) => row.id);
+
+          if (idsToDelete.length > 0) {
+            await client.query(
+              `DELETE FROM conferences WHERE id = ANY($1)`,
+              [idsToDelete]
+            );
+            console.log(`Deleted ${idsToDelete.length} duplicate entries for conference: ${dup.name}`);
+          }
+        }
+
+        // Also clean up orphaned message bases and file areas
+        await this.cleanupOrphanedData();
+      } else {
+        console.log('No duplicate conferences found');
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  // Clean up orphaned message bases and file areas after conference cleanup
+  private async cleanupOrphanedData(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Cleaning up orphaned message bases and file areas...');
+
+      // Delete message bases that reference non-existent conferences
+      const deletedMB = await client.query(`
+        DELETE FROM message_bases
+        WHERE "conferenceId" NOT IN (SELECT id FROM conferences)
+      `);
+
+      // Delete file areas that reference non-existent conferences
+      const deletedFA = await client.query(`
+        DELETE FROM file_areas
+        WHERE "conferenceId" NOT IN (SELECT id FROM conferences)
+      `);
+
+      if (deletedMB.rowCount > 0 || deletedFA.rowCount > 0) {
+        console.log(`Cleaned up ${deletedMB.rowCount} orphaned message bases and ${deletedFA.rowCount} orphaned file areas`);
+      }
     } finally {
       client.release();
     }

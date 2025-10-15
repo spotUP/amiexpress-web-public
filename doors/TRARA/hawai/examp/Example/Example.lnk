@@ -1,0 +1,8 @@
+FROM LIB:c.o "Example.o"
+TO "Example"
+LIB lib:code.o LIB:sc.lib LIB:amiga.lib
+SMALLCODE
+SMALLDATA
+STRIPDEBUG
+VERBOSE
+

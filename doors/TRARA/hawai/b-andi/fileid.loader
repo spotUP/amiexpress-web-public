@@ -1,0 +1,16 @@
+
+
+caseZIP:sprintf(SYSTEM,"UnZIP -o %s file_id.diz",FILENAME);
+break;
+caseLHA:sprintf(SYSTEM,"Lha e %s file_id.diz %s",FILENAME,WORKPATH);
+break;
+case  DMS:  sprintf(SYSTEM,"DMSExtract file_id.diz %s",FILENAME);
+break;
+default   :return(0);
+}
+inoutput("searching for File_Id.Diz...",3);
+
+
+das ist alles was ich tue ich h   hab da auch keine ahnung.....
+
+

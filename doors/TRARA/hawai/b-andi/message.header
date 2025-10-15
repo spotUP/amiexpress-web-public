@@ -1,0 +1,20 @@
+	struct Message1
+		{
+		long	anfang,
+					ende,
+					who_not_deletet;
+		char 	Place[6];
+		}message;
+
+	struct Basis
+		{
+		char	Status[1];	        
+		long	number;             
+		char	For[31],            
+					From[31],			
+					Why[31];            
+		long	wann,				
+					wan_received;		
+		char	place;  			
+		}basis;
+

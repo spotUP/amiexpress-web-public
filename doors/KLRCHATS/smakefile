@@ -1,0 +1,36 @@
+#
+# makefile for The Incredible ConfScan
+#
+# Licensed material.  Program property of Lattice, Inc.
+# All rights reserved.
+#
+#
+CC = sc
+AS = genam
+
+CFLAGS_000 = DATA=NEAR PARM=REGISTER NMINC STREQ CPU=ANY NOSTKCHCK
+LFLAGS = SMALLCODE SMALLDATA NOICONS NODEBUG
+
+NAME_000 = Chat-O-Meter
+
+APP10_000 = Chat-O-Meter.o Chat-O-Meter_Top.o Chat-O-Meter_Log.o
+
+.SUFFIXES:	.o	.c	.h        .a
+
+all: $(NAME_000) #$(NAME_020)
+
+$(NAME_000): $(APP10_000)
+	slink <WITH <
+FROM lib:c.o $(APP10_000)
+LIBRARY lib:sc.lib amicon/amiconsasc.o
+TO $(NAME_000) $(LFLAGS)
+<
+
+.c.o:
+   $(CC) $(CFLAGS_000) $*.c
+
+.a.o:
+	$(AS) $*.a
+
+.h.o:
+   $(CC) $(CFLAGS_000) $*.c

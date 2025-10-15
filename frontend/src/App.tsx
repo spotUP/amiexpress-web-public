@@ -74,14 +74,16 @@ function App() {
 
     // Connect to backend (environment-aware configuration)
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const backendUrl = isDevelopment ? 'http://localhost:3001' : 'https://amiexpress-web-three.vercel.app';
+    const backendUrl = isDevelopment ? 'http://localhost:3001' : (import.meta.env.VITE_API_URL || 'https://amiexpress-web-three.vercel.app');
 
     console.log('🔌 Connecting to backend:', backendUrl, 'Environment:', isDevelopment ? 'development' : 'production');
 
     const ws = io(backendUrl, {
-      transports: ['websocket', 'polling'], // WebSocket preferred, polling as fallback
+      transports: ['websocket'], // WebSocket only, no polling fallback
       timeout: 20000,
       forceNew: true,
+      upgrade: false, // Disable transport upgrades
+      rememberUpgrade: false, // Don't remember previous transport upgrades
       reconnection: true,
       reconnectionAttempts: isDevelopment ? 5 : 3,
       reconnectionDelay: 1000
