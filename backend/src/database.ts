@@ -411,7 +411,7 @@ export class Database {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messagebaseid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages("isPrivate", "toUser")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isprivate, touser)`);
 
     // File indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaId)`);
