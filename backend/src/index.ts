@@ -1,11 +1,13 @@
 // Load environment variables FIRST, before any other imports
 require('dotenv').config({ path: './backend/.env' });
 
-// Debug: Log environment variables
-console.log('Environment variables loaded:');
-console.log('POSTGRES_URL:', process.env.POSTGRES_URL ? 'SET' : 'NOT SET');
-console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
-console.log('NODE_ENV:', process.env.NODE_ENV);
+// Debug: Log environment variables (only in development)
+if (process.env.NODE_ENV !== 'production') {
+  console.log('Environment variables loaded:');
+  console.log('POSTGRES_URL:', process.env.POSTGRES_URL ? 'SET' : 'NOT SET');
+  console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+}
 
 // Import and initialize migrations system
 // import { migrationManager } from './migrations';
@@ -159,7 +161,19 @@ app.get('/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     connections: io.sockets.sockets.size,
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    keepAlive: true // Indicate server is designed to stay alive
+  });
+});
+
+// Add keep-alive endpoint to prevent Render.com from spinning down
+app.get('/keep-alive', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'alive',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    connections: io.sockets.sockets.size,
+    message: 'Server is active and ready for connections'
   });
 });
 
@@ -2132,11 +2146,17 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
 // Initialize data for serverless environment and start server
 (async () => {
   try {
-    console.log('Starting database initialization...');
-    // Wait for database to be ready before initializing data
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    await initializeData();
-    console.log('Database initialization completed');
+    console.log('Starting server initialization...');
+
+    // Try to initialize database, but don't fail if it doesn't work
+    try {
+      console.log('Attempting database initialization...');
+      await initializeData();
+      console.log('Database initialization completed');
+    } catch (dbError) {
+      console.warn('Database initialization failed, but continuing:', dbError.message);
+      console.log('Server will start with limited functionality');
+    }
 
     // Start server with proper error handling for Render.com
     server.listen(port, () => {
@@ -2147,6 +2167,12 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       console.log(`📡 Listening on 0.0.0.0:${port}`);
       console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
       console.log(`🔌 WebSocket endpoint: ws://0.0.0.0:${port}`);
+      console.log(`♻️ Keep-alive endpoint: http://0.0.0.0:${port}/keep-alive`);
+
+      // Set up periodic keep-alive logging for Render.com
+      setInterval(() => {
+        console.log(`♻️ Server keep-alive: ${new Date().toISOString()} - ${io.sockets.sockets.size} active connections`);
+      }, 5 * 60 * 1000); // Log every 5 minutes
     });
 
     // Handle server errors gracefully
@@ -2177,14 +2203,12 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
     });
 
   } catch (error) {
-    console.error('Failed to initialize database:', error);
-    // Don't exit in production - try to start anyway
-    if (process.env.NODE_ENV !== 'production') {
-      process.exit(1);
-    } else {
-      console.log('Continuing despite database error...');
+    console.error('Failed to start server:', error);
+    // Try to start server anyway in production
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Attempting to start server despite errors...');
       server.listen(port, () => {
-        console.log(`🚀 AmiExpress BBS backend running on port ${port} (with database issues)`);
+        console.log(`🚀 AmiExpress BBS backend running on port ${port} (with initialization issues)`);
         console.log('🔌 Socket.IO server attached to Express app');
         console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
         console.log('🔧 Render.com deployment active');
@@ -2192,6 +2216,8 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
         console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
         console.log(`🔌 WebSocket endpoint: ws://0.0.0.0:${port}`);
       });
+    } else {
+      process.exit(1);
     }
   }
 })();
@@ -2241,16 +2267,24 @@ async function initializeData() {
     // Load message bases for all conferences
     messageBases = [];
     for (const conf of conferences) {
-      const bases = await db.getMessageBases(conf.id);
-      messageBases.push(...bases);
+      try {
+        const bases = await db.getMessageBases(conf.id);
+        messageBases.push(...bases);
+      } catch (error) {
+        console.warn(`Failed to load message bases for conference ${conf.id}:`, error);
+      }
     }
     console.log(`Loaded ${messageBases.length} message bases`);
 
     // Load file areas for all conferences
     fileAreas = [];
     for (const conf of conferences) {
-      const areas = await db.getFileAreas(conf.id);
-      fileAreas.push(...areas);
+      try {
+        const areas = await db.getFileAreas(conf.id);
+        fileAreas.push(...areas);
+      } catch (error) {
+        console.warn(`Failed to load file areas for conference ${conf.id}:`, error);
+      }
     }
     console.log(`Loaded ${fileAreas.length} file areas`);
 
@@ -2276,7 +2310,8 @@ async function initializeData() {
     });
   } catch (error) {
     console.error('Failed to initialize data:', error);
-    throw error; // Re-throw to ensure calling code knows about the failure
+    // Don't throw error - continue with server startup
+    console.log('Continuing with server startup despite database initialization error');
   }
 }
 

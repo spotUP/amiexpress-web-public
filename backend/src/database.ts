@@ -212,7 +212,8 @@ export class Database {
       console.log('Default data initialized');
     } catch (error) {
       console.error('Failed to initialize database:', error);
-      throw error;
+      // Don't throw error - continue with server startup
+      console.log('Continuing with server startup despite database initialization error');
     }
   }
 
@@ -406,16 +407,16 @@ export class Database {
 
   private async createIndexes(client: any): Promise<void> {
     // Message indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceId)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messageBaseId)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages("conferenceId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages("messageBaseId")`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isPrivate, toUser)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages("isPrivate", "toUser")`);
 
     // File indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaId)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries("areaId")`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries(uploadDate)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries("uploadDate")`);
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
@@ -964,7 +965,7 @@ export class Database {
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM file_areas WHERE "conferenceid" = $1 ORDER BY id`;
+      const sql = `SELECT * FROM file_areas WHERE "conferenceId" = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as FileArea[];
     } finally {
@@ -1326,7 +1327,7 @@ export class Database {
 
       for (const area of fileAreas) {
         // Check if file area already exists
-        const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceid = $2', [area.name, area.conferenceId]);
+        const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND "conferenceId" = $2', [area.name, area.conferenceId]);
         if (existing.rows.length === 0) {
           await client.query(`
             INSERT INTO file_areas (name, description, path, conferenceid, maxFiles, uploadAccess, downloadAccess)
@@ -1359,7 +1360,11 @@ export class Database {
             calls, "callsToday", "newUser", expert, ansi, "linesPerScreen", computer,
             "screenType", protocol, editor, "zoomType", "availableForChat", "quietNode",
             "autoRejoin", "confAccess", "areaName", "uuCP", "topUploadCPS", "topDownloadCPS", "byteLimit"
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+            $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
+            $39, $40, $41, $42, $43
+          )
         `, [
           'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
           255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
@@ -1375,8 +1380,10 @@ export class Database {
 
       // Clean up duplicate conferences (in case they exist from previous runs)
       await this.cleanupDuplicateConferences();
-    } finally {
-      client.release();
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      // Don't throw error - continue with server startup
+      console.log('Continuing with server startup despite database initialization error');
     }
   }
 
