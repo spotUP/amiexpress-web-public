@@ -164,6 +164,41 @@ export interface SystemLog {
   node?: number;
 }
 
+// Helper function to convert camelCase field names to lowercase column names
+function fieldToColumn(field: string): string {
+  // Map of camelCase field names to lowercase column names
+  const fieldMap: { [key: string]: string } = {
+    'passwordHash': 'passwordhash',
+    'secLevel': 'seclevel',
+    'bytesUpload': 'bytesupload',
+    'bytesDownload': 'bytesdownload',
+    'ratioType': 'ratiotype',
+    'timeTotal': 'timetotal',
+    'timeLimit': 'timelimit',
+    'timeUsed': 'timeused',
+    'chatLimit': 'chatlimit',
+    'chatUsed': 'chatused',
+    'lastLogin': 'lastlogin',
+    'firstLogin': 'firstlogin',
+    'callsToday': 'callstoday',
+    'newUser': 'newuser',
+    'linesPerScreen': 'linesperscreen',
+    'screenType': 'screentype',
+    'zoomType': 'zoomtype',
+    'availableForChat': 'availableforchat',
+    'quietNode': 'quietnode',
+    'autoRejoin': 'autorejoin',
+    'confAccess': 'confaccess',
+    'areaName': 'areaname',
+    'uuCP': 'uucp',
+    'topUploadCPS': 'topuploadcps',
+    'topDownloadCPS': 'topdownloadcps',
+    'byteLimit': 'bytelimit'
+  };
+
+  return fieldMap[field] || field.toLowerCase();
+}
+
 export class Database {
   private pool?: any;
 
@@ -425,7 +460,7 @@ export class Database {
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users("secLevel")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(seclevel)`);
   }
 
 
@@ -489,40 +524,40 @@ export class Database {
           location: user.location,
           phone: user.phone,
           email: user.email,
-          secLevel: safeNumber(user["secLevel"], 10), // Default to 10 if NaN
+          secLevel: safeNumber(user.seclevel, 10), // Default to 10 if NaN
           uploads: safeNumber(user.uploads, 0),
           downloads: safeNumber(user.downloads, 0),
-          bytesUpload: safeNumber(user["bytesUpload"], 0),
-          bytesDownload: safeNumber(user["bytesDownload"], 0),
+          bytesUpload: safeNumber(user.bytesupload, 0),
+          bytesDownload: safeNumber(user.bytesdownload, 0),
           ratio: safeNumber(user.ratio, 0),
-          ratioType: safeNumber(user["ratioType"], 0),
-          timeTotal: safeNumber(user["timeTotal"], 0),
-          timeLimit: safeNumber(user["timeLimit"], 0),
-          timeUsed: safeNumber(user["timeUsed"], 0),
-          chatLimit: safeNumber(user["chatLimit"], 0),
-          chatUsed: safeNumber(user["chatUsed"], 0),
-          lastLogin: user["lastLogin"],
-          firstLogin: user["firstLogin"],
+          ratioType: safeNumber(user.ratiotype, 0),
+          timeTotal: safeNumber(user.timetotal, 0),
+          timeLimit: safeNumber(user.timelimit, 0),
+          timeUsed: safeNumber(user.timeused, 0),
+          chatLimit: safeNumber(user.chatlimit, 0),
+          chatUsed: safeNumber(user.chatused, 0),
+          lastLogin: user.lastlogin,
+          firstLogin: user.firstlogin,
           calls: safeNumber(user.calls, 0),
-          callsToday: safeNumber(user["callsToday"], 0),
-          newUser: user["newUser"],
+          callsToday: safeNumber(user.callstoday, 0),
+          newUser: user.newuser,
           expert: user.expert,
           ansi: user.ansi,
-          linesPerScreen: safeNumber(user["linesPerScreen"], 23),
+          linesPerScreen: safeNumber(user.linesperscreen, 23),
           computer: user.computer,
-          screenType: user["screenType"],
+          screenType: user.screentype,
           protocol: user.protocol,
           editor: user.editor,
-          zoomType: user["zoomType"],
-          availableForChat: user["availableForChat"],
-          quietNode: user["quietNode"],
-          autoRejoin: safeNumber(user["autoRejoin"], 1),
-          confAccess: user["confAccess"],
-          areaName: user["areaName"],
-          uuCP: user["uuCP"],
-          topUploadCPS: safeNumber(user["topUploadCPS"], 0),
-          topDownloadCPS: safeNumber(user["topDownloadCPS"], 0),
-          byteLimit: safeNumber(user["byteLimit"], 0),
+          zoomType: user.zoomtype,
+          availableForChat: user.availableforchat,
+          quietNode: user.quietnode,
+          autoRejoin: safeNumber(user.autorejoin, 1),
+          confAccess: user.confaccess,
+          areaName: user.areaname,
+          uuCP: user.uucp,
+          topUploadCPS: safeNumber(user.topuploadcps, 0),
+          topDownloadCPS: safeNumber(user.topdownloadcps, 0),
+          byteLimit: safeNumber(user.bytelimit, 0),
           created: user.created,
           updated: user.updated,
         } as User;
@@ -550,7 +585,7 @@ export class Database {
       const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
       if (fields.length === 0) return;
 
-      const sql = `UPDATE users SET ${fields.map((f, i) => `"${f}" = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
+      const sql = `UPDATE users SET ${fields.map((f, i) => `${fieldToColumn(f)} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
       const values = [...fields.map(f => updates[f as keyof User]), id];
 
       await client.query(sql, values);
@@ -567,12 +602,12 @@ export class Database {
       let paramIndex = 1;
 
       if (filter?.secLevel !== undefined) {
-        sql += ` AND "secLevel" >= $${paramIndex++}`;
+        sql += ` AND seclevel >= $${paramIndex++}`;
         params.push(filter.secLevel);
       }
 
       if (filter?.newUser !== undefined) {
-        sql += ` AND newUser = $${paramIndex++}`;
+        sql += ` AND newuser = $${paramIndex++}`;
         params.push(filter.newUser);
       }
 
