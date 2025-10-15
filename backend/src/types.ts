@@ -67,3 +67,134 @@ export interface ChatState {
   pagingUsers: string[]; // User IDs currently paging
   chatToggle: boolean; // F7 chat toggle state
 }
+
+// Node management interfaces - for multi-node BBS support
+export interface NodeSession {
+  id: string;
+  nodeId: number;
+  userId?: string;
+  socketId: string;
+  state: string;
+  subState?: string;
+  currentConf: number;
+  currentMsgBase: number;
+  timeRemaining: number;
+  lastActivity: Date;
+  status: 'available' | 'busy' | 'down' | 'active' | 'idle' | 'disconnected';
+  loadLevel: number; // 0-100, for load balancing
+  currentUser?: string; // Current user ID on this node
+}
+
+export interface NodeInfo {
+  id: number;
+  name: string;
+  description?: string;
+  status: 'available' | 'busy' | 'down' | 'maintenance';
+  currentUsers: number;
+  maxUsers: number;
+  loadLevel: number;
+  lastActivity: Date;
+  ipAddress?: string;
+  port?: number;
+  currentUser?: string; // Current user ID on this node
+}
+
+// AREXX scripting interfaces
+export interface AREXXScript {
+  id: string;
+  name: string;
+  description: string;
+  script: string;
+  trigger: string; // Event that triggers this script
+  enabled: boolean;
+  priority: number; // Execution priority
+  created: Date;
+  updated: Date;
+}
+
+export interface AREXXContext {
+  user?: any;
+  session?: any;
+  command?: string;
+  parameters?: string[];
+  variables: { [key: string]: any };
+}
+
+// QWK/FTN offline mail interfaces
+export interface QWKPacket {
+  id: string;
+  filename: string;
+  userId: string;
+  status: 'creating' | 'ready' | 'sent' | 'error' | 'processing' | 'completed' | 'downloaded';
+  messageCount: number;
+  created: Date;
+  sent?: Date;
+  size: number;
+  path?: string;
+  fromBBS?: string;
+  toBBS?: string;
+  processedAt?: Date;
+  messages?: any[];
+  error?: string;
+}
+
+export interface QWKMessage {
+  id: number;
+  packetId: string;
+  subject: string;
+  body: string;
+  author: string;
+  recipient: string;
+  timestamp: Date;
+  conference: number;
+  messageBase: number;
+  isPrivate: boolean;
+  status: 'unread' | 'read' | 'replied';
+  from?: string; // QWK format field
+  to?: string; // QWK format field
+  date?: Date; // QWK format field
+  isReply?: boolean; // QWK format field
+  parentId?: number; // QWK format field
+  attachments?: string[]; // QWK format field
+}
+
+export interface FTNMessage {
+  id: number;
+  subject: string;
+  body: string;
+  author: string;
+  recipient: string;
+  timestamp: Date;
+  originAddress: string; // FTN address format (zone:net/node.point@domain)
+  destinationAddress: string;
+  conference: number;
+  messageBase: number;
+  isPrivate: boolean;
+  status: 'unread' | 'read' | 'replied' | 'forwarded' | 'received' | 'sent' | 'archived';
+  attributes: number; // FTN message attributes bitfield
+  fromAddress?: string; // Additional FTN fields
+  toAddress?: string;
+  date?: Date;
+  msgid?: string;
+  replyTo?: string;
+  area?: string;
+}
+
+// File transfer protocol interfaces
+export interface TransferSession {
+  id: string;
+  userId: string;
+  type: 'upload' | 'download';
+  protocol: 'zmodem' | 'ftp' | 'websocket' | string;
+  filename: string;
+  size: number;
+  transferred: number;
+  status: 'starting' | 'active' | 'paused' | 'completed' | 'error';
+  startTime: Date;
+  endTime?: Date;
+  speed: number; // bytes per second
+  error?: string;
+  checksum?: string;
+  direction?: string;
+  bytesTransferred?: number;
+}

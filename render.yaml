@@ -1,0 +1,74 @@
+# Render Blueprint Configuration for AmiExpress Web
+# This file defines the complete infrastructure setup for Render.com
+# Run with: render deploy --blueprint render.yaml
+
+services:
+  # Backend API Service
+  - type: web
+    name: amiexpress-backend
+    runtime: node
+    buildCommand: "npm ci && npm run build"
+    startCommand: "npm start"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false # Set manually in Render dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        fromService:
+          type: web
+          name: amiexpress-frontend
+          property: host
+    healthCheckPath: /health
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 10
+    autoDeploy: true
+
+  # Frontend Static Site
+  - type: web
+    name: amiexpress-frontend
+    runtime: static
+    buildCommand: "cd frontend && npm ci && npm run build"
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: amiexpress-backend
+          property: host
+    routes:
+      - type: redirect
+        source: /api/*
+        destination: https://amiexpress-backend.onrender.com/api/:splat
+    autoDeploy: true
+
+  # Database (PostgreSQL)
+  - type: pserv
+    name: amiexpress-db
+    ipAllowList: [] # Only accessible from services in this blueprint
+
+# Environment groups for different deployment stages
+environments:
+  - name: staging
+    services:
+      - amiexpress-backend
+      - amiexpress-frontend
+      - amiexpress-db
+    envVars:
+      - key: NODE_ENV
+        value: staging
+
+  - name: production
+    services:
+      - amiexpress-backend
+      - amiexpress-frontend
+      - amiexpress-db
+    envVars:
+      - key: NODE_ENV
+        value: production

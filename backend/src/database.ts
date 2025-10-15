@@ -1,5 +1,17 @@
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
+import { Pool as PoolConstructor } from 'pg';
 import * as crypto from 'crypto';
+
+// Import types from types.ts
+import type {
+  NodeSession,
+  AREXXScript,
+  AREXXContext,
+  QWKPacket,
+  QWKMessage,
+  FTNMessage,
+  TransferSession
+} from './types';
 
 // Database interfaces matching AmiExpress data structures
 export interface User {
@@ -154,7 +166,7 @@ export interface SystemLog {
 }
 
 export class Database {
-  private pool?: Pool;
+  private pool?: any;
 
   constructor() {
     // PostgreSQL connection configuration
@@ -165,7 +177,7 @@ export class Database {
     }
 
     console.log('Initializing PostgreSQL database connection...');
-    this.pool = new Pool({
+    this.pool = new PoolConstructor({
       connectionString,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
       max: 20, // Maximum number of clients in the pool
@@ -174,7 +186,7 @@ export class Database {
     });
 
     // Handle pool errors
-    this.pool.on('error', (err) => {
+    this.pool.on('error', (err: Error) => {
       console.error('Unexpected error on idle client', err);
       process.exit(-1);
     });
@@ -426,7 +438,7 @@ export class Database {
           linesPerScreen, computer, screenType, protocol, editor, zoomType,
           availableForChat, quietNode, autoRejoin, confAccess, areaName, uuCP,
           topUploadCPS, topDownloadCPS, byteLimit
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
       `;
 
       const values = [
@@ -815,7 +827,7 @@ export class Database {
     try {
       const sql = `SELECT * FROM sessions WHERE lastActivity > NOW() - INTERVAL '30 minutes'`;
       const result = await client.query(sql);
-      const sessions = result.rows.map(row => {
+      const sessions = result.rows.map((row: any) => {
         const session = row as any;
         if (session.tempData) {
           session.tempData = JSON.parse(session.tempData);
@@ -901,6 +913,275 @@ export class Database {
       const sql = `SELECT * FROM file_areas WHERE conferenceId = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as FileArea[];
+    } finally {
+      client.release();
+    }
+  }
+
+  // Node session management methods
+  async createNodeSession(session: Omit<NodeSession, 'created' | 'updated'>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO node_sessions (
+          id, nodeId, userId, socketId, state, subState, currentConf, currentMsgBase,
+          timeRemaining, lastActivity, status, loadLevel, currentUser
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT (id) DO UPDATE SET
+          userId = EXCLUDED.userId,
+          socketId = EXCLUDED.socketId,
+          state = EXCLUDED.state,
+          subState = EXCLUDED.subState,
+          currentConf = EXCLUDED.currentConf,
+          currentMsgBase = EXCLUDED.currentMsgBase,
+          timeRemaining = EXCLUDED.timeRemaining,
+          lastActivity = EXCLUDED.lastActivity,
+          status = EXCLUDED.status,
+          loadLevel = EXCLUDED.loadLevel,
+          currentUser = EXCLUDED.currentUser,
+          updated = CURRENT_TIMESTAMP
+      `;
+
+      const values = [
+        session.id, session.nodeId, session.userId, session.socketId, session.state,
+        session.subState, session.currentConf, session.currentMsgBase, session.timeRemaining,
+        session.lastActivity, session.status, session.loadLevel, session.currentUser
+      ];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateNodeSession(id: string, updates: Partial<NodeSession>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+      if (fields.length === 0) return;
+
+      const sql = `UPDATE node_sessions SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof NodeSession]), id];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getNodeSessions(nodeId?: number): Promise<NodeSession[]> {
+    const client = await this.pool.connect();
+    try {
+      let sql = `SELECT * FROM node_sessions`;
+      const params: any[] = [];
+
+      if (nodeId !== undefined) {
+        sql += ` WHERE nodeId = $1`;
+        params.push(nodeId);
+      }
+
+      sql += ` ORDER BY lastActivity DESC`;
+      const result = await client.query(sql, params);
+      return result.rows as NodeSession[];
+    } finally {
+      client.release();
+    }
+  }
+
+  // AREXX script management methods
+  async getAREXXScripts(): Promise<AREXXScript[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM arexx_scripts ORDER BY priority DESC, name`;
+      const result = await client.query(sql);
+      return result.rows as AREXXScript[];
+    } finally {
+      client.release();
+    }
+  }
+
+  async executeAREXXScript(scriptId: string, context: AREXXContext): Promise<any> {
+    // AREXX execution would be implemented here
+    // For now, return a placeholder
+    return { success: true, result: 'AREXX script executed' };
+  }
+
+  // QWK packet management methods
+  async createQWKPacket(packet: Omit<QWKPacket, 'id'>): Promise<string> {
+    const client = await this.pool.connect();
+    try {
+      const id = crypto.randomUUID();
+      const sql = `
+        INSERT INTO qwk_packets (
+          id, filename, userId, status, messageCount, created, sent, size, path
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `;
+
+      const values = [
+        id, packet.filename, packet.userId, packet.status, packet.messageCount,
+        packet.created, packet.sent, packet.size, packet.path
+      ];
+
+      await client.query(sql, values);
+      return id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async createQWKMessage(message: Omit<QWKMessage, 'id'>): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO qwk_messages (
+          packetId, subject, body, author, recipient, timestamp, conference,
+          messageBase, isPrivate, status, from, to, date, isReply, parentId, attachments
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        RETURNING id
+      `;
+
+      const values = [
+        message.packetId, message.subject, message.body, message.author, message.recipient,
+        message.timestamp, message.conference, message.messageBase, message.isPrivate,
+        message.status, message.from, message.to, message.date, message.isReply,
+        message.parentId, JSON.stringify(message.attachments || [])
+      ];
+
+      const result = await client.query(sql, values);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateQWKPacket(id: string, updates: Partial<QWKPacket>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return;
+
+      const sql = `UPDATE qwk_packets SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof QWKPacket]), id];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getQWKPacket(id: string): Promise<QWKPacket | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM qwk_packets WHERE id = $1`;
+      const result = await client.query(sql, [id]);
+      return result.rows[0] as QWKPacket || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteQWKPacket(id: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `DELETE FROM qwk_packets WHERE id = $1`;
+      await client.query(sql, [id]);
+    } finally {
+      client.release();
+    }
+  }
+
+  // FTN message management methods
+  async createFTNMessage(message: Omit<FTNMessage, 'id'>): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO ftn_messages (
+          subject, body, author, recipient, timestamp, originAddress, destinationAddress,
+          conference, messageBase, isPrivate, status, attributes, fromAddress, toAddress,
+          date, msgid, replyTo, area
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        RETURNING id
+      `;
+
+      const values = [
+        message.subject, message.body, message.author, message.recipient, message.timestamp,
+        message.originAddress, message.destinationAddress, message.conference, message.messageBase,
+        message.isPrivate, message.status, message.attributes, message.fromAddress,
+        message.toAddress, message.date, message.msgid, message.replyTo, message.area
+      ];
+
+      const result = await client.query(sql, values);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getFTNMessages(conferenceId: number, messageBaseId: number): Promise<FTNMessage[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM ftn_messages
+        WHERE conference = $1 AND messageBase = $2
+        ORDER BY timestamp DESC
+      `;
+      const result = await client.query(sql, [conferenceId, messageBaseId]);
+      return result.rows as FTNMessage[];
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateFTNMessage(id: number, updates: Partial<FTNMessage>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return;
+
+      const sql = `UPDATE ftn_messages SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof FTNMessage]), id];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  // File transfer session management methods
+  async createTransferSession(session: Omit<TransferSession, 'id'>): Promise<string> {
+    const client = await this.pool.connect();
+    try {
+      const id = crypto.randomUUID();
+      const sql = `
+        INSERT INTO transfer_sessions (
+          id, userId, type, protocol, filename, size, transferred, status,
+          startTime, endTime, speed, error
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `;
+
+      const values = [
+        id, session.userId, session.type, session.protocol, session.filename,
+        session.size, session.transferred, session.status, session.startTime,
+        session.endTime, session.speed, session.error
+      ];
+
+      await client.query(sql, values);
+      return id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return;
+
+      const sql = `UPDATE transfer_sessions SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof TransferSession]), id];
+
+      await client.query(sql, values);
     } finally {
       client.release();
     }
@@ -1000,7 +1281,7 @@ export class Database {
         'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '',
         255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, new Date(),
         0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
-        'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
+        'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0, new Date()
       ]);
 
       console.log('Default data initialization completed');

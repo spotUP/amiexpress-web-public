@@ -1,11 +1,30 @@
+// Import and initialize migrations system
+import { migrationManager } from './migrations';
+
+// Run pending migrations on startup (for production deployments)
+if (process.env.NODE_ENV === 'production') {
+  console.log('🔄 Checking for pending database migrations...');
+  migrationManager.migrate().then(result => {
+    if (result.executed.length > 0) {
+      console.log(`✅ Applied ${result.executed.length} database migrations`);
+    } else {
+      console.log('✅ No pending migrations');
+    }
+    if (result.failed.length > 0) {
+      console.error(`❌ Failed to apply ${result.failed.length} migrations:`, result.failed);
+    }
+  }).catch(error => {
+    console.error('❌ Migration error:', error);
+    // Don't exit in production - continue with existing schema
+  });
+}
+
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { User, Door, DoorSession, ChatSession, ChatMessage, ChatState } from './types';
 import { db } from './database';
-
-// Add health check endpoint for Render.com monitoring
 
 // BBS State definitions (mirroring AmiExpress state machine)
 enum BBSState {
@@ -78,6 +97,10 @@ let chatState: ChatState = {
 };
 
 const app = express();
+
+// Import and use health check router
+import healthRouter from './health';
+app.use('/health', healthRouter);
 
 // Configure CORS for Render.com deployment
 const corsOptions = {

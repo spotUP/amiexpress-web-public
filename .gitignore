@@ -13,6 +13,15 @@ backend/dist/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.staging.local
+.env.production
+.env.staging
+
+# Vercel
+.vercel/
+
+# Render
+.render/
 
 # Logs
 logs

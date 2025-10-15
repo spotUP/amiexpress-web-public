@@ -2,7 +2,7 @@
 // Manages multiple concurrent BBS sessions across different nodes
 
 import { db } from './database';
-import { NodeSession, NodeInfo } from './types';
+import { NodeSession, NodeInfo, AREXXContext } from './types';
 
 export class NodeManager {
   private nodes: Map<number, NodeInfo> = new Map();
@@ -22,7 +22,11 @@ export class NodeManager {
           id: i,
           name: `Node ${i}`,
           status: 'available',
-          description: `Web node ${i}`
+          description: `Web node ${i}`,
+          currentUsers: 0,
+          maxUsers: 1,
+          loadLevel: 0,
+          lastActivity: new Date()
         };
         this.nodes.set(i, nodeInfo);
       }
@@ -57,7 +61,9 @@ export class NodeManager {
       currentMsgBase: 0,
       timeRemaining: 60,
       lastActivity: new Date(),
-      status: 'active'
+      status: 'active',
+      loadLevel: 0,
+      currentUser: userId
     };
 
     await db.createNodeSession(nodeSession);
@@ -66,6 +72,8 @@ export class NodeManager {
     // Update node status
     availableNode.status = 'busy';
     availableNode.currentUser = userId;
+    availableNode.currentUsers = 1;
+    availableNode.loadLevel = 50; // Assuming 50% load for one user
     availableNode.lastActivity = new Date();
 
     return nodeSession as NodeSession;
@@ -104,6 +112,8 @@ export class NodeManager {
       if (node) {
         node.status = 'available';
         node.currentUser = undefined;
+        node.currentUsers = 0;
+        node.loadLevel = 0;
       }
 
       // Update session status
@@ -219,10 +229,14 @@ export class NodeManager {
       if (oldNode) {
         oldNode.status = 'available';
         oldNode.currentUser = undefined;
+        oldNode.currentUsers = 0;
+        oldNode.loadLevel = 0;
       }
 
       targetNode.status = 'busy';
       targetNode.currentUser = session.userId;
+      targetNode.currentUsers = 1;
+      targetNode.loadLevel = 50;
 
       console.log(`Transferred session ${sessionId} to node ${targetNodeId}`);
       return true;
@@ -321,26 +335,31 @@ export class AREXXEngine {
   async executeScript(script: any, context: any): Promise<any> {
     try {
       // Create execution context
-      const arexxContext = {
-        scriptId: script.id,
-        userId: context.userId,
-        sessionId: context.sessionId,
-        parameters: context.parameters || {},
-        environment: {
-          bbsName: 'AmiExpress Web',
-          sysopName: 'Sysop',
-          ...context.environment
-        },
-        output: [],
-        result: undefined,
-        error: undefined
+      const arexxContext: AREXXContext = {
+        user: context.userId ? { id: context.userId } : undefined,
+        session: context.sessionId ? { id: context.sessionId } : undefined,
+        command: undefined,
+        parameters: context.parameters || [],
+        variables: {
+          scriptId: script.id,
+          userId: context.userId,
+          sessionId: context.sessionId,
+          environment: {
+            bbsName: 'AmiExpress Web',
+            sysopName: 'Sysop',
+            ...context.environment
+          },
+          output: [],
+          result: undefined,
+          error: undefined
+        }
       };
 
       // Simulate script execution (in real implementation, this would execute AREXX code)
       const result = await this.simulateScriptExecution(script, arexxContext);
 
       // Log execution
-      await db.executeAREXXScript(arexxContext);
+      await db.executeAREXXScript(script.id, arexxContext);
 
       return result;
     } catch (error) {
@@ -535,14 +554,15 @@ export class ProtocolManager {
 
     // Create transfer session
     const sessionId = await db.createTransferSession({
+      type: transferData.direction === 'upload' ? 'upload' : 'download',
       protocol: protocolId,
       userId: transferData.userId,
-      direction: transferData.direction,
       filename: transferData.filename,
       size: transferData.size,
-      bytesTransferred: 0,
+      transferred: 0,
       status: 'starting',
-      startTime: new Date()
+      startTime: new Date(),
+      speed: 0
     });
 
     // Start transfer based on protocol
