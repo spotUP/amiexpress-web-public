@@ -193,8 +193,6 @@ io.on('connection', (socket: Socket) => {
 const port = process.env.PORT || 3001;
 
 // Export for Vercel deployment
-export default app;
-export { io, server };
 
 // Store active sessions (in production, use Redis/database)
 const sessions = new Map<string, BBSSession>();
@@ -2161,6 +2159,10 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
     }
   }
 })();
+
+// Export for Vercel serverless functions
+export default app;
+export { io, server };
 
 // Socket.IO connection logging will be handled in the existing connection handler
 // Global data caches (loaded from database)
