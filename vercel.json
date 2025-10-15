@@ -20,29 +20,23 @@
       }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "/backend/src/index.ts"
+      "source": "/api/(.*)",
+      "destination": "/backend/src/index.ts"
     },
     {
-      "src": "/socket.io/(.*)",
-      "dest": "/backend/src/index.ts"
+      "source": "/socket.io/(.*)",
+      "destination": "/backend/src/index.ts"
     },
     {
-      "src": "/(.*)",
-      "dest": "/frontend/$1"
+      "source": "/(.*)",
+      "destination": "/frontend/$1"
     }
   ],
   "env": {
     "NODE_ENV": "production",
     "VERCEL": "1"
-  },
-  "functions": {
-    "backend/src/index.ts": {
-      "maxDuration": 30,
-      "memory": 1024
-    }
   },
   "regions": ["iad1"],
   "headers": [

@@ -54,7 +54,7 @@ function App() {
     terminal.current = term;
 
     // Connect to backend WebSocket
-    const ws = io('http://localhost:3001');
+    const ws = io(window.location.origin);
     socket.current = ws;
 
     // Handle terminal output from server
