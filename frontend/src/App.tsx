@@ -72,34 +72,37 @@ function App() {
       term.refresh(0, term.rows - 1);
     }, 100);
 
-    // Connect to backend WebSocket (environment-aware configuration)
+    // Connect to backend (environment-aware configuration)
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const backendUrl = isDevelopment ? 'http://localhost:3001' : 'https://amiexpress-web-three.vercel.app';
 
-    console.log('Connecting to backend:', backendUrl, 'Environment:', isDevelopment ? 'development' : 'production');
+    console.log('🔌 Connecting to backend:', backendUrl, 'Environment:', isDevelopment ? 'development' : 'production');
 
     const ws = io(backendUrl, {
-      transports: ['websocket', 'polling'], // Prefer WebSocket, fallback to polling
-      upgrade: true,
+      transports: ['websocket', 'polling'], // WebSocket preferred, polling as fallback
       timeout: 20000,
       forceNew: true,
       reconnection: true,
-      reconnectionAttempts: isDevelopment ? 5 : 10, // More attempts in production
+      reconnectionAttempts: isDevelopment ? 5 : 3,
       reconnectionDelay: 1000
     });
     socket.current = ws;
 
-    // Enhanced connection handling
+    // Connection handling
     ws.on('connect', () => {
-      console.log('✅ Connected to BBS backend');
+      const transport = ws.io.engine.transport.name;
+      console.log(`✅ Connected to BBS backend via ${transport}`);
+      if (transport === 'polling') {
+        console.log('ℹ️ Using HTTP polling - real-time features limited but functional');
+      }
     });
 
     ws.on('connect_error', (error) => {
       console.warn('❌ Connection error:', error.message);
       if (isDevelopment) {
-        console.log('💡 In development mode - make sure backend is running on localhost:3001');
+        console.log('💡 Make sure backend is running: cd backend && npm run dev');
       } else {
-        console.log('💡 In production mode - trying to connect to Vercel deployment');
+        console.log('💡 Production mode: Will use HTTP polling as fallback');
       }
     });
 
