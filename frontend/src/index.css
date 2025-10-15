@@ -1,3 +1,25 @@
+/* Custom Amiga Fonts */
+@font-face {
+  font-family: 'mosoul';
+  src: url('../Fonts/mO\'sOul_v1.0.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'MicroKnight_v1.0';
+  src: url('../Fonts/MicroKnight_v1.0.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'MicroKnightPlus_v1.0';
+  src: url('../Fonts/MicroKnightPlus_v1.0.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -29,6 +51,43 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  font-size: 16px;
+}
+
+/* Override terminal container font size */
+#terminal {
+  font-size: 16px !important;
+}
+
+/* BBS Terminal Styles */
+.xterm {
+  font-size: 16px !important;
+  -webkit-font-smoothing: none !important;
+  -moz-osx-font-smoothing: none !important;
+  font-smooth: never !important;
+  text-rendering: optimizeSpeed !important;
+}
+
+.xterm .xterm-rows {
+  font-size: 16px !important;
+  -webkit-font-smoothing: none !important;
+  -moz-osx-font-smoothing: none !important;
+  font-smooth: never !important;
+}
+
+.xterm .xterm-viewport {
+  font-size: 16px !important;
+  -webkit-font-smoothing: none !important;
+  -moz-osx-font-smoothing: none !important;
+  font-smooth: never !important;
+}
+
+.xterm .xterm-rows .xterm-row {
+  font-size: 16px !important;
+  line-height: 1.6 !important;
+  -webkit-font-smoothing: none !important;
+  -moz-osx-font-smoothing: none !important;
+  font-smooth: never !important;
 }
 
 h1 {

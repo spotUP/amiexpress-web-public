@@ -12,5 +12,9 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  // Define environment variables for Render.com deployment
+  define: {
+    // VITE_API_URL will be set by Render.com environment variables
   }
 })

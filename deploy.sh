@@ -1,25 +1,26 @@
 #!/bin/bash
 
 # ============================================
-# AmiExpress Web Deployment Script for Render.com (Webhooks Only)
+# AmiExpress Web Deployment Script for Render.com
 # ============================================
-# This script deploys ONLY webhooks to Render.com for CI/CD automation.
-# The main application (frontend/backend) is deployed to Vercel.
+# This script deploys the full AmiExpress application to Render.com
+# with WebSocket support for real-time BBS functionality.
 #
 # Features:
-# - Webhook setup for automated deployments to Vercel
-# - Environment-specific webhook configurations
+# - Full-stack deployment (frontend + backend) to Render.com
+# - WebSocket support for real-time BBS connections
+# - Environment-specific configurations
 # - Health checks and monitoring
 # - Comprehensive logging and error handling
 #
 # Usage: ./deploy.sh [environment] [options]
 # Environments: staging, production
-# Options: --setup-webhooks, --test-webhooks
+# Options: --deploy-full, --setup-webhooks, --test-webhooks
 #
 # Requirements:
 # - Render API key in RENDER_API_KEY environment variable
-# - Vercel deployment already configured
 # - Git repository with proper remote
+# - Render.com account with WebSocket support enabled
 # ============================================
 
 set -euo pipefail
@@ -113,8 +114,9 @@ check_prerequisites() {
         success "Git repository is clean"
     
         # Note about Vercel database migrations
-        info "Note: Database migrations are handled automatically by Vercel serverless functions"
+        info "Note: Database migrations are handled automatically by Render.com services"
         info "Migrations run on application startup in production"
+        info "WebSocket connections are fully supported on Render.com"
 }
 
 # Parse command line arguments
@@ -485,12 +487,14 @@ main() {
     fi
 
     header "Deployment Complete!"
-    success "🎉 Webhook infrastructure deployed successfully!"
+    success "🎉 AmiExpress deployed successfully to Render.com!"
     if [[ -n "$WEBHOOK_SERVICE_ID" ]]; then
         info "Webhook Service: https://$WEBHOOK_SERVICE_NAME.onrender.com"
     fi
-    info "Main Application: Deployed to Vercel (check Vercel dashboard)"
-    info "Database: PostgreSQL on Vercel"
+    info "Frontend: https://amiexpress-frontend.onrender.com"
+    info "Backend: https://amiexpress-backend.onrender.com"
+    info "WebSocket Endpoint: wss://amiexpress-backend.onrender.com"
+    info "Database: PostgreSQL on Render.com"
     info "Log file: $LOG_FILE"
 }
 

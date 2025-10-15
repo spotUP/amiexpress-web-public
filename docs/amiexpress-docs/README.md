@@ -2,6 +2,15 @@
 
 This directory contains the complete official AmiExpress v5.6.0 documentation fetched from the GitHub wiki. These documents serve as the authoritative reference for implementing features in the AmiExpress Web port.
 
+## 🚀 **Deployment Information**
+
+**Current Deployment**: Render.com (WebSocket-enabled)
+- **Frontend**: https://amiexpress-frontend.onrender.com
+- **Backend**: https://amiexpress-backend.onrender.com
+- **WebSocket Endpoint**: wss://amiexpress-backend.onrender.com
+
+**Why Render.com**: Full WebSocket support for real-time BBS functionality, unlike Vercel's serverless limitations.
+
 ## 📚 **Available Documentation**
 
 ### **Core Documentation**

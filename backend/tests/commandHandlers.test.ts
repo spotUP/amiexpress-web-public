@@ -5,7 +5,7 @@ import { ConfigManager } from '../src/config';
 const mockSocket = {
   emit: jest.fn(),
   disconnect: jest.fn()
-};
+} as any;
 
 // Mock session object
 const createMockSession = (overrides = {}) => ({

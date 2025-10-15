@@ -16,6 +16,7 @@ function App() {
     const term = new Terminal({
       fontFamily: 'mosoul, "Courier New", monospace',
       fontSize: 16,
+      lineHeight: 1.2,
       theme: {
         background: '#000000',
         foreground: '#ffffff',
@@ -73,12 +74,13 @@ function App() {
     }, 100);
 
     // Connect to backend WebSocket (supports Render.com deployment)
-    const backendUrl = (import.meta as any).env?.VITE_API_URL || window.location.origin;
+    const backendUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
     const ws = io(backendUrl, {
       transports: ['websocket', 'polling'], // Prefer WebSocket, fallback to polling
       upgrade: true, // Allow transport upgrades
       rememberUpgrade: true, // Remember successful upgrades
-      timeout: 20000 // Connection timeout
+      timeout: 20000, // Connection timeout
+      forceNew: true // Force new connection to avoid stale connections
     });
     socket.current = ws;
 
