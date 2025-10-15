@@ -1,6 +1,8 @@
 import sqlite3 from 'sqlite3';
 import { promisify } from 'util';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 // Database interfaces matching AmiExpress data structures
 export interface User {
@@ -154,6 +156,138 @@ export interface SystemLog {
   node?: number;
 }
 
+// Network message interfaces
+export interface QWKPacket {
+  id: string;
+  filename: string;
+  size: number;
+  created: Date;
+  fromBBS: string;
+  toBBS: string;
+  messages: QWKMessage[];
+  status: 'pending' | 'processing' | 'completed' | 'downloaded' | 'error';
+  error?: string;
+  processedAt?: Date;
+}
+
+export interface QWKMessage {
+  id: number;
+  conference: number;
+  subject: string;
+  from: string;
+  to: string;
+  date: Date;
+  body: string;
+  isPrivate: boolean;
+  isReply: boolean;
+  parentId?: number;
+  attachments?: string[];
+}
+
+export interface FTNMessage {
+  id: string;
+  fromAddress: string;
+  toAddress: string;
+  subject: string;
+  body: string;
+  date: Date;
+  area: string;
+  msgid?: string;
+  replyTo?: string;
+  attributes: number;
+  status: 'pending' | 'sent' | 'received' | 'error' | 'archived';
+  error?: string;
+  processedAt?: Date;
+}
+
+// Multi-node support
+export interface NodeSession {
+  id: string;
+  nodeId: number;
+  userId?: string;
+  socketId: string;
+  state: string;
+  subState?: string;
+  currentConf: number;
+  currentMsgBase: number;
+  timeRemaining: number;
+  lastActivity: Date;
+  status: 'active' | 'idle' | 'away' | 'disconnected';
+  ipAddress?: string;
+  location?: string;
+}
+
+export interface NodeInfo {
+  id: number;
+  name: string;
+  status: 'available' | 'busy' | 'maintenance' | 'offline';
+  currentUser?: string;
+  lastActivity?: Date;
+  description?: string;
+}
+
+// AREXX scripting
+export interface AREXXScript {
+  id: string;
+  name: string;
+  description: string;
+  filename: string;
+  path: string;
+  accessLevel: number;
+  enabled: boolean;
+  parameters?: AREXXParameter[];
+  triggers?: AREXXTrigger[];
+}
+
+export interface AREXXParameter {
+  name: string;
+  type: 'string' | 'number' | 'boolean';
+  required: boolean;
+  defaultValue?: any;
+  description?: string;
+}
+
+export interface AREXXTrigger {
+  event: 'login' | 'logout' | 'message_post' | 'file_upload' | 'command' | 'timer';
+  condition?: string;
+  priority: number;
+}
+
+export interface AREXXContext {
+  scriptId: string;
+  userId?: string;
+  sessionId?: string;
+  parameters: Record<string, any>;
+  environment: Record<string, any>;
+  output: string[];
+  result?: any;
+  error?: string;
+}
+
+// Protocol support
+export interface FileTransferProtocol {
+  id: string;
+  name: string;
+  type: 'zmodem' | 'ftp' | 'websocket';
+  enabled: boolean;
+  config: Record<string, any>;
+}
+
+export interface TransferSession {
+  id: string;
+  protocol: string;
+  userId: string;
+  direction: 'upload' | 'download';
+  filename: string;
+  size: number;
+  bytesTransferred: number;
+  status: 'starting' | 'active' | 'paused' | 'completed' | 'error';
+  startTime: Date;
+  endTime?: Date;
+  error?: string;
+  checksum?: string;
+}
+
 export class Database {
   private db: sqlite3.Database;
 
@@ -162,7 +296,7 @@ export class Database {
     this.initDatabase();
   }
 
-  private initDatabase(): void {
+  public initDatabase(): void {
     // Enable foreign keys
     this.db.run('PRAGMA foreign_keys = ON');
 
@@ -359,8 +493,297 @@ export class Database {
       )
     `);
 
+    // Node sessions table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS node_sessions (
+        id TEXT PRIMARY KEY,
+        nodeId INTEGER NOT NULL,
+        userId TEXT,
+        socketId TEXT NOT NULL,
+        state TEXT NOT NULL,
+        subState TEXT,
+        currentConf INTEGER DEFAULT 0,
+        currentMsgBase INTEGER DEFAULT 0,
+        timeRemaining INTEGER DEFAULT 60,
+        lastActivity DATETIME DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'active',
+        ipAddress TEXT,
+        location TEXT,
+        created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
+    // QWK packets table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS qwk_packets (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        fromBBS TEXT NOT NULL,
+        toBBS TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        error TEXT,
+        processedAt DATETIME
+      )
+    `);
+
+    // QWK messages table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS qwk_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        packetId TEXT NOT NULL,
+        conference INTEGER NOT NULL,
+        subject TEXT NOT NULL,
+        from TEXT NOT NULL,
+        to TEXT,
+        date DATETIME NOT NULL,
+        body TEXT NOT NULL,
+        isPrivate BOOLEAN DEFAULT 0,
+        isReply BOOLEAN DEFAULT 0,
+        parentId INTEGER,
+        attachments TEXT,
+        FOREIGN KEY (packetId) REFERENCES qwk_packets(id)
+      )
+    `);
+
+    // FTN messages table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS ftn_messages (
+        id TEXT PRIMARY KEY,
+        fromAddress TEXT NOT NULL,
+        toAddress TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        date DATETIME NOT NULL,
+        area TEXT NOT NULL,
+        msgid TEXT,
+        replyTo TEXT,
+        attributes INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        processedAt DATETIME,
+        error TEXT
+      )
+    `);
+
+    // AREXX scripts table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS arexx_scripts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        filename TEXT NOT NULL,
+        path TEXT NOT NULL,
+        accessLevel INTEGER DEFAULT 0,
+        enabled BOOLEAN DEFAULT 1,
+        parameters TEXT,
+        triggers TEXT,
+        created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // AREXX execution log table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS arexx_executions (
+        id TEXT PRIMARY KEY,
+        scriptId TEXT NOT NULL,
+        userId TEXT,
+        sessionId TEXT,
+        parameters TEXT,
+        environment TEXT,
+        output TEXT,
+        result TEXT,
+        error TEXT,
+        executedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        duration INTEGER,
+        FOREIGN KEY (scriptId) REFERENCES arexx_scripts(id),
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
+    // Transfer sessions table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS transfer_sessions (
+        id TEXT PRIMARY KEY,
+        protocol TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        bytesTransferred INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'starting',
+        startTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+        endTime DATETIME,
+        error TEXT,
+        checksum TEXT,
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
+    // QWK/FTN network message tables
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS qwk_packets (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        fromBBS TEXT NOT NULL,
+        toBBS TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        error TEXT,
+        processedAt DATETIME
+      )
+    `);
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS qwk_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        packetId TEXT NOT NULL,
+        conference INTEGER NOT NULL,
+        subject TEXT NOT NULL,
+        from_user TEXT NOT NULL,
+        to_user TEXT,
+        date DATETIME NOT NULL,
+        body TEXT NOT NULL,
+        isPrivate BOOLEAN DEFAULT 0,
+        isReply BOOLEAN DEFAULT 0,
+        parentId INTEGER,
+        attachments TEXT, -- JSON array
+        FOREIGN KEY (packetId) REFERENCES qwk_packets(id)
+      )
+    `);
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS ftn_messages (
+        id TEXT PRIMARY KEY,
+        fromAddress TEXT NOT NULL,
+        toAddress TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        area TEXT NOT NULL,
+        msgid TEXT,
+        replyTo TEXT,
+        attributes INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        error TEXT,
+        processedAt DATETIME
+      )
+    `);
+
+    // Multi-node support tables
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS nodes (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        status TEXT DEFAULT 'available',
+        currentUser TEXT,
+        lastActivity DATETIME,
+        description TEXT,
+        created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS node_sessions (
+        id TEXT PRIMARY KEY,
+        nodeId INTEGER NOT NULL,
+        userId TEXT,
+        socketId TEXT NOT NULL,
+        state TEXT NOT NULL,
+        subState TEXT,
+        currentConf INTEGER DEFAULT 0,
+        currentMsgBase INTEGER DEFAULT 0,
+        timeRemaining INTEGER DEFAULT 60,
+        lastActivity DATETIME DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'active',
+        ipAddress TEXT,
+        location TEXT,
+        created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (nodeId) REFERENCES nodes(id),
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
+    // AREXX scripting tables
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS arexx_scripts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        filename TEXT NOT NULL,
+        path TEXT NOT NULL,
+        accessLevel INTEGER DEFAULT 10,
+        enabled BOOLEAN DEFAULT 1,
+        parameters TEXT, -- JSON array
+        triggers TEXT, -- JSON array
+        created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS arexx_executions (
+        id TEXT PRIMARY KEY,
+        scriptId TEXT NOT NULL,
+        userId TEXT,
+        sessionId TEXT,
+        parameters TEXT, -- JSON object
+        environment TEXT, -- JSON object
+        output TEXT, -- JSON array
+        result TEXT,
+        error TEXT,
+        startedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completedAt DATETIME,
+        FOREIGN KEY (scriptId) REFERENCES arexx_scripts(id),
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
+    // Protocol support tables
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS transfer_protocols (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        enabled BOOLEAN DEFAULT 1,
+        config TEXT, -- JSON object
+        created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS transfer_sessions (
+        id TEXT PRIMARY KEY,
+        protocol TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        bytesTransferred INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'starting',
+        startTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+        endTime DATETIME,
+        error TEXT,
+        checksum TEXT,
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
     // Create indexes for performance
     this.createIndexes();
+
+    // Initialize default data for new features
+    this.initializeNetworkData();
+    this.initializeNodeData();
+    this.initializeAREXXData();
+    this.initializeProtocolData();
   }
 
   private createIndexes(): void {
@@ -855,14 +1278,53 @@ export class Database {
     });
   }
 
+  // JWT and authentication methods
+  private jwtSecret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
+  private jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'amiexpress-refresh-secret-key-change-in-production';
+
+  async generateAccessToken(user: User): Promise<string> {
+    return jwt.sign(
+      {
+        userId: user.id,
+        username: user.username,
+        secLevel: user.secLevel
+      },
+      this.jwtSecret,
+      { expiresIn: '15m' } // Short-lived access token
+    );
+  }
+
+  async generateRefreshToken(user: User): Promise<string> {
+    return jwt.sign(
+      { userId: user.id },
+      this.jwtRefreshSecret,
+      { expiresIn: '7d' } // Longer-lived refresh token
+    );
+  }
+
+  async verifyAccessToken(token: string): Promise<any> {
+    try {
+      return jwt.verify(token, this.jwtSecret);
+    } catch (error) {
+      throw new Error('Invalid access token');
+    }
+  }
+
+  async verifyRefreshToken(token: string): Promise<any> {
+    try {
+      return jwt.verify(token, this.jwtRefreshSecret);
+    } catch (error) {
+      throw new Error('Invalid refresh token');
+    }
+  }
+
   // Utility methods
   async hashPassword(password: string): Promise<string> {
-    return crypto.createHash('sha256').update(password).digest('hex');
+    return bcrypt.hash(password, 12);
   }
 
   async verifyPassword(password: string, hash: string): Promise<boolean> {
-    const hashed = await this.hashPassword(password);
-    return hashed === hash;
+    return bcrypt.compare(password, hash);
   }
 
   async close(): Promise<void> {
@@ -870,6 +1332,354 @@ export class Database {
       this.db.close((err) => {
         if (err) reject(err);
         else resolve();
+      });
+    });
+  }
+
+  // Network message methods
+  async createQWKPacket(packet: Omit<QWKPacket, 'id'>): Promise<string> {
+    const id = crypto.randomUUID();
+    const sql = `
+      INSERT INTO qwk_packets (
+        id, filename, size, created, fromBBS, toBBS, status, error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      id, packet.filename, packet.size, packet.created, packet.fromBBS,
+      packet.toBBS, packet.status, packet.error
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve(id);
+      });
+    });
+  }
+
+  async createQWKMessage(message: Omit<QWKMessage, 'id'> & { packetId: string }): Promise<number> {
+    const sql = `
+      INSERT INTO qwk_messages (
+        packetId, conference, subject, from_user, to_user, date, body,
+        isPrivate, isReply, parentId, attachments
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      message.packetId, message.conference, message.subject, message.from,
+      message.to, message.date, message.body, message.isPrivate,
+      message.isReply, message.parentId, JSON.stringify(message.attachments || [])
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve(this.lastID);
+      });
+    });
+  }
+
+  async createFTNMessage(message: Omit<FTNMessage, 'id'>): Promise<string> {
+    const id = crypto.randomUUID();
+    const sql = `
+      INSERT INTO ftn_messages (
+        id, fromAddress, toAddress, subject, body, date, area, msgid,
+        replyTo, attributes, status, error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      id, message.fromAddress, message.toAddress, message.subject,
+      message.body, message.date, message.area, message.msgid,
+      message.replyTo, message.attributes, message.status, message.error
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve(id);
+      });
+    });
+  }
+
+  // Multi-node methods
+  async createNode(node: Omit<NodeInfo, 'created' | 'updated'>): Promise<number> {
+    const sql = `
+      INSERT INTO nodes (id, name, status, currentUser, lastActivity, description)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      node.id, node.name, node.status, node.currentUser,
+      node.lastActivity, node.description
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve(node.id);
+      });
+    });
+  }
+
+  async createNodeSession(session: Omit<NodeSession, 'created' | 'updated'>): Promise<void> {
+    const sql = `
+      INSERT OR REPLACE INTO node_sessions (
+        id, nodeId, userId, socketId, state, subState, currentConf,
+        currentMsgBase, timeRemaining, lastActivity, status, ipAddress, location
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      session.id, session.nodeId, session.userId, session.socketId,
+      session.state, session.subState, session.currentConf,
+      session.currentMsgBase, session.timeRemaining, session.lastActivity,
+      session.status, session.ipAddress, session.location
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  async getNodeSessions(nodeId: number): Promise<NodeSession[]> {
+    const sql = `SELECT * FROM node_sessions WHERE nodeId = ? AND status = 'active' ORDER BY lastActivity DESC`;
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, [nodeId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows as NodeSession[]);
+      });
+    });
+  }
+
+  // AREXX scripting methods
+  async createAREXXScript(script: Omit<AREXXScript, 'created' | 'updated'>): Promise<void> {
+    const sql = `
+      INSERT INTO arexx_scripts (
+        id, name, description, filename, path, accessLevel, enabled,
+        parameters, triggers
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      script.id, script.name, script.description, script.filename,
+      script.path, script.accessLevel, script.enabled,
+      JSON.stringify(script.parameters || []),
+      JSON.stringify(script.triggers || [])
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  async getAREXXScripts(): Promise<AREXXScript[]> {
+    const sql = `SELECT * FROM arexx_scripts WHERE enabled = 1 ORDER BY name`;
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, [], (err, rows) => {
+        if (err) reject(err);
+        else {
+          const scripts = (rows as any[]).map(row => ({
+            ...row,
+            parameters: JSON.parse(row.parameters || '[]'),
+            triggers: JSON.parse(row.triggers || '[]')
+          }));
+          resolve(scripts as AREXXScript[]);
+        }
+      });
+    });
+  }
+
+  async executeAREXXScript(context: AREXXContext): Promise<void> {
+    const sql = `
+      INSERT INTO arexx_executions (
+        id, scriptId, userId, sessionId, parameters, environment,
+        output, result, error, startedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      crypto.randomUUID(), context.scriptId, context.userId, context.sessionId,
+      JSON.stringify(context.parameters), JSON.stringify(context.environment),
+      JSON.stringify(context.output), context.result, context.error, new Date()
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  // Protocol support methods
+  async createTransferProtocol(protocol: Omit<FileTransferProtocol, 'created' | 'updated'>): Promise<void> {
+    const sql = `
+      INSERT INTO transfer_protocols (id, name, type, enabled, config)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      protocol.id, protocol.name, protocol.type, protocol.enabled,
+      JSON.stringify(protocol.config)
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  async createTransferSession(session: Omit<TransferSession, 'id'>): Promise<string> {
+    const id = crypto.randomUUID();
+    const sql = `
+      INSERT INTO transfer_sessions (
+        id, protocol, userId, direction, filename, size, bytesTransferred,
+        status, startTime, endTime, error, checksum
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const values = [
+      id, session.protocol, session.userId, session.direction,
+      session.filename, session.size, session.bytesTransferred,
+      session.status, session.startTime, session.endTime,
+      session.error, session.checksum
+    ];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve(id);
+      });
+    });
+  }
+
+  async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {
+    const fields = Object.keys(updates).filter(key => key !== 'id');
+    if (fields.length === 0) return;
+
+    const sql = `UPDATE transfer_sessions SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`;
+    const values = [...fields.map(f => updates[f as keyof TransferSession]), id];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  // Node session methods
+  async updateNodeSession(id: string, updates: Partial<NodeSession>): Promise<void> {
+    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+    if (fields.length === 0) return;
+
+    const sql = `UPDATE node_sessions SET ${fields.map(f => `${f} = ?`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = ?`;
+    const values = [...fields.map(f => updates[f as keyof NodeSession]), id];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  // Additional QWK/FTN methods
+  async updateQWKPacket(id: string, updates: Partial<QWKPacket>): Promise<void> {
+    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'messages');
+    if (fields.length === 0) return;
+
+    const sql = `UPDATE qwk_packets SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`;
+    const values = [...fields.map(f => updates[f as keyof QWKPacket]), id];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  async updateFTNMessage(id: string, updates: Partial<FTNMessage>): Promise<void> {
+    const fields = Object.keys(updates).filter(key => key !== 'id');
+    if (fields.length === 0) return;
+
+    const sql = `UPDATE ftn_messages SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`;
+    const values = [...fields.map(f => updates[f as keyof FTNMessage]), id];
+
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, values, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  // Additional QWK/FTN query methods
+  async getQWKPacket(filter?: { status?: string; createdBefore?: Date }): Promise<QWKPacket[]> {
+    let sql = `SELECT * FROM qwk_packets WHERE 1=1`;
+    const params: any[] = [];
+
+    if (filter?.status) {
+      sql += ` AND status = ?`;
+      params.push(filter.status);
+    }
+
+    if (filter?.createdBefore) {
+      sql += ` AND created < ?`;
+      params.push(filter.createdBefore.toISOString());
+    }
+
+    sql += ` ORDER BY created DESC`;
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows as QWKPacket[]);
+      });
+    });
+  }
+
+  async deleteQWKPacket(id: string): Promise<void> {
+    const sql = `DELETE FROM qwk_packets WHERE id = ?`;
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, [id], function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  async getFTNMessages(filter?: { status?: string; area?: string }): Promise<FTNMessage[]> {
+    let sql = `SELECT * FROM ftn_messages WHERE 1=1`;
+    const params: any[] = [];
+
+    if (filter?.status) {
+      sql += ` AND status = ?`;
+      params.push(filter.status);
+    }
+
+    if (filter?.area) {
+      sql += ` AND area = ?`;
+      params.push(filter.area);
+    }
+
+    sql += ` ORDER BY date DESC`;
+
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows as FTNMessage[]);
       });
     });
   }
@@ -954,6 +1764,121 @@ export class Database {
       topDownloadCPS: 0,
       byteLimit: 0
     });
+  }
+
+  // Initialize network message data
+  private async initializeNetworkData(): Promise<void> {
+    // Create default QWK network configuration
+    const qwkConfig = {
+      enabled: true,
+      bbsId: 'AMIWEB',
+      networkName: 'AmiExpress Network',
+      packetPath: './qwk_packets',
+      maxPacketSize: 1048576, // 1MB
+      compressionEnabled: true
+    };
+
+    // Create default FTN network configuration
+    const ftnConfig = {
+      enabled: false,
+      address: '1:1/1.0@fidonet.org',
+      inboundPath: './ftn_inbound',
+      outboundPath: './ftn_outbound',
+      tosserEnabled: false
+    };
+
+    // Initialize default network settings (stored in config, not database)
+    console.log('Network message support initialized');
+  }
+
+  // Initialize multi-node data
+  private async initializeNodeData(): Promise<void> {
+    // Create default nodes
+    const defaultNodes = [
+      { id: 1, name: 'Node 1', status: 'available' as const, description: 'Primary web node' },
+      { id: 2, name: 'Node 2', status: 'available' as const, description: 'Secondary web node' },
+      { id: 3, name: 'Node 3', status: 'available' as const, description: 'Tertiary web node' }
+    ];
+
+    for (const node of defaultNodes) {
+      try {
+        await this.createNode(node);
+      } catch (error) {
+        // Ignore duplicate key errors for tests
+        if (!(error as any).message?.includes('UNIQUE constraint failed')) {
+          throw error;
+        }
+      }
+    }
+
+    console.log('Multi-node support initialized');
+  }
+
+  // Initialize AREXX scripting data
+  private async initializeAREXXData(): Promise<void> {
+    // Create default AREXX scripts
+    const defaultScripts = [
+      {
+        id: 'welcome',
+        name: 'Welcome Script',
+        description: 'Displays welcome message on login',
+        filename: 'welcome.rexx',
+        path: './arexx/welcome.rexx',
+        accessLevel: 1,
+        enabled: true,
+        triggers: [{ event: 'login' as const, priority: 10 }]
+      },
+      {
+        id: 'newuser',
+        name: 'New User Setup',
+        description: 'Handles new user registration',
+        filename: 'newuser.rexx',
+        path: './arexx/newuser.rexx',
+        accessLevel: 1,
+        enabled: true,
+        triggers: [{ event: 'login' as const, condition: 'user.newUser', priority: 5 }]
+      }
+    ];
+
+    for (const script of defaultScripts) {
+      await this.createAREXXScript(script);
+    }
+
+    console.log('AREXX scripting support initialized');
+  }
+
+  // Initialize protocol data
+  private async initializeProtocolData(): Promise<void> {
+    // Create default transfer protocols
+    const defaultProtocols = [
+      {
+        id: 'websocket',
+        name: 'WebSocket Transfer',
+        type: 'websocket' as const,
+        enabled: true,
+        config: { chunkSize: 1024, maxConcurrent: 3 }
+      },
+      {
+        id: 'zmodem',
+        name: 'ZModem Protocol',
+        type: 'zmodem' as const,
+        enabled: false,
+        config: { path: './bin/zmodem', timeout: 300 }
+      },
+      {
+        id: 'ftp',
+        name: 'FTP Protocol',
+        type: 'ftp' as const,
+        enabled: false,
+        config: { port: 21, passive: true, timeout: 300 }
+      }
+    ];
+
+    for (const protocol of defaultProtocols) {
+      await this.createTransferProtocol(protocol);
+    }
+
+    console.log('Protocol support initialized');
   }
 }
 

@@ -46,7 +46,7 @@ case 'X': // Command Name (internalCommandX)
 
 ### **Phase 3: Advanced Features (Future)**
 13. **JM** - Join Message Base
-14. **FM** - File Maintenance
+14. **FM** - File Maintenance *(COMPLETED - FM D/M/S fully implemented)*
 15. **1-5** - Sysop Commands
 16. **C** - Comment to Sysop
 17. **Q** - Quick Logoff

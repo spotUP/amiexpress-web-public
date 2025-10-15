@@ -67,3 +67,133 @@ export interface ChatState {
   pagingUsers: string[]; // User IDs currently paging
   chatToggle: boolean; // F7 chat toggle state
 }
+
+// Network message interfaces - QWK/FTN offline mail support
+export interface QWKPacket {
+  id: string;
+  filename: string;
+  size: number;
+  created: Date;
+  fromBBS: string;
+  toBBS: string;
+  messages: QWKMessage[];
+  status: 'pending' | 'processing' | 'completed' | 'downloaded' | 'error';
+  error?: string;
+  processedAt?: Date;
+}
+
+export interface QWKMessage {
+  id: number;
+  conference: number;
+  subject: string;
+  from: string;
+  to: string;
+  date: Date;
+  body: string;
+  isPrivate: boolean;
+  isReply: boolean;
+  parentId?: number;
+  attachments?: string[];
+}
+
+export interface FTNMessage {
+  id: string;
+  fromAddress: string; // FTN address format (zone:net/node.point@domain)
+  toAddress: string;
+  subject: string;
+  body: string;
+  date: Date;
+  area: string; // Echo area name
+  msgid?: string; // Message-ID
+  replyTo?: string; // References
+  attributes: number; // FTN message attributes
+  status: 'pending' | 'sent' | 'received' | 'error' | 'archived';
+}
+
+// Multi-node support interfaces
+export interface NodeSession {
+  id: string;
+  nodeId: number;
+  userId?: string;
+  socketId: string;
+  state: string;
+  subState?: string;
+  currentConf: number;
+  currentMsgBase: number;
+  timeRemaining: number;
+  lastActivity: Date;
+  status: 'active' | 'idle' | 'away' | 'disconnected';
+  ipAddress?: string;
+  location?: string;
+}
+
+export interface NodeInfo {
+  id: number;
+  name: string;
+  status: 'available' | 'busy' | 'maintenance' | 'offline';
+  currentUser?: string;
+  lastActivity?: Date;
+  description?: string;
+}
+
+// AREXX scripting interfaces
+export interface AREXXScript {
+  id: string;
+  name: string;
+  description: string;
+  filename: string;
+  path: string;
+  accessLevel: number;
+  enabled: boolean;
+  parameters?: AREXXParameter[];
+  triggers?: AREXXTrigger[];
+}
+
+export interface AREXXParameter {
+  name: string;
+  type: 'string' | 'number' | 'boolean';
+  required: boolean;
+  defaultValue?: any;
+  description?: string;
+}
+
+export interface AREXXTrigger {
+  event: 'login' | 'logout' | 'message_post' | 'file_upload' | 'command' | 'timer';
+  condition?: string; // Optional condition script
+  priority: number;
+}
+
+export interface AREXXContext {
+  scriptId: string;
+  userId?: string;
+  sessionId?: string;
+  parameters: Record<string, any>;
+  environment: Record<string, any>;
+  output: string[];
+  result?: any;
+  error?: string;
+}
+
+// Protocol support interfaces
+export interface FileTransferProtocol {
+  id: string;
+  name: string;
+  type: 'zmodem' | 'ftp' | 'websocket';
+  enabled: boolean;
+  config: Record<string, any>;
+}
+
+export interface TransferSession {
+  id: string;
+  protocol: string;
+  userId: string;
+  direction: 'upload' | 'download';
+  filename: string;
+  size: number;
+  bytesTransferred: number;
+  status: 'starting' | 'active' | 'paused' | 'completed' | 'error';
+  startTime: Date;
+  endTime?: Date;
+  error?: string;
+  checksum?: string;
+}

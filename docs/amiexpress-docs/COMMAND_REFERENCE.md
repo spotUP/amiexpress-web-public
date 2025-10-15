@@ -18,10 +18,10 @@ Complete reference for implementing AmiExpress commands in the web port. Each co
 | FS | File Status | ✅ Complete | Medium | [Main Menu](main_menu.md#fs---full-status-view) |
 | N | New Files | ✅ Complete | Medium | [Main Menu](main_menu.md#n---new-files-since-date) |
 | FR | File Areas Reverse | ✅ Complete | Medium | [Main Menu](main_menu.md#fr---reverse-file-listings) |
-| JM | Join Message Base | ❌ Pending | Medium | [Main Menu](main_menu.md#jm---join-a-message-base-area-within-this-conference) |
-| FM | File Maintenance | ❌ Pending | Low | [Main Menu](main_menu.md#fm---file-maintenance) |
-| C | Comment to Sysop | ❌ Pending | Low | [Main Menu](main_menu.md#c---operator-page) |
-| Q | Quick Logoff | ❌ Pending | Low | [Main Menu](main_menu.md#q---quiet-node) |
+| JM | Join Message Base | ✅ Complete | Medium | [Main Menu](main_menu.md#jm---join-a-message-base-area-within-this-conference) |
+| FM | File Maintenance | ✅ Complete | Low | [Main Menu](main_menu.md#fm---file-maintenance) - FM D/M/S fully implemented |
+| C | Comment to Sysop | ✅ Complete | Low | [Main Menu](main_menu.md#c---operator-page) |
+| Q | Quick Logoff | ✅ Complete | Low | [Main Menu](main_menu.md#q---quiet-node) |
 | 0-5 | Sysop Commands | ❌ Pending | Low | [Main Menu](main_menu.md#sysop-only-commands) |
 
 ## 🎯 **High Priority Commands (Essential)**
@@ -257,9 +257,9 @@ For each command implementation:
 ## 📖 **Next Steps**
 
 ### **Immediate Tasks:**
-1. **JM** - Join Message Base (medium priority)
-2. **C** - Comment to Sysop (low priority)
-3. **Q** - Quick Logoff (low priority)
+1. **File Upload/Download** - Core BBS functionality (high priority)
+2. **FM** - File maintenance operations (medium priority)
+3. **0-5** - Sysop administration commands (medium priority)
 
 ### **Future Tasks:**
 1. **0-5** - Sysop administration commands
