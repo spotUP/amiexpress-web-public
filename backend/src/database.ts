@@ -436,13 +436,13 @@ export class Database {
       const id = crypto.randomUUID();
       const sql = `
         INSERT INTO users (
-          id, username, "passwordHash", realname, location, phone, email,
-          "secLevel", uploads, downloads, "bytesUpload", "bytesDownload", ratio,
-          "ratioType", "timeTotal", "timeLimit", "timeUsed", "chatLimit", "chatUsed",
-          "lastLogin", "firstLogin", calls, "callsToday", "newUser", expert, ansi,
-          "linesPerScreen", computer, "screenType", protocol, editor, "zoomType",
-          "availableForChat", "quietNode", "autoRejoin", "confAccess", "areaName", "uuCP",
-          "topUploadCPS", "topDownloadCPS", "byteLimit"
+          id, username, passwordhash, realname, location, phone, email,
+          seclevel, uploads, downloads, bytesupload, bytesdownload, ratio,
+          ratiotype, timetotal, timelimit, timeused, chatlimit, chatused,
+          lastlogin, firstlogin, calls, callstoday, newuser, expert, ansi,
+          linesperscreen, computer, screentype, protocol, editor, zoomtype,
+          availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
+          topuploadcps, topdownloadcps, bytelimit
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
       `;
 
@@ -484,7 +484,7 @@ export class Database {
         return {
           id: user.id,
           username: user.username,
-          passwordHash: user["passwordHash"],
+          passwordHash: user.passwordhash,
           realname: user.realname,
           location: user.location,
           phone: user.phone,
@@ -1351,7 +1351,7 @@ export class Database {
 
       // Always try to update existing sysop user first, then create if doesn't exist
       const updateResult = await client.query(`
-        UPDATE users SET "passwordHash" = $1 WHERE username = 'sysop'
+        UPDATE users SET passwordhash = $1 WHERE username = 'sysop'
       `, [hashedPassword]);
 
       if (updateResult.rowCount === 0) {
@@ -1359,12 +1359,12 @@ export class Database {
         console.log('Creating new sysop user...');
         await client.query(`
           INSERT INTO users (
-            id, username, "passwordHash", realname, location, phone, email, "secLevel",
-            uploads, downloads, "bytesUpload", "bytesDownload", ratio, "ratioType",
-            "timeTotal", "timeLimit", "timeUsed", "chatLimit", "chatUsed", "lastLogin", "firstLogin",
-            calls, "callsToday", "newUser", expert, ansi, "linesPerScreen", computer,
-            "screenType", protocol, editor, "zoomType", "availableForChat", "quietNode",
-            "autoRejoin", "confAccess", "areaName", "uuCP", "topUploadCPS", "topDownloadCPS", "byteLimit"
+            id, username, passwordhash, realname, location, phone, email, seclevel,
+            uploads, downloads, bytesupload, bytesdownload, ratio, ratiotype,
+            timetotal, timelimit, timeused, chatlimit, chatused, lastlogin, firstlogin,
+            calls, callstoday, newuser, expert, ansi, linesperscreen, computer,
+            screentype, protocol, editor, zoomtype, availableforchat, quietnode,
+            autorejoin, confaccess, areaname, uucp, topuploadcps, topdownloadcps, bytelimit
           ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
             $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
