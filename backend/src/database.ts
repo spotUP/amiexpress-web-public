@@ -425,7 +425,7 @@ export class Database {
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users("secLevel")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(seclevel)`);
   }
 
 
