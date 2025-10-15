@@ -3,7 +3,7 @@
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020", "DOM"],
-    "types": ["node", "jest"],
+    "types": ["node"],
     "outDir": "./dist",
     "strict": false,
     "esModuleInterop": true,
@@ -12,8 +12,8 @@
     "resolveJsonModule": true,
     "moduleResolution": "node"
   },
-  "include": ["src/**/*", "tests/**/*"],
-  "exclude": ["node_modules", "dist"],
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests/**/*"],
   "ts-node": {
     "esm": true
   }
