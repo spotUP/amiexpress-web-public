@@ -99,8 +99,8 @@ let chatState: ChatState = {
 const app = express();
 
 // Import and use health check router
-import healthRouter from './health';
-app.use('/health', healthRouter);
+// import healthRouter from './health';
+// app.use('/health', healthRouter);
 
 // Configure CORS for Render.com deployment
 const corsOptions = {
@@ -142,7 +142,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Add health check endpoint for Render.com monitoring
+// Add health check endpoint for Vercel monitoring
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'healthy',
@@ -156,7 +156,7 @@ app.get('/health', (req: Request, res: Response) => {
 // Create HTTP server
 const server = createServer(app);
 
-// Configure Socket.IO for Render.com
+// Configure Socket.IO for Vercel
 const io = new Server(server, {
   cors: corsOptions,
   transports: ['polling', 'websocket'],
@@ -167,7 +167,7 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e8, // 100MB for file uploads
   cookie: false, // Disable cookies for better compatibility
   allowRequest: (req: any, callback: (err: string | null, success: boolean) => void) => {
-    // Additional security check for Render.com
+    // Additional security check for Vercel
     const origin = req.headers.origin;
     if (origin && corsOptions.origin(origin, () => {}) !== null) {
       callback(null, true);
@@ -177,7 +177,7 @@ const io = new Server(server, {
   }
 });
 
-// Add connection logging for Render.com debugging
+// Add connection logging for Vercel debugging
 io.on('connection', (socket: Socket) => {
   console.log(`🔌 Socket connected: ${socket.id} from ${socket.handshake.address}`);
 
@@ -254,7 +254,7 @@ app.get('/users/:id', (req: Request, res: Response) => {
 
 // BBS connection handler (separate from global Socket.IO logging)
 io.on('connection', (socket: Socket) => {
-  console.log('🎮 BBS Client connected from:', socket.handshake.address);
+  console.log('🎮 BBS Client connected from:', socket.handshake.address || 'unknown');
 
   // Initialize session (mirroring processAwait in AmiExpress)
   const session: BBSSession = {
@@ -2106,12 +2106,12 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
     await initializeData();
     console.log('Database initialization completed');
 
-    // Start server with proper error handling for Render.com
+    // Start server with proper error handling for Vercel
     server.listen(port, () => {
       console.log(`🚀 AmiExpress BBS backend running on port ${port}`);
       console.log('🔌 Socket.IO server attached to Express app');
       console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
-      console.log('🔧 Render.com deployment active');
+      console.log('🔧 Vercel deployment active');
       console.log(`📡 Listening on 0.0.0.0:${port}`);
       console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
     });
@@ -2154,7 +2154,7 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
         console.log(`🚀 AmiExpress BBS backend running on port ${port} (with database issues)`);
         console.log('🔌 Socket.IO server attached to Express app');
         console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
-        console.log('🔧 Render.com deployment active');
+        console.log('🔧 Vercel deployment active');
         console.log(`📡 Listening on 0.0.0.0:${port}`);
         console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
       });
