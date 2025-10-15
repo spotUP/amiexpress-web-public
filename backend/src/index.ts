@@ -2162,7 +2162,6 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
 
 // Export for Vercel serverless functions
 export default app;
-export { io, server };
 
 // Socket.IO connection logging will be handled in the existing connection handler
 // Global data caches (loaded from database)

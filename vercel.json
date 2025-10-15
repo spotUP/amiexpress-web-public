@@ -20,18 +20,14 @@
       }
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "/backend/src/index.ts"
+      "src": "/api/(.*)",
+      "dest": "/backend/src/index.ts"
     },
     {
-      "source": "/socket.io/(.*)",
-      "destination": "/backend/src/index.ts"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/frontend/$1"
+      "src": "/(.*)",
+      "dest": "/frontend/$1"
     }
   ],
   "env": {
