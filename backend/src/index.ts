@@ -127,7 +127,8 @@ const corsOptions = {
       "https://amiexpress-web.vercel.app", // Keep Vercel for now during transition
       "https://amiexpress-hqq1ycqoz-johans-projects-458502e2.vercel.app",
       "https://amiexpress-f16ckm2tw-johans-projects-458502e2.vercel.app",
-      "https://frontend-cyybidlkv-johans-projects-458502e2.vercel.app"
+      "https://frontend-cyybidlkv-johans-projects-458502e2.vercel.app",
+      "https://amiexpress-web-three.vercel.app"
     ];
 
     // Allow requests with no origin (mobile apps, curl requests, etc.)
