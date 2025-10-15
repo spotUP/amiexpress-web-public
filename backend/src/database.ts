@@ -285,7 +285,7 @@ export class Database {
         CREATE TABLE IF NOT EXISTS message_bases (
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
+          conference_id INTEGER NOT NULL REFERENCES conferences(id),
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -318,7 +318,7 @@ export class Database {
           name TEXT NOT NULL,
           description TEXT,
           path TEXT NOT NULL,
-          conferenceId INTEGER NOT NULL REFERENCES conferences(id),
+          conference_id INTEGER NOT NULL REFERENCES conferences(id),
           maxFiles INTEGER DEFAULT 100,
           uploadAccess INTEGER DEFAULT 10,
           downloadAccess INTEGER DEFAULT 1,
@@ -377,7 +377,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS bulletins (
           id SERIAL PRIMARY KEY,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
+          conference_id INTEGER NOT NULL REFERENCES conferences(id),
           filename TEXT NOT NULL,
           title TEXT NOT NULL,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -419,9 +419,9 @@ export class Database {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries("uploadDate")`);
 
     // Conference indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins("conferenceId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conference_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conference_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conference_id)`);
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
@@ -926,7 +926,7 @@ export class Database {
   async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
     const client = await this.pool.connect();
     try {
-      const sql = `INSERT INTO message_bases (name, "conferenceId") VALUES ($1, $2) RETURNING id`;
+      const sql = `INSERT INTO message_bases (name, conference_id) VALUES ($1, $2) RETURNING id`;
       const result = await client.query(sql, [mb.name, mb.conferenceId]);
       return result.rows[0].id;
     } finally {
@@ -937,7 +937,7 @@ export class Database {
   async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM message_bases WHERE "conferenceId" = $1 ORDER BY id`;
+      const sql = `SELECT * FROM message_bases WHERE conference_id = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as MessageBase[];
     } finally {
@@ -951,7 +951,7 @@ export class Database {
     try {
       const sql = `
         INSERT INTO file_areas (
-          name, description, path, "conferenceId", maxFiles, uploadAccess, downloadAccess
+          name, description, path, conference_id, maxFiles, uploadAccess, downloadAccess
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
       `;
@@ -970,7 +970,7 @@ export class Database {
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM file_areas WHERE "conferenceId" = $1 ORDER BY id`;
+      const sql = `SELECT * FROM file_areas WHERE conference_id = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as FileArea[];
     } finally {
