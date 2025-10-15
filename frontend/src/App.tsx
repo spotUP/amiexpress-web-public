@@ -72,16 +72,40 @@ function App() {
       term.refresh(0, term.rows - 1);
     }, 100);
 
-    // Connect to backend WebSocket (supports Render.com deployment)
-    const backendUrl = (import.meta as any).env?.VITE_API_URL || 'https://amiexpress-web-three.vercel.app';
+    // Connect to backend WebSocket (environment-aware configuration)
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const backendUrl = isDevelopment ? 'http://localhost:3001' : 'https://amiexpress-web-three.vercel.app';
+
+    console.log('Connecting to backend:', backendUrl, 'Environment:', isDevelopment ? 'development' : 'production');
+
     const ws = io(backendUrl, {
       transports: ['websocket', 'polling'], // Prefer WebSocket, fallback to polling
-      upgrade: true, // Allow transport upgrades
-      rememberUpgrade: true, // Remember successful upgrades
-      timeout: 20000, // Connection timeout
-      forceNew: true // Force new connection to avoid stale connections
+      upgrade: true,
+      timeout: 20000,
+      forceNew: true,
+      reconnection: true,
+      reconnectionAttempts: isDevelopment ? 5 : 10, // More attempts in production
+      reconnectionDelay: 1000
     });
     socket.current = ws;
+
+    // Enhanced connection handling
+    ws.on('connect', () => {
+      console.log('✅ Connected to BBS backend');
+    });
+
+    ws.on('connect_error', (error) => {
+      console.warn('❌ Connection error:', error.message);
+      if (isDevelopment) {
+        console.log('💡 In development mode - make sure backend is running on localhost:3001');
+      } else {
+        console.log('💡 In production mode - trying to connect to Vercel deployment');
+      }
+    });
+
+    ws.on('disconnect', (reason) => {
+      console.log('🔌 Disconnected from BBS backend:', reason);
+    });
 
     // Handle terminal output from server
     ws.on('ansi-output', (data: string) => {
