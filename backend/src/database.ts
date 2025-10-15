@@ -320,7 +320,7 @@ export class Database {
         CREATE TABLE IF NOT EXISTS message_bases (
           id SERIAL PRIMARY KEY,
           name TEXT NOT NULL,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -334,15 +334,15 @@ export class Database {
           body TEXT NOT NULL,
           author TEXT NOT NULL,
           timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
-          "messageBaseId" INTEGER NOT NULL REFERENCES message_bases(id),
-          "isPrivate" BOOLEAN DEFAULT false,
-          "toUser" TEXT,
-          "parentId" INTEGER,
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          messagebaseid INTEGER NOT NULL REFERENCES message_bases(id),
+          isprivate BOOLEAN DEFAULT false,
+          touser TEXT,
+          parentid INTEGER,
           attachments JSONB,
           edited BOOLEAN DEFAULT false,
-          "editedBy" TEXT,
-          "editedAt" TIMESTAMPTZ
+          editedby TEXT,
+          editedat TIMESTAMPTZ
         )
       `);
 
@@ -353,10 +353,10 @@ export class Database {
           name TEXT NOT NULL,
           description TEXT,
           path TEXT NOT NULL,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
-          maxFiles INTEGER DEFAULT 100,
-          uploadAccess INTEGER DEFAULT 10,
-          downloadAccess INTEGER DEFAULT 1,
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          maxfiles INTEGER DEFAULT 100,
+          uploadaccess INTEGER DEFAULT 10,
+          downloadaccess INTEGER DEFAULT 1,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -370,10 +370,10 @@ export class Database {
           description TEXT,
           size BIGINT NOT NULL,
           uploader TEXT NOT NULL,
-          "uploadDate" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          uploaddate TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           downloads INTEGER DEFAULT 0,
-          "areaId" INTEGER NOT NULL REFERENCES file_areas(id),
-          "fileIdDiz" TEXT,
+          areaid INTEGER NOT NULL REFERENCES file_areas(id),
+          fileiddiz TEXT,
           rating REAL DEFAULT 0,
           votes INTEGER DEFAULT 0,
           status TEXT DEFAULT 'active',
@@ -386,23 +386,23 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS sessions (
           id TEXT PRIMARY KEY,
-          "userId" TEXT REFERENCES users(id),
-          "socketId" TEXT NOT NULL,
+          userid TEXT REFERENCES users(id),
+          socketid TEXT NOT NULL,
           state TEXT NOT NULL,
-          "subState" TEXT,
-          "currentConf" INTEGER DEFAULT 0,
-          "currentMsgBase" INTEGER DEFAULT 0,
-          "timeRemaining" INTEGER DEFAULT 60,
-          "lastActivity" TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          "confRJoin" INTEGER DEFAULT 1,
-          "msgBaseRJoin" INTEGER DEFAULT 1,
-          "commandBuffer" TEXT DEFAULT '',
-          "menuPause" BOOLEAN DEFAULT true,
-          "inputBuffer" TEXT DEFAULT '',
-          "relConfNum" INTEGER DEFAULT 0,
-          "currentConfName" TEXT DEFAULT 'Unknown',
-          "cmdShortcuts" BOOLEAN DEFAULT false,
-          "tempData" JSONB,
+          substate TEXT,
+          currentconf INTEGER DEFAULT 0,
+          currentmsgbase INTEGER DEFAULT 0,
+          timeremaining INTEGER DEFAULT 60,
+          lastactivity TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          confrjoin INTEGER DEFAULT 1,
+          msgbaserjoin INTEGER DEFAULT 1,
+          commandbuffer TEXT DEFAULT '',
+          menupause BOOLEAN DEFAULT true,
+          inputbuffer TEXT DEFAULT '',
+          relconfnum INTEGER DEFAULT 0,
+          currentconfname TEXT DEFAULT 'Unknown',
+          cmdshortcuts BOOLEAN DEFAULT false,
+          tempdata JSONB,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
@@ -412,7 +412,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS bulletins (
           id SERIAL PRIMARY KEY,
-          "conferenceId" INTEGER NOT NULL REFERENCES conferences(id),
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           filename TEXT NOT NULL,
           title TEXT NOT NULL,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -427,8 +427,8 @@ export class Database {
           timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           level TEXT NOT NULL,
           message TEXT NOT NULL,
-          "userId" TEXT REFERENCES users(id),
-          "conferenceId" INTEGER REFERENCES conferences(id),
+          userid TEXT REFERENCES users(id),
+          conferenceid INTEGER REFERENCES conferences(id),
           node INTEGER
         )
       `);
@@ -442,21 +442,21 @@ export class Database {
 
   private async createIndexes(client: any): Promise<void> {
     // Message indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages("messageBaseId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messagebaseid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages("isPrivate", "toUser")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isprivate, touser)`);
 
     // File indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries("areaId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaid)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries("uploadDate")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries(uploaddate)`);
 
     // Conference indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases("conferenceId")`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins("conferenceId")`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conferenceid)`);
 
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
@@ -631,8 +631,8 @@ export class Database {
     try {
       const sql = `
         INSERT INTO messages (
-          subject, body, author, timestamp, "conferenceId", "messageBaseId",
-          "isPrivate", "toUser", "parentId", attachments, edited, "editedBy", "editedAt"
+          subject, body, author, timestamp, conferenceid, messagebaseid,
+          isprivate, touser, parentid, attachments, edited, editedby, editedat
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
       `;
@@ -663,15 +663,15 @@ export class Database {
       let sql = `
         SELECT m.*, mb.name as messageBaseName, c.name as conferenceName
         FROM messages m
-        JOIN message_bases mb ON m.messageBaseId = mb.id
-        JOIN conferences c ON m.conferenceId = c.id
-        WHERE m.conferenceId = $1 AND m.messageBaseId = $2
+        JOIN message_bases mb ON m.messagebaseid = mb.id
+        JOIN conferences c ON m.conferenceid = c.id
+        WHERE m.conferenceid = $1 AND m.messagebaseid = $2
       `;
       const params: any[] = [conferenceId, messageBaseId];
       let paramIndex = 3;
 
       if (options?.privateOnly && options?.userId) {
-        sql += ` AND (m.isPrivate = false OR (m.isPrivate = true AND (m.author = $${paramIndex++} OR m.toUser = $${paramIndex++})))`;
+        sql += ` AND (m.isprivate = false OR (m.isprivate = true AND (m.author = $${paramIndex++} OR m.touser = $${paramIndex++})))`;
         params.push(options.userId, options.userId);
       }
 
@@ -739,8 +739,8 @@ export class Database {
     try {
       const sql = `
         INSERT INTO file_entries (
-          filename, description, size, uploader, "uploadDate", downloads,
-          "areaId", "fileIdDiz", rating, votes, status, checked, comment
+          filename, description, size, uploader, uploaddate, downloads,
+          areaid, fileiddiz, rating, votes, status, checked, comment
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
       `;
@@ -766,7 +766,7 @@ export class Database {
   }): Promise<FileEntry[]> {
     const client = await this.pool.connect();
     try {
-      let sql = `SELECT * FROM file_entries WHERE areaId = $1`;
+      let sql = `SELECT * FROM file_entries WHERE areaid = $1`;
       const params: any[] = [areaId];
       let paramIndex = 2;
 
@@ -776,12 +776,12 @@ export class Database {
       }
 
       if (options?.search) {
-        sql += ` AND (filename ILIKE $${paramIndex++} OR description ILIKE $${paramIndex++} OR fileIdDiz ILIKE $${paramIndex++})`;
+        sql += ` AND (filename ILIKE $${paramIndex++} OR description ILIKE $${paramIndex++} OR fileiddiz ILIKE $${paramIndex++})`;
         const searchTerm = `%${options.search}%`;
         params.push(searchTerm, searchTerm, searchTerm);
       }
 
-      sql += ` ORDER BY uploadDate DESC`;
+      sql += ` ORDER BY uploaddate DESC`;
 
       if (options?.limit) {
         sql += ` LIMIT $${paramIndex++}`;
@@ -831,28 +831,28 @@ export class Database {
     try {
       const sql = `
         INSERT INTO sessions (
-          id, "userId", "socketId", state, "subState", "currentConf", "currentMsgBase",
-          "timeRemaining", "lastActivity", "confRJoin", "msgBaseRJoin", "commandBuffer",
-          "menuPause", "inputBuffer", "relConfNum", "currentConfName", "cmdShortcuts", "tempData"
+          id, userid, socketid, state, substate, currentconf, currentmsgbase,
+          timeremaining, lastactivity, confrjoin, msgbaserjoin, commandbuffer,
+          menupause, inputbuffer, relconfnum, currentconfname, cmdshortcuts, tempdata
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         ON CONFLICT (id) DO UPDATE SET
-          "userId" = EXCLUDED."userId",
-          "socketId" = EXCLUDED."socketId",
+          userid = EXCLUDED.userid,
+          socketid = EXCLUDED.socketid,
           state = EXCLUDED.state,
-          "subState" = EXCLUDED."subState",
-          "currentConf" = EXCLUDED."currentConf",
-          "currentMsgBase" = EXCLUDED."currentMsgBase",
-          "timeRemaining" = EXCLUDED."timeRemaining",
-          "lastActivity" = EXCLUDED."lastActivity",
-          "confRJoin" = EXCLUDED."confRJoin",
-          "msgBaseRJoin" = EXCLUDED."msgBaseRJoin",
-          "commandBuffer" = EXCLUDED."commandBuffer",
-          "menuPause" = EXCLUDED."menuPause",
-          "inputBuffer" = EXCLUDED."inputBuffer",
-          "relConfNum" = EXCLUDED."relConfNum",
-          "currentConfName" = EXCLUDED."currentConfName",
-          "cmdShortcuts" = EXCLUDED."cmdShortcuts",
-          "tempData" = EXCLUDED."tempData",
+          substate = EXCLUDED.substate,
+          currentconf = EXCLUDED.currentconf,
+          currentmsgbase = EXCLUDED.currentmsgbase,
+          timeremaining = EXCLUDED.timeremaining,
+          lastactivity = EXCLUDED.lastactivity,
+          confrjoin = EXCLUDED.confrjoin,
+          msgbaserjoin = EXCLUDED.msgbaserjoin,
+          commandbuffer = EXCLUDED.commandbuffer,
+          menupause = EXCLUDED.menupause,
+          inputbuffer = EXCLUDED.inputbuffer,
+          relconfnum = EXCLUDED.relconfnum,
+          currentconfname = EXCLUDED.currentconfname,
+          cmdshortcuts = EXCLUDED.cmdshortcuts,
+          tempdata = EXCLUDED.tempdata,
           updated = CURRENT_TIMESTAMP
       `;
 
@@ -920,7 +920,7 @@ export class Database {
   async getActiveSessions(): Promise<Session[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM sessions WHERE lastActivity > NOW() - INTERVAL '30 minutes'`;
+      const sql = `SELECT * FROM sessions WHERE lastactivity > NOW() - INTERVAL '30 minutes'`;
       const result = await client.query(sql);
       const sessions = result.rows.map((row: any) => {
         const session = row as any;
@@ -961,7 +961,7 @@ export class Database {
   async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
     const client = await this.pool.connect();
     try {
-      const sql = `INSERT INTO message_bases (name, "conferenceId") VALUES ($1, $2) RETURNING id`;
+      const sql = `INSERT INTO message_bases (name, conferenceid) VALUES ($1, $2) RETURNING id`;
       const result = await client.query(sql, [mb.name, mb.conferenceId]);
       return result.rows[0].id;
     } finally {
@@ -972,7 +972,7 @@ export class Database {
   async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM message_bases WHERE conferenceId = $1 ORDER BY id`;
+      const sql = `SELECT * FROM message_bases WHERE conferenceid = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as MessageBase[];
     } finally {
@@ -986,7 +986,7 @@ export class Database {
     try {
       const sql = `
         INSERT INTO file_areas (
-          name, description, path, "conferenceId", maxFiles, uploadAccess, downloadAccess
+          name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
       `;
@@ -1005,7 +1005,7 @@ export class Database {
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM file_areas WHERE conferenceId = $1 ORDER BY id`;
+      const sql = `SELECT * FROM file_areas WHERE conferenceid = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as FileArea[];
     } finally {
@@ -1346,9 +1346,9 @@ export class Database {
 
       for (const mb of messageBases) {
         // Check if message base already exists
-        const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND conferenceId = $2', [mb.name, mb.conferenceId]);
+        const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND conferenceid = $2', [mb.name, mb.conferenceId]);
         if (existing.rows.length === 0) {
-          await client.query('INSERT INTO message_bases (name, conferenceId) VALUES ($1, $2)', [mb.name, mb.conferenceId]);
+          await client.query('INSERT INTO message_bases (name, conferenceid) VALUES ($1, $2)', [mb.name, mb.conferenceId]);
           console.log(`Created message base: ${mb.name} in conference ${mb.conferenceId}`);
         } else {
           console.log(`Message base already exists: ${mb.name} in conference ${mb.conferenceId}`);
@@ -1367,10 +1367,10 @@ export class Database {
 
       for (const area of fileAreas) {
         // Check if file area already exists
-        const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceId = $2', [area.name, area.conferenceId]);
+        const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceid = $2', [area.name, area.conferenceId]);
         if (existing.rows.length === 0) {
           await client.query(`
-            INSERT INTO file_areas (name, description, path, conferenceId, maxFiles, uploadAccess, downloadAccess)
+            INSERT INTO file_areas (name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
           `, [area.name, area.description, area.path, area.conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
           console.log(`Created file area: ${area.name} in conference ${area.conferenceId}`);
