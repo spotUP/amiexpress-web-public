@@ -2266,9 +2266,11 @@ async function initializeData() {
       }
     }
 
-    // Load message bases for all conferences
+    // Load message bases for all conferences (limit to prevent timeout)
     messageBases = [];
-    for (const conf of conferences) {
+    const maxConferencesToLoad = 10; // Limit to prevent timeout
+    const conferencesToLoad = conferences.slice(0, maxConferencesToLoad);
+    for (const conf of conferencesToLoad) {
       try {
         const bases = await db.getMessageBases(conf.id);
         messageBases.push(...bases);
@@ -2276,11 +2278,11 @@ async function initializeData() {
         console.warn(`Failed to load message bases for conference ${conf.id}:`, error);
       }
     }
-    console.log(`Loaded ${messageBases.length} message bases`);
+    console.log(`Loaded ${messageBases.length} message bases (limited to ${maxConferencesToLoad} conferences)`);
 
-    // Load file areas for all conferences
+    // Load file areas for all conferences (limit to prevent timeout)
     fileAreas = [];
-    for (const conf of conferences) {
+    for (const conf of conferencesToLoad) {
       try {
         const areas = await db.getFileAreas(conf.id);
         fileAreas.push(...areas);
@@ -2288,7 +2290,7 @@ async function initializeData() {
         console.warn(`Failed to load file areas for conference ${conf.id}:`, error);
       }
     }
-    console.log(`Loaded ${fileAreas.length} file areas`);
+    console.log(`Loaded ${fileAreas.length} file areas (limited to ${maxConferencesToLoad} conferences)`);
 
     // Load some recent messages
     try {
