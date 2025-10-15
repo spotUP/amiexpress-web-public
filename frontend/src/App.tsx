@@ -67,7 +67,7 @@ function App() {
         style.webkitFontSmoothing = 'none';
         style.MozOsxFontSmoothing = 'none';
         // Add padding to prevent text from drawing at screen edge
-        style.padding = '0 1ch'; // 1 character width padding on left/right
+        style.padding = '0 2ch'; // 2 character width padding on left/right
       }
       term.refresh(0, term.rows - 1);
     }, 100);
