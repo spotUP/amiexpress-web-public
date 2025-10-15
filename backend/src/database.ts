@@ -1269,7 +1269,7 @@ export class Database {
       const hashedPassword = await this.hashPassword('sysop');
       await client.query(`
         INSERT INTO users (
-          id, username, passwordHash, realname, location, phone, secLevel,
+          id, username, passwordHash, realname, location, phone, email, secLevel,
           uploads, downloads, bytesUpload, bytesDownload, ratio, ratioType,
           timeTotal, timeLimit, timeUsed, chatLimit, chatUsed, firstLogin,
           calls, callsToday, newUser, expert, ansi, linesPerScreen, computer,
@@ -1278,10 +1278,10 @@ export class Database {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
         ON CONFLICT (username) DO NOTHING
       `, [
-        'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '',
+        'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
         255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, new Date(),
         0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
-        'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0, new Date()
+        'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
       ]);
 
       console.log('Default data initialization completed');
