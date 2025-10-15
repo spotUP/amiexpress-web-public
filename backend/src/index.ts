@@ -108,11 +108,12 @@ const corsOptions = {
     // Allow requests from localhost (development) and Render.com deployments
     const allowedOrigins = [
       "http://localhost:5173",
+      "http://localhost:5174",
       "http://localhost:3000",
       "http://localhost:3001",
       /^https:\/\/amiexpress.*\.onrender\.com$/,
-      /^https:\/\/amiexpress.*\.vercel\.app$/,
-      "https://amiexpress-web.vercel.app",
+      /^https:\/\/amiexpress-frontend.*\.onrender\.com$/,
+      "https://amiexpress-web.vercel.app", // Keep Vercel for now during transition
       "https://amiexpress-hqq1ycqoz-johans-projects-458502e2.vercel.app",
       "https://amiexpress-f16ckm2tw-johans-projects-458502e2.vercel.app"
     ];
@@ -156,18 +157,18 @@ app.get('/health', (req: Request, res: Response) => {
 // Create HTTP server
 const server = createServer(app);
 
-// Configure Socket.IO for Vercel
+// Configure Socket.IO for Render.com (optimized for persistent connections)
 const io = new Server(server, {
   cors: corsOptions,
-  transports: ['polling', 'websocket'],
+  transports: ['websocket', 'polling'], // Prefer WebSocket first
   allowEIO3: true, // Allow Engine.IO v3 clients
   pingTimeout: 60000, // 60 seconds
   pingInterval: 25000, // 25 seconds
-  connectTimeout: 20000, // 20 seconds
+  connectTimeout: 45000, // 45 seconds (longer for Render.com)
   maxHttpBufferSize: 1e8, // 100MB for file uploads
   cookie: false, // Disable cookies for better compatibility
   allowRequest: (req: any, callback: (err: string | null, success: boolean) => void) => {
-    // Additional security check for Vercel
+    // Additional security check for Render.com
     const origin = req.headers.origin;
     if (origin && corsOptions.origin(origin, () => {}) !== null) {
       callback(null, true);
@@ -177,9 +178,9 @@ const io = new Server(server, {
   }
 });
 
-// Add connection logging for Vercel debugging
+// Add connection logging for Render.com debugging
 io.on('connection', (socket: Socket) => {
-  console.log(`🔌 Socket connected: ${socket.id} from ${socket.handshake.address}`);
+  console.log(`🔌 Socket connected: ${socket.id} from ${socket.handshake.address} (${socket.conn.transport.name})`);
 
   socket.on('disconnect', (reason: string) => {
     console.log(`🔌 Socket disconnected: ${socket.id}, reason: ${reason}`);
@@ -187,6 +188,11 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('error', (error: Error) => {
     console.error(`❌ Socket error for ${socket.id}:`, error);
+  });
+
+  // Log transport upgrades (important for WebSocket verification)
+  socket.conn.on('upgrade', () => {
+    console.log(`⬆️ Socket ${socket.id} upgraded to ${socket.conn.transport.name}`);
   });
 });
 
@@ -199,38 +205,7 @@ const sessions = new Map<string, BBSSession>();
 
 // Remove duplicate health check endpoint
 
-app.use(cors({
-    origin: function (origin, callback) {
-      // Allow requests from localhost (development) and Vercel deployments
-      const allowedOrigins = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        /\.vercel\.app$/,
-        "https://amiexpress-web.vercel.app",
-        "https://amiexpress-owu55bmie-johans-projects-458502e2.vercel.app",
-        "https://amiexpress-f16ckm2tw-johans-projects-458502e2.vercel.app"
-      ];
-
-      // Allow requests with no origin (mobile apps, etc.)
-      if (!origin) return callback(null, true);
-
-      const isAllowed = allowedOrigins.some(pattern => {
-        if (typeof pattern === 'string') {
-          return pattern === origin;
-        } else {
-          return pattern.test(origin);
-        }
-      });
-
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        console.log('CORS blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true
-  }));
+// Additional CORS middleware for Render.com (removed duplicate)
 app.use(express.json());
 
 app.get('/', (req: Request, res: Response) => {
@@ -252,7 +227,7 @@ app.get('/users/:id', (req: Request, res: Response) => {
 
 // BBS connection handler (separate from global Socket.IO logging)
 io.on('connection', (socket: Socket) => {
-  console.log('🎮 BBS Client connected from:', socket.handshake.address || 'unknown');
+  console.log('🎮 BBS Client connected from:', socket.handshake.address || 'unknown', `(${socket.conn.transport.name})`);
 
   // Initialize session (mirroring processAwait in AmiExpress)
   const session: BBSSession = {
@@ -2104,14 +2079,15 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
     await initializeData();
     console.log('Database initialization completed');
 
-    // Start server with proper error handling for Vercel
+    // Start server with proper error handling for Render.com
     server.listen(port, () => {
       console.log(`🚀 AmiExpress BBS backend running on port ${port}`);
       console.log('🔌 Socket.IO server attached to Express app');
       console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
-      console.log('🔧 Vercel deployment active');
+      console.log('🔧 Render.com deployment active');
       console.log(`📡 Listening on 0.0.0.0:${port}`);
       console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
+      console.log(`🔌 WebSocket endpoint: ws://0.0.0.0:${port}`);
     });
 
     // Handle server errors gracefully
@@ -2152,9 +2128,10 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
         console.log(`🚀 AmiExpress BBS backend running on port ${port} (with database issues)`);
         console.log('🔌 Socket.IO server attached to Express app');
         console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
-        console.log('🔧 Vercel deployment active');
+        console.log('🔧 Render.com deployment active');
         console.log(`📡 Listening on 0.0.0.0:${port}`);
         console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
+        console.log(`🔌 WebSocket endpoint: ws://0.0.0.0:${port}`);
       });
     }
   }
