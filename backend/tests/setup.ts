@@ -1,11 +1,12 @@
 import { Database } from '../src/database';
 
+declare const beforeAll: any;
+declare const afterAll: any;
+
 beforeAll(async () => {
   // Setup test database
-  const testDb = new Database(':memory:');
-  await testDb.initDatabase();
-
-  // Initialize default data
+  const testDb = new Database();
+  // Call initializeDefaultData directly since initDatabase is private
   await testDb.initializeDefaultData();
 
   // Wait much longer for initialization to complete

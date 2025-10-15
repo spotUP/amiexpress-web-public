@@ -1,0 +1,648 @@
+VerStr	Dc.b	"$VER: "		-.
+	PROGNAM				 |
+	Dc.b	" "			 |
+ActVer	VERSION				 |
+	Dc.b	" ("			 |- For 2.0+ Version Command
+	REVDATE				 |
+	Dc.b	")",10,0		-'
+
+	Dc.b	10,10,"WARNING: DO NOT ALTER ANY STRINGS.",10,10
+
+	Even	S_Vers must be even.
+S_Vers	Dc.b	"*SALv003"			File Version (At Start)
+S_Vers_Len	Equ	*-S_Vers
+	Dc.b	0			Nullterm for Search routine.
+	Even	Months must be even.
+Months	Dc.b	"Jan-Feb-Mar-Apr-May-Jun-Jul-Aug-Sep-Oct-Nov-Dec-"
+;---------------------------------------------------------------------------;
+** OverLay Spaces ***********************************************************
+;---------------------------------------------------------------------------;
+		Even
+;---------------------------------------------------------------------------;
+Over00		Dc.b	"                                                                            ",0
+Over00L		Equ	*-Over00
+RndMax = Over00L-1
+;---------------------------------------------------------------------------;
+Over01		Dc.b	"BBS:NODExx/CALLERSLOG",0
+		Even
+Over01L		Equ	*-Over01
+;---------------------------------------------------------------------------;
+Over02
+S_Usr
+S1	Dc.b	"Nobody                        ",0
+S1_Len	Equ	*-S1
+SU_Name_Len	Equ	S1_Len-1
+S2	Dc.b	"Nowhere                      ",0
+S2_Len	Equ	*-S2
+SU_Location_Len	Equ	S2_Len-1
+S3	Dc.b	"0",0
+S3_Len	Equ	*-S3
+S4	Dc.b	" 0",0
+S4_Len	Equ	*-S4
+S5	Dc.b	"-:--",0
+S5_Len	Equ	*-S5
+S6	Dc.b	"   0",0
+S6_Len	Equ	*-S6
+S7	Dc.b	"   0",0
+S7_Len	Equ	*-S7
+S8	Dc.b	"   0",0
+S8_Len	Equ	*-S8
+S9	Dc.b	"   0",0
+S9_Len	Equ	*-S9
+S10	Dc.b	"--:--:--",0
+S10_Len	Equ	*-S10
+S11	Dc.b	"--:--:--",0
+	Even	Average CPS must be even.
+S11_Len	Equ	*-S11
+S12	Dc.b	"   0",0
+	Even	Baud Rate must be even.
+S12_Len	Equ	*-S12
+S13	Dc.b	"-----",0
+S13_Len	Equ	*-S13
+S14	Dc.b	0
+S14_Len	Equ	*-S14
+S15	Dc.b	0
+S15_Len	Equ	*-S15
+S16	Dc.b	0
+	ODD	S_Usr		Make next ODDly aligned in relation to S_Usr
+S16_Len	Equ	*-S16
+S17	Dc.b	"DD-MMM-YY",0	(Because "MMM-" MUST be even...)
+	Even
+S17_Len	Equ	*-S17
+S18	Ds.b	40
+S18_Len	Equ	*-S18
+Over02L	Equ	*-Over02
+;---------------------------------------------------------------------------;
+Over03	Dc.b	34,10,"There is no matching ",155,"3m@End_",155,"0;1m"
+Over03L	Equ	*-Over03
+Over04	Dc.b	"X ",155,"0mto go with your ",155,"3m@Opt_",155,"0;1m"
+Over04L	Equ	*-Over04
+Over05	Dc.b	"X ",155,"0mor ",155,"3m@NOpt_",155,"0;1m"
+Over05L	Equ	*-Over05
+Over06	Dc.b	"X ",155,"0mcommand.",10,10
+Over06L	Equ	*-Over06
+MEMsgL	Equ	*-Over03
+	Even
+;---------------------------------------------------------------------------;
+;;;;;;;					LAST OVERLAY MUST END EVEN!!
+LENOVER	Equ	*-Over00
+;---------------------------------------------------------------------------;
+** New-Storage File Pieces **************************************************
+;---------------------------------------------------------------------------;
+;;;;SCR	Dc.b	"   0",0			Actual CPS "Score"
+;;;;	Dc.b	0				Even
+;;;;	Dc.w	0				Pointer to Name, etc
+SCR_Len	Equ	8
+SC_Ptr	Equ	6
+
+S_CPS
+SC1	Dc.b	"Nobody                        ",0
+SC1_Len	Equ	*-SC1
+SC_Name_Len	Equ	SC1_Len-1
+SC2	Dc.b	"Nowhere                      ",0
+SC2_Len	Equ	*-SC2
+SC_Location_Len	Equ	SC2_Len-1
+SC3	Dc.b	"DDD, DD-MMM-YY",0
+	Even	Filename must be even.
+SC3_Len	Equ	*-SC3
+STD_Filename_String
+SC4	Dc.b	"[-FILENAME-]",0
+SC_FileName_Len	Equ	(*-SC4)-1
+	Even	Baud Rate must be even.
+STD_Filename_Length	EQU	*-STD_Filename_String
+SC4_Len	Equ	*-SC4
+SC5	Dc.b	"-----",0
+	EVEN
+SC5_Len	Equ	*-SC5
+SC6	Dc.b	"   0k",0
+SC6_Len	Equ	*-SC6
+SC7	Dc.b	0
+	Even	MINS must be even.
+SC7_Len	Equ	*-SC7
+SC8	Dc.b	"   0",0
+	Even	SECS must be even.
+SC8_Len	Equ	*-SC8
+SC9	Dc.b	" 0",0
+	Even	EFFY must be even.
+SC9_Len	Equ	*-SC9
+SCA	Dc.b	"   0%",0
+	Even	RESERVED Bytes must be even.
+SCA_Len	Equ	*-SCA
+SCB	Ds.b	20
+SCB_Len	Equ	*-SCB
+****************************************************************************
+* Structure Stuff...                                                        *
+*****************************************************************************
+;---------------------------------------------------------------------------;
+;- Daily Statistics in Storage File ----------------------------------------;
+;---------------------------------------------------------------------------;
+		RSReset
+SD_Date		Rs.l	1		Number of days since Jan 1978.
+SD_DayName	Rs.b	4		Three letter day name, null term.
+SD_AsciiDate	Rs.b	10		"DD-MMM-YY",0 date.
+SD_Calls	Rs.w	1		Callers
+SD_UpKBytes	Rs.l	1		KBytes Uploaded
+SD_UpFiles	Rs.w	1		Files Uploaded
+SD_UpFails	Rs.w	1		Upload Fails (Not implemented)
+SD_DnKBytes	Rs.l	1		KBytes Downloaded
+SD_DnFiles	Rs.w	1		Files Downloaded
+SD_DnFails	Rs.w	1		Download Fails (Not implemented)
+SD_UsedMins	Rs.l	1		Minutes Of Usage
+SD_NewUsers	Rs.w	1		New Users
+SD_Hacks	Rs.w	1		Hacks
+SD_Drops	Rs.w	1		Drop Carriers
+SD_Pages	Rs.w	1		Pages
+SD_H00_Calls	Rs.w	1		00:00 to 00:59 - Nº Calls.
+SD_H00_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H00_Mins	Rs.w	1		00:00 to 00:59 - Minutes of Usage
+SD_H01_Calls	Rs.w	1		01:00 to 01:59 - Nº Calls.
+SD_H01_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H01_Mins	Rs.w	1		01:00 to 01:59 - Minutes of Usage
+SD_H02_Calls	Rs.w	1		02:00 to 02:59 - Nº Calls.
+SD_H02_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H02_Mins	Rs.w	1		02:00 to 02:59 - Minutes of Usage
+SD_H03_Calls	Rs.w	1		03:00 to 03:59 - Nº Calls.
+SD_H03_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H03_Mins	Rs.w	1		03:00 to 03:59 - Minutes of Usage
+SD_H04_Calls	Rs.w	1		04:00 to 04:59 - Nº Calls.
+SD_H04_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H04_Mins	Rs.w	1		04:00 to 04:59 - Minutes of Usage
+SD_H05_Calls	Rs.w	1		05:00 to 05:59 - Nº Calls.
+SD_H05_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H05_Mins	Rs.w	1		05:00 to 05:59 - Minutes of Usage
+SD_H06_Calls	Rs.w	1		06:00 to 06:59 - Nº Calls.
+SD_H06_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H06_Mins	Rs.w	1		06:00 to 06:59 - Minutes of Usage
+SD_H07_Calls	Rs.w	1		07:00 to 07:59 - Nº Calls.
+SD_H07_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H07_Mins	Rs.w	1		07:00 to 07:59 - Minutes of Usage
+SD_H08_Calls	Rs.w	1		08:00 to 08:59 - Nº Calls.
+SD_H08_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H08_Mins	Rs.w	1		08:00 to 08:59 - Minutes of Usage
+SD_H09_Calls	Rs.w	1		09:00 to 09:59 - Nº Calls.
+SD_H09_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H09_Mins	Rs.w	1		09:00 to 09:59 - Minutes of Usage
+SD_H10_Calls	Rs.w	1		10:00 to 10:59 - Nº Calls.
+SD_H10_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H10_Mins	Rs.w	1		10:00 to 10:59 - Minutes of Usage
+SD_H11_Calls	Rs.w	1		11:00 to 11:59 - Nº Calls.
+SD_H11_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H11_Mins	Rs.w	1		11:00 to 11:59 - Minutes of Usage
+SD_H12_Calls	Rs.w	1		12:00 to 12:59 - Nº Calls.
+SD_H12_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H12_Mins	Rs.w	1		12:00 to 12:59 - Minutes of Usage
+SD_H13_Calls	Rs.w	1		13:00 to 13:59 - Nº Calls.
+SD_H13_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H13_Mins	Rs.w	1		13:00 to 13:59 - Minutes of Usage
+SD_H14_Calls	Rs.w	1		14:00 to 14:59 - Nº Calls.
+SD_H14_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H14_Mins	Rs.w	1		14:00 to 14:59 - Minutes of Usage
+SD_H15_Calls	Rs.w	1		15:00 to 15:59 - Nº Calls.
+SD_H15_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H15_Mins	Rs.w	1		15:00 to 15:59 - Minutes of Usage
+SD_H16_Calls	Rs.w	1		16:00 to 16:59 - Nº Calls.
+SD_H16_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H16_Mins	Rs.w	1		16:00 to 16:59 - Minutes of Usage
+SD_H17_Calls	Rs.w	1		17:00 to 17:59 - Nº Calls.
+SD_H17_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H17_Mins	Rs.w	1		17:00 to 17:59 - Minutes of Usage
+SD_H18_Calls	Rs.w	1		18:00 to 18:59 - Nº Calls.
+SD_H18_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H18_Mins	Rs.w	1		18:00 to 18:59 - Minutes of Usage
+SD_H19_Calls	Rs.w	1		19:00 to 19:59 - Nº Calls.
+SD_H19_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H19_Mins	Rs.w	1		19:00 to 19:59 - Minutes of Usage
+SD_H20_Calls	Rs.w	1		20:00 to 20:59 - Nº Calls.
+SD_H20_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H20_Mins	Rs.w	1		20:00 to 20:59 - Minutes of Usage
+SD_H21_Calls	Rs.w	1		21:00 to 21:59 - Nº Calls.
+SD_H21_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H21_Mins	Rs.w	1		21:00 to 21:59 - Minutes of Usage
+SD_H22_Calls	Rs.w	1		22:00 to 22:59 - Nº Calls.
+SD_H22_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H22_Mins	Rs.w	1		22:00 to 22:59 - Minutes of Usage
+SD_H23_Calls	Rs.w	1		23:00 to 23:59 - Nº Calls.
+SD_H23_Users	Rs.w	1		"":"" to "":"" - Nº Users in Hour.
+SD_H23_Mins	Rs.w	1		23:00 to 23:59 - Minutes of Usage
+SD_RESERVED	Rs.b	40		40 CHARS RESERVED FOR ENHANCEMENTS
+SD_Len		Equ	__RS		Length
+SD_H_Len	Equ	SD_H01_Calls-SD_H00_Calls
+;---------------------------------------------------------------------------;
+;- Individual Users in Storage File ----------------------------------------;
+;---------------------------------------------------------------------------;
+		RSReset
+SU_Name		Rs.b	S1_Len
+SU_Location	Rs.b	S2_Len
+SU_Node		Rs.b	S3_Len
+SU_Node2	Rs.b	S4_Len
+SU_Usage	Rs.b	S5_Len
+SU_UpKBytes	Rs.b	S6_Len
+SU_UpFiles	Rs.b	S7_Len
+SU_DnKBytes	Rs.b	S8_Len
+SU_DnFiles	Rs.b	S9_Len
+SU_OnTime	Rs.b	S10_Len
+SU_OffTime	Rs.b	S11_Len
+SU_AvCPS	Rs.b	S12_Len
+SU_Baud		Rs.b	S13_Len
+SU_Flag_1	Rs.b	S14_Len
+SU_Flag_2	Rs.b	S15_Len
+SU_Flag_3	Rs.b	S16_Len
+SU_OnDate	Rs.b	S17_Len
+SU_Reserved	Rs.b	S18_Len
+SU_Len		Equ	__RS		Length
+;---------------------------------------------------------------------------;
+;- Individual CPS-Records in Storage File ----------------------------------;
+;---------------------------------------------------------------------------;
+		RSReset
+SC_Name		Rs.b	SC1_Len
+SC_Location	Rs.b	SC2_Len
+SC_Date		Rs.b	SC3_Len
+SC_FileName	Rs.b	SC4_Len
+SC_Baud		Rs.b	SC5_Len
+SC_Size		Rs.b	SC6_Len
+SC_Flag_1	Rs.b	SC7_Len
+SC_Mins		Rs.b	SC8_Len
+SC_Secs		Rs.b	SC9_Len
+SC_Effy		Rs.b	SCA_Len
+SC_Reserved	Rs.b	SCB_Len
+SC_Len		Equ	__RS		Length
+;---------------------------------------------------------------------------;
+;- Formats of Binary/Boolen Flag bytes in User Structures ------------------;
+;---------------------------------------------------------------------------;
+;- User Flag #1 ------------------------------------------------------------;
+;---------------------------------------------------------------------------;
+SU_F1_New	Equ	0		New User?
+SU_F1_Hack	Equ	1		Hacking?
+SU_F1_Drop	Equ	2		Dropped Carrier?
+SU_F1_Page	Equ	3		Paged?
+SU_F1_SysC	Equ	4		Used Sysop Command(s)?
+SU_F1_Locl	Equ	5		Local Call?
+SU_F1_ISDN	Equ	6		ISDN Call?
+;		Equ	7		RESERVED FOR ENHANCEMENTS
+;---------------------------------------------------------------------------;
+;- User Flag #2 ------------------------------------------------------------;
+;---------------------------------------------------------------------------;
+SU_F2_Upld	Equ	0		Uploaded?
+SU_F2_UpFl	Equ	1		Failed an Upload?
+SU_F2_Dnld	Equ	2		Downloaded?
+SU_F2_DnFl	Equ	3		Failed a Download?
+;		Equ	4		RESERVED FOR ENHANCEMENTS
+;		Equ	5		RESERVED FOR ENHANCEMENTS
+;		Equ	6		RESERVED FOR ENHANCEMENTS
+;		Equ	7		RESERVED FOR ENHANCEMENTS
+;---------------------------------------------------------------------------;
+;- User Flag #3 ------------------------------------------------------------;
+;---------------------------------------------------------------------------;
+;		Equ	0		RESERVED FOR ENHANCEMENTS
+;		Equ	1		RESERVED FOR ENHANCEMENTS
+;		Equ	2		RESERVED FOR ENHANCEMENTS
+;		Equ	3		RESERVED FOR ENHANCEMENTS
+;		Equ	4		RESERVED FOR ENHANCEMENTS
+;		Equ	5		RESERVED FOR ENHANCEMENTS
+;		Equ	6		RESERVED FOR ENHANCEMENTS
+;		Equ	7		RESERVED FOR ENHANCEMENTS
+;---------------------------------------------------------------------------;
+;---------------------------------------------------------------------------;
+;- CPS Flag #1 -------------------------------------------------------------;
+;---------------------------------------------------------------------------;
+SC_F1_UpDn	Equ	0		If = 0 Then UPLOAD, = 1 Then DOWNLOAD
+SC_F1_Batch	Equ	1		If = 1 Then it was a Batch Transfer.
+;		Equ	2		RESERVED FOR ENHANCEMENTS
+;		Equ	3		RESERVED FOR ENHANCEMENTS
+;		Equ	4		RESERVED FOR ENHANCEMENTS
+;		Equ	5		RESERVED FOR ENHANCEMENTS
+;		Equ	6		RESERVED FOR ENHANCEMENTS
+;		Equ	7		RESERVED FOR ENHANCEMENTS
+;---------------------------------------------------------------------------;
+;- Formats of Routine Flags (In Reserve thingy) ----------------------------;
+;---------------------------------------------------------------------------;
+;- Opt_F_1 - (Update Routine) --------- CMDLine (etc) Options --------------;
+;---------------------------------------------------------------------------;
+U1_NewDay	Equ	0		First update of today?
+;---------------------------------------------------------------------------;
+;- Fmt_F_1 - (FormTxt Routines) --------------------------------------------;
+;---------------------------------------------------------------------------;
+F1_NoANSI	Equ	0		Is ANSI *OFF*?  (0 = ANSI on!)
+F1_Random	Equ	1		Has a Random line bin chosen?
+F1_Creds1	Equ	2		-. .--------------------------------.
+F1_Creds2	Equ	3		 |_| After FormTxt, all are checked |
+F1_Creds3	Equ	4		 | | and if not set, no outputting. |
+F1_Creds4	Equ	5		-' `--------------------------------'
+F1_ExANSI	Equ	6		If tried ".gr" yet or not...
+;---------------------------------------------------------------------------;
+;- Fil_F_1 ---------------------------- Files In Memory --------------------;
+;---------------------------------------------------------------------------;
+; The Input file could be chosen but not allocated: an internal input.
+X1_Store	Equ	0		Storage File is Loaded? (Pre-Aloced)
+X1_Input	Equ	1		Input file has been allocated?
+X1_InList	Equ	2		Input file-list has been allocated?
+X1_InGot	Equ	3		Input file has been chosen.
+X1_AnyRout	Equ	4		Has any routine been run?
+X1_ProgDir_Lock	Equ	5		Has the ProgDir been locked?
+X1_OutBlks	Equ	6		Output block(s) in mem.
+X1_SortChange	Equ	7		For bubble sort routine(s).
+;---------------------------------------------------------------------------;
+;- Fil_F_2 ---------------------------- Files In Memory --------------------;
+;---------------------------------------------------------------------------;
+X2_Header	Equ	0		Header file allocated?
+X2_Tailer	Equ	1		Tailer file allocated?
+*****************************************************************************
+	EVEN
+*****************************************************************************
+*****************************************************************************
+*: The Variables (Address Equates for Space allocated at program start) ::::*
+*****************************************************************************
+;---------------------------------------------------------------------------;
+	RSReset
+;===========================================================================;
+FilHead		Rs.b	260		; File-Header - MUST BE LW ALLIGNED ;
+;===========================================================================;
+FH_DiskKey	Equ	FilHead+000	[LW]
+FH_DirEntryType	Equ	FilHead+004	[LW] If < 0, File. If > 0, Directory.
+FH_FileName	Equ	FilHead+008	[108] FileName Null Term. MAX 30chars
+FH_Protection	Equ	FilHead+116	[LW] Protection Bit Mask. rwxd=3-0
+FH_EntryType	Equ	FilHead+120	[LW]
+FH_Size		Equ	FilHead+124	[LW] Number of Bytes In File.
+FH_NumBlocks	Equ	FilHead+128	[LW] Number of Blocks In File.
+FH_DateStamp	Equ	FilHead+132	[12] DateStamp of time Last Changed.
+FH_Comment	Equ	FilHead+144	[80] File Command. Null Term.
+FH_Reserved	Equ	FilHead+224	[36] RESERVED.
+;===========================================================================;
+DTStruc		Rs.b	26		;------- Date-Time Structure -------;
+;===========================================================================;
+DT_Days		Equ	DTStruc+00	Days Since 1978
+DT_Mins		Equ	DTStruc+04	Mins Since Midnight
+DT_Tiks		Equ	DTStruc+08	Ticks Since Minute (Always Even)
+DT_4Mat		Equ	DTStruc+12	Format   -.
+DT_Flag		Equ	DTStruc+13	Flags     |
+DT_Name		Equ	DTStruc+14	Date Adr  |- For Outputting.
+DT_Date		Equ	DTStruc+18	Name Adr  |
+DT_Time		Equ	DTStruc+22	Time Adr -'
+;= SWITCHES ================================================================;
+Opt_F_1		Rs.b	1		CMDLine (etc) Options.
+Fmt_F_1		Rs.b	1		Format-Text Options.
+Fil_F_1		Rs.b	1		Files In Memory.
+Fil_F_2		Rs.b	1
+STD_F_1		Rs.b	1		Standard files.
+NCP_F_1		Rs.b	1		CPS-Records Flag Byte #1
+;		This byte is like those in the CPS-Records strucs, used when
+;		building new structures.
+;= DATA ====================================================================;
+;;;;;;;;NumUser	Rs.l	1		Number of Users to output
+OnMins		Rs.l	1		Number of Mins after 00:00 of logon.
+Usage		Rs.l	1		Number of Mins Online by this User
+UpFiles		Rs.w	1		Number of files uploaded......User
+UpBytes		Rs.l	1		Number of bytes uploaded......User
+DnFiles		Rs.w	1		Number of files downloaded....User
+DnBytes		Rs.l	1		Number of bytes downloaded....User
+Pages		Rs.w	1		Number of Pages.......by this User
+NamLen		Rs.w	1		Length of Names to write.
+LocLen		Rs.w	1		Length of Locations to write.
+TimLen		Rs.w	1		Length of Times to write.
+DatLen		Rs.w	1		Length of Dates to write.
+RndLen		Rs.w	1		Length of Random-Line to write.
+RDatLen		Rs.w	1		Length of Record-Dates to write.
+TempCPS		Rs.l	1		Temp storage for CPS rate.
+TotlCPS		Rs.l	1		Sum of this user's CPS rates.
+NumbCPS		Rs.l	1		Number of CPS rates in the above.
+FT_If_T		Rs.b	1		[FormTxt] byte to send when IF=TRUE.
+FT_If_F		Rs.b	1		[FormTxt] byte to send when IF=FALSE.
+FT_If_O		Rs.b	1		[FormTxt] byte to send when IF=3rd Op
+FT_User		Rs.l	1		[FormTxt] Store of given user number.
+;= FILES ===================================================================;
+FileNam		Rs.l	1		Active  File Name
+FileHdl		Rs.l	1		Active  File Handle
+FileLok		Rs.l	1		Active  File Lock
+FileSze		Rs.l	1		Active  File Size
+FileAdr		Rs.l	1		Active  File Address
+StorHdl		Rs.l	1		Storage File Handle
+In_FAdr		Rs.l	1		Adrs of Input text for Output
+In_FSze		Rs.l	1		Size of Input text for Output
+In_FNam		Rs.l	1		Name of Input text for Output
+ListAdr		Rs.l	1		Adrs of Input-list of filenames
+ListSze		Rs.l	1		Size of Input-list of filenames
+HeadAdr		Rs.l	1		Adrs of Header file.
+HeadSze		Rs.l	1		Size of Header file.
+TailAdr		Rs.l	1		Adrs of Tailer file.
+TailSze		Rs.l	1		Size of Tailer file.
+;= ADDRESS-POINTERS ========================================================;
+StarStk		Rs.l	1		Original Stack Pointer
+DosBase		Rs.l	1		Dos.Library Base
+CLI_Hdl		Rs.l	1		Output CLI (or whatever) handle
+StarRef		Rs.l	1		START of search area in Callerslog.
+EndRef		Rs.l	1		END of callerslog.
+NoFilRt		Rs.l	1		Routine to call when no file exists.
+NWrtNFd		Rs.l	1		Routine to call when no file exists.
+BlkCurr		Rs.l	1		Adr of current output block
+BlkEnd		Rs.l	1		Adr of end+1 of current block
+BlkBase		Rs.l	1		Adr of BASE block
+InptAdr		Rs.l	1		Adr of start of input text [FormTxt]
+InptEnd		Rs.l	1		Adr of  end  of input text [FormTxt]
+FNaFTxt		Rs.l	1		Filename being used by FormTxt
+;= TEMP ====================================================================;
+Temp001		Rs.l	1		-.
+Temp002		Rs.l	1		 |
+Temp003		Rs.l	1		 |  Temperarary Pointers for
+Temp004		Rs.l	1		 |- Subroutine Calls and for
+Temp005		Rs.l	1		 |  using instead of the stack!
+Temp006		Rs.l	1		 |
+Temp007		Rs.l	1		-'
+FTNumChars	Rs.l	1		-.
+FTInptAdr	Rs.l	1		 |
+FTInptEnd	Rs.l	1		 |_ Temp storage for
+FTOBlkEnd	Rs.l	1		 |  FormTxt routines.
+FTOPstion	Rs.l	1		 |
+FT_D7		Rs.l	1		-'
+;= BUFFERS =================================================================;
+D8_Name		Rs.b	16		Name String	-.
+D8_Date		Rs.b	16		Date String	 |- Date Stuff
+D8_Time		Rs.b	16		Time String	-'
+ErrBuffLen	Equ	100
+ErrBuff		Rs.b	ErrBuffLen	For Fault() to write Error Text.
+StdBuffLen	Equ	1024
+StdBuff		Rs.b	StdBuffLen	Buffer for anything.
+;= READARGS() STUFF ========================================================;
+RDA_Rtn		Rs.l	1		Pointer to returned RDArgs structure
+;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -;
+RDA_Array	Equ	__RS		Array of longwords matching template
+RDA_Template
+Help_S		Rs.l	1
+		Dc.b	"?=HELP/S"	Help Switch.
+Clear_S		Rs.l	1
+		Dc.b	",CLEAR/S"	Clear Switch.
+Update_N	Rs.l	1
+		Dc.b	",UPDATE/N"	Number of node to update.
+NoSysop_S	Rs.l	1
+		Dc.b	",NOSYSOP/S"	NoSysop Switch (Update).
+MClog_S		Rs.l	1
+		Dc.b	",MCLOG/S"	MiniCallerslog Switch (Update).
+StripMCL_N	Rs.l	1
+		Dc.b	",STRIPMCL/N"	Number Of Days To Keep In MiniClog.
+OutANSI_K	Rs.l	1
+		Dc.b	",OUTANSI/K"	Filename to output with ANSI.
+OutNoANSI_K	Rs.l	1
+		Dc.b	",OUTNOANSI/K"	Filename to output without ANSI.
+Users_N		Rs.l	1
+		Dc.b	",USERS/N"	Number of Users (Output).
+Design_K	Rs.l	1
+		Dc.b	",DESIGN/K"	Filename of Externam Design (Output).
+IntType_K	Rs.l	1
+		Dc.b	",INTTYPE/K"	Internal Design Type (Output).
+Option_K	Rs.l	1
+		Dc.b	",OPTION/K"	Option(s) Design Files (Output).
+ANSITop_K	Rs.l	1
+		Dc.b	",ANSITOP/K"	Header file for ANSI output.
+NoANSITop_K	Rs.l	1
+		Dc.b	",NOANSITOP/K"	Header file for Non-ANSI output.
+ANSIBottom_K	Rs.l	1
+		Dc.b	",ANSIBOTTOM/K"	Tailer file for ANSI output.
+NoANSIBottom_K	Rs.l	1
+		Dc.b	",NOANSIBOTTOM/K"
+Top_K		Rs.l	1
+		Dc.b	",TOP/K"	Header (ANSI & Non-ANSI)
+Bottom_K	Rs.l	1
+		Dc.b	",BOTTOM/K"	Tailer (ANSI & Non-ANSI)
+RDA_Temp_Len	Equ	*-RDA_Template
+		Dc.b	0
+		Even
+;===========================================================================;
+StorFil		Equ	__RS		;------- Storage File Memory -------;
+;===========================================================================;
+SV_Start	Rs.b	S_Vers_Len	File Version
+SX_Clear_Date	Rs.b	10		Date that the file was cleared/made.
+SX_Upload_1	Rs.b	STD_Filename_Length	-.
+SX_Upload_2	Rs.b	STD_Filename_Length	 |
+SX_Upload_3	Rs.b	STD_Filename_Length	 |- Last 5 uploads.
+SX_Upload_4	Rs.b	STD_Filename_Length	 |
+SX_Upload_5	Rs.b	STD_Filename_Length	-'
+Store_Clear_S	Equ	__RS		OppyC: Clear from here down.
+SX_NumUpdates	Rs.l	1		Number of times Update has been run.
+SX_RESERVED	Rs.b	40		40 CHARS RESERVED FOR ENHANCEMENTS
+;---------------------------------------------------------------------------;
+;- Daily Stats Structures [8] ----------------------------------------------;
+;---------------------------------------------------------------------------;
+SD0_Base	Rs.b	SD_Len		Day #0 (Today)
+SD1_Base	Rs.b	SD_Len		Day #1 -.
+SD2_Base	Rs.b	SD_Len		Day #2	|
+SD3_Base	Rs.b	SD_Len		Day #3	|
+SD4_Base	Rs.b	SD_Len		Day #4	|- One Full Week.
+SD5_Base	Rs.b	SD_Len		Day #5	|
+SD6_Base	Rs.b	SD_Len		Day #6	|
+SD7_Base	Rs.b	SD_Len		Day #7 -'
+;---------------------------------------------------------------------------;
+;- Records Structure -------------------------------------------------------;
+;---------------------------------------------------------------------------;
+; Date Format: "DDD, DD-MMM-YY",0,0  LAST null is an EVEN.
+SR_Calls	Rs.w	1		Callers
+SR_Calls_D	Rs.b	16		Date of Above
+SR_UpKBytes	Rs.l	1		KBytes Uploaded
+SR_UpKBytes_D	Rs.b	16		Date of Above
+SR_UpFiles	Rs.w	1		Files Uploaded
+SR_UpFiles_D	Rs.b	16		Date of Above
+SR_UpFails	Rs.w	1		Upload Fails   (NOT IMPLEMENTED)
+SR_UpFails_D	Rs.b	16		Date of Above  (NOT IMPLEMENTED)
+SR_DnKBytes	Rs.l	1		KBytes Downloaded
+SR_DnKBytes_D	Rs.b	16		Date of Above
+SR_DnFiles	Rs.w	1		Files Downloaded
+SR_DnFiles_D	Rs.b	16		Date of Above
+SR_DnFails	Rs.w	1		Download Fails (NOT IMPLEMENTED)
+SR_DnFails_D	Rs.b	16		Date of Above  (NOT IMPLEMENTED)
+SR_UsedMins	Rs.l	1		Minutes Of Useage
+SR_UsedMins_D	Rs.b	16		Date of Above
+SR_NewUsers	Rs.w	1		New Users
+SR_NewUsers_D	Rs.b	16		Date of Above
+SR_Hacks	Rs.w	1		Hacks
+SR_Hacks_D	Rs.b	16		Date of Above
+SR_Drops	Rs.w	1		Drop Carriers
+SR_Drops_D	Rs.b	16		Date of Above
+SR_Pages	Rs.w	1		Pages
+SR_Pages_D	Rs.b	16		Date of Above
+SR_RESERVED	Rs.b	40		40 CHARS RESERVED FOR ENHANCEMENTS
+SR_Len		Equ	__RS-SR_Calls	Length
+;---------------------------------------------------------------------------;
+Store_Clear	Equ	__RS-Store_Clear_S	OppyC: STOP CLEARING.
+;---------------------------------------------------------------------------;
+;- Individual User Entries [20] --------------------------------------------;
+;---------------------------------------------------------------------------;
+SU01_Base	Rs.b	SU_Len		User #1
+SU02_Base	Rs.b	SU_Len		User #2
+SU03_Base	Rs.b	SU_Len		User #3
+SU04_Base	Rs.b	SU_Len		User #4
+SU05_Base	Rs.b	SU_Len		User #5
+SU06_Base	Rs.b	SU_Len		User #6
+SU07_Base	Rs.b	SU_Len		User #7
+SU08_Base	Rs.b	SU_Len		User #8
+SU09_Base	Rs.b	SU_Len		User #9
+SU10_Base	Rs.b	SU_Len		User #10
+SU11_Base	Rs.b	SU_Len		User #11
+SU12_Base	Rs.b	SU_Len		User #12
+SU13_Base	Rs.b	SU_Len		User #13
+SU14_Base	Rs.b	SU_Len		User #14
+SU15_Base	Rs.b	SU_Len		User #15
+SU16_Base	Rs.b	SU_Len		User #16
+SU17_Base	Rs.b	SU_Len		User #17
+SU18_Base	Rs.b	SU_Len		User #18
+SU19_Base	Rs.b	SU_Len		User #19
+SU20_Base	Rs.b	SU_Len		User #20
+;---------------------------------------------------------------------------;
+;- Individual CPS Record Entries [20] --------------------------------------;
+;---------------------------------------------------------------------------;
+SCR01_Base	Rs.b	SCR_Len		CPS Record #1
+SCR02_Base	Rs.b	SCR_Len		CPS Record #2
+SCR03_Base	Rs.b	SCR_Len		CPS Record #3
+SCR04_Base	Rs.b	SCR_Len		CPS Record #4
+SCR05_Base	Rs.b	SCR_Len		CPS Record #5
+SCR06_Base	Rs.b	SCR_Len		CPS Record #6
+SCR07_Base	Rs.b	SCR_Len		CPS Record #7
+SCR08_Base	Rs.b	SCR_Len		CPS Record #8
+SCR09_Base	Rs.b	SCR_Len		CPS Record #9
+SCR10_Base	Rs.b	SCR_Len		CPS Record #10
+SCR11_Base	Rs.b	SCR_Len		CPS Record #11
+SCR12_Base	Rs.b	SCR_Len		CPS Record #12
+SCR13_Base	Rs.b	SCR_Len		CPS Record #13
+SCR14_Base	Rs.b	SCR_Len		CPS Record #14
+SCR15_Base	Rs.b	SCR_Len		CPS Record #15
+SCR16_Base	Rs.b	SCR_Len		CPS Record #16
+SCR17_Base	Rs.b	SCR_Len		CPS Record #17
+SCR18_Base	Rs.b	SCR_Len		CPS Record #18
+SCR19_Base	Rs.b	SCR_Len		CPS Record #19
+SCR20_Base	Rs.b	SCR_Len		CPS Record #20
+;---------------------------------------------------------------------------;
+;- Pointers in above are to these structures [20] --------------------------;
+;---------------------------------------------------------------------------;
+SC01_Base	Rs.b	SC_Len		User #1
+SC02_Base	Rs.b	SC_Len		User #2
+SC03_Base	Rs.b	SC_Len		User #3
+SC04_Base	Rs.b	SC_Len		User #4
+SC05_Base	Rs.b	SC_Len		User #5
+SC06_Base	Rs.b	SC_Len		User #6
+SC07_Base	Rs.b	SC_Len		User #7
+SC08_Base	Rs.b	SC_Len		User #8
+SC09_Base	Rs.b	SC_Len		User #9
+SC10_Base	Rs.b	SC_Len		User #10
+SC11_Base	Rs.b	SC_Len		User #11
+SC12_Base	Rs.b	SC_Len		User #12
+SC13_Base	Rs.b	SC_Len		User #13
+SC14_Base	Rs.b	SC_Len		User #14
+SC15_Base	Rs.b	SC_Len		User #15
+SC16_Base	Rs.b	SC_Len		User #16
+SC17_Base	Rs.b	SC_Len		User #17
+SC18_Base	Rs.b	SC_Len		User #18
+SC19_Base	Rs.b	SC_Len		User #19
+SC20_Base	Rs.b	SC_Len		User #20
+;---------------------------------------------------------------------------;
+S_Size		Equ	__RS-StorFil	Size of Storage File.
+;===========================================================================;
+NULLEND		Equ	__RS		;------- Overlays Start Here -------;
+;===========================================================================;
+RanSpac		Rs.b	Over00L		Random Line
+Clog		Rs.b	Over01L		Callerslog filename (node# changes)
+NUS		Rs.b	Over02L		User-Storage Structure for creating
+;					new entries in. (Don't use Usr20)
+MEMsg		Rs.b	Over03L		Missing @End Message.
+MEMsg_O1	Rs.b	Over04L		-.
+MEMsg_O2	Rs.b	Over05L		 |- Start of Option letters.
+MEMsg_O3	Rs.b	Over06L		-'
+;===========================================================================;
+LENVARS		Equ	__RS		;---- End of variables/overlays ----;
+;===========================================================================;

@@ -1,0 +1,122 @@
+********************************************************** **** *** ** *  *
+* If @End_X found outside of an exclude-search-loop, it is to be ignored.
+********************************************************** **** *** ** *  *
+FTxt_End
+	Cmp.l	d5,a0			End of input?
+	Bge	BadInput
+	Addq.l	#1,a0			Point past the option.
+	Bra	FTxtSJm			Continue with original input.
+******************************* **** *** ** *  *
+* The actual Option command itself...
+******************************* **** *** ** *  *
+; Will skip a section which ends with the @End_X command if option was set
+FTxt_Option
+	Bsr	FTOp_GetOpt
+
+	Tst.l	Option_K(a5)		Were any options given?
+	Beq.s	FT_Option_ExcludeSearch	If not, automatically skip section.
+	Move.l	Option_K(a5),a2		Point to Options set on CMDLine.
+
+FT_Option_Check
+	Tst.b	(a2)			End of options string?
+	Beq.s	FT_Option_ExcludeSearch	Yes = skip this section.
+	Cmp.b	(a2),d2			Uppercase...
+	Beq.s	FT_Option_Done		If found, do not skip this section.
+	Cmp.b	(a2)+,d3		Lowercase...
+	Beq.s	FT_Option_Done		If found, do not skip this section.
+	Bra.s	FT_Option_Check
+
+FT_Option_ExcludeSearch
+;;;;;;;	d2/d3 still contain the upper/lowercase option letter...
+	Move.b	#"@",d4
+	Subq.l	#5,d5			Add done afterwards...
+FTOpESL	Cmp.l	d5,a0			Make sure at least 6 chars left
+	Bge.s	MissEnd			If the end, tell user "missing end"
+
+	Cmp.b	(a0)+,d4		Check for "@"
+	Bne.s	FTOpESL			If not found, check the next char...
+	Cmpi.b	#"E",(a0)
+	Beq.s	FTOpES1
+	Cmpi.b	#"e",(a0)
+	Bne.s	FTOpESL
+FTOpES1	Cmpi.b	#"N",1(a0)
+	Beq.s	FTOpES2
+	Cmpi.b	#"n",1(a0)
+	Bne.s	FTOpESL
+FTOpES2	Cmpi.b	#"D",2(a0)
+	Beq.s	FTOpES3
+	Cmpi.b	#"d",2(a0)
+	Bne.s	FTOpESL
+FTOpES3	Cmpi.b	#"_",3(a0)
+	Bne.s	FTOpESL
+	Cmp.b	4(a0),d2
+	Beq.s	FT_Option_Exclude_Done
+	Cmp.b	4(a0),d3
+	Bne.s	FTOpESL
+
+FT_Option_Exclude_Done
+	Addq.l	#5,d5
+	Addq.l	#5,a0
+	Move.l	a0,FTInptAdr(a5)	(Store adr start of input)
+FT_Option_Done
+	Bsr	Restore_FT_Regs
+	Bra	FTxtSJm			Continue with original input.
+
+********************************************************** **** *** ** *  *
+* Error message routine for when @End not found...
+********************************************************** **** *** ** *  *
+MissEnd	Move.b	d2,MEMsg_O1(a5)		-.
+	Move.b	d2,MEMsg_O2(a5)		 |- Put option letter into error msg
+	Move.b	d2,MEMsg_O3(a5)		-'
+
+	Lea	BIMsg1(pc),a0
+	Move.l	#BIMsg1L,d3
+	Bsr	CLIRite
+
+	Move.l	FNaFTxt(a5),a0		Point to Filename for measuring...
+	Bsr	NullLen			...its length
+	Move.l	d0,d3			Length of Filename in d3.
+	Move.l	FNaFTxt(a5),a0		Point to Filename to output to CLI.
+	Bsr	CLIRite
+
+	Lea	MEMsg(a5),a0
+	Moveq	#MEMsgL,d3
+	Bsr	CLIRite
+
+	Bra	Finish
+********************************************************** **** *** ** *  *
+FTOp_GetOpt
+	Cmp.l	d5,a0			End of input?
+	Bge	BadInput
+
+	Move.b	(a0)+,d2
+	Move.l	a0,FTInptAdr(a5)	(Store adr start of input)
+
+	Cmpi.b	#"a",d2
+	Blt.s	FTOpUpN
+	Cmpi.b	#"z",d2
+	Bgt.s	FTOpUpN
+	Sub.b	#32,d2			Convert Opt to Upper-case
+FTOpUpN	Move.l	d2,d3
+	Cmpi.b	#"A",d3
+	Blt.s	FTOpDnN
+	Cmpi.b	#"Z",d3
+	Bgt.s	FTOpDnN
+	Add.b	#32,d3			Convert Opt to Lower-case
+FTOpDnN	RTS
+********************************************************** **** *** ** *  *
+FTxt_Not_Option
+	Bsr.s	FTOp_GetOpt
+
+	Tst.l	Option_K(a5)		Were any options given?
+	Beq.s	FT_Option_Done		If not, automatically inc. section.
+	Move.l	Option_K(a5),a2		Point to Options set on CMDLine.
+
+FT_NOption_Check
+	Tst.b	(a2)			End of options string?
+	Beq	FT_Option_Done		If found, do not skip this section.
+	Cmp.b	(a2),d2			Uppercase...
+	Beq	FT_Option_ExcludeSearch	Yes = skip this section.
+	Cmp.b	(a2)+,d3		Lowercase...
+	Beq	FT_Option_ExcludeSearch	Yes = skip this section.
+	Bra.s	FT_NOption_Check

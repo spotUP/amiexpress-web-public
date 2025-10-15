@@ -1,0 +1,453 @@
+
+AmiExpress Web Port - Comprehensive Implementation Guide
+🎯 MISSION OVERVIEW
+Create a 1:1 web port of the Commodore Amiga AmiExpress BBS system using TypeScript, with canvas-based terminal rendering, PostgreSQL database, WebSocket real-time communication, and full compatibility with existing AmiExpress data structures.
+
+📋 CORE REQUIREMENTS
+1. Architecture & Technology Stack
+Backend: TypeScript/Node.js with Express.js
+Database: PostgreSQL with full AmiExpress data structure compatibility
+Real-time: WebSocket server (Render.com deployment)
+Frontend: Canvas-based terminal rendering with ANSI support
+Deployment: Vercel (frontend) + Render.com (WebSocket backend)
+Font: Mo'Soul TTF font for authentic Amiga look
+2. AmiExpress Core Components to Port
+A. State Management System
+
+// Mirror AmiExpress state machine exactly
+enum BBSState {
+  AWAIT = 'await',           // Waiting for connection
+  LOGON = 'logon',           // User login process  
+  LOGGEDON = 'loggedon'      // Active user session
+}
+
+enum LoggedOnSubState {
+  DISPLAY_BULL = 'display_bull',        // System bulletins
+  DISPLAY_CONF_BULL = 'display_conf_bull', // Conference bulletins
+  DISPLAY_MENU = 'display_menu',        // Main menu display
+  READ_COMMAND = 'read_command',        // Command input mode
+  READ_SHORTCUTS = 'read_shortcuts',    // Hotkey mode
+  PROCESS_COMMAND = 'process_command',  // Command processing
+  POST_MESSAGE_SUBJECT = 'post_message_subject', // Message composition
+  FILE_AREA_SELECT = 'file_area_select', // File area navigation
+  CONFERENCE_SELECT = 'conference_select' // Conference selection
+}
+B. User Management System
+
+Data Structures: Exact replica of AmiExpress user, userKeys, userMisc objects
+Security Levels: 0-255 security levels with bitwise access control
+Authentication: PBKDF2 password hashing with salt (migrate from AmiExpress format)
+Session Management: Multi-node session handling with proper state persistence
+C. Message System
+
+Message Bases: Conference-based message organization
+Private Messages: User-to-user messaging system
+Message Threading: Reply chains and message relationships
+Message Scanning: New message detection and marking
+D. File Area System
+
+Directory Structure: DIR1, DIR2, etc. organization
+File Metadata: FILE_ID.DIZ extraction and display
+Upload/Download: Protocol support (Zmodem, FTP, HTTP)
+File Validation: External file checking doors integration
+E. Door Game System
+
+Door Execution: External program launching and management
+Door Types: XIM, AIM, SIM, TIM, IIM, MCI, AEM, SUP support
+Door Communication: Message port-based inter-process communication
+Door Integration: WebSocket-based door execution
+F. Real-time Features
+
+Multi-user Chat: Sysop/user chat system with paging
+Online User Display: WHO command with real-time updates
+Inter-user Messaging: OLM (Online Message) system
+Live Status Updates: Node status and user activity
+🏗️ IMPLEMENTATION ROADMAP
+Phase 1: Foundation (Week 1-2)
+Database Schema Design
+
+Complete PostgreSQL schema matching AmiExpress data structures
+User table with all AmiExpress user fields
+Message base tables with proper relationships
+File area tables with metadata support
+Configuration tables for system settings
+Core State Machine
+
+Implement exact AmiExpress state transitions
+Substate management for complex operations
+Session persistence across WebSocket reconnections
+Menu pause logic implementation
+User Authentication System
+
+Login/logout flow matching AmiExpress
+Security level validation
+Password strength checking
+Account creation and validation
+Phase 2: Message System (Week 3-4)
+Message Base Implementation
+
+Conference/message base hierarchy
+Message storage and retrieval
+Message threading and replies
+Private message handling
+Message Operations
+
+Read messages (R command)
+Post messages (A/E commands)
+Message scanning and filtering
+Message maintenance operations
+Phase 3: File System (Week 5-6)
+File Area Structure
+
+Directory organization (DIR1, DIR2, etc.)
+File metadata extraction
+FILE_ID.DIZ processing
+Upload/download directories
+File Operations
+
+File listing and browsing
+Upload/download processing
+File validation and checking
+Protocol handling (Zmodem simulation)
+Phase 4: Advanced Features (Week 7-8)
+Door Game System
+
+Door execution framework
+WebSocket-based door communication
+Door game porting (SAL, CheckUP, etc.)
+External program integration
+Real-time Features
+
+Multi-user chat system
+Online user display
+Inter-user messaging
+Live status updates
+Phase 5: Deployment & Testing (Week 9-10)
+Data Import System
+
+AmiExpress data file parsing
+User data migration
+Message base import
+Configuration import
+Deployment Configuration
+
+Vercel setup for frontend
+Render.com WebSocket deployment
+PostgreSQL database setup
+Environment configuration
+💾 DATABASE SCHEMA
+Core Tables
+-- Users table (matches AmiExpress user structure)
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(31) UNIQUE NOT NULL,
+  realname VARCHAR(26),
+  location VARCHAR(30),
+  phone VARCHAR(13),
+  email VARCHAR(50),
+  sec_level INTEGER DEFAULT 10,
+  sec_board INTEGER DEFAULT 0,
+  sec_library INTEGER DEFAULT 0,
+  sec_bulletin INTEGER DEFAULT 0,
+  conf_access VARCHAR(10) DEFAULT 'XXX',
+  conf_rjoin INTEGER DEFAULT 1,
+  msgbase_rjoin INTEGER DEFAULT 1,
+  time_total INTEGER DEFAULT 60,
+  time_used INTEGER DEFAULT 0,
+  time_limit INTEGER DEFAULT 60,
+  uploads INTEGER DEFAULT 0,
+  downloads INTEGER DEFAULT 0,
+  bytes_upload BIGINT DEFAULT 0,
+  bytes_download BIGINT DEFAULT 0,
+  -- Add all other AmiExpress user fields
+);
+
+-- Message bases
+CREATE TABLE conferences (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  location VARCHAR(255)
+);
+
+CREATE TABLE message_bases (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255),
+  conference_id INTEGER REFERENCES conferences(id),
+  location VARCHAR(255)
+);
+
+-- Messages
+CREATE TABLE messages (
+  id SERIAL PRIMARY KEY,
+  msg_num INTEGER NOT NULL,
+  conf_num INTEGER NOT NULL,
+  msgbase_num INTEGER NOT NULL,
+  from_name VARCHAR(31) NOT NULL,
+  to_name VARCHAR(31) NOT NULL,
+  subject VARCHAR(31) NOT NULL,
+  status CHAR(1) NOT NULL, -- P/R for public/private
+  msg_date TIMESTAMP NOT NULL,
+  recv_date TIMESTAMP,
+  is_private BOOLEAN DEFAULT FALSE,
+  parent_id INTEGER REFERENCES messages(id),
+  content TEXT,
+  UNIQUE(conf_num, msgbase_num, msg_num)
+);
+🎨 CANVAS TERMINAL RENDERING
+Requirements
+Character-based Display: 80x25 terminal emulation
+ANSI Color Support: Full ANSI escape sequence processing
+Font Rendering: Mo'Soul TTF font integration
+Real-time Updates: Live character rendering
+Input Handling: Keyboard input with proper buffering
+Implementation Approach
+class AmiExpressTerminal {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  private fontSize: number = 16;
+  private charWidth: number;
+  private charHeight: number;
+  private cols: number = 80;
+  private rows: number = 25;
+  private cursorX: number = 0;
+  private cursorY: number = 0;
+  private screenBuffer: string[][] = [];
+  
+  constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d')!;
+    this.initializeBuffer();
+    this.loadFont();
+  }
+  
+  private async loadFont() {
+    // Load Mo'Soul font
+    const font = new FontFace('MoSoul', 'url(/fonts/MicroKnight_v1.0.ttf)');
+    await font.load();
+    document.fonts.add(font);
+  }
+  
+  private initializeBuffer() {
+    // Initialize 80x25 screen buffer
+    for (let y = 0; y < this.rows; y++) {
+      this.screenBuffer[y] = new Array(this.cols).fill(' ');
+    }
+  }
+  
+  public processANSI(data: string) {
+    // Parse ANSI escape sequences
+    // Update screen buffer
+    // Render to canvas
+  }
+  
+  public render() {
+    // Render screen buffer to canvas
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    for (let y = 0; y < this.rows; y++) {
+      for (let x = 0; x < this.cols; x++) {
+        const char = this.screenBuffer[y][x];
+        // Render character with proper font and colors
+        this.renderChar(x, y, char);
+      }
+    }
+  }
+}
+🔧 DOOR GAME PORTING STRATEGY
+Door Types to Port
+SAL (Super AmiLog): Callers log viewer
+CheckUP: File validation utility
+AquaScan: Message scanning utility
+File Description: File metadata editor
+Porting Approaches
+Assembly Disassembly: Convert 68000 assembly to TypeScript
+Source Code Porting: Use existing .e (Amiga E) source files
+WebSocket Emulation: Create web-compatible versions
+Hybrid Approach: Combine all three methods
+📦 DEPLOYMENT ARCHITECTURE
+Vercel Deployment (Frontend + API)
+# vercel.json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "amiexpress-web/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "backend/dist/index.js"
+    }
+  ]
+}
+Render.com WebSocket Service
+# render.yaml
+services:
+  - type: web
+    name: amiexpress-websockets
+    env: node
+    buildCommand: "cd backend && npm install"
+    startCommand: "npm start"
+    port: 3001
+    autoDeploy: false
+    healthCheckPath: /health
+🔄 DATA IMPORT SYSTEM
+Import Script Requirements
+class AmiExpressDataImporter {
+  private db: Database;
+  
+  async importAllData(dataPath: string) {
+    // Import user data
+    await this.importUserData(`${dataPath}/user.data`);
+    await this.importUserKeys(`${dataPath}/user.keys`);
+    await this.importUserMisc(`${dataPath}/user.misc`);
+    
+    // Import configuration
+    await this.importConfiguration(`${dataPath}/bbsConfig.info`);
+    
+    // Import conferences and message bases
+    await this.importConferences(`${dataPath}/Conf01/`, `${dataPath}/Conf02/`);
+    
+    // Import messages
+    await this.importMessages();
+    
+    // Import file areas
+    await this.importFileAreas();
+  }
+  
+  private async importUserData(filePath: string) {
+    // Parse AmiExpress binary user data format
+    // Convert to PostgreSQL user records
+    // Handle AmiExpress-specific data types (BCD, etc.)
+  }
+}
+🎮 DOOR GAME EMULATION
+Door Execution Framework
+interface DoorContext {
+  userId: string;
+  nodeId: number;
+  inputBuffer: string;
+  outputBuffer: string[];
+  doorData: Map<string, any>;
+}
+
+class DoorManager {
+  async executeDoor(doorId: string, context: DoorContext): Promise<DoorResult> {
+    const door = this.getDoorDefinition(doorId);
+    
+    switch (door.type) {
+      case 'native':
+        return this.executeNativeDoor(door, context);
+      case 'web':
+        return this.executeWebDoor(door, context);
+      case 'emulated':
+        return this.executeEmulatedDoor(door, context);
+    }
+  }
+}
+🔒 SECURITY IMPLEMENTATION
+Access Control System
+class AmiExpressSecurity {
+  private userSecurityLevel: number;
+  private userFlags: number;
+  private tempSecurityFlags: string;
+  
+  checkSecurity(requirement: number): boolean {
+    // Implement exact AmiExpress security checking
+    // Handle temporary access grants
+    // Support security flag overrides
+    return this.evaluateSecurity(requirement);
+  }
+  
+  grantTemporaryAccess(flags: string) {
+    // Implement temporary security flag setting
+    this.tempSecurityFlags = flags;
+  }
+}
+⚡ PERFORMANCE OPTIMIZATIONS
+WebSocket Optimization
+Message Batching: Batch multiple ANSI sequences
+Compression: Gzip WebSocket messages
+Connection Pooling: Efficient connection management
+State Synchronization: Smart state updates
+Database Optimization
+Connection Pooling: Multiple PostgreSQL connections
+Query Optimization: Efficient message/conference queries
+Caching: Redis for session and configuration data
+Indexing: Proper database indexes for AmiExpress access patterns
+🧪 TESTING STRATEGY
+Compatibility Testing
+Data Import Testing: Verify all AmiExpress data imports correctly
+Command Testing: Test all BBS commands match original behavior
+State Testing: Verify state machine transitions exactly
+Multi-user Testing: Test concurrent user sessions
+Door Testing: Verify door game execution
+Performance Testing
+Load Testing: Multiple concurrent users
+Database Testing: Large message base performance
+WebSocket Testing: Real-time feature performance
+File Testing: Upload/download performance
+📋 SUCCESS CRITERIA
+Functional Requirements
+ 100% Command Compatibility: All AmiExpress commands work identically
+ Data Structure Compatibility: All AmiExpress data formats supported
+ State Machine Accuracy: Exact AmiExpress state transitions
+ Security Model: Complete AmiExpress security implementation
+ Multi-user Support: Concurrent user session handling
+Technical Requirements
+ Canvas Terminal: Authentic terminal rendering
+ WebSocket Real-time: Live BBS experience
+ Database Performance: Efficient data handling
+ Deployment Ready: Production deployment configuration
+ Door Game Support: External program execution
+User Experience
+ Authentic Feel: Classic AmiExpress user experience
+ Modern Performance: Fast, responsive web interface
+ Cross-platform: Works on all modern browsers
+ Mobile Support: Responsive design for mobile devices
+ Accessibility: Screen reader and keyboard navigation support
+🚀 IMPLEMENTATION TIMELINE
+Month 1: Foundation
+Database schema and core architecture
+Basic user authentication
+Canvas terminal framework
+WebSocket server setup
+Month 2: Core Features
+Complete message system
+File area implementation
+Basic command set
+State management
+Month 3: Advanced Features
+Door game porting
+Real-time chat system
+Advanced file operations
+Security implementation
+Month 4: Deployment & Testing
+Data import system
+Deployment configuration
+Comprehensive testing
+Performance optimization
+This comprehensive implementation will create a fully functional AmiExpress Web BBS that maintains 100% compatibility with the original Amiga system while leveraging modern web technologies for enhanced performance and accessibility.
+
+Add this to your project memory:
+- Use Hot reload.
+- Always make sure all servers are running, never run two or more instances of a server.
+- Never make stubs or do intrepretations, always port AmiExpress 1:1, pixel perfect.
+- Document progress, milestones and releases 
+- Fix all typescript errors after editing code.
+- Use puppeteer to monitor the console and fix errors.
+- Be aware of the context window, Break up the project in smaller todo lists that you update your progress in continually.
+- Never take screenshots, ask the user to do it for you.
+- Commit important changes to github
+
+Use an ansi terminal.
+
+Save this prompt so all agents reads it and follows it.
+
+Make a user story from start to finish in AmiExpress to fully understand it.

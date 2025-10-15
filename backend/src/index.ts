@@ -1,12 +1,11 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { User, Door, DoorSession, ChatSession, ChatMessage, ChatState } from './types';
 import { db } from './database';
-import { config } from './config';
-import { qwkManager, ftnManager } from './qwk';
-import { nodeManager, arexxEngine, protocolManager } from './nodes';
+
+// Add health check endpoint for Render.com monitoring
 
 // BBS State definitions (mirroring AmiExpress state machine)
 enum BBSState {
@@ -79,244 +78,162 @@ let chatState: ChatState = {
 };
 
 const app = express();
+
+// Configure CORS for Render.com deployment
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Allow requests from localhost (development) and Render.com deployments
+    const allowedOrigins = [
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      /^https:\/\/amiexpress.*\.onrender\.com$/,
+      /^https:\/\/amiexpress.*\.vercel\.app$/,
+      "https://amiexpress-web.vercel.app",
+      "https://amiexpress-hqq1ycqoz-johans-projects-458502e2.vercel.app",
+      "https://amiexpress-f16ckm2tw-johans-projects-458502e2.vercel.app"
+    ];
+
+    // Allow requests with no origin (mobile apps, curl requests, etc.)
+    if (!origin) return callback(null, true);
+
+    const isAllowed = allowedOrigins.some(pattern => {
+      if (typeof pattern === 'string') {
+        return pattern === origin;
+      } else {
+        return pattern.test(origin);
+      }
+    });
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ["GET", "POST", "OPTIONS"],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+};
+
+app.use(cors(corsOptions));
+
+// Add health check endpoint for Render.com monitoring
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    connections: io.sockets.sockets.size,
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Create HTTP server
 const server = createServer(app);
+
+// Configure Socket.IO for Render.com
 const io = new Server(server, {
-  cors: {
-    origin: config.get('corsOrigins'),
-    methods: ["GET", "POST"]
+  cors: corsOptions,
+  transports: ['polling', 'websocket'],
+  allowEIO3: true, // Allow Engine.IO v3 clients
+  pingTimeout: 60000, // 60 seconds
+  pingInterval: 25000, // 25 seconds
+  connectTimeout: 20000, // 20 seconds
+  maxHttpBufferSize: 1e8, // 100MB for file uploads
+  cookie: false, // Disable cookies for better compatibility
+  allowRequest: (req: any, callback: (err: string | null, success: boolean) => void) => {
+    // Additional security check for Render.com
+    const origin = req.headers.origin;
+    if (origin && corsOptions.origin(origin, () => {}) !== null) {
+      callback(null, true);
+    } else {
+      callback('CORS error', false);
+    }
   }
 });
 
-const port = process.env.PORT || config.get('port');
+// Add connection logging for Render.com debugging
+io.on('connection', (socket: Socket) => {
+  console.log(`🔌 Socket connected: ${socket.id} from ${socket.handshake.address}`);
+
+  socket.on('disconnect', (reason: string) => {
+    console.log(`🔌 Socket disconnected: ${socket.id}, reason: ${reason}`);
+  });
+
+  socket.on('error', (error: Error) => {
+    console.error(`❌ Socket error for ${socket.id}:`, error);
+  });
+});
+
+const port = process.env.PORT || 3001;
+
+// Export for Render.com deployment
+export default app;
+export { io, server };
 
 // Store active sessions (in production, use Redis/database)
 const sessions = new Map<string, BBSSession>();
 
-// JWT Authentication middleware
-interface AuthRequest extends Request {
-  user?: any;
-}
+// Remove duplicate health check endpoint
 
-const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+app.use(cors({
+    origin: function (origin, callback) {
+      // Allow requests from localhost (development) and Vercel deployments
+      const allowedOrigins = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        /\.vercel\.app$/,
+        "https://amiexpress-web.vercel.app",
+        "https://amiexpress-owu55bmie-johans-projects-458502e2.vercel.app",
+        "https://amiexpress-f16ckm2tw-johans-projects-458502e2.vercel.app"
+      ];
 
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
+      // Allow requests with no origin (mobile apps, etc.)
+      if (!origin) return callback(null, true);
 
-  try {
-    const decoded = await db.verifyAccessToken(token);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(403).json({ error: 'Invalid or expired access token' });
-  }
-};
+      const isAllowed = allowedOrigins.some(pattern => {
+        if (typeof pattern === 'string') {
+          return pattern === origin;
+        } else {
+          return pattern.test(origin);
+        }
+      });
 
-app.use(cors());
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        console.log('CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true
+  }));
 app.use(express.json());
 
 app.get('/', (req: Request, res: Response) => {
   res.json({ message: 'AmiExpress Backend API' });
 });
 
-// Authentication endpoints
-app.post('/auth/login', async (req: Request, res: Response) => {
-  try {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
-    }
-
-    // Authenticate user
-    const user = await db.getUserByUsername(username);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const isValidPassword = await db.verifyPassword(password, user.passwordHash);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Update last login
-    await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
-
-    // Generate tokens
-    const accessToken = await db.generateAccessToken(user);
-    const refreshToken = await db.generateRefreshToken(user);
-
-    res.json({
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        username: user.username,
-        realname: user.realname,
-        secLevel: user.secLevel,
-        expert: user.expert,
-        ansi: user.ansi
-      }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+// Example route using User type
+app.get('/users/:id', (req: Request, res: Response) => {
+  const userId = req.params.id;
+  // Placeholder: In a real app, fetch from DB
+  const user: User = {
+    id: userId,
+    username: 'example',
+    useRealName: true,
+    realname: 'Example User'
+  };
+  res.json(user);
 });
 
-app.post('/auth/register', async (req: Request, res: Response) => {
-  try {
-    const { username, realname, location, password } = req.body;
+// BBS connection handler (separate from global Socket.IO logging)
+io.on('connection', (socket: Socket) => {
+  console.log('🎮 BBS Client connected from:', socket.handshake.address);
 
-    if (!username || !realname || !password) {
-      return res.status(400).json({ error: 'Username, realname, and password required' });
-    }
-
-    // Check if user already exists
-    const existingUser = await db.getUserByUsername(username);
-    if (existingUser) {
-      return res.status(409).json({ error: 'Username already exists' });
-    }
-
-    // Hash password
-    const passwordHash = await db.hashPassword(password);
-
-    // Create new user
-    const userId = await db.createUser({
-      username,
-      passwordHash,
-      realname,
-      location: location || '',
-      phone: '',
-      secLevel: 10, // Default security level
-      uploads: 0,
-      downloads: 0,
-      bytesUpload: 0,
-      bytesDownload: 0,
-      ratio: 0,
-      ratioType: 0,
-      timeTotal: 0,
-      timeLimit: 60, // 60 minutes default
-      timeUsed: 0,
-      chatLimit: 0,
-      chatUsed: 0,
-      firstLogin: new Date(),
-      calls: 1,
-      callsToday: 1,
-      newUser: true,
-      expert: false,
-      ansi: true,
-      linesPerScreen: 23,
-      computer: 'Unknown',
-      screenType: 'Amiga Ansi',
-      protocol: '/X Zmodem',
-      editor: 'Prompt',
-      zoomType: 'QWK',
-      availableForChat: true,
-      quietNode: false,
-      autoRejoin: 1,
-      confAccess: 'XXX', // Access to first 3 conferences
-      areaName: 'Standard',
-      uuCP: false,
-      topUploadCPS: 0,
-      topDownloadCPS: 0,
-      byteLimit: 0
-    });
-
-    // Get the created user
-    const user = await db.getUserById(userId);
-    if (!user) {
-      return res.status(500).json({ error: 'Registration failed' });
-    }
-
-    // Generate tokens
-    const accessToken = await db.generateAccessToken(user);
-    const refreshToken = await db.generateRefreshToken(user);
-
-    res.status(201).json({
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        username: user.username,
-        realname: user.realname,
-        secLevel: user.secLevel,
-        expert: user.expert,
-        ansi: user.ansi
-      }
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/auth/refresh', async (req: Request, res: Response) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (!refreshToken) {
-      return res.status(400).json({ error: 'Refresh token required' });
-    }
-
-    // Verify refresh token
-    const decoded = await db.verifyRefreshToken(refreshToken);
-
-    // Get user
-    const user = await db.getUserById(decoded.userId);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
-    // Generate new access token
-    const accessToken = await db.generateAccessToken(user);
-
-    res.json({ accessToken });
-  } catch (error) {
-    console.error('Token refresh error:', error);
-    res.status(403).json({ error: 'Invalid refresh token' });
-  }
-});
-
-// Protected route example
-app.get('/users/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.params.id;
-
-    // Check if user can access this resource (own profile or admin)
-    if (req.user.userId !== userId && req.user.secLevel < 100) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const user = await db.getUserById(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.json({
-      id: user.id,
-      username: user.username,
-      realname: user.realname,
-      location: user.location,
-      secLevel: user.secLevel,
-      lastLogin: user.lastLogin,
-      uploads: user.uploads,
-      downloads: user.downloads
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-io.on('connection', async (socket) => {
-  console.log('Client connected');
-
-  // Initialize session with multi-node support
-  const nodeSession = await nodeManager.assignSessionToNode(socket.id, socket.id);
-
+  // Initialize session (mirroring processAwait in AmiExpress)
   const session: BBSSession = {
     state: BBSState.AWAIT,
     currentConf: 0,
@@ -334,24 +251,38 @@ io.on('connection', async (socket) => {
   };
   sessions.set(socket.id, session);
 
-  // Execute login trigger for AREXX scripts
-  await arexxEngine.executeTrigger('login', {
-    userId: undefined,
-    sessionId: socket.id,
-    environment: { nodeId: nodeSession.nodeId }
+  // Handle connection errors gracefully
+  socket.on('error', (error: Error) => {
+    console.error('❌ BBS Socket error for client:', socket.id, error);
   });
 
-  socket.on('login', async (data: { token: string }) => {
-    console.log('Socket login attempt with JWT token');
+  socket.on('connect_error', (error: Error) => {
+    console.error('❌ BBS Connection error for client:', socket.id, error);
+  });
+
+  socket.on('login', async (data: { username: string; password: string }) => {
+    console.log('Login attempt:', data.username);
 
     try {
-      // Verify JWT token
-      const decoded = await db.verifyAccessToken(data.token);
+      // Validate input
+      if (!data.username || !data.password) {
+        socket.emit('login-failed', 'Username and password are required');
+        return;
+      }
 
-      // Get user from database
-      const user = await db.getUserById(decoded.userId);
+      // Authenticate user against database
+      const user = await db.getUserByUsername(data.username);
       if (!user) {
+        console.log('User not found:', data.username);
         socket.emit('login-failed', 'User not found');
+        return;
+      }
+
+      // Verify password
+      const isValidPassword = await db.verifyPassword(data.password, user.passwordHash);
+      if (!isValidPassword) {
+        console.log('Invalid password for user:', data.username);
+        socket.emit('login-failed', 'Invalid password');
         return;
       }
 
@@ -368,27 +299,114 @@ io.on('connection', async (socket) => {
       session.msgBaseRJoin = 1; // Default message base
       session.cmdShortcuts = !user.expert; // Expert mode uses shortcuts
 
-      socket.emit('login-success', {
-        user: {
-          id: user.id,
-          username: user.username,
-          realname: user.realname,
-          secLevel: user.secLevel,
-          expert: user.expert,
-          ansi: user.ansi
-        }
-      });
+      console.log('Login successful for user:', data.username);
+      socket.emit('login-success');
 
       // Start the proper AmiExpress flow: bulletins first
       displaySystemBulletins(socket, session);
     } catch (error) {
-      console.error('Socket login error:', error);
-      socket.emit('login-failed', 'Invalid token');
+      console.error('Login error:', error);
+      socket.emit('login-failed', 'Internal server error');
     }
   });
 
-  // Registration is now handled via REST API endpoints
-  // Socket registration removed - use /auth/register endpoint instead
+  socket.on('register', async (data: { username: string; realname: string; location: string; password: string }) => {
+    console.log('Registration attempt:', data.username);
+
+    try {
+      // Validate input
+      if (!data.username || !data.password || !data.realname) {
+        socket.emit('register-failed', 'Username, password, and real name are required');
+        return;
+      }
+
+      // Validate username format
+      if (data.username.length < 2 || data.username.length > 20) {
+        socket.emit('register-failed', 'Username must be between 2 and 20 characters');
+        return;
+      }
+
+      // Check if user already exists
+      const existingUser = await db.getUserByUsername(data.username);
+      if (existingUser) {
+        console.log('Username already exists:', data.username);
+        socket.emit('register-failed', 'Username already exists');
+        return;
+      }
+
+      // Hash password
+      const passwordHash = await db.hashPassword(data.password);
+
+      // Create new user
+      const userId = await db.createUser({
+        username: data.username,
+        passwordHash,
+        realname: data.realname,
+        location: data.location,
+        phone: '',
+        secLevel: 10, // Default security level
+        uploads: 0,
+        downloads: 0,
+        bytesUpload: 0,
+        bytesDownload: 0,
+        ratio: 0,
+        ratioType: 0,
+        timeTotal: 0,
+        timeLimit: 60, // 60 minutes default
+        timeUsed: 0,
+        chatLimit: 0,
+        chatUsed: 0,
+        firstLogin: new Date(),
+        calls: 1,
+        callsToday: 1,
+        newUser: true,
+        expert: false,
+        ansi: true,
+        linesPerScreen: 23,
+        computer: 'Unknown',
+        screenType: 'Amiga Ansi',
+        protocol: '/X Zmodem',
+        editor: 'Prompt',
+        zoomType: 'QWK',
+        availableForChat: true,
+        quietNode: false,
+        autoRejoin: 1,
+        confAccess: 'XXX', // Access to first 3 conferences
+        areaName: 'Standard',
+        uuCP: false,
+        topUploadCPS: 0,
+        topDownloadCPS: 0,
+        byteLimit: 0
+      });
+
+      // Get the created user
+      const user = await db.getUserById(userId);
+      if (!user) {
+        console.error('Failed to retrieve created user:', userId);
+        socket.emit('register-failed', 'Registration failed - user not created');
+        return;
+      }
+
+      // Set session data
+      session.state = BBSState.LOGGEDON;
+      session.subState = LoggedOnSubState.DISPLAY_BULL;
+      session.user = user;
+
+      // Set user preferences
+      session.confRJoin = user.autoRejoin || 1;
+      session.msgBaseRJoin = 1;
+      session.cmdShortcuts = !user.expert;
+
+      console.log('Registration successful for user:', data.username);
+      socket.emit('register-success');
+
+      // Start the proper AmiExpress flow: bulletins first
+      displaySystemBulletins(socket, session);
+    } catch (error) {
+      console.error('Registration error:', error);
+      socket.emit('register-failed', 'Registration failed - internal server error');
+    }
+  });
 
   socket.on('command', (data: string) => {
     console.log('=== COMMAND RECEIVED ===');
@@ -432,8 +450,8 @@ io.on('connection', async (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected');
+  socket.on('disconnect', (reason: string) => {
+    console.log('🎮 BBS Client disconnected:', socket.id, 'reason:', reason);
     sessions.delete(socket.id);
   });
 });
@@ -441,16 +459,13 @@ io.on('connection', async (socket) => {
 // Display system bulletins (SCREEN_BULL equivalent)
 function displaySystemBulletins(socket: any, session: BBSSession) {
   // In AmiExpress, displayScreen(SCREEN_BULL) shows system bulletins
-  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
-  socket.emit('ansi-output', '\r\n\x1b[36m-= AmiExpress Web BBS System Bulletins =-\x1b[0m\r\n');
+  socket.emit('ansi-output', '\r\n\x1b[36m-= System Bulletins =-\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[33mWelcome to AmiExpress Web!\x1b[0m\r\n');
   socket.emit('ansi-output', 'This is a modern web implementation of the classic AmiExpress BBS.\r\n');
   socket.emit('ansi-output', '\r\n\x1b[32mSystem News:\x1b[0m\r\n');
   socket.emit('ansi-output', '- New web interface available\r\n');
   socket.emit('ansi-output', '- Enhanced security features\r\n');
   socket.emit('ansi-output', '- Real-time chat capabilities\r\n');
-  socket.emit('ansi-output', '- PostgreSQL database backend\r\n');
-  socket.emit('ansi-output', '- Full conference system\r\n');
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
 
   // Move to next state after bulletin display (mirroring doPause logic)
@@ -465,7 +480,6 @@ function displayConferenceBulletins(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '- Welcome to Node 1\r\n');
   socket.emit('ansi-output', '- All systems operational\r\n');
   socket.emit('ansi-output', '- Sysop available for chat\r\n');
-  socket.emit('ansi-output', '- WebSocket connections active\r\n');
 
   // Conference scan (confScan equivalent)
   socket.emit('ansi-output', '\r\n\x1b[32mScanning conferences for new messages...\x1b[0m\r\n');
@@ -627,8 +641,14 @@ function displaySelectedFileAreas(socket: any, session: BBSSession, fileAreas: a
   const endDir = reverse ? dirSpan.startDir : dirSpan.dirScan;
   const step = reverse ? -1 : 1;
 
-  while ((reverse && currentDir >= endDir) || (!reverse && currentDir <= endDir)) {
+  // Add safety check to prevent infinite loops
+  let iterations = 0;
+  const maxIterations = fileAreas.length * 2; // Reasonable upper bound
+
+  while (((reverse && currentDir >= endDir) || (!reverse && currentDir <= endDir)) && iterations < maxIterations) {
     const areaIndex = currentDir - 1; // Convert to 0-based array index
+
+    // Additional bounds checking
     if (areaIndex >= 0 && areaIndex < fileAreas.length) {
       const area = fileAreas[areaIndex];
       displayFileAreaContents(socket, session, area);
@@ -641,6 +661,12 @@ function displaySelectedFileAreas(socket: any, session: BBSSession, fileAreas: a
       }
     }
     currentDir += step;
+    iterations++;
+  }
+
+  // Log if we hit the safety limit (indicates potential logic error)
+  if (iterations >= maxIterations) {
+    console.warn('displaySelectedFileAreas: Hit safety limit, possible infinite loop prevented');
   }
 
   // Finished displaying all areas
@@ -660,16 +686,19 @@ function displayFileMaintenance(socket: any, session: BBSSession, params: string
 
   if (operation === 'D') {
     // Delete files
-    handleFileDelete(socket, session, parsedParams.slice(1));
-    return;
+    socket.emit('ansi-output', 'Delete files functionality.\r\n');
+    socket.emit('ansi-output', 'Enter filename to delete (wildcards supported):\r\n');
+    socket.emit('ansi-output', '\r\nNot fully implemented yet.\r\n');
   } else if (operation === 'M') {
     // Move files
-    handleFileMove(socket, session, parsedParams.slice(1));
-    return;
+    socket.emit('ansi-output', 'Move files functionality.\r\n');
+    socket.emit('ansi-output', 'Enter filename to move and destination area:\r\n');
+    socket.emit('ansi-output', '\r\nNot fully implemented yet.\r\n');
   } else if (operation === 'S') {
     // Search files
-    handleFileSearch(socket, session, parsedParams.slice(1));
-    return;
+    socket.emit('ansi-output', 'Search files functionality.\r\n');
+    socket.emit('ansi-output', 'Enter search pattern:\r\n');
+    socket.emit('ansi-output', '\r\nNot fully implemented yet.\r\n');
   } else {
     // Show menu
     socket.emit('ansi-output', 'Available operations:\r\n');
@@ -685,281 +714,6 @@ function displayFileMaintenance(socket: any, session: BBSSession, params: string
 }
 
 // displayFileStatus() - File status display (FS command)
-// handleFileDelete() - Delete files (FM D command)
-function handleFileDelete(socket: any, session: BBSSession, params: string[]) {
-  if (params.length === 0) {
-    socket.emit('ansi-output', 'Delete files functionality.\r\n');
-    socket.emit('ansi-output', 'Usage: FM D <filename> [area]\r\n');
-    socket.emit('ansi-output', 'Wildcards (* and ?) are supported.\r\n');
-    socket.emit('ansi-output', 'Area parameter is optional (defaults to current conference).\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  const filename = params[0].toUpperCase();
-  const areaParam = params.length > 1 ? params[1] : null;
-
-  // Determine which file areas to search
-  let targetAreas: any[] = [];
-  if (areaParam) {
-    // Specific area requested
-    const areaId = parseInt(areaParam);
-    if (isNaN(areaId)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid area number.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-    const area = fileAreas.find(a => a.id === areaId);
-    if (!area) {
-      socket.emit('ansi-output', '\r\n\x1b[31mFile area not found.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-    targetAreas = [area];
-  } else {
-    // All areas in current conference
-    targetAreas = fileAreas.filter(a => a.conferenceId === session.currentConf);
-  }
-
-  // Find matching files
-  const matchingFiles: any[] = [];
-  targetAreas.forEach(area => {
-    const areaFiles = fileEntries.filter(f => f.areaId === area.id);
-    areaFiles.forEach(file => {
-      if (matchesWildcard(file.filename, filename)) {
-        matchingFiles.push({ file, area });
-      }
-    });
-  });
-
-  if (matchingFiles.length === 0) {
-    socket.emit('ansi-output', `\r\nNo files matching "${filename}" found.\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  // Check permissions (sysop or file owner)
-  const userLevel = session.user?.secLevel || 0;
-  const allowedFiles = matchingFiles.filter(({ file }) =>
-    userLevel >= 200 || file.uploader.toLowerCase() === session.user?.username.toLowerCase()
-  );
-
-  if (allowedFiles.length === 0) {
-    socket.emit('ansi-output', '\r\n\x1b[31mYou do not have permission to delete these files.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  // Display files to be deleted
-  socket.emit('ansi-output', `\r\nFiles matching "${filename}":\r\n\r\n`);
-  allowedFiles.forEach(({ file, area }, index) => {
-    socket.emit('ansi-output', `${index + 1}. ${file.filename} (${area.name})\r\n`);
-  });
-
-  socket.emit('ansi-output', '\r\n\x1b[31mWARNING: This action cannot be undone!\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[32mEnter file numbers to delete (comma-separated) or "ALL" for all: \x1b[0m');
-
-  // Store context for confirmation
-  session.tempData = {
-    operation: 'delete_files',
-    allowedFiles,
-    filename
-  };
-  session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for input
-}
-
-// handleFileMove() - Move files between areas (FM M command)
-function handleFileMove(socket: any, session: BBSSession, params: string[]) {
-  if (params.length < 2) {
-    socket.emit('ansi-output', 'Move files functionality.\r\n');
-    socket.emit('ansi-output', 'Usage: FM M <filename> <destination_area>\r\n');
-    socket.emit('ansi-output', 'Wildcards (* and ?) are supported for filename.\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  const filename = params[0].toUpperCase();
-  const destAreaId = parseInt(params[1]);
-
-  if (isNaN(destAreaId)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid destination area number.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  // Check destination area exists
-  const destArea = fileAreas.find(a => a.id === destAreaId);
-  if (!destArea) {
-    socket.emit('ansi-output', '\r\n\x1b[31mDestination file area not found.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  // Find matching files in current conference
-  const sourceAreas = fileAreas.filter(a => a.conferenceId === session.currentConf);
-  const matchingFiles: any[] = [];
-
-  sourceAreas.forEach(area => {
-    const areaFiles = fileEntries.filter(f => f.areaId === area.id);
-    areaFiles.forEach(file => {
-      if (matchesWildcard(file.filename, filename)) {
-        matchingFiles.push({ file, area });
-      }
-    });
-  });
-
-  if (matchingFiles.length === 0) {
-    socket.emit('ansi-output', `\r\nNo files matching "${filename}" found in current conference.\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  // Check permissions (sysop or file owner)
-  const userLevel = session.user?.secLevel || 0;
-  const allowedFiles = matchingFiles.filter(({ file }) =>
-    userLevel >= 200 || file.uploader.toLowerCase() === session.user?.username.toLowerCase()
-  );
-
-  if (allowedFiles.length === 0) {
-    socket.emit('ansi-output', '\r\n\x1b[31mYou do not have permission to move these files.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  // Display files to be moved
-  socket.emit('ansi-output', `\r\nFiles matching "${filename}" to move to ${destArea.name}:\r\n\r\n`);
-  allowedFiles.forEach(({ file, area }, index) => {
-    socket.emit('ansi-output', `${index + 1}. ${file.filename} (${area.name} -> ${destArea.name})\r\n`);
-  });
-
-  socket.emit('ansi-output', '\r\n\x1b[32mEnter file numbers to move (comma-separated) or "ALL" for all: \x1b[0m');
-
-  // Store context for confirmation
-  session.tempData = {
-    operation: 'move_files',
-    allowedFiles,
-    destArea,
-    filename
-  };
-  session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for input
-}
-
-// handleFileSearch() - Search files by pattern (FM S command)
-function handleFileSearch(socket: any, session: BBSSession, params: string[]) {
-  if (params.length === 0) {
-    socket.emit('ansi-output', 'Search files functionality.\r\n');
-    socket.emit('ansi-output', 'Usage: FM S <search_pattern> [area]\r\n');
-    socket.emit('ansi-output', 'Search pattern can be filename, description, or uploader.\r\n');
-    socket.emit('ansi-output', 'Area parameter is optional (defaults to current conference).\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  const searchPattern = params[0].toLowerCase();
-  const areaParam = params.length > 1 ? params[1] : null;
-
-  // Determine which file areas to search
-  let targetAreas: any[] = [];
-  if (areaParam) {
-    // Specific area requested
-    const areaId = parseInt(areaParam);
-    if (isNaN(areaId)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid area number.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-    const area = fileAreas.find(a => a.id === areaId);
-    if (!area) {
-      socket.emit('ansi-output', '\r\n\x1b[31mFile area not found.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-    targetAreas = [area];
-  } else {
-    // All areas in current conference
-    targetAreas = fileAreas.filter(a => a.conferenceId === session.currentConf);
-  }
-
-  // Search files
-  const matchingFiles: any[] = [];
-  targetAreas.forEach(area => {
-    const areaFiles = fileEntries.filter(f => f.areaId === area.id);
-    areaFiles.forEach(file => {
-      const filename = file.filename.toLowerCase();
-      const description = (file.fileIdDiz || file.description || '').toLowerCase();
-      const uploader = file.uploader.toLowerCase();
-
-      if (filename.includes(searchPattern) ||
-          description.includes(searchPattern) ||
-          uploader.includes(searchPattern)) {
-        matchingFiles.push({ file, area });
-      }
-    });
-  });
-
-  // Display results
-  socket.emit('ansi-output', `\r\nSearch results for "${searchPattern}":\r\n\r\n`);
-
-  if (matchingFiles.length === 0) {
-    socket.emit('ansi-output', 'No files found matching the search pattern.\r\n');
-  } else {
-    socket.emit('ansi-output', `Found ${matchingFiles.length} file(s):\r\n\r\n`);
-
-    matchingFiles.forEach(({ file, area }) => {
-      const sizeKB = Math.ceil(file.size / 1024);
-      const dateStr = file.uploadDate.toLocaleDateString();
-      const description = file.fileIdDiz || file.description;
-
-      socket.emit('ansi-output', `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
-      socket.emit('ansi-output', `  ${description}\r\n`);
-      socket.emit('ansi-output', `  Area: ${area.name}\r\n\r\n`);
-    });
-  }
-
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-}
-
-// matchesWildcard() - Simple wildcard matching utility
-function matchesWildcard(filename: string, pattern: string): boolean {
-  // Convert wildcard pattern to regex
-  const regexPattern = pattern
-    .replace(/\*/g, '.*')  // * matches any characters
-    .replace(/\?/g, '.')   // ? matches single character
-    .replace(/\./g, '\\.') // Escape dots
-    .replace(/\$/g, '\\$') // Escape dollar signs
-    .replace(/\^/g, '\\^'); // Escape carets
-
-  const regex = new RegExp(`^${regexPattern}$`, 'i'); // Case insensitive
-  return regex.test(filename);
-}
 function displayFileStatus(socket: any, session: BBSSession, params: string) {
   socket.emit('ansi-output', '\x1b[36m-= File Status =-\x1b[0m\r\n');
 
@@ -1079,8 +833,14 @@ function displayNewFilesInDirectories(socket: any, session: BBSSession, searchDa
 
   let foundNewFiles = false;
 
-  while (currentDir <= endDir) {
+  // Add safety check to prevent infinite loops
+  let iterations = 0;
+  const maxIterations = fileAreas.length * 2; // Reasonable upper bound
+
+  while (currentDir <= endDir && iterations < maxIterations) {
     const areaIndex = currentDir - 1; // Convert to 0-based array index
+
+    // Additional bounds checking
     if (areaIndex >= 0 && areaIndex < fileAreas.length) {
       const area = fileAreas[areaIndex];
       const newFilesInArea = fileEntries.filter(file =>
@@ -1113,6 +873,12 @@ function displayNewFilesInDirectories(socket: any, session: BBSSession, searchDa
       }
     }
     currentDir += step;
+    iterations++;
+  }
+
+  // Log if we hit the safety limit (indicates potential logic error)
+  if (iterations >= maxIterations) {
+    console.warn('displayNewFilesInDirectories: Hit safety limit, possible infinite loop prevented');
   }
 
   if (!foundNewFiles) {
@@ -1377,6 +1143,13 @@ function startFileUpload(socket: any, session: BBSSession, fileArea: any) {
   socket.emit('ansi-output', '\x1b[32mAvailable Upload Space:\x1b[0m\r\n');
   socket.emit('ansi-output', '1,000,000 bytes available\r\n\r\n');
 
+  // Display file areas for upload
+  socket.emit('ansi-output', '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
+  const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
+  currentFileAreas.forEach((area, index) => {
+    socket.emit('ansi-output', `${index + 1}. ${area.name} - ${area.description}\r\n`);
+  });
+
   // Check if user has upload access to this area
   if (fileArea.uploadAccess > (session.user?.secLevel || 0)) {
     socket.emit('ansi-output', '\r\n\x1b[31mYou do not have upload access to this file area.\x1b[0m\r\n');
@@ -1392,111 +1165,20 @@ function startFileUpload(socket: any, session: BBSSession, fileArea: any) {
   socket.emit('ansi-output', 'Please select files to upload. Files will be validated and checked for duplicates.\r\n');
   socket.emit('ansi-output', 'Filename lengths above 12 characters are not allowed.\r\n\r\n');
 
-  // Display current protocol (WebSocket-based)
+  // Display current protocol (simplified)
   socket.emit('ansi-output', '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
 
-  // Initialize WebSocket file upload
-  socket.emit('ansi-output', '\x1b[32mWebSocket File Upload Ready\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Send file data using WebSocket protocol...\r\n\r\n');
+  // Prompt for file selection (WebSocket-based upload)
+  socket.emit('ansi-output', '\x1b[32mSelect files to upload (WebSocket-based):\x1b[0m\r\n');
+  socket.emit('ansi-output', 'Upload functionality will be implemented with WebSocket chunking.\r\n');
+  socket.emit('ansi-output', 'This will support resumable uploads and progress tracking.\r\n\r\n');
 
-  // Set up WebSocket file upload handlers
-  session.tempData = {
-    uploadMode: true,
-    fileArea: fileArea,
-    uploadState: 'ready',
-    currentFile: null,
-    receivedChunks: [],
-    totalSize: 0
-  };
-
-  // Listen for file upload data
-  const uploadHandler = (data: any) => {
-    if (data.type === 'file-start') {
-      // Start of file upload
-      session.tempData.currentFile = {
-        filename: data.filename,
-        size: data.size,
-        description: data.description || ''
-      };
-      session.tempData.receivedChunks = [];
-      session.tempData.totalSize = data.size;
-      session.tempData.uploadState = 'receiving';
-
-      socket.emit('ansi-output', `\x1b[32mReceiving file: ${data.filename} (${data.size} bytes)\x1b[0m\r\n`);
-      socket.emit('ansi-output', 'Progress: [                    ] 0%\r\n');
-    } else if (data.type === 'file-chunk') {
-      // File chunk received
-      session.tempData.receivedChunks.push(data.chunk);
-
-      const receivedBytes = session.tempData.receivedChunks.reduce((sum: number, chunk: string) => sum + chunk.length, 0);
-      const progress = Math.floor((receivedBytes / session.tempData.totalSize) * 100);
-      const progressBar = '[' + '='.repeat(Math.floor(progress / 5)) + ' '.repeat(20 - Math.floor(progress / 5)) + ']';
-
-      // Update progress display (overwrite previous line)
-      socket.emit('ansi-output', '\x1b[1A\x1b[K'); // Move up and clear line
-      socket.emit('ansi-output', `Progress: ${progressBar} ${progress}%\r\n`);
-    } else if (data.type === 'file-end') {
-      // File upload complete
-      const fileData = session.tempData.receivedChunks.join('');
-      const file = session.tempData.currentFile;
-
-      // Validate file (basic checks)
-      if (file.filename.length > 12) {
-        socket.emit('ansi-output', '\x1b[31mError: Filename too long (max 12 characters)\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-        return;
-      }
-
-      // Save file to database
-      const fileEntry = {
-        filename: file.filename,
-        description: file.description,
-        size: fileData.length,
-        uploader: session.user!.username,
-        uploadDate: new Date(),
-        downloads: 0,
-        areaId: fileArea.id,
-        status: 'active' as const,
-        checked: 'N' as const
-      };
-
-      // In production, save to file system too
-      // For now, just store in database
-      db.createFileEntry(fileEntry).then(() => {
-        // Update user stats
-        db.updateUser(session.user!.id, {
-          uploads: (session.user!.uploads || 0) + 1,
-          bytesUpload: (session.user!.bytesUpload || 0) + fileData.length
-        });
-
-        socket.emit('ansi-output', '\x1b[32mFile uploaded successfully!\x1b[0m\r\n');
-        socket.emit('ansi-output', `Added to ${fileArea.name}\r\n`);
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-      }).catch((error: any) => {
-        console.error('File upload error:', error);
-        socket.emit('ansi-output', '\x1b[31mError saving file to database\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-      });
-    }
-  };
-
-  // Store upload handler for cleanup
-  (socket as any).uploadHandler = uploadHandler;
-  socket.on('file-upload', uploadHandler);
-
-  socket.emit('ansi-output', '\x1b[32mReady to receive file data...\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to cancel upload...\x1b[0m');
+  // For now, show placeholder message
+  socket.emit('ansi-output', '\x1b[33mUpload system under development...\x1b[0m\r\n');
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.tempData = undefined;
 }
 
 // Start file download process (WebSocket-based chunking)
@@ -1513,8 +1195,15 @@ function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
   socket.emit('ansi-output', `Files Downloaded: ${user.downloads || 0}\r\n`);
   socket.emit('ansi-output', `Bytes Downloaded: ${user.bytesDownload || 0}\r\n\r\n`);
 
-  // Display current protocol (WebSocket-based)
+  // Display current protocol (simplified)
   socket.emit('ansi-output', '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
+
+  // Display file areas for download
+  socket.emit('ansi-output', '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
+  const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
+  currentFileAreas.forEach((area, index) => {
+    socket.emit('ansi-output', `${index + 1}. ${area.name} - ${area.description}\r\n`);
+  });
 
   // Check if user has download access to this area
   if (fileArea.downloadAccess > (session.user?.secLevel || 0)) {
@@ -1556,89 +1245,6 @@ function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
   session.tempData = { downloadMode: true, fileArea, areaFiles };
 }
 
-// Handle file download selection and transfer
-function handleFileDownload(socket: any, session: BBSSession, fileIndex: number) {
-  const tempData = session.tempData as { fileArea: any, areaFiles: any[] };
-  const selectedFile = tempData.areaFiles[fileIndex - 1];
-
-  if (!selectedFile) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid file selection.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-    return;
-  }
-
-  socket.emit('ansi-output', `\r\n\x1b[32mSelected file: ${selectedFile.filename}\x1b[0m\r\n`);
-  socket.emit('ansi-output', 'Starting WebSocket file transfer...\r\n\r\n');
-
-  // In a real implementation, file data would be read from disk
-  // For demo, we'll simulate file transfer with placeholder data
-  const fileSize = selectedFile.size;
-  const chunkSize = 1024; // 1KB chunks
-  const totalChunks = Math.ceil(fileSize / chunkSize);
-
-  socket.emit('ansi-output', `File size: ${fileSize} bytes\r\n`);
-  socket.emit('ansi-output', `Transferring in ${totalChunks} chunks...\r\n\r\n`);
-
-  // Send file start
-  socket.emit('file-download-start', {
-    filename: selectedFile.filename,
-    size: fileSize,
-    description: selectedFile.description
-  });
-
-  // Simulate chunked transfer
-  let sentChunks = 0;
-  const transferInterval = setInterval(() => {
-    if (sentChunks >= totalChunks) {
-      clearInterval(transferInterval);
-      // Send file end
-      socket.emit('file-download-end');
-      socket.emit('ansi-output', '\r\n\x1b[32mFile transfer complete!\x1b[0m\r\n');
-
-      // Update download stats
-      db.updateFileEntry(selectedFile.id, { downloads: selectedFile.downloads + 1 });
-      db.updateUser(session.user!.id, {
-        downloads: (session.user!.downloads || 0) + 1,
-        bytesDownload: (session.user!.bytesDownload || 0) + fileSize
-      });
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
-      return;
-    }
-
-    // Send chunk (placeholder data)
-    const chunkData = 'x'.repeat(Math.min(chunkSize, fileSize - (sentChunks * chunkSize)));
-    socket.emit('file-download-chunk', {
-      chunk: chunkData,
-      chunkIndex: sentChunks,
-      totalChunks: totalChunks
-    });
-
-    sentChunks++;
-
-    // Update progress
-    const progress = Math.floor((sentChunks / totalChunks) * 100);
-    const progressBar = '[' + '='.repeat(Math.floor(progress / 5)) + ' '.repeat(20 - Math.floor(progress / 5)) + ']';
-
-    // Update progress display
-    if (sentChunks === 1) {
-      socket.emit('ansi-output', `Progress: ${progressBar} ${progress}%\r\n`);
-    } else {
-      socket.emit('ansi-output', '\x1b[1A\x1b[K'); // Move up and clear line
-      socket.emit('ansi-output', `Progress: ${progressBar} ${progress}%\r\n`);
-    }
-  }, 100); // Send chunk every 100ms for demo
-
-  // Store interval for cleanup
-  (session as any).downloadInterval = transferInterval;
-}
-
 // Display main menu (SCREEN_MENU equivalent)
 function displayMainMenu(socket: any, session: BBSSession) {
   console.log('displayMainMenu called, current subState:', session.subState, 'menuPause:', session.menuPause);
@@ -1659,7 +1265,6 @@ function displayMainMenu(socket: any, session: BBSSession) {
       socket.emit('ansi-output', 'A) Post Message\r\n');
       socket.emit('ansi-output', 'J) Join Conference\r\n');
       socket.emit('ansi-output', 'F) File Areas\r\n');
-      socket.emit('ansi-output', 'N) New Files\r\n');
       socket.emit('ansi-output', 'D) Download Files\r\n');
       socket.emit('ansi-output', 'U) Upload Files\r\n');
       socket.emit('ansi-output', 'O) Page Sysop\r\n');
@@ -1684,7 +1289,7 @@ function displayMainMenu(socket: any, session: BBSSession) {
 // Display menu prompt (displayMenuPrompt equivalent)
 function displayMenuPrompt(socket: any, session: BBSSession) {
   // Like AmiExpress: Use BBS name, relative conference number, conference name
-  const bbsName = config.get('bbsName');
+  const bbsName = 'AmiExpress'; // In real implementation, get from config
   const timeLeft = Math.floor(session.timeRemaining);
 
   // Check if multiple message bases in conference (like getConfMsgBaseCount in AmiExpress)
@@ -1721,95 +1326,85 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
       session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
       session.subState === LoggedOnSubState.FILE_LIST) {
     console.log('📋 In display state, continuing to next state');
-    try {
-      // Any key continues to next state
-      if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
-        displayConferenceBulletins(socket, session);
-      } else if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
-        // Like AmiExpress: after command completes, set menuPause=TRUE and display menu
-        session.menuPause = true;
-        displayMainMenu(socket, session);
-      } else if (session.subState === LoggedOnSubState.FILE_LIST) {
-        // Return to file area selection
-        session.subState = LoggedOnSubState.FILE_AREA_SELECT;
-        // Re-trigger F command to show file areas again
-        processBBSCommand(socket, session, 'F');
-        return;
-      }
-    } catch (error) {
-      console.error('Error in display state handling:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mAn error occurred. Returning to main menu...\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
+    // Any key continues to next state
+    if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
+      displayConferenceBulletins(socket, session);
+    } else if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
+      // Like AmiExpress: after command completes, set menuPause=TRUE and display menu
+      session.menuPause = true;
+      displayMainMenu(socket, session);
+    } else if (session.subState === LoggedOnSubState.FILE_LIST) {
+      // Return to file area selection
+      session.subState = LoggedOnSubState.FILE_AREA_SELECT;
+      // Re-trigger F command to show file areas again
+      processBBSCommand(socket, session, 'F');
+      return;
     }
     return;
   }
 
   // Handle file area selection (like getDirSpan in AmiExpress)
-   if (session.subState === LoggedOnSubState.FILE_AREA_SELECT) {
-     console.log('📁 In file area selection state');
-     const input = data.trim();
-     const areaNumber = parseInt(input);
+  if (session.subState === LoggedOnSubState.FILE_AREA_SELECT) {
+    console.log('📁 In file area selection state');
+    const input = data.trim();
+    const areaNumber = parseInt(input);
 
-     if (input === '' || (isNaN(areaNumber) && input !== '0')) {
-       // Empty input or invalid - return to menu with error handling
-       socket.emit('ansi-output', '\r\n\x1b[31mInvalid selection. Returning to main menu...\x1b[0m\r\n');
-       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-       session.menuPause = false;
-       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-       session.tempData = undefined;
-       return;
-     }
+    if (input === '' || (isNaN(areaNumber) && input !== '0')) {
+      // Empty input or invalid - return to menu
+      socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      displayMainMenu(socket, session);
+      return;
+    }
 
     // Handle door selection
-     if (session.tempData?.doorMode) {
-       const availableDoors = session.tempData.availableDoors;
-       const doorNumber = parseInt(input);
+    if (session.tempData?.doorMode) {
+      const availableDoors = session.tempData.availableDoors;
+      const doorNumber = parseInt(input);
 
-       if (isNaN(doorNumber) || doorNumber < 1 || doorNumber > availableDoors.length) {
-         socket.emit('ansi-output', '\r\n\x1b[31mInvalid door number. Please enter a number between 1 and ' + availableDoors.length + '.\x1b[0m\r\n');
-         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-         session.menuPause = false;
-         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-         session.tempData = undefined;
-         return;
-       }
+      if (isNaN(doorNumber) || doorNumber < 1 || doorNumber > availableDoors.length) {
+        socket.emit('ansi-output', '\r\nInvalid door number.\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
 
-       const selectedDoor = availableDoors[doorNumber - 1];
-       executeDoor(socket, session, selectedDoor);
-       return;
-     }
+      const selectedDoor = availableDoors[doorNumber - 1];
+      executeDoor(socket, session, selectedDoor);
+      return;
+    }
 
     // Handle file download selection (when areaFiles are available)
-     if (session.tempData?.areaFiles) {
-       const areaFiles = session.tempData.areaFiles;
-       const fileNumber = parseInt(input);
+    if (session.tempData?.areaFiles) {
+      const areaFiles = session.tempData.areaFiles;
+      const fileNumber = parseInt(input);
 
-       if (isNaN(fileNumber) || fileNumber < 1 || fileNumber > areaFiles.length) {
-         socket.emit('ansi-output', '\r\n\x1b[31mInvalid file number. Please enter a number between 1 and ' + areaFiles.length + '.\x1b[0m\r\n');
-         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-         session.menuPause = false;
-         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-         session.tempData = undefined;
-         return;
-       }
+      if (isNaN(fileNumber) || fileNumber < 1 || fileNumber > areaFiles.length) {
+        socket.emit('ansi-output', '\r\nInvalid file number.\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
 
-       // Start file download
-       handleFileDownload(socket, session, fileNumber);
-       return;
-     }
+      const selectedFile = areaFiles[fileNumber - 1];
+      socket.emit('ansi-output', `\r\n\x1b[32mSelected file: ${selectedFile.filename}\x1b[0m\r\n`);
+      socket.emit('ansi-output', 'Download functionality will be implemented with WebSocket chunking.\r\n');
+      socket.emit('ansi-output', 'This will support resumable downloads and progress tracking.\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[33mDownload system under development...\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+      return;
+    }
 
     // Handle file area selection for upload/download
-     if (isNaN(areaNumber) || areaNumber === 0) {
-       socket.emit('ansi-output', '\r\n\x1b[31mInvalid file area number. Please enter a valid number.\x1b[0m\r\n');
-       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-       session.menuPause = false;
-       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-       session.tempData = undefined;
-       return;
-     }
+    if (isNaN(areaNumber) || areaNumber === 0) {
+      socket.emit('ansi-output', '\r\nInvalid file area number.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+    }
 
     // Get file areas for current conference and find by relative number (1,2,3...)
     const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
@@ -1839,7 +1434,7 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
   // Handle directory selection for file listing (like getDirSpan interactive)
   if (session.subState === LoggedOnSubState.FILE_DIR_SELECT) {
     console.log('📂 In file directory selection state');
-    const input = data.trim();
+    const input = data.trim().toUpperCase();
 
     if (input === '') {
       // Empty input - return to menu
@@ -1849,57 +1444,8 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
       return;
     }
 
-    // Handle file maintenance operations
-    if (session.tempData?.operation === 'delete_files') {
-      handleFileDeleteConfirmation(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.operation === 'move_files') {
-      handleFileMoveConfirmation(socket, session, input);
-      return;
-    }
-
-    // Handle account editing operations
-    if (session.tempData?.accountEditingMenu) {
-      handleAccountEditing(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.editUserAccount) {
-      handleEditUserAccount(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.viewUserStats) {
-      handleViewUserStats(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.changeSecLevel) {
-      handleChangeSecLevel(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.toggleUserFlags) {
-      handleToggleUserFlags(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.deleteUserAccount) {
-      handleDeleteUserAccount(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.searchUsers) {
-      handleSearchUsers(socket, session, input);
-      return;
-    }
-
-    // Handle regular file directory selection
-    const upperInput = input.toUpperCase();
     const tempData = session.tempData as { fileAreas: any[], reverse: boolean, nonStop: boolean };
-    const dirSpan = getDirSpan(upperInput, tempData.fileAreas.length);
+    const dirSpan = getDirSpan(input, tempData.fileAreas.length);
 
     if (dirSpan.startDir === -1) {
       socket.emit('ansi-output', '\r\n\x1b[31mInvalid directory selection.\x1b[0m\r\n');
@@ -1924,25 +1470,8 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
       nonStop: boolean,
       currentDir: number,
       searchDate?: Date,
-      isNewFiles?: boolean,
-      userListPage?: number,
-      searchTerm?: string
+      isNewFiles?: boolean
     };
-
-    // Handle user list pagination
-    if (tempData.userListPage) {
-      const input = data.trim().toUpperCase();
-      if (input === 'Q') {
-        socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        displayMainMenu(socket, session);
-        return;
-      } else {
-        // Continue to next page
-        displayUserList(socket, session, tempData.userListPage, tempData.searchTerm);
-        return;
-      }
-    }
 
     if (tempData.isNewFiles && tempData.searchDate) {
       // Continue new files display
@@ -1958,43 +1487,7 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
   // Handle conference selection
   if (session.subState === LoggedOnSubState.CONFERENCE_SELECT) {
     console.log('🏛️ In conference selection state');
-    const input = data.trim();
-
-    // Check if this is message base selection (from JM command)
-    if (session.tempData?.messageBaseSelect) {
-      const msgBaseId = parseInt(input);
-      if (isNaN(msgBaseId) || msgBaseId === 0) {
-        // Empty input or invalid - return to menu
-        socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.tempData = undefined;
-        displayMainMenu(socket, session);
-        return;
-      }
-
-      const currentConfBases = session.tempData.currentConfBases;
-      const selectedBase = currentConfBases.find((mb: any) => mb.id === msgBaseId);
-      if (!selectedBase) {
-        socket.emit('ansi-output', '\r\nInvalid message base number.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-        return;
-      }
-
-      // Join the selected message base
-      session.currentMsgBase = msgBaseId;
-      socket.emit('ansi-output', `\r\n\x1b[32mJoined message base: ${selectedBase.name}\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
-      return;
-    }
-
-    // Regular conference selection
-    const confId = parseInt(input);
+    const confId = parseInt(data.trim());
     if (isNaN(confId) || confId === 0) {
       // Empty input or invalid - return to menu
       socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
@@ -2173,50 +1666,22 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
 
   if (session.subState === LoggedOnSubState.READ_COMMAND) {
     console.log('✅ In READ_COMMAND state, processing line input');
-    try {
-      // Like AmiExpress: Use lineInput for full command lines (supports "j 2", "f", etc.)
-      // For now, process the input as a command line (split by space, first part is command)
-      const input = data.trim();
-      if (input.length > 0) {
-        const parts = input.split(' ');
-        const command = parts[0].toUpperCase();
-        const params = parts.slice(1).join(' ');
-        console.log('🚀 Processing command:', command, 'with params:', params);
-        processBBSCommand(socket, session, command, params).catch(error => {
-          console.error('Error processing command:', error);
-          socket.emit('ansi-output', '\r\n\x1b[31mError processing command. Please try again.\x1b[0m\r\n');
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        });
-      }
-    } catch (error) {
-      console.error('Error in command processing:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mCommand processing error. Returning to menu...\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    // Like AmiExpress: Use lineInput for full command lines (supports "j 2", "f", etc.)
+    // For now, process the input as a command line (split by space, first part is command)
+    const input = data.trim();
+    if (input.length > 0) {
+      const parts = input.split(' ');
+      const command = parts[0].toUpperCase();
+      const params = parts.slice(1).join(' ');
+      console.log('🚀 Processing command:', command, 'with params:', params);
+      processBBSCommand(socket, session, command, params);
     }
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
     console.log('🔥 In READ_SHORTCUTS state, processing single key');
-    try {
-      // Process single character hotkeys immediately
-      const command = data.trim().toUpperCase();
-      if (command.length > 0) {
-        processBBSCommand(socket, session, command).catch(error => {
-          console.error('Error processing shortcut command:', error);
-          socket.emit('ansi-output', '\r\n\x1b[31mError processing command. Please try again.\x1b[0m\r\n');
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        });
-      }
-    } catch (error) {
-      console.error('Error in shortcut processing:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mShortcut processing error. Returning to menu...\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    // Process single character hotkeys immediately
+    const command = data.trim().toUpperCase();
+    if (command.length > 0) {
+      processBBSCommand(socket, session, command);
     }
   } else {
     console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
@@ -2225,7 +1690,7 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
 }
 
 // Process BBS commands (processInternalCommand equivalent)
-async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
+function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
   console.log('processBBSCommand called with command:', JSON.stringify(command));
 
   // Clear screen before showing command output (authentic BBS behavior)
@@ -2246,33 +1711,27 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       console.log('Processing command 0');
       socket.emit('ansi-output', '\x1b[36m-= Remote Shell =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Remote shell access not available.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
+      break;
 
     case '1': // Account Editing (internalCommand1) - 1:1 with AmiExpress account editing
       // Check sysop permissions (like AmiExpress secStatus check)
       if ((session.user?.secLevel || 0) < 200) { // Sysop level required
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
+        break;
       }
 
       // Start account editing workflow (like accountEdit() in AmiExpress)
-      displayAccountEditingMenu(socket, session);
+      socket.emit('ansi-output', '\x1b[36m-= Account Editing =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Enter username to edit (or press Enter for new user validation):\r\n');
+      session.subState = LoggedOnSubState.FILE_AREA_SELECT; // Reuse for account selection
+      session.tempData = { accountEditing: true };
       return; // Stay in input mode
 
     case '2': // View Callers Log (internalCommand2) - 1:1 with AmiExpress callers log
       // Check sysop permissions
       if ((session.user?.secLevel || 0) < 200) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
+        break;
       }
 
       socket.emit('ansi-output', '\x1b[36m-= Callers Log =-\x1b[0m\r\n');
@@ -2303,10 +1762,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       // Check sysop permissions
       if ((session.user?.secLevel || 0) < 200) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
+        break;
       }
 
       socket.emit('ansi-output', '\x1b[36m-= Edit Directory Files =-\x1b[0m\r\n');
@@ -2332,362 +1788,11 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.tempData = { editDirectories: true, fileAreas: currentFileAreas };
       return; // Stay in input mode
 
-    case 'MS': // Run mailscan (internalCommandMS) - 1:1 with AmiExpress mailscan
-      socket.emit('ansi-output', '\x1b[36m-= Mailscan =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Scanning all conferences for new messages...\r\n\r\n');
-
-      // Get all conferences user has access to
-      const accessibleConferences = conferences.filter(conf => {
-        // Check if user has access to this conference
-        // For simplicity, assume all users have access to conferences 1-3
-        return conf.id <= 3 || (session.user?.secLevel || 0) >= 10;
-      });
-
-      let totalNewMessages = 0;
-      let scannedConferences = 0;
-
-      accessibleConferences.forEach(conf => {
-        const confMessages = messages.filter(msg =>
-          msg.conferenceId === conf.id &&
-          msg.timestamp > (session.user?.lastLogin || new Date(0)) &&
-          (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-        );
-
-        if (confMessages.length > 0) {
-          socket.emit('ansi-output', `\x1b[33m${conf.name}:\x1b[0m ${confMessages.length} new message(s)\r\n`);
-          totalNewMessages += confMessages.length;
-        }
-        scannedConferences++;
-      });
-
-      socket.emit('ansi-output', `\r\nTotal new messages: ${totalNewMessages}\r\n`);
-      socket.emit('ansi-output', `Conferences scanned: ${scannedConferences}\r\n`);
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-
-    case 'OLM': // Send online message (internalCommandOLM) - 1:1 with AmiExpress OLM
-      socket.emit('ansi-output', '\x1b[36m-= Send Online Message =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Send a message to users currently online.\r\n\r\n');
-
-      // Get all online users (excluding quiet nodes)
-      const onlineUsers = Array.from(sessions.values())
-        .filter(sess => sess.state === BBSState.LOGGEDON && sess.user && !sess.user.quietNode)
-        .map(sess => ({
-          username: sess.user!.username,
-          conference: sess.currentConfName,
-          idle: Math.floor((Date.now() - sess.lastActivity) / 60000)
-        }));
-
-      if (onlineUsers.length === 0) {
-        socket.emit('ansi-output', 'No users currently online.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', 'Currently online users:\r\n\r\n');
-      onlineUsers.forEach((user, index) => {
-        const idleStr = user.idle > 0 ? ` (${user.idle}min idle)` : '';
-        socket.emit('ansi-output', `${index + 1}. ${user.username.padEnd(15)} ${user.conference}${idleStr}\r\n`);
-      });
-
-      socket.emit('ansi-output', '\r\n\x1b[32mSelect user (1-\x1b[33m' + onlineUsers.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_AREA_SELECT;
-      session.tempData = { olmMode: true, onlineUsers };
-      return; // Stay in input mode
-
-    case 'RL': // RELOGON (internalCommandRL) - 1:1 with AmiExpress relogon
-      socket.emit('ansi-output', '\x1b[36m-= Relogon =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This will disconnect you and return you to the login prompt.\r\n');
-      socket.emit('ansi-output', 'Are you sure you want to relogon? (Y/N): ');
-
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { relogonConfirm: true };
-      return; // Stay in input mode
-
-    case 'RZ': // Zmodem Upload Command (internalCommandRZ) - 1:1 with AmiExpress RZ
-      socket.emit('ansi-output', '\x1b[36m-= Zmodem Upload =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This command starts an immediate Zmodem upload.\r\n\r\n');
-
-      // Check if there are file directories to upload to
-      const uploadFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
-      if (uploadFileAreas.length === 0) {
-        socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', 'Available file areas:\r\n');
-      uploadFileAreas.forEach((area, index) => {
-        socket.emit('ansi-output', `${index + 1}. ${area.name} - ${area.description}\r\n`);
-      });
-
-      socket.emit('ansi-output', '\r\n\x1b[32mSelect file area (1-\x1b[33m' + uploadFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_AREA_SELECT;
-      session.tempData = { rzUploadMode: true, fileAreas: uploadFileAreas };
-      return; // Stay in input mode
-
-    case 'S': // Status of On-Line User (internalCommandS) - 1:1 with AmiExpress status
-      socket.emit('ansi-output', '\x1b[36m-= Your Account Status =-\x1b[0m\r\n\r\n');
-
-      const statusUser = session.user!;
-      socket.emit('ansi-output', `        Caller Num.: ${statusUser.id}\r\n`);
-      socket.emit('ansi-output', `        Lst Date On: ${statusUser.lastLogin?.toLocaleDateString() || 'Never'}\r\n`);
-      socket.emit('ansi-output', `        Security Lv: ${statusUser.secLevel}\r\n`);
-      socket.emit('ansi-output', `        # Times On : ${statusUser.calls}\r\n`);
-      socket.emit('ansi-output', `        Ratio DL/UL: ${statusUser.ratio > 0 ? `${statusUser.ratio}:1` : 'Disabled'}\r\n`);
-      socket.emit('ansi-output', `        Online Baud: WebSocket\r\n`);
-      socket.emit('ansi-output', `        Rate CPS UP: ${statusUser.topUploadCPS || 0}\r\n`);
-      socket.emit('ansi-output', `        Rate CPS DN: ${statusUser.topDownloadCPS || 0}\r\n`);
-      socket.emit('ansi-output', `        Screen  Clr: ${statusUser.ansi ? 'YES' : 'NO'}\r\n`);
-      socket.emit('ansi-output', `        Protocol   : WebSocket\r\n`);
-      socket.emit('ansi-output', `        Sysop Pages Remaining: ${statusUser.secLevel === 255 ? 'Unlimited' : Math.max(0, 3 - (statusUser.chatUsed || 0))}\r\n\r\n`);
-
-      // File statistics by conference
-      socket.emit('ansi-output', `                      Uploads            Downloads\r\n`);
-      socket.emit('ansi-output', `    Conf  Files    KBytes     Files    KBytes     Bytes Avail  Ratio\r\n`);
-      socket.emit('ansi-output', `    ----  -------  ---------- -------  ---------- -----------  -----\r\n`);
-
-      // Show stats for current conference
-      const confFiles = fileEntries.filter(f => {
-        const area = fileAreas.find(a => a.id === f.areaId);
-        return area && area.conferenceId === session.currentConf;
-      });
-
-      const uploads = confFiles.filter(f => f.uploader.toLowerCase() === statusUser.username.toLowerCase()).length;
-      const uploadBytes = confFiles.filter(f => f.uploader.toLowerCase() === statusUser.username.toLowerCase()).reduce((sum, f) => sum + f.size, 0);
-      const downloads = confFiles.reduce((sum, f) => sum + f.downloads, 0);
-      const downloadBytes = uploadBytes; // Simplified
-      const bytesAvail = 1000000; // Mock available bytes
-      const ratio = statusUser.ratio > 0 ? `${statusUser.ratio}:1` : 'DSBLD';
-
-      socket.emit('ansi-output', `       ${session.currentConf.toString().padStart(4)}  ${uploads.toString().padStart(7)}  ${Math.ceil(uploadBytes/1024).toString().padStart(10)} ${downloads.toString().padStart(7)}  ${Math.ceil(downloadBytes/1024).toString().padStart(10)}   ${bytesAvail.toString().padStart(9)}  ${ratio}\r\n`);
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-
-    case 'UP': // Display uptime for node (internalCommandUP) - 1:1 with AmiExpress UP
-      socket.emit('ansi-output', '\x1b[36m-= System Uptime =-\x1b[0m\r\n\r\n');
-
-      const uptime = process.uptime();
-      const days = Math.floor(uptime / 86400);
-      const hours = Math.floor((uptime % 86400) / 3600);
-      const minutes = Math.floor((uptime % 3600) / 60);
-      const seconds = Math.floor(uptime % 60);
-
-      socket.emit('ansi-output', `System has been up for: ${days} days, ${hours} hours, ${minutes} minutes, ${seconds} seconds\r\n`);
-      socket.emit('ansi-output', `Started: ${new Date(Date.now() - uptime * 1000).toLocaleString()}\r\n`);
-      socket.emit('ansi-output', `Current time: ${new Date().toLocaleString()}\r\n\r\n`);
-
-      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-
-    case 'V': // View a Text File (internalCommandV) - 1:1 with AmiExpress view text file
-      socket.emit('ansi-output', '\x1b[36m-= View Text File =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter filename to view (or press Enter to cancel): ');
-
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { viewTextFile: true };
-      return; // Stay in input mode
-
-    case 'VER': // View ami-express version information (internalCommandVER) - 1:1 with AmiExpress VER
-      socket.emit('ansi-output', '\x1b[36m-= AmiExpress Web Version Information =-\x1b[0m\r\n\r\n');
-
-      socket.emit('ansi-output', 'AmiExpress Web v5.6.0\r\n');
-      socket.emit('ansi-output', 'Modern web implementation of the classic AmiExpress BBS\r\n\r\n');
-
-      socket.emit('ansi-output', 'Built with:\r\n');
-      socket.emit('ansi-output', '- Node.js backend\r\n');
-      socket.emit('ansi-output', '- React frontend\r\n');
-      socket.emit('ansi-output', '- SQLite database\r\n');
-      socket.emit('ansi-output', '- Socket.io real-time communication\r\n');
-      socket.emit('ansi-output', '- xterm.js terminal emulation\r\n\r\n');
-
-      socket.emit('ansi-output', 'Compatible with AmiExpress v5.6.0 features\r\n');
-      socket.emit('ansi-output', 'WebSocket-based file transfers\r\n');
-      socket.emit('ansi-output', 'Real-time chat and messaging\r\n');
-      socket.emit('ansi-output', 'Multi-node support\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-
-    case 'W': // Write User Parameters (internalCommandW) - 1:1 with AmiExpress user parameters
-      socket.emit('ansi-output', '\x1b[36m-= User Parameters =-\x1b[0m\r\n\r\n');
-
-      const currentUser = session.user!;
-      socket.emit('ansi-output', `            1. LOGIN NAME..............${currentUser.username}\r\n`);
-      socket.emit('ansi-output', `            2. REAL NAME...............${currentUser.realname || 'Not set'}\r\n`);
-      socket.emit('ansi-output', `            3. INTERNET NAME...........${currentUser.username.toLowerCase()}\r\n`);
-      socket.emit('ansi-output', `            4. LOCATION................${currentUser.location || 'Not set'}\r\n`);
-      socket.emit('ansi-output', `            5. PHONE NUMBER............${currentUser.phone || 'Not set'}\r\n`);
-      socket.emit('ansi-output', `            6. PASSWORD................ENCRYPTED\r\n`);
-      socket.emit('ansi-output', `            7. LINES PER SCREEN........${currentUser.linesPerScreen || 23}\r\n`);
-      socket.emit('ansi-output', `            8. COMPUTER................${currentUser.computer || 'Unknown'}\r\n`);
-      socket.emit('ansi-output', `            9. SCREEN TYPE.............${currentUser.screenType || 'Web Terminal'}\r\n`);
-      socket.emit('ansi-output', `           10. SCREEN CLEAR............${currentUser.ansi ? 'Yes' : 'No'}\r\n`);
-      socket.emit('ansi-output', `           11. TRANSFER PROTOCOL.......WebSocket\r\n`);
-      socket.emit('ansi-output', `           12. EDITOR TYPE.............Prompt\r\n`);
-      socket.emit('ansi-output', `           13. ZOOM TYPE...............QWK\r\n`);
-      socket.emit('ansi-output', `           14. AVAILABLE FOR CHAT/OLM..${currentUser.availableForChat ? 'Yes' : 'No'}\r\n\r\n`);
-
-      socket.emit('ansi-output', 'Which to change <CR>= QUIT ? ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { userParameters: true };
-      return; // Stay in input mode
-
-    case 'WHO': // Node Information (internalCommandWHO) - 1:1 with AmiExpress WHO
-      socket.emit('ansi-output', '\x1b[36m-= Online Users (WHO) =-\x1b[0m\r\n\r\n');
-
-      // Get all online users
-      const allOnlineUsers = Array.from(sessions.values())
-        .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
-        .map(sess => ({
-          username: sess.user!.username,
-          realname: sess.user!.realname,
-          conference: sess.currentConfName,
-          idle: Math.floor((Date.now() - sess.lastActivity) / 60000),
-          node: 'Web1', // All users on same node for now
-          quiet: sess.user!.quietNode
-        }));
-
-      if (allOnlineUsers.length === 0) {
-        socket.emit('ansi-output', 'No users currently online.\r\n');
-      } else {
-        socket.emit('ansi-output', 'User Name'.padEnd(16) + 'Real Name'.padEnd(20) + 'Conference'.padEnd(15) + 'Idle  Node\r\n');
-        socket.emit('ansi-output', '='.repeat(75) + '\r\n');
-
-        allOnlineUsers.forEach(userInfo => {
-          if (!userInfo.quiet || session.user?.secLevel === 255) { // Sysops can see quiet users
-            const idleStr = userInfo.idle > 0 ? userInfo.idle.toString().padStart(4) : '    ';
-            const quietIndicator = userInfo.quiet ? ' (Q)' : '';
-            socket.emit('ansi-output',
-              userInfo.username.padEnd(16) +
-              userInfo.realname.padEnd(20) +
-              userInfo.conference.padEnd(15) +
-              idleStr + '  ' +
-              userInfo.node + quietIndicator + '\r\n'
-            );
-          }
-        });
-      }
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-
-    case 'X': // Expert Mode Toggle (internalCommandX) - 1:1 with AmiExpress expert mode
-      socket.emit('ansi-output', '\x1b[36m-= Expert Mode Toggle =-\x1b[0m\r\n');
-
-      const currentExpert = session.user!.expert;
-      session.user!.expert = !currentExpert;
-
-      // Update in database
-      await db.updateUser(session.user!.id, { expert: session.user!.expert });
-
-      socket.emit('ansi-output', `Expert mode is now ${session.user!.expert ? 'ON' : 'OFF'}.\r\n`);
-
-      if (session.user!.expert) {
-        socket.emit('ansi-output', 'Menu will not be displayed after commands.\r\n');
-        socket.emit('ansi-output', 'Type ? for help.\r\n');
-      } else {
-        socket.emit('ansi-output', 'Menu will be displayed after each command.\r\n');
-      }
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-
-    case 'Z': // Zippy Text Search (internalCommandZ) - 1:1 with AmiExpress zippy search
-      socket.emit('ansi-output', '\x1b[36m-= Zippy Text Search =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Search for text in file descriptions.\r\n\r\n');
-      socket.emit('ansi-output', 'Enter search pattern (or press Enter to cancel): ');
-
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { zippySearch: true };
-      return; // Stay in input mode
-
-    case 'ZOOM': // Zoo Mail (internalCommandZOOM) - 1:1 with AmiExpress ZOOM
-      socket.emit('ansi-output', '\x1b[36m-= Zoo Mail (QWK/FTN Download) =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Download your messages in offline format.\r\n\r\n');
-
-      // Check if user has any unread messages
-      const unreadMessages = messages.filter(msg =>
-        msg.timestamp > (session.user?.lastLogin || new Date(0)) &&
-        (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-      );
-
-      if (unreadMessages.length === 0) {
-        socket.emit('ansi-output', 'No unread messages to download.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', `You have ${unreadMessages.length} unread message(s).\r\n\r\n`);
-      socket.emit('ansi-output', 'Available formats:\r\n');
-      socket.emit('ansi-output', '1. QWK format (standard)\r\n');
-      socket.emit('ansi-output', '2. ASCII text format\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[32mSelect format (1-2) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { zoomMail: true, unreadMessages };
-      return; // Stay in input mode
-
-    case 'CF': // Set Conference Configuration (internalCommandCF) - 1:1 with AmiExpress conference config
-      socket.emit('ansi-output', '\x1b[36m-= Conference Configuration =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Configure message and file scanning options per conference.\r\n\r\n');
-
-      // Display current conference settings
-      socket.emit('ansi-output', `Current conference: ${session.currentConfName}\r\n\r\n`);
-
-      socket.emit('ansi-output', 'Available options:\r\n');
-      socket.emit('ansi-output', '1. Toggle new message scan\r\n');
-      socket.emit('ansi-output', '2. Toggle new file scan\r\n');
-      socket.emit('ansi-output', '3. Toggle ZOOM mail inclusion\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[32mSelect option (1-3) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { conferenceConfig: true };
-      return; // Stay in input mode
-
-    case 'VO': // Voting Booth (internalCommandVO) - 1:1 with AmiExpress voting booth
-      socket.emit('ansi-output', '\x1b[36m-= Voting Booth =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Participate in community polls and surveys.\r\n\r\n');
-
-      // Check if voting booth is available for this conference
-      socket.emit('ansi-output', 'Available voting topics:\r\n\r\n');
-      socket.emit('ansi-output', '1. System Features Survey\r\n');
-      socket.emit('ansi-output', '2. Conference Improvements\r\n');
-      socket.emit('ansi-output', '3. File Area Organization\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[32mSelect topic (1-3) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { votingBooth: true };
-      return; // Stay in input mode
-
     case '4': // Edit Any File (internalCommand4) - 1:1 with AmiExpress MicroEmacs
       // Check sysop permissions
       if ((session.user?.secLevel || 0) < 200) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
+        break;
       }
 
       socket.emit('ansi-output', '\x1b[36m-= Edit Any File =-\x1b[0m\r\n');
@@ -2701,10 +1806,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       // Check sysop permissions
       if ((session.user?.secLevel || 0) < 200) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
+        break;
       }
 
       socket.emit('ansi-output', '\x1b[36m-= List System Directories =-\x1b[0m\r\n');
@@ -2839,7 +1941,6 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
         // No params - prompt for input
         socket.emit('ansi-output', '\r\n\x1b[32mMessage base number: \x1b[0m');
         session.subState = LoggedOnSubState.CONFERENCE_SELECT; // Reuse for message base selection
-        session.tempData = { messageBaseSelect: true, currentConfBases };
         return; // Stay in input mode
       }
       break;
@@ -2854,14 +1955,10 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
     case 'FM': // File Maintenance (internalCommandFM) - maintenanceFileSearch()
       displayFileMaintenance(socket, session, params);
-      return; // Don't continue to menu display
+      return;
 
     case 'FS': // File Status (internalCommandFS) - fileStatus()
       displayFileStatus(socket, session, params);
-      return;
-
-    case 'N': // New Files (internalCommandN) - displayNewFiles(params)
-      displayNewFiles(socket, session, params);
       return;
 
     case 'O': // Operator Page (internalCommandO) - Sysop Chat
@@ -2897,7 +1994,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', 'Currently online:\r\n\r\n');
 
       // Get all active sessions
-      const onlineUsersList = Array.from(sessions.values())
+      const onlineUsers = Array.from(sessions.values())
         .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
         .map(sess => ({
           username: sess.user!.username,
@@ -2906,12 +2003,12 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
           node: 'Web1' // For now, all users are on the same "node"
         }));
 
-      if (onlineUsersList.length === 0) {
+      if (onlineUsers.length === 0) {
         socket.emit('ansi-output', 'No users currently online.\r\n');
       } else {
-        onlineUsersList.forEach(userInfo => {
-          const idleStr = userInfo.idle > 0 ? ` (${userInfo.idle}min idle)` : '';
-          socket.emit('ansi-output', `${userInfo.username.padEnd(15)} ${userInfo.conference.padEnd(20)} ${userInfo.node}${idleStr}\r\n`);
+        onlineUsers.forEach(user => {
+          const idleStr = user.idle > 0 ? ` (${user.idle}min idle)` : '';
+          socket.emit('ansi-output', `${user.username.padEnd(15)} ${user.conference.padEnd(20)} ${user.node}${idleStr}\r\n`);
         });
       }
       socket.emit('ansi-output', '\r\n');
@@ -2937,24 +2034,9 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
     case 'Q': // Quiet Node (internalCommandQ)
       socket.emit('ansi-output', '\x1b[36m-= Quiet Node =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'This command will change the Quiet Node option for your node.\r\n');
-      socket.emit('ansi-output', 'With this command a user can prevent other users from seeing them on the WHO list.\r\n\r\n');
-
-      // Toggle quiet node status
-      const user = session.user!;
-      user.quietNode = !user.quietNode;
-
-      // Update in database
-      await db.updateUser(user.id, { quietNode: user.quietNode });
-
-      socket.emit('ansi-output', `Quiet node is now ${user.quietNode ? 'ON' : 'OFF'}.\r\n`);
-      socket.emit('ansi-output', user.quietNode ?
-        'Other users will not see you in the online user list.\r\n' :
-        'Other users can now see you in the online user list.\r\n');
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
+      socket.emit('ansi-output', 'With this command a user can prevent other users from seeing them on the WHO list.\r\n');
+      socket.emit('ansi-output', '\r\nQuiet node functionality not implemented yet.\r\n');
+      break;
 
     case 'DOORS': // Door Games Menu (new command for Phase 4)
       displayDoorMenu(socket, session, params);
@@ -2973,7 +2055,6 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', 'J - Join Conference\r\n');
       socket.emit('ansi-output', 'JM - Join Message Base\r\n');
       socket.emit('ansi-output', 'F - File Areas\r\n');
-      socket.emit('ansi-output', 'N - New Files\r\n');
       socket.emit('ansi-output', 'D - Download Files\r\n');
       socket.emit('ansi-output', 'U - Upload Files\r\n');
       socket.emit('ansi-output', 'O - Page Sysop for Chat\r\n');
@@ -2995,12 +2076,70 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
   displayMainMenu(socket, session);
 }
 
-server.listen(port, async () => {
-  console.log(`Server running on port ${port}`);
+// Initialize data for serverless environment and start server
+(async () => {
+  try {
+    console.log('Starting database initialization...');
+    await initializeData();
+    console.log('Database initialization completed');
 
-  // Initialize database and load data
-  await initializeData();
-});
+    // Start server with proper error handling for Render.com
+    server.listen(port, () => {
+      console.log(`🚀 AmiExpress BBS backend running on port ${port}`);
+      console.log('🔌 Socket.IO server attached to Express app');
+      console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+      console.log('🔧 Render.com deployment active');
+      console.log(`📡 Listening on 0.0.0.0:${port}`);
+      console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
+    });
+
+    // Handle server errors gracefully
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${port} is already in use`);
+      } else {
+        console.error('Server error:', error);
+      }
+      process.exit(1);
+    });
+
+    // Handle graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('SIGTERM received, shutting down gracefully');
+      server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', () => {
+      console.log('SIGINT received, shutting down gracefully');
+      server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+      });
+    });
+
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    // Don't exit in production - try to start anyway
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(1);
+    } else {
+      console.log('Continuing despite database error...');
+      server.listen(port, () => {
+        console.log(`🚀 AmiExpress BBS backend running on port ${port} (with database issues)`);
+        console.log('🔌 Socket.IO server attached to Express app');
+        console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+        console.log('🔧 Render.com deployment active');
+        console.log(`📡 Listening on 0.0.0.0:${port}`);
+        console.log(`🏥 Health check available at: http://0.0.0.0:${port}/health`);
+      });
+    }
+  }
+})();
+
+// Socket.IO connection logging will be handled in the existing connection handler
 // Global data caches (loaded from database)
 let conferences: any[] = [];
 let messageBases: any[] = [];
@@ -3011,10 +2150,16 @@ let messages: any[] = [];
 // Initialize data from database
 async function initializeData() {
   try {
+    console.log('Starting database initialization...');
+
     conferences = await db.getConferences();
+    console.log(`Loaded ${conferences.length} conferences`);
+
     if (conferences.length === 0) {
+      console.log('No conferences found, initializing default data...');
       await db.initializeDefaultData();
       conferences = await db.getConferences();
+      console.log(`After initialization: ${conferences.length} conferences`);
     }
 
     // Load message bases for all conferences
@@ -3023,6 +2168,7 @@ async function initializeData() {
       const bases = await db.getMessageBases(conf.id);
       messageBases.push(...bases);
     }
+    console.log(`Loaded ${messageBases.length} message bases`);
 
     // Load file areas for all conferences
     fileAreas = [];
@@ -3030,14 +2176,22 @@ async function initializeData() {
       const areas = await db.getFileAreas(conf.id);
       fileAreas.push(...areas);
     }
+    console.log(`Loaded ${fileAreas.length} file areas`);
 
     // Load some recent messages
-    messages = await db.getMessages(1, 1, { limit: 50 });
+    try {
+      messages = await db.getMessages(1, 1, { limit: 50 });
+      console.log(`Loaded ${messages.length} messages`);
+    } catch (error) {
+      console.warn('Failed to load messages, continuing without them:', error);
+      messages = [];
+    }
 
     // Initialize doors
     await initializeDoors();
+    console.log(`Initialized ${doors.length} doors`);
 
-    console.log('Database initialized with:', {
+    console.log('Database initialized successfully with:', {
       conferences: conferences.length,
       messageBases: messageBases.length,
       fileAreas: fileAreas.length,
@@ -3046,6 +2200,7 @@ async function initializeData() {
     });
   } catch (error) {
     console.error('Failed to initialize data:', error);
+    throw error; // Re-throw to ensure calling code knows about the failure
   }
 }
 
@@ -3249,105 +2404,6 @@ function sendChatMessage(socket: any, session: BBSSession, message: string) {
   socket.emit('ansi-output', `${colorCode}${chatMessage.senderName}: ${chatMessage.content}\x1b[0m\r\n`);
 }
 
-// handleFileDeleteConfirmation() - Confirm and execute file deletion
-function handleFileDeleteConfirmation(socket: any, session: BBSSession, input: string) {
-  const tempData = session.tempData as {
-    operation: string;
-    allowedFiles: any[];
-    filename: string;
-  };
-
-  let filesToDelete: any[] = [];
-
-  if (input.toUpperCase() === 'ALL') {
-    filesToDelete = tempData.allowedFiles;
-  } else {
-    // Parse comma-separated numbers
-    const indices = input.split(',').map(s => parseInt(s.trim()) - 1); // Convert to 0-based
-    filesToDelete = indices
-      .filter(i => i >= 0 && i < tempData.allowedFiles.length)
-      .map(i => tempData.allowedFiles[i]);
-  }
-
-  if (filesToDelete.length === 0) {
-    socket.emit('ansi-output', '\r\nNo files selected for deletion.\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-    return;
-  }
-
-  // Delete files from database
-  let deletedCount = 0;
-  filesToDelete.forEach(({ file }) => {
-    // In production, also delete from file system
-    // For now, just mark as deleted in database
-    db.updateFileEntry(file.id, { status: 'deleted' }).then(() => {
-      deletedCount++;
-      if (deletedCount === filesToDelete.length) {
-        socket.emit('ansi-output', `\r\n\x1b[32mSuccessfully deleted ${deletedCount} file(s).\x1b[0m\r\n`);
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-      }
-    }).catch(error => {
-      console.error('Error deleting file:', error);
-      socket.emit('ansi-output', `\r\n\x1b[31mError deleting ${file.filename}.\x1b[0m\r\n`);
-    });
-  });
-}
-
-// handleFileMoveConfirmation() - Confirm and execute file move
-function handleFileMoveConfirmation(socket: any, session: BBSSession, input: string) {
-  const tempData = session.tempData as {
-    operation: string;
-    allowedFiles: any[];
-    destArea: any;
-    filename: string;
-  };
-
-  let filesToMove: any[] = [];
-
-  if (input.toUpperCase() === 'ALL') {
-    filesToMove = tempData.allowedFiles;
-  } else {
-    // Parse comma-separated numbers
-    const indices = input.split(',').map(s => parseInt(s.trim()) - 1); // Convert to 0-based
-    filesToMove = indices
-      .filter(i => i >= 0 && i < tempData.allowedFiles.length)
-      .map(i => tempData.allowedFiles[i]);
-  }
-
-  if (filesToMove.length === 0) {
-    socket.emit('ansi-output', '\r\nNo files selected for moving.\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-    return;
-  }
-
-  // Move files to destination area
-  let movedCount = 0;
-  filesToMove.forEach(({ file }) => {
-    db.updateFileEntry(file.id, { areaId: tempData.destArea.id }).then(() => {
-      movedCount++;
-      if (movedCount === filesToMove.length) {
-        socket.emit('ansi-output', `\r\n\x1b[32mSuccessfully moved ${movedCount} file(s) to ${tempData.destArea.name}.\x1b[0m\r\n`);
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-      }
-    }).catch(error => {
-      console.error('Error moving file:', error);
-      socket.emit('ansi-output', `\r\n\x1b[31mError moving ${file.filename}.\x1b[0m\r\n`);
-    });
-  });
-}
-
 // toggleSysopAvailable() - Toggle sysop availability (like F7 in AmiExpress)
 function toggleSysopAvailable() {
   chatState.sysopAvailable = !chatState.sysopAvailable;
@@ -3361,259 +2417,4 @@ function getChatStatus(): { available: boolean, pagingCount: number, activeCount
     pagingCount: chatState.pagingUsers.length,
     activeCount: chatState.activeSessions.filter(s => s.status === 'active').length
   };
-}
-
-// displayAccountEditingMenu() - Account editing interface (1:1 with AmiExpress account editing)
-function displayAccountEditingMenu(socket: any, session: BBSSession) {
-  socket.emit('ansi-output', '\x1b[36m-= Account Editing Menu =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Available operations:\r\n\r\n');
-  socket.emit('ansi-output', '1. Edit User Account\r\n');
-  socket.emit('ansi-output', '2. View User Statistics\r\n');
-  socket.emit('ansi-output', '3. Change User Security Level\r\n');
-  socket.emit('ansi-output', '4. Toggle User Flags\r\n');
-  socket.emit('ansi-output', '5. Delete User Account\r\n');
-  socket.emit('ansi-output', '6. List All Users\r\n');
-  socket.emit('ansi-output', '7. Search Users\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mSelect option (1-7) or press Enter to cancel: \x1b[0m');
-
-  session.subState = LoggedOnSubState.FILE_AREA_SELECT; // Reuse for menu selection
-  session.tempData = { accountEditingMenu: true };
-}
-
-// handleAccountEditing() - Process account editing selections
-function handleAccountEditing(socket: any, session: BBSSession, input: string) {
-  const option = parseInt(input.trim());
-
-  if (isNaN(option) || option < 1 || option > 7) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid option.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-    return;
-  }
-
-  switch (option) {
-    case 1: // Edit User Account
-      socket.emit('ansi-output', '\r\n\x1b[36m-= Edit User Account =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter username to edit: ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for username input
-      session.tempData = { editUserAccount: true };
-      return;
-
-    case 2: // View User Statistics
-      socket.emit('ansi-output', '\r\n\x1b[36m-= User Statistics =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter username to view stats: ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { viewUserStats: true };
-      return;
-
-    case 3: // Change User Security Level
-      socket.emit('ansi-output', '\r\n\x1b[36m-= Change Security Level =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter username: ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { changeSecLevel: true };
-      return;
-
-    case 4: // Toggle User Flags
-      socket.emit('ansi-output', '\r\n\x1b[36m-= Toggle User Flags =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter username: ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { toggleUserFlags: true };
-      return;
-
-    case 5: // Delete User Account
-      socket.emit('ansi-output', '\r\n\x1b[36m-= Delete User Account =-\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[31mWARNING: This action cannot be undone!\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter username to delete: ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { deleteUserAccount: true };
-      return;
-
-    case 6: // List All Users
-      displayUserList(socket, session);
-      return;
-
-    case 7: // Search Users
-      socket.emit('ansi-output', '\r\n\x1b[36m-= Search Users =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter search term (username, realname, or location): ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { searchUsers: true };
-      return;
-  }
-}
-
-// displayUserList() - Display paginated user list
-function displayUserList(socket: any, session: BBSSession, page: number = 1, searchTerm?: string) {
-  const pageSize = 20;
-  const offset = (page - 1) * pageSize;
-
-  socket.emit('ansi-output', '\x1b[36m-= User List ');
-  if (searchTerm) {
-    socket.emit('ansi-output', `(Search: "${searchTerm}") `);
-  }
-  socket.emit('ansi-output', `Page ${page} =-\x1b[0m\r\n\r\n`);
-
-  socket.emit('ansi-output', '\x1b[32mUsername'.padEnd(16) + 'Real Name'.padEnd(20) + 'Location'.padEnd(15) + 'Level  Last Login\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[36m' + '='.repeat(75) + '\x1b[0m\r\n');
-
-  // Get users (with optional search)
-  db.getUsers({ limit: pageSize + 1, newUser: undefined }).then(users => {
-    const hasMorePages = users.length > pageSize;
-    const displayUsers = users.slice(0, pageSize);
-
-    displayUsers.forEach(user => {
-      const lastLogin = user.lastLogin ? user.lastLogin.toLocaleDateString() : 'Never';
-      socket.emit('ansi-output',
-        user.username.padEnd(16) +
-        (user.realname || '').padEnd(20) +
-        (user.location || '').padEnd(15) +
-        user.secLevel.toString().padStart(5) + '  ' +
-        lastLogin + '\r\n'
-      );
-    });
-
-    socket.emit('ansi-output', '\r\n');
-
-    if (hasMorePages) {
-      socket.emit('ansi-output', `\x1b[32mPress any key for page ${page + 1}, or 'Q' to quit: \x1b[0m`);
-      session.tempData = { userListPage: page + 1, searchTerm };
-    } else {
-      socket.emit('ansi-output', '\x1b[32mEnd of list. Press any key to continue...\x1b[0m');
-      session.tempData = undefined;
-    }
-
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  }).catch(error => {
-    console.error('Error fetching users:', error);
-    socket.emit('ansi-output', '\x1b[31mError loading user list.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-  });
-}
-
-// handleEditUserAccount() - Edit user account details
-function handleEditUserAccount(socket: any, session: BBSSession, username: string) {
-  db.getUserByUsername(username).then(user => {
-    if (!user) {
-      socket.emit('ansi-output', '\r\n\x1b[31mUser not found.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
-      return;
-    }
-
-    socket.emit('ansi-output', `\r\n\x1b[36m-= Editing User: ${user.username} =-\x1b[0m\r\n`);
-    socket.emit('ansi-output', `Real Name: ${user.realname || 'Not set'}\r\n`);
-    socket.emit('ansi-output', `Location: ${user.location || 'Not set'}\r\n`);
-    socket.emit('ansi-output', `Phone: ${user.phone || 'Not set'}\r\n`);
-    socket.emit('ansi-output', `Security Level: ${user.secLevel}\r\n`);
-    socket.emit('ansi-output', `Expert Mode: ${user.expert ? 'Yes' : 'No'}\r\n`);
-    socket.emit('ansi-output', `ANSI: ${user.ansi ? 'Yes' : 'No'}\r\n\r\n`);
-
-    socket.emit('ansi-output', '\x1b[32mAccount editing interface not fully implemented yet.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-  }).catch(error => {
-    console.error('Error fetching user:', error);
-    socket.emit('ansi-output', '\r\n\x1b[31mError loading user data.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-  });
-}
-
-// handleViewUserStats() - View detailed user statistics
-function handleViewUserStats(socket: any, session: BBSSession, username: string) {
-  db.getUserByUsername(username).then(user => {
-    if (!user) {
-      socket.emit('ansi-output', '\r\n\x1b[31mUser not found.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
-      return;
-    }
-
-    socket.emit('ansi-output', `\r\n\x1b[36m-= Statistics for ${user.username} =-\x1b[0m\r\n\r\n`);
-    socket.emit('ansi-output', `\x1b[32mAccount Information:\x1b[0m\r\n`);
-    socket.emit('ansi-output', `Real Name: ${user.realname}\r\n`);
-    socket.emit('ansi-output', `Location: ${user.location}\r\n`);
-    socket.emit('ansi-output', `Security Level: ${user.secLevel}\r\n`);
-    socket.emit('ansi-output', `First Login: ${user.firstLogin.toLocaleDateString()}\r\n`);
-    socket.emit('ansi-output', `Last Login: ${user.lastLogin?.toLocaleDateString() || 'Never'}\r\n\r\n`);
-
-    socket.emit('ansi-output', `\x1b[32mActivity Statistics:\x1b[0m\r\n`);
-    socket.emit('ansi-output', `Total Calls: ${user.calls}\r\n`);
-    socket.emit('ansi-output', `Calls Today: ${user.callsToday}\r\n`);
-    socket.emit('ansi-output', `Time Total: ${user.timeTotal} minutes\r\n`);
-    socket.emit('ansi-output', `Time Used: ${user.timeUsed} minutes\r\n`);
-    socket.emit('ansi-output', `Time Limit: ${user.timeLimit} minutes\r\n\r\n`);
-
-    socket.emit('ansi-output', `\x1b[32mFile Statistics:\x1b[0m\r\n`);
-    socket.emit('ansi-output', `Files Uploaded: ${user.uploads}\r\n`);
-    socket.emit('ansi-output', `Bytes Uploaded: ${user.bytesUpload}\r\n`);
-    socket.emit('ansi-output', `Files Downloaded: ${user.downloads}\r\n`);
-    socket.emit('ansi-output', `Bytes Downloaded: ${user.bytesDownload}\r\n\r\n`);
-
-    socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-  }).catch(error => {
-    console.error('Error fetching user stats:', error);
-    socket.emit('ansi-output', '\r\n\x1b[31mError loading user statistics.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-  });
-}
-
-// handleChangeSecLevel() - Change user security level
-function handleChangeSecLevel(socket: any, session: BBSSession, input: string) {
-  // This would need multi-step input: username, then new level
-  socket.emit('ansi-output', '\r\n\x1b[32mSecurity level editing not fully implemented yet.\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  session.tempData = undefined;
-}
-
-// handleToggleUserFlags() - Toggle user flags (expert, ansi, etc.)
-function handleToggleUserFlags(socket: any, session: BBSSession, input: string) {
-  socket.emit('ansi-output', '\r\n\x1b[32mUser flag editing not fully implemented yet.\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  session.tempData = undefined;
-}
-
-// handleDeleteUserAccount() - Delete user account
-function handleDeleteUserAccount(socket: any, session: BBSSession, input: string) {
-  socket.emit('ansi-output', '\r\n\x1b[32mUser account deletion not implemented yet.\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  session.tempData = undefined;
-}
-
-// handleSearchUsers() - Search users by various criteria
-function handleSearchUsers(socket: any, session: BBSSession, searchTerm: string) {
-  socket.emit('ansi-output', `\r\n\x1b[36m-= Searching for "${searchTerm}" =-\x1b[0m\r\n`);
-  socket.emit('ansi-output', 'Searching...\r\n\r\n');
-
-  // For now, just show a message that search is not fully implemented
-  socket.emit('ansi-output', '\x1b[32mUser search not fully implemented yet.\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  session.tempData = undefined;
 }

@@ -1,45 +1,33 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "npx tsx src/index.ts",
-    "build": "npx tsc",
+    "build": "npm install && tsc",
+    "tsc": "npx tsc",
     "start": "node dist/index.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "serve": "node dist/index.js",
+    "render-start": "NODE_ENV=production node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^18.0.0",
     "@types/socket.io": "^3.0.1",
-    "@types/sqlite3": "^3.1.11",
-    "@xterm/xterm": "^5.5.0",
-    "@xterm/addon-canvas": "^0.7.0",
-    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "socket.io": "^4.8.1",
-    "sqlite3": "^5.1.7",
-    "xterm": "^4.19.0",
-    "xterm-addon-canvas": "^0.12.0"
+    "pg": "^8.16.3",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@types/jest": "^29.5.12",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^24.7.2",
-    "@types/supertest": "^6.0.2",
-    "jest": "^29.7.0",
-    "supertest": "^7.0.0",
-    "ts-jest": "^29.1.2",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
   }
 }

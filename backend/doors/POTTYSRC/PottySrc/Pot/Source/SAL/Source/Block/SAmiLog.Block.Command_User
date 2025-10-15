@@ -1,0 +1,399 @@
+*****************************************************************************
+* Input for command User:                                                   *
+* @User_##_Cmd                                                              *
+*****************************************************************************
+FTxt_User
+	Subq.l	#1,d5
+	Cmp.l	d5,a0			Make sure at least 2 chars left.
+	Bge	BadInput
+	Addq.l	#1,d5
+
+	Cmpi.b	#"0",(a0)		-.
+	Blt	BadInput		 |_ Make Sure 1st digit is a number
+	Cmpi.b	#"9",(a0)		 |  If not, Invalid CommandLine
+	Bgt	BadInput		-'
+
+	Moveq	#2,d2			2 Digit Number to convert
+
+	Cmpi.b	#"0",1(a0)		-.
+	Blt.s	FTU1Dig			 |_ Check 2nd digit is a number
+	Cmpi.b	#"9",1(a0)		 |  If not, Check for 1 Dig #
+	Ble.s	FTU2Dig			-'
+
+FTU1Dig	Moveq	#1,d2			1 Dig to convert.
+
+FTU2Dig	Bsr	Asc2Num			Ascii @ a0 » Num in d0
+	Cmpi.l	#20,d0			If the number is over 20
+	Bgt	BadInput		Bad Input.
+	Tst.l	d0			If the number is zero (or neg!)
+	Ble	BadInput
+
+	Move.l	d0,FT_User(a5)
+
+;;;;;;;	Asc2Num moves a0 to point to after the number.
+
+	Lea	SU01_Base(a5),a2
+	Subq.l	#1,d0			Offset from user 1...
+	Muls.w	#SU_Len,d0		Point to the wanted user...
+	Add.l	d0,a2			...with a2
+
+	Move.l	a2,-(SP)		Store user base for later...
+
+	Lea	User_Line_CMD(pc),a2
+	Lea	User_Line__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_Line		If found, do the command.
+
+	Lea	User_Name_CMD(pc),a2
+	Lea	User_Name__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_Name		If found, do the command.
+
+	Lea	User_Location_CMD(pc),a2
+	Lea	User_Location__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_Location		If found, do the command.
+
+	Lea	User_Node1_CMD(pc),a2
+	Lea	User_Node1__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_Node1		If found, do the command.
+
+	Lea	User_Node2_CMD(pc),a2
+	Lea	User_Node2__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_Node2		If found, do the command.
+
+	Lea	User_Usage_CMD(pc),a2
+	Lea	User_Usage__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_Usage		If found, do the command.
+
+	Lea	User_UpKBytes_CMD(pc),a2
+	Lea	User_UpKBytes__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_UpKBytes		If found, do the command.
+
+	Lea	User_UpFiles_CMD(pc),a2
+	Lea	User_UpFiles__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_UpFiles		If found, do the command.
+
+	Lea	User_DnKBytes_CMD(pc),a2
+	Lea	User_DnKBytes__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_DnKBytes		If found, do the command.
+
+	Lea	User_DnFiles_CMD(pc),a2
+	Lea	User_DnFiles__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_DnFiles		If found, do the command.
+
+	Lea	User_OnTime_CMD(pc),a2
+	Lea	User_OnTime__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_OnTime		If found, do the command.
+
+	Lea	User_OffTime_CMD(pc),a2
+	Lea	User_OffTime__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_OffTime		If found, do the command.
+
+	Lea	User_AvCPS_CMD(pc),a2
+	Lea	User_AvCPS__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_AvCPS		If found, do the command.
+
+	Lea	User_Baud1_CMD(pc),a2
+	Lea	User_Baud1__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_Baud1		If found, do the command.
+
+	Lea	User_Baud2_CMD(pc),a2
+	Lea	User_Baud2__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_Baud2		If found, do the command.
+
+	Lea	User_OnDate_CMD(pc),a2
+	Lea	User_OnDate__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_OnDate		If found, do the command.
+
+	Lea	User_If_CMD(pc),a2
+	Lea	User_If__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_If_		If found, do the command.
+
+	Bra	BadInput
+
+User_Line_CMD		Dc.b	"_LINE",0
+User_Line__CMD		Dc.b	"_line",0
+User_Name_CMD		Dc.b	"_NAME",0
+User_Name__CMD		Dc.b	"_name",0
+User_Location_CMD	Dc.b	"_LOCATION",0
+User_Location__CMD	Dc.b	"_location",0
+User_Node1_CMD		Dc.b	"_NODE1",0
+User_Node1__CMD		Dc.b	"_node1",0
+User_Node2_CMD		Dc.b	"_NODE2",0
+User_Node2__CMD		Dc.b	"_node2",0
+User_Usage_CMD		Dc.b	"_USAGE",0
+User_Usage__CMD		Dc.b	"_usage",0
+User_UpKBytes_CMD	Dc.b	"_UPKBYTES",0
+User_UpKBytes__CMD	Dc.b	"_upkbytes",0
+User_UpFiles_CMD	Dc.b	"_UPFILES",0
+User_UpFiles__CMD	Dc.b	"_upfiles",0
+User_DnKBytes_CMD	Dc.b	"_DNKBYTES",0
+User_DnKBytes__CMD	Dc.b	"_dnkbytes",0
+User_DnFiles_CMD	Dc.b	"_DNFILES",0
+User_DnFiles__CMD	Dc.b	"_dnfiles",0
+User_OnTime_CMD		Dc.b	"_ONTIME",0
+User_OnTime__CMD	Dc.b	"_ontime",0
+User_OffTime_CMD	Dc.b	"_OFFTIME",0
+User_OffTime__CMD	Dc.b	"_offtime",0
+User_AvCPS_CMD		Dc.b	"_AVCPS",0
+User_AvCPS__CMD		Dc.b	"_avcps",0
+User_Baud1_CMD		Dc.b	"_BAUD1",0
+User_Baud1__CMD		Dc.b	"_baud1",0
+User_Baud2_CMD		Dc.b	"_BAUD2",0
+User_Baud2__CMD		Dc.b	"_baud2",0
+User_OnDate_CMD		Dc.b	"_ONDATE",0
+User_OnDate__CMD	Dc.b	"_ondate",0
+User_If_CMD		Dc.b	"_IF_",0
+User_If__CMD		Dc.b	"_if_",0
+			Even
+*****************************************************************************
+FT_User_Line
+	Addq.l	#4,SP
+	Move.l	Users_N(a5),a2		Users from commandline...
+	Move.l	FT_User(a5),d2		Users from input file...
+	Cmp.l	(a2),d2
+	Ble.s	FT_User_LineDo		If enough users set, cont. normally.
+
+FTUsLiL	Move.b	#10,d2			Return for quick searching...
+	Cmp.l	d5,a0			Make sure at least 1 char left.
+	Bge	BadInput
+	Cmp.b	(a0)+,d2		-._ Skip this line, point to char
+	Bne.s	FTUsLiL			-'  after the return.
+
+FT_User_LineDo
+	Move.l	a0,FTInptAdr(a5)	(Store adr start of input)
+	Bsr	Restore_FT_Regs
+	Bra	FTxtSJm			Continue with input.
+*****************************************************************************
+FT_User_Name
+	Move.l	(SP)+,a2		Restore user base.
+	IFNE	SU_Name
+	Lea	SU_Name(a2),a2		Point to user's name.
+	ENDC
+	Move.w	NamLen(a5),d2		Get set/default length to write.
+	Bra	FTxLOut			Write it!
+FT_User_Location
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_Location(a2),a2	Point to what to send. (Null Term)
+	Move.w	LocLen(a5),d2		Length to write.
+	Bra	FTxLOut
+FT_User_Node1
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_Node(a2),a2		Point to what to send. (Null Term)
+	Bra	FTx_Out
+FT_User_Node2
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_Node2(a2),a2		Point to what to send. (Null Term)
+	Bra	FTx_Out
+FT_User_Usage
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_Usage(a2),a2		Point to what to send. (Null Term)
+	Bra	FTx_Out
+FT_User_UpKBytes
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_UpKBytes(a2),a2	Point to what to send. (Null Term)
+	Bra	FTx_Out
+FT_User_UpFiles
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_UpFiles(a2),a2	Point to what to send. (Null Term)
+	Bra	FTx_Out
+FT_User_DnKBytes
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_DnKBytes(a2),a2	Point to what to send. (Null Term)
+	Bra	FTx_Out
+FT_User_DnFiles
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_DnFiles(a2),a2	Point to what to send. (Null Term)
+	Bra	FTx_Out
+FT_User_OnTime
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_OnTime(a2),a2	Point to what to send. (Null Term)
+	Move.w	TimLen(a5),d2
+	Bra	FTxLOut
+FT_User_OffTime
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_OffTime(a2),a2	Point to what to send. (Null Term)
+	Move.w	TimLen(a5),d2
+	Bra	FTxLOut
+FT_User_AvCPS
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_AvCPS(a2),a2		Point to what to send. (Null Term)
+	Bra	FTx_Out
+FT_User_Baud1
+	Move.l	(SP)+,a2		Restore user base.
+	BTst	#SU_F1_Locl,SU_Flag_1(a2)	Local call?
+	Bne.s	FTUM_Lo
+	BTst	#SU_F1_ISDN,SU_Flag_1(a2)	ISDN call?
+	Bne.s	FTUM_IS
+	Lea	SU_Baud(a2),a2		Point to what to send. (Null Term)
+	Bra	FTx_Out
+FTUM_Lo	Lea	Lo5Msg(pc),a2
+	Bra	FTx_Out
+FTUM_IS	Lea	IS5Msg(pc),a2
+	Bra	FTx_Out
+Lo5Msg	Dc.b	"LOCAL",0
+IS5Msg	Dc.b	" ISDN",0
+	Even
+FT_User_Baud2
+	Move.l	(SP)+,a2		Restore user base.
+	BTst	#SU_F1_Locl,SU_Flag_1(a2)	Local call?
+	Bne.s	FTUN_Lo
+	BTst	#SU_F1_ISDN,SU_Flag_1(a2)	ISDN call?
+	Bne.s	FTUN_IS
+	Lea	StdBuff(a5),a3
+	Move.w	SU_Baud(a2),(a3)	First 2 digits of the baud...
+	Move.b	#".",2(a3)	"."
+	Move.b	SU_Baud+2(a2),3(a3)	3rd digit of the baud.
+;;;;;;;	Move.b	#0,4(a3)
+	SF	4(a3)			Null byte.
+	Move.l	a3,a2			Point to what to send. (Null Term)
+	Bra	FTx_Out
+FTUN_Lo	Lea	Lo4Msg(pc),a2
+	Bra	FTx_Out
+FTUN_IS	Lea	IS4Msg(pc),a2
+	Bra	FTx_Out
+Lo4Msg	Dc.b	"LOCL",0
+IS4Msg	Dc.b	"ISDN",0
+	Even
+FT_User_OnDate
+	Move.l	(SP)+,a2		Restore user base.
+	Lea	SU_OnDate(a2),a2	Point to what to send. (Null Term)
+	Move.w	DatLen(a5),d2		Length to write.
+	Bra	FTxLOut
+;- - - - - ->
+FT_User_If_
+	Subq.l	#3,d5
+	Cmp.l	d5,a0			Make sure at least 3 chars left.
+	Bge	BadInput
+	Addq.l	#3,d5
+
+	SF	FT_If_O(a5)
+	Move.b	(a0)+,FT_If_T(a5)	Store byte to send when IF=TRUE
+	Move.b	(a0)+,FT_If_F(a5)	Store byte to send when IF=FALSE
+	Cmpi.b	#"_",1(a0)		Is there a 3rd option?
+	Bne.s	No3rdOp			If not, done read it!
+	Move.b	(a0)+,FT_If_O(a5)	Store byte for 3rd option.
+No3rdOp
+;;;;;;;	Move.l	a0,FTInptAdr(a5)	(Store adr start of input)
+;					Above Done by FTSerch
+;	3rd option checking tests for string like "_If_abc_Upload".
+;	This is better than checking for "_If_ab_New" because when you check
+;	for the 3rd option, instead of checking for the lack of it, it means
+;	that "_" can be used as the 3rd option. This will only work so long
+;	as there are no commands that begin with two "_" chars (forever)...
+
+	Lea	User_If_New_CMD(pc),a2
+	Lea	User_If_New__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_If_New		If found, do the command.
+
+	Lea	User_If_Hack_CMD(pc),a2
+	Lea	User_If_Hack__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_If_Hack		If found, do the command.
+
+	Lea	User_If_Drop_CMD(pc),a2
+	Lea	User_If_Drop__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_If_Drop		If found, do the command.
+
+	Lea	User_If_Page_CMD(pc),a2
+	Lea	User_If_Page__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_If_Page		If found, do the command.
+
+	Lea	User_If_Sysop_CMD(pc),a2
+	Lea	User_If_Sysop__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_If_Sysop	If found, do the command.
+
+	Lea	User_If_Upload_CMD(pc),a2
+	Lea	User_If_Upload__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_If_Upload	If found, do the command.
+
+	Lea	User_If_Download_CMD(pc),a2
+	Lea	User_If_Download__CMD-1(pc),a3
+	Bsr	FTSerch			Search for command...
+	Beq	FT_User_If_Download	If found, do the command.
+
+	Bra	BadInput
+
+User_If_New_CMD		Dc.b	"_NEW",0
+User_If_New__CMD	Dc.b	"_new",0
+User_If_Hack_CMD	Dc.b	"_HACK",0
+User_If_Hack__CMD	Dc.b	"_hack",0
+User_If_Drop_CMD	Dc.b	"_DROP",0
+User_If_Drop__CMD	Dc.b	"_drop",0
+User_If_Page_CMD	Dc.b	"_PAGE",0
+User_If_Page__CMD	Dc.b	"_page",0
+User_If_Sysop_CMD	Dc.b	"_SYSOP",0
+User_If_Sysop__CMD	Dc.b	"_sysop",0
+User_If_Upload_CMD	Dc.b	"_UPLOAD",0
+User_If_Upload__CMD	Dc.b	"_upload",0
+User_If_Download_CMD	Dc.b	"_DOWNLOAD",0
+User_If_Download__CMD	Dc.b	"_download",0
+			Even
+
+FT_User_If_New
+	Move.l	(SP)+,a2		Restore user base.
+	BTst	#SU_F1_New,SU_Flag_1(a2)	New User?
+	Beq	FTCOt_F			IF=FALSE, send FALSE char.
+	Bra	FTCOt_T			IF=TRUE,  send TRUE  char.
+FT_User_If_Hack
+	Move.l	(SP)+,a2		Restore user base.
+	BTst	#SU_F1_Hack,SU_Flag_1(a2)	Hacked?
+	Beq	FTCOt_F			IF=FALSE, send FALSE char.
+	Bra	FTCOt_T			IF=TRUE,  send TRUE  char.
+FT_User_If_Drop
+	Move.l	(SP)+,a2		Restore user base.
+	BTst	#SU_F1_Drop,SU_Flag_1(a2)	Dropped?
+	Beq	FTCOt_F			IF=FALSE, send FALSE char.
+	Bra	FTCOt_T			IF=TRUE,  send TRUE  char.
+FT_User_If_Page
+	Move.l	(SP)+,a2		Restore user base.
+	BTst	#SU_F1_Page,SU_Flag_1(a2)	Paged?
+	Beq	FTCOt_F			IF=FALSE, send FALSE char.
+	Bra	FTCOt_T			IF=TRUE,  send TRUE  char.
+FT_User_If_Sysop
+	Move.l	(SP)+,a2		Restore user base.
+	BTst	#SU_F1_SysC,SU_Flag_1(a2)	Used Sysop Commands?
+	Beq	FTCOt_F			IF=FALSE, send FALSE char.
+	Bra	FTCOt_T			IF=TRUE,  send TRUE  char.
+
+FT_User_If_Upload
+	Move.l	(SP)+,a2		Restore user base.
+	Tst.b	FT_If_O(a5)		Was 3rd option given?
+	Beq.s	FTx_User_If_Upload_2	No = No Upload failed checking.
+	BTst	#SU_F2_UpFl,SU_Flag_2(a2)	Upload Failed?
+	Bne	FTCOt_O			YES = Send 3rd option.
+FTx_User_If_Upload_2
+	BTst	#SU_F2_Upld,SU_Flag_2(a2)	Uploaded at all?
+	Beq	FTCOt_F			IF=FALSE, send FALSE char.
+	Bra	FTCOt_T			IF=TRUE,  send TRUE  char.
+
+FT_User_If_Download
+	Move.l	(SP)+,a2		Restore user base.
+	Tst.b	FT_If_O(a5)		Was 3rd option given?
+	Beq.s	FTx_User_If_Download_2	No = No Upload failed checking.
+	BTst	#SU_F2_DnFl,SU_Flag_2(a2)	Download Failed?
+	Bne	FTCOt_O			YES = Send 3rd option.
+FTx_User_If_Download_2
+	BTst	#SU_F2_Dnld,SU_Flag_2(a2)	Downloaded at all?
+	Beq	FTCOt_F			IF=FALSE, send FALSE char.
+	Bra	FTCOt_T			IF=TRUE,  send TRUE  char.

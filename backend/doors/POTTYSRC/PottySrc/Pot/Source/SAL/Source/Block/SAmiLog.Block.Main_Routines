@@ -1,0 +1,103 @@
+*****************************************************************************
+* FormText - Search routine for Command strings.                            *
+*****************************************************************************
+* a0 = Input. Will not change if CMD not found. If CMD found, points to end *
+* a2 - ?????_CMD(pc) = Uppercase command string.                            *
+* a3 - ?????__CMD-1(pc) = Lowercase command string. TAKE ONE FROM THE ADR!  *
+* After calling, Beq to routine for if the command WAS found.               *
+*****************************************************************************
+FTSerch	Moveq	#1,d2			For quick sub/adding
+	Move.l	a0,a4			Preserve a0 in case cmd not found.
+FTSrch1	Add.l	d2,a3
+FTSrch2	Tst.b	(a2)			Entire string found?
+	Bne.s	FTSrch3			No, continue with searching.
+	Move.l	a0,FTInptAdr(a5)	(Store adr start of input)
+	Cmp.b	d0,d0			(Generate an EQ.)
+	RTS				Yes, return with EQ.
+FTSrch3	Cmp.l	d5,a0			If at the end of the input,
+	Bge.s	FTSrch4			Command has not been found.
+	Cmpm.b	(a2)+,(a0)+
+	Beq.s	FTSrch1			Search more and update a3.
+	Sub.l	d2,a0			Point back to it...
+	Cmpm.b	(a3)+,(a0)+
+	Beq.s	FTSrch2			Search more.
+FTSrch4	Move.l	a4,a0			Restore a0 as cmd not found.
+	RTS				Not found, return with NEQ.
+*****************************************************************************
+*****************************************************************************
+*****************************************************************************
+*****************************************************************************
+NonANSI_Output_Prep
+	Tst.l	NoANSITop_K(a5)		Was a non-ANSI header specified?
+	Beq.s	NANAH			No, check for a global header.
+	Move.l	NoANSITop_K(a5),FileNam(a5)
+NAHeadR	Bsr	NRead			Read the header into memory.
+	Move.l	FileAdr(a5),HeadAdr(a5)
+	Move.l	FileSze(a5),HeadSze(a5)
+	BSet	#X2_Header,Fil_F_2(a5)
+	BClr	#SF1_InMem,STD_F_1(a5)
+	Bra.s	NATail			Check for tailers...
+
+NANAH	Tst.l	Top_K(a5)		Was a global header specified?
+	Beq.s	NATail			No, check for tailers...
+	Move.l	Top_K(a5),FileNam(a5)
+	Bra.s	NAHeadR			Else, read it in.
+
+NATail	Tst.l	NoANSIBottom_K(a5)	Was a non-ANSI tailer specified?
+	Beq.s	NANAT			No, check for a global tailer.
+	Move.l	NoANSIBottom_K(a5),FileNam(a5)
+NATailR	Bsr	NRead			Read the tailer into memory.
+	Move.l	FileAdr(a5),TailAdr(a5)
+	Move.l	FileSze(a5),TailSze(a5)
+	BSet	#X2_Tailer,Fil_F_2(a5)
+	BClr	#SF1_InMem,STD_F_1(a5)
+	Bra.s	NATHDon			Done loading headers/tailers..
+
+NANAT	Tst.l	Bottom_K(a5)		Was a global header specified?
+	Beq.s	NATHDon			No, done checking for headers/tails.
+	Move.l	Bottom_K(a5),FileNam(a5)
+	Bra.s	NATailR			Else, read it in.
+NATHDon
+
+	Move.l	OutNoANSI_K(a5),d1	Adr of Non-ANSI Output Filename...
+	RTS
+*****************************************************************************
+*****************************************************************************
+*****************************************************************************
+*****************************************************************************
+ANSI_Output_Prep
+	Tst.l	ANSITop_K(a5)		Was an ANSI header specified?
+	Beq.s	ANAH			No, check for a global header.
+	Move.l	ANSITop_K(a5),FileNam(a5)
+AHeadR	Bsr	NRead			Read the header into memory.
+	Move.l	FileAdr(a5),HeadAdr(a5)
+	Move.l	FileSze(a5),HeadSze(a5)
+	BSet	#X2_Header,Fil_F_2(a5)
+	BClr	#SF1_InMem,STD_F_1(a5)
+	Bra.s	ATail			Check for tailers...
+
+ANAH	Tst.l	Top_K(a5)		Was a global header specified?
+	Beq.s	ATail			No, check for tailers...
+	Move.l	Top_K(a5),FileNam(a5)
+	Bra.s	AHeadR			Else, read it in.
+
+ATail	Tst.l	ANSIBottom_K(a5)	Was an ANSI tailer specified?
+	Beq.s	ANAT			No, check for a global tailer.
+	Move.l	ANSIBottom_K(a5),FileNam(a5)
+ATailR	Bsr	NRead			Read the tailer into memory.
+	Move.l	FileAdr(a5),TailAdr(a5)
+	Move.l	FileSze(a5),TailSze(a5)
+	BSet	#X2_Tailer,Fil_F_2(a5)
+	BClr	#SF1_InMem,STD_F_1(a5)
+	Bra.s	ATHDon			Done loading headers/tailers..
+
+ANAT	Tst.l	Bottom_K(a5)		Was a global header specified?
+	Beq.s	ATHDon			No, done checking for headers/tails.
+	Move.l	Bottom_K(a5),FileNam(a5)
+	Bra.s	ATailR			Else, read it in.
+ATHDon
+
+	Move.l	OutANSI_K(a5),d1	Adr of ANSI Output Filename...
+	RTS
+*****************************************************************************
+*****************************************************************************

@@ -1,0 +1,71 @@
+b01:
+====
+First Beta of Release 4
+
+
+
+b02:
+====
+NOTE: The docs haven't changed since beta-01 so they're not included with
+      beta-02.
+    * IF YOU DIDN'T GET BETA-01, GET IT, BECAUSE YOU'LL HAVE TO READ THE
+      NEW DOCS FOR INFO ON THE CHANGES SINCE Release-3!
+
+      The Super-DirAdd and Super-DirStrip support programs haven't changed
+      since Release-01 either, so those haven't been included.
+
+Fixed StDr: - with cross-archive-checking it wasn't saving the .XXX of files.
+
+StDr: Will not add filename to stripped-down dir-listing if it is detected as
+	a private upload.
+	Could you people please test this for me because it's a right pain in
+	the arse to test this feature seeing as it's for /X3+ and I'm using
+	/X2!   Pleale let me know if it works correctly!
+
+To Do: (I really don't know when I'll do this, I really shouldn't do any
+       coding until after my exams if I want to do at all well in them!)
+
+1) Totally take over the FCheck handling from /X so that StDr: can not add
+   files that fail the check.
+   Make it a new config so that people can have different checkers in diff
+   conferneces...
+
+   The way it'll be is: You'll have a line in your config file like
+
+   .LHA: Doors:DupeCheck/DMS_FCheck.CFG
+
+   and if it's a .LHA file it'll load up the filename given, which'll have
+   something like:
+   ---------------------------------------------------------------------------
+   ; LHA FileChecker config for Super-DupeCheck
+   Before=DH0:Tools/System/Packers/Utils/LHA T
+   After=-m -F -N -I -Qa -Qw -Qo
+   Fail=FAILED
+   Fail=CORRUPTED
+   ---------------------------------------------------------------------------
+   and it'll use that to do the FCheck...
+
+   You'll be able to have different checkers for different confs etc, and you can
+   even not check files uploaded to certain confs...
+
+
+2) Add an option which makes the internal /X FCheck stuff run, for those
+   who don't want to setup the super-dupecheck FChecking...
+
+3) Add a BAN: command which would (like Free:) send all e.g. ATX-#? files to
+   the hold dir for sysop review.
+
+
+-) Please note that the changes for Beta-02 were very small and I have not
+   checked anything, so, for your own sake, please be around for the first
+   hour or so that this new version is running, coz there is a chance that
+   I've done something really stupid!...
+
+
+
+b03:
+====
+
+Quickly added (WHILE ONLINE!) LZX support to the cross-arc-checking.
+(For MDR who kept bugging me).
+(Not tested, but should work).

@@ -1,0 +1,68 @@
+
+PHONE DARREN!
+
+*****************************************************************************
+* Input for command I(f):                                                   *
+* X, X = Command Nº - Always going to be followed by at least 1 char        *
+*****************************************************************************
+FTxt_I	Addq.l	#1,a0			Point to the next char.
+	Subq.l	#1,d5
+	Cmp.l	d5,a0			End of input?
+	Bge	BadInput
+	Addq.l	#1,d5
+
+	Move.b	(a0)+,d0
+	And.l	#$FF,d0			Clear all but lowest byte
+	Cmpi.b	#"A",d0			-.
+	Blt	BadInput		 |_ Make sure it's in the range.
+	Cmpi.b	#"C",d0			 |
+	Bgt	BadInput		-'
+
+	Sub.l	#"A",d0			Offset from 1st command.
+	Asl.l	#2,d0
+	Lea	ITblBas(pc),a3		Base of Branch table.
+	Jmp	(a3,d0)			Jump to the wanted Branch.
+
+	Opt	O-			DO *NOT* Optimise, all must be FULL
+ITblBas	Bra	FTx_I_A			@IA[<String>] - IF ANSI on, STRING
+	Bra	FTx_I_B			@IB[<String>] - IF ANSI off, STRING
+	Bra	FTx_I_C			@IC[##] - Skip unless Usernum>=##
+	Opt	O+
+
+FTx_I_A	BTst	#F1_NoANSI,Fmt_F_1(a5)	NoANSI On?
+	Bne	FTxSSkp			NOPE=Skip the string.
+	Bra	FTxSOut			ELSE=Copy the string out.
+FTx_I_B	BTst	#F1_NoANSI,Fmt_F_1(a5)	NoANSI Off?
+	Beq	FTxSSkp			NOPE=Skip the string.
+	Bra	FTxSOut			ELSE=Copy the string out.
+FTx_I_C	Cmpi.b	#"[",(a0)+
+	Bne	BadInput
+	Subq.l	#2,d5			Shold be at least 2 chars!
+	Cmp.l	d5,a0			End of input?
+	Bge	BadInput
+	Addq.l	#2,d5
+
+	Cmpi.b	#"0",(a0)		-.
+	Blt	BadInput		 |_ Make Sure 1st digit is a number
+	Cmpi.b	#"9",(a0)		 |  If not, Invalid CommandLine
+	Bgt	BadInput		-'
+	Moveq.l	#2,d2			2 Digit Number to convert
+	Cmpi.b	#"0",1(a0)		-.
+	Blt.s	Fi1Dig0			 |_ Check 2nd digit is a number
+	Cmpi.b	#"9",1(a0)		 |  If not, Check for 1 Dig #
+	Ble.s	Fi1NCal			-'
+Fi1Dig0	Cmpi.b	#"]",1(a0)		Is this a "]"??? (1 dig # given)
+	Bne	BadInput		If not. Bad Input.
+Fi1DYup	Moveq.l	#1,d2			But if it was, 1 digit number..
+Fi1NCal	Bsr	Asc2Num			Ascii @ a0 » Num in d0
+	Cmpi.b	#"]",(a0)+		Is this a "]"???
+	Bne	BadInput		If not. Bad Input.
+	Move.l	d0,d3			d0 about to be overwritten...
+
+	Bsr	Restore_FT_Regs		Restore regs
+	Move.l	Users_N(a5),a2
+	Cmp.l	(a2),d3			Check against Number to output
+	Ble	FTxtSJm			Check < or = NumUser = No Line Skip.
+;;;;;;; Else we skip to the next return, +1
+	Move.b	#10,d2			For quick compare.
+	Bra	FTxSSLp			Skip to it!

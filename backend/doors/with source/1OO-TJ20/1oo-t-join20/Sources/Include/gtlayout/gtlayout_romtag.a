@@ -1,0 +1,87 @@
+**
+**	GadTools layout toolkit
+**
+**	Copyright © 1993-1996 by Olaf `Olsen' Barthel
+**		Freely distributable.
+**
+**	:ts=8
+**
+
+	include "exec/types.i"
+	include	"exec/nodes.i"
+	include "exec/resident.i"
+
+	include	"gtlayout.library_rev.i"
+
+	xref	LibInitTab
+
+	section	text,code
+
+*-------------------------------------------------------------------------
+
+	moveq	#0,d0
+	rts
+
+*-------------------------------------------------------------------------
+
+RomTag
+	dc.w	RTC_MATCHWORD
+	dc.l	RomTag
+	dc.l	EndTag
+	dc.b	RTF_AUTOINIT
+	dc.b	VERSION
+	dc.b	NT_LIBRARY
+	dc.b	0
+	dc.l	LibName
+	dc.l	LibID
+	dc.l	LibInitTab
+EndTag
+
+*-------------------------------------------------------------------------
+
+	dc.b	0,'$VER: '
+	VERS
+	dc.b	' ('
+	DATE
+	dc.b	')'
+	ifd	CPU_68030
+	dc.b	' MC68020/030/040/060'
+	else
+	dc.b	' Generic 68k'
+	endc
+	dc.b	' Version',13,10,0
+
+*-------------------------------------------------------------------------
+
+	section	__MERGED,data
+
+*-------------------------------------------------------------------------
+
+	xref	_BSSBAS
+	xref	_BSSLEN
+
+	dc.l	_BSSBAS
+	dc.l	_BSSLEN
+
+*-------------------------------------------------------------------------
+
+	xdef	LibVersion
+	xdef	LibRevision
+	xdef	LibName
+	xdef	LibID
+
+LibVersion
+	dc.w	VERSION
+
+LibRevision
+	dc.w	REVISION
+
+LibName
+	dc.b	'gtlayout.library',0
+
+LibID
+	VSTRING
+
+*-------------------------------------------------------------------------
+
+	end

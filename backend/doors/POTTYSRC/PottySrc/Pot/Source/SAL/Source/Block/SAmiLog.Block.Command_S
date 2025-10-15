@@ -1,0 +1,71 @@
+*****************************************************************************
+* Input for command S(et):                                                  *
+* X[##] - X = Command Nº, ## = Setting Number                               *
+*****************************************************************************
+FTxt_S	Addq.l	#1,a0			Point to the next char.
+	Subq.l	#4,d5
+	Cmp.l	d5,a0			End of input?
+	Bge	BadInput
+	Addq.l	#4,d5
+
+	Move.b	(a0)+,d0
+
+	Cmpi.b	#"[",(a0)+
+	Bne	BadInput
+
+	And.l	#$FF,d0			Clear all but lowest byte
+	Cmpi.b	#"A",d0			-.
+	Blt	BadInput		 |_ Make sure it's in the range.
+	Cmpi.b	#"F",d0			 |
+	Bgt	BadInput		-'
+
+	Sub.l	#"A",d0			Offset from 1st command.
+;;;;;;;	Muls.w	#UTblErp-UTblBas,d0	Offset into distance.
+;;;;;;; UTblErp-UTblBas = 4 = Asl.l #2
+	Asl.l	#2,d0
+	Lea	STblBas(pc),a3		Base of Branch table.
+	Jmp	(a3,d0)			Jump to the wanted Branch.
+
+	Opt	O-			DO *NOT* Optimise, all must be FULL
+STblBas	Bra	FTx_S_A
+	Bra	FTx_S_B
+	Bra	FTx_S_C
+	Bra	FTx_S_D
+	Bra	FTx_S_E
+	Bra	FTx_S_F
+	Opt	O+
+
+FTx_S_A	Lea	NamLen(a5),a3
+	Bra.s	FTxSetR
+FTx_S_B	Lea	LocLen(a5),a3
+	Bra.s	FTxSetR
+FTx_S_C	Lea	TimLen(a5),a3
+	Bra.s	FTxSetR
+FTx_S_D	Lea	DatLen(a5),a3
+	Bra.s	FTxSetR
+FTx_S_E	Lea	RndLen(a5),a3
+	Bra.s	FTxSetR
+FTx_S_F	Lea	RDatLen(a5),a3
+;;;;;;;	Bra.s	FTxSetR
+
+FTxSetR	Cmpi.b	#"0",(a0)		-.
+	Blt	BadInput		 |_ Make Sure 1st digit is a number
+	Cmpi.b	#"9",(a0)		 |  If not, Invalid CommandLine
+	Bgt	BadInput		-'
+
+	Moveq	#2,d2			2 Digit Number to convert
+
+	Cmpi.b	#"0",1(a0)		-.
+	Blt.s	FTS1Dig			 |_ Check 2nd digit is a number
+	Cmpi.b	#"9",1(a0)		 |  If not, Check for 1 Dig #
+	Ble.s	FTS2Dig			-'
+
+FTS1Dig	Moveq	#1,d2			1 Dig to convert.
+
+FTS2Dig	Bsr	Asc2Num			Ascii @ a0 » Num in d0
+	Cmpi.b	#"]",(a0)+
+	Bne	BadInput
+
+	Move.w	d0,(a3)			Store the new value.
+	Bsr	Restore_FT_Regs		Restore regs
+	Bra	FTxtSJm			Continue with original input.
