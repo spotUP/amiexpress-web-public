@@ -329,10 +329,7 @@ const corsOptions = {
       "http://localhost:3001",
       /^https:\/\/amiexpress.*\.onrender\.com$/,
       /^https:\/\/amiexpress-frontend.*\.onrender\.com$/,
-      "https://amiexpress-web.vercel.app", // Keep Vercel for now during transition
-      "https://amiexpress-hqq1ycqoz-johans-projects-458502e2.vercel.app",
-      "https://amiexpress-f16ckm2tw-johans-projects-458502e2.vercel.app",
-      "https://frontend-cyybidlkv-johans-projects-458502e2.vercel.app",
+      /^https:\/\/.*\.vercel\.app$/,  // Allow ALL Vercel deployment URLs (wildcard)
       "https://amiexpress-web-three.vercel.app"
     ];
 
