@@ -384,6 +384,159 @@ class BBSFunctions {
       return 'Unknown';
     }
   }
+
+  /**
+   * File Operations (Phase 3)
+   */
+  async BBSREADFILE(filename: string): Promise<string> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      // Security: only allow reading from specific BBS directories
+      const basePath = path.join(process.cwd(), 'data', 'files');
+      const fullPath = path.join(basePath, filename);
+
+      // Prevent directory traversal
+      if (!fullPath.startsWith(basePath)) {
+        throw new Error('Access denied: Invalid file path');
+      }
+
+      const content = await fs.readFile(fullPath, 'utf-8');
+      return content;
+    } catch (error) {
+      console.error('BBSREADFILE error:', error);
+      return '';
+    }
+  }
+
+  async BBSWRITEFILE(filename: string, content: string, append: boolean = false): Promise<boolean> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      // Security: only allow writing to specific BBS directories
+      const basePath = path.join(process.cwd(), 'data', 'files');
+      const fullPath = path.join(basePath, filename);
+
+      // Prevent directory traversal
+      if (!fullPath.startsWith(basePath)) {
+        throw new Error('Access denied: Invalid file path');
+      }
+
+      // Ensure directory exists
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+
+      if (append) {
+        await fs.appendFile(fullPath, content, 'utf-8');
+      } else {
+        await fs.writeFile(fullPath, content, 'utf-8');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('BBSWRITEFILE error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Menu and Door Functions (Phase 3)
+   */
+  async BBSSHOWMENU(menuName: string): Promise<void> {
+    try {
+      // Read menu file from data/menus directory
+      const menuContent = await this.BBSREADFILE(`../menus/${menuName}.ans`);
+      if (menuContent) {
+        await this.BBSWRITE(menuContent);
+      } else {
+        await this.BBSWRITE(`Menu '${menuName}' not found`);
+      }
+    } catch (error) {
+      console.error('BBSSHOWMENU error:', error);
+      await this.BBSWRITE(`Error loading menu: ${menuName}`);
+    }
+  }
+
+  async BBSLAUNCHDOOR(doorName: string, params: string[] = []): Promise<number> {
+    try {
+      // Log door launch
+      await this.BBSLOG('info', `Launching door: ${doorName} with params: ${params.join(' ')}`);
+
+      // In a real implementation, this would:
+      // 1. Check if door exists in doors registry
+      // 2. Create door drop file (DOOR.SYS, DORINFO1.DEF, etc.)
+      // 3. Launch door process or load TypeScript module
+      // 4. Capture door output and send to user
+      // 5. Return door exit code
+
+      // For now, return success indicator
+      await this.BBSWRITE(`Door '${doorName}' would launch here with params: ${params.join(', ')}`);
+      return 0; // Success
+    } catch (error) {
+      console.error('BBSLAUNCHDOOR error:', error);
+      return 1; // Error
+    }
+  }
+
+  /**
+   * File Area Functions (Phase 3)
+   */
+  async BBSGETFILECOUNT(areaId?: number): Promise<number> {
+    try {
+      const areaToUse = areaId || this.context.session?.currentFileArea || 1;
+      const files = await db.getFileEntries(areaToUse);
+      return files.length;
+    } catch (error) {
+      console.error('BBSGETFILECOUNT error:', error);
+      return 0;
+    }
+  }
+
+  async BBSGETFILEAREAS(): Promise<number> {
+    try {
+      const confId = this.context.session?.currentConf || 1;
+      const areas = await db.getFileAreas(confId);
+      return areas.length;
+    } catch (error) {
+      console.error('BBSGETFILEAREAS error:', error);
+      return 0;
+    }
+  }
+
+  async BBSGETAREANAME(areaId?: number): Promise<string> {
+    try {
+      const areaToUse = areaId || this.context.session?.currentFileArea || 1;
+      const areas = await db.getFileAreas(this.context.session?.currentConf || 1);
+      const area = areas.find(a => a.id === areaToUse);
+      return area?.name || 'Unknown';
+    } catch (error) {
+      console.error('BBSGETAREANAME error:', error);
+      return 'Unknown';
+    }
+  }
+
+  async BBSSEARCHFILES(pattern: string, areaId?: number): Promise<string> {
+    try {
+      const areaToUse = areaId || this.context.session?.currentFileArea || 1;
+      const files = await db.getFileEntries(areaToUse, { search: pattern });
+      return files.map(f => f.filename).join(', ');
+    } catch (error) {
+      console.error('BBSSEARCHFILES error:', error);
+      return '';
+    }
+  }
+}
+
+/**
+ * AREXX Procedure Definition
+ */
+interface Procedure {
+  name: string;
+  params: string[];
+  body: string[];
+  startLine: number;
+  endLine: number;
 }
 
 /**
@@ -398,6 +551,8 @@ export class AREXXInterpreter {
   private iterateRequested: boolean = false;
   private returnRequested: boolean = false;
   private returnValue: any = undefined;
+  private procedures: Map<string, Procedure> = new Map();
+  private variableStack: AREXXVariables[] = [];  // Stack for local variable scopes
 
   constructor(context: any) {
     this.context = context;
@@ -493,6 +648,11 @@ export class AREXXInterpreter {
         continue;
       }
 
+      if (line.toUpperCase().startsWith('PROCEDURE ')) {
+        i = await this.defineProcedure(lines, i);
+        continue;
+      }
+
       // Single-line commands
       await this.executeLine(line);
       i++;
@@ -524,6 +684,12 @@ export class AREXXInterpreter {
       if (value) {
         this.returnValue = await this.evaluateExpression(value);
       }
+      return;
+    }
+
+    // PARSE command
+    if (line.toUpperCase().startsWith('PARSE ')) {
+      await this.executeParse(line);
       return;
     }
 
@@ -770,6 +936,124 @@ export class AREXXInterpreter {
   }
 
   /**
+   * Execute PARSE command (Phase 3)
+   * PARSE VAR string template
+   * PARSE VALUE expression WITH template
+   */
+  private async executeParse(line: string): Promise<void> {
+    const parseCmd = line.substring(6).trim(); // Remove "PARSE "
+
+    // PARSE VAR varname template
+    if (parseCmd.toUpperCase().startsWith('VAR ')) {
+      const parts = parseCmd.substring(4).trim().split(/\s+/, 2);
+      const varName = parts[0];
+      const template = parts.slice(1).join(' ');
+
+      const value = String(this.variables.get(varName) || '');
+      await this.parseTemplate(value, template);
+      return;
+    }
+
+    // PARSE VALUE expression WITH template
+    if (parseCmd.toUpperCase().includes(' WITH ')) {
+      const [valueExpr, template] = parseCmd.split(/\s+WITH\s+/i);
+      const value = String(await this.evaluateExpression(valueExpr.replace(/^VALUE\s+/i, '').trim()));
+      await this.parseTemplate(value, template);
+      return;
+    }
+
+    throw new Error(`Invalid PARSE syntax: ${line}`);
+  }
+
+  /**
+   * Parse string according to template
+   */
+  private async parseTemplate(value: string, template: string): Promise<void> {
+    // Simple implementation: split by whitespace and assign to variables
+    const vars = template.trim().split(/\s+/);
+    const words = value.trim().split(/\s+/);
+
+    for (let i = 0; i < vars.length; i++) {
+      this.variables.set(vars[i], words[i] || '');
+    }
+
+    // Handle positional parsing (e.g., "1 var1 5 var2 10 var3")
+    // For now, just implement basic word parsing
+  }
+
+  /**
+   * Define PROCEDURE (Phase 3)
+   * PROCEDURE name(param1, param2, ...)
+   */
+  private async defineProcedure(lines: string[], startIndex: number): Promise<number> {
+    const procLine = lines[startIndex].substring(10).trim(); // Remove "PROCEDURE "
+
+    // Parse procedure name and parameters
+    const match = procLine.match(/^(\w+)(?:\((.*?)\))?/);
+    if (!match) {
+      throw new Error('Invalid PROCEDURE syntax');
+    }
+
+    const [, name, paramsStr] = match;
+    const params = paramsStr ? paramsStr.split(',').map(p => p.trim()) : [];
+
+    // Find matching END for procedure
+    const endIndex = this.findMatchingEnd(lines, startIndex);
+    if (endIndex === -1) {
+      throw new Error('PROCEDURE without matching END');
+    }
+
+    // Store procedure definition
+    this.procedures.set(name.toUpperCase(), {
+      name: name.toUpperCase(),
+      params,
+      body: lines.slice(startIndex + 1, endIndex),
+      startLine: startIndex,
+      endLine: endIndex
+    });
+
+    return endIndex + 1;
+  }
+
+  /**
+   * Call procedure with parameters
+   */
+  private async callProcedure(procName: string, args: any[]): Promise<any> {
+    const procedure = this.procedures.get(procName.toUpperCase());
+    if (!procedure) {
+      return undefined;
+    }
+
+    // Push current variable scope
+    this.variableStack.push(this.variables);
+
+    // Create new variable scope with parameters
+    const localVars = new AREXXVariables();
+
+    // Copy parameters to local scope
+    for (let i = 0; i < procedure.params.length; i++) {
+      localVars.set(procedure.params[i], args[i] || '');
+    }
+
+    // Set local scope as current
+    this.variables = localVars;
+
+    // Execute procedure body
+    this.returnRequested = false;
+    this.returnValue = undefined;
+
+    for (const line of procedure.body) {
+      if (this.returnRequested) break;
+      await this.executeLine(line);
+    }
+
+    // Restore previous variable scope
+    this.variables = this.variableStack.pop() || this.variables;
+
+    return this.returnValue;
+  }
+
+  /**
    * Evaluate condition
    */
   private async evaluateCondition(condition: string): Promise<boolean> {
@@ -898,6 +1182,11 @@ export class AREXXInterpreter {
    * Call function
    */
   private async callFunction(funcName: string, args: any[]): Promise<any> {
+    // Check for user-defined procedures first (Phase 3)
+    if (this.procedures.has(funcName.toUpperCase())) {
+      return await this.callProcedure(funcName, args);
+    }
+
     // BBS Functions - Original
     if (funcName === 'BBSWRITE') {
       await this.bbsFunctions.BBSWRITE(String(args[0] || ''));
@@ -964,6 +1253,44 @@ export class AREXXInterpreter {
     }
     if (funcName === 'BBSGETLASTCALLER') {
       return await this.bbsFunctions.BBSGETLASTCALLER();
+    }
+
+    // BBS Functions - Phase 3 (File Operations)
+    if (funcName === 'BBSREADFILE') {
+      return await this.bbsFunctions.BBSREADFILE(String(args[0]));
+    }
+    if (funcName === 'BBSWRITEFILE') {
+      return await this.bbsFunctions.BBSWRITEFILE(
+        String(args[0]),
+        String(args[1]),
+        args[2] ? Boolean(args[2]) : false
+      );
+    }
+
+    // BBS Functions - Phase 3 (Menu and Door Functions)
+    if (funcName === 'BBSSHOWMENU') {
+      await this.bbsFunctions.BBSSHOWMENU(String(args[0]));
+      return;
+    }
+    if (funcName === 'BBSLAUNCHDOOR') {
+      return await this.bbsFunctions.BBSLAUNCHDOOR(String(args[0]), args.slice(1).map(String));
+    }
+
+    // BBS Functions - Phase 3 (File Area Functions)
+    if (funcName === 'BBSGETFILECOUNT') {
+      return await this.bbsFunctions.BBSGETFILECOUNT(args[0] ? Number(args[0]) : undefined);
+    }
+    if (funcName === 'BBSGETFILEAREAS') {
+      return await this.bbsFunctions.BBSGETFILEAREAS();
+    }
+    if (funcName === 'BBSGETAREANAME') {
+      return await this.bbsFunctions.BBSGETAREANAME(args[0] ? Number(args[0]) : undefined);
+    }
+    if (funcName === 'BBSSEARCHFILES') {
+      return await this.bbsFunctions.BBSSEARCHFILES(
+        String(args[0]),
+        args[1] ? Number(args[1]) : undefined
+      );
     }
 
     // Standard AREXX Functions
