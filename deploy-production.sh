@@ -234,12 +234,15 @@ detect_build_errors() {
         "npm ERR!"
         "Command failed"
         "Exit code: 1"
+        "Connection terminated unexpectedly"
+        "ECONNREFUSED"
+        "getaddrinfo ENOTFOUND"
     )
 
     local errors_found=false
     local error_summary="$LOGS_DIR/error_summary_${TIMESTAMP}.txt"
 
-    echo "=== Build Errors Detected in $platform ===" > "$error_summary"
+    echo "=== Errors Detected in $platform ===" > "$error_summary"
     echo "" >> "$error_summary"
 
     for pattern in "${error_patterns[@]}"; do
@@ -263,11 +266,36 @@ analyze_and_fix_errors() {
 
     header "🔧 AUTO-FIX: ANALYZING ERRORS"
 
-    warning "Build errors detected in $platform deployment"
+    warning "Errors detected in $platform deployment"
     echo ""
     echo -e "${BOLD}Error Summary:${NC}"
     head -30 "$error_file"
     echo ""
+
+    # Check for database connection errors
+    if grep -q -i "connection terminated unexpectedly\|ECONNREFUSED.*postgres\|getaddrinfo ENOTFOUND.*postgres" "$error_file"; then
+        error "❌ DATABASE CONNECTION ERROR"
+        echo ""
+        echo -e "${RED}${BOLD}PostgreSQL database connection failed!${NC}"
+        echo ""
+        echo -e "${YELLOW}This is a configuration issue, not a build error.${NC}"
+        echo ""
+        echo -e "${BOLD}Required Action:${NC}"
+        echo "1. Go to Render Dashboard: https://dashboard.render.com/web/$RENDER_SERVICE"
+        echo "2. Navigate to: Environment tab"
+        echo "3. Add these environment variables:"
+        echo ""
+        echo -e "   ${CYAN}DATABASE_URL${NC}     = postgresql://user:password@host:5432/dbname"
+        echo -e "   ${CYAN}NODE_ENV${NC}         = production"
+        echo -e "   ${CYAN}JWT_SECRET${NC}       = your-secret-key"
+        echo -e "   ${CYAN}REDIS_URL${NC}        = redis://... (optional)"
+        echo ""
+        echo "4. Render will automatically redeploy after you save"
+        echo ""
+        info "💡 Get a free PostgreSQL database at: https://render.com/docs/databases"
+        echo ""
+        return 1
+    fi
 
     # Check if this is a TypeScript error
     if grep -q "error TS" "$error_file"; then
@@ -632,7 +660,7 @@ if ! render whoami -o json &> /dev/null; then
     info "Continuing with Vercel-only deployment"
     RENDER_AVAILABLE=false
 else
-    RENDER_USER=$(render whoami -o json 2>/dev/null | grep -o '"Email": "[^"]*"' | cut -d'"' -f4 || echo "unknown")
+    RENDER_USER=$(render whoami -o json 2>/dev/null | grep "Email:" | awk '{print $2}')
     success "Logged in to Render as: $RENDER_USER"
     RENDER_AVAILABLE=true
 fi
@@ -1105,6 +1133,9 @@ if [ "$DRY_RUN" = false ] && [ "$SKIP_ERROR_CHECK" = false ]; then
     header "${ICON_INFO} STEP 8/9: POST-DEPLOYMENT ERROR CHECK"
 
     step 8 9 "Checking deployment logs for errors..."
+    echo ""
+    info "🔍 Fetching logs from deployment platforms..."
+    echo ""
 
     ERRORS_DETECTED=false
     VERCEL_ERRORS=""
@@ -1112,10 +1143,14 @@ if [ "$DRY_RUN" = false ] && [ "$SKIP_ERROR_CHECK" = false ]; then
 
     # Check Vercel logs
     if [ -n "$DEPLOYMENT_URL" ]; then
-        sleep 3  # Wait for logs to be available
+        info "⏳ Waiting for Vercel logs to be available (3s)..."
+        sleep 3
+        echo ""
+        info "📥 Fetching Vercel deployment logs..."
         VERCEL_LOG_FILE=$(fetch_vercel_logs "$DEPLOYMENT_URL")
 
         if [ -n "$VERCEL_LOG_FILE" ]; then
+            info "🔎 Analyzing Vercel logs for errors..."
             if ERROR_SUMMARY=$(detect_build_errors "$VERCEL_LOG_FILE" "Vercel"); then
                 warning "Build errors detected in Vercel deployment"
                 ERRORS_DETECTED=true
@@ -1124,22 +1159,28 @@ if [ "$DRY_RUN" = false ] && [ "$SKIP_ERROR_CHECK" = false ]; then
                 success "No build errors detected in Vercel logs"
             fi
         fi
+        echo ""
     fi
 
     # Check Render logs
     if [ -n "$RENDER_SERVICE" ] && [ "$RENDER_AVAILABLE" = true ]; then
-        sleep 3  # Wait for logs to be available
+        info "⏳ Waiting for Render logs to be available (3s)..."
+        sleep 3
+        echo ""
+        info "📥 Fetching Render service logs..."
         RENDER_LOG_FILE=$(fetch_render_logs "$RENDER_SERVICE")
 
         if [ -n "$RENDER_LOG_FILE" ] && [ -f "$RENDER_LOG_FILE" ]; then
+            info "🔎 Analyzing Render logs for errors..."
             if ERROR_SUMMARY=$(detect_build_errors "$RENDER_LOG_FILE" "Render"); then
-                warning "Build errors detected in Render deployment"
+                warning "Errors detected in Render deployment"
                 ERRORS_DETECTED=true
                 RENDER_ERRORS="$ERROR_SUMMARY"
             else
-                success "No build errors detected in Render logs"
+                success "No errors detected in Render logs"
             fi
         fi
+        echo ""
     fi
 
     # If errors detected and auto-fix is enabled
@@ -1148,23 +1189,38 @@ if [ "$DRY_RUN" = false ] && [ "$SKIP_ERROR_CHECK" = false ]; then
         CURRENT_ATTEMPT=$((CURRENT_ATTEMPT + 1))
 
         if [ $CURRENT_ATTEMPT -le $MAX_FIX_ATTEMPTS ]; then
-            warning "Attempt $CURRENT_ATTEMPT of $MAX_FIX_ATTEMPTS to auto-fix errors"
+            echo ""
+            warning "🔧 AUTO-FIX ACTIVATED: Attempt $CURRENT_ATTEMPT of $MAX_FIX_ATTEMPTS"
+            echo ""
+            info "🤖 Analyzing errors and attempting automatic fixes..."
             echo ""
 
             FIXES_APPLIED=false
 
             # Try to fix Vercel errors
             if [ -n "$VERCEL_ERRORS" ]; then
+                info "🔍 Processing Vercel errors..."
+                echo ""
                 if analyze_and_fix_errors "$VERCEL_ERRORS" "Vercel"; then
                     FIXES_APPLIED=true
+                    success "✅ Applied fixes for Vercel errors"
+                else
+                    warning "⚠️  Could not auto-fix Vercel errors"
                 fi
+                echo ""
             fi
 
             # Try to fix Render errors
             if [ -n "$RENDER_ERRORS" ]; then
+                info "🔍 Processing Render errors..."
+                echo ""
                 if analyze_and_fix_errors "$RENDER_ERRORS" "Render"; then
                     FIXES_APPLIED=true
+                    success "✅ Applied fixes for Render errors"
+                else
+                    warning "⚠️  Could not auto-fix Render errors"
                 fi
+                echo ""
             fi
 
             if [ "$FIXES_APPLIED" = true ]; then
