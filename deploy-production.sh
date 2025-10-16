@@ -179,14 +179,25 @@ fetch_vercel_logs() {
 
     log "Fetching Vercel deployment logs..."
 
-    if vercel logs "$deployment_url" --output "$log_output" 2>&1 | head -100 > "$log_output"; then
+    # Use timeout to prevent hanging (10 second timeout)
+    # Vercel logs can stream indefinitely, so we need to limit it
+    if timeout 10s vercel logs "$deployment_url" 2>&1 | head -100 > "$log_output" 2>&1; then
+        # If we got any content, consider it success
+        if [ -s "$log_output" ]; then
+            echo "$log_output"
+            return 0
+        fi
+    fi
+
+    # If timeout or no content, use inspect instead (non-streaming)
+    info "Using vercel inspect as fallback..."
+    if timeout 10s vercel inspect "$deployment_url" 2>&1 > "$log_output"; then
         echo "$log_output"
         return 0
     else
-        # Alternative: get logs without output flag
-        vercel logs "$deployment_url" 2>&1 | head -100 > "$log_output"
-        echo "$log_output"
-        return 0
+        warning "Could not fetch Vercel logs"
+        echo ""
+        return 1
     fi
 }
 
@@ -197,17 +208,22 @@ fetch_render_logs() {
     log "Fetching Render deployment logs..."
 
     # Render CLI requires -r flag for resources and -o json for non-interactive mode
-    if render logs -r "$service_id" --limit 200 --type build -o json 2>&1 > "$log_output"; then
+    # Use timeout to prevent hanging (15 second timeout for Render)
+    if timeout 15s render logs -r "$service_id" --limit 200 --level error -o json 2>&1 > "$log_output"; then
         # Extract just the messages from JSON
-        cat "$log_output" | grep -o '"message": "[^"]*"' | cut -d'"' -f4 > "${log_output}.txt"
-        mv "${log_output}.txt" "$log_output"
-        echo "$log_output"
-        return 0
-    else
-        warning "Could not fetch Render logs"
-        echo ""
-        return 1
+        if [ -s "$log_output" ]; then
+            cat "$log_output" | grep -o '"message": "[^"]*"' | cut -d'"' -f4 > "${log_output}.txt" 2>/dev/null || true
+            if [ -s "${log_output}.txt" ]; then
+                mv "${log_output}.txt" "$log_output"
+            fi
+            echo "$log_output"
+            return 0
+        fi
     fi
+
+    warning "Could not fetch Render logs (may still be deploying)"
+    echo ""
+    return 1
 }
 
 detect_build_errors() {
