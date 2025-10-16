@@ -255,7 +255,8 @@ enum LoggedOnSubState {
   FILE_DIR_SELECT = 'file_dir_select',
   FILE_LIST = 'file_list',
   FILE_LIST_CONTINUE = 'file_list_continue',
-  CONFERENCE_SELECT = 'conference_select'
+  CONFERENCE_SELECT = 'conference_select',
+  CHAT = 'chat' // Internode chat mode
 }
 
 interface BBSSession {
@@ -278,6 +279,12 @@ interface BBSSession {
   currentConfName: string; // Current conference name (like AmiExpress currentConfName)
   cmdShortcuts: boolean; // Like AmiExpress cmdShortcuts - controls hotkey vs line input mode
   tempData?: any; // Temporary data storage for complex operations (like file listing)
+  // Internode chat fields
+  chatSessionId?: string; // Current chat session ID (if in chat)
+  chatWithUserId?: string; // User ID of chat partner
+  chatWithUsername?: string; // Username of chat partner
+  previousState?: BBSState; // State to return to after chat
+  previousSubState?: LoggedOnSubState; // Substate to return to after chat
 }
 
 // Conference and Message Base data structures (simplified)
@@ -592,6 +599,16 @@ io.on('connection', async (socket: Socket) => {
       console.log('Login successful for user:', data.username);
       socket.emit('login-success');
 
+      // Check for unread OLM messages
+      try {
+        const unreadCount = await db.getUnreadMessageCount(user.id);
+        if (unreadCount > 0) {
+          socket.emit('ansi-output', `\r\n\x1b[33m*** You have ${unreadCount} unread message(s)! Type OLM READ to view. ***\x1b[0m\r\n`);
+        }
+      } catch (error) {
+        console.error('Error checking OLM messages:', error);
+      }
+
       // Start the proper AmiExpress flow: bulletins first
       displaySystemBulletins(socket, session);
     } catch (error) {
@@ -749,8 +766,423 @@ io.on('connection', async (socket: Socket) => {
     }
   });
 
+  // Internode Chat Event Handlers
+
+  // Handle chat request
+  socket.on('chat:request', async (data: { targetUsername: string }) => {
+    try {
+      console.log(`[CHAT] User ${session.user?.username} requesting chat with ${data.targetUsername}`);
+
+      // 1. Validate current user is logged in
+      if (!session.user) {
+        socket.emit('chat:error', 'You must be logged in to use chat');
+        return;
+      }
+
+      // 2. Check if initiator is available for chat
+      if (!session.user.availableForChat) {
+        socket.emit('chat:error', 'You are not available for chat. Use CHAT TOGGLE to enable.');
+        return;
+      }
+
+      // 3. Check if user is already in a chat
+      if (session.chatSessionId) {
+        socket.emit('chat:error', 'You are already in a chat session. End current chat first.');
+        return;
+      }
+
+      // 4. Find target user
+      const targetUser = await db.getUserByUsernameForOLM(data.targetUsername);
+      if (!targetUser) {
+        socket.emit('chat:error', `User "${data.targetUsername}" not found`);
+        return;
+      }
+
+      // 5. Check if target is same as initiator
+      if (targetUser.id === session.user.id) {
+        socket.emit('chat:error', 'You cannot chat with yourself');
+        return;
+      }
+
+      // 6. Check if target is online
+      const allKeys = await sessions.getAllKeys();
+      let targetSocketId: string | null = null;
+      let targetSession: any = null;
+
+      for (const socketId of allKeys) {
+        const sess = await sessions.get(socketId);
+        if (sess && sess.user && sess.user.id === targetUser.id) {
+          targetSocketId = socketId;
+          targetSession = sess;
+          break;
+        }
+      }
+
+      if (!targetSocketId || !targetSession) {
+        socket.emit('chat:error', `User "${data.targetUsername}" is not online`);
+        return;
+      }
+
+      // 7. Check if target is available for chat
+      if (!targetUser.availableforchat) {
+        socket.emit('chat:error', `User "${data.targetUsername}" is not available for chat`);
+        return;
+      }
+
+      // 8. Check if target is already in a chat
+      if (targetSession.chatSessionId) {
+        socket.emit('chat:error', `User "${data.targetUsername}" is already in a chat session`);
+        return;
+      }
+
+      // 9. Create chat session in database
+      const sessionId = await db.createChatSession(
+        session.user.id,
+        session.user.username,
+        socket.id,
+        targetUser.id,
+        targetUser.username,
+        targetSocketId
+      );
+
+      console.log(`[CHAT] Session ${sessionId} created: ${session.user.username} → ${targetUser.username}`);
+
+      // 10. Send invite to target user
+      io.to(targetSocketId).emit('chat:invite', {
+        sessionId: sessionId,
+        from: session.user.username,
+        fromId: session.user.id
+      });
+
+      // 11. Notify initiator
+      socket.emit('chat:request-sent', {
+        sessionId: sessionId,
+        to: targetUser.username
+      });
+
+      // 12. Set timeout for request (30 seconds)
+      setTimeout(async () => {
+        const chatSession = await db.getChatSession(sessionId);
+        if (chatSession && chatSession.status === 'requesting') {
+          // Request timed out - auto decline
+          await db.updateChatSessionStatus(sessionId, 'declined');
+          socket.emit('chat:timeout', { username: targetUser.username });
+          io.to(targetSocketId).emit('chat:invite-cancelled', { from: session.user.username });
+          console.log(`[CHAT] Session ${sessionId} timed out - no response from ${targetUser.username}`);
+        }
+      }, 30000); // 30 seconds
+
+    } catch (error) {
+      console.error('[CHAT] Error in chat:request:', error);
+      socket.emit('chat:error', 'Failed to send chat request');
+    }
+  });
+
+  // Handle chat accept
+  socket.on('chat:accept', async (data: { sessionId: string }) => {
+    try {
+      console.log(`[CHAT] User accepting session ${data.sessionId}`);
+
+      // 1. Validate user is logged in
+      if (!session.user) {
+        socket.emit('chat:error', 'You must be logged in');
+        return;
+      }
+
+      // 2. Get chat session from database
+      const chatSession = await db.getChatSession(data.sessionId);
+      if (!chatSession) {
+        socket.emit('chat:error', 'Chat session not found');
+        return;
+      }
+
+      // 3. Validate user is the recipient
+      if (chatSession.recipient_id !== session.user.id) {
+        socket.emit('chat:error', 'You are not the recipient of this chat request');
+        return;
+      }
+
+      // 4. Validate session is in requesting state
+      if (chatSession.status !== 'requesting') {
+        socket.emit('chat:error', `Chat request is no longer available (status: ${chatSession.status})`);
+        return;
+      }
+
+      // 5. Update session status to active
+      await db.updateChatSessionStatus(data.sessionId, 'active');
+
+      // 6. Create Socket.io room
+      const roomName = `chat:${data.sessionId}`;
+      socket.join(roomName);
+      io.sockets.sockets.get(chatSession.initiator_socket)?.join(roomName);
+
+      // 7. Get both user sessions
+      const initiatorSession = await sessions.get(chatSession.initiator_socket);
+      const recipientSession = await sessions.get(chatSession.recipient_socket);
+
+      if (!initiatorSession || !recipientSession) {
+        socket.emit('chat:error', 'Failed to start chat - session not found');
+        return;
+      }
+
+      // 8. Update both BBSSession objects
+      initiatorSession.chatSessionId = data.sessionId;
+      initiatorSession.chatWithUserId = session.user.id;
+      initiatorSession.chatWithUsername = session.user.username;
+      initiatorSession.previousState = initiatorSession.state;
+      initiatorSession.previousSubState = initiatorSession.subState;
+      initiatorSession.subState = LoggedOnSubState.CHAT;
+
+      recipientSession.chatSessionId = data.sessionId;
+      recipientSession.chatWithUserId = chatSession.initiator_id;
+      recipientSession.chatWithUsername = chatSession.initiator_username;
+      recipientSession.previousState = recipientSession.state;
+      recipientSession.previousSubState = recipientSession.subState;
+      recipientSession.subState = LoggedOnSubState.CHAT;
+
+      await sessions.set(chatSession.initiator_socket, initiatorSession);
+      await sessions.set(chatSession.recipient_socket, recipientSession);
+
+      // 9. Emit chat:started to both users
+      io.to(roomName).emit('chat:started', {
+        sessionId: data.sessionId,
+        withUsername: chatSession.initiator_username,
+        withUserId: chatSession.initiator_id
+      });
+
+      // Update for initiator specifically
+      io.to(chatSession.initiator_socket).emit('chat:started', {
+        sessionId: data.sessionId,
+        withUsername: chatSession.recipient_username,
+        withUserId: chatSession.recipient_id
+      });
+
+      console.log(`[CHAT] Session ${data.sessionId} started: ${chatSession.initiator_username} <-> ${chatSession.recipient_username}`);
+
+    } catch (error) {
+      console.error('[CHAT] Error in chat:accept:', error);
+      socket.emit('chat:error', 'Failed to accept chat request');
+    }
+  });
+
+  // Handle chat decline
+  socket.on('chat:decline', async (data: { sessionId: string }) => {
+    try {
+      console.log(`[CHAT] User declining session ${data.sessionId}`);
+
+      // 1. Validate user is logged in
+      if (!session.user) {
+        return;
+      }
+
+      // 2. Get chat session
+      const chatSession = await db.getChatSession(data.sessionId);
+      if (!chatSession) {
+        return;
+      }
+
+      // 3. Validate user is the recipient
+      if (chatSession.recipient_id !== session.user.id) {
+        return;
+      }
+
+      // 4. Update status to declined
+      await db.updateChatSessionStatus(data.sessionId, 'declined');
+
+      // 5. Notify initiator
+      io.to(chatSession.initiator_socket).emit('chat:declined', {
+        username: session.user.username
+      });
+
+      console.log(`[CHAT] Session ${data.sessionId} declined by ${session.user.username}`);
+
+    } catch (error) {
+      console.error('[CHAT] Error in chat:decline:', error);
+    }
+  });
+
+  // Handle chat message
+  socket.on('chat:message', async (data: { message: string }) => {
+    try {
+      // 1. Validate user is in active chat
+      if (!session.chatSessionId) {
+        socket.emit('chat:error', 'You are not in a chat session');
+        return;
+      }
+
+      if (!session.user) {
+        return;
+      }
+
+      // 2. Get chat session
+      const chatSession = await db.getChatSession(session.chatSessionId);
+      if (!chatSession || chatSession.status !== 'active') {
+        socket.emit('chat:error', 'Chat session is not active');
+        return;
+      }
+
+      // 3. Validate message length
+      if (data.message.length === 0) {
+        return;
+      }
+
+      if (data.message.length > 500) {
+        socket.emit('chat:error', 'Message too long (max 500 characters)');
+        return;
+      }
+
+      // 4. Sanitize message (prevent ANSI injection)
+      const sanitized = data.message.replace(/\x1b/g, '').trim();
+      if (sanitized.length === 0) {
+        return;
+      }
+
+      // 5. Save message to database
+      await db.saveChatMessage(
+        session.chatSessionId,
+        session.user.id,
+        session.user.username,
+        sanitized
+      );
+
+      // 6. Emit to Socket.io room (both participants receive)
+      const roomName = `chat:${session.chatSessionId}`;
+      io.to(roomName).emit('chat:message-received', {
+        sessionId: session.chatSessionId,
+        from: session.user.username,
+        fromId: session.user.id,
+        message: sanitized,
+        timestamp: new Date()
+      });
+
+      console.log(`[CHAT] Message in session ${session.chatSessionId} from ${session.user.username}: ${sanitized.substring(0, 50)}...`);
+
+    } catch (error) {
+      console.error('[CHAT] Error in chat:message:', error);
+      socket.emit('chat:error', 'Failed to send message');
+    }
+  });
+
+  // Handle chat end
+  socket.on('chat:end', async () => {
+    try {
+      console.log(`[CHAT] User ${session.user?.username} ending chat`);
+
+      // 1. Validate user is in chat
+      if (!session.chatSessionId) {
+        return;
+      }
+
+      // 2. Get chat session
+      const chatSession = await db.getChatSession(session.chatSessionId);
+      if (!chatSession) {
+        return;
+      }
+
+      // 3. End session in database
+      await db.endChatSession(session.chatSessionId);
+
+      // 4. Get message count
+      const messageCount = await db.getChatMessageCount(session.chatSessionId);
+
+      // 5. Calculate duration
+      const duration = Math.floor((Date.now() - new Date(chatSession.started_at).getTime()) / 1000 / 60); // minutes
+
+      // 6. Emit chat:ended to both users
+      const roomName = `chat:${session.chatSessionId}`;
+      io.to(roomName).emit('chat:ended', {
+        sessionId: session.chatSessionId,
+        messageCount: messageCount,
+        duration: duration
+      });
+
+      // 7. Leave Socket.io room
+      socket.leave(roomName);
+      io.sockets.sockets.get(chatSession.initiator_socket)?.leave(roomName);
+      io.sockets.sockets.get(chatSession.recipient_socket)?.leave(roomName);
+
+      // 8. Restore previous state for both users
+      const initiatorSession = await sessions.get(chatSession.initiator_socket);
+      const recipientSession = await sessions.get(chatSession.recipient_socket);
+
+      if (initiatorSession) {
+        initiatorSession.state = initiatorSession.previousState || BBSState.LOGGEDON;
+        initiatorSession.subState = initiatorSession.previousSubState || LoggedOnSubState.DISPLAY_MENU;
+        initiatorSession.chatSessionId = undefined;
+        initiatorSession.chatWithUserId = undefined;
+        initiatorSession.chatWithUsername = undefined;
+        initiatorSession.previousState = undefined;
+        initiatorSession.previousSubState = undefined;
+        await sessions.set(chatSession.initiator_socket, initiatorSession);
+      }
+
+      if (recipientSession) {
+        recipientSession.state = recipientSession.previousState || BBSState.LOGGEDON;
+        recipientSession.subState = recipientSession.previousSubState || LoggedOnSubState.DISPLAY_MENU;
+        recipientSession.chatSessionId = undefined;
+        recipientSession.chatWithUserId = undefined;
+        recipientSession.chatWithUsername = undefined;
+        recipientSession.previousState = undefined;
+        recipientSession.previousSubState = undefined;
+        await sessions.set(chatSession.recipient_socket, recipientSession);
+      }
+
+      console.log(`[CHAT] Session ${session.chatSessionId} ended: ${messageCount} messages, ${duration} minutes`);
+
+    } catch (error) {
+      console.error('[CHAT] Error in chat:end:', error);
+    }
+  });
+
   socket.on('disconnect', async (reason: string) => {
     console.log('🎮 BBS Client disconnected:', socket.id, 'reason:', reason);
+
+    // Handle active chat session if user was in chat
+    if (session.chatSessionId) {
+      try {
+        const chatSession = await db.getChatSession(session.chatSessionId);
+        if (chatSession && chatSession.status === 'active') {
+          // End the chat session
+          await db.endChatSession(session.chatSessionId);
+
+          // Notify the other user
+          const otherSocketId = chatSession.initiator_socket === socket.id
+            ? chatSession.recipient_socket
+            : chatSession.initiator_socket;
+
+          const otherUsername = chatSession.initiator_socket === socket.id
+            ? chatSession.recipient_username
+            : chatSession.initiator_username;
+
+          io.to(otherSocketId).emit('chat:partner-disconnected', {
+            username: session.user?.username || 'User'
+          });
+
+          // Restore other user's state
+          const otherSession = await sessions.get(otherSocketId);
+          if (otherSession) {
+            otherSession.state = otherSession.previousState || BBSState.LOGGEDON;
+            otherSession.subState = otherSession.previousSubState || LoggedOnSubState.DISPLAY_MENU;
+            otherSession.chatSessionId = undefined;
+            otherSession.chatWithUserId = undefined;
+            otherSession.chatWithUsername = undefined;
+            otherSession.previousState = undefined;
+            otherSession.previousSubState = undefined;
+            await sessions.set(otherSocketId, otherSession);
+          }
+
+          // Leave room
+          const roomName = `chat:${session.chatSessionId}`;
+          socket.leave(roomName);
+          io.sockets.sockets.get(otherSocketId)?.leave(roomName);
+
+          console.log(`[CHAT] Session ${session.chatSessionId} ended due to disconnect of ${session.user?.username}`);
+        }
+      } catch (error) {
+        console.error('[CHAT] Error handling disconnect for chat session:', error);
+      }
+    }
+
     await sessions.delete(socket.id);
   });
 });
@@ -1590,6 +2022,8 @@ function displayMainMenu(socket: any, session: BBSSession) {
       socket.emit('ansi-output', 'D - Download Files\r\n');
       socket.emit('ansi-output', 'U - Upload Files\r\n');
       socket.emit('ansi-output', 'O - Page Sysop\r\n');
+      socket.emit('ansi-output', 'OLM - Online Messages\r\n');
+      socket.emit('ansi-output', 'CHAT - Internode Chat\r\n');
       socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
       socket.emit('ansi-output', 'DOORS/DOOR - Door Games & Utilities\r\n');
       socket.emit('ansi-output', 'G - Goodbye\r\n');
@@ -1639,6 +2073,120 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
 
   if (session.state !== BBSState.LOGGEDON) {
     console.log('❌ Not in LOGGEDON state, ignoring command');
+    return;
+  }
+
+  // Handle chat mode input
+  if (session.subState === LoggedOnSubState.CHAT) {
+    console.log('💬 In CHAT mode, handling chat input');
+    const input = data.trim();
+
+    // Check for special commands
+    if (input.toUpperCase() === '/END' || input.toUpperCase() === '/EXIT') {
+      // End chat session
+      console.log('User requested to end chat via /END command');
+
+      if (session.chatSessionId) {
+        const chatSession = await db.getChatSession(session.chatSessionId);
+        if (chatSession && chatSession.status === 'active') {
+          // End the chat session
+          await db.endChatSession(session.chatSessionId);
+
+          // Get stats
+          const messageCount = await db.getChatMessageCount(session.chatSessionId);
+          const duration = Math.floor((Date.now() - new Date(chatSession.started_at).getTime()) / 1000 / 60);
+
+          // Notify both users
+          const roomName = `chat:${session.chatSessionId}`;
+          io.to(roomName).emit('chat:ended', {
+            sessionId: session.chatSessionId,
+            messageCount: messageCount,
+            duration: duration
+          });
+
+          // Get other user's info
+          const otherSocketId = chatSession.initiator_socket === socket.id
+            ? chatSession.recipient_socket
+            : chatSession.initiator_socket;
+
+          // Leave room
+          socket.leave(roomName);
+          io.sockets.sockets.get(otherSocketId)?.leave(roomName);
+
+          // Restore both users' states
+          const otherSession = await sessions.get(otherSocketId);
+          if (otherSession) {
+            otherSession.state = otherSession.previousState || BBSState.LOGGEDON;
+            otherSession.subState = otherSession.previousSubState || LoggedOnSubState.DISPLAY_MENU;
+            otherSession.chatSessionId = undefined;
+            otherSession.chatWithUserId = undefined;
+            otherSession.chatWithUsername = undefined;
+            otherSession.previousState = undefined;
+            otherSession.previousSubState = undefined;
+            await sessions.set(otherSocketId, otherSession);
+          }
+
+          // Restore current user's state
+          session.state = session.previousState || BBSState.LOGGEDON;
+          session.subState = session.previousSubState || LoggedOnSubState.DISPLAY_MENU;
+          session.chatSessionId = undefined;
+          session.chatWithUserId = undefined;
+          session.chatWithUsername = undefined;
+          session.previousState = undefined;
+          session.previousSubState = undefined;
+          await sessions.set(socket.id, session);
+
+          console.log(`[CHAT] Session ended by user command: ${messageCount} messages, ${duration} minutes`);
+
+          // Display menu
+          displayMainMenu(socket, session);
+        }
+      }
+      return;
+    } else if (input.toUpperCase() === '/HELP') {
+      // Show chat help
+      socket.emit('ansi-output', '\r\n\x1b[36m-= Chat Commands =-\x1b[0m\r\n');
+      socket.emit('ansi-output', '/END or /EXIT  - End chat session\r\n');
+      socket.emit('ansi-output', '/HELP          - Show this help\r\n');
+      socket.emit('ansi-output', '\r\nType your message and press ENTER to send.\r\n\r\n');
+      return;
+    } else if (input.length > 0) {
+      // Send as chat message
+      if (input.length > 500) {
+        socket.emit('ansi-output', '\x1b[31mMessage too long (max 500 characters)\x1b[0m\r\n');
+        return;
+      }
+
+      // Sanitize message
+      const sanitized = input.replace(/\x1b/g, '').trim();
+      if (sanitized.length === 0) {
+        return;
+      }
+
+      // Save message and broadcast
+      if (session.chatSessionId && session.user) {
+        try {
+          await db.saveChatMessage(
+            session.chatSessionId,
+            session.user.id,
+            session.user.username,
+            sanitized
+          );
+
+          const roomName = `chat:${session.chatSessionId}`;
+          io.to(roomName).emit('chat:message-received', {
+            sessionId: session.chatSessionId,
+            from: session.user.username,
+            fromId: session.user.id,
+            message: sanitized,
+            timestamp: new Date()
+          });
+        } catch (error) {
+          console.error('[CHAT] Error sending message:', error);
+          socket.emit('ansi-output', '\x1b[31mError sending message\x1b[0m\r\n');
+        }
+      }
+    }
     return;
   }
 
@@ -2368,6 +2916,385 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.disconnect();
       return;
 
+    case 'OLM': // Online Message System
+      socket.emit('ansi-output', '\x1b[36m-= Online Message System =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', 'Commands:\r\n');
+      socket.emit('ansi-output', '  OLM SEND <username> <message>  - Send a message to another user\r\n');
+      socket.emit('ansi-output', '  OLM READ                        - Read your unread messages\r\n');
+      socket.emit('ansi-output', '  OLM LIST                        - List all your messages\r\n');
+      socket.emit('ansi-output', '  OLM CHECK                       - Check for new messages\r\n');
+      socket.emit('ansi-output', '  OLM TOGGLE                      - Toggle OLM availability\r\n\r\n');
+
+      // Handle OLM subcommands
+      if (params) {
+        const olmParts = params.split(' ');
+        const subCommand = olmParts[0].toUpperCase();
+
+        switch (subCommand) {
+          case 'SEND':
+            if (olmParts.length < 3) {
+              socket.emit('ansi-output', '\x1b[31mUsage: OLM SEND <username> <message>\x1b[0m\r\n\r\n');
+            } else {
+              const targetUsername = olmParts[1];
+              const message = olmParts.slice(2).join(' ');
+
+              // Send the message
+              try {
+                const targetUser = await db.getUserByUsernameForOLM(targetUsername);
+
+                if (!targetUser) {
+                  socket.emit('ansi-output', `\x1b[31mUser '${targetUsername}' not found.\x1b[0m\r\n\r\n`);
+                } else if (!targetUser.availableforchat) {
+                  socket.emit('ansi-output', `\x1b[33m${targetUsername} is not available for messages.\x1b[0m\r\n\r\n`);
+                } else {
+                  const messageId = await db.sendOnlineMessage(
+                    session.user!.id,
+                    session.user!.username,
+                    targetUser.id,
+                    targetUser.username,
+                    message
+                  );
+
+                  socket.emit('ansi-output', `\x1b[32mMessage sent to ${targetUsername}!\x1b[0m\r\n\r\n`);
+
+                  // Try to deliver immediately if user is online
+                  const allKeys = await sessions.getAllKeys();
+                  for (const socketId of allKeys) {
+                    const otherSession = await sessions.get(socketId);
+                    if (otherSession?.user?.id === targetUser.id) {
+                      // User is online, notify them
+                      io.to(socketId).emit('ansi-output',
+                        `\r\n\x1b[33m*** You have a new message from ${session.user!.username}! Type OLM READ to view. ***\x1b[0m\r\n`);
+                      await db.markMessageDelivered(messageId);
+                      break;
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('OLM SEND error:', error);
+                socket.emit('ansi-output', '\x1b[31mError sending message.\x1b[0m\r\n\r\n');
+              }
+            }
+            break;
+
+          case 'READ':
+            try {
+              const messages = await db.getUnreadMessages(session.user!.id);
+
+              if (messages.length === 0) {
+                socket.emit('ansi-output', '\x1b[33mNo unread messages.\x1b[0m\r\n\r\n');
+              } else {
+                socket.emit('ansi-output', `\x1b[36mYou have ${messages.length} unread message(s):\x1b[0m\r\n\r\n`);
+
+                for (const msg of messages) {
+                  const msgDate = new Date(msg.created_at);
+                  socket.emit('ansi-output', `\x1b[33m[${msgDate.toLocaleString()}]\x1b[0m `);
+                  socket.emit('ansi-output', `\x1b[32mFrom: ${msg.from_username}\x1b[0m\r\n`);
+                  socket.emit('ansi-output', `  ${msg.message}\r\n\r\n`);
+
+                  // Mark as delivered and read
+                  await db.markMessageDelivered(msg.id);
+                  await db.markMessageRead(msg.id);
+                }
+              }
+            } catch (error) {
+              console.error('OLM READ error:', error);
+              socket.emit('ansi-output', '\x1b[31mError reading messages.\x1b[0m\r\n\r\n');
+            }
+            break;
+
+          case 'LIST':
+            try {
+              const allMessages = await db.getAllMessages(session.user!.id);
+
+              if (allMessages.length === 0) {
+                socket.emit('ansi-output', '\x1b[33mNo messages.\x1b[0m\r\n\r\n');
+              } else {
+                socket.emit('ansi-output', `\x1b[36mYour messages (showing last 50):\x1b[0m\r\n\r\n`);
+
+                for (const msg of allMessages) {
+                  const msgDate = new Date(msg.created_at);
+                  const status = msg.read ? '\x1b[90m[READ]\x1b[0m' : '\x1b[33m[NEW]\x1b[0m';
+                  socket.emit('ansi-output', `${status} \x1b[33m[${msgDate.toLocaleString()}]\x1b[0m `);
+                  socket.emit('ansi-output', `\x1b[32mFrom: ${msg.from_username}\x1b[0m\r\n`);
+                  socket.emit('ansi-output', `  ${msg.message}\r\n\r\n`);
+                }
+              }
+            } catch (error) {
+              console.error('OLM LIST error:', error);
+              socket.emit('ansi-output', '\x1b[31mError listing messages.\x1b[0m\r\n\r\n');
+            }
+            break;
+
+          case 'CHECK':
+            try {
+              const count = await db.getUnreadMessageCount(session.user!.id);
+
+              if (count === 0) {
+                socket.emit('ansi-output', '\x1b[32mNo new messages.\x1b[0m\r\n\r\n');
+              } else {
+                socket.emit('ansi-output', `\x1b[33mYou have ${count} unread message(s).\x1b[0m Type OLM READ to view.\r\n\r\n`);
+              }
+            } catch (error) {
+              console.error('OLM CHECK error:', error);
+              socket.emit('ansi-output', '\x1b[31mError checking messages.\x1b[0m\r\n\r\n');
+            }
+            break;
+
+          case 'TOGGLE':
+            try {
+              const currentStatus = session.user!.availableForChat;
+              const newStatus = !currentStatus;
+
+              await db.updateUser(session.user!.id, { availableForChat: newStatus });
+              session.user!.availableForChat = newStatus;
+
+              const statusText = newStatus ? '\x1b[32mENABLED\x1b[0m' : '\x1b[31mDISABLED\x1b[0m';
+              socket.emit('ansi-output', `OLM availability ${statusText}\r\n\r\n`);
+            } catch (error) {
+              console.error('OLM TOGGLE error:', error);
+              socket.emit('ansi-output', '\x1b[31mError toggling OLM availability.\x1b[0m\r\n\r\n');
+            }
+            break;
+
+          default:
+            socket.emit('ansi-output', `\x1b[31mUnknown OLM command: ${subCommand}\x1b[0m\r\n\r\n`);
+        }
+      }
+      break;
+
+    case 'CHAT': // Internode Chat System
+      if (!params) {
+        // Display chat menu
+        socket.emit('ansi-output', '\x1b[36m-= Internode Chat System =-\x1b[0m\r\n\r\n');
+        socket.emit('ansi-output', 'Commands:\r\n');
+        socket.emit('ansi-output', '  CHAT <username>  - Request chat with user\r\n');
+        socket.emit('ansi-output', '  CHAT WHO         - List users available for chat\r\n');
+        socket.emit('ansi-output', '  CHAT TOGGLE      - Toggle your chat availability\r\n');
+        socket.emit('ansi-output', '  CHAT END         - End current chat session\r\n');
+        socket.emit('ansi-output', '  CHAT HELP        - This help screen\r\n\r\n');
+
+        // Show current status
+        const user = session.user!;
+        const status = user.availableForChat ? '\x1b[32mAvailable\x1b[0m' : '\x1b[31mNot Available\x1b[0m';
+        socket.emit('ansi-output', `Your status: ${status}\r\n`);
+
+        // Show if currently in chat
+        if (session.chatSessionId) {
+          socket.emit('ansi-output', `\x1b[33mCurrently chatting with: ${session.chatWithUsername}\x1b[0m\r\n`);
+          socket.emit('ansi-output', '\x1b[33mType /END to exit chat mode.\x1b[0m\r\n');
+        }
+        socket.emit('ansi-output', '\r\n');
+      } else {
+        const chatParts = params.split(' ');
+        const subCommand = chatParts[0].toUpperCase();
+
+        switch (subCommand) {
+          case 'WHO':
+            // List users available for chat
+            try {
+              socket.emit('ansi-output', '\x1b[36m-= Users Available for Chat =-\x1b[0m\r\n\r\n');
+
+              // Get all online users
+              const allKeys = await sessions.getAllKeys();
+              const onlineUsers: any[] = [];
+
+              for (const socketId of allKeys) {
+                const sess = await sessions.get(socketId);
+                if (sess && sess.user && sess.user.id !== session.user!.id) {
+                  onlineUsers.push({
+                    username: sess.user.username,
+                    realname: sess.user.realname,
+                    availableForChat: sess.user.availableForChat,
+                    inChat: !!sess.chatSessionId
+                  });
+                }
+              }
+
+              if (onlineUsers.length === 0) {
+                socket.emit('ansi-output', '\x1b[33mNo other users are currently online.\x1b[0m\r\n\r\n');
+              } else {
+                socket.emit('ansi-output', 'Username          Real Name                Status\r\n');
+                socket.emit('ansi-output', '================  =======================  ====================\r\n');
+
+                for (const user of onlineUsers) {
+                  const username = user.username.padEnd(16);
+                  const realname = (user.realname || 'Unknown').substring(0, 23).padEnd(23);
+                  let status = '';
+
+                  if (user.inChat) {
+                    status = '\x1b[33mIn Chat\x1b[0m';
+                  } else if (user.availableForChat) {
+                    status = '\x1b[32mAvailable\x1b[0m';
+                  } else {
+                    status = '\x1b[31mNot Available\x1b[0m';
+                  }
+
+                  socket.emit('ansi-output', `${username}  ${realname}  ${status}\r\n`);
+                }
+                socket.emit('ansi-output', '\r\n');
+                socket.emit('ansi-output', `Total: ${onlineUsers.length} user(s) online\r\n\r\n`);
+              }
+            } catch (error) {
+              console.error('CHAT WHO error:', error);
+              socket.emit('ansi-output', '\x1b[31mError listing users.\x1b[0m\r\n\r\n');
+            }
+            break;
+
+          case 'TOGGLE':
+            // Toggle chat availability
+            try {
+              const currentStatus = session.user!.availableForChat;
+              const newStatus = !currentStatus;
+
+              await db.updateUser(session.user!.id, { availableForChat: newStatus });
+              session.user!.availableForChat = newStatus;
+
+              const statusText = newStatus ? '\x1b[32mAVAILABLE\x1b[0m' : '\x1b[31mNOT AVAILABLE\x1b[0m';
+              socket.emit('ansi-output', `\x1b[36m-= Chat Availability Toggled =-\x1b[0m\r\n\r\n`);
+              socket.emit('ansi-output', `Your chat status is now: ${statusText}\r\n\r\n`);
+
+              if (newStatus) {
+                socket.emit('ansi-output', '\x1b[32mOther users can now request to chat with you.\x1b[0m\r\n\r\n');
+              } else {
+                socket.emit('ansi-output', '\x1b[33mYou will not receive chat requests.\x1b[0m\r\n\r\n');
+              }
+            } catch (error) {
+              console.error('CHAT TOGGLE error:', error);
+              socket.emit('ansi-output', '\x1b[31mError toggling chat availability.\x1b[0m\r\n\r\n');
+            }
+            break;
+
+          case 'END':
+            // End current chat session
+            if (!session.chatSessionId) {
+              socket.emit('ansi-output', '\x1b[31mYou are not currently in a chat session.\x1b[0m\r\n\r\n');
+            } else {
+              socket.emit('ansi-output', '\x1b[33mYou are in an active chat session.\x1b[0m\r\n');
+              socket.emit('ansi-output', '\x1b[33mType /END while in chat mode to end the session.\x1b[0m\r\n\r\n');
+            }
+            break;
+
+          case 'HELP':
+            // Show help (same as no params)
+            socket.emit('ansi-output', '\x1b[36m-= Internode Chat System =-\x1b[0m\r\n\r\n');
+            socket.emit('ansi-output', 'Commands:\r\n');
+            socket.emit('ansi-output', '  CHAT <username>  - Request chat with user\r\n');
+            socket.emit('ansi-output', '  CHAT WHO         - List users available for chat\r\n');
+            socket.emit('ansi-output', '  CHAT TOGGLE      - Toggle your chat availability\r\n');
+            socket.emit('ansi-output', '  CHAT END         - End current chat session\r\n');
+            socket.emit('ansi-output', '  CHAT HELP        - This help screen\r\n\r\n');
+            break;
+
+          default:
+            // Treat as username - request chat
+            const targetUsername = params.trim();
+            if (targetUsername.length === 0) {
+              socket.emit('ansi-output', '\x1b[31mPlease specify a username.\x1b[0m\r\n\r\n');
+              break;
+            }
+
+            try {
+              // 1. Check if initiator is available for chat
+              if (!session.user!.availableForChat) {
+                socket.emit('ansi-output', '\x1b[31mYou are not available for chat. Use CHAT TOGGLE to enable.\x1b[0m\r\n\r\n');
+                break;
+              }
+
+              // 2. Check if user is already in a chat
+              if (session.chatSessionId) {
+                socket.emit('ansi-output', '\x1b[31mYou are already in a chat session. End current chat first.\x1b[0m\r\n\r\n');
+                break;
+              }
+
+              // 3. Find target user
+              const targetUser = await db.getUserByUsernameForOLM(targetUsername);
+              if (!targetUser) {
+                socket.emit('ansi-output', `\x1b[31mUser "${targetUsername}" not found.\x1b[0m\r\n\r\n`);
+                break;
+              }
+
+              // 4. Check if target is same as initiator
+              if (targetUser.id === session.user!.id) {
+                socket.emit('ansi-output', '\x1b[31mYou cannot chat with yourself.\x1b[0m\r\n\r\n');
+                break;
+              }
+
+              // 5. Check if target is online
+              const allKeys = await sessions.getAllKeys();
+              let targetSocketId: string | null = null;
+              let targetSession: any = null;
+
+              for (const socketId of allKeys) {
+                const sess = await sessions.get(socketId);
+                if (sess && sess.user && sess.user.id === targetUser.id) {
+                  targetSocketId = socketId;
+                  targetSession = sess;
+                  break;
+                }
+              }
+
+              if (!targetSocketId || !targetSession) {
+                socket.emit('ansi-output', `\x1b[31mUser "${targetUsername}" is not currently online.\x1b[0m\r\n\r\n`);
+                break;
+              }
+
+              // 6. Check if target is available for chat
+              if (!targetUser.availableforchat) {
+                socket.emit('ansi-output', `\x1b[31mUser "${targetUsername}" is not available for chat.\x1b[0m\r\n\r\n`);
+                break;
+              }
+
+              // 7. Check if target is already in a chat
+              if (targetSession.chatSessionId) {
+                socket.emit('ansi-output', `\x1b[31mUser "${targetUsername}" is already in a chat session.\x1b[0m\r\n\r\n`);
+                break;
+              }
+
+              // 8. Create chat session in database
+              const sessionId = await db.createChatSession(
+                session.user!.id,
+                session.user!.username,
+                socket.id,
+                targetUser.id,
+                targetUser.username,
+                targetSocketId
+              );
+
+              console.log(`[CHAT] Session ${sessionId} created via CHAT command: ${session.user!.username} → ${targetUser.username}`);
+
+              // 9. Send invite to target user
+              io.to(targetSocketId).emit('chat:invite', {
+                sessionId: sessionId,
+                from: session.user!.username,
+                fromId: session.user!.id
+              });
+
+              // 10. Notify initiator
+              socket.emit('ansi-output', `\x1b[36mRequesting chat with ${targetUsername}...\x1b[0m\r\n`);
+              socket.emit('ansi-output', '\x1b[33mWaiting for response (30 second timeout)...\x1b[0m\r\n\r\n');
+
+              // 11. Set timeout for request (30 seconds)
+              setTimeout(async () => {
+                const chatSession = await db.getChatSession(sessionId);
+                if (chatSession && chatSession.status === 'requesting') {
+                  // Request timed out - auto decline
+                  await db.updateChatSessionStatus(sessionId, 'declined');
+                  io.to(socket.id).emit('ansi-output', `\r\n\x1b[33mChat request to ${targetUsername} timed out (no response).\x1b[0m\r\n\r\n`);
+                  io.to(targetSocketId!).emit('ansi-output', `\r\n\x1b[33mChat invite from ${session.user!.username} cancelled.\x1b[0m\r\n\r\n`);
+                  console.log(`[CHAT] Session ${sessionId} timed out - no response from ${targetUsername}`);
+                }
+              }, 30000); // 30 seconds
+
+            } catch (error) {
+              console.error('[CHAT] Error in chat request:', error);
+              socket.emit('ansi-output', '\x1b[31mError sending chat request.\x1b[0m\r\n\r\n');
+            }
+            break;
+        }
+      }
+      break;
+
     case 'C': // Comment to Sysop (internalCommandC)
       socket.emit('ansi-output', '\x1b[36m-= Comment to Sysop =-\x1b[0m\r\n');
 
@@ -2412,6 +3339,8 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', 'D - Download Files\r\n');
       socket.emit('ansi-output', 'U - Upload Files\r\n');
       socket.emit('ansi-output', 'O - Page Sysop for Chat\r\n');
+      socket.emit('ansi-output', 'OLM - Online Message System (send/read messages)\r\n');
+      socket.emit('ansi-output', 'CHAT - Internode Chat (real-time user-to-user chat)\r\n');
       socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
       socket.emit('ansi-output', 'DOORS/DOOR - Door Games & Utilities\r\n');
       socket.emit('ansi-output', 'G - Goodbye\r\n');

@@ -10,7 +10,9 @@ import type {
   QWKPacket,
   QWKMessage,
   FTNMessage,
-  TransferSession
+  TransferSession,
+  InternodeChatSession,
+  InternodeChatMessage
 } from './types';
 
 // Database interfaces matching AmiExpress data structures
@@ -419,6 +421,89 @@ export class Database {
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
+      `);
+
+      // Online messages table (OLM - Online Message system)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS online_messages (
+          id SERIAL PRIMARY KEY,
+          from_user_id TEXT NOT NULL REFERENCES users(id),
+          to_user_id TEXT NOT NULL REFERENCES users(id),
+          message TEXT NOT NULL,
+          delivered BOOLEAN DEFAULT FALSE,
+          read BOOLEAN DEFAULT FALSE,
+          from_username TEXT NOT NULL,
+          to_username TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          delivered_at TIMESTAMPTZ,
+          read_at TIMESTAMPTZ
+        )
+      `);
+
+      // Create index for efficient message lookups
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_online_messages_to_user
+        ON online_messages(to_user_id, delivered, read);
+      `);
+
+      // Chat sessions table (Internode chat system)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+          id SERIAL PRIMARY KEY,
+          session_id TEXT UNIQUE NOT NULL,
+          initiator_id TEXT NOT NULL REFERENCES users(id),
+          recipient_id TEXT NOT NULL REFERENCES users(id),
+          initiator_username TEXT NOT NULL,
+          recipient_username TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'requesting',
+          started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          ended_at TIMESTAMPTZ,
+          initiator_socket TEXT NOT NULL,
+          recipient_socket TEXT NOT NULL,
+          message_count INTEGER DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create indexes for chat sessions
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_sessions_status
+        ON chat_sessions(status);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_sessions_users
+        ON chat_sessions(initiator_id, recipient_id);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_sessions_active
+        ON chat_sessions(status, started_at) WHERE status = 'active';
+      `);
+
+      // Chat messages table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+          id SERIAL PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          sender_id TEXT NOT NULL REFERENCES users(id),
+          sender_username TEXT NOT NULL,
+          message TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_chat_session
+            FOREIGN KEY (session_id)
+            REFERENCES chat_sessions(session_id)
+            ON DELETE CASCADE
+        )
+      `);
+
+      // Create indexes for chat messages
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+        ON chat_messages(session_id, created_at);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_sender
+        ON chat_messages(sender_id);
       `);
 
       // System logs table
@@ -1278,6 +1363,303 @@ export class Database {
       const values = [...fields.map(f => updates[f as keyof TransferSession]), id];
 
       await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  // OLM (Online Message) methods
+  async sendOnlineMessage(fromUserId: string, fromUsername: string, toUserId: string, toUsername: string, message: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO online_messages (from_user_id, from_username, to_user_id, to_username, message)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+      `;
+      const result = await client.query(sql, [fromUserId, fromUsername, toUserId, toUsername, message]);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUnreadMessages(userId: string): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT id, from_user_id, from_username, message, created_at
+        FROM online_messages
+        WHERE to_user_id = $1 AND delivered = FALSE
+        ORDER BY created_at ASC
+      `;
+      const result = await client.query(sql, [userId]);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAllMessages(userId: string): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT id, from_user_id, from_username, message, created_at, delivered, read, delivered_at, read_at
+        FROM online_messages
+        WHERE to_user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 50
+      `;
+      const result = await client.query(sql, [userId]);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async markMessageDelivered(messageId: number): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        UPDATE online_messages
+        SET delivered = TRUE, delivered_at = NOW()
+        WHERE id = $1
+      `;
+      await client.query(sql, [messageId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async markMessageRead(messageId: number): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        UPDATE online_messages
+        SET read = TRUE, read_at = NOW()
+        WHERE id = $1
+      `;
+      await client.query(sql, [messageId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUnreadMessageCount(userId: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT COUNT(*) as count
+        FROM online_messages
+        WHERE to_user_id = $1 AND delivered = FALSE
+      `;
+      const result = await client.query(sql, [userId]);
+      return parseInt(result.rows[0].count);
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteOLMMessage(messageId: number, userId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        DELETE FROM online_messages
+        WHERE id = $1 AND to_user_id = $2
+      `;
+      const result = await client.query(sql, [messageId, userId]);
+      return result.rowCount > 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUserByUsernameForOLM(username: string): Promise<{ id: string; username: string; availableforchat: boolean } | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT id, username, availableforchat FROM users WHERE LOWER(username) = LOWER($1)`;
+      const result = await client.query(sql, [username]);
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Internode Chat Methods
+  async createChatSession(
+    initiatorId: string,
+    initiatorUsername: string,
+    initiatorSocket: string,
+    recipientId: string,
+    recipientUsername: string,
+    recipientSocket: string
+  ): Promise<string> {
+    const client = await this.pool.connect();
+    try {
+      const sessionId = crypto.randomUUID();
+      const sql = `
+        INSERT INTO chat_sessions (
+          session_id, initiator_id, initiator_username, initiator_socket,
+          recipient_id, recipient_username, recipient_socket, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'requesting')
+        RETURNING session_id
+      `;
+      const result = await client.query(sql, [
+        sessionId, initiatorId, initiatorUsername, initiatorSocket,
+        recipientId, recipientUsername, recipientSocket
+      ]);
+      return result.rows[0].session_id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatSession(sessionId: string): Promise<InternodeChatSession | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM chat_sessions WHERE session_id = $1`;
+      const result = await client.query(sql, [sessionId]);
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatSessionBySocketId(socketId: string): Promise<InternodeChatSession | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM chat_sessions
+        WHERE (initiator_socket = $1 OR recipient_socket = $1)
+        AND status = 'active'
+      `;
+      const result = await client.query(sql, [socketId]);
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateChatSessionStatus(
+    sessionId: string,
+    status: 'requesting' | 'active' | 'ended' | 'declined'
+  ): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        UPDATE chat_sessions
+        SET status = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = $1
+      `;
+      await client.query(sql, [sessionId, status]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async endChatSession(sessionId: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        UPDATE chat_sessions
+        SET status = 'ended', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = $1
+      `;
+      await client.query(sql, [sessionId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getActiveChatSessions(): Promise<InternodeChatSession[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM chat_sessions
+        WHERE status = 'active'
+        ORDER BY started_at DESC
+      `;
+      const result = await client.query(sql);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async saveChatMessage(
+    sessionId: string,
+    senderId: string,
+    senderUsername: string,
+    message: string
+  ): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      // Save message
+      const sql = `
+        INSERT INTO chat_messages (session_id, sender_id, sender_username, message)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+      `;
+      const result = await client.query(sql, [sessionId, senderId, senderUsername, message]);
+
+      // Update message count in session
+      const updateSql = `
+        UPDATE chat_sessions
+        SET message_count = message_count + 1, updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = $1
+      `;
+      await client.query(updateSql, [sessionId]);
+
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatHistory(sessionId: string, limit: number = 50): Promise<InternodeChatMessage[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM chat_messages
+        WHERE session_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+      `;
+      const result = await client.query(sql, [sessionId, limit]);
+      return result.rows.reverse(); // Reverse to get chronological order
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatMessageCount(sessionId: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT COUNT(*) as count FROM chat_messages WHERE session_id = $1`;
+      const result = await client.query(sql, [sessionId]);
+      return parseInt(result.rows[0].count);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAvailableUsersForChat(): Promise<Array<{
+    id: string;
+    username: string;
+    realname: string;
+    seclevel: number;
+    currentAction?: string;
+  }>> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT id, username, realname, seclevel
+        FROM users
+        WHERE availableforchat = TRUE
+        ORDER BY username
+      `;
+      const result = await client.query(sql);
+      return result.rows;
     } finally {
       client.release();
     }

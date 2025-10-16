@@ -68,6 +68,33 @@ export interface ChatState {
   chatToggle: boolean; // F7 chat toggle state
 }
 
+// Internode chat interfaces - for user-to-user chat
+export interface InternodeChatSession {
+  id: number;
+  session_id: string;
+  initiator_id: string;
+  recipient_id: string;
+  initiator_username: string;
+  recipient_username: string;
+  status: 'requesting' | 'active' | 'ended' | 'declined';
+  started_at: Date;
+  ended_at?: Date;
+  initiator_socket: string;
+  recipient_socket: string;
+  message_count: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface InternodeChatMessage {
+  id: number;
+  session_id: string;
+  sender_id: string;
+  sender_username: string;
+  message: string;
+  created_at: Date;
+}
+
 // Node management interfaces - for multi-node BBS support
 export interface NodeSession {
   id: string;
