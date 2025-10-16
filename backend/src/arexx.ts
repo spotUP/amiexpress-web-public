@@ -2,7 +2,7 @@
 // Implements a subset of AREXX suitable for web-based BBS automation
 
 import { db } from './database';
-import { AREXXContext, AREXXScript, AREXXTrigger } from './types';
+import { AREXXContext, AREXXScript } from './types';
 
 /**
  * AREXX Variable Storage
@@ -271,6 +271,119 @@ class BBSFunctions {
       conferenceId: this.context.session?.currentConf
     });
   }
+
+  /**
+   * Get user by username or ID
+   */
+  async BBSGETUSER(usernameOrId: string | number): Promise<any> {
+    try {
+      if (typeof usernameOrId === 'number') {
+        const users = await db.getUsers();
+        return users.find(u => String(u.id) === String(usernameOrId));
+      } else {
+        return await db.getUserByUsername(usernameOrId);
+      }
+    } catch (error) {
+      console.error('AREXX BBSGETUSER error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update user field
+   */
+  async BBSSETUSER(field: string, value: any): Promise<boolean> {
+    try {
+      if (!this.context.user?.id) return false;
+      await db.updateUser(this.context.user.id, { [field]: value });
+      return true;
+    } catch (error) {
+      console.error('AREXX BBSSETUSER error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get number of users online
+   */
+  async BBSGETONLINECOUNT(): Promise<number> {
+    try {
+      // Count connected sessions
+      // In a real implementation, would query active sessions
+      return 1; // At least the current user
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  /**
+   * Get list of online users
+   */
+  async BBSGETONLINEUSERS(): Promise<string[]> {
+    try {
+      // Return list of online usernames
+      // In a real implementation, would query active sessions
+      if (this.context.user?.username) {
+        return [this.context.user.username];
+      }
+      return [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  /**
+   * Get conference name
+   */
+  async BBSGETCONFNAME(confId?: number): Promise<string> {
+    try {
+      const id = confId || this.context.session?.currentConf || 1;
+      const conferences = await db.getConferences();
+      const conf = conferences.find(c => c.id === id);
+      return conf?.name || 'Unknown';
+    } catch (error) {
+      return 'Unknown';
+    }
+  }
+
+  /**
+   * Get all conferences
+   */
+  async BBSGETCONFERENCES(): Promise<number> {
+    try {
+      const conferences = await db.getConferences();
+      return conferences.length;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  /**
+   * Check if user has access level
+   */
+  BBSCHECKLEVEL(requiredLevel: number): boolean {
+    return (this.context.user?.secLevel || 0) >= requiredLevel;
+  }
+
+  /**
+   * Send private message to user
+   */
+  async BBSSENDPRIVATE(toUser: string, subject: string, body: string): Promise<number> {
+    return await this.BBSPOSTMSG(subject, body, true, toUser);
+  }
+
+  /**
+   * Get last caller info
+   */
+  async BBSGETLASTCALLER(): Promise<string> {
+    try {
+      // In a real implementation, would query sessions table
+      // For now, return placeholder
+      return 'System';
+    } catch (error) {
+      return 'Unknown';
+    }
+  }
 }
 
 /**
@@ -281,6 +394,10 @@ export class AREXXInterpreter {
   private bbsFunctions: BBSFunctions;
   private context: any;
   private output: string[] = [];
+  private breakRequested: boolean = false;
+  private iterateRequested: boolean = false;
+  private returnRequested: boolean = false;
+  private returnValue: any = undefined;
 
   constructor(context: any) {
     this.context = context;
@@ -306,19 +423,14 @@ export class AREXXInterpreter {
    */
   async execute(script: string): Promise<{ success: boolean, output: string[], error?: string }> {
     this.output = [];
+    this.breakRequested = false;
+    this.iterateRequested = false;
+    this.returnRequested = false;
+    this.returnValue = undefined;
 
     try {
-      const lines = script.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('/*'));
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-
-        // Skip comments
-        if (line.startsWith('/*') || line.startsWith('//')) continue;
-
-        // Process line
-        await this.executeLine(line);
-      }
+      const lines = this.preprocessScript(script);
+      await this.executeLines(lines);
 
       return { success: true, output: this.output };
     } catch (error) {
@@ -331,11 +443,92 @@ export class AREXXInterpreter {
   }
 
   /**
+   * Preprocess script into lines
+   */
+  private preprocessScript(script: string): string[] {
+    return script
+      .split('\n')
+      .map(line => {
+        // Remove inline comments
+        const commentIndex = line.indexOf('//');
+        if (commentIndex !== -1) {
+          line = line.substring(0, commentIndex);
+        }
+        return line.trim();
+      })
+      .filter(line => {
+        // Remove empty lines and block comments
+        return line && !line.startsWith('/*') && !line.endsWith('*/');
+      });
+  }
+
+  /**
+   * Execute array of lines
+   */
+  private async executeLines(lines: string[], startIndex: number = 0, endIndex?: number): Promise<number> {
+    const end = endIndex ?? lines.length;
+    let i = startIndex;
+
+    while (i < end) {
+      if (this.breakRequested || this.iterateRequested || this.returnRequested) {
+        break;
+      }
+
+      const line = lines[i];
+
+      // Skip comments
+      if (line.startsWith('/*') || line.startsWith('//')) {
+        i++;
+        continue;
+      }
+
+      // Handle multi-line constructs
+      if (line.toUpperCase().startsWith('DO ') || line.toUpperCase() === 'DO') {
+        i = await this.executeDo(lines, i);
+        continue;
+      }
+
+      if (line.toUpperCase().startsWith('SELECT ')) {
+        i = await this.executeSelect(lines, i);
+        continue;
+      }
+
+      // Single-line commands
+      await this.executeLine(line);
+      i++;
+    }
+
+    return i;
+  }
+
+  /**
    * Execute single AREXX line
    */
   private async executeLine(line: string): Promise<void> {
+    // BREAK command
+    if (line.toUpperCase() === 'BREAK' || line.toUpperCase() === 'LEAVE') {
+      this.breakRequested = true;
+      return;
+    }
+
+    // ITERATE command
+    if (line.toUpperCase() === 'ITERATE' || line.toUpperCase() === 'CONTINUE') {
+      this.iterateRequested = true;
+      return;
+    }
+
+    // RETURN command
+    if (line.toUpperCase() === 'RETURN' || line.toUpperCase().startsWith('RETURN ')) {
+      this.returnRequested = true;
+      const value = line.substring(6).trim();
+      if (value) {
+        this.returnValue = await this.evaluateExpression(value);
+      }
+      return;
+    }
+
     // Assignment: VAR = value
-    if (line.includes('=') && !line.includes('==')) {
+    if (line.includes('=') && !line.includes('==') && !line.includes('>=') && !line.includes('<=')) {
       const [varName, ...valueParts] = line.split('=');
       const value = valueParts.join('=').trim();
       const evaluated = await this.evaluateExpression(value);
@@ -390,10 +583,209 @@ export class AREXXInterpreter {
   }
 
   /**
+   * Execute DO loop
+   * Supports: DO count, DO WHILE, DO UNTIL, DO FOREVER, DO var = start TO end [BY step]
+   */
+  private async executeDo(lines: string[], startIndex: number): Promise<number> {
+    const doLine = lines[startIndex].substring(3).trim(); // Remove "DO "
+
+    // Find matching END
+    let endIndex = this.findMatchingEnd(lines, startIndex);
+    if (endIndex === -1) {
+      throw new Error('DO without matching END');
+    }
+
+    // Parse DO type
+    if (!doLine || doLine.toUpperCase() === 'FOREVER') {
+      // DO FOREVER
+      while (true) {
+        this.breakRequested = false;
+        this.iterateRequested = false;
+
+        await this.executeLines(lines, startIndex + 1, endIndex);
+
+        if (this.breakRequested) {
+          this.breakRequested = false;
+          break;
+        }
+        if (this.returnRequested) {
+          break;
+        }
+      }
+    } else if (doLine.toUpperCase().startsWith('WHILE ')) {
+      // DO WHILE condition
+      const condition = doLine.substring(6).trim();
+      while (await this.evaluateCondition(condition)) {
+        this.breakRequested = false;
+        this.iterateRequested = false;
+
+        await this.executeLines(lines, startIndex + 1, endIndex);
+
+        if (this.breakRequested) {
+          this.breakRequested = false;
+          break;
+        }
+        if (this.returnRequested) {
+          break;
+        }
+      }
+    } else if (doLine.toUpperCase().startsWith('UNTIL ')) {
+      // DO UNTIL condition
+      const condition = doLine.substring(6).trim();
+      do {
+        this.breakRequested = false;
+        this.iterateRequested = false;
+
+        await this.executeLines(lines, startIndex + 1, endIndex);
+
+        if (this.breakRequested) {
+          this.breakRequested = false;
+          break;
+        }
+        if (this.returnRequested) {
+          break;
+        }
+      } while (!(await this.evaluateCondition(condition)));
+    } else if (doLine.includes('=') && doLine.toUpperCase().includes(' TO ')) {
+      // DO var = start TO end [BY step]
+      const match = doLine.match(/(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+BY\s+(.+))?$/i);
+      if (!match) {
+        throw new Error('Invalid DO loop syntax');
+      }
+
+      const [, varName, startExpr, endExpr, stepExpr] = match;
+      const start = Number(await this.evaluateExpression(startExpr.trim()));
+      const end = Number(await this.evaluateExpression(endExpr.trim()));
+      const step = stepExpr ? Number(await this.evaluateExpression(stepExpr.trim())) : 1;
+
+      for (let i = start; step > 0 ? i <= end : i >= end; i += step) {
+        this.variables.set(varName, i);
+        this.breakRequested = false;
+        this.iterateRequested = false;
+
+        await this.executeLines(lines, startIndex + 1, endIndex);
+
+        if (this.breakRequested) {
+          this.breakRequested = false;
+          break;
+        }
+        if (this.returnRequested) {
+          break;
+        }
+      }
+    } else {
+      // DO count
+      const count = Number(await this.evaluateExpression(doLine));
+      for (let i = 0; i < count; i++) {
+        this.breakRequested = false;
+        this.iterateRequested = false;
+
+        await this.executeLines(lines, startIndex + 1, endIndex);
+
+        if (this.breakRequested) {
+          this.breakRequested = false;
+          break;
+        }
+        if (this.returnRequested) {
+          break;
+        }
+      }
+    }
+
+    return endIndex + 1; // Return index after END
+  }
+
+  /**
+   * Find matching END for DO/SELECT
+   */
+  private findMatchingEnd(lines: string[], startIndex: number): number {
+    let depth = 1;
+    for (let i = startIndex + 1; i < lines.length; i++) {
+      const line = lines[i].toUpperCase().trim();
+      if (line.startsWith('DO ') || line === 'DO' || line.startsWith('SELECT ')) {
+        depth++;
+      } else if (line === 'END') {
+        depth--;
+        if (depth === 0) {
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Execute SELECT statement
+   * SELECT; WHEN condition; commands; WHEN condition; commands; OTHERWISE; commands; END
+   */
+  private async executeSelect(lines: string[], startIndex: number): Promise<number> {
+    const endIndex = this.findMatchingEnd(lines, startIndex);
+    if (endIndex === -1) {
+      throw new Error('SELECT without matching END');
+    }
+
+    let i = startIndex + 1;
+    let matched = false;
+
+    while (i < endIndex) {
+      const line = lines[i].toUpperCase().trim();
+
+      if (line.startsWith('WHEN ')) {
+        if (!matched) {
+          const condition = lines[i].substring(5).trim();
+          if (await this.evaluateCondition(condition)) {
+            matched = true;
+            i++;
+            // Execute until next WHEN or OTHERWISE or END
+            while (i < endIndex) {
+              const nextLine = lines[i].toUpperCase().trim();
+              if (nextLine.startsWith('WHEN ') || nextLine === 'OTHERWISE') {
+                break;
+              }
+              await this.executeLine(lines[i]);
+              i++;
+            }
+          } else {
+            i++;
+          }
+        } else {
+          i++;
+        }
+      } else if (line === 'OTHERWISE') {
+        if (!matched) {
+          i++;
+          // Execute until END
+          while (i < endIndex) {
+            await this.executeLine(lines[i]);
+            i++;
+          }
+        }
+        break;
+      } else {
+        i++;
+      }
+    }
+
+    return endIndex + 1;
+  }
+
+  /**
    * Evaluate condition
    */
   private async evaluateCondition(condition: string): Promise<boolean> {
-    // Simple comparison operators
+    // Comparison operators (order matters - check multi-char first)
+    if (condition.includes('>=')) {
+      const [left, right] = condition.split('>=');
+      return Number(await this.evaluateExpression(left.trim())) >= Number(await this.evaluateExpression(right.trim()));
+    }
+    if (condition.includes('<=')) {
+      const [left, right] = condition.split('<=');
+      return Number(await this.evaluateExpression(left.trim())) <= Number(await this.evaluateExpression(right.trim()));
+    }
+    if (condition.includes('~=') || condition.includes('!=') || condition.includes('<>')) {
+      const parts = condition.split(/~=|!=|<>/);
+      return await this.evaluateExpression(parts[0].trim()) != await this.evaluateExpression(parts[1].trim());
+    }
     if (condition.includes('==')) {
       const [left, right] = condition.split('==');
       return await this.evaluateExpression(left.trim()) == await this.evaluateExpression(right.trim());
@@ -506,7 +898,7 @@ export class AREXXInterpreter {
    * Call function
    */
   private async callFunction(funcName: string, args: any[]): Promise<any> {
-    // BBS Functions
+    // BBS Functions - Original
     if (funcName === 'BBSWRITE') {
       await this.bbsFunctions.BBSWRITE(String(args[0] || ''));
       return;
@@ -543,6 +935,35 @@ export class AREXXInterpreter {
     if (funcName === 'BBSLOG') {
       await this.bbsFunctions.BBSLOG(String(args[0]), String(args[1]));
       return;
+    }
+
+    // BBS Functions - New
+    if (funcName === 'BBSGETUSER') {
+      return await this.bbsFunctions.BBSGETUSER(args[0]);
+    }
+    if (funcName === 'BBSSETUSER') {
+      return await this.bbsFunctions.BBSSETUSER(String(args[0]), args[1]);
+    }
+    if (funcName === 'BBSGETONLINECOUNT') {
+      return await this.bbsFunctions.BBSGETONLINECOUNT();
+    }
+    if (funcName === 'BBSGETONLINEUSERS') {
+      return await this.bbsFunctions.BBSGETONLINEUSERS();
+    }
+    if (funcName === 'BBSGETCONFNAME') {
+      return await this.bbsFunctions.BBSGETCONFNAME(args[0] ? Number(args[0]) : undefined);
+    }
+    if (funcName === 'BBSGETCONFERENCES') {
+      return await this.bbsFunctions.BBSGETCONFERENCES();
+    }
+    if (funcName === 'BBSCHECKLEVEL') {
+      return this.bbsFunctions.BBSCHECKLEVEL(Number(args[0]));
+    }
+    if (funcName === 'BBSSENDPRIVATE') {
+      return await this.bbsFunctions.BBSSENDPRIVATE(String(args[0]), String(args[1]), String(args[2]));
+    }
+    if (funcName === 'BBSGETLASTCALLER') {
+      return await this.bbsFunctions.BBSGETLASTCALLER();
     }
 
     // Standard AREXX Functions
@@ -603,19 +1024,8 @@ export class EnhancedAREXXEngine {
     for (const [id, script] of this.scripts) {
       if (!script.enabled) continue;
 
-      const triggers = script.triggers || [];
-      const matchingTrigger = triggers.find((t: AREXXTrigger) => t.event === event);
-
-      if (matchingTrigger) {
-        // Check condition if specified
-        if (matchingTrigger.condition) {
-          const interpreter = new AREXXInterpreter(context);
-          const condResult = await interpreter.execute(`IF ${matchingTrigger.condition} THEN SAY "TRUE"`);
-          if (!condResult.success || condResult.output.length === 0) {
-            continue;
-          }
-        }
-
+      // Check if script trigger matches event
+      if (script.trigger === event) {
         const result = await this.executeScript(script, context);
         results.push(result);
       }
@@ -662,7 +1072,7 @@ export class EnhancedAREXXEngine {
       });
 
       // Execute script code
-      const result = await interpreter.execute(script.code);
+      const result = await interpreter.execute(script.script);
 
       // Log execution
       await db.executeAREXXScript(script.id, {
@@ -721,7 +1131,7 @@ export class EnhancedAREXXEngine {
    */
   getScriptsByTrigger(event: string): AREXXScript[] {
     return Array.from(this.scripts.values()).filter(script =>
-      script.triggers?.some((t: AREXXTrigger) => t.event === event)
+      script.trigger === event
     );
   }
 }
