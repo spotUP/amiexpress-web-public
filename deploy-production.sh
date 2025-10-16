@@ -191,12 +191,16 @@ fetch_vercel_logs() {
 }
 
 fetch_render_logs() {
-    local service_name="$1"
+    local service_id="$1"
     local log_output="$LOGS_DIR/render_deploy_logs_${TIMESTAMP}.txt"
 
     log "Fetching Render deployment logs..."
 
-    if render logs -s "$service_name" --tail 100 > "$log_output" 2>&1; then
+    # Render CLI requires -r flag for resources and -o json for non-interactive mode
+    if render logs -r "$service_id" --limit 200 --type build -o json 2>&1 > "$log_output"; then
+        # Extract just the messages from JSON
+        cat "$log_output" | grep -o '"message": "[^"]*"' | cut -d'"' -f4 > "${log_output}.txt"
+        mv "${log_output}.txt" "$log_output"
         echo "$log_output"
         return 0
     else
@@ -622,13 +626,13 @@ VERCEL_USER=$(vercel whoami 2>/dev/null)
 success "Logged in to Vercel as: $VERCEL_USER"
 
 # Check Render authentication
-if ! render whoami &> /dev/null; then
+if ! render whoami -o json &> /dev/null; then
     warning "Not logged in to Render"
     info "Run: render login"
     info "Continuing with Vercel-only deployment"
     RENDER_AVAILABLE=false
 else
-    RENDER_USER=$(render whoami 2>/dev/null | head -1)
+    RENDER_USER=$(render whoami -o json 2>/dev/null | grep -o '"Email": "[^"]*"' | cut -d'"' -f4 || echo "unknown")
     success "Logged in to Render as: $RENDER_USER"
     RENDER_AVAILABLE=true
 fi
@@ -944,60 +948,38 @@ if [ "$DRY_RUN" = false ]; then
             RENDER_SERVICE=""
             RENDER_SERVICE_URL=""
 
-            if render services list 2>/dev/null | grep -q "amiexpress"; then
-                RENDER_SERVICE=$(render services list 2>/dev/null | grep "amiexpress" | head -1 | awk '{print $2}' || echo "")
+            # Get services list in JSON format
+            SERVICES_JSON=$(render services list -o json 2>/dev/null)
+
+            if echo "$SERVICES_JSON" | grep -q "amiexpress"; then
+                # Extract service ID from JSON
+                RENDER_SERVICE=$(echo "$SERVICES_JSON" | grep -o '"id": "srv-[^"]*"' | head -1 | cut -d'"' -f4)
+                RENDER_SERVICE_URL=$(echo "$SERVICES_JSON" | grep -o '"url": "https://[^"]*\.onrender\.com"' | head -1 | cut -d'"' -f4)
+
                 if [ -n "$RENDER_SERVICE" ]; then
                     info "Render service found: $RENDER_SERVICE"
-
-                    # Try to trigger a manual deployment
-                    log "Triggering Render deployment..."
-
-                    # Render CLI deploy command
-                    if [ "$VERBOSE" = true ]; then
-                        render deploy --service="$RENDER_SERVICE" --yes 2>&1 | tee "$RENDER_OUTPUT"
-                    else
-                        render deploy --service="$RENDER_SERVICE" --yes > "$RENDER_OUTPUT" 2>&1 &
-                        RENDER_PID=$!
-                        spinner $RENDER_PID "Deploying to Render..."
-                        wait $RENDER_PID
+                    if [ -n "$RENDER_SERVICE_URL" ]; then
+                        info "Service URL: $RENDER_SERVICE_URL"
                     fi
 
-                    RENDER_EXIT_CODE=$?
+                    # Note: Render auto-deploys from GitHub, so we just notify
+                    log "Render will auto-deploy from GitHub push..."
 
-                    if [ $RENDER_EXIT_CODE -eq 0 ]; then
-                        success "Render deployment triggered successfully"
+                    # Check if there's a recent deployment
+                    info "Note: Render auto-deploys from GitHub within 1-2 minutes"
+                    info "Manual trigger via CLI is not needed for connected repos"
 
-                        # Extract deployment URL if available
-                        RENDER_SERVICE_URL=$(grep -o 'https://[^[:space:]]*\.onrender\.com' "$RENDER_OUTPUT" | head -1 || echo "")
-
-                        if [ -n "$RENDER_SERVICE_URL" ]; then
-                            echo ""
-                            echo -e "${BOLD}Render Deployment:${NC}"
-                            echo -e "  ${CYAN}${ICON_DEPLOY} Backend URL:${NC}  $RENDER_SERVICE_URL"
-                            echo ""
-                        else
-                            # Try to get URL from service info
-                            info "Fetching Render service URL..."
-                            if render services get "$RENDER_SERVICE" 2>/dev/null | grep -q "https://"; then
-                                RENDER_SERVICE_URL=$(render services get "$RENDER_SERVICE" 2>/dev/null | grep -o 'https://[^[:space:]]*\.onrender\.com' | head -1)
-                                if [ -n "$RENDER_SERVICE_URL" ]; then
-                                    echo -e "  ${CYAN}${ICON_DEPLOY} Backend URL:${NC}  $RENDER_SERVICE_URL"
-                                fi
-                            fi
-                        fi
-                    else
-                        warning "Render deployment may still be in progress"
-                        info "Check status: render services get $RENDER_SERVICE"
-
-                        if [ "$VERBOSE" = true ]; then
-                            echo ""
-                            echo -e "${YELLOW}Render Output:${NC}"
-                            cat "$RENDER_OUTPUT"
-                            echo ""
-                        fi
+                    echo ""
+                    echo -e "${BOLD}Render Service:${NC}"
+                    echo -e "  ${CYAN}${ICON_DEPLOY} Service ID:${NC}   $RENDER_SERVICE"
+                    if [ -n "$RENDER_SERVICE_URL" ]; then
+                        echo -e "  ${CYAN}${ICON_DEPLOY} Backend URL:${NC}  $RENDER_SERVICE_URL"
                     fi
+                    echo ""
+
+                    success "Render service configured for auto-deploy"
                 else
-                    warning "Could not determine Render service name"
+                    warning "Could not determine Render service ID"
                     info "Render will auto-deploy from GitHub push"
                 fi
             else
