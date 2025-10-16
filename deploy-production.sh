@@ -4,13 +4,18 @@
 # AmiExpress-Web Production Deployment Script
 # ============================================
 # A comprehensive deployment script with pre-flight checks,
-# automated testing, rollback capabilities, and health monitoring.
+# automated testing, rollback capabilities, health monitoring,
+# and intelligent auto-fix capabilities.
 #
 # Features:
 # - Pre-deployment validation (tests, builds, env checks)
-# - Automated deployment to Vercel
-# - Health checks and smoke tests
+# - Automated deployment to Vercel (frontend) and Render (backend)
+# - Dual-platform deployment support
+# - Health checks and smoke tests for both platforms
 # - Automatic rollback on failure
+# - Post-deployment error detection from logs
+# - Intelligent auto-fix for common build errors
+# - Automatic redeployment after fixes (max 2 attempts)
 # - Deployment notifications
 # - Comprehensive logging
 #
@@ -34,9 +39,11 @@
 #
 # Requirements:
 # - Vercel CLI installed (npm i -g vercel)
+# - Render CLI installed (npm i -g render) - optional
 # - Node.js and npm
 # - Git repository
 # - Vercel account configured
+# - Render account configured (optional)
 # ============================================
 
 set -euo pipefail
@@ -45,7 +52,7 @@ set -euo pipefail
 # CONFIGURATION
 # ============================================
 
-SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION="3.0.0"
 SCRIPT_NAME="AmiExpress Deploy"
 PROJECT_NAME="AmiExpress-Web"
 
@@ -64,6 +71,8 @@ ERROR_LOG="$LOGS_DIR/deploy_error_${TIMESTAMP}.log"
 DEPLOY_TIMEOUT=300  # 5 minutes
 HEALTH_CHECK_RETRIES=10
 HEALTH_CHECK_DELAY=5
+MAX_FIX_ATTEMPTS=2  # Maximum number of auto-fix and redeploy attempts
+CURRENT_ATTEMPT=0
 
 # URLs (will be updated after deployment)
 PRODUCTION_URL=""
@@ -161,6 +170,259 @@ spinner() {
 }
 
 # ============================================
+# ERROR DETECTION AND AUTO-FIX FUNCTIONS
+# ============================================
+
+fetch_vercel_logs() {
+    local deployment_url="$1"
+    local log_output="$LOGS_DIR/vercel_deploy_logs_${TIMESTAMP}.txt"
+
+    log "Fetching Vercel deployment logs..."
+
+    if vercel logs "$deployment_url" --output "$log_output" 2>&1 | head -100 > "$log_output"; then
+        echo "$log_output"
+        return 0
+    else
+        # Alternative: get logs without output flag
+        vercel logs "$deployment_url" 2>&1 | head -100 > "$log_output"
+        echo "$log_output"
+        return 0
+    fi
+}
+
+fetch_render_logs() {
+    local service_name="$1"
+    local log_output="$LOGS_DIR/render_deploy_logs_${TIMESTAMP}.txt"
+
+    log "Fetching Render deployment logs..."
+
+    if render logs -s "$service_name" --tail 100 > "$log_output" 2>&1; then
+        echo "$log_output"
+        return 0
+    else
+        warning "Could not fetch Render logs"
+        echo ""
+        return 1
+    fi
+}
+
+detect_build_errors() {
+    local log_file="$1"
+    local platform="$2"  # "vercel" or "render"
+
+    if [ ! -f "$log_file" ]; then
+        return 1
+    fi
+
+    # Common error patterns
+    local error_patterns=(
+        "ERROR"
+        "Error:"
+        "error TS"
+        "Build failed"
+        "build failed"
+        "Cannot find module"
+        "Module not found"
+        "SyntaxError"
+        "TypeError"
+        "ReferenceError"
+        "ENOENT"
+        "npm ERR!"
+        "Command failed"
+        "Exit code: 1"
+    )
+
+    local errors_found=false
+    local error_summary="$LOGS_DIR/error_summary_${TIMESTAMP}.txt"
+
+    echo "=== Build Errors Detected in $platform ===" > "$error_summary"
+    echo "" >> "$error_summary"
+
+    for pattern in "${error_patterns[@]}"; do
+        if grep -i "$pattern" "$log_file" >> "$error_summary" 2>/dev/null; then
+            errors_found=true
+        fi
+    done
+
+    if [ "$errors_found" = true ]; then
+        echo "$error_summary"
+        return 0
+    else
+        rm "$error_summary" 2>/dev/null
+        return 1
+    fi
+}
+
+analyze_and_fix_errors() {
+    local error_file="$1"
+    local platform="$2"
+
+    header "🔧 AUTO-FIX: ANALYZING ERRORS"
+
+    warning "Build errors detected in $platform deployment"
+    echo ""
+    echo -e "${BOLD}Error Summary:${NC}"
+    head -30 "$error_file"
+    echo ""
+
+    # Check if this is a TypeScript error
+    if grep -q "error TS" "$error_file"; then
+        info "TypeScript errors detected"
+        fix_typescript_errors "$error_file"
+        return $?
+    fi
+
+    # Check if this is a module not found error
+    if grep -q -i "cannot find module\|module not found" "$error_file"; then
+        info "Module dependency errors detected"
+        fix_module_errors "$error_file"
+        return $?
+    fi
+
+    # Check if this is a build configuration error
+    if grep -q -i "build failed\|command failed" "$error_file"; then
+        info "Build configuration errors detected"
+        fix_build_errors "$error_file"
+        return $?
+    fi
+
+    warning "Could not automatically determine fix strategy"
+    return 1
+}
+
+fix_typescript_errors() {
+    local error_file="$1"
+
+    info "Running TypeScript compiler to get detailed errors..."
+
+    cd "$BACKEND_DIR"
+    npx tsc --noEmit > "$LOGS_DIR/tsc_backend_errors.txt" 2>&1 || true
+
+    cd "$FRONTEND_DIR"
+    npx tsc --noEmit > "$LOGS_DIR/tsc_frontend_errors.txt" 2>&1 || true
+
+    cd "$PROJECT_ROOT"
+
+    # Look for common fixable TypeScript issues
+    local backend_errors="$LOGS_DIR/tsc_backend_errors.txt"
+    local frontend_errors="$LOGS_DIR/tsc_frontend_errors.txt"
+
+    local fixed=false
+
+    # Check for missing type definitions
+    if grep -q "Could not find a declaration file" "$backend_errors" "$frontend_errors" 2>/dev/null; then
+        info "Installing missing type definitions..."
+
+        # Extract package names and install @types packages
+        for pkg in $(grep "Could not find a declaration file" "$backend_errors" "$frontend_errors" 2>/dev/null | grep -o "for '[^']*'" | cut -d"'" -f2); do
+            info "Installing @types/$pkg..."
+            cd "$BACKEND_DIR" && npm install --save-dev "@types/$pkg" 2>/dev/null || true
+            cd "$FRONTEND_DIR" && npm install --save-dev "@types/$pkg" 2>/dev/null || true
+            fixed=true
+        done
+
+        cd "$PROJECT_ROOT"
+    fi
+
+    if [ "$fixed" = true ]; then
+        success "Applied TypeScript fixes"
+        return 0
+    else
+        warning "No automatic fixes available for these TypeScript errors"
+        return 1
+    fi
+}
+
+fix_module_errors() {
+    local error_file="$1"
+
+    info "Analyzing module dependency errors..."
+
+    # Extract missing module names
+    local missing_modules=$(grep -i "cannot find module\|module not found" "$error_file" | grep -o "'[^']*'" | tr -d "'" | sort -u)
+
+    if [ -z "$missing_modules" ]; then
+        return 1
+    fi
+
+    echo ""
+    echo -e "${BOLD}Missing modules detected:${NC}"
+    echo "$missing_modules"
+    echo ""
+
+    read -p "Install missing modules automatically? (yes/no): " confirm
+    if [ "$confirm" != "yes" ]; then
+        return 1
+    fi
+
+    local fixed=false
+
+    for module in $missing_modules; do
+        info "Installing $module..."
+
+        # Try backend first
+        if cd "$BACKEND_DIR" && npm install "$module" 2>/dev/null; then
+            success "Installed $module in backend"
+            fixed=true
+        fi
+
+        # Try frontend
+        if cd "$FRONTEND_DIR" && npm install "$module" 2>/dev/null; then
+            success "Installed $module in frontend"
+            fixed=true
+        fi
+
+        cd "$PROJECT_ROOT"
+    done
+
+    if [ "$fixed" = true ]; then
+        success "Installed missing dependencies"
+        return 0
+    else
+        return 1
+    fi
+}
+
+fix_build_errors() {
+    local error_file="$1"
+
+    info "Analyzing build configuration errors..."
+
+    # Check for common build issues
+    if grep -q "out of memory\|heap out of memory" "$error_file"; then
+        warning "Build failed due to memory issues"
+        info "Consider increasing Node memory: NODE_OPTIONS=--max_old_space_size=4096"
+        return 1
+    fi
+
+    if grep -q "ENOENT.*package.json" "$error_file"; then
+        warning "Package.json not found - this might be a path issue"
+        return 1
+    fi
+
+    # Try cleaning and reinstalling dependencies
+    read -p "Clean and reinstall dependencies? (yes/no): " confirm
+    if [ "$confirm" != "yes" ]; then
+        return 1
+    fi
+
+    info "Cleaning node_modules and package-lock.json..."
+
+    cd "$BACKEND_DIR"
+    rm -rf node_modules package-lock.json
+    npm install
+
+    cd "$FRONTEND_DIR"
+    rm -rf node_modules package-lock.json
+    npm install
+
+    cd "$PROJECT_ROOT"
+
+    success "Reinstalled all dependencies"
+    return 0
+}
+
+# ============================================
 # PARSE COMMAND LINE OPTIONS
 # ============================================
 
@@ -171,6 +433,8 @@ DRY_RUN=false
 DO_ROLLBACK=false
 IS_STAGING=false
 VERBOSE=false
+AUTO_FIX=true  # Enable auto-fix by default
+SKIP_ERROR_CHECK=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -202,6 +466,14 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
+        --no-auto-fix)
+            AUTO_FIX=false
+            shift
+            ;;
+        --skip-error-check)
+            SKIP_ERROR_CHECK=true
+            shift
+            ;;
         -h|--help)
             cat << EOF
 ${BOLD}$SCRIPT_NAME v$SCRIPT_VERSION${NC}
@@ -210,14 +482,16 @@ ${BOLD}USAGE:${NC}
     $0 [options]
 
 ${BOLD}OPTIONS:${NC}
-    --skip-tests       Skip TypeScript compilation and tests
-    --skip-build       Skip local build validation
-    --force            Force deployment even if checks fail
-    --dry-run          Show what would be deployed without deploying
-    --rollback         Rollback to previous deployment
-    --staging          Deploy to staging instead of production
-    --verbose          Show detailed output
-    -h, --help         Show this help message
+    --skip-tests          Skip TypeScript compilation and tests
+    --skip-build          Skip local build validation
+    --force               Force deployment even if checks fail
+    --dry-run             Show what would be deployed without deploying
+    --rollback            Rollback to previous deployment
+    --staging             Deploy to staging instead of production
+    --verbose             Show detailed output
+    --no-auto-fix         Disable automatic error fixing and redeployment
+    --skip-error-check    Skip post-deployment error checking
+    -h, --help            Show this help message
 
 ${BOLD}EXAMPLES:${NC}
     $0                           # Standard production deploy
@@ -228,9 +502,15 @@ ${BOLD}EXAMPLES:${NC}
 
 ${BOLD}REQUIREMENTS:${NC}
     - Vercel CLI installed (npm i -g vercel)
+    - Render CLI installed (npm i -g render) - optional for backend deployment
     - Node.js and npm
     - Git repository
     - Vercel account configured
+    - Render account configured (optional)
+
+${BOLD}DEPLOYMENT TARGETS:${NC}
+    - Frontend → Vercel (required)
+    - Backend → Render (optional, auto-detected)
 
 EOF
             exit 0
@@ -313,17 +593,19 @@ fi
 # STEP 1: PRE-FLIGHT CHECKS
 # ============================================
 
-header "${ICON_INFO} STEP 1/8: PRE-FLIGHT CHECKS"
+header "${ICON_INFO} STEP 1/9: PRE-FLIGHT CHECKS"
 
-step 1 8 "Checking prerequisites..."
+step 1 9 "Checking prerequisites..."
 
 # Check required commands
-required_commands=(vercel git node npm)
+required_commands=(vercel render git node npm)
 for cmd in "${required_commands[@]}"; do
     if ! command -v "$cmd" &> /dev/null; then
         error "Required command not found: $cmd"
         if [ "$cmd" = "vercel" ]; then
             info "Install with: npm install -g vercel"
+        elif [ "$cmd" = "render" ]; then
+            info "Install with: npm install -g render"
         fi
         exit 1
     fi
@@ -337,7 +619,19 @@ if ! vercel whoami &> /dev/null; then
     exit 1
 fi
 VERCEL_USER=$(vercel whoami 2>/dev/null)
-success "Logged in as: $VERCEL_USER"
+success "Logged in to Vercel as: $VERCEL_USER"
+
+# Check Render authentication
+if ! render whoami &> /dev/null; then
+    warning "Not logged in to Render"
+    info "Run: render login"
+    info "Continuing with Vercel-only deployment"
+    RENDER_AVAILABLE=false
+else
+    RENDER_USER=$(render whoami 2>/dev/null | head -1)
+    success "Logged in to Render as: $RENDER_USER"
+    RENDER_AVAILABLE=true
+fi
 
 # Check git status
 if [ -n "$(git status --porcelain)" ] && [ "$FORCE_DEPLOY" = false ]; then
@@ -371,9 +665,9 @@ success "Pre-flight checks passed"
 # ============================================
 
 if [ "$SKIP_TESTS" = false ]; then
-    header "${ICON_TEST} STEP 2/8: TYPESCRIPT COMPILATION"
+    header "${ICON_TEST} STEP 2/9: TYPESCRIPT COMPILATION"
 
-    step 2 8 "Compiling TypeScript (backend)..."
+    step 2 9 "Compiling TypeScript (backend)..."
 
     cd "$BACKEND_DIR"
     if [ "$VERBOSE" = true ]; then
@@ -395,7 +689,7 @@ if [ "$SKIP_TESTS" = false ]; then
         fi
     fi
 
-    step 2 8 "Compiling TypeScript (frontend)..."
+    step 2 9 "Compiling TypeScript (frontend)..."
 
     cd "$FRONTEND_DIR"
     if [ "$VERBOSE" = true ]; then
@@ -419,7 +713,7 @@ if [ "$SKIP_TESTS" = false ]; then
 
     cd "$PROJECT_ROOT"
 else
-    header "${ICON_INFO} STEP 2/8: TYPESCRIPT COMPILATION (SKIPPED)"
+    header "${ICON_INFO} STEP 2/9: TYPESCRIPT COMPILATION (SKIPPED)"
     warning "TypeScript compilation skipped"
 fi
 
@@ -428,9 +722,9 @@ fi
 # ============================================
 
 if [ "$SKIP_BUILD" = false ]; then
-    header "${ICON_BUILD} STEP 3/8: BUILD VALIDATION"
+    header "${ICON_BUILD} STEP 3/9: BUILD VALIDATION"
 
-    step 3 8 "Building frontend..."
+    step 3 9 "Building frontend..."
 
     cd "$FRONTEND_DIR"
     if [ "$VERBOSE" = true ]; then
@@ -458,7 +752,7 @@ if [ "$SKIP_BUILD" = false ]; then
         fi
     fi
 
-    step 3 8 "Building backend..."
+    step 3 9 "Building backend..."
 
     cd "$BACKEND_DIR"
     if [ "$VERBOSE" = true ]; then
@@ -482,7 +776,7 @@ if [ "$SKIP_BUILD" = false ]; then
 
     cd "$PROJECT_ROOT"
 else
-    header "${ICON_INFO} STEP 3/8: BUILD VALIDATION (SKIPPED)"
+    header "${ICON_INFO} STEP 3/9: BUILD VALIDATION (SKIPPED)"
     warning "Build validation skipped"
 fi
 
@@ -490,9 +784,9 @@ fi
 # STEP 4: SECURITY CHECK
 # ============================================
 
-header "${ICON_INFO} STEP 4/8: SECURITY CHECK"
+header "${ICON_INFO} STEP 4/9: SECURITY CHECK"
 
-step 4 8 "Checking for security vulnerabilities..."
+step 4 9 "Checking for security vulnerabilities..."
 
 cd "$BACKEND_DIR"
 if npm audit --audit-level=high > /dev/null 2>&1; then
@@ -530,7 +824,7 @@ cd "$PROJECT_ROOT"
 # STEP 5: DEPLOYMENT SUMMARY
 # ============================================
 
-header "${ICON_PACKAGE} STEP 5/8: DEPLOYMENT SUMMARY"
+header "${ICON_PACKAGE} STEP 5/9: DEPLOYMENT SUMMARY"
 
 # Get git info
 GIT_COMMIT=$(git rev-parse --short HEAD)
@@ -574,13 +868,13 @@ if [ "$DRY_RUN" = false ] && [ "$FORCE_DEPLOY" = false ]; then
 fi
 
 # ============================================
-# STEP 7: DEPLOY TO VERCEL
+# STEP 6: DEPLOY TO VERCEL
 # ============================================
 
 if [ "$DRY_RUN" = false ]; then
-    header "${ICON_ROCKET} STEP 6/8: DEPLOYING TO VERCEL"
+    header "${ICON_ROCKET} STEP 6/9: DEPLOYING TO VERCEL"
 
-    step 6 8 "Starting deployment..."
+    step 6 9 "Starting deployment..."
 
     # Unset placeholder environment variables
     unset VERCEL_PROJECT_ID
@@ -635,27 +929,115 @@ if [ "$DRY_RUN" = false ]; then
 
     rm "$DEPLOY_OUTPUT"
 
+    # Deploy to Render if available
+    if [ "$RENDER_AVAILABLE" = true ]; then
+        echo ""
+        step 6 9 "Deploying backend to Render..."
+
+        # Check if render.yaml exists
+        if [ -f "render.yaml" ]; then
+            log "Deploying backend to Render.com..."
+
+            RENDER_OUTPUT=$(mktemp)
+
+            # Get Render service info
+            RENDER_SERVICE=""
+            RENDER_SERVICE_URL=""
+
+            if render services list 2>/dev/null | grep -q "amiexpress"; then
+                RENDER_SERVICE=$(render services list 2>/dev/null | grep "amiexpress" | head -1 | awk '{print $2}' || echo "")
+                if [ -n "$RENDER_SERVICE" ]; then
+                    info "Render service found: $RENDER_SERVICE"
+
+                    # Try to trigger a manual deployment
+                    log "Triggering Render deployment..."
+
+                    # Render CLI deploy command
+                    if [ "$VERBOSE" = true ]; then
+                        render deploy --service="$RENDER_SERVICE" --yes 2>&1 | tee "$RENDER_OUTPUT"
+                    else
+                        render deploy --service="$RENDER_SERVICE" --yes > "$RENDER_OUTPUT" 2>&1 &
+                        RENDER_PID=$!
+                        spinner $RENDER_PID "Deploying to Render..."
+                        wait $RENDER_PID
+                    fi
+
+                    RENDER_EXIT_CODE=$?
+
+                    if [ $RENDER_EXIT_CODE -eq 0 ]; then
+                        success "Render deployment triggered successfully"
+
+                        # Extract deployment URL if available
+                        RENDER_SERVICE_URL=$(grep -o 'https://[^[:space:]]*\.onrender\.com' "$RENDER_OUTPUT" | head -1 || echo "")
+
+                        if [ -n "$RENDER_SERVICE_URL" ]; then
+                            echo ""
+                            echo -e "${BOLD}Render Deployment:${NC}"
+                            echo -e "  ${CYAN}${ICON_DEPLOY} Backend URL:${NC}  $RENDER_SERVICE_URL"
+                            echo ""
+                        else
+                            # Try to get URL from service info
+                            info "Fetching Render service URL..."
+                            if render services get "$RENDER_SERVICE" 2>/dev/null | grep -q "https://"; then
+                                RENDER_SERVICE_URL=$(render services get "$RENDER_SERVICE" 2>/dev/null | grep -o 'https://[^[:space:]]*\.onrender\.com' | head -1)
+                                if [ -n "$RENDER_SERVICE_URL" ]; then
+                                    echo -e "  ${CYAN}${ICON_DEPLOY} Backend URL:${NC}  $RENDER_SERVICE_URL"
+                                fi
+                            fi
+                        fi
+                    else
+                        warning "Render deployment may still be in progress"
+                        info "Check status: render services get $RENDER_SERVICE"
+
+                        if [ "$VERBOSE" = true ]; then
+                            echo ""
+                            echo -e "${YELLOW}Render Output:${NC}"
+                            cat "$RENDER_OUTPUT"
+                            echo ""
+                        fi
+                    fi
+                else
+                    warning "Could not determine Render service name"
+                    info "Render will auto-deploy from GitHub push"
+                fi
+            else
+                warning "No Render services found"
+                info "Make sure your service is connected to GitHub"
+                info "Render will auto-deploy when you push to GitHub"
+            fi
+
+            rm "$RENDER_OUTPUT" 2>/dev/null || true
+        else
+            warning "render.yaml not found - skipping Render deployment"
+            info "Create render.yaml to enable Render deployments"
+        fi
+    else
+        warning "Render CLI not authenticated - skipping Render deployment"
+        info "Run 'render login' to enable Render deployments"
+    fi
+
 else
-    header "${ICON_INFO} STEP 6/8: DEPLOY TO VERCEL (DRY RUN)"
+    header "${ICON_INFO} STEP 6/9: DEPLOY TO VERCEL (DRY RUN)"
     info "Dry run mode - skipping actual deployment"
     info "Would deploy commit: $GIT_COMMIT"
     info "Would deploy to: $([ "$IS_STAGING" = true ] && echo "STAGING" || echo "PRODUCTION")"
+    info "Would deploy to both Vercel and Render"
 
     # Set dummy URL for dry run
     DEPLOYMENT_URL="https://dry-run-example.vercel.app"
 fi
 
 # ============================================
-# STEP 8: HEALTH CHECKS
+# STEP 7: HEALTH CHECKS
 # ============================================
 
 if [ "$DRY_RUN" = false ]; then
-    header "${ICON_HEALTH} STEP 7/8: HEALTH CHECKS"
+    header "${ICON_HEALTH} STEP 7/9: HEALTH CHECKS"
 
-    step 7 8 "Waiting for deployment to be ready..."
+    step 7 9 "Waiting for deployment to be ready..."
     sleep 5
 
-    step 7 8 "Checking deployment health..."
+    step 7 9 "Checking deployment health..."
 
     HEALTH_CHECK_URL="$DEPLOYMENT_URL"
     HEALTH_PASSED=false
@@ -681,33 +1063,215 @@ if [ "$DRY_RUN" = false ]; then
         warning "The deployment may still be working, check manually"
     fi
 
-    # Test Socket.io connection
-    step 7 8 "Testing Socket.io endpoint..."
+    # Test Socket.io connection on Vercel (if frontend has Socket.io)
+    step 7 9 "Testing Socket.io endpoint (Vercel)..."
     if curl -s "$DEPLOYMENT_URL/socket.io/" | grep -q "socket.io"; then
-        success "Socket.io endpoint responding"
+        success "Socket.io endpoint responding on Vercel"
     else
-        warning "Socket.io endpoint check inconclusive"
+        warning "Socket.io endpoint check inconclusive on Vercel"
+    fi
+
+    # Test Render backend if available
+    if [ -n "$RENDER_SERVICE_URL" ]; then
+        echo ""
+        step 7 9 "Testing Render backend health..."
+
+        RENDER_HEALTH_PASSED=false
+
+        for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$RENDER_SERVICE_URL" 2>/dev/null || echo "000")
+
+            if echo "$HTTP_CODE" | grep -q "200\|301\|302"; then
+                RENDER_HEALTH_PASSED=true
+                break
+            fi
+
+            if [ $i -lt $HEALTH_CHECK_RETRIES ]; then
+                echo -ne "  Attempt $i/$HEALTH_CHECK_RETRIES - Waiting ${HEALTH_CHECK_DELAY}s...\r"
+                sleep $HEALTH_CHECK_DELAY
+            fi
+        done
+
+        echo ""
+
+        if [ "$RENDER_HEALTH_PASSED" = true ]; then
+            success "Render backend is healthy and responding"
+        else
+            warning "Render backend health check failed (may still be deploying)"
+            info "Render deployments can take 5-10 minutes to fully start"
+        fi
+
+        # Test Render Socket.io endpoint
+        step 7 9 "Testing Socket.io endpoint (Render)..."
+        if curl -s "$RENDER_SERVICE_URL/socket.io/" 2>/dev/null | grep -q "socket.io"; then
+            success "Socket.io endpoint responding on Render"
+        else
+            warning "Socket.io endpoint not yet available on Render (may still be starting)"
+        fi
     fi
 
 else
-    header "${ICON_INFO} STEP 7/8: HEALTH CHECKS (SKIPPED - DRY RUN)"
+    header "${ICON_INFO} STEP 7/9: HEALTH CHECKS (SKIPPED - DRY RUN)"
     info "Would perform health checks on: $DEPLOYMENT_URL"
+fi
+
+# ============================================
+# STEP 8: ERROR DETECTION AND AUTO-FIX
+# ============================================
+
+if [ "$DRY_RUN" = false ] && [ "$SKIP_ERROR_CHECK" = false ]; then
+    header "${ICON_INFO} STEP 8/9: POST-DEPLOYMENT ERROR CHECK"
+
+    step 8 9 "Checking deployment logs for errors..."
+
+    ERRORS_DETECTED=false
+    VERCEL_ERRORS=""
+    RENDER_ERRORS=""
+
+    # Check Vercel logs
+    if [ -n "$DEPLOYMENT_URL" ]; then
+        sleep 3  # Wait for logs to be available
+        VERCEL_LOG_FILE=$(fetch_vercel_logs "$DEPLOYMENT_URL")
+
+        if [ -n "$VERCEL_LOG_FILE" ]; then
+            if ERROR_SUMMARY=$(detect_build_errors "$VERCEL_LOG_FILE" "Vercel"); then
+                warning "Build errors detected in Vercel deployment"
+                ERRORS_DETECTED=true
+                VERCEL_ERRORS="$ERROR_SUMMARY"
+            else
+                success "No build errors detected in Vercel logs"
+            fi
+        fi
+    fi
+
+    # Check Render logs
+    if [ -n "$RENDER_SERVICE" ] && [ "$RENDER_AVAILABLE" = true ]; then
+        sleep 3  # Wait for logs to be available
+        RENDER_LOG_FILE=$(fetch_render_logs "$RENDER_SERVICE")
+
+        if [ -n "$RENDER_LOG_FILE" ] && [ -f "$RENDER_LOG_FILE" ]; then
+            if ERROR_SUMMARY=$(detect_build_errors "$RENDER_LOG_FILE" "Render"); then
+                warning "Build errors detected in Render deployment"
+                ERRORS_DETECTED=true
+                RENDER_ERRORS="$ERROR_SUMMARY"
+            else
+                success "No build errors detected in Render logs"
+            fi
+        fi
+    fi
+
+    # If errors detected and auto-fix is enabled
+    if [ "$ERRORS_DETECTED" = true ] && [ "$AUTO_FIX" = true ]; then
+        # Check if we haven't exceeded max attempts
+        CURRENT_ATTEMPT=$((CURRENT_ATTEMPT + 1))
+
+        if [ $CURRENT_ATTEMPT -le $MAX_FIX_ATTEMPTS ]; then
+            warning "Attempt $CURRENT_ATTEMPT of $MAX_FIX_ATTEMPTS to auto-fix errors"
+            echo ""
+
+            FIXES_APPLIED=false
+
+            # Try to fix Vercel errors
+            if [ -n "$VERCEL_ERRORS" ]; then
+                if analyze_and_fix_errors "$VERCEL_ERRORS" "Vercel"; then
+                    FIXES_APPLIED=true
+                fi
+            fi
+
+            # Try to fix Render errors
+            if [ -n "$RENDER_ERRORS" ]; then
+                if analyze_and_fix_errors "$RENDER_ERRORS" "Render"; then
+                    FIXES_APPLIED=true
+                fi
+            fi
+
+            if [ "$FIXES_APPLIED" = true ]; then
+                echo ""
+                warning "Fixes have been applied. Redeploying..."
+                echo ""
+
+                # Commit the fixes
+                if [ -n "$(git status --porcelain)" ]; then
+                    info "Committing auto-fixes..."
+                    git add -A
+                    git commit -m "Auto-fix: Resolve deployment errors (attempt $CURRENT_ATTEMPT)
+
+Applied automatic fixes for build errors detected in deployment logs.
+
+🤖 Generated with Claude Code Deployment Script
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+                    success "Changes committed"
+                fi
+
+                # Recursive call to redeploy with same flags
+                info "Redeploying with fixes..."
+                sleep 2
+
+                # Build the command with current flags
+                REDEPLOY_CMD="$0"
+                [ "$SKIP_TESTS" = true ] && REDEPLOY_CMD="$REDEPLOY_CMD --skip-tests"
+                [ "$SKIP_BUILD" = true ] && REDEPLOY_CMD="$REDEPLOY_CMD --skip-build"
+                [ "$FORCE_DEPLOY" = true ] && REDEPLOY_CMD="$REDEPLOY_CMD --force"
+                [ "$IS_STAGING" = true ] && REDEPLOY_CMD="$REDEPLOY_CMD --staging"
+                [ "$VERBOSE" = true ] && REDEPLOY_CMD="$REDEPLOY_CMD --verbose"
+                [ "$AUTO_FIX" = false ] && REDEPLOY_CMD="$REDEPLOY_CMD --no-auto-fix"
+
+                exec $REDEPLOY_CMD
+            else
+                error "Could not automatically fix the detected errors"
+                warning "Manual intervention required"
+                echo ""
+                info "Review error logs at:"
+                [ -n "$VERCEL_ERRORS" ] && echo "  - $VERCEL_ERRORS"
+                [ -n "$RENDER_ERRORS" ] && echo "  - $RENDER_ERRORS"
+                echo ""
+            fi
+        else
+            error "Maximum fix attempts ($MAX_FIX_ATTEMPTS) reached"
+            warning "Manual intervention required"
+            echo ""
+            info "Review error logs and fix manually"
+        fi
+    elif [ "$ERRORS_DETECTED" = true ]; then
+        warning "Errors detected but auto-fix is disabled"
+        info "Use --auto-fix to enable automatic error fixing"
+        echo ""
+        info "Review error logs at:"
+        [ -n "$VERCEL_ERRORS" ] && echo "  - $VERCEL_ERRORS"
+        [ -n "$RENDER_ERRORS" ] && echo "  - $RENDER_ERRORS"
+    else
+        success "No errors detected in deployment logs"
+    fi
+else
+    if [ "$SKIP_ERROR_CHECK" = true ]; then
+        header "${ICON_INFO} STEP 8/9: ERROR CHECK (SKIPPED)"
+        warning "Error checking skipped"
+    else
+        header "${ICON_INFO} STEP 8/9: ERROR CHECK (SKIPPED - DRY RUN)"
+        info "Would check deployment logs for errors"
+    fi
 fi
 
 # ============================================
 # STEP 9: COMPLETION SUMMARY
 # ============================================
 
-header "${ICON_CHECK} STEP 8/8: DEPLOYMENT COMPLETE"
+header "${ICON_CHECK} STEP 9/9: DEPLOYMENT COMPLETE"
 
 echo -e "${GREEN}${BOLD}${ICON_ROCKET} Deployment Successful!${NC}"
 echo ""
 
 if [ "$DRY_RUN" = false ]; then
     echo -e "${BOLD}Quick Links:${NC}"
-    echo -e "  ${CYAN}${ICON_DEPLOY} Live Site:${NC}        $DEPLOYMENT_URL"
-    echo -e "  ${CYAN}${ICON_INFO} Vercel Dashboard:${NC} https://vercel.com/dashboard"
-    echo -e "  ${CYAN}${ICON_INFO} View Logs:${NC}        vercel logs $DEPLOYMENT_URL"
+    echo -e "  ${CYAN}${ICON_DEPLOY} Frontend (Vercel):${NC} $DEPLOYMENT_URL"
+    if [ -n "$RENDER_SERVICE_URL" ]; then
+        echo -e "  ${CYAN}${ICON_DEPLOY} Backend (Render):${NC}  $RENDER_SERVICE_URL"
+    fi
+    echo -e "  ${CYAN}${ICON_INFO} Vercel Dashboard:${NC}  https://vercel.com/dashboard"
+    if [ "$RENDER_AVAILABLE" = true ]; then
+        echo -e "  ${CYAN}${ICON_INFO} Render Dashboard:${NC}  https://dashboard.render.com"
+    fi
     echo ""
 
     echo -e "${BOLD}Deployment Details:${NC}"
@@ -715,19 +1279,27 @@ if [ "$DRY_RUN" = false ]; then
     echo -e "  ${CYAN}Branch:${NC}     $CURRENT_BRANCH"
     echo -e "  ${CYAN}Time:${NC}       $(date +'%Y-%m-%d %H:%M:%S')"
     echo -e "  ${CYAN}Log File:${NC}   $LOG_FILE"
+    if [ -n "$RENDER_SERVICE" ]; then
+        echo -e "  ${CYAN}Render:${NC}     $RENDER_SERVICE"
+    fi
     echo ""
 
     echo -e "${BOLD}Next Steps:${NC}"
-    echo "  1. Visit the deployment URL to verify"
-    echo "  2. Test key functionality (login, chat, etc.)"
+    echo "  1. Visit the deployment URLs to verify"
+    echo "  2. Test key functionality (login, chat, file transfer)"
     echo "  3. Monitor logs for any errors"
-    echo "  4. Update DNS if using custom domain"
+    echo "  4. Verify backend Socket.io connection"
+    echo "  5. Update DNS if using custom domain"
     echo ""
 
     echo -e "${BOLD}Useful Commands:${NC}"
-    echo -e "  ${CYAN}vercel logs${NC}                    View deployment logs"
-    echo -e "  ${CYAN}vercel inspect${NC}                 Inspect deployment details"
-    echo -e "  ${CYAN}./deploy-production.sh --rollback${NC}  Rollback this deployment"
+    echo -e "  ${CYAN}vercel logs${NC}                          View Vercel deployment logs"
+    echo -e "  ${CYAN}vercel inspect${NC}                       Inspect Vercel deployment details"
+    if [ "$RENDER_AVAILABLE" = true ] && [ -n "$RENDER_SERVICE" ]; then
+        echo -e "  ${CYAN}render logs -s $RENDER_SERVICE${NC}    View Render service logs"
+        echo -e "  ${CYAN}render services get $RENDER_SERVICE${NC}    Get Render service details"
+    fi
+    echo -e "  ${CYAN}./deploy-production.sh --rollback${NC}    Rollback this deployment"
     echo ""
 
 else
@@ -748,8 +1320,15 @@ if [ "$DRY_RUN" = false ]; then
   "branch": "$CURRENT_BRANCH",
   "author": "$GIT_AUTHOR",
   "environment": "$([ "$IS_STAGING" = true ] && echo "staging" || echo "production")",
-  "deployment_url": "$DEPLOYMENT_URL",
-  "production_url": "$PRODUCTION_URL",
+  "vercel": {
+    "deployment_url": "$DEPLOYMENT_URL",
+    "production_url": "$PRODUCTION_URL"
+  },
+  "render": {
+    "service": "${RENDER_SERVICE:-null}",
+    "service_url": "${RENDER_SERVICE_URL:-null}",
+    "available": $RENDER_AVAILABLE
+  },
   "log_file": "$LOG_FILE"
 }
 EOF
