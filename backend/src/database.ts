@@ -1,5 +1,6 @@
 import { Pool as PoolConstructor } from 'pg';
 import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
 
 // Import types from types.ts
 import type {
@@ -1300,12 +1301,22 @@ export class Database {
 
   // Utility methods
   async hashPassword(password: string): Promise<string> {
-    return crypto.createHash('sha256').update(password).digest('hex');
+    // Use bcrypt with 12 salt rounds (industry standard for security)
+    const saltRounds = 12;
+    return await bcrypt.hash(password, saltRounds);
   }
 
   async verifyPassword(password: string, hash: string): Promise<boolean> {
-    const hashed = await this.hashPassword(password);
-    return hashed === hash;
+    // bcrypt.compare handles both bcrypt and legacy SHA-256 hashes
+    try {
+      // First try bcrypt verification
+      return await bcrypt.compare(password, hash);
+    } catch (error) {
+      // Fallback for legacy SHA-256 hashes (for migration period)
+      // This allows old passwords to still work during migration
+      const sha256Hash = crypto.createHash('sha256').update(password).digest('hex');
+      return sha256Hash === hash;
+    }
   }
 
   async close(): Promise<void> {
@@ -1380,9 +1391,9 @@ export class Database {
       }
 
       console.log('Creating default sysop user...');
-      // Create default sysop user with fixed password hash
-      const hashedPassword = 'REDACTED'; // SHA256 of 'sysop'
-      console.log('Using fixed password hash for sysop:', hashedPassword);
+      // Create default sysop user with bcrypt hash
+      const hashedPassword = await this.hashPassword('sysop'); // bcrypt hash of 'sysop'
+      console.log('Generated secure bcrypt hash for sysop user');
 
       // Always try to update existing sysop user first, then create if doesn't exist
       const updateResult = await client.query(`

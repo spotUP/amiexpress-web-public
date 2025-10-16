@@ -5,8 +5,8 @@
 **AmiExpress-Web** is a 99% complete, production-ready web port of the legendary Commodore Amiga AmiExpress BBS system (v5.6.0), bringing classic 1990s BBS culture to modern web browsers through TypeScript, React, Socket.io, and PostgreSQL.
 
 **Status:** Production-ready with minor enhancements needed
-**Completion:** 99% (Core: 100%, Advanced: 98%, Polish: 95%)
-**Lines of Code:** 54,000+ (original E) + 4,500+ (TypeScript port)
+**Completion:** 99% (Core: 100%, Advanced: 100%, Polish: 95%)
+**Lines of Code:** 54,000+ (original E) + 6,500+ (TypeScript port)
 **Authenticity Score:** 99% - Pixel-perfect recreation
 
 ---
@@ -24,7 +24,7 @@
 | **Conferences** | 100% | ✅ Production | Multi-conference hierarchy |
 | **Door Games** | 100% | ✅ Production | SAmiLog, CheckUP implemented |
 | **Real-time Chat** | 100% | ✅ Production | Sysop paging, F1 toggle |
-| **AREXX Engine** | 100% | ✅ Production | Script triggers, conditions |
+| **AREXX Engine** | 100% | ✅ Production | All 4 phases complete (56 functions) |
 | **QWK/FTN** | 100% | ✅ Production | Full packet support |
 | **Multi-node** | 100% | ✅ Production | NodeManager with balancing |
 | **Security** | 85% | ⚠️ Needs Work | SHA-256 → bcrypt upgrade needed |
@@ -116,7 +116,12 @@ VERCEL (Primary)                  RENDER.COM (WebSocket)
 - [x] SAmiLog door (web-based)
 - [x] CheckUP door (web-based)
 - [x] Real-time sysop chat (F1 toggle, paging)
-- [x] AREXX scripting engine
+- [x] AREXX scripting engine (Phases 1-4 complete)
+  - [x] Phase 1: Core features + 29 functions
+  - [x] Phase 2: Loops, SELECT/WHEN + 9 functions
+  - [x] Phase 3: PARSE, PROCEDURE, file I/O + 9 functions
+  - [x] Phase 4: SIGNAL, ARG, INTERPRET, TRACE + 6 functions + 3 BBS functions
+  - [x] Total: 56 functions (20 standard + 36 BBS), 1,905 lines, 18 demo scripts
 - [x] QWK offline mail (parsing + creation)
 - [x] FTN message routing
 - [x] Protocol manager (ZModem/FTP simulation)
@@ -432,10 +437,14 @@ const redis = new Redis(process.env.REDIS_URL);
 
 ```
 Backend:
-- index.ts (2578 lines) - Main server, state machine
-- database.ts (1503 lines) - PostgreSQL layer
+- index.ts (2,578 lines) - Main server, state machine
+- arexx.ts (1,905 lines) - Complete AREXX interpreter (Phases 1-4)
+- database.ts (1,503 lines) - PostgreSQL layer
 - nodes.ts (699 lines) - Multi-node + AREXX
 - qwk.ts (976 lines) - QWK/FTN support
+
+AREXX Scripts:
+- 18 demo scripts (1,722 lines) - Comprehensive examples
 
 Frontend:
 - App.tsx (296 lines) - Terminal component
@@ -445,6 +454,9 @@ Documentation:
 - FEATURE_MATRIX.md - 99% completion tracker
 - COMMAND_REFERENCE.md - Implementation guide
 - IMPLEMENTATION_GUIDE.md - Porting instructions
+- AREXX_PROGRESS.md - AREXX status (all phases)
+- AREXX_PHASE4.md - Phase 4 advanced features
+- AREXX_DOCUMENTATION.md - Complete API reference
 
 Original Source:
 - AmiExpress/express.e (32,248 lines) - Original BBS

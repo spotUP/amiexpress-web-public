@@ -34,8 +34,206 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
+import Redis from 'ioredis';
 import { User, Door, DoorSession, ChatSession, ChatMessage, ChatState } from './types';
 import { db } from './database';
+
+// Simple rate limiter for Socket.IO events
+class SocketRateLimiter {
+  private attempts: Map<string, { count: number; resetTime: number }> = new Map();
+  private readonly maxAttempts: number;
+  private readonly windowMs: number;
+
+  constructor(maxAttempts: number = 5, windowMs: number = 15 * 60 * 1000) {
+    this.maxAttempts = maxAttempts;
+    this.windowMs = windowMs;
+
+    // Cleanup old entries every minute
+    setInterval(() => this.cleanup(), 60 * 1000);
+  }
+
+  check(identifier: string): boolean {
+    const now = Date.now();
+    const record = this.attempts.get(identifier);
+
+    if (!record || now > record.resetTime) {
+      // New window or expired window
+      this.attempts.set(identifier, {
+        count: 1,
+        resetTime: now + this.windowMs
+      });
+      return true;
+    }
+
+    if (record.count >= this.maxAttempts) {
+      // Rate limit exceeded
+      return false;
+    }
+
+    // Increment counter
+    record.count++;
+    return true;
+  }
+
+  reset(identifier: string): void {
+    this.attempts.delete(identifier);
+  }
+
+  private cleanup(): void {
+    const now = Date.now();
+    for (const [key, record] of this.attempts.entries()) {
+      if (now > record.resetTime) {
+        this.attempts.delete(key);
+      }
+    }
+  }
+}
+
+// Create rate limiters for different events
+const loginRateLimiter = new SocketRateLimiter(5, 15 * 60 * 1000); // 5 attempts per 15 minutes
+const registerRateLimiter = new SocketRateLimiter(3, 60 * 60 * 1000); // 3 attempts per hour
+
+// Redis Session Store for horizontal scaling
+class RedisSessionStore {
+  private redis: Redis | null = null;
+  private fallbackMap: Map<string, BBSSession> = new Map();
+  private useRedis: boolean = false;
+  private readonly SESSION_PREFIX = 'bbs:session:';
+  private readonly SESSION_TTL = 3600; // 1 hour in seconds
+
+  constructor() {
+    // Try to connect to Redis if REDIS_URL is provided
+    if (process.env.REDIS_URL) {
+      try {
+        this.redis = new Redis(process.env.REDIS_URL, {
+          maxRetriesPerRequest: 3,
+          retryStrategy: (times: number) => {
+            if (times > 3) {
+              console.warn('⚠️  Redis connection failed after 3 retries, falling back to in-memory sessions');
+              return null; // Stop retrying
+            }
+            return Math.min(times * 100, 2000); // Exponential backoff
+          }
+        });
+
+        this.redis.on('connect', () => {
+          console.log('✅ Redis connected - using Redis session store');
+          this.useRedis = true;
+        });
+
+        this.redis.on('error', (error: Error) => {
+          console.warn('⚠️  Redis error:', error.message);
+          this.useRedis = false;
+        });
+
+        this.redis.on('close', () => {
+          console.warn('⚠️  Redis connection closed - falling back to in-memory sessions');
+          this.useRedis = false;
+        });
+
+      } catch (error) {
+        console.warn('⚠️  Failed to initialize Redis:', error);
+        this.redis = null;
+        this.useRedis = false;
+      }
+    } else {
+      console.log('ℹ️  No REDIS_URL provided - using in-memory sessions');
+    }
+  }
+
+  async set(socketId: string, session: BBSSession): Promise<void> {
+    if (this.useRedis && this.redis) {
+      try {
+        const key = this.SESSION_PREFIX + socketId;
+        await this.redis.setex(key, this.SESSION_TTL, JSON.stringify(session));
+      } catch (error) {
+        console.error('Redis set error:', error);
+        this.fallbackMap.set(socketId, session);
+      }
+    } else {
+      this.fallbackMap.set(socketId, session);
+    }
+  }
+
+  async get(socketId: string): Promise<BBSSession | undefined> {
+    if (this.useRedis && this.redis) {
+      try {
+        const key = this.SESSION_PREFIX + socketId;
+        const data = await this.redis.get(key);
+        if (data) {
+          return JSON.parse(data) as BBSSession;
+        }
+        return undefined;
+      } catch (error) {
+        console.error('Redis get error:', error);
+        return this.fallbackMap.get(socketId);
+      }
+    } else {
+      return this.fallbackMap.get(socketId);
+    }
+  }
+
+  async delete(socketId: string): Promise<void> {
+    if (this.useRedis && this.redis) {
+      try {
+        const key = this.SESSION_PREFIX + socketId;
+        await this.redis.del(key);
+      } catch (error) {
+        console.error('Redis delete error:', error);
+        this.fallbackMap.delete(socketId);
+      }
+    } else {
+      this.fallbackMap.delete(socketId);
+    }
+  }
+
+  async has(socketId: string): Promise<boolean> {
+    if (this.useRedis && this.redis) {
+      try {
+        const key = this.SESSION_PREFIX + socketId;
+        const exists = await this.redis.exists(key);
+        return exists === 1;
+      } catch (error) {
+        console.error('Redis exists error:', error);
+        return this.fallbackMap.has(socketId);
+      }
+    } else {
+      return this.fallbackMap.has(socketId);
+    }
+  }
+
+  async getAllKeys(): Promise<string[]> {
+    if (this.useRedis && this.redis) {
+      try {
+        const keys = await this.redis.keys(this.SESSION_PREFIX + '*');
+        return keys.map(key => key.replace(this.SESSION_PREFIX, ''));
+      } catch (error) {
+        console.error('Redis keys error:', error);
+        return Array.from(this.fallbackMap.keys());
+      }
+    } else {
+      return Array.from(this.fallbackMap.keys());
+    }
+  }
+
+  async refreshTTL(socketId: string): Promise<void> {
+    if (this.useRedis && this.redis) {
+      try {
+        const key = this.SESSION_PREFIX + socketId;
+        await this.redis.expire(key, this.SESSION_TTL);
+      } catch (error) {
+        console.error('Redis expire error:', error);
+      }
+    }
+    // In-memory sessions don't need TTL refresh (handled by cleanup)
+  }
+
+  async close(): Promise<void> {
+    if (this.redis) {
+      await this.redis.quit();
+    }
+  }
+}
 
 // BBS State definitions (mirroring AmiExpress state machine)
 enum BBSState {
@@ -225,8 +423,51 @@ const port = process.env.PORT || 3001;
 
 // Export for Vercel deployment
 
-// Store active sessions (in production, use Redis/database)
-const sessions = new Map<string, BBSSession>();
+// Store active sessions (Redis-backed with in-memory fallback)
+const sessions = new RedisSessionStore();
+
+// Helper function to get session with error handling
+async function getSession(socketId: string): Promise<BBSSession | null> {
+  try {
+    const session = await sessions.get(socketId);
+    return session || null;
+  } catch (error) {
+    console.error('Error getting session:', error);
+    return null;
+  }
+}
+
+// Helper function to update session
+async function updateSession(socketId: string, session: BBSSession): Promise<void> {
+  try {
+    await sessions.set(socketId, session);
+    // Refresh TTL on every update to keep active sessions alive
+    await sessions.refreshTTL(socketId);
+  } catch (error) {
+    console.error('Error updating session:', error);
+  }
+}
+
+// Session cleanup - runs every 5 minutes
+// For Redis: TTL handles expiration automatically
+// For in-memory fallback: checks lastActivity and cleans up stale sessions
+setInterval(async () => {
+  try {
+    const allKeys = await sessions.getAllKeys();
+    const now = Date.now();
+    const maxInactiveTime = 60 * 60 * 1000; // 1 hour
+
+    for (const socketId of allKeys) {
+      const session = await sessions.get(socketId);
+      if (session && (now - session.lastActivity) > maxInactiveTime) {
+        console.log(`Cleaning up inactive session: ${socketId}`);
+        await sessions.delete(socketId);
+      }
+    }
+  } catch (error) {
+    console.error('Session cleanup error:', error);
+  }
+}, 5 * 60 * 1000); // Every 5 minutes
 
 // Remove duplicate health check endpoint
 
@@ -251,7 +492,7 @@ app.get('/users/:id', (req: Request, res: Response) => {
 });
 
 // BBS connection handler (separate from global Socket.IO logging)
-io.on('connection', (socket: Socket) => {
+io.on('connection', async (socket: Socket) => {
   console.log('🎮 BBS Client connected from:', socket.handshake.address || 'unknown', `(${socket.conn.transport.name})`);
 
   // Initialize session (mirroring processAwait in AmiExpress)
@@ -270,7 +511,7 @@ io.on('connection', (socket: Socket) => {
     currentConfName: 'Unknown', // Current conference name
     cmdShortcuts: false // Like AmiExpress - default to line input mode, not hotkeys
   };
-  sessions.set(socket.id, session);
+  await sessions.set(socket.id, session);
 
   // Handle connection errors gracefully
   socket.on('error', (error: Error) => {
@@ -285,6 +526,14 @@ io.on('connection', (socket: Socket) => {
     console.log('Login attempt:', data.username);
 
     try {
+      // Rate limiting check (using IP address + username as identifier)
+      const rateLimitKey = `${socket.handshake.address}:${data.username}`;
+      if (!loginRateLimiter.check(rateLimitKey)) {
+        console.log('Rate limit exceeded for:', rateLimitKey);
+        socket.emit('login-failed', 'Too many login attempts. Please try again in 15 minutes.');
+        return;
+      }
+
       // Validate input
       if (!data.username || !data.password) {
         socket.emit('login-failed', 'Username and password are required');
@@ -313,6 +562,14 @@ io.on('connection', (socket: Socket) => {
         return;
       }
 
+      // Transparent password migration: upgrade legacy SHA-256 hashes to bcrypt
+      if (user.passwordHash.length === 64) { // SHA-256 hashes are always 64 hex characters
+        console.log('Step 3a: Migrating legacy password to bcrypt...');
+        const newHash = await db.hashPassword(data.password);
+        await db.updateUser(user.id, { passwordHash: newHash });
+        console.log('Step 3a: Password upgraded to bcrypt successfully');
+      }
+
       console.log('Step 4: Updating user login info...');
       // Update last login
       await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
@@ -328,6 +585,9 @@ io.on('connection', (socket: Socket) => {
       session.confRJoin = user.autoRejoin || 1;
       session.msgBaseRJoin = 1; // Default message base
       session.cmdShortcuts = !user.expert; // Expert mode uses shortcuts
+
+      // Reset rate limiter on successful login
+      loginRateLimiter.reset(rateLimitKey);
 
       console.log('Login successful for user:', data.username);
       socket.emit('login-success');
@@ -345,6 +605,14 @@ io.on('connection', (socket: Socket) => {
     console.log('Registration attempt:', data.username);
 
     try {
+      // Rate limiting check (using IP address as identifier)
+      const rateLimitKey = socket.handshake.address;
+      if (!registerRateLimiter.check(rateLimitKey)) {
+        console.log('Registration rate limit exceeded for IP:', rateLimitKey);
+        socket.emit('register-failed', 'Too many registration attempts. Please try again in 1 hour.');
+        return;
+      }
+
       // Validate input
       if (!data.username || !data.password || !data.realname) {
         socket.emit('register-failed', 'Username, password, and real name are required');
@@ -481,9 +749,9 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
-  socket.on('disconnect', (reason: string) => {
+  socket.on('disconnect', async (reason: string) => {
     console.log('🎮 BBS Client disconnected:', socket.id, 'reason:', reason);
-    sessions.delete(socket.id);
+    await sessions.delete(socket.id);
   });
 });
 
@@ -1361,12 +1629,13 @@ function displayMenuPrompt(socket: any, session: BBSSession) {
 }
 
 // Handle user commands (processCommand equivalent)
-function handleCommand(socket: any, session: BBSSession, data: string) {
+async function handleCommand(socket: any, session: BBSSession, data: string) {
   console.log('=== handleCommand called ===');
   console.log('data:', JSON.stringify(data));
   console.log('session.state:', session.state);
   console.log('session.subState:', session.subState);
-  console.log('session id:', sessions.has(socket.id) ? 'found' : 'NOT FOUND');
+  const hasSession = await sessions.has(socket.id);
+  console.log('session id:', hasSession ? 'found' : 'NOT FOUND');
 
   if (session.state !== BBSState.LOGGEDON) {
     console.log('❌ Not in LOGGEDON state, ignoring command');
@@ -1389,7 +1658,7 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
       // Return to file area selection
       session.subState = LoggedOnSubState.FILE_AREA_SELECT;
       // Re-trigger F command to show file areas again
-      processBBSCommand(socket, session, 'F');
+      await processBBSCommand(socket, session, 'F');
       return;
     }
     return;
@@ -1731,7 +2000,7 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
         const command = parts[0].toUpperCase();
         const params = parts.slice(1).join(' ');
         console.log('🚀 Processing command:', command, 'with params:', params);
-        processBBSCommand(socket, session, command, params);
+        await processBBSCommand(socket, session, command, params);
       }
 
       // Clear the input buffer after processing
@@ -1755,7 +2024,7 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
     // Process single character hotkeys immediately
     const command = data.trim().toUpperCase();
     if (command.length > 0) {
-      processBBSCommand(socket, session, command);
+      await processBBSCommand(socket, session, command);
     }
   } else {
     console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
@@ -1764,7 +2033,7 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
 }
 
 // Process BBS commands (processInternalCommand equivalent)
-function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
+async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
   console.log('processBBSCommand called with command:', JSON.stringify(command));
 
   // Clear screen before showing command output (authentic BBS behavior)
@@ -2068,14 +2337,20 @@ function processBBSCommand(socket: any, session: BBSSession, command: string, pa
       socket.emit('ansi-output', 'Currently online:\r\n\r\n');
 
       // Get all active sessions
-      const onlineUsers = Array.from(sessions.values())
-        .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
-        .map(sess => ({
-          username: sess.user!.username,
-          conference: sess.currentConfName,
-          idle: Math.floor((Date.now() - sess.lastActivity) / 60000), // minutes idle
-          node: 'Web1' // For now, all users are on the same "node"
-        }));
+      const allKeys = await sessions.getAllKeys();
+      const onlineUsers = [];
+
+      for (const socketId of allKeys) {
+        const sess = await sessions.get(socketId);
+        if (sess && sess.state === BBSState.LOGGEDON && sess.user) {
+          onlineUsers.push({
+            username: sess.user.username,
+            conference: sess.currentConfName,
+            idle: Math.floor((Date.now() - sess.lastActivity) / 60000), // minutes idle
+            node: 'Web1' // For now, all users are on the same "node"
+          });
+        }
+      }
 
       if (onlineUsers.length === 0) {
         socket.emit('ansi-output', 'No users currently online.\r\n');
