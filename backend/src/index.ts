@@ -290,7 +290,9 @@ const corsOptions = {
       /^https:\/\/amiexpress.*\.onrender\.com$/,
       /^https:\/\/amiexpress-frontend.*\.onrender\.com$/,
       /^https:\/\/.*\.vercel\.app$/,  // Allow ALL Vercel deployment URLs (wildcard)
-      "https://amiexpress-web-three.vercel.app"
+      "https://amiexpress-web-three.vercel.app",
+      "https://bbs.uprough.net",  // Custom domain
+      /^https:\/\/.*\.uprough\.net$/  // Allow all subdomains of uprough.net
     ];
 
     // Allow requests with no origin (mobile apps, curl requests, etc.)
