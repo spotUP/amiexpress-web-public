@@ -4334,11 +4334,37 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
       console.log('📝 Ignoring non-printable character in READ_COMMAND:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
     }
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
-    console.log('🔥 In READ_SHORTCUTS state, processing single key');
-    // Process single character hotkeys immediately
-    const command = data.trim().toUpperCase();
-    if (command.length > 0) {
-      await processBBSCommand(socket, session, command);
+    console.log('🔥 In READ_SHORTCUTS state');
+    // READ_SHORTCUTS (expert mode) works same as READ_COMMAND but with no menu shown
+    // Still need to buffer multi-character commands like WHO, CHAT, OLM
+    if (data === '\r' || data === '\n') {
+      // Enter pressed - process the complete command line
+      const input = session.inputBuffer.trim();
+      console.log('🎯 SHORTCUTS ENTER PRESSED - Processing command:', JSON.stringify(input));
+
+      if (input.length > 0) {
+        const parts = input.split(' ');
+        const command = parts[0].toUpperCase();
+        const params = parts.slice(1).join(' ');
+        console.log('🚀 SHORTCUTS Processing command:', command, 'with params:', params);
+        await processBBSCommand(socket, session, command, params);
+      }
+
+      // Clear the input buffer after processing
+      session.inputBuffer = '';
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+        console.log('📝 SHORTCUTS Backspace - buffer now:', JSON.stringify(session.inputBuffer));
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      // Regular character - add to buffer and echo
+      session.inputBuffer += data;
+      socket.emit('ansi-output', data);
+      console.log('📝 SHORTCUTS Added char to buffer:', JSON.stringify(session.inputBuffer));
+    } else {
+      console.log('📝 SHORTCUTS Ignoring non-printable:', JSON.stringify(data));
     }
   } else {
     console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
