@@ -310,7 +310,7 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+      callback(null, false); // Reject without error (prevents 500)
     }
   },
   methods: ["GET", "POST", "OPTIONS"],
