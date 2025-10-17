@@ -5520,6 +5520,10 @@ async function initializeData() {
       }
     }
 
+    // Always run message base cleanup to remove accumulated duplicates
+    console.log('Running message base duplicate cleanup...');
+    await db.cleanupDuplicateMessageBases();
+
     // Load message bases for all conferences (limit to prevent timeout)
     messageBases = [];
     const maxConferencesToLoad = 10; // Limit to prevent timeout
@@ -5527,12 +5531,19 @@ async function initializeData() {
     for (const conf of conferencesToLoad) {
       try {
         const bases = await db.getMessageBases(conf.id);
+        console.log(`📥 Loaded ${bases.length} message bases for conference ${conf.id} (${conf.name})`);
+        if (bases.length > 0) {
+          console.log(`📥 Sample message base:`, JSON.stringify(bases[0], null, 2));
+        }
         messageBases.push(...bases);
       } catch (error) {
         console.warn(`Failed to load message bases for conference ${conf.id}:`, error);
       }
     }
     console.log(`Loaded ${messageBases.length} message bases (limited to ${maxConferencesToLoad} conferences)`);
+    if (messageBases.length > 0) {
+      console.log(`📥 First 3 message bases in global array:`, messageBases.slice(0, 3).map(mb => ({ id: mb.id, name: mb.name, conferenceId: mb.conferenceId })));
+    }
 
     // Load file areas for all conferences (limit to prevent timeout)
     fileAreas = [];

@@ -1972,17 +1972,65 @@ export class Database {
       // Delete message bases that reference non-existent conferences
       const deletedMB = await client.query(`
         DELETE FROM message_bases
-        WHERE conferenceId NOT IN (SELECT id FROM conferences)
+        WHERE conferenceid NOT IN (SELECT id FROM conferences)
       `);
 
       // Delete file areas that reference non-existent conferences
       const deletedFA = await client.query(`
         DELETE FROM file_areas
-        WHERE conferenceId NOT IN (SELECT id FROM conferences)
+        WHERE conferenceid NOT IN (SELECT id FROM conferences)
       `);
 
       if (deletedMB.rowCount > 0 || deletedFA.rowCount > 0) {
         console.log(`Cleaned up ${deletedMB.rowCount} orphaned message bases and ${deletedFA.rowCount} orphaned file areas`);
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  // Clean up duplicate message bases by name + conferenceId, keeping only the first occurrence
+  async cleanupDuplicateMessageBases(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Cleaning up duplicate message bases...');
+
+      // Find duplicate message base names within the same conference
+      const duplicates = await client.query(`
+        SELECT name, conferenceid, COUNT(*) as count
+        FROM message_bases
+        GROUP BY name, conferenceid
+        HAVING COUNT(*) > 1
+      `);
+
+      if (duplicates.rows.length > 0) {
+        console.log(`Found ${duplicates.rows.length} message base combinations with duplicates`);
+
+        let totalDeleted = 0;
+        for (const dup of duplicates.rows) {
+          // Get all IDs for this message base name + conference combination, ordered by creation date
+          const ids = await client.query(`
+            SELECT id FROM message_bases
+            WHERE name = $1 AND conferenceid = $2
+            ORDER BY created ASC
+          `, [dup.name, dup.conferenceid]);
+
+          // Keep the first one, delete the rest
+          const idsToDelete = ids.rows.slice(1).map((row: any) => row.id);
+
+          if (idsToDelete.length > 0) {
+            await client.query(
+              `DELETE FROM message_bases WHERE id = ANY($1)`,
+              [idsToDelete]
+            );
+            console.log(`Deleted ${idsToDelete.length} duplicate entries for message base: ${dup.name} in conference ${dup.conferenceid}`);
+            totalDeleted += idsToDelete.length;
+          }
+        }
+
+        console.log(`✅ Total duplicate message bases deleted: ${totalDeleted}`);
+      } else {
+        console.log('No duplicate message bases found');
       }
     } finally {
       client.release();
