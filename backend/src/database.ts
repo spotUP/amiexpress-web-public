@@ -587,6 +587,57 @@ export class Database {
         ON chat_messages(sender_id);
       `);
 
+      // Chat rooms table (multi-user chat rooms - extended feature)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_rooms (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          topic TEXT,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created_by TEXT NOT NULL REFERENCES users(id),
+          is_public BOOLEAN DEFAULT TRUE,
+          max_users INTEGER DEFAULT 50,
+          min_security_level INTEGER DEFAULT 0
+        )
+      `);
+
+      // Chat room users (current users in rooms)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_room_users (
+          room_id TEXT NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          username TEXT NOT NULL,
+          joined TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (room_id, user_id)
+        )
+      `);
+
+      // Chat room messages (message history)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_room_messages (
+          id SERIAL PRIMARY KEY,
+          room_id TEXT NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+          sender_id TEXT NOT NULL REFERENCES users(id),
+          sender_name TEXT NOT NULL,
+          message TEXT NOT NULL,
+          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create indexes for chat rooms
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_rooms_public
+        ON chat_rooms(is_public, min_security_level);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_room_users_room
+        ON chat_room_users(room_id);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_room_messages_room
+        ON chat_room_messages(room_id, timestamp);
+      `);
+
       // System logs table
       await client.query(`
         CREATE TABLE IF NOT EXISTS system_logs (
