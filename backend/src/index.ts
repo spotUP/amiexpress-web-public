@@ -378,12 +378,16 @@ const io = new Server(server, {
   // Additional security check
   allowRequest: (req: any, callback: (err: string | null, success: boolean) => void) => {
     const origin = req.headers.origin;
-    if (origin && corsOptions.origin(origin, () => {}) !== null) {
-      callback(null, true);
-    } else {
-      console.warn(`⚠️ CORS blocked connection from origin: ${origin}`);
-      callback('CORS error', false);
-    }
+
+    // Use the corsOptions.origin function properly with callback
+    corsOptions.origin(origin, (err: Error | null, allowed?: boolean) => {
+      if (allowed) {
+        callback(null, true);
+      } else {
+        console.warn(`⚠️ CORS blocked WebSocket connection from origin: ${origin}`);
+        callback('CORS error', false);
+      }
+    });
   }
 });
 
