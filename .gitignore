@@ -118,7 +118,11 @@ Desktop.ini
 *.lha
 *.lzh
 
-# AmiExpress specific
-data/
-backend/data/
+# AmiExpress specific - runtime data only
+backend/data/bulletins/
+backend/data/uploads/
+backend/data/downloads/
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
 .vercel

@@ -1,0 +1,34 @@
+[2J[H[1;32m
+  ██████╗ ███████╗ █████╗ ██╗         ███╗   ██╗ █████╗ ███╗   ███╗███████╗
+  ██╔══██╗██╔════╝██╔══██╗██║         ████╗  ██║██╔══██╗████╗ ████║██╔════╝
+  ██████╔╝█████╗  ███████║██║         ██╔██╗ ██║███████║██╔████╔██║█████╗
+  ██╔══██╗██╔══╝  ██╔══██║██║         ██║╚██╗██║██╔══██║██║╚██╔╝██║██╔══╝
+  ██║  ██║███████╗██║  ██║███████╗    ██║ ╚████║██║  ██║██║ ╚═╝ ██║███████╗
+  ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝    ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝
+[0m
+[36m═══════════════════════════════════════════════════════════════════════════[0m
+
+[1;33m                      REAL NAME REQUIRED[0m
+
+[36m═══════════════════════════════════════════════════════════════════════════[0m
+
+[37mThis BBS requires users to provide their real name for account verification.[0m
+
+[33mWhy we ask for your real name:[0m
+  [37m• Account verification and security[0m
+  [37m• Compliance with BBS policies[0m
+  [37m• Professional or educational requirements[0m
+  [37m• Creating a trusted community[0m
+
+[35mYour real name will be:[0m
+  [32m✓[0m [37mStored securely in your user profile[0m
+  [32m✓[0m [37mVisible only to sysops (unless you choose otherwise)[0m
+  [32m✓[0m [37mUsed for identification purposes only[0m
+
+[36m═══════════════════════════════════════════════════════════════════════════[0m
+
+[1;37mPlease enter your real name (First Last):[0m
+
+[33mYou will still use your handle/username ([1;36m%U[0;33m) when logging in.[0m
+
+[36m═══════════════════════════════════════════════════════════════════════════[0m

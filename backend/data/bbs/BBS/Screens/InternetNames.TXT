@@ -1,0 +1,35 @@
+[2J[H[1;35m
+  ██╗███╗   ██╗████████╗███████╗██████╗ ███╗   ██╗███████╗████████╗    ███╗   ██╗ █████╗ ███╗   ███╗███████╗
+  ██║████╗  ██║╚══██╔══╝██╔════╝██╔══██╗████╗  ██║██╔════╝╚══██╔══╝    ████╗  ██║██╔══██╗████╗ ████║██╔════╝
+  ██║██╔██╗ ██║   ██║   █████╗  ██████╔╝██╔██╗ ██║█████╗     ██║       ██╔██╗ ██║███████║██╔████╔██║█████╗
+  ██║██║╚██╗██║   ██║   ██╔══╝  ██╔══██╗██║╚██╗██║██╔══╝     ██║       ██║╚██╗██║██╔══██║██║╚██╔╝██║██╔══╝
+  ██║██║ ╚████║   ██║   ███████╗██║  ██║██║ ╚████║███████╗   ██║       ██║ ╚████║██║  ██║██║ ╚═╝ ██║███████╗
+  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝       ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝
+[0m
+[36m═══════════════════════════════════════════════════════════════════════════[0m
+
+[1;33m                    INTERNET EMAIL ADDRESS[0m
+
+[36m═══════════════════════════════════════════════════════════════════════════[0m
+
+[37mPlease provide your internet email address for account verification.[0m
+
+[33mYour email address will be used for:[0m
+  [37m• Account verification and password resets[0m
+  [37m• Important BBS announcements[0m
+  [37m• QWK mail and offline messaging (optional)[0m
+  [37m• Contact from the sysop if needed[0m
+
+[35mPrivacy:[0m
+  [32m✓[0m [37mYour email is kept confidential[0m
+  [32m✓[0m [37mNever shared with other users or third parties[0m
+  [32m✓[0m [37mUsed only for BBS-related communications[0m
+  [31m✗[0m [37mNo spam or marketing emails[0m
+
+[36m═══════════════════════════════════════════════════════════════════════════[0m
+
+[1;37mEnter your internet email address:[0m
+
+[33m(Format: user@domain.com)[0m
+
+[36m═══════════════════════════════════════════════════════════════════════════[0m

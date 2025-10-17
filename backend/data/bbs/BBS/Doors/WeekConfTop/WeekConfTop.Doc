@@ -1,0 +1,186 @@
+
+             .------------------------------------------------.                
+._________   | ________   ___:_  ____________.________________:_ _________     
+|\   ____/___:_\______ \_/   |___\____ \_    | ____     / _____/_\    ___/_____
+|    \/       /   ___/  ¬|   |       /_____  | \ \/    /____     /    \/      /
+|___         /    \|¯ ___|____      /   _____| _\_____/   \/    /_           / 
+  ¯\________/\_______/aC!    ¯\____/___/¯   : _\/_|   ___      / ¯\_________/  
+             :                                \/\/       \____/-TRE!           
+             `------------------------------------------------'
+
+                                 PRESENTS
+
+                 -=> WeekConfTop V1.0 - ASM XIM DOOR <=-
+
+    PROFESSIONAL TOOLS FOR PROFESSIONAL SYSOPS - GET THE REAL QUALITY !
+
+
+WHAT'S THE USE OF THIS TOOL ?
+-----------------------------
+
+        This door displays a list of your week-top-uploaders !
+
+        At the End of the Week it sends a message (configurable) !
+
+        The Week Top-Uploader gets an extra bonus (configurable) !
+
+        It is a XIM and NO CLI tool, this means you don't waste
+        time in your logoff-batch for it !
+
+        It is so fucking fast that the user doesn't see any
+        difference from a file displayed from your HD !
+        
+        Enjoy the maximum (ASM) speed and perfection...
+
+        If you use /X3.x+ you need CONFERENCE ACCOUNTING TURNED ON !
+        (Simply because /X3.x+ does not store the creds in Conf.DB
+         when turned OFF, LAME !)
+
+        If you are a lucky user of S-Express V0.39m+ then there is
+        no matter if Conference Accounting is ON or OFF, works in
+        both cases (S-Express rules) !
+
+        Enjoy !
+
+  .-----------------------------------------------------------------------.
+  |       PLEASE READ THE REGISTER!.TXT INCLUDED IN THIS ARCHIVE !!!      |
+  `-----------------------------------------------------------------------'
+
+HOW TO INSTALL :
+----------------
+
+        Copy the files in the archive to your directories,
+        they are :
+
+        BBS:Doors/WeekConfTop/WeekConfTop.Config
+        BBS:Doors/WeekConfTop/WeekConfTop.XIM
+        BBS:Doors/WeekConfTop/WeekConfTop.Doc
+        BBS:Doors/WeekConfTop/WeekConfTop.Header
+        BBS:Doors/WeekConfTop/WeekConfTop.Tailer
+        LIBS:AEDoor.library ( © Sintax/WOT )
+
+        The WeekConfTop.Config looks like this :
+ 
+        --------(cut here)--------
+        1                                    <- Displaymode !
+        N                                    <- Y/N turns first line on/off !
+        10                                   <- Amount of Users to display !
+        BBS:User.Data                        <- The Location of your User.Data !
+        EALL                                 <- Where to send the message !
+        10                                   <- % given as Bonus !
+        DOORS:WeekConfTop/WeekConfTop.Header <- Headertext to be displayed !
+        DOORS:WeekConfTop/WeekConfTop.Tailer <- Tailertext to be displayed !
+        --------------------------
+
+        The first line is the displaymode :
+
+        1 - Show DL Bytes in second column !
+        2 - Show UL Files and DL Files in second column !
+
+        The first line (Y/N) is for a better look with the header
+        in the archive. If you use your own header or NO header,
+        then please use Y to give it a better look ! You'll see !
+
+        The Tailer-Text can be left out.
+        
+
+        Now if you use /X2.x or S-Express then append the
+        BBS:Commands/BBS.CMD to your BBS.CMD !
+
+        If you use /X3.x copy the BBS:Commands/BBSCMD/Week.Info
+        to your BBS:Commands/BBSCMD/ !
+        
+        Ok, now the door is installed and a user can call it with
+        typing WEEK, but normally you want it displayed during
+        logon sequence ! Use this in a file during logon :
+
+        ~CC_WEEK
+
+        This will call the door !
+
+        The advantage is that you don't have to add another util
+        to your logoffbatch !!!
+
+        If you have a week-top tool running, then remove it
+        from your logoffbatch and replace the files where it normally
+        outputs to with the ones in the BBS:Screens dir in the archive !
+
+        Now you're ready to enjoy !
+
+
+ |||    Only for S-Express users :
+ |||    If it shows weird things, just grab the latest S-Express
+ |||    version from Synergy ! Should work perfectly on some
+ |||    newer versions to come !
+
+
+        Some hints for proper running :
+        -------------------------------
+
+        I suggest you start it on Monday, so you get the output
+        on the first caller the next Monday... but you can choose
+        which day you want ! To RESTART it delete the Conf.DB.TOP !
+                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~   
+
+  .-----------------------------------------------------------------------.
+  |       PLEASE READ THE REGISTER!.TXT INCLUDED IN THIS ARCHIVE !!!      |
+  `-----------------------------------------------------------------------'
+
+LAST WORDS :
+------------
+        
+Have fun with my tools !
+
+If you want to contact me for any reason, drop me some mail via
+internet or on Synergy (S-Express Home BBS) !
+
+INTERNET : zxmgr09@student.informatik.uni-tuebingen.de
+
+For S-Express registration call :
+
+         SYNERGY (Sysop : Sigma Seven)
+
+                +49-5731-40074
+                +49-5731-40076
+
+
+                                                           Calypso
+P.S. :
+------
+Since I currently do not know what's up with GOD, I release this stuff
+under my name ! I always wanted to continue the group but it looks like
+that most members can not call for free/are inactive  ! If there is any
+active member left I would be lucky if you can contact me (see above) !
+
+If there is any good group which wants an allround-coder, simply contact
+me...
+
+Let the scene go back to the good old days... have fun out there !
+
+GREETINGS/MESSAGES:
+-------------------
+
+Sigma Seven - S-Express rules !
+Noisy Belch - Good luck with coding in C ! Good designs !
+Galaxy - Resource-God :)
+No Limit - Why don't you switch to S-Express ?
+BBC - Keep coding !
+Bilbo Baggins - Contact me (internet ?) !
+Sisko - Hows ZIVI life ?
+Raider/Scout/Ventor - Still active ?
+Wedlock - Call me !
+Sid Vicious - Where are you ?!
+Whiz - Kick your BBS !
+Castor - Paradox suxx, hehe
+E.F.A. - Nothing to crack ?
+Doc - Keep those loooong messages !
+Dalai Lama - Where are you ? Use internet !
+Wormeater - Still no Playstation ? (it rules !)
+JAF - Contact me !
+Mike & Dave - Where are you ?!
+Spike - Where have you been on the PARTY IV ?
+Autopsy - Hi ! New World-Charts coming ?
+-TCB!- - Just gimme a call...
+Zion - If you have internet... write me !
+
+Sorry if i forgot someone, hehe... that's all folx !
