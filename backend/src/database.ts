@@ -1141,7 +1141,14 @@ export class Database {
     try {
       const sql = `SELECT * FROM message_bases WHERE conferenceid = $1 ORDER BY id`;
       const result = await client.query(sql, [conferenceId]);
-      return result.rows as MessageBase[];
+      // Map PostgreSQL column names to camelCase interface
+      return result.rows.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        conferenceId: row.conferenceid,
+        created: row.created,
+        updated: row.updated
+      }));
     } finally {
       client.release();
     }
