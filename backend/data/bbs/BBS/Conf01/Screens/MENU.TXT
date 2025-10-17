@@ -1,27 +1,21 @@
-[2J[H[36m
-   __  __    _    ___ _   _   __  __ _____ _   _ _   _
-  |  \/  |  / \  |_ _| \ | | |  \/  | ____| \ | | | | |
-  | |\/| | / _ \  | ||  \| | | |\/| |  _| |  \| | | | |
-  | |  | |/ ___ \ | || |\  | | |  | | |___| |\  | |_| |
-  |_|  |_/_/   \_\___|_| \_| |_|  |_|_____|_| \_|\___/
-[0m
-[35m---------------------------------------------------------------------------[0m
-[37m  %B[0m - [33mConference:[0m [36m%CF[0m - [33mTime Left:[0m [36m%R[0m min
-[35m---------------------------------------------------------------------------[0m
+[2J[H[36m══════════════════════════════════════════════════════════════════════════════
+  __  __    _    ___ _   _   __  __ _____ _   _ _   _
+ |  \/  |  / \  |_ _| \ | | |  \/  | ____| \ | | | | |
+ | |\/| | / _ \  | ||  \| | | |\/| |  _| |  \| | | | |
+ | |  | |/ ___ \ | || |\  | | |  | | |___| |\  | |_| |
+ |_|  |_/_/   \_\___|_| \_| |_|  |_|_____|_| \_|\___/
+══════════════════════════════════════════════════════════════════════════════[0m
+[33m%B[0m │ [36mConf:[0m %CF │ [36mTime:[0m %R min
 
-[33m MESSAGES                        FILES                    UTILITIES[0m
- [37m[[36mR[37m][0m Read Messages              [37m[[36mF[37m][0m File Listings           [37m[[36mO[37m][0m Online Users
- [37m[[36mA[37m][0m Post Message               [37m[[36mU[37m][0m Upload File              [37m[[36mC[37m][0m Comment to Sysop
- [37m[[36mE[37m][0m Send Email                 [37m[[36mD[37m][0m Download File            [37m[[36mP[37m][0m Page Sysop
- [37m[[36mN[37m][0m New Messages Scan          [37m[[36mN[37m][0m New Files Scan           [37m[[36mT[37m][0m Time Statistics
- [37m[[36mZ[37m][0m New Msg Since Last                                      [37m[[36mW[37m][0m Wall (Graffiti)
+[33mMESSAGES[0m          [33mFILES[0m             [33mCONFERENCE[0m        [33mSYSTEM[0m
+[[36mR[0m] Read          [[36mF[0m] List          [[36mJ[0m]  Join Conf     [[36mO[0m] Who's Online
+[[36mA[0m] Post          [[36mU[0m] Upload        [[36mJM[0m] Join Base     [[36mP[0m] Page Sysop
+[[36mE[0m] Email         [[36mD[0m] Download      [[36mX[0m]  eXec Door     [[36mI[0m] User Info
+[[36mN[0m] New Scan      [[36mN[0m] New Files                       [[36mS[0m] Settings
+[[36mZ[0m] New Since                                         [[36mC[0m] Comment
 
-[33m CONFERENCE                      DOORS                    SYSTEM[0m
- [37m[[36mJ[37m][0m Join Conference            [37m[[36mX[37m][0m eXecute Door             [37m[[36mI[37m][0m User Info
- [37m[[36mJM[37m][0m Join Message Base         [37m[[36mM[37m][0m Door Menu                [37m[[36mS[37m][0m Settings
-                                                                 [37m[[36mV[37m][0m Version Info
-                                                                 [37m[[36m?[37m][0m Help
+[36m══════════════════════════════════════════════════════════════════════════════[0m
+[[36mG[0m] Goodbye  [[36mQ[0m] Quick Logoff  [[36m?[0m] Help
+[36m══════════════════════════════════════════════════════════════════════════════[0m
 
-[35m---------------------------------------------------------------------------[0m
- [37m[[36mG[37m][0m Goodbye (Logoff)           [37m[[36mQ[37m][0m Quick Logoff
-[35m---------------------------------------------------------------------------[0m
+Command:

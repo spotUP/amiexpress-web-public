@@ -185,8 +185,16 @@ export function loadScreen(screenName: string, session: BBSSession): string | nu
     // Step 1: Process MCI codes (classic AmiExpress ~CODE format)
     content = processMciCodes(content, session);
 
-    // Step 2: Handle [%B] placeholder (BBS name - non-standard extension)
+    // Step 2: Handle percent-style variables (menu format)
+    // %B = BBS name
+    content = content.replace(/%B/g, 'AmiExpress Web BBS');
     content = content.replace(/\[%B\]/g, 'AmiExpress Web BBS');
+
+    // %CF = Conference name
+    content = content.replace(/%CF/g, session.currentConfName || 'Main');
+
+    // %R = Time remaining (minutes)
+    content = content.replace(/%R/g, String(Math.floor(session.timeRemaining / 60)));
 
     // Step 3: Add ESC prefix to bare ANSI sequences
     content = addAnsiEscapes(content);
