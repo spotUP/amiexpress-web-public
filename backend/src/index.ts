@@ -285,6 +285,7 @@ interface BBSSession {
   currentConf: number;
   currentMsgBase: number;
   timeRemaining: number;
+  timeLimit: number; // Time limit in seconds (like AmiExpress timeLimit)
   lastActivity: number;
   confRJoin: number; // Default conference to join (from user preferences)
   msgBaseRJoin: number; // Default message base to join
@@ -663,6 +664,7 @@ io.on('connection', async (socket: Socket) => {
     currentConf: 0,
     currentMsgBase: 0,
     timeRemaining: 60, // 60 minutes default
+    timeLimit: 3600, // 60 minutes in seconds (like AmiExpress timeLimit)
     lastActivity: Date.now(),
     confRJoin: 1, // Default to General conference
     msgBaseRJoin: 1, // Default to Main message base
@@ -3063,6 +3065,232 @@ function displayMenuPrompt(socket: any, session: BBSSession) {
   session.subState = LoggedOnSubState.READ_COMMAND;
 }
 
+// Hotkey handler (handles F-keys like AmiExpress)
+async function handleHotkey(socket: any, session: BBSSession, data: string): Promise<boolean> {
+  // Function key escape sequences
+  const hotkeys: { [key: string]: { name: string, shift: boolean } } = {
+    '\x1b[OP': { name: 'F1', shift: false },
+    '\x1bOP': { name: 'F1', shift: false },
+    '\x1b[OQ': { name: 'F2', shift: false },
+    '\x1bOQ': { name: 'F2', shift: false },
+    '\x1b[OR': { name: 'F3', shift: false },
+    '\x1bOR': { name: 'F3', shift: false },
+    '\x1b[OS': { name: 'F4', shift: false },
+    '\x1bOS': { name: 'F4', shift: false },
+    '\x1b[15~': { name: 'F5', shift: false },
+    '\x1b[17~': { name: 'F6', shift: false },
+    '\x1b[18~': { name: 'F7', shift: false },
+    '\x1b[19~': { name: 'F8', shift: false },
+    '\x1b[20~': { name: 'F9', shift: false },
+    '\x1b[21~': { name: 'F10', shift: false },
+    '\x1b[1;2P': { name: 'F1', shift: true },
+    '\x1b[1;2Q': { name: 'F2', shift: true },
+    '\x1b[1;2R': { name: 'F3', shift: true },
+    '\x1b[1;2S': { name: 'F4', shift: true },
+    '\x1b[15;2~': { name: 'F5', shift: true },
+    '\x1b[17;2~': { name: 'F6', shift: true },
+    '\x1b[18;2~': { name: 'F7', shift: true },
+    '\x1b[19;2~': { name: 'F8', shift: true },
+    '\x1b[20;2~': { name: 'F9', shift: true },
+    '\x1b[21;2~': { name: 'F10', shift: true },
+  };
+
+  const hotkey = hotkeys[data];
+  if (!hotkey) return false;
+
+  console.log(`🔥 Hotkey detected: ${hotkey.shift ? 'Shift+' : ''}${hotkey.name}`);
+
+  const isLoggedOn = session.state === BBSState.LOGGEDON;
+  const isSysop = (session.user?.secLevel || 0) >= 200;
+
+  // Handle user online hotkeys
+  if (isLoggedOn) {
+    switch (hotkey.name) {
+      case 'F1': // Toggle chat with sysop
+        if (!hotkey.shift) {
+          if ((session as any).inChat) {
+            exitChat(socket, session);
+          }
+          return true;
+        }
+        break;
+
+      case 'F2': // Increase time limit (sysop only)
+        if (!hotkey.shift && isSysop) {
+          session.timeLimit += 600; // +10 minutes
+          socket.emit('ansi-output', '\r\n\x1b[32m+10 minutes added to time limit\x1b[0m\r\n');
+          return true;
+        }
+        break;
+
+      case 'F3': // Decrease time limit (sysop only)
+        if (!hotkey.shift && isSysop) {
+          session.timeLimit = Math.max(60, session.timeLimit - 600); // -10 minutes, min 1 min
+          socket.emit('ansi-output', '\r\n\x1b[33m-10 minutes removed from time limit\x1b[0m\r\n');
+          return true;
+        }
+        break;
+
+      case 'F4': // Start capture / Display file to user
+        if (!hotkey.shift && isSysop) {
+          socket.emit('ansi-output', '\r\n\x1b[36mSession capture started\x1b[0m\r\n');
+          // TODO: Implement capture functionality
+          return true;
+        } else if (hotkey.shift && isSysop) {
+          socket.emit('ansi-output', '\r\n\x1b[36mDisplay file to user\x1b[0m\r\n');
+          socket.emit('ansi-output', 'Enter filename to display: ');
+          // TODO: Implement file display
+          return true;
+        }
+        break;
+
+      case 'F6': // Edit user account / Grant temporary access
+        if (!hotkey.shift && isSysop) {
+          await processBBSCommand(socket, session, '1'); // Account editing
+          return true;
+        } else if (hotkey.shift && isSysop) {
+          socket.emit('ansi-output', '\r\n\x1b[36mTemporary access grant/removal\x1b[0m\r\n');
+          // TODO: Implement temporary access
+          return true;
+        }
+        break;
+
+      case 'F7': // Toggle chat availability
+        if (!hotkey.shift) {
+          chatState.sysopAvailable = !chatState.sysopAvailable;
+          socket.emit('ansi-output', `\r\n\x1b[35mSysop chat is now ${chatState.sysopAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}\x1b[0m\r\n`);
+          return true;
+        }
+        break;
+
+      case 'F8': // Toggle serial output (sysop only)
+        if (!hotkey.shift && isSysop) {
+          socket.emit('ansi-output', '\r\n\x1b[33mSerial output toggled\x1b[0m\r\n');
+          // TODO: Implement serial output toggle
+          return true;
+        }
+        break;
+
+      case 'F9': // Toggle serial input (sysop only)
+        if (!hotkey.shift && isSysop) {
+          socket.emit('ansi-output', '\r\n\x1b[33mSerial input toggled\x1b[0m\r\n');
+          // TODO: Implement serial input toggle
+          return true;
+        }
+        break;
+
+      case 'F10': // Kick user / Clear tooltype cache
+        if (!hotkey.shift && isSysop) {
+          socket.emit('ansi-output', '\r\n\x1b[31mDisconnecting user...\x1b[0m\r\n');
+          socket.disconnect(true);
+          return true;
+        } else if (hotkey.shift && isSysop) {
+          socket.emit('ansi-output', '\r\n\x1b[36mTooltype cache cleared\x1b[0m\r\n');
+          // TODO: Implement tooltype cache clear
+          return true;
+        }
+        break;
+    }
+  }
+
+  // Handle await mode hotkeys (sysop only when no user logged on)
+  if (!isLoggedOn && isSysop) {
+    switch (hotkey.name) {
+      case 'F1': // Sysop login
+        if (!hotkey.shift) {
+          socket.emit('ansi-output', '\r\n\x1b[36mSysop local login\x1b[0m\r\n');
+          // TODO: Implement sysop login
+          return true;
+        }
+        break;
+
+      case 'F2': // Local login
+        if (!hotkey.shift) {
+          socket.emit('ansi-output', '\r\n\x1b[36mLocal user login\x1b[0m\r\n');
+          // TODO: Implement local login
+          return true;
+        }
+        break;
+
+      case 'F3': // Instant remote logon
+        if (!hotkey.shift) {
+          socket.emit('ansi-output', '\r\n\x1b[36mInstant remote logon enabled\x1b[0m\r\n');
+          // TODO: Implement instant logon
+          return true;
+        }
+        break;
+
+      case 'F4': // Reserve for a user
+        if (!hotkey.shift) {
+          socket.emit('ansi-output', '\r\n\x1b[36mReserve node for user\x1b[0m\r\n');
+          socket.emit('ansi-output', 'Enter username to reserve for: ');
+          // TODO: Implement node reservation
+          return true;
+        }
+        break;
+
+      case 'F5': // Conference maintenance / Open shell
+        if (!hotkey.shift) {
+          await processBBSCommand(socket, session, '5'); // Conference maintenance
+          return true;
+        } else {
+          socket.emit('ansi-output', '\r\n\x1b[36mOpening remote shell\x1b[0m\r\n');
+          // TODO: Implement remote shell
+          return true;
+        }
+        break;
+
+      case 'F6': // Account editing / View callerslog
+        if (!hotkey.shift) {
+          await processBBSCommand(socket, session, '1'); // Account editing
+          return true;
+        } else {
+          await processBBSCommand(socket, session, '2'); // Callers log
+          return true;
+        }
+        break;
+
+      case 'F7': // Chat toggle
+        if (!hotkey.shift) {
+          chatState.sysopAvailable = !chatState.sysopAvailable;
+          socket.emit('ansi-output', `\r\n\x1b[35mSysop chat is now ${chatState.sysopAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}\x1b[0m\r\n`);
+          return true;
+        }
+        break;
+
+      case 'F8': // Reprogram modem
+        if (!hotkey.shift) {
+          socket.emit('ansi-output', '\r\n\x1b[36mModem reprogrammed\x1b[0m\r\n');
+          // TODO: Implement modem reprogram
+          return true;
+        }
+        break;
+
+      case 'F9': // Exit BBS
+        if (!hotkey.shift) {
+          socket.emit('ansi-output', '\r\n\x1b[31mShutting down BBS...\x1b[0m\r\n');
+          // TODO: Implement BBS shutdown
+          return true;
+        }
+        break;
+
+      case 'F10': // Exit BBS (off hook) / Clear tooltype cache
+        if (!hotkey.shift) {
+          socket.emit('ansi-output', '\r\n\x1b[31mShutting down BBS (off hook)...\x1b[0m\r\n');
+          // TODO: Implement BBS shutdown with off hook
+          return true;
+        } else {
+          socket.emit('ansi-output', '\r\n\x1b[36mTooltype cache cleared\x1b[0m\r\n');
+          // TODO: Implement tooltype cache clear
+          return true;
+        }
+        break;
+    }
+  }
+
+  return false;
+}
+
 // Handle user commands (processCommand equivalent)
 async function handleCommand(socket: any, session: BBSSession, data: string) {
   console.log('=== handleCommand called ===');
@@ -3071,6 +3299,13 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
   console.log('session.subState:', session.subState);
   const hasSession = await sessions.has(socket.id);
   console.log('session id:', hasSession ? 'found' : 'NOT FOUND');
+
+  // Check for hotkeys first
+  const hotkeyHandled = await handleHotkey(socket, session, data);
+  if (hotkeyHandled) {
+    console.log('🔥 Hotkey handled, skipping normal command processing');
+    return;
+  }
 
   if (session.state !== BBSState.LOGGEDON) {
     console.log('❌ Not in LOGGEDON state, ignoring command');

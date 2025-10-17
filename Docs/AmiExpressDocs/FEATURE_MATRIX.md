@@ -58,6 +58,7 @@ Comprehensive comparison of AmiExpress v5.6.0 features vs. AmiExpress Web implem
 | **Prompt Display** | ✅ Complete | ✅ Complete | **100%** | BBS name, conference, time with menuPause logic |
 | **Font Support** | ✅ Amiga fonts | ✅ Web fonts | **95%** | Topaz, MicroKnight via CSS with canvas rendering |
 | **Terminal Emulation** | ✅ Serial | ✅ Web | **100%** | xterm.js terminal interface with ANSI support |
+| **Function Key Hotkeys** | ✅ Complete | ✅ Complete | **100%** | All F1-F10 and Shift+F1-F10 hotkeys implemented with stubs |
 
 ## ⚙️ **System Features**
 
