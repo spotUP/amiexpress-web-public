@@ -52,15 +52,14 @@ import {
   getOnlineUsers
 } from './chatHandlers';
 
+// BBS modules
+import { BBSSession, BBSState, LoggedOnSubState, Conference, MessageBase } from './bbs/session';
+import { loadScreen, displayScreen, doPause } from './bbs/screens';
+import { displayMainMenu, displayMenuPrompt, setMessageBases } from './bbs/menu';
+import { formatFileSize, parseParams } from './bbs/utils';
+
 // JWT Secret (should be in environment variables)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
-
-// Helper function to format file sizes
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
 
 // Simple rate limiter for Socket.IO events
 class SocketRateLimiter {
@@ -259,73 +258,7 @@ class RedisSessionStore {
   }
 }
 
-// BBS State definitions (mirroring AmiExpress state machine)
-enum BBSState {
-  AWAIT = 'await',
-  LOGON = 'logon',
-  LOGGEDON = 'loggedon'
-}
-
-enum LoggedOnSubState {
-  DISPLAY_BULL = 'display_bull',
-  DISPLAY_CONF_BULL = 'display_conf_bull',
-  DISPLAY_MENU = 'display_menu',
-  READ_COMMAND = 'read_command',
-  READ_SHORTCUTS = 'read_shortcuts',
-  PROCESS_COMMAND = 'process_command',
-  POST_MESSAGE_SUBJECT = 'post_message_subject',
-  POST_MESSAGE_BODY = 'post_message_body',
-  FILE_AREA_SELECT = 'file_area_select',
-  FILE_DIR_SELECT = 'file_dir_select',
-  FILE_LIST = 'file_list',
-  FILE_LIST_CONTINUE = 'file_list_continue',
-  CONFERENCE_SELECT = 'conference_select',
-  CHAT = 'chat', // Internode chat mode
-  DOOR_MANAGER = 'door_manager' // Sysop door management
-}
-
-interface BBSSession {
-  state: BBSState;
-  subState?: LoggedOnSubState;
-  user?: any; // Will be User from database
-  nodeNumber?: number; // Node number for multi-node BBS (like AmiExpress nodeNumber)
-  currentConf: number;
-  currentMsgBase: number;
-  timeRemaining: number;
-  timeLimit: number; // Time limit in seconds (like AmiExpress timeLimit)
-  lastActivity: number;
-  confRJoin: number; // Default conference to join (from user preferences)
-  msgBaseRJoin: number; // Default message base to join
-  commandBuffer: string; // Buffer for command input
-  menuPause: boolean; // Like AmiExpress menuPause - controls if menu displays immediately
-  messageSubject?: string; // For message posting workflow
-  messageBody?: string; // For message posting workflow
-  messageRecipient?: string; // For private message recipient
-  inputBuffer: string; // Buffer for line-based input (like login system)
-  relConfNum: number; // Relative conference number (like AmiExpress relConfNum)
-  currentConfName: string; // Current conference name (like AmiExpress currentConfName)
-  cmdShortcuts: boolean; // Like AmiExpress cmdShortcuts - controls hotkey vs line input mode
-  tempData?: any; // Temporary data storage for complex operations (like file listing)
-  // Internode chat fields
-  chatSessionId?: string; // Current chat session ID (if in chat)
-  chatWithUserId?: string; // User ID of chat partner
-  chatWithUsername?: string; // Username of chat partner
-  previousState?: BBSState; // State to return to after chat
-  previousSubState?: LoggedOnSubState; // Substate to return to after chat
-}
-
-// Conference and Message Base data structures (simplified)
-interface Conference {
-  id: number;
-  name: string;
-  description: string;
-}
-
-interface MessageBase {
-  id: number;
-  name: string;
-  conferenceId: number;
-}
+// Types now imported from ./bbs/session
 
 // Global data caches (loaded from database)
 let doors: Door[] = [];
@@ -5681,6 +5614,9 @@ async function initializeData() {
     if (messageBases.length > 0) {
       console.log(`📥 First 3 message bases in global array:`, messageBases.slice(0, 3).map(mb => ({ id: mb.id, name: mb.name, conferenceId: mb.conferenceId })));
     }
+
+    // Update menu module with message bases
+    setMessageBases(messageBases);
 
     // Load file areas for all conferences (limit to prevent timeout)
     fileAreas = [];
