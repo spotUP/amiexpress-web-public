@@ -1657,9 +1657,25 @@ export async function processBBSCommand(
       startSysopPage(socket, session);
       return; // Don't continue to menu display
 
-    case 'G': // Goodbye (internalCommandG)
-      socket.emit('ansi-output', '\r\nGoodbye!\r\n');
-      socket.disconnect();
+    case 'G': // Goodbye (internalCommandG from express.e line 25047)
+      // Port of internalCommandG() - express.e lines 25047-25069
+      // Sets state to LOGOFF and lets state machine handle the actual logout
+      if (session) {
+        // Display LOGOFF screen (like express.e line 8187)
+        displayScreen(socket, session, 'LOGOFF');
+
+        // Small delay to show screen before disconnect
+        setTimeout(() => {
+          socket.emit('ansi-output', '\r\n\r\nClick...\r\n');
+
+          // Clean up session and disconnect
+          setTimeout(() => {
+            socket.disconnect();
+          }, 500);
+        }, 1000);
+      } else {
+        socket.disconnect();
+      }
       return;
 
     case 'OLM': // Online Message System
