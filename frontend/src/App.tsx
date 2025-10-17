@@ -42,7 +42,7 @@ function App() {
       cursorStyle: 'block',
       cols: 80,
       rows: 24,
-      scrollback: 1000,
+      scrollback: 0,
       fontWeight: 'normal',
       fontWeightBold: 'bold',
       allowProposedApi: true
@@ -69,6 +69,8 @@ function App() {
         // No padding - screens are designed for full 80-column display
       }
       term.refresh(0, term.rows - 1);
+      // Autofocus terminal so user can interact immediately without clicking
+      term.focus();
     }, 100);
 
     // Connect to backend (environment-aware configuration)
@@ -164,6 +166,9 @@ function App() {
         localStorage.setItem('bbs_auth_token', data.token);
         console.log('🔐 Auth token stored in localStorage');
       }
+
+      // Focus terminal after login so user can interact immediately
+      term.focus();
     });
 
     // Handle login failure

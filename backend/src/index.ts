@@ -1634,21 +1634,46 @@ function loadScreen(screenName: string, session: BBSSession): string | null {
     const timeLeft = Math.floor(session.timeRemaining || 60);
     const confName = session.currentConfName || 'General';
 
+    // User stats
+    const user = session.user;
+    const lastLogin = user?.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never';
+    const lastLoginTime = user?.lastLogin ? new Date(user.lastLogin).toLocaleTimeString() : '00:00:00';
+    const totalCalls = String(user?.calls || 0);
+    const messagesPosted = String(user?.messagesPosted || 0);
+    const filesUploaded = String(user?.uploads || 0);
+    const filesDownloaded = String(user?.downloads || 0);
+    const newMessages = '0'; // TODO: Calculate from database
+    const newFiles = '0'; // TODO: Calculate from database
+
     // First, convert ANSI codes: Replace `[` with `\x1b[` (proper ANSI escape sequence)
-    // But preserve variable substitution markers like [%B], [%U], etc.
+    // But preserve variable substitution markers like %X and [%X]
     content = content.replace(/\[(?![%])/g, '\x1b[');
 
-    // Now do variable substitution
+    // Now do variable substitution (support both %X and [%X] formats)
+    // IMPORTANT: Replace longer variable names FIRST to avoid partial matches
+    // (e.g., %TC before %T, %MP before %M, %UF before %U, %DF before %D)
     content = content
-      .replace(/\[%B\]/g, bbsName)                          // BBS name
-      .replace(/\[%S\]/g, sysopName)                        // Sysop name
-      .replace(/\[%U\]/g, userName)                         // Username
-      .replace(/\[%R\]/g, userRealName)                     // Real name
-      .replace(/\[%T\]/g, String(timeLeft))                 // Time left
-      .replace(/\[%C\]/g, confName)                         // Conference name
-      .replace(/\[%N\]/g, String(session.nodeNumber || 0))  // Node number
-      .replace(/\[%D\]/g, new Date().toLocaleDateString())  // Date
-      .replace(/\[%M\]/g, new Date().toLocaleTimeString()); // Time
+      .replace(/%RN|(\[%RN\])/g, userRealName)               // Real name (before %R)
+      .replace(/%CF|(\[%CF\])/g, confName)                   // Conference full name (before %C)
+      .replace(/%LD|(\[%LD\])/g, lastLogin)                  // Last login date (before %L)
+      .replace(/%LT|(\[%LT\])/g, lastLoginTime)              // Last login time (before %L)
+      .replace(/%TC|(\[%TC\])/g, totalCalls)                 // Total calls (before %T)
+      .replace(/%TM|(\[%TM\])/g, '0')                        // Total messages (before %T)
+      .replace(/%MP|(\[%MP\])/g, messagesPosted)             // Messages posted (before %M)
+      .replace(/%UF|(\[%UF\])/g, filesUploaded)              // Files uploaded (before %U)
+      .replace(/%DF|(\[%DF\])/g, filesDownloaded)            // Files downloaded (before %D)
+      .replace(/%NM|(\[%NM\])/g, newMessages)                // New messages (before %N)
+      .replace(/%NF|(\[%NF\])/g, newFiles)                   // New files (before %N)
+      .replace(/%AU|(\[%AU\])/g, '1')                        // Active users (before %A)
+      .replace(/%B|(\[%B\])/g, bbsName)                      // BBS name
+      .replace(/%S|(\[%S\])/g, sysopName)                    // Sysop name
+      .replace(/%U|(\[%U\])/g, userName)                     // Username
+      .replace(/%R|(\[%R\])/g, String(timeLeft))             // Time remaining
+      .replace(/%T|(\[%T\])/g, String(timeLeft))             // Time left (alias)
+      .replace(/%C|(\[%C\])/g, confName)                     // Conference name
+      .replace(/%N|(\[%N\])/g, String(session.nodeNumber || 0))  // Node number
+      .replace(/%D|(\[%D\])/g, new Date().toLocaleDateString())  // Current date
+      .replace(/%M|(\[%M\])/g, new Date().toLocaleTimeString()); // Current time
 
     // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
     // First normalize any existing \r\n to \n, then convert all \n to \r\n
@@ -3888,8 +3913,8 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
       // User pressed key after CONF_BULL
       socket.emit('ansi-output', '\r\n'); // Clear pause prompt
       delete session.tempData.confBullPause;
-      // Set menuPause and move to DISPLAY_MENU
-      session.tempData = { ...session.tempData, menuPause: true };
+      // Move to DISPLAY_MENU without additional pause (user already pressed key)
+      session.tempData = { ...session.tempData, menuPause: false };
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       // Continue to DISPLAY_MENU processing
       return handleCommand(socket, session, ' ');
@@ -3901,7 +3926,7 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
       // If join failed, still move to menu to avoid infinite loop
       if (!joinSuccess) {
         console.log('⚠️ joinConference failed, moving to DISPLAY_MENU anyway');
-        session.tempData = { ...session.tempData, menuPause: true };
+        session.tempData = { ...session.tempData, menuPause: false };
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         return handleCommand(socket, session, ' ');
       }
@@ -4558,7 +4583,38 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       displayFileStatus(socket, session, params);
       return;
 
-    case 'O': // Operator Page (internalCommandO) - Sysop Chat
+    case 'O': // Online Users
+      socket.emit('ansi-output', '\x1b[36m-= Online Users =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Currently online:\r\n\r\n');
+
+      // Get all active sessions
+      const allKeys = await sessions.getAllKeys();
+      const onlineUsersList = [];
+
+      for (const socketId of allKeys) {
+        const sess = await sessions.get(socketId);
+        if (sess && sess.state === BBSState.LOGGEDON && sess.user) {
+          onlineUsersList.push({
+            username: sess.user.username,
+            conference: sess.currentConfName,
+            idle: Math.floor((Date.now() - sess.lastActivity) / 60000), // minutes idle
+            node: 'Web1' // For now, all users are on the same "node"
+          });
+        }
+      }
+
+      if (onlineUsersList.length === 0) {
+        socket.emit('ansi-output', 'No users currently online.\r\n');
+      } else {
+        onlineUsersList.forEach(userInfo => {
+          const idleStr = userInfo.idle > 0 ? ` (${userInfo.idle}min idle)` : '';
+          socket.emit('ansi-output', `${userInfo.username.padEnd(15)} ${userInfo.conference.padEnd(20)} ${userInfo.node}${idleStr}\r\n`);
+        });
+      }
+      socket.emit('ansi-output', '\r\n');
+      break;
+
+    case 'P': // Page Sysop (internalCommandP)
       // Check if user is already paging
       if (chatState.pagingUsers.includes(session.user!.id)) {
         socket.emit('ansi-output', '\r\n\x1b[31mYou are already paging the sysop.\x1b[0m\r\n\r\n');
@@ -4585,37 +4641,6 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       // Start paging process (like ccom() in AmiExpress)
       startSysopPage(socket, session);
       return; // Don't continue to menu display
-
-    case 'O_USERS': // Online Users (separate command for compatibility)
-      socket.emit('ansi-output', '\x1b[36m-= Online Users =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Currently online:\r\n\r\n');
-
-      // Get all active sessions
-      const allKeys = await sessions.getAllKeys();
-      const onlineUsers = [];
-
-      for (const socketId of allKeys) {
-        const sess = await sessions.get(socketId);
-        if (sess && sess.state === BBSState.LOGGEDON && sess.user) {
-          onlineUsers.push({
-            username: sess.user.username,
-            conference: sess.currentConfName,
-            idle: Math.floor((Date.now() - sess.lastActivity) / 60000), // minutes idle
-            node: 'Web1' // For now, all users are on the same "node"
-          });
-        }
-      }
-
-      if (onlineUsers.length === 0) {
-        socket.emit('ansi-output', 'No users currently online.\r\n');
-      } else {
-        onlineUsers.forEach(user => {
-          const idleStr = user.idle > 0 ? ` (${user.idle}min idle)` : '';
-          socket.emit('ansi-output', `${user.username.padEnd(15)} ${user.conference.padEnd(20)} ${user.node}${idleStr}\r\n`);
-        });
-      }
-      socket.emit('ansi-output', '\r\n');
-      break;
 
     case 'G': // Goodbye (internalCommandG)
       socket.emit('ansi-output', '\r\nGoodbye!\r\n');

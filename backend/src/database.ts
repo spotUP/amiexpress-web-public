@@ -2044,6 +2044,82 @@ export class Database {
     }
   }
 
+  // Bulletin management
+  async createBulletin(bulletin: { conferenceId: number; filename: string; title: string }): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO bulletins (conferenceid, filename, title)
+        VALUES ($1, $2, $3)
+        RETURNING id
+      `;
+      const result = await client.query(sql, [bulletin.conferenceId, bulletin.filename, bulletin.title]);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getBulletins(conferenceId?: number): Promise<Bulletin[]> {
+    const client = await this.pool.connect();
+    try {
+      let sql: string;
+      let params: any[];
+
+      if (conferenceId !== undefined) {
+        sql = `SELECT * FROM bulletins WHERE conferenceid = $1 ORDER BY created DESC`;
+        params = [conferenceId];
+      } else {
+        sql = `SELECT * FROM bulletins ORDER BY created DESC`;
+        params = [];
+      }
+
+      const result = await client.query(sql, params);
+      return result.rows.map((row: any) => ({
+        id: row.id,
+        conferenceId: row.conferenceid,
+        filename: row.filename,
+        title: row.title,
+        created: row.created,
+        updated: row.updated
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async getBulletinById(id: number): Promise<Bulletin | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM bulletins WHERE id = $1`;
+      const result = await client.query(sql, [id]);
+
+      if (result.rows.length === 0) return null;
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        conferenceId: row.conferenceid,
+        filename: row.filename,
+        title: row.title,
+        created: row.created,
+        updated: row.updated
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteBulletin(id: number): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `DELETE FROM bulletins WHERE id = $1`;
+      await client.query(sql, [id]);
+    } finally {
+      client.release();
+    }
+  }
+
 }
 
 // Export singleton instance

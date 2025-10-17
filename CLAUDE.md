@@ -56,3 +56,4 @@ The BBS uses proper substates:
 - `DISPLAY_MENU` - Shows menu with respect to menuPause flag
 - `READ_COMMAND` - Waits for line input
 - `READ_SHORTCUTS` - Waits for hotkey input (expert mode)
+- always post daily changelogs to the bbs bulletins if there are any

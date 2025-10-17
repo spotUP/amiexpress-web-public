@@ -178,7 +178,7 @@ fi
 print_info "Installing/verifying frontend dependencies..."
 cd frontend
 rm -rf node_modules .vite-temp 2>/dev/null || true
-npm install &> /dev/null
+npm install --include=dev &> /dev/null
 cd ..
 print_success "Frontend dependencies installed"
 
