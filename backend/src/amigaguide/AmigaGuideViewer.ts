@@ -50,8 +50,8 @@ export class AmigaGuideViewer {
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
     // Header
-    this.socket.emit('ansi-output', `\x1b[1;36m-= ${doc.database} =-\x1b[0m\r\n`);
-    this.socket.emit('ansi-output', `\x1b[1;33m${node.title}\x1b[0m\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36m-= ${doc.database} =-\x1b[0m\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;33m${node.title}\x1b[0m\r\n`);
     this.socket.emit('ansi-output', '-'.repeat(this.width) + '\r\n');
 
     // Render content
@@ -295,8 +295,8 @@ export class AmigaGuideViewer {
    */
   private showHelp(): void {
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H');
-    this.socket.emit('ansi-output', '\x1b[1;36m-= AmigaGuide Viewer Help =-\x1b[0m\r\n\r\n');
-    this.socket.emit('ansi-output', '\x1b[1mNavigation:\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;36m-= AmigaGuide Viewer Help =-\x1b[0m\r\n\r\n');
+    this.socket.emit('ansi-output', '\x1b[0mNavigation:\x1b[0m\r\n');
     this.socket.emit('ansi-output', '  \x1b[33mUP/DOWN\x1b[0m  - Scroll content\r\n');
     this.socket.emit('ansi-output', '  \x1b[33mPGUP/PGDN\x1b[0m - Page up/down\r\n');
     this.socket.emit('ansi-output', '  \x1b[33m1-9\x1b[0m      - Follow numbered link\r\n');

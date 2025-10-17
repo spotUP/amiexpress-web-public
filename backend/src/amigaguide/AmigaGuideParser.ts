@@ -337,9 +337,9 @@ export class AmigaGuideParser {
   private processInlineFormatting(line: string): string {
     // Replace AmigaGuide formatting with ANSI codes
 
-    // Bold: @{b} text @{ub}
-    line = line.replace(/@\{b\}/gi, '\x1b[1m');
-    line = line.replace(/@\{ub\}/gi, '\x1b[22m');
+    // Bold: @{b} text @{ub} - strip bold tags (Amiga BBS doesn't use bold)
+    line = line.replace(/@\{b\}/gi, '');
+    line = line.replace(/@\{ub\}/gi, '');
 
     // Underline: @{u} text @{uu}
     line = line.replace(/@\{u\}/gi, '\x1b[4m');

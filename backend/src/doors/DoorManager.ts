@@ -243,7 +243,7 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
 
     // Header
-    this.socket.emit('ansi-output', '\x1b[1;37;44m' + this.pad(' DOOR MANAGER ', 80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR MANAGER ', 80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\r\n');
 
     if (this.state.doors.length === 0) {
@@ -268,7 +268,7 @@ export class DoorManager {
 
         if (isSelected) {
           // Blue background for selected
-          this.socket.emit('ansi-output', `\x1b[1;37;44m ${status} [${type}] ${name} ${size} \x1b[0m\r\n`);
+          this.socket.emit('ansi-output', `\x1b[0;37;44m ${status} [${type}] ${name} ${size} \x1b[0m\r\n`);
         } else {
           this.socket.emit('ansi-output', ` ${status} \x1b[33m[${type}]\x1b[0m ${name} \x1b[36m${size}\x1b[0m\r\n`);
         }
@@ -284,7 +284,7 @@ export class DoorManager {
 
     // Footer with commands
     this.socket.emit('ansi-output', '\r\n');
-    this.socket.emit('ansi-output', '\x1b[1;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Navigate  ');
     this.socket.emit('ansi-output', '\x1b[33mENTER\x1b[0m Info  ');
     this.socket.emit('ansi-output', '\x1b[33mU\x1b[0m Upload  ');
@@ -302,30 +302,30 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
 
     // Header
-    this.socket.emit('ansi-output', '\x1b[1;37;44m' + this.pad(' DOOR INFORMATION ', 80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR INFORMATION ', 80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\r\n');
 
     // Basic info
-    this.socket.emit('ansi-output', `\x1b[1;36mName:\x1b[0m ${door.name}\r\n`);
-    this.socket.emit('ansi-output', `\x1b[1;36mFile:\x1b[0m ${door.filename}\r\n`);
-    this.socket.emit('ansi-output', `\x1b[1;36mType:\x1b[0m ${door.type.toUpperCase()}\r\n`);
-    this.socket.emit('ansi-output', `\x1b[1;36mSize:\x1b[0m ${this.formatSize(door.size)}\r\n`);
-    this.socket.emit('ansi-output', `\x1b[1;36mDate:\x1b[0m ${door.uploadDate.toLocaleDateString()}\r\n`);
-    this.socket.emit('ansi-output', `\x1b[1;36mStatus:\x1b[0m ${door.installed ? '\x1b[32mInstalled\x1b[0m' : '\x1b[31mNot Installed\x1b[0m'}\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36mName:\x1b[0m ${door.name}\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36mFile:\x1b[0m ${door.filename}\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36mType:\x1b[0m ${door.type.toUpperCase()}\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36mSize:\x1b[0m ${this.formatSize(door.size)}\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36mDate:\x1b[0m ${door.uploadDate.toLocaleDateString()}\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36mStatus:\x1b[0m ${door.installed ? '\x1b[32mInstalled\x1b[0m' : '\x1b[31mNot Installed\x1b[0m'}\r\n`);
 
     if (door.author) {
-      this.socket.emit('ansi-output', `\x1b[1;36mAuthor:\x1b[0m ${door.author}\r\n`);
+      this.socket.emit('ansi-output', `\x1b[0;36mAuthor:\x1b[0m ${door.author}\r\n`);
     }
     if (door.version) {
-      this.socket.emit('ansi-output', `\x1b[1;36mVersion:\x1b[0m ${door.version}\r\n`);
+      this.socket.emit('ansi-output', `\x1b[0;36mVersion:\x1b[0m ${door.version}\r\n`);
     }
     if (door.executable) {
-      this.socket.emit('ansi-output', `\x1b[1;36mExecutable:\x1b[0m ${door.executable}\r\n`);
+      this.socket.emit('ansi-output', `\x1b[0;36mExecutable:\x1b[0m ${door.executable}\r\n`);
     }
 
     // FILE_ID.DIZ
     if (door.fileidDiz) {
-      this.socket.emit('ansi-output', '\r\n\x1b[1;33m─── FILE_ID.DIZ ───\x1b[0m\r\n');
+      this.socket.emit('ansi-output', '\r\n\x1b[0;33m─── FILE_ID.DIZ ───\x1b[0m\r\n');
       const dizLines = door.fileidDiz.split('\n').slice(0, 10); // Show first 10 lines
       dizLines.forEach(line => {
         this.socket.emit('ansi-output', `\x1b[37m${line}\x1b[0m\r\n`);
@@ -337,13 +337,13 @@ export class DoorManager {
 
     // Description
     if (door.description) {
-      this.socket.emit('ansi-output', '\r\n\x1b[1;36mDescription:\x1b[0m\r\n');
+      this.socket.emit('ansi-output', '\r\n\x1b[0;36mDescription:\x1b[0m\r\n');
       this.socket.emit('ansi-output', `\x1b[37m${door.description}\x1b[0m\r\n`);
     }
 
     // Footer with commands
     this.socket.emit('ansi-output', '\r\n');
-    this.socket.emit('ansi-output', '\x1b[1;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
 
     if (door.installed) {
       this.socket.emit('ansi-output', '\x1b[33mU\x1b[0m Uninstall  ');
@@ -368,7 +368,7 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
 
     // Header
-    this.socket.emit('ansi-output', '\x1b[1;37;44m' + this.pad(' DOCUMENTATION ', 80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOCUMENTATION ', 80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\r\n');
 
     // Show content with paging
@@ -383,7 +383,7 @@ export class DoorManager {
 
     // Footer
     this.socket.emit('ansi-output', '\r\n');
-    this.socket.emit('ansi-output', '\x1b[1;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', `\x1b[90mLine ${start + 1}-${end} of ${lines.length}\x1b[0m\r\n`);
     this.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Scroll  ');
     this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
@@ -395,7 +395,7 @@ export class DoorManager {
    */
   private async handleUpload(): Promise<void> {
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
-    this.socket.emit('ansi-output', '\x1b[1;37;44m' + this.pad(' UPLOAD DOOR ', 80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' UPLOAD DOOR ', 80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\r\n');
     this.socket.emit('ansi-output', 'Upload a door archive (ZIP format)\r\n\r\n');
     this.socket.emit('ansi-output', 'The archive should contain:\r\n');

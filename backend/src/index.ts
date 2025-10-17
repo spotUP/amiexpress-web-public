@@ -684,7 +684,7 @@ io.on('connection', async (socket: Socket) => {
     socket.emit('ansi-output', titleScreen);
   } else {
     // Fallback welcome message
-    socket.emit('ansi-output', '\x1b[2J\x1b[H\x1b[1;36mWelcome to AmiExpress-Web BBS\x1b[0m\r\n\r\n');
+    socket.emit('ansi-output', '\x1b[2J\x1b[H\x1b[0;36mWelcome to AmiExpress-Web BBS\x1b[0m\r\n\r\n');
   }
 
   // Handle connection errors gracefully
@@ -2184,7 +2184,7 @@ function displayReadme(socket: any, session: BBSSession, door: any): void {
   socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
   // Header
-  socket.emit('ansi-output', `\x1b[1;36m-= ${door.name} - README =-\x1b[0m\r\n`);
+  socket.emit('ansi-output', `\x1b[0;36m-= ${door.name} - README =-\x1b[0m\r\n`);
   socket.emit('ansi-output', '-'.repeat(80) + '\r\n');
 
   // Display content
@@ -2594,7 +2594,7 @@ function displayDoorManagerList(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
 
   // Header (Amiga style)
-  socket.emit('ansi-output', '\r\n\x1b[1;36m-= DOOR MANAGER =-\x1b[0m\r\n');
+  socket.emit('ansi-output', '\r\n\x1b[0;36m-= DOOR MANAGER =-\x1b[0m\r\n');
   socket.emit('ansi-output', '\r\n');
 
   if (doorList.length === 0) {
@@ -2639,7 +2639,7 @@ function displayDoorManagerList(socket: any, session: BBSSession) {
 
       if (isSelected) {
         // Blue background for selected
-        socket.emit('ansi-output', `\x1b[1;37;44m ${status} [${type}] ${name} ${info} \x1b[0m\r\n`);
+        socket.emit('ansi-output', `\x1b[0;37;44m ${status} [${type}] ${name} ${info} \x1b[0m\r\n`);
       } else {
         socket.emit('ansi-output', ` ${status} \x1b[33m[${type}]\x1b[0m ${name} \x1b[36m${info}\x1b[0m\r\n`);
       }
@@ -2655,7 +2655,7 @@ function displayDoorManagerList(socket: any, session: BBSSession) {
 
   // Footer with commands (Amiga style)
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\x1b[1;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[33m[UP/DN]\x1b[0m Navigate  ');
   socket.emit('ansi-output', '\x1b[33m[ENTER]\x1b[0m Info  ');
   socket.emit('ansi-output', '\x1b[33m[U]\x1b[0m Upload  ');
@@ -2673,68 +2673,68 @@ function displayDoorManagerInfo(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
 
   // Header (Amiga style)
-  socket.emit('ansi-output', '\r\n\x1b[1;36m-= DOOR INFORMATION =-\x1b[0m\r\n');
+  socket.emit('ansi-output', '\r\n\x1b[0;36m-= DOOR INFORMATION =-\x1b[0m\r\n');
   socket.emit('ansi-output', '\r\n');
 
   // Basic info
-  socket.emit('ansi-output', `\x1b[1;36mName:\x1b[0m ${door.displayName || door.name}\r\n`);
-  socket.emit('ansi-output', `\x1b[1;36mFile:\x1b[0m ${door.filename}\r\n`);
-  socket.emit('ansi-output', `\x1b[1;36mType:\x1b[0m ${door.type.toUpperCase()}\r\n`);
+  socket.emit('ansi-output', `\x1b[0;36mName:\x1b[0m ${door.displayName || door.name}\r\n`);
+  socket.emit('ansi-output', `\x1b[0;36mFile:\x1b[0m ${door.filename}\r\n`);
+  socket.emit('ansi-output', `\x1b[0;36mType:\x1b[0m ${door.type.toUpperCase()}\r\n`);
 
   // Show Amiga door-specific metadata from .info file
   if (door.isAmigaDoor) {
-    socket.emit('ansi-output', `\x1b[1;36mCommand:\x1b[0m ${door.command}\r\n`);
-    socket.emit('ansi-output', `\x1b[1;36mLocation:\x1b[0m ${door.location}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mCommand:\x1b[0m ${door.command}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mLocation:\x1b[0m ${door.location}\r\n`);
     if (door.resolvedPath) {
-      socket.emit('ansi-output', `\x1b[1;36mResolved Path:\x1b[0m ${door.resolvedPath}\r\n`);
+      socket.emit('ansi-output', `\x1b[0;36mResolved Path:\x1b[0m ${door.resolvedPath}\r\n`);
     }
-    socket.emit('ansi-output', `\x1b[1;36mAccess Level:\x1b[0m ${door.access}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mAccess Level:\x1b[0m ${door.access}\r\n`);
     if (door.stack) {
-      socket.emit('ansi-output', `\x1b[1;36mStack Size:\x1b[0m ${door.stack} bytes\r\n`);
+      socket.emit('ansi-output', `\x1b[0;36mStack Size:\x1b[0m ${door.stack} bytes\r\n`);
     }
     if (door.priority) {
-      socket.emit('ansi-output', `\x1b[1;36mPriority:\x1b[0m ${door.priority}\r\n`);
+      socket.emit('ansi-output', `\x1b[0;36mPriority:\x1b[0m ${door.priority}\r\n`);
     }
     if (door.multinode !== undefined) {
-      socket.emit('ansi-output', `\x1b[1;36mMultinode:\x1b[0m ${door.multinode ? 'YES' : 'NO'}\r\n`);
+      socket.emit('ansi-output', `\x1b[0;36mMultinode:\x1b[0m ${door.multinode ? 'YES' : 'NO'}\r\n`);
     }
   } else if (door.isTypeScriptDoor) {
     // TypeScript door-specific metadata
     if (door.description) {
-      socket.emit('ansi-output', `\x1b[1;36mDescription:\x1b[0m ${door.description}\r\n`);
+      socket.emit('ansi-output', `\x1b[0;36mDescription:\x1b[0m ${door.description}\r\n`);
     }
     if (door.version) {
-      socket.emit('ansi-output', `\x1b[1;36mVersion:\x1b[0m ${door.version}\r\n`);
+      socket.emit('ansi-output', `\x1b[0;36mVersion:\x1b[0m ${door.version}\r\n`);
     }
     if (door.author) {
-      socket.emit('ansi-output', `\x1b[1;36mAuthor:\x1b[0m ${door.author}\r\n`);
+      socket.emit('ansi-output', `\x1b[0;36mAuthor:\x1b[0m ${door.author}\r\n`);
     }
     if (door.path) {
-      socket.emit('ansi-output', `\x1b[1;36mPath:\x1b[0m ${door.path}\r\n`);
+      socket.emit('ansi-output', `\x1b[0;36mPath:\x1b[0m ${door.path}\r\n`);
     }
-    socket.emit('ansi-output', `\x1b[1;36mAccess Level:\x1b[0m ${door.access || 0}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mAccess Level:\x1b[0m ${door.access || 0}\r\n`);
   } else {
     // Archive/legacy door info
     const sizeStr = door.size < 1024 ? door.size + ' B' :
                     door.size < 1024 * 1024 ? Math.round(door.size / 1024) + ' KB' :
                     Math.round(door.size / (1024 * 1024) * 10) / 10 + ' MB';
-    socket.emit('ansi-output', `\x1b[1;36mSize:\x1b[0m ${sizeStr}\r\n`);
-    socket.emit('ansi-output', `\x1b[1;36mDate:\x1b[0m ${door.uploadDate.toLocaleDateString()}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mSize:\x1b[0m ${sizeStr}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mDate:\x1b[0m ${door.uploadDate.toLocaleDateString()}\r\n`);
   }
 
-  socket.emit('ansi-output', `\x1b[1;36mStatus:\x1b[0m ${door.installed ? '\x1b[32mInstalled\x1b[0m' : '\x1b[31mNot Installed\x1b[0m'}\r\n`);
+  socket.emit('ansi-output', `\x1b[0;36mStatus:\x1b[0m ${door.installed ? '\x1b[32mInstalled\x1b[0m' : '\x1b[31mNot Installed\x1b[0m'}\r\n`);
 
   if (door.author) {
-    socket.emit('ansi-output', `\x1b[1;36mAuthor:\x1b[0m ${door.author}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mAuthor:\x1b[0m ${door.author}\r\n`);
   }
   if (door.version) {
-    socket.emit('ansi-output', `\x1b[1;36mVersion:\x1b[0m ${door.version}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mVersion:\x1b[0m ${door.version}\r\n`);
   }
   if (door.executable) {
-    socket.emit('ansi-output', `\x1b[1;36mExecutable:\x1b[0m ${door.executable}\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mExecutable:\x1b[0m ${door.executable}\r\n`);
   }
   if (door.libraries && door.libraries.length > 0) {
-    socket.emit('ansi-output', `\x1b[1;36mLibraries:\x1b[0m ${door.libraries.length} found\r\n`);
+    socket.emit('ansi-output', `\x1b[0;36mLibraries:\x1b[0m ${door.libraries.length} found\r\n`);
     door.libraries.forEach((lib: string) => {
       socket.emit('ansi-output', `  \x1b[90m- ${lib}\x1b[0m\r\n`);
     });
@@ -2742,7 +2742,7 @@ function displayDoorManagerInfo(socket: any, session: BBSSession) {
 
   // FILE_ID.DIZ
   if (door.fileidDiz) {
-    socket.emit('ansi-output', '\r\n\x1b[1;33m--- FILE_ID.DIZ ---\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[0;33m--- FILE_ID.DIZ ---\x1b[0m\r\n');
     const dizLines = door.fileidDiz.split('\n').slice(0, 10);
     dizLines.forEach((line: string) => {
       socket.emit('ansi-output', `\x1b[37m${line}\x1b[0m\r\n`);
@@ -2754,13 +2754,13 @@ function displayDoorManagerInfo(socket: any, session: BBSSession) {
 
   // Description
   if (door.description) {
-    socket.emit('ansi-output', '\r\n\x1b[1;36mDescription:\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[0;36mDescription:\x1b[0m\r\n');
     socket.emit('ansi-output', `\x1b[37m${door.description}\x1b[0m\r\n`);
   }
 
   // Footer with commands (Amiga style)
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\x1b[1;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
 
   if (door.installed) {
     socket.emit('ansi-output', '\x1b[33m[U]\x1b[0m Uninstall  ');
@@ -3096,50 +3096,50 @@ function displayMainMenu(socket: any, session: BBSSession) {
   // Only show full menu if not expert mode (expert users get just the prompt)
   if (session.user?.expert !== "N") {
     console.log('Displaying full menu for non-expert user');
-    socket.emit('ansi-output', '\x1b[1;36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[1;36m║                         \x1b[1;33mAmiExpress BBS Main Menu\x1b[1;36m                          ║\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[1;36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n');
+    socket.emit('ansi-output', '\x1b[0;36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;36m║                         \x1b[0;33mAmiExpress BBS Main Menu\x1b[0;36m                          ║\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n');
 
     // Message Commands
-    socket.emit('ansi-output', '\x1b[1;33m▶ MESSAGE COMMANDS:\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;33m▶ MESSAGE COMMANDS:\x1b[0m\r\n');
     socket.emit('ansi-output', '  \x1b[36mR\x1b[0m  - Read Messages              \x1b[36mA\x1b[0m  - Post Message\r\n');
     socket.emit('ansi-output', '  \x1b[36mE\x1b[0m  - Post Private Message       \x1b[36mJM\x1b[0m - Join Message Base\r\n\r\n');
 
     // File Commands
-    socket.emit('ansi-output', '\x1b[1;33m▶ FILE COMMANDS:\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;33m▶ FILE COMMANDS:\x1b[0m\r\n');
     socket.emit('ansi-output', '  \x1b[36mF\x1b[0m  - File Areas                 \x1b[36mD\x1b[0m  - Download Files\r\n');
     socket.emit('ansi-output', '  \x1b[36mU\x1b[0m  - Upload Files               \x1b[36mN\x1b[0m  - New Files Scan\r\n');
     socket.emit('ansi-output', '  \x1b[36mFR\x1b[0m - File Request               \x1b[36mFS\x1b[0m - File Search\r\n');
     socket.emit('ansi-output', '  \x1b[36mFM\x1b[0m - File Maintenance            \x1b[36mJF\x1b[0m - Join File Area\r\n\r\n');
 
     // Conference & User Commands
-    socket.emit('ansi-output', '\x1b[1;33m▶ CONFERENCE & USER:\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;33m▶ CONFERENCE & USER:\x1b[0m\r\n');
     socket.emit('ansi-output', '  \x1b[36mJ\x1b[0m  - Join Conference            \x1b[36mO\x1b[0m  - Online Users / Page Sysop\r\n');
     socket.emit('ansi-output', '  \x1b[36mI\x1b[0m  - User Information           \x1b[36mP\x1b[0m  - User Profile\r\n');
     socket.emit('ansi-output', '  \x1b[36mT\x1b[0m  - Time Left                  \x1b[36mQ\x1b[0m  - Quiet Node Toggle\r\n\r\n');
 
     // Communication Commands
-    socket.emit('ansi-output', '\x1b[1;33m▶ COMMUNICATION:\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;33m▶ COMMUNICATION:\x1b[0m\r\n');
     socket.emit('ansi-output', '  \x1b[36mC\x1b[0m  - Comment to Sysop           \x1b[36mOLM\x1b[0m - Online Messages\r\n');
     socket.emit('ansi-output', '  \x1b[36mCHAT\x1b[0m - Internode Chat            \x1b[36mWHO\x1b[0m - Who\'s Online\r\n\r\n');
 
     // Door & System Commands
-    socket.emit('ansi-output', '\x1b[1;33m▶ DOORS & SYSTEM:\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;33m▶ DOORS & SYSTEM:\x1b[0m\r\n');
     socket.emit('ansi-output', '  \x1b[36mDOORS\x1b[0m - Door Games & Utilities    \x1b[36mX\x1b[0m <name> - Execute Door\r\n');
     socket.emit('ansi-output', '  \x1b[36m2\x1b[0m  - Callers Log                \x1b[36m3\x1b[0m  - System Statistics\r\n');
     socket.emit('ansi-output', '  \x1b[36m4\x1b[0m  - Account Information        \x1b[36mVER\x1b[0m - Version Information\r\n\r\n');
 
     // Sysop-only commands
     if (session.user?.securityLevel >= 255) {
-      socket.emit('ansi-output', '\x1b[1;33m▶ SYSOP COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33m▶ SYSOP COMMANDS:\x1b[0m\r\n');
       socket.emit('ansi-output', '  \x1b[33m1\x1b[0m  - Account Editing            \x1b[33mDOORMAN\x1b[0m - Door Manager\r\n\r\n');
     }
 
     // Help & Exit
-    socket.emit('ansi-output', '\x1b[1;33m▶ HELP & EXIT:\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;33m▶ HELP & EXIT:\x1b[0m\r\n');
     socket.emit('ansi-output', '  \x1b[36m?\x1b[0m  - Command Help               \x1b[36mG\x1b[0m  - Goodbye (Logoff)\r\n');
 
-    socket.emit('ansi-output', '\x1b[1;36m────────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;36m────────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n');
   }
 
   // Show prompt
@@ -3187,10 +3187,10 @@ async function handleHotkey(socket: any, session: BBSSession, data: string): Pro
     '\x1b[19~': { name: 'F8', shift: false },
     '\x1b[20~': { name: 'F9', shift: false },
     '\x1b[21~': { name: 'F10', shift: false },
-    '\x1b[1;2P': { name: 'F1', shift: true },
-    '\x1b[1;2Q': { name: 'F2', shift: true },
-    '\x1b[1;2R': { name: 'F3', shift: true },
-    '\x1b[1;2S': { name: 'F4', shift: true },
+    '\x1b[0;2P': { name: 'F1', shift: true },
+    '\x1b[0;2Q': { name: 'F2', shift: true },
+    '\x1b[0;2R': { name: 'F3', shift: true },
+    '\x1b[0;2S': { name: 'F4', shift: true },
     '\x1b[15;2~': { name: 'F5', shift: true },
     '\x1b[17;2~': { name: 'F6', shift: true },
     '\x1b[18;2~': { name: 'F7', shift: true },
@@ -3464,7 +3464,7 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
       if (key.toUpperCase() === 'U') {
         session.tempData.doorManagerMode = 'upload';
         socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
-        socket.emit('ansi-output', '\r\n\x1b[1;36m-= UPLOAD DOOR ARCHIVE =-\x1b[0m\r\n\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[0;36m-= UPLOAD DOOR ARCHIVE =-\x1b[0m\r\n\r\n');
         socket.emit('ansi-output', 'Upload a door archive (ZIP or LHA format)\r\n\r\n');
         socket.emit('ansi-output', 'The archive should contain:\r\n');
         socket.emit('ansi-output', '  - Door executable (.ts, .js, or Amiga binary)\r\n');
@@ -3589,7 +3589,7 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
         // If both README and AmigaGuide exist, show choice menu
         if (door.readme && door.guide) {
           socket.emit('ansi-output', '\x1b[2J\x1b[H');
-          socket.emit('ansi-output', '\x1b[1;36m-= Documentation Format =-\x1b[0m\r\n\r\n');
+          socket.emit('ansi-output', '\x1b[0;36m-= Documentation Format =-\x1b[0m\r\n\r\n');
           socket.emit('ansi-output', '  \x1b[33m[1]\x1b[0m README (Text)\r\n');
           socket.emit('ansi-output', `  \x1b[33m[2]\x1b[0m ${door.guideName || 'AmigaGuide'} (Interactive)\r\n\r\n`);
           socket.emit('ansi-output', 'Select format [1-2] or [B]ack: ');
@@ -5032,9 +5032,9 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
     case 'DM': // Short alias for DOORMAN
       // Security check - Sysop only
       if (session.user.securityLevel < 255) {
-        socket.emit('ansi-output', '\r\n\x1b[1;31m+--------------------------------------+\x1b[0m\r\n');
-        socket.emit('ansi-output', '\x1b[1;31m|  ACCESS DENIED: SYSOP ONLY           |\x1b[0m\r\n');
-        socket.emit('ansi-output', '\x1b[1;31m+--------------------------------------+\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[0;31m+--------------------------------------+\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[0;31m|  ACCESS DENIED: SYSOP ONLY           |\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[0;31m+--------------------------------------+\x1b[0m\r\n');
         break;
       }
       displayDoorManager(socket, session);
@@ -5187,7 +5187,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
     case 'VER': // Version (internalCommandVER)
       socket.emit('ansi-output', '\x1b[36m-= BBS Version =-\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[1;33mAmiExpress-Web v1.0.0\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33mAmiExpress-Web v1.0.0\x1b[0m\r\n');
       socket.emit('ansi-output', 'Modern web recreation of AmiExpress BBS\r\n');
       socket.emit('ansi-output', 'Based on AmiExpress v5.6.0\r\n');
       socket.emit('ansi-output', '\r\n\x1b[35mBuilt with TypeScript, Socket.IO, and Node.js\x1b[0m\r\n');
@@ -5265,9 +5265,9 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       break;
 
     case '?': // Help (internalCommandQuestionMark)
-      socket.emit('ansi-output', '\x1b[2J\x1b[H\x1b[1;36m-= AmiExpress Command Reference =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[2J\x1b[H\x1b[0;36m-= AmiExpress Command Reference =-\x1b[0m\r\n\r\n');
 
-      socket.emit('ansi-output', '\x1b[1;33mSYSTEM COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33mSYSTEM COMMANDS:\x1b[0m\r\n');
       socket.emit('ansi-output', '  \x1b[36m0\x1b[0m - Remote Shell (Sysop)\r\n');
       socket.emit('ansi-output', '  \x1b[36m1\x1b[0m - Account Editing (Sysop)\r\n');
       socket.emit('ansi-output', '  \x1b[36m2\x1b[0m - View Callers Log (Sysop)\r\n');
@@ -5279,7 +5279,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', '  \x1b[36mRL\x1b[0m - Re-Logon\r\n');
       socket.emit('ansi-output', '  \x1b[36mVER\x1b[0m - BBS Version Info\r\n\r\n');
 
-      socket.emit('ansi-output', '\x1b[1;33mMESSAGE COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33mMESSAGE COMMANDS:\x1b[0m\r\n');
       socket.emit('ansi-output', '  \x1b[36mR\x1b[0m - Read Messages\r\n');
       socket.emit('ansi-output', '  \x1b[36mA\x1b[0m - Post Message\r\n');
       socket.emit('ansi-output', '  \x1b[36mE\x1b[0m - Post Private Message\r\n');
@@ -5289,7 +5289,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', '  \x1b[36mMS\x1b[0m - Message Status\r\n');
       socket.emit('ansi-output', '  \x1b[36mZOOM\x1b[0m - Zoom Scan (Quick Scan)\r\n\r\n');
 
-      socket.emit('ansi-output', '\x1b[1;33mFILE COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33mFILE COMMANDS:\x1b[0m\r\n');
       socket.emit('ansi-output', '  \x1b[36mF\x1b[0m - File Areas\r\n');
       socket.emit('ansi-output', '  \x1b[36mFR\x1b[0m - File Areas (Reverse)\r\n');
       socket.emit('ansi-output', '  \x1b[36mFM\x1b[0m - File Maintenance (Sysop)\r\n');
@@ -5300,7 +5300,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', '  \x1b[36mV\x1b[0m - View File\r\n');
       socket.emit('ansi-output', '  \x1b[36mN\x1b[0m - New Files\r\n\r\n');
 
-      socket.emit('ansi-output', '\x1b[1;33mCONFERENCE COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33mCONFERENCE COMMANDS:\x1b[0m\r\n');
       socket.emit('ansi-output', '  \x1b[36mJ\x1b[0m - Join Conference\r\n');
       socket.emit('ansi-output', '  \x1b[36mJM\x1b[0m - Join Message Base\r\n');
       socket.emit('ansi-output', '  \x1b[36m<\x1b[0m - Previous Conference\r\n');
@@ -5310,7 +5310,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', '  \x1b[36mCF\x1b[0m - Conference Flags\r\n');
       socket.emit('ansi-output', '  \x1b[36mCM\x1b[0m - Conference Maintenance (Sysop)\r\n\r\n');
 
-      socket.emit('ansi-output', '\x1b[1;33mUSER COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33mUSER COMMANDS:\x1b[0m\r\n');
       socket.emit('ansi-output', '  \x1b[36mO\x1b[0m - Page Sysop for Chat\r\n');
       socket.emit('ansi-output', '  \x1b[36mOLM\x1b[0m - Online Message System\r\n');
       socket.emit('ansi-output', '  \x1b[36mCHAT\x1b[0m - Internode Chat\r\n');
@@ -5322,7 +5322,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', '  \x1b[36mUS\x1b[0m - User Statistics\r\n');
       socket.emit('ansi-output', '  \x1b[36mW\x1b[0m - Graffiti Wall\r\n\r\n');
 
-      socket.emit('ansi-output', '\x1b[1;33mDOOR & UTILITY COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33mDOOR & UTILITY COMMANDS:\x1b[0m\r\n');
       socket.emit('ansi-output', '  \x1b[36mDOORS/DOOR/M\x1b[0m - Door Games & Utilities\r\n');
       socket.emit('ansi-output', '  \x1b[36mX\x1b[0m <doorname> - Execute Door\r\n');
       socket.emit('ansi-output', '  \x1b[36m^\x1b[0m <script> - Execute AREXX Script\r\n');
@@ -5331,7 +5331,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       }
       socket.emit('ansi-output', '\r\n');
 
-      socket.emit('ansi-output', '\x1b[1;33mOTHER COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[0;33mOTHER COMMANDS:\x1b[0m\r\n');
       socket.emit('ansi-output', '  \x1b[36mB\x1b[0m - Browse Bulletins\r\n');
       socket.emit('ansi-output', '  \x1b[36mGR\x1b[0m - Greets\r\n');
       socket.emit('ansi-output', '  \x1b[36mH\x1b[0m <cmd> - Help on Command\r\n');
