@@ -57,6 +57,7 @@ import { BBSSession, BBSState, LoggedOnSubState, Conference, MessageBase } from 
 import { loadScreen, displayScreen, doPause } from './bbs/screens';
 import { displayMainMenu, displayMenuPrompt, setMessageBases } from './bbs/menu';
 import { formatFileSize, parseParams } from './bbs/utils';
+import { newUserAccount, completeNewUserRegistration } from './bbs/newuser';
 
 // JWT Secret (should be in environment variables)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
@@ -673,7 +674,16 @@ io.on('connection', async (socket: Socket) => {
       console.log('Step 2 result:', user ? 'User found' : 'User not found');
       if (!user) {
         console.log('User not found:', data.username);
-        socket.emit('login-failed', 'User not found');
+
+        // Offer new user registration (express.e lines 29607-29622)
+        if (data.username.toUpperCase() === 'NEW') {
+          socket.emit('ansi-output', '\r\n\x1b[36m[C]ontinue as a new user?\x1b[0m ');
+        } else {
+          socket.emit('ansi-output', `\r\n\x1b[36mThe name ${data.username} is not used on this BBS.\x1b[0m\r\n`);
+          socket.emit('ansi-output', '\x1b[36m[R]etry your name or [C]ontinue as a new user?\x1b[0m ');
+        }
+
+        socket.emit('new-user-prompt', { username: data.username });
         return;
       }
 
@@ -860,6 +870,45 @@ io.on('connection', async (socket: Socket) => {
         console.error('Token login error:', error);
         socket.emit('login-failed', 'Internal server error');
       }
+    }
+  });
+
+  // Handle new user registration response (express.e lines 29622-29656)
+  socket.on('new-user-response', async (data: { response: string; username: string }) => {
+    console.log('New user response:', data.response, 'for username:', data.username);
+
+    try {
+      const session = await sessions.get(socket.id);
+      if (!session) {
+        socket.emit('login-failed', 'Session expired');
+        return;
+      }
+
+      const response = data.response.toUpperCase();
+
+      if (response === 'C') {
+        // Continue as new user
+        console.log('Starting new user registration for:', data.username);
+        socket.emit('ansi-output', '\r\n\x1b[32mStarting new user registration...\x1b[0m\r\n');
+
+        // Call newUserAccount to start the registration process
+        const success = await newUserAccount(socket, session, data.username);
+
+        if (!success) {
+          socket.emit('login-failed', 'Registration cancelled or failed');
+        }
+      } else if (response === 'R') {
+        // Retry login
+        socket.emit('ansi-output', '\r\n\x1b[36mPlease try again.\x1b[0m\r\n');
+        socket.emit('login-failed', 'Please retry with a different username');
+      } else {
+        // Invalid response
+        socket.emit('ansi-output', '\r\n\x1b[31mInvalid response. Please enter C to continue or R to retry.\x1b[0m\r\n');
+        socket.emit('new-user-prompt', { username: data.username });
+      }
+    } catch (error) {
+      console.error('New user response error:', error);
+      socket.emit('login-failed', 'Internal server error');
     }
   });
 
