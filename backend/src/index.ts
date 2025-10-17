@@ -57,7 +57,6 @@ import { BBSSession, BBSState, LoggedOnSubState, Conference, MessageBase } from 
 import { loadScreen, displayScreen, doPause } from './bbs/screens';
 import { displayMainMenu, displayMenuPrompt, setMessageBases } from './bbs/menu';
 import { formatFileSize, parseParams } from './bbs/utils';
-import { newUserAccount, completeNewUserRegistration } from './bbs/newuser';
 
 // JWT Secret (should be in environment variables)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
@@ -291,9 +290,7 @@ const corsOptions = {
       /^https:\/\/amiexpress.*\.onrender\.com$/,
       /^https:\/\/amiexpress-frontend.*\.onrender\.com$/,
       /^https:\/\/.*\.vercel\.app$/,  // Allow ALL Vercel deployment URLs (wildcard)
-      "https://amiexpress-web-three.vercel.app",
-      "https://bbs.uprough.net",  // Custom domain
-      /^https:\/\/.*\.uprough\.net$/  // Allow all subdomains of uprough.net
+      "https://amiexpress-web-three.vercel.app"
     ];
 
     // Allow requests with no origin (mobile apps, curl requests, etc.)
@@ -311,7 +308,7 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);
-      callback(null, false); // Reject without error (prevents 500)
+      callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ["GET", "POST", "OPTIONS"],
@@ -379,16 +376,12 @@ const io = new Server(server, {
   // Additional security check
   allowRequest: (req: any, callback: (err: string | null, success: boolean) => void) => {
     const origin = req.headers.origin;
-
-    // Use the corsOptions.origin function properly with callback
-    corsOptions.origin(origin, (err: Error | null, allowed?: boolean) => {
-      if (allowed) {
-        callback(null, true);
-      } else {
-        console.warn(`⚠️ CORS blocked WebSocket connection from origin: ${origin}`);
-        callback('CORS error', false);
-      }
-    });
+    if (origin && corsOptions.origin(origin, () => {}) !== null) {
+      callback(null, true);
+    } else {
+      console.warn(`⚠️ CORS blocked connection from origin: ${origin}`);
+      callback('CORS error', false);
+    }
   }
 });
 
@@ -674,16 +667,7 @@ io.on('connection', async (socket: Socket) => {
       console.log('Step 2 result:', user ? 'User found' : 'User not found');
       if (!user) {
         console.log('User not found:', data.username);
-
-        // Offer new user registration (express.e lines 29607-29622)
-        if (data.username.toUpperCase() === 'NEW') {
-          socket.emit('ansi-output', '\r\n\x1b[36m[C]ontinue as a new user?\x1b[0m ');
-        } else {
-          socket.emit('ansi-output', `\r\n\x1b[36mThe name ${data.username} is not used on this BBS.\x1b[0m\r\n`);
-          socket.emit('ansi-output', '\x1b[36m[R]etry your name or [C]ontinue as a new user?\x1b[0m ');
-        }
-
-        socket.emit('new-user-prompt', { username: data.username });
+        socket.emit('login-failed', 'User not found');
         return;
       }
 
@@ -870,45 +854,6 @@ io.on('connection', async (socket: Socket) => {
         console.error('Token login error:', error);
         socket.emit('login-failed', 'Internal server error');
       }
-    }
-  });
-
-  // Handle new user registration response (express.e lines 29622-29656)
-  socket.on('new-user-response', async (data: { response: string; username: string }) => {
-    console.log('New user response:', data.response, 'for username:', data.username);
-
-    try {
-      const session = await sessions.get(socket.id);
-      if (!session) {
-        socket.emit('login-failed', 'Session expired');
-        return;
-      }
-
-      const response = data.response.toUpperCase();
-
-      if (response === 'C') {
-        // Continue as new user
-        console.log('Starting new user registration for:', data.username);
-        socket.emit('ansi-output', '\r\n\x1b[32mStarting new user registration...\x1b[0m\r\n');
-
-        // Call newUserAccount to start the registration process
-        const success = await newUserAccount(socket, session, data.username);
-
-        if (!success) {
-          socket.emit('login-failed', 'Registration cancelled or failed');
-        }
-      } else if (response === 'R') {
-        // Retry login
-        socket.emit('ansi-output', '\r\n\x1b[36mPlease try again.\x1b[0m\r\n');
-        socket.emit('login-failed', 'Please retry with a different username');
-      } else {
-        // Invalid response
-        socket.emit('ansi-output', '\r\n\x1b[31mInvalid response. Please enter C to continue or R to retry.\x1b[0m\r\n');
-        socket.emit('new-user-prompt', { username: data.username });
-      }
-    } catch (error) {
-      console.error('New user response error:', error);
-      socket.emit('login-failed', 'Internal server error');
     }
   });
 
@@ -1626,6 +1571,111 @@ io.on('connection', async (socket: Socket) => {
   });
 });
 
+// Load and display screen file with variable substitution
+function loadScreen(screenName: string, session: BBSSession): string | null {
+  const basePath = path.join(__dirname, '../data/bbs/BBS');
+  const nodeScreenPath = path.join(basePath, `Node${session.nodeNumber || 0}`, 'Screens', `${screenName}.TXT`);
+  const confScreenPath = path.join(basePath, `Conf${String(session.currentConf || 1).padStart(2, '0')}`, 'Screens', `${screenName}.TXT`);
+  const globalScreenPath = path.join(basePath, 'Screens', `${screenName}.TXT`);
+
+  // Try node-specific, then conference-specific, then global
+  let screenPath = nodeScreenPath;
+  if (!fs.existsSync(screenPath)) {
+    screenPath = confScreenPath;
+    if (!fs.existsSync(screenPath)) {
+      screenPath = globalScreenPath;
+      if (!fs.existsSync(screenPath)) {
+        console.log(`Screen file not found: ${screenName} (tried node, conf, and global paths)`);
+        return null;
+      }
+    }
+  }
+
+  try {
+    let content = fs.readFileSync(screenPath, 'utf-8');
+
+    // Substitute AmiExpress screen variables
+    const bbsName = 'AmiExpress-Web';
+    const sysopName = 'Sysop';
+    const userName = session.user?.username || 'Guest';
+    const userRealName = session.user?.realName || userName;
+    const timeLeft = Math.floor(session.timeRemaining || 60);
+    const confName = session.currentConfName || 'General';
+
+    // User stats
+    const user = session.user;
+    const lastLogin = user?.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never';
+    const lastLoginTime = user?.lastLogin ? new Date(user.lastLogin).toLocaleTimeString() : '00:00:00';
+    const totalCalls = String(user?.calls || 0);
+    const messagesPosted = String(user?.messagesPosted || 0);
+    const filesUploaded = String(user?.uploads || 0);
+    const filesDownloaded = String(user?.downloads || 0);
+    const newMessages = '0'; // TODO: Calculate from database
+    const newFiles = '0'; // TODO: Calculate from database
+
+    // First, convert ANSI codes: Replace `[` with `\x1b[` (proper ANSI escape sequence)
+    // But preserve variable substitution markers like %X and [%X]
+    content = content.replace(/\[(?![%])/g, '\x1b[');
+
+    // Now do variable substitution (support both %X and [%X] formats)
+    // IMPORTANT: Replace longer variable names FIRST to avoid partial matches
+    // (e.g., %TC before %T, %MP before %M, %UF before %U, %DF before %D)
+    content = content
+      .replace(/%RN|(\[%RN\])/g, userRealName)               // Real name (before %R)
+      .replace(/%CF|(\[%CF\])/g, confName)                   // Conference full name (before %C)
+      .replace(/%LD|(\[%LD\])/g, lastLogin)                  // Last login date (before %L)
+      .replace(/%LT|(\[%LT\])/g, lastLoginTime)              // Last login time (before %L)
+      .replace(/%TC|(\[%TC\])/g, totalCalls)                 // Total calls (before %T)
+      .replace(/%TM|(\[%TM\])/g, '0')                        // Total messages (before %T)
+      .replace(/%MP|(\[%MP\])/g, messagesPosted)             // Messages posted (before %M)
+      .replace(/%UF|(\[%UF\])/g, filesUploaded)              // Files uploaded (before %U)
+      .replace(/%DF|(\[%DF\])/g, filesDownloaded)            // Files downloaded (before %D)
+      .replace(/%NM|(\[%NM\])/g, newMessages)                // New messages (before %N)
+      .replace(/%NF|(\[%NF\])/g, newFiles)                   // New files (before %N)
+      .replace(/%AU|(\[%AU\])/g, '1')                        // Active users (before %A)
+      .replace(/%B|(\[%B\])/g, bbsName)                      // BBS name
+      .replace(/%S|(\[%S\])/g, sysopName)                    // Sysop name
+      .replace(/%U|(\[%U\])/g, userName)                     // Username
+      .replace(/%R|(\[%R\])/g, String(timeLeft))             // Time remaining
+      .replace(/%T|(\[%T\])/g, String(timeLeft))             // Time left (alias)
+      .replace(/%C|(\[%C\])/g, confName)                     // Conference name
+      .replace(/%N|(\[%N\])/g, String(session.nodeNumber || 0))  // Node number
+      .replace(/%D|(\[%D\])/g, new Date().toLocaleDateString())  // Current date
+      .replace(/%M|(\[%M\])/g, new Date().toLocaleTimeString()); // Current time
+
+    // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
+    // First normalize any existing \r\n to \n, then convert all \n to \r\n
+    content = content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
+    return content;
+  } catch (error) {
+    console.error(`Error loading screen ${screenName}:`, error);
+    return null;
+  }
+}
+
+// Display screen file and return true if shown, false if not found
+// Matches displayScreen() in express.e lines 6539-6644
+function displayScreen(socket: any, session: BBSSession, screenName: string): boolean {
+  const content = loadScreen(screenName, session);
+
+  if (content) {
+    socket.emit('ansi-output', content);
+    return true;
+  }
+
+  return false;
+}
+
+// Display pause prompt and wait for keypress
+// Matches doPause() in express.e lines 5141-5151
+// In the async JS environment, this emits the prompt and returns
+// The state machine handles waiting for the keypress
+function doPause(socket: any, session: BBSSession): void {
+  // \x1b[32m = green, \x1b[33m = yellow, \x1b[34m = blue, \x1b[0m = reset
+  socket.emit('ansi-output', '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+}
+
 // Join conference function (joinConf equivalent)
 // Join conference and display CONF_BULL screen
 // Matches joinConf() in express.e lines 5051-5105
@@ -1919,6 +1969,15 @@ function displayFileStatus(socket: any, session: BBSSession, params: string) {
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+}
+
+// parseParams() - Parameter parsing utility (1:1 with AmiExpress parseParams)
+function parseParams(paramString: string): string[] {
+  if (!paramString.trim()) return [];
+
+  return paramString.split(' ')
+    .map(p => p.trim().toUpperCase())
+    .filter(p => p.length > 0);
 }
 
 // displayNewFiles() - N command implementation (1:1 with myNewFiles in AmiExpress)
@@ -3018,6 +3077,89 @@ function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
   socket.emit('ansi-output', '\x1b[32mSelect file to download (1-\x1b[33m' + areaFiles.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
   session.subState = LoggedOnSubState.FILE_AREA_SELECT;
   session.tempData = { downloadMode: true, fileArea, areaFiles };
+}
+
+// Display main menu (SCREEN_MENU equivalent)
+function displayMainMenu(socket: any, session: BBSSession) {
+  console.log('displayMainMenu called, current subState:', session.subState);
+
+  // Clear screen before displaying menu (like AmiExpress does)
+  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
+
+  // Only show full menu if not expert mode (expert users get just the prompt)
+  if (session.user?.expert !== "N") {
+    console.log('Displaying full menu for non-expert user');
+    socket.emit('ansi-output', '\x1b[0;36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;36m║                         \x1b[0;33mAmiExpress BBS Main Menu\x1b[0;36m                          ║\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[0;36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n');
+
+    // Message Commands
+    socket.emit('ansi-output', '\x1b[0;33m▶ MESSAGE COMMANDS:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mR\x1b[0m  - Read Messages              \x1b[36mA\x1b[0m  - Post Message\r\n');
+    socket.emit('ansi-output', '  \x1b[36mE\x1b[0m  - Post Private Message       \x1b[36mJM\x1b[0m - Join Message Base\r\n\r\n');
+
+    // File Commands
+    socket.emit('ansi-output', '\x1b[0;33m▶ FILE COMMANDS:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mF\x1b[0m  - File Areas                 \x1b[36mD\x1b[0m  - Download Files\r\n');
+    socket.emit('ansi-output', '  \x1b[36mU\x1b[0m  - Upload Files               \x1b[36mN\x1b[0m  - New Files Scan\r\n');
+    socket.emit('ansi-output', '  \x1b[36mFR\x1b[0m - File Request               \x1b[36mFS\x1b[0m - File Search\r\n');
+    socket.emit('ansi-output', '  \x1b[36mFM\x1b[0m - File Maintenance            \x1b[36mJF\x1b[0m - Join File Area\r\n\r\n');
+
+    // Conference & User Commands
+    socket.emit('ansi-output', '\x1b[0;33m▶ CONFERENCE & USER:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mJ\x1b[0m  - Join Conference            \x1b[36mO\x1b[0m  - Online Users / Page Sysop\r\n');
+    socket.emit('ansi-output', '  \x1b[36mI\x1b[0m  - User Information           \x1b[36mP\x1b[0m  - User Profile\r\n');
+    socket.emit('ansi-output', '  \x1b[36mT\x1b[0m  - Time Left                  \x1b[36mQ\x1b[0m  - Quiet Node Toggle\r\n\r\n');
+
+    // Communication Commands
+    socket.emit('ansi-output', '\x1b[0;33m▶ COMMUNICATION:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mC\x1b[0m  - Comment to Sysop           \x1b[36mOLM\x1b[0m - Online Messages\r\n');
+    socket.emit('ansi-output', '  \x1b[36mCHAT\x1b[0m - Internode Chat            \x1b[36mWHO\x1b[0m - Who\'s Online\r\n\r\n');
+
+    // Door & System Commands
+    socket.emit('ansi-output', '\x1b[0;33m▶ DOORS & SYSTEM:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mDOORS\x1b[0m - Door Games & Utilities    \x1b[36mX\x1b[0m <name> - Execute Door\r\n');
+    socket.emit('ansi-output', '  \x1b[36m2\x1b[0m  - Callers Log                \x1b[36m3\x1b[0m  - System Statistics\r\n');
+    socket.emit('ansi-output', '  \x1b[36m4\x1b[0m  - Account Information        \x1b[36mVER\x1b[0m - Version Information\r\n\r\n');
+
+    // Sysop-only commands
+    if (session.user?.securityLevel >= 255) {
+      socket.emit('ansi-output', '\x1b[0;33m▶ SYSOP COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[33m1\x1b[0m  - Account Editing            \x1b[33mDOORMAN\x1b[0m - Door Manager\r\n\r\n');
+    }
+
+    // Help & Exit
+    socket.emit('ansi-output', '\x1b[0;33m▶ HELP & EXIT:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36m?\x1b[0m  - Command Help               \x1b[36mG\x1b[0m  - Goodbye (Logoff)\r\n');
+
+    socket.emit('ansi-output', '\x1b[0;36m────────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n');
+  }
+
+  // Show prompt
+  displayMenuPrompt(socket, session);
+}
+
+// Display menu prompt (displayMenuPrompt equivalent)
+function displayMenuPrompt(socket: any, session: BBSSession) {
+  // Like AmiExpress: Use BBS name, relative conference number, conference name
+  const bbsName = 'AmiExpress'; // In real implementation, get from config
+  const timeLeft = Math.floor(session.timeRemaining);
+
+  // Check if multiple message bases in conference (like getConfMsgBaseCount in AmiExpress)
+  const msgBasesInConf = messageBases.filter(mb => mb.conferenceId === session.currentConf);
+  const currentMsgBase = messageBases.find(mb => mb.id === session.currentMsgBase);
+
+  if (msgBasesInConf.length > 1 && currentMsgBase) {
+    // Multiple message bases: show "ConfName - MsgBaseName"
+    const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
+    socket.emit('ansi-output', `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `);
+  } else {
+    // Single message base: just show conference name
+    socket.emit('ansi-output', `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `);
+  }
+
+  // Set command reading state based on expert mode (shortcuts vs line input)
+  session.subState = session.cmdShortcuts ? LoggedOnSubState.READ_SHORTCUTS : LoggedOnSubState.READ_COMMAND;
 }
 
 // Hotkey handler (handles F-keys like AmiExpress)

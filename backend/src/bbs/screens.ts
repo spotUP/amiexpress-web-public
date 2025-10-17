@@ -1,6 +1,9 @@
 /**
  * Screen loading and display functions
  * Extracted from index.ts for better modularity
+ *
+ * Implements classic AmiExpress MCI (Master Control Interface) codes
+ * Port of processMci() and processMciCmd() from express.e lines 5258-5802
  */
 
 import * as path from 'path';
@@ -9,8 +12,151 @@ import { Socket } from 'socket.io';
 import { BBSSession } from './session';
 
 /**
- * Load and display screen file with variable substitution
+ * Add ESC character prefix to bare ANSI sequences
+ * Screen files contain [XXm without ESC (0x1B) prefix
+ * This matches original Amiga behavior where ESC was stored as actual byte
+ */
+function addAnsiEscapes(content: string): string {
+  // Match ANSI sequences: [digits;digitsm or [digitm or [H or [2J etc
+  // But NOT [%X] which are variable placeholders
+  return content.replace(/\[(?!%)([0-9;]*[A-Za-z])/g, '\x1b[$1');
+}
+
+/**
+ * Process classic AmiExpress MCI codes
+ * Format: ~CODE where CODE is 1-3 character identifier
+ * Port from express.e processMciCmd() lines 5258-5762
+ */
+function processMciCodes(content: string, session: BBSSession): string {
+  let result = '';
+  let pos = 0;
+
+  while (pos < content.length) {
+    const tilde = content.indexOf('~', pos);
+
+    if (tilde === -1) {
+      // No more MCI codes
+      result += content.substring(pos);
+      break;
+    }
+
+    // Add content before tilde
+    result += content.substring(pos, tilde);
+
+    // Parse MCI code
+    let codeEnd = tilde + 1;
+    let maxLen = -1;
+
+    // Check for numeric length specifier: ~123CODE
+    let numStr = '';
+    while (codeEnd < content.length && content[codeEnd] >= '0' && content[codeEnd] <= '9' && numStr.length < 3) {
+      numStr += content[codeEnd];
+      codeEnd++;
+    }
+    if (numStr) maxLen = parseInt(numStr);
+
+    // Get code (up to space or | terminator)
+    const codeStart = codeEnd;
+    while (codeEnd < content.length && content[codeEnd] !== ' ' && content[codeEnd] !== '|' && content[codeEnd] !== '~') {
+      codeEnd++;
+    }
+
+    const code = content.substring(codeStart, codeEnd).toUpperCase();
+    let value = '';
+
+    // Process MCI codes (from express.e lines 5290-5762)
+    switch (code) {
+      case 'N':   // User name
+        value = session.user?.username || 'Guest';
+        break;
+      case 'UL':  // User location
+        value = session.user?.location || 'Unknown';
+        break;
+      case 'TC':  // Times called
+        value = String(session.user?.calls || 0);
+        break;
+      case 'M':   // Messages posted
+        value = String(session.user?.posts || 0);
+        break;
+      case 'A':   // Security level (access)
+        value = String(session.user?.secLevel || 0);
+        break;
+      case 'S':   // Slot number (user ID)
+        value = String(session.user?.id || 0);
+        break;
+      case 'BR':  // Baud rate
+        value = '115200'; // WebSocket connection
+        break;
+      case 'TL':  // Time limit (minutes)
+        value = String(Math.floor((session.user?.timeLimit || 60) / 60));
+        break;
+      case 'TR':  // Time remaining (minutes)
+        value = String(Math.floor(session.timeRemaining / 60));
+        break;
+      case 'FU':  // Files uploaded
+        value = String(session.user?.uploads || 0);
+        break;
+      case 'FD':  // Files downloaded
+        value = String(session.user?.downloads || 0);
+        break;
+      case 'UB':  // Upload bytes
+        value = String(session.user?.bytesUpload || 0);
+        break;
+      case 'DB':  // Download bytes
+        value = String(session.user?.bytesDownload || 0);
+        break;
+      case 'ON':  // Node number (also LG)
+      case 'LG':
+        value = String(session.nodeNumber || 0);
+        break;
+      case 'RN':  // Real name
+        value = session.user?.realname || session.user?.username || 'Guest';
+        break;
+      case 'OD':  // Online date
+        value = new Date().toLocaleDateString();
+        break;
+      case 'OT':  // Online time
+        value = new Date().toLocaleTimeString();
+        break;
+      case 'VE':  // Version
+        value = 'AmiExpress Web 1.0';
+        break;
+      case 'VD':  // Version date
+        value = '2025-01-17';
+        break;
+      case 'BN':  // BBS Name (custom extension)
+        value = 'AmiExpress Web BBS';
+        break;
+      case '':    // Empty ~~ = literal tilde
+        value = '~';
+        break;
+      default:
+        // Unknown code - output as-is
+        value = '~' + numStr + code;
+    }
+
+    // Apply max length if specified
+    if (maxLen > 0 && value.length > maxLen) {
+      value = value.substring(0, maxLen);
+    }
+
+    result += value;
+
+    // Skip terminator if present
+    if (codeEnd < content.length && content[codeEnd] === '|') {
+      codeEnd++;
+    }
+
+    pos = codeEnd;
+  }
+
+  return result;
+}
+
+/**
+ * Load and display screen file with MCI code processing
  * Matches AmiExpress screen loading: Node-specific -> Conference -> Global
+ * Port from express.e displayScreen() lines 6539-6625
  */
 export function loadScreen(screenName: string, session: BBSSession): string | null {
   const basePath = path.join(__dirname, '../../data/bbs/BBS');
@@ -36,23 +182,14 @@ export function loadScreen(screenName: string, session: BBSSession): string | nu
   try {
     let content = fs.readFileSync(screenPath, 'utf-8');
 
-    // Variable substitution (like AmiExpress)
-    if (session.user) {
-      content = content.replace(/\{USERNAME\}/g, session.user.username);
-      content = content.replace(/\{REALNAME\}/g, session.user.realname || session.user.username);
-      content = content.replace(/\{LOCATION\}/g, session.user.location || 'Unknown');
-      content = content.replace(/\{SECLEVEL\}/g, String(session.user.secLevel || 0));
-      content = content.replace(/\{CALLS\}/g, String(session.user.calls || 0));
-      content = content.replace(/\{UPLOADS\}/g, String(session.user.uploads || 0));
-      content = content.replace(/\{DOWNLOADS\}/g, String(session.user.downloads || 0));
-      content = content.replace(/\{TIMELEFT\}/g, String(Math.floor(session.timeRemaining)));
-    }
+    // Step 1: Process MCI codes (classic AmiExpress ~CODE format)
+    content = processMciCodes(content, session);
 
-    // System variables
-    content = content.replace(/\{NODE\}/g, String(session.nodeNumber || 0));
-    content = content.replace(/\{CONF\}/g, session.currentConfName || 'Main');
-    content = content.replace(/\{DATE\}/g, new Date().toLocaleDateString());
-    content = content.replace(/\{TIME\}/g, new Date().toLocaleTimeString());
+    // Step 2: Handle [%B] placeholder (BBS name - non-standard extension)
+    content = content.replace(/\[%B\]/g, 'AmiExpress Web BBS');
+
+    // Step 3: Add ESC prefix to bare ANSI sequences
+    content = addAnsiEscapes(content);
 
     return content;
   } catch (error) {
