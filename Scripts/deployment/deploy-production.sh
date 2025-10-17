@@ -57,10 +57,11 @@ SCRIPT_NAME="AmiExpress Deploy"
 PROJECT_NAME="AmiExpress-Web"
 
 # Directories
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
-LOGS_DIR="$PROJECT_ROOT/logs"
+LOGS_DIR="$SCRIPT_DIR/logs"
 
 # Log files
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
