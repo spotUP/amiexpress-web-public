@@ -66,8 +66,7 @@ function App() {
         style.fontSmooth = 'never';
         style.webkitFontSmoothing = 'none';
         style.MozOsxFontSmoothing = 'none';
-        // Add padding to prevent text from drawing at screen edge
-        style.padding = '0 2ch'; // 2 character width padding on left/right
+        // No padding - screens are designed for full 80-column display
       }
       term.refresh(0, term.rows - 1);
     }, 100);

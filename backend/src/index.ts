@@ -677,6 +677,15 @@ io.on('connection', async (socket: Socket) => {
   };
   await sessions.set(socket.id, session);
 
+  // Display BBS title screen on connect (will pause until login)
+  const titleScreen = loadScreen('BBSTITLE', session);
+  if (titleScreen) {
+    socket.emit('ansi-output', titleScreen);
+  } else {
+    // Fallback welcome message
+    socket.emit('ansi-output', '\x1b[2J\x1b[H\x1b[1;36mWelcome to AmiExpress-Web BBS\x1b[0m\r\n\r\n');
+  }
+
   // Handle connection errors gracefully
   socket.on('error', (error: Error) => {
     console.error('❌ BBS Socket error for client:', socket.id, error);
@@ -779,6 +788,12 @@ io.on('connection', async (socket: Socket) => {
         }
       });
 
+      // Display LOGON screen and pause before bulletins
+      const logonScreen = loadScreen('LOGON', session);
+      if (logonScreen) {
+        socket.emit('ansi-output', logonScreen);
+      }
+
       // Check for unread OLM messages
       try {
         const unreadCount = await db.getUnreadMessageCount(user.id);
@@ -789,8 +804,9 @@ io.on('connection', async (socket: Socket) => {
         console.error('Error checking OLM messages:', error);
       }
 
-      // Start the proper AmiExpress flow: bulletins first
-      displaySystemBulletins(socket, session);
+      // Pause after LOGON screen, then show bulletins
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.subState = LoggedOnSubState.DISPLAY_BULL; // Wait for key before bulletins
     } catch (error) {
       console.error('Login error details:', error);
       console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
@@ -851,6 +867,12 @@ io.on('connection', async (socket: Socket) => {
         }
       });
 
+      // Display LOGON screen and pause before bulletins
+      const logonScreen = loadScreen('LOGON', session);
+      if (logonScreen) {
+        socket.emit('ansi-output', logonScreen);
+      }
+
       // Check for unread OLM messages
       try {
         const unreadCount = await db.getUnreadMessageCount(user.id);
@@ -861,8 +883,9 @@ io.on('connection', async (socket: Socket) => {
         console.error('Error checking OLM messages:', error);
       }
 
-      // Start the proper AmiExpress flow
-      displaySystemBulletins(socket, session);
+      // Pause after LOGON screen, then show bulletins
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.subState = LoggedOnSubState.DISPLAY_BULL; // Wait for key before bulletins
     } catch (error) {
       if (error instanceof jwt.JsonWebTokenError) {
         console.log('Invalid token:', error.message);
@@ -1026,8 +1049,13 @@ io.on('connection', async (socket: Socket) => {
       console.log('Registration successful for user:', data.username);
       socket.emit('register-success');
 
-      // Start the proper AmiExpress flow: bulletins first
-      displaySystemBulletins(socket, session);
+      // Show LOGON screen if it exists
+      if (displayScreen(socket, session, 'LOGON')) {
+        doPause(socket, session);
+      }
+
+      // Start DISPLAY_BULL flow (will show BULL, NODE_BULL, CONF_BULL, then menu)
+      session.subState = LoggedOnSubState.DISPLAY_BULL;
     } catch (error) {
       console.error('Registration error:', error);
       socket.emit('register-failed', 'Registration failed - internal server error');
@@ -1574,46 +1602,89 @@ io.on('connection', async (socket: Socket) => {
   });
 });
 
-// Display system bulletins (SCREEN_BULL equivalent)
-function displaySystemBulletins(socket: any, session: BBSSession) {
-  // In AmiExpress, displayScreen(SCREEN_BULL) shows system bulletins
-  socket.emit('ansi-output', '\r\n\x1b[36m-= System Bulletins =-\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[33mWelcome to AmiExpress Web!\x1b[0m\r\n');
-  socket.emit('ansi-output', 'This is a modern web implementation of the classic AmiExpress BBS.\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mSystem News:\x1b[0m\r\n');
-  socket.emit('ansi-output', '- New web interface available\r\n');
-  socket.emit('ansi-output', '- Enhanced security features\r\n');
-  socket.emit('ansi-output', '- Real-time chat capabilities\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+// Load and display screen file with variable substitution
+function loadScreen(screenName: string, session: BBSSession): string | null {
+  const basePath = path.join(__dirname, '../data/bbs/BBS');
+  const nodeScreenPath = path.join(basePath, `Node${session.nodeNumber || 0}`, 'Screens', `${screenName}.TXT`);
+  const confScreenPath = path.join(basePath, `Conf${String(session.currentConf || 1).padStart(2, '0')}`, 'Screens', `${screenName}.TXT`);
+  const globalScreenPath = path.join(basePath, 'Screens', `${screenName}.TXT`);
 
-  // Move to next state after bulletin display (mirroring doPause logic)
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // Try node-specific, then conference-specific, then global
+  let screenPath = nodeScreenPath;
+  if (!fs.existsSync(screenPath)) {
+    screenPath = confScreenPath;
+    if (!fs.existsSync(screenPath)) {
+      screenPath = globalScreenPath;
+      if (!fs.existsSync(screenPath)) {
+        console.log(`Screen file not found: ${screenName} (tried node, conf, and global paths)`);
+        return null;
+      }
+    }
+  }
+
+  try {
+    let content = fs.readFileSync(screenPath, 'utf-8');
+
+    // Substitute AmiExpress screen variables
+    const bbsName = 'AmiExpress-Web';
+    const sysopName = 'Sysop';
+    const userName = session.user?.username || 'Guest';
+    const userRealName = session.user?.realName || userName;
+    const timeLeft = Math.floor(session.timeRemaining || 60);
+    const confName = session.currentConfName || 'General';
+
+    // First, convert ANSI codes: Replace `[` with `\x1b[` (proper ANSI escape sequence)
+    // But preserve variable substitution markers like [%B], [%U], etc.
+    content = content.replace(/\[(?![%])/g, '\x1b[');
+
+    // Now do variable substitution
+    content = content
+      .replace(/\[%B\]/g, bbsName)                          // BBS name
+      .replace(/\[%S\]/g, sysopName)                        // Sysop name
+      .replace(/\[%U\]/g, userName)                         // Username
+      .replace(/\[%R\]/g, userRealName)                     // Real name
+      .replace(/\[%T\]/g, String(timeLeft))                 // Time left
+      .replace(/\[%C\]/g, confName)                         // Conference name
+      .replace(/\[%N\]/g, String(session.nodeNumber || 0))  // Node number
+      .replace(/\[%D\]/g, new Date().toLocaleDateString())  // Date
+      .replace(/\[%M\]/g, new Date().toLocaleTimeString()); // Time
+
+    // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
+    // First normalize any existing \r\n to \n, then convert all \n to \r\n
+    content = content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
+    return content;
+  } catch (error) {
+    console.error(`Error loading screen ${screenName}:`, error);
+    return null;
+  }
 }
 
-// Display conference bulletins and trigger conference scan (SCREEN_NODE_BULL + confScan equivalent)
-function displayConferenceBulletins(socket: any, session: BBSSession) {
-  // In AmiExpress, displayScreen(SCREEN_NODE_BULL) shows node-specific bulletins
-  socket.emit('ansi-output', '\r\n\x1b[36m-= Node Bulletins =-\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[33mNode-specific announcements:\x1b[0m\r\n');
-  socket.emit('ansi-output', '- Welcome to Node 1\r\n');
-  socket.emit('ansi-output', '- All systems operational\r\n');
-  socket.emit('ansi-output', '- Sysop available for chat\r\n');
+// Display screen file and return true if shown, false if not found
+// Matches displayScreen() in express.e lines 6539-6644
+function displayScreen(socket: any, session: BBSSession, screenName: string): boolean {
+  const content = loadScreen(screenName, session);
 
-  // Conference scan (confScan equivalent)
-  socket.emit('ansi-output', '\r\n\x1b[32mScanning conferences for new messages...\x1b[0m\r\n');
+  if (content) {
+    socket.emit('ansi-output', content);
+    return true;
+  }
 
-  // Simulate conference scan results
-  socket.emit('ansi-output', '\x1b[32mFound new messages in:\x1b[0m\r\n');
-  socket.emit('ansi-output', '- General conference (5 new)\r\n');
-  socket.emit('ansi-output', '- Tech Support conference (2 new)\r\n');
+  return false;
+}
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-
-  // Join default conference (joinConf equivalent)
-  joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
+// Display pause prompt and wait for keypress
+// Matches doPause() in express.e lines 5141-5151
+// In the async JS environment, this emits the prompt and returns
+// The state machine handles waiting for the keypress
+function doPause(socket: any, session: BBSSession): void {
+  // \x1b[32m = green, \x1b[33m = yellow, \x1b[34m = blue, \x1b[0m = reset
+  socket.emit('ansi-output', '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
 }
 
 // Join conference function (joinConf equivalent)
+// Join conference and display CONF_BULL screen
+// Matches joinConf() in express.e lines 5051-5105
 function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number) {
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
@@ -1644,8 +1715,17 @@ function joinConference(socket: any, session: BBSSession, confId: number, msgBas
   socket.emit('ansi-output', `\r\n\x1b[32mJoined conference: ${conference.name}\x1b[0m\r\n`);
   socket.emit('ansi-output', `\r\n\x1b[32mCurrent message base: ${messageBase.name}\x1b[0m\r\n`);
 
-  // Move to menu display
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  // Display CONF_BULL screen if it exists (express.e lines 5058-5060)
+  if (displayScreen(socket, session, 'CONF_BULL')) {
+    doPause(socket, session);
+    // Set flag to indicate we're waiting for pause keypress
+    session.tempData = { ...session.tempData, confBullPause: true };
+  } else {
+    // No CONF_BULL screen, move directly to menu
+    session.tempData = { ...session.tempData, menuPause: true };
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
+
   return true;
 }
 
@@ -2996,51 +3076,62 @@ function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
 
 // Display main menu (SCREEN_MENU equivalent)
 function displayMainMenu(socket: any, session: BBSSession) {
-  console.log('displayMainMenu called, current subState:', session.subState, 'menuPause:', session.menuPause);
+  console.log('displayMainMenu called, current subState:', session.subState);
 
-  // Like AmiExpress: only display menu if menuPause is TRUE
-  if (session.menuPause) {
-    console.log('menuPause is TRUE, displaying menu');
+  // Clear screen before displaying menu (like AmiExpress does)
+  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
 
-    // Clear screen before displaying menu (like AmiExpress does)
-    console.log('Sending screen clear: \\x1b[2J\\x1b[H');
-    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
+  // Only show full menu if not expert mode (expert users get just the prompt)
+  if (session.user?.expert !== "N") {
+    console.log('Displaying full menu for non-expert user');
+    socket.emit('ansi-output', '\x1b[1;36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[1;36m║                         \x1b[1;33mAmiExpress BBS Main Menu\x1b[1;36m                          ║\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[1;36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n');
 
-    if (session.user?.expert !== "N") {
-      console.log('Sending menu header');
-      socket.emit('ansi-output', '\x1b[36m-= Main Menu =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Available commands:\r\n');
-      socket.emit('ansi-output', 'R - Read Messages\r\n');
-      socket.emit('ansi-output', 'A - Post Message\r\n');
-      socket.emit('ansi-output', 'E - Post Private Message\r\n');
-      socket.emit('ansi-output', 'J - Join Conference\r\n');
-      socket.emit('ansi-output', 'JM - Join Message Base\r\n');
-      socket.emit('ansi-output', 'F - File Areas\r\n');
-      socket.emit('ansi-output', 'D - Download Files\r\n');
-      socket.emit('ansi-output', 'U - Upload Files\r\n');
-      socket.emit('ansi-output', 'O - Page Sysop\r\n');
-      socket.emit('ansi-output', 'OLM - Online Messages\r\n');
-      socket.emit('ansi-output', 'CHAT - Internode Chat\r\n');
-      socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
-      socket.emit('ansi-output', 'DOORS/DOOR - Door Games & Utilities\r\n');
+    // Message Commands
+    socket.emit('ansi-output', '\x1b[1;33m▶ MESSAGE COMMANDS:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mR\x1b[0m  - Read Messages              \x1b[36mA\x1b[0m  - Post Message\r\n');
+    socket.emit('ansi-output', '  \x1b[36mE\x1b[0m  - Post Private Message       \x1b[36mJM\x1b[0m - Join Message Base\r\n\r\n');
 
-      // Sysop-only commands
-      if (session.user?.securityLevel >= 255) {
-        socket.emit('ansi-output', '\x1b[33mDOORMAN - Door Manager (Sysop)\x1b[0m\r\n');
-      }
+    // File Commands
+    socket.emit('ansi-output', '\x1b[1;33m▶ FILE COMMANDS:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mF\x1b[0m  - File Areas                 \x1b[36mD\x1b[0m  - Download Files\r\n');
+    socket.emit('ansi-output', '  \x1b[36mU\x1b[0m  - Upload Files               \x1b[36mN\x1b[0m  - New Files Scan\r\n');
+    socket.emit('ansi-output', '  \x1b[36mFR\x1b[0m - File Request               \x1b[36mFS\x1b[0m - File Search\r\n');
+    socket.emit('ansi-output', '  \x1b[36mFM\x1b[0m - File Maintenance            \x1b[36mJF\x1b[0m - Join File Area\r\n\r\n');
 
-      socket.emit('ansi-output', 'G - Goodbye\r\n');
-      socket.emit('ansi-output', '? - Help\r\n');
+    // Conference & User Commands
+    socket.emit('ansi-output', '\x1b[1;33m▶ CONFERENCE & USER:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mJ\x1b[0m  - Join Conference            \x1b[36mO\x1b[0m  - Online Users / Page Sysop\r\n');
+    socket.emit('ansi-output', '  \x1b[36mI\x1b[0m  - User Information           \x1b[36mP\x1b[0m  - User Profile\r\n');
+    socket.emit('ansi-output', '  \x1b[36mT\x1b[0m  - Time Left                  \x1b[36mQ\x1b[0m  - Quiet Node Toggle\r\n\r\n');
+
+    // Communication Commands
+    socket.emit('ansi-output', '\x1b[1;33m▶ COMMUNICATION:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mC\x1b[0m  - Comment to Sysop           \x1b[36mOLM\x1b[0m - Online Messages\r\n');
+    socket.emit('ansi-output', '  \x1b[36mCHAT\x1b[0m - Internode Chat            \x1b[36mWHO\x1b[0m - Who\'s Online\r\n\r\n');
+
+    // Door & System Commands
+    socket.emit('ansi-output', '\x1b[1;33m▶ DOORS & SYSTEM:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36mDOORS\x1b[0m - Door Games & Utilities    \x1b[36mX\x1b[0m <name> - Execute Door\r\n');
+    socket.emit('ansi-output', '  \x1b[36m2\x1b[0m  - Callers Log                \x1b[36m3\x1b[0m  - System Statistics\r\n');
+    socket.emit('ansi-output', '  \x1b[36m4\x1b[0m  - Account Information        \x1b[36mVER\x1b[0m - Version Information\r\n\r\n');
+
+    // Sysop-only commands
+    if (session.user?.securityLevel >= 255) {
+      socket.emit('ansi-output', '\x1b[1;33m▶ SYSOP COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[33m1\x1b[0m  - Account Editing            \x1b[33mDOORMAN\x1b[0m - Door Manager\r\n\r\n');
     }
 
-    displayMenuPrompt(socket, session);
-  } else {
-    console.log('menuPause is FALSE, NOT displaying menu - staying in command mode');
+    // Help & Exit
+    socket.emit('ansi-output', '\x1b[1;33m▶ HELP & EXIT:\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[36m?\x1b[0m  - Command Help               \x1b[36mG\x1b[0m  - Goodbye (Logoff)\r\n');
+
+    socket.emit('ansi-output', '\x1b[1;36m────────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n');
   }
 
-  // Always use line input mode for traditional BBS experience
-  // Hotkeys should only be used in special contexts (like chat)
-  session.subState = LoggedOnSubState.READ_COMMAND;
+  // Show prompt
+  displayMenuPrompt(socket, session);
 }
 
 // Display menu prompt (displayMenuPrompt equivalent)
@@ -3062,7 +3153,8 @@ function displayMenuPrompt(socket: any, session: BBSSession) {
     socket.emit('ansi-output', `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `);
   }
 
-  session.subState = LoggedOnSubState.READ_COMMAND;
+  // Set command reading state based on expert mode (shortcuts vs line input)
+  session.subState = session.cmdShortcuts ? LoggedOnSubState.READ_SHORTCUTS : LoggedOnSubState.READ_COMMAND;
 }
 
 // Hotkey handler (handles F-keys like AmiExpress)
@@ -3694,25 +3786,113 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
     return;
   }
 
-  // Handle substate-specific input
-  if (session.subState === LoggedOnSubState.DISPLAY_BULL ||
-      session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
-      session.subState === LoggedOnSubState.FILE_LIST) {
-    console.log('📋 In display state, continuing to next state');
-    // Any key continues to next state
-    if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
-      displayConferenceBulletins(socket, session);
-    } else if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
-      // Like AmiExpress: after command completes, set menuPause=TRUE and display menu
-      session.menuPause = true;
-      displayMainMenu(socket, session);
-    } else if (session.subState === LoggedOnSubState.FILE_LIST) {
-      // Return to file area selection
-      session.subState = LoggedOnSubState.FILE_AREA_SELECT;
-      // Re-trigger F command to show file areas again
-      await processBBSCommand(socket, session, 'F');
-      return;
+  // Handle DISPLAY_MENU state - matches express.e lines 28587-28601
+  if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
+    console.log('📋 DISPLAY_MENU state, menuPause:', session.tempData?.menuPause);
+
+    // Check if we need to pause before showing menu
+    if (session.tempData?.menuPause && !session.tempData?.menuPauseShown) {
+      doPause(socket, session);
+      session.tempData = { ...session.tempData, menuPauseShown: true };
+      return; // Wait for keypress
     }
+
+    // User pressed key after pause (or no pause needed)
+    if (session.tempData?.menuPauseShown) {
+      socket.emit('ansi-output', '\r\n'); // Clear pause prompt
+      delete session.tempData.menuPause;
+      delete session.tempData.menuPauseShown;
+    }
+
+    // Try to display MENU screen file
+    if (!displayScreen(socket, session, 'MENU')) {
+      // No MENU screen file, show hardcoded menu
+      displayMainMenu(socket, session);
+    } else {
+      // MENU screen was shown, still show prompt
+      displayMenuPrompt(socket, session);
+    }
+
+    // displayMainMenu/displayMenuPrompt already set the subState
+    return;
+  }
+
+  // Handle DISPLAY_BULL state - matches express.e lines 28555-28570
+  // This shows BULL, NODE_BULL screens with pauses, then does confScan
+  if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
+    const step = session.tempData?.bullStep || 'start';
+    console.log('📋 DISPLAY_BULL state, step:', step);
+
+    if (step === 'start') {
+      // Show BULL screen
+      if (displayScreen(socket, session, 'BULL')) {
+        doPause(socket, session);
+        session.tempData = { ...session.tempData, bullStep: 'pause_bull' };
+      } else {
+        // No BULL screen, skip to NODE_BULL
+        session.tempData = { ...session.tempData, bullStep: 'show_node_bull' };
+        // Process immediately without waiting for keypress
+        return handleCommand(socket, session, ' ');
+      }
+    } else if (step === 'pause_bull') {
+      // User pressed key after BULL, now show NODE_BULL
+      socket.emit('ansi-output', '\r\n'); // Clear pause prompt
+      session.tempData = { ...session.tempData, bullStep: 'show_node_bull' };
+      return handleCommand(socket, session, ' ');
+    } else if (step === 'show_node_bull') {
+      // Show NODE_BULL screen
+      if (displayScreen(socket, session, 'NODE_BULL')) {
+        doPause(socket, session);
+        session.tempData = { ...session.tempData, bullStep: 'pause_node_bull' };
+      } else {
+        // No NODE_BULL screen, skip to confScan
+        session.tempData = { ...session.tempData, bullStep: 'conf_scan' };
+        return handleCommand(socket, session, ' ');
+      }
+    } else if (step === 'pause_node_bull') {
+      // User pressed key after NODE_BULL, now do confScan
+      socket.emit('ansi-output', '\r\n'); // Clear pause prompt
+      session.tempData = { ...session.tempData, bullStep: 'conf_scan' };
+      return handleCommand(socket, session, ' ');
+    } else if (step === 'conf_scan') {
+      // Do conference scan (simplified - just a message for now)
+      socket.emit('ansi-output', '\r\n\x1b[32mScanning conferences for new messages...\x1b[0m\r\n');
+      // Clear bullStep and move to DISPLAY_CONF_BULL
+      delete session.tempData?.bullStep;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      // Continue to DISPLAY_CONF_BULL processing
+      return handleCommand(socket, session, ' ');
+    }
+    return;
+  }
+
+  // Handle DISPLAY_CONF_BULL state - matches express.e lines 28571-28586
+  if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
+    console.log('📋 DISPLAY_CONF_BULL state');
+
+    // Check if we're waiting for pause after CONF_BULL screen
+    if (session.tempData?.confBullPause) {
+      // User pressed key after CONF_BULL
+      socket.emit('ansi-output', '\r\n'); // Clear pause prompt
+      delete session.tempData.confBullPause;
+      // Set menuPause and move to DISPLAY_MENU
+      session.tempData = { ...session.tempData, menuPause: true };
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      // Continue to DISPLAY_MENU processing
+      return handleCommand(socket, session, ' ');
+    } else {
+      // First entry to DISPLAY_CONF_BULL - join conference
+      joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
+    }
+    return;
+  }
+
+  // Handle FILE_LIST continuation
+  if (session.subState === LoggedOnSubState.FILE_LIST) {
+    // Return to file area selection
+    session.subState = LoggedOnSubState.FILE_AREA_SELECT;
+    // Re-trigger F command to show file areas again
+    await processBBSCommand(socket, session, 'F');
     return;
   }
 
