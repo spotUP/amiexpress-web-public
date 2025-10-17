@@ -5292,9 +5292,11 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       break;
 
     case 'WHO': // Who's Online (internalCommandWHO)
+      console.log('🔍 WHO command executed');
       socket.emit('ansi-output', '\x1b[36m-= Who\'s Online =-\x1b[0m\r\n\r\n');
       // Use multinode system to get online users
       const onlineUsers = await getOnlineUsers();
+      console.log('🔍 WHO: Found', onlineUsers.length, 'online users');
       if (onlineUsers.length === 0) {
         socket.emit('ansi-output', '\x1b[33mNo other users online.\x1b[0m\r\n');
       } else {
@@ -5310,13 +5312,16 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
           socket.emit('ansi-output', `${nodeStr}  ${usernameStr}${locationStr}${privateFlag}${offHookFlag}\r\n`);
         }
       }
-      socket.emit('ansi-output', '\r\n');
-      break;
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      // Don't show menu immediately - wait for keypress
+      return;
 
     case 'WHD': // Who's Online Detailed (internalCommandWHD)
+      console.log('🔍 WHD command executed');
       socket.emit('ansi-output', '\x1b[36m-= Who\'s Online (Detailed) =-\x1b[0m\r\n\r\n');
       // Use multinode system for detailed view
       const detailedUsers = await getOnlineUsers();
+      console.log('🔍 WHD: Found', detailedUsers.length, 'online users');
       if (detailedUsers.length === 0) {
         socket.emit('ansi-output', '\x1b[33mNo other users online.\x1b[0m\r\n');
       } else {
@@ -5333,7 +5338,9 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
           socket.emit('ansi-output', '\r\n\r\n');
         }
       }
-      break;
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      // Don't show menu immediately - wait for keypress
+      return;
 
     case 'X': // Execute Door (internalCommandX)
       socket.emit('ansi-output', '\x1b[36m-= Execute Door =-\x1b[0m\r\n');
