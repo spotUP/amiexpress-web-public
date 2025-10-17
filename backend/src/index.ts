@@ -45,6 +45,12 @@ import { setupDoorHandlers, terminateAllSessions } from './amiga-emulation/doorH
 import { AmigaGuideParser } from './amigaguide/AmigaGuideParser';
 import { AmigaGuideViewer } from './amigaguide/AmigaGuideViewer';
 import { getAmigaDoorManager, DoorInfo as AmigaDoorInfo, DoorArchive } from './doors/amigaDoorManager';
+import {
+  setupChatHandlers,
+  assignNodeToSession,
+  releaseNodeFromSession,
+  getOnlineUsers
+} from './chatHandlers';
 
 // JWT Secret (should be in environment variables)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
@@ -699,6 +705,9 @@ io.on('connection', async (socket: Socket) => {
   // Set up Amiga door handlers
   setupDoorHandlers(socket);
 
+  // Set up multinode chat handlers
+  setupChatHandlers(socket, session);
+
   socket.on('login', async (data: { username: string; password: string }) => {
     console.log('Login attempt:', data.username);
 
@@ -767,6 +776,23 @@ io.on('connection', async (socket: Socket) => {
       loginRateLimiter.reset(rateLimitKey);
 
       console.log('Login successful for user:', data.username);
+
+      // Assign node to user (multinode system)
+      console.log('Step 6: Assigning node to user...');
+      const nodeId = await assignNodeToSession(
+        session,
+        user.id,
+        user.username,
+        user.location || ''
+      );
+
+      if (nodeId) {
+        console.log(`Step 6: Assigned node ${nodeId} to ${user.username}`);
+      } else {
+        console.error(`Step 6: No available nodes for ${user.username}`);
+        socket.emit('login-failed', 'System is full - no available nodes. Please try again later.');
+        return;
+      }
 
       // Generate JWT token for persistent login
       const token = jwt.sign(
@@ -1597,6 +1623,15 @@ io.on('connection', async (socket: Socket) => {
       } catch (error) {
         console.error('[CHAT] Error handling disconnect for chat session:', error);
       }
+    }
+
+    // Release multinode assignment
+    await releaseNodeFromSession(session);
+
+    // Leave any chat rooms
+    if (session.currentRoomId) {
+      const { chatRoomManager } = await import('./chatroom');
+      await chatRoomManager.leaveRoom(session.currentRoomId, session.user?.id);
     }
 
     await sessions.delete(socket.id);
@@ -4822,22 +4857,39 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
         switch (subCommand) {
           case 'WHO':
-            // List users available for chat
+            // List users available for chat (using multinode system)
             try {
               socket.emit('ansi-output', '\x1b[36m-= Users Available for Chat =-\x1b[0m\r\n\r\n');
 
-              // Get all online users
-              const allKeys = await sessions.getAllKeys();
+              // Get all online users from multinode
+              const onlineUsersMulti = await getOnlineUsers();
               const onlineUsers: any[] = [];
 
-              for (const socketId of allKeys) {
-                const sess = await sessions.get(socketId);
-                if (sess && sess.user && sess.user.id !== session.user!.id) {
+              // Filter out current user and get session info for chat status
+              for (const user of onlineUsersMulti) {
+                if (user.username !== session.user?.username) {
+                  // Get session for chat availability
+                  const allKeys = await sessions.getAllKeys();
+                  let inChat = false;
+                  let availableForChat = true;
+
+                  for (const socketId of allKeys) {
+                    const sess = await sessions.get(socketId);
+                    if (sess?.user?.username === user.username) {
+                      inChat = !!sess.chatSessionId;
+                      availableForChat = sess.user.availableForChat ?? true;
+                      break;
+                    }
+                  }
+
                   onlineUsers.push({
-                    username: sess.user.username,
-                    realname: sess.user.realname,
-                    availableForChat: sess.user.availableForChat,
-                    inChat: !!sess.chatSessionId
+                    username: user.username,
+                    location: user.location,
+                    nodeId: user.nodeId,
+                    offHook: user.offHook,
+                    private: user.private,
+                    inChat,
+                    availableForChat
                   });
                 }
               }
@@ -4845,15 +4897,18 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
               if (onlineUsers.length === 0) {
                 socket.emit('ansi-output', '\x1b[33mNo other users are currently online.\x1b[0m\r\n\r\n');
               } else {
-                socket.emit('ansi-output', 'Username          Real Name                Status\r\n');
-                socket.emit('ansi-output', '================  =======================  ====================\r\n');
+                socket.emit('ansi-output', 'Node  Username          Location             Status\r\n');
+                socket.emit('ansi-output', '====  ================  ===================  =================\r\n');
 
                 for (const user of onlineUsers) {
+                  const nodeStr = String(user.nodeId).padEnd(4);
                   const username = user.username.padEnd(16);
-                  const realname = (user.realname || 'Unknown').substring(0, 23).padEnd(23);
+                  const location = (user.location || 'Unknown').substring(0, 19).padEnd(19);
                   let status = '';
 
-                  if (user.inChat) {
+                  if (user.offHook) {
+                    status = '\x1b[31mOff-Hook\x1b[0m';
+                  } else if (user.inChat) {
                     status = '\x1b[33mIn Chat\x1b[0m';
                   } else if (user.availableForChat) {
                     status = '\x1b[32mAvailable\x1b[0m';
@@ -4861,7 +4916,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
                     status = '\x1b[31mNot Available\x1b[0m';
                   }
 
-                  socket.emit('ansi-output', `${username}  ${realname}  ${status}\r\n`);
+                  socket.emit('ansi-output', `${nodeStr}  ${username}  ${location}  ${status}\r\n`);
                 }
                 socket.emit('ansi-output', '\r\n');
                 socket.emit('ansi-output', `Total: ${onlineUsers.length} user(s) online\r\n\r\n`);
@@ -5237,23 +5292,47 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       break;
 
     case 'WHO': // Who's Online (internalCommandWHO)
-      socket.emit('ansi-output', '\x1b[36m-= Who\'s Online =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Display list of users currently online.\r\n');
-      // Show all active sessions
-      const activeSockets = Array.from(io.sockets.sockets.values());
-      socket.emit('ansi-output', `\r\nCurrently ${activeSockets.length} user(s) online:\r\n\r\n`);
-      for (const [id, activeSocket] of io.sockets.sockets.entries()) {
-        const activeSession = await sessions.get(activeSocket.id);
-        if (activeSession?.user) {
-          socket.emit('ansi-output', `- ${activeSession.user.username} (Node ${activeSocket.id.substring(0, 4)})\r\n`);
+      socket.emit('ansi-output', '\x1b[36m-= Who\'s Online =-\x1b[0m\r\n\r\n');
+      // Use multinode system to get online users
+      const onlineUsers = await getOnlineUsers();
+      if (onlineUsers.length === 0) {
+        socket.emit('ansi-output', '\x1b[33mNo other users online.\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', `\x1b[32mCurrently ${onlineUsers.length} user(s) online:\x1b[0m\r\n\r\n`);
+        socket.emit('ansi-output', '\x1b[36mNode  Username                Location\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[36m════  ════════════════════════════════════════════════\x1b[0m\r\n');
+        for (const user of onlineUsers) {
+          const nodeStr = String(user.nodeId).padEnd(4);
+          const usernameStr = user.username.padEnd(24);
+          const locationStr = user.location || 'Unknown';
+          const privateFlag = user.private ? ' \x1b[35m[PRIVATE]\x1b[0m' : '';
+          const offHookFlag = user.offHook ? ' \x1b[33m[OFF-HOOK]\x1b[0m' : '';
+          socket.emit('ansi-output', `${nodeStr}  ${usernameStr}${locationStr}${privateFlag}${offHookFlag}\r\n`);
         }
       }
+      socket.emit('ansi-output', '\r\n');
       break;
 
     case 'WHD': // Who's Online Detailed (internalCommandWHD)
-      socket.emit('ansi-output', '\x1b[36m-= Who\'s Online (Detailed) =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Detailed user online list.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[33mDetailed who list not implemented yet. Use WHO for basic list.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[36m-= Who\'s Online (Detailed) =-\x1b[0m\r\n\r\n');
+      // Use multinode system for detailed view
+      const detailedUsers = await getOnlineUsers();
+      if (detailedUsers.length === 0) {
+        socket.emit('ansi-output', '\x1b[33mNo other users online.\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', `\x1b[32m${detailedUsers.length} user(s) online:\x1b[0m\r\n\r\n`);
+        for (const user of detailedUsers) {
+          socket.emit('ansi-output', '\x1b[36m════════════════════════════════════════════════\x1b[0m\r\n');
+          socket.emit('ansi-output', `\x1b[33mNode:\x1b[0m ${user.nodeId}\r\n`);
+          socket.emit('ansi-output', `\x1b[33mUsername:\x1b[0m ${user.username}\r\n`);
+          socket.emit('ansi-output', `\x1b[33mLocation:\x1b[0m ${user.location || 'Unknown'}\r\n`);
+          socket.emit('ansi-output', `\x1b[33mStatus:\x1b[0m ${user.private ? 'Private' : 'Available'}`);
+          if (user.offHook) {
+            socket.emit('ansi-output', ' \x1b[31m(Off-Hook)\x1b[0m');
+          }
+          socket.emit('ansi-output', '\r\n\r\n');
+        }
+      }
       break;
 
     case 'X': // Execute Door (internalCommandX)
