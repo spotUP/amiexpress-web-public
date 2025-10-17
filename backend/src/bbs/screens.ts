@@ -219,10 +219,13 @@ export function displayScreen(socket: Socket, session: BBSSession, screenName: s
 }
 
 /**
- * Pause with "Press any key to continue..."
+ * Pause with classic AmiExpress prompt
+ * Port from express.e lines 5141-5151
  * Sets session state to wait for keypress before continuing
  */
 export function doPause(socket: Socket, session: BBSSession): void {
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  // Classic AmiExpress pause message: "(Pause)...Space To Resume: "
+  // \x1b[32m = green, \x1b[33m = yellow, \x1b[34m = blue, \x1b[0m = reset
+  socket.emit('ansi-output', '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
   // Session will wait for any key before continuing
 }
