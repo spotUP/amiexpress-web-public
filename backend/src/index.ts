@@ -4838,33 +4838,305 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       displayDoorManager(socket, session);
       return;
 
-    case '?': // Help (internalCommandQuestionMark)
-      socket.emit('ansi-output', '\x1b[36m-= Command Help =-\x1b[0m\r\n');
-      socket.emit('ansi-output', '0 - Remote Shell\r\n');
-      socket.emit('ansi-output', '1 - Account Editing (Sysop)\r\n');
-      socket.emit('ansi-output', '2 - View Callers Log (Sysop)\r\n');
-      socket.emit('ansi-output', '3 - Edit Directory Files (Sysop)\r\n');
-      socket.emit('ansi-output', '4 - Edit Any File (Sysop)\r\n');
-      socket.emit('ansi-output', '5 - Change Directory (Sysop)\r\n');
-      socket.emit('ansi-output', 'R - Read Messages\r\n');
-      socket.emit('ansi-output', 'A - Post Message\r\n');
-      socket.emit('ansi-output', 'E - Post Private Message\r\n');
-      socket.emit('ansi-output', 'J - Join Conference\r\n');
-      socket.emit('ansi-output', 'JM - Join Message Base\r\n');
-      socket.emit('ansi-output', 'F - File Areas\r\n');
-      socket.emit('ansi-output', 'D - Download Files\r\n');
-      socket.emit('ansi-output', 'U - Upload Files\r\n');
-      socket.emit('ansi-output', 'O - Page Sysop for Chat\r\n');
-      socket.emit('ansi-output', 'OLM - Online Message System (send/read messages)\r\n');
-      socket.emit('ansi-output', 'CHAT - Internode Chat (real-time user-to-user chat)\r\n');
-      socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
-      socket.emit('ansi-output', 'DOORS/DOOR - Door Games & Utilities\r\n');
-      if (session.user.securityLevel >= 255) {
-        socket.emit('ansi-output', 'DOORMAN/DM - Door Manager (Sysop Only)\r\n');
+    case 'B': // Browse Bulletins (internalCommandB)
+      socket.emit('ansi-output', '\x1b[36m-= Browse Bulletins =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This command allows you to browse all available bulletins.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mBulletin browsing not fully implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'CF': // Conference Flags (internalCommandCF)
+      socket.emit('ansi-output', '\x1b[36m-= Conference Flags =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This command allows you to set flags for the current conference.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mConference flags not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'CM': // Conference Maintenance (internalCommandCM) - Sysop only
+      if ((session.user?.secLevel || 0) < 200) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
+        break;
       }
-      socket.emit('ansi-output', 'G - Goodbye\r\n');
-      socket.emit('ansi-output', 'Q - Quiet Node\r\n');
-      socket.emit('ansi-output', '? - This help\r\n');
+      socket.emit('ansi-output', '\x1b[36m-= Conference Maintenance =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Conference maintenance tools for sysops.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mConference maintenance not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'DS': // Download with Description (internalCommandD variant)
+      socket.emit('ansi-output', '\x1b[36m-= Download with Description =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Download files with descriptions.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mDS command not implemented yet. Use D for download.\x1b[0m\r\n');
+      break;
+
+    case 'GR': // Greets (internalCommandGreets)
+      socket.emit('ansi-output', '\x1b[36m-= Greets =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Display BBS greetings and credits.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mGreets display not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'H': // Help with parameter (internalCommandH)
+      socket.emit('ansi-output', '\x1b[36m-= Help System =-\x1b[0m\r\n');
+      if (params.trim()) {
+        socket.emit('ansi-output', `Help for command: ${params.trim()}\r\n`);
+        socket.emit('ansi-output', '\r\n\x1b[33mDetailed help not implemented yet. Use ? for command list.\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', 'Enter H <command> for help on a specific command.\r\n');
+      }
+      break;
+
+    case '<': // Previous Conference (internalCommandLT)
+      socket.emit('ansi-output', '\x1b[36m-= Previous Conference =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Jump to previous conference.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mConference navigation not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case '>': // Next Conference (internalCommandGT)
+      socket.emit('ansi-output', '\x1b[36m-= Next Conference =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Jump to next conference.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mConference navigation not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case '<<': // Previous Message Base (internalCommandLT2)
+      socket.emit('ansi-output', '\x1b[36m-= Previous Message Base =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Jump to previous message base.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mMessage base navigation not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case '>>': // Next Message Base (internalCommandGT2)
+      socket.emit('ansi-output', '\x1b[36m-= Next Message Base =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Jump to next message base.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mMessage base navigation not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'M': // Door Menu (internalCommandM)
+      socket.emit('ansi-output', '\x1b[36m-= Door Menu =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Display available doors and games.\r\n');
+      displayDoorMenu(socket, session, params);
+      return;
+
+    case 'MS': // Message Status (internalCommandMS)
+      socket.emit('ansi-output', '\x1b[36m-= Message Status =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Display message base statistics.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mMessage status not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'N': // New Files (internalCommandN)
+      socket.emit('ansi-output', '\x1b[36m-= New Files =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Display new files since your last call.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mNew files scan not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'NM': // New Messages (internalCommandNM)
+      socket.emit('ansi-output', '\x1b[36m-= New Messages =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Scan for new messages since your last call.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mNew message scan not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'RL': // Re-Logon (internalCommandRL)
+      socket.emit('ansi-output', '\x1b[36m-= Re-Logon =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Logoff and logon again as a different user.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mRe-logon not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'RZ': // Resume ZModem (internalCommandRZ)
+      socket.emit('ansi-output', '\x1b[36m-= Resume ZModem =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Resume interrupted ZModem transfer.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mZModem resume not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'S': // Settings/Status (internalCommandS)
+      socket.emit('ansi-output', '\x1b[36m-= User Settings =-\x1b[0m\r\n');
+      socket.emit('ansi-output', `Username: ${session.user?.username || 'Unknown'}\r\n`);
+      socket.emit('ansi-output', `Access Level: ${session.user?.secLevel || 0}\r\n`);
+      socket.emit('ansi-output', `Conference: ${session.currentConfName}\r\n`);
+      socket.emit('ansi-output', `Time Left: ${session.timeRemaining} minutes\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[33mDetailed settings editor not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'T': // Time Statistics (internalCommandT)
+      socket.emit('ansi-output', '\x1b[36m-= Time Statistics =-\x1b[0m\r\n');
+      socket.emit('ansi-output', `Time online this session: ${Math.floor((Date.now() - session.lastActivity) / 60000)} minutes\r\n`);
+      socket.emit('ansi-output', `Time remaining: ${session.timeRemaining} minutes\r\n`);
+      socket.emit('ansi-output', `Daily time limit: ${session.timeLimit / 60} minutes\r\n`);
+      break;
+
+    case 'UP': // User Profile (internalCommandUP)
+      socket.emit('ansi-output', '\x1b[36m-= User Profile =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Edit your user profile.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mUser profile editing not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'US': // User Statistics (internalCommandUS)
+      socket.emit('ansi-output', '\x1b[36m-= User Statistics =-\x1b[0m\r\n');
+      socket.emit('ansi-output', `Username: ${session.user?.username || 'Unknown'}\r\n`);
+      socket.emit('ansi-output', `Total Calls: 0\r\n`);
+      socket.emit('ansi-output', `Messages Posted: 0\r\n`);
+      socket.emit('ansi-output', `Files Uploaded: 0\r\n`);
+      socket.emit('ansi-output', `Files Downloaded: 0\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[33mDetailed statistics not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'V': // View File (internalCommandV)
+      socket.emit('ansi-output', '\x1b[36m-= View File =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'View a text file without downloading.\r\n');
+      if (params.trim()) {
+        socket.emit('ansi-output', `File: ${params.trim()}\r\n`);
+      }
+      socket.emit('ansi-output', '\r\n\x1b[33mFile viewing not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'VER': // Version (internalCommandVER)
+      socket.emit('ansi-output', '\x1b[36m-= BBS Version =-\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[1;33mAmiExpress-Web v1.0.0\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Modern web recreation of AmiExpress BBS\r\n');
+      socket.emit('ansi-output', 'Based on AmiExpress v5.6.0\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[35mBuilt with TypeScript, Socket.IO, and Node.js\x1b[0m\r\n');
+      break;
+
+    case 'VO': // Voting (internalCommandVO)
+      socket.emit('ansi-output', '\x1b[36m-= Voting Booth =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Participate in BBS polls and voting.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mVoting system not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'VS': // View Special (internalCommandV variant)
+      socket.emit('ansi-output', '\x1b[36m-= View Special File =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'View special formatted file.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mSpecial view mode not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'W': // Wall/Graffiti (internalCommandW)
+      socket.emit('ansi-output', '\x1b[36m-= Graffiti Wall =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Leave a message on the graffiti wall.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mGraffiti wall not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case 'WHO': // Who's Online (internalCommandWHO)
+      socket.emit('ansi-output', '\x1b[36m-= Who\'s Online =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Display list of users currently online.\r\n');
+      // Show all active sessions
+      const activeSockets = Array.from(io.sockets.sockets.values());
+      socket.emit('ansi-output', `\r\nCurrently ${activeSockets.length} user(s) online:\r\n\r\n`);
+      for (const [id, activeSocket] of io.sockets.sockets.entries()) {
+        const activeSession = await sessions.get(activeSocket.id);
+        if (activeSession?.user) {
+          socket.emit('ansi-output', `- ${activeSession.user.username} (Node ${activeSocket.id.substring(0, 4)})\r\n`);
+        }
+      }
+      break;
+
+    case 'WHD': // Who's Online Detailed (internalCommandWHD)
+      socket.emit('ansi-output', '\x1b[36m-= Who\'s Online (Detailed) =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Detailed user online list.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mDetailed who list not implemented yet. Use WHO for basic list.\x1b[0m\r\n');
+      break;
+
+    case 'X': // Execute Door (internalCommandX)
+      socket.emit('ansi-output', '\x1b[36m-= Execute Door =-\x1b[0m\r\n');
+      if (params.trim()) {
+        socket.emit('ansi-output', `Executing door: ${params.trim()}\r\n`);
+        socket.emit('ansi-output', '\r\n\x1b[33mDirect door execution not implemented yet. Use DOORS command.\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', 'Usage: X <doorname>\r\n');
+        socket.emit('ansi-output', 'Use DOORS to see available doors.\r\n');
+      }
+      break;
+
+    case 'Z': // ZModem (internalCommandZ)
+      socket.emit('ansi-output', '\x1b[36m-= ZModem Transfer =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Initiate ZModem protocol transfer.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mZModem protocol not implemented in web version.\x1b[0m\r\n');
+      break;
+
+    case 'ZOOM': // Zoom Scan (internalCommandZOOM)
+      socket.emit('ansi-output', '\x1b[36m-= Zoom Scan =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Quick scan of new messages and files.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[33mZoom scan not implemented yet.\x1b[0m\r\n');
+      break;
+
+    case '^': // Execute AREXX (internalCommandUpHat)
+      socket.emit('ansi-output', '\x1b[36m-= Execute AREXX Script =-\x1b[0m\r\n');
+      if (params.trim()) {
+        socket.emit('ansi-output', `AREXX script: ${params.trim()}\r\n`);
+        socket.emit('ansi-output', '\r\n\x1b[33mAREXX execution not fully implemented yet.\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', 'Usage: ^ <script>\r\n');
+      }
+      break;
+
+    case '?': // Help (internalCommandQuestionMark)
+      socket.emit('ansi-output', '\x1b[2J\x1b[H\x1b[1;36m-= AmiExpress Command Reference =-\x1b[0m\r\n\r\n');
+
+      socket.emit('ansi-output', '\x1b[1;33mSYSTEM COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[36m0\x1b[0m - Remote Shell (Sysop)\r\n');
+      socket.emit('ansi-output', '  \x1b[36m1\x1b[0m - Account Editing (Sysop)\r\n');
+      socket.emit('ansi-output', '  \x1b[36m2\x1b[0m - View Callers Log (Sysop)\r\n');
+      socket.emit('ansi-output', '  \x1b[36m3\x1b[0m - Edit Directory Files (Sysop)\r\n');
+      socket.emit('ansi-output', '  \x1b[36m4\x1b[0m - Edit Any File (Sysop)\r\n');
+      socket.emit('ansi-output', '  \x1b[36m5\x1b[0m - List System Directories (Sysop)\r\n');
+      socket.emit('ansi-output', '  \x1b[36mG\x1b[0m - Goodbye (Logoff)\r\n');
+      socket.emit('ansi-output', '  \x1b[36mQ\x1b[0m - Quiet Node\r\n');
+      socket.emit('ansi-output', '  \x1b[36mRL\x1b[0m - Re-Logon\r\n');
+      socket.emit('ansi-output', '  \x1b[36mVER\x1b[0m - BBS Version Info\r\n\r\n');
+
+      socket.emit('ansi-output', '\x1b[1;33mMESSAGE COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[36mR\x1b[0m - Read Messages\r\n');
+      socket.emit('ansi-output', '  \x1b[36mA\x1b[0m - Post Message\r\n');
+      socket.emit('ansi-output', '  \x1b[36mE\x1b[0m - Post Private Message\r\n');
+      socket.emit('ansi-output', '  \x1b[36mC\x1b[0m - Comment to Sysop\r\n');
+      socket.emit('ansi-output', '  \x1b[36mN\x1b[0m - New Messages Scan\r\n');
+      socket.emit('ansi-output', '  \x1b[36mNM\x1b[0m - New Messages Since Last Call\r\n');
+      socket.emit('ansi-output', '  \x1b[36mMS\x1b[0m - Message Status\r\n');
+      socket.emit('ansi-output', '  \x1b[36mZOOM\x1b[0m - Zoom Scan (Quick Scan)\r\n\r\n');
+
+      socket.emit('ansi-output', '\x1b[1;33mFILE COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[36mF\x1b[0m - File Areas\r\n');
+      socket.emit('ansi-output', '  \x1b[36mFR\x1b[0m - File Areas (Reverse)\r\n');
+      socket.emit('ansi-output', '  \x1b[36mFM\x1b[0m - File Maintenance (Sysop)\r\n');
+      socket.emit('ansi-output', '  \x1b[36mFS\x1b[0m - File Status\r\n');
+      socket.emit('ansi-output', '  \x1b[36mD\x1b[0m - Download Files\r\n');
+      socket.emit('ansi-output', '  \x1b[36mDS\x1b[0m - Download with Description\r\n');
+      socket.emit('ansi-output', '  \x1b[36mU\x1b[0m - Upload Files\r\n');
+      socket.emit('ansi-output', '  \x1b[36mV\x1b[0m - View File\r\n');
+      socket.emit('ansi-output', '  \x1b[36mN\x1b[0m - New Files\r\n\r\n');
+
+      socket.emit('ansi-output', '\x1b[1;33mCONFERENCE COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[36mJ\x1b[0m - Join Conference\r\n');
+      socket.emit('ansi-output', '  \x1b[36mJM\x1b[0m - Join Message Base\r\n');
+      socket.emit('ansi-output', '  \x1b[36m<\x1b[0m - Previous Conference\r\n');
+      socket.emit('ansi-output', '  \x1b[36m>\x1b[0m - Next Conference\r\n');
+      socket.emit('ansi-output', '  \x1b[36m<<\x1b[0m - Previous Message Base\r\n');
+      socket.emit('ansi-output', '  \x1b[36m>>\x1b[0m - Next Message Base\r\n');
+      socket.emit('ansi-output', '  \x1b[36mCF\x1b[0m - Conference Flags\r\n');
+      socket.emit('ansi-output', '  \x1b[36mCM\x1b[0m - Conference Maintenance (Sysop)\r\n\r\n');
+
+      socket.emit('ansi-output', '\x1b[1;33mUSER COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[36mO\x1b[0m - Page Sysop for Chat\r\n');
+      socket.emit('ansi-output', '  \x1b[36mOLM\x1b[0m - Online Message System\r\n');
+      socket.emit('ansi-output', '  \x1b[36mCHAT\x1b[0m - Internode Chat\r\n');
+      socket.emit('ansi-output', '  \x1b[36mWHO\x1b[0m - Who\'s Online\r\n');
+      socket.emit('ansi-output', '  \x1b[36mWHD\x1b[0m - Who\'s Online (Detailed)\r\n');
+      socket.emit('ansi-output', '  \x1b[36mS\x1b[0m - Settings\r\n');
+      socket.emit('ansi-output', '  \x1b[36mT\x1b[0m - Time Statistics\r\n');
+      socket.emit('ansi-output', '  \x1b[36mUP\x1b[0m - User Profile\r\n');
+      socket.emit('ansi-output', '  \x1b[36mUS\x1b[0m - User Statistics\r\n');
+      socket.emit('ansi-output', '  \x1b[36mW\x1b[0m - Graffiti Wall\r\n\r\n');
+
+      socket.emit('ansi-output', '\x1b[1;33mDOOR & UTILITY COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[36mDOORS/DOOR/M\x1b[0m - Door Games & Utilities\r\n');
+      socket.emit('ansi-output', '  \x1b[36mX\x1b[0m <doorname> - Execute Door\r\n');
+      socket.emit('ansi-output', '  \x1b[36m^\x1b[0m <script> - Execute AREXX Script\r\n');
+      if (session.user?.securityLevel >= 255) {
+        socket.emit('ansi-output', '  \x1b[36mDOORMAN/DM\x1b[0m - Door Manager (Sysop Only)\r\n');
+      }
+      socket.emit('ansi-output', '\r\n');
+
+      socket.emit('ansi-output', '\x1b[1;33mOTHER COMMANDS:\x1b[0m\r\n');
+      socket.emit('ansi-output', '  \x1b[36mB\x1b[0m - Browse Bulletins\r\n');
+      socket.emit('ansi-output', '  \x1b[36mGR\x1b[0m - Greets\r\n');
+      socket.emit('ansi-output', '  \x1b[36mH\x1b[0m <cmd> - Help on Command\r\n');
+      socket.emit('ansi-output', '  \x1b[36mVO\x1b[0m - Voting Booth\r\n');
+      socket.emit('ansi-output', '  \x1b[36m?\x1b[0m - This Help\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[35m══════════════════════════════════════════════════════════\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[33mUse H <command> for detailed help on a specific command\x1b[0m\r\n');
       break;
 
     default:
