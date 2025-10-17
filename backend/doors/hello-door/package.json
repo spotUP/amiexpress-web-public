@@ -1,0 +1,11 @@
+{
+  "name": "hello-door",
+  "version": "1.0.0",
+  "description": "A simple hello world door written in TypeScript",
+  "displayName": "Hello World Door",
+  "author": "AmiExpress Team",
+  "main": "index.ts",
+  "type": "door",
+  "accessLevel": 0,
+  "keywords": ["door", "typescript", "bbs"]
+}

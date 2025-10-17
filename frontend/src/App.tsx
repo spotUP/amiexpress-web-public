@@ -135,6 +135,12 @@ function App() {
         wasConnected: ws.connected,
         transport: ws.io?.engine?.transport?.name
       });
+
+      // Clear token on disconnect if it was a logout
+      if (reason === 'io client disconnect') {
+        localStorage.removeItem('bbs_auth_token');
+        console.log('🔐 Auth token cleared on logout');
+      }
     });
 
     // Add transport upgrade/downgrade logging
@@ -153,11 +159,26 @@ function App() {
     // Handle login success
     ws.on('login-success', (data: any) => {
       console.log('Login successful:', data);
+
+      // Store JWT token in localStorage for persistent login
+      if (data && data.token) {
+        localStorage.setItem('bbs_auth_token', data.token);
+        console.log('🔐 Auth token stored in localStorage');
+      }
     });
 
     // Handle login failure
     ws.on('login-failed', (reason: string) => {
       console.log('Login failed:', reason);
+
+      // Clear token on failed login
+      localStorage.removeItem('bbs_auth_token');
+    });
+
+    // Handle file upload request from server
+    ws.on('show-file-upload', (options: { accept: string; maxSize: number; uploadUrl: string; fieldName: string }) => {
+      console.log('📂 File upload requested:', options);
+      handleFileUpload(options, ws, term);
     });
 
     // Handle terminal input
@@ -184,14 +205,54 @@ function App() {
       return true;
     });
 
-    // Display welcome message and wait for user input
-    setTimeout(() => {
-      term.write('\r\n\x1b[32mWelcome to AmiExpress Web BBS!\x1b[0m\r\n');
-      term.write('Please login with your username and password.\r\n\r\n');
-      term.write('Username: ');
-      // Focus the terminal for input
-      term.focus();
-    }, 500);
+    // Check for existing auth token and attempt auto-login
+    const checkAutoLogin = () => {
+      const token = localStorage.getItem('bbs_auth_token');
+
+      if (token) {
+        console.log('🔐 Found stored auth token, attempting auto-login...');
+        term.write('\r\n\x1b[36mRestoring session...\x1b[0m\r\n');
+
+        // Attempt login with token
+        ws.emit('login-with-token', { token });
+
+        // Set login state to prevent manual login prompt
+        loginState.current = 'loggedin';
+
+        // If auto-login fails, show login prompt
+        const failHandler = (reason: string) => {
+          console.log('🔐 Auto-login failed:', reason);
+          localStorage.removeItem('bbs_auth_token');
+          loginState.current = 'username';
+          term.write('\r\n\x1b[33mSession expired. Please login again.\x1b[0m\r\n\r\n');
+          term.write('Username: ');
+          term.focus();
+          ws.off('login-failed', failHandler);
+        };
+
+        ws.once('login-failed', failHandler);
+
+        // On success, remove the fail handler
+        ws.once('login-success', () => {
+          ws.off('login-failed', failHandler);
+        });
+      } else {
+        // No token, show normal login prompt
+        term.write('\r\n\x1b[32mWelcome to AmiExpress Web BBS!\x1b[0m\r\n');
+        term.write('Please login with your username and password.\r\n\r\n');
+        term.write('Username: ');
+        term.focus();
+      }
+    };
+
+    // Wait for connection, then check auto-login
+    if (ws.connected) {
+      setTimeout(checkAutoLogin, 500);
+    } else {
+      ws.once('connect', () => {
+        setTimeout(checkAutoLogin, 500);
+      });
+    }
 
     // Cleanup
     return () => {
@@ -215,6 +276,86 @@ function App() {
 const loginState = { current: 'username' as 'username' | 'password' | 'loggedin' };
 const username = { current: '' };
 const password = { current: '' };
+
+// Handle file upload
+function handleFileUpload(options: { accept: string; maxSize: number; uploadUrl: string; fieldName: string }, ws: Socket, term: Terminal) {
+  // Create hidden file input
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = options.accept;
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.onchange = async (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+
+    if (!file) {
+      console.log('📂 No file selected');
+      document.body.removeChild(input);
+      return;
+    }
+
+    console.log('📂 File selected:', file.name, `(${file.size} bytes)`);
+
+    // Check file size
+    if (file.size > options.maxSize) {
+      term.write(`\r\n\x1b[31m✗ Error: File too large (max ${Math.round(options.maxSize / 1024 / 1024)}MB)\x1b[0m\r\n`);
+      document.body.removeChild(input);
+      return;
+    }
+
+    // Show upload progress
+    term.write(`\r\n\x1b[36mUploading ${file.name}...\x1b[0m\r\n`);
+
+    try {
+      // Prepare form data
+      const formData = new FormData();
+      formData.append(options.fieldName, file);
+
+      // Determine backend URL based on environment
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const backendUrl = isDevelopment
+        ? 'http://localhost:3001'
+        : (import.meta.env.VITE_API_URL || 'https://amiexpress-backend.onrender.com');
+
+      const uploadUrl = `${backendUrl}${options.uploadUrl}`;
+      console.log('📤 Uploading to:', uploadUrl);
+
+      // Upload file
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('📦 Upload successful:', result);
+
+      // Notify server of successful upload
+      ws.emit('file-uploaded', {
+        filename: result.filename,
+        originalname: result.originalname,
+        size: result.size
+      });
+
+      term.write(`\x1b[32m✓ Upload complete\x1b[0m\r\n`);
+
+    } catch (error) {
+      console.error('📂 Upload error:', error);
+      term.write(`\r\n\x1b[31m✗ Upload failed: ${(error as Error).message}\x1b[0m\r\n`);
+    }
+
+    // Cleanup
+    document.body.removeChild(input);
+  };
+
+  // Trigger file picker
+  input.click();
+}
 
 // Handle login input (username/password collection)
 function handleLoginInput(data: string, ws: Socket, term: Terminal) {

@@ -204,6 +204,11 @@ function fieldToColumn(field: string): string {
 
 export class Database {
   private pool?: any;
+  private isConnected: boolean = false;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 10;
+  private reconnectDelay: number = 5000; // 5 seconds
+  private healthCheckInterval?: NodeJS.Timeout;
 
   constructor() {
     // PostgreSQL connection configuration
@@ -214,26 +219,102 @@ export class Database {
     }
 
     console.log('Initializing PostgreSQL database connection...');
+
+    // SSL configuration based on environment
+    const sslConfig = process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false; // Explicitly disable SSL in development
+
     this.pool = new PoolConstructor({
       connectionString,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: sslConfig,
       max: 20, // Maximum number of clients in the pool
       idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
       connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
+      keepAlive: true, // Keep TCP connection alive
+      keepAliveInitialDelayMillis: 10000, // Start keep-alive after 10 seconds
     });
 
-    // Handle pool errors
+    // Handle pool errors - DO NOT CRASH THE SERVER
     this.pool.on('error', (err: Error) => {
-      console.error('Unexpected error on idle client', err);
-      process.exit(-1);
+      console.error('⚠️ PostgreSQL pool error (connection may have dropped):', err.message);
+      this.isConnected = false;
+      // Attempt to reconnect instead of crashing
+      this.attemptReconnection();
     });
 
     this.pool.on('connect', () => {
-      console.log('Connected to PostgreSQL database');
+      console.log('✅ Connected to PostgreSQL database');
+      this.isConnected = true;
+      this.reconnectAttempts = 0; // Reset reconnection counter on successful connect
     });
+
+    this.pool.on('remove', () => {
+      console.log('🔌 Client removed from pool');
+    });
+
+    // Start health check monitoring
+    this.startHealthCheck();
 
     // Initialize database schema
     this.initDatabase();
+  }
+
+  // Attempt to reconnect to database
+  private async attemptReconnection(): Promise<void> {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error(`❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
+      return;
+    }
+
+    this.reconnectAttempts++;
+    console.log(`🔄 Attempting database reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+
+    setTimeout(async () => {
+      try {
+        // Try to get a client from the pool
+        const client = await this.pool.connect();
+        await client.query('SELECT 1'); // Test query
+        client.release();
+
+        console.log('✅ Database reconnection successful');
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+      } catch (error) {
+        console.error(`⚠️ Reconnection attempt ${this.reconnectAttempts} failed:`, error);
+        // Try again
+        this.attemptReconnection();
+      }
+    }, this.reconnectDelay);
+  }
+
+  // Health check to monitor database connection
+  private startHealthCheck(): void {
+    // Check every 30 seconds
+    this.healthCheckInterval = setInterval(async () => {
+      try {
+        const client = await this.pool.connect();
+        await client.query('SELECT 1');
+        client.release();
+
+        if (!this.isConnected) {
+          console.log('✅ Database health check: Connection restored');
+          this.isConnected = true;
+          this.reconnectAttempts = 0;
+        }
+      } catch (error) {
+        if (this.isConnected) {
+          console.error('⚠️ Database health check failed:', error);
+          this.isConnected = false;
+          this.attemptReconnection();
+        }
+      }
+    }, 30000);
+  }
+
+  // Check if database is connected
+  public isHealthy(): boolean {
+    return this.isConnected;
   }
 
   // SQLite methods removed - now using PostgreSQL only
@@ -1689,20 +1770,35 @@ export class Database {
   }
 
   async verifyPassword(password: string, hash: string): Promise<boolean> {
-    // bcrypt.compare handles both bcrypt and legacy SHA-256 hashes
-    try {
-      // First try bcrypt verification
-      return await bcrypt.compare(password, hash);
-    } catch (error) {
-      // Fallback for legacy SHA-256 hashes (for migration period)
-      // This allows old passwords to still work during migration
+    // Check if this is a legacy SHA-256 hash (64 hex characters)
+    const isSHA256 = hash.length === 64 && /^[0-9a-f]{64}$/i.test(hash);
+
+    if (isSHA256) {
+      // Legacy SHA-256 hash - use direct comparison
       const sha256Hash = crypto.createHash('sha256').update(password).digest('hex');
       return sha256Hash === hash;
+    }
+
+    // Modern bcrypt hash - use bcrypt.compare()
+    try {
+      return await bcrypt.compare(password, hash);
+    } catch (error) {
+      // If bcrypt verification fails due to invalid hash format, return false
+      console.warn('Password verification error:', error);
+      return false;
     }
   }
 
   async close(): Promise<void> {
+    // Clear health check interval
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    console.log('🔌 Closing database connection pool...');
     await this.pool.end();
+    this.isConnected = false;
+    console.log('✅ Database connection pool closed');
   }
 
   // Initialize default data

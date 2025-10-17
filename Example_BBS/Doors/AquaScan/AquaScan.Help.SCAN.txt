@@ -1,0 +1,20 @@
+
+[0m SCAN ?                         [36m- Show this help text
+[0m SCAN W                         [36m- Configure AquaScan
+[0m SCAN [S] [dir] [Q] [NS]        [36m- Scan all confs since day of last call
+[0m SCAN mm-dd[-yy] [dir] [Q] [NS] [36m- Scan all confs since the specified date
+[0m SCAN T [dir] [Q] [NS]          [36m- Scan today's files in all confs
+[0m SCAN Y [dir] [Q] [NS]          [36m- Scan all confs since yesterday
+[0m SCAN -x [dir] [Q] [NS]         [36m- Scan all confs since x days back
+[0m SCAN !x [dir] [Q] [NS]         [36m- Scan the x newest files in all confs
+[0m SCAN R [dir] [Q] [NS]          [36m- Scan all confs in reverse chronological order
+         ^     ^   ^
+         |     |   |
+         |     |   `-- Non-stop scrolling
+         |     `--- Quick scan = Show only first line of every description
+         |
+         +-- U -- Upload dir (default)
+         +-- A -- All dirs
+         +-- x -- Dir number x
+         `-- H -- Hold dir
+[0m

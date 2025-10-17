@@ -1,5 +1,5 @@
 // Load environment variables FIRST, before any other imports
-require('dotenv').config({ path: './backend/.env' });
+require('dotenv').config({ path: './.env' });
 
 // Debug: Log environment variables (only in development)
 if (process.env.NODE_ENV !== 'production') {
@@ -35,8 +35,26 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import Redis from 'ioredis';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import jwt from 'jsonwebtoken';
 import { User, Door, DoorSession, ChatSession, ChatMessage, ChatState } from './types';
 import { db } from './database';
+import { setupDoorHandlers, terminateAllSessions } from './amiga-emulation/doorHandler';
+import { AmigaGuideParser } from './amigaguide/AmigaGuideParser';
+import { AmigaGuideViewer } from './amigaguide/AmigaGuideViewer';
+import { getAmigaDoorManager, DoorInfo as AmigaDoorInfo, DoorArchive } from './doors/amigaDoorManager';
+
+// JWT Secret (should be in environment variables)
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
+
+// Helper function to format file sizes
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
 
 // Simple rate limiter for Socket.IO events
 class SocketRateLimiter {
@@ -256,7 +274,8 @@ enum LoggedOnSubState {
   FILE_LIST = 'file_list',
   FILE_LIST_CONTINUE = 'file_list_continue',
   CONFERENCE_SELECT = 'conference_select',
-  CHAT = 'chat' // Internode chat mode
+  CHAT = 'chat', // Internode chat mode
+  DOOR_MANAGER = 'door_manager' // Sysop door management
 }
 
 interface BBSSession {
@@ -384,43 +403,126 @@ app.get('/keep-alive', (req: Request, res: Response) => {
 // Create HTTP server
 const server = createServer(app);
 
-// Configure Socket.IO for Render.com (optimized for persistent connections)
+// Configure Socket.IO for maximum stability and reliability
 const io = new Server(server, {
   cors: corsOptions,
-  transports: ['websocket', 'polling'], // Prefer WebSocket first
-  allowEIO3: true, // Allow Engine.IO v3 clients
-  pingTimeout: 60000, // 60 seconds
-  pingInterval: 25000, // 25 seconds
-  connectTimeout: 45000, // 45 seconds (longer for Render.com)
+  transports: ['websocket', 'polling'], // Prefer WebSocket first, fallback to polling
+  allowEIO3: true, // Allow Engine.IO v3 clients for compatibility
+
+  // Aggressive keep-alive settings for stability
+  pingTimeout: 120000, // 2 minutes before considering connection dead
+  pingInterval: 25000, // Send ping every 25 seconds
+
+  // Connection timeouts
+  connectTimeout: 60000, // 1 minute to establish connection
+
+  // Upgrade settings for reliability
+  upgradeTimeout: 30000, // 30 seconds to upgrade transport
+
+  // Buffer settings
   maxHttpBufferSize: 1e8, // 100MB for file uploads
+  perMessageDeflate: false, // Disable compression for better performance
+
+  // HTTP long-polling settings
+  httpCompression: true,
+
+  // Cookie and session settings
   cookie: false, // Disable cookies for better compatibility
+
+  // Reconnection settings (client-side will use these hints)
+  allowUpgrades: true, // Allow transport upgrades
+
+  // Additional security check
   allowRequest: (req: any, callback: (err: string | null, success: boolean) => void) => {
-    // Additional security check for Render.com
     const origin = req.headers.origin;
     if (origin && corsOptions.origin(origin, () => {}) !== null) {
       callback(null, true);
     } else {
+      console.warn(`⚠️ CORS blocked connection from origin: ${origin}`);
       callback('CORS error', false);
     }
   }
 });
 
-// Add connection logging for Render.com debugging
+// Enhanced connection handling with stability improvements
 io.on('connection', (socket: Socket) => {
   console.log(`🔌 Socket connected: ${socket.id} from ${socket.handshake.address} (${socket.conn.transport.name})`);
 
+  // Connection monitoring
+  let lastActivity = Date.now();
+  const activityTimeout = 300000; // 5 minutes of inactivity
+
+  // Update activity timestamp on any message
+  const updateActivity = () => {
+    lastActivity = Date.now();
+  };
+
+  // Monitor for inactivity (could indicate a stale connection)
+  const inactivityCheck = setInterval(() => {
+    const inactive = Date.now() - lastActivity;
+    if (inactive > activityTimeout) {
+      console.warn(`⚠️ Socket ${socket.id} inactive for ${Math.floor(inactive / 1000)}s, disconnecting`);
+      socket.disconnect(true);
+      clearInterval(inactivityCheck);
+    }
+  }, 60000); // Check every minute
+
+  // Enhanced disconnect handling
   socket.on('disconnect', (reason: string) => {
     console.log(`🔌 Socket disconnected: ${socket.id}, reason: ${reason}`);
+    clearInterval(inactivityCheck);
+
+    // Clean up session on disconnect
+    sessions.delete(socket.id).catch(err => {
+      console.error(`Error cleaning up session for ${socket.id}:`, err);
+    });
   });
 
+  // Robust error handling - DO NOT let errors crash the server
   socket.on('error', (error: Error) => {
-    console.error(`❌ Socket error for ${socket.id}:`, error);
+    console.error(`❌ Socket error for ${socket.id}:`, error.message);
+    // Don't disconnect on error - let ping/pong handle it
   });
 
-  // Log transport upgrades (important for WebSocket verification)
+  // Handle connection errors (transport level)
+  socket.conn.on('error', (error: Error) => {
+    console.error(`❌ Transport error for ${socket.id}:`, error.message);
+  });
+
+  // Log transport upgrades (WebSocket upgrade is important for performance)
   socket.conn.on('upgrade', () => {
     console.log(`⬆️ Socket ${socket.id} upgraded to ${socket.conn.transport.name}`);
+    updateActivity();
   });
+
+  // Handle ping/pong for connection monitoring
+  socket.on('ping', () => {
+    updateActivity();
+  });
+
+  socket.on('pong', () => {
+    updateActivity();
+  });
+
+  // Wrap all socket event handlers with error boundary
+  const safeOn = (event: string, handler: (...args: any[]) => void | Promise<void>) => {
+    socket.on(event, async (...args: any[]) => {
+      try {
+        updateActivity();
+        await handler(...args);
+      } catch (error) {
+        console.error(`Error handling event "${event}" for socket ${socket.id}:`, error);
+        // Emit error to client instead of crashing
+        socket.emit('error', {
+          message: 'An error occurred processing your request',
+          event
+        });
+      }
+    });
+  };
+
+  // safeOn function is available for wrapping event handlers in try-catch
+  // Example usage: safeOn('terminal-input', async (data) => { ... });
 });
 
 const port = process.env.PORT || 3001;
@@ -495,6 +597,62 @@ app.get('/users/:id', (req: Request, res: Response) => {
   res.json(user);
 });
 
+// Configure multer for door file uploads
+const doorsPath = path.join(__dirname, '../doors/archives');
+if (!fs.existsSync(doorsPath)) {
+  fs.mkdirSync(doorsPath, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, doorsPath);
+  },
+  filename: (req, file, cb) => {
+    // Sanitize filename
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, safeName);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept ZIP, LHA, and LZX files
+    const ext = file.originalname.toLowerCase();
+    if (file.mimetype === 'application/zip' || ext.endsWith('.zip') ||
+        ext.endsWith('.lha') || ext.endsWith('.lzh') || ext.endsWith('.lzx')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only ZIP, LHA, and LZX files are allowed'));
+    }
+  }
+});
+
+// File upload endpoint for doors
+app.post('/api/upload/door', upload.single('door'), (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    console.log('📦 Door uploaded:', req.file.originalname, `(${req.file.size} bytes)`);
+
+    res.status(200).json({
+      success: true,
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      size: req.file.size,
+      path: req.file.path
+    });
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
 // BBS connection handler (separate from global Socket.IO logging)
 io.on('connection', async (socket: Socket) => {
   console.log('🎮 BBS Client connected from:', socket.handshake.address || 'unknown', `(${socket.conn.transport.name})`);
@@ -525,6 +683,9 @@ io.on('connection', async (socket: Socket) => {
   socket.on('connect_error', (error: Error) => {
     console.error('❌ BBS Connection error for client:', socket.id, error);
   });
+
+  // Set up Amiga door handlers
+  setupDoorHandlers(socket);
 
   socket.on('login', async (data: { username: string; password: string }) => {
     console.log('Login attempt:', data.username);
@@ -594,7 +755,27 @@ io.on('connection', async (socket: Socket) => {
       loginRateLimiter.reset(rateLimitKey);
 
       console.log('Login successful for user:', data.username);
-      socket.emit('login-success');
+
+      // Generate JWT token for persistent login
+      const token = jwt.sign(
+        {
+          userId: user.id,
+          username: user.username,
+          securityLevel: user.secLevel || 0
+        },
+        JWT_SECRET,
+        { expiresIn: '7d' } // Token valid for 7 days
+      );
+
+      socket.emit('login-success', {
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          realname: user.realname,
+          securityLevel: user.secLevel || 0
+        }
+      });
 
       // Check for unread OLM messages
       try {
@@ -612,6 +793,136 @@ io.on('connection', async (socket: Socket) => {
       console.error('Login error details:', error);
       console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       socket.emit('login-failed', 'Internal server error');
+    }
+  });
+
+  // Token-based login for persistent sessions
+  socket.on('login-with-token', async (data: { token: string }) => {
+    console.log('Token login attempt');
+
+    try {
+      // Verify JWT token
+      const decoded = jwt.verify(data.token, JWT_SECRET) as { userId: string; username: string; securityLevel: number };
+      console.log('Token verified for user:', decoded.username);
+
+      // Get user from database
+      const user = await db.getUserByUsername(decoded.username);
+      if (!user) {
+        console.log('User not found for token:', decoded.username);
+        socket.emit('login-failed', 'Invalid session');
+        return;
+      }
+
+      // Update last login
+      await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
+
+      // Set session user data
+      session.state = BBSState.LOGGEDON;
+      session.subState = LoggedOnSubState.DISPLAY_BULL;
+      session.user = user;
+
+      // Set user preferences
+      session.confRJoin = user.autoRejoin || 1;
+      session.msgBaseRJoin = 1;
+      session.cmdShortcuts = !user.expert;
+
+      console.log('Token login successful for user:', decoded.username);
+
+      // Generate a fresh token
+      const newToken = jwt.sign(
+        {
+          userId: user.id,
+          username: user.username,
+          securityLevel: user.secLevel || 0
+        },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      socket.emit('login-success', {
+        token: newToken,
+        user: {
+          id: user.id,
+          username: user.username,
+          realname: user.realname,
+          securityLevel: user.secLevel || 0
+        }
+      });
+
+      // Check for unread OLM messages
+      try {
+        const unreadCount = await db.getUnreadMessageCount(user.id);
+        if (unreadCount > 0) {
+          socket.emit('ansi-output', `\r\n\x1b[33m*** You have ${unreadCount} unread message(s)! Type OLM READ to view. ***\x1b[0m\r\n`);
+        }
+      } catch (error) {
+        console.error('Error checking OLM messages:', error);
+      }
+
+      // Start the proper AmiExpress flow
+      displaySystemBulletins(socket, session);
+    } catch (error) {
+      if (error instanceof jwt.JsonWebTokenError) {
+        console.log('Invalid token:', error.message);
+        socket.emit('login-failed', 'Invalid or expired session');
+      } else {
+        console.error('Token login error:', error);
+        socket.emit('login-failed', 'Internal server error');
+      }
+    }
+  });
+
+  // Handle file uploads for door manager
+  socket.on('file-uploaded', async (data: { filename: string; originalname: string; size: number }) => {
+    console.log('📦 File uploaded:', data.originalname);
+
+    // Check if user is in door manager upload mode
+    const session = await sessions.get(socket.id);
+    if (!session || session.subState !== LoggedOnSubState.DOOR_MANAGER || session.tempData?.doorManagerMode !== 'upload') {
+      console.log('❌ File upload received but not in upload mode');
+      return;
+    }
+
+    socket.emit('ansi-output', `\r\n\x1b[32m✓ File received: ${data.originalname}\x1b[0m\r\n`);
+    socket.emit('ansi-output', `\x1b[36mSize: ${formatFileSize(data.size)}\x1b[0m\r\n`);
+    socket.emit('ansi-output', 'Processing...\r\n');
+
+    try {
+      // Re-scan doors to include new upload
+      await displayDoorManager(socket, session);
+
+      // Find the newly uploaded door
+      const { doorList } = session.tempData;
+      const newDoor = doorList.find((d: any) => d.filename === data.filename || d.filename === data.originalname);
+
+      if (newDoor) {
+        socket.emit('ansi-output', '\x1b[32m✓ Upload successful!\x1b[0m\r\n\r\n');
+        socket.emit('ansi-output', 'Press any key to view door information...\r\n');
+
+        // Set as current door and switch to info mode
+        session.tempData.selectedIndex = doorList.findIndex((d: any) => d.filename === data.filename || d.filename === data.originalname);
+        session.tempData.doorManagerMode = 'list';
+
+        // Wait for keypress then show info
+        const showInfoHandler = () => {
+          displayDoorManagerInfo(socket, session);
+          socket.off('command', showInfoHandler);
+        };
+        socket.once('command', showInfoHandler);
+      } else {
+        throw new Error('Could not find uploaded door in archive');
+      }
+
+    } catch (error) {
+      socket.emit('ansi-output', `\x1b[31m✗ Error processing upload: ${(error as Error).message}\x1b[0m\r\n`);
+      socket.emit('ansi-output', 'Press any key to return to door list...\r\n');
+
+      const returnToList = () => {
+        session.tempData.doorManagerMode = 'list';
+        displayDoorManagerList(socket, session);
+        socket.off('command', returnToList);
+      };
+      socket.once('command', returnToList);
     }
   });
 
@@ -1128,6 +1439,83 @@ io.on('connection', async (socket: Socket) => {
 
     } catch (error) {
       console.error('[CHAT] Error in chat:end:', error);
+    }
+  });
+
+  // Handle door archive upload
+  socket.on('door-upload', async (data: { filename: string; content: Buffer | string }) => {
+    console.log('[DOOR UPLOAD] Received file:', data.filename);
+
+    const session = await sessions.get(socket.id);
+    if (!session || session.user.securityLevel < 255) {
+      socket.emit('door-upload-error', { message: 'Access denied: Sysop only' });
+      return;
+    }
+
+    if (session.tempData?.doorManagerMode !== 'upload') {
+      socket.emit('door-upload-error', { message: 'Not in upload mode' });
+      return;
+    }
+
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const archivesPath = path.join(__dirname, '../doors/archives');
+
+      // Ensure archives directory exists
+      if (!fs.existsSync(archivesPath)) {
+        fs.mkdirSync(archivesPath, { recursive: true });
+      }
+
+      // Validate filename
+      const filename = path.basename(data.filename);
+      if (!filename.toLowerCase().endsWith('.zip')) {
+        socket.emit('door-upload-error', { message: 'Only ZIP files are accepted' });
+        return;
+      }
+
+      // Convert content to Buffer if needed
+      const buffer = Buffer.isBuffer(data.content)
+        ? data.content
+        : Buffer.from(data.content, 'base64');
+
+      // Check file size (10MB limit)
+      if (buffer.length > 10 * 1024 * 1024) {
+        socket.emit('door-upload-error', { message: 'File too large (max 10MB)' });
+        return;
+      }
+
+      // Save file
+      const filepath = path.join(archivesPath, filename);
+      fs.writeFileSync(filepath, buffer);
+
+      socket.emit('ansi-output', `\r\n\x1b[32mFile uploaded successfully: ${filename}\x1b[0m\r\n`);
+      socket.emit('ansi-output', `Size: ${Math.round(buffer.length / 1024)} KB\r\n\r\n`);
+      socket.emit('ansi-output', 'Processing...\r\n');
+
+      // Re-scan doors to include new upload
+      await displayDoorManager(socket, session);
+
+      // Find the newly uploaded door
+      const newDoor = session.tempData.doorList.find((d: any) => d.filename === filename);
+      if (newDoor) {
+        // Set as current door and show info
+        session.tempData.selectedIndex = session.tempData.doorList.indexOf(newDoor);
+        session.tempData.doorManagerMode = 'info';
+        displayDoorManagerInfo(socket, session);
+      } else {
+        // Just show the list
+        session.tempData.doorManagerMode = 'list';
+        displayDoorManagerList(socket, session);
+      }
+
+    } catch (error) {
+      console.error('[DOOR UPLOAD] Error:', error);
+      socket.emit('door-upload-error', {
+        message: 'Upload failed: ' + (error as Error).message
+      });
+      session.tempData.doorManagerMode = 'list';
+      displayDoorManagerList(socket, session);
     }
   });
 
@@ -1692,6 +2080,616 @@ function displayDoorMenu(socket: any, session: BBSSession, params: string) {
   session.tempData = { doorMode: true, availableDoors };
 }
 
+// README viewer for Door Manager
+function displayReadme(socket: any, session: BBSSession, door: any): void {
+  const lines = door.readme.split('\n');
+  const maxLines = 20;
+  const offset = session.tempData.readmeOffset || 0;
+
+  // Clear screen
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+
+  // Header
+  socket.emit('ansi-output', `\x1b[1;36m-= ${door.name} - README =-\x1b[0m\r\n`);
+  socket.emit('ansi-output', '-'.repeat(80) + '\r\n');
+
+  // Display content
+  const visibleLines = lines.slice(offset, offset + maxLines);
+  for (const line of visibleLines) {
+    socket.emit('ansi-output', line + '\r\n');
+  }
+
+  // Scroll indicator
+  if (offset + maxLines < lines.length || offset > 0) {
+    socket.emit('ansi-output', `\r\n\x1b[90m[Line ${offset + 1}-${offset + visibleLines.length} of ${lines.length}]\x1b[0m\r\n`);
+  }
+
+  // Footer
+  socket.emit('ansi-output', '\r\n' + '-'.repeat(80) + '\r\n');
+  const nav: string[] = [];
+
+  if (offset > 0) {
+    nav.push('\x1b[33m[UP]\x1b[0m Scroll Up');
+  }
+  if (offset + maxLines < lines.length) {
+    nav.push('\x1b[33m[DN]\x1b[0m Scroll Down');
+  }
+  nav.push('\x1b[33m[B]\x1b[0m Back');
+  nav.push('\x1b[33m[Q]\x1b[0m Quit');
+
+  socket.emit('ansi-output', nav.join('  ') + '\r\n');
+}
+
+// Handle README viewer input
+function handleReadmeInput(socket: any, session: BBSSession, door: any, data: string): void {
+  const key = data.trim();
+  const lines = door.readme.split('\n');
+  const maxLines = 20;
+
+  // Arrow up / UP
+  if (key === '\x1b[A' || key.toUpperCase() === 'UP') {
+    if (session.tempData.readmeOffset > 0) {
+      session.tempData.readmeOffset = Math.max(0, session.tempData.readmeOffset - 1);
+      displayReadme(socket, session, door);
+    }
+    return;
+  }
+
+  // Arrow down / DN
+  if (key === '\x1b[B' || key.toUpperCase() === 'DN' || key.toUpperCase() === 'DOWN') {
+    if (session.tempData.readmeOffset + maxLines < lines.length) {
+      session.tempData.readmeOffset++;
+      displayReadme(socket, session, door);
+    }
+    return;
+  }
+
+  // Page up
+  if (key === '\x1b[5~' || key.toUpperCase() === 'PGUP') {
+    session.tempData.readmeOffset = Math.max(0, session.tempData.readmeOffset - maxLines);
+    displayReadme(socket, session, door);
+    return;
+  }
+
+  // Page down
+  if (key === '\x1b[6~' || key.toUpperCase() === 'PGDN') {
+    if (session.tempData.readmeOffset + maxLines < lines.length) {
+      session.tempData.readmeOffset = Math.min(lines.length - maxLines, session.tempData.readmeOffset + maxLines);
+      displayReadme(socket, session, door);
+    }
+    return;
+  }
+
+  // Back
+  if (key.toUpperCase() === 'B') {
+    delete session.tempData.readmeOffset;
+    session.tempData.doorManagerMode = 'info';
+    displayDoorManagerInfo(socket, session);
+    return;
+  }
+
+  // Quit
+  if (key.toUpperCase() === 'Q') {
+    delete session.tempData.readmeOffset;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    displayMainMenu(socket, session);
+    return;
+  }
+}
+
+// Door Manager - Sysop function to manage installed doors
+async function displayDoorManager(socket: any, session: BBSSession) {
+  const AdmZip = require('adm-zip');
+  const fs = require('fs');
+  const path = require('path');
+  const crypto = require('crypto');
+  const { execSync } = require('child_process');
+
+  const archivesPath = path.join(__dirname, '../doors/archives');
+
+  // Helper function to list LHA archive contents
+  const listLhaContents = (archivePath: string): string[] => {
+    try {
+      const output = execSync(`lha -l "${archivePath}"`, { encoding: 'utf8' });
+      const lines = output.split('\n');
+      const files: string[] = [];
+
+      // Parse lha output format: [type] spaces uid/gid spaces size ratio date name
+      // Example: [generic]  *****/*****      49 100.0% Sep 27  1994 BBS/Commands/BBS.CMD
+      for (const line of lines) {
+        // Match lines starting with [type]
+        if (line.match(/^\[[\w-]+\]/)) {
+          // Extract filename (everything after the date)
+          const parts = line.split(/\s+/);
+          // Format: [type] uid/gid size ratio month day year filename...
+          // Parts: 0:[type] 1:uid/gid 2:size 3:ratio 4:month 5:day 6:year 7+:filename
+          if (parts.length >= 8) {
+            // Filename is everything from index 7 onwards (joined with spaces)
+            const filename = parts.slice(7).join(' ');
+            files.push(filename);
+          }
+        }
+      }
+      return files;
+    } catch (error) {
+      console.error('Error listing LHA contents:', error);
+      return [];
+    }
+  };
+
+  // Helper function to extract file from LHA archive
+  const extractFromLha = (archivePath: string, filename: string): string | null => {
+    try {
+      const tempDir = path.join(__dirname, '../temp');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      // Extract to temp directory
+      execSync(`lha e "${archivePath}" "${filename}"`, { cwd: tempDir, encoding: 'utf8' });
+
+      // Read the extracted file
+      const extractedPath = path.join(tempDir, path.basename(filename));
+      if (fs.existsSync(extractedPath)) {
+        const content = fs.readFileSync(extractedPath, 'utf8');
+        // Clean up
+        fs.unlinkSync(extractedPath);
+        return content;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error extracting from LHA:', error);
+      return null;
+    }
+  };
+
+  // Helper function to filter out system files
+  const isSystemFile = (filename: string): boolean => {
+    const systemFiles = [
+      '.DS_Store',
+      '.localized',
+      'Thumbs.db',
+      'desktop.ini',
+      '.gitkeep',
+      '.gitignore',
+      '__MACOSX'
+    ];
+    return systemFiles.includes(filename) || filename.startsWith('._');
+  };
+
+  // Ensure archives directory exists
+  if (!fs.existsSync(archivesPath)) {
+    fs.mkdirSync(archivesPath, { recursive: true });
+  }
+
+  // Scan for installed doors using AmigaDoorManager
+  const doorList: any[] = [];
+  const doorManager = getAmigaDoorManager();
+
+  try {
+    // Scan Amiga doors
+    const installedDoors = await doorManager.scanInstalledDoors();
+    console.log(`Found ${installedDoors.length} installed Amiga doors from .info files`);
+
+    // Convert AmigaDoorInfo to display format
+    for (const door of installedDoors) {
+      doorList.push({
+        id: crypto.createHash('md5').update(door.command).digest('hex'),
+        name: door.doorName || door.command,
+        command: door.command,
+        filename: door.command + '.info',
+        type: door.type.toLowerCase(),
+        location: door.location,
+        resolvedPath: door.resolvedPath,
+        access: door.access,
+        stack: door.stack,
+        priority: door.priority,
+        multinode: door.multinode,
+        displayName: door.name,
+        size: 0, // Will be populated from actual file if exists
+        uploadDate: new Date(),
+        installed: door.installed,
+        isAmigaDoor: true
+      });
+    }
+
+    // Scan TypeScript doors
+    const typeScriptDoors = await doorManager.scanTypeScriptDoors();
+    console.log(`Found ${typeScriptDoors.length} installed TypeScript doors`);
+
+    for (const door of typeScriptDoors) {
+      doorList.push({
+        id: crypto.createHash('md5').update(door.name).digest('hex'),
+        name: door.name,
+        displayName: door.displayName,
+        description: door.description,
+        version: door.version,
+        author: door.author,
+        filename: door.main,
+        type: 'typescript',
+        path: door.path,
+        access: door.accessLevel,
+        size: 0,
+        uploadDate: new Date(),
+        installed: door.installed,
+        isTypeScriptDoor: true
+      });
+    }
+  } catch (error) {
+    console.error('Error scanning installed doors:', error);
+  }
+
+  // Scan archives directory
+  if (fs.existsSync(archivesPath)) {
+    const archives = fs.readdirSync(archivesPath).filter((f: string) => !isSystemFile(f));
+
+    for (const archive of archives) {
+      const fullPath = path.join(archivesPath, archive);
+      try {
+        const stats = fs.statSync(fullPath);
+        const ext = path.extname(archive).toLowerCase();
+        const isZip = ext === '.zip';
+        const isLha = ext === '.lha' || ext === '.lzh';
+        const isLzx = ext === '.lzx';
+
+        if (stats.isFile() && (isZip || isLha || isLzx)) {
+          const doorInfo: any = {
+            id: crypto.createHash('md5').update(archive).digest('hex'),
+            name: path.basename(archive, ext),
+            filename: archive,
+            type: 'archive',
+            size: stats.size,
+            uploadDate: stats.mtime,
+            installed: false,
+            archivePath: fullPath,
+            format: isZip ? 'ZIP' : isLha ? 'LHA' : 'LZX'
+          };
+
+          // Extract metadata from archive
+          try {
+            let fileList: string[] = [];
+
+            // Get file list based on archive type
+            if (isZip) {
+              const zip = new AdmZip(fullPath);
+              const zipEntries = zip.getEntries();
+              fileList = zipEntries.map((e: any) => e.entryName);
+            } else if (isLha) {
+              fileList = listLhaContents(fullPath);
+            } else if (isLzx) {
+              // Use AmigaDoorManager for LZX
+              const doorManager = getAmigaDoorManager();
+              const analysis = doorManager.analyzeDoorArchive(fullPath);
+              if (analysis) {
+                fileList = analysis.files;
+              }
+            }
+
+            // Look for FILE_ID.DIZ
+            const dizFile = fileList.find((f: string) =>
+              f.toLowerCase() === 'file_id.diz' ||
+              f.toLowerCase().endsWith('/file_id.diz')
+            );
+            if (dizFile) {
+              let dizContent: string | null = null;
+              if (isZip) {
+                const zip = new AdmZip(fullPath);
+                const dizEntry = zip.getEntry(dizFile);
+                if (dizEntry) {
+                  dizContent = dizEntry.getData().toString('utf8');
+                }
+              } else if (isLha) {
+                dizContent = extractFromLha(fullPath, dizFile);
+              }
+
+              if (dizContent) {
+                doorInfo.fileidDiz = dizContent;
+
+                // Parse DIZ for metadata
+                const lines = dizContent.split('\n').map((l: string) => l.trim()).filter((l: string) => l);
+                if (lines.length > 0) {
+                  doorInfo.description = lines[0];
+                }
+
+                // Extract author
+                const authorMatch = dizContent.match(/(?:by|author|coded by|written by)[:\s]+([^\n]+)/i);
+                if (authorMatch) {
+                  doorInfo.author = authorMatch[1].trim();
+                }
+
+                // Extract version
+                const versionMatch = dizContent.match(/v(?:ersion)?[:\s]*([\d.]+)/i);
+                if (versionMatch) {
+                  doorInfo.version = versionMatch[1];
+                }
+              }
+            }
+
+            // Look for README
+            const readmeFile = fileList.find((f: string) =>
+              /readme/i.test(f) && /\.(txt|md|doc)$/i.test(f)
+            );
+            if (readmeFile) {
+              let readmeContent: string | null = null;
+              if (isZip) {
+                const zip = new AdmZip(fullPath);
+                const readmeEntry = zip.getEntry(readmeFile);
+                if (readmeEntry) {
+                  readmeContent = readmeEntry.getData().toString('utf8');
+                }
+              } else if (isLha) {
+                readmeContent = extractFromLha(fullPath, readmeFile);
+              }
+              if (readmeContent) {
+                doorInfo.readme = readmeContent;
+              }
+            }
+
+            // Look for AmigaGuide documentation
+            const guideFile = fileList.find((f: string) =>
+              f.toLowerCase().endsWith('.guide')
+            );
+            if (guideFile) {
+              let guideContent: string | null = null;
+              if (isZip) {
+                const zip = new AdmZip(fullPath);
+                const guideEntry = zip.getEntry(guideFile);
+                if (guideEntry) {
+                  guideContent = guideEntry.getData().toString('utf8');
+                }
+              } else if (isLha) {
+                guideContent = extractFromLha(fullPath, guideFile);
+              }
+              if (guideContent) {
+                doorInfo.guide = guideContent;
+                doorInfo.guideName = path.basename(guideFile);
+              }
+            }
+
+            // Look for executable (including .XIM for Amiga executables)
+            const exeFile = fileList.find((f: string) =>
+              f.endsWith('.exe') ||
+              f.endsWith('.xim') ||
+              f.endsWith('.XIM') ||
+              f.endsWith('.ts') ||
+              f.endsWith('.js') ||
+              (!path.extname(f) && f.includes('/'))
+            );
+            if (exeFile) {
+              doorInfo.executable = exeFile;
+            }
+
+            // Look for libraries (.library files)
+            const libraryFiles = fileList.filter((f: string) =>
+              f.toLowerCase().endsWith('.library')
+            );
+            if (libraryFiles.length > 0) {
+              doorInfo.libraries = libraryFiles;
+            }
+          } catch (zipError) {
+            // Skip if can't read archive
+          }
+
+          doorList.push(doorInfo);
+        }
+      } catch (error) {
+        // Skip files that can't be read
+      }
+    }
+  }
+
+  // Sort by name
+  doorList.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Store in session for navigation
+  session.tempData = {
+    doorManagerMode: 'list',
+    doorList,
+    selectedIndex: 0,
+    scrollOffset: 0
+  };
+
+  // Display the list
+  displayDoorManagerList(socket, session);
+}
+
+// Display Door Manager list
+function displayDoorManagerList(socket: any, session: BBSSession) {
+  const { doorList, selectedIndex, scrollOffset } = session.tempData;
+
+  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+
+  // Header (Amiga style)
+  socket.emit('ansi-output', '\r\n\x1b[1;36m-= DOOR MANAGER =-\x1b[0m\r\n');
+  socket.emit('ansi-output', '\r\n');
+
+  if (doorList.length === 0) {
+    socket.emit('ansi-output', '\x1b[33mNo doors installed.\x1b[0m\r\n\r\n');
+  } else {
+    socket.emit('ansi-output', '\x1b[36mInstalled Doors:\x1b[0m\r\n\r\n');
+
+    // Calculate visible range (15 doors per page)
+    const pageSize = 15;
+    const start = scrollOffset || 0;
+    const end = Math.min(start + pageSize, doorList.length);
+
+    for (let i = start; i < end; i++) {
+      const door = doorList[i];
+      const isSelected = i === selectedIndex;
+
+      // Format line
+      const status = door.installed ? '\x1b[32m[*]\x1b[0m' : '\x1b[31m[ ]\x1b[0m';
+
+      // Type indicator
+      let type = 'ARC';
+      if (door.isAmigaDoor) {
+        type = door.type.toUpperCase().substring(0, 4).padEnd(4);
+      } else if (door.type === 'typescript') {
+        type = 'TS  ';
+      } else if (door.type === 'archive') {
+        type = door.format || 'ARC ';
+      }
+
+      const name = (door.displayName || door.name).substring(0, 35).padEnd(35);
+
+      // Info column - show access level for Amiga doors, size for archives
+      let info = '';
+      if (door.isAmigaDoor) {
+        info = `LVL:${door.access.toString().padStart(3)} ${door.command}`;
+      } else {
+        const sizeKB = door.size < 1024 ? door.size + 'B' :
+                       door.size < 1024 * 1024 ? Math.round(door.size / 1024) + 'KB' :
+                       Math.round(door.size / (1024 * 1024) * 10) / 10 + 'MB';
+        info = sizeKB.padStart(8);
+      }
+
+      if (isSelected) {
+        // Blue background for selected
+        socket.emit('ansi-output', `\x1b[1;37;44m ${status} [${type}] ${name} ${info} \x1b[0m\r\n`);
+      } else {
+        socket.emit('ansi-output', ` ${status} \x1b[33m[${type}]\x1b[0m ${name} \x1b[36m${info}\x1b[0m\r\n`);
+      }
+    }
+
+    // Show page indicator
+    if (doorList.length > pageSize) {
+      const currentPage = Math.floor(selectedIndex / pageSize) + 1;
+      const totalPages = Math.ceil(doorList.length / pageSize);
+      socket.emit('ansi-output', `\r\n\x1b[90mPage ${currentPage}/${totalPages}\x1b[0m\r\n`);
+    }
+  }
+
+  // Footer with commands (Amiga style)
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', '\x1b[1;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[33m[UP/DN]\x1b[0m Navigate  ');
+  socket.emit('ansi-output', '\x1b[33m[ENTER]\x1b[0m Info  ');
+  socket.emit('ansi-output', '\x1b[33m[U]\x1b[0m Upload  ');
+  socket.emit('ansi-output', '\x1b[33m[Q]\x1b[0m Quit\r\n');
+
+  // Set up input handler
+  session.subState = LoggedOnSubState.DOOR_MANAGER;
+}
+
+// Display Door Manager info page
+function displayDoorManagerInfo(socket: any, session: BBSSession) {
+  const { doorList, selectedIndex } = session.tempData;
+  const door = doorList[selectedIndex];
+
+  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+
+  // Header (Amiga style)
+  socket.emit('ansi-output', '\r\n\x1b[1;36m-= DOOR INFORMATION =-\x1b[0m\r\n');
+  socket.emit('ansi-output', '\r\n');
+
+  // Basic info
+  socket.emit('ansi-output', `\x1b[1;36mName:\x1b[0m ${door.displayName || door.name}\r\n`);
+  socket.emit('ansi-output', `\x1b[1;36mFile:\x1b[0m ${door.filename}\r\n`);
+  socket.emit('ansi-output', `\x1b[1;36mType:\x1b[0m ${door.type.toUpperCase()}\r\n`);
+
+  // Show Amiga door-specific metadata from .info file
+  if (door.isAmigaDoor) {
+    socket.emit('ansi-output', `\x1b[1;36mCommand:\x1b[0m ${door.command}\r\n`);
+    socket.emit('ansi-output', `\x1b[1;36mLocation:\x1b[0m ${door.location}\r\n`);
+    if (door.resolvedPath) {
+      socket.emit('ansi-output', `\x1b[1;36mResolved Path:\x1b[0m ${door.resolvedPath}\r\n`);
+    }
+    socket.emit('ansi-output', `\x1b[1;36mAccess Level:\x1b[0m ${door.access}\r\n`);
+    if (door.stack) {
+      socket.emit('ansi-output', `\x1b[1;36mStack Size:\x1b[0m ${door.stack} bytes\r\n`);
+    }
+    if (door.priority) {
+      socket.emit('ansi-output', `\x1b[1;36mPriority:\x1b[0m ${door.priority}\r\n`);
+    }
+    if (door.multinode !== undefined) {
+      socket.emit('ansi-output', `\x1b[1;36mMultinode:\x1b[0m ${door.multinode ? 'YES' : 'NO'}\r\n`);
+    }
+  } else if (door.isTypeScriptDoor) {
+    // TypeScript door-specific metadata
+    if (door.description) {
+      socket.emit('ansi-output', `\x1b[1;36mDescription:\x1b[0m ${door.description}\r\n`);
+    }
+    if (door.version) {
+      socket.emit('ansi-output', `\x1b[1;36mVersion:\x1b[0m ${door.version}\r\n`);
+    }
+    if (door.author) {
+      socket.emit('ansi-output', `\x1b[1;36mAuthor:\x1b[0m ${door.author}\r\n`);
+    }
+    if (door.path) {
+      socket.emit('ansi-output', `\x1b[1;36mPath:\x1b[0m ${door.path}\r\n`);
+    }
+    socket.emit('ansi-output', `\x1b[1;36mAccess Level:\x1b[0m ${door.access || 0}\r\n`);
+  } else {
+    // Archive/legacy door info
+    const sizeStr = door.size < 1024 ? door.size + ' B' :
+                    door.size < 1024 * 1024 ? Math.round(door.size / 1024) + ' KB' :
+                    Math.round(door.size / (1024 * 1024) * 10) / 10 + ' MB';
+    socket.emit('ansi-output', `\x1b[1;36mSize:\x1b[0m ${sizeStr}\r\n`);
+    socket.emit('ansi-output', `\x1b[1;36mDate:\x1b[0m ${door.uploadDate.toLocaleDateString()}\r\n`);
+  }
+
+  socket.emit('ansi-output', `\x1b[1;36mStatus:\x1b[0m ${door.installed ? '\x1b[32mInstalled\x1b[0m' : '\x1b[31mNot Installed\x1b[0m'}\r\n`);
+
+  if (door.author) {
+    socket.emit('ansi-output', `\x1b[1;36mAuthor:\x1b[0m ${door.author}\r\n`);
+  }
+  if (door.version) {
+    socket.emit('ansi-output', `\x1b[1;36mVersion:\x1b[0m ${door.version}\r\n`);
+  }
+  if (door.executable) {
+    socket.emit('ansi-output', `\x1b[1;36mExecutable:\x1b[0m ${door.executable}\r\n`);
+  }
+  if (door.libraries && door.libraries.length > 0) {
+    socket.emit('ansi-output', `\x1b[1;36mLibraries:\x1b[0m ${door.libraries.length} found\r\n`);
+    door.libraries.forEach((lib: string) => {
+      socket.emit('ansi-output', `  \x1b[90m- ${lib}\x1b[0m\r\n`);
+    });
+  }
+
+  // FILE_ID.DIZ
+  if (door.fileidDiz) {
+    socket.emit('ansi-output', '\r\n\x1b[1;33m--- FILE_ID.DIZ ---\x1b[0m\r\n');
+    const dizLines = door.fileidDiz.split('\n').slice(0, 10);
+    dizLines.forEach((line: string) => {
+      socket.emit('ansi-output', `\x1b[37m${line}\x1b[0m\r\n`);
+    });
+    if (door.fileidDiz.split('\n').length > 10) {
+      socket.emit('ansi-output', '\x1b[90m... (truncated)\x1b[0m\r\n');
+    }
+  }
+
+  // Description
+  if (door.description) {
+    socket.emit('ansi-output', '\r\n\x1b[1;36mDescription:\x1b[0m\r\n');
+    socket.emit('ansi-output', `\x1b[37m${door.description}\x1b[0m\r\n`);
+  }
+
+  // Footer with commands (Amiga style)
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', '\x1b[1;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
+
+  if (door.installed) {
+    socket.emit('ansi-output', '\x1b[33m[U]\x1b[0m Uninstall  ');
+  } else if (door.type === 'archive') {
+    socket.emit('ansi-output', '\x1b[33m[I]\x1b[0m Install  ');
+  }
+
+  if (door.readme || door.guide) {
+    socket.emit('ansi-output', '\x1b[33m[D]\x1b[0m Documentation');
+    if (door.readme && door.guide) {
+      socket.emit('ansi-output', ' (README+Guide)');
+    } else if (door.guide) {
+      socket.emit('ansi-output', ' (AmigaGuide)');
+    }
+    socket.emit('ansi-output', '  ');
+  }
+
+  socket.emit('ansi-output', '\x1b[33m[B]\x1b[0m Back  ');
+  socket.emit('ansi-output', '\x1b[33m[Q]\x1b[0m Quit\r\n');
+
+  session.tempData.doorManagerMode = 'info';
+}
+
 // Execute door game/utility
 function executeDoor(socket: any, session: BBSSession, door: Door) {
   console.log('Executing door:', door.name);
@@ -2023,6 +3021,12 @@ function displayMainMenu(socket: any, session: BBSSession) {
       socket.emit('ansi-output', 'CHAT - Internode Chat\r\n');
       socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
       socket.emit('ansi-output', 'DOORS/DOOR - Door Games & Utilities\r\n');
+
+      // Sysop-only commands
+      if (session.user?.securityLevel >= 255) {
+        socket.emit('ansi-output', '\x1b[33mDOORMAN - Door Manager (Sysop)\x1b[0m\r\n');
+      }
+
       socket.emit('ansi-output', 'G - Goodbye\r\n');
       socket.emit('ansi-output', '? - Help\r\n');
     }
@@ -2070,6 +3074,274 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
 
   if (session.state !== BBSState.LOGGEDON) {
     console.log('❌ Not in LOGGEDON state, ignoring command');
+    return;
+  }
+
+  // Handle Door Manager input
+  if (session.subState === LoggedOnSubState.DOOR_MANAGER) {
+    const { doorManagerMode, doorList, selectedIndex, scrollOffset } = session.tempData;
+    const key = data.trim();
+    const fs = require('fs');
+    const path = require('path');
+
+    if (doorManagerMode === 'list') {
+      // Arrow keys
+      if (data === '\x1b[A' || data === '\x1b\x5b\x41') { // Up arrow
+        if (selectedIndex > 0) {
+          session.tempData.selectedIndex--;
+          const pageSize = 15;
+          if (session.tempData.selectedIndex < scrollOffset) {
+            session.tempData.scrollOffset = Math.max(0, scrollOffset - pageSize);
+          }
+          displayDoorManagerList(socket, session);
+        }
+        return;
+      }
+
+      if (data === '\x1b[B' || data === '\x1b\x5b\x42') { // Down arrow
+        if (selectedIndex < doorList.length - 1) {
+          session.tempData.selectedIndex++;
+          const pageSize = 15;
+          if (session.tempData.selectedIndex >= scrollOffset + pageSize) {
+            session.tempData.scrollOffset = Math.min(
+              doorList.length - pageSize,
+              scrollOffset + pageSize
+            );
+          }
+          displayDoorManagerList(socket, session);
+        }
+        return;
+      }
+
+      // Enter - View info
+      if (key === '\r' || key === '\n' || key === '') {
+        if (doorList.length > 0) {
+          displayDoorManagerInfo(socket, session);
+        }
+        return;
+      }
+
+      // U - Upload door archive
+      if (key.toUpperCase() === 'U') {
+        session.tempData.doorManagerMode = 'upload';
+        socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+        socket.emit('ansi-output', '\r\n\x1b[1;36m-= UPLOAD DOOR ARCHIVE =-\x1b[0m\r\n\r\n');
+        socket.emit('ansi-output', 'Upload a door archive (ZIP or LHA format)\r\n\r\n');
+        socket.emit('ansi-output', 'The archive should contain:\r\n');
+        socket.emit('ansi-output', '  - Door executable (.ts, .js, or Amiga binary)\r\n');
+        socket.emit('ansi-output', '  - FILE_ID.DIZ (optional, but recommended)\r\n');
+        socket.emit('ansi-output', '  - README or documentation (optional)\r\n\r\n');
+
+        // Trigger file picker on frontend
+        socket.emit('show-file-upload', {
+          accept: '.zip,.lha,.lzh,.lzx',
+          maxSize: 10 * 1024 * 1024, // 10MB
+          uploadUrl: '/api/upload/door',
+          fieldName: 'door'
+        });
+
+        socket.emit('ansi-output', '\x1b[33mA file picker has opened in your browser.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[36mSelect a ZIP, LHA, or LZX archive to upload...\x1b[0m\r\n\r\n');
+        socket.emit('ansi-output', '\x1b[90mPress [Q] to cancel\x1b[0m\r\n');
+        return;
+      }
+
+      // Q - Quit
+      if (key.toUpperCase() === 'Q') {
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        displayMainMenu(socket, session);
+        return;
+      }
+    } else if (doorManagerMode === 'upload') {
+      // Q - Cancel upload
+      if (key.toUpperCase() === 'Q') {
+        session.tempData.doorManagerMode = 'list';
+        displayDoorManagerList(socket, session);
+        return;
+      }
+      // Waiting for file upload, do nothing else
+      return;
+    } else if (doorManagerMode === 'info') {
+      const door = doorList[selectedIndex];
+
+      // B - Back to list
+      if (key.toUpperCase() === 'B') {
+        session.tempData.doorManagerMode = 'list';
+        displayDoorManagerList(socket, session);
+        return;
+      }
+
+      // Q - Quit
+      if (key.toUpperCase() === 'Q') {
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        displayMainMenu(socket, session);
+        return;
+      }
+
+      // I - Install (archives only)
+      if (key.toUpperCase() === 'I' && door.type === 'archive' && !door.installed) {
+        socket.emit('ansi-output', `\r\n\x1b[33mInstalling ${door.name}...\x1b[0m\r\n`);
+
+        try {
+          // Use AmigaDoorManager for installation
+          const doorManager = getAmigaDoorManager();
+          socket.emit('ansi-output', `\x1b[36mAnalyzing archive structure...\x1b[0m\r\n`);
+
+          const result = await doorManager.installDoor(door.archivePath);
+
+          if (result.success) {
+            socket.emit('ansi-output', `\x1b[32m✓ ${result.message}\x1b[0m\r\n`);
+
+            if (result.door) {
+              socket.emit('ansi-output', `\x1b[90mCommand: ${result.door.command}\x1b[0m\r\n`);
+              socket.emit('ansi-output', `\x1b[90mLocation: ${result.door.location}\x1b[0m\r\n`);
+              socket.emit('ansi-output', `\x1b[90mType: ${result.door.type}\x1b[0m\r\n`);
+              socket.emit('ansi-output', `\x1b[90mAccess Level: ${result.door.access}\x1b[0m\r\n`);
+            }
+
+            socket.emit('ansi-output', '\r\n\x1b[32mInstallation successful!\x1b[0m\r\n');
+            socket.emit('ansi-output', `\x1b[90mInstalled to: Commands/BBSCmd/ and Doors/\x1b[0m\r\n`);
+
+            // Mark as installed
+            door.installed = true;
+
+            // Refresh door list
+            await displayDoorManager(socket, session);
+            return;
+          } else {
+            socket.emit('ansi-output', `\x1b[31m✗ ${result.message}\x1b[0m\r\n`);
+          }
+        } catch (error) {
+          socket.emit('ansi-output', `\x1b[31mInstallation failed: ${(error as Error).message}\x1b[0m\r\n`);
+          console.error('Door installation error:', error);
+        }
+
+        socket.emit('ansi-output', '\r\nPress any key to continue...\r\n');
+        session.tempData.awaitingKeypress = true;
+        return;
+      }
+
+      // U - Uninstall
+      if (key.toUpperCase() === 'U' && door.installed) {
+        const doorsPath = path.join(__dirname, '../doors');
+        const doorPath = path.join(doorsPath, door.filename);
+
+        socket.emit('ansi-output', `\r\n\x1b[33mUninstalling ${door.name}...\x1b[0m\r\n`);
+
+        try {
+          if (fs.existsSync(doorPath)) {
+            fs.unlinkSync(doorPath);
+            socket.emit('ansi-output', '\x1b[32mUninstallation successful!\x1b[0m\r\n');
+            door.installed = false;
+          } else {
+            socket.emit('ansi-output', '\x1b[31mDoor file not found\x1b[0m\r\n');
+          }
+        } catch (error) {
+          socket.emit('ansi-output', `\x1b[31mUninstallation failed: ${error.message}\x1b[0m\r\n`);
+        }
+
+        socket.emit('ansi-output', '\r\nPress any key to continue...\r\n');
+        session.tempData.awaitingKeypress = true;
+        return;
+      }
+
+      // D - View documentation
+      if (key.toUpperCase() === 'D' && (door.readme || door.guide)) {
+        // If both README and AmigaGuide exist, show choice menu
+        if (door.readme && door.guide) {
+          socket.emit('ansi-output', '\x1b[2J\x1b[H');
+          socket.emit('ansi-output', '\x1b[1;36m-= Documentation Format =-\x1b[0m\r\n\r\n');
+          socket.emit('ansi-output', '  \x1b[33m[1]\x1b[0m README (Text)\r\n');
+          socket.emit('ansi-output', `  \x1b[33m[2]\x1b[0m ${door.guideName || 'AmigaGuide'} (Interactive)\r\n\r\n`);
+          socket.emit('ansi-output', 'Select format [1-2] or [B]ack: ');
+          session.tempData.doorManagerMode = 'doc-select';
+          return;
+        }
+
+        // Show AmigaGuide if available
+        if (door.guide) {
+          try {
+            const parser = new AmigaGuideParser();
+            parser.parse(door.guide);
+
+            session.tempData.doorManagerMode = 'amigaguide';
+            session.tempData.guideViewer = new AmigaGuideViewer(socket, parser);
+            session.tempData.guideViewer.display();
+          } catch (error) {
+            socket.emit('ansi-output', `\x1b[31mError parsing AmigaGuide: ${error.message}\x1b[0m\r\n`);
+            socket.emit('ansi-output', 'Press any key to continue...\r\n');
+            session.tempData.awaitingKeypress = true;
+          }
+          return;
+        }
+
+        // Show README if available
+        if (door.readme) {
+          session.tempData.doorManagerMode = 'readme';
+          session.tempData.readmeOffset = 0;
+          displayReadme(socket, session, door);
+          return;
+        }
+      }
+
+      // Handle keypress after operation
+      if (session.tempData.awaitingKeypress) {
+        delete session.tempData.awaitingKeypress;
+        displayDoorManagerInfo(socket, session);
+        return;
+      }
+    } else if (doorManagerMode === 'doc-select') {
+      // Documentation format selection
+      const door = doorList[selectedIndex];
+
+      if (key === '1' && door.readme) {
+        session.tempData.doorManagerMode = 'readme';
+        session.tempData.readmeOffset = 0;
+        displayReadme(socket, session, door);
+        return;
+      }
+
+      if (key === '2' && door.guide) {
+        try {
+          const parser = new AmigaGuideParser();
+          parser.parse(door.guide);
+
+          session.tempData.doorManagerMode = 'amigaguide';
+          session.tempData.guideViewer = new AmigaGuideViewer(socket, parser);
+          session.tempData.guideViewer.display();
+        } catch (error) {
+          socket.emit('ansi-output', `\x1b[31mError parsing AmigaGuide: ${error.message}\x1b[0m\r\n`);
+          socket.emit('ansi-output', 'Press any key to continue...\r\n');
+          session.tempData.awaitingKeypress = true;
+        }
+        return;
+      }
+
+      if (key.toUpperCase() === 'B') {
+        session.tempData.doorManagerMode = 'info';
+        displayDoorManagerInfo(socket, session);
+        return;
+      }
+    } else if (doorManagerMode === 'amigaguide') {
+      // AmigaGuide viewer mode
+      const viewer = session.tempData.guideViewer;
+
+      if (viewer) {
+        const continueViewing = viewer.handleInput(data);
+
+        if (!continueViewing) {
+          // User quit viewer
+          delete session.tempData.guideViewer;
+          session.tempData.doorManagerMode = 'info';
+          displayDoorManagerInfo(socket, session);
+        }
+      }
+      return;
+    } else if (doorManagerMode === 'readme') {
+      // README viewer mode
+      handleReadmeInput(socket, session, doorList[selectedIndex], data);
+      return;
+    }
     return;
   }
 
@@ -3319,6 +4591,18 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       displayDoorMenu(socket, session, params);
       return;
 
+    case 'DOORMAN': // Door Manager - Sysop only
+    case 'DM': // Short alias for DOORMAN
+      // Security check - Sysop only
+      if (session.user.securityLevel < 255) {
+        socket.emit('ansi-output', '\r\n\x1b[1;31m+--------------------------------------+\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[1;31m|  ACCESS DENIED: SYSOP ONLY           |\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[1;31m+--------------------------------------+\x1b[0m\r\n');
+        break;
+      }
+      displayDoorManager(socket, session);
+      return;
+
     case '?': // Help (internalCommandQuestionMark)
       socket.emit('ansi-output', '\x1b[36m-= Command Help =-\x1b[0m\r\n');
       socket.emit('ansi-output', '0 - Remote Shell\r\n');
@@ -3340,6 +4624,9 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', 'CHAT - Internode Chat (real-time user-to-user chat)\r\n');
       socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
       socket.emit('ansi-output', 'DOORS/DOOR - Door Games & Utilities\r\n');
+      if (session.user.securityLevel >= 255) {
+        socket.emit('ansi-output', 'DOORMAN/DM - Door Manager (Sysop Only)\r\n');
+      }
       socket.emit('ansi-output', 'G - Goodbye\r\n');
       socket.emit('ansi-output', 'Q - Quiet Node\r\n');
       socket.emit('ansi-output', '? - This help\r\n');
@@ -3401,6 +4688,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
     // Handle graceful shutdown
     process.on('SIGTERM', () => {
       console.log('SIGTERM received, shutting down gracefully');
+      terminateAllSessions();
       server.close(() => {
         console.log('Server closed');
         process.exit(0);
@@ -3409,6 +4697,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
     process.on('SIGINT', () => {
       console.log('SIGINT received, shutting down gracefully');
+      terminateAllSessions();
       server.close(() => {
         console.log('Server closed');
         process.exit(0);
@@ -3434,6 +4723,51 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
     }
   }
 })();
+
+// Graceful shutdown handling
+const gracefulShutdown = async (signal: string) => {
+  console.log(`\n🛑 Received ${signal}, starting graceful shutdown...`);
+
+  // Stop accepting new connections
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+  });
+
+  // Close all Socket.IO connections
+  io.close(() => {
+    console.log('✅ Socket.IO server closed');
+  });
+
+  // Close database connection
+  try {
+    await db.close();
+  } catch (error) {
+    console.error('Error closing database:', error);
+  }
+
+  // Give connections 10 seconds to close gracefully
+  setTimeout(() => {
+    console.log('⚠️ Forcing shutdown after timeout');
+    process.exit(0);
+  }, 10000);
+};
+
+// Handle termination signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions and rejections
+process.on('uncaughtException', (error: Error) => {
+  console.error('💥 Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  // Don't crash the server - log and continue
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  console.error('💥 Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+  // Don't crash the server - log and continue
+});
 
 // Export for Vercel serverless functions
 export default app;
