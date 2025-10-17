@@ -1,0 +1,23 @@
+# Development files
+backend/src/amiga-emulation/cpu/moira-source
+backend/src/amiga-emulation/cpu/build
+backend/src/amiga-emulation/test
+
+# Data files
+backend/data
+backend/amiexpress.db
+
+# Build artifacts
+backend/backend
+backend/dist
+
+# Test files
+backend/test-*.ts
+backend/*.zip
+
+# Documentation
+*.md
+!README.md
+
+# Other large files
+AmiExpress-Sources

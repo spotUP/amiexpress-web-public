@@ -282,6 +282,7 @@ interface BBSSession {
   state: BBSState;
   subState?: LoggedOnSubState;
   user?: any; // Will be User from database
+  nodeNumber?: number; // Node number for multi-node BBS (like AmiExpress nodeNumber)
   currentConf: number;
   currentMsgBase: number;
   timeRemaining: number;
@@ -1686,11 +1687,16 @@ function doPause(socket: any, session: BBSSession): void {
 // Join conference and display CONF_BULL screen
 // Matches joinConf() in express.e lines 5051-5105
 function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number) {
+  console.log(`🔍 joinConference called: confId=${confId}, msgBaseId=${msgBaseId}`);
+  console.log(`🔍 Total conferences: ${conferences.length}, Total message bases: ${messageBases.length}`);
+
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
+    console.log(`❌ Conference ${confId} not found in:`, conferences.map(c => ({ id: c.id, name: c.name })));
     socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
     return false;
   }
+  console.log(`✓ Found conference: ${conference.name} (id: ${conference.id})`);
 
   // Find the requested message base first
   let messageBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
@@ -1698,13 +1704,19 @@ function joinConference(socket: any, session: BBSSession, confId: number, msgBas
   // If the specific message base doesn't exist, find the first available one for this conference
   if (!messageBase) {
     const availableMessageBases = messageBases.filter(mb => mb.conferenceId === confId);
+    console.log(`🔍 Message base ${msgBaseId} not found for conference ${confId}`);
+    console.log(`🔍 Available message bases for conference ${confId}:`, availableMessageBases.map(mb => ({ id: mb.id, name: mb.name, confId: mb.conferenceId })));
+
     if (availableMessageBases.length === 0) {
+      console.log(`❌ No message bases available for conference ${confId}`);
       socket.emit('ansi-output', '\r\n\x1b[31mNo message bases available for this conference!\x1b[0m\r\n');
       return false;
     }
     // Use the first available message base
     messageBase = availableMessageBases[0];
-    console.log(`Message base ${msgBaseId} not found for conference ${confId}, using ${messageBase.id} instead`);
+    console.log(`✓ Using first available message base: ${messageBase.name} (id: ${messageBase.id})`);
+  } else {
+    console.log(`✓ Found requested message base: ${messageBase.name} (id: ${messageBase.id})`);
   }
 
   session.currentConf = confId;
@@ -3868,7 +3880,8 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
 
   // Handle DISPLAY_CONF_BULL state - matches express.e lines 28571-28586
   if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
-    console.log('📋 DISPLAY_CONF_BULL state');
+    console.log('📋 DISPLAY_CONF_BULL state, confBullPause:', session.tempData?.confBullPause);
+    console.log('📋 confRJoin:', session.confRJoin, 'msgBaseRJoin:', session.msgBaseRJoin);
 
     // Check if we're waiting for pause after CONF_BULL screen
     if (session.tempData?.confBullPause) {
@@ -3882,7 +3895,16 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
       return handleCommand(socket, session, ' ');
     } else {
       // First entry to DISPLAY_CONF_BULL - join conference
-      joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
+      const joinSuccess = joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
+      console.log('📋 joinConference result:', joinSuccess);
+
+      // If join failed, still move to menu to avoid infinite loop
+      if (!joinSuccess) {
+        console.log('⚠️ joinConference failed, moving to DISPLAY_MENU anyway');
+        session.tempData = { ...session.tempData, menuPause: true };
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return handleCommand(socket, session, ' ');
+      }
     }
     return;
   }
