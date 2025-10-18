@@ -78,6 +78,7 @@ export class MultiNodeManager {
         chatColor: 32, // Green default (matches original)
         offHook: false,
         private: false,
+        quietMode: false,
         stats: [],
         taskSignal: 0,
         status: NodeStatus.AVAILABLE,
