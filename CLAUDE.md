@@ -295,6 +295,51 @@ See `backend/backend/MODULARIZATION_GUIDE.md` and `backend/backend/FILE_HANDLER_
 
 ## Development Server Management
 
+### MANDATORY: Check Server Restart After Code Changes
+**After updating or adding new code, ALWAYS check if servers need to be restarted:**
+
+1. **Check if servers are running:**
+   ```bash
+   lsof -ti:3001  # Backend
+   lsof -ti:5173  # Frontend
+   ```
+
+2. **Determine if restart is needed:**
+   - **Backend changes** (TypeScript files, database schema, env vars) → Restart backend
+   - **Frontend changes** (React components, styles) → Usually hot-reloads, but restart if issues
+   - **Dependency changes** (package.json) → MUST restart
+   - **Configuration changes** (.env, config files) → MUST restart
+
+3. **When in doubt, restart:**
+   - If you made code changes and aren't sure if they're loaded → RESTART
+   - If you see unexpected errors → RESTART
+   - Better to restart unnecessarily than leave stale code running
+
+4. **How to restart properly:**
+   ```bash
+   # Backend (from backend/backend directory)
+   cd ~/Code/AmiExpress-Web/backend/backend
+   lsof -ti:3001 | xargs kill -9 2>/dev/null
+   sleep 2
+   export DATABASE_URL="postgresql://localhost/amiexpress"
+   npm run dev 2>&1 &
+
+   # Frontend (from root directory)
+   cd ~/Code/AmiExpress-Web
+   lsof -ti:5173 | xargs kill -9 2>/dev/null
+   sleep 2
+   npm run dev 2>&1 &
+   ```
+
+5. **After restarting, ALWAYS verify:**
+   ```bash
+   # Check backend is responding
+   curl http://localhost:3001/
+
+   # Check frontend is responding
+   curl http://localhost:5173/
+   ```
+
 ### Server Restart Protocol
 When restarting development servers:
 - **ALWAYS kill all old servers first** - Use `lsof -ti:3001 | xargs kill -9` and `lsof -ti:5173 | xargs kill -9`
