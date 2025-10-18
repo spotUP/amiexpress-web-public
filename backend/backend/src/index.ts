@@ -1969,7 +1969,8 @@ function displayMainMenu(socket: any, session: BBSSession) {
 
     // CRITICAL FIX: Correct condition from express.e:28583
     // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
-    if ((session.user?.expert === "N" && !session.doorExpertMode) /* TODO: || FORCE_MENUS check */) {
+    // Note: Database stores expert as BOOLEAN (true/false), not string ("Y"/"N")
+    if ((session.user?.expert === false && !session.doorExpertMode) /* TODO: || FORCE_MENUS check */) {
       console.log('Displaying menu screen file');
       // Phase 8: Use authentic screen file system (express.e:28586 - displayScreen(SCREEN_MENU))
       displayScreen(socket, session, SCREEN_MENU);
@@ -2546,11 +2547,16 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
         return;
       }
     }
-    // After processing: menuPause := TRUE, subState := DISPLAY_MENU (express.e:28641-28642)
-    session.menuPause = true;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // After processing: Check if command changed subState (commands like R set DISPLAY_CONF_BULL to wait for keypress)
+    // If subState was changed by command, respect it. Otherwise, go to DISPLAY_MENU (express.e:28641-28642)
     session.commandText = undefined; // Clear command text
-    displayMainMenu(socket, session);
+    if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
+      // Command didn't change state, so default to showing menu
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      displayMainMenu(socket, session);
+    }
+    // If command changed subState (e.g., to DISPLAY_CONF_BULL), let handleCommand handle it on next input
     return;
   } else {
     console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
@@ -4008,13 +4014,16 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
     default:
       socket.emit('ansi-output', `\r\nUnknown command: ${command}\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       break;
   }
 
-  // Return to menu after command processing (mirroring menuPause logic)
-  console.log('Setting subState to DISPLAY_MENU and calling displayMainMenu');
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
-  displayMainMenu(socket, session);
+  // Note: State transition is handled by PROCESS_COMMAND handler in handleCommand
+  // Commands that use 'return' will skip this point
+  // Commands that use 'break' or fall through will reach here
+  // If no subState was set, PROCESS_COMMAND handler will default to DISPLAY_MENU
 }
 
 server.listen(port, async () => {

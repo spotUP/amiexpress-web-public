@@ -2274,8 +2274,8 @@ export class Database {
         // Try to update existing sysop user first
         console.log('  • Checking for existing sysop user...');
         const updateResult = await client.query(`
-          UPDATE users SET passwordhash = $1 WHERE username = 'sysop'
-        `, [hashedPassword]);
+          UPDATE users SET passwordhash = $1, expert = $2 WHERE username = 'sysop'
+        `, [hashedPassword, false]);
 
         if (updateResult.rowCount === 0) {
           // User doesn't exist, create it
@@ -2296,7 +2296,7 @@ export class Database {
           `, [
             'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
             255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
-            0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
+            0, 0, false, false, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
             'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
           ]);
           console.log('  ✓ Sysop user created successfully');
