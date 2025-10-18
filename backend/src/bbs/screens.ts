@@ -19,9 +19,7 @@ import { BBSSession } from './session';
 function addAnsiEscapes(content: string): string {
   // Match ANSI sequences: [digits;digitsm or [digitm or [H or [2J etc
   // But NOT [%X] which are variable placeholders
-  // Commands that REQUIRE a number: A,B,C,D,E,F,G,m,n,etc
-  // Commands that work WITHOUT a number: H,J,K,f,s,u
-  return content.replace(/\[([0-9]+[;0-9]*[A-Za-z]|[HJKfsu])/g, '\x1b[$1');
+  return content.replace(/\[(?!%)([0-9;]*[A-Za-z])/g, '\x1b[$1');
 }
 
 /**
@@ -187,16 +185,8 @@ export function loadScreen(screenName: string, session: BBSSession): string | nu
     // Step 1: Process MCI codes (classic AmiExpress ~CODE format)
     content = processMciCodes(content, session);
 
-    // Step 2: Handle percent-style variables (menu format)
-    // %B = BBS name
-    content = content.replace(/%B/g, 'AmiExpress Web BBS');
+    // Step 2: Handle [%B] placeholder (BBS name - non-standard extension)
     content = content.replace(/\[%B\]/g, 'AmiExpress Web BBS');
-
-    // %CF = Conference name
-    content = content.replace(/%CF/g, session.currentConfName || 'Main');
-
-    // %R = Time remaining (minutes)
-    content = content.replace(/%R/g, String(Math.floor(session.timeRemaining / 60)));
 
     // Step 3: Add ESC prefix to bare ANSI sequences
     content = addAnsiEscapes(content);
