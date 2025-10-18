@@ -532,21 +532,52 @@ export async function handleCommand(
 
       // U - Uninstall
       if (key.toUpperCase() === 'U' && door.installed) {
-        const doorsPath = path.join(__dirname, '../doors');
-        const doorPath = path.join(doorsPath, door.filename);
-
         socket.emit('ansi-output', `\r\n\x1b[33mUninstalling ${door.name}...\x1b[0m\r\n`);
 
         try {
-          if (fs.existsSync(doorPath)) {
-            fs.unlinkSync(doorPath);
-            socket.emit('ansi-output', '\x1b[32mUninstallation successful!\x1b[0m\r\n');
-            door.installed = false;
+          // Use AmigaDoorManager for proper deletion
+          const doorManager = getAmigaDoorManager();
+          let result;
+
+          if (door.isAmigaDoor) {
+            // Delete Amiga door (.info file + door directory)
+            socket.emit('ansi-output', `\x1b[36mRemoving command file and door files...\x1b[0m\r\n`);
+            result = await doorManager.deleteAmigaDoor(door.command);
+          } else if (door.isTypeScriptDoor) {
+            // Delete TypeScript door (entire directory)
+            socket.emit('ansi-output', `\x1b[36mRemoving TypeScript door directory...\x1b[0m\r\n`);
+            result = await doorManager.deleteTypeScriptDoor(door.name);
           } else {
-            socket.emit('ansi-output', '\x1b[31mDoor file not found\x1b[0m\r\n');
+            socket.emit('ansi-output', '\x1b[31mUnknown door type, cannot uninstall\x1b[0m\r\n');
+            socket.emit('ansi-output', '\r\nPress any key to continue...\r\n');
+            session.tempData.awaitingKeypress = true;
+            return;
           }
-        } catch (error: any) {
-          socket.emit('ansi-output', `\x1b[31mUninstallation failed: ${error.message}\x1b[0m\r\n`);
+
+          if (result.success) {
+            socket.emit('ansi-output', `\x1b[32m✓ ${result.message}\x1b[0m\r\n`);
+
+            // Show what was deleted
+            if (door.isAmigaDoor) {
+              socket.emit('ansi-output', `\x1b[90mDeleted: Commands/BBSCmd/${door.command}.info\x1b[0m\r\n`);
+              if (door.doorName) {
+                socket.emit('ansi-output', `\x1b[90mDeleted: Doors/${door.doorName}/\x1b[0m\r\n`);
+              }
+            } else if (door.isTypeScriptDoor) {
+              socket.emit('ansi-output', `\x1b[90mDeleted: backend/doors/${door.name}/\x1b[0m\r\n`);
+            }
+
+            socket.emit('ansi-output', '\r\n\x1b[32mUninstallation successful!\x1b[0m\r\n');
+
+            // Refresh door list to reflect deletion
+            await displayDoorManager(socket, session);
+            return;
+          } else {
+            socket.emit('ansi-output', `\x1b[31m✗ ${result.message}\x1b[0m\r\n`);
+          }
+        } catch (error) {
+          socket.emit('ansi-output', `\x1b[31mUninstallation failed: ${(error as Error).message}\x1b[0m\r\n`);
+          console.error('Door uninstallation error:', error);
         }
 
         socket.emit('ansi-output', '\r\nPress any key to continue...\r\n');

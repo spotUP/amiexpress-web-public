@@ -734,6 +734,134 @@ export class AmigaDoorManager {
       console.error('Cleanup error:', error);
     }
   }
+
+  /**
+   * Delete Amiga door (removes .info file and door directory)
+   * @param command - The command name (e.g., "AQUASCAN")
+   * @returns Result object with success status and message
+   */
+  async deleteAmigaDoor(command: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
+      const infoPath = path.join(commandsPath, `${command}.info`);
+
+      // Check if .info file exists
+      if (!fs.existsSync(infoPath)) {
+        return {
+          success: false,
+          message: `Door command '${command}' not found`
+        };
+      }
+
+      // Parse .info to find door location
+      const metadata = this.parseInfoFile(infoPath);
+      if (!metadata || !metadata.doorName) {
+        return {
+          success: false,
+          message: `Could not parse door information for '${command}'`
+        };
+      }
+
+      const doorName = metadata.doorName;
+      const doorPath = path.join(this.assigns['Doors:'], doorName);
+
+      // Delete .info file
+      fs.unlinkSync(infoPath);
+      console.log(`Deleted command file: ${infoPath}`);
+
+      // Delete door directory if it exists
+      if (fs.existsSync(doorPath)) {
+        fs.rmSync(doorPath, { recursive: true, force: true });
+        console.log(`Deleted door files: ${doorPath}`);
+      }
+
+      return {
+        success: true,
+        message: `Door '${command}' deleted successfully`
+      };
+    } catch (error) {
+      console.error('Door deletion error:', error);
+      return {
+        success: false,
+        message: `Deletion failed: ${(error as Error).message}`
+      };
+    }
+  }
+
+  /**
+   * Delete TypeScript door (removes entire door directory)
+   * @param doorName - The door name (directory name in backend/doors/)
+   * @returns Result object with success status and message
+   */
+  async deleteTypeScriptDoor(doorName: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const doorPath = path.join(__dirname, '../../doors', doorName);
+
+      // Check if door exists
+      if (!fs.existsSync(doorPath)) {
+        return {
+          success: false,
+          message: `TypeScript door '${doorName}' not found`
+        };
+      }
+
+      // Verify it's a directory
+      const stats = fs.statSync(doorPath);
+      if (!stats.isDirectory()) {
+        return {
+          success: false,
+          message: `'${doorName}' is not a valid door directory`
+        };
+      }
+
+      // Delete door directory
+      fs.rmSync(doorPath, { recursive: true, force: true });
+      console.log(`Deleted TypeScript door: ${doorPath}`);
+
+      return {
+        success: true,
+        message: `TypeScript door '${doorName}' deleted successfully`
+      };
+    } catch (error) {
+      console.error('TypeScript door deletion error:', error);
+      return {
+        success: false,
+        message: `Deletion failed: ${(error as Error).message}`
+      };
+    }
+  }
+
+  /**
+   * Delete door (auto-detects Amiga or TypeScript door)
+   * @param identifier - Command name for Amiga door, or door name for TypeScript door
+   * @param isTypeScriptDoor - Optional flag to force TypeScript door deletion
+   * @returns Result object with success status and message
+   */
+  async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<{ success: boolean; message: string }> {
+    // If explicitly marked as TypeScript door, delete as such
+    if (isTypeScriptDoor === true) {
+      return this.deleteTypeScriptDoor(identifier);
+    }
+
+    // Try Amiga door first
+    const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
+    const infoPath = path.join(commandsPath, `${identifier}.info`);
+
+    if (fs.existsSync(infoPath)) {
+      return this.deleteAmigaDoor(identifier);
+    }
+
+    // Try TypeScript door
+    const tsPath = path.join(__dirname, '../../doors', identifier);
+    if (fs.existsSync(tsPath)) {
+      return this.deleteTypeScriptDoor(identifier);
+    }
+
+    return {
+      success: false,
+      message: `Door '${identifier}' not found (checked both Amiga and TypeScript doors)`
+    };
+  }
 }
 
 /**
