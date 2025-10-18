@@ -455,6 +455,7 @@ function loadScreenFile(screenName: string, conferenceId?: number, nodeId: numbe
   for (const filePath of paths) {
     try {
       if (fs.existsSync(filePath)) {
+        console.log(`✓ Loaded screen ${screenName} from: ${filePath}`);
         return fs.readFileSync(filePath, 'utf-8');
       }
     } catch (error) {
@@ -462,7 +463,7 @@ function loadScreenFile(screenName: string, conferenceId?: number, nodeId: numbe
     }
   }
 
-  console.warn(`Screen file not found: ${screenName}`);
+  console.warn(`Screen file not found: ${screenName} (tried: ${paths.join(', ')})`);
   return null;
 }
 
