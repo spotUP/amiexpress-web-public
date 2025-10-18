@@ -59,7 +59,8 @@ export class ChatManager {
   constructor(screenPath?: string) {
     this.activeSessions = new Map();
     // BBS directory structure matches original Amiga AmiExpress
-    this.screenPath = screenPath || path.join(process.cwd(), 'BBS');
+    // Note: When running from backend/backend/src, we need to go up one level to reach backend/BBS
+    this.screenPath = screenPath || path.join(process.cwd(), '..', 'BBS');
   }
 
   /**
