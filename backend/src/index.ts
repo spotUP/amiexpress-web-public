@@ -1,5 +1,5 @@
 // Load environment variables FIRST, before any other imports
-require('dotenv').config({ path: './.env' });
+require('dotenv').config({ override: true });
 
 // Debug: Log environment variables (only in development)
 if (process.env.NODE_ENV !== 'production') {

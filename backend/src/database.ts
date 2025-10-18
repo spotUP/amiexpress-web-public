@@ -1,3 +1,6 @@
+// Load environment variables FIRST
+require('dotenv').config({ override: true });
+
 import { Pool as PoolConstructor } from 'pg';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
