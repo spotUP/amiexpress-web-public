@@ -26,6 +26,17 @@ import {
   clearOverride
 } from './utils/security.util';
 
+// Phase 10: Message Pointer System imports
+import {
+  loadMsgPointers,
+  saveMsgPointers,
+  getMailStatFile,
+  validatePointers,
+  hasNewMessages,
+  updateReadPointer,
+  updateScanPointer
+} from './utils/message-pointers.util';
+
 interface BBSSession {
   state: BBSState;
   subState?: LoggedOnSubState;
@@ -60,6 +71,10 @@ interface BBSSession {
   blockOLM: boolean; // Whether to block Online Messages (OLM) - express.e:310
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
+
+  // Phase 10: Message Pointer System (express.e:199-200, 4882-4973)
+  lastMsgReadConf: number; // Last message manually read (confBase.confYM) - express.e:199
+  lastNewReadConf: number; // Last message auto-scanned (confBase.confRead) - express.e:200
 }
 
 // Conference and Message Base data structures (simplified)
@@ -179,7 +194,11 @@ io.on('connection', async (socket) => {
     quietFlag: false, // Quiet mode (invisible to WHO)
     blockOLM: false, // Block Online Messages
     loginTime: Date.now(), // Login timestamp
-    nodeStartTime: Date.now() // Node start time for uptime
+    nodeStartTime: Date.now(), // Node start time for uptime
+
+    // Phase 10: Initialize message pointers (express.e:199-200)
+    lastMsgReadConf: 0, // Last message manually read
+    lastNewReadConf: 0 // Last message auto-scanned
   };
   sessions.set(socket.id, session);
 

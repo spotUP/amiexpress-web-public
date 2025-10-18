@@ -742,6 +742,38 @@ export class Database {
         )
       `);
 
+      // Phase 10: Message Pointer System tables (express.e:8672-8707, axobjects.e:192-197)
+      // Mail statistics - tracks message ranges per conference/message base
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS mail_stats (
+          conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+          message_base_id INTEGER NOT NULL REFERENCES message_bases(id) ON DELETE CASCADE,
+          lowest_key INTEGER DEFAULT 1,
+          high_msg_num INTEGER DEFAULT 1,
+          lowest_not_del INTEGER DEFAULT 0,
+          PRIMARY KEY (conference_id, message_base_id)
+        )
+      `);
+
+      // Conference base - tracks per-user read pointers and scan flags
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS conf_base (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+          message_base_id INTEGER NOT NULL REFERENCES message_bases(id) ON DELETE CASCADE,
+          last_new_read_conf INTEGER DEFAULT 0,
+          last_msg_read_conf INTEGER DEFAULT 0,
+          scan_flags INTEGER DEFAULT 12,
+          messages_posted INTEGER DEFAULT 0,
+          new_since_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          bytes_download BIGINT DEFAULT 0,
+          bytes_upload BIGINT DEFAULT 0,
+          upload INTEGER DEFAULT 0,
+          downloads INTEGER DEFAULT 0,
+          PRIMARY KEY (user_id, conference_id, message_base_id)
+        )
+      `);
+
       // Create indexes for performance
       await this.createIndexes(client);
     } finally {
@@ -778,6 +810,10 @@ export class Database {
 
     // Caller activity indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_user ON caller_activity(user_id)`);
+
+    // Phase 10: Message pointer indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_conf_base_user ON conf_base(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_conf_base_conference ON conf_base(conference_id, message_base_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_timestamp ON caller_activity(timestamp DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_node ON caller_activity(node_id, timestamp DESC)`);
 
