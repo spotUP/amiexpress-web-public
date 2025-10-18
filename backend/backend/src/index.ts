@@ -2465,9 +2465,51 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       displayDownloadInterface(socket, session, params);
       return;
 
+    case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302
+      // DS is handled by same function as D in express.e
+      // The difference is DS shows download status/progress
+      // TODO for 100% 1:1: Implement status display during download - express.e:24853
+      displayDownloadInterface(socket, session, params);
+      return;
+
     case 'U': // Upload File(s) (internalCommandU) - uploadaFile(params)
       displayUploadInterface(socket, session, params);
       return;
+
+    case 'UP': // Upload Status / Node Uptime (internalCommandUP) - express.e:25667
+      // Shows when the node was started
+      const uptimeMs = Date.now() - (session.nodeStartTime || Date.now());
+      const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
+      const uptimeMins = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
+      const startTime = session.nodeStartTime ? new Date(session.nodeStartTime).toLocaleString() : 'Unknown';
+
+      socket.emit('ansi-output', `\r\n\x1b[36mNode 1 was started at ${startTime}.\x1b[0m\r\n`);
+      socket.emit('ansi-output', `\x1b[32mUptime: ${uptimeHours}h ${uptimeMins}m\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
+    case 'US': // Sysop Upload (internalCommandUS) - express.e:25660
+      // TODO for 100% 1:1: checkSecurity(ACS_SYSOP_COMMANDS) - express.e:25661
+      // TODO for 100% 1:1: setEnvStat(ENV_UPLOADING) - express.e:25662
+      // Check sysop permissions
+      if ((session.user?.secLevel || 0) < 255) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      socket.emit('ansi-output', '\x1b[36m-= Sysop Upload =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Special sysop upload mode - bypasses ratio checks.\r\n\r\n');
+
+      // TODO for 100% 1:1: Implement sysopUpload() - express.e:25664
+      // This should bypass all ratio/security checks for sysop uploads
+      displayUploadInterface(socket, session, params);
+      return;
+
     case '0': // Remote Shell (internalCommand0)
       console.log('Processing command 0');
       socket.emit('ansi-output', '\x1b[36m-= Remote Shell =-\x1b[0m\r\n');
@@ -2558,6 +2600,62 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.subState = LoggedOnSubState.FILE_DIR_SELECT;
       session.tempData = { editDirectories: true, fileAreas: currentFileAreas };
       return; // Stay in input mode
+
+    case '4': // Edit Any File (internalCommand4) - express.e:24517
+      // TODO for 100% 1:1: setEnvStat(ENV_EMACS) - express.e:24518
+      // Check sysop permissions (express.e:24519 - ACS_EDIT_FILES)
+      if ((session.user?.secLevel || 0) < 200) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. File editing privileges required.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      socket.emit('ansi-output', '\x1b[36m-= Edit Any File =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Edit any file on the system (sysop only).\r\n\r\n');
+
+      // TODO for 100% 1:1: Implement editAnyFile(params) - express.e:24520
+      // This should:
+      // 1. Parse filename from params or prompt for it
+      // 2. Load file into MicroEmacs-style editor
+      // 3. Allow full editing capabilities
+      // 4. Save changes back to file
+
+      socket.emit('ansi-output', '\x1b[33mFile editor not yet implemented.\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This command will allow editing any file on the system.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
+    case '5': // Change Directory (internalCommand5) - express.e:24523
+      // TODO for 100% 1:1: setEnvStat(ENV_SYSOP) - express.e:24524
+      // Check sysop permissions (express.e:24525 - ACS_SYSOP_COMMANDS)
+      if ((session.user?.secLevel || 0) < 255) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      socket.emit('ansi-output', '\x1b[36m-= Change Directory =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Navigate and execute files anywhere on the system (sysop only).\r\n\r\n');
+
+      // TODO for 100% 1:1: Implement myDirAnyWhere(params) - express.e:24526
+      // This should:
+      // 1. Parse directory path from params or prompt
+      // 2. Change to that directory
+      // 3. Show directory listing
+      // 4. Allow execution of programs from any location
+
+      socket.emit('ansi-output', '\x1b[33mDirectory navigation not yet implemented.\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This command allows sysop to navigate the entire filesystem.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
 
     case 'MS': // Run mailscan (internalCommandMS) - 1:1 with AmiExpress mailscan
       socket.emit('ansi-output', '\x1b[36m-= Mailscan =-\x1b[0m\r\n');
@@ -2731,6 +2829,47 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.subState = LoggedOnSubState.FILE_DIR_SELECT;
       session.tempData = { viewTextFile: true };
       return; // Stay in input mode
+
+    case 'VS': // View Statistics - Same as V command (internalCommandV) - express.e:28376
+      // In express.e, VS calls internalCommandV (view file command)
+      socket.emit('ansi-output', '\x1b[36m-= View Statistics File =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Enter statistics filename to view (or press Enter to cancel): ');
+
+      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+      session.tempData = { viewTextFile: true };
+      return; // Stay in input mode
+
+    case 'VO': // Voting Booth (internalCommandVO) - express.e:25700
+      // TODO for 100% 1:1: checkSecurity(ACS_VOTE) - express.e:25701
+      // TODO for 100% 1:1: setEnvStat(ENV_DOORS) - express.e:25703
+      // TODO for 100% 1:1: setEnvMsg('Voting Booth') - express.e:25704
+      // Check permissions
+      if ((session.user?.secLevel || 0) < 10) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Voting privileges required.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      socket.emit('ansi-output', '\x1b[36m-= Voting Booth =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Voice your opinion on various topics.\r\n\r\n');
+
+      // TODO for 100% 1:1: Implement voting system - express.e:25705-25708
+      // If user has ACS_MODIFY_VOTE: call voteMenu() (create/edit votes)
+      // Otherwise: call vote() (just vote on existing items)
+      // This requires:
+      // - Vote database tables
+      // - Vote creation/editing interface
+      // - Vote results display
+      // - Multi-choice voting support
+
+      socket.emit('ansi-output', '\x1b[33mVoting booth not yet implemented.\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This system allows users to participate in polls and surveys.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
 
     case 'VER': // View ami-express version information (internalCommandVER) - 1:1 with AmiExpress VER
       socket.emit('ansi-output', '\x1b[36m-= AmiExpress Web Version Information =-\x1b[0m\r\n\r\n');
@@ -2922,24 +3061,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.tempData = { zoomMail: true, unreadMessages };
       return; // Stay in input mode
 
-    case 'CF': // Set Conference Configuration (internalCommandCF) - 1:1 with AmiExpress conference config
-      socket.emit('ansi-output', '\x1b[36m-= Conference Configuration =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Configure message and file scanning options per conference.\r\n\r\n');
-
-      // Display current conference settings
-      socket.emit('ansi-output', `Current conference: ${session.currentConfName}\r\n\r\n`);
-
-      socket.emit('ansi-output', 'Available options:\r\n');
-      socket.emit('ansi-output', '1. Toggle new message scan\r\n');
-      socket.emit('ansi-output', '2. Toggle new file scan\r\n');
-      socket.emit('ansi-output', '3. Toggle ZOOM mail inclusion\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[32mSelect option (1-3) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { conferenceConfig: true };
-      return; // Stay in input mode
-
-    case 'VO': // Voting Booth (internalCommandVO) - 1:1 with AmiExpress voting booth
+    case 'VODUP': // Voting Booth (DUPLICATE - real one is earlier) - 1:1 with AmiExpress voting booth
       socket.emit('ansi-output', '\x1b[36m-= Voting Booth =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Participate in community polls and surveys.\r\n\r\n');
 
@@ -3459,6 +3581,24 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.disconnect();
       return;
 
+    case 'GR': // Greets (internalCommandGreets) - express.e:24411-24423
+      // Tribute to the Amiga demo scene
+      socket.emit('ansi-output', '\r\n\x1b[36mIn memory of those who came before us...\x1b[0m\r\n\r\n');
+
+      socket.emit('ansi-output', '\x1b[34m[\x1b[0mscoopex\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mlsd\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mskid row\x1b[34m]\x1b[0m \x1b[34m[\x1b[0malpha flight\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mtrsi\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mbamiga sector one\x1b[34m]\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[34m[\x1b[0mfairlight\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mdefjam\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mparadox\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mlegend\x1b[34m]\x1b[0m \x1b[34m[\x1b[0manthrox\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mcrystal\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mangels\x1b[34m]\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[34m[\x1b[0mvision factory\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mzenith\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mslipstream\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mdual crew\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mdelight\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mshining\x1b[34m]\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[34m[\x1b[0mquartex\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mglobal overdose\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mparanoimia\x1b[34m]\x1b[0m \x1b[34m[\x1b[0msupplex\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mclassic\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mhoodlum\x1b[34m]\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[34m[\x1b[0maccumulators\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mhellfire\x1b[34m]\x1b[0m \x1b[34m[\x1b[0moracle\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mendless piracy\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mhqc\x1b[34m]\x1b[0m \x1b[34m[\x1b[0msetrox\x1b[34m]\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[34m[\x1b[0mprodigy\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mprestige\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mnemesis\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mgenesis\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mloonies\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mhorizon\x1b[34m]\x1b[0m \x1b[34m[\x1b[0magile\x1b[34m]\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[34m[\x1b[0mcrack inc\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mvalhalla\x1b[34m]\x1b[0m \x1b[34m[\x1b[0msunflex inc\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mministry\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mthe band\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mrazor1911\x1b[34m]\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[34m[\x1b[0mconqueror and zike\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mmad\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mthe company\x1b[34m]\x1b[0m\r\n\r\n');
+
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
     case 'C': // Comment to Sysop (internalCommandC)
       socket.emit('ansi-output', '\x1b[36m-= Comment to Sysop =-\x1b[0m\r\n');
 
@@ -3470,6 +3610,35 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.tempData = { isCommentToSysop: true };
       session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
       return; // Don't call displayMainMenu - stay in input mode
+
+    case 'CF': // Comment with Flags (internalCommandCF) - express.e:24672
+      // TODO for 100% 1:1: checkSecurity(ACS_CONFFLAGS) - express.e:24684
+      // Check permissions
+      if ((session.user?.secLevel || 0) < 200) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Conference flag privileges required.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      socket.emit('ansi-output', '\x1b[36m-= Conference Flags =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Manage which conferences are flagged for scanning.\r\n\r\n');
+
+      // TODO for 100% 1:1: Implement full conference flag management - express.e:24685-24750
+      // This requires:
+      // - Display list of conferences with current flag status
+      // - Allow toggle of individual conference flags
+      // - Parse flag patterns like "1,3-5,7" for bulk changes
+      // - Save conference flag preferences per user
+      // - Database table for user conference flags
+
+      socket.emit('ansi-output', '\x1b[33mConference flag management not yet implemented.\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This allows you to select which conferences to scan for new messages.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
 
     case 'Q': // Quiet Node (internalCommandQ)
       socket.emit('ansi-output', '\x1b[36m-= Quiet Node =-\x1b[0m\r\n');
@@ -3538,6 +3707,32 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', 'Q - Quiet Node\r\n');
       socket.emit('ansi-output', '? - This help\r\n');
       break;
+
+    case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089
+      // Searches for help files in BBS:Help/ directory
+      socket.emit('ansi-output', '\x1b[36m-= Help File Viewer =-\x1b[0m\r\n');
+
+      // TODO for 100% 1:1: Implement full help file search - express.e:25089-25111
+      // This should:
+      // 1. Take params as partial filename (e.g., "^upload" looks for "help/upload")
+      // 2. Use findSecurityScreen() to find help file with correct security level
+      // 3. Display the help file with doPause()
+      // 4. If not found, try removing last character and searching again (progressive search)
+      // 5. Continue until file found or params empty
+
+      if (params.trim()) {
+        socket.emit('ansi-output', `Looking for help on: ${params}\r\n\r\n`);
+        socket.emit('ansi-output', '\x1b[33mHelp file system not yet implemented.\x1b[0m\r\n');
+        socket.emit('ansi-output', 'This would search for matching help files in BBS:Help/\r\n');
+      } else {
+        socket.emit('ansi-output', 'Usage: ^ <topic>\r\n');
+        socket.emit('ansi-output', 'Example: ^upload (shows help on uploading files)\r\n');
+      }
+
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
 
     default:
       socket.emit('ansi-output', `\r\nUnknown command: ${command}\r\n`);
