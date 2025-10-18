@@ -126,8 +126,16 @@ backend/data/bbs/*
 !backend/data/bbs/BBS/
 backend/data/bbs/BBS/*
 !backend/data/bbs/BBS/Conf*/
+!backend/data/bbs/BBS/Node*/
+!backend/data/bbs/BBS/Screens/
 backend/data/bbs/BBS/Conf*/*
+backend/data/bbs/BBS/Node*/*
+backend/data/bbs/BBS/Screens/*
 !backend/data/bbs/BBS/Conf*/Screens/
+!backend/data/bbs/BBS/Node*/Screens/
+!backend/data/bbs/BBS/Screens/*.TXT
 backend/data/bbs/BBS/Conf*/Screens/*
+backend/data/bbs/BBS/Node*/Screens/*
 !backend/data/bbs/BBS/Conf*/Screens/*.TXT
+!backend/data/bbs/BBS/Node*/Screens/*.TXT
 .vercel
