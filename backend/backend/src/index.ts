@@ -2988,7 +2988,15 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.tempData = { listDirectories: true };
       return; // Stay in input mode
 
-    case 'R': // Read Messages (internalCommandR)
+    case 'R': // Read Messages (internalCommandR) - express.e:25518-25531
+      // TODO for 100% 1:1 compliance:
+      // 1. checkSecurity(ACS_READ_MESSAGE) - express.e:25519
+      // 2. setEnvStat(ENV_MAIL) - express.e:25520
+      // 3. parseParams(params) for message range/options - express.e:25521
+      // 4. getMailStatFile(currentConf, currentMsgBase) - load message pointers - express.e:25523
+      // 5. checkToolTypeExists(TOOLTYPE_CONF, 'CUSTOM') - custom msgbase check - express.e:25525
+      // 6. callMsgFuncs(MAIL_READ) - proper message reader with navigation - express.e:25526
+
       socket.emit('ansi-output', '\x1b[36m-= Message Reader =-\x1b[0m\r\n');
 
       // Get messages for current conference and message base
@@ -3034,7 +3042,14 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
       return; // Don't call displayMainMenu - stay in input mode
 
-    case 'E': // Post Private Message (internalCommandE with private flag)
+    case 'E': // Enter Message (internalCommandE) - express.e:24860-24872
+      // TODO for 100% 1:1 compliance:
+      // 1. checkSecurity(ACS_ENTER_MESSAGE) - express.e:24861
+      // 2. setEnvStat(ENV_MAIL) - express.e:24862
+      // 3. parseParams(params) for message options - express.e:24863
+      // 4. checkToolTypeExists(TOOLTYPE_CONF, 'CUSTOM') - custom msgbase - express.e:24864
+      // 5. callMsgFuncs(MAIL_CREATE) -> EnterMSG() - full message editor - express.e:24865
+
       // Start private message posting workflow
       socket.emit('ansi-output', '\x1b[36m-= Post Private Message =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Enter recipient username: ');
@@ -3170,14 +3185,26 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       }
       return;
 
-    case 'J': // Join Conference (internalCommandJ) - express.e:25113
+    case 'J': // Join Conference (internalCommandJ) - express.e:25113-25184
+      // TODO for 100% 1:1 compliance:
+      // 1. checkSecurity(ACS_JOIN_CONFERENCE) - express.e:25119
+      // 2. saveMsgPointers(currentConf, currentMsgBase) - express.e:25120
+      // 3. setEnvStat(ENV_JOIN) - express.e:25122
+      // 4. getInverse() for relative conference numbers - express.e:25136
+      // 5. displayScreen(SCREEN_JOINCONF) when no params - express.e:25139
+      // 6. lineInput() with timeout handling - express.e:25141
+      // 7. checkConfAccess(newConf) for permission check - express.e:25151
+      // 8. getConfLocation() and callersLog() for diagnostics - express.e:25156-25159
+      // 9. displayScreen(SCREEN_CONF_JOINMSGBASE) for msgbase - express.e:25164-25165
+      // 10. lineInput() for message base selection - express.e:25167
+
       socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Available conferences:\r\n');
       conferences.forEach(conf => {
         socket.emit('ansi-output', `${conf.id}. ${conf.name} - ${conf.description}\r\n`);
       });
 
-      // Parse params: "J 5" or "J 5.2" or "J 5 2" (conf, conf.msgbase, conf msgbase)
+      // Parse params: "J 5" or "J 5.2" or "J 5 2" (express.e:25124-25134)
       if (params.trim()) {
         let confId = 0;
         let msgBaseId = 1;
@@ -3418,7 +3445,16 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'G': // Goodbye (internalCommandG)
+    case 'G': // Goodbye (internalCommandG) - express.e:25047-25069
+      // TODO for 100% 1:1 compliance:
+      // 1. parseParams(params) - check for 'Y' auto parameter - express.e:25051-25054
+      // 2. partUploadOK(0) - check for partial uploads - express.e:25057
+      // 3. checkFlagged() - check for flagged files - express.e:25058
+      // 4. saveFlagged() - save flagged file list - express.e:25063
+      // 5. saveHistory() - save command history - express.e:25064
+      // 6. reqState = REQ_STATE_LOGOFF - set logoff state - express.e:25065
+      // 7. setEnvStat(ENV_LOGOFF) - set environment - express.e:25066
+
       socket.emit('ansi-output', '\r\nGoodbye!\r\n');
       socket.disconnect();
       return;
