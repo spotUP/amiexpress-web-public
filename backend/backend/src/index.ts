@@ -7,29 +7,9 @@ import { db } from './database';
 import { config } from './config';
 import { qwkManager, ftnManager } from './qwk';
 import { nodeManager, arexxEngine, protocolManager } from './nodes';
-
-// BBS State definitions (mirroring AmiExpress state machine)
-enum BBSState {
-  AWAIT = 'await',
-  LOGON = 'logon',
-  LOGGEDON = 'loggedon'
-}
-
-enum LoggedOnSubState {
-  DISPLAY_BULL = 'display_bull',
-  DISPLAY_CONF_BULL = 'display_conf_bull',
-  DISPLAY_MENU = 'display_menu',
-  READ_COMMAND = 'read_command',
-  READ_SHORTCUTS = 'read_shortcuts',
-  PROCESS_COMMAND = 'process_command',
-  POST_MESSAGE_SUBJECT = 'post_message_subject',
-  POST_MESSAGE_BODY = 'post_message_body',
-  FILE_AREA_SELECT = 'file_area_select',
-  FILE_DIR_SELECT = 'file_dir_select',
-  FILE_LIST = 'file_list',
-  FILE_LIST_CONTINUE = 'file_list_continue',
-  CONFERENCE_SELECT = 'conference_select'
-}
+import { BBSState, LoggedOnSubState } from './constants/bbs-states';
+import { AuthHandler } from './handlers/auth.handler';
+import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
 
 interface BBSSession {
   state: BBSState;
@@ -92,27 +72,8 @@ const port = process.env.PORT || config.get('port');
 // Store active sessions (in production, use Redis/database)
 const sessions = new Map<string, BBSSession>();
 
-// JWT Authentication middleware
-interface AuthRequest extends Request {
-  user?: any;
-}
-
-const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  try {
-    const decoded = await db.verifyAccessToken(token);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(403).json({ error: 'Invalid or expired access token' });
-  }
-};
+// Initialize handlers
+const authHandler = new AuthHandler(db);
 
 app.use(cors());
 app.use(express.json());
@@ -122,166 +83,12 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // Authentication endpoints
-app.post('/auth/login', async (req: Request, res: Response) => {
-  try {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
-    }
-
-    // Authenticate user
-    const user = await db.getUserByUsername(username);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const isValidPassword = await db.verifyPassword(password, user.passwordHash);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Update last login
-    await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
-
-    // Generate tokens
-    const accessToken = await db.generateAccessToken(user);
-    const refreshToken = await db.generateRefreshToken(user);
-
-    res.json({
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        username: user.username,
-        realname: user.realname,
-        secLevel: user.secLevel,
-        expert: user.expert,
-        ansi: user.ansi
-      }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/auth/register', async (req: Request, res: Response) => {
-  try {
-    const { username, realname, location, password } = req.body;
-
-    if (!username || !realname || !password) {
-      return res.status(400).json({ error: 'Username, realname, and password required' });
-    }
-
-    // Check if user already exists
-    const existingUser = await db.getUserByUsername(username);
-    if (existingUser) {
-      return res.status(409).json({ error: 'Username already exists' });
-    }
-
-    // Hash password
-    const passwordHash = await db.hashPassword(password);
-
-    // Create new user
-    const userId = await db.createUser({
-      username,
-      passwordHash,
-      realname,
-      location: location || '',
-      phone: '',
-      secLevel: 10, // Default security level
-      uploads: 0,
-      downloads: 0,
-      bytesUpload: 0,
-      bytesDownload: 0,
-      ratio: 0,
-      ratioType: 0,
-      timeTotal: 0,
-      timeLimit: 60, // 60 minutes default
-      timeUsed: 0,
-      chatLimit: 0,
-      chatUsed: 0,
-      firstLogin: new Date(),
-      calls: 1,
-      callsToday: 1,
-      newUser: true,
-      expert: false,
-      ansi: true,
-      linesPerScreen: 23,
-      computer: 'Unknown',
-      screenType: 'Amiga Ansi',
-      protocol: '/X Zmodem',
-      editor: 'Prompt',
-      zoomType: 'QWK',
-      availableForChat: true,
-      quietNode: false,
-      autoRejoin: 1,
-      confAccess: 'XXX', // Access to first 3 conferences
-      areaName: 'Standard',
-      uuCP: false,
-      topUploadCPS: 0,
-      topDownloadCPS: 0,
-      byteLimit: 0
-    });
-
-    // Get the created user
-    const user = await db.getUserById(userId);
-    if (!user) {
-      return res.status(500).json({ error: 'Registration failed' });
-    }
-
-    // Generate tokens
-    const accessToken = await db.generateAccessToken(user);
-    const refreshToken = await db.generateRefreshToken(user);
-
-    res.status(201).json({
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        username: user.username,
-        realname: user.realname,
-        secLevel: user.secLevel,
-        expert: user.expert,
-        ansi: user.ansi
-      }
-    });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/auth/refresh', async (req: Request, res: Response) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (!refreshToken) {
-      return res.status(400).json({ error: 'Refresh token required' });
-    }
-
-    // Verify refresh token
-    const decoded = await db.verifyRefreshToken(refreshToken);
-
-    // Get user
-    const user = await db.getUserById(decoded.userId);
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
-    // Generate new access token
-    const accessToken = await db.generateAccessToken(user);
-
-    res.json({ accessToken });
-  } catch (error) {
-    console.error('Token refresh error:', error);
-    res.status(403).json({ error: 'Invalid refresh token' });
-  }
-});
+app.post('/auth/login', (req, res) => authHandler.login(req, res));
+app.post('/auth/register', (req, res) => authHandler.register(req, res));
+app.post('/auth/refresh', (req, res) => authHandler.refresh(req, res));
 
 // Protected route example
-app.get('/users/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+app.get('/users/:id', authenticateToken(db), async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.params.id;
 

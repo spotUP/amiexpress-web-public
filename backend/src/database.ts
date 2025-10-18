@@ -1866,114 +1866,158 @@ export class Database {
   async initializeDefaultData(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      console.log('Creating default conferences...');
-      // Create default conferences
-      const conferences = [
-        { name: 'General', description: 'General discussion' },
-        { name: 'Tech Support', description: 'Technical support' },
-        { name: 'Announcements', description: 'System announcements' }
-      ];
+      // Step 1: Create conferences
+      try {
+        console.log('[DB Init Step 1/5] Creating default conferences...');
+        const conferences = [
+          { name: 'General', description: 'General discussion' },
+          { name: 'Tech Support', description: 'Technical support' },
+          { name: 'Announcements', description: 'System announcements' }
+        ];
 
-      for (const conf of conferences) {
-        // Check if conference already exists
-        const existing = await client.query('SELECT id FROM conferences WHERE name = $1', [conf.name]);
-        if (existing.rows.length === 0) {
-          await client.query('INSERT INTO conferences (name, description) VALUES ($1, $2)', [conf.name, conf.description]);
-          console.log(`Created conference: ${conf.name}`);
-        } else {
-          console.log(`Conference already exists: ${conf.name}`);
+        for (const conf of conferences) {
+          const existing = await client.query('SELECT id FROM conferences WHERE name = $1', [conf.name]);
+          if (existing.rows.length === 0) {
+            await client.query('INSERT INTO conferences (name, description) VALUES ($1, $2)', [conf.name, conf.description]);
+            console.log(`  ✓ Created conference: ${conf.name}`);
+          } else {
+            console.log(`  • Conference already exists: ${conf.name}`);
+          }
         }
+        console.log('[DB Init Step 1/5] ✓ Conferences initialized');
+      } catch (error) {
+        console.error('[DB Init Step 1/5] ✗ Failed to create conferences:', error);
+        throw error;
       }
 
-      console.log('Creating default message bases...');
-      // Create default message bases
-      const messageBases = [
-        { name: 'Main', conferenceId: 1 },
-        { name: 'Off Topic', conferenceId: 1 },
-        { name: 'Support', conferenceId: 2 },
-        { name: 'News', conferenceId: 3 }
-      ];
+      // Step 2: Create message bases
+      try {
+        console.log('[DB Init Step 2/5] Creating default message bases...');
+        const messageBases = [
+          { name: 'Main', conferenceId: 1 },
+          { name: 'Off Topic', conferenceId: 1 },
+          { name: 'Support', conferenceId: 2 },
+          { name: 'News', conferenceId: 3 }
+        ];
 
-      for (const mb of messageBases) {
-        // Check if message base already exists
-        const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND conferenceid = $2', [mb.name, mb.conferenceId]);
-        if (existing.rows.length === 0) {
-          await client.query('INSERT INTO message_bases (name, conferenceid) VALUES ($1, $2)', [mb.name, mb.conferenceId]);
-          console.log(`Created message base: ${mb.name} in conference ${mb.conferenceId}`);
-        } else {
-          console.log(`Message base already exists: ${mb.name} in conference ${mb.conferenceId}`);
+        for (const mb of messageBases) {
+          const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND conferenceid = $2', [mb.name, mb.conferenceId]);
+          if (existing.rows.length === 0) {
+            await client.query('INSERT INTO message_bases (name, conferenceid) VALUES ($1, $2)', [mb.name, mb.conferenceId]);
+            console.log(`  ✓ Created message base: ${mb.name} in conference ${mb.conferenceId}`);
+          } else {
+            console.log(`  • Message base already exists: ${mb.name} in conference ${mb.conferenceId}`);
+          }
         }
+        console.log('[DB Init Step 2/5] ✓ Message bases initialized');
+      } catch (error) {
+        console.error('[DB Init Step 2/5] ✗ Failed to create message bases:', error);
+        throw error;
       }
 
-      console.log('Creating default file areas...');
-      // Create default file areas
-      const fileAreas = [
-        { name: 'General Files', description: 'General purpose file area', path: '/files/general', conferenceId: 1, maxFiles: 100, uploadAccess: 10, downloadAccess: 1 },
-        { name: 'Utilities', description: 'System utilities and tools', path: '/files/utils', conferenceId: 1, maxFiles: 50, uploadAccess: 50, downloadAccess: 1 },
-        { name: 'Games', description: 'BBS games and entertainment', path: '/files/games', conferenceId: 2, maxFiles: 75, uploadAccess: 25, downloadAccess: 1 },
-        { name: 'Tech Files', description: 'Technical documentation and tools', path: '/files/tech', conferenceId: 2, maxFiles: 60, uploadAccess: 20, downloadAccess: 1 },
-        { name: 'System News', description: 'System announcements and updates', path: '/files/news', conferenceId: 3, maxFiles: 30, uploadAccess: 100, downloadAccess: 1 }
-      ];
+      // Step 3: Create file areas
+      try {
+        console.log('[DB Init Step 3/5] Creating default file areas...');
+        const fileAreas = [
+          { name: 'General Files', description: 'General purpose file area', path: '/files/general', conferenceId: 1, maxFiles: 100, uploadAccess: 10, downloadAccess: 1 },
+          { name: 'Utilities', description: 'System utilities and tools', path: '/files/utils', conferenceId: 1, maxFiles: 50, uploadAccess: 50, downloadAccess: 1 },
+          { name: 'Games', description: 'BBS games and entertainment', path: '/files/games', conferenceId: 2, maxFiles: 75, uploadAccess: 25, downloadAccess: 1 },
+          { name: 'Tech Files', description: 'Technical documentation and tools', path: '/files/tech', conferenceId: 2, maxFiles: 60, uploadAccess: 20, downloadAccess: 1 },
+          { name: 'System News', description: 'System announcements and updates', path: '/files/news', conferenceId: 3, maxFiles: 30, uploadAccess: 100, downloadAccess: 1 }
+        ];
 
-      for (const area of fileAreas) {
-        // Check if file area already exists
-        const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceid = $2', [area.name, area.conferenceId]);
-        if (existing.rows.length === 0) {
+        for (const area of fileAreas) {
+          const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceid = $2', [area.name, area.conferenceId]);
+          if (existing.rows.length === 0) {
+            await client.query(`
+              INSERT INTO file_areas (name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [area.name, area.description, area.path, area.conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
+            console.log(`  ✓ Created file area: ${area.name} in conference ${area.conferenceId}`);
+          } else {
+            console.log(`  • File area already exists: ${area.name} in conference ${area.conferenceId}`);
+          }
+        }
+        console.log('[DB Init Step 3/5] ✓ File areas initialized');
+      } catch (error) {
+        console.error('[DB Init Step 3/5] ✗ Failed to create file areas:', error);
+        throw error;
+      }
+
+      // Step 4: Create sysop user
+      try {
+        console.log('[DB Init Step 4/5] Creating default sysop user...');
+        console.log('  • Generating bcrypt password hash...');
+        const hashedPassword = await this.hashPassword('sysop');
+        console.log('  ✓ Password hash generated');
+
+        // Try to update existing sysop user first
+        console.log('  • Checking for existing sysop user...');
+        const updateResult = await client.query(`
+          UPDATE users SET passwordhash = $1 WHERE username = 'sysop'
+        `, [hashedPassword]);
+
+        if (updateResult.rowCount === 0) {
+          // User doesn't exist, create it
+          console.log('  • No existing sysop user found, creating new user...');
           await client.query(`
-            INSERT INTO file_areas (name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-          `, [area.name, area.description, area.path, area.conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
-          console.log(`Created file area: ${area.name} in conference ${area.conferenceId}`);
+            INSERT INTO users (
+              id, username, passwordhash, realname, location, phone, email, seclevel,
+              uploads, downloads, bytesupload, bytesdownload, ratio, ratiotype,
+              timetotal, timelimit, timeused, chatlimit, chatused, lastlogin, firstlogin,
+              calls, callstoday, newuser, expert, ansi, linesperscreen, computer,
+              screentype, protocol, editor, zoomtype, availableforchat, quietnode,
+              autorejoin, confaccess, areaname, uucp, topuploadcps, topdownloadcps, bytelimit
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+              $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
+              $39, $40, $41
+            )
+          `, [
+            'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
+            255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
+            0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
+            'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
+          ]);
+          console.log('  ✓ Sysop user created successfully');
         } else {
-          console.log(`File area already exists: ${area.name} in conference ${area.conferenceId}`);
+          console.log(`  ✓ Sysop user password updated (affected ${updateResult.rowCount} rows)`);
         }
+        console.log('[DB Init Step 4/5] ✓ Sysop user initialized');
+      } catch (error) {
+        console.error('[DB Init Step 4/5] ✗ CRITICAL: Failed to create sysop user:', error);
+        console.error('  Error details:', {
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        throw error;
       }
 
-      console.log('Creating default sysop user...');
-      // Create default sysop user with bcrypt hash
-      const hashedPassword = await this.hashPassword('sysop'); // bcrypt hash of 'sysop'
-      console.log('Generated secure bcrypt hash for sysop user');
-
-      // Always try to update existing sysop user first, then create if doesn't exist
-      const updateResult = await client.query(`
-        UPDATE users SET passwordhash = $1 WHERE username = 'sysop'
-      `, [hashedPassword]);
-
-      if (updateResult.rowCount === 0) {
-        // User doesn't exist, create it
-        console.log('Creating new sysop user...');
-        await client.query(`
-          INSERT INTO users (
-            id, username, passwordhash, realname, location, phone, email, seclevel,
-            uploads, downloads, bytesupload, bytesdownload, ratio, ratiotype,
-            timetotal, timelimit, timeused, chatlimit, chatused, lastlogin, firstlogin,
-            calls, callstoday, newuser, expert, ansi, linesperscreen, computer,
-            screentype, protocol, editor, zoomtype, availableforchat, quietnode,
-            autorejoin, confaccess, areaname, uucp, topuploadcps, topdownloadcps, bytelimit
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-            $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-            $39, $40, $41, $42, $43
-          )
-        `, [
-          'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
-          255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
-          0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
-          'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
-        ]);
-        console.log('Sysop user created successfully');
-      } else {
-        console.log(`Sysop user updated with fixed password hash (affected ${updateResult.rowCount} rows)`);
+      // Step 5: Cleanup duplicates
+      try {
+        console.log('[DB Init Step 5/5] Cleaning up duplicate data...');
+        await this.cleanupDuplicateConferences();
+        console.log('[DB Init Step 5/5] ✓ Duplicate cleanup completed');
+      } catch (error) {
+        console.error('[DB Init Step 5/5] ✗ Failed to cleanup duplicates:', error);
+        // Don't throw - this is non-critical
       }
 
-      console.log('Default data initialization completed');
-
-      // Clean up duplicate conferences (in case they exist from previous runs)
-      await this.cleanupDuplicateConferences();
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('✓ Database initialization completed successfully');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (error) {
-      console.error('Failed to initialize database:', error);
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('✗ CRITICAL: Database initialization failed');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('Error:', error);
+      console.error('Stack:', error instanceof Error ? error.stack : 'No stack trace available');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       // Don't throw error - continue with server startup
-      console.log('Continuing with server startup despite database initialization error');
+      console.log('⚠️  Continuing with server startup despite database initialization error');
+      console.log('⚠️  The BBS may not function correctly. Please check the error above.');
+    } finally {
+      client.release();
     }
   }
 

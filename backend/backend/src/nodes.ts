@@ -266,9 +266,15 @@ export class AREXXEngine {
 
   // Load AREXX scripts from database
   private async loadScripts(): Promise<void> {
-    const scripts = await db.getAREXXScripts();
-    for (const script of scripts) {
-      this.scripts.set(script.id, script);
+    try {
+      const scripts = await db.getAREXXScripts();
+      for (const script of scripts) {
+        this.scripts.set(script.id, script);
+      }
+      console.log(`Loaded ${scripts.length} AREXX scripts`);
+    } catch (error) {
+      // Table might not exist yet during initial startup
+      console.log('AREXX scripts table not ready yet, will retry later');
     }
   }
 

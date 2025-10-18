@@ -1,8 +1,22 @@
-import sqlite3 from 'sqlite3';
-import { promisify } from 'util';
-import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+// Load environment variables FIRST
+require('dotenv').config({ override: true });
+
+import { Pool as PoolConstructor } from 'pg';
+import * as crypto from 'crypto';
+import * as bcrypt from 'bcrypt';
+
+// Import types from types.ts
+import type {
+  NodeSession,
+  AREXXScript,
+  AREXXContext,
+  QWKPacket,
+  QWKMessage,
+  FTNMessage,
+  TransferSession,
+  InternodeChatSession,
+  InternodeChatMessage
+} from './types';
 
 // Database interfaces matching AmiExpress data structures
 export interface User {
@@ -156,777 +170,742 @@ export interface SystemLog {
   node?: number;
 }
 
-// Network message interfaces
-export interface QWKPacket {
-  id: string;
-  filename: string;
-  size: number;
-  created: Date;
-  fromBBS: string;
-  toBBS: string;
-  messages: QWKMessage[];
-  status: 'pending' | 'processing' | 'completed' | 'downloaded' | 'error';
-  error?: string;
-  processedAt?: Date;
-}
+// Helper function to convert camelCase field names to lowercase column names
+function fieldToColumn(field: string): string {
+  // Map of camelCase field names to lowercase column names
+  const fieldMap: { [key: string]: string } = {
+    'passwordHash': 'passwordhash',
+    'secLevel': 'seclevel',
+    'bytesUpload': 'bytesupload',
+    'bytesDownload': 'bytesdownload',
+    'ratioType': 'ratiotype',
+    'timeTotal': 'timetotal',
+    'timeLimit': 'timelimit',
+    'timeUsed': 'timeused',
+    'chatLimit': 'chatlimit',
+    'chatUsed': 'chatused',
+    'lastLogin': 'lastlogin',
+    'firstLogin': 'firstlogin',
+    'callsToday': 'callstoday',
+    'newUser': 'newuser',
+    'linesPerScreen': 'linesperscreen',
+    'screenType': 'screentype',
+    'zoomType': 'zoomtype',
+    'availableForChat': 'availableforchat',
+    'quietNode': 'quietnode',
+    'autoRejoin': 'autorejoin',
+    'confAccess': 'confaccess',
+    'areaName': 'areaname',
+    'uuCP': 'uucp',
+    'topUploadCPS': 'topuploadcps',
+    'topDownloadCPS': 'topdownloadcps',
+    'byteLimit': 'bytelimit'
+  };
 
-export interface QWKMessage {
-  id: number;
-  conference: number;
-  subject: string;
-  from: string;
-  to: string;
-  date: Date;
-  body: string;
-  isPrivate: boolean;
-  isReply: boolean;
-  parentId?: number;
-  attachments?: string[];
-}
-
-export interface FTNMessage {
-  id: string;
-  fromAddress: string;
-  toAddress: string;
-  subject: string;
-  body: string;
-  date: Date;
-  area: string;
-  msgid?: string;
-  replyTo?: string;
-  attributes: number;
-  status: 'pending' | 'sent' | 'received' | 'error' | 'archived';
-  error?: string;
-  processedAt?: Date;
-}
-
-// Multi-node support
-export interface NodeSession {
-  id: string;
-  nodeId: number;
-  userId?: string;
-  socketId: string;
-  state: string;
-  subState?: string;
-  currentConf: number;
-  currentMsgBase: number;
-  timeRemaining: number;
-  lastActivity: Date;
-  status: 'active' | 'idle' | 'away' | 'disconnected';
-  ipAddress?: string;
-  location?: string;
-}
-
-export interface NodeInfo {
-  id: number;
-  name: string;
-  status: 'available' | 'busy' | 'maintenance' | 'offline';
-  currentUser?: string;
-  lastActivity?: Date;
-  description?: string;
-}
-
-// AREXX scripting
-export interface AREXXScript {
-  id: string;
-  name: string;
-  description: string;
-  filename: string;
-  path: string;
-  accessLevel: number;
-  enabled: boolean;
-  parameters?: AREXXParameter[];
-  triggers?: AREXXTrigger[];
-}
-
-export interface AREXXParameter {
-  name: string;
-  type: 'string' | 'number' | 'boolean';
-  required: boolean;
-  defaultValue?: any;
-  description?: string;
-}
-
-export interface AREXXTrigger {
-  event: 'login' | 'logout' | 'message_post' | 'file_upload' | 'command' | 'timer';
-  condition?: string;
-  priority: number;
-}
-
-export interface AREXXContext {
-  scriptId: string;
-  userId?: string;
-  sessionId?: string;
-  parameters: Record<string, any>;
-  environment: Record<string, any>;
-  output: string[];
-  result?: any;
-  error?: string;
-}
-
-// Protocol support
-export interface FileTransferProtocol {
-  id: string;
-  name: string;
-  type: 'zmodem' | 'ftp' | 'websocket';
-  enabled: boolean;
-  config: Record<string, any>;
-}
-
-export interface TransferSession {
-  id: string;
-  protocol: string;
-  userId: string;
-  direction: 'upload' | 'download';
-  filename: string;
-  size: number;
-  bytesTransferred: number;
-  status: 'starting' | 'active' | 'paused' | 'completed' | 'error';
-  startTime: Date;
-  endTime?: Date;
-  error?: string;
-  checksum?: string;
+  return fieldMap[field] || field.toLowerCase();
 }
 
 export class Database {
-  private db: sqlite3.Database;
+  private pool?: any;
+  private isConnected: boolean = false;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 10;
+  private reconnectDelay: number = 5000; // 5 seconds
+  private healthCheckInterval?: NodeJS.Timeout;
 
-  constructor(filename: string = 'amiexpress.db') {
-    this.db = new sqlite3.Database(filename);
+  constructor() {
+    // PostgreSQL connection configuration
+    const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+    if (!connectionString) {
+      throw new Error('PostgreSQL connection string not found. Please set DATABASE_URL or POSTGRES_URL environment variable.');
+    }
+
+    console.log('Initializing PostgreSQL database connection...');
+
+    // SSL configuration based on environment
+    const sslConfig = process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false; // Explicitly disable SSL in development
+
+    this.pool = new PoolConstructor({
+      connectionString,
+      ssl: sslConfig,
+      max: 20, // Maximum number of clients in the pool
+      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+      connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
+      keepAlive: true, // Keep TCP connection alive
+      keepAliveInitialDelayMillis: 10000, // Start keep-alive after 10 seconds
+    });
+
+    // Handle pool errors - DO NOT CRASH THE SERVER
+    this.pool.on('error', (err: Error) => {
+      console.error('⚠️ PostgreSQL pool error (connection may have dropped):', err.message);
+      this.isConnected = false;
+      // Attempt to reconnect instead of crashing
+      this.attemptReconnection();
+    });
+
+    this.pool.on('connect', () => {
+      console.log('✅ Connected to PostgreSQL database');
+      this.isConnected = true;
+      this.reconnectAttempts = 0; // Reset reconnection counter on successful connect
+    });
+
+    this.pool.on('remove', () => {
+      console.log('🔌 Client removed from pool');
+    });
+
+    // Start health check monitoring
+    this.startHealthCheck();
+
+    // Initialize database schema
     this.initDatabase();
   }
 
-  public initDatabase(): void {
-    // Enable foreign keys
-    this.db.run('PRAGMA foreign_keys = ON');
+  // Attempt to reconnect to database
+  private async attemptReconnection(): Promise<void> {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error(`❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
+      return;
+    }
 
-    // Create tables
-    this.createTables();
+    this.reconnectAttempts++;
+    console.log(`🔄 Attempting database reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+
+    setTimeout(async () => {
+      try {
+        // Try to get a client from the pool
+        const client = await this.pool.connect();
+        await client.query('SELECT 1'); // Test query
+        client.release();
+
+        console.log('✅ Database reconnection successful');
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+      } catch (error) {
+        console.error(`⚠️ Reconnection attempt ${this.reconnectAttempts} failed:`, error);
+        // Try again
+        this.attemptReconnection();
+      }
+    }, this.reconnectDelay);
   }
 
-  private createTables(): void {
-    // Users table - 1:1 with AmiExpress account editing fields
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        passwordHash TEXT NOT NULL,
-        realname TEXT NOT NULL,
-        location TEXT,
-        phone TEXT,
-        email TEXT,
-        secLevel INTEGER DEFAULT 10,
-        uploads INTEGER DEFAULT 0,
-        downloads INTEGER DEFAULT 0,
-        bytesUpload INTEGER DEFAULT 0,
-        bytesDownload INTEGER DEFAULT 0,
-        ratio INTEGER DEFAULT 0,
-        ratioType INTEGER DEFAULT 0,
-        timeTotal INTEGER DEFAULT 0,
-        timeLimit INTEGER DEFAULT 0,
-        timeUsed INTEGER DEFAULT 0,
-        chatLimit INTEGER DEFAULT 0,
-        chatUsed INTEGER DEFAULT 0,
-        lastLogin DATETIME,
-        firstLogin DATETIME DEFAULT CURRENT_TIMESTAMP,
-        calls INTEGER DEFAULT 0,
-        callsToday INTEGER DEFAULT 0,
-        newUser BOOLEAN DEFAULT 1,
-        expert BOOLEAN DEFAULT 0,
-        ansi BOOLEAN DEFAULT 1,
-        linesPerScreen INTEGER DEFAULT 23,
-        computer TEXT,
-        screenType TEXT DEFAULT 'Amiga Ansi',
-        protocol TEXT DEFAULT '/X Zmodem',
-        editor TEXT DEFAULT 'Prompt',
-        zoomType TEXT DEFAULT 'QWK',
-        availableForChat BOOLEAN DEFAULT 1,
-        quietNode BOOLEAN DEFAULT 0,
-        autoRejoin INTEGER DEFAULT 1,
-        confAccess TEXT DEFAULT 'XXX',
-        areaName TEXT DEFAULT 'Standard',
-        uuCP BOOLEAN DEFAULT 0,
-        topUploadCPS INTEGER DEFAULT 0,
-        topDownloadCPS INTEGER DEFAULT 0,
-        byteLimit INTEGER DEFAULT 0,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+  // Health check to monitor database connection
+  private startHealthCheck(): void {
+    // Check every 30 seconds
+    this.healthCheckInterval = setInterval(async () => {
+      try {
+        const client = await this.pool.connect();
+        await client.query('SELECT 1');
+        client.release();
 
-    // Conferences table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS conferences (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Message bases table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS message_bases (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        conferenceId INTEGER NOT NULL,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (conferenceId) REFERENCES conferences(id)
-      )
-    `);
-
-    // Messages table - supports threading and private messages
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        subject TEXT NOT NULL,
-        body TEXT NOT NULL,
-        author TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        conferenceId INTEGER NOT NULL,
-        messageBaseId INTEGER NOT NULL,
-        isPrivate BOOLEAN DEFAULT 0,
-        toUser TEXT,
-        parentId INTEGER,
-        attachments TEXT, -- JSON array
-        edited BOOLEAN DEFAULT 0,
-        editedBy TEXT,
-        editedAt DATETIME,
-        FOREIGN KEY (conferenceId) REFERENCES conferences(id),
-        FOREIGN KEY (messageBaseId) REFERENCES message_bases(id),
-        FOREIGN KEY (parentId) REFERENCES messages(id)
-      )
-    `);
-
-    // File areas table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS file_areas (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        path TEXT NOT NULL,
-        conferenceId INTEGER NOT NULL,
-        maxFiles INTEGER DEFAULT 100,
-        uploadAccess INTEGER DEFAULT 10,
-        downloadAccess INTEGER DEFAULT 1,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (conferenceId) REFERENCES conferences(id)
-      )
-    `);
-
-    // File entries table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS file_entries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filename TEXT NOT NULL,
-        description TEXT,
-        size INTEGER NOT NULL,
-        uploader TEXT NOT NULL,
-        uploadDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-        downloads INTEGER DEFAULT 0,
-        areaId INTEGER NOT NULL,
-        fileIdDiz TEXT,
-        rating REAL DEFAULT 0,
-        votes INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'active',
-        checked TEXT DEFAULT 'N',
-        comment TEXT,
-        FOREIGN KEY (areaId) REFERENCES file_areas(id)
-      )
-    `);
-
-    // Sessions table for persistence
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY,
-        userId TEXT,
-        socketId TEXT NOT NULL,
-        state TEXT NOT NULL,
-        subState TEXT,
-        currentConf INTEGER DEFAULT 0,
-        currentMsgBase INTEGER DEFAULT 0,
-        timeRemaining INTEGER DEFAULT 60,
-        lastActivity DATETIME DEFAULT CURRENT_TIMESTAMP,
-        confRJoin INTEGER DEFAULT 1,
-        msgBaseRJoin INTEGER DEFAULT 1,
-        commandBuffer TEXT DEFAULT '',
-        menuPause BOOLEAN DEFAULT 1,
-        inputBuffer TEXT DEFAULT '',
-        relConfNum INTEGER DEFAULT 0,
-        currentConfName TEXT DEFAULT 'Unknown',
-        cmdShortcuts BOOLEAN DEFAULT 0,
-        tempData TEXT,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId) REFERENCES users(id)
-      )
-    `);
-
-    // Bulletins table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS bulletins (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conferenceId INTEGER NOT NULL,
-        filename TEXT NOT NULL,
-        title TEXT NOT NULL,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (conferenceId) REFERENCES conferences(id)
-      )
-    `);
-
-    // System logs table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS system_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        level TEXT NOT NULL,
-        message TEXT NOT NULL,
-        userId TEXT,
-        conferenceId INTEGER,
-        node INTEGER,
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (conferenceId) REFERENCES conferences(id)
-      )
-    `);
-
-    // Node sessions table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS node_sessions (
-        id TEXT PRIMARY KEY,
-        nodeId INTEGER NOT NULL,
-        userId TEXT,
-        socketId TEXT NOT NULL,
-        state TEXT NOT NULL,
-        subState TEXT,
-        currentConf INTEGER DEFAULT 0,
-        currentMsgBase INTEGER DEFAULT 0,
-        timeRemaining INTEGER DEFAULT 60,
-        lastActivity DATETIME DEFAULT CURRENT_TIMESTAMP,
-        status TEXT DEFAULT 'active',
-        ipAddress TEXT,
-        location TEXT,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId) REFERENCES users(id)
-      )
-    `);
-
-    // QWK packets table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS qwk_packets (
-        id TEXT PRIMARY KEY,
-        filename TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        fromBBS TEXT NOT NULL,
-        toBBS TEXT NOT NULL,
-        status TEXT DEFAULT 'pending',
-        error TEXT,
-        processedAt DATETIME
-      )
-    `);
-
-    // QWK messages table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS qwk_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        packetId TEXT NOT NULL,
-        conference INTEGER NOT NULL,
-        subject TEXT NOT NULL,
-        from TEXT NOT NULL,
-        to TEXT,
-        date DATETIME NOT NULL,
-        body TEXT NOT NULL,
-        isPrivate BOOLEAN DEFAULT 0,
-        isReply BOOLEAN DEFAULT 0,
-        parentId INTEGER,
-        attachments TEXT,
-        FOREIGN KEY (packetId) REFERENCES qwk_packets(id)
-      )
-    `);
-
-    // FTN messages table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS ftn_messages (
-        id TEXT PRIMARY KEY,
-        fromAddress TEXT NOT NULL,
-        toAddress TEXT NOT NULL,
-        subject TEXT NOT NULL,
-        body TEXT NOT NULL,
-        date DATETIME NOT NULL,
-        area TEXT NOT NULL,
-        msgid TEXT,
-        replyTo TEXT,
-        attributes INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'pending',
-        processedAt DATETIME,
-        error TEXT
-      )
-    `);
-
-    // AREXX scripts table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS arexx_scripts (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        filename TEXT NOT NULL,
-        path TEXT NOT NULL,
-        accessLevel INTEGER DEFAULT 0,
-        enabled BOOLEAN DEFAULT 1,
-        parameters TEXT,
-        triggers TEXT,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // AREXX execution log table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS arexx_executions (
-        id TEXT PRIMARY KEY,
-        scriptId TEXT NOT NULL,
-        userId TEXT,
-        sessionId TEXT,
-        parameters TEXT,
-        environment TEXT,
-        output TEXT,
-        result TEXT,
-        error TEXT,
-        executedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        duration INTEGER,
-        FOREIGN KEY (scriptId) REFERENCES arexx_scripts(id),
-        FOREIGN KEY (userId) REFERENCES users(id)
-      )
-    `);
-
-    // Transfer sessions table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS transfer_sessions (
-        id TEXT PRIMARY KEY,
-        protocol TEXT NOT NULL,
-        userId TEXT NOT NULL,
-        direction TEXT NOT NULL,
-        filename TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        bytesTransferred INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'starting',
-        startTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-        endTime DATETIME,
-        error TEXT,
-        checksum TEXT,
-        FOREIGN KEY (userId) REFERENCES users(id)
-      )
-    `);
-
-    // QWK/FTN network message tables
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS qwk_packets (
-        id TEXT PRIMARY KEY,
-        filename TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        fromBBS TEXT NOT NULL,
-        toBBS TEXT NOT NULL,
-        status TEXT DEFAULT 'pending',
-        error TEXT,
-        processedAt DATETIME
-      )
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS qwk_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        packetId TEXT NOT NULL,
-        conference INTEGER NOT NULL,
-        subject TEXT NOT NULL,
-        from_user TEXT NOT NULL,
-        to_user TEXT,
-        date DATETIME NOT NULL,
-        body TEXT NOT NULL,
-        isPrivate BOOLEAN DEFAULT 0,
-        isReply BOOLEAN DEFAULT 0,
-        parentId INTEGER,
-        attachments TEXT, -- JSON array
-        FOREIGN KEY (packetId) REFERENCES qwk_packets(id)
-      )
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS ftn_messages (
-        id TEXT PRIMARY KEY,
-        fromAddress TEXT NOT NULL,
-        toAddress TEXT NOT NULL,
-        subject TEXT NOT NULL,
-        body TEXT NOT NULL,
-        date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        area TEXT NOT NULL,
-        msgid TEXT,
-        replyTo TEXT,
-        attributes INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'pending',
-        error TEXT,
-        processedAt DATETIME
-      )
-    `);
-
-    // Multi-node support tables
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS nodes (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        status TEXT DEFAULT 'available',
-        currentUser TEXT,
-        lastActivity DATETIME,
-        description TEXT,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS node_sessions (
-        id TEXT PRIMARY KEY,
-        nodeId INTEGER NOT NULL,
-        userId TEXT,
-        socketId TEXT NOT NULL,
-        state TEXT NOT NULL,
-        subState TEXT,
-        currentConf INTEGER DEFAULT 0,
-        currentMsgBase INTEGER DEFAULT 0,
-        timeRemaining INTEGER DEFAULT 60,
-        lastActivity DATETIME DEFAULT CURRENT_TIMESTAMP,
-        status TEXT DEFAULT 'active',
-        ipAddress TEXT,
-        location TEXT,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (nodeId) REFERENCES nodes(id),
-        FOREIGN KEY (userId) REFERENCES users(id)
-      )
-    `);
-
-    // AREXX scripting tables
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS arexx_scripts (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        filename TEXT NOT NULL,
-        path TEXT NOT NULL,
-        accessLevel INTEGER DEFAULT 10,
-        enabled BOOLEAN DEFAULT 1,
-        parameters TEXT, -- JSON array
-        triggers TEXT, -- JSON array
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS arexx_executions (
-        id TEXT PRIMARY KEY,
-        scriptId TEXT NOT NULL,
-        userId TEXT,
-        sessionId TEXT,
-        parameters TEXT, -- JSON object
-        environment TEXT, -- JSON object
-        output TEXT, -- JSON array
-        result TEXT,
-        error TEXT,
-        startedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        completedAt DATETIME,
-        FOREIGN KEY (scriptId) REFERENCES arexx_scripts(id),
-        FOREIGN KEY (userId) REFERENCES users(id)
-      )
-    `);
-
-    // Protocol support tables
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS transfer_protocols (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        enabled BOOLEAN DEFAULT 1,
-        config TEXT, -- JSON object
-        created DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS transfer_sessions (
-        id TEXT PRIMARY KEY,
-        protocol TEXT NOT NULL,
-        userId TEXT NOT NULL,
-        direction TEXT NOT NULL,
-        filename TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        bytesTransferred INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'starting',
-        startTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-        endTime DATETIME,
-        error TEXT,
-        checksum TEXT,
-        FOREIGN KEY (userId) REFERENCES users(id)
-      )
-    `);
-
-    // Create indexes for performance
-    this.createIndexes();
-
-    // Initialize default data for new features
-    this.initializeNetworkData();
-    this.initializeNodeData();
-    this.initializeAREXXData();
-    this.initializeProtocolData();
+        if (!this.isConnected) {
+          console.log('✅ Database health check: Connection restored');
+          this.isConnected = true;
+          this.reconnectAttempts = 0;
+        }
+      } catch (error) {
+        if (this.isConnected) {
+          console.error('⚠️ Database health check failed:', error);
+          this.isConnected = false;
+          this.attemptReconnection();
+        }
+      }
+    }, 30000);
   }
 
-  private createIndexes(): void {
+  // Check if database is connected
+  public isHealthy(): boolean {
+    return this.isConnected;
+  }
+
+  // SQLite methods removed - now using PostgreSQL only
+
+
+  private async initDatabase(): Promise<void> {
+    try {
+      console.log('Creating database tables...');
+      await this.createTables();
+      console.log('Database tables created successfully');
+
+      // Initialize default data
+      await this.initializeDefaultData();
+      console.log('Default data initialized');
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      // Don't throw error - continue with server startup
+      console.log('Continuing with server startup despite database initialization error');
+    }
+  }
+
+  private async createTables(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      // Users table - 1:1 with AmiExpress account editing fields
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          username TEXT UNIQUE NOT NULL,
+          passwordhash TEXT NOT NULL,
+          realname TEXT NOT NULL,
+          location TEXT,
+          phone TEXT,
+          email TEXT,
+          seclevel INTEGER DEFAULT 10,
+          uploads INTEGER DEFAULT 0,
+          downloads INTEGER DEFAULT 0,
+          bytesupload BIGINT DEFAULT 0,
+          bytesdownload BIGINT DEFAULT 0,
+          ratio INTEGER DEFAULT 0,
+          ratiotype INTEGER DEFAULT 0,
+          timetotal INTEGER DEFAULT 0,
+          timelimit INTEGER DEFAULT 0,
+          timeused INTEGER DEFAULT 0,
+          chatlimit INTEGER DEFAULT 0,
+          chatused INTEGER DEFAULT 0,
+          lastlogin TIMESTAMPTZ,
+          firstlogin TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          calls INTEGER DEFAULT 0,
+          callstoday INTEGER DEFAULT 0,
+          newuser BOOLEAN DEFAULT true,
+          expert BOOLEAN DEFAULT false,
+          ansi BOOLEAN DEFAULT true,
+          linesperscreen INTEGER DEFAULT 23,
+          computer TEXT,
+          screentype TEXT DEFAULT 'Amiga Ansi',
+          protocol TEXT DEFAULT '/X Zmodem',
+          editor TEXT DEFAULT 'Prompt',
+          zoomtype TEXT DEFAULT 'QWK',
+          availableforchat BOOLEAN DEFAULT true,
+          quietnode BOOLEAN DEFAULT false,
+          autorejoin INTEGER DEFAULT 1,
+          confaccess TEXT DEFAULT 'XXX',
+          areaname TEXT DEFAULT 'Standard',
+          uucp BOOLEAN DEFAULT false,
+          topuploadcps INTEGER DEFAULT 0,
+          topdownloadcps INTEGER DEFAULT 0,
+          bytelimit BIGINT DEFAULT 0,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Conferences table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS conferences (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Message bases table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS message_bases (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Messages table - supports threading and private messages
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS messages (
+          id SERIAL PRIMARY KEY,
+          subject TEXT NOT NULL,
+          body TEXT NOT NULL,
+          author TEXT NOT NULL,
+          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          messagebaseid INTEGER NOT NULL REFERENCES message_bases(id),
+          isprivate BOOLEAN DEFAULT false,
+          touser TEXT,
+          parentid INTEGER,
+          attachments JSONB,
+          edited BOOLEAN DEFAULT false,
+          editedby TEXT,
+          editedat TIMESTAMPTZ
+        )
+      `);
+
+      // File areas table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS file_areas (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          path TEXT NOT NULL,
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          maxfiles INTEGER DEFAULT 100,
+          uploadaccess INTEGER DEFAULT 10,
+          downloadaccess INTEGER DEFAULT 1,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // File entries table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS file_entries (
+          id SERIAL PRIMARY KEY,
+          filename TEXT NOT NULL,
+          description TEXT,
+          size BIGINT NOT NULL,
+          uploader TEXT NOT NULL,
+          uploaddate TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          downloads INTEGER DEFAULT 0,
+          areaid INTEGER NOT NULL REFERENCES file_areas(id),
+          fileiddiz TEXT,
+          rating REAL DEFAULT 0,
+          votes INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'active',
+          checked TEXT DEFAULT 'N',
+          comment TEXT
+        )
+      `);
+
+      // Sessions table for persistence
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          userid TEXT REFERENCES users(id),
+          socketid TEXT NOT NULL,
+          state TEXT NOT NULL,
+          substate TEXT,
+          currentconf INTEGER DEFAULT 0,
+          currentmsgbase INTEGER DEFAULT 0,
+          timeremaining INTEGER DEFAULT 60,
+          lastactivity TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          confrjoin INTEGER DEFAULT 1,
+          msgbaserjoin INTEGER DEFAULT 1,
+          commandbuffer TEXT DEFAULT '',
+          menupause BOOLEAN DEFAULT true,
+          inputbuffer TEXT DEFAULT '',
+          relconfnum INTEGER DEFAULT 0,
+          currentconfname TEXT DEFAULT 'Unknown',
+          cmdshortcuts BOOLEAN DEFAULT false,
+          tempdata JSONB,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Bulletins table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS bulletins (
+          id SERIAL PRIMARY KEY,
+          conferenceid INTEGER NOT NULL REFERENCES conferences(id),
+          filename TEXT NOT NULL,
+          title TEXT NOT NULL,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Online messages table (OLM - Online Message system)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS online_messages (
+          id SERIAL PRIMARY KEY,
+          from_user_id TEXT NOT NULL REFERENCES users(id),
+          to_user_id TEXT NOT NULL REFERENCES users(id),
+          message TEXT NOT NULL,
+          delivered BOOLEAN DEFAULT FALSE,
+          read BOOLEAN DEFAULT FALSE,
+          from_username TEXT NOT NULL,
+          to_username TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          delivered_at TIMESTAMPTZ,
+          read_at TIMESTAMPTZ
+        )
+      `);
+
+      // Create index for efficient message lookups
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_online_messages_to_user
+        ON online_messages(to_user_id, delivered, read);
+      `);
+
+      // Chat sessions table (Internode chat system)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+          id SERIAL PRIMARY KEY,
+          session_id TEXT UNIQUE NOT NULL,
+          initiator_id TEXT NOT NULL REFERENCES users(id),
+          recipient_id TEXT NOT NULL REFERENCES users(id),
+          initiator_username TEXT NOT NULL,
+          recipient_username TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'requesting',
+          started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          ended_at TIMESTAMPTZ,
+          initiator_socket TEXT NOT NULL,
+          recipient_socket TEXT NOT NULL,
+          message_count INTEGER DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create indexes for chat sessions
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_sessions_status
+        ON chat_sessions(status);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_sessions_users
+        ON chat_sessions(initiator_id, recipient_id);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_sessions_active
+        ON chat_sessions(status, started_at) WHERE status = 'active';
+      `);
+
+      // Chat messages table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+          id SERIAL PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          sender_id TEXT NOT NULL REFERENCES users(id),
+          sender_username TEXT NOT NULL,
+          message TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_chat_session
+            FOREIGN KEY (session_id)
+            REFERENCES chat_sessions(session_id)
+            ON DELETE CASCADE
+        )
+      `);
+
+      // Create indexes for chat messages
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+        ON chat_messages(session_id, created_at);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_sender
+        ON chat_messages(sender_id);
+      `);
+
+      // Chat rooms table (multi-user chat rooms - extended feature)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_rooms (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          topic TEXT,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created_by TEXT NOT NULL REFERENCES users(id),
+          is_public BOOLEAN DEFAULT TRUE,
+          max_users INTEGER DEFAULT 50,
+          min_security_level INTEGER DEFAULT 0
+        )
+      `);
+
+      // Chat room users (current users in rooms)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_room_users (
+          room_id TEXT NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          username TEXT NOT NULL,
+          joined TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (room_id, user_id)
+        )
+      `);
+
+      // Chat room messages (message history)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_room_messages (
+          id SERIAL PRIMARY KEY,
+          room_id TEXT NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+          sender_id TEXT NOT NULL REFERENCES users(id),
+          sender_name TEXT NOT NULL,
+          message TEXT NOT NULL,
+          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create indexes for chat rooms
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_rooms_public
+        ON chat_rooms(is_public, min_security_level);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_room_users_room
+        ON chat_room_users(room_id);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_room_messages_room
+        ON chat_room_messages(room_id, timestamp);
+      `);
+
+      // System logs table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS system_logs (
+          id SERIAL PRIMARY KEY,
+          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          level TEXT NOT NULL,
+          message TEXT NOT NULL,
+          userid TEXT REFERENCES users(id),
+          conferenceid INTEGER REFERENCES conferences(id),
+          node INTEGER
+        )
+      `);
+
+      // AREXX scripts table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS arexx_scripts (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          script TEXT NOT NULL,
+          triggers JSONB,
+          priority INTEGER DEFAULT 0,
+          enabled BOOLEAN DEFAULT TRUE,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Node sessions table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS node_sessions (
+          id TEXT PRIMARY KEY,
+          nodeId INTEGER NOT NULL,
+          userId TEXT REFERENCES users(id),
+          socketId TEXT NOT NULL,
+          state TEXT NOT NULL,
+          subState TEXT,
+          currentConf INTEGER,
+          currentMsgBase INTEGER,
+          timeRemaining INTEGER,
+          lastActivity TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          status TEXT NOT NULL,
+          loadLevel INTEGER DEFAULT 0,
+          currentUser TEXT,
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create indexes for performance
+      await this.createIndexes(client);
+    } finally {
+      client.release();
+    }
+  }
+
+  private async createIndexes(client: any): Promise<void> {
     // Message indexes
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceId)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messageBaseId)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isPrivate, toUser)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messagebaseid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isprivate, touser)`);
 
     // File indexes
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaId)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries(uploadDate)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries(uploaddate)`);
+
+    // Conference indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conferenceid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conferenceid)`);
 
     // User indexes
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(secLevel)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(seclevel)`);
   }
+
 
   // User management methods
   async createUser(userData: Omit<User, 'id' | 'created' | 'updated'>): Promise<string> {
-    const id = crypto.randomUUID();
-    const sql = `
-      INSERT INTO users (
-        id, username, passwordHash, realname, location, phone, email,
-        secLevel, uploads, downloads, bytesUpload, bytesDownload, ratio,
-        ratioType, timeTotal, timeLimit, timeUsed, chatLimit, chatUsed,
-        lastLogin, firstLogin, calls, callsToday, newUser, expert, ansi,
-        linesPerScreen, computer, screenType, protocol, editor, zoomType,
-        availableForChat, quietNode, autoRejoin, confAccess, areaName, uuCP,
-        topUploadCPS, topDownloadCPS, byteLimit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+    const client = await this.pool.connect();
+    try {
+      const id = crypto.randomUUID();
+      const sql = `
+        INSERT INTO users (
+          id, username, passwordhash, realname, location, phone, email,
+          seclevel, uploads, downloads, bytesupload, bytesdownload, ratio,
+          ratiotype, timetotal, timelimit, timeused, chatlimit, chatused,
+          lastlogin, firstlogin, calls, callstoday, newuser, expert, ansi,
+          linesperscreen, computer, screentype, protocol, editor, zoomtype,
+          availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
+          topuploadcps, topdownloadcps, bytelimit
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
+      `;
 
-    const values = [
-      id, userData.username, userData.passwordHash, userData.realname,
-      userData.location, userData.phone, userData.email, userData.secLevel,
-      userData.uploads, userData.downloads, userData.bytesUpload, userData.bytesDownload,
-      userData.ratio, userData.ratioType, userData.timeTotal, userData.timeLimit,
-      userData.timeUsed, userData.chatLimit, userData.chatUsed, userData.lastLogin,
-      userData.firstLogin, userData.calls, userData.callsToday, userData.newUser,
-      userData.expert, userData.ansi, userData.linesPerScreen, userData.computer,
-      userData.screenType, userData.protocol, userData.editor, userData.zoomType,
-      userData.availableForChat, userData.quietNode, userData.autoRejoin,
-      userData.confAccess, userData.areaName, userData.uuCP, userData.topUploadCPS,
-      userData.topDownloadCPS, userData.byteLimit
-    ];
+      const values = [
+        id, userData.username, userData.passwordHash, userData.realname,
+        userData.location, userData.phone, userData.email, userData.secLevel,
+        userData.uploads, userData.downloads, userData.bytesUpload, userData.bytesDownload,
+        userData.ratio, userData.ratioType, userData.timeTotal, userData.timeLimit,
+        userData.timeUsed, userData.chatLimit, userData.chatUsed, userData.lastLogin,
+        userData.firstLogin, userData.calls, userData.callsToday, userData.newUser,
+        userData.expert, userData.ansi, userData.linesPerScreen, userData.computer,
+        userData.screenType, userData.protocol, userData.editor, userData.zoomType,
+        userData.availableForChat, userData.quietNode, userData.autoRejoin,
+        userData.confAccess, userData.areaName, userData.uuCP, userData.topUploadCPS,
+        userData.topDownloadCPS, userData.byteLimit
+      ];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(id);
-      });
-    });
+      await client.query(sql, values);
+      return id;
+    } finally {
+      client.release();
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
-    const sql = `SELECT * FROM users WHERE username = ?`;
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, [username], (err, row) => {
-        if (err) reject(err);
-        else resolve(row as User || null);
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM users WHERE username = $1`;
+      const result = await client.query(sql, [username]);
+      if (result.rows[0]) {
+        const user = result.rows[0] as any;
+        // Convert bigint fields to numbers for compatibility
+        // Helper function to safely convert to number with default
+        const safeNumber = (value: any, defaultValue: number = 0): number => {
+          const num = Number(value);
+          return isNaN(num) ? defaultValue : num;
+        };
+
+        return {
+          id: user.id,
+          username: user.username,
+          passwordHash: user.passwordhash,
+          realname: user.realname,
+          location: user.location,
+          phone: user.phone,
+          email: user.email,
+          secLevel: safeNumber(user.seclevel, 10), // Default to 10 if NaN
+          uploads: safeNumber(user.uploads, 0),
+          downloads: safeNumber(user.downloads, 0),
+          bytesUpload: safeNumber(user.bytesupload, 0),
+          bytesDownload: safeNumber(user.bytesdownload, 0),
+          ratio: safeNumber(user.ratio, 0),
+          ratioType: safeNumber(user.ratiotype, 0),
+          timeTotal: safeNumber(user.timetotal, 0),
+          timeLimit: safeNumber(user.timelimit, 0),
+          timeUsed: safeNumber(user.timeused, 0),
+          chatLimit: safeNumber(user.chatlimit, 0),
+          chatUsed: safeNumber(user.chatused, 0),
+          lastLogin: user.lastlogin,
+          firstLogin: user.firstlogin,
+          calls: safeNumber(user.calls, 0),
+          callsToday: safeNumber(user.callstoday, 0),
+          newUser: user.newuser,
+          expert: user.expert,
+          ansi: user.ansi,
+          linesPerScreen: safeNumber(user.linesperscreen, 23),
+          computer: user.computer,
+          screenType: user.screentype,
+          protocol: user.protocol,
+          editor: user.editor,
+          zoomType: user.zoomtype,
+          availableForChat: user.availableforchat,
+          quietNode: user.quietnode,
+          autoRejoin: safeNumber(user.autorejoin, 1),
+          confAccess: user.confaccess,
+          areaName: user.areaname,
+          uuCP: user.uucp,
+          topUploadCPS: safeNumber(user.topuploadcps, 0),
+          topDownloadCPS: safeNumber(user.topdownloadcps, 0),
+          byteLimit: safeNumber(user.bytelimit, 0),
+          created: user.created,
+          updated: user.updated,
+        } as User;
+      }
+      return null;
+    } finally {
+      client.release();
+    }
   }
 
   async getUserById(id: string): Promise<User | null> {
-    const sql = `SELECT * FROM users WHERE id = ?`;
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, [id], (err, row) => {
-        if (err) reject(err);
-        else resolve(row as User || null);
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM users WHERE id = $1`;
+      const result = await client.query(sql, [id]);
+      return result.rows[0] as User || null;
+    } finally {
+      client.release();
+    }
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<void> {
-    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
-    if (fields.length === 0) return;
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+      if (fields.length === 0) return;
 
-    const sql = `UPDATE users SET ${fields.map(f => `${f} = ?`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = ?`;
-    const values = [...fields.map(f => updates[f as keyof User]), id];
+      const sql = `UPDATE users SET ${fields.map((f, i) => `${fieldToColumn(f)} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof User]), id];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
   }
 
   async getUsers(filter?: { secLevel?: number; newUser?: boolean; limit?: number }): Promise<User[]> {
-    let sql = `SELECT * FROM users WHERE 1=1`;
-    const params: any[] = [];
+    const client = await this.pool.connect();
+    try {
+      let sql = `SELECT * FROM users WHERE 1=1`;
+      const params: any[] = [];
+      let paramIndex = 1;
 
-    if (filter?.secLevel !== undefined) {
-      sql += ` AND secLevel >= ?`;
-      params.push(filter.secLevel);
+      if (filter?.secLevel !== undefined) {
+        sql += ` AND seclevel >= $${paramIndex++}`;
+        params.push(filter.secLevel);
+      }
+
+      if (filter?.newUser !== undefined) {
+        sql += ` AND newuser = $${paramIndex++}`;
+        params.push(filter.newUser);
+      }
+
+      sql += ` ORDER BY username`;
+
+      if (filter?.limit) {
+        sql += ` LIMIT $${paramIndex++}`;
+        params.push(filter.limit);
+      }
+
+      const result = await client.query(sql, params);
+      return result.rows as User[];
+    } finally {
+      client.release();
     }
-
-    if (filter?.newUser !== undefined) {
-      sql += ` AND newUser = ?`;
-      params.push(filter.newUser ? 1 : 0);
-    }
-
-    sql += ` ORDER BY username`;
-
-    if (filter?.limit) {
-      sql += ` LIMIT ?`;
-      params.push(filter.limit);
-    }
-
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as User[]);
-      });
-    });
   }
 
   // Message management methods
   async createMessage(message: Omit<Message, 'id'>): Promise<number> {
-    const sql = `
-      INSERT INTO messages (
-        subject, body, author, timestamp, conferenceId, messageBaseId,
-        isPrivate, toUser, parentId, attachments, edited, editedBy, editedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO messages (
+          subject, body, author, timestamp, conferenceid, messagebaseid,
+          isprivate, touser, parentid, attachments, edited, editedby, editedat
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        RETURNING id
+      `;
 
-    const values = [
-      message.subject, message.body, message.author, message.timestamp,
-      message.conferenceId, message.messageBaseId, message.isPrivate,
-      message.toUser, message.parentId, JSON.stringify(message.attachments || []),
-      message.edited, message.editedBy, message.editedAt
-    ];
+      const values = [
+        message.subject, message.body, message.author, message.timestamp,
+        message.conferenceId, message.messageBaseId, message.isPrivate,
+        message.toUser, message.parentId, JSON.stringify(message.attachments || []),
+        message.edited, message.editedBy, message.editedAt
+      ];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(this.lastID);
-      });
-    });
+      const result = await client.query(sql, values);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
   }
 
   async getMessages(conferenceId: number, messageBaseId: number, options?: {
@@ -936,101 +915,104 @@ export class Database {
     userId?: string;
     search?: string;
   }): Promise<Message[]> {
-    let sql = `
-      SELECT m.*, mb.name as messageBaseName, c.name as conferenceName
-      FROM messages m
-      JOIN message_bases mb ON m.messageBaseId = mb.id
-      JOIN conferences c ON m.conferenceId = c.id
-      WHERE m.conferenceId = ? AND m.messageBaseId = ?
-    `;
-    const params: any[] = [conferenceId, messageBaseId];
+    const client = await this.pool.connect();
+    try {
+      let sql = `
+        SELECT m.*, mb.name as messageBaseName, c.name as conferenceName
+        FROM messages m
+        JOIN message_bases mb ON m.messagebaseid = mb.id
+        JOIN conferences c ON m.conferenceid = c.id
+        WHERE m.conferenceid = $1 AND m.messagebaseid = $2
+      `;
+      const params: any[] = [conferenceId, messageBaseId];
+      let paramIndex = 3;
 
-    if (options?.privateOnly && options?.userId) {
-      sql += ` AND (m.isPrivate = 0 OR (m.isPrivate = 1 AND (m.author = ? OR m.toUser = ?)))`;
-      params.push(options.userId, options.userId);
+      if (options?.privateOnly && options?.userId) {
+        sql += ` AND (m.isprivate = false OR (m.isprivate = true AND (m.author = $${paramIndex++} OR m.touser = $${paramIndex++})))`;
+        params.push(options.userId, options.userId);
+      }
+
+      if (options?.search) {
+        sql += ` AND (m.subject ILIKE $${paramIndex++} OR m.body ILIKE $${paramIndex++} OR m.author ILIKE $${paramIndex++})`;
+        const searchTerm = `%${options.search}%`;
+        params.push(searchTerm, searchTerm, searchTerm);
+      }
+
+      sql += ` ORDER BY m.timestamp DESC`;
+
+      if (options?.limit) {
+        sql += ` LIMIT $${paramIndex++}`;
+        params.push(options.limit);
+      }
+
+      if (options?.offset) {
+        sql += ` OFFSET $${paramIndex++}`;
+        params.push(options.offset);
+      }
+
+      const result = await client.query(sql, params);
+      const messages = result.rows.map((row: any) => ({
+        ...row,
+        attachments: row.attachments || []
+      }));
+
+      return messages as Message[];
+    } finally {
+      client.release();
     }
-
-    if (options?.search) {
-      sql += ` AND (m.subject LIKE ? OR m.body LIKE ? OR m.author LIKE ?)`;
-      const searchTerm = `%${options.search}%`;
-      params.push(searchTerm, searchTerm, searchTerm);
-    }
-
-    sql += ` ORDER BY m.timestamp DESC`;
-
-    if (options?.limit) {
-      sql += ` LIMIT ?`;
-      params.push(options.limit);
-    }
-
-    if (options?.offset) {
-      sql += ` OFFSET ?`;
-      params.push(options.offset);
-    }
-
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else {
-          const messages = rows.map((row: any) => ({
-            ...row,
-            attachments: JSON.parse(row.attachments || '[]')
-          }));
-          resolve(messages as Message[]);
-        }
-      });
-    });
   }
 
   async updateMessage(id: number, updates: Partial<Message>): Promise<void> {
-    const fields = Object.keys(updates).filter(key => key !== 'id');
-    if (fields.length === 0) return;
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return;
 
-    const sql = `UPDATE messages SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`;
-    const values = [...fields.map(f => {
-      if (f === 'attachments') return JSON.stringify(updates.attachments || []);
-      return updates[f as keyof Message];
-    }), id];
+      const sql = `UPDATE messages SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => {
+        if (f === 'attachments') return JSON.stringify(updates.attachments || []);
+        return updates[f as keyof Message];
+      }), id];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
   }
 
   async deleteMessage(id: number): Promise<void> {
-    const sql = `DELETE FROM messages WHERE id = ?`;
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, [id], function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `DELETE FROM messages WHERE id = $1`;
+      await client.query(sql, [id]);
+    } finally {
+      client.release();
+    }
   }
 
   // File management methods
   async createFileEntry(file: Omit<FileEntry, 'id'>): Promise<number> {
-    const sql = `
-      INSERT INTO file_entries (
-        filename, description, size, uploader, uploadDate, downloads,
-        areaId, fileIdDiz, rating, votes, status, checked, comment
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO file_entries (
+          filename, description, size, uploader, uploaddate, downloads,
+          areaid, fileiddiz, rating, votes, status, checked, comment
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        RETURNING id
+      `;
 
-    const values = [
-      file.filename, file.description, file.size, file.uploader, file.uploadDate,
-      file.downloads, file.areaId, file.fileIdDiz, file.rating, file.votes,
-      file.status, file.checked, file.comment
-    ];
+      const values = [
+        file.filename, file.description, file.size, file.uploader, file.uploadDate,
+        file.downloads, file.areaId, file.fileIdDiz, file.rating, file.votes,
+        file.status, file.checked, file.comment
+      ];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(this.lastID);
-      });
-    });
+      const result = await client.query(sql, values);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
   }
 
   async getFileEntries(areaId: number, options?: {
@@ -1039,226 +1021,826 @@ export class Database {
     search?: string;
     status?: string;
   }): Promise<FileEntry[]> {
-    let sql = `SELECT * FROM file_entries WHERE areaId = ?`;
-    const params: any[] = [areaId];
+    const client = await this.pool.connect();
+    try {
+      let sql = `SELECT * FROM file_entries WHERE areaid = $1`;
+      const params: any[] = [areaId];
+      let paramIndex = 2;
 
-    if (options?.status) {
-      sql += ` AND status = ?`;
-      params.push(options.status);
+      if (options?.status) {
+        sql += ` AND status = $${paramIndex++}`;
+        params.push(options.status);
+      }
+
+      if (options?.search) {
+        sql += ` AND (filename ILIKE $${paramIndex++} OR description ILIKE $${paramIndex++} OR fileiddiz ILIKE $${paramIndex++})`;
+        const searchTerm = `%${options.search}%`;
+        params.push(searchTerm, searchTerm, searchTerm);
+      }
+
+      sql += ` ORDER BY uploaddate DESC`;
+
+      if (options?.limit) {
+        sql += ` LIMIT $${paramIndex++}`;
+        params.push(options.limit);
+      }
+
+      if (options?.offset) {
+        sql += ` OFFSET $${paramIndex++}`;
+        params.push(options.offset);
+      }
+
+      const result = await client.query(sql, params);
+      return result.rows as FileEntry[];
+    } finally {
+      client.release();
     }
-
-    if (options?.search) {
-      sql += ` AND (filename LIKE ? OR description LIKE ? OR fileIdDiz LIKE ?)`;
-      const searchTerm = `%${options.search}%`;
-      params.push(searchTerm, searchTerm, searchTerm);
-    }
-
-    sql += ` ORDER BY uploadDate DESC`;
-
-    if (options?.limit) {
-      sql += ` LIMIT ?`;
-      params.push(options.limit);
-    }
-
-    if (options?.offset) {
-      sql += ` OFFSET ?`;
-      params.push(options.offset);
-    }
-
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as FileEntry[]);
-      });
-    });
   }
 
   async updateFileEntry(id: number, updates: Partial<FileEntry>): Promise<void> {
-    const fields = Object.keys(updates).filter(key => key !== 'id');
-    if (fields.length === 0) return;
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return;
 
-    const sql = `UPDATE file_entries SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`;
-    const values = [...fields.map(f => updates[f as keyof FileEntry]), id];
+      const sql = `UPDATE file_entries SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof FileEntry]), id];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
   }
 
   async incrementDownloadCount(id: number): Promise<void> {
-    const sql = `UPDATE file_entries SET downloads = downloads + 1 WHERE id = ?`;
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, [id], function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `UPDATE file_entries SET downloads = downloads + 1 WHERE id = $1`;
+      await client.query(sql, [id]);
+    } finally {
+      client.release();
+    }
   }
 
   // Session management methods
   async createSession(session: Omit<Session, 'created' | 'updated'>): Promise<void> {
-    const sql = `
-      INSERT OR REPLACE INTO sessions (
-        id, userId, socketId, state, subState, currentConf, currentMsgBase,
-        timeRemaining, lastActivity, confRJoin, msgBaseRJoin, commandBuffer,
-        menuPause, inputBuffer, relConfNum, currentConfName, cmdShortcuts, tempData
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO sessions (
+          id, userid, socketid, state, substate, currentconf, currentmsgbase,
+          timeremaining, lastactivity, confrjoin, msgbaserjoin, commandbuffer,
+          menupause, inputbuffer, relconfnum, currentconfname, cmdshortcuts, tempdata
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        ON CONFLICT (id) DO UPDATE SET
+          userid = EXCLUDED.userid,
+          socketid = EXCLUDED.socketid,
+          state = EXCLUDED.state,
+          substate = EXCLUDED.substate,
+          currentconf = EXCLUDED.currentconf,
+          currentmsgbase = EXCLUDED.currentmsgbase,
+          timeremaining = EXCLUDED.timeremaining,
+          lastactivity = EXCLUDED.lastactivity,
+          confrjoin = EXCLUDED.confrjoin,
+          msgbaserjoin = EXCLUDED.msgbaserjoin,
+          commandbuffer = EXCLUDED.commandbuffer,
+          menupause = EXCLUDED.menupause,
+          inputbuffer = EXCLUDED.inputbuffer,
+          relconfnum = EXCLUDED.relconfnum,
+          currentconfname = EXCLUDED.currentconfname,
+          cmdshortcuts = EXCLUDED.cmdshortcuts,
+          tempdata = EXCLUDED.tempdata,
+          updated = CURRENT_TIMESTAMP
+      `;
 
-    const values = [
-      session.id, session.userId, session.socketId, session.state, session.subState,
-      session.currentConf, session.currentMsgBase, session.timeRemaining,
-      session.lastActivity, session.confRJoin, session.msgBaseRJoin,
-      session.commandBuffer, session.menuPause, session.inputBuffer,
-      session.relConfNum, session.currentConfName, session.cmdShortcuts,
-      session.tempData ? JSON.stringify(session.tempData) : null
-    ];
+      const values = [
+        session.id, session.userId, session.socketId, session.state, session.subState,
+        session.currentConf, session.currentMsgBase, session.timeRemaining,
+        session.lastActivity, session.confRJoin, session.msgBaseRJoin,
+        session.commandBuffer, session.menuPause, session.inputBuffer,
+        session.relConfNum, session.currentConfName, session.cmdShortcuts,
+        session.tempData ? JSON.stringify(session.tempData) : null
+      ];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
   }
 
   async getSession(id: string): Promise<Session | null> {
-    const sql = `SELECT * FROM sessions WHERE id = ?`;
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, [id], (err, row) => {
-        if (err) reject(err);
-        else if (row) {
-          const session = row as any;
-          if (session.tempData) {
-            session.tempData = JSON.parse(session.tempData);
-          }
-          resolve(session as Session);
-        } else {
-          resolve(null);
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM sessions WHERE id = $1`;
+      const result = await client.query(sql, [id]);
+      if (result.rows[0]) {
+        const session = result.rows[0] as any;
+        if (session.tempData) {
+          session.tempData = JSON.parse(session.tempData);
         }
-      });
-    });
+        return session as Session;
+      }
+      return null;
+    } finally {
+      client.release();
+    }
   }
 
   async updateSession(id: string, updates: Partial<Session>): Promise<void> {
-    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
-    if (fields.length === 0) return;
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+      if (fields.length === 0) return;
 
-    const sql = `UPDATE sessions SET ${fields.map(f => `${f} = ?`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = ?`;
-    const values = [...fields.map(f => {
-      if (f === 'tempData') return updates.tempData ? JSON.stringify(updates.tempData) : null;
-      return updates[f as keyof Session];
-    }), id];
+      const sql = `UPDATE sessions SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => {
+        if (f === 'tempData') return updates.tempData ? JSON.stringify(updates.tempData) : null;
+        return updates[f as keyof Session];
+      }), id];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
   }
 
   async deleteSession(id: string): Promise<void> {
-    const sql = `DELETE FROM sessions WHERE id = ?`;
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, [id], function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `DELETE FROM sessions WHERE id = $1`;
+      await client.query(sql, [id]);
+    } finally {
+      client.release();
+    }
   }
 
   async getActiveSessions(): Promise<Session[]> {
-    const sql = `SELECT * FROM sessions WHERE lastActivity > datetime('now', '-30 minutes')`;
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, [], (err, rows) => {
-        if (err) reject(err);
-        else {
-          const sessions = rows.map(row => {
-            const session = row as any;
-            if (session.tempData) {
-              session.tempData = JSON.parse(session.tempData);
-            }
-            return session as Session;
-          });
-          resolve(sessions);
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM sessions WHERE lastactivity > NOW() - INTERVAL '30 minutes'`;
+      const result = await client.query(sql);
+      const sessions = result.rows.map((row: any) => {
+        const session = row as any;
+        if (session.tempData) {
+          session.tempData = JSON.parse(session.tempData);
         }
+        return session as Session;
       });
-    });
+      return sessions;
+    } finally {
+      client.release();
+    }
   }
 
   // Conference and message base management
   async createConference(conf: Omit<Conference, 'id' | 'created' | 'updated'>): Promise<number> {
-    const sql = `INSERT INTO conferences (name, description) VALUES (?, ?)`;
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, [conf.name, conf.description], function(err) {
-        if (err) reject(err);
-        else resolve(this.lastID);
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `INSERT INTO conferences (name, description) VALUES ($1, $2) RETURNING id`;
+      const result = await client.query(sql, [conf.name, conf.description]);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
   }
 
   async getConferences(): Promise<Conference[]> {
-    const sql = `SELECT * FROM conferences ORDER BY id`;
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, [], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as Conference[]);
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM conferences ORDER BY id`;
+      const result = await client.query(sql);
+      return result.rows as Conference[];
+    } finally {
+      client.release();
+    }
   }
 
   async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
-    const sql = `INSERT INTO message_bases (name, conferenceId) VALUES (?, ?)`;
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, [mb.name, mb.conferenceId], function(err) {
-        if (err) reject(err);
-        else resolve(this.lastID);
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `INSERT INTO message_bases (name, conferenceid) VALUES ($1, $2) RETURNING id`;
+      const result = await client.query(sql, [mb.name, mb.conferenceId]);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
   }
 
   async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
-    const sql = `SELECT * FROM message_bases WHERE conferenceId = ? ORDER BY id`;
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, [conferenceId], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as MessageBase[]);
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM message_bases WHERE conferenceid = $1 ORDER BY id`;
+      const result = await client.query(sql, [conferenceId]);
+      // Map PostgreSQL column names to camelCase interface
+      return result.rows.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        conferenceId: row.conferenceid,
+        created: row.created,
+        updated: row.updated
+      }));
+    } finally {
+      client.release();
+    }
   }
 
   // File area management
   async createFileArea(area: Omit<FileArea, 'id' | 'created' | 'updated'>): Promise<number> {
-    const sql = `
-      INSERT INTO file_areas (
-        name, description, path, conferenceId, maxFiles, uploadAccess, downloadAccess
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-    const values = [
-      area.name, area.description, area.path, area.conferenceId,
-      area.maxFiles, area.uploadAccess, area.downloadAccess
-    ];
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO file_areas (
+          name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id
+      `;
+      const values = [
+        area.name, area.description, area.path, area.conferenceId,
+        area.maxFiles, area.uploadAccess, area.downloadAccess
+      ];
 
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(this.lastID);
-      });
-    });
+      const result = await client.query(sql, values);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
   }
 
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
-    const sql = `SELECT * FROM file_areas WHERE conferenceId = ? ORDER BY id`;
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, [conferenceId], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as FileArea[]);
-      });
-    });
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM file_areas WHERE conferenceid = $1 ORDER BY id`;
+      const result = await client.query(sql, [conferenceId]);
+      return result.rows as FileArea[];
+    } finally {
+      client.release();
+    }
+  }
+
+  // Node session management methods
+  async createNodeSession(session: Omit<NodeSession, 'created' | 'updated'>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO node_sessions (
+          id, nodeId, userId, socketId, state, subState, currentConf, currentMsgBase,
+          timeRemaining, lastActivity, status, loadLevel, currentUser
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT (id) DO UPDATE SET
+          userId = EXCLUDED.userId,
+          socketId = EXCLUDED.socketId,
+          state = EXCLUDED.state,
+          subState = EXCLUDED.subState,
+          currentConf = EXCLUDED.currentConf,
+          currentMsgBase = EXCLUDED.currentMsgBase,
+          timeRemaining = EXCLUDED.timeRemaining,
+          lastActivity = EXCLUDED.lastActivity,
+          status = EXCLUDED.status,
+          loadLevel = EXCLUDED.loadLevel,
+          currentUser = EXCLUDED.currentUser,
+          updated = CURRENT_TIMESTAMP
+      `;
+
+      const values = [
+        session.id, session.nodeId, session.userId, session.socketId, session.state,
+        session.subState, session.currentConf, session.currentMsgBase, session.timeRemaining,
+        session.lastActivity, session.status, session.loadLevel, session.currentUser
+      ];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateNodeSession(id: string, updates: Partial<NodeSession>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+      if (fields.length === 0) return;
+
+      const sql = `UPDATE node_sessions SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof NodeSession]), id];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getNodeSessions(nodeId?: number): Promise<NodeSession[]> {
+    const client = await this.pool.connect();
+    try {
+      let sql = `SELECT * FROM node_sessions`;
+      const params: any[] = [];
+
+      if (nodeId !== undefined) {
+        sql += ` WHERE nodeId = $1`;
+        params.push(nodeId);
+      }
+
+      sql += ` ORDER BY lastActivity DESC`;
+      const result = await client.query(sql, params);
+      return result.rows as NodeSession[];
+    } finally {
+      client.release();
+    }
+  }
+
+  // AREXX script management methods
+  async getAREXXScripts(): Promise<AREXXScript[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM arexx_scripts ORDER BY priority DESC, name`;
+      const result = await client.query(sql);
+      return result.rows as AREXXScript[];
+    } finally {
+      client.release();
+    }
+  }
+
+  async executeAREXXScript(scriptId: string, context: AREXXContext): Promise<any> {
+    // AREXX execution would be implemented here
+    // For now, return a placeholder
+    return { success: true, result: 'AREXX script executed' };
+  }
+
+  // QWK packet management methods
+  async createQWKPacket(packet: Omit<QWKPacket, 'id'>): Promise<string> {
+    const client = await this.pool.connect();
+    try {
+      const id = crypto.randomUUID();
+      const sql = `
+        INSERT INTO qwk_packets (
+          id, filename, userId, status, messageCount, created, sent, size, path
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `;
+
+      const values = [
+        id, packet.filename, packet.userId, packet.status, packet.messageCount,
+        packet.created, packet.sent, packet.size, packet.path
+      ];
+
+      await client.query(sql, values);
+      return id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async createQWKMessage(message: Omit<QWKMessage, 'id'>): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO qwk_messages (
+          packetId, subject, body, author, recipient, timestamp, conference,
+          messageBase, isPrivate, status, from, to, date, isReply, parentId, attachments
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        RETURNING id
+      `;
+
+      const values = [
+        message.packetId, message.subject, message.body, message.author, message.recipient,
+        message.timestamp, message.conference, message.messageBase, message.isPrivate,
+        message.status, message.from, message.to, message.date, message.isReply,
+        message.parentId, JSON.stringify(message.attachments || [])
+      ];
+
+      const result = await client.query(sql, values);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateQWKPacket(id: string, updates: Partial<QWKPacket>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return;
+
+      const sql = `UPDATE qwk_packets SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof QWKPacket]), id];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getQWKPacket(id: string): Promise<QWKPacket | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM qwk_packets WHERE id = $1`;
+      const result = await client.query(sql, [id]);
+      return result.rows[0] as QWKPacket || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteQWKPacket(id: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `DELETE FROM qwk_packets WHERE id = $1`;
+      await client.query(sql, [id]);
+    } finally {
+      client.release();
+    }
+  }
+
+  // FTN message management methods
+  async createFTNMessage(message: Omit<FTNMessage, 'id'>): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO ftn_messages (
+          subject, body, author, recipient, timestamp, originAddress, destinationAddress,
+          conference, messageBase, isPrivate, status, attributes, fromAddress, toAddress,
+          date, msgid, replyTo, area
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        RETURNING id
+      `;
+
+      const values = [
+        message.subject, message.body, message.author, message.recipient, message.timestamp,
+        message.originAddress, message.destinationAddress, message.conference, message.messageBase,
+        message.isPrivate, message.status, message.attributes, message.fromAddress,
+        message.toAddress, message.date, message.msgid, message.replyTo, message.area
+      ];
+
+      const result = await client.query(sql, values);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getFTNMessages(conferenceId: number, messageBaseId: number): Promise<FTNMessage[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM ftn_messages
+        WHERE conference = $1 AND messageBase = $2
+        ORDER BY timestamp DESC
+      `;
+      const result = await client.query(sql, [conferenceId, messageBaseId]);
+      return result.rows as FTNMessage[];
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateFTNMessage(id: number, updates: Partial<FTNMessage>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return;
+
+      const sql = `UPDATE ftn_messages SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof FTNMessage]), id];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  // File transfer session management methods
+  async createTransferSession(session: Omit<TransferSession, 'id'>): Promise<string> {
+    const client = await this.pool.connect();
+    try {
+      const id = crypto.randomUUID();
+      const sql = `
+        INSERT INTO transfer_sessions (
+          id, userId, type, protocol, filename, size, transferred, status,
+          startTime, endTime, speed, error
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `;
+
+      const values = [
+        id, session.userId, session.type, session.protocol, session.filename,
+        session.size, session.transferred, session.status, session.startTime,
+        session.endTime, session.speed, session.error
+      ];
+
+      await client.query(sql, values);
+      return id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = Object.keys(updates).filter(key => key !== 'id');
+      if (fields.length === 0) return;
+
+      const sql = `UPDATE transfer_sessions SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
+      const values = [...fields.map(f => updates[f as keyof TransferSession]), id];
+
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  // OLM (Online Message) methods
+  async sendOnlineMessage(fromUserId: string, fromUsername: string, toUserId: string, toUsername: string, message: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO online_messages (from_user_id, from_username, to_user_id, to_username, message)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+      `;
+      const result = await client.query(sql, [fromUserId, fromUsername, toUserId, toUsername, message]);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUnreadMessages(userId: string): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT id, from_user_id, from_username, message, created_at
+        FROM online_messages
+        WHERE to_user_id = $1 AND delivered = FALSE
+        ORDER BY created_at ASC
+      `;
+      const result = await client.query(sql, [userId]);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAllMessages(userId: string): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT id, from_user_id, from_username, message, created_at, delivered, read, delivered_at, read_at
+        FROM online_messages
+        WHERE to_user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 50
+      `;
+      const result = await client.query(sql, [userId]);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async markMessageDelivered(messageId: number): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        UPDATE online_messages
+        SET delivered = TRUE, delivered_at = NOW()
+        WHERE id = $1
+      `;
+      await client.query(sql, [messageId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async markMessageRead(messageId: number): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        UPDATE online_messages
+        SET read = TRUE, read_at = NOW()
+        WHERE id = $1
+      `;
+      await client.query(sql, [messageId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUnreadMessageCount(userId: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT COUNT(*) as count
+        FROM online_messages
+        WHERE to_user_id = $1 AND delivered = FALSE
+      `;
+      const result = await client.query(sql, [userId]);
+      return parseInt(result.rows[0].count);
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteOLMMessage(messageId: number, userId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        DELETE FROM online_messages
+        WHERE id = $1 AND to_user_id = $2
+      `;
+      const result = await client.query(sql, [messageId, userId]);
+      return result.rowCount > 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUserByUsernameForOLM(username: string): Promise<{ id: string; username: string; availableforchat: boolean } | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT id, username, availableforchat FROM users WHERE LOWER(username) = LOWER($1)`;
+      const result = await client.query(sql, [username]);
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Internode Chat Methods
+  async createChatSession(
+    initiatorId: string,
+    initiatorUsername: string,
+    initiatorSocket: string,
+    recipientId: string,
+    recipientUsername: string,
+    recipientSocket: string
+  ): Promise<string> {
+    const client = await this.pool.connect();
+    try {
+      const sessionId = crypto.randomUUID();
+      const sql = `
+        INSERT INTO chat_sessions (
+          session_id, initiator_id, initiator_username, initiator_socket,
+          recipient_id, recipient_username, recipient_socket, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'requesting')
+        RETURNING session_id
+      `;
+      const result = await client.query(sql, [
+        sessionId, initiatorId, initiatorUsername, initiatorSocket,
+        recipientId, recipientUsername, recipientSocket
+      ]);
+      return result.rows[0].session_id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatSession(sessionId: string): Promise<InternodeChatSession | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM chat_sessions WHERE session_id = $1`;
+      const result = await client.query(sql, [sessionId]);
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatSessionBySocketId(socketId: string): Promise<InternodeChatSession | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM chat_sessions
+        WHERE (initiator_socket = $1 OR recipient_socket = $1)
+        AND status = 'active'
+      `;
+      const result = await client.query(sql, [socketId]);
+      return result.rows.length > 0 ? result.rows[0] : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateChatSessionStatus(
+    sessionId: string,
+    status: 'requesting' | 'active' | 'ended' | 'declined'
+  ): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        UPDATE chat_sessions
+        SET status = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = $1
+      `;
+      await client.query(sql, [sessionId, status]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async endChatSession(sessionId: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        UPDATE chat_sessions
+        SET status = 'ended', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = $1
+      `;
+      await client.query(sql, [sessionId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getActiveChatSessions(): Promise<InternodeChatSession[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM chat_sessions
+        WHERE status = 'active'
+        ORDER BY started_at DESC
+      `;
+      const result = await client.query(sql);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async saveChatMessage(
+    sessionId: string,
+    senderId: string,
+    senderUsername: string,
+    message: string
+  ): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      // Save message
+      const sql = `
+        INSERT INTO chat_messages (session_id, sender_id, sender_username, message)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+      `;
+      const result = await client.query(sql, [sessionId, senderId, senderUsername, message]);
+
+      // Update message count in session
+      const updateSql = `
+        UPDATE chat_sessions
+        SET message_count = message_count + 1, updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = $1
+      `;
+      await client.query(updateSql, [sessionId]);
+
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatHistory(sessionId: string, limit: number = 50): Promise<InternodeChatMessage[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM chat_messages
+        WHERE session_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+      `;
+      const result = await client.query(sql, [sessionId, limit]);
+      return result.rows.reverse(); // Reverse to get chronological order
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatMessageCount(sessionId: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT COUNT(*) as count FROM chat_messages WHERE session_id = $1`;
+      const result = await client.query(sql, [sessionId]);
+      return parseInt(result.rows[0].count);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getAvailableUsersForChat(): Promise<Array<{
+    id: string;
+    username: string;
+    realname: string;
+    seclevel: number;
+    currentAction?: string;
+  }>> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT id, username, realname, seclevel
+        FROM users
+        WHERE availableforchat = TRUE
+        ORDER BY username
+      `;
+      const result = await client.query(sql);
+      return result.rows;
+    } finally {
+      client.release();
+    }
   }
 
   // Logging methods
@@ -1267,619 +1849,416 @@ export class Database {
     conferenceId?: number;
     node?: number;
   }): Promise<void> {
-    const sql = `INSERT INTO system_logs (level, message, userId, conferenceId, node) VALUES (?, ?, ?, ?, ?)`;
-    const values = [level, message, context?.userId, context?.conferenceId, context?.node];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  // JWT and authentication methods
-  private jwtSecret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
-  private jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || 'amiexpress-refresh-secret-key-change-in-production';
-
-  async generateAccessToken(user: User): Promise<string> {
-    return jwt.sign(
-      {
-        userId: user.id,
-        username: user.username,
-        secLevel: user.secLevel
-      },
-      this.jwtSecret,
-      { expiresIn: '15m' } // Short-lived access token
-    );
-  }
-
-  async generateRefreshToken(user: User): Promise<string> {
-    return jwt.sign(
-      { userId: user.id },
-      this.jwtRefreshSecret,
-      { expiresIn: '7d' } // Longer-lived refresh token
-    );
-  }
-
-  async verifyAccessToken(token: string): Promise<any> {
+    const client = await this.pool.connect();
     try {
-      return jwt.verify(token, this.jwtSecret);
-    } catch (error) {
-      throw new Error('Invalid access token');
-    }
-  }
-
-  async verifyRefreshToken(token: string): Promise<any> {
-    try {
-      return jwt.verify(token, this.jwtRefreshSecret);
-    } catch (error) {
-      throw new Error('Invalid refresh token');
+      const sql = `INSERT INTO system_logs (level, message, userId, conferenceId, node) VALUES ($1, $2, $3, $4, $5)`;
+      const values = [level, message, context?.userId, context?.conferenceId, context?.node];
+      await client.query(sql, values);
+    } finally {
+      client.release();
     }
   }
 
   // Utility methods
   async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 12);
+    // Use bcrypt with 12 salt rounds (industry standard for security)
+    const saltRounds = 12;
+    return await bcrypt.hash(password, saltRounds);
   }
 
   async verifyPassword(password: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(password, hash);
+    // Check if this is a legacy SHA-256 hash (64 hex characters)
+    const isSHA256 = hash.length === 64 && /^[0-9a-f]{64}$/i.test(hash);
+
+    if (isSHA256) {
+      // Legacy SHA-256 hash - use direct comparison
+      const sha256Hash = crypto.createHash('sha256').update(password).digest('hex');
+      return sha256Hash === hash;
+    }
+
+    // Modern bcrypt hash - use bcrypt.compare()
+    try {
+      return await bcrypt.compare(password, hash);
+    } catch (error) {
+      // If bcrypt verification fails due to invalid hash format, return false
+      console.warn('Password verification error:', error);
+      return false;
+    }
   }
 
   async close(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  // Network message methods
-  async createQWKPacket(packet: Omit<QWKPacket, 'id'>): Promise<string> {
-    const id = crypto.randomUUID();
-    const sql = `
-      INSERT INTO qwk_packets (
-        id, filename, size, created, fromBBS, toBBS, status, error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      id, packet.filename, packet.size, packet.created, packet.fromBBS,
-      packet.toBBS, packet.status, packet.error
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(id);
-      });
-    });
-  }
-
-  async createQWKMessage(message: Omit<QWKMessage, 'id'> & { packetId: string }): Promise<number> {
-    const sql = `
-      INSERT INTO qwk_messages (
-        packetId, conference, subject, from_user, to_user, date, body,
-        isPrivate, isReply, parentId, attachments
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      message.packetId, message.conference, message.subject, message.from,
-      message.to, message.date, message.body, message.isPrivate,
-      message.isReply, message.parentId, JSON.stringify(message.attachments || [])
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(this.lastID);
-      });
-    });
-  }
-
-  async createFTNMessage(message: Omit<FTNMessage, 'id'>): Promise<string> {
-    const id = crypto.randomUUID();
-    const sql = `
-      INSERT INTO ftn_messages (
-        id, fromAddress, toAddress, subject, body, date, area, msgid,
-        replyTo, attributes, status, error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      id, message.fromAddress, message.toAddress, message.subject,
-      message.body, message.date, message.area, message.msgid,
-      message.replyTo, message.attributes, message.status, message.error
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(id);
-      });
-    });
-  }
-
-  // Multi-node methods
-  async createNode(node: Omit<NodeInfo, 'created' | 'updated'>): Promise<number> {
-    const sql = `
-      INSERT INTO nodes (id, name, status, currentUser, lastActivity, description)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      node.id, node.name, node.status, node.currentUser,
-      node.lastActivity, node.description
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(node.id);
-      });
-    });
-  }
-
-  async createNodeSession(session: Omit<NodeSession, 'created' | 'updated'>): Promise<void> {
-    const sql = `
-      INSERT OR REPLACE INTO node_sessions (
-        id, nodeId, userId, socketId, state, subState, currentConf,
-        currentMsgBase, timeRemaining, lastActivity, status, ipAddress, location
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      session.id, session.nodeId, session.userId, session.socketId,
-      session.state, session.subState, session.currentConf,
-      session.currentMsgBase, session.timeRemaining, session.lastActivity,
-      session.status, session.ipAddress, session.location
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  async getNodeSessions(nodeId: number): Promise<NodeSession[]> {
-    const sql = `SELECT * FROM node_sessions WHERE nodeId = ? AND status = 'active' ORDER BY lastActivity DESC`;
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, [nodeId], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as NodeSession[]);
-      });
-    });
-  }
-
-  // AREXX scripting methods
-  async createAREXXScript(script: Omit<AREXXScript, 'created' | 'updated'>): Promise<void> {
-    const sql = `
-      INSERT INTO arexx_scripts (
-        id, name, description, filename, path, accessLevel, enabled,
-        parameters, triggers
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      script.id, script.name, script.description, script.filename,
-      script.path, script.accessLevel, script.enabled,
-      JSON.stringify(script.parameters || []),
-      JSON.stringify(script.triggers || [])
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  async getAREXXScripts(): Promise<AREXXScript[]> {
-    const sql = `SELECT * FROM arexx_scripts WHERE enabled = 1 ORDER BY name`;
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, [], (err, rows) => {
-        if (err) reject(err);
-        else {
-          const scripts = (rows as any[]).map(row => ({
-            ...row,
-            parameters: JSON.parse(row.parameters || '[]'),
-            triggers: JSON.parse(row.triggers || '[]')
-          }));
-          resolve(scripts as AREXXScript[]);
-        }
-      });
-    });
-  }
-
-  async executeAREXXScript(context: AREXXContext): Promise<void> {
-    const sql = `
-      INSERT INTO arexx_executions (
-        id, scriptId, userId, sessionId, parameters, environment,
-        output, result, error, startedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      crypto.randomUUID(), context.scriptId, context.userId, context.sessionId,
-      JSON.stringify(context.parameters), JSON.stringify(context.environment),
-      JSON.stringify(context.output), context.result, context.error, new Date()
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  // Protocol support methods
-  async createTransferProtocol(protocol: Omit<FileTransferProtocol, 'created' | 'updated'>): Promise<void> {
-    const sql = `
-      INSERT INTO transfer_protocols (id, name, type, enabled, config)
-      VALUES (?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      protocol.id, protocol.name, protocol.type, protocol.enabled,
-      JSON.stringify(protocol.config)
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  async createTransferSession(session: Omit<TransferSession, 'id'>): Promise<string> {
-    const id = crypto.randomUUID();
-    const sql = `
-      INSERT INTO transfer_sessions (
-        id, protocol, userId, direction, filename, size, bytesTransferred,
-        status, startTime, endTime, error, checksum
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const values = [
-      id, session.protocol, session.userId, session.direction,
-      session.filename, session.size, session.bytesTransferred,
-      session.status, session.startTime, session.endTime,
-      session.error, session.checksum
-    ];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve(id);
-      });
-    });
-  }
-
-  async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {
-    const fields = Object.keys(updates).filter(key => key !== 'id');
-    if (fields.length === 0) return;
-
-    const sql = `UPDATE transfer_sessions SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`;
-    const values = [...fields.map(f => updates[f as keyof TransferSession]), id];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  // Node session methods
-  async updateNodeSession(id: string, updates: Partial<NodeSession>): Promise<void> {
-    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
-    if (fields.length === 0) return;
-
-    const sql = `UPDATE node_sessions SET ${fields.map(f => `${f} = ?`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = ?`;
-    const values = [...fields.map(f => updates[f as keyof NodeSession]), id];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  // Additional QWK/FTN methods
-  async updateQWKPacket(id: string, updates: Partial<QWKPacket>): Promise<void> {
-    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'messages');
-    if (fields.length === 0) return;
-
-    const sql = `UPDATE qwk_packets SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`;
-    const values = [...fields.map(f => updates[f as keyof QWKPacket]), id];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  async updateFTNMessage(id: string, updates: Partial<FTNMessage>): Promise<void> {
-    const fields = Object.keys(updates).filter(key => key !== 'id');
-    if (fields.length === 0) return;
-
-    const sql = `UPDATE ftn_messages SET ${fields.map(f => `${f} = ?`).join(', ')} WHERE id = ?`;
-    const values = [...fields.map(f => updates[f as keyof FTNMessage]), id];
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, values, function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  // Additional QWK/FTN query methods
-  async getQWKPacket(filter?: { status?: string; createdBefore?: Date }): Promise<QWKPacket[]> {
-    let sql = `SELECT * FROM qwk_packets WHERE 1=1`;
-    const params: any[] = [];
-
-    if (filter?.status) {
-      sql += ` AND status = ?`;
-      params.push(filter.status);
+    // Clear health check interval
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
     }
 
-    if (filter?.createdBefore) {
-      sql += ` AND created < ?`;
-      params.push(filter.createdBefore.toISOString());
-    }
-
-    sql += ` ORDER BY created DESC`;
-
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as QWKPacket[]);
-      });
-    });
-  }
-
-  async deleteQWKPacket(id: string): Promise<void> {
-    const sql = `DELETE FROM qwk_packets WHERE id = ?`;
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, [id], function(err) {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  async getFTNMessages(filter?: { status?: string; area?: string }): Promise<FTNMessage[]> {
-    let sql = `SELECT * FROM ftn_messages WHERE 1=1`;
-    const params: any[] = [];
-
-    if (filter?.status) {
-      sql += ` AND status = ?`;
-      params.push(filter.status);
-    }
-
-    if (filter?.area) {
-      sql += ` AND area = ?`;
-      params.push(filter.area);
-    }
-
-    sql += ` ORDER BY date DESC`;
-
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as FTNMessage[]);
-      });
-    });
+    console.log('🔌 Closing database connection pool...');
+    await this.pool.end();
+    this.isConnected = false;
+    console.log('✅ Database connection pool closed');
   }
 
   // Initialize default data
   async initializeDefaultData(): Promise<void> {
-    // Create default conferences
-    const conferences = [
-      { name: 'General', description: 'General discussion' },
-      { name: 'Tech Support', description: 'Technical support' },
-      { name: 'Announcements', description: 'System announcements' }
-    ];
-
-    for (const conf of conferences) {
-      await this.createConference(conf);
-    }
-
-    // Create default message bases
-    const messageBases = [
-      { name: 'Main', conferenceId: 1 },
-      { name: 'Off Topic', conferenceId: 1 },
-      { name: 'Support', conferenceId: 2 },
-      { name: 'News', conferenceId: 3 }
-    ];
-
-    for (const mb of messageBases) {
-      await this.createMessageBase(mb);
-    }
-
-    // Create default file areas
-    const fileAreas = [
-      { name: 'General Files', description: 'General purpose file area', path: '/files/general', conferenceId: 1, maxFiles: 100, uploadAccess: 10, downloadAccess: 1 },
-      { name: 'Utilities', description: 'System utilities and tools', path: '/files/utils', conferenceId: 1, maxFiles: 50, uploadAccess: 50, downloadAccess: 1 },
-      { name: 'Games', description: 'BBS games and entertainment', path: '/files/games', conferenceId: 2, maxFiles: 75, uploadAccess: 25, downloadAccess: 1 },
-      { name: 'Tech Files', description: 'Technical documentation and tools', path: '/files/tech', conferenceId: 2, maxFiles: 60, uploadAccess: 20, downloadAccess: 1 },
-      { name: 'System News', description: 'System announcements and updates', path: '/files/news', conferenceId: 3, maxFiles: 30, uploadAccess: 100, downloadAccess: 1 }
-    ];
-
-    for (const area of fileAreas) {
-      await this.createFileArea(area);
-    }
-
-    // Create default sysop user
-    const hashedPassword = await this.hashPassword('sysop');
-    await this.createUser({
-      username: 'sysop',
-      passwordHash: hashedPassword,
-      realname: 'System Operator',
-      location: 'Server Room',
-      phone: '',
-      secLevel: 255,
-      uploads: 0,
-      downloads: 0,
-      bytesUpload: 0,
-      bytesDownload: 0,
-      ratio: 0,
-      ratioType: 0,
-      timeTotal: 0,
-      timeLimit: 0,
-      timeUsed: 0,
-      chatLimit: 0,
-      chatUsed: 0,
-      firstLogin: new Date(),
-      calls: 0,
-      callsToday: 0,
-      newUser: false,
-      expert: true,
-      ansi: true,
-      linesPerScreen: 23,
-      computer: 'Server',
-      screenType: 'Amiga Ansi',
-      protocol: '/X Zmodem',
-      editor: 'Prompt',
-      zoomType: 'QWK',
-      availableForChat: true,
-      quietNode: false,
-      autoRejoin: 1,
-      confAccess: 'XXX',
-      areaName: 'Sysop',
-      uuCP: false,
-      topUploadCPS: 0,
-      topDownloadCPS: 0,
-      byteLimit: 0
-    });
-  }
-
-  // Initialize network message data
-  private async initializeNetworkData(): Promise<void> {
-    // Create default QWK network configuration
-    const qwkConfig = {
-      enabled: true,
-      bbsId: 'AMIWEB',
-      networkName: 'AmiExpress Network',
-      packetPath: './qwk_packets',
-      maxPacketSize: 1048576, // 1MB
-      compressionEnabled: true
-    };
-
-    // Create default FTN network configuration
-    const ftnConfig = {
-      enabled: false,
-      address: '1:1/1.0@fidonet.org',
-      inboundPath: './ftn_inbound',
-      outboundPath: './ftn_outbound',
-      tosserEnabled: false
-    };
-
-    // Initialize default network settings (stored in config, not database)
-    console.log('Network message support initialized');
-  }
-
-  // Initialize multi-node data
-  private async initializeNodeData(): Promise<void> {
-    // Create default nodes
-    const defaultNodes = [
-      { id: 1, name: 'Node 1', status: 'available' as const, description: 'Primary web node' },
-      { id: 2, name: 'Node 2', status: 'available' as const, description: 'Secondary web node' },
-      { id: 3, name: 'Node 3', status: 'available' as const, description: 'Tertiary web node' }
-    ];
-
-    for (const node of defaultNodes) {
+    const client = await this.pool.connect();
+    try {
+      // Step 1: Create conferences and get their IDs
+      let confIds: { [key: string]: number } = {};
       try {
-        await this.createNode(node);
-      } catch (error) {
-        // Ignore duplicate key errors for tests
-        if (!(error as any).message?.includes('UNIQUE constraint failed')) {
-          throw error;
+        console.log('[DB Init Step 1/5] Creating default conferences...');
+        const conferences = [
+          { name: 'General', description: 'General discussion' },
+          { name: 'Tech Support', description: 'Technical support' },
+          { name: 'Announcements', description: 'System announcements' }
+        ];
+
+        for (const conf of conferences) {
+          const existing = await client.query('SELECT id FROM conferences WHERE name = $1', [conf.name]);
+          if (existing.rows.length === 0) {
+            const result = await client.query('INSERT INTO conferences (name, description) VALUES ($1, $2) RETURNING id', [conf.name, conf.description]);
+            confIds[conf.name] = result.rows[0].id;
+            console.log(`  ✓ Created conference: ${conf.name} (ID: ${confIds[conf.name]})`);
+          } else {
+            confIds[conf.name] = existing.rows[0].id;
+            console.log(`  • Conference already exists: ${conf.name} (ID: ${confIds[conf.name]})`);
+          }
         }
+        console.log('[DB Init Step 1/5] ✓ Conferences initialized');
+      } catch (error) {
+        console.error('[DB Init Step 1/5] ✗ Failed to create conferences:', error);
+        throw error;
       }
-    }
 
-    console.log('Multi-node support initialized');
+      // Step 2: Create message bases using actual conference IDs
+      try {
+        console.log('[DB Init Step 2/5] Creating default message bases...');
+        const messageBases = [
+          { name: 'Main', conferenceName: 'General' },
+          { name: 'Off Topic', conferenceName: 'General' },
+          { name: 'Support', conferenceName: 'Tech Support' },
+          { name: 'News', conferenceName: 'Announcements' }
+        ];
+
+        for (const mb of messageBases) {
+          const conferenceId = confIds[mb.conferenceName];
+          const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND conferenceid = $2', [mb.name, conferenceId]);
+          if (existing.rows.length === 0) {
+            await client.query('INSERT INTO message_bases (name, conferenceid) VALUES ($1, $2)', [mb.name, conferenceId]);
+            console.log(`  ✓ Created message base: ${mb.name} in conference ${mb.conferenceName}`);
+          } else {
+            console.log(`  • Message base already exists: ${mb.name} in conference ${mb.conferenceName}`);
+          }
+        }
+        console.log('[DB Init Step 2/5] ✓ Message bases initialized');
+      } catch (error) {
+        console.error('[DB Init Step 2/5] ✗ Failed to create message bases:', error);
+        throw error;
+      }
+
+      // Step 3: Create file areas using actual conference IDs
+      try {
+        console.log('[DB Init Step 3/5] Creating default file areas...');
+        const fileAreas = [
+          { name: 'General Files', description: 'General purpose file area', path: '/files/general', conferenceName: 'General', maxFiles: 100, uploadAccess: 10, downloadAccess: 1 },
+          { name: 'Utilities', description: 'System utilities and tools', path: '/files/utils', conferenceName: 'General', maxFiles: 50, uploadAccess: 50, downloadAccess: 1 },
+          { name: 'Games', description: 'BBS games and entertainment', path: '/files/games', conferenceName: 'Tech Support', maxFiles: 75, uploadAccess: 25, downloadAccess: 1 },
+          { name: 'Tech Files', description: 'Technical documentation and tools', path: '/files/tech', conferenceName: 'Tech Support', maxFiles: 60, uploadAccess: 20, downloadAccess: 1 },
+          { name: 'System News', description: 'System announcements and updates', path: '/files/news', conferenceName: 'Announcements', maxFiles: 30, uploadAccess: 100, downloadAccess: 1 }
+        ];
+
+        for (const area of fileAreas) {
+          const conferenceId = confIds[area.conferenceName];
+          const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceid = $2', [area.name, conferenceId]);
+          if (existing.rows.length === 0) {
+            await client.query(`
+              INSERT INTO file_areas (name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [area.name, area.description, area.path, conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
+            console.log(`  ✓ Created file area: ${area.name} in conference ${area.conferenceName}`);
+          } else {
+            console.log(`  • File area already exists: ${area.name} in conference ${area.conferenceName}`);
+          }
+        }
+        console.log('[DB Init Step 3/5] ✓ File areas initialized');
+      } catch (error) {
+        console.error('[DB Init Step 3/5] ✗ Failed to create file areas:', error);
+        throw error;
+      }
+
+      // Step 4: Create sysop user
+      try {
+        console.log('[DB Init Step 4/5] Creating default sysop user...');
+        console.log('  • Generating bcrypt password hash...');
+        const hashedPassword = await this.hashPassword('sysop');
+        console.log('  ✓ Password hash generated');
+
+        // Try to update existing sysop user first
+        console.log('  • Checking for existing sysop user...');
+        const updateResult = await client.query(`
+          UPDATE users SET passwordhash = $1 WHERE username = 'sysop'
+        `, [hashedPassword]);
+
+        if (updateResult.rowCount === 0) {
+          // User doesn't exist, create it
+          console.log('  • No existing sysop user found, creating new user...');
+          await client.query(`
+            INSERT INTO users (
+              id, username, passwordhash, realname, location, phone, email, seclevel,
+              uploads, downloads, bytesupload, bytesdownload, ratio, ratiotype,
+              timetotal, timelimit, timeused, chatlimit, chatused, lastlogin, firstlogin,
+              calls, callstoday, newuser, expert, ansi, linesperscreen, computer,
+              screentype, protocol, editor, zoomtype, availableforchat, quietnode,
+              autorejoin, confaccess, areaname, uucp, topuploadcps, topdownloadcps, bytelimit
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+              $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
+              $39, $40, $41
+            )
+          `, [
+            'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
+            255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
+            0, 0, false, true, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
+            'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
+          ]);
+          console.log('  ✓ Sysop user created successfully');
+        } else {
+          console.log(`  ✓ Sysop user password updated (affected ${updateResult.rowCount} rows)`);
+        }
+        console.log('[DB Init Step 4/5] ✓ Sysop user initialized');
+      } catch (error) {
+        console.error('[DB Init Step 4/5] ✗ CRITICAL: Failed to create sysop user:', error);
+        console.error('  Error details:', {
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        throw error;
+      }
+
+      // Step 5: Cleanup duplicates
+      try {
+        console.log('[DB Init Step 5/5] Cleaning up duplicate data...');
+        await this.cleanupDuplicateConferences();
+        console.log('[DB Init Step 5/5] ✓ Duplicate cleanup completed');
+      } catch (error) {
+        console.error('[DB Init Step 5/5] ✗ Failed to cleanup duplicates:', error);
+        // Don't throw - this is non-critical
+      }
+
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('✓ Database initialization completed successfully');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    } catch (error) {
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('✗ CRITICAL: Database initialization failed');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('Error:', error);
+      console.error('Stack:', error instanceof Error ? error.stack : 'No stack trace available');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      // Don't throw error - continue with server startup
+      console.log('⚠️  Continuing with server startup despite database initialization error');
+      console.log('⚠️  The BBS may not function correctly. Please check the error above.');
+    } finally {
+      client.release();
+    }
   }
 
-  // Initialize AREXX scripting data
-  private async initializeAREXXData(): Promise<void> {
-    // Create default AREXX scripts
-    const defaultScripts = [
-      {
-        id: 'welcome',
-        name: 'Welcome Script',
-        description: 'Displays welcome message on login',
-        filename: 'welcome.rexx',
-        path: './arexx/welcome.rexx',
-        accessLevel: 1,
-        enabled: true,
-        triggers: [{ event: 'login' as const, priority: 10 }]
-      },
-      {
-        id: 'newuser',
-        name: 'New User Setup',
-        description: 'Handles new user registration',
-        filename: 'newuser.rexx',
-        path: './arexx/newuser.rexx',
-        accessLevel: 1,
-        enabled: true,
-        triggers: [{ event: 'login' as const, condition: 'user.newUser', priority: 5 }]
+  // Clean up duplicate conferences by name, keeping only the first occurrence
+  async cleanupDuplicateConferences(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Cleaning up duplicate conferences...');
+
+      // Find duplicate conference names
+      const duplicates = await client.query(`
+        SELECT name, COUNT(*) as count
+        FROM conferences
+        GROUP BY name
+        HAVING COUNT(*) > 1
+      `);
+
+      if (duplicates.rows.length > 0) {
+        console.log(`Found ${duplicates.rows.length} conference names with duplicates`);
+
+        for (const dup of duplicates.rows) {
+          // Get all IDs for this conference name, ordered by creation date
+          const ids = await client.query(`
+            SELECT id FROM conferences
+            WHERE name = $1
+            ORDER BY created ASC
+          `, [dup.name]);
+
+          // Keep the first one, delete the rest
+          const idsToDelete = ids.rows.slice(1).map((row: any) => row.id);
+
+          if (idsToDelete.length > 0) {
+            await client.query(
+              `DELETE FROM conferences WHERE id = ANY($1)`,
+              [idsToDelete]
+            );
+            console.log(`Deleted ${idsToDelete.length} duplicate entries for conference: ${dup.name}`);
+          }
+        }
+
+        // Also clean up orphaned message bases and file areas
+        await this.cleanupOrphanedData();
+      } else {
+        console.log('No duplicate conferences found');
       }
-    ];
-
-    for (const script of defaultScripts) {
-      await this.createAREXXScript(script);
+    } finally {
+      client.release();
     }
-
-    console.log('AREXX scripting support initialized');
   }
 
-  // Initialize protocol data
-  private async initializeProtocolData(): Promise<void> {
-    // Create default transfer protocols
-    const defaultProtocols = [
-      {
-        id: 'websocket',
-        name: 'WebSocket Transfer',
-        type: 'websocket' as const,
-        enabled: true,
-        config: { chunkSize: 1024, maxConcurrent: 3 }
-      },
-      {
-        id: 'zmodem',
-        name: 'ZModem Protocol',
-        type: 'zmodem' as const,
-        enabled: false,
-        config: { path: './bin/zmodem', timeout: 300 }
-      },
-      {
-        id: 'ftp',
-        name: 'FTP Protocol',
-        type: 'ftp' as const,
-        enabled: false,
-        config: { port: 21, passive: true, timeout: 300 }
+  // Clean up orphaned message bases and file areas after conference cleanup
+  private async cleanupOrphanedData(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Cleaning up orphaned message bases and file areas...');
+
+      // Delete message bases that reference non-existent conferences
+      const deletedMB = await client.query(`
+        DELETE FROM message_bases
+        WHERE conferenceid NOT IN (SELECT id FROM conferences)
+      `);
+
+      // Delete file areas that reference non-existent conferences
+      const deletedFA = await client.query(`
+        DELETE FROM file_areas
+        WHERE conferenceid NOT IN (SELECT id FROM conferences)
+      `);
+
+      if (deletedMB.rowCount > 0 || deletedFA.rowCount > 0) {
+        console.log(`Cleaned up ${deletedMB.rowCount} orphaned message bases and ${deletedFA.rowCount} orphaned file areas`);
       }
-    ];
-
-    for (const protocol of defaultProtocols) {
-      await this.createTransferProtocol(protocol);
+    } finally {
+      client.release();
     }
-
-    console.log('Protocol support initialized');
   }
+
+  // Clean up duplicate message bases by name + conferenceId, keeping only the first occurrence
+  async cleanupDuplicateMessageBases(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Cleaning up duplicate message bases...');
+
+      // Find duplicate message base names within the same conference
+      const duplicates = await client.query(`
+        SELECT name, conferenceid, COUNT(*) as count
+        FROM message_bases
+        GROUP BY name, conferenceid
+        HAVING COUNT(*) > 1
+      `);
+
+      if (duplicates.rows.length > 0) {
+        console.log(`Found ${duplicates.rows.length} message base combinations with duplicates`);
+
+        let totalDeleted = 0;
+        for (const dup of duplicates.rows) {
+          // Get all IDs for this message base name + conference combination, ordered by creation date
+          const ids = await client.query(`
+            SELECT id FROM message_bases
+            WHERE name = $1 AND conferenceid = $2
+            ORDER BY created ASC
+          `, [dup.name, dup.conferenceid]);
+
+          // Keep the first one, delete the rest
+          const idsToDelete = ids.rows.slice(1).map((row: any) => row.id);
+
+          if (idsToDelete.length > 0) {
+            await client.query(
+              `DELETE FROM message_bases WHERE id = ANY($1)`,
+              [idsToDelete]
+            );
+            console.log(`Deleted ${idsToDelete.length} duplicate entries for message base: ${dup.name} in conference ${dup.conferenceid}`);
+            totalDeleted += idsToDelete.length;
+          }
+        }
+
+        console.log(`✅ Total duplicate message bases deleted: ${totalDeleted}`);
+      } else {
+        console.log('No duplicate message bases found');
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  // Bulletin management
+  async createBulletin(bulletin: { conferenceId: number; filename: string; title: string }): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO bulletins (conferenceid, filename, title)
+        VALUES ($1, $2, $3)
+        RETURNING id
+      `;
+      const result = await client.query(sql, [bulletin.conferenceId, bulletin.filename, bulletin.title]);
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getBulletins(conferenceId?: number): Promise<Bulletin[]> {
+    const client = await this.pool.connect();
+    try {
+      let sql: string;
+      let params: any[];
+
+      if (conferenceId !== undefined) {
+        sql = `SELECT * FROM bulletins WHERE conferenceid = $1 ORDER BY created DESC`;
+        params = [conferenceId];
+      } else {
+        sql = `SELECT * FROM bulletins ORDER BY created DESC`;
+        params = [];
+      }
+
+      const result = await client.query(sql, params);
+      return result.rows.map((row: any) => ({
+        id: row.id,
+        conferenceId: row.conferenceid,
+        filename: row.filename,
+        title: row.title,
+        created: row.created,
+        updated: row.updated
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async getBulletinById(id: number): Promise<Bulletin | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM bulletins WHERE id = $1`;
+      const result = await client.query(sql, [id]);
+
+      if (result.rows.length === 0) return null;
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        conferenceId: row.conferenceid,
+        filename: row.filename,
+        title: row.title,
+        created: row.created,
+        updated: row.updated
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteBulletin(id: number): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `DELETE FROM bulletins WHERE id = $1`;
+      await client.query(sql, [id]);
+    } finally {
+      client.release();
+    }
+  }
+
 }
 
 // Export singleton instance
