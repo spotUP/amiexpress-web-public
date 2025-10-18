@@ -277,8 +277,13 @@ io.on('connection', async (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log('Client disconnected');
+
+    // Release node back to available pool
+    await nodeManager.releaseSession(socket.id);
+
+    // Clean up session
     sessions.delete(socket.id);
   });
 });
