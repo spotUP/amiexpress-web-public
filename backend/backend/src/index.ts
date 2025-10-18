@@ -31,6 +31,7 @@ interface BBSSession {
   relConfNum: number; // Relative conference number (like AmiExpress relConfNum)
   currentConfName: string; // Current conference name (like AmiExpress currentConfName)
   cmdShortcuts: boolean; // Like AmiExpress cmdShortcuts - controls hotkey vs line input mode
+  doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
   tempData?: any; // Temporary data storage for complex operations (like file listing)
 }
 
@@ -138,7 +139,8 @@ io.on('connection', async (socket) => {
     inputBuffer: '', // Buffer for line-based input
     relConfNum: 0, // Relative conference number
     currentConfName: 'Unknown', // Current conference name
-    cmdShortcuts: false // Like AmiExpress - default to line input mode, not hotkeys
+    cmdShortcuts: false, // Like AmiExpress - default to line input mode, not hotkeys
+    doorExpertMode: false // Like AmiExpress - doors can force menu display (express.e:28583)
   };
   sessions.set(socket.id, session);
 
@@ -1502,9 +1504,9 @@ function displayMainMenu(socket: any, session: BBSSession) {
     console.log('Sending screen clear: \\x1b[2J\\x1b[H');
     socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
 
-    // CRITICAL FIX: Condition must be expert === "N" (not !== "N")
+    // CRITICAL FIX: Correct condition from express.e:28583
     // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
-    if (session.user?.expert === "N") {  // Show menu only in non-expert mode
+    if ((session.user?.expert === "N" && !session.doorExpertMode) /* TODO: || FORCE_MENUS check */) {
       console.log('Sending menu header');
       socket.emit('ansi-output', '\x1b[36m-= Main Menu =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Available commands:\r\n');
@@ -1524,6 +1526,9 @@ function displayMainMenu(socket: any, session: BBSSession) {
   } else {
     console.log('menuPause is FALSE, NOT displaying menu - staying in command mode');
   }
+
+  // Reset doorExpertMode after menu display (express.e:28586)
+  session.doorExpertMode = false;
 
   // Like AmiExpress: Check cmdShortcuts to determine input mode
   if (session.cmdShortcuts === false) {
@@ -2693,6 +2698,133 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
       return; // Don't call displayMainMenu - stay in input mode
 
+    case '<': // Previous Conference (internalCommandLT) - express.e:24529
+      // Check if user has join permission
+      // TODO: Implement checkSecurity(ACS_JOIN_CONFERENCE)
+
+      // Find previous accessible conference
+      let prevConf = session.currentConf - 1;
+      while (prevConf > 0) {
+        // TODO: Check if user has access to this conference with checkConfAccess()
+        // For now, assume all conferences are accessible
+        const conf = conferences.find(c => c.id === prevConf);
+        if (conf) {
+          break;
+        }
+        prevConf--;
+      }
+
+      if (prevConf < 1) {
+        // No previous conference - show join prompt
+        socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
+        socket.emit('ansi-output', 'At first conference. Select conference to join:\r\n');
+        conferences.forEach(conf => {
+          socket.emit('ansi-output', `${conf.id}. ${conf.name}\r\n`);
+        });
+        socket.emit('ansi-output', '\r\n\x1b[32mConference number: \x1b[0m');
+        session.subState = LoggedOnSubState.CONFERENCE_SELECT;
+        return;
+      } else {
+        // Join previous conference
+        joinConference(socket, session, prevConf, 1);
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      }
+      return;
+
+    case '>': // Next Conference (internalCommandGT) - express.e:24548
+      // Find next accessible conference
+      let nextConf = session.currentConf + 1;
+      const maxConf = Math.max(...conferences.map(c => c.id));
+
+      while (nextConf <= maxConf) {
+        const conf = conferences.find(c => c.id === nextConf);
+        if (conf) {
+          break;
+        }
+        nextConf++;
+      }
+
+      if (nextConf > maxConf) {
+        // No next conference - show join prompt
+        socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
+        socket.emit('ansi-output', 'At last conference. Select conference to join:\r\n');
+        conferences.forEach(conf => {
+          socket.emit('ansi-output', `${conf.id}. ${conf.name}\r\n`);
+        });
+        socket.emit('ansi-output', '\r\n\x1b[32mConference number: \x1b[0m');
+        session.subState = LoggedOnSubState.CONFERENCE_SELECT;
+        return;
+      } else {
+        // Join next conference
+        joinConference(socket, session, nextConf, 1);
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      }
+      return;
+
+    case '<<': // Previous Message Base (internalCommandLT2) - express.e:24566
+      {
+        const prevMsgBase = session.currentMsgBase - 1;
+
+        if (prevMsgBase < 1) {
+          // No previous message base - show join prompt
+          const currentConfBases = messageBases.filter(mb => mb.conferenceId === session.currentConf);
+          socket.emit('ansi-output', '\x1b[36m-= Join Message Base =-\x1b[0m\r\n');
+          socket.emit('ansi-output', 'At first message base. Select message base to join:\r\n');
+          currentConfBases.forEach(mb => {
+            socket.emit('ansi-output', `${mb.id}. ${mb.name}\r\n`);
+          });
+          socket.emit('ansi-output', '\r\n\x1b[32mMessage base number: \x1b[0m');
+          session.subState = LoggedOnSubState.CONFERENCE_SELECT;
+          session.tempData = { messageBaseSelect: true, currentConfBases };
+          return;
+        } else {
+          // Join previous message base
+          const prevBase = messageBases.find(mb => mb.id === prevMsgBase && mb.conferenceId === session.currentConf);
+          if (prevBase) {
+            session.currentMsgBase = prevMsgBase;
+            socket.emit('ansi-output', `\r\n\x1b[32mJoined message base: ${prevBase.name}\x1b[0m\r\n`);
+            socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+            session.menuPause = false;
+            session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+          }
+        }
+      }
+      return;
+
+    case '>>': // Next Message Base (internalCommandGT2) - express.e:24580
+      {
+        const currentConfBases = messageBases.filter(mb => mb.conferenceId === session.currentConf);
+        const nextMsgBase = session.currentMsgBase + 1;
+
+        if (nextMsgBase > currentConfBases.length) {
+          // No next message base - show join prompt
+          socket.emit('ansi-output', '\x1b[36m-= Join Message Base =-\x1b[0m\r\n');
+          socket.emit('ansi-output', 'At last message base. Select message base to join:\r\n');
+          currentConfBases.forEach(mb => {
+            socket.emit('ansi-output', `${mb.id}. ${mb.name}\r\n`);
+          });
+          socket.emit('ansi-output', '\r\n\x1b[32mMessage base number: \x1b[0m');
+          session.subState = LoggedOnSubState.CONFERENCE_SELECT;
+          session.tempData = { messageBaseSelect: true, currentConfBases };
+          return;
+        } else {
+          // Join next message base
+          const nextBase = messageBases.find(mb => mb.id === nextMsgBase && mb.conferenceId === session.currentConf);
+          if (nextBase) {
+            session.currentMsgBase = nextMsgBase;
+            socket.emit('ansi-output', `\r\n\x1b[32mJoined message base: ${nextBase.name}\x1b[0m\r\n`);
+            socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+            session.menuPause = false;
+            session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+          }
+        }
+      }
+      return;
+
     case 'J': // Join Conference (internalCommandJ)
       socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Available conferences:\r\n');
@@ -2840,6 +2972,98 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       }
       socket.emit('ansi-output', '\r\n');
       break;
+
+    case 'T': // Time/Date Display (internalCommandT) - express.e:25622
+      {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-US');
+        const timeStr = now.toLocaleTimeString('en-US');
+        socket.emit('ansi-output', `\r\nIt is ${dateStr} ${timeStr}\r\n`);
+        socket.emit('ansi-output', `Time remaining: ${Math.floor(session.timeRemaining)} minutes\r\n`);
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      }
+      return;
+
+    case 'B': // Bulletins (internalCommandB) - express.e:24607
+      // TODO: Implement bulletin file system from Bulletins/ directory
+      socket.emit('ansi-output', '\x1b[36m-= Bulletins =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Bulletin system not yet implemented.\r\n');
+      socket.emit('ansi-output', 'This will display bulletins from the Bulletins/ directory.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
+    case 'H': // Help (internalCommandH) - express.e:25071
+      // Like AmiExpress: Display help file for current conference
+      socket.emit('ansi-output', '\x1b[36m-= Help =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Available commands:\r\n\r\n');
+      socket.emit('ansi-output', '< / >    - Previous/Next Conference\r\n');
+      socket.emit('ansi-output', '<< / >>  - Previous/Next Message Base\r\n');
+      socket.emit('ansi-output', 'R        - Read Messages\r\n');
+      socket.emit('ansi-output', 'A        - Post Message\r\n');
+      socket.emit('ansi-output', 'J        - Join Conference\r\n');
+      socket.emit('ansi-output', 'JM       - Join Message Base\r\n');
+      socket.emit('ansi-output', 'F        - File Areas\r\n');
+      socket.emit('ansi-output', 'N        - New Files\r\n');
+      socket.emit('ansi-output', 'D        - Download Files\r\n');
+      socket.emit('ansi-output', 'U        - Upload Files\r\n');
+      socket.emit('ansi-output', 'O        - Page Sysop\r\n');
+      socket.emit('ansi-output', 'C        - Comment to Sysop\r\n');
+      socket.emit('ansi-output', 'X        - Toggle Expert Mode\r\n');
+      socket.emit('ansi-output', 'T        - Time/Date\r\n');
+      socket.emit('ansi-output', 'G        - Goodbye\r\n');
+      socket.emit('ansi-output', '?        - Help\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
+    case 'M': // Message Menu (internalCommandM) - express.e:25239
+      // TODO: Implement full message menu from express.e
+      socket.emit('ansi-output', '\x1b[36m-= Message Menu =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Message menu not yet fully implemented.\r\n');
+      socket.emit('ansi-output', 'Use R to read messages, A to post.\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
+    case 'NM': // New Messages (internalCommandNM) - express.e:25281
+      // TODO: Implement new message scan from express.e
+      socket.emit('ansi-output', '\x1b[36m-= New Messages =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Scanning for new messages...\r\n\r\n');
+
+      // Count new messages since last login
+      const newMessages = messages.filter(msg =>
+        msg.conferenceId === session.currentConf &&
+        msg.timestamp > (session.user?.lastLogin || new Date(0))
+      );
+
+      if (newMessages.length > 0) {
+        socket.emit('ansi-output', `Found ${newMessages.length} new message(s) in this conference.\r\n`);
+      } else {
+        socket.emit('ansi-output', 'No new messages.\r\n');
+      }
+
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
+    case 'CM': // Clear Message Scan Pointers (internalCommandCM) - express.e:24843
+      // Like AmiExpress: Clear message scan pointers so all messages appear as "new"
+      socket.emit('ansi-output', '\x1b[36m-= Clear Message Scan =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'This will mark all messages as unread.\r\n');
+      socket.emit('ansi-output', 'Are you sure? (Y/N): ');
+      // TODO: Implement confirmation and clear scan pointers
+      socket.emit('ansi-output', '\r\n\x1b[33mNot yet implemented.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
 
     case 'G': // Goodbye (internalCommandG)
       socket.emit('ansi-output', '\r\nGoodbye!\r\n');
