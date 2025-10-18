@@ -10,6 +10,8 @@ import { nodeManager, arexxEngine, protocolManager } from './nodes';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface BBSSession {
   state: BBSState;
@@ -319,6 +321,113 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
 
+// ===== SCREEN FILE SYSTEM (Phase 8) =====
+// AmiExpress screen file system for authentic BBS display
+// express.e uses displayScreen() throughout - lines 28566, 28571, 28586, etc.
+
+// Screen name constants (like express.e SCREEN_* constants)
+const SCREEN_BBSTITLE = 'BBSTITLE';
+const SCREEN_LOGON = 'LOGON';
+const SCREEN_BULL = 'BULL';
+const SCREEN_NODE_BULL = 'NODE_BULL';
+const SCREEN_CONF_BULL = 'CONF_BULL';
+const SCREEN_MENU = 'MENU';
+const SCREEN_LOGOFF = 'LOGOFF';
+const SCREEN_JOINCONF = 'JoinConf';
+const SCREEN_JOINED = 'JOINED';
+const SCREEN_JOINMSGBASE = 'JoinMsgBase';
+
+// Parse MCI codes (Macro Command Interface) in screen files
+// Like express.e parseMci() function
+function parseMciCodes(content: string, session: BBSSession, bbsName: string = 'AmiExpress-Web'): string {
+  let parsed = content;
+
+  // %B - BBS Name
+  parsed = parsed.replace(/%B/g, bbsName);
+
+  // %CF - Current Conference Name
+  parsed = parsed.replace(/%CF/g, session.currentConfName || 'Unknown');
+
+  // %R - Time Remaining (in minutes)
+  parsed = parsed.replace(/%R/g, Math.floor(session.timeRemaining / 60).toString());
+
+  // %D - Current Date
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
+  parsed = parsed.replace(/%D/g, dateStr);
+
+  // %U - Username
+  parsed = parsed.replace(/%U/g, session.user?.username || 'Guest');
+
+  // %N - Node Number (always 1 in web version)
+  parsed = parsed.replace(/%N/g, '1');
+
+  return parsed;
+}
+
+// Load screen file from disk
+// Like express.e displayScreen() - loads from BBS:Node{X}/Screens/ or BBS:Conf{X}/Screens/
+function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0): string | null {
+  const baseDir = path.join(__dirname, '../data/bbs/BBS');
+  const paths = [];
+
+  // Try conference-specific screen first (if provided)
+  if (conferenceId) {
+    const confPath = path.join(baseDir, `Conf0${conferenceId}`, 'Screens', `${screenName}.TXT`);
+    paths.push(confPath);
+  }
+
+  // Then try node-specific screen
+  const nodePath = path.join(baseDir, `Node${nodeId}`, 'Screens', `${screenName}.TXT`);
+  paths.push(nodePath);
+
+  // Then try default BBS screens
+  const bbsPath = path.join(baseDir, 'Screens', `${screenName}.TXT`);
+  paths.push(bbsPath);
+
+  // Try each path in order
+  for (const filePath of paths) {
+    try {
+      if (fs.existsSync(filePath)) {
+        return fs.readFileSync(filePath, 'utf-8');
+      }
+    } catch (error) {
+      console.error(`Error loading screen ${screenName} from ${filePath}:`, error);
+    }
+  }
+
+  console.warn(`Screen file not found: ${screenName}`);
+  return null;
+}
+
+// Display a screen file to the user
+// Like express.e displayScreen(screenName) - express.e:28566, 28571, 28586
+function displayScreen(socket: any, session: BBSSession, screenName: string) {
+  const content = loadScreenFile(screenName, session.currentConf);
+
+  if (content) {
+    // Parse MCI codes
+    const parsed = parseMciCodes(content, session);
+
+    // Send to client (screen files already have ANSI codes and \r\n line endings)
+    socket.emit('ansi-output', parsed);
+  } else {
+    // Fallback if screen not found
+    console.warn(`Using fallback for screen: ${screenName}`);
+    socket.emit('ansi-output', `\x1b[36m-= ${screenName} =-\x1b[0m\r\n`);
+  }
+}
+
+// Display "Press any key..." pause prompt
+// Like express.e doPause() - express.e:28566, 28571
+function doPause(socket: any, session: BBSSession) {
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  // Note: Actual key wait is handled by client sending keypress event
+  // This just displays the prompt
+}
+
+// ===== END SCREEN FILE SYSTEM =====
+
 // Log caller activity (express.e:9493 callersLog)
 // Logs to database like express.e logs to BBS:Node{X}/CallersLog file
 async function callersLog(userId: string | null, username: string, action: string, details?: string, nodeId: number = 1) {
@@ -389,13 +498,14 @@ async function getUserStats(userId: string): Promise<any> {
 
 // Display conference bulletins and trigger conference scan (SCREEN_NODE_BULL + confScan equivalent)
 async function displayConferenceBulletins(socket: any, session: BBSSession) {
-  // In AmiExpress, displayScreen(SCREEN_NODE_BULL) shows node-specific bulletins
-  socket.emit('ansi-output', '\r\n\x1b[36m-= Node Bulletins =-\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[33mNode-specific announcements:\x1b[0m\r\n');
-  socket.emit('ansi-output', '- Welcome to Node 1\r\n');
-  socket.emit('ansi-output', '- All systems operational\r\n');
-  socket.emit('ansi-output', '- Sysop available for chat\r\n');
-  socket.emit('ansi-output', '- WebSocket connections active\r\n');
+  // Phase 8: Use authentic screen file system
+  // Express.e:28566 - displayScreen(SCREEN_BULL)
+  displayScreen(socket, session, SCREEN_BULL);
+  doPause(socket, session);
+
+  // Express.e:28571 - displayScreen(SCREEN_NODE_BULL)
+  displayScreen(socket, session, SCREEN_NODE_BULL);
+  doPause(socket, session);
 
   // Conference scan (confScan equivalent - express.e:28066)
   socket.emit('ansi-output', '\r\n\x1b[32mScanning conferences for new messages...\x1b[0m\r\n');
@@ -1801,19 +1911,9 @@ function displayMainMenu(socket: any, session: BBSSession) {
     // CRITICAL FIX: Correct condition from express.e:28583
     // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
     if ((session.user?.expert === "N" && !session.doorExpertMode) /* TODO: || FORCE_MENUS check */) {
-      console.log('Sending menu header');
-      socket.emit('ansi-output', '\x1b[36m-= Main Menu =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Available commands:\r\n');
-      socket.emit('ansi-output', 'R) Read Messages\r\n');
-      socket.emit('ansi-output', 'A) Post Message\r\n');
-      socket.emit('ansi-output', 'J) Join Conference\r\n');
-      socket.emit('ansi-output', 'F) File Areas\r\n');
-      socket.emit('ansi-output', 'N) New Files\r\n');
-      socket.emit('ansi-output', 'D) Download Files\r\n');
-      socket.emit('ansi-output', 'U) Upload Files\r\n');
-      socket.emit('ansi-output', 'O) Page Sysop\r\n');
-      socket.emit('ansi-output', 'G) Goodbye\r\n');
-      socket.emit('ansi-output', '?) Help\r\n');
+      console.log('Displaying menu screen file');
+      // Phase 8: Use authentic screen file system (express.e:28586 - displayScreen(SCREEN_MENU))
+      displayScreen(socket, session, SCREEN_MENU);
     }
 
     displayMenuPrompt(socket, session);
