@@ -4,6 +4,7 @@ require('dotenv').config({ override: true });
 import { Pool as PoolConstructor } from 'pg';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
+import * as jwt from 'jsonwebtoken';
 
 // Import types from types.ts
 import type {
@@ -1883,6 +1884,59 @@ export class Database {
       // If bcrypt verification fails due to invalid hash format, return false
       console.warn('Password verification error:', error);
       return false;
+    }
+  }
+
+  // JWT Token Methods
+  async generateAccessToken(user: User): Promise<string> {
+    const secret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
+    const payload = {
+      userId: user.id,
+      username: user.username,
+      secLevel: user.secLevel
+    };
+
+    // Access tokens expire in 1 hour
+    return jwt.sign(payload, secret, { expiresIn: '1h' });
+  }
+
+  async generateRefreshToken(user: User): Promise<string> {
+    const secret = process.env.JWT_REFRESH_SECRET || 'amiexpress-refresh-secret-change-in-production';
+    const payload = {
+      userId: user.id,
+      username: user.username
+    };
+
+    // Refresh tokens expire in 7 days
+    return jwt.sign(payload, secret, { expiresIn: '7d' });
+  }
+
+  async verifyAccessToken(token: string): Promise<{ userId: string; username: string; secLevel: number }> {
+    const secret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
+
+    try {
+      const decoded = jwt.verify(token, secret) as any;
+      return {
+        userId: decoded.userId,
+        username: decoded.username,
+        secLevel: decoded.secLevel
+      };
+    } catch (error) {
+      throw new Error('Invalid or expired access token');
+    }
+  }
+
+  async verifyRefreshToken(token: string): Promise<{ userId: string; username: string }> {
+    const secret = process.env.JWT_REFRESH_SECRET || 'amiexpress-refresh-secret-change-in-production';
+
+    try {
+      const decoded = jwt.verify(token, secret) as any;
+      return {
+        userId: decoded.userId,
+        username: decoded.username
+      };
+    } catch (error) {
+      throw new Error('Invalid or expired refresh token');
     }
   }
 
