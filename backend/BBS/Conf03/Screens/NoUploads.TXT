@@ -1,0 +1,32 @@
+[2J[H[1;31m
+  ███╗   ██╗ ██████╗     ██╗   ██╗██████╗ ██╗      ██████╗  █████╗ ██████╗ ███████╗
+  ████╗  ██║██╔═══██╗    ██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔══██╗██╔════╝
+  ██╔██╗ ██║██║   ██║    ██║   ██║██████╔╝██║     ██║   ██║███████║██║  ██║███████╗
+  ██║╚██╗██║██║   ██║    ██║   ██║██╔═══╝ ██║     ██║   ██║██╔══██║██║  ██║╚════██║
+  ██║ ╚████║╚██████╔╝    ╚██████╔╝██║     ███████╗╚██████╔╝██║  ██║██████╔╝███████║
+  ╚═╝  ╚═══╝ ╚═════╝      ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ ╚══════╝
+[0m
+[35m══════════════════════════════════════════════════════════════════════════[0m
+
+[1;33m                    UPLOADS NOT ALLOWED[0m
+
+[35m══════════════════════════════════════════════════════════════════════════[0m
+
+[37mFile uploads are currently disabled in this conference or for your
+access level.[0m
+
+[33mPossible reasons:[0m
+  [37m• Your account level doesn't permit uploads[0m
+  [37m• This conference is read-only[0m
+  [37m• Upload disk quota has been reached[0m
+  [37m• Temporary maintenance or system restrictions[0m
+  [37m• New users must establish trust first[0m
+
+[1;32mWhat you can do:[0m
+  [32m✓[0m [37mBrowse and download files from other areas[0m
+  [32m✓[0m [37mEarn upload privileges by being active[0m
+  [32m✓[0m [37mContact the sysop for upload access: [1;36m%S[0m
+
+[35m══════════════════════════════════════════════════════════════════════════[0m
+
+[1;37m                   Press any key to return...[0m
