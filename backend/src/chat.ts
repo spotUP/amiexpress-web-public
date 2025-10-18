@@ -56,9 +56,10 @@ export class ChatManager {
   private chatColorUser: number = 36;  // Cyan (LVL_CHAT_COLOR_USER)
   private screenPath: string;
 
-  constructor(screenPath: string = 'backend/data/bbs/BBS') {
+  constructor(screenPath?: string) {
     this.activeSessions = new Map();
-    this.screenPath = screenPath;
+    // BBS directory structure matches original Amiga AmiExpress
+    this.screenPath = screenPath || path.join(process.cwd(), 'BBS');
   }
 
   /**

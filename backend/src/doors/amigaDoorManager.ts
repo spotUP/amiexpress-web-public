@@ -743,7 +743,8 @@ let managerInstance: AmigaDoorManager | null = null;
 
 export function getAmigaDoorManager(bbsRoot?: string): AmigaDoorManager {
   if (!managerInstance) {
-    const root = bbsRoot || path.join(__dirname, '../../data/bbs/BBS');
+    // BBS directory structure matches original Amiga AmiExpress
+    const root = bbsRoot || path.join(process.cwd(), 'BBS');
     managerInstance = new AmigaDoorManager(root);
   }
   return managerInstance;
