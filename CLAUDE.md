@@ -59,6 +59,90 @@
 
 ---
 
+## 🚨 CRITICAL: NEVER OVERWRITE ORIGINAL AMIEXPRESS COMMANDS 🚨
+
+**THIS IS EQUALLY AS IMPORTANT AS THE 1:1 PORT RULE**
+
+### SACRED RULE: Command Namespace Preservation
+
+**ALL original AmiExpress commands are SACRED and must NEVER be overwritten, replaced, or modified to do something different.**
+
+### Rules for Commands:
+
+1. **Original AmiExpress Commands - UNTOUCHABLE:**
+   - If a command exists in express.e, it is **SACRED**
+   - You MUST implement it exactly as express.e specifies
+   - You CANNOT change its behavior
+   - You CANNOT replace it with something else
+   - You CANNOT remove it
+
+2. **New/Web-Specific Commands - Use Different Names:**
+   - If you need a new feature for the web version, create a NEW command name
+   - NEVER use a name that conflicts with express.e commands
+   - Use descriptive names like: WEB_*, MODERN_*, CUSTOM_*, etc.
+   - Document all custom commands in a separate file
+
+3. **Before Creating ANY Command:**
+   ```bash
+   # Check if command name exists in express.e
+   grep -i "ELSEIF.*StrCmp(cmdcode,'YOUR_COMMAND')" ~/Code/AmiExpress-Web/AmiExpress-Sources/express.e
+
+   # If found: YOU MUST implement it exactly as express.e shows
+   # If not found: You CAN create it as a custom command
+   ```
+
+### Example of WRONG vs CORRECT:
+
+❌ **WRONG - Overwriting Original Command:**
+```typescript
+case 'X':  // X is expert mode toggle in express.e
+  displayDoorMenu(socket, session);  // WRONG! Changing X's behavior
+  return;
+```
+
+✅ **CORRECT - Preserving Original + Adding Custom:**
+```typescript
+case 'X':  // Expert Mode Toggle - express.e:26113
+  // ... implement exactly as express.e shows
+  return;
+
+case 'WEB_DOORS':  // Custom web-specific command
+  displayDoorMenu(socket, session);
+  return;
+```
+
+### Custom Command Naming Convention:
+
+**For web-specific features, use these prefixes:**
+- `WEB_*` - Web interface features
+- `MODERN_*` - Modern enhancements
+- `CUSTOM_*` - Custom additions
+- `ADMIN_*` - Administrative tools
+
+**Examples:**
+- `WEB_DOORS` - Web door menu (if needed)
+- `WEB_SETTINGS` - Web-specific settings
+- `MODERN_SEARCH` - Enhanced search features
+- `CUSTOM_STATS` - Custom statistics
+
+### Verification Checklist:
+
+Before adding/modifying ANY command:
+- [ ] Did I check if this command exists in express.e?
+- [ ] If it exists in express.e, am I implementing it EXACTLY as shown?
+- [ ] If it doesn't exist, am I using a non-conflicting name?
+- [ ] Have I documented this as a custom command?
+
+### Command Registry:
+
+**Keep an updated list of:**
+1. **Original AmiExpress Commands** - From express.e (NEVER modify)
+2. **Custom Web Commands** - Our additions (clearly marked)
+
+**Location:** See `COMMANDS.md` for the complete registry.
+
+---
+
 ## ⚠️ CRITICAL: Server Restart Checklist (ALWAYS READ THIS FIRST)
 
 **BEFORE restarting backend or frontend servers, YOU MUST follow this checklist:**

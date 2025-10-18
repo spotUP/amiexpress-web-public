@@ -3,11 +3,33 @@
 **Date:** 2025-10-18
 **Comparison:** `backend/backend/src/index.ts` vs `AmiExpress-Sources/express.e`
 
+---
+
+## 🚨 SACRED RULE: NEVER OVERWRITE ORIGINAL COMMANDS
+
+**CRITICAL:** All original AmiExpress commands are **SACRED** and must NEVER be modified, replaced, or overwritten.
+
+### The Rule:
+1. **Original AmiExpress commands** - Implement exactly as express.e shows, NO changes
+2. **New/custom features** - Use different command names (WEB_*, MODERN_*, CUSTOM_*)
+3. **Before ANY command** - Check `COMMANDS.md` registry and express.e sources
+
+### Why This Matters:
+- Preserves backward compatibility
+- Respects original design
+- Prevents accidental breaking changes
+- Allows custom features to coexist with original commands
+
+### Registry:
+See `COMMANDS.md` for complete list of original vs custom commands.
+
+---
+
 ## CRITICAL ISSUES FOUND
 
 ### 1. **WRONG COMMAND IMPLEMENTATION - "X" Command**
 
-**STATUS:** ❌ **BROKEN**
+**STATUS:** ✅ **FIXED IN PHASE 1**
 
 - **What I did:** Changed X to execute door menu
 - **What it should be:** Expert mode toggle (express.e:26113-26122)
