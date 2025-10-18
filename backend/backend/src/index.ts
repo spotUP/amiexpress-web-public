@@ -170,17 +170,17 @@ io.on('connection', async (socket) => {
 
   const session: BBSSession = {
     state: BBSState.AWAIT,
-    currentConf: 0,
-    currentMsgBase: 0,
+    currentConf: 4, // Start in General conference (ID 4)
+    currentMsgBase: 7, // Start in Main message base (ID 7)
     timeRemaining: 60, // 60 minutes default
     lastActivity: Date.now(),
-    confRJoin: 1, // Default to General conference
-    msgBaseRJoin: 1, // Default to Main message base
+    confRJoin: 4, // Default to General conference (ID 4)
+    msgBaseRJoin: 7, // Default to Main message base (ID 7)
     commandBuffer: '', // Buffer for command input
     menuPause: true, // Like AmiExpress - menu displays immediately by default
     inputBuffer: '', // Buffer for line-based input
     relConfNum: 0, // Relative conference number
-    currentConfName: 'Unknown', // Current conference name
+    currentConfName: 'General', // Current conference name (matches ID 4)
     cmdShortcuts: false, // Like AmiExpress - default to line input mode, not hotkeys
     doorExpertMode: false, // Like AmiExpress - doors can force menu display (express.e:28583)
 
@@ -491,7 +491,7 @@ function doPause(socket: any, session: BBSSession) {
 // Logs to database like express.e logs to BBS:Node{X}/CallersLog file
 async function callersLog(userId: string | null, username: string, action: string, details?: string, nodeId: number = 1) {
   try {
-    await db.query(
+    await db.pool.query(
       'INSERT INTO caller_activity (node_id, user_id, username, action, details) VALUES ($1, $2, $3, $4, $5)',
       [nodeId, userId, username, action, details || null]
     );
