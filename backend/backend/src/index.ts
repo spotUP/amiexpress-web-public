@@ -148,17 +148,52 @@ io.on('connection', async (socket) => {
     environment: { nodeId: nodeSession.nodeId }
   });
 
-  socket.on('login', async (data: { token: string }) => {
-    console.log('Socket login attempt with JWT token');
-
+  socket.on('login', async (data: { token?: string; username?: string; password?: string }) => {
     try {
-      // Verify JWT token
-      const decoded = await db.verifyAccessToken(data.token);
+      let user;
 
-      // Get user from database
-      const user = await db.getUserById(decoded.userId);
-      if (!user) {
-        socket.emit('login-failed', 'User not found');
+      // Check if login is with JWT token or username/password
+      if (data.token) {
+        console.log('Socket login attempt with JWT token');
+
+        // Verify JWT token
+        const decoded = await db.verifyAccessToken(data.token);
+
+        // Get user from database
+        user = await db.getUserById(decoded.userId);
+        if (!user) {
+          socket.emit('login-failed', 'User not found');
+          return;
+        }
+      } else if (data.username && data.password) {
+        console.log('Socket login attempt with username/password:', data.username);
+
+        // Authenticate with username/password
+        user = await db.authenticateUser(data.username, data.password);
+        if (!user) {
+          socket.emit('login-failed', 'Invalid username or password');
+          return;
+        }
+
+        // Generate JWT tokens for this session
+        const accessToken = await db.generateAccessToken(user);
+        const refreshToken = await db.generateRefreshToken(user);
+
+        // Send tokens to client for future use
+        socket.emit('login-success', {
+          user: {
+            id: user.id,
+            username: user.username,
+            realname: user.realname,
+            secLevel: user.secLevel,
+            expert: user.expert,
+            ansi: user.ansi
+          },
+          token: accessToken,
+          refreshToken: refreshToken
+        });
+      } else {
+        socket.emit('login-failed', 'Missing credentials');
         return;
       }
 
@@ -175,22 +210,25 @@ io.on('connection', async (socket) => {
       session.msgBaseRJoin = 1; // Default message base
       session.cmdShortcuts = !user.expert; // Expert mode uses shortcuts
 
-      socket.emit('login-success', {
-        user: {
-          id: user.id,
-          username: user.username,
-          realname: user.realname,
-          secLevel: user.secLevel,
-          expert: user.expert,
-          ansi: user.ansi
-        }
-      });
+      // If we already sent login-success for username/password, don't send again
+      if (data.token) {
+        socket.emit('login-success', {
+          user: {
+            id: user.id,
+            username: user.username,
+            realname: user.realname,
+            secLevel: user.secLevel,
+            expert: user.expert,
+            ansi: user.ansi
+          }
+        });
+      }
 
       // Start the proper AmiExpress flow: bulletins first
       displaySystemBulletins(socket, session);
     } catch (error) {
       console.error('Socket login error:', error);
-      socket.emit('login-failed', 'Invalid token');
+      socket.emit('login-failed', 'Invalid credentials');
     }
   });
 

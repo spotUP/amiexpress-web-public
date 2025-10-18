@@ -1940,6 +1940,78 @@ export class Database {
     }
   }
 
+  async authenticateUser(username: string, password: string): Promise<User | null> {
+    const client = await this.pool.connect();
+    try {
+      // Get user by username
+      const result = await client.query(
+        'SELECT * FROM users WHERE LOWER(username) = LOWER($1)',
+        [username]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const user = result.rows[0];
+
+      // Verify password with bcrypt
+      const bcrypt = await import('bcrypt');
+      const passwordMatch = await bcrypt.compare(password, user.passwordhash);
+
+      if (!passwordMatch) {
+        return null;
+      }
+
+      // Return user without password hash
+      return {
+        id: user.id,
+        username: user.username,
+        passwordHash: user.passwordhash,
+        realname: user.realname,
+        location: user.location,
+        phone: user.phone,
+        email: user.email,
+        secLevel: user.seclevel,
+        uploads: user.uploads,
+        downloads: user.downloads,
+        bytesUpload: user.bytesupload,
+        bytesDownload: user.bytesdownload,
+        ratio: user.ratio,
+        ratioType: user.ratiotype,
+        timeTotal: user.timetotal,
+        timeLimit: user.timelimit,
+        timeUsed: user.timeused,
+        chatLimit: user.chatlimit,
+        chatUsed: user.chatused,
+        firstLogin: user.firstlogin,
+        lastLogin: user.lastlogin || user.firstlogin,
+        calls: user.calls,
+        callsToday: user.callstoday,
+        newUser: user.newuser,
+        expert: user.expert,
+        ansi: user.ansi,
+        linesPerScreen: user.linesperscreen,
+        computer: user.computer,
+        screenType: user.screentype,
+        protocol: user.protocol,
+        editor: user.editor,
+        zoomType: user.zoomtype,
+        availableForChat: user.availableforchat,
+        quietNode: user.quietnode,
+        autoRejoin: user.autorejoin,
+        confAccess: user.confaccess,
+        areaName: user.areaname,
+        uucp: user.uucp,
+        topUploadCps: user.topuploadcps,
+        topDownloadCps: user.topdownloadcps,
+        byteLimit: user.bytelimit
+      };
+    } finally {
+      client.release();
+    }
+  }
+
   async close(): Promise<void> {
     // Clear health check interval
     if (this.healthCheckInterval) {
