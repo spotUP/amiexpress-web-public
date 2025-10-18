@@ -1,0 +1,36 @@
+[2J[H[36m──────────────────────────────────────────────────────────────────────────────
+   ___________   ______________  ___    __
+  / ____/ ____/ / ____/ ____/ / / | |  / /
+ / / __/ __/   / __/ / /___ / / /  | | / /
+/ /_/ / /___  / /___/ /___// /_/   | |/ /
+\____/_____/ /_____/_____//_____/  |___/
+
+[36m──────────────────────────────────────────────────────────────────────────────[0m
+[35m---------------------------------------------------------------------------[0m
+
+[33m                    [%CF] CONFERENCE BULLETINS[0m
+
+[35m---------------------------------------------------------------------------[0m
+
+[37mWelcome to the [36m%CF[37m conference![0m
+
+[33mThis conference is dedicated to discussions about the conference topic.
+Feel free to participate, ask questions, and share your knowledge with
+other users.[0m
+
+[32mConference Rules:[0m
+  [37m1. Stay on topic for this conference[0m
+  [37m2. Be respectful and courteous to all users[0m
+  [37m3. No spam or advertising[0m
+  [37m4. Search before posting duplicate questions[0m
+  [37m5. Have fun and enjoy the conversation![0m
+
+[35mConference Statistics:[0m
+  [37m• Total Messages:[0m [36m%TM[0m
+  [37m• New Messages:[0m [36m%NM[0m
+  [37m• Last Message:[0m [36m%LD[0m at [36m%LT[0m
+  [37m• Active Users:[0m [36m%AU[0m
+
+[35m---------------------------------------------------------------------------[0m
+
+[37m                    Press any key to continue...[0m
