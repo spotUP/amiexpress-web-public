@@ -1,5 +1,64 @@
 # AmiExpress-Web Project Guidelines
 
+## 🚨 MANDATORY: 1:1 PORT - ALWAYS CHECK E SOURCES FIRST 🚨
+
+**THIS IS THE #1 RULE - FAILURE TO FOLLOW THIS WASTES EVERYONE'S TIME**
+
+### BEFORE Writing or Modifying ANY Code:
+
+**YOU MUST CHECK THE ORIGINAL AMIEXPRESS E SOURCES:**
+
+1. **Find the original implementation:**
+   ```bash
+   # Search for the function/command in express.e
+   grep -n "internalCommand<X>" ~/Code/AmiExpress-Web/AmiExpress-Sources/express.e
+   grep -n "PROC <functionName>" ~/Code/AmiExpress-Web/AmiExpress-Sources/express.e
+   ```
+
+2. **Read the original E code:**
+   ```bash
+   sed -n '<startLine>,<endLine>p' ~/Code/AmiExpress-Web/AmiExpress-Sources/express.e
+   ```
+
+3. **Check the original menu files:**
+   ```bash
+   cat ~/Code/AmiExpress-Web/backend/data/bbs/BBS/Conf01/Screens/MENU.TXT
+   ```
+
+4. **ONLY THEN implement the exact behavior - NO GUESSING, NO ASSUMPTIONS**
+
+### Why This Is CRITICAL:
+
+- This is a **1:1 port** of the original AmiExpress BBS software
+- Every command, every flow, every behavior must match express.e EXACTLY
+- The user has the E sources for a reason - USE THEM
+- Making up features or guessing wastes time and breaks authenticity
+- User has repeatedly emphasized this - DON'T FORGET
+
+### Example of What NOT to Do:
+
+❌ **WRONG:** "I'll change DOORS to X for door games"
+- Did you check express.e? NO
+- Did you check what X does? NO
+- Result: X is expert mode toggle, you broke it
+
+✅ **CORRECT:**
+1. Search express.e for door implementation
+2. Read how internalCommandX works (it's expert mode)
+3. Find how doors are actually accessed (BBS commands)
+4. Implement exactly as the original
+
+### Command Priority (from express.e:28228):
+```
+1. SysCommand (SYSCMD)
+2. BbsCommand (BBSCMD)
+3. InternalCommand (built-in)
+```
+
+**If you're implementing a feature and haven't looked at express.e, STOP and look at it first.**
+
+---
+
 ## ⚠️ CRITICAL: Server Restart Checklist (ALWAYS READ THIS FIRST)
 
 **BEFORE restarting backend or frontend servers, YOU MUST follow this checklist:**
