@@ -218,7 +218,7 @@ function App() {
         term.write('\r\n\x1b[36mRestoring session...\x1b[0m\r\n');
 
         // Attempt login with token
-        ws.emit('login-with-token', { token });
+        ws.emit('login', { token });
 
         // Set login state to prevent manual login prompt
         loginState.current = 'loggedin';

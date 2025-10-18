@@ -831,7 +831,61 @@ export class Database {
     try {
       const sql = `SELECT * FROM users WHERE id = $1`;
       const result = await client.query(sql, [id]);
-      return result.rows[0] as User || null;
+      if (result.rows[0]) {
+        const user = result.rows[0] as any;
+        // Helper function to safely convert to number with default
+        const safeNumber = (value: any, defaultValue: number = 0): number => {
+          const num = Number(value);
+          return isNaN(num) ? defaultValue : num;
+        };
+
+        return {
+          id: user.id,
+          username: user.username,
+          passwordHash: user.passwordhash,
+          realname: user.realname,
+          location: user.location,
+          phone: user.phone,
+          email: user.email,
+          secLevel: safeNumber(user.seclevel, 10),
+          uploads: safeNumber(user.uploads, 0),
+          downloads: safeNumber(user.downloads, 0),
+          bytesUpload: safeNumber(user.bytesupload, 0),
+          bytesDownload: safeNumber(user.bytesdownload, 0),
+          ratio: safeNumber(user.ratio, 0),
+          ratioType: safeNumber(user.ratiotype, 0),
+          timeTotal: safeNumber(user.timetotal, 0),
+          timeLimit: safeNumber(user.timelimit, 0),
+          timeUsed: safeNumber(user.timeused, 0),
+          chatLimit: safeNumber(user.chatlimit, 0),
+          chatUsed: safeNumber(user.chatused, 0),
+          lastLogin: user.lastlogin,
+          firstLogin: user.firstlogin,
+          calls: safeNumber(user.calls, 0),
+          callsToday: safeNumber(user.callstoday, 0),
+          newUser: user.newuser,
+          expert: user.expert,
+          ansi: user.ansi,
+          linesPerScreen: safeNumber(user.linesperscreen, 23),
+          computer: user.computer,
+          screenType: user.screentype,
+          protocol: user.protocol,
+          editor: user.editor,
+          zoomType: user.zoomtype,
+          availableForChat: user.availableforchat,
+          quietNode: user.quietnode,
+          autoRejoin: safeNumber(user.autorejoin, 1),
+          confAccess: user.confaccess,
+          areaName: user.areaname,
+          uuCP: user.uucp,
+          topUploadCPS: safeNumber(user.topuploadcps, 0),
+          topDownloadCPS: safeNumber(user.topdownloadcps, 0),
+          byteLimit: safeNumber(user.bytelimit, 0),
+          created: user.created,
+          updated: user.updated,
+        } as User;
+      }
+      return null;
     } finally {
       client.release();
     }

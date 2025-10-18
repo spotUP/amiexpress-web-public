@@ -22,6 +22,7 @@ interface BBSSession {
   confRJoin: number; // Default conference to join (from user preferences)
   msgBaseRJoin: number; // Default message base to join
   commandBuffer: string; // Buffer for command input
+  commandText?: string; // Current command text for PROCESS_COMMAND state (express.e:28639)
   menuPause: boolean; // Like AmiExpress menuPause - controls if menu displays immediately
   messageSubject?: string; // For message posting workflow
   messageBody?: string; // For message posting workflow
@@ -1501,7 +1502,9 @@ function displayMainMenu(socket: any, session: BBSSession) {
     console.log('Sending screen clear: \\x1b[2J\\x1b[H');
     socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
 
-    if (session.user?.expert !== "N") {
+    // CRITICAL FIX: Condition must be expert === "N" (not !== "N")
+    // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
+    if (session.user?.expert === "N") {  // Show menu only in non-expert mode
       console.log('Sending menu header');
       socket.emit('ansi-output', '\x1b[36m-= Main Menu =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Available commands:\r\n');
@@ -1513,7 +1516,6 @@ function displayMainMenu(socket: any, session: BBSSession) {
       socket.emit('ansi-output', 'D) Download Files\r\n');
       socket.emit('ansi-output', 'U) Upload Files\r\n');
       socket.emit('ansi-output', 'O) Page Sysop\r\n');
-      socket.emit('ansi-output', 'DOORS) Door Games & Utilities\r\n');
       socket.emit('ansi-output', 'G) Goodbye\r\n');
       socket.emit('ansi-output', '?) Help\r\n');
     }
@@ -1554,7 +1556,7 @@ function displayMenuPrompt(socket: any, session: BBSSession) {
 }
 
 // Handle user commands (processCommand equivalent)
-function handleCommand(socket: any, session: BBSSession, data: string) {
+async function handleCommand(socket: any, session: BBSSession, data: string) {
   console.log('=== handleCommand called ===');
   console.log('data:', JSON.stringify(data));
   console.log('session.state:', session.state);
@@ -2022,31 +2024,21 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
   }
 
   if (session.subState === LoggedOnSubState.READ_COMMAND) {
-    console.log('✅ In READ_COMMAND state, processing line input');
-    try {
-      // Like AmiExpress: Use lineInput for full command lines (supports "j 2", "f", etc.)
-      // For now, process the input as a command line (split by space, first part is command)
-      const input = data.trim();
-      if (input.length > 0) {
-        const parts = input.split(' ');
-        const command = parts[0].toUpperCase();
-        const params = parts.slice(1).join(' ');
-        console.log('🚀 Processing command:', command, 'with params:', params);
-        processBBSCommand(socket, session, command, params).catch(error => {
-          console.error('Error processing command:', error);
-          socket.emit('ansi-output', '\r\n\x1b[31mError processing command. Please try again.\x1b[0m\r\n');
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        });
-      }
-    } catch (error) {
-      console.error('Error in command processing:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mCommand processing error. Returning to menu...\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    console.log('✅ In READ_COMMAND state, reading line input');
+    // Express.e:28619-28633 - Read command text and transition to PROCESS_COMMAND
+    const input = data.trim();
+    if (input.length > 0) {
+      // Store command text in session for PROCESS_COMMAND state
+      session.commandText = input.toUpperCase();
+      console.log('📝 Command text stored:', session.commandText);
+      // Transition to PROCESS_COMMAND (express.e:28638)
+      session.subState = LoggedOnSubState.PROCESS_COMMAND;
+      // Process the command in the next event cycle
+      setTimeout(() => {
+        handleCommand(socket, session, '');  // Trigger process command
+      }, 0);
     }
+    return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
     console.log('🔥 In READ_SHORTCUTS state, processing single key');
     try {
@@ -2068,10 +2060,92 @@ function handleCommand(socket: any, session: BBSSession, data: string) {
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     }
+  } else if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
+    // Express.e:28639-28642 - Process the command with priority system
+    console.log('⚙️ In PROCESS_COMMAND state, executing command:', session.commandText);
+    if (session.commandText) {
+      const parts = session.commandText.split(' ');
+      const command = parts[0];
+      const params = parts.slice(1).join(' ');
+      try {
+        // Express.e:28244-28256 - Command priority: SysCommand → BbsCommand → InternalCommand
+        const result = await processCommand(socket, session, command, params);
+        if (result === 'NOT_ALLOWED') {
+          // Permission denied - already handled
+          session.menuPause = false;
+          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+          return;
+        }
+      } catch (error) {
+        console.error('Error processing command:', error);
+        socket.emit('ansi-output', '\r\n\x1b[31mError processing command.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+    }
+    // After processing: menuPause := TRUE, subState := DISPLAY_MENU (express.e:28641-28642)
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.commandText = undefined; // Clear command text
+    displayMainMenu(socket, session);
+    return;
   } else {
     console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
   }
   console.log('=== handleCommand end ===\n');
+}
+
+// Command Priority System - Express.e:28228-28282
+// Priority order: SysCommand → BbsCommand → InternalCommand
+
+// Check for System Command (express.e:4813-4819)
+async function runSysCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
+  // TODO: Implement system command lookup (.cmd files in Conf/SysCmds/)
+  // For now, return FAILURE (command not found)
+  console.log(`[SysCommand] Checking for system command: ${command} - NOT FOUND (not implemented yet)`);
+  return 'FAILURE';
+}
+
+// Check for BBS Command (express.e:4807-4811)
+async function runBbsCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
+  // TODO: Implement BBS command lookup (.cmd files in Conf/Cmds/, Node/Cmds/, BBS/Cmds/)
+  // For now, return FAILURE (command not found)
+  console.log(`[BbsCommand] Checking for BBS command: ${command} - NOT FOUND (not implemented yet)`);
+  return 'FAILURE';
+}
+
+// Process command with priority system (express.e:28229-28257)
+async function processCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
+  console.log(`[CommandPriority] Processing command: ${command} with params: ${params}`);
+
+  // Try SysCommand first
+  const sysResult = await runSysCommand(socket, session, command, params);
+  if (sysResult === 'SUCCESS') {
+    console.log('[CommandPriority] Executed as SysCommand');
+    return 'SUCCESS';
+  }
+  if (sysResult === 'NOT_ALLOWED') {
+    console.log('[CommandPriority] SysCommand denied by permissions');
+    return 'NOT_ALLOWED';
+  }
+
+  // Try BbsCommand second
+  const bbsResult = await runBbsCommand(socket, session, command, params);
+  if (bbsResult === 'SUCCESS') {
+    console.log('[CommandPriority] Executed as BbsCommand');
+    return 'SUCCESS';
+  }
+  if (bbsResult === 'NOT_ALLOWED') {
+    console.log('[CommandPriority] BbsCommand denied by permissions');
+    return 'NOT_ALLOWED';
+  }
+
+  // Try InternalCommand last
+  console.log('[CommandPriority] Trying as InternalCommand');
+  await processBBSCommand(socket, session, command, params);
+  return 'SUCCESS';
 }
 
 // Process BBS commands (processInternalCommand equivalent)
@@ -2806,8 +2880,26 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'DOORS': // Door Games Menu (new command for Phase 4)
-      displayDoorMenu(socket, session, params);
+    case 'X': // Expert Mode Toggle (internalCommandX) - express.e:26113
+      // Toggle expert mode (shortcuts vs full commands)
+      if (session.user?.expert === 'X') {
+        // Disable expert mode
+        socket.emit('ansi-output', '\r\n\x1b[33mExpert mode disabled\x1b[0m\r\n');
+        session.user.expert = 'N';
+        if (session.user) {
+          await db.updateUser(session.user.id, { expert: 'N' });
+        }
+      } else {
+        // Enable expert mode
+        socket.emit('ansi-output', '\r\n\x1b[33mExpert mode enabled\x1b[0m\r\n');
+        if (session.user) {
+          session.user.expert = 'X';
+          await db.updateUser(session.user.id, { expert: 'X' });
+        }
+      }
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
     case '?': // Help (internalCommandQuestionMark)
@@ -2828,7 +2920,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', 'U - Upload Files\r\n');
       socket.emit('ansi-output', 'O - Page Sysop for Chat\r\n');
       socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
-      socket.emit('ansi-output', 'DOORS - Door Games & Utilities\r\n');
+      socket.emit('ansi-output', 'X - Expert Mode Toggle\r\n');
       socket.emit('ansi-output', 'G - Goodbye\r\n');
       socket.emit('ansi-output', 'Q - Quiet Node\r\n');
       socket.emit('ansi-output', '? - This help\r\n');

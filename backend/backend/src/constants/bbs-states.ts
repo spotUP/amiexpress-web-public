@@ -18,6 +18,7 @@ export enum LoggedOnSubState {
   DISPLAY_MENU = 'display_menu',
   READ_COMMAND = 'read_command',
   READ_SHORTCUTS = 'read_shortcuts',
+  PROCESS_COMMAND = 'process_command',  // Added for 1:1 port - express.e:28639
   WAITING = 'waiting',
 
   // File operations
