@@ -294,10 +294,10 @@ ELSEIF subState.subState=SUBSTATE_READ_SHORTCUTS
 9. ✅ Implement doorExpertMode flag
 
 ### MEDIUM (Authenticity issues):
-10. ✅ Verify all existing commands match express.e behavior
-11. ✅ Remove non-express.e commands (checkup, native, sal, etc.)
-12. ✅ Implement loadFlagged() and loadHistory()
-13. ✅ Implement processOlmMessageQueue()
+10. 🚧 Verify all existing commands match express.e behavior (deferred to Phase 4)
+11. ✅ **DONE - Phase 3:** Remove non-express.e commands (O_USERS removed, others validated)
+12. ✅ **DONE - Phase 3:** Implement loadFlagged() and loadHistory()
+13. ✅ **DONE - Phase 3:** Implement processOlmMessageQueue()
 
 ### LOW (Polish):
 14. ✅ Update menu to match original MENU.TXT exactly
@@ -308,11 +308,11 @@ ELSEIF subState.subState=SUBSTATE_READ_SHORTCUTS
 
 ## NEXT STEPS
 
-1. **Immediate:** Revert X command changes, remove DOORS menu
-2. **Phase 1:** Fix state machine (add PROCESS_COMMAND, fix menuPause)
-3. **Phase 2:** Implement command priority system
-4. **Phase 3:** Add missing commands
-5. **Phase 4:** Implement BBS command/.cmd system
+1. ✅ **Immediate:** Revert X command changes, remove DOORS menu
+2. ✅ **Phase 1:** Fix state machine (add PROCESS_COMMAND, fix menuPause)
+3. ✅ **Phase 2:** Implement command priority system + 10 missing commands
+4. ✅ **Phase 3:** Infrastructure (loadFlagged, loadHistory, processOlmMessageQueue) + WHD command
+5. **Phase 4:** Verify partial commands + implement BBS command/.cmd system
 6. **Phase 5:** Verify each command against express.e line-by-line
 
 ---

@@ -80,9 +80,9 @@ These commands are from express.e (processInternalCommand function, lines 28283-
 |---------|---------------|---------|--------|-------|
 | `O` | 25372 | Page sysop (internalCommandO) | 🚧 | Partially implemented |
 | `OLM` | 25406 | Online message (internalCommandOLM) | 🚧 | Partially implemented |
-| `WHO` | - | Who's online (internalCommandWHO) | 🚧 | Partially implemented |
-| `WHD` | - | Who's online detailed (internalCommandWHD) | ❌ | Not implemented |
-| `W` | - | Who's online short (internalCommandW) | ❌ | Not implemented |
+| `WHO` | 26094 | Who's online (internalCommandWHO) | ✅ | **VERIFIED - Phase 2** |
+| `WHD` | 26104 | Who's online detailed (internalCommandWHD) | ✅ | **VERIFIED - Phase 3** |
+| `W` | 25712 | User configuration menu (internalCommandW) | 🚧 | Different from WHO |
 
 ### System Status Commands
 
@@ -118,12 +118,12 @@ These commands are NOT in the original AmiExpress. They are custom additions for
 
 | Command | Purpose | Status | Notes |
 |---------|---------|--------|-------|
-| `checkup` | System checkup? | ⚠️ | **REVIEW NEEDED** - Source unknown |
-| `native` | ? | ⚠️ | **REVIEW NEEDED** - Source unknown |
-| `sal` | ? | ⚠️ | **REVIEW NEEDED** - Source unknown |
-| `script` | ? | ⚠️ | **REVIEW NEEDED** - Source unknown |
-| `web` | ? | ⚠️ | **REVIEW NEEDED** - Source unknown |
-| `O_USERS` | List users? | ⚠️ | **REVIEW NEEDED** - Conflicts with WHO? |
+| *none* | | | **Phase 3: All reviewed and removed** |
+
+**Note:** During Phase 3 review:
+- `checkup`, `sal` - These are DOOR IDs, not commands (OK)
+- `native`, `script`, `web` - These are DOOR TYPES, not commands (OK)
+- `O_USERS` - Was a duplicate of WHO command (REMOVED in Phase 3)
 
 ### ⚠️ ATTENTION NEEDED:
 
@@ -186,15 +186,15 @@ To verify a command implementation:
 ## 📊 Implementation Statistics
 
 **Total Original Commands:** 49
-**Implemented & Verified:** 1 (2%)
-**Partially Implemented:** 22 (45%)
-**Not Implemented:** 26 (53%)
+**Implemented & Verified:** 13 (27%)
+**Partially Implemented:** 21 (43%)
+**Not Implemented:** 15 (31%)
 **Broken/Wrong:** 0 (0%)
 
-**Custom Commands:** 6 (all need review)
+**Custom Commands:** 0 (all reviewed and removed/validated)
 
 ---
 
 **Last Updated:** 2025-10-18
-**Updated By:** Phase 1 Critical Fixes
+**Updated By:** Phase 3 - Authenticity & Infrastructure
 **Next Review:** After each phase of implementation

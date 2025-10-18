@@ -356,6 +356,10 @@ function joinConference(socket: any, session: BBSSession, confId: number, msgBas
   socket.emit('ansi-output', `\r\n\x1b[32mJoined conference: ${conference.name}\x1b[0m\r\n`);
   socket.emit('ansi-output', `\r\n\x1b[32mCurrent message base: ${messageBase.name}\x1b[0m\r\n`);
 
+  // Like express.e:28576-28577 - load flagged files and command history
+  loadFlagged(socket, session);
+  loadHistory(session);
+
   // Move to menu display
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   return true;
@@ -1492,9 +1496,108 @@ function handleFileDownload(socket: any, session: BBSSession, fileIndex: number)
   (session as any).downloadInterval = transferInterval;
 }
 
+// Load flagged files for user (express.e:2757)
+function loadFlagged(socket: any, session: BBSSession) {
+  // TODO: Implement flagged files system
+  // In express.e, this reads flagged files from disk
+  // For web version, we'll use database to store flagged files
+  // Format: User has a list of files marked for download
+
+  // Stub implementation - check if user has flagged files in session
+  if (session.tempData?.flaggedFiles && session.tempData.flaggedFiles.length > 0) {
+    socket.emit('ansi-output', '\r\n** Flagged File(s) Exist **\r\n');
+    socket.emit('ansi-output', '\x07'); // BELL character
+  }
+}
+
+// Load command history for user (express.e:2669)
+function loadHistory(session: BBSSession) {
+  // TODO: Implement command history system
+  // In express.e, this reads command history from disk
+  // For web version, we'll use session storage
+  // Format: historyBuf contains list of previously entered commands
+
+  // Stub implementation - initialize history if not exists
+  if (!session.tempData) {
+    session.tempData = {};
+  }
+  if (!session.tempData.commandHistory) {
+    session.tempData.commandHistory = [];
+    session.tempData.historyNum = 0;
+    session.tempData.historyCycle = 0;
+  }
+}
+
+// Process queued online messages (express.e:29108)
+function processOlmMessageQueue(socket: any, session: BBSSession, showMessages: boolean) {
+  // In express.e, this displays queued online messages (OLM)
+  // These are instant messages from other users that arrived while busy
+
+  if (!session.tempData?.olmQueue) {
+    session.tempData = session.tempData || {};
+    session.tempData.olmQueue = [];
+  }
+
+  if (session.tempData.olmQueue.length > 0) {
+    if (showMessages) {
+      socket.emit('ansi-output', '\r\nDisplaying Message Queue\r\n');
+      session.tempData.olmQueue.forEach((msg: string) => {
+        socket.emit('ansi-output', msg + '\r\n');
+      });
+    }
+    session.tempData.olmQueue = [];
+  }
+}
+
+// Map substate to human-readable activity for WHO command
+function getActivityFromSubState(subState?: string): string {
+  if (!subState) return 'IDLE';
+
+  // Match express.e ENV_* states
+  switch (subState) {
+    case LoggedOnSubState.DISPLAY_MENU:
+    case LoggedOnSubState.READ_COMMAND:
+    case LoggedOnSubState.READ_SHORTCUTS:
+      return 'MAIN MENU';
+    case LoggedOnSubState.READ_MESSAGES:
+      return 'READING MAIL';
+    case LoggedOnSubState.POST_MESSAGE:
+    case LoggedOnSubState.POST_MESSAGE_SUBJECT:
+    case LoggedOnSubState.POST_MESSAGE_TO:
+    case LoggedOnSubState.POST_MESSAGE_BODY:
+      return 'POSTING MESSAGE';
+    case LoggedOnSubState.FILES_MAIN:
+    case LoggedOnSubState.FILES_VIEW_AREA:
+      return 'BROWSING FILES';
+    case LoggedOnSubState.FILES_DOWNLOAD:
+      return 'DOWNLOADING';
+    case LoggedOnSubState.FILES_UPLOAD:
+      return 'UPLOADING';
+    case LoggedOnSubState.FILES_MAINTENANCE:
+    case LoggedOnSubState.FILES_MAINT_SELECT:
+      return 'FILE MAINT';
+    case LoggedOnSubState.DOOR_RUNNING:
+      return 'IN DOOR';
+    case LoggedOnSubState.CHAT_PAGE_SYSOP:
+    case LoggedOnSubState.CHAT_SESSION:
+      return 'CHATTING';
+    case LoggedOnSubState.ACCOUNT_MENU:
+    case LoggedOnSubState.ACCOUNT_EDIT_SETTINGS:
+      return 'ACCOUNT EDITING';
+    case LoggedOnSubState.CONFERENCE_SELECT:
+    case LoggedOnSubState.CONFERENCE_JOIN:
+      return 'JOINING CONF';
+    default:
+      return 'IDLE';
+  }
+}
+
 // Display main menu (SCREEN_MENU equivalent)
 function displayMainMenu(socket: any, session: BBSSession) {
   console.log('displayMainMenu called, current subState:', session.subState, 'menuPause:', session.menuPause);
+
+  // Like express.e:28594 - process OLM message queue before displaying menu
+  processOlmMessageQueue(socket, session, true);
 
   // Like AmiExpress: only display menu if menuPause is TRUE
   if (session.menuPause) {
@@ -2517,6 +2620,48 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
+    case 'WHD': // Who's Online - Detailed (internalCommandWHD) - express.e:26104
+      socket.emit('ansi-output', '\x1b[36m-= Online Users (Detailed) =-\x1b[0m\r\n\r\n');
+
+      // Get all online users with detailed status
+      const detailedOnlineUsers = Array.from(sessions.values())
+        .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
+        .map(sess => ({
+          username: sess.user!.username,
+          realname: sess.user!.realname,
+          conference: sess.currentConfName,
+          idle: Math.floor((Date.now() - sess.lastActivity) / 60000),
+          node: 'Web1',
+          quiet: sess.user!.quietNode,
+          subState: sess.subState || 'UNKNOWN',
+          // Determine activity based on substate
+          activity: getActivityFromSubState(sess.subState)
+        }));
+
+      if (detailedOnlineUsers.length === 0) {
+        socket.emit('ansi-output', 'No users currently online.\r\n');
+      } else {
+        socket.emit('ansi-output', 'User Name'.padEnd(16) + 'Real Name'.padEnd(20) + 'Activity'.padEnd(20) + 'Node\r\n');
+        socket.emit('ansi-output', '='.repeat(75) + '\r\n');
+
+        detailedOnlineUsers.forEach(userInfo => {
+          if (!userInfo.quiet || session.user?.secLevel === 255) { // Sysops can see quiet users
+            const quietIndicator = userInfo.quiet ? ' (Q)' : '';
+            socket.emit('ansi-output',
+              userInfo.username.padEnd(16) +
+              userInfo.realname.padEnd(20) +
+              userInfo.activity.padEnd(20) +
+              userInfo.node + quietIndicator + '\r\n'
+            );
+          }
+        });
+      }
+
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      return;
+
     case 'X': // Expert Mode Toggle (internalCommandX) - 1:1 with AmiExpress expert mode
       socket.emit('ansi-output', '\x1b[36m-= Expert Mode Toggle =-\x1b[0m\r\n');
 
@@ -2948,30 +3093,6 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       startSysopPage(socket, session);
       return; // Don't continue to menu display
 
-    case 'O_USERS': // Online Users (separate command for compatibility)
-      socket.emit('ansi-output', '\x1b[36m-= Online Users =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Currently online:\r\n\r\n');
-
-      // Get all active sessions
-      const onlineUsersList = Array.from(sessions.values())
-        .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
-        .map(sess => ({
-          username: sess.user!.username,
-          conference: sess.currentConfName,
-          idle: Math.floor((Date.now() - sess.lastActivity) / 60000), // minutes idle
-          node: 'Web1' // For now, all users are on the same "node"
-        }));
-
-      if (onlineUsersList.length === 0) {
-        socket.emit('ansi-output', 'No users currently online.\r\n');
-      } else {
-        onlineUsersList.forEach(userInfo => {
-          const idleStr = userInfo.idle > 0 ? ` (${userInfo.idle}min idle)` : '';
-          socket.emit('ansi-output', `${userInfo.username.padEnd(15)} ${userInfo.conference.padEnd(20)} ${userInfo.node}${idleStr}\r\n`);
-        });
-      }
-      socket.emit('ansi-output', '\r\n');
-      break;
 
     case 'T': // Time/Date Display (internalCommandT) - express.e:25622
       {
