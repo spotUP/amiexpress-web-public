@@ -310,6 +310,74 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
 
+// Log caller activity (express.e:9493 callersLog)
+// Logs to database like express.e logs to BBS:Node{X}/CallersLog file
+async function callersLog(userId: string | null, username: string, action: string, details?: string, nodeId: number = 1) {
+  try {
+    await db.query(
+      'INSERT INTO caller_activity (node_id, user_id, username, action, details) VALUES ($1, $2, $3, $4, $5)',
+      [nodeId, userId, username, action, details || null]
+    );
+  } catch (error) {
+    console.error('Error logging caller activity:', error);
+    // Fail silently like express.e would
+  }
+}
+
+// Get recent caller activity from database
+async function getRecentCallerActivity(limit: number = 20, nodeId?: number): Promise<any[]> {
+  try {
+    let query = 'SELECT username, action, details, timestamp FROM caller_activity';
+    const params: any[] = [];
+
+    if (nodeId !== undefined) {
+      query += ' WHERE node_id = $1';
+      params.push(nodeId);
+    }
+
+    query += ' ORDER BY timestamp DESC LIMIT $' + (params.length + 1);
+    params.push(limit);
+
+    const result = await db.query(query, params);
+    return result.rows;
+  } catch (error) {
+    console.error('Error getting caller activity:', error);
+    return [];
+  }
+}
+
+// Get or initialize user stats
+async function getUserStats(userId: string): Promise<any> {
+  try {
+    let result = await db.query(
+      'SELECT * FROM user_stats WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      // Initialize stats for new user
+      await db.query(
+        'INSERT INTO user_stats (user_id) VALUES ($1)',
+        [userId]
+      );
+      result = await db.query(
+        'SELECT * FROM user_stats WHERE user_id = $1',
+        [userId]
+      );
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    console.error('Error getting user stats:', error);
+    return {
+      bytes_uploaded: 0,
+      bytes_downloaded: 0,
+      files_uploaded: 0,
+      files_downloaded: 0
+    };
+  }
+}
+
 // Display conference bulletins and trigger conference scan (SCREEN_NODE_BULL + confScan equivalent)
 async function displayConferenceBulletins(socket: any, session: BBSSession) {
   // In AmiExpress, displayScreen(SCREEN_NODE_BULL) shows node-specific bulletins
@@ -1084,24 +1152,25 @@ function executeWebDoor(socket: any, session: BBSSession, door: Door, doorSessio
 }
 
 // Execute SAmiLog callers log viewer door
-function executeSAmiLogDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
+async function executeSAmiLogDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
   socket.emit('ansi-output', '\x1b[36m-= Super AmiLog v3.00 =-\x1b[0m\r\n');
   socket.emit('ansi-output', 'Advanced Callers Log Viewer\r\n\r\n');
 
-  // Simulate callers log display (would read from BBS:NODE{x}/CALLERSLOG)
+  // Read from caller_activity table (express.e reads from BBS:NODE{x}/CALLERSLOG)
   socket.emit('ansi-output', 'Recent callers:\r\n\r\n');
 
-  // Mock some caller entries
-  const mockCallers = [
-    { user: 'ByteMaster', action: 'Logged off', time: '22:15:30' },
-    { user: 'AmigaFan', action: 'Downloaded file', time: '22:10:15' },
-    { user: 'RetroUser', action: 'Posted message', time: '22:05:42' },
-    { user: 'NewUser', action: 'Logged on', time: '21:58:12' }
-  ];
+  const recentActivity = await getRecentCallerActivity(20);
 
-  mockCallers.forEach(caller => {
-    socket.emit('ansi-output', `${caller.time} ${caller.user.padEnd(15)} ${caller.action}\r\n`);
-  });
+  if (recentActivity.length === 0) {
+    socket.emit('ansi-output', 'No caller activity recorded yet.\r\n');
+  } else {
+    recentActivity.forEach(activity => {
+      const timestamp = new Date(activity.timestamp);
+      const timeStr = timestamp.toLocaleTimeString('en-US', { hour12: false });
+      const details = activity.details ? ` - ${activity.details}` : '';
+      socket.emit('ansi-output', `${timeStr} ${activity.username.padEnd(15)} ${activity.action}${details}\r\n`);
+    });
+  }
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to exit SAmiLog...\x1b[0m');
   session.menuPause = false;

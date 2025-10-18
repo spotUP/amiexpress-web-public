@@ -716,6 +716,32 @@ export class Database {
         )
       `);
 
+      // Caller activity log table (express.e:9493 callersLog)
+      // Stores all caller actions like express.e's BBS:Node{X}/CallersLog
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS caller_activity (
+          id SERIAL PRIMARY KEY,
+          node_id INTEGER DEFAULT 1,
+          user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+          username TEXT,
+          action TEXT NOT NULL,
+          details TEXT,
+          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // User statistics table for bytes/ratio tracking
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS user_stats (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          bytes_uploaded BIGINT DEFAULT 0,
+          bytes_downloaded BIGINT DEFAULT 0,
+          files_uploaded INTEGER DEFAULT 0,
+          files_downloaded INTEGER DEFAULT 0,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       // Create indexes for performance
       await this.createIndexes(client);
     } finally {
@@ -749,6 +775,13 @@ export class Database {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_flagged_files_user ON flagged_files(user_id)`);
 
     // Command history indexes (user_id is already primary key)
+
+    // Caller activity indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_user ON caller_activity(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_timestamp ON caller_activity(timestamp DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_node ON caller_activity(node_id, timestamp DESC)`);
+
+    // User stats indexes (user_id is already primary key)
   }
 
 
