@@ -191,6 +191,10 @@ export function loadScreen(screenName: string, session: BBSSession): string | nu
     // Step 3: Add ESC prefix to bare ANSI sequences
     content = addAnsiEscapes(content);
 
+    // Step 4: Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
+    // First normalize any existing \r\n to \n, then convert all \n to \r\n
+    content = content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
     return content;
   } catch (error) {
     console.error(`Error loading screen ${screenName}:`, error);
