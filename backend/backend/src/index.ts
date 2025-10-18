@@ -484,6 +484,10 @@ function displayScreen(socket: any, session: BBSSession, screenName: string) {
     // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
     parsed = addAnsiEscapes(parsed);
 
+    // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
+    // First normalize any existing \r\n to \n, then convert all \n to \r\n
+    parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
     // Send to client
     socket.emit('ansi-output', parsed);
   } else {
