@@ -195,11 +195,6 @@ export function loadScreen(screenName: string, session: BBSSession): string | nu
     // First normalize any existing \r\n to \n, then convert all \n to \r\n
     content = content.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
 
-    // Step 5: Add padding (2 spaces left and right) to each line
-    const lines = content.split('\r\n');
-    const paddedLines = lines.map(line => '  ' + line + '  ');
-    content = paddedLines.join('\r\n');
-
     return content;
   } catch (error) {
     console.error(`Error loading screen ${screenName}:`, error);
