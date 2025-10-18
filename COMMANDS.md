@@ -49,7 +49,7 @@ These commands are from express.e (processInternalCommand function, lines 28283-
 | `MS` | 25250 | Mailscan (internalCommandMS) | 🚧 | Partially implemented |
 | `N` | 25275 | New messages scan (internalCommandN) | 🚧 | Partially implemented |
 | `NM` | 25281 | New messages (internalCommandNM) | ✅ | **VERIFIED - Phase 2** |
-| `R` | 25518 | Read messages (internalCommandR) | ✅ | **ENHANCED - Phase 7** (sorting, unread count, formatting) |
+| `R` | 25518 | Read messages (internalCommandR) | ✅ | **ENHANCED - Phase 7+10** (pointers, [NEW] tags, tracking) |
 | `RL` | 25534 | Relogon (internalCommandRL) | 🚧 | Partially implemented |
 
 ### File Commands

@@ -3294,11 +3294,12 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
     case 'R': // Read Messages (internalCommandR) - express.e:25518-25531
       // Enhanced for Phase 7 Part 2 - improved sorting and display
       // Phase 9: Security/ACS System implemented
+      // Phase 10: Message Pointer System integrated
       // TODO for 100% 1:1 compliance:
       // 1. ✅ checkSecurity(ACS_READ_MESSAGE) - express.e:25519 [IMPLEMENTED]
       // 2. ✅ setEnvStat(ENV_MAIL) - express.e:25520 [IMPLEMENTED]
       // 3. parseParams(params) for message range/options - express.e:25521
-      // 4. getMailStatFile(currentConf, currentMsgBase) - load message pointers - express.e:25523
+      // 4. ✅ getMailStatFile(currentConf, currentMsgBase) - express.e:25523 [IMPLEMENTED]
       // 5. checkToolTypeExists(TOOLTYPE_CONF, 'CUSTOM') - custom msgbase check - express.e:25525
       // 6. callMsgFuncs(MAIL_READ) - proper message reader with navigation - express.e:25526
 
@@ -3314,22 +3315,31 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       // Phase 9: Set environment status (express.e:25520)
       setEnvStat(session, EnvStat.MAIL);
 
+      // Phase 10: Load message pointers (express.e:25523 - getMailStatFile, loadMsgPointers)
+      const mailStat = await getMailStatFile(session.currentConf, session.currentMsgBase);
+      const confBase = await loadMsgPointers(session.user.id, session.currentConf, session.currentMsgBase);
+
+      // Validate pointers against boundaries (express.e:5037-5049)
+      const validatedConfBase = validatePointers(confBase, mailStat);
+      session.lastMsgReadConf = validatedConfBase.lastMsgReadConf;
+      session.lastNewReadConf = validatedConfBase.lastNewReadConf;
+
       socket.emit('ansi-output', '\x1b[36m-= Message Reader =-\x1b[0m\r\n');
       socket.emit('ansi-output', `Conference: ${session.currentConfName}\r\n\r\n`);
 
-      // Get messages for current conference and message base - sorted by timestamp
+      // Get messages for current conference and message base - sorted by ID (message number)
       const currentMessages = messages.filter(msg =>
         msg.conferenceId === session.currentConf &&
         msg.messageBaseId === session.currentMsgBase &&
         (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-      ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      ).sort((a, b) => a.id - b.id); // Sort by message number
 
       if (currentMessages.length === 0) {
         socket.emit('ansi-output', '\x1b[33mNo messages in this area.\x1b[0m\r\n');
       } else {
-        // Count unread vs total
+        // Phase 10: Count unread based on lastNewReadConf pointer (not lastLogin)
         const unreadCount = currentMessages.filter(msg =>
-          msg.timestamp > (session.user?.lastLogin || new Date(0))
+          msg.id > session.lastNewReadConf
         ).length;
 
         socket.emit('ansi-output', `Total messages: ${currentMessages.length} `);
@@ -3338,13 +3348,17 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
         }
         socket.emit('ansi-output', '\r\n\r\n');
 
+        // Phase 10: Track highest message number viewed for pointer update
+        let highestMsgRead = session.lastMsgReadConf;
+
         currentMessages.forEach((msg, index) => {
-          const isNew = msg.timestamp > (session.user?.lastLogin || new Date(0));
+          // Phase 10: Mark message as [NEW] if > lastNewReadConf pointer
+          const isNew = msg.id > session.lastNewReadConf;
           const newIndicator = isNew ? '\x1b[33m[NEW]\x1b[0m ' : '';
           const privateIndicator = msg.isPrivate ? '\x1b[31m[PRIVATE]\x1b[0m ' : '';
           const replyIndicator = msg.parentId ? '\x1b[35m[REPLY]\x1b[0m ' : '';
 
-          socket.emit('ansi-output', `\x1b[36mMessage ${index + 1} of ${currentMessages.length}\x1b[0m\r\n`);
+          socket.emit('ansi-output', `\x1b[36mMessage ${index + 1} of ${currentMessages.length} (Msg #${msg.id})\x1b[0m\r\n`);
           socket.emit('ansi-output', `${newIndicator}${privateIndicator}${replyIndicator}\x1b[1;37m${msg.subject}\x1b[0m\r\n`);
           socket.emit('ansi-output', `\x1b[32mFrom:\x1b[0m ${msg.author}\r\n`);
           if (msg.isPrivate && msg.toUser) {
@@ -3356,7 +3370,18 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
             socket.emit('ansi-output', `\x1b[36mAttachments:\x1b[0m ${msg.attachments.join(', ')}\r\n\r\n`);
           }
           socket.emit('ansi-output', '\x1b[36m' + '-'.repeat(60) + '\x1b[0m\r\n');
+
+          // Phase 10: Update lastMsgReadConf to highest message viewed
+          if (msg.id > highestMsgRead) {
+            highestMsgRead = msg.id;
+          }
         });
+
+        // Phase 10: Update and save read pointer (express.e:11985+ readMSG logic)
+        if (highestMsgRead > session.lastMsgReadConf) {
+          session.lastMsgReadConf = highestMsgRead;
+          await updateReadPointer(session.user.id, session.currentConf, session.currentMsgBase, highestMsgRead);
+        }
       }
 
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
