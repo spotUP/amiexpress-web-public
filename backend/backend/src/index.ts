@@ -3601,43 +3601,46 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
       socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Available conferences:\r\n');
-      conferences.forEach(conf => {
-        socket.emit('ansi-output', `${conf.id}. ${conf.name} - ${conf.description}\r\n`);
+      // Display with relative numbers (1-based) like AmiExpress (express.e:25143)
+      conferences.forEach((conf, index) => {
+        socket.emit('ansi-output', `${index + 1}. ${conf.name} - ${conf.description}\r\n`);
       });
 
       // Parse params: "J 5" or "J 5.2" or "J 5 2" (express.e:25124-25134)
       if (params.trim()) {
-        let confId = 0;
+        let relConfNum = 0; // Relative conference number (1-based, as user enters)
         let msgBaseId = 1;
 
         // Check for "5.2" format
         if (params.includes('.')) {
           const parts = params.split('.');
-          confId = parseInt(parts[0]);
+          relConfNum = parseInt(parts[0]);
           msgBaseId = parseInt(parts[1]) || 1;
         } else {
           // Check for "5 2" format or just "5"
           const parts = params.trim().split(/\s+/);
-          confId = parseInt(parts[0]);
+          relConfNum = parseInt(parts[0]);
           if (parts.length > 1) {
             msgBaseId = parseInt(parts[1]) || 1;
           }
         }
 
-        // Validate conference
-        const selectedConf = conferences.find(conf => conf.id === confId);
-        if (!selectedConf) {
-          socket.emit('ansi-output', `\r\n\x1b[31mInvalid conference number: ${confId}\x1b[0m\r\n`);
+        // Convert relative number (1-based) to conference object
+        if (relConfNum < 1 || relConfNum > conferences.length) {
+          socket.emit('ansi-output', `\r\n\x1b[31mInvalid conference number: ${relConfNum}\x1b[0m\r\n`);
           socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
           session.menuPause = false;
           session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
           return;
         }
 
+        const selectedConf = conferences[relConfNum - 1]; // Convert to 0-based index
+        const confId = selectedConf.id; // Get actual database ID
+
         // Validate message base
         const selectedMsgBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
         if (!selectedMsgBase) {
-          socket.emit('ansi-output', `\r\n\x1b[31mInvalid message base: ${msgBaseId} for conference ${confId}\x1b[0m\r\n`);
+          socket.emit('ansi-output', `\r\n\x1b[31mInvalid message base: ${msgBaseId} for conference ${relConfNum}\x1b[0m\r\n`);
           socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
           session.menuPause = false;
           session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
