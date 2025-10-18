@@ -159,7 +159,8 @@ function processMciCodes(content: string, session: BBSSession): string {
  * Port from express.e displayScreen() lines 6539-6625
  */
 export function loadScreen(screenName: string, session: BBSSession): string | null {
-  const basePath = path.join(__dirname, '../../data/bbs/BBS');
+  // Data files are in backend/data/bbs/BBS relative to the backend directory (process.cwd() when running npm run dev)
+  const basePath = path.join(process.cwd(), 'data/bbs/BBS');
   const nodeScreenPath = path.join(basePath, `Node${session.nodeNumber || 0}`, 'Screens', `${screenName}.TXT`);
   const confScreenPath = path.join(basePath, `Conf${String(session.currentConf || 1).padStart(2, '0')}`, 'Screens', `${screenName}.TXT`);
   const globalScreenPath = path.join(basePath, 'Screens', `${screenName}.TXT`);
