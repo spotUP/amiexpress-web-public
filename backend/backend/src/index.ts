@@ -3111,6 +3111,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return; // Stay in input mode
 
     case 'R': // Read Messages (internalCommandR) - express.e:25518-25531
+      // Enhanced for Phase 7 Part 2 - improved sorting and display
       // TODO for 100% 1:1 compliance:
       // 1. checkSecurity(ACS_READ_MESSAGE) - express.e:25519
       // 2. setEnvStat(ENV_MAIL) - express.e:25520
@@ -3120,33 +3121,47 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       // 6. callMsgFuncs(MAIL_READ) - proper message reader with navigation - express.e:25526
 
       socket.emit('ansi-output', '\x1b[36m-= Message Reader =-\x1b[0m\r\n');
+      socket.emit('ansi-output', `Conference: ${session.currentConfName}\r\n\r\n`);
 
-      // Get messages for current conference and message base
+      // Get messages for current conference and message base - sorted by timestamp
       const currentMessages = messages.filter(msg =>
         msg.conferenceId === session.currentConf &&
         msg.messageBaseId === session.currentMsgBase &&
         (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-      );
+      ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
       if (currentMessages.length === 0) {
-        socket.emit('ansi-output', 'No messages in this area.\r\n');
+        socket.emit('ansi-output', '\x1b[33mNo messages in this area.\x1b[0m\r\n');
       } else {
-        socket.emit('ansi-output', `Reading ${currentMessages.length} message(s)...\r\n\r\n`);
+        // Count unread vs total
+        const unreadCount = currentMessages.filter(msg =>
+          msg.timestamp > (session.user?.lastLogin || new Date(0))
+        ).length;
+
+        socket.emit('ansi-output', `Total messages: ${currentMessages.length} `);
+        if (unreadCount > 0) {
+          socket.emit('ansi-output', `(\x1b[33m${unreadCount} new\x1b[0m)`);
+        }
+        socket.emit('ansi-output', '\r\n\r\n');
 
         currentMessages.forEach((msg, index) => {
+          const isNew = msg.timestamp > (session.user?.lastLogin || new Date(0));
+          const newIndicator = isNew ? '\x1b[33m[NEW]\x1b[0m ' : '';
           const privateIndicator = msg.isPrivate ? '\x1b[31m[PRIVATE]\x1b[0m ' : '';
           const replyIndicator = msg.parentId ? '\x1b[35m[REPLY]\x1b[0m ' : '';
-          socket.emit('ansi-output', `\x1b[33m${index + 1}. ${privateIndicator}${replyIndicator}${msg.subject}\x1b[0m\r\n`);
-          socket.emit('ansi-output', `\x1b[32mFrom: ${msg.author}\x1b[0m\r\n`);
+
+          socket.emit('ansi-output', `\x1b[36mMessage ${index + 1} of ${currentMessages.length}\x1b[0m\r\n`);
+          socket.emit('ansi-output', `${newIndicator}${privateIndicator}${replyIndicator}\x1b[1;37m${msg.subject}\x1b[0m\r\n`);
+          socket.emit('ansi-output', `\x1b[32mFrom:\x1b[0m ${msg.author}\r\n`);
           if (msg.isPrivate && msg.toUser) {
-            socket.emit('ansi-output', `\x1b[32mTo: ${msg.toUser}\x1b[0m\r\n`);
+            socket.emit('ansi-output', `\x1b[32mTo:\x1b[0m ${msg.toUser}\r\n`);
           }
-          socket.emit('ansi-output', `\x1b[32mDate: ${msg.timestamp.toLocaleString()}\x1b[0m\r\n\r\n`);
+          socket.emit('ansi-output', `\x1b[32mDate:\x1b[0m ${msg.timestamp.toLocaleString()}\r\n\r\n`);
           socket.emit('ansi-output', `${msg.body}\r\n\r\n`);
           if (msg.attachments && msg.attachments.length > 0) {
-            socket.emit('ansi-output', `\x1b[36mAttachments: ${msg.attachments.join(', ')}\x1b[0m\r\n\r\n`);
+            socket.emit('ansi-output', `\x1b[36mAttachments:\x1b[0m ${msg.attachments.join(', ')}\r\n\r\n`);
           }
-          socket.emit('ansi-output', '\x1b[36m' + '='.repeat(50) + '\x1b[0m\r\n\r\n');
+          socket.emit('ansi-output', '\x1b[36m' + '-'.repeat(60) + '\x1b[0m\r\n');
         });
       }
 
@@ -3157,14 +3172,18 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return; // Don't call displayMainMenu
 
     case 'A': // Post Message (internalCommandE - message entry)
+      // Enhanced for Phase 7 Part 2 - added conference context
       // Start message posting workflow - prompt for subject first
       socket.emit('ansi-output', '\x1b[36m-= Post Message =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter your message subject (or press Enter to abort): ');
+      socket.emit('ansi-output', `Posting to: ${session.currentConfName}\r\n`);
+      socket.emit('ansi-output', '\r\nEnter your message subject (or press Enter to abort):\r\n');
+      socket.emit('ansi-output', '\x1b[32mSubject: \x1b[0m');
       session.inputBuffer = ''; // Clear input buffer
       session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
       return; // Don't call displayMainMenu - stay in input mode
 
     case 'E': // Enter Message (internalCommandE) - express.e:24860-24872
+      // Enhanced for Phase 7 Part 2 - improved prompts and validation
       // TODO for 100% 1:1 compliance:
       // 1. checkSecurity(ACS_ENTER_MESSAGE) - express.e:24861
       // 2. setEnvStat(ENV_MAIL) - express.e:24862
@@ -3174,7 +3193,9 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
       // Start private message posting workflow
       socket.emit('ansi-output', '\x1b[36m-= Post Private Message =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter recipient username: ');
+      socket.emit('ansi-output', `Conference: ${session.currentConfName}\r\n\r\n`);
+      socket.emit('ansi-output', 'Enter recipient username (or press Enter to abort):\r\n');
+      socket.emit('ansi-output', '\x1b[32mTo: \x1b[0m');
       session.inputBuffer = ''; // Clear input buffer
       session.tempData = { isPrivate: true };
       session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
@@ -3568,16 +3589,33 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return;
 
     case 'G': // Goodbye (internalCommandG) - express.e:25047-25069
+      // Enhanced for Phase 7 Part 2 - added logging and better UX
       // TODO for 100% 1:1 compliance:
       // 1. parseParams(params) - check for 'Y' auto parameter - express.e:25051-25054
       // 2. partUploadOK(0) - check for partial uploads - express.e:25057
       // 3. checkFlagged() - check for flagged files - express.e:25058
       // 4. saveFlagged() - save flagged file list - express.e:25063
       // 5. saveHistory() - save command history - express.e:25064
-      // 6. reqState = REQ_STATE_LOGOFF - set logoff state - express.e:25065
-      // 7. setEnvStat(ENV_LOGOFF) - set environment - express.e:25066
 
-      socket.emit('ansi-output', '\r\nGoodbye!\r\n');
+      // Log the logoff event
+      if (session.user) {
+        await callersLog(session.user.id, session.user.username, 'Logged off');
+      }
+
+      // Display goodbye message
+      socket.emit('ansi-output', '\r\n\x1b[36m-= Logging Off =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', 'Thank you for calling!\r\n');
+      socket.emit('ansi-output', 'We hope to see you again soon.\r\n\r\n');
+
+      if (session.user) {
+        const sessionTime = Math.floor((Date.now() - session.loginTime) / 60000);
+        socket.emit('ansi-output', `Session time: ${sessionTime} minute(s)\r\n`);
+        socket.emit('ansi-output', `Goodbye, ${session.user.username}!\r\n\r\n`);
+      }
+
+      // Give user time to see message before disconnect
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       socket.disconnect();
       return;
 
