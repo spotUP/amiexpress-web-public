@@ -1,5 +1,52 @@
 # AmiExpress-Web Project Guidelines
 
+## ⚠️ CRITICAL: Server Restart Checklist (ALWAYS READ THIS FIRST)
+
+**BEFORE restarting backend or frontend servers, YOU MUST follow this checklist:**
+
+### Step 1: Check for Startup Scripts
+```bash
+ls -la start-*.sh stop-all.sh
+```
+
+### Step 2: If Scripts Exist - Use Them!
+```bash
+# ✓ CORRECT - Use atomic startup scripts
+./start-all.sh      # Start both servers
+./start-backend.sh  # Backend only
+./start-frontend.sh # Frontend only
+./stop-all.sh       # Stop all servers
+
+# ✗ WRONG - NEVER do this:
+npm run dev &
+npm run dev 2>&1 &
+cd backend/backend && npm run dev &
+```
+
+### Step 3: Never Use Manual Commands
+**YOU MUST NOT use these commands in this project:**
+- `npm run dev &`
+- `npm run dev 2>&1 &`
+- Any variant of manual npm commands for servers
+
+### Step 4: Why This Matters
+- User has reported this issue MULTIPLE times
+- Manual commands create duplicate server instances
+- Duplicate instances = stale code = wasted time
+- Startup scripts guarantee exactly ONE server per port
+- You keep forgetting - THIS TIME DON'T FORGET!
+
+### Step 5: After Starting
+Verify exactly ONE server per port:
+```bash
+lsof -ti:3001 | xargs ps -p | grep "node"  # Should show 1 line
+lsof -ti:5173 | xargs ps -p | grep "node"  # Should show 1 line
+```
+
+**📋 Read this section EVERY TIME before restarting servers!**
+
+---
+
 ## Text Styling Rules
 
 ### NEVER Use Bold Text Styles
