@@ -3170,28 +3170,60 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       }
       return;
 
-    case 'J': // Join Conference (internalCommandJ)
+    case 'J': // Join Conference (internalCommandJ) - express.e:25113
       socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Available conferences:\r\n');
       conferences.forEach(conf => {
         socket.emit('ansi-output', `${conf.id}. ${conf.name} - ${conf.description}\r\n`);
       });
 
-      // Like AmiExpress: If params provided (e.g., "j 2"), process immediately
+      // Parse params: "J 5" or "J 5.2" or "J 5 2" (conf, conf.msgbase, conf msgbase)
       if (params.trim()) {
-        const confId = parseInt(params.trim());
+        let confId = 0;
+        let msgBaseId = 1;
+
+        // Check for "5.2" format
+        if (params.includes('.')) {
+          const parts = params.split('.');
+          confId = parseInt(parts[0]);
+          msgBaseId = parseInt(parts[1]) || 1;
+        } else {
+          // Check for "5 2" format or just "5"
+          const parts = params.trim().split(/\s+/);
+          confId = parseInt(parts[0]);
+          if (parts.length > 1) {
+            msgBaseId = parseInt(parts[1]) || 1;
+          }
+        }
+
+        // Validate conference
         const selectedConf = conferences.find(conf => conf.id === confId);
-        if (selectedConf) {
-          await joinConference(socket, session, confId, 1);
+        if (!selectedConf) {
+          socket.emit('ansi-output', `\r\n\x1b[31mInvalid conference number: ${confId}\x1b[0m\r\n`);
           socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
           session.menuPause = false;
           session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        } else {
-          socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference number.\x1b[0m\r\n');
+          return;
         }
+
+        // Validate message base
+        const selectedMsgBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
+        if (!selectedMsgBase) {
+          socket.emit('ansi-output', `\r\n\x1b[31mInvalid message base: ${msgBaseId} for conference ${confId}\x1b[0m\r\n`);
+          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+          session.menuPause = false;
+          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+          return;
+        }
+
+        // Join the conference
+        await joinConference(socket, session, confId, msgBaseId);
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       } else {
         // No params - prompt for input
-        socket.emit('ansi-output', '\r\n\x1b[32mConference number: \x1b[0m');
+        socket.emit('ansi-output', `\r\n\x1b[32mConference number (1-${conferences.length}): \x1b[0m`);
         session.subState = LoggedOnSubState.CONFERENCE_SELECT;
         return; // Stay in input mode
       }
