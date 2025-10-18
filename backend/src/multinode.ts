@@ -29,6 +29,7 @@ export interface NodeInfo {
   chatColor: number;           // ANSI color code for chat - from chatColor
   offHook: boolean;            // Node off-hook status - from offHook
   private: boolean;            // Private mode - from private
+  quietMode: boolean;          // Quiet mode (no chat interruptions)
   stats: NodeStats[];          // Stats for all nodes - from stats[MAX_NODES]
   taskSignal: number;          // Signal flags - from taskSignal
   status: NodeStatus;          // Current status - from singlePort.status

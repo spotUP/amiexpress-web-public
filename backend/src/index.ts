@@ -154,7 +154,7 @@ app.get('/', (req: Request, res: Response) => {
 // API endpoint to get user profile
 app.get('/api/user/:userId', async (req: Request, res: Response) => {
   const { userId } = req.params;
-  const user = await db.getUser(parseInt(userId));
+  const user = await db.getUserById(userId);
   res.json(user);
 });
 
@@ -327,7 +327,7 @@ async function initializeDoors() {
       path: 'doors/CheckUP',
       accessLevel: 255, // Sysop only
       enabled: true,
-      type: 'utility',
+      type: 'native',
       parameters: []
     }
   ];

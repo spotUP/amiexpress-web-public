@@ -12,6 +12,7 @@ import { Conference, MessageBase } from '../bbs/session';
 export let conferences: Conference[] = [];
 export let messageBases: MessageBase[] = [];
 export let fileAreas: any[] = [];
+export let fileEntries: any[] = [];
 export let doors: Door[] = [];
 export let doorSessions: DoorSession[] = [];
 export let messages: any[] = [];
@@ -35,6 +36,10 @@ export function setMessageBases(data: MessageBase[]) {
 
 export function setFileAreas(data: any[]) {
   fileAreas = data;
+}
+
+export function setFileEntries(data: any[]) {
+  fileEntries = data;
 }
 
 export function setDoors(data: Door[]) {
