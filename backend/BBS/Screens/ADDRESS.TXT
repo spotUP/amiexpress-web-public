@@ -1,0 +1,19 @@
+[2J[H[36m──────────────────────────────────────────────────────────────────────────────
+   ___    ____  ____  ____  ________________
+  /   |  / __ \/ __ \/ __ \/ ____/ ___/ ___/
+ / /| | / / / / / / / /_/ / __/  \__ \\__ \
+/ ___ |/ /_/ / /_/ / _, _/ /___ ___/ /__/ /
+/_/  |_/_____/_____/_/ |_/_____//____/____/
+
+[36m──────────────────────────────────────────────────────────────────────────────[0m
+
+[33mUPDATE YOUR ADDRESS[0m
+
+[36mPlease provide your current address information:[0m
+
+[32mThis information is kept confidential and is used for:[0m
+  • System administration purposes
+  • Verification of user accounts
+  • Emergency contact if needed
+
+[33mAll fields are optional but appreciated.[0m
