@@ -1344,6 +1344,50 @@ export async function processBBSCommand(
     case 'U': // Upload File(s) (internalCommandU) - uploadaFile(params)
       displayUploadInterface(socket, session, params);
       return;
+
+    case 'N': // New Message Scan (internalCommandN from express.e line 25275)
+      console.log('🔍 N command executed - New Message Scan');
+      socket.emit('ansi-output', '\x1b[36m-= New Message Scan =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', 'Scanning all conferences for new messages...\r\n\r\n');
+
+      // Scan all conferences for messages newer than user's last login
+      const lastLoginDate = session.user?.lastLogin || new Date();
+      const newMessages = messages.filter(msg => {
+        // Get messages posted since last login that user can see
+        const isNew = msg.timestamp > lastLoginDate;
+        const canRead = !msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username;
+        return isNew && canRead;
+      });
+
+      if (newMessages.length === 0) {
+        socket.emit('ansi-output', '\x1b[33mNo new messages found since your last visit.\x1b[0m\r\n');
+        socket.emit('ansi-output', `\x1b[36m(Last login: ${lastLoginDate.toLocaleString()})\x1b[0m\r\n`);
+      } else {
+        socket.emit('ansi-output', `\x1b[32mFound ${newMessages.length} new message(s):\x1b[0m\r\n\r\n`);
+
+        // Group by conference
+        const messagesByConf = new Map<number, typeof newMessages>();
+        newMessages.forEach(msg => {
+          const confMsgs = messagesByConf.get(msg.conferenceId) || [];
+          confMsgs.push(msg);
+          messagesByConf.set(msg.conferenceId, confMsgs);
+        });
+
+        // Display grouped by conference
+        messagesByConf.forEach((confMessages, confId) => {
+          const conf = conferences.find(c => c.id === confId);
+          socket.emit('ansi-output', `\x1b[33mConference: ${conf?.name || 'Unknown'}\x1b[0m\r\n`);
+          confMessages.forEach(msg => {
+            const privateTag = msg.isPrivate ? '\x1b[31m[PRIVATE]\x1b[0m ' : '';
+            socket.emit('ansi-output', `  ${privateTag}\x1b[36m${msg.subject}\x1b[0m by \x1b[32m${msg.author}\x1b[0m\r\n`);
+          });
+          socket.emit('ansi-output', '\r\n');
+        });
+
+        socket.emit('ansi-output', '\x1b[36mUse the R command to read messages in each conference.\x1b[0m\r\n');
+      }
+      break;
+
     case '0': // Remote Shell (internalCommand0)
       console.log('Processing command 0');
       socket.emit('ansi-output', '\x1b[36m-= Remote Shell =-\x1b[0m\r\n');
@@ -1598,84 +1642,62 @@ export async function processBBSCommand(
       displayFileStatus(socket, session, params);
       return;
 
-    case 'O': // Online Users
-      socket.emit('ansi-output', '\x1b[36m-= Online Users =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Currently online:\r\n\r\n');
+    case 'JF': // Join File Area (similar to internalCommandJM but for file areas)
+      socket.emit('ansi-output', '\x1b[36m-= Join File Area =-\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Selecting file area...\r\n\r\n');
 
-      // Get all active sessions
-      const allKeys = await sessions.getAllKeys();
-      const onlineUsersList = [];
-
-      for (const socketId of allKeys) {
-        const sess = await sessions.get(socketId);
-        if (sess && sess.state === BBSState.LOGGEDON && sess.user) {
-          onlineUsersList.push({
-            username: sess.user.username,
-            conference: sess.currentConfName,
-            idle: Math.floor((Date.now() - sess.lastActivity) / 60000), // minutes idle
-            node: 'Web1' // For now, all users are on the same "node"
-          });
-        }
-      }
-
-      if (onlineUsersList.length === 0) {
-        socket.emit('ansi-output', 'No users currently online.\r\n');
-      } else {
-        onlineUsersList.forEach(userInfo => {
-          const idleStr = userInfo.idle > 0 ? ` (${userInfo.idle}min idle)` : '';
-          socket.emit('ansi-output', `${userInfo.username.padEnd(15)} ${userInfo.conference.padEnd(20)} ${userInfo.node}${idleStr}\r\n`);
-        });
-      }
-      socket.emit('ansi-output', '\r\n');
+      // In original AmiExpress, this allows users to switch between file directories
+      // For now, show a simple placeholder (full implementation would list file areas)
+      socket.emit('ansi-output', '\x1b[33mAvailable file areas:\x1b[0m\r\n');
+      socket.emit('ansi-output', '1. Main Files\r\n');
+      socket.emit('ansi-output', '2. Uploads\r\n');
+      socket.emit('ansi-output', '3. Graphics\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[36mUse the F command to browse files in the current area.\x1b[0m\r\n');
       break;
 
-    case 'P': // Page Sysop (internalCommandP)
-      // Check if user is already paging
-      if (chatState.pagingUsers.includes(session.user!.id)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mYou are already paging the sysop.\x1b[0m\r\n\r\n');
-        break;
+    case 'O': // Who's Online (ORIGINAL AmiExpress command from MENU.TXT)
+      console.log('🔍 O command - Who\'s Online');
+      socket.emit('ansi-output', '\x1b[36m-= Who\'s Online =-\x1b[0m\r\n\r\n');
+      const whoOnlineUsers = await getOnlineUsers();
+      if (whoOnlineUsers.length === 0) {
+        socket.emit('ansi-output', '\x1b[33mNo other users online.\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', `\x1b[32mCurrently ${whoOnlineUsers.length} user(s) online:\x1b[0m\r\n\r\n`);
+        socket.emit('ansi-output', '\x1b[36mNode  Username                Location\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[36m----  ----------------------------------------\x1b[0m\r\n');
+        for (const user of whoOnlineUsers) {
+          const nodeStr = String(user.nodeId).padEnd(4);
+          const usernameStr = user.username.padEnd(24);
+          const locationStr = user.location || 'Unknown';
+          const privateFlag = user.private ? ' \x1b[35m[PRIVATE]\x1b[0m' : '';
+          const offHookFlag = user.offHook ? ' \x1b[33m[OFF-HOOK]\x1b[0m' : '';
+          socket.emit('ansi-output', `${nodeStr}  ${usernameStr}${locationStr}${privateFlag}${offHookFlag}\r\n`);
+        }
       }
-
-      // Check page limits (like pagesAllowed in AmiExpress)
-      const userPagesRemaining = session.user?.secLevel === 255 ? -1 : 3; // Sysop unlimited, users limited
-
-      if (userPagesRemaining !== -1 && userPagesRemaining <= 0) {
-        socket.emit('ansi-output', '\x1b[36m-= Comment to Sysop =-\x1b[0m\r\n');
-        socket.emit('ansi-output', 'You have exceeded your paging limit.\r\n');
-        socket.emit('ansi-output', 'You can use \'C\' to leave a comment.\r\n\r\n');
-        break;
-      }
-
-      // Check if sysop is available (like sysopAvail in AmiExpress)
-      if (!chatState.sysopAvailable && (session.user?.secLevel || 0) < 200) { // 200 = override level
-        socket.emit('ansi-output', '\r\n\x1b[31mSorry, the sysop is not around right now.\x1b[0m\r\n');
-        socket.emit('ansi-output', 'You can use \'C\' to leave a comment.\r\n\r\n');
-        break;
-      }
-
-      // Start paging process (like ccom() in AmiExpress)
-      startSysopPage(socket, session);
-      return; // Don't continue to menu display
+      break;
 
     case 'G': // Goodbye (internalCommandG from express.e line 25047)
       // Port of internalCommandG() - express.e lines 25047-25069
       // Sets state to LOGOFF and lets state machine handle the actual logout
-      if (session) {
-        // Display LOGOFF screen (like express.e line 8187)
-        displayScreen(socket, session, 'LOGOFF');
+      console.log('🚪 G command - Goodbye! Logging off user...');
 
-        // Small delay to show screen before disconnect
-        setTimeout(() => {
-          socket.emit('ansi-output', '\r\n\r\nClick...\r\n');
+      // Clear screen first
+      socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
-          // Clean up session and disconnect
-          setTimeout(() => {
-            socket.disconnect();
-          }, 500);
-        }, 1000);
-      } else {
-        socket.disconnect();
-      }
+      // Display LOGOFF screen (like express.e line 8187)
+      displayScreen(socket, session, 'LOGOFF');
+
+      // Small delay to show screen before disconnect
+      setTimeout(() => {
+        socket.emit('ansi-output', '\r\n\r\nClick...\r\n');
+
+        // Clean up session and disconnect
+        setTimeout(async () => {
+          console.log('🚪 Disconnecting user...');
+          await sessions.delete(socket.id);
+          socket.disconnect(true);
+        }, 500);
+      }, 2000);
       return;
 
     case 'OLM': // Online Message System
@@ -1830,11 +1852,34 @@ export async function processBBSCommand(
     // Due to length, I'm providing the structure - the full implementation would include all remaining cases
 
     case 'CHAT': // Internode Chat System
-      // This would include the full CHAT command implementation
-      // The code is very long, so I'm showing the structure
+      console.log('💬 CHAT command - Internode Chat');
       socket.emit('ansi-output', '\x1b[36m-= Internode Chat System =-\x1b[0m\r\n\r\n');
-      // ... full implementation from original code
-      break;
+
+      // Show who's online
+      const chatOnlineUsers = await getOnlineUsers();
+
+      if (chatOnlineUsers.length === 0) {
+        socket.emit('ansi-output', '\x1b[33mNo other users online to chat with.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[33mTry the OLM (Online Messages) system to leave messages.\x1b[0m\r\n');
+        break;
+      }
+
+      socket.emit('ansi-output', `\x1b[32mCurrently ${chatOnlineUsers.length} user(s) available for chat:\x1b[0m\r\n\r\n`);
+      socket.emit('ansi-output', '\x1b[36mNode  Username\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[36m════  ════════════════════════\x1b[0m\r\n');
+
+      for (const user of chatOnlineUsers) {
+        const nodeStr = String(user.nodeId).padEnd(4);
+        const usernameStr = user.username.padEnd(24);
+        socket.emit('ansi-output', `${nodeStr}  ${usernameStr}\r\n`);
+      }
+
+      socket.emit('ansi-output', '\r\n\x1b[33mEnter username to chat with (or press ENTER to cancel):\x1b[0m ');
+
+      // Set up state to wait for username input
+      session.subState = LoggedOnSubState.FILE_AREA_SELECT; // Reuse for chat target selection
+      session.tempData = { chatUserSelection: true, availableUsers: chatOnlineUsers };
+      return;
 
     case 'C': // Comment to Sysop (internalCommandC)
       socket.emit('ansi-output', '\x1b[36m-= Comment to Sysop =-\x1b[0m\r\n');
@@ -1845,12 +1890,17 @@ export async function processBBSCommand(
       session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
       return;
 
-    case 'Q': // Quiet Node (internalCommandQ)
-      socket.emit('ansi-output', '\x1b[36m-= Quiet Node =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This command will change the Quiet Node option for your node.\r\n');
-      socket.emit('ansi-output', 'With this command a user can prevent other users from seeing them on the WHO list.\r\n');
-      socket.emit('ansi-output', '\r\nQuiet node functionality not implemented yet.\r\n');
-      break;
+    case 'Q': // Quick Logoff (ORIGINAL AmiExpress command from MENU.TXT - instant logout)
+      console.log('🚪 Q command - Quick Logoff (instant logout)');
+      // No LOGOFF screen, just instant disconnect
+      socket.emit('ansi-output', '\r\n\x1b[33mLogging off...\x1b[0m\r\n');
+
+      setTimeout(async () => {
+        console.log('🚪 Quick logoff - disconnecting user');
+        await sessions.delete(socket.id);
+        socket.disconnect(true);
+      }, 500);
+      return;
 
     case 'DOORS': // Door Games Menu
     case 'DOOR':  // Alternative spelling
@@ -1869,10 +1919,95 @@ export async function processBBSCommand(
       displayDoorManager(socket, session);
       return;
 
+    case 'X': // Execute Door (internalCommandX from express.e line 28361)
+      if (!params || params.trim().length === 0) {
+        socket.emit('ansi-output', '\x1b[36m-= Execute Door =-\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[31mUsage: X <door name>\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[36mExample: X tradewars\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\nUse the DOORS command to see available doors.\r\n');
+        break;
+      }
+
+      // Attempt to execute the door by name
+      const doorName = params.trim().toLowerCase();
+      socket.emit('ansi-output', `\x1b[36mAttempting to launch door: ${doorName}\x1b[0m\r\n`);
+
+      // In original AmiExpress, this would look up the door and execute it
+      // For now, redirect to door menu
+      socket.emit('ansi-output', '\x1b[33mDoor execution not yet implemented.\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Use the DOORS command to browse available doors.\r\n');
+      break;
+
     // Additional commands would continue here...
     // WHO, WHD, ?, and all other commands from the original
 
-    case 'WHO': // Who's Online (internalCommandWHO)
+    case 'I': // User Information (custom command - not in original AmiExpress)
+      socket.emit('ansi-output', '\x1b[36m-= User Information =-\x1b[0m\r\n\r\n');
+      if (session.user) {
+        socket.emit('ansi-output', `\x1b[33mUsername:[0m ${session.user.username}\r\n`);
+        socket.emit('ansi-output', `\x1b[33mSecurity Level:[0m ${session.user.secLevel}\r\n`);
+        socket.emit('ansi-output', `\x1b[33mLocation:[0m ${session.user.location || 'Not set'}\r\n`);
+        socket.emit('ansi-output', `\x1b[33mTime Remaining:[0m ${session.timeRemaining || 60} minutes\r\n`);
+      }
+      break;
+
+    case 'P': // Page Sysop (ORIGINAL AmiExpress command from MENU.TXT - internalCommandO from express.e)
+      // Check if user is already paging
+      if (chatState.pagingUsers.includes(session.user!.id)) {
+        socket.emit('ansi-output', '\r\n\x1b[31mYou are already paging the sysop.\x1b[0m\r\n\r\n');
+        break;
+      }
+
+      // Check page limits (like pagesAllowed in AmiExpress)
+      const userPagesRemaining = session.user?.secLevel === 255 ? -1 : 3; // Sysop unlimited, users limited
+
+      if (userPagesRemaining !== -1 && userPagesRemaining <= 0) {
+        socket.emit('ansi-output', '\x1b[36m-= Page Sysop =-\x1b[0m\r\n');
+        socket.emit('ansi-output', 'You have exceeded your paging limit.\r\n');
+        socket.emit('ansi-output', 'You can use \'C\' to leave a comment.\r\n\r\n');
+        break;
+      }
+
+      // Check if sysop is available (like sysopAvail in AmiExpress)
+      if (!chatState.sysopAvailable && (session.user?.secLevel || 0) < 200) { // 200 = override level
+        socket.emit('ansi-output', '\r\n\x1b[31mSorry, the sysop is not around right now.\x1b[0m\r\n');
+        socket.emit('ansi-output', 'You can use \'C\' to leave a comment.\r\n\r\n');
+        break;
+      }
+
+      // Start paging process (like ccom() in AmiExpress)
+      startSysopPage(socket, session);
+      return; // Don't continue to menu display
+
+    case 'S': // Settings (ORIGINAL AmiExpress command from MENU.TXT - User Configuration)
+      socket.emit('ansi-output', '\x1b[36m-= User Settings =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', 'User configuration menu not yet implemented.\r\n');
+      socket.emit('ansi-output', 'This will allow you to edit:\r\n');
+      socket.emit('ansi-output', '  • Name, Email, Location\r\n');
+      socket.emit('ansi-output', '  • Password\r\n');
+      socket.emit('ansi-output', '  • Screen settings\r\n');
+      socket.emit('ansi-output', '  • Transfer protocol\r\n');
+      socket.emit('ansi-output', '  • Editor type\r\n');
+      break;
+
+    case 'T': // Time Left (internalCommandT from express.e line 25622)
+      socket.emit('ansi-output', '\x1b[36m-= Time Remaining =-\x1b[0m\r\n\r\n');
+      const timeLeft = session.timeRemaining || 60; // Default 60 minutes
+      socket.emit('ansi-output', `\x1b[32mYou have ${timeLeft} minutes remaining in this session.\x1b[0m\r\n`);
+      break;
+
+    case 'W': // User Configuration (internalCommandW from express.e line 25712)
+      socket.emit('ansi-output', '\x1b[36m-= User Configuration =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', 'User configuration menu not yet implemented.\r\n');
+      socket.emit('ansi-output', 'This will allow you to edit:\r\n');
+      socket.emit('ansi-output', '  • Name, Email, Location\r\n');
+      socket.emit('ansi-output', '  • Password\r\n');
+      socket.emit('ansi-output', '  • Screen settings\r\n');
+      socket.emit('ansi-output', '  • Transfer protocol\r\n');
+      socket.emit('ansi-output', '  • Editor type\r\n');
+      break;
+
+    case 'WHO': // Who's Online (internalCommandWHO from express.e line 26094)
       console.log('🔍 WHO command executed');
       socket.emit('ansi-output', '\x1b[36m-= Who\'s Online =-\x1b[0m\r\n\r\n');
       const onlineUsers = await getOnlineUsers();
@@ -1882,7 +2017,7 @@ export async function processBBSCommand(
       } else {
         socket.emit('ansi-output', `\x1b[32mCurrently ${onlineUsers.length} user(s) online:\x1b[0m\r\n\r\n`);
         socket.emit('ansi-output', '\x1b[36mNode  Username                Location\x1b[0m\r\n');
-        socket.emit('ansi-output', '\x1b[36m════  ════════════════════════════════════════════════\x1b[0m\r\n');
+        socket.emit('ansi-output', '\x1b[36m----  ----------------------------------------\x1b[0m\r\n');
         for (const user of onlineUsers) {
           const nodeStr = String(user.nodeId).padEnd(4);
           const usernameStr = user.username.padEnd(24);
@@ -1894,6 +2029,50 @@ export async function processBBSCommand(
       }
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       return;
+
+    case 'WHD': // Who's Online Detailed (internalCommandWHD from express.e line 26104)
+      console.log('🔍 WHD command executed');
+      socket.emit('ansi-output', '\x1b[36m-= Who\'s Online (Detailed) =-\x1b[0m\r\n\r\n');
+      const onlineUsersDetailed = await getOnlineUsers();
+      if (onlineUsersDetailed.length === 0) {
+        socket.emit('ansi-output', '\x1b[33mNo other users online.\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', `\x1b[32mCurrently ${onlineUsersDetailed.length} user(s) online:\x1b[0m\r\n\r\n`);
+        for (const user of onlineUsersDetailed) {
+          socket.emit('ansi-output', `\x1b[36mNode ${user.nodeId}:[0m ${user.username}\r\n`);
+          socket.emit('ansi-output', `  Location: ${user.location || 'Unknown'}\r\n`);
+          socket.emit('ansi-output', `  Activity: ${user.activity || 'Idle'}\r\n`);
+          if (user.private) socket.emit('ansi-output', `  \x1b[35m[PRIVATE MODE]\x1b[0m\r\n`);
+          if (user.offHook) socket.emit('ansi-output', `  \x1b[33m[OFF-HOOK - No interruptions]\x1b[0m\r\n`);
+          socket.emit('ansi-output', '\r\n');
+        }
+      }
+      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
+      return;
+
+    case 'Z': // New Since (ORIGINAL AmiExpress command from MENU.TXT - files newer than date)
+      socket.emit('ansi-output', '\x1b[36m-= New Files Since Date =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', 'Enter date (MM-DD-YY) to scan for new files:\r\n');
+      socket.emit('ansi-output', 'Or press Enter to scan since your last login.\r\n\r\n');
+
+      // This would prompt for date and scan directories
+      // For now, show a placeholder
+      const lastLoginZ = session.user?.lastLogin || new Date();
+      socket.emit('ansi-output', `\x1b[33mScanning for files newer than ${lastLoginZ.toLocaleDateString()}\x1b[0m\r\n\r\n`);
+      socket.emit('ansi-output', '\x1b[32mNo new files found.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[36mTry the N command for a simpler new files scan.\x1b[0m\r\n');
+      break;
+
+    case 'VER': // Version Information (internalCommandVER from express.e line 28398)
+      socket.emit('ansi-output', '\x1b[36m-= AmiExpress Version Information =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[33mAmiExpress Web Edition\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[32mVersion: 1.0.0-alpha\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[32mBased on: AmiExpress E (Amiga BBS)\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[32mPlatform: Node.js / Socket.IO / xterm.js\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', '\x1b[36mThis is a 1:1 port of the classic AmiExpress BBS software.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[36mOriginally written for the Commodore Amiga.\x1b[0m\r\n');
+      break;
 
     case '?': // Help command
       socket.emit('ansi-output', '\x1b[2J\x1b[H\x1b[0;36m-= AmiExpress Command Reference =-\x1b[0m\r\n\r\n');

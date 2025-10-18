@@ -448,14 +448,17 @@ export async function releaseNodeFromSession(session: any): Promise<void> {
 export async function getOnlineUsers(): Promise<any[]> {
   try {
     const nodes = await multiNodeManager.getOnlineUsers();
-    return nodes.map(node => ({
-      nodeId: node.nodeId,
-      username: node.handle,
-      location: node.location,
-      chatColor: node.chatColor,
-      offHook: node.offHook,
-      private: node.private
-    }));
+    return nodes
+      .filter(node => !node.quietMode) // Filter out users in quiet mode
+      .map(node => ({
+        nodeId: node.nodeId,
+        username: node.handle,
+        location: node.location,
+        chatColor: node.chatColor,
+        offHook: node.offHook,
+        private: node.private,
+        quietMode: node.quietMode
+      }));
   } catch (error) {
     console.error('[MULTINODE] Get online users error:', error);
     return [];

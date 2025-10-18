@@ -10,6 +10,7 @@ export interface User {
   downloads?: number; // Number of files downloaded
   bytesDownload?: number; // Total bytes downloaded
   secLevel?: number; // Security level (mirrors AmiExpress secStatus)
+  quietMode?: boolean; // Quiet node - hide from WHO list (internalCommandQ)
   // Add other properties as needed based on the project
 }
 

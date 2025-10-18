@@ -19,7 +19,7 @@ function App() {
       theme: {
         background: '#000000',
         foreground: '#ffffff',
-        cursor: '#ffffff',
+        cursor: '#ff0000',
         black: '#000000',
         red: '#ff0000',
         green: '#00ff00',

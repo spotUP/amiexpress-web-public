@@ -57,3 +57,16 @@ The BBS uses proper substates:
 - `READ_COMMAND` - Waits for line input
 - `READ_SHORTCUTS` - Waits for hotkey input (expert mode)
 - always post daily changelogs to the bbs bulletins if there are any
+
+## Development Server Management
+
+### Server Restart Protocol
+When restarting development servers:
+- **ALWAYS kill all old servers first** - Use `lsof -ti:3001 | xargs kill -9` and `lsof -ti:5173 | xargs kill -9`
+- **Only ONE instance** of each server should be running at any time
+- **CLEARLY notify the user** if a port changes
+- Default ports:
+  - Backend: `http://localhost:3001`
+  - Frontend: `http://localhost:5173`
+- After killing old servers, wait 2-3 seconds before starting new ones
+- Always confirm servers are running on the correct ports before notifying the user

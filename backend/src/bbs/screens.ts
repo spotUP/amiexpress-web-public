@@ -19,7 +19,9 @@ import { BBSSession } from './session';
 function addAnsiEscapes(content: string): string {
   // Match ANSI sequences: [digits;digitsm or [digitm or [H or [2J etc
   // But NOT [%X] which are variable placeholders
-  return content.replace(/\[(?!%)([0-9;]*[A-Za-z])/g, '\x1b[$1');
+  // Commands that REQUIRE a number: A,B,C,D,E,F,G,m,n,etc
+  // Commands that work WITHOUT a number: H,J,K,f,s,u
+  return content.replace(/\[([0-9]+[;0-9]*[A-Za-z]|[HJKfsu])/g, '\x1b[$1');
 }
 
 /**

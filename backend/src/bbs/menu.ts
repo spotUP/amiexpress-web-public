@@ -5,6 +5,7 @@
 
 import { Socket } from 'socket.io';
 import { BBSSession, LoggedOnSubState, MessageBase } from './session';
+import { displayScreen } from './screens';
 
 // These will be provided by the caller
 let messageBases: MessageBase[] = [];
@@ -19,56 +20,15 @@ export function setMessageBases(bases: MessageBase[]) {
 export function displayMainMenu(socket: Socket, session: BBSSession) {
   console.log('displayMainMenu called, current subState:', session.subState);
 
-  // Clear screen before displaying menu (like AmiExpress does)
-  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
-
   // Only show full menu if not expert mode (expert users get just the prompt)
   if (session.user?.expert !== "N") {
     console.log('Displaying full menu for non-expert user');
-    socket.emit('ansi-output', '\x1b[0;36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[0;36m║                         \x1b[0;33mAmiExpress BBS Main Menu\x1b[0;36m                          ║\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[0;36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n');
 
-    // Message Commands
-    socket.emit('ansi-output', '\x1b[0;33m▶ MESSAGE COMMANDS:\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[36mR\x1b[0m  - Read Messages              \x1b[36mA\x1b[0m  - Post Message\r\n');
-    socket.emit('ansi-output', '  \x1b[36mE\x1b[0m  - Post Private Message       \x1b[36mJM\x1b[0m - Join Message Base\r\n\r\n');
-
-    // File Commands
-    socket.emit('ansi-output', '\x1b[0;33m▶ FILE COMMANDS:\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[36mF\x1b[0m  - File Areas                 \x1b[36mD\x1b[0m  - Download Files\r\n');
-    socket.emit('ansi-output', '  \x1b[36mU\x1b[0m  - Upload Files               \x1b[36mN\x1b[0m  - New Files Scan\r\n');
-    socket.emit('ansi-output', '  \x1b[36mFR\x1b[0m - File Request               \x1b[36mFS\x1b[0m - File Search\r\n');
-    socket.emit('ansi-output', '  \x1b[36mFM\x1b[0m - File Maintenance            \x1b[36mJF\x1b[0m - Join File Area\r\n\r\n');
-
-    // Conference & User Commands
-    socket.emit('ansi-output', '\x1b[0;33m▶ CONFERENCE & USER:\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[36mJ\x1b[0m  - Join Conference            \x1b[36mO\x1b[0m  - Online Users / Page Sysop\r\n');
-    socket.emit('ansi-output', '  \x1b[36mI\x1b[0m  - User Information           \x1b[36mP\x1b[0m  - User Profile\r\n');
-    socket.emit('ansi-output', '  \x1b[36mT\x1b[0m  - Time Left                  \x1b[36mQ\x1b[0m  - Quiet Node Toggle\r\n\r\n');
-
-    // Communication Commands
-    socket.emit('ansi-output', '\x1b[0;33m▶ COMMUNICATION:\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[36mC\x1b[0m  - Comment to Sysop           \x1b[36mOLM\x1b[0m - Online Messages\r\n');
-    socket.emit('ansi-output', '  \x1b[36mCHAT\x1b[0m - Internode Chat            \x1b[36mWHO\x1b[0m - Who\'s Online\r\n\r\n');
-
-    // Door & System Commands
-    socket.emit('ansi-output', '\x1b[0;33m▶ DOORS & SYSTEM:\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[36mDOORS\x1b[0m - Door Games & Utilities    \x1b[36mX\x1b[0m <name> - Execute Door\r\n');
-    socket.emit('ansi-output', '  \x1b[36m2\x1b[0m  - Callers Log                \x1b[36m3\x1b[0m  - System Statistics\r\n');
-    socket.emit('ansi-output', '  \x1b[36m4\x1b[0m  - Account Information        \x1b[36mVER\x1b[0m - Version Information\r\n\r\n');
-
-    // Sysop-only commands
-    if (session.user?.securityLevel >= 255) {
-      socket.emit('ansi-output', '\x1b[0;33m▶ SYSOP COMMANDS:\x1b[0m\r\n');
-      socket.emit('ansi-output', '  \x1b[33m1\x1b[0m  - Account Editing            \x1b[33mDOORMAN\x1b[0m - Door Manager\r\n\r\n');
-    }
-
-    // Help & Exit
-    socket.emit('ansi-output', '\x1b[0;33m▶ HELP & EXIT:\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[36m?\x1b[0m  - Command Help               \x1b[36mG\x1b[0m  - Goodbye (Logoff)\r\n');
-
-    socket.emit('ansi-output', '\x1b[0;36m────────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n');
+    // Use the ORIGINAL AmiExpress MENU.TXT file from the conference screens directory
+    // This matches the original AmiExpress behavior exactly
+    console.log('🎨 About to call displayScreen with MENU');
+    displayScreen(socket, session, 'MENU');
+    console.log('🎨 displayScreen returned');
   }
 
   // Show prompt
