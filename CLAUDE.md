@@ -295,58 +295,77 @@ See `backend/backend/MODULARIZATION_GUIDE.md` and `backend/backend/FILE_HANDLER_
 
 ## Development Server Management
 
-### MANDATORY: Check Server Restart After Code Changes
-**After updating or adding new code, ALWAYS check if servers need to be restarted:**
+### MANDATORY: Use Startup Scripts ONLY
+**CRITICAL: NEVER manually start servers with `npm run dev` or background commands.**
 
-1. **Check if servers are running:**
-   ```bash
-   lsof -ti:3001  # Backend
-   lsof -ti:5173  # Frontend
-   ```
+**Problem:** Manual server startup causes multiple instances to run, leading to stale code and development issues.
 
-2. **Determine if restart is needed:**
-   - **Backend changes** (TypeScript files, database schema, env vars) → Restart backend
-   - **Frontend changes** (React components, styles) → Usually hot-reloads, but restart if issues
-   - **Dependency changes** (package.json) → MUST restart
-   - **Configuration changes** (.env, config files) → MUST restart
+**Solution:** Always use the dedicated startup scripts that ensure exactly ONE instance runs.
 
-3. **When in doubt, restart:**
-   - If you made code changes and aren't sure if they're loaded → RESTART
-   - If you see unexpected errors → RESTART
-   - Better to restart unnecessarily than leave stale code running
+### Available Scripts
 
-4. **How to restart properly:**
-   ```bash
-   # Backend (from backend/backend directory)
-   cd ~/Code/AmiExpress-Web/backend/backend
-   lsof -ti:3001 | xargs kill -9 2>/dev/null
-   sleep 2
-   export DATABASE_URL="postgresql://localhost/amiexpress"
-   npm run dev 2>&1 &
+**Start All Servers (Recommended):**
+```bash
+./start-all.sh
+```
+- Kills any existing servers on both ports
+- Starts backend on port 3001
+- Starts frontend on port 5173
+- Verifies exactly ONE process per port
+- Shows success/failure status
 
-   # Frontend (from root directory)
-   cd ~/Code/AmiExpress-Web
-   lsof -ti:5173 | xargs kill -9 2>/dev/null
-   sleep 2
-   npm run dev 2>&1 &
-   ```
+**Start Individual Servers:**
+```bash
+./start-backend.sh    # Backend only (port 3001)
+./start-frontend.sh   # Frontend only (port 5173)
+```
 
-5. **After restarting, ALWAYS verify:**
-   ```bash
-   # Check backend is responding
-   curl http://localhost:3001/
+**Stop All Servers:**
+```bash
+./stop-all.sh
+```
+- Kills all servers on both ports
+- Use before starting if you're unsure about current state
 
-   # Check frontend is responding
-   curl http://localhost:5173/
-   ```
+### When to Restart Servers
 
-### Server Restart Protocol
-When restarting development servers:
-- **ALWAYS kill all old servers first** - Use `lsof -ti:3001 | xargs kill -9` and `lsof -ti:5173 | xargs kill -9`
-- **Only ONE instance** of each server should be running at any time
-- **CLEARLY notify the user** if a port changes
-- Default ports:
-  - Backend: `http://localhost:3001`
-  - Frontend: `http://localhost:5173`
-- After killing old servers, wait 2-3 seconds before starting new ones
-- Always confirm servers are running on the correct ports before notifying the user
+**After Backend Changes:**
+- TypeScript files in `backend/backend/src/`
+- Database schema changes
+- Environment variables (.env)
+- Dependencies (package.json)
+- **Action:** Run `./start-backend.sh`
+
+**After Frontend Changes:**
+- Usually hot-reloads automatically
+- If changes don't appear, run `./start-frontend.sh`
+
+**When in Doubt:**
+- Run `./stop-all.sh` then `./start-all.sh`
+- Better safe than running stale code
+
+### Verification Commands
+
+**Check server status:**
+```bash
+# Count servers (should be 1 each)
+lsof -ti:3001 | wc -l    # Backend (expect: 1)
+lsof -ti:5173 | wc -l    # Frontend (expect: 1)
+
+# Test endpoints
+curl http://localhost:3001/    # Should return: {"message":"AmiExpress Backend API"}
+curl http://localhost:5173/    # Should return HTML
+```
+
+### Default Ports
+- Backend API: `http://localhost:3001`
+- Frontend BBS: `http://localhost:5173` ← Users access this
+- **NEVER** change these ports without user approval
+
+### Critical Rules for Claude Code
+
+1. **NEVER run `npm run dev` or `npm run dev &` manually**
+2. **ALWAYS use `./start-backend.sh` or `./start-all.sh`**
+3. **ALWAYS verify exactly 1 process per port after starting**
+4. **If multiple processes detected, STOP and use `./stop-all.sh` first**
+5. **Report to user if scripts fail** - don't fall back to manual commands
