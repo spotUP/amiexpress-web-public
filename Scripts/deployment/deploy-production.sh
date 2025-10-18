@@ -52,9 +52,45 @@ set -euo pipefail
 # CONFIGURATION
 # ============================================
 
-SCRIPT_VERSION="3.0.0"
+SCRIPT_VERSION="3.1.0"
 SCRIPT_NAME="AmiExpress Deploy"
 PROJECT_NAME="AmiExpress-Web"
+
+# ============================================
+# CHANGELOG v3.1.0
+# ============================================
+# IMPROVEMENTS TO RENDER CLI INTEGRATION:
+#
+# Fixed issues identified during production deployments:
+#
+# 1. Service ID Detection:
+#    - OLD: Used grep pattern that could match any service
+#    - NEW: get_render_backend_service_id() specifically finds "amiexpress-backend"
+#    - Supports both jq and grep fallback methods
+#
+# 2. Log Fetching:
+#    - OLD: Used -r flag without validation
+#    - NEW: Uses --resources flag with validation
+#    - Validates service ID before attempting to fetch logs
+#    - Correct syntax: render logs --resources <id> --type build
+#
+# 3. Manual Deployment Trigger:
+#    - OLD: Only relied on auto-deploy, no manual trigger
+#    - NEW: trigger_render_deployment() manually triggers deploys
+#    - Correct syntax: render deploys create <service-id> --commit <sha> --confirm
+#    - Extracts deployment ID from output
+#
+# 4. Deployment Polling:
+#    - OLD: No wait mechanism, just assumed success
+#    - NEW: wait_for_render_deployment() polls build logs
+#    - Checks for "Build successful" or "Build failed" in logs
+#    - Timeout protection (default 5 minutes)
+#
+# 5. Error Handling:
+#    - Added validation for empty service IDs
+#    - Better error messages for common failures
+#    - Fallback to auto-deploy if manual trigger fails
+# ============================================
 
 # Directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -202,16 +238,121 @@ fetch_vercel_logs() {
     fi
 }
 
+get_render_backend_service_id() {
+    # Get the service ID for amiexpress-backend specifically
+    # Returns: service_id on stdout, exit code 0 on success, 1 on failure
+
+    local services_json
+    services_json=$(render services list -o json 2>/dev/null)
+
+    if [ -z "$services_json" ]; then
+        return 1
+    fi
+
+    # Extract service ID for amiexpress-backend using jq if available, otherwise grep
+    if command -v jq &> /dev/null; then
+        echo "$services_json" | jq -r '.[] | select(.service.name == "amiexpress-backend") | .service.id' 2>/dev/null | head -1
+    else
+        # Fallback to grep/sed if jq not available
+        # Look for the backend service name and extract its ID
+        echo "$services_json" | grep -A 20 '"name": "amiexpress-backend"' | grep -o '"id": "srv-[^"]*"' | head -1 | cut -d'"' -f4
+    fi
+
+    # Return success if we got an ID
+    [ -n "$(echo "$services_json" | grep -o 'srv-[a-z0-9]*' | head -1)" ]
+}
+
+trigger_render_deployment() {
+    local service_id="$1"
+    local commit_sha="$2"
+
+    log "Triggering Render deployment..."
+
+    # Validate inputs
+    if [ -z "$service_id" ]; then
+        error "Service ID is required"
+        return 1
+    fi
+
+    # Trigger deployment using correct syntax
+    # render deploys create <service-id> [flags]
+    local deploy_output
+    if [ -n "$commit_sha" ]; then
+        deploy_output=$(render deploys create "$service_id" --commit "$commit_sha" --confirm 2>&1)
+    else
+        deploy_output=$(render deploys create "$service_id" --confirm 2>&1)
+    fi
+
+    local exit_code=$?
+
+    if [ $exit_code -eq 0 ]; then
+        # Extract deployment ID from output (format: "Deploy dep-xxx succeeded for service srv-yyy")
+        local deploy_id
+        deploy_id=$(echo "$deploy_output" | grep -o 'dep-[a-z0-9]*' | head -1)
+
+        if [ -n "$deploy_id" ]; then
+            log "Deployment triggered: $deploy_id"
+            echo "$deploy_id"
+            return 0
+        else
+            log "Deployment triggered (ID not found in output)"
+            echo "unknown"
+            return 0
+        fi
+    else
+        error "Failed to trigger deployment"
+        echo "$deploy_output" >&2
+        return 1
+    fi
+}
+
+wait_for_render_deployment() {
+    local service_id="$1"
+    local max_wait="${2:-300}"  # Default 5 minutes
+
+    log "Waiting for Render deployment to complete..."
+
+    local elapsed=0
+    local check_interval=10
+
+    while [ $elapsed -lt $max_wait ]; do
+        # Check build logs for completion markers
+        local log_sample
+        log_sample=$(render logs -r "$service_id" --type build --limit 5 -o text 2>/dev/null || echo "")
+
+        if echo "$log_sample" | grep -q "Build successful"; then
+            success "Build completed successfully"
+            return 0
+        elif echo "$log_sample" | grep -q "Build failed"; then
+            error "Build failed"
+            return 1
+        fi
+
+        echo -ne "  Waiting for build... ${elapsed}s / ${max_wait}s\r"
+        sleep $check_interval
+        elapsed=$((elapsed + check_interval))
+    done
+
+    warning "Deployment timeout after ${max_wait}s"
+    return 2
+}
+
 fetch_render_logs() {
     local service_id="$1"
     local log_output="$LOGS_DIR/render_deploy_logs_${TIMESTAMP}.txt"
 
     log "Fetching Render deployment logs..."
 
+    # Validate service ID
+    if [ -z "$service_id" ]; then
+        error "Service ID is required for fetching logs"
+        return 1
+    fi
+
     # Fetch BUILD logs (where TypeScript errors appear), not just runtime errors
     # Use -o text for easier parsing of build output
-    # Use timeout to prevent hanging (15 second timeout for Render)
-    if timeout 15s render logs -r "$service_id" --type build --limit 200 -o text 2>&1 > "$log_output"; then
+    # Note: Correct flag syntax is --resources, but -r is an alias
+    if timeout 15s render logs --resources "$service_id" --type build --limit 200 -o text 2>&1 > "$log_output"; then
         if [ -s "$log_output" ]; then
             echo "$log_output"
             return 0
@@ -220,7 +361,7 @@ fetch_render_logs() {
 
     # Fallback: try without --type flag to get all logs
     info "Trying to fetch all logs as fallback..."
-    if timeout 15s render logs -r "$service_id" --limit 200 -o text 2>&1 > "$log_output"; then
+    if timeout 15s render logs --resources "$service_id" --limit 200 -o text 2>&1 > "$log_output"; then
         if [ -s "$log_output" ]; then
             echo "$log_output"
             return 0
@@ -1003,42 +1144,69 @@ if [ "$DRY_RUN" = false ]; then
             RENDER_SERVICE=""
             RENDER_SERVICE_URL=""
 
-            # Get services list in JSON format
-            SERVICES_JSON=$(render services list -o json 2>/dev/null)
+            # Get backend service ID using improved function
+            RENDER_SERVICE=$(get_render_backend_service_id)
 
-            if echo "$SERVICES_JSON" | grep -q "amiexpress"; then
-                # Extract service ID from JSON
-                RENDER_SERVICE=$(echo "$SERVICES_JSON" | grep -o '"id": "srv-[^"]*"' | head -1 | cut -d'"' -f4)
-                RENDER_SERVICE_URL=$(echo "$SERVICES_JSON" | grep -o '"url": "https://[^"]*\.onrender\.com"' | head -1 | cut -d'"' -f4)
+            if [ -n "$RENDER_SERVICE" ]; then
+                info "Render service found: $RENDER_SERVICE"
 
-                if [ -n "$RENDER_SERVICE" ]; then
-                    info "Render service found: $RENDER_SERVICE"
-                    if [ -n "$RENDER_SERVICE_URL" ]; then
-                        info "Service URL: $RENDER_SERVICE_URL"
-                    fi
-
-                    # Note: Render auto-deploys from GitHub, so we just notify
-                    log "Render will auto-deploy from GitHub push..."
-
-                    # Check if there's a recent deployment
-                    info "Note: Render auto-deploys from GitHub within 1-2 minutes"
-                    info "Manual trigger via CLI is not needed for connected repos"
-
-                    echo ""
-                    echo -e "${BOLD}Render Service:${NC}"
-                    echo -e "  ${CYAN}${ICON_DEPLOY} Service ID:${NC}   $RENDER_SERVICE"
-                    if [ -n "$RENDER_SERVICE_URL" ]; then
-                        echo -e "  ${CYAN}${ICON_DEPLOY} Backend URL:${NC}  $RENDER_SERVICE_URL"
-                    fi
-                    echo ""
-
-                    success "Render service configured for auto-deploy"
+                # Get service URL from services list
+                SERVICES_JSON=$(render services list -o json 2>/dev/null)
+                if command -v jq &> /dev/null; then
+                    RENDER_SERVICE_URL=$(echo "$SERVICES_JSON" | jq -r ".[] | select(.service.id == \"$RENDER_SERVICE\") | .service.serviceDetails.url" 2>/dev/null)
                 else
-                    warning "Could not determine Render service ID"
-                    info "Render will auto-deploy from GitHub push"
+                    RENDER_SERVICE_URL=$(echo "$SERVICES_JSON" | grep -A 30 "\"id\": \"$RENDER_SERVICE\"" | grep -o '"url": "https://[^"]*\.onrender\.com"' | head -1 | cut -d'"' -f4)
+                fi
+
+                if [ -n "$RENDER_SERVICE_URL" ]; then
+                    info "Service URL: $RENDER_SERVICE_URL"
+                fi
+
+                echo ""
+                echo -e "${BOLD}Render Deployment:${NC}"
+                echo -e "  ${CYAN}${ICON_DEPLOY} Service ID:${NC}   $RENDER_SERVICE"
+                if [ -n "$RENDER_SERVICE_URL" ]; then
+                    echo -e "  ${CYAN}${ICON_DEPLOY} Backend URL:${NC}  $RENDER_SERVICE_URL"
+                fi
+                echo ""
+
+                # Trigger manual deployment (don't just rely on auto-deploy)
+                log "Triggering Render deployment for commit: $GIT_COMMIT"
+
+                DEPLOY_ID=$(trigger_render_deployment "$RENDER_SERVICE" "$GIT_COMMIT")
+                DEPLOY_EXIT_CODE=$?
+
+                if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
+                    info "Deployment triggered: $DEPLOY_ID"
+
+                    # Wait for deployment to complete
+                    if wait_for_render_deployment "$RENDER_SERVICE" 300; then
+                        success "Render deployment completed successfully"
+
+                        # Fetch and check logs for errors
+                        RENDER_LOG_FILE=$(fetch_render_logs "$RENDER_SERVICE")
+                        if [ -n "$RENDER_LOG_FILE" ] && [ -f "$RENDER_LOG_FILE" ]; then
+                            if ERROR_FILE=$(detect_build_errors "$RENDER_LOG_FILE" "render"); then
+                                warning "Build errors detected in Render deployment"
+                                if analyze_and_fix_errors "$ERROR_FILE" "render"; then
+                                    info "Errors fixed, redeploying..."
+                                    # Redeploy will happen via GitHub push from fixes
+                                fi
+                            else
+                                success "No build errors detected in Render logs"
+                            fi
+                        fi
+                    else
+                        warning "Deployment may still be in progress or failed"
+                        info "Check logs at: https://dashboard.render.com/web/$RENDER_SERVICE"
+                    fi
+                else
+                    error "Failed to trigger Render deployment"
+                    warning "Falling back to auto-deploy from GitHub push"
+                    info "Render will auto-deploy within 1-2 minutes"
                 fi
             else
-                warning "No Render services found"
+                warning "Could not find amiexpress-backend service"
                 info "Make sure your service is connected to GitHub"
                 info "Render will auto-deploy when you push to GitHub"
             fi
