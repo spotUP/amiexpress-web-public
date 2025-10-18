@@ -366,12 +366,11 @@ export async function handleCommand(
   doors: any[],
   messages: any[]
 ) {
-  console.log('=== handleCommand called ===');
-  console.log('data:', JSON.stringify(data));
-  console.log('session.state:', session.state);
-  console.log('session.subState:', session.subState);
-  const hasSession = await sessions.has(socket.id);
-  console.log('session id:', hasSession ? 'found' : 'NOT FOUND');
+  // Performance optimization: Reduced logging for faster keystroke processing
+  // Uncomment for debugging: console.log('=== handleCommand called ===');
+  // Uncomment for debugging: console.log('data:', JSON.stringify(data));
+  // Uncomment for debugging: console.log('session.state:', session.state);
+  // Uncomment for debugging: console.log('session.subState:', session.subState);
 
   // Check for hotkeys first
   const hotkeyHandled = await handleHotkey(socket, session, data, chatState,
@@ -1130,23 +1129,21 @@ export async function handleCommand(
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b'); // Erase character from terminal
-        console.log('📝 Backspace - buffer now:', JSON.stringify(session.inputBuffer));
+        // NO ECHO: Frontend has local echo enabled for instant feedback
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') { // Only printable characters
-      // Regular character - add to buffer and echo
+      // Regular character - add to buffer (frontend echoes locally)
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
-      console.log('📝 Added character to buffer, current buffer:', JSON.stringify(session.inputBuffer));
+      // NO ECHO: Frontend has local echo enabled for instant feedback
     } else {
-      console.log('📝 Ignoring non-printable character:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
+      // Uncomment for debugging: console.log('📝 Ignoring non-printable character:', JSON.stringify(data));
     }
-    console.log('📝 EXITING message subject handler');
+    // Uncomment for debugging: console.log('📝 EXITING message subject handler');
     return;
   }
 
   if (session.subState === LoggedOnSubState.POST_MESSAGE_BODY) {
-    console.log('📝 In message body input state, received:', JSON.stringify(data));
+    // Uncomment for debugging: console.log('📝 In message body input state, received:', JSON.stringify(data));
 
     // Handle line-based input for message body
     if (data === '\r' || data === '\n') {
@@ -1197,31 +1194,31 @@ export async function handleCommand(
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b'); // Erase character from terminal
+        // NO ECHO: Frontend has local echo enabled for instant feedback
       }
     } else {
-      // Regular character - add to buffer and echo
+      // Regular character - add to buffer (frontend echoes locally)
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
+      // NO ECHO: Frontend has local echo enabled for instant feedback
     }
     return;
   }
 
   if (session.subState === LoggedOnSubState.READ_COMMAND) {
-    console.log('✅ In READ_COMMAND state, processing line input');
+    // Uncomment for debugging: console.log('✅ In READ_COMMAND state, processing line input');
 
     // Handle line-based input like the message posting system
     if (data === '\r' || data === '\n') { // Handle both carriage return and newline
-      console.log('🎯 ENTER KEY DETECTED in READ_COMMAND!');
+      // Uncomment for debugging: console.log('🎯 ENTER KEY DETECTED in READ_COMMAND!');
       // Enter pressed - process the complete command line
       const input = session.inputBuffer.trim();
-      console.log('🎯 ENTER PRESSED - Processing command:', JSON.stringify(input), 'length:', input.length);
+      // Uncomment for debugging: console.log('🎯 ENTER PRESSED - Processing command:', JSON.stringify(input), 'length:', input.length);
 
       if (input.length > 0) {
         const parts = input.split(' ');
         const command = parts[0].toUpperCase();
         const params = parts.slice(1).join(' ');
-        console.log('🚀 Processing command:', command, 'with params:', params);
+        // Uncomment for debugging: console.log('🚀 Processing command:', command, 'with params:', params);
         await processBBSCommand(socket, session, command, params, sessions, io, chatState,
           conferences, messageBases, fileAreas, doors, messages);
       }
@@ -1231,31 +1228,29 @@ export async function handleCommand(
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b'); // Erase character from terminal
-        console.log('📝 Backspace - command buffer now:', JSON.stringify(session.inputBuffer));
+        // NO ECHO: Frontend has local echo enabled for instant feedback
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') { // Only printable characters
-      // Regular character - add to buffer and echo
+      // Regular character - add to buffer (frontend echoes locally)
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
-      console.log('📝 Added character to command buffer, current buffer:', JSON.stringify(session.inputBuffer));
+      // NO ECHO: Frontend has local echo enabled for instant feedback
     } else {
-      console.log('📝 Ignoring non-printable character in READ_COMMAND:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
+      // Uncomment for debugging: console.log('📝 Ignoring non-printable character in READ_COMMAND:', JSON.stringify(data));
     }
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
-    console.log('🔥 In READ_SHORTCUTS state');
+    // Uncomment for debugging: console.log('🔥 In READ_SHORTCUTS state');
     // READ_SHORTCUTS (expert mode) works same as READ_COMMAND but with no menu shown
     // Still need to buffer multi-character commands like WHO, CHAT, OLM
     if (data === '\r' || data === '\n') {
       // Enter pressed - process the complete command line
       const input = session.inputBuffer.trim();
-      console.log('🎯 SHORTCUTS ENTER PRESSED - Processing command:', JSON.stringify(input));
+      // Uncomment for debugging: console.log('🎯 SHORTCUTS ENTER PRESSED - Processing command:', JSON.stringify(input));
 
       if (input.length > 0) {
         const parts = input.split(' ');
         const command = parts[0].toUpperCase();
         const params = parts.slice(1).join(' ');
-        console.log('🚀 SHORTCUTS Processing command:', command, 'with params:', params);
+        // Uncomment for debugging: console.log('🚀 SHORTCUTS Processing command:', command, 'with params:', params);
         await processBBSCommand(socket, session, command, params, sessions, io, chatState,
           conferences, messageBases, fileAreas, doors, messages);
       }
@@ -1265,21 +1260,19 @@ export async function handleCommand(
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
-        console.log('📝 SHORTCUTS Backspace - buffer now:', JSON.stringify(session.inputBuffer));
+        // NO ECHO: Frontend has local echo enabled for instant feedback
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      // Regular character - add to buffer and echo
+      // Regular character - add to buffer (frontend echoes locally)
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
-      console.log('📝 SHORTCUTS Added char to buffer:', JSON.stringify(session.inputBuffer));
+      // NO ECHO: Frontend has local echo enabled for instant feedback
     } else {
-      console.log('📝 SHORTCUTS Ignoring non-printable:', JSON.stringify(data));
+      // Uncomment for debugging: console.log('📝 SHORTCUTS Ignoring non-printable:', JSON.stringify(data));
     }
   } else {
-    console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
+    // Uncomment for debugging: console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
   }
-  console.log('=== handleCommand end ===\n');
+  // Uncomment for debugging: console.log('=== handleCommand end ===\n');
 }
 
 /**

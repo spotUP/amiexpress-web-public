@@ -124,8 +124,9 @@ export async function setupBBSConnection(
    * In a future refactoring, this could be moved to its own module.
    */
   socket.on('command', async (data: string) => {
-    console.log('=== COMMAND RECEIVED ===');
-    console.log('Raw data:', JSON.stringify(data), 'length:', data.length, 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
+    // Performance optimization: Reduced logging for faster keystroke processing
+    // Uncomment for debugging: console.log('=== COMMAND RECEIVED ===');
+    // Uncomment for debugging: console.log('Raw data:', JSON.stringify(data), 'length:', data.length);
 
     try {
       const currentSession = await sessions.get(socket.id);
@@ -134,13 +135,8 @@ export async function setupBBSConnection(
         return;
       }
 
-      console.log('Session state:', currentSession.state, 'subState:', currentSession.subState);
-      console.log('Input buffer:', JSON.stringify(currentSession.inputBuffer));
-
-      // Special debug for Enter key
-      if (data === '\r') {
-        console.log('-> ENTER KEY DETECTED!');
-      }
+      // Uncomment for debugging: console.log('Session state:', currentSession.state, 'subState:', currentSession.subState);
+      // Uncomment for debugging: console.log('Input buffer:', JSON.stringify(currentSession.inputBuffer));
 
       // Handle command processing with all required parameters
       await handleCommand(socket, currentSession, data, sessions, io, chatState, conferences, messageBases, fileAreas, doors, messages);

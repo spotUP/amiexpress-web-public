@@ -187,13 +187,26 @@ function App() {
 
     // Handle terminal input
     term.onData((data: string) => {
-      console.log('📝 Terminal input received:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
       if (loginState.current === 'username' || loginState.current === 'password') {
-        // Handle login input
+        // Handle login input (has its own echo logic)
         handleLoginInput(data, ws, term);
       } else {
-        // Send input to server
-        console.log('📤 Sending command to server:', JSON.stringify(data));
+        // LOCAL ECHO: Display character immediately for instant feedback
+        // Only echo printable characters and backspace, not control sequences
+        if (data.length === 1) {
+          if (data >= ' ' && data <= '~') {
+            // Printable character - echo immediately
+            term.write(data);
+          } else if (data === '\x7f' || data === '\b') {
+            // Backspace - erase immediately
+            term.write('\b \b');
+          } else if (data === '\r') {
+            // Enter - echo newline
+            term.write('\r\n');
+          }
+        }
+
+        // Send input to server (async, no waiting for echo)
         ws.emit('command', data);
       }
     });
