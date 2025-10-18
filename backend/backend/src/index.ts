@@ -13,6 +13,19 @@ import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Phase 9: Security/ACS System imports
+import { ACSCode } from './constants/acs-codes';
+import { EnvStat } from './constants/env-codes';
+import {
+  checkSecurity,
+  setEnvStat,
+  initializeSecurity,
+  setTempSecurityFlag,
+  clearTempSecurityFlag,
+  setOverride,
+  clearOverride
+} from './utils/security.util';
+
 interface BBSSession {
   state: BBSState;
   subState?: LoggedOnSubState;
@@ -35,6 +48,18 @@ interface BBSSession {
   cmdShortcuts: boolean; // Like AmiExpress cmdShortcuts - controls hotkey vs line input mode
   doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
   tempData?: any; // Temporary data storage for complex operations (like file listing)
+
+  // Phase 9: Security/ACS System (express.e:165-167, 306-308)
+  acsLevel: number; // Current ACS level (0-255, or -1 if invalid) - express.e:165
+  securityFlags: string; // Temporary per-session ACS overrides ("T"/"F"/"?") - express.e:306
+  secOverride: string; // Permanent override denials ("T"=deny) - strongest denial - express.e:307
+  overrideDefaultAccess: boolean; // Whether to skip default access checks - express.e:166
+  userSpecificAccess: boolean; // Whether user has specific access file - express.e:167
+  currentStat: number; // Current environment status (what user is doing) - express.e:308
+  quietFlag: boolean; // Whether node is in quiet mode (invisible to WHO) - express.e:309
+  blockOLM: boolean; // Whether to block Online Messages (OLM) - express.e:310
+  loginTime: number; // Login timestamp for session time tracking
+  nodeStartTime: number; // Node start time for uptime display
 }
 
 // Conference and Message Base data structures (simplified)
@@ -142,7 +167,19 @@ io.on('connection', async (socket) => {
     relConfNum: 0, // Relative conference number
     currentConfName: 'Unknown', // Current conference name
     cmdShortcuts: false, // Like AmiExpress - default to line input mode, not hotkeys
-    doorExpertMode: false // Like AmiExpress - doors can force menu display (express.e:28583)
+    doorExpertMode: false, // Like AmiExpress - doors can force menu display (express.e:28583)
+
+    // Phase 9: Initialize security fields (express.e:447-455)
+    acsLevel: -1, // Will be set on login
+    securityFlags: '', // Temporary per-session ACS overrides
+    secOverride: '', // Permanent override denials
+    overrideDefaultAccess: false, // Skip default access checks
+    userSpecificAccess: false, // User has specific access file
+    currentStat: EnvStat.IDLE, // Environment status
+    quietFlag: false, // Quiet mode (invisible to WHO)
+    blockOLM: false, // Block Online Messages
+    loginTime: Date.now(), // Login timestamp
+    nodeStartTime: Date.now() // Node start time for uptime
   };
   sessions.set(socket.id, session);
 
@@ -209,6 +246,9 @@ io.on('connection', async (socket) => {
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
+
+      // Phase 9: Initialize security system (express.e:447-455)
+      initializeSecurity(session);
 
       // Log successful login (express.e:9493 callersLog)
       await callersLog(user.id, user.username, 'Logged on');
@@ -2591,16 +2631,21 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return;
 
     case 'US': // Sysop Upload (internalCommandUS) - express.e:25660
-      // TODO for 100% 1:1: checkSecurity(ACS_SYSOP_COMMANDS) - express.e:25661
-      // TODO for 100% 1:1: setEnvStat(ENV_UPLOADING) - express.e:25662
-      // Check sysop permissions
-      if ((session.user?.secLevel || 0) < 255) {
+      // Phase 9: Security/ACS System implemented
+      // ✅ checkSecurity(ACS_SYSOP_COMMANDS) - express.e:25661 [IMPLEMENTED]
+      // ✅ setEnvStat(ENV_UPLOADING) - express.e:25662 [IMPLEMENTED]
+
+      // Phase 9: Check security permission (express.e:25661)
+      if (!checkSecurity(session, ACSCode.SYSOP_COMMANDS)) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         return;
       }
+
+      // Phase 9: Set environment status (express.e:25662)
+      setEnvStat(session, EnvStat.UPLOADING);
 
       socket.emit('ansi-output', '\x1b[36m-= Sysop Upload =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Special sysop upload mode - bypasses ratio checks.\r\n\r\n');
@@ -2702,15 +2747,21 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return; // Stay in input mode
 
     case '4': // Edit Any File (internalCommand4) - express.e:24517
-      // TODO for 100% 1:1: setEnvStat(ENV_EMACS) - express.e:24518
-      // Check sysop permissions (express.e:24519 - ACS_EDIT_FILES)
-      if ((session.user?.secLevel || 0) < 200) {
+      // Phase 9: Security/ACS System implemented
+      // ✅ setEnvStat(ENV_EMACS) - express.e:24518 [IMPLEMENTED]
+      // ✅ checkSecurity(ACS_EDIT_FILES) - express.e:24519 [IMPLEMENTED]
+
+      // Phase 9: Check security permission (express.e:24519)
+      if (!checkSecurity(session, ACSCode.EDIT_FILES)) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. File editing privileges required.\x1b[0m\r\n');
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         return;
       }
+
+      // Phase 9: Set environment status (express.e:24518)
+      setEnvStat(session, EnvStat.EMACS);
 
       socket.emit('ansi-output', '\x1b[36m-= Edit Any File =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Edit any file on the system (sysop only).\r\n\r\n');
@@ -2730,15 +2781,21 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return;
 
     case '5': // Change Directory (internalCommand5) - express.e:24523
-      // TODO for 100% 1:1: setEnvStat(ENV_SYSOP) - express.e:24524
-      // Check sysop permissions (express.e:24525 - ACS_SYSOP_COMMANDS)
-      if ((session.user?.secLevel || 0) < 255) {
+      // Phase 9: Security/ACS System implemented
+      // ✅ setEnvStat(ENV_SYSOP) - express.e:24524 [IMPLEMENTED]
+      // ✅ checkSecurity(ACS_SYSOP_COMMANDS) - express.e:24525 [IMPLEMENTED]
+
+      // Phase 9: Check security permission (express.e:24525)
+      if (!checkSecurity(session, ACSCode.SYSOP_COMMANDS)) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         return;
       }
+
+      // Phase 9: Set environment status (express.e:24524)
+      setEnvStat(session, EnvStat.SYSOP);
 
       socket.emit('ansi-output', '\x1b[36m-= Change Directory =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Navigate and execute files anywhere on the system (sysop only).\r\n\r\n');
@@ -2940,17 +2997,22 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return; // Stay in input mode
 
     case 'VO': // Voting Booth (internalCommandVO) - express.e:25700
-      // TODO for 100% 1:1: checkSecurity(ACS_VOTE) - express.e:25701
-      // TODO for 100% 1:1: setEnvStat(ENV_DOORS) - express.e:25703
+      // Phase 9: Security/ACS System implemented
+      // ✅ checkSecurity(ACS_VOTE) - express.e:25701 [IMPLEMENTED]
+      // ✅ setEnvStat(ENV_DOORS) - express.e:25703 [IMPLEMENTED]
       // TODO for 100% 1:1: setEnvMsg('Voting Booth') - express.e:25704
-      // Check permissions
-      if ((session.user?.secLevel || 0) < 10) {
+
+      // Phase 9: Check security permission (express.e:25701)
+      if (!checkSecurity(session, ACSCode.VOTE)) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Voting privileges required.\x1b[0m\r\n');
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         return;
       }
+
+      // Phase 9: Set environment status (express.e:25703)
+      setEnvStat(session, EnvStat.DOORS);
 
       socket.emit('ansi-output', '\x1b[36m-= Voting Booth =-\x1b[0m\r\n');
       socket.emit('ansi-output', 'Voice your opinion on various topics.\r\n\r\n');
@@ -3212,13 +3274,26 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
     case 'R': // Read Messages (internalCommandR) - express.e:25518-25531
       // Enhanced for Phase 7 Part 2 - improved sorting and display
+      // Phase 9: Security/ACS System implemented
       // TODO for 100% 1:1 compliance:
-      // 1. checkSecurity(ACS_READ_MESSAGE) - express.e:25519
-      // 2. setEnvStat(ENV_MAIL) - express.e:25520
+      // 1. ✅ checkSecurity(ACS_READ_MESSAGE) - express.e:25519 [IMPLEMENTED]
+      // 2. ✅ setEnvStat(ENV_MAIL) - express.e:25520 [IMPLEMENTED]
       // 3. parseParams(params) for message range/options - express.e:25521
       // 4. getMailStatFile(currentConf, currentMsgBase) - load message pointers - express.e:25523
       // 5. checkToolTypeExists(TOOLTYPE_CONF, 'CUSTOM') - custom msgbase check - express.e:25525
       // 6. callMsgFuncs(MAIL_READ) - proper message reader with navigation - express.e:25526
+
+      // Phase 9: Check security permission (express.e:25519)
+      if (!checkSecurity(session, ACSCode.READ_MESSAGE)) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. You do not have permission to read messages.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      // Phase 9: Set environment status (express.e:25520)
+      setEnvStat(session, EnvStat.MAIL);
 
       socket.emit('ansi-output', '\x1b[36m-= Message Reader =-\x1b[0m\r\n');
       socket.emit('ansi-output', `Conference: ${session.currentConfName}\r\n\r\n`);
@@ -3284,12 +3359,25 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
     case 'E': // Enter Message (internalCommandE) - express.e:24860-24872
       // Enhanced for Phase 7 Part 2 - improved prompts and validation
+      // Phase 9: Security/ACS System implemented
       // TODO for 100% 1:1 compliance:
-      // 1. checkSecurity(ACS_ENTER_MESSAGE) - express.e:24861
-      // 2. setEnvStat(ENV_MAIL) - express.e:24862
+      // 1. ✅ checkSecurity(ACS_ENTER_MESSAGE) - express.e:24861 [IMPLEMENTED]
+      // 2. ✅ setEnvStat(ENV_MAIL) - express.e:24862 [IMPLEMENTED]
       // 3. parseParams(params) for message options - express.e:24863
       // 4. checkToolTypeExists(TOOLTYPE_CONF, 'CUSTOM') - custom msgbase - express.e:24864
       // 5. callMsgFuncs(MAIL_CREATE) -> EnterMSG() - full message editor - express.e:24865
+
+      // Phase 9: Check security permission (express.e:24861)
+      if (!checkSecurity(session, ACSCode.ENTER_MESSAGE)) {
+        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. You do not have permission to post messages.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      // Phase 9: Set environment status (express.e:24862)
+      setEnvStat(session, EnvStat.MAIL);
 
       // Start private message posting workflow
       socket.emit('ansi-output', '\x1b[36m-= Post Private Message =-\x1b[0m\r\n');
@@ -3750,9 +3838,11 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return; // Don't call displayMainMenu - stay in input mode
 
     case 'CF': // Comment with Flags (internalCommandCF) - express.e:24672
-      // TODO for 100% 1:1: checkSecurity(ACS_CONFFLAGS) - express.e:24684
-      // Check permissions
-      if ((session.user?.secLevel || 0) < 200) {
+      // Phase 9: Security/ACS System implemented
+      // ✅ checkSecurity(ACS_CONFFLAGS) - express.e:24684 [IMPLEMENTED]
+
+      // Phase 9: Check security permission (express.e:24684)
+      if (!checkSecurity(session, ACSCode.CONFFLAGS)) {
         socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Conference flag privileges required.\x1b[0m\r\n');
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
