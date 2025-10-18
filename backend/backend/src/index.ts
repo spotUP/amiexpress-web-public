@@ -461,6 +461,17 @@ function loadScreenFile(screenName: string, conferenceId?: number, nodeId: numbe
   return null;
 }
 
+/**
+ * Add ESC character prefix to bare ANSI sequences
+ * Screen files contain [XXm without ESC (0x1B) prefix
+ * This matches original Amiga behavior where ESC was stored as actual byte
+ */
+function addAnsiEscapes(content: string): string {
+  // Match ANSI sequences: [digits;digitsm or [digitm or [H or [2J etc
+  // But NOT [%X] which are variable placeholders
+  return content.replace(/\[(?!%)([0-9;]*[A-Za-z])/g, '\x1b[$1');
+}
+
 // Display a screen file to the user
 // Like express.e displayScreen(screenName) - express.e:28566, 28571, 28586
 function displayScreen(socket: any, session: BBSSession, screenName: string) {
@@ -468,9 +479,12 @@ function displayScreen(socket: any, session: BBSSession, screenName: string) {
 
   if (content) {
     // Parse MCI codes
-    const parsed = parseMciCodes(content, session);
+    let parsed = parseMciCodes(content, session);
 
-    // Send to client (screen files already have ANSI codes and \r\n line endings)
+    // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
+    parsed = addAnsiEscapes(parsed);
+
+    // Send to client
     socket.emit('ansi-output', parsed);
   } else {
     // Fallback if screen not found
