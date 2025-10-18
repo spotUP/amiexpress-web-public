@@ -208,15 +208,20 @@ fetch_render_logs() {
 
     log "Fetching Render deployment logs..."
 
-    # Render CLI requires -r flag for resources and -o json for non-interactive mode
+    # Fetch BUILD logs (where TypeScript errors appear), not just runtime errors
+    # Use -o text for easier parsing of build output
     # Use timeout to prevent hanging (15 second timeout for Render)
-    if timeout 15s render logs -r "$service_id" --limit 200 --level error -o json 2>&1 > "$log_output"; then
-        # Extract just the messages from JSON
+    if timeout 15s render logs -r "$service_id" --type build --limit 200 -o text 2>&1 > "$log_output"; then
         if [ -s "$log_output" ]; then
-            cat "$log_output" | grep -o '"message": "[^"]*"' | cut -d'"' -f4 > "${log_output}.txt" 2>/dev/null || true
-            if [ -s "${log_output}.txt" ]; then
-                mv "${log_output}.txt" "$log_output"
-            fi
+            echo "$log_output"
+            return 0
+        fi
+    fi
+
+    # Fallback: try without --type flag to get all logs
+    info "Trying to fetch all logs as fallback..."
+    if timeout 15s render logs -r "$service_id" --limit 200 -o text 2>&1 > "$log_output"; then
+        if [ -s "$log_output" ]; then
             echo "$log_output"
             return 0
         fi
@@ -242,11 +247,16 @@ detect_build_errors() {
         "error TS"
         "Build failed"
         "build failed"
+        "Build fail"
+        "==> Build failed"
         "Cannot find module"
         "Module not found"
         "SyntaxError"
         "TypeError"
         "ReferenceError"
+        "Property.*does not exist"
+        "has no exported member"
+        "is not assignable to type"
         "ENOENT"
         "npm ERR!"
         "Command failed"
