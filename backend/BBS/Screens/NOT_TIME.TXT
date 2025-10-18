@@ -1,0 +1,22 @@
+[2J[H[36m──────────────────────────────────────────────────────────────────────────────
+    _____         .__
+   /  _  \   _____|__| _________    [33mExpress[0m
+  /  /_\  \ /     \  |/ ___\__  \   [35mTime Restriction[0m
+ /    |    \  Y Y  \  / /_/  > __ \_
+ \____|__  /__|_|  /__\___  (____  /
+         \/      \/  /_____/     \/
+[36m──────────────────────────────────────────────────────────────────────────────[0m
+
+[31mACCESS DENIED![0m
+
+[33mYou are not allowed to access the BBS at this time.[0m
+
+[36mYour account has time restrictions based on:[0m
+  [32m•[0m Time of day
+  [32m•[0m Day of week
+  [32m•[0m Your user level
+
+[33mPlease try again during your allowed access hours.[0m
+[33mContact the sysop if you believe this is an error.[0m
+
+[32mPress any key to disconnect...[0m

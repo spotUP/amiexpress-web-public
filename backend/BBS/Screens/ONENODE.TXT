@@ -1,0 +1,17 @@
+[2J[H[36m──────────────────────────────────────────────────────────────────────────────
+    _____         .__
+   /  _  \   _____|__| _________    [33mExpress[0m
+  /  /_\  \ /     \  |/ ___\__  \   [35mSingle Node Only[0m
+ /    |    \  Y Y  \  / /_/  > __ \_
+ \____|__  /__|_|  /__\___  (____  /
+         \/      \/  /_____/     \/
+[36m──────────────────────────────────────────────────────────────────────────────[0m
+
+[31mALREADY LOGGED IN![0m
+
+[33mYou are already logged into the BBS on another node.[0m
+
+[36mThis system only allows one connection per user.[0m
+[36mPlease log off from your other session first.[0m
+
+[32mPress any key to disconnect...[0m

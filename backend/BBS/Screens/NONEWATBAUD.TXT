@@ -1,0 +1,16 @@
+[2J[H[36m──────────────────────────────────────────────────────────────────────────────
+    _____         .__
+   /  _  \   _____|__| _________    [33mExpress[0m
+  /  /_\  \ /     \  |/ ___\__  \   [35mNo New Users At Baud[0m
+ /    |    \  Y Y  \  / /_/  > __ \_
+ \____|__  /__|_|  /__\___  (____  /
+         \/      \/  /_____/     \/
+[36m──────────────────────────────────────────────────────────────────────────────[0m
+
+[31mSORRY![0m
+
+[33mNew users are not allowed at your current baud rate.[0m
+
+[36mPlease connect at a higher baud rate or contact the sysop.[0m
+
+[32mPress any key to continue...[0m
