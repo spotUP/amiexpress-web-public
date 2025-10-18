@@ -691,6 +691,31 @@ export class Database {
         )
       `);
 
+      // Flagged files table (express.e:2757)
+      // Stores user's flagged files for batch download
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS flagged_files (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          conf_num INTEGER NOT NULL,
+          file_name TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, conf_num, file_name)
+        )
+      `);
+
+      // Command history table (express.e:2669)
+      // Stores user's command history for up-arrow recall
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS command_history (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          history_num INTEGER DEFAULT 0,
+          history_cycle INTEGER DEFAULT 0,
+          commands JSONB DEFAULT '[]',
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       // Create indexes for performance
       await this.createIndexes(client);
     } finally {
@@ -719,6 +744,11 @@ export class Database {
     // User indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(seclevel)`);
+
+    // Flagged files indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_flagged_files_user ON flagged_files(user_id)`);
+
+    // Command history indexes (user_id is already primary key)
   }
 
 

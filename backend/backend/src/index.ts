@@ -311,7 +311,7 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
 }
 
 // Display conference bulletins and trigger conference scan (SCREEN_NODE_BULL + confScan equivalent)
-function displayConferenceBulletins(socket: any, session: BBSSession) {
+async function displayConferenceBulletins(socket: any, session: BBSSession) {
   // In AmiExpress, displayScreen(SCREEN_NODE_BULL) shows node-specific bulletins
   socket.emit('ansi-output', '\r\n\x1b[36m-= Node Bulletins =-\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[33mNode-specific announcements:\x1b[0m\r\n');
@@ -331,11 +331,11 @@ function displayConferenceBulletins(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
 
   // Join default conference (joinConf equivalent)
-  joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
+  await joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
 }
 
 // Join conference function (joinConf equivalent)
-function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number) {
+async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number) {
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
     socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
@@ -357,8 +357,8 @@ function joinConference(socket: any, session: BBSSession, confId: number, msgBas
   socket.emit('ansi-output', `\r\n\x1b[32mCurrent message base: ${messageBase.name}\x1b[0m\r\n`);
 
   // Like express.e:28576-28577 - load flagged files and command history
-  loadFlagged(socket, session);
-  loadHistory(session);
+  await loadFlagged(socket, session);
+  await loadHistory(session);
 
   // Move to menu display
   session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -1497,32 +1497,81 @@ function handleFileDownload(socket: any, session: BBSSession, fileIndex: number)
 }
 
 // Load flagged files for user (express.e:2757)
-function loadFlagged(socket: any, session: BBSSession) {
-  // TODO: Implement flagged files system
-  // In express.e, this reads flagged files from disk
-  // For web version, we'll use database to store flagged files
-  // Format: User has a list of files marked for download
+// In express.e, reads from BBS:Partdownload/flagged{slot} and dump{slot}
+// For web version, we store in database but maintain exact behavior
+async function loadFlagged(socket: any, session: BBSSession) {
+  try {
+    // Initialize flaggedFiles list if not exists
+    if (!session.tempData) {
+      session.tempData = {};
+    }
+    if (!session.tempData.flaggedFiles) {
+      session.tempData.flaggedFiles = [];
+    }
 
-  // Stub implementation - check if user has flagged files in session
-  if (session.tempData?.flaggedFiles && session.tempData.flaggedFiles.length > 0) {
-    socket.emit('ansi-output', '\r\n** Flagged File(s) Exist **\r\n');
-    socket.emit('ansi-output', '\x07'); // BELL character
+    // Load user's flagged files from database
+    // Format: array of {confNum: number, fileName: string}
+    const result = await db.query(
+      'SELECT conf_num, file_name FROM flagged_files WHERE user_id = $1',
+      [session.user!.id]
+    );
+
+    // Add to session (like express.e's addFlagItem)
+    result.rows.forEach(row => {
+      session.tempData.flaggedFiles.push({
+        confNum: row.conf_num,
+        fileName: row.file_name
+      });
+    });
+
+    // Like express.e:2795 - display notification if files exist
+    if (session.tempData.flaggedFiles.length > 0) {
+      socket.emit('ansi-output', '\r\n** Flagged File(s) Exist **\r\n');
+      socket.emit('ansi-output', '\x07'); // sendBELL()
+    }
+  } catch (error) {
+    console.error('Error loading flagged files:', error);
+    // Fail silently like express.e would if file doesn't exist
   }
 }
 
 // Load command history for user (express.e:2669)
-function loadHistory(session: BBSSession) {
-  // TODO: Implement command history system
-  // In express.e, this reads command history from disk
-  // For web version, we'll use session storage
-  // Format: historyBuf contains list of previously entered commands
+// In express.e, reads from {historyFolder}/history{slot}
+// For web version, we store in database but maintain exact behavior
+async function loadHistory(session: BBSSession) {
+  try {
+    // Initialize history storage
+    if (!session.tempData) {
+      session.tempData = {};
+    }
 
-  // Stub implementation - initialize history if not exists
-  if (!session.tempData) {
-    session.tempData = {};
-  }
-  if (!session.tempData.commandHistory) {
-    session.tempData.commandHistory = [];
+    session.tempData.historyBuf = [];
+    session.tempData.historyNum = 0;
+    session.tempData.historyCycle = 0;
+
+    // Load from database
+    const result = await db.query(
+      'SELECT history_num, history_cycle, commands FROM command_history WHERE user_id = $1',
+      [session.user!.id]
+    );
+
+    if (result.rows.length > 0) {
+      const history = result.rows[0];
+      session.tempData.historyNum = history.history_num || 0;
+      session.tempData.historyCycle = history.history_cycle || 0;
+
+      // commands is stored as JSON array
+      if (history.commands) {
+        session.tempData.historyBuf = Array.isArray(history.commands)
+          ? history.commands
+          : JSON.parse(history.commands);
+      }
+    }
+  } catch (error) {
+    console.error('Error loading command history:', error);
+    // Fail silently like express.e would if file doesn't exist
+    session.tempData = session.tempData || {};
+    session.tempData.historyBuf = [];
     session.tempData.historyNum = 0;
     session.tempData.historyCycle = 0;
   }
@@ -1684,7 +1733,7 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
     try {
       // Any key continues to next state
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
-        displayConferenceBulletins(socket, session);
+        await displayConferenceBulletins(socket, session);
       } else if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
         // Like AmiExpress: after command completes, set menuPause=TRUE and display menu
         session.menuPause = true;
@@ -1973,7 +2022,7 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
     }
 
     // Join the selected conference
-    if (joinConference(socket, session, confId, 1)) { // Default to message base 1
+    if (await joinConference(socket, session, confId, 1)) { // Default to message base 1
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
@@ -2871,7 +2920,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
         return;
       } else {
         // Join previous conference
-        joinConference(socket, session, prevConf, 1);
+        await joinConference(socket, session, prevConf, 1);
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
@@ -2903,7 +2952,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
         return;
       } else {
         // Join next conference
-        joinConference(socket, session, nextConf, 1);
+        await joinConference(socket, session, nextConf, 1);
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
@@ -2982,7 +3031,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
         const confId = parseInt(params.trim());
         const selectedConf = conferences.find(conf => conf.id === confId);
         if (selectedConf) {
-          joinConference(socket, session, confId, 1);
+          await joinConference(socket, session, confId, 1);
           socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
           session.menuPause = false;
           session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
