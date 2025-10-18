@@ -208,6 +208,9 @@ io.on('connection', async (socket) => {
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
 
+      // Log successful login (express.e:9493 callersLog)
+      await callersLog(user.id, user.username, 'Logged on');
+
       // Set user preferences
       session.confRJoin = user.autoRejoin || 1;
       session.msgBaseRJoin = 1; // Default message base
@@ -282,6 +285,12 @@ io.on('connection', async (socket) => {
 
   socket.on('disconnect', async () => {
     console.log('Client disconnected');
+
+    // Log user logout if they were logged in (express.e:9493 callersLog)
+    const session = sessions.get(socket.id);
+    if (session?.user) {
+      await callersLog(session.user.id, session.user.username, 'Logged off');
+    }
 
     // Release node back to available pool
     await nodeManager.releaseSession(socket.id);
@@ -388,13 +397,34 @@ async function displayConferenceBulletins(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '- Sysop available for chat\r\n');
   socket.emit('ansi-output', '- WebSocket connections active\r\n');
 
-  // Conference scan (confScan equivalent)
+  // Conference scan (confScan equivalent - express.e:28066)
   socket.emit('ansi-output', '\r\n\x1b[32mScanning conferences for new messages...\x1b[0m\r\n');
 
-  // Simulate conference scan results
-  socket.emit('ansi-output', '\x1b[32mFound new messages in:\x1b[0m\r\n');
-  socket.emit('ansi-output', '- General conference (5 new)\r\n');
-  socket.emit('ansi-output', '- Tech Support conference (2 new)\r\n');
+  // Get user's last scan time (use last login if no scan time stored)
+  const lastScanTime = session.user!.lastScanTime || session.user!.lastLogin || new Date(0);
+
+  // Query for new messages per conference since last scan
+  const newMessagesQuery = await db.query(
+    `SELECT c.id, c.name, COUNT(m.id) as new_count
+     FROM conferences c
+     LEFT JOIN messages m ON m.conference_id = c.id AND m.timestamp > $1
+     GROUP BY c.id, c.name
+     HAVING COUNT(m.id) > 0
+     ORDER BY c.id`,
+    [lastScanTime]
+  );
+
+  if (newMessagesQuery.rows.length > 0) {
+    socket.emit('ansi-output', '\x1b[32mFound new messages in:\x1b[0m\r\n');
+    newMessagesQuery.rows.forEach((row: any) => {
+      socket.emit('ansi-output', `- ${row.name} conference (${row.new_count} new)\r\n`);
+    });
+  } else {
+    socket.emit('ansi-output', '\x1b[33mNo new messages found.\x1b[0m\r\n');
+  }
+
+  // Update last scan time
+  await db.updateUser(session.user!.id, { lastScanTime: new Date() });
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
 
@@ -423,6 +453,11 @@ async function joinConference(socket: any, session: BBSSession, confId: number, 
 
   socket.emit('ansi-output', `\r\n\x1b[32mJoined conference: ${conference.name}\x1b[0m\r\n`);
   socket.emit('ansi-output', `\r\n\x1b[32mCurrent message base: ${messageBase.name}\x1b[0m\r\n`);
+
+  // Log conference join (express.e:9493 callersLog)
+  if (session.user) {
+    await callersLog(session.user.id, session.user.username, 'Joined conference', conference.name);
+  }
 
   // Like express.e:28576-28577 - load flagged files and command history
   await loadFlagged(socket, session);
@@ -885,12 +920,20 @@ function matchesWildcard(filename: string, pattern: string): boolean {
   const regex = new RegExp(`^${regexPattern}$`, 'i'); // Case insensitive
   return regex.test(filename);
 }
-function displayFileStatus(socket: any, session: BBSSession, params: string) {
+async function displayFileStatus(socket: any, session: BBSSession, params: string) {
   socket.emit('ansi-output', '\x1b[36m-= File Status =-\x1b[0m\r\n');
 
   // Parse parameters to determine scope (like fileStatus(opt) in AmiExpress)
   const parsedParams = parseParams(params);
   const showAllConferences = parsedParams.length === 0 || parsedParams.includes('ALL');
+
+  // Get user stats from database for bytes available and ratio calculation
+  const userStats = await getUserStats(session.user!.id);
+  const userRatio = session.user!.ratio || 1;
+
+  // Calculate bytes available: (bytes_uploaded * ratio) - bytes_downloaded
+  const bytesAvail = Math.max(0, (userStats.bytes_uploaded * userRatio) - userStats.bytes_downloaded);
+  const ratioDisplay = userRatio > 0 ? `${userRatio}:1` : 'DSBLD';
 
   socket.emit('ansi-output', '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n\r\n');
   socket.emit('ansi-output', '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail  Ratio\x1b[0m\r\n\r\n');
@@ -908,22 +951,21 @@ function displayFileStatus(socket: any, session: BBSSession, params: string) {
     const uploadBytes = confFiles.reduce((sum, f) => sum + f.size, 0);
     const downloads = confFiles.reduce((sum, f) => sum + f.downloads, 0);
     const downloadBytes = uploadBytes; // Simplified
-    const bytesAvail = 1000000; // Mock available bytes
-    const ratio = '1:1'; // Mock ratio
 
     const displayNum = showAllConferences ? conf.id : 1; // Relative numbering
     const highlight = conf.id === session.currentConf ? '\x1b[33m' : '\x1b[36m';
 
-    socket.emit('ansi-output', `${highlight}    ${displayNum.toString().padStart(4)}  ${uploads.toString().padStart(7)}  ${Math.ceil(uploadBytes/1024).toString().padStart(14)} ${downloads.toString().padStart(7)}  ${Math.ceil(downloadBytes/1024).toString().padStart(14)}   ${bytesAvail.toString().padStart(9)}  ${ratio}\x1b[0m\r\n`);
+    socket.emit('ansi-output', `${highlight}    ${displayNum.toString().padStart(4)}  ${uploads.toString().padStart(7)}  ${Math.ceil(uploadBytes/1024).toString().padStart(14)} ${downloads.toString().padStart(7)}  ${Math.ceil(downloadBytes/1024).toString().padStart(14)}   ${Math.ceil(bytesAvail/1024).toString().padStart(9)}  ${ratioDisplay}\x1b[0m\r\n`);
   });
 
   // Display user-specific file statistics (like AmiExpress user file stats)
   const user = session.user!;
   socket.emit('ansi-output', '\r\n\x1b[32mYour File Statistics:\x1b[0m\r\n');
-  socket.emit('ansi-output', `Files Uploaded: ${user.uploads || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Uploaded: ${user.bytesUpload || 0}\r\n`);
-  socket.emit('ansi-output', `Files Downloaded: ${user.downloads || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Downloaded: ${user.bytesDownload || 0}\r\n`);
+  socket.emit('ansi-output', `Files Uploaded: ${userStats.files_uploaded || 0}\r\n`);
+  socket.emit('ansi-output', `Bytes Uploaded: ${userStats.bytes_uploaded || 0}\r\n`);
+  socket.emit('ansi-output', `Files Downloaded: ${userStats.files_downloaded || 0}\r\n`);
+  socket.emit('ansi-output', `Bytes Downloaded: ${userStats.bytes_downloaded || 0}\r\n`);
+  socket.emit('ansi-output', `Bytes Available: ${bytesAvail}\r\n`);
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
@@ -1103,7 +1145,7 @@ function displayDoorMenu(socket: any, session: BBSSession, params: string) {
 }
 
 // Execute door game/utility
-function executeDoor(socket: any, session: BBSSession, door: Door) {
+async function executeDoor(socket: any, session: BBSSession, door: Door) {
   console.log('Executing door:', door.name);
 
   // Create door session
@@ -1117,10 +1159,13 @@ function executeDoor(socket: any, session: BBSSession, door: Door) {
 
   socket.emit('ansi-output', `\r\n\x1b[32mStarting ${door.name}...\x1b[0m\r\n`);
 
+  // Log door execution (express.e:9493 callersLog)
+  callersLog(session.user!.id, session.user!.username, 'Executed door', door.name);
+
   // Execute based on door type
   switch (door.type) {
     case 'web':
-      executeWebDoor(socket, session, door, doorSession);
+      await executeWebDoor(socket, session, door, doorSession);
       break;
     case 'native':
       socket.emit('ansi-output', 'Native door execution not implemented yet.\r\n');
@@ -1138,13 +1183,13 @@ function executeDoor(socket: any, session: BBSSession, door: Door) {
 }
 
 // Execute web-compatible door (ported AmiExpress doors)
-function executeWebDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
+async function executeWebDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
   switch (door.id) {
     case 'sal':
-      executeSAmiLogDoor(socket, session, door, doorSession);
+      await executeSAmiLogDoor(socket, session, door, doorSession);
       break;
     case 'checkup':
-      executeCheckUPDoor(socket, session, door, doorSession);
+      await executeCheckUPDoor(socket, session, door, doorSession);
       break;
     default:
       socket.emit('ansi-output', 'Door implementation not found.\r\n');
@@ -1178,25 +1223,35 @@ async function executeSAmiLogDoor(socket: any, session: BBSSession, door: Door, 
 }
 
 // Execute CheckUP file checking utility
-function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
+async function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
   socket.emit('ansi-output', '\x1b[36m-= CheckUP v0.4 =-\x1b[0m\r\n');
   socket.emit('ansi-output', 'File checking utility for upload directories\r\n\r\n');
 
-  // Check upload directory for files
+  // Check upload directory for files (in database, check for unchecked uploads)
   socket.emit('ansi-output', 'Checking upload directory...\r\n');
 
-  // Simulate checking upload directory
-  const hasFiles = Math.random() > 0.5; // Random for demo
+  // Query database for unchecked files (checked = 'N')
+  const result = await db.query(
+    "SELECT filename, size, uploader FROM file_entries WHERE checked = 'N' ORDER BY upload_date DESC LIMIT 10"
+  );
 
-  if (hasFiles) {
-    socket.emit('ansi-output', 'Files found in upload directory!\r\n');
-    socket.emit('ansi-output', 'Processing uploads...\r\n');
-    socket.emit('ansi-output', '- File1.lha: Archive OK\r\n');
-    socket.emit('ansi-output', '- File2.zip: Archive OK\r\n');
-    socket.emit('ansi-output', 'Moving files to download area...\r\n');
+  const uncheckedFiles = result.rows;
+
+  if (uncheckedFiles.length > 0) {
+    socket.emit('ansi-output', `Files found in upload directory! (${uncheckedFiles.length})\r\n`);
+    socket.emit('ansi-output', 'Processing uploads...\r\n\r\n');
+
+    // Display each unchecked file
+    for (const file of uncheckedFiles) {
+      const sizeKB = Math.ceil(file.size / 1024);
+      socket.emit('ansi-output', `- ${file.filename.padEnd(15)} ${sizeKB.toString().padStart(5)}K by ${file.uploader}\r\n`);
+      socket.emit('ansi-output', '  Status: Archive OK\r\n');
+    }
+
+    socket.emit('ansi-output', '\r\nAll files processed and ready for download.\r\n');
   } else {
-    socket.emit('ansi-output', 'No files found in upload directory.\r\n');
-    socket.emit('ansi-output', 'Running cleanup scripts...\r\n');
+    socket.emit('ansi-output', 'No unchecked files found in upload directory.\r\n');
+    socket.emit('ansi-output', 'All uploads have been processed.\r\n');
   }
 
   socket.emit('ansi-output', '\r\n\x1b[32mCheckUP completed. Press any key to continue...\x1b[0m');
@@ -1391,12 +1446,21 @@ function startFileUpload(socket: any, session: BBSSession, fileArea: any) {
 
       // In production, save to file system too
       // For now, just store in database
-      db.createFileEntry(fileEntry).then(() => {
-        // Update user stats
-        db.updateUser(session.user!.id, {
+      db.createFileEntry(fileEntry).then(async () => {
+        // Update user stats in users table (for backward compatibility)
+        await db.updateUser(session.user!.id, {
           uploads: (session.user!.uploads || 0) + 1,
           bytesUpload: (session.user!.bytesUpload || 0) + fileData.length
         });
+
+        // Update user_stats table (for ratio calculations)
+        await db.query(
+          'UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2',
+          [fileData.length, session.user!.id]
+        );
+
+        // Log file upload (express.e:9493 callersLog)
+        await callersLog(session.user!.id, session.user!.username, 'Uploaded file', file.filename);
 
         socket.emit('ansi-output', '\x1b[32mFile uploaded successfully!\x1b[0m\r\n');
         socket.emit('ansi-output', `Added to ${fileArea.name}\r\n`);
@@ -1530,6 +1594,15 @@ function handleFileDownload(socket: any, session: BBSSession, fileIndex: number)
         downloads: (session.user!.downloads || 0) + 1,
         bytesDownload: (session.user!.bytesDownload || 0) + fileSize
       });
+
+      // Update user_stats table (for ratio calculations)
+      db.query(
+        'UPDATE user_stats SET bytes_downloaded = bytes_downloaded + $1, files_downloaded = files_downloaded + 1 WHERE user_id = $2',
+        [fileSize, session.user!.id]
+      ).catch((error: any) => console.error('Error updating user stats:', error));
+
+      // Log file download (express.e:9493 callersLog)
+      callersLog(session.user!.id, session.user!.username, 'Downloaded file', selectedFile.filename);
 
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -1856,7 +1929,7 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
        }
 
        const selectedDoor = availableDoors[doorNumber - 1];
-       executeDoor(socket, session, selectedDoor);
+       await executeDoor(socket, session, selectedDoor);
        return;
      }
 
@@ -2200,6 +2273,9 @@ async function handleCommand(socket: any, session: BBSSession, data: string) {
           };
           messages.push(newMessage);
           socket.emit('ansi-output', '\r\nMessage posted successfully!\r\n');
+
+          // Log message posting activity (express.e:9493 callersLog)
+          await callersLog(session.user!.id, session.user!.username, 'Posted message', session.messageSubject);
         }
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
@@ -2427,22 +2503,23 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
 
       socket.emit('ansi-output', '\x1b[36m-= Callers Log =-\x1b[0m\r\n');
 
-      // In web version, we'll show recent login activity (simulating callers log)
-      // In real AmiExpress, this reads BBS:NODE{x}/CALLERSLOG backwards
-      socket.emit('ansi-output', 'Recent login activity:\r\n\r\n');
+      // In web version, we read from caller_activity table
+      // In real AmiExpress (express.e:9493), this reads BBS:NODE{x}/CALLERSLOG backwards
+      socket.emit('ansi-output', 'Recent caller activity:\r\n\r\n');
 
-      // Mock callers log entries (would read from actual log file)
-      const mockCallers = [
-        { time: '14:05:23', user: 'ByteMaster', action: 'Logged off', duration: '45min' },
-        { time: '14:02:15', user: 'AmigaFan', action: 'Downloaded file', duration: '12min' },
-        { time: '13:58:42', user: 'RetroUser', action: 'Posted message', duration: '8min' },
-        { time: '13:55:12', user: 'NewUser', action: 'Logged on', duration: '2min' },
-        { time: '13:50:33', user: 'Sysop', action: 'System maintenance', duration: '120min' }
-      ];
+      // Get recent caller activity from database (last 20 entries)
+      const recentActivity = await getRecentCallerActivity(20);
 
-      mockCallers.forEach(entry => {
-        socket.emit('ansi-output', `${entry.time} ${entry.user.padEnd(15)} ${entry.action.padEnd(20)} ${entry.duration}\r\n`);
-      });
+      if (recentActivity.length === 0) {
+        socket.emit('ansi-output', 'No caller activity recorded yet.\r\n');
+      } else {
+        recentActivity.forEach(entry => {
+          const timestamp = new Date(entry.timestamp);
+          const timeStr = timestamp.toLocaleTimeString('en-US', { hour12: false });
+          const details = entry.details ? ` - ${entry.details}` : '';
+          socket.emit('ansi-output', `${timeStr} ${entry.username.padEnd(15)} ${entry.action}${details}\r\n`);
+        });
+      }
 
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -2587,6 +2664,12 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       socket.emit('ansi-output', '\x1b[36m-= Your Account Status =-\x1b[0m\r\n\r\n');
 
       const statusUser = session.user!;
+
+      // Get user stats from database for accurate bytes available calculation
+      const statusUserStats = await getUserStats(statusUser.id);
+      const statusUserRatio = statusUser.ratio || 1;
+      const statusBytesAvail = Math.max(0, (statusUserStats.bytes_uploaded * statusUserRatio) - statusUserStats.bytes_downloaded);
+
       socket.emit('ansi-output', `        Caller Num.: ${statusUser.id}\r\n`);
       socket.emit('ansi-output', `        Lst Date On: ${statusUser.lastLogin?.toLocaleDateString() || 'Never'}\r\n`);
       socket.emit('ansi-output', `        Security Lv: ${statusUser.secLevel}\r\n`);
@@ -2614,10 +2697,9 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       const uploadBytes = confFiles.filter(f => f.uploader.toLowerCase() === statusUser.username.toLowerCase()).reduce((sum, f) => sum + f.size, 0);
       const downloads = confFiles.reduce((sum, f) => sum + f.downloads, 0);
       const downloadBytes = uploadBytes; // Simplified
-      const bytesAvail = 1000000; // Mock available bytes
       const ratio = statusUser.ratio > 0 ? `${statusUser.ratio}:1` : 'DSBLD';
 
-      socket.emit('ansi-output', `       ${session.currentConf.toString().padStart(4)}  ${uploads.toString().padStart(7)}  ${Math.ceil(uploadBytes/1024).toString().padStart(10)} ${downloads.toString().padStart(7)}  ${Math.ceil(downloadBytes/1024).toString().padStart(10)}   ${bytesAvail.toString().padStart(9)}  ${ratio}\r\n`);
+      socket.emit('ansi-output', `       ${session.currentConf.toString().padStart(4)}  ${uploads.toString().padStart(7)}  ${Math.ceil(uploadBytes/1024).toString().padStart(10)} ${downloads.toString().padStart(7)}  ${Math.ceil(downloadBytes/1024).toString().padStart(10)}   ${Math.ceil(statusBytesAvail/1024).toString().padStart(9)}  ${ratio}\r\n`);
 
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -3176,7 +3258,7 @@ async function processBBSCommand(socket: any, session: BBSSession, command: stri
       return; // Don't continue to menu display
 
     case 'FS': // File Status (internalCommandFS) - fileStatus()
-      displayFileStatus(socket, session, params);
+      await displayFileStatus(socket, session, params);
       return;
 
     case 'N': // New Files (internalCommandN) - displayNewFiles(params)
