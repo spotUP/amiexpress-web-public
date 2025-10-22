@@ -1963,11 +1963,15 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'M': // Message Menu (internalCommandM) - express.e:25239
-      // TODO: Implement full message menu from express.e
-      socket.emit('ansi-output', '\x1b[36m-= Message Menu =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Message menu not yet fully implemented.\r\n');
-      socket.emit('ansi-output', 'Use R to read messages, A to post.\r\n');
+    case 'M': // Toggle ANSI Color (internalCommandM) - express.e:25239-25249
+      // 1:1 port: Simple toggle for ANSI color on/off
+      if (session.ansiColour === false || session.ansiColour === undefined) {
+        session.ansiColour = true;
+        socket.emit('ansi-output', '\r\n\x1b[32mAnsi Color On\x1b[0m\r\n');
+      } else {
+        session.ansiColour = false;
+        socket.emit('ansi-output', '\r\nAnsi Color Off\r\n');
+      }
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
