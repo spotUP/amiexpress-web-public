@@ -62,6 +62,10 @@ export interface User {
   topUploadCPS: number;
   topDownloadCPS: number;
   byteLimit: number;
+  // ACS (Access Control System) fields - express.e:8455-8497
+  securityFlags?: string; // String of 'T'/'F'/'?' chars for each permission (87 total)
+  secOverride?: string;   // String of 'T'/'F'/'?' chars to override permissions
+  userFlags: number;      // Bitwise flags (e.g., USER_SCRNCLR)
   created: Date;
   updated: Date;
 }
@@ -387,6 +391,9 @@ export class Database {
           topuploadcps INTEGER DEFAULT 0,
           topdownloadcps INTEGER DEFAULT 0,
           bytelimit BIGINT DEFAULT 0,
+          securityflags TEXT DEFAULT NULL,
+          secoverride TEXT DEFAULT NULL,
+          userflags INTEGER DEFAULT 0,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
