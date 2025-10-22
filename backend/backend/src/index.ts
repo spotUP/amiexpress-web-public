@@ -31,6 +31,20 @@ import {
   setHelpers as setHelpersForDoorHandler,
   setConstants as setConstantsForDoorHandler
 } from './handlers/door.handler';
+import {
+  startSysopPage,
+  displayInternalPager,
+  completePaging,
+  acceptChat,
+  enterChatMode,
+  exitChat,
+  sendChatMessage,
+  toggleSysopAvailable,
+  getChatStatus,
+  setChatState,
+  setConstants as setConstantsForChatHandler,
+  setHelpers as setHelpersForChatHandler
+} from './handlers/chat.handler';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -3826,6 +3840,11 @@ async function initializeData() {
     setHelpersForDoorHandler({ callersLog, getRecentCallerActivity });
     setConstantsForDoorHandler({ LoggedOnSubState });
 
+    // Inject dependencies into chat handler
+    setChatState(chatState);
+    setConstantsForChatHandler({ LoggedOnSubState });
+    setHelpersForChatHandler({ executePagerDoor, displayMainMenu });
+
     console.log('Database initialized with:', {
       conferences: conferences.length,
       messageBases: messageBases.length,
@@ -3840,172 +3859,7 @@ async function initializeData() {
 
 // (initializeDoors now in handlers/door.handler.ts)
 
-// Sysop chat functions (1:1 implementation of AmiExpress chat system)
-
-// startSysopPage() - Initiates sysop paging (like ccom() in AmiExpress)
-function startSysopPage(socket: any, session: BBSSession) {
-  console.log('Starting sysop page for user:', session.user?.username);
-
-  // Create chat session (like pagedFlag in AmiExpress)
-  const chatSession: ChatSession = {
-    id: `chat_${Date.now()}_${session.user?.id}`,
-    userId: session.user!.id,
-    startTime: new Date(),
-    status: 'paging',
-    messages: [],
-    pageCount: 1,
-    lastActivity: new Date()
-  };
-
-  chatState.activeSessions.push(chatSession);
-  chatState.pagingUsers.push(session.user!.id);
-
-  // Log the page (like callersLog in AmiExpress)
-  console.log(`Operator paged at ${new Date().toISOString()} by ${session.user?.username}`);
-
-  // Display paging message (like ccom() output)
-  socket.emit('ansi-output', '\r\n\x1b[32mF1 Toggles chat\r\n');
-
-  // Try to execute pager door first (like runSysCommand('PAGER') in AmiExpress)
-  if (!executePagerDoor(socket, session, chatSession)) {
-    // Fall back to internal pager (like the dots display)
-    displayInternalPager(socket, session, chatSession);
-  }
-}
-
-// (executePagerDoor now in handlers/door.handler.ts)
-
-// displayInternalPager() - Internal pager display (like the dots in ccom())
-function displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession) {
-  const displayTime = new Date().toLocaleTimeString();
-  const sysopName = 'Sysop'; // In real implementation, get from config
-
-  socket.emit('ansi-output', `\r\n${displayTime}\r\n\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
-
-  // Start the paging dots animation (like the FOR loops in ccom())
-  let dotCount = 0;
-  const maxDots = 20;
-
-  const dotInterval = setInterval(() => {
-    socket.emit('ansi-output', ' .');
-
-    // Check for F1 key press (like chatF=1 check in AmiExpress)
-    // In web implementation, this would be handled by client-side key events
-
-    dotCount++;
-    if (dotCount >= maxDots) {
-      clearInterval(dotInterval);
-      // Complete paging process
-      completePaging(socket, session, chatSession);
-    }
-  }, 1000); // 1 second delay like Delay(1) in AmiExpress
-
-  // Store interval for cleanup
-  (session as any).pagingInterval = dotInterval;
-}
-
-// completePaging() - Complete the paging process
-function completePaging(socket: any, session: BBSSession, chatSession: ChatSession) {
-  // Clear any paging interval
-  if ((session as any).pagingInterval) {
-    clearInterval((session as any).pagingInterval);
-    delete (session as any).pagingInterval;
-  }
-
-  socket.emit('ansi-output', '\r\n\r\nThe Sysop has been paged\r\n');
-  socket.emit('ansi-output', 'You may continue using the system\r\n');
-  socket.emit('ansi-output', 'until the sysop answers your request.\r\n\r\n');
-
-  // Update session status (like statMessage in AmiExpress)
-  chatSession.status = 'paging'; // Wait for sysop response
-
-  // Return to menu (like the end of ccom())
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
-  displayMainMenu(socket, session);
-}
-
-// acceptChat() - Sysop accepts chat (like F1 press handling)
-function acceptChat(socket: any, session: BBSSession, chatSession: ChatSession) {
-  console.log('Sysop accepting chat for session:', chatSession.id);
-
-  chatSession.status = 'active';
-  chatSession.sysopId = session.user?.id; // Assuming sysop is accepting
-
-  // Remove from paging users
-  const pagingIndex = chatState.pagingUsers.indexOf(chatSession.userId);
-  if (pagingIndex > -1) {
-    chatState.pagingUsers.splice(pagingIndex, 1);
-  }
-
-  // Display chat start messages (like STARTCHAT.TXT)
-  socket.emit('ansi-output', '\r\n\x1b[32mChat session started!\r\n');
-  socket.emit('ansi-output', 'Type your messages. Press F1 to exit chat.\r\n\r\n');
-
-  // Enter chat mode
-  enterChatMode(socket, session, chatSession);
-}
-
-// enterChatMode() - Enter active chat mode (like chatFlag=TRUE in AmiExpress)
-function enterChatMode(socket: any, session: BBSSession, chatSession: ChatSession) {
-  // Set chat flag (like chatFlag:=TRUE in AmiExpress)
-  (session as any).inChat = true;
-  (session as any).chatSession = chatSession;
-
-  socket.emit('ansi-output', '\x1b[36m[Chat Mode Active]\x1b[0m\r\n');
-  socket.emit('ansi-output', 'You are now in chat with the user.\r\n');
-  socket.emit('ansi-output', 'Press F1 to exit chat.\r\n\r\n');
-}
-
-// exitChat() - Exit chat mode (like F1 exit in AmiExpress)
-function exitChat(socket: any, session: BBSSession) {
-  const chatSession = (session as any).chatSession as ChatSession;
-  if (chatSession) {
-    chatSession.status = 'ended';
-    chatSession.endTime = new Date();
-
-    // Remove from active sessions
-    const sessionIndex = chatState.activeSessions.findIndex(s => s.id === chatSession.id);
-    if (sessionIndex > -1) {
-      chatState.activeSessions.splice(sessionIndex, 1);
-    }
-  }
-
-  // Clear chat state
-  delete (session as any).inChat;
-  delete (session as any).chatSession;
-
-  // Display exit message (like ENDCHAT.TXT)
-  socket.emit('ansi-output', '\r\n\x1b[32mChat session ended.\r\n');
-
-  // Return to normal operation
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
-  displayMainMenu(socket, session);
-}
-
-// sendChatMessage() - Send message in chat (like chat input handling)
-function sendChatMessage(socket: any, session: BBSSession, message: string) {
-  const chatSession = (session as any).chatSession as ChatSession;
-  if (!chatSession || chatSession.status !== 'active') {
-    return;
-  }
-
-  const chatMessage: ChatMessage = {
-    id: `msg_${Date.now()}`,
-    sessionId: chatSession.id,
-    senderId: session.user!.id,
-    senderName: session.user!.username,
-    content: message,
-    timestamp: new Date(),
-    isSysop: session.user?.secLevel === 255 // Assuming 255 = sysop level
-  };
-
-  chatSession.messages.push(chatMessage);
-  chatSession.lastActivity = new Date();
-
-  // Format and display message (like ANSI color handling in AmiExpress)
-  const colorCode = chatMessage.isSysop ? '\x1b[31m' : '\x1b[32m'; // Red for sysop, green for user
-  socket.emit('ansi-output', `${colorCode}${chatMessage.senderName}: ${chatMessage.content}\x1b[0m\r\n`);
-}
+// ===== CHAT HANDLING NOW IN handlers/chat.handler.ts =====
 
 // handleFileDeleteConfirmation() - Confirm and execute file deletion
 function handleFileDeleteConfirmation(socket: any, session: BBSSession, input: string) {
@@ -4106,20 +3960,7 @@ function handleFileMoveConfirmation(socket: any, session: BBSSession, input: str
   });
 }
 
-// toggleSysopAvailable() - Toggle sysop availability (like F7 in AmiExpress)
-function toggleSysopAvailable() {
-  chatState.sysopAvailable = !chatState.sysopAvailable;
-  console.log('Sysop availability toggled to:', chatState.sysopAvailable);
-}
-
-// getChatStatus() - Get current chat status for display
-function getChatStatus(): { available: boolean, pagingCount: number, activeCount: number } {
-  return {
-    available: chatState.sysopAvailable,
-    pagingCount: chatState.pagingUsers.length,
-    activeCount: chatState.activeSessions.filter(s => s.status === 'active').length
-  };
-}
+// (toggleSysopAvailable and getChatStatus now in handlers/chat.handler.ts)
 
 // displayAccountEditingMenu() - Account editing interface (1:1 with AmiExpress account editing)
 function displayAccountEditingMenu(socket: any, session: BBSSession) {
