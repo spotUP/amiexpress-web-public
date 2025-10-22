@@ -10,6 +10,27 @@ import { nodeManager, arexxEngine, protocolManager } from './nodes';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
+import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
+import {
+  displayConferenceBulletins,
+  joinConference,
+  setConferences as setConferencesForConferenceHandler,
+  setMessageBases,
+  setDatabase,
+  setHelpers,
+  setConstants
+} from './handlers/conference.handler';
+import {
+  displayDoorMenu,
+  executeDoor,
+  initializeDoors,
+  executePagerDoor,
+  setDoors,
+  setDoorSessions,
+  setDatabase as setDatabaseForDoorHandler,
+  setHelpers as setHelpersForDoorHandler,
+  setConstants as setConstantsForDoorHandler
+} from './handlers/door.handler';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -398,120 +419,7 @@ const SCREEN_JOINMSGBASE = 'JoinMsgBase';
 
 // Parse MCI codes (Macro Command Interface) in screen files
 // Like express.e parseMci() function
-function parseMciCodes(content: string, session: BBSSession, bbsName: string = 'AmiExpress-Web'): string {
-  let parsed = content;
-
-  // %B - BBS Name
-  parsed = parsed.replace(/%B/g, bbsName);
-
-  // %CF - Current Conference Name
-  parsed = parsed.replace(/%CF/g, session.currentConfName || 'Unknown');
-
-  // %R - Time Remaining (in minutes)
-  parsed = parsed.replace(/%R/g, Math.floor(session.timeRemaining / 60).toString());
-
-  // %D - Current Date
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
-  parsed = parsed.replace(/%D/g, dateStr);
-
-  // %U - Username
-  parsed = parsed.replace(/%U/g, session.user?.username || 'Guest');
-
-  // %N - Node Number (always 1 in web version)
-  parsed = parsed.replace(/%N/g, '1');
-
-  return parsed;
-}
-
-// Load screen file from disk
-// Like express.e displayScreen() - loads from BBS:Node{X}/Screens/ or BBS:Conf{X}/Screens/
-function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0): string | null {
-  // BBS directory structure matches original Amiga AmiExpress
-  // From backend/backend/src, go up two levels to backend/, then into BBS/
-  const baseDir = path.join(__dirname, '../../BBS');
-  const paths = [];
-
-  // Try conference-specific screen first (if provided)
-  if (conferenceId) {
-    // Find the relative conference number (1-based position in conferences array)
-    const confIndex = conferences.findIndex(c => c.id === conferenceId);
-    if (confIndex !== -1) {
-      const relConfNum = confIndex + 1; // Convert to 1-based
-      const confPath = path.join(baseDir, `Conf${String(relConfNum).padStart(2, '0')}`, 'Screens', `${screenName}.TXT`);
-      paths.push(confPath);
-    }
-  }
-
-  // Then try node-specific screen
-  const nodePath = path.join(baseDir, `Node${nodeId}`, 'Screens', `${screenName}.TXT`);
-  paths.push(nodePath);
-
-  // Then try default BBS screens
-  const bbsPath = path.join(baseDir, 'Screens', `${screenName}.TXT`);
-  paths.push(bbsPath);
-
-  // Try each path in order
-  for (const filePath of paths) {
-    try {
-      if (fs.existsSync(filePath)) {
-        console.log(`✓ Loaded screen ${screenName} from: ${filePath}`);
-        return fs.readFileSync(filePath, 'utf-8');
-      }
-    } catch (error) {
-      console.error(`Error loading screen ${screenName} from ${filePath}:`, error);
-    }
-  }
-
-  console.warn(`Screen file not found: ${screenName} (tried: ${paths.join(', ')})`);
-  return null;
-}
-
-/**
- * Add ESC character prefix to bare ANSI sequences
- * Screen files contain [XXm without ESC (0x1B) prefix
- * This matches original Amiga behavior where ESC was stored as actual byte
- */
-function addAnsiEscapes(content: string): string {
-  // Match ANSI sequences: [digits;digitsm or [digitm or [H or [2J etc
-  // But NOT [%X] which are variable placeholders
-  return content.replace(/\[(?!%)([0-9;]*[A-Za-z])/g, '\x1b[$1');
-}
-
-// Display a screen file to the user
-// Like express.e displayScreen(screenName) - express.e:28566, 28571, 28586
-function displayScreen(socket: any, session: BBSSession, screenName: string) {
-  const content = loadScreenFile(screenName, session.currentConf);
-
-  if (content) {
-    // Parse MCI codes
-    let parsed = parseMciCodes(content, session);
-
-    // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
-    parsed = addAnsiEscapes(parsed);
-
-    // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
-    // First normalize any existing \r\n to \n, then convert all \n to \r\n
-    parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-
-    // Send to client
-    socket.emit('ansi-output', parsed);
-  } else {
-    // Fallback if screen not found
-    console.warn(`Using fallback for screen: ${screenName}`);
-    socket.emit('ansi-output', `\x1b[36m-= ${screenName} =-\x1b[0m\r\n`);
-  }
-}
-
-// Display "Press any key..." pause prompt
-// Like express.e doPause() - express.e:28566, 28571
-function doPause(socket: any, session: BBSSession) {
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  // Note: Actual key wait is handled by client sending keypress event
-  // This just displays the prompt
-}
-
-// ===== END SCREEN FILE SYSTEM =====
+// ===== SCREEN HANDLING NOW IN handlers/screen.handler.ts =====
 
 // Log caller activity (express.e:9493 callersLog)
 // Logs to database like express.e logs to BBS:Node{X}/CallersLog file
@@ -581,87 +489,7 @@ async function getUserStats(userId: string): Promise<any> {
   }
 }
 
-// Display conference bulletins and trigger conference scan (SCREEN_NODE_BULL + confScan equivalent)
-async function displayConferenceBulletins(socket: any, session: BBSSession) {
-  // Phase 8: Use authentic screen file system
-  // Express.e:28566 - displayScreen(SCREEN_BULL)
-  displayScreen(socket, session, SCREEN_BULL);
-  doPause(socket, session);
-
-  // Express.e:28571 - displayScreen(SCREEN_NODE_BULL)
-  displayScreen(socket, session, SCREEN_NODE_BULL);
-  doPause(socket, session);
-
-  // Conference scan (confScan equivalent - express.e:28066)
-  socket.emit('ansi-output', '\r\n\x1b[32mScanning conferences for new messages...\x1b[0m\r\n');
-
-  // Get user's last scan time (use last login if no scan time stored)
-  const lastScanTime = session.user!.lastScanTime || session.user!.lastLogin || new Date(0);
-
-  // Query for new messages per conference since last scan
-  const newMessagesQuery = await db.query(
-    `SELECT c.id, c.name, COUNT(m.id) as new_count
-     FROM conferences c
-     LEFT JOIN messages m ON m.conference_id = c.id AND m.timestamp > $1
-     GROUP BY c.id, c.name
-     HAVING COUNT(m.id) > 0
-     ORDER BY c.id`,
-    [lastScanTime]
-  );
-
-  if (newMessagesQuery.rows.length > 0) {
-    socket.emit('ansi-output', '\x1b[32mFound new messages in:\x1b[0m\r\n');
-    newMessagesQuery.rows.forEach((row: any) => {
-      socket.emit('ansi-output', `- ${row.name} conference (${row.new_count} new)\r\n`);
-    });
-  } else {
-    socket.emit('ansi-output', '\x1b[33mNo new messages found.\x1b[0m\r\n');
-  }
-
-  // Update last scan time
-  await db.updateUser(session.user!.id, { lastScanTime: new Date() });
-
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-
-  // Join default conference (joinConf equivalent)
-  await joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
-}
-
-// Join conference function (joinConf equivalent)
-async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number) {
-  const conference = conferences.find(c => c.id === confId);
-  if (!conference) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
-    return false;
-  }
-
-  const messageBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
-  if (!messageBase) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid message base for this conference!\x1b[0m\r\n');
-    return false;
-  }
-
-  session.currentConf = confId;
-  session.currentMsgBase = msgBaseId;
-  session.currentConfName = conference.name;
-  session.relConfNum = confId; // For simplicity, use absolute conf number as relative
-
-  socket.emit('ansi-output', `\r\n\x1b[32mJoined conference: ${conference.name}\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\r\n\x1b[32mCurrent message base: ${messageBase.name}\x1b[0m\r\n`);
-
-  // Log conference join (express.e:9493 callersLog)
-  if (session.user) {
-    await callersLog(session.user.id, session.user.username, 'Joined conference', conference.name);
-  }
-
-  // Like express.e:28576-28577 - load flagged files and command history
-  await loadFlagged(socket, session);
-  await loadHistory(session);
-
-  // Move to menu display
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
-  return true;
-}
+// ===== CONFERENCE HANDLING NOW IN handlers/conference.handler.ts =====
 
 // Display file area contents (displayIt equivalent in AmiExpress)
 function displayFileAreaContents(socket: any, session: BBSSession, area: any) {
@@ -1307,152 +1135,7 @@ function dirLineNewFile(dirLine: string, searchDate: Date): boolean {
   }
 }
 
-// Display door games menu (DOORS command)
-function displayDoorMenu(socket: any, session: BBSSession, params: string) {
-  socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
-
-  // Get available doors for current user
-  const availableDoors = doors.filter(door =>
-    door.enabled &&
-    (!door.conferenceId || door.conferenceId === session.currentConf) &&
-    (session.user?.secLevel || 0) >= door.accessLevel
-  );
-
-  if (availableDoors.length === 0) {
-    socket.emit('ansi-output', 'No doors are currently available.\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
-
-  socket.emit('ansi-output', 'Available doors:\r\n\r\n');
-
-  availableDoors.forEach((door, index) => {
-    socket.emit('ansi-output', `${index + 1}. ${door.name}\r\n`);
-    socket.emit('ansi-output', `   ${door.description}\r\n`);
-    socket.emit('ansi-output', `   Access Level: ${door.accessLevel}\r\n\r\n`);
-  });
-
-  socket.emit('ansi-output', '\x1b[32mSelect door (1-\x1b[33m' + availableDoors.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.FILE_AREA_SELECT; // Reuse for door selection
-  session.tempData = { doorMode: true, availableDoors };
-}
-
-// Execute door game/utility
-async function executeDoor(socket: any, session: BBSSession, door: Door) {
-  console.log('Executing door:', door.name);
-
-  // Create door session
-  const doorSession: DoorSession = {
-    doorId: door.id,
-    userId: session.user!.id,
-    startTime: new Date(),
-    status: 'running'
-  };
-  doorSessions.push(doorSession);
-
-  socket.emit('ansi-output', `\r\n\x1b[32mStarting ${door.name}...\x1b[0m\r\n`);
-
-  // Log door execution (express.e:9493 callersLog)
-  callersLog(session.user!.id, session.user!.username, 'Executed door', door.name);
-
-  // Execute based on door type
-  switch (door.type) {
-    case 'web':
-      await executeWebDoor(socket, session, door, doorSession);
-      break;
-    case 'native':
-      socket.emit('ansi-output', 'Native door execution not implemented yet.\r\n');
-      break;
-    case 'script':
-      socket.emit('ansi-output', 'Script door execution not implemented yet.\r\n');
-      break;
-    default:
-      socket.emit('ansi-output', 'Unknown door type.\r\n');
-  }
-
-  // Mark session as completed
-  doorSession.endTime = new Date();
-  doorSession.status = 'completed';
-}
-
-// Execute web-compatible door (ported AmiExpress doors)
-async function executeWebDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
-  switch (door.id) {
-    case 'sal':
-      await executeSAmiLogDoor(socket, session, door, doorSession);
-      break;
-    case 'checkup':
-      await executeCheckUPDoor(socket, session, door, doorSession);
-      break;
-    default:
-      socket.emit('ansi-output', 'Door implementation not found.\r\n');
-  }
-}
-
-// Execute SAmiLog callers log viewer door
-async function executeSAmiLogDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
-  socket.emit('ansi-output', '\x1b[36m-= Super AmiLog v3.00 =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Advanced Callers Log Viewer\r\n\r\n');
-
-  // Read from caller_activity table (express.e reads from BBS:NODE{x}/CALLERSLOG)
-  socket.emit('ansi-output', 'Recent callers:\r\n\r\n');
-
-  const recentActivity = await getRecentCallerActivity(20);
-
-  if (recentActivity.length === 0) {
-    socket.emit('ansi-output', 'No caller activity recorded yet.\r\n');
-  } else {
-    recentActivity.forEach(activity => {
-      const timestamp = new Date(activity.timestamp);
-      const timeStr = timestamp.toLocaleTimeString('en-US', { hour12: false });
-      const details = activity.details ? ` - ${activity.details}` : '';
-      socket.emit('ansi-output', `${timeStr} ${activity.username.padEnd(15)} ${activity.action}${details}\r\n`);
-    });
-  }
-
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to exit SAmiLog...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-}
-
-// Execute CheckUP file checking utility
-async function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
-  socket.emit('ansi-output', '\x1b[36m-= CheckUP v0.4 =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'File checking utility for upload directories\r\n\r\n');
-
-  // Check upload directory for files (in database, check for unchecked uploads)
-  socket.emit('ansi-output', 'Checking upload directory...\r\n');
-
-  // Query database for unchecked files (checked = 'N')
-  const result = await db.query(
-    "SELECT filename, size, uploader FROM file_entries WHERE checked = 'N' ORDER BY upload_date DESC LIMIT 10"
-  );
-
-  const uncheckedFiles = result.rows;
-
-  if (uncheckedFiles.length > 0) {
-    socket.emit('ansi-output', `Files found in upload directory! (${uncheckedFiles.length})\r\n`);
-    socket.emit('ansi-output', 'Processing uploads...\r\n\r\n');
-
-    // Display each unchecked file
-    for (const file of uncheckedFiles) {
-      const sizeKB = Math.ceil(file.size / 1024);
-      socket.emit('ansi-output', `- ${file.filename.padEnd(15)} ${sizeKB.toString().padStart(5)}K by ${file.uploader}\r\n`);
-      socket.emit('ansi-output', '  Status: Archive OK\r\n');
-    }
-
-    socket.emit('ansi-output', '\r\nAll files processed and ready for download.\r\n');
-  } else {
-    socket.emit('ansi-output', 'No unchecked files found in upload directory.\r\n');
-    socket.emit('ansi-output', 'All uploads have been processed.\r\n');
-  }
-
-  socket.emit('ansi-output', '\r\n\x1b[32mCheckUP completed. Press any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-}
+// ===== DOOR HANDLING NOW IN handlers/door.handler.ts =====
 
 // Display upload interface (uploadaFile equivalent)
 function displayUploadInterface(socket: any, session: BBSSession, params: string) {
@@ -4106,12 +3789,22 @@ async function initializeData() {
       conferences = await db.getConferences();
     }
 
+    // Inject conferences into screen handler
+    setConferences(conferences);
+
     // Load message bases for all conferences
     messageBases = [];
     for (const conf of conferences) {
       const bases = await db.getMessageBases(conf.id);
       messageBases.push(...bases);
     }
+
+    // Inject dependencies into conference handler
+    setConferencesForConferenceHandler(conferences);
+    setMessageBases(messageBases);
+    setDatabase(db);
+    setHelpers({ callersLog, loadFlagged, loadHistory });
+    setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, LoggedOnSubState });
 
     // Load file areas for all conferences
     fileAreas = [];
@@ -4126,6 +3819,13 @@ async function initializeData() {
     // Initialize doors
     await initializeDoors();
 
+    // Inject dependencies into door handler
+    setDoors(doors);
+    setDoorSessions(doorSessions);
+    setDatabaseForDoorHandler(db);
+    setHelpersForDoorHandler({ callersLog, getRecentCallerActivity });
+    setConstantsForDoorHandler({ LoggedOnSubState });
+
     console.log('Database initialized with:', {
       conferences: conferences.length,
       messageBases: messageBases.length,
@@ -4138,33 +3838,7 @@ async function initializeData() {
   }
 }
 
-// Initialize door collection
-async function initializeDoors() {
-  doors = [
-    {
-      id: 'sal',
-      name: 'Super AmiLog',
-      description: 'Advanced callers log viewer with statistics and filtering',
-      command: 'SAL',
-      path: 'doors/POTTYSRC/PottySrc/Pot/Source/SAL/SAmiLog.s',
-      accessLevel: 10,
-      enabled: true,
-      type: 'web',
-      parameters: ['-r'] // Read-only mode for web
-    },
-    {
-      id: 'checkup',
-      name: 'CheckUP Utility',
-      description: 'File checking utility for upload directories',
-      command: 'CHECKUP',
-      path: 'doors/Y-CU04/tAJcHECKUP/CheckUP',
-      accessLevel: 1,
-      enabled: true,
-      type: 'web',
-      parameters: []
-    }
-  ];
-}
+// (initializeDoors now in handlers/door.handler.ts)
 
 // Sysop chat functions (1:1 implementation of AmiExpress chat system)
 
@@ -4199,12 +3873,7 @@ function startSysopPage(socket: any, session: BBSSession) {
   }
 }
 
-// executePagerDoor() - Execute external pager door (like runSysCommand('PAGER') in AmiExpress)
-function executePagerDoor(socket: any, session: BBSSession, chatSession: ChatSession): boolean {
-  // For now, always fall back to internal pager
-  // In full implementation, this would check for PAGER door and execute it
-  return false;
-}
+// (executePagerDoor now in handlers/door.handler.ts)
 
 // displayInternalPager() - Internal pager display (like the dots in ccom())
 function displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession) {
