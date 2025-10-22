@@ -28,6 +28,12 @@ import {
   handleBulletinInput,
   setBulletinDependencies
 } from './bulletin.handler';
+import {
+  runSysCommand as execSysCommand,
+  runBbsCommand as execBbsCommand,
+  loadCommands,
+  setCommandExecutionDependencies
+} from './command-execution.handler';
 
 // Import security/ACS system
 import { ACSCode } from '../constants/acs-codes';
@@ -42,6 +48,9 @@ let checkSecurity: any;
 let setEnvStat: any;
 let getRecentCallerActivity: any;
 let doors: any[] = [];
+
+// Re-export command loading functions for index.ts
+export { loadCommands, setCommandExecutionDependencies } from './command-execution.handler';
 
 // Constants (injected)
 let SCREEN_MENU: string;
@@ -723,17 +732,23 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
 // Check for System Command (express.e:4813-4819)
 export async function runSysCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
-  // TODO: Implement system command lookup (.cmd files in Conf/SysCmds/)
-  // For now, return FAILURE (command not found)
-  console.log(`[SysCommand] Checking for system command: ${command} - NOT FOUND (not implemented yet)`);
+  // Use the command-execution handler for SYSCMD lookup and execution
+  const result = await execSysCommand(socket, session, command, params);
+
+  // Convert numeric result codes to strings for compatibility
+  if (result === 0) return 'SUCCESS';
+  if (result === -2) return 'NOT_ALLOWED';
   return 'FAILURE';
 }
 
 // Check for BBS Command (express.e:4807-4811)
 export async function runBbsCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
-  // TODO: Implement BBS command lookup (.cmd files in Conf/Cmds/, Node/Cmds/, BBS/Cmds/)
-  // For now, return FAILURE (command not found)
-  console.log(`[BbsCommand] Checking for BBS command: ${command} - NOT FOUND (not implemented yet)`);
+  // Use the command-execution handler for BBSCMD lookup and execution
+  const result = await execBbsCommand(socket, session, command, params);
+
+  // Convert numeric result codes to strings for compatibility
+  if (result === 0) return 'SUCCESS';
+  if (result === -2) return 'NOT_ALLOWED';
   return 'FAILURE';
 }
 

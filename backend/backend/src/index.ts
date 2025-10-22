@@ -112,7 +112,9 @@ import {
   setSetEnvStat,
   setGetRecentCallerActivity as setGetRecentCallerActivityForCommandHandler,
   setDoors as setDoorsForCommandHandler,
-  setConstants as setConstantsForCommandHandler
+  setConstants as setConstantsForCommandHandler,
+  loadCommands,
+  setCommandExecutionDependencies
 } from './handlers/command.handler';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -781,6 +783,11 @@ async function initializeData() {
     setHelpersForDoorHandler({ callersLog, getRecentCallerActivity });
     setConstantsForDoorHandler({ LoggedOnSubState });
 
+    // Load Amiga command definitions (.info and .CMD files)
+    // express.e loads commands at startup for SYSCMD and BBSCMD lookup
+    const bbsBaseDir = path.join(__dirname, '../../BBS');
+    loadCommands(bbsBaseDir, 1, 0); // Load for conference 1, node 0
+
     // Inject dependencies into chat handler
     setChatState(chatState);
     setConstantsForChatHandler({ LoggedOnSubState });
@@ -805,6 +812,9 @@ async function initializeData() {
     setGetRecentCallerActivityForCommandHandler(getRecentCallerActivity);
     setDoorsForCommandHandler(doors);
     setConstantsForCommandHandler({ SCREEN_MENU });
+
+    // Inject dependencies into command execution handler
+    setCommandExecutionDependencies(executeDoor, processBBSCommand);
 
     console.log('Database initialized with:', {
       conferences: conferences.length,
