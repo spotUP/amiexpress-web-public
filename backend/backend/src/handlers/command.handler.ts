@@ -161,12 +161,20 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle substate-specific input
   if (session.subState === LoggedOnSubState.DISPLAY_BULL ||
+      session.subState === LoggedOnSubState.CONF_SCAN ||
       session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
       session.subState === LoggedOnSubState.FILE_LIST) {
     console.log('📋 In display state, continuing to next state');
     try {
       // Any key continues to next state
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
+        // express.e:28555-28648 flow: BULL → confScan
+        // Import and call performConferenceScan from message-scan.handler
+        const { performConferenceScan } = require('./message-scan.handler');
+        await performConferenceScan(socket, session);
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      } else if (session.subState === LoggedOnSubState.CONF_SCAN) {
+        // express.e:28555-28648 flow: confScan → CONF_BULL
         await displayConferenceBulletins(socket, session);
       } else if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
         // Like AmiExpress: after command completes, set menuPause=TRUE and display menu

@@ -26,6 +26,11 @@ import {
   setBulletinDependencies
 } from './handlers/bulletin.handler';
 import {
+  performConferenceScan,
+  displayMailScanScreen,
+  setMessageScanDependencies
+} from './handlers/message-scan.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -475,8 +480,9 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '- Full conference system\r\n');
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
 
-  // Move to next state after bulletin display (mirroring doPause logic)
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // Move to next state after bulletin display
+  // express.e:28555-28648 flow: BULL → NODE_BULL → confScan → CONF_BULL → MENU
+  session.subState = LoggedOnSubState.CONF_SCAN;
 }
 
 // ===== SCREEN FILE SYSTEM (Phase 8) =====
@@ -785,6 +791,9 @@ async function initializeData() {
 
     // Inject dependencies into bulletin handler
     setBulletinDependencies(db, parseMciCodes, addAnsiEscapes);
+
+    // Inject dependencies into message scan handler
+    setMessageScanDependencies(db, displayScreen, parseMciCodes, addAnsiEscapes, loadScreenFile, conferences, messageBases);
 
     // Inject dependencies into command handler
     setDatabaseForCommandHandler(db);
