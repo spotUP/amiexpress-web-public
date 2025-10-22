@@ -44,7 +44,7 @@ export function setMessageScanDependencies(
  * @param conferenceId - Conference ID (1-based)
  * @returns True if user has access
  */
-function checkConfAccess(user: any, conferenceId: number): boolean {
+export function checkConfAccess(user: any, conferenceId: number): boolean {
   if (!user) return false;
 
   // express.e:8506-8511 - Check confAccess string

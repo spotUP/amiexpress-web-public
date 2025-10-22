@@ -29,6 +29,13 @@ import {
   setBulletinDependencies
 } from './bulletin.handler';
 import {
+  handleUserStatsCommand,
+  handleJoinConferenceCommand,
+  handleUploadCommand,
+  handleDownloadCommand,
+  setUserCommandsDependencies
+} from './user-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -795,8 +802,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
   // Map commands to internalCommandX functions from AmiExpress
   console.log('Entering switch statement for command:', command);
   switch (command) {
-    case 'D': // Download File(s) (internalCommandD) - downloadFile(params)
-      displayDownloadInterface(socket, session, params);
+    case 'D': // Download File(s) (internalCommandD) - express.e:24853-24857
+      handleDownloadCommand(socket, session, commandArgs);
       return;
 
     case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302
@@ -806,8 +813,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       displayDownloadInterface(socket, session, params);
       return;
 
-    case 'U': // Upload File(s) (internalCommandU) - uploadaFile(params)
-      displayUploadInterface(socket, session, params);
+    case 'U': // Upload File(s) (internalCommandU) - express.e:25646-25658
+      handleUploadCommand(socket, session);
       return;
 
     case 'UP': // Upload Status / Node Uptime (internalCommandUP) - express.e:25667
@@ -1109,50 +1116,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.tempData = { rzUploadMode: true, fileAreas: uploadFileAreas };
       return; // Stay in input mode
 
-    case 'S': // Status of On-Line User (internalCommandS) - 1:1 with AmiExpress status
-      socket.emit('ansi-output', '\x1b[36m-= Your Account Status =-\x1b[0m\r\n\r\n');
-
-      const statusUser = session.user!;
-
-      // Get user stats from database for accurate bytes available calculation
-      const statusUserStats = await getUserStats(statusUser.id);
-      const statusUserRatio = statusUser.ratio || 1;
-      const statusBytesAvail = Math.max(0, (statusUserStats.bytes_uploaded * statusUserRatio) - statusUserStats.bytes_downloaded);
-
-      socket.emit('ansi-output', `        Caller Num.: ${statusUser.id}\r\n`);
-      socket.emit('ansi-output', `        Lst Date On: ${statusUser.lastLogin?.toLocaleDateString() || 'Never'}\r\n`);
-      socket.emit('ansi-output', `        Security Lv: ${statusUser.secLevel}\r\n`);
-      socket.emit('ansi-output', `        # Times On : ${statusUser.calls}\r\n`);
-      socket.emit('ansi-output', `        Ratio DL/UL: ${statusUser.ratio > 0 ? `${statusUser.ratio}:1` : 'Disabled'}\r\n`);
-      socket.emit('ansi-output', `        Online Baud: WebSocket\r\n`);
-      socket.emit('ansi-output', `        Rate CPS UP: ${statusUser.topUploadCPS || 0}\r\n`);
-      socket.emit('ansi-output', `        Rate CPS DN: ${statusUser.topDownloadCPS || 0}\r\n`);
-      socket.emit('ansi-output', `        Screen  Clr: ${statusUser.ansi ? 'YES' : 'NO'}\r\n`);
-      socket.emit('ansi-output', `        Protocol   : WebSocket\r\n`);
-      socket.emit('ansi-output', `        Sysop Pages Remaining: ${statusUser.secLevel === 255 ? 'Unlimited' : Math.max(0, 3 - (statusUser.chatUsed || 0))}\r\n\r\n`);
-
-      // File statistics by conference
-      socket.emit('ansi-output', `                      Uploads            Downloads\r\n`);
-      socket.emit('ansi-output', `    Conf  Files    KBytes     Files    KBytes     Bytes Avail  Ratio\r\n`);
-      socket.emit('ansi-output', `    ----  -------  ---------- -------  ---------- -----------  -----\r\n`);
-
-      // Show stats for current conference
-      const confFiles = fileEntries.filter(f => {
-        const area = fileAreas.find(a => a.id === f.areaId);
-        return area && area.conferenceId === session.currentConf;
-      });
-
-      const uploads = confFiles.filter(f => f.uploader.toLowerCase() === statusUser.username.toLowerCase()).length;
-      const uploadBytes = confFiles.filter(f => f.uploader.toLowerCase() === statusUser.username.toLowerCase()).reduce((sum, f) => sum + f.size, 0);
-      const downloads = confFiles.reduce((sum, f) => sum + f.downloads, 0);
-      const downloadBytes = uploadBytes; // Simplified
-      const ratio = statusUser.ratio > 0 ? `${statusUser.ratio}:1` : 'DSBLD';
-
-      socket.emit('ansi-output', `       ${session.currentConf.toString().padStart(4)}  ${uploads.toString().padStart(7)}  ${Math.ceil(uploadBytes/1024).toString().padStart(10)} ${downloads.toString().padStart(7)}  ${Math.ceil(downloadBytes/1024).toString().padStart(10)}   ${Math.ceil(statusBytesAvail/1024).toString().padStart(9)}  ${ratio}\r\n`);
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'S': // User Statistics (internalCommandS) - express.e:25540-25568
+      handleUserStatsCommand(socket, session);
       return;
 
     case 'UP': // Display uptime for node (internalCommandUP) - 1:1 with AmiExpress UP
@@ -1735,94 +1700,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       }
       return;
 
-    case 'J': // Join Conference (internalCommandJ) - express.e:25113-25184
-      // TODO for 100% 1:1 compliance:
-      // 1. checkSecurity(ACS_JOIN_CONFERENCE) - express.e:25119
-      // 2. saveMsgPointers(currentConf, currentMsgBase) - express.e:25120
-      // 3. setEnvStat(ENV_JOIN) - express.e:25122
-      // 4. getInverse() for relative conference numbers - express.e:25136
-      // 5. displayScreen(SCREEN_JOINCONF) when no params - express.e:25139
-      // 6. lineInput() with timeout handling - express.e:25141
-      // 7. checkConfAccess(newConf) for permission check - express.e:25151
-      // 8. getConfLocation() and callersLog() for diagnostics - express.e:25156-25159
-      // 9. displayScreen(SCREEN_CONF_JOINMSGBASE) for msgbase - express.e:25164-25165
-      // 10. lineInput() for message base selection - express.e:25167
-
-      socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Available conferences:\r\n');
-      // Display with relative numbers (1-based) like AmiExpress (express.e:25143)
-      conferences.forEach((conf, index) => {
-        socket.emit('ansi-output', `${index + 1}. ${conf.name} - ${conf.description}\r\n`);
-      });
-
-      // Parse params: "J 5" or "J 5.2" or "J 5 2" (express.e:25124-25134)
-      if (params.trim()) {
-        let relConfNum = 0; // Relative conference number (1-based, as user enters)
-        let msgBaseId = 0; // 0 means use first available
-
-        // Check for "5.2" format
-        if (params.includes('.')) {
-          const parts = params.split('.');
-          relConfNum = parseInt(parts[0]);
-          msgBaseId = parseInt(parts[1]) || 0;
-        } else {
-          // Check for "5 2" format or just "5"
-          const parts = params.trim().split(/\s+/);
-          relConfNum = parseInt(parts[0]);
-          if (parts.length > 1) {
-            msgBaseId = parseInt(parts[1]) || 0;
-          }
-        }
-
-        // Convert relative number (1-based) to conference object
-        if (relConfNum < 1 || relConfNum > conferences.length) {
-          socket.emit('ansi-output', `\r\n\x1b[31mInvalid conference number: ${relConfNum}\x1b[0m\r\n`);
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-          return;
-        }
-
-        const selectedConf = conferences[relConfNum - 1]; // Convert to 0-based index
-        const confId = selectedConf.id; // Get actual database ID
-
-        // Get available message bases for this conference
-        const confMessageBases = messageBases.filter(mb => mb.conferenceId === confId);
-        if (confMessageBases.length === 0) {
-          socket.emit('ansi-output', '\r\n\x1b[31mNo message bases available in this conference!\x1b[0m\r\n');
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-          return;
-        }
-
-        // If no message base specified, use first one
-        if (msgBaseId === 0) {
-          msgBaseId = confMessageBases[0].id;
-        }
-
-        // Validate message base
-        const selectedMsgBase = confMessageBases.find(mb => mb.id === msgBaseId);
-        if (!selectedMsgBase) {
-          socket.emit('ansi-output', `\r\n\x1b[31mInvalid message base: ${msgBaseId} for conference ${relConfNum}\x1b[0m\r\n`);
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-          return;
-        }
-
-        // Join the conference
-        await joinConference(socket, session, confId, msgBaseId);
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      } else {
-        // No params - prompt for input
-        socket.emit('ansi-output', `\r\n\x1b[32mConference number (1-${conferences.length}): \x1b[0m`);
-        session.subState = LoggedOnSubState.CONFERENCE_SELECT;
-        return; // Stay in input mode
-      }
-      break; // Continue to menu display
+    case 'J': // Join Conference (internalCommandJ) - express.e:25113-25183
+      await handleJoinConferenceCommand(socket, session, commandArgs);
+      return;
 
     case 'JM': // Join Message Base (internalCommandJM)
       socket.emit('ansi-output', '\x1b[36m-= Join Message Base =-\x1b[0m\r\n');

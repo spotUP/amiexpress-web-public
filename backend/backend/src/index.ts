@@ -28,8 +28,12 @@ import {
 import {
   performConferenceScan,
   displayMailScanScreen,
-  setMessageScanDependencies
+  setMessageScanDependencies,
+  checkConfAccess
 } from './handlers/message-scan.handler';
+import {
+  setUserCommandsDependencies
+} from './handlers/user-commands.handler';
 import {
   displayDoorMenu,
   executeDoor,
@@ -801,6 +805,16 @@ async function initializeData() {
 
     // Inject dependencies into message scan handler
     setMessageScanDependencies(db, displayScreen, parseMciCodes, addAnsiEscapes, loadScreenFile, conferences, messageBases);
+
+    // Inject dependencies into user commands handler
+    setUserCommandsDependencies({
+      conferences,
+      messageBases,
+      db,
+      joinConference,
+      checkConfAccess,
+      displayScreen
+    });
 
     // Inject dependencies into command handler
     setDatabaseForCommandHandler(db);
