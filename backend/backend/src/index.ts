@@ -11,6 +11,7 @@ import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
+import { findSecurityScreen } from './utils/screen-security.util';
 import {
   displayConferenceBulletins,
   joinConference,
@@ -34,6 +35,9 @@ import {
 import {
   setUserCommandsDependencies
 } from './handlers/user-commands.handler';
+import {
+  setSystemCommandsDependencies
+} from './handlers/system-commands.handler';
 import {
   displayDoorMenu,
   executeDoor,
@@ -814,6 +818,12 @@ async function initializeData() {
       joinConference,
       checkConfAccess,
       displayScreen
+    });
+
+    // Inject dependencies into system commands handler
+    setSystemCommandsDependencies({
+      displayScreen,
+      findSecurityScreen
     });
 
     // Inject dependencies into command handler

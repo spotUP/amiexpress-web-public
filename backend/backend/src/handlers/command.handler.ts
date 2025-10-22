@@ -36,6 +36,14 @@ import {
   setUserCommandsDependencies
 } from './user-commands.handler';
 import {
+  handleGoodbyeCommand,
+  handleQuietModeCommand,
+  handleHelpCommand,
+  handleReadMessagesCommand,
+  handleEnterMessageCommand,
+  setSystemCommandsDependencies
+} from './system-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -1818,29 +1826,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleBulletinCommand(socket, session, commandArgs);
       return;
 
-    case 'H': // Help (internalCommandH) - express.e:25071
-      // Like AmiExpress: Display help file for current conference
-      socket.emit('ansi-output', '\x1b[36m-= Help =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Available commands:\r\n\r\n');
-      socket.emit('ansi-output', '< / >    - Previous/Next Conference\r\n');
-      socket.emit('ansi-output', '<< / >>  - Previous/Next Message Base\r\n');
-      socket.emit('ansi-output', 'R        - Read Messages\r\n');
-      socket.emit('ansi-output', 'A        - Post Message\r\n');
-      socket.emit('ansi-output', 'J        - Join Conference\r\n');
-      socket.emit('ansi-output', 'JM       - Join Message Base\r\n');
-      socket.emit('ansi-output', 'F        - File Areas\r\n');
-      socket.emit('ansi-output', 'N        - New Files\r\n');
-      socket.emit('ansi-output', 'D        - Download Files\r\n');
-      socket.emit('ansi-output', 'U        - Upload Files\r\n');
-      socket.emit('ansi-output', 'O        - Page Sysop\r\n');
-      socket.emit('ansi-output', 'C        - Comment to Sysop\r\n');
-      socket.emit('ansi-output', 'X        - Toggle Expert Mode\r\n');
-      socket.emit('ansi-output', 'T        - Time/Date\r\n');
-      socket.emit('ansi-output', 'G        - Goodbye\r\n');
-      socket.emit('ansi-output', '?        - Help\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'H': // Help (internalCommandH) - express.e:25075-25087
+      handleHelpCommand(socket, session, commandArgs);
       return;
 
     case 'M': // Toggle ANSI Color (internalCommandM) - express.e:25239-25249
@@ -1891,35 +1878,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'G': // Goodbye (internalCommandG) - express.e:25047-25069
-      // Enhanced for Phase 7 Part 2 - added logging and better UX
-      // TODO for 100% 1:1 compliance:
-      // 1. parseParams(params) - check for 'Y' auto parameter - express.e:25051-25054
-      // 2. partUploadOK(0) - check for partial uploads - express.e:25057
-      // 3. checkFlagged() - check for flagged files - express.e:25058
-      // 4. saveFlagged() - save flagged file list - express.e:25063
-      // 5. saveHistory() - save command history - express.e:25064
-
-      // Log the logoff event
-      if (session.user) {
-        await callersLog(session.user.id, session.user.username, 'Logged off');
-      }
-
-      // Display goodbye message
-      socket.emit('ansi-output', '\r\n\x1b[36m-= Logging Off =-\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', 'Thank you for calling!\r\n');
-      socket.emit('ansi-output', 'We hope to see you again soon.\r\n\r\n');
-
-      if (session.user) {
-        const sessionTime = Math.floor((Date.now() - session.loginTime) / 60000);
-        socket.emit('ansi-output', `Session time: ${sessionTime} minute(s)\r\n`);
-        socket.emit('ansi-output', `Goodbye, ${session.user.username}!\r\n\r\n`);
-      }
-
-      // Give user time to see message before disconnect
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      socket.disconnect();
+    case 'G': // Goodbye/Logoff (internalCommandG) - express.e:25047-25075
+      handleGoodbyeCommand(socket, session, commandArgs);
       return;
 
     case 'GR': // Greets (internalCommandGreets) - express.e:24411-24423
@@ -1983,26 +1943,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'Q': // Quiet Node (internalCommandQ)
-      socket.emit('ansi-output', '\x1b[36m-= Quiet Node =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This command will change the Quiet Node option for your node.\r\n');
-      socket.emit('ansi-output', 'With this command a user can prevent other users from seeing them on the WHO list.\r\n\r\n');
-
-      // Toggle quiet node status
-      const user = session.user!;
-      user.quietNode = !user.quietNode;
-
-      // Update in database
-      await db.updateUser(user.id, { quietNode: user.quietNode });
-
-      socket.emit('ansi-output', `Quiet node is now ${user.quietNode ? 'ON' : 'OFF'}.\r\n`);
-      socket.emit('ansi-output', user.quietNode ?
-        'Other users will not see you in the online user list.\r\n' :
-        'Other users can now see you in the online user list.\r\n');
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'Q': // Quiet Mode Toggle (internalCommandQ) - express.e:25504-25516
+      handleQuietModeCommand(socket, session);
       return;
 
     case 'X': // Expert Mode Toggle (internalCommandX) - express.e:26113
