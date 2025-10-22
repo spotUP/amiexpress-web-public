@@ -1,0 +1,51 @@
+[2J[H[36m──────────────────────────────────────────────────────────────────────────────
+   ____        __
+  / __ \__  __/ /__  _____
+ / /_/ / / / / / _ \/ ___/
+/ _, _/ /_/ / /  __(__  )
+/_/ |_|\__,_/_/\___/____/
+
+[36m──────────────────────────────────────────────────────────────────────────────[0m
+
+[33m                    Bulletin #3: Rules & Guidelines[0m
+
+[35m──────────────────────────────────────────────────────────────────────────────[0m
+
+[33mGeneral BBS Rules:[0m
+
+[32m 1. Be Respectful[0m
+    [37mTreat all users with respect. No harassment, personal attacks,
+    or offensive language will be tolerated.[0m
+
+[32m 2. Stay On Topic[0m
+    [37mPost messages in the appropriate conference. Off-topic posts
+    may be moved or deleted.[0m
+
+[32m 3. No Illegal Content[0m
+    [37mDo not post, upload, or share any illegal content including
+    pirated software, copyrighted material, or hacking tools.[0m
+
+[32m 4. No Spamming[0m
+    [37mDo not flood the message bases or file areas with repetitive
+    or commercial content.[0m
+
+[32m 5. Use Appropriate Filenames[0m
+    [37mWhen uploading files, use descriptive names and provide
+    accurate descriptions.[0m
+
+[32m 6. Respect Privacy[0m
+    [37mDo not share other users' personal information without
+    their explicit consent.[0m
+
+[32m 7. Report Issues[0m
+    [37mIf you encounter problems or see rule violations,
+    use the Comment to SysOp (C) command to report them.[0m
+
+[33mConsequences:[0m
+  [31m•[0m [37mFirst Offense: Warning[0m
+  [31m•[0m [37mSecond Offense: Temporary access restriction[0m
+  [31m•[0m [37mThird Offense: Permanent ban[0m
+
+[37mBy using this BBS, you agree to follow these rules.[0m
+
+[35m──────────────────────────────────────────────────────────────────────────────[0m

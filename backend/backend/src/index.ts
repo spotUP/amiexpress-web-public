@@ -21,6 +21,11 @@ import {
   setConstants
 } from './handlers/conference.handler';
 import {
+  handleBulletinCommand,
+  handleBulletinInput,
+  setBulletinDependencies
+} from './handlers/bulletin.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -777,6 +782,9 @@ async function initializeData() {
 
     // Inject dependencies into account handler
     setDatabaseForAccountHandler(db);
+
+    // Inject dependencies into bulletin handler
+    setBulletinDependencies(db, parseMciCodes, addAnsiEscapes);
 
     // Inject dependencies into command handler
     setDatabaseForCommandHandler(db);

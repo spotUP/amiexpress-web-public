@@ -23,6 +23,11 @@ import {
 import {
   displayAccountEditingMenu
 } from './account.handler';
+import {
+  handleBulletinCommand,
+  handleBulletinInput,
+  setBulletinDependencies
+} from './bulletin.handler';
 
 // Import security/ACS system
 import { ACSCode } from '../constants/acs-codes';
@@ -1906,14 +1911,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       }
       return;
 
-    case 'B': // Bulletins (internalCommandB) - express.e:24607
-      // TODO: Implement bulletin file system from Bulletins/ directory
-      socket.emit('ansi-output', '\x1b[36m-= Bulletins =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Bulletin system not yet implemented.\r\n');
-      socket.emit('ansi-output', 'This will display bulletins from the Bulletins/ directory.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'B': // Bulletins (internalCommandB) - express.e:24607-24652
+      handleBulletinCommand(socket, session, commandArgs);
       return;
 
     case 'H': // Help (internalCommandH) - express.e:25071

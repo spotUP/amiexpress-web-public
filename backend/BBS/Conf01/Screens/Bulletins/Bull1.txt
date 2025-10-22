@@ -1,0 +1,44 @@
+[2J[H[36m──────────────────────────────────────────────────────────────────────────────
+   _       __     __
+  | |     / /__  / /________  ____ ___  ___
+  | | /| / / _ \/ / ___/ __ \/ __ `__ \/ _ \
+  | |/ |/ /  __/ / /__/ /_/ / / / / / /  __/_
+  |__/|__/\___/_/\___/\____/_/ /_/ /_/\___(_)
+
+[36m──────────────────────────────────────────────────────────────────────────────[0m
+
+[33m                    Bulletin #1: Welcome & System Information[0m
+
+[35m──────────────────────────────────────────────────────────────────────────────[0m
+
+[37mWelcome to [36m%B[37m, [36m%U[37m![0m
+
+[33mSystem Information:[0m
+  [37m• BBS Name:[0m [36m%B[0m
+  [37m• Current Conference:[0m [36m%CF[0m
+  [37m• Your Access Level:[0m [36mStandard User[0m
+  [37m• Time Remaining:[0m [36m%R minutes[0m
+  [37m• Today's Date:[0m [36m%D[0m
+
+[33mWhat is AmiExpress-Web?[0m
+
+[37mThis is a modern web-based recreation of the classic Amiga BBS software,
+AmiExpress. Every feature is being ported 1:1 from the original E language
+sources to TypeScript, maintaining complete authenticity with the original.[0m
+
+[33mFeatures:[0m
+  [32m•[0m [37mAuthentic command system from original AmiExpress[0m
+  [32m•[0m [37mMulti-conference message system[0m
+  [32m•[0m [37mFile areas with upload/download support[0m
+  [32m•[0m [37mDoor game support (XIM, AIM, SIM, etc.)[0m
+  [32m•[0m [37m87-bit ACS (Access Control System)[0m
+  [32m•[0m [37mSecurity-level based screens[0m
+
+[33mGetting Help:[0m
+  [37mType[0m [36m?[0m [37mor[0m [36mHELP[0m [37mat the main menu for command help.[0m
+  [37mType[0m [36mB[0m [37mto read bulletins (like this one!).[0m
+  [37mType[0m [36mX[0m [37mto toggle expert mode (no prompts).[0m
+
+[37mEnjoy your stay on[0m [36m%B[37m![0m
+
+[35m──────────────────────────────────────────────────────────────────────────────[0m

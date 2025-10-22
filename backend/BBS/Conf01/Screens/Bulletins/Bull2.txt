@@ -1,0 +1,44 @@
+[2J[H[36m──────────────────────────────────────────────────────────────────────────────
+   _   __
+  / | / /__ _      _______
+ /  |/ / _ \ | /| / / ___/
+/ /|  /  __/ |/ |/ (__  )_ _
+/_/ |_/\___/|__/|__/____(_|_)
+
+[36m──────────────────────────────────────────────────────────────────────────────[0m
+
+[33m                    Bulletin #2: News & Announcements[0m
+
+[35m──────────────────────────────────────────────────────────────────────────────[0m
+
+[32m[Date: %D][0m
+
+[33mLatest Updates:[0m
+
+[32m• 2025-01-23[0m [37m- Bulletin System Implemented[0m
+  [37mFull 1:1 port of bulletin reading system from express.e:24613-24652.
+  Supports security-level based bulletin files and non-stop mode.[0m
+
+[32m• 2025-01-23[0m [37m- Command Lookup System Complete[0m
+  [37m100% Amiga-compatible .info and .CMD file parsers.
+  Maintains compatibility with real Amiga BBS data imports.[0m
+
+[32m• 2025-01-23[0m [37m- ACS Security System Implemented[0m
+  [37mComplete 87-bit permission system from express.e:8455-8497.
+  All ACS permission codes and checkSecurity() function.[0m
+
+[32m• 2025-01-22[0m [37m- Backend Modularization Complete[0m
+  [37m8 handlers extracted from monolithic code (81% reduction).
+  Improved maintainability and code organization.[0m
+
+[33mComing Soon:[0m
+  [32m•[0m [37mMessage scan system (confScan)[0m
+  [32m•[0m [37mEnhanced message reading features[0m
+  [32m•[0m [37mAdditional door game support[0m
+  [32m•[0m [37mReal-time chat enhancements[0m
+
+[33mHow to Report Issues:[0m
+  [37mFound a bug? Please use command[0m [36mC[0m [37m(Comment to SysOp)
+  or email the system administrator.[0m
+
+[35m──────────────────────────────────────────────────────────────────────────────[0m
