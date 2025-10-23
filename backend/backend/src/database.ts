@@ -325,6 +325,21 @@ export class Database {
     return this.isConnected;
   }
 
+  // Generic query method for custom SQL queries
+  public async query(sql: string, params: any[] = []): Promise<{ rows: any[] }> {
+    if (!this.pool) {
+      throw new Error('Database pool not initialized');
+    }
+
+    try {
+      const result = await this.pool.query(sql, params);
+      return { rows: result.rows };
+    } catch (error) {
+      console.error('Database query error:', error);
+      throw error;
+    }
+  }
+
   // SQLite methods removed - now using PostgreSQL only
 
 

@@ -1300,12 +1300,6 @@ function getActivityFromSubState(subState?: string): string {
   }
 }
 
-server.listen(port, async () => {
-  console.log(`Server running on port ${port}`);
-
-  // Initialize database and load data
-  await initializeData();
-});
 // Global data caches (loaded from database)
 let conferences: any[] = [];
 let messageBases: any[] = [];
@@ -1555,3 +1549,23 @@ async function initializeData() {
 
 // (toggleSysopAvailable and getChatStatus now in handlers/chat.handler.ts)
 // ===== ACCOUNT MANAGEMENT NOW IN handlers/account.handler.ts =====
+
+// ===== SERVER STARTUP =====
+// Initialize database and start server
+// IMPORTANT: Database must be initialized BEFORE accepting connections
+(async () => {
+  try {
+    console.log('Initializing database and loading data...');
+    await initializeData();
+    console.log('✅ Database initialization complete');
+
+    // Now start accepting connections
+    server.listen(port, () => {
+      console.log(`✅ Server running on port ${port}`);
+      console.log(`🌐 BBS accessible at http://localhost:${port}/`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+})();
