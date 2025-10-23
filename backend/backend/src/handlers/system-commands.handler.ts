@@ -207,8 +207,8 @@ export function handleReadMessagesCommand(socket: any, session: BBSSession, para
 }
 
 /**
- * Handle E command - Enter Message [STUB]
- * 1:1 port from express.e:24860-24868 internalCommandE()
+ * Handle E command - Enter Message
+ * 1:1 port from express.e:24860-24868 internalCommandE() -> express.e:10749+ enterMSG()
  */
 export function handleEnterMessageCommand(socket: any, session: BBSSession, params: string = ''): void {
   // express.e:24861 - Check ACS_ENTER_MESSAGE permission
@@ -225,18 +225,37 @@ export function handleEnterMessageCommand(socket: any, session: BBSSession, para
   // express.e:24863 - parseParams(params)
   const parsedParams = ParamsUtil.parse(params);
 
-  // express.e:24864-24867 - Call message editor
-  // callMsgFuncs(MAIL_CREATE, currentConf, currentMsgBase)
+  // Initialize message entry state - express.e:10749+ enterMSG()
+  session.tempData = {
+    messageEntry: {
+      toUser: parsedParams.length > 0 ? parsedParams[0] : '',
+      subject: '',
+      isPrivate: false,
+      body: [],
+      currentLine: 0
+    }
+  };
 
-  // TODO: Implement message posting system
+  // Start message entry flow - express.e:10768-10788 (recipient prompt)
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Enter Message'));
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('Message posting system not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('This will allow you to post messages to the current conference/message base.', 'white') + '\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
 
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  // If recipient was provided in params, skip to subject
+  if (session.tempData.messageEntry.toUser && session.tempData.messageEntry.toUser.length > 0) {
+    socket.emit('ansi-output', `${AnsiUtil.colorize('To:', 'cyan')} ${session.tempData.messageEntry.toUser}\r\n`);
+    promptForSubject(socket, session);
+  } else {
+    // Prompt for recipient - express.e:10771
+    socket.emit('ansi-output', `${AnsiUtil.colorize('To:', 'cyan')} ${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Blank', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('ALL', 'yellow')}${AnsiUtil.colorize('?', 'green')} `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_TO;
+  }
+}
+
+/**
+ * Prompt for message subject - express.e:10839-10849
+ */
+function promptForSubject(socket: any, session: BBSSession): void {
+  socket.emit('ansi-output', `${AnsiUtil.colorize('Subject:', 'cyan')} ${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Blank', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('abort', 'yellow')}${AnsiUtil.colorize('?', 'green')} `);
+  session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
 }

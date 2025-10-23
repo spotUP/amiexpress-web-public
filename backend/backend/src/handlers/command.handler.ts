@@ -139,6 +139,12 @@ import {
 // Import security/ACS system
 import { ACSCode } from '../constants/acs-codes';
 import { EnvStat } from '../constants/env-codes';
+import {
+  handleMessageToInput,
+  handleMessageSubjectInput,
+  handleMessagePrivateInput,
+  handleMessageBodyInput
+} from './message-entry.handler';
 
 // Dependencies (injected)
 let db: any;
@@ -593,6 +599,27 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     }
+    return;
+  }
+
+  // Handle message entry substates (E command flow)
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_TO) {
+    handleMessageToInput(socket, session, data.trim());
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
+    handleMessageSubjectInput(socket, session, data.trim());
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_PRIVATE) {
+    handleMessagePrivateInput(socket, session, data.trim());
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_BODY) {
+    await handleMessageBodyInput(socket, session, data);
     return;
   }
 

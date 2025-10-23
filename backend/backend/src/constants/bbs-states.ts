@@ -43,9 +43,11 @@ export enum LoggedOnSubState {
   // Message operations
   READ_MESSAGES = 'read_messages',
   POST_MESSAGE = 'post_message',
-  POST_MESSAGE_SUBJECT = 'post_message_subject',
   POST_MESSAGE_TO = 'post_message_to',
+  POST_MESSAGE_SUBJECT = 'post_message_subject',
+  POST_MESSAGE_PRIVATE = 'post_message_private',
   POST_MESSAGE_BODY = 'post_message_body',
+  POST_MESSAGE_SAVE = 'post_message_save',
 
   // Door operations
   DOOR_SELECT = 'door_select',

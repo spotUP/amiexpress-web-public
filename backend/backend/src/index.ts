@@ -124,6 +124,7 @@ import {
   setGetUserStats,
   setFileMaintenanceDependencies
 } from './handlers/file.handler';
+import { setMessageEntryDependencies } from './handlers/message-entry.handler';
 import {
   displayAccountEditingMenu,
   handleAccountEditing,
@@ -1343,6 +1344,12 @@ async function initializeData() {
       moveFileEntry,
       updateFileDescription,
       getFileAreas
+    });
+
+    // Inject message entry dependencies
+    setMessageEntryDependencies({
+      db,
+      callersLog
     });
 
     // Load some recent messages
