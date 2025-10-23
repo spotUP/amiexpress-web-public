@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
+import { CanvasAddon } from '@xterm/addon-canvas';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 
@@ -40,6 +41,7 @@ function App() {
       allowTransparency: false,
       cursorBlink: true,
       cursorStyle: 'block',
+      cursorInactiveStyle: 'block',
       cols: 80,
       rows: 24,
       scrollback: 0,
@@ -48,16 +50,47 @@ function App() {
       allowProposedApi: true
     });
 
-    // Add canvas addon for better performance and authentic rendering
-    // const canvasAddon = new CanvasAddon();
-    // term.loadAddon(canvasAddon);
-
     // Open terminal in the DOM
     term.open(terminalRef.current);
     terminal.current = term;
 
+    // Add canvas addon for better performance and cursor rendering
+    const canvasAddon = new CanvasAddon();
+    term.loadAddon(canvasAddon);
+
+    // Force cursor blinking immediately after open
+    term.options.cursorBlink = true;
+    term.options.cursorStyle = 'block';
+    term.options.cursorInactiveStyle = 'block';
+
     // Force font size and disable smoothing after terminal is opened
     setTimeout(() => {
+      // Re-apply theme to ensure cursor colors are applied
+      term.options.theme = {
+        background: '#000000',
+        foreground: '#ffffff',
+        cursor: '#ff0000',
+        black: '#000000',
+        red: '#ff0000',
+        green: '#00ff00',
+        yellow: '#ffff00',
+        blue: '#0000ff',
+        magenta: '#ff00ff',
+        cyan: '#00ffff',
+        white: '#ffffff',
+        brightBlack: '#808080',
+        brightRed: '#ff8080',
+        brightGreen: '#80ff80',
+        brightYellow: '#ffff80',
+        brightBlue: '#8080ff',
+        brightMagenta: '#ff80ff',
+        brightCyan: '#80ffff',
+        brightWhite: '#ffffff'
+      };
+
+      term.options.cursorBlink = true;
+      term.options.cursorStyle = 'block';
+      term.options.cursorInactiveStyle = 'block';
       term.options.fontSize = 16;
       // Try to disable font smoothing programmatically
       const termElement = terminalRef.current?.querySelector('.xterm');
@@ -237,7 +270,7 @@ function App() {
       term.focus();
     });
 
-    // Cleanup
+    // Cleanup on unmount
     return () => {
       term.dispose();
       ws.disconnect();
