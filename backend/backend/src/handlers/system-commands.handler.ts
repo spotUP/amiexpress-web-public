@@ -169,41 +169,14 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
 }
 
 /**
- * Handle R command - Read Messages [STUB]
+ * Handle R command - Read Messages
  * 1:1 port from express.e:25518-25532 internalCommandR()
+ * Implementation in messaging.handler.ts
  */
-export function handleReadMessagesCommand(socket: any, session: BBSSession, params: string = ''): void {
-  // express.e:25519 - Check ACS_READ_MESSAGE permission
-  if (!checkSecurity(session.user, ACSPermission.READ_MESSAGE)) {
-    ErrorHandler.permissionDenied(socket, 'read messages', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  // express.e:25520 - setEnvStat(ENV_MAIL)
-  console.log('[ENV] Mail - Read');
-
-  // express.e:25521 - parseParams(params)
-  const parsedParams = ParamsUtil.parse(params);
-
-  // express.e:25523 - getMailStatFile(currentConf, currentMsgBase)
-  // This loads message base statistics
-
-  // express.e:25525-25530 - Call message reader
-  // callMsgFuncs(MAIL_READ, currentConf, currentMsgBase)
-
-  // TODO: Implement message reading system
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Read Messages'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('Message reading system not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('This will display messages in the current conference/message base.', 'white') + '\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+export async function handleReadMessagesCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
+  // Import and call the full implementation
+  const { handleReadMessagesFullCommand } = await import('./messaging.handler');
+  await handleReadMessagesFullCommand(socket, session, params);
 }
 
 /**

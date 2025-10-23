@@ -12,30 +12,18 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 
 // Dependencies (injected)
-let _setEnvStat: any;
-let _messages: any[] = [];
-let _getMailStatFile: any;
-let _loadMsgPointers: any;
-let _validatePointers: any;
-let _updateReadPointer: any;
+let _db: any;
+let _callersLog: any;
 
 /**
  * Dependency injection setter
  */
 export function setMessagingDependencies(deps: {
-  setEnvStat: any;
-  messages: any[];
-  getMailStatFile: any;
-  loadMsgPointers: any;
-  validatePointers: any;
-  updateReadPointer: any;
+  db: any;
+  callersLog: any;
 }) {
-  _setEnvStat = deps.setEnvStat;
-  _messages = deps.messages;
-  _getMailStatFile = deps.getMailStatFile;
-  _loadMsgPointers = deps.loadMsgPointers;
-  _validatePointers = deps.validatePointers;
-  _updateReadPointer = deps.updateReadPointer;
+  _db = deps.db;
+  _callersLog = deps.callersLog;
 }
 
 /**
@@ -58,28 +46,15 @@ export async function handleReadMessagesFullCommand(
     return;
   }
 
-  // Set environment status - express.e:25520
-  _setEnvStat(session, EnvStat.MAIL);
+  console.log('[ENV] Mail - Read');
 
-  console.log('[ENV] Mail');
+  // Get messages from database for current conference and message base
+  const messages = await _db.getMessages(session.currentConf || 1, session.currentMsgBase || 1, {
+    privateOnly: false,
+    userId: session.user?.username
+  });
 
-  // Load message pointers - express.e:25523
-  const mailStat = await _getMailStatFile(session.currentConf, session.currentMsgBase);
-  const confBase = await _loadMsgPointers(session.user.id, session.currentConf, session.currentMsgBase);
-
-  // Validate pointers against boundaries - express.e:5037-5049
-  const validatedConfBase = _validatePointers(confBase, mailStat);
-  session.lastMsgReadConf = validatedConfBase.lastMsgReadConf;
-  session.lastNewReadConf = validatedConfBase.lastNewReadConf;
-
-  // Get messages for current conference and message base - sorted by ID (message number)
-  const currentMessages = _messages.filter((msg: any) =>
-    msg.conferenceId === session.currentConf &&
-    msg.messageBaseId === session.currentMsgBase &&
-    (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-  ).sort((a: any, b: any) => a.id - b.id); // Sort by message number
-
-  if (currentMessages.length === 0) {
+  if (messages.length === 0) {
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.colorize('No messages in this area.', 'yellow'));
     socket.emit('ansi-output', '\r\n\r\n');
@@ -91,9 +66,9 @@ export async function handleReadMessagesFullCommand(
 
   // Initialize message reader state
   session.tempData = session.tempData || {};
-  session.tempData.msgReaderMessages = currentMessages;
+  session.tempData.msgReaderMessages = messages;
   session.tempData.msgReaderIndex = 0;
-  session.tempData.msgReaderHighestRead = session.lastMsgReadConf;
+  session.tempData.msgReaderHighestRead = session.lastMsgReadConf || 0;
 
   // Display first message
   await displaySingleMessage(socket, session, 0);

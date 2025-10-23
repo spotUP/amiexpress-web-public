@@ -125,6 +125,7 @@ import {
   setFileMaintenanceDependencies
 } from './handlers/file.handler';
 import { setMessageEntryDependencies } from './handlers/message-entry.handler';
+import { setMessagingDependencies } from './handlers/messaging.handler';
 import {
   displayAccountEditingMenu,
   handleAccountEditing,
@@ -1348,6 +1349,12 @@ async function initializeData() {
 
     // Inject message entry dependencies
     setMessageEntryDependencies({
+      db,
+      callersLog
+    });
+
+    // Inject messaging (message reader) dependencies
+    setMessagingDependencies({
       db,
       callersLog
     });

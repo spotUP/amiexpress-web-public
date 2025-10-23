@@ -623,6 +623,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle message reader navigation (R command)
+  if (session.subState === 'MSG_READER_NAV') {
+    const { handleMessageReaderNav } = await import('./messaging.handler');
+    await handleMessageReaderNav(socket, session, data.trim());
+    return;
+  }
+
   // Handle JM (Join Message Base) input
   if (session.subState === 'JM_INPUT') {
     console.log('📬 In JM input state');
