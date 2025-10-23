@@ -82,6 +82,28 @@ export function parseMciCodes(
   // %C - Number of conferences
   parsed = parsed.replace(/%C/g, conferences.length.toString());
 
+  // %NODELIST - Display all nodes with their status (like reference-board BBS)
+  if (parsed.includes('%NODELIST')) {
+    let nodeList = '';
+    const totalNodes = 8; // Total number of nodes in the system
+    const currentNode = 1; // Current node (we're always on node 1 in web version)
+
+    for (let i = 0; i < totalNodes; i++) {
+      let status = 'Waiting';
+      if (i === currentNode) {
+        status = 'You';
+      } else if (i === 0) {
+        status = 'Sysop';  // Node 0 reserved for sysop
+      } else if (i === 7) {
+        status = 'Shutdown';  // Node 7 shutdown like reference-board
+      }
+
+      nodeList += `Node ${i}:  ${status}\r\n`;
+    }
+
+    parsed = parsed.replace(/%NODELIST/g, nodeList);
+  }
+
   return parsed;
 }
 

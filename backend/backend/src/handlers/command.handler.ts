@@ -277,16 +277,17 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // User pressed key after AWAITSCREEN
       console.log('📋 Connection screen viewed, moving to ANSI prompt');
       session.subState = LoggedOnSubState.ANSI_PROMPT;
-      socket.emit('ansi-output', '\r\n\r\n\x1b[33mDo you support ANSI graphics? (Y/N): \x1b[0m');
+      socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
       return;
     }
 
     if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
       // User answered ANSI prompt
       const answer = data.toUpperCase();
-      if (answer === 'Y' || answer === 'N' || answer === '\r') {
-        const ansiEnabled = (answer === 'Y' || answer === '\r'); // Default to Yes on Enter
-        console.log('📋 ANSI preference set:', ansiEnabled);
+      if (answer === 'A' || answer === 'R' || answer === 'N' || answer === '\r') {
+        // A or Enter = ANSI, R = RIP (treat as ANSI), N = No graphics
+        const ansiEnabled = (answer === 'A' || answer === 'R' || answer === '\r');
+        console.log('📋 Graphics preference set:', ansiEnabled ? 'ANSI/RIP' : 'None');
         session.ansiEnabled = ansiEnabled;
 
         // Move to BBSTITLE screen
@@ -297,7 +298,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         return;
       }
       // Invalid input, re-prompt
-      socket.emit('ansi-output', '\r\n\x1b[31mPlease answer Y or N: \x1b[0m');
+      socket.emit('ansi-output', '\r\nPlease answer A, R, or N: ');
       return;
     }
 
