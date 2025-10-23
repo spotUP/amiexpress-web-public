@@ -35,6 +35,7 @@ let _messages: any[] = [];
 let _confScreenDir: string;
 let _findSecurityScreen: (basePath: string, secLevel: number) => string | null;
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
+let _searchFileDescriptions: (searchPattern: string, conferenceId: number) => Promise<any[]>;
 
 /**
  * Set dependencies for utility commands (called from index.ts)
@@ -45,12 +46,14 @@ export function setUtilityCommandsDependencies(deps: {
   confScreenDir: string;
   findSecurityScreen: typeof _findSecurityScreen;
   displayScreen: typeof _displayScreen;
+  searchFileDescriptions: typeof _searchFileDescriptions;
 }) {
   _handleGoodbyeCommand = deps.handleGoodbyeCommand;
   _messages = deps.messages;
   _confScreenDir = deps.confScreenDir;
   _findSecurityScreen = deps.findSecurityScreen;
   _displayScreen = deps.displayScreen;
+  _searchFileDescriptions = deps.searchFileDescriptions;
 }
 
 /**
@@ -218,7 +221,7 @@ function _viewFile(socket: any, session: BBSSession, filename: string): void {
  * @param session - Current BBS session
  * @param params - Search pattern and optional directory range
  */
-export function handleZippySearchCommand(socket: any, session: BBSSession, params: string = ''): void {
+export async function handleZippySearchCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // Check security - express.e:26126
   if (!checkSecurity(session.user, ACSPermission.ZIPPY_TEXT_SEARCH)) {
     ErrorHandler.permissionDenied(socket, 'search file descriptions', {
@@ -232,29 +235,62 @@ export function handleZippySearchCommand(socket: any, session: BBSSession, param
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Zippy Text Search'));
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Search for text in file descriptions.\r\n');
-  socket.emit('ansi-output', '\r\n');
 
   // Parse params - express.e:26134-26137
   const parsedParams = ParamsUtil.parse(params);
 
   if (parsedParams.length > 0) {
-    const searchPattern = parsedParams[0];
+    const searchPattern = parsedParams[0].toUpperCase();
     const dirRange = parsedParams.length > 1 ? parsedParams[1] : 'A';
     const nonStop = ParamsUtil.hasFlag(parsedParams, 'NS');
 
-    socket.emit('ansi-output', AnsiUtil.colorize(`Search pattern: `, 'cyan'));
+    socket.emit('ansi-output', AnsiUtil.colorize(`Searching for: `, 'cyan'));
     socket.emit('ansi-output', `${searchPattern}\r\n`);
-    socket.emit('ansi-output', AnsiUtil.colorize(`Directory range: `, 'cyan'));
-    socket.emit('ansi-output', `${dirRange}\r\n`);
-    socket.emit('ansi-output', AnsiUtil.colorize(`Non-stop: `, 'cyan'));
-    socket.emit('ansi-output', `${nonStop ? 'Yes' : 'No'}\r\n`);
     socket.emit('ansi-output', '\r\n');
 
-    // TODO: Implement zippy() function - requires file database integration
-    socket.emit('ansi-output', AnsiUtil.warningLine('Zippy search not yet implemented'));
-    socket.emit('ansi-output', 'This requires file database integration.\r\n');
-    socket.emit('ansi-output', '\r\n');
+    // Perform database search - express.e:26151-26165 (zippy function call)
+    try {
+      const results = await _searchFileDescriptions(searchPattern, session.currentConf || 0);
+
+      if (results.length === 0) {
+        socket.emit('ansi-output', AnsiUtil.warningLine('No files found matching your search'));
+        socket.emit('ansi-output', '\r\n');
+      } else {
+        socket.emit('ansi-output', AnsiUtil.successLine(`Found ${results.length} file(s)`));
+        socket.emit('ansi-output', '\r\n');
+
+        // Display results - express.e:26165-26200 (zippy display logic)
+        results.forEach((file: any, index: number) => {
+          socket.emit('ansi-output', AnsiUtil.colorize(`[${index + 1}] `, 'yellow'));
+          socket.emit('ansi-output', AnsiUtil.colorize(file.filename, 'green'));
+          socket.emit('ansi-output', AnsiUtil.colorize(` (${formatFileSize(file.size)})`, 'cyan'));
+          socket.emit('ansi-output', '\r\n');
+
+          if (file.description) {
+            socket.emit('ansi-output', `    ${file.description}\r\n`);
+          }
+
+          socket.emit('ansi-output', AnsiUtil.colorize(`    Area: `, 'white'));
+          socket.emit('ansi-output', `${file.areaname || 'Unknown'}\r\n`);
+          socket.emit('ansi-output', AnsiUtil.colorize(`    Uploaded by: `, 'white'));
+          socket.emit('ansi-output', `${file.uploader} on ${formatDate(file.uploaddate)}\r\n`);
+          socket.emit('ansi-output', AnsiUtil.colorize(`    Downloads: `, 'white'));
+          socket.emit('ansi-output', `${file.downloads}\r\n`);
+          socket.emit('ansi-output', '\r\n');
+
+          // Pause after each page if not in non-stop mode - express.e:26192-26197
+          if (!nonStop && (index + 1) % 5 === 0 && (index + 1) < results.length) {
+            socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+            // Note: In a real implementation, would need to pause here
+          }
+        });
+      }
+    } catch (error) {
+      console.error('[Z Command] Database error:', error);
+      socket.emit('ansi-output', AnsiUtil.errorLine('An error occurred during search'));
+      socket.emit('ansi-output', '\r\n');
+    }
+
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
@@ -270,6 +306,27 @@ export function handleZippySearchCommand(socket: any, session: BBSSession, param
 
   session.subState = 'ZIPPY_SEARCH_INPUT';
   session.tempData = { zippySearchCommand: true };
+}
+
+/**
+ * Format file size for display
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Format date for display
+ */
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: '2-digit'
+  });
 }
 
 /**

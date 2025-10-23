@@ -1015,7 +1015,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'Z': // Zippy Text Search (internalCommandZ) - express.e:26123-26213
-      handleZippySearchCommand(socket, session, commandArgs);
+      await handleZippySearchCommand(socket, session, commandArgs);
       return;
 
     case 'ZOOM': // Zoo Mail (internalCommandZOOM) - express.e:26215-26240

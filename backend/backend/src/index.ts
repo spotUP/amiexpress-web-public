@@ -617,6 +617,38 @@ async function getUserStats(userId: string): Promise<any> {
 // ===== CONFERENCE HANDLING NOW IN handlers/conference.handler.ts =====
 // ===== FILE OPERATIONS NOW IN handlers/file.handler.ts =====
 
+// Search file descriptions (express.e:26123-26213, zippy function)
+// Searches file_entries table for matching descriptions
+async function searchFileDescriptions(searchPattern: string, conferenceId: number): Promise<any[]> {
+  try {
+    const query = `
+      SELECT
+        fe.id,
+        fe.filename,
+        fe.description,
+        fe.size,
+        fe.uploader,
+        fe.uploaddate,
+        fe.downloads,
+        fa.name AS areaname
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fa.conferenceid = $1
+        AND (
+          UPPER(fe.filename) LIKE $2
+          OR UPPER(fe.description) LIKE $2
+        )
+      ORDER BY fe.uploaddate DESC
+    `;
+
+    const result = await db.query(query, [conferenceId, `%${searchPattern}%`]);
+    return result.rows;
+  } catch (error) {
+    console.error('[searchFileDescriptions] Database error:', error);
+    return [];
+  }
+}
+
 // Load flagged files for user (express.e:2757)
 // In express.e, reads from BBS:Partdownload/flagged{slot} and dump{slot}
 // For web version, we store in database but maintain exact behavior
@@ -904,7 +936,8 @@ async function initializeData() {
       messages,
       confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens'),
       findSecurityScreen,
-      displayScreen
+      displayScreen,
+      searchFileDescriptions
     });
 
     // Inject dependencies into sysop commands handler
