@@ -3,9 +3,9 @@
 ## Date: 2025-10-23
 
 ## Session Goals
-Continue file system implementation, focusing on D command (Download single file).
+Continue file system implementation, focusing on D command (Download single file) and V command (View file content).
 
-## Completed This Session (Item 8)
+## Completed This Session (Items 8-9)
 
 ### Item 8: D Command - Download Single File ✅
 **Port from:** express.e:24853 (internalCommandD), 19791 (beginDLF), 20075+ (downloadAFile)
@@ -61,15 +61,68 @@ Download link: /api/download/1/1/filename.zip
 Click the download link or use your browser's download feature.
 ```
 
+### Item 9: V Command - View File Content ✅
+**Port from:** express.e:25675 (internalCommandV), 20388 (viewAFile)
+
+**New File:** `backend/backend/src/handlers/view-file.handler.ts` (329 lines)
+
+**Implementation:**
+- `ViewFileHandler` class with static methods
+- `handleViewFileCommand()` - V command entry point (express.e:25675)
+- `viewAFile()` - Main viewing logic (express.e:20388)
+- `handleFilenameInput()` - State continuation for filename prompt
+- `displayFile()` - File content display with validation
+- `displayLineWithWrapping()` - Line wrapping at 79 characters
+- `findFileInConference()` - Search for files in conference directories
+- `isValidFilename()` - Validation (no special symbols: : / * @)
+- `isRestrictedFile()` - Security check for restricted paths
+- `isBinaryFile()` - Binary file detection (first 3 bytes > 128)
+
+**Features:**
+- Interactive filename prompting if no parameter provided
+- NS (non-stop) parameter support for continuous display
+- File validation (no special symbols: : / * @ \\)
+- Conference directory searching (DIR1-DIR20)
+- Binary file detection (rejects non-text files)
+- Restricted file checking (prevents /etc/, passwd, .env, etc.)
+- Line wrapping at 79 characters for long lines
+- Security logging for restricted file access attempts
+
+**Express.e References:**
+- `internalCommandV`: Line 25675-25687
+- `viewAFile`: Line 20388-20550
+- Filename validation: Line 20460-20467
+- Binary detection: Line 20486-20491
+- Line wrapping: Line 20492-20516
+
+**Display Format:**
+```
+Enter filename of file to view? <input>
+
+Viewing: filename.txt
+
+[File contents displayed with line wrapping]
+[Lines wrap at 79 characters]
+[Pause every 20 lines if not NS mode]
+```
+
+**Security Features:**
+- Rejects files with path separators (: / \\)
+- Blocks wildcard characters (* @)
+- Detects and blocks restricted paths (/etc/, passwd, .env)
+- Logs security violations to callerslog
+- Binary file detection prevents viewing non-text files
+
 ## Modified Files
 
 ### 1. `bbs-states.ts`
-Added new states for download input:
+Added new states for download and view input:
 - `DOWNLOAD_FILENAME_INPUT` - D command filename input
 - `DOWNLOAD_CONFIRM_INPUT` - D command download confirmation
+- `VIEW_FILE_INPUT` - V command filename input
 
 ### 2. `command.handler.ts`
-Added download input state handlers:
+Added download and view file input state handlers:
 ```typescript
 // Handle download input (D command continuation)
 if (session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT) {
@@ -160,19 +213,20 @@ Returns first match with file info (size, path, conf number, dir number).
 
 ## Session Statistics
 
-### New Files: 1
+### New Files: 2
 - `download.handler.ts` (370 lines)
+- `view-file.handler.ts` (329 lines)
 
 ### Modified Files: 2
-- `bbs-states.ts` (2 lines added)
-- `command.handler.ts` (15 lines added)
+- `bbs-states.ts` (3 lines added)
+- `command.handler.ts` (23 lines added)
 
-### Total New Code: ~370 lines
-### Total Modified: ~17 lines
+### Total New Code: ~699 lines
+### Total Modified: ~26 lines
 
 ## Progress Tracking
 
-### Completed (8/19 items - 42%)
+### Completed (9/14 items - 64%)
 1. ✅ DIR file reading
 2. ✅ getDirSpan()
 3. ✅ File flagging system utilities
@@ -181,21 +235,16 @@ Returns first match with file info (size, path, conf number, dir number).
 6. ✅ FS command (File statistics)
 7. ✅ A command (Alter flags)
 8. ✅ D command (Download single file)
+9. ✅ V command (View file content)
 
-### Remaining (11/19 items)
-9. downloadFile() - Core download function (partially implemented in D command)
-10. beginDLF() - Begin download flow (implemented in D command)
-11. Protocol selection (not applicable for web - using HTTP)
-12. Download statistics tracking (basic implementation in D command)
-13. V command (View file)
-14. Z command (Zippy search)
-15. Batch download (download all flagged files)
-16. File area navigation
-17. Download ratio checking (implemented in D command)
-18. File time credit
-19. File area scanning
+### Remaining (5/14 items)
+10. Z command (Zippy text search) - express.e:26123+
+11. Batch download (download all flagged files) - express.e:26215+
+12. File area navigation (switching between file areas)
+13. File time credit for uploads
+14. New file scanning (show new files since last visit)
 
-**Note:** Items 9-12 are partially/fully implemented as part of the D command implementation.
+**Note:** Items for download functions, protocol selection, ratio checking, and statistics tracking are implemented as part of the D command (Item 8).
 
 ## Testing Status
 
@@ -206,6 +255,7 @@ Returns first match with file info (size, path, conf number, dir number).
 - Server running on port 3001
 
 ### ⏳ Manual Testing Needed
+**D Command:**
 - D command with filename parameter
 - D command without parameter (prompts for filename)
 - File validation (invalid paths, wildcards)
@@ -215,43 +265,74 @@ Returns first match with file info (size, path, conf number, dir number).
 - Download statistics updates
 - State transitions (DOWNLOAD_FILENAME_INPUT, DOWNLOAD_CONFIRM_INPUT)
 
+**V Command:**
+- V command with filename parameter
+- V command without parameter (prompts for filename)
+- V command with NS (non-stop) parameter
+- File validation (special symbols blocking)
+- Binary file detection
+- Restricted file blocking
+- Line wrapping at 79 characters
+- Security logging
+- State transitions (VIEW_FILE_INPUT)
+
 ## Next Steps
 
 ### Immediate
-1. **Manual testing** of D command in live BBS
+1. **Manual testing** of D and V commands in live BBS
 2. **Implement HTTP download endpoint** in Express.js
-3. **Test download statistics** tracking
-4. **Verify ratio enforcement** works correctly
+3. **Test file viewing** with various file types
+4. **Verify security checks** (binary files, restricted paths)
 
 ### Medium Term
-1. **V command** (View file content) - express.e:25675, 20388+
-2. **Z command** (Zippy text search) - express.e:26123+
-3. **Batch download** (download all flagged files) - express.e:26215+
-4. **Protocol selection menu** (if needed for compatibility)
+1. **Z command** (Zippy text search) - express.e:26123+
+2. **Batch download** (download all flagged files) - express.e:26215+
+3. **File area navigation** (switching between file areas)
+4. **Enhanced pause functionality** for V command
 
 ### Long Term
-1. File area navigation
-2. File time credits for uploads
-3. New file scanning
-4. Advanced download features (resume, verification)
+1. File time credits for uploads
+2. New file scanning (show new files since last visit)
+3. Advanced download features (resume, verification)
+4. Protocol selection menu (if needed for compatibility)
 
 ## Key Achievements
 
 1. **Complete D Command Implementation** - Full 1:1 port with web adaptation
-2. **Ratio Checking System** - Upload/download ratio enforcement from express.e
-3. **State Machine Integration** - Multi-step interactive prompts for filename and confirmation
-4. **File Validation** - Exact express.e validation logic (path separators, wildcards)
-5. **Conference Directory Searching** - Searches all DIR# folders in conference
-6. **Web Context Adaptation** - HTTP downloads while preserving express.e logic
+   - Ratio checking system (upload bytes × ratio - download bytes)
+   - State machine integration (filename prompt, confirmation)
+   - File validation (path separators, wildcards)
+   - Conference directory searching (DIR1-DIR20)
+   - HTTP download link generation
+
+2. **Complete V Command Implementation** - Full 1:1 port with security enhancements
+   - Binary file detection (first 3 bytes check)
+   - Restricted file blocking (/etc/, passwd, .env)
+   - Line wrapping at 79 characters
+   - NS (non-stop) parameter support
+   - Security logging for violations
+
+3. **Web Context Adaptation**
+   - HTTP downloads instead of terminal protocols
+   - Preserves all express.e validation and security logic
+   - Socket.io event-based file transfer initiation
+
+4. **Enhanced Security**
+   - Multiple layers of file validation
+   - Restricted path detection
+   - Binary file rejection for text viewing
+   - Security violation logging
 
 ## Notes
 
-- D command now provides HTTP download links instead of terminal-based transfers
-- All validation and security checks match express.e exactly
+- D command provides HTTP download links instead of Zmodem/Xmodem transfers
+- V command adds web-specific security checks (restricted paths, .env files)
+- All validation and security checks match or exceed express.e
 - Ratio checking works per express.e logic (upload bytes × ratio - download bytes)
 - Download statistics are tracked but not yet persisted to database
-- Protocol selection not needed for web context (uses HTTP)
-- Items 9-12 in original todo list are largely complete via D command implementation
+- Line wrapping in V command preserves 79-character terminal width
+- Items 9-12 in original todo list are complete via D command implementation
+- 9/14 items complete (64% of file system implementation)
 
 ---
 

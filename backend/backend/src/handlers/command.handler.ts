@@ -702,6 +702,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle view file input (V command continuation)
+  if (session.subState === LoggedOnSubState.VIEW_FILE_INPUT) {
+    const { ViewFileHandler } = require('./view-file.handler');
+    await ViewFileHandler.handleFilenameInput(socket, session, data.trim());
+    return;
+  }
+
   // Handle file maintenance operations
   if (session.tempData?.operation === 'delete_files') {
     await handleFileDeleteConfirmation(socket, session, input);
@@ -1511,11 +1518,13 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'V': // View a Text File (internalCommandV) - express.e:25675-25687
-      handleViewFileCommand(socket, session, params);
+      const { ViewFileHandler } = require('./view-file.handler');
+      await ViewFileHandler.handleViewFileCommand(socket, session, params);
       return;
 
     case 'VS': // View Statistics - Same as V command (internalCommandV) - express.e:28376
-      handleViewFileCommand(socket, session, params);
+      const { ViewFileHandler: ViewFileHandler2 } = require('./view-file.handler');
+      await ViewFileHandler2.handleViewFileCommand(socket, session, params);
       return;
 
     case 'VO': // Voting Booth (internalCommandVO) - express.e:25700-25710

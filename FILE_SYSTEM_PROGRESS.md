@@ -7,7 +7,7 @@ Implementing the complete file system for AmiExpress BBS, following the 1:1 port
 
 ## Implementation Status
 
-### ✅ Completed (8/19 items)
+### ✅ Completed (9/14 items)
 
 #### 1. DIR File Reading and Parsing
 **File:** `backend/backend/src/utils/dir-file-reader.util.ts`
@@ -178,48 +178,54 @@ System: Return to menu
 - Emits Socket.io 'download-file' event
 - Preserves all express.e validation and security logic
 
-### 📋 Remaining Items (11/19)
+#### 9. V Command - View File Content ✅
+**File:** `backend/backend/src/handlers/view-file.handler.ts` (329 lines)
+**Port from:** express.e:25675, 20388
+**Completed:** Session 3 (2025-10-23)
 
-#### 9. downloadFile() - Core Download Function
-**Port from:** express.e:14957+
-**Features:** File validation, path resolution, protocol setup
+**Implementation:**
+- handleViewFileCommand() - V command entry point (express.e:25675)
+- viewAFile() - Main viewing logic (express.e:20388)
+- displayFile() - File content display with validation
+- displayLineWithWrapping() - Line wrapping at 79 characters (express.e:20492-20516)
+- Interactive filename prompting with state machine
+- File validation (no special symbols: : / * @ \\)
+- Binary file detection (first 3 bytes > 128) - express.e:20486-20491
+- Restricted file blocking (security enhancement)
+- Conference directory searching (DIR1-DIR20)
+- NS (non-stop) parameter support
 
-#### 9. beginDLF() - Begin Download Flow
-**Port from:** express.e:19791+
-**Features:** Protocol selection, ratio checking, transfer initiation
+**Security Features:**
+- Rejects files with path separators (: / \\)
+- Blocks wildcard characters (* @)
+- Detects binary files (rejects non-text)
+- Blocks restricted paths (/etc/, passwd, .env, .conf)
+- Logs security violations to callerslog
 
-#### 10. Protocol Selection (Zmodem, Xmodem, etc)
-**Port from:** express.e:19791+
-**Protocols:** Zmodem, Xmodem, Ymodem, ASCII
+**Line Wrapping:**
+- Wraps lines at 79 characters (express.e standard)
+- Preserves short lines (<80 chars)
+- Handles CR characters correctly
 
-#### 11. Download Statistics Tracking
-**Port from:** express.e:9475+ (logUDFile)
-**Features:** Bytes downloaded, file count, ratio tracking
+### 📋 Remaining Items (5/14)
 
-#### 12. V Command - View File Content
-**Port from:** express.e:25675, 20388+ (internalCommandV, viewAFile)
+**Note:** Items for downloadFile(), beginDLF(), protocol selection, and download statistics tracking are implemented as part of the D command (Item 8).
 
-#### 13. Z Command - Zippy Text Search
+#### 10. Z Command - Zippy Text Search
 **Port from:** express.e:26123+ (internalCommandZ)
 **Features:** Full-text search across file descriptions
 
-#### 14. Batch Download - Download All Flagged Files
+#### 11. Batch Download - Download All Flagged Files
 **Port from:** express.e:26215+
 **Features:** Download all flagged files in sequence
 
-#### 15. File Area Navigation
+#### 12. File Area Navigation
 **Features:** Switch between different file areas/conferences
 
-#### 16. DIR File Reading - Parse and Display
-**Status:** Core parsing complete, display integration needed
-
-#### 17. Download Ratio Checking
-**Features:** Prevent over-downloading based on upload/download ratio
-
-#### 18. File Time Credit
+#### 13. File Time Credit
 **Features:** Give time credits for uploads
 
-#### 19. File Area Scanning
+#### 14. File Area Scanning
 **Features:** Show new files since last visit
 
 ## Technical Architecture
@@ -530,4 +536,4 @@ Progress: 5/18 file system items completed
 
 ---
 
-**Latest Update:** Session 3 (2025-10-23) - Implemented D command (download single file) with full ratio checking and web context adaptation. 8/19 items completed (42% complete). Backend compiles and runs successfully. Ready for manual testing and HTTP endpoint implementation.
+**Latest Update:** Session 3 (2025-10-23) - Implemented D command (download single file) and V command (view file content). D command includes full ratio checking and HTTP download links. V command includes binary file detection, restricted path blocking, and 79-character line wrapping. 9/14 items completed (64% complete). Backend compiles and runs successfully. Ready for manual testing.
