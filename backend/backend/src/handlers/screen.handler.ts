@@ -64,13 +64,24 @@ export function parseMciCodes(
   // Use "38400" as default baud rate for web connections
   parsed = parsed.replace(/%R/g, session.user ? Math.floor(session.timeRemaining / 60).toString() : '38400');
 
-  // %D - Current Date
+  // %D and %T - Date/Time in reference-board BBS format: "Fri 17-Oct-2025 08:33:58"
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
-  parsed = parsed.replace(/%D/g, dateStr);
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dayName = days[now.getDay()];
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = months[now.getMonth()];
+  const year = now.getFullYear();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
 
-  // %T - Current Time
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  // %D - Full date/time: "Fri 17-Oct-2025 08:33:58"
+  const fullDateTime = `${dayName} ${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+  parsed = parsed.replace(/%D/g, fullDateTime);
+
+  // %T - Time only: "08:33:58"
+  const timeStr = `${hours}:${minutes}:${seconds}`;
   parsed = parsed.replace(/%T/g, timeStr);
 
   // %U - Username

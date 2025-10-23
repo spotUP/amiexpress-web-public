@@ -351,52 +351,17 @@ io.on('connection', async (socket) => {
   };
   sessions.set(socket.id, session);
 
-  // Display complete connection screen with welcome messages + node list
-  // reference-board BBS style: show everything at once before ANSI prompt
-  // express.e functionality preserved (line input, state handling)
-
-  // Connection simulation messages
-  socket.emit('ansi-output', 'Connecting to AmiExpress-Web...\r\n');
-  socket.emit('ansi-output', 'CONNECT FULL SPEED\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '/X Native Telnet:  Searching for free node...\r\n');
-  socket.emit('ansi-output', '/X Native Telnet:  Successful connection to node 1\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'CONNECT 38400\r\n');
-  socket.emit('ansi-output', '**EMSI_IRQ8E08\r\n');
-  socket.emit('ansi-output', '\r\n');
-
-  // Welcome messages (express.e:29514-29525)
-  const bbsName = 'AmiExpress-Web';
-  const location = 'The Internet';
-  const version = '1.0.0';
-  const regKey = 'Sysop';
-  const nodeNum = 1;
-  const baud = 38400;
-
-  socket.emit('ansi-output', `Welcome to ${bbsName}, located in ${location}\r\n`);
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', `Running AmiExpress ${version} Copyright ©2018-2025 Darren Coles\r\n`);
-
-  // Date formatting to match reference-board: "Fri 17-Oct-2025 08:33:58"
-  const now = new Date();
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const dayName = days[now.getDay()];
-  const day = String(now.getDate()).padStart(2, '0');
-  const month = months[now.getMonth()];
-  const year = now.getFullYear();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  const dateStr = `${dayName} ${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
-
-  socket.emit('ansi-output', `Registration ${regKey}. You are connected to Node ${nodeNum} at ${baud} baud\r\n`);
-  socket.emit('ansi-output', `Connection occured at ${dateStr}.\r\n`);
-  socket.emit('ansi-output', '\r\n');
-
-  // Node list (from AWAITSCREEN.TXT via MCI code)
+  // Display complete connection screen via AWAITSCREEN.TXT
+  // reference-board BBS layout: everything shown via screen file with MCI codes
+  // All messages, node list, etc. are in AWAITSCREEN.TXT
   displayScreen(socket, session, 'AWAITSCREEN');
+
+  // Show ANSI prompt immediately (reference-board style - no key wait)
+  socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
+
+  // Set state to wait for ANSI response
+  session.subState = LoggedOnSubState.ANSI_PROMPT;
+  session.tempData = { inputBuffer: '' };
 
   // Execute login trigger for AREXX scripts
   await arexxEngine.executeTrigger('login', {
