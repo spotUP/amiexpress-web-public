@@ -709,6 +709,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle zippy search input (Z command continuation)
+  if (session.subState === LoggedOnSubState.ZIPPY_SEARCH_INPUT) {
+    const { ZippySearchHandler } = require('./zippy-search.handler');
+    await ZippySearchHandler.handleSearchInput(socket, session, data.trim());
+    return;
+  }
+
   // Handle file maintenance operations
   if (session.tempData?.operation === 'delete_files') {
     await handleFileDeleteConfirmation(socket, session, input);
@@ -1552,7 +1559,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'Z': // Zippy Text Search (internalCommandZ) - express.e:26123-26213
-      await handleZippySearchCommand(socket, session, params);
+      const { ZippySearchHandler } = require('./zippy-search.handler');
+      await ZippySearchHandler.handleZippySearchCommand(socket, session, params);
       return;
 
     case 'ZOOM': // Zoo Mail (internalCommandZOOM) - express.e:26215-26240

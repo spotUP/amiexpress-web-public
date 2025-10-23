@@ -3,9 +3,9 @@
 ## Date: 2025-10-23
 
 ## Session Goals
-Continue file system implementation, focusing on D command (Download single file) and V command (View file content).
+Continue file system implementation, focusing on D command (Download single file), V command (View file content), and Z command (Zippy text search).
 
-## Completed This Session (Items 8-9)
+## Completed This Session (Items 8-10)
 
 ### Item 8: D Command - Download Single File ✅
 **Port from:** express.e:24853 (internalCommandD), 19791 (beginDLF), 20075+ (downloadAFile)
@@ -113,13 +113,64 @@ Viewing: filename.txt
 - Logs security violations to callerslog
 - Binary file detection prevents viewing non-text files
 
+### Item 10: Z Command - Zippy Text Search ✅
+**Port from:** express.e:26123 (internalCommandZ), 27529 (zippy function)
+
+**New File:** `backend/backend/src/handlers/zippy-search.handler.ts` (264 lines)
+
+**Implementation:**
+- `ZippySearchHandler` class with static methods
+- `handleZippySearchCommand()` - Z command entry point (express.e:26123)
+- `handleSearchInput()` - State continuation for search string prompt
+- `performSearch()` - Search orchestration (express.e:26159-26209)
+- `zippy()` - Core search function (express.e:27529-27625)
+- Interactive search string prompting
+- Directory range selection (A/U/H/number)
+- Case-insensitive search
+- Displays complete file entries for matches
+
+**Features:**
+- Interactive search string prompting if no parameter provided
+- NS (non-stop) parameter support for continuous display
+- Case-insensitive search (converts to uppercase)
+- Directory range support (A=all, U=upload, H=hold, #=specific)
+- Searches through all DIR files in specified directories
+- Displays complete file entries (filename + all description lines)
+- Uses isNewFileEntry() to detect file boundaries
+
+**Express.e References:**
+- `internalCommandZ`: Line 26123-26213
+- `zippy`: Line 27529-27625
+- getDirSpan: Line 26161-26168
+- dirLineNewFile: Line 27569
+
+**Display Format:**
+```
+Enter string to search for: <input>
+
+Scanning directory 1
+[matching file entries displayed]
+
+Scanning directory 2
+[matching file entries displayed]
+```
+
+**Search Algorithm:**
+1. Read DIR file line by line
+2. Detect new file entries with isNewFileEntry()
+3. Collect all lines of current entry
+4. Check each line for search string (case-insensitive)
+5. If match found, display entire entry
+6. Continue to next entry
+
 ## Modified Files
 
 ### 1. `bbs-states.ts`
-Added new states for download and view input:
+Added new states for download, view, and search input:
 - `DOWNLOAD_FILENAME_INPUT` - D command filename input
 - `DOWNLOAD_CONFIRM_INPUT` - D command download confirmation
 - `VIEW_FILE_INPUT` - V command filename input
+- `ZIPPY_SEARCH_INPUT` - Z command search string input
 
 ### 2. `command.handler.ts`
 Added download and view file input state handlers:
@@ -213,20 +264,21 @@ Returns first match with file info (size, path, conf number, dir number).
 
 ## Session Statistics
 
-### New Files: 2
+### New Files: 3
 - `download.handler.ts` (370 lines)
 - `view-file.handler.ts` (329 lines)
+- `zippy-search.handler.ts` (264 lines)
 
 ### Modified Files: 2
-- `bbs-states.ts` (3 lines added)
-- `command.handler.ts` (23 lines added)
+- `bbs-states.ts` (4 lines added)
+- `command.handler.ts` (29 lines added)
 
-### Total New Code: ~699 lines
-### Total Modified: ~26 lines
+### Total New Code: ~963 lines
+### Total Modified: ~33 lines
 
 ## Progress Tracking
 
-### Completed (9/14 items - 64%)
+### Completed (10/14 items - 71%)
 1. ✅ DIR file reading
 2. ✅ getDirSpan()
 3. ✅ File flagging system utilities
@@ -236,9 +288,9 @@ Returns first match with file info (size, path, conf number, dir number).
 7. ✅ A command (Alter flags)
 8. ✅ D command (Download single file)
 9. ✅ V command (View file content)
+10. ✅ Z command (Zippy text search)
 
-### Remaining (5/14 items)
-10. Z command (Zippy text search) - express.e:26123+
+### Remaining (4/14 items)
 11. Batch download (download all flagged files) - express.e:26215+
 12. File area navigation (switching between file areas)
 13. File time credit for uploads
@@ -276,6 +328,16 @@ Returns first match with file info (size, path, conf number, dir number).
 - Security logging
 - State transitions (VIEW_FILE_INPUT)
 
+**Z Command:**
+- Z command with search string parameter
+- Z command without parameter (prompts for search string)
+- Z command with directory range (A/U/H/number)
+- Z command with NS (non-stop) parameter
+- Case-insensitive search
+- Directory scanning display
+- File entry matching and display
+- State transitions (ZIPPY_SEARCH_INPUT)
+
 ## Next Steps
 
 ### Immediate
@@ -285,10 +347,9 @@ Returns first match with file info (size, path, conf number, dir number).
 4. **Verify security checks** (binary files, restricted paths)
 
 ### Medium Term
-1. **Z command** (Zippy text search) - express.e:26123+
-2. **Batch download** (download all flagged files) - express.e:26215+
-3. **File area navigation** (switching between file areas)
-4. **Enhanced pause functionality** for V command
+1. **Batch download** (download all flagged files) - express.e:26215+
+2. **File area navigation** (switching between file areas)
+3. **Enhanced pause functionality** for V and Z commands
 
 ### Long Term
 1. File time credits for uploads
@@ -312,12 +373,19 @@ Returns first match with file info (size, path, conf number, dir number).
    - NS (non-stop) parameter support
    - Security logging for violations
 
-3. **Web Context Adaptation**
+3. **Complete Z Command Implementation** - Full 1:1 port of Zippy text search
+   - Case-insensitive search across DIR files
+   - Directory range support (A/U/H/number)
+   - Complete file entry display for matches
+   - Uses isNewFileEntry() for boundary detection
+   - Interactive search string prompting
+
+4. **Web Context Adaptation**
    - HTTP downloads instead of terminal protocols
    - Preserves all express.e validation and security logic
    - Socket.io event-based file transfer initiation
 
-4. **Enhanced Security**
+5. **Enhanced Security**
    - Multiple layers of file validation
    - Restricted path detection
    - Binary file rejection for text viewing
@@ -327,12 +395,14 @@ Returns first match with file info (size, path, conf number, dir number).
 
 - D command provides HTTP download links instead of Zmodem/Xmodem transfers
 - V command adds web-specific security checks (restricted paths, .env files)
+- Z command searches DIR files with case-insensitive matching
 - All validation and security checks match or exceed express.e
 - Ratio checking works per express.e logic (upload bytes × ratio - download bytes)
 - Download statistics are tracked but not yet persisted to database
 - Line wrapping in V command preserves 79-character terminal width
+- Search in Z command uses isNewFileEntry() to detect file boundaries
 - Items 9-12 in original todo list are complete via D command implementation
-- 9/14 items complete (64% of file system implementation)
+- 10/14 items complete (71% of file system implementation)
 
 ---
 

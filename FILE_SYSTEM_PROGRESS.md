@@ -7,7 +7,7 @@ Implementing the complete file system for AmiExpress BBS, following the 1:1 port
 
 ## Implementation Status
 
-### ✅ Completed (9/14 items)
+### ✅ Completed (10/14 items)
 
 #### 1. DIR File Reading and Parsing
 **File:** `backend/backend/src/utils/dir-file-reader.util.ts`
@@ -207,13 +207,40 @@ System: Return to menu
 - Preserves short lines (<80 chars)
 - Handles CR characters correctly
 
-### 📋 Remaining Items (5/14)
+#### 10. Z Command - Zippy Text Search ✅
+**File:** `backend/backend/src/handlers/zippy-search.handler.ts` (264 lines)
+**Port from:** express.e:26123, 27529
+**Completed:** Session 3 (2025-10-23)
+
+**Implementation:**
+- handleZippySearchCommand() - Z command entry point (express.e:26123)
+- performSearch() - Search orchestration (express.e:26159-26209)
+- zippy() - Core search function (express.e:27529-27625)
+- Interactive search string prompting with state machine
+- Directory range selection (A/U/H/number)
+- Case-insensitive search across DIR files
+- Complete file entry display for matches
+- Uses isNewFileEntry() for boundary detection
+
+**Search Algorithm:**
+1. Read DIR file line by line
+2. Detect new file entries with isNewFileEntry()
+3. Collect all lines of current entry
+4. Check each line for search string (case-insensitive)
+5. If match found, display entire entry
+6. Continue to next entry
+
+**Features:**
+- Interactive search string prompting
+- Directory range support (A=all, U=upload, H=hold, #=specific)
+- NS (non-stop) parameter support
+- Case-insensitive matching (converts to uppercase)
+- Displays complete file entries (filename + all description lines)
+- Searches through all specified DIR files in conference
+
+### 📋 Remaining Items (4/14)
 
 **Note:** Items for downloadFile(), beginDLF(), protocol selection, and download statistics tracking are implemented as part of the D command (Item 8).
-
-#### 10. Z Command - Zippy Text Search
-**Port from:** express.e:26123+ (internalCommandZ)
-**Features:** Full-text search across file descriptions
 
 #### 11. Batch Download - Download All Flagged Files
 **Port from:** express.e:26215+
@@ -536,4 +563,4 @@ Progress: 5/18 file system items completed
 
 ---
 
-**Latest Update:** Session 3 (2025-10-23) - Implemented D command (download single file) and V command (view file content). D command includes full ratio checking and HTTP download links. V command includes binary file detection, restricted path blocking, and 79-character line wrapping. 9/14 items completed (64% complete). Backend compiles and runs successfully. Ready for manual testing.
+**Latest Update:** Session 3 (2025-10-23) - Implemented D command (download single file), V command (view file content), and Z command (Zippy text search). D command includes full ratio checking and HTTP download links. V command includes binary file detection, restricted path blocking, and 79-character line wrapping. Z command provides case-insensitive search across DIR files with complete entry display. 10/14 items completed (71% complete). Backend compiles and runs successfully. Ready for manual testing.

@@ -44,6 +44,7 @@ export enum LoggedOnSubState {
   DOWNLOAD_FILENAME_INPUT = 'download_filename_input',  // D command filename input
   DOWNLOAD_CONFIRM_INPUT = 'download_confirm_input',    // D command download confirmation
   VIEW_FILE_INPUT = 'view_file_input',                  // V command filename input
+  ZIPPY_SEARCH_INPUT = 'zippy_search_input',            // Z command search string input
   FILES_MAINTENANCE = 'files_maintenance',
   FILES_MAINT_SELECT = 'files_maint_select',
   FILES_MAINT_AREA_SELECT = 'files_maint_area_select',
