@@ -1,13 +1,13 @@
 # AmiExpress File System Implementation Progress
 
-## Session Date: 2025-10-23
+## Latest Session: 2025-10-23 (Session 2)
 
 ## Overview
-This session focused on implementing the complete file system for AmiExpress BBS, following the 1:1 port methodology from the original express.e source code. The goal was to implement file listing, flagging, and download functionality to complete the upload-to-download user story.
+Implementing the complete file system for AmiExpress BBS, following the 1:1 port methodology from the original express.e source code. The goal is to implement file listing, flagging, and download functionality to complete the upload-to-download user story.
 
 ## Implementation Status
 
-### ✅ Completed (5/18 items)
+### ✅ Completed (7/19 items)
 
 #### 1. DIR File Reading and Parsing
 **File:** `backend/backend/src/utils/dir-file-reader.util.ts`
@@ -129,24 +129,46 @@ System: Display file listings
 System: Return to menu
 ```
 
-### 🚧 In Progress (1/18 items)
+#### 6. FS Command - File Statistics ✅
+**File:** `backend/backend/src/handlers/file-status.handler.ts` (187 lines)
+**Port from:** express.e:24872-24875, 24141-24250
+**Completed:** Session 2 (2025-10-23)
 
-#### 6. FS Command - Flag Scan
-**Port from:** express.e:24872, 24141+ (internalCommandFS, fileStatus)
-**Status:** Utilities ready, command handler needed
-**Next Steps:**
-1. Read express.e:24872-24875 for FS command
-2. Read express.e:24141+ for fileStatus function
-3. Implement handler in display-file-commands.handler.ts
-4. Display all flagged files with details
+**Implementation:**
+- Displays upload/download statistics per conference
+- Shows file counts, byte totals, available quota
+- Library ratio display (X:1 format)
+- Conference highlighting
+- Security checking (ACS_CONFERENCE_ACCOUNTING)
 
-### 📋 Remaining Items (12/18)
+**Note:** FS shows file STATISTICS, not flagged files (common confusion)
 
-#### 7. D Command - Download Single File
+#### 7. A Command - Alter Flags (Interactive) ✅
+**File:** `backend/backend/src/handlers/alter-flags.handler.ts` (258 lines)
+**Port from:** express.e:24601-24605, 12648-12664, 12594-12645
+**Completed:** Session 2 (2025-10-23)
+
+**Implementation:**
+- Interactive flag management with state machine
+- Commands: C (clear), F (flag from), <filename>, <Enter>
+- Uses FileFlagManager for persistence
+- Multi-state input handling
+- Shows flagged files before each prompt
+
+### 🚧 In Progress (1/19 items)
+
+#### 8. D Command - Download Single File
 **Port from:** express.e:24853, 14957+
-**Components:** internalCommandD, downloadFile
+**Status:** Next to implement
+**Next Steps:**
+1. Read express.e:24853 for D command
+2. Read express.e:14957+ for downloadFile function
+3. Implement download handler
+4. Protocol selection framework
 
-#### 8. downloadFile() - Core Download Function
+### 📋 Remaining Items (11/19)
+
+#### 9. downloadFile() - Core Download Function
 **Port from:** express.e:14957+
 **Features:** File validation, path resolution, protocol setup
 
