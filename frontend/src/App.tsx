@@ -225,54 +225,17 @@ function App() {
       return true;
     });
 
-    // Check for existing auth token and attempt auto-login
-    const checkAutoLogin = () => {
-      const token = localStorage.getItem('bbs_auth_token');
+    // TEMPORARY: Auto-login disabled to show connection screens
+    // Connection screens (AWAITSCREEN/ANSI/BBSTITLE) are handled by backend
+    // Frontend should NOT write any output - let the backend control the flow
 
-      if (token) {
-        console.log('🔐 Found stored auth token, attempting auto-login...');
-        term.write('\r\n\x1b[36mRestoring session...\x1b[0m\r\n');
-
-        // Attempt login with token
-        ws.emit('login', { token });
-
-        // Set login state to prevent manual login prompt
-        loginState.current = 'loggedin';
-
-        // If auto-login fails, show login prompt
-        const failHandler = (reason: string) => {
-          console.log('🔐 Auto-login failed:', reason);
-          localStorage.removeItem('bbs_auth_token');
-          loginState.current = 'username';
-          term.write('\r\n\x1b[33mSession expired. Please login again.\x1b[0m\r\n\r\n');
-          term.write('Username: ');
-          term.focus();
-          ws.off('login-failed', failHandler);
-        };
-
-        ws.once('login-failed', failHandler);
-
-        // On success, remove the fail handler
-        ws.once('login-success', () => {
-          ws.off('login-failed', failHandler);
-        });
-      } else {
-        // No token, show normal login prompt
-        term.write('\r\n\x1b[32mWelcome to AmiExpress Web BBS!\x1b[0m\r\n');
-        term.write('Please login with your username and password.\r\n\r\n');
-        term.write('Username: ');
-        term.focus();
-      }
-    };
-
-    // Wait for connection, then check auto-login
-    if (ws.connected) {
-      setTimeout(checkAutoLogin, 500);
-    } else {
-      ws.once('connect', () => {
-        setTimeout(checkAutoLogin, 500);
-      });
-    }
+    // Listen for prompt-login event from backend after connection screens
+    ws.on('prompt-login', () => {
+      console.log('🔐 Backend requests login prompt');
+      term.write('Username: ');
+      loginState.current = 'username';
+      term.focus();
+    });
 
     // Cleanup
     return () => {
