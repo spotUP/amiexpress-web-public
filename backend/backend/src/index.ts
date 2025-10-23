@@ -1420,7 +1420,8 @@ async function initializeData() {
     setDisplayFileCommandsDependencies({
       displayScreen,
       findSecurityScreen,
-      confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens')
+      confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens'),
+      db
     });
 
     // Inject dependencies into preference/chat commands handler

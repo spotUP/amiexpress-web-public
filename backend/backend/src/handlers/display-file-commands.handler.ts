@@ -32,6 +32,7 @@ interface BBSSession {
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => void;
 let _findSecurityScreen: (basePath: string, secLevel: number) => string | null;
 let _confScreenDir: string;
+let _db: any;
 
 /**
  * Set dependencies for display/file commands (called from index.ts)
@@ -40,10 +41,12 @@ export function setDisplayFileCommandsDependencies(deps: {
   displayScreen: typeof _displayScreen;
   findSecurityScreen: typeof _findSecurityScreen;
   confScreenDir: string;
+  db: any;
 }) {
   _displayScreen = deps.displayScreen;
   _findSecurityScreen = deps.findSecurityScreen;
   _confScreenDir = deps.confScreenDir;
+  _db = deps.db;
 }
 
 /**
@@ -82,7 +85,7 @@ export function handleQuestionMarkCommand(socket: any, session: BBSSession): voi
  * Displays file listings for the current conference.
  * Supports parameters for filtering (wildcards, etc.)
  */
-export function handleFileListCommand(socket: any, session: BBSSession, params: string = ''): void {
+export async function handleFileListCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   if (!checkSecurity(session.user, ACSPermission.FILE_LISTINGS)) {
     ErrorHandler.permissionDenied(socket, 'view file listings', {
       nextState: LoggedOnSubState.DISPLAY_MENU
@@ -92,13 +95,7 @@ export function handleFileListCommand(socket: any, session: BBSSession, params: 
 
   console.log('[ENV] Files');
 
-  // TODO: Implement displayFileList(params) - requires file database
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('File listings not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  await displayFileList(socket, session, params, false);
 }
 
 /**
@@ -113,7 +110,7 @@ export function handleFileListCommand(socket: any, session: BBSSession, params: 
  * Displays file listings with full details (raw format).
  * Shows more information than the F command.
  */
-export function handleFileListRawCommand(socket: any, session: BBSSession, params: string = ''): void {
+export async function handleFileListRawCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   if (!checkSecurity(session.user, ACSPermission.FILE_LISTINGS)) {
     ErrorHandler.permissionDenied(socket, 'view file listings', {
       nextState: LoggedOnSubState.DISPLAY_MENU
@@ -123,13 +120,137 @@ export function handleFileListRawCommand(socket: any, session: BBSSession, param
 
   console.log('[ENV] Files');
 
-  // TODO: Implement displayFileList(params, TRUE) - requires file database
+  await displayFileList(socket, session, params, true);
+}
+
+/**
+ * Display file list implementation - express.e:27626-27733 displayFileList()
+ */
+async function displayFileList(socket: any, session: BBSSession, params: string, reverse: boolean): Promise<void> {
+  const parsedParams = ParamsUtil.parse(params);
+  const nonStop = ParamsUtil.hasFlag(parsedParams, 'NS');
+
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('File listings (raw) not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+
+  // Get file areas for current conference - express.e:27642
+  const conferenceId = session.currentConf || 1;
+  const fileAreas = await _db.getFileAreas(conferenceId);
+
+  if (fileAreas.length === 0) {
+    socket.emit('ansi-output', AnsiUtil.errorLine('No file areas available in this conference.'));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // Parse area range from params - express.e:27647-27651 getDirSpan()
+  let startArea = 0;
+  let endArea = fileAreas.length - 1;
+
+  if (parsedParams.length > 0 && parsedParams[0].match(/^\d+$/)) {
+    const areaNum = parseInt(parsedParams[0]);
+    if (areaNum > 0 && areaNum <= fileAreas.length) {
+      startArea = areaNum - 1;
+      endArea = areaNum - 1;
+    }
+  } else if (parsedParams.length > 0 && parsedParams[0].match(/^\d+-\d+$/)) {
+    const range = ParamsUtil.extractRange(parsedParams);
+    if (range && range.start > 0 && range.end <= fileAreas.length) {
+      startArea = range.start - 1;
+      endArea = range.end - 1;
+    }
+  }
+
+  // Determine loop direction - express.e:27659-27665
+  let currentArea = reverse ? endArea : startArea;
+  const increment = reverse ? -1 : 1;
+
+  // Loop through file areas - express.e:27666-27720
+  while ((reverse && currentArea >= startArea) || (!reverse && currentArea <= endArea)) {
+    const area = fileAreas[currentArea];
+
+    // Display area header - express.e:27677-27682
+    const areaNumber = currentArea + 1;
+    const headerText = reverse ?
+      `Reverse scanning directory ${areaNumber}` :
+      `Scanning directory ${areaNumber}`;
+
+    socket.emit('ansi-output', AnsiUtil.colorize(headerText, 'cyan') + '\r\n');
+    socket.emit('ansi-output', AnsiUtil.colorize(`Area: ${area.name}`, 'yellow') + '\r\n');
+    socket.emit('ansi-output', '\r\n');
+
+    // Get files in this area - express.e:27695 displayIt()
+    const files = await _db.getFilesByArea(area.id);
+
+    if (files.length === 0) {
+      socket.emit('ansi-output', AnsiUtil.colorize('  (No files in this area)', 'white') + '\r\n');
+    } else {
+      // Display files - express.e:27731-27848 displayIt2()
+      for (const file of files) {
+        // Format file info: filename (size) - description
+        const filename = file.filename.padEnd(15);
+        const size = formatFileSize(file.size).padStart(10);
+        const uploadDate = formatDate(file.uploaddate).padEnd(10);
+        const downloads = `${file.downloads || 0}d`.padStart(5);
+
+        socket.emit('ansi-output',
+          `  ${AnsiUtil.colorize(filename, 'white')} ` +
+          `${AnsiUtil.colorize(size, 'cyan')} ` +
+          `${AnsiUtil.colorize(uploadDate, 'green')} ` +
+          `${AnsiUtil.colorize(downloads, 'yellow')}\r\n`
+        );
+
+        // Show description if available
+        if (file.description) {
+          const desc = file.description.substring(0, 70);
+          socket.emit('ansi-output', AnsiUtil.colorize(`     ${desc}`, 'white') + '\r\n');
+        }
+
+        // Show uploader
+        socket.emit('ansi-output',
+          AnsiUtil.colorize(`     Uploaded by: ${file.uploader}`, 'white') + '\r\n'
+        );
+        socket.emit('ansi-output', '\r\n');
+      }
+    }
+
+    socket.emit('ansi-output', '\r\n');
+
+    // Move to next area
+    currentArea += increment;
+  }
+
+  // Final prompt
+  if (!nonStop) {
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  }
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
+}
+
+/**
+ * Format file size for display (bytes -> KB/MB)
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes}B`;
+  } else if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)}KB`;
+  } else {
+    return `${Math.round(bytes / (1024 * 1024))}MB`;
+  }
+}
+
+/**
+ * Format date for display (MM/DD/YY)
+ */
+function formatDate(date: Date): string {
+  const d = new Date(date);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const year = String(d.getFullYear()).substring(2);
+  return `${month}/${day}/${year}`;
 }
 
 /**

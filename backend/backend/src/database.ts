@@ -1513,6 +1513,21 @@ export class Database {
     }
   }
 
+  async getFilesByArea(areaId: number): Promise<FileEntry[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM file_entries
+        WHERE areaid = $1
+        ORDER BY uploaddate DESC
+      `;
+      const result = await client.query(sql, [areaId]);
+      return result.rows as FileEntry[];
+    } finally {
+      client.release();
+    }
+  }
+
   // Node session management methods
   async createNodeSession(session: Omit<NodeSession, 'created' | 'updated'>): Promise<void> {
     const client = await this.pool.connect();

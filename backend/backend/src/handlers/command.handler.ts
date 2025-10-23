@@ -1145,11 +1145,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'F': // File Listings (internalCommandF) - express.e:24877-24881
-      handleFileListCommand(socket, session, commandArgs);
+      await handleFileListCommand(socket, session, commandArgs);
       return;
 
     case 'FR': // File Listings Raw (internalCommandFR) - express.e:24883-24887
-      handleFileListRawCommand(socket, session, commandArgs);
+      await handleFileListRawCommand(socket, session, commandArgs);
       return;
 
     case 'FM': // File Maintenance (internalCommandFM) - maintenanceFileSearch()
