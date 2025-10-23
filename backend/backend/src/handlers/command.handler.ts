@@ -274,31 +274,63 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // Handle pre-login connection flow (AWAIT state)
   if (session.state === BBSState.AWAIT) {
     if (session.subState === LoggedOnSubState.DISPLAY_CONNECT) {
-      // User pressed key after AWAITSCREEN
+      // User pressed key after AWAITSCREEN - show ANSI prompt
+      // express.e:29528 - aePuts('ANSI, RIP or No graphics (A/r/n)? ')
       console.log('📋 Connection screen viewed, moving to ANSI prompt');
       session.subState = LoggedOnSubState.ANSI_PROMPT;
+      session.tempData = { inputBuffer: '' }; // Initialize input buffer
       socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
       return;
     }
 
     if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
-      // User answered ANSI prompt
-      const answer = data.toUpperCase();
-      if (answer === 'A' || answer === 'R' || answer === 'N' || answer === '\r') {
-        // A or Enter = ANSI, R = RIP (treat as ANSI), N = No graphics
-        const ansiEnabled = (answer === 'A' || answer === 'R' || answer === '\r');
-        console.log('📋 Graphics preference set:', ansiEnabled ? 'ANSI/RIP' : 'None');
-        session.ansiEnabled = ansiEnabled;
+      // express.e:29530-29546 - Line input for ANSI prompt (not single keypress!)
+      // Buffer input until Enter is pressed
+      if (data === '\r') {
+        // Enter pressed - process the buffered input
+        const answer = (session.tempData?.inputBuffer || '').toUpperCase();
+        console.log('📋 Graphics prompt response:', answer || '(empty = ANSI)');
 
-        // Move to BBSTITLE screen
+        // express.e:29538-29546 - Check for specific letters in the string
+        // Default (empty/just Enter) = ANSI enabled
+        const hasN = answer.includes('N'); // No graphics
+        const hasR = answer.includes('R'); // RIP mode
+        const hasQ = answer.includes('Q'); // Quick logon
+
+        // express.e:29538-29539 - If 'N' in string, disable ANSI
+        session.ansiEnabled = !hasN;
+
+        // express.e:29543-29544 - Quick logon flag (for future use)
+        if (hasQ) {
+          session.tempData.quickLogon = true;
+        }
+
+        // express.e:29545 - RIP mode flag (for future use)
+        if (hasR) {
+          session.tempData.ripMode = true;
+        }
+
+        console.log('📋 Graphics mode set:', session.ansiEnabled ? 'ANSI/RIP' : 'None');
+
+        // express.e:29551 - Display BBSTITLE screen
         session.subState = LoggedOnSubState.DISPLAY_BBSTITLE;
+        session.tempData.inputBuffer = ''; // Clear buffer
         const { displayScreen, doPause } = require('./screen.handler');
         displayScreen(socket, session, 'BBSTITLE');
         doPause(socket, session);
         return;
+      } else if (data === '\x7f' || data === '\b') {
+        // Backspace - remove last character from buffer
+        if (session.tempData?.inputBuffer && session.tempData.inputBuffer.length > 0) {
+          session.tempData.inputBuffer = session.tempData.inputBuffer.slice(0, -1);
+        }
+        return;
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        // Printable character - add to buffer
+        session.tempData.inputBuffer = (session.tempData?.inputBuffer || '') + data;
+        return;
       }
-      // Invalid input, re-prompt
-      socket.emit('ansi-output', '\r\nPlease answer A, R, or N: ');
+      // Ignore other control characters
       return;
     }
 

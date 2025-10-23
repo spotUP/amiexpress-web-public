@@ -352,8 +352,8 @@ io.on('connection', async (socket) => {
   sessions.set(socket.id, session);
 
   // Display connection screen (AWAITSCREEN) with node info
+  // No pause prompt - user presses any key to continue to ANSI prompt
   displayScreen(socket, session, 'AWAITSCREEN');
-  doPause(socket, session);
 
   // Execute login trigger for AREXX scripts
   await arexxEngine.executeTrigger('login', {

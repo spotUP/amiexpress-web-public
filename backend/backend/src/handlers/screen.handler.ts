@@ -76,13 +76,8 @@ export function parseMciCodes(
   // %U - Username
   parsed = parsed.replace(/%U/g, session.user?.username || 'Guest');
 
-  // %N - Node Number (always 1 in web version)
-  parsed = parsed.replace(/%N/g, '1');
-
-  // %C - Number of conferences
-  parsed = parsed.replace(/%C/g, conferences.length.toString());
-
   // %NODELIST - Display all nodes with their status (like reference-board BBS)
+  // IMPORTANT: Process multi-character MCI codes BEFORE single-character ones to avoid collisions
   if (parsed.includes('%NODELIST')) {
     let nodeList = '';
     const totalNodes = 8; // Total number of nodes in the system
@@ -103,6 +98,13 @@ export function parseMciCodes(
 
     parsed = parsed.replace(/%NODELIST/g, nodeList);
   }
+
+  // %N - Node Number (always 1 in web version)
+  // Process AFTER %NODELIST to avoid turning %NODELIST into 1ODELIST
+  parsed = parsed.replace(/%N/g, '1');
+
+  // %C - Number of conferences
+  parsed = parsed.replace(/%C/g, conferences.length.toString());
 
   return parsed;
 }
