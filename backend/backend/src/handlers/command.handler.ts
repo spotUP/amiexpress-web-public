@@ -5,7 +5,8 @@
  * 1:1 port from AmiExpress express.e command processing
  */
 
-import { BBSSession, LoggedOnSubState, BBSState } from '../index';
+import { BBSSession } from '../index';
+import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 
 // Import from other handlers
 import { displayScreen, doPause } from './screen.handler';
