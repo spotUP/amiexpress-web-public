@@ -36,6 +36,7 @@ import {
   setUserCommandsDependencies
 } from './handlers/user-commands.handler';
 import {
+  handleGoodbyeCommand,
   setSystemCommandsDependencies
 } from './handlers/system-commands.handler';
 import {
@@ -56,6 +57,9 @@ import {
 import {
   setInfoCommandsDependencies
 } from './handlers/info-commands.handler';
+import {
+  setUtilityCommandsDependencies
+} from './handlers/utility-commands.handler';
 import {
   displayDoorMenu,
   executeDoor,
@@ -883,6 +887,15 @@ async function initializeData() {
     // Inject dependencies into info commands handler
     setInfoCommandsDependencies({
       sessions
+    });
+
+    // Inject dependencies into utility commands handler
+    setUtilityCommandsDependencies({
+      handleGoodbyeCommand,
+      messages,
+      confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens'),
+      findSecurityScreen,
+      displayScreen
     });
 
     // Inject dependencies into command handler

@@ -91,6 +91,17 @@ import {
   setInfoCommandsDependencies
 } from './info-commands.handler';
 import {
+  handleRelogonCommand,
+  handleViewFileCommand,
+  handleZippySearchCommand,
+  handleZoomCommand,
+  handleHelpFilesCommand,
+  handleRelogonConfirm,
+  handleViewFileInput,
+  handleZippySearchInput,
+  setUtilityCommandsDependencies
+} from './utility-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -561,6 +572,27 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   if (session.subState === 'JM_INPUT') {
     console.log('📬 In JM input state');
     handleJMInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle RL (Relogon) confirmation
+  if (session.subState === 'RL_CONFIRM') {
+    console.log('🔄 In RL confirmation state');
+    handleRelogonConfirm(socket, session, data.trim());
+    return;
+  }
+
+  // Handle V (View File) input
+  if (session.subState === 'VIEW_FILE_INPUT') {
+    console.log('📄 In View File input state');
+    handleViewFileInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle Z (Zippy Search) input
+  if (session.subState === 'ZIPPY_SEARCH_INPUT') {
+    console.log('🔍 In Zippy Search input state');
+    handleZippySearchInput(socket, session, data.trim());
     return;
   }
 
@@ -1085,14 +1117,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleOnlineMessageCommand(socket, session, commandArgs);
       return;
 
-    case 'RL': // RELOGON (internalCommandRL) - 1:1 with AmiExpress relogon
-      socket.emit('ansi-output', '\x1b[36m-= Relogon =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This will disconnect you and return you to the login prompt.\r\n');
-      socket.emit('ansi-output', 'Are you sure you want to relogon? (Y/N): ');
-
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { relogonConfirm: true };
-      return; // Stay in input mode
+    case 'RL': // RELOGON (internalCommandRL) - express.e:25534-25539
+      handleRelogonCommand(socket, session, commandArgs);
+      return;
 
     case 'RZ': // Zmodem Upload Command (internalCommandRZ) - 1:1 with AmiExpress RZ
       socket.emit('ansi-output', '\x1b[36m-= Zmodem Upload =-\x1b[0m\r\n');
@@ -1140,22 +1167,13 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'V': // View a Text File (internalCommandV) - 1:1 with AmiExpress view text file
-      socket.emit('ansi-output', '\x1b[36m-= View Text File =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter filename to view (or press Enter to cancel): ');
-
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { viewTextFile: true };
-      return; // Stay in input mode
+    case 'V': // View a Text File (internalCommandV) - express.e:25675-25687
+      handleViewFileCommand(socket, session, commandArgs);
+      return;
 
     case 'VS': // View Statistics - Same as V command (internalCommandV) - express.e:28376
-      // In express.e, VS calls internalCommandV (view file command)
-      socket.emit('ansi-output', '\x1b[36m-= View Statistics File =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Enter statistics filename to view (or press Enter to cancel): ');
-
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { viewTextFile: true };
-      return; // Stay in input mode
+      handleViewFileCommand(socket, session, commandArgs);
+      return;
 
     case 'VO': // Voting Booth (internalCommandVO) - express.e:25700
       // Phase 9: Security/ACS System implemented
@@ -1214,42 +1232,13 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleExpertModeCommand(socket, session);
       return;
 
-    case 'Z': // Zippy Text Search (internalCommandZ) - 1:1 with AmiExpress zippy search
-      socket.emit('ansi-output', '\x1b[36m-= Zippy Text Search =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Search for text in file descriptions.\r\n\r\n');
-      socket.emit('ansi-output', 'Enter search pattern (or press Enter to cancel): ');
+    case 'Z': // Zippy Text Search (internalCommandZ) - express.e:26123-26213
+      handleZippySearchCommand(socket, session, commandArgs);
+      return;
 
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { zippySearch: true };
-      return; // Stay in input mode
-
-    case 'ZOOM': // Zoo Mail (internalCommandZOOM) - 1:1 with AmiExpress ZOOM
-      socket.emit('ansi-output', '\x1b[36m-= Zoo Mail (QWK/FTN Download) =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Download your messages in offline format.\r\n\r\n');
-
-      // Check if user has any unread messages
-      const unreadMessages = messages.filter(msg =>
-        msg.timestamp > (session.user?.lastLogin || new Date(0)) &&
-        (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-      );
-
-      if (unreadMessages.length === 0) {
-        socket.emit('ansi-output', 'No unread messages to download.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', `You have ${unreadMessages.length} unread message(s).\r\n\r\n`);
-      socket.emit('ansi-output', 'Available formats:\r\n');
-      socket.emit('ansi-output', '1. QWK format (standard)\r\n');
-      socket.emit('ansi-output', '2. ASCII text format\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[32mSelect format (1-2) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { zoomMail: true, unreadMessages };
-      return; // Stay in input mode
+    case 'ZOOM': // Zoo Mail (internalCommandZOOM) - express.e:26215-26240
+      handleZoomCommand(socket, session);
+      return;
 
     case 'VODUP': // Voting Booth (DUPLICATE - real one is earlier) - 1:1 with AmiExpress voting booth
       socket.emit('ansi-output', '\x1b[36m-= Voting Booth =-\x1b[0m\r\n');
@@ -1533,30 +1522,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleQuestionMarkCommand(socket, session);
       return;
 
-    case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089
-      // Searches for help files in BBS:Help/ directory
-      socket.emit('ansi-output', '\x1b[36m-= Help File Viewer =-\x1b[0m\r\n');
-
-      // TODO for 100% 1:1: Implement full help file search - express.e:25089-25111
-      // This should:
-      // 1. Take params as partial filename (e.g., "^upload" looks for "help/upload")
-      // 2. Use findSecurityScreen() to find help file with correct security level
-      // 3. Display the help file with doPause()
-      // 4. If not found, try removing last character and searching again (progressive search)
-      // 5. Continue until file found or params empty
-
-      if (params.trim()) {
-        socket.emit('ansi-output', `Looking for help on: ${params}\r\n\r\n`);
-        socket.emit('ansi-output', '\x1b[33mHelp file system not yet implemented.\x1b[0m\r\n');
-        socket.emit('ansi-output', 'This would search for matching help files in BBS:Help/\r\n');
-      } else {
-        socket.emit('ansi-output', 'Usage: ^ <topic>\r\n');
-        socket.emit('ansi-output', 'Example: ^upload (shows help on uploading files)\r\n');
-      }
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089-25111
+      handleHelpFilesCommand(socket, session, commandArgs);
       return;
 
     default:
