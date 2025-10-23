@@ -75,7 +75,7 @@ import {
   setPreferenceChatCommandsDependencies
 } from './preference-chat-commands.handler';
 import {
-  handleChatCommand
+  handleLiveChatCommand
 } from './chat-commands.handler';
 import {
   handleGreetingsCommand,
@@ -411,36 +411,82 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  // PRIORITY 1: Handle internode chat mode input
-  // When user is in active chat session, intercept all input
+  // PRIORITY 1: Handle internode chat mode input - REAL-TIME keystroke transmission
+  // When user is in active chat session, transmit each keystroke immediately
   if (session.subState === LoggedOnSubState.CHAT) {
-    console.log('💬 User in CHAT mode, handling chat input');
-    const input = data.trim();
+    console.log('💬 [COMMAND] User in CHAT mode, real-time input');
 
-    // Check for /END or /EXIT command
-    if (input.toUpperCase() === '/END' || input.toUpperCase() === '/EXIT') {
-      const { handleChatEnd } = require('./internode-chat.handler');
-      await handleChatEnd(socket, session);
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    const { handleChatKeystroke } = require('./internode-chat.handler');
+
+    // Handle arrow keys for cursor movement (left/right navigation)
+    if (data === '\x1b[D') {
+      // Left arrow - just move cursor left locally (don't transmit)
+      socket.emit('ansi-output', '\x1b[D');
+      return;
+    }
+    else if (data === '\x1b[C') {
+      // Right arrow - just move cursor right locally (don't transmit)
+      socket.emit('ansi-output', '\x1b[C');
+      return;
+    }
+    // Ignore up/down arrows
+    else if (data === '\x1b[A' || data === '\x1b[B') {
       return;
     }
 
-    // Check for /HELP command
-    if (input.toUpperCase() === '/HELP') {
-      socket.emit('ansi-output',
-        '\r\n' +
-        '\x1b[36mChat Mode Commands:\x1b[0m\r\n' +
-        '  \x1b[33m/END\x1b[0m or \x1b[33m/EXIT\x1b[0m  - End chat session\r\n' +
-        '  \x1b[33m/HELP\x1b[0m             - Show this help\r\n' +
-        '  \x1b[33m<text>\x1b[0m            - Send message (max 500 chars)\r\n' +
-        '\r\n'
-      );
-      return;
-    }
+    // Handle Enter key - finalize message
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
 
-    // Regular message - send to chat partner
-    if (input.length > 0) {
-      const { handleChatMessage } = require('./internode-chat.handler');
-      await handleChatMessage(socket, session, { message: input });
+      // Check for /END or /EXIT command
+      if (input.toUpperCase() === '/END' || input.toUpperCase() === '/EXIT') {
+        console.log('💬 [COMMAND] User wants to end chat');
+        const { handleChatEnd } = require('./internode-chat.handler');
+        await handleChatEnd(socket, session);
+        return;
+      }
+
+      // Check for /HELP command
+      if (input.toUpperCase() === '/HELP') {
+        console.log('💬 [COMMAND] User requested help');
+        socket.emit('ansi-output',
+          '\r\n' +
+          '\x1b[36mChat Mode Commands:\x1b[0m\r\n' +
+          '  \x1b[33m/END\x1b[0m or \x1b[33m/EXIT\x1b[0m  - End chat session\r\n' +
+          '  \x1b[33m/HELP\x1b[0m             - Show this help\r\n' +
+          '  \x1b[33m<text>\x1b[0m            - Send message (max 500 chars)\r\n' +
+          '\r\n'
+        );
+        session.inputBuffer = '';
+        return;
+      }
+
+      // Regular message - finalize and send to scroll area
+      if (input.length > 0) {
+        console.log('💬 [COMMAND] Finalizing message:', input);
+        const { handleChatMessage } = require('./internode-chat.handler');
+        await handleChatMessage(socket, session, { message: input });
+        session.inputBuffer = ''; // Clear buffer after sending
+      }
+    }
+    // Handle Backspace - real-time transmission
+    else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Transmit backspace to partner in real-time
+        await handleChatKeystroke(socket, session, { keystroke: '\x7f' });
+      }
+    }
+    // Handle printable characters - real-time transmission
+    else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      // Transmit character to partner in real-time
+      await handleChatKeystroke(socket, session, { keystroke: data });
     }
     return;
   }
@@ -1469,11 +1515,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     // After processing: Check if command changed subState (commands like R set DISPLAY_CONF_BULL to wait for keypress)
     // If subState was changed by command, respect it. Otherwise, go to DISPLAY_MENU (express.e:28641-28642)
     session.commandText = undefined; // Clear command text
+    console.log('🔍 [AFTER COMMAND] subState is:', session.subState);
+    console.log('🔍 [AFTER COMMAND] PROCESS_COMMAND const is:', LoggedOnSubState.PROCESS_COMMAND);
     if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
+      console.log('⚠️ [AFTER COMMAND] subState is still PROCESS_COMMAND, showing menu');
       // Command didn't change state, so default to showing menu
       session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       displayMainMenu(socket, session);
+    } else {
+      console.log('✅ [AFTER COMMAND] subState was changed to:', session.subState, '- NOT showing menu');
     }
     // If command changed subState (e.g., to DISPLAY_CONF_BULL), let handleCommand handle it on next input
     return;
@@ -1609,8 +1660,15 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleOnlineMessageCommand(socket, session, params);
       return;
 
-    case 'CHAT': // Internode Chat (User-to-User Chat)
-      await handleChatCommand(socket, session, params);
+    case 'LIVECHAT': // Modern Real-Time Internode Chat (Enhancement)
+      console.log('🔥 BEFORE calling handleLiveChatCommand, params:', params);
+      try {
+        await handleLiveChatCommand(socket, session, params);
+        console.log('✅ AFTER calling handleLiveChatCommand successfully');
+      } catch (error) {
+        console.error('❌ ERROR in handleLiveChatCommand:', error);
+        throw error;
+      }
       return;
 
     case 'ROOM': // Group Chat Rooms (Modern Enhancement)

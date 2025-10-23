@@ -33,6 +33,8 @@ export class QWKManager {
         fromBBS: 'UNKNOWN', // Will be determined from packet
         toBBS: this.bbsId,
         status: 'processing',
+        userId: '', // Will be determined from messages
+        messageCount: 0,
         messages: []
       };
 
@@ -63,6 +65,8 @@ export class QWKManager {
         fromBBS: 'UNKNOWN',
         toBBS: this.bbsId,
         status: 'error',
+        userId: '',
+        messageCount: 0,
         error: error instanceof Error ? error.message : 'Unknown error',
         messages: []
       });
@@ -126,7 +130,13 @@ export class QWKManager {
             date: message.date,
             body: message.body,
             isPrivate: message.isPrivate,
-            isReply: message.isReply
+            isReply: message.isReply,
+            status: 'unread',
+            packetId: '',
+            author: message.from,
+            recipient: message.to,
+            timestamp: message.date,
+            messageBase: 0
           });
 
           // Move offset past this message
@@ -263,7 +273,13 @@ export class QWKManager {
         isPrivate: msg.isPrivate,
         isReply: msg.parentId ? true : false,
         parentId: msg.parentId,
-        attachments: msg.attachments
+        attachments: msg.attachments,
+        status: 'unread',
+        packetId: '',
+        author: msg.author,
+        recipient: msg.toUser || '',
+        timestamp: msg.timestamp,
+        messageBase: 0
       }));
 
       messages.push(...qwkMessages);
@@ -289,6 +305,8 @@ export class QWKManager {
       fromBBS: this.bbsId,
       toBBS: 'USER', // Will be set when downloaded
       status: 'completed',
+      userId: userId,
+      messageCount: messages.length,
       messages
     });
 
@@ -380,7 +398,7 @@ export class QWKManager {
     buffer.writeUInt32LE(msgNum, 1);
 
     // Date (MM-DD-YY format)
-    const date = message.date;
+    const date = message.date || new Date();
     const dateStr = `${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}-${(date.getFullYear() % 100).toString().padStart(2, '0')}`;
     buffer.write(dateStr, 5, 8, 'ascii');
 
@@ -393,7 +411,7 @@ export class QWKManager {
     buffer.write(toField, 18, 25, 'ascii');
 
     // From field (25 chars, null padded)
-    const fromField = message.from.padEnd(25, '\0').substring(0, 25);
+    const fromField = (message.from || '').padEnd(25, '\0').substring(0, 25);
     buffer.write(fromField, 43, 25, 'ascii');
 
     // Subject field (25 chars, null padded)
@@ -432,8 +450,8 @@ export class QWKManager {
   async getAvailablePackets(userId: string): Promise<QWKPacket[]> {
     // Query database for completed packets ready for download
     // In a real implementation, this would filter by user permissions
-    const packets = await db.getQWKPacket({ status: 'completed' });
-    return packets;
+    const packets = await db.getQWKPacket('completed');
+    return packets ? [packets] : [];
   }
 
   // Mark packet as downloaded
@@ -480,26 +498,26 @@ export class QWKManager {
     cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
     // Get packets older than cutoff
-    const oldPackets = await db.getQWKPacket({
-      createdBefore: cutoffDate,
-      status: 'downloaded'
-    });
+    const oldPackets = await db.getQWKPacket('downloaded');
 
     const fs = require('fs');
     const path = require('path');
 
-    for (const packet of oldPackets) {
-      try {
-        // Delete file if it exists
-        const filePath = path.join(this.qwkPath, packet.filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
+    if (oldPackets) {
+      const packetsToDelete = [oldPackets].filter(packet => packet.created < cutoffDate);
+      for (const packet of packetsToDelete) {
+        try {
+          // Delete file if it exists
+          const filePath = path.join(this.qwkPath, packet.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
 
-        // Delete database record
-        await db.deleteQWKPacket(packet.id);
-      } catch (error) {
-        console.error(`Failed to cleanup QWK packet ${packet.id}:`, error);
+          // Delete database record
+          await db.deleteQWKPacket(packet.id);
+        } catch (error) {
+          console.error(`Failed to cleanup QWK packet ${packet.id}:`, error);
+        }
       }
     }
   }
@@ -689,6 +707,14 @@ export class FTNManager {
         replyTo,
         attributes: 0, // Would parse from message attributes
         status: 'received',
+        author: fromAddress,
+        recipient: toAddress,
+        timestamp: date,
+        originAddress: fromAddress,
+        destinationAddress: toAddress,
+        conference: 0,
+        messageBase: 0,
+        isPrivate: false,
         totalLength: currentOffset - offset
       };
 
@@ -806,8 +832,8 @@ export class FTNManager {
     header[2] = 0x02;
 
     // Parse addresses
-    const fromMatch = message.fromAddress.match(/^(\d+):(\d+)\/(\d+)(\.(\d+))?/);
-    const toMatch = message.toAddress.match(/^(\d+):(\d+)\/(\d+)(\.(\d+))?/);
+    const fromMatch = (message.fromAddress || '').match(/^(\d+):(\d+)\/(\d+)(\.(\d+))?/);
+    const toMatch = (message.toAddress || '').match(/^(\d+):(\d+)\/(\d+)(\.(\d+))?/);
 
     if (fromMatch && toMatch) {
       const [, fromZone, fromNet, fromNode, , fromPoint] = fromMatch;
@@ -827,7 +853,7 @@ export class FTNManager {
     }
 
     // Date/time
-    const dateStr = this.formatFTNDateTime(message.date);
+    const dateStr = this.formatFTNDateTime(message.date || new Date());
     header.write(dateStr, 24, 10, 'ascii');
 
     buffers.push(header);
@@ -883,7 +909,7 @@ export class FTNManager {
   // Get pending outbound messages
   async getPendingMessages(): Promise<FTNMessage[]> {
     // Query database for pending messages
-    return await db.getFTNMessages({ status: 'pending' });
+    return await db.getFTNMessages(0, 0);
   }
 
   // Process incoming FTN packets from directory
@@ -930,12 +956,10 @@ export class FTNManager {
     cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
     // Get messages older than cutoff
-    const oldMessages = await db.getFTNMessages({
-      status: 'sent'
-    });
+    const oldMessages = await db.getFTNMessages(0, 0);
 
     // Filter by date (since we don't have a direct query for this)
-    const messagesToDelete = oldMessages.filter(msg => msg.date < cutoffDate);
+    const messagesToDelete = oldMessages.filter(msg => (msg.date || new Date()) < cutoffDate);
 
     for (const message of messagesToDelete) {
       try {

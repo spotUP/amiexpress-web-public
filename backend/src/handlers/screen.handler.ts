@@ -132,8 +132,8 @@ export function parseMciCodes(
  */
 export function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0): string | null {
   // BBS directory structure matches original Amiga AmiExpress
-  // From backend/backend/src, go up two levels to backend/, then into BBS/
-  const baseDir = path.join(__dirname, '../../../BBS');
+  // From backend/src/handlers, go up to backend/, then into BBS/
+  const baseDir = path.join(__dirname, '../../BBS');
   const paths = [];
 
   // Try conference-specific screen first (if provided)
@@ -229,7 +229,7 @@ export function displayScreen(socket: any, session: BBSSession, screenName: stri
  * @returns true if .keys file exists, false otherwise
  */
 export function hasKeysFile(screenName: string, conferenceId?: number, nodeId: number = 0): boolean {
-  const baseDir = path.join(__dirname, '../../../BBS');
+  const baseDir = path.join(__dirname, '../../BBS');
   const paths = [];
 
   // Try conference-specific .keys file first (if provided)

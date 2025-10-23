@@ -162,7 +162,7 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   console.log('[ENV] Bulletins');
 
   // BBS directory structure
-  const baseDir = path.join(__dirname, '../../../BBS');
+  const baseDir = path.join(__dirname, '../../BBS');
 
   // express.e:24616-24622 - Check if Bulletins/BullHelp.txt exists
   const conferenceDir = `Conf${String(session.currentConf || 1).padStart(2, '0')}`;
@@ -229,7 +229,7 @@ export function handleBulletinInput(socket: any, session: any, input: string): v
 
   // express.e:24642 - Handle ? (show help again)
   if (trimmedInput === '?') {
-    const baseDir = path.join(__dirname, '../../../BBS');
+    const baseDir = path.join(__dirname, '../../BBS');
     displayBullHelpScreen(socket, session, baseDir);
 
     // Prompt again
@@ -248,7 +248,7 @@ export function handleBulletinInput(socket: any, session: any, input: string): v
   const bulletinNumber = ParamsUtil.extractNumber(parsedParams);
 
   if (bulletinNumber !== null) {
-    const baseDir = path.join(__dirname, '../../../BBS');
+    const baseDir = path.join(__dirname, '../../BBS');
     displayBulletin(socket, session, baseDir, bulletinNumber, nonStopDisplayFlag);
 
     // Prompt for another bulletin (express.e:24643 - JUMP inputAgain)
