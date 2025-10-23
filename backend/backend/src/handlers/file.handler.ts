@@ -584,7 +584,7 @@ export async function displayFileStatus(socket: any, session: BBSSession, params
 
 // ===== New Files (N command) =====
 
-export function displayNewFiles(socket: any, session: BBSSession, params: string) {
+export async function displayNewFiles(socket: any, session: BBSSession, params: string) {
   console.log('displayNewFiles called with params:', params);
 
   // Parse parameters (like parseParams in AmiExpress)
@@ -618,26 +618,101 @@ export function displayNewFiles(socket: any, session: BBSSession, params: string
 
   socket.emit('ansi-output', `Searching for files newer than: ${searchDate.toLocaleDateString()}\r\n\r\n`);
 
-  // Directory selection (getDirSpan equivalent)
-  if (parsedParams.length > 1 || (parsedParams.length === 1 && !parsedParams.includes('NS'))) {
-    // Direct directory selection from params
-    const dirSpan = getDirSpan(parsedParams[parsedParams.includes('NS') ? 1 : 0], fileAreas.length);
-    if (dirSpan.startDir === -1) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid directory selection.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
+  // Get file areas for current conference from database
+  const conferenceId = session.currentConf || 1;
+  const areas = await _db.getFileAreas(conferenceId);
 
-    // Display new files in selected directories
-    displayNewFilesInDirectories(socket, session, searchDate, dirSpan, nonStopDisplay);
-  } else {
-    // Interactive directory selection (like getDirSpan prompt)
-    displayDirectorySelectionPrompt(socket, session, fileAreas, false, nonStopDisplay);
-    // Store search date for later use
-    session.tempData = { ...session.tempData, searchDate, nonStopDisplay, isNewFiles: true };
+  if (areas.length === 0) {
+    socket.emit('ansi-output', '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    return;
   }
+
+  // Display new files from database
+  await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay);
+}
+
+// Display new files from database - express.e:28115+ myNewFiles()
+async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean) {
+  let foundNewFiles = false;
+  let totalNewFiles = 0;
+
+  // Loop through all file areas in conference
+  for (const area of areas) {
+    try {
+      // Query files newer than search date in this area
+      const query = `
+        SELECT
+          id,
+          filename,
+          description,
+          size,
+          uploader,
+          uploaddate,
+          downloads
+        FROM file_entries
+        WHERE areaid = $1
+          AND uploaddate > $2
+        ORDER BY uploaddate DESC
+      `;
+
+      const result = await _db.query(query, [area.id, searchDate]);
+      const newFiles = result.rows;
+
+      if (newFiles.length > 0) {
+        foundNewFiles = true;
+        totalNewFiles += newFiles.length;
+
+        // Display area header
+        socket.emit('ansi-output', `\r\n\x1b[33m${area.name}\x1b[0m\r\n`);
+        if (area.description) {
+          socket.emit('ansi-output', `${area.description}\r\n`);
+        }
+        socket.emit('ansi-output', '\r\n');
+
+        // Display each new file
+        newFiles.forEach(file => {
+          const sizeKB = Math.ceil(file.size / 1024);
+          const uploadDate = new Date(file.uploaddate).toLocaleDateString();
+
+          // Format: filename  sizeKB  date  uploader
+          socket.emit('ansi-output',
+            `\x1b[32m${file.filename.padEnd(20)}\x1b[0m ` +
+            `\x1b[36m${String(sizeKB).padStart(6)}KB\x1b[0m ` +
+            `\x1b[33m${uploadDate.padEnd(10)}\x1b[0m ` +
+            `\x1b[37m${file.uploader}\x1b[0m\r\n`
+          );
+
+          // Show description if available
+          if (file.description) {
+            const desc = file.description.substring(0, 70);
+            socket.emit('ansi-output', `  \x1b[37m${desc}\x1b[0m\r\n`);
+          }
+        });
+
+        socket.emit('ansi-output', `\r\n\x1b[36m${newFiles.length} new file(s) in this area\x1b[0m\r\n`);
+      }
+    } catch (error) {
+      console.error(`[displayNewFilesFromDatabase] Error for area ${area.name}:`, error);
+    }
+  }
+
+  // Summary
+  socket.emit('ansi-output', '\r\n');
+  if (foundNewFiles) {
+    socket.emit('ansi-output', `\x1b[32mTotal: ${totalNewFiles} new file(s) found\x1b[0m\r\n`);
+  } else {
+    socket.emit('ansi-output', '\x1b[33mNo new files found since last login\x1b[0m\r\n');
+  }
+
+  if (!nonStop) {
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  }
+
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
 
 export function displayNewFilesInDirectories(socket: any, session: BBSSession, searchDate: Date, dirSpan: { startDir: number, dirScan: number }, nonStop: boolean) {
