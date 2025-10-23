@@ -256,7 +256,7 @@ function App() {
 }
 
 // Global refs for login state (accessible from handleLoginInput)
-const loginState = { current: 'username' as 'username' | 'password' | 'loggedin' };
+const loginState = { current: 'connecting' as 'connecting' | 'username' | 'password' | 'loggedin' };
 const username = { current: '' };
 const password = { current: '' };
 
