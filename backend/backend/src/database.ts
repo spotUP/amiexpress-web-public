@@ -613,75 +613,82 @@ export class Database {
         ON chat_messages(sender_id);
       `);
 
-      // Chat rooms table (multi-user chat rooms - extended feature)
+      // Chat rooms table (Group chat system - Phase 2)
       await client.query(`
         CREATE TABLE IF NOT EXISTS chat_rooms (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
+          id SERIAL PRIMARY KEY,
+          room_id TEXT UNIQUE NOT NULL,
+          room_name TEXT NOT NULL,
           topic TEXT,
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           created_by TEXT NOT NULL REFERENCES users(id),
+          created_by_username TEXT NOT NULL,
           is_public BOOLEAN DEFAULT TRUE,
           max_users INTEGER DEFAULT 50,
-          min_security_level INTEGER DEFAULT 0
-        )
-      `);
-
-      // Chat room users (current users in rooms)
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS chat_room_users (
-          room_id TEXT NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
-          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          username TEXT NOT NULL,
-          joined TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (room_id, user_id)
-        )
-      `);
-
-      // Chat room messages (message history)
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS chat_room_messages (
-          id SERIAL PRIMARY KEY,
-          room_id TEXT NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
-          sender_id TEXT NOT NULL REFERENCES users(id),
-          sender_name TEXT NOT NULL,
-          message TEXT NOT NULL,
-          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          is_persistent BOOLEAN DEFAULT TRUE,
+          password TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
       `);
 
       // Create indexes for chat rooms
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_chat_rooms_public
-        ON chat_rooms(is_public, min_security_level);
+        ON chat_rooms(is_public) WHERE is_public = TRUE;
       `);
       await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_chat_room_users_room
-        ON chat_room_users(room_id);
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_chat_room_messages_room
-        ON chat_room_messages(room_id, timestamp);
+        CREATE INDEX IF NOT EXISTS idx_chat_rooms_name
+        ON chat_rooms(room_name);
       `);
 
-      // System logs table
+      // Chat room members table
       await client.query(`
-        CREATE TABLE IF NOT EXISTS system_logs (
+        CREATE TABLE IF NOT EXISTS chat_room_members (
           id SERIAL PRIMARY KEY,
-          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          level TEXT NOT NULL,
-          message TEXT NOT NULL,
-          userid TEXT REFERENCES users(id),
-          conferenceid INTEGER REFERENCES conferences(id),
-          node INTEGER
+          room_id TEXT NOT NULL REFERENCES chat_rooms(room_id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          username TEXT NOT NULL,
+          socket_id TEXT NOT NULL,
+          is_moderator BOOLEAN DEFAULT FALSE,
+          is_muted BOOLEAN DEFAULT FALSE,
+          joined_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(room_id, user_id)
         )
       `);
 
-      // AREXX scripts table
+      // Create indexes for room members
       await client.query(`
-        CREATE TABLE IF NOT EXISTS arexx_scripts (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
+        CREATE INDEX IF NOT EXISTS idx_room_members_room
+        ON chat_room_members(room_id);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_room_members_user
+        ON chat_room_members(user_id);
+      `);
+
+      // Chat room messages table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS chat_room_messages (
+          id SERIAL PRIMARY KEY,
+          room_id TEXT NOT NULL REFERENCES chat_rooms(room_id) ON DELETE CASCADE,
+          sender_id TEXT NOT NULL REFERENCES users(id),
+          sender_username TEXT NOT NULL,
+          message TEXT NOT NULL,
+          message_type TEXT DEFAULT 'message',
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Create indexes for room messages
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_room_messages_room
+        ON chat_room_messages(room_id, created_at);
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_room_messages_sender
+        ON chat_room_messages(sender_id);
+      `);
+
           description TEXT,
           script TEXT NOT NULL,
           triggers JSONB,
