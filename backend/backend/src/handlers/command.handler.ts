@@ -274,9 +274,41 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // Handle pre-login connection flow (AWAIT state)
   if (session.state === BBSState.AWAIT) {
     if (session.subState === LoggedOnSubState.DISPLAY_CONNECT) {
-      // User pressed key after AWAITSCREEN - show ANSI prompt
-      // express.e:29528 - aePuts('ANSI, RIP or No graphics (A/r/n)? ')
-      console.log('📋 Connection screen viewed, moving to ANSI prompt');
+      // User pressed key after AWAITSCREEN
+      // Now show welcome messages and ANSI prompt
+      // express.e:29496-29528 - Connection messages before ANSI prompt
+      console.log('📋 Connection screen viewed, showing welcome messages');
+
+      // express.e:29496 - Connect string
+      socket.emit('ansi-output', 'CONNECT 38400\r\n');
+      socket.emit('ansi-output', '\r\n');
+
+      // express.e:29514-29525 - Welcome messages (shown by code, not screen file)
+      const bbsName = 'AmiExpress-Web';
+      const location = 'The Internet';
+      const version = '1.0.0';
+      const regKey = 'Sysop';
+      const node = 1;
+      const baud = 38400;
+
+      // express.e:29509-29514 - Welcome to BBS
+      socket.emit('ansi-output', `\x1b[0mWelcome to ${bbsName}, located in ${location}\r\n`);
+      socket.emit('ansi-output', '\r\n');
+
+      // express.e:29516-29518 - Copyright
+      socket.emit('ansi-output', `Running AmiExpress ${version} Copyright ©2018-2025 Darren Coles\r\n`);
+
+      // express.e:29519-29521 - Registration and connection info
+      socket.emit('ansi-output', `Registration ${regKey}. You are connected to Node ${node} at ${baud} baud\r\n`);
+
+      // express.e:29522-29525 - Connection time
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      socket.emit('ansi-output', `Connection occured at ${dateStr} ${timeStr}.\r\n`);
+      socket.emit('ansi-output', '\r\n');
+
+      // express.e:29528 - ANSI prompt
       session.subState = LoggedOnSubState.ANSI_PROMPT;
       session.tempData = { inputBuffer: '' }; // Initialize input buffer
       socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
