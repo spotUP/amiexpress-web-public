@@ -716,6 +716,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle batch download confirmation
+  if (session.subState === LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM) {
+    const { BatchDownloadHandler } = require('./batch-download.handler');
+    await BatchDownloadHandler.handleBatchConfirm(socket, session, data.trim());
+    return;
+  }
+
   // Handle file maintenance operations
   if (session.tempData?.operation === 'delete_files') {
     await handleFileDeleteConfirmation(socket, session, input);
@@ -1466,6 +1473,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302
       handleDownloadWithStatusCommand(socket, session, params);
+      return;
+
+    case 'DB': // Download Batch - Download all flagged files
+      const { BatchDownloadHandler } = require('./batch-download.handler');
+      await BatchDownloadHandler.handleBatchDownload(socket, session);
       return;
 
     case 'U': // Upload File(s) (internalCommandU) - express.e:25646-25658

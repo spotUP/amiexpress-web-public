@@ -3,9 +3,9 @@
 ## Date: 2025-10-23
 
 ## Session Goals
-Continue file system implementation, focusing on D command (Download single file), V command (View file content), and Z command (Zippy text search).
+Continue file system implementation, focusing on D command (Download single file), V command (View file content), Z command (Zippy text search), and batch download (all flagged files).
 
-## Completed This Session (Items 8-10)
+## Completed This Session (Items 8-11)
 
 ### Item 8: D Command - Download Single File ✅
 **Port from:** express.e:24853 (internalCommandD), 19791 (beginDLF), 20075+ (downloadAFile)
@@ -163,14 +163,80 @@ Scanning directory 2
 5. If match found, display entire entry
 6. Continue to next entry
 
+### Item 11: Batch Download - Download All Flagged Files ✅
+**Port from:** express.e:15571 (downloadFiles), 20047+ (batch download in downloadAFile)
+
+**New File:** `backend/backend/src/handlers/batch-download.handler.ts` (249 lines)
+
+**Implementation:**
+- `BatchDownloadHandler` class with static methods
+- `handleBatchDownload()` - Initiates batch download of all flagged files
+- `handleBatchConfirm()` - Confirms and executes batch download
+- Validates each flagged file exists
+- Checks ratio/limits for each file
+- Emits multiple browser downloads via 'download-file' events
+- Updates statistics for each download
+- Clears flags after successful batch download
+
+**Web Context Adaptation:**
+- Uses multiple browser downloads instead of protocol-based transfer
+- Emits 'download-file' event for each file
+- Browser handles downloads sequentially or in parallel
+- No need for Zmodem/Xmodem/HTTP protocols
+
+**Features:**
+- Gets all flagged files from FileFlagManager
+- Validates each file exists in conference directories
+- Checks download ratios and limits per file
+- Displays batch summary (files, total size, failed)
+- Confirmation prompt before starting
+- Emits multiple download events for browser
+- Updates download statistics for each file
+- Automatically clears flags after successful download
+
+**Display Format:**
+```
+Preparing to download 5 flagged file(s)...
+
+✓ Queued: file1.zip (1024 bytes)
+✓ Queued: file2.zip (2048 bytes)
+✗ File not found: missing.zip
+✗ Insufficient quota for: huge.zip
+✓ Queued: file3.zip (512 bytes)
+
+Batch Download Summary:
+  Files: 3
+  Total Size: 0.00 MB
+  Failed: 2
+
+Start batch download? (Y/N): Y
+
+Initiating batch download...
+
+→ Downloading: file1.zip
+→ Downloading: file2.zip
+→ Downloading: file3.zip
+
+✓ Batch download complete! 3 file(s) queued.
+Check your browser downloads.
+
+All flags cleared.
+```
+
+**Command:**
+- `DB` - Download Batch (custom web command)
+- Triggers batch download of all flagged files
+- Interactive confirmation before starting
+
 ## Modified Files
 
 ### 1. `bbs-states.ts`
-Added new states for download, view, and search input:
+Added new states for download, view, search, and batch download:
 - `DOWNLOAD_FILENAME_INPUT` - D command filename input
 - `DOWNLOAD_CONFIRM_INPUT` - D command download confirmation
 - `VIEW_FILE_INPUT` - V command filename input
 - `ZIPPY_SEARCH_INPUT` - Z command search string input
+- `BATCH_DOWNLOAD_CONFIRM` - Batch download confirmation
 
 ### 2. `command.handler.ts`
 Added download and view file input state handlers:
@@ -264,21 +330,22 @@ Returns first match with file info (size, path, conf number, dir number).
 
 ## Session Statistics
 
-### New Files: 3
+### New Files: 4
 - `download.handler.ts` (370 lines)
 - `view-file.handler.ts` (329 lines)
 - `zippy-search.handler.ts` (264 lines)
+- `batch-download.handler.ts` (249 lines)
 
 ### Modified Files: 2
-- `bbs-states.ts` (4 lines added)
-- `command.handler.ts` (29 lines added)
+- `bbs-states.ts` (5 lines added)
+- `command.handler.ts` (36 lines added)
 
-### Total New Code: ~963 lines
-### Total Modified: ~33 lines
+### Total New Code: ~1,212 lines
+### Total Modified: ~41 lines
 
 ## Progress Tracking
 
-### Completed (10/14 items - 71%)
+### Completed (11/14 items - 79%)
 1. ✅ DIR file reading
 2. ✅ getDirSpan()
 3. ✅ File flagging system utilities
@@ -289,9 +356,9 @@ Returns first match with file info (size, path, conf number, dir number).
 8. ✅ D command (Download single file)
 9. ✅ V command (View file content)
 10. ✅ Z command (Zippy text search)
+11. ✅ Batch download (all flagged files)
 
-### Remaining (4/14 items)
-11. Batch download (download all flagged files) - express.e:26215+
+### Remaining (3/14 items)
 12. File area navigation (switching between file areas)
 13. File time credit for uploads
 14. New file scanning (show new files since last visit)
@@ -338,6 +405,18 @@ Returns first match with file info (size, path, conf number, dir number).
 - File entry matching and display
 - State transitions (ZIPPY_SEARCH_INPUT)
 
+**DB Command (Batch Download):**
+- DB command with flagged files
+- DB command with no flagged files (error message)
+- File validation for each flagged file
+- Ratio checking for each file
+- Batch download summary display
+- Confirmation prompt
+- Multiple browser downloads
+- Statistics tracking for each file
+- Flag clearing after download
+- State transitions (BATCH_DOWNLOAD_CONFIRM)
+
 ## Next Steps
 
 ### Immediate
@@ -380,12 +459,20 @@ Returns first match with file info (size, path, conf number, dir number).
    - Uses isNewFileEntry() for boundary detection
    - Interactive search string prompting
 
-4. **Web Context Adaptation**
+4. **Complete Batch Download Implementation** - Web-adapted batch download
+   - Downloads all flagged files via browser
+   - Validates each file and checks ratios
+   - Emits multiple 'download-file' events
+   - Interactive confirmation before starting
+   - Automatically clears flags after download
+
+5. **Web Context Adaptation**
    - HTTP downloads instead of terminal protocols
    - Preserves all express.e validation and security logic
    - Socket.io event-based file transfer initiation
+   - Multiple browser downloads for batch operations
 
-5. **Enhanced Security**
+6. **Enhanced Security**
    - Multiple layers of file validation
    - Restricted path detection
    - Binary file rejection for text viewing
@@ -396,13 +483,15 @@ Returns first match with file info (size, path, conf number, dir number).
 - D command provides HTTP download links instead of Zmodem/Xmodem transfers
 - V command adds web-specific security checks (restricted paths, .env files)
 - Z command searches DIR files with case-insensitive matching
+- DB command triggers multiple browser downloads for flagged files
 - All validation and security checks match or exceed express.e
 - Ratio checking works per express.e logic (upload bytes × ratio - download bytes)
 - Download statistics are tracked but not yet persisted to database
 - Line wrapping in V command preserves 79-character terminal width
 - Search in Z command uses isNewFileEntry() to detect file boundaries
+- Batch download emits multiple 'download-file' events for browser
 - Items 9-12 in original todo list are complete via D command implementation
-- 10/14 items complete (71% of file system implementation)
+- 11/14 items complete (79% of file system implementation)
 
 ---
 

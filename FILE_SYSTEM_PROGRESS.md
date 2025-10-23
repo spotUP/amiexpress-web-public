@@ -7,7 +7,7 @@ Implementing the complete file system for AmiExpress BBS, following the 1:1 port
 
 ## Implementation Status
 
-### ✅ Completed (10/14 items)
+### ✅ Completed (11/14 items)
 
 #### 1. DIR File Reading and Parsing
 **File:** `backend/backend/src/utils/dir-file-reader.util.ts`
@@ -238,13 +238,39 @@ System: Return to menu
 - Displays complete file entries (filename + all description lines)
 - Searches through all specified DIR files in conference
 
-### 📋 Remaining Items (4/14)
+#### 11. Batch Download - Download All Flagged Files ✅
+**File:** `backend/backend/src/handlers/batch-download.handler.ts` (249 lines)
+**Port from:** express.e:15571 (downloadFiles), 20047+
+**Completed:** Session 3 (2025-10-23)
 
-**Note:** Items for downloadFile(), beginDLF(), protocol selection, and download statistics tracking are implemented as part of the D command (Item 8).
+**Implementation:**
+- handleBatchDownload() - Initiates batch download
+- handleBatchConfirm() - Confirms and executes batch download
+- Gets all flagged files from FileFlagManager
+- Validates each file exists in conference directories
+- Checks download ratios and limits per file
+- Emits multiple 'download-file' events for browser
+- Updates download statistics for each file
+- Clears flags after successful batch download
 
-#### 11. Batch Download - Download All Flagged Files
-**Port from:** express.e:26215+
-**Features:** Download all flagged files in sequence
+**Web Context Adaptation:**
+- Uses multiple browser downloads instead of protocol-based transfer
+- Emits 'download-file' event for each file
+- Browser handles downloads sequentially or in parallel
+- No need for Zmodem/Xmodem/HTTP protocols
+
+**Features:**
+- Validates each flagged file exists
+- Checks ratio/limits for each file individually
+- Displays batch summary (files, total size, failed)
+- Interactive confirmation prompt
+- Emits multiple download events
+- Automatically clears flags after download
+- Command: DB (Download Batch)
+
+### 📋 Remaining Items (3/14)
+
+**Note:** Items for downloadFile(), beginDLF(), protocol selection, download statistics tracking, and batch download are implemented as part of the D command (Item 8) and DB command (Item 11).
 
 #### 12. File Area Navigation
 **Features:** Switch between different file areas/conferences
@@ -563,4 +589,4 @@ Progress: 5/18 file system items completed
 
 ---
 
-**Latest Update:** Session 3 (2025-10-23) - Implemented D command (download single file), V command (view file content), and Z command (Zippy text search). D command includes full ratio checking and HTTP download links. V command includes binary file detection, restricted path blocking, and 79-character line wrapping. Z command provides case-insensitive search across DIR files with complete entry display. 10/14 items completed (71% complete). Backend compiles and runs successfully. Ready for manual testing.
+**Latest Update:** Session 3 (2025-10-23) - Implemented D command (download single file), V command (view file content), Z command (Zippy text search), and DB command (batch download). D command includes full ratio checking and HTTP download links. V command includes binary file detection, restricted path blocking, and 79-character line wrapping. Z command provides case-insensitive search across DIR files. DB command downloads all flagged files via multiple browser downloads. 11/14 items completed (79% complete). Backend compiles and runs successfully. Ready for manual testing.
