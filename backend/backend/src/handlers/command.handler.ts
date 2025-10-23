@@ -71,6 +71,12 @@ import {
   setPreferenceChatCommandsDependencies
 } from './preference-chat-commands.handler';
 import {
+  handleGreetingsCommand,
+  handleMailScanCommand,
+  handleConferenceFlagsCommand,
+  setAdvancedCommandsDependencies
+} from './advanced-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -1050,40 +1056,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'MS': // Run mailscan (internalCommandMS) - 1:1 with AmiExpress mailscan
-      socket.emit('ansi-output', '\x1b[36m-= Mailscan =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Scanning all conferences for new messages...\r\n\r\n');
-
-      // Get all conferences user has access to
-      const accessibleConferences = conferences.filter(conf => {
-        // Check if user has access to this conference
-        // For simplicity, assume all users have access to conferences 1-3
-        return conf.id <= 3 || (session.user?.secLevel || 0) >= 10;
-      });
-
-      let totalNewMessages = 0;
-      let scannedConferences = 0;
-
-      accessibleConferences.forEach(conf => {
-        const confMessages = messages.filter(msg =>
-          msg.conferenceId === conf.id &&
-          msg.timestamp > (session.user?.lastLogin || new Date(0)) &&
-          (!msg.isPrivate || msg.toUser === session.user?.username || msg.author === session.user?.username)
-        );
-
-        if (confMessages.length > 0) {
-          socket.emit('ansi-output', `\x1b[33m${conf.name}:\x1b[0m ${confMessages.length} new message(s)\r\n`);
-          totalNewMessages += confMessages.length;
-        }
-        scannedConferences++;
-      });
-
-      socket.emit('ansi-output', `\r\nTotal new messages: ${totalNewMessages}\r\n`);
-      socket.emit('ansi-output', `Conferences scanned: ${scannedConferences}\r\n`);
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'MS': // Mail Scan (internalCommandMS) - express.e:25250-25279
+      handleMailScanCommand(socket, session);
       return;
 
     case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25470
@@ -1701,57 +1675,16 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleGoodbyeCommand(socket, session, commandArgs);
       return;
 
-    case 'GR': // Greets (internalCommandGreets) - express.e:24411-24423
-      // Tribute to the Amiga demo scene
-      socket.emit('ansi-output', '\r\n\x1b[36mIn memory of those who came before us...\x1b[0m\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[34m[\x1b[0mscoopex\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mlsd\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mskid row\x1b[34m]\x1b[0m \x1b[34m[\x1b[0malpha flight\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mtrsi\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mbamiga sector one\x1b[34m]\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[34m[\x1b[0mfairlight\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mdefjam\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mparadox\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mlegend\x1b[34m]\x1b[0m \x1b[34m[\x1b[0manthrox\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mcrystal\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mangels\x1b[34m]\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[34m[\x1b[0mvision factory\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mzenith\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mslipstream\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mdual crew\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mdelight\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mshining\x1b[34m]\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[34m[\x1b[0mquartex\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mglobal overdose\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mparanoimia\x1b[34m]\x1b[0m \x1b[34m[\x1b[0msupplex\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mclassic\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mhoodlum\x1b[34m]\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[34m[\x1b[0maccumulators\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mhellfire\x1b[34m]\x1b[0m \x1b[34m[\x1b[0moracle\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mendless piracy\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mhqc\x1b[34m]\x1b[0m \x1b[34m[\x1b[0msetrox\x1b[34m]\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[34m[\x1b[0mprodigy\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mprestige\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mnemesis\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mgenesis\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mloonies\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mhorizon\x1b[34m]\x1b[0m \x1b[34m[\x1b[0magile\x1b[34m]\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[34m[\x1b[0mcrack inc\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mvalhalla\x1b[34m]\x1b[0m \x1b[34m[\x1b[0msunflex inc\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mministry\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mthe band\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mrazor1911\x1b[34m]\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[34m[\x1b[0mconqueror and zike\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mmad\x1b[34m]\x1b[0m \x1b[34m[\x1b[0mthe company\x1b[34m]\x1b[0m\r\n\r\n');
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'GR': // Greetings (internalCommandGreets) - express.e:24411-24423
+      handleGreetingsCommand(socket, session);
       return;
 
     case 'C': // Comment to Sysop (internalCommandC) - express.e:24658-24670
       handleCommentToSysopCommand(socket, session, commandArgs);
       return;
 
-    case 'CF': // Comment with Flags (internalCommandCF) - express.e:24672
-      // Phase 9: Security/ACS System implemented
-      // ✅ checkSecurity(ACS_CONFFLAGS) - express.e:24684 [IMPLEMENTED]
-
-      // Phase 9: Check security permission (express.e:24684)
-      if (!checkSecurity(session, ACSCode.CONFFLAGS)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Conference flag privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', '\x1b[36m-= Conference Flags =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Manage which conferences are flagged for scanning.\r\n\r\n');
-
-      // TODO for 100% 1:1: Implement full conference flag management - express.e:24685-24750
-      // This requires:
-      // - Display list of conferences with current flag status
-      // - Allow toggle of individual conference flags
-      // - Parse flag patterns like "1,3-5,7" for bulk changes
-      // - Save conference flag preferences per user
-      // - Database table for user conference flags
-
-      socket.emit('ansi-output', '\x1b[33mConference flag management not yet implemented.\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This allows you to select which conferences to scan for new messages.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'CF': // Conference Flags (internalCommandCF) - express.e:24672-24750
+      handleConferenceFlagsCommand(socket, session);
       return;
 
     case 'Q': // Quiet Mode Toggle (internalCommandQ) - express.e:25504-25516

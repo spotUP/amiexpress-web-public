@@ -48,6 +48,9 @@ import {
   setPreferenceChatCommandsDependencies
 } from './handlers/preference-chat-commands.handler';
 import {
+  setAdvancedCommandsDependencies
+} from './handlers/advanced-commands.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -854,6 +857,13 @@ async function initializeData() {
     // Inject dependencies into preference/chat commands handler
     setPreferenceChatCommandsDependencies({
       startSysopPage
+    });
+
+    // Inject dependencies into advanced commands handler
+    setAdvancedCommandsDependencies({
+      conferences,
+      messages,
+      checkConfAccess
     });
 
     // Inject dependencies into command handler
