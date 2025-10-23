@@ -192,8 +192,9 @@ export function addAnsiEscapes(content: string): string {
  * @param socket - Socket.io socket for sending output
  * @param session - Current BBS session
  * @param screenName - Name of screen to display
+ * @returns true if screen was displayed successfully, false otherwise
  */
-export function displayScreen(socket: any, session: BBSSession, screenName: string): void {
+export function displayScreen(socket: any, session: BBSSession, screenName: string): boolean {
   const content = loadScreenFile(screenName, session.currentConf);
 
   if (content) {
@@ -209,11 +210,56 @@ export function displayScreen(socket: any, session: BBSSession, screenName: stri
 
     // Send to client
     socket.emit('ansi-output', parsed);
+    return true;
   } else {
     // Fallback if screen not found
     console.warn(`Using fallback for screen: ${screenName}`);
     socket.emit('ansi-output', `\x1b[36m-= ${screenName} =-\x1b[0m\r\n`);
+    return false;
   }
+}
+
+/**
+ * Check if a .keys file exists for the given screen
+ * Like express.e:6567-6573 - checks for screenfile + '.keys'
+ *
+ * @param screenName - Name of screen file (without .TXT extension)
+ * @param conferenceId - Optional conference ID for conference-specific screens
+ * @param nodeId - Node ID (default 0)
+ * @returns true if .keys file exists, false otherwise
+ */
+export function hasKeysFile(screenName: string, conferenceId?: number, nodeId: number = 0): boolean {
+  const baseDir = path.join(__dirname, '../../../BBS');
+  const paths = [];
+
+  // Try conference-specific .keys file first (if provided)
+  if (conferenceId) {
+    const confIndex = conferences.findIndex(c => c.id === conferenceId);
+    if (confIndex !== -1) {
+      const relConfNum = confIndex + 1; // Convert to 1-based
+      const confPath = path.join(baseDir, `Conf${String(relConfNum).padStart(2, '0')}`, 'Screens', `${screenName}.keys`);
+      paths.push(confPath);
+    }
+  }
+
+  // Then try node-specific .keys file
+  const nodePath = path.join(baseDir, `Node${nodeId}`, 'Screens', `${screenName}.keys`);
+  paths.push(nodePath);
+
+  // Then try default BBS .keys file
+  const bbsPath = path.join(baseDir, 'Screens', `${screenName}.keys`);
+  paths.push(bbsPath);
+
+  // Check each path in order
+  for (const filePath of paths) {
+    if (fs.existsSync(filePath)) {
+      console.log(`✓ Found .keys file: ${filePath}`);
+      return true;
+    }
+  }
+
+  console.log(`No .keys file found for screen: ${screenName}`);
+  return false;
 }
 
 /**

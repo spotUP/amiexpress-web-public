@@ -2,12 +2,18 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import multer from 'multer';
 import { User, Door, DoorSession, ChatSession, ChatMessage, ChatState } from './types';
 import { db } from './database';
 import { config } from './config';
 import { qwkManager, ftnManager } from './qwk';
 import { nodeManager, arexxEngine, protocolManager } from './nodes';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
+import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
+import { testFile, TestResult } from './utils/file-test.util';
+import { moveUploadedFile, getConferenceDir } from './utils/file-hold.util';
+import { writeUploadToDirFile } from './utils/dir-file.util';
+import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.util';
 import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
@@ -148,7 +154,9 @@ import {
   processBBSCommand,
   setDatabase as setDatabaseForCommandHandler,
   setConfig,
+  setConferences as setConferencesForCommandHandler,
   setMessageBases as setMessageBasesForCommandHandler,
+  setFileAreas as setFileAreasForCommandHandler,
   setProcessOlmMessageQueue,
   setCheckSecurity,
   setSetEnvStat,
@@ -278,6 +286,58 @@ app.get('/', (req: Request, res: Response) => {
 app.post('/auth/login', (req, res) => authHandler.login(req, res));
 app.post('/auth/register', (req, res) => authHandler.register(req, res));
 app.post('/auth/refresh', (req, res) => authHandler.refresh(req, res));
+
+// File upload configuration
+// Express.e uses Node#/Playpen for uploaded files (express.e:19573-19584)
+import * as path from 'path';
+import * as fs from 'fs';
+
+const playpenStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Use Node0/Playpen for uploads (express.e uses ramPen or Node#/Playpen)
+    const playpenDir = path.join(config.dataDir, 'Node0', 'Playpen');
+
+    // Ensure directory exists
+    if (!fs.existsSync(playpenDir)) {
+      fs.mkdirSync(playpenDir, { recursive: true });
+    }
+
+    cb(null, playpenDir);
+  },
+  filename: (req, file, cb) => {
+    // Use original filename (already validated in UPLOAD_FILENAME_INPUT handler)
+    cb(null, file.originalname);
+  }
+});
+
+const upload = multer({
+  storage: playpenStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB max
+  }
+});
+
+// File upload endpoint
+app.post('/api/upload', upload.single('file'), (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    console.log('File upload received:', req.file.originalname, req.file.size, 'bytes');
+    console.log('Saved to:', req.file.path);
+
+    res.json({
+      filename: req.file.filename || req.file.originalname,
+      originalname: req.file.originalname,
+      size: req.file.size,
+      path: req.file.path  // Send file path instead of buffer
+    });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
 
 // Protected route example
 app.get('/users/:id', authenticateToken(db), async (req: AuthRequest, res: Response) => {
@@ -443,7 +503,9 @@ io.on('connection', async (socket) => {
       // Set user preferences
       session.confRJoin = user.autoRejoin || 1;
       session.msgBaseRJoin = 1; // Default message base
-      session.cmdShortcuts = !user.expert; // Expert mode uses shortcuts
+      // Like express.e:394 - default cmdShortcuts to FALSE (line input mode)
+      // This will be set to TRUE if .keys file exists when displaying menu (express.e:6567-6573)
+      session.cmdShortcuts = false;
 
       // If we already sent login-success for username/password, don't send again
       if (data.token) {
@@ -509,6 +571,236 @@ io.on('connection', async (socket) => {
     const chatSession = chatState.activeSessions.find(s => s.id === sessionId);
     if (chatSession && session.user?.secLevel === 255) { // Sysop level
       acceptChat(socket, session, chatSession);
+    }
+  });
+
+  // Handle file upload completion (express.e:19059-19110)
+  socket.on('file-uploaded', async (data: { filename: string; originalname: string; size: number; path?: string }) => {
+    console.log('File uploaded event received:', data);
+
+    if (!session.tempData?.uploadMode || !session.tempData?.fileArea || !session.tempData?.uploadBatch) {
+      socket.emit('ansi-output', '\r\n\x1b[31mError: Upload session invalid\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+      return;
+    }
+
+    const fileArea = session.tempData.fileArea;
+    const currentIndex = session.tempData.currentUploadIndex || 0;
+    const currentFile = session.tempData.uploadBatch[currentIndex];
+
+    if (!currentFile) {
+      socket.emit('ansi-output', '\r\n\x1b[31mError: No file info for uploaded file\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+      return;
+    }
+
+    try {
+      // Track upload stats
+      if (!session.tempData.uploadedFiles) session.tempData.uploadedFiles = 0;
+      if (!session.tempData.uploadedBytes) session.tempData.uploadedBytes = 0;
+
+      session.tempData.uploadedFiles++;
+      session.tempData.uploadedBytes += data.size;
+
+      // Extract FILE_ID.DIZ and test file (express.e:19258-19370)
+      let finalDescription = currentFile.description;
+      let testStatus = TestResult.NOT_TESTED;
+      let fileStatus: 'active' | 'private' | 'hold' = currentFile.isPrivate ? 'private' : 'active';
+
+      if (data.path) {
+        const nodeWorkDir = getNodeWorkDir(0, config.dataDir); // Node0/WorkDir
+
+        // Extract FILE_ID.DIZ (express.e:19258-19285)
+        console.log(`[FILE_ID.DIZ] Attempting extraction for ${currentFile.filename}`);
+        try {
+          const dizLines = await extractAndReadDiz(data.path, nodeWorkDir, [], 10);
+          if (dizLines && dizLines.length > 0) {
+            finalDescription = dizLines.join('\n');
+            console.log(`[FILE_ID.DIZ] Using FILE_ID.DIZ content (${dizLines.length} lines)`);
+            socket.emit('ansi-output', `\r\n\x1b[36m[FILE_ID.DIZ found and used for description]\x1b[0m\r\n`);
+          } else {
+            console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found, using batch description`);
+          }
+        } catch (error) {
+          console.error(`[FILE_ID.DIZ] Extraction error:`, error);
+        }
+
+        // Test file integrity (express.e:19348-19354)
+        socket.emit('ansi-output', `\r\nTesting... ${currentFile.filename}...\r\n`);
+        try {
+          testStatus = await testFile(data.path, nodeWorkDir);
+          console.log(`[testFile] Result: ${testStatus}`);
+
+          if (testStatus === TestResult.SUCCESS || testStatus === TestResult.NOT_TESTED) {
+            socket.emit('ansi-output', '\r\nTested Ok...\r\n');
+          } else if (testStatus === TestResult.FAILURE) {
+            socket.emit('ansi-output', '\r\n\x1b[33mRequires review, possibly bad format\x1b[0m\r\n');
+            socket.emit('ansi-output', `\r\n\x1b[33mMoving to ${config.sysopName}'s private Directory.\x1b[0m\r\n\r\n`);
+            fileStatus = 'hold';  // Mark for HOLD directory (express.e:19364-19369)
+          }
+        } catch (error) {
+          console.error(`[testFile] Error:`, error);
+          testStatus = TestResult.NOT_TESTED;
+        }
+      }
+
+      // Determine file checked status marker (express.e:19410-19419)
+      let checkedMarker: 'P' | 'F' | 'N' | 'D' = 'N';
+      if (testStatus === TestResult.SUCCESS) {
+        checkedMarker = 'P';  // Passed
+      } else if (testStatus === TestResult.FAILURE) {
+        checkedMarker = 'F';  // Failed
+      } else {
+        checkedMarker = 'N';  // Not tested
+      }
+
+      // Move file to appropriate directory (express.e:19403-19415)
+      let finalFilePath = data.path || '';
+      if (data.path && fileStatus !== 'active') {
+        try {
+          finalFilePath = await moveUploadedFile(
+            data.path,
+            currentFile.filename,
+            fileStatus,
+            session.currentConf,
+            config.dataDir
+          );
+          console.log(`[Upload] File moved to: ${finalFilePath}`);
+        } catch (error: any) {
+          console.error(`[Upload] Error moving file: ${error.message}`);
+          // Continue with original path on error
+        }
+      }
+
+      // Save file to database
+      const fileEntry = {
+        filename: currentFile.filename,
+        description: finalDescription,  // Use DIZ if found, otherwise batch description
+        size: data.size,
+        uploader: session.user!.username,
+        uploadDate: new Date(),
+        downloads: 0,
+        areaId: fileArea.id,
+        status: fileStatus,  // active, private, or hold based on test result
+        checked: checkedMarker,  // P/F/N status marker
+        filePath: finalFilePath  // Store actual file path
+      };
+
+      await db.createFileEntry(fileEntry);
+
+      // Write to DIR file (express.e:19473-19509)
+      try {
+        const conferencePath = getConferenceDir(session.currentConf, config.dataDir);
+        await writeUploadToDirFile(
+          currentFile.filename,
+          data.size,
+          new Date(),
+          finalDescription,
+          checkedMarker,
+          session.user!.name || session.user!.username,
+          conferencePath,
+          fileStatus,
+          1,  // maxDirs - TODO: Make configurable
+          true  // addSentBy - TODO: Make configurable via SENTBY_FILES
+        );
+        console.log(`[Upload] Wrote DIR entry for ${currentFile.filename}`);
+      } catch (error: any) {
+        console.error(`[Upload] Error writing DIR file: ${error.message}`);
+        // Don't fail upload on DIR write error
+      }
+
+      // Update user stats in users table (for backward compatibility)
+      await db.updateUser(session.user!.id, {
+        uploads: (session.user!.uploads || 0) + 1,
+        bytesUpload: (session.user!.bytesUpload || 0) + data.size
+      });
+
+      // Update user_stats table (for ratio calculations)
+      await db.query(
+        'UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2',
+        [data.size, session.user!.id]
+      );
+
+      // Log file upload (express.e:9493 callersLog)
+      await callersLog(session.user!.id, session.user!.username, 'Uploaded file', currentFile.filename);
+
+      // Update sysop upload statistics (express.e:19440)
+      try {
+        const conferencePath = getConferenceDir(session.currentConf, config.dataDir);
+        await updateSysopUploadStats(
+          conferencePath,
+          session.currentConf,
+          config.dataDir,
+          fileStatus === 'hold' || fileStatus === 'private'
+        );
+      } catch (error: any) {
+        console.error(`[Upload] Error updating sysop stats: ${error.message}`);
+      }
+
+      // Check if more files to upload
+      if (currentIndex + 1 < session.tempData.uploadBatch.length) {
+        // More files - trigger next upload
+        session.tempData.currentUploadIndex = currentIndex + 1;
+        const nextFile = session.tempData.uploadBatch[currentIndex + 1];
+
+        socket.emit('show-file-upload', {
+          accept: '*/*',
+          maxSize: 10 * 1024 * 1024, // 10MB max
+          uploadUrl: '/api/upload',
+          fieldName: 'file',
+          expectedFilename: nextFile.filename
+        });
+
+        session.subState = LoggedOnSubState.FILES_UPLOAD;
+        return;
+      }
+
+      // All files uploaded - show statistics (express.e:19059-19083)
+      const uploadTime = Math.floor((Date.now() - session.tempData.uploadStartTime) / 1000); // seconds
+      const minutes = Math.floor(uploadTime / 60);
+      const seconds = uploadTime % 60;
+      const bytesKB = Math.floor(session.tempData.uploadedBytes / 1024);
+      const cps = uploadTime > 0 ? Math.floor(session.tempData.uploadedBytes / uploadTime) : 0;
+
+      socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
+      socket.emit('ansi-output', ` ${session.tempData.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps.\r\n`);
+      socket.emit('ansi-output', '\r\n');
+
+      // Log batch upload summary
+      const summaryLog = `\t ${session.tempData.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps.`;
+      await callersLog(session.user!.id, session.user!.username, summaryLog);
+
+      // Notify sysop of upload (express.e:19098)
+      try {
+        await doUploadNotify(
+          session.user!.name || session.user!.username,
+          session.user!.location || 'Unknown',
+          config.bbsName || 'AmiExpress BBS',
+          undefined,  // TODO: Get sysop email from config
+          false  // TODO: Get MAIL_ON_UPLOAD from config
+        );
+      } catch (error: any) {
+        console.error(`[Upload] Error sending upload notification: ${error.message}`);
+      }
+
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+
+    } catch (error) {
+      console.error('File upload error:', error);
+      socket.emit('ansi-output', '\r\n\x1b[31mError saving file to database\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
     }
   });
 
@@ -1412,7 +1704,9 @@ async function initializeData() {
       db,
       joinConference,
       checkConfAccess,
-      displayScreen
+      displayScreen,
+      displayUploadInterface,
+      displayDownloadInterface
     });
 
     // Inject dependencies into system commands handler
@@ -1440,7 +1734,8 @@ async function initializeData() {
 
     // Inject dependencies into preference/chat commands handler
     setPreferenceChatCommandsDependencies({
-      startSysopPage
+      startSysopPage,
+      db
     });
 
     // Inject dependencies into advanced commands handler
@@ -1518,7 +1813,9 @@ async function initializeData() {
     // Inject dependencies into command handler
     setDatabaseForCommandHandler(db);
     setConfig(config);
+    setConferencesForCommandHandler(conferences);
     setMessageBasesForCommandHandler(messageBases);
+    setFileAreasForCommandHandler(fileAreas);
     setProcessOlmMessageQueue(processOlmMessageQueue);
     setCheckSecurity(checkSecurity);
     setSetEnvStat(setEnvStat);

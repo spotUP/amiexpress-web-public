@@ -27,14 +27,17 @@ interface BBSSession {
 
 // Dependencies injected from index.ts
 let _startSysopPage: (socket: any, session: BBSSession) => void;
+let _db: any;
 
 /**
  * Set dependencies for preference/chat commands (called from index.ts)
  */
 export function setPreferenceChatCommandsDependencies(deps: {
   startSysopPage: typeof _startSysopPage;
+  db?: any;
 }) {
   _startSysopPage = deps.startSysopPage;
+  if (deps.db) _db = deps.db;
 }
 
 /**
@@ -86,21 +89,36 @@ export function handleAnsiModeCommand(socket: any, session: BBSSession): void {
  *
  * Toggles expert mode (hides menu, single-key commands).
  */
-export function handleExpertModeCommand(socket: any, session: BBSSession): void {
-  if (session.expertMode) {
-    session.expertMode = false;
+export async function handleExpertModeCommand(socket: any, session: BBSSession): Promise<void> {
+  // express.e:26113-26122 - Toggle expert mode flag
+  console.log('🔧 [X Command] Before toggle - session.user.expert:', session.user.expert);
+
+  if (session.user.expert) {
+    session.user.expert = false;
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', 'Expert mode disabled\r\n');
     socket.emit('ansi-output', '\r\n');
   } else {
-    session.expertMode = true;
+    session.user.expert = true;
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', 'Expert mode enabled\r\n');
     socket.emit('ansi-output', '\r\n');
   }
 
+  console.log('🔧 [X Command] After toggle - session.user.expert:', session.user.expert);
+
+  // Save expert mode preference to database
+  if (_db) {
+    console.log('🔧 [X Command] Saving to database - user.id:', session.user.id, 'expert:', session.user.expert);
+    await _db.updateUser(session.user.id, { expert: session.user.expert });
+    console.log('🔧 [X Command] Database update complete');
+  } else {
+    console.log('⚠️  [X Command] _db not available, cannot save to database!');
+  }
+
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.subState = LoggedOnSubState.DISPLAY_MENU;
+  console.log('🔧 [X Command] Setting subState to DISPLAY_MENU');
 }
 
 /**
@@ -133,17 +151,26 @@ export function handleCommentToSysopCommand(socket: any, session: BBSSession, pa
 
   console.log('[ENV] Mail');
 
-  // TODO: Implement commentToSYSOP() - requires message editor and sysop mail system
+  // express.e:24662-24664 - Start private message to sysop
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Comment to Sysop'));
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('Comment system not yet implemented'));
+  socket.emit('ansi-output', `Conference: ${session.currentConfName}\r\n`);
+  socket.emit('ansi-output', 'To: sysop\r\n');
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'This would allow you to leave a private message for the sysop.\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  socket.emit('ansi-output', 'Enter subject for your comment (or press Enter to abort):\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('Subject: ', 'green'));
 
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  // Set up message entry with recipient pre-set to sysop
+  session.inputBuffer = '';
+  session.tempData = {
+    isPrivate: true,
+    messageEntry: {
+      toUser: 'sysop'  // Pre-set recipient to sysop
+    }
+  };
+  // Go directly to subject input since recipient is already set
+  session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
 }
 
 /**

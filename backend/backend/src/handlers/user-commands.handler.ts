@@ -48,6 +48,8 @@ let _db: Database;
 let _joinConference: (socket: any, session: BBSSession, confId: number, msgBaseId: number) => Promise<boolean>;
 let _checkConfAccess: (user: any, confNum: number) => boolean;
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
+let _displayUploadInterface: (socket: any, session: BBSSession, params: string) => void;
+let _displayDownloadInterface: (socket: any, session: BBSSession, params: string) => void;
 
 // Injection functions
 export function setUserCommandsDependencies(deps: {
@@ -57,6 +59,8 @@ export function setUserCommandsDependencies(deps: {
   joinConference: typeof _joinConference;
   checkConfAccess: typeof _checkConfAccess;
   displayScreen: typeof _displayScreen;
+  displayUploadInterface: typeof _displayUploadInterface;
+  displayDownloadInterface: typeof _displayDownloadInterface;
 }) {
   _conferences = deps.conferences;
   _messageBases = deps.messageBases;
@@ -64,6 +68,8 @@ export function setUserCommandsDependencies(deps: {
   _joinConference = deps.joinConference;
   _checkConfAccess = deps.checkConfAccess;
   _displayScreen = deps.displayScreen;
+  _displayUploadInterface = deps.displayUploadInterface;
+  _displayDownloadInterface = deps.displayDownloadInterface;
 }
 
 /**
@@ -193,9 +199,9 @@ export async function handleJoinConferenceCommand(
       { text: ': ', color: 'white' }
     ]));
 
-    // Set state to wait for input
-    session.subState = LoggedOnSubState.READ_COMMAND;
-    // TODO: Add pendingJoinConferenceInput flag to session
+    // Set state to wait for conference number input
+    session.subState = 'JOIN_CONF_INPUT' as any;
+    session.inputBuffer = '';
     return;
   }
 
@@ -256,13 +262,8 @@ export function handleUploadCommand(socket: any, session: BBSSession): void {
   // express.e:25651-25655 - Background file check (web version doesn't need this)
   // express.e:25656 - stat:=uploadaFile(0,cmdcode,FALSE)
 
-  // TODO: Implement file upload system
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('File upload system not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  // Display upload interface (calls displayUploadInterface from file.handler.ts)
+  _displayUploadInterface(socket, session, '');
 }
 
 /**
@@ -282,11 +283,6 @@ export function handleDownloadCommand(socket: any, session: BBSSession, params: 
   console.log('[ENV] Downloading');
 
   // express.e:24856 - beginDLF(cmdcode,params)
-  // TODO: Implement file download system
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('File download system not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  // Display download interface (calls displayDownloadInterface from file.handler.ts)
+  _displayDownloadInterface(socket, session, params);
 }

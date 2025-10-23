@@ -4,7 +4,18 @@
  * 1:1 port from AmiExpress express.e file operations
  */
 
-import { BBSSession, LoggedOnSubState } from '../index';
+import { LoggedOnSubState } from '../constants/bbs-states';
+
+// Types
+interface BBSSession {
+  user?: any;
+  subState?: string;
+  currentConf?: number;
+  currentConfName?: string;
+  currentMsgBase?: number;
+  menuPause?: boolean;
+  [key: string]: any;
+}
 
 // Dependencies (injected)
 let fileAreas: any[] = [];
@@ -61,36 +72,45 @@ export function setFileMaintenanceDependencies(deps: {
 
 // ===== File Area Display =====
 
+// displayFileAreaContents() - Display files in area (express.e:27670-27694)
 export function displayFileAreaContents(socket: any, session: BBSSession, area: any) {
-  socket.emit('ansi-output', `\x1b[2J\x1b[H`); // Clear screen
-  socket.emit('ansi-output', `\x1b[36m-= ${area.name} =-\x1b[0m\r\n`);
-  socket.emit('ansi-output', `${area.description}\r\n\r\n`);
+  // Show "Scanning directory X" message (express.e:27674 or 27683)
+  socket.emit('ansi-output', `Scanning directory ${area.id}, Area: ${area.name}\r\n`);
 
   // Get files in this area (like reading DIR file in AmiExpress)
   const areaFiles = fileEntries.filter(file => file.areaId === area.id);
 
   if (areaFiles.length === 0) {
-    socket.emit('ansi-output', 'No files in this area.\r\n');
-  } else {
-    socket.emit('ansi-output', 'Available files:\r\n\r\n');
-
-    // Format like AmiExpress DIR file display (1:1 with displayIt)
-    areaFiles.forEach(file => {
-      const sizeKB = Math.ceil(file.size / 1024);
-      const dateStr = file.uploadDate.toLocaleDateString();
-      const description = file.fileIdDiz || file.description;
-
-      // Format exactly like AmiExpress DIR display:
-      // filename        sizeK date       uploader
-      //   description line 1
-      //   description line 2
-      socket.emit('ansi-output', `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
-      socket.emit('ansi-output', `  ${description}\r\n\r\n`);
-    });
+    socket.emit('ansi-output', '\r\n');
+    return;
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to return to file areas...\x1b[0m');
-  session.subState = LoggedOnSubState.FILE_LIST;
+  // Format like AmiExpress DIR file display - express.e uses displayIt() to read pre-formatted DIR files
+  // DIR file format is typically: filename, size, date, uploader, then description on next lines
+  areaFiles.forEach(file => {
+    const sizeKB = Math.ceil(file.size / 1024);
+
+    // Format date as mm/dd/yy like original AmiExpress
+    const date = new Date(file.uploadDate);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = String(date.getFullYear()).slice(-2);
+    const dateStr = `${month}/${day}/${year}`;
+
+    const description = file.fileIdDiz || file.description;
+
+    // AmiExpress DIR format (one line per file with description):
+    // filename.ext   123K 12/25/95 uploader - Description text here
+    const sizePadded = `${sizeKB}K`.padStart(6);
+    socket.emit('ansi-output', `${file.filename.padEnd(13)} ${sizePadded} ${dateStr} ${file.uploader}`);
+
+    if (description) {
+      socket.emit('ansi-output', ` - ${description}`);
+    }
+    socket.emit('ansi-output', '\r\n');
+  });
+
+  socket.emit('ansi-output', '\r\n');
 }
 
 // displayFileList() - Main file listing function (1:1 with AmiExpress)
@@ -771,9 +791,14 @@ export function displayNewFilesInDirectories(socket: any, session: BBSSession, s
 
 export function displayUploadInterface(socket: any, session: BBSSession, params: string) {
   console.log('displayUploadInterface called with params:', params);
+  console.log('🔍 [Upload Debug] Total fileAreas:', fileAreas.length);
+  console.log('🔍 [Upload Debug] session.currentConf:', session.currentConf);
+  console.log('🔍 [Upload Debug] fileAreas data:', fileAreas.map(a => ({ id: a.id, name: a.name, confId: a.conferenceId })));
 
   // Check if there are file directories to upload to (NDIRS check)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
+  console.log('🔍 [Upload Debug] Filtered currentFileAreas:', currentFileAreas.length);
+
   if (currentFileAreas.length === 0) {
     socket.emit('ansi-output', '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
     socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
@@ -805,7 +830,7 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
 
   // Prompt for file area selection
   socket.emit('ansi-output', '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.FILE_AREA_SELECT;
+  session.subState = LoggedOnSubState.FILES_SELECT_AREA;
   session.tempData = { uploadMode: true, fileAreas: currentFileAreas };
 }
 
@@ -844,7 +869,7 @@ export function displayDownloadInterface(socket: any, session: BBSSession, param
 
   // Prompt for file area selection
   socket.emit('ansi-output', '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.FILE_AREA_SELECT;
+  session.subState = LoggedOnSubState.FILES_SELECT_AREA;
   session.tempData = { downloadMode: true, fileAreas: currentFileAreas };
 }
 
@@ -896,19 +921,7 @@ export function dirLineNewFile(dirLine: string, searchDate: Date): boolean {
 export function startFileUpload(socket: any, session: BBSSession, fileArea: any) {
   console.log('startFileUpload called for area:', fileArea.name);
 
-  socket.emit('ansi-output', `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n`);
-  socket.emit('ansi-output', '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Upload your files to share with the community.\r\n\r\n');
-
-  // Display user stats (like displayULStats in AmiExpress)
-  const user = session.user!;
-  socket.emit('ansi-output', '\x1b[32mYour Upload Statistics:\x1b[0m\r\n');
-  socket.emit('ansi-output', `Files Uploaded: ${user.uploads || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Uploaded: ${user.bytesUpload || 0}\r\n\r\n`);
-
-  // Display available space (simplified - in production, calculate from file system)
-  socket.emit('ansi-output', '\x1b[32mAvailable Upload Space:\x1b[0m\r\n');
-  socket.emit('ansi-output', '1,000,000 bytes available\r\n\r\n');
+  socket.emit('ansi-output', `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n\r\n`);
 
   // Check if user has upload access to this area
   if (fileArea.uploadAccess > (session.user?.secLevel || 0)) {
@@ -920,125 +933,27 @@ export function startFileUpload(socket: any, session: BBSSession, fileArea: any)
     return;
   }
 
-  // Display upload message (like UPLOADMSG.TXT)
-  socket.emit('ansi-output', '\r\n\x1b[32mUpload Message:\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Please select files to upload. Files will be validated and checked for duplicates.\r\n');
-  socket.emit('ansi-output', 'Filename lengths above 12 characters are not allowed.\r\n\r\n');
+  // Display available space (express.e:18991-18993)
+  socket.emit('ansi-output', '1,000,000 bytes available for uploading.  1,000,000 at one time.\r\n');
+  socket.emit('ansi-output', 'Filename lengths above 12 are not allowed.\r\n\r\n');
 
-  // Display current protocol (WebSocket-based)
-  socket.emit('ansi-output', '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
+  // Start batch upload mode (express.e:17651-17653)
+  socket.emit('ansi-output', 'Batch UpLoading.....\r\n');
+  socket.emit('ansi-output', '\r\nUnlimited files.  Blank Line to start transfer.\r\n');
 
-  // Initialize WebSocket file upload
-  socket.emit('ansi-output', '\x1b[32mWebSocket File Upload Ready\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Send file data using WebSocket protocol...\r\n\r\n');
-
-  // Set up WebSocket file upload handlers
+  // Initialize upload session data
   session.tempData = {
     uploadMode: true,
     fileArea: fileArea,
-    uploadState: 'ready',
-    currentFile: null,
-    receivedChunks: [],
-    totalSize: 0
+    uploadSessionId: socket.id,
+    uploadBatch: [],
+    uploadCount: 1,
+    uploadStartTime: Date.now()
   };
 
-  // Listen for file upload data
-  const uploadHandler = (data: any) => {
-    if (data.type === 'file-start') {
-      // Start of file upload
-      session.tempData.currentFile = {
-        filename: data.filename,
-        size: data.size,
-        description: data.description || ''
-      };
-      session.tempData.receivedChunks = [];
-      session.tempData.totalSize = data.size;
-      session.tempData.uploadState = 'receiving';
-
-      socket.emit('ansi-output', `\x1b[32mReceiving file: ${data.filename} (${data.size} bytes)\x1b[0m\r\n`);
-      socket.emit('ansi-output', 'Progress: [                    ] 0%\r\n');
-    } else if (data.type === 'file-chunk') {
-      // File chunk received
-      session.tempData.receivedChunks.push(data.chunk);
-
-      const receivedBytes = session.tempData.receivedChunks.reduce((sum: number, chunk: string) => sum + chunk.length, 0);
-      const progress = Math.floor((receivedBytes / session.tempData.totalSize) * 100);
-      const progressBar = '[' + '='.repeat(Math.floor(progress / 5)) + ' '.repeat(20 - Math.floor(progress / 5)) + ']';
-
-      // Update progress display (overwrite previous line)
-      socket.emit('ansi-output', '\x1b[1A\x1b[K'); // Move up and clear line
-      socket.emit('ansi-output', `Progress: ${progressBar} ${progress}%\r\n`);
-    } else if (data.type === 'file-end') {
-      // File upload complete
-      const fileData = session.tempData.receivedChunks.join('');
-      const file = session.tempData.currentFile;
-
-      // Validate file (basic checks)
-      if (file.filename.length > 12) {
-        socket.emit('ansi-output', '\x1b[31mError: Filename too long (max 12 characters)\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-        return;
-      }
-
-      // Save file to database
-      const fileEntry = {
-        filename: file.filename,
-        description: file.description,
-        size: fileData.length,
-        uploader: session.user!.username,
-        uploadDate: new Date(),
-        downloads: 0,
-        areaId: fileArea.id,
-        status: 'active' as const,
-        checked: 'N' as const
-      };
-
-      // In production, save to file system too
-      // For now, just store in database
-      db.createFileEntry(fileEntry).then(async () => {
-        // Update user stats in users table (for backward compatibility)
-        await db.updateUser(session.user!.id, {
-          uploads: (session.user!.uploads || 0) + 1,
-          bytesUpload: (session.user!.bytesUpload || 0) + fileData.length
-        });
-
-        // Update user_stats table (for ratio calculations)
-        await db.query(
-          'UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2',
-          [fileData.length, session.user!.id]
-        );
-
-        // Log file upload (express.e:9493 callersLog)
-        await callersLog(session.user!.id, session.user!.username, 'Uploaded file', file.filename);
-
-        socket.emit('ansi-output', '\x1b[32mFile uploaded successfully!\x1b[0m\r\n');
-        socket.emit('ansi-output', `Added to ${fileArea.name}\r\n`);
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-      }).catch((error: any) => {
-        console.error('File upload error:', error);
-        socket.emit('ansi-output', '\x1b[31mError saving file to database\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-      });
-    }
-  };
-
-  // Store upload handler for cleanup
-  (socket as any).uploadHandler = uploadHandler;
-  socket.on('file-upload', uploadHandler);
-
-  socket.emit('ansi-output', '\x1b[32mReady to receive file data...\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to cancel upload...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // Prompt for first filename (express.e:17658-17661)
+  socket.emit('ansi-output', `\r\nFileName 1: `);
+  session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
 }
 
 export function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
@@ -1093,7 +1008,7 @@ export function startFileDownload(socket: any, session: BBSSession, fileArea: an
 
   // Prompt for file selection
   socket.emit('ansi-output', '\x1b[32mSelect file to download (1-\x1b[33m' + areaFiles.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.FILE_AREA_SELECT;
+  session.subState = LoggedOnSubState.FILES_SELECT_AREA;
   session.tempData = { downloadMode: true, fileArea, areaFiles };
 }
 

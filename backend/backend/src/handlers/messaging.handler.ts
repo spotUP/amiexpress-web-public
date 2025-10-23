@@ -4,7 +4,8 @@
  * 1:1 port from AmiExpress express.e message commands
  */
 
-import { BBSSession, LoggedOnSubState } from '../index';
+import { BBSSession } from '../index';
+import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
 import { ACSCode } from '../constants/acs-codes';
 import { EnvStat } from '../constants/env-codes';
@@ -14,16 +15,34 @@ import { ErrorHandler } from '../utils/error-handling.util';
 // Dependencies (injected)
 let _db: any;
 let _callersLog: any;
+let _setEnvStat: any;
+
+// Helper functions for database operations
+async function _deleteMessage(messageId: number): Promise<void> {
+  await _db.deleteMessage(messageId);
+}
+
+async function _updateReadPointer(userId: number, confId: number, msgBaseId: number, lastRead: number): Promise<void> {
+  await _db.updateReadPointer(userId, confId, msgBaseId, lastRead);
+}
 
 /**
  * Dependency injection setter
  */
 export function setMessagingDependencies(deps: {
-  db: any;
-  callersLog: any;
+  db?: any;
+  callersLog?: any;
+  setEnvStat?: any;
+  messages?: any;
+  getMailStatFile?: any;
+  loadMsgPointers?: any;
+  validatePointers?: any;
+  updateReadPointer?: any;
 }) {
-  _db = deps.db;
-  _callersLog = deps.callersLog;
+  if (deps.db) _db = deps.db;
+  if (deps.callersLog) _callersLog = deps.callersLog;
+  if (deps.setEnvStat) _setEnvStat = deps.setEnvStat;
+  // Note: other deps (messages, getMailStatFile, etc.) not used yet but accepted for future use
 }
 
 /**
@@ -39,7 +58,7 @@ export async function handleReadMessagesFullCommand(
   params: string = ''
 ): Promise<void> {
   // Check security permission - express.e:25519
-  if (!checkSecurity(session, ACSCode.READ_MESSAGE)) {
+  if (!checkSecurity(session.user, ACSCode.READ_MESSAGE)) {
     ErrorHandler.permissionDenied(socket, 'read messages', {
       nextState: LoggedOnSubState.DISPLAY_CONF_BULL
     });
@@ -127,8 +146,123 @@ async function displaySingleMessage(socket: any, session: BBSSession, messageInd
 }
 
 /**
+ * Display short help menu (helplist=1)
+ * From express.e:11009-11017
+ */
+function displayShortHelp(socket: any, session: BBSSession): void {
+  const messages = session.tempData.msgReaderMessages;
+  const currentIndex = session.tempData.msgReaderIndex;
+  const nextMsgNum = currentIndex < messages.length - 1 ? messages[currentIndex + 1].id : 'End';
+
+  socket.emit('ansi-output', AnsiUtil.colorize('A', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('gain', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  if (checkSecurity(session.user, ACSCode.DELETE_MESSAGE)) {
+    socket.emit('ansi-output', AnsiUtil.colorize('D', 'yellow'));
+    socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+    socket.emit('ansi-output', AnsiUtil.colorize('elete Message', 'cyan'));
+    socket.emit('ansi-output', '\r\n');
+  }
+
+  socket.emit('ansi-output', AnsiUtil.colorize('F', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('orward', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('R', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('eply', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('L', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('ist', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('Q', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('uit', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('<CR>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('=', 'white'));
+  socket.emit('ansi-output', AnsiUtil.colorize('Next ', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('( ', 'green'));
+  socket.emit('ansi-output', `${nextMsgNum}`);
+  socket.emit('ansi-output', AnsiUtil.colorize(' )', 'green'));
+  socket.emit('ansi-output', ' >: ');
+
+  session.subState = 'MSG_READER_NAV';
+}
+
+/**
+ * Display full help menu (helplist=2)
+ * From express.e:11018-11045
+ */
+function displayFullHelp(socket: any, session: BBSSession): void {
+  const messages = session.tempData.msgReaderMessages;
+  const currentIndex = session.tempData.msgReaderIndex;
+  const nextMsgNum = currentIndex < messages.length - 1 ? messages[currentIndex + 1].id : 'End';
+
+  socket.emit('ansi-output', AnsiUtil.colorize('A', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('gain', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  if (checkSecurity(session.user, ACSCode.DELETE_MESSAGE)) {
+    socket.emit('ansi-output', AnsiUtil.colorize('D', 'yellow'));
+    socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+    socket.emit('ansi-output', AnsiUtil.colorize('elete Message', 'cyan'));
+    socket.emit('ansi-output', '\r\n');
+  }
+
+  socket.emit('ansi-output', AnsiUtil.colorize('F', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('orward', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('R', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('eply', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('L', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('ist all messages', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('NS', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize(' Non-stop mode', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('K', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('eep and quit', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('Q', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('uit', 'cyan'));
+  socket.emit('ansi-output', '\r\n');
+
+  socket.emit('ansi-output', AnsiUtil.colorize('<CR>', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('=', 'white'));
+  socket.emit('ansi-output', AnsiUtil.colorize('Next ', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize('( ', 'green'));
+  socket.emit('ansi-output', `${nextMsgNum}`);
+  socket.emit('ansi-output', AnsiUtil.colorize(' )', 'green'));
+  socket.emit('ansi-output', ' >: ');
+
+  session.subState = 'MSG_READER_NAV';
+}
+
+/**
  * Display message navigation prompt
- * From express.e:11000-11036
+ * From express.e:10992-11036
+ * Default is compact format (helplist=0), use ? for short help, ?? for full help
  */
 function displayMessageNavigationPrompt(socket: any, session: BBSSession): void {
   const messages = session.tempData.msgReaderMessages;
@@ -136,37 +270,34 @@ function displayMessageNavigationPrompt(socket: any, session: BBSSession): void 
   const currentMsg = messages[currentIndex];
   const nextMsgNum = currentIndex < messages.length - 1 ? messages[currentIndex + 1].id : 'End';
 
-  // Display simple navigation menu - express.e:11009
+  // Like express.e:10993-11000 - Compact format (helplist=0) is the DEFAULT
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('Msg. Options: ', 'green'));
   socket.emit('ansi-output', AnsiUtil.colorize('A', 'yellow'));
-  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
-  socket.emit('ansi-output', AnsiUtil.colorize('gain', 'cyan'));
 
-  if (checkSecurity(session, ACSCode.DELETE_MESSAGE)) {
-    socket.emit('ansi-output', '\r\n');
+  if (checkSecurity(session.user, ACSCode.DELETE_MESSAGE)) {
+    socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
     socket.emit('ansi-output', AnsiUtil.colorize('D', 'yellow'));
-    socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
-    socket.emit('ansi-output', AnsiUtil.colorize('elete Message', 'cyan'));
   }
 
-  socket.emit('ansi-output', '\r\n');
+  // Always show F,R,L,Q
+  socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
+  socket.emit('ansi-output', AnsiUtil.colorize('F', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
   socket.emit('ansi-output', AnsiUtil.colorize('R', 'yellow'));
-  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
-  socket.emit('ansi-output', AnsiUtil.colorize('eply', 'cyan'));
-
-  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
   socket.emit('ansi-output', AnsiUtil.colorize('L', 'yellow'));
-  socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
-  socket.emit('ansi-output', AnsiUtil.colorize('ist', 'cyan'));
-
-  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
   socket.emit('ansi-output', AnsiUtil.colorize('Q', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
+  socket.emit('ansi-output', AnsiUtil.colorize('?', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
+  socket.emit('ansi-output', AnsiUtil.colorize('??', 'yellow'));
+  socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
+  socket.emit('ansi-output', AnsiUtil.colorize('<', 'green'));
+  socket.emit('ansi-output', AnsiUtil.colorize('CR', 'yellow'));
   socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
-  socket.emit('ansi-output', AnsiUtil.colorize('uit', 'cyan'));
-
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('<CR>', 'green'));
-  socket.emit('ansi-output', AnsiUtil.colorize('=', 'white'));
-  socket.emit('ansi-output', AnsiUtil.colorize('Next ', 'yellow'));
+  socket.emit('ansi-output', ' ');
   socket.emit('ansi-output', AnsiUtil.colorize('( ', 'green'));
   socket.emit('ansi-output', `${nextMsgNum}`);
   socket.emit('ansi-output', AnsiUtil.colorize(' )', 'green'));
@@ -184,6 +315,18 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   const command = input.trim().toUpperCase();
   const messages = session.tempData.msgReaderMessages;
   const currentIndex = session.tempData.msgReaderIndex;
+
+  // ? - Short help (helplist=1) - express.e:11054-11056
+  if (command === '?') {
+    displayShortHelp(socket, session);
+    return;
+  }
+
+  // ?? - Full help (helplist=2) - express.e:11051-11053
+  if (command === '??') {
+    displayFullHelp(socket, session);
+    return;
+  }
 
   // CR/Enter - Next message - express.e:11062
   if (command === '' || command === 'N') {
@@ -235,12 +378,60 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // D - Delete message - express.e:11119-11131
-  if (command === 'D' && checkSecurity(session, ACSCode.DELETE_MESSAGE)) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.warningLine('Message deletion not yet implemented'));
-    socket.emit('ansi-output', '\r\n');
-    await displaySingleMessage(socket, session, currentIndex);
+  // F - Forward message - express.e:11178-11191
+  if (command === 'F') {
+    const msg = messages[currentIndex];
+    // Check if user can forward this message:
+    // - Public messages (not private)
+    // - Private messages to you
+    // - Messages to ALL
+    if (!msg.isPrivate || msg.toUser === session.user.username || msg.toUser === 'ALL') {
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.warningLine('Message forwarding not yet implemented'));
+      socket.emit('ansi-output', '\r\n');
+      await displaySingleMessage(socket, session, currentIndex);
+    } else {
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', 'Not your message.\r\n');
+      await displaySingleMessage(socket, session, currentIndex);
+    }
+    return;
+  }
+
+  // D - Delete message - express.e:11113-11121
+  if (command === 'D' && checkSecurity(session.user, ACSCode.DELETE_MESSAGE)) {
+    const msg = messages[currentIndex];
+
+    // Check if user can delete: public message OR message addressed to user
+    // Like express.e: (privateFlag=0) OR (toName matches username)
+    if (!msg.isPrivate || msg.toUser === session.user.username || msg.toUser === 'ALL') {
+      // Delete the message
+      await _deleteMessage(msg.id);
+
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.successLine('Message deleted'));
+      socket.emit('ansi-output', '\r\n');
+
+      // Remove from reader's message list
+      messages.splice(currentIndex, 1);
+      session.tempData.msgReaderMessages = messages;
+
+      // If there are no more messages, exit
+      if (messages.length === 0) {
+        socket.emit('ansi-output', 'No more messages.\r\n');
+        await saveMessagePointerAndExit(socket, session);
+        return;
+      }
+
+      // Display next message, or previous if we deleted the last one
+      const nextIndex = currentIndex < messages.length ? currentIndex : currentIndex - 1;
+      await displaySingleMessage(socket, session, nextIndex);
+    } else {
+      // Not your message
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', 'Not your message.\r\n');
+      await displaySingleMessage(socket, session, currentIndex);
+    }
     return;
   }
 
@@ -314,7 +505,7 @@ export function handleEnterMessageFullCommand(
   params: string = ''
 ): void {
   // Check security permission - express.e:24861
-  if (!checkSecurity(session, ACSCode.ENTER_MESSAGE)) {
+  if (!checkSecurity(session.user, ACSCode.ENTER_MESSAGE)) {
     ErrorHandler.permissionDenied(socket, 'post messages', {
       nextState: LoggedOnSubState.DISPLAY_CONF_BULL
     });
@@ -337,6 +528,7 @@ export function handleEnterMessageFullCommand(
 
   // Clear input buffer and set up for line-based input
   session.inputBuffer = '';
-  session.tempData = { isPrivate: true };
-  session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
+  session.tempData = { isPrivate: true, messageEntry: {} };
+  // IMPORTANT: Set state to POST_MESSAGE_TO (recipient input), NOT POST_MESSAGE_SUBJECT
+  session.subState = LoggedOnSubState.POST_MESSAGE_TO;
 }

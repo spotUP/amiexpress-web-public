@@ -87,6 +87,12 @@ export function handleMessagePrivateInput(socket: any, session: BBSSession, inpu
 export async function handleMessageBodyInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const line = input;
 
+  // Empty line = end of message entry (express.e behavior)
+  if (line.trim() === '') {
+    await saveMessage(socket, session);
+    return;
+  }
+
   // Check for editor commands
   if (line.startsWith('/')) {
     const cmd = line.substring(1).toUpperCase();

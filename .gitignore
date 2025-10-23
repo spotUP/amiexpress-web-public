@@ -139,3 +139,6 @@ backend/data/bbs/BBS/Node*/Screens/*
 !backend/data/bbs/BBS/Conf*/Screens/*.TXT
 !backend/data/bbs/BBS/Node*/Screens/*.TXT
 .vercel
+
+# BBS data directories
+reference-boardBBS/

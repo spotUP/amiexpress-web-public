@@ -167,6 +167,9 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
   await loadFlagged(socket, session);
   await loadHistory(session);
 
+  // Show pause prompt before displaying menu
+  doPause(socket, session);
+
   // Move to menu display
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   return true;

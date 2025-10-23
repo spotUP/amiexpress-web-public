@@ -1520,7 +1520,22 @@ export class Database {
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT * FROM file_areas WHERE conferenceid = $1 ORDER BY id`;
+      const sql = `
+        SELECT
+          id,
+          name,
+          description,
+          path,
+          conferenceid AS "conferenceId",
+          maxfiles AS "maxFiles",
+          uploadaccess AS "uploadAccess",
+          downloadaccess AS "downloadAccess",
+          created,
+          updated
+        FROM file_areas
+        WHERE conferenceid = $1
+        ORDER BY id
+      `;
       const result = await client.query(sql, [conferenceId]);
       return result.rows as FileArea[];
     } finally {

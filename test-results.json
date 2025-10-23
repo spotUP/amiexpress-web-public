@@ -1,0 +1,151 @@
+{
+  "timestamp": "2025-10-23T15:07:31.374Z",
+  "summary": {
+    "passed": 0,
+    "failed": 23,
+    "total": 23
+  },
+  "passed": [],
+  "failed": [
+    "J 1: Failed to join conference 1",
+    "J 2: Failed to join conference 2",
+    "J 4: Invalid conference number handling failed",
+    "X toggle on: No response from expert mode toggle",
+    "X toggle off: No response from expert mode toggle",
+    "> (Next Conf): Failed to move to next conference",
+    "< (Prev Conf): Failed to move to previous conference",
+    ">> (Next MB): Failed to move to next message base",
+    "<< (Prev MB): Failed to move to previous message base",
+    "R (Read): Read messages command failed",
+    "E (Enter): Enter message command failed",
+    "MS (Mail Scan): Mail scan command failed",
+    "F (File List): File list command failed",
+    "FR (Raw List): File list raw command failed",
+    "FS (Status): File status command failed",
+    "N (New Files): New files command failed",
+    "T (Time): Time command failed",
+    "S (Stats): Statistics command failed",
+    "VER: Version command failed",
+    "? (Help): Help command failed",
+    "W (Who): Who command failed",
+    "WHO: WHO command failed",
+    "WHD (Detailed): WHO detailed command failed"
+  ],
+  "issues": [
+    {
+      "test": "J 1",
+      "description": "Failed to join conference 1",
+      "severity": "error"
+    },
+    {
+      "test": "J 2",
+      "description": "Failed to join conference 2",
+      "severity": "error"
+    },
+    {
+      "test": "J 4",
+      "description": "Invalid conference number handling failed",
+      "severity": "error"
+    },
+    {
+      "test": "X toggle on",
+      "description": "No response from expert mode toggle",
+      "severity": "error"
+    },
+    {
+      "test": "X toggle off",
+      "description": "No response from expert mode toggle",
+      "severity": "error"
+    },
+    {
+      "test": "> (Next Conf)",
+      "description": "Failed to move to next conference",
+      "severity": "error"
+    },
+    {
+      "test": "< (Prev Conf)",
+      "description": "Failed to move to previous conference",
+      "severity": "error"
+    },
+    {
+      "test": ">> (Next MB)",
+      "description": "Failed to move to next message base",
+      "severity": "error"
+    },
+    {
+      "test": "<< (Prev MB)",
+      "description": "Failed to move to previous message base",
+      "severity": "error"
+    },
+    {
+      "test": "R (Read)",
+      "description": "Read messages command failed",
+      "severity": "error"
+    },
+    {
+      "test": "E (Enter)",
+      "description": "Enter message command failed",
+      "severity": "error"
+    },
+    {
+      "test": "MS (Mail Scan)",
+      "description": "Mail scan command failed",
+      "severity": "error"
+    },
+    {
+      "test": "F (File List)",
+      "description": "File list command failed",
+      "severity": "error"
+    },
+    {
+      "test": "FR (Raw List)",
+      "description": "File list raw command failed",
+      "severity": "error"
+    },
+    {
+      "test": "FS (Status)",
+      "description": "File status command failed",
+      "severity": "error"
+    },
+    {
+      "test": "N (New Files)",
+      "description": "New files command failed",
+      "severity": "error"
+    },
+    {
+      "test": "T (Time)",
+      "description": "Time command failed",
+      "severity": "error"
+    },
+    {
+      "test": "S (Stats)",
+      "description": "Statistics command failed",
+      "severity": "error"
+    },
+    {
+      "test": "VER",
+      "description": "Version command failed",
+      "severity": "error"
+    },
+    {
+      "test": "? (Help)",
+      "description": "Help command failed",
+      "severity": "error"
+    },
+    {
+      "test": "W (Who)",
+      "description": "Who command failed",
+      "severity": "error"
+    },
+    {
+      "test": "WHO",
+      "description": "WHO command failed",
+      "severity": "error"
+    },
+    {
+      "test": "WHD (Detailed)",
+      "description": "WHO detailed command failed",
+      "severity": "error"
+    }
+  ]
+}
