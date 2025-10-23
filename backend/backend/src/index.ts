@@ -67,6 +67,9 @@ import {
   setTransferMiscCommandsDependencies
 } from './handlers/transfer-misc-commands.handler';
 import {
+  setMessagingDependencies
+} from './handlers/messaging.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -917,6 +920,16 @@ async function initializeData() {
       displayUploadInterface,
       displayDownloadInterface,
       fileAreas
+    });
+
+    // Inject dependencies into messaging handler
+    setMessagingDependencies({
+      setEnvStat,
+      messages,
+      getMailStatFile,
+      loadMsgPointers,
+      validatePointers,
+      updateReadPointer
     });
 
     // Inject dependencies into command handler
