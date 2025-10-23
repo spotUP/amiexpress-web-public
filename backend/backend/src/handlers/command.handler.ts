@@ -81,6 +81,8 @@ import {
   handleNodeManagementCommand,
   handleConferenceMaintenanceCommand,
   handleJMInput,
+  handleCMInput,
+  handleCMNumericInput,
   setMessageCommandsDependencies
 } from './message-commands.handler';
 import {
@@ -618,6 +620,26 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle CM (Conference Maintenance) menu input
+  if (session.subState === 'CM_DISPLAY_MENU') {
+    console.log('⚙️  In CM menu state');
+    await handleCMInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle CM numeric inputs (B and C options)
+  if (session.subState === 'CM_INPUT_HIGH_MSG') {
+    console.log('⚙️  In CM high message input state');
+    await handleCMNumericInput(socket, session, data.trim(), 'HIGH_MSG');
+    return;
+  }
+
+  if (session.subState === 'CM_INPUT_LOW_MSG') {
+    console.log('⚙️  In CM low message input state');
+    await handleCMNumericInput(socket, session, data.trim(), 'LOW_MSG');
+    return;
+  }
+
   // Handle message posting workflow (line-based input like login system)
   console.log('📝 Checking if in POST_MESSAGE_SUBJECT state:', session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT);
   if (session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
@@ -1104,7 +1126,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'CM': // Conference Maintenance (SYSOP) (internalCommandCM) - express.e:24843-24852
-      handleConferenceMaintenanceCommand(socket, session);
+      await handleConferenceMaintenanceCommand(socket, session);
       return;
 
     case 'G': // Goodbye/Logoff (internalCommandG) - express.e:25047-25075

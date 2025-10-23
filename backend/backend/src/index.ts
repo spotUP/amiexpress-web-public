@@ -649,6 +649,106 @@ async function searchFileDescriptions(searchPattern: string, conferenceId: numbe
   }
 }
 
+// Conference Maintenance Database Functions (express.e:22686+)
+
+// Reset new mail scan pointers for all users in a conference/message base
+async function resetNewMailScanPointers(conferenceId: number, messageBaseId: number): Promise<number> {
+  try {
+    const result = await db.query(`
+      UPDATE msg_pointers
+      SET lastnewreadconf = 0
+      WHERE conferenceid = $1 AND messagebaseid = $2
+    `, [conferenceId, messageBaseId]);
+    return result.rowCount || 0;
+  } catch (error) {
+    console.error('[resetNewMailScanPointers] Error:', error);
+    return 0;
+  }
+}
+
+// Reset last message read pointers for all users in a conference/message base
+async function resetLastMessageReadPointers(conferenceId: number, messageBaseId: number): Promise<number> {
+  try {
+    const result = await db.query(`
+      UPDATE msg_pointers
+      SET lastmsgreadconf = 0
+      WHERE conferenceid = $1 AND messagebaseid = $2
+    `, [conferenceId, messageBaseId]);
+    return result.rowCount || 0;
+  } catch (error) {
+    console.error('[resetLastMessageReadPointers] Error:', error);
+    return 0;
+  }
+}
+
+// Get conference statistics
+async function getConferenceStats(conferenceId: number, messageBaseId: number): Promise<any> {
+  try {
+    // Get message count
+    const msgResult = await db.query(`
+      SELECT COUNT(*) as count,
+             COALESCE(MIN(id), 0) as lowest,
+             COALESCE(MAX(id), 0) as highest
+      FROM messages
+      WHERE conferenceid = $1 AND messagebaseid = $2
+    `, [conferenceId, messageBaseId]);
+
+    // Get user count with pointers for this conference
+    const userResult = await db.query(`
+      SELECT COUNT(DISTINCT userid) as count
+      FROM msg_pointers
+      WHERE conferenceid = $1 AND messagebaseid = $2
+    `, [conferenceId, messageBaseId]);
+
+    return {
+      messageCount: parseInt(msgResult.rows[0].count),
+      lowestMsgNum: parseInt(msgResult.rows[0].lowest),
+      highestMsgNum: parseInt(msgResult.rows[0].highest),
+      userCount: parseInt(userResult.rows[0].count)
+    };
+  } catch (error) {
+    console.error('[getConferenceStats] Error:', error);
+    return {
+      messageCount: 0,
+      lowestMsgNum: 0,
+      highestMsgNum: 0,
+      userCount: 0
+    };
+  }
+}
+
+// Update message number range in mailstat
+async function updateMessageNumberRange(conferenceId: number, messageBaseId: number, lowestKey?: number, highMsgNum?: number): Promise<boolean> {
+  try {
+    const updates: string[] = [];
+    const values: any[] = [conferenceId, messageBaseId];
+    let paramIndex = 3;
+
+    if (lowestKey !== undefined) {
+      updates.push(`lowest_key = $${paramIndex++}`);
+      values.push(lowestKey);
+    }
+
+    if (highMsgNum !== undefined) {
+      updates.push(`high_msg_num = $${paramIndex++}`);
+      values.push(highMsgNum);
+    }
+
+    if (updates.length === 0) return false;
+
+    await db.query(`
+      UPDATE mailstat
+      SET ${updates.join(', ')}
+      WHERE conferenceid = $1 AND messagebaseid = $2
+    `, values);
+
+    return true;
+  } catch (error) {
+    console.error('[updateMessageNumberRange] Error:', error);
+    return false;
+  }
+}
+
 // Load flagged files for user (express.e:2757)
 // In express.e, reads from BBS:Partdownload/flagged{slot} and dump{slot}
 // For web version, we store in database but maintain exact behavior
@@ -922,7 +1022,12 @@ async function initializeData() {
       messageBases,
       conferences,
       joinConference,
-      displayScreen
+      displayScreen,
+      resetNewMailScanPointers,
+      resetLastMessageReadPointers,
+      getConferenceStats,
+      updateMessageNumberRange,
+      getMailStatFile
     });
 
     // Inject dependencies into info commands handler
