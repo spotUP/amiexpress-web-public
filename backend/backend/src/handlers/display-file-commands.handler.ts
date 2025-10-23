@@ -266,7 +266,7 @@ function formatDate(date: Date): string {
  * Allows users to flag files for download.
  * Files can be flagged by name or pattern.
  */
-export function handleAlterFlagsCommand(socket: any, session: BBSSession, params: string = ''): void {
+export async function handleAlterFlagsCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   if (!checkSecurity(session.user, ACSPermission.DOWNLOAD)) {
     ErrorHandler.permissionDenied(socket, 'flag files for download', {
       nextState: LoggedOnSubState.DISPLAY_MENU
@@ -276,13 +276,199 @@ export function handleAlterFlagsCommand(socket: any, session: BBSSession, params
 
   console.log('[ENV] Files');
 
-  // TODO: Implement alterFlags(params) - requires file flagging system
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('File flagging not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  // Initialize flagged files array if not exists
+  if (!session.flaggedFiles) {
+    session.flaggedFiles = [];
+  }
 
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  await alterFlags(socket, session, params);
+}
+
+/**
+ * Alter flags implementation - express.e:12648-12664 alterFlags()
+ */
+async function alterFlags(socket: any, session: BBSSession, params: string): Promise<void> {
+  socket.emit('ansi-output', '\r\n');
+
+  if (params.length > 0) {
+    // Parameters provided - process directly
+    await flagFiles(socket, session, params);
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  } else {
+    // No parameters - enter interactive mode
+    showFlaggedFiles(socket, session);
+    promptForFlagInput(socket, session);
+  }
+}
+
+/**
+ * Show currently flagged files - express.e:12594 showFlags()
+ */
+function showFlaggedFiles(socket: any, session: BBSSession): void {
+  const flagged = session.flaggedFiles || [];
+
+  if (flagged.length === 0) {
+    socket.emit('ansi-output', AnsiUtil.colorize('No files currently flagged', 'yellow') + '\r\n');
+  } else {
+    socket.emit('ansi-output', AnsiUtil.headerBox('Flagged Files'));
+    socket.emit('ansi-output', '\r\n');
+
+    let totalSize = 0;
+    flagged.forEach((file, index) => {
+      totalSize += file.size || 0;
+      const size = formatFileSize(file.size || 0).padStart(10);
+      socket.emit('ansi-output',
+        `${String(index + 1).padStart(3)}. ${AnsiUtil.colorize(file.filename.padEnd(20), 'white')} ` +
+        `${AnsiUtil.colorize(size, 'cyan')} ` +
+        `${AnsiUtil.colorize(file.areaname, 'green')}\r\n`
+      );
+    });
+
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `Total: ${flagged.length} file(s), ${formatFileSize(totalSize)}\r\n`);
+  }
+
+  socket.emit('ansi-output', '\r\n');
+}
+
+/**
+ * Prompt for flag input - express.e:12597-12600
+ */
+function promptForFlagInput(socket: any, session: BBSSession): void {
+  socket.emit('ansi-output',
+    AnsiUtil.colorize('Filename(s) to flag: ', 'cyan') +
+    AnsiUtil.colorize('(', 'green') +
+    AnsiUtil.colorize('C', 'yellow') +
+    AnsiUtil.colorize(')', 'green') +
+    AnsiUtil.colorize('lear, ', 'cyan') +
+    AnsiUtil.colorize('(', 'green') +
+    AnsiUtil.colorize('Enter', 'yellow') +
+    AnsiUtil.colorize(')', 'green') +
+    AnsiUtil.colorize('=none? ', 'cyan')
+  );
+
+  session.subState = 'FLAG_INPUT';
+  session.tempData = { flagOperation: 'prompt' };
+}
+
+/**
+ * Process flag input - express.e:12605-12661
+ */
+export async function handleFlagInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const trimmed = input.trim();
+
+  if (trimmed.length === 0) {
+    // Enter = done
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.successLine(`${session.flaggedFiles?.length || 0} file(s) flagged`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.tempData = undefined;
+    return;
+  }
+
+  // Check for Clear command - express.e:12605-12621
+  if (trimmed.toUpperCase().startsWith('C ') || trimmed.toUpperCase() === 'C') {
+    const pattern = trimmed.length > 2 ? trimmed.substring(2).trim() : '*';
+
+    if (pattern === '*') {
+      // Clear all
+      session.flaggedFiles = [];
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.successLine('All flagged files cleared'));
+    } else {
+      // Clear specific pattern
+      const before = session.flaggedFiles?.length || 0;
+      const upperPattern = pattern.toUpperCase();
+      session.flaggedFiles = (session.flaggedFiles || []).filter(f =>
+        !f.filename.toUpperCase().includes(upperPattern)
+      );
+      const removed = before - (session.flaggedFiles?.length || 0);
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.successLine(`Cleared ${removed} file(s)`));
+    }
+
+    socket.emit('ansi-output', '\r\n');
+    showFlaggedFiles(socket, session);
+    promptForFlagInput(socket, session);
+    return;
+  }
+
+  // Add files matching pattern - express.e:12638-12661
+  await flagFiles(socket, session, trimmed);
+
+  // Show updated list and prompt again
+  socket.emit('ansi-output', '\r\n');
+  showFlaggedFiles(socket, session);
+  promptForFlagInput(socket, session);
+}
+
+/**
+ * Flag files matching pattern - express.e:12594+ flagFiles()
+ */
+async function flagFiles(socket: any, session: BBSSession, pattern: string): Promise<void> {
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize(`Searching for: ${pattern}`, 'cyan') + '\r\n');
+
+  // Convert wildcards: * -> SQL %, ? -> SQL _
+  const sqlPattern = pattern.toUpperCase().replace(/\*/g, '%').replace(/\?/g, '_');
+
+  // Search for files in current conference
+  const conferenceId = session.currentConf || 1;
+
+  try {
+    const query = `
+      SELECT
+        fe.id,
+        fe.filename,
+        fe.description,
+        fe.size,
+        fe.uploader,
+        fe.uploaddate,
+        fe.downloads,
+        fa.name AS areaname,
+        fa.id AS areaid
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fa.conferenceid = $1
+        AND UPPER(fe.filename) LIKE $2
+      ORDER BY fe.filename
+    `;
+
+    const result = await _db.query(query, [conferenceId, sqlPattern]);
+    const files = result.rows;
+
+    if (files.length === 0) {
+      socket.emit('ansi-output', AnsiUtil.warningLine('No files found matching pattern'));
+      return;
+    }
+
+    // Filter out files already flagged
+    const alreadyFlagged = new Set((session.flaggedFiles || []).map(f => f.id));
+    const newFiles = files.filter(f => !alreadyFlagged.has(f.id));
+
+    if (newFiles.length === 0) {
+      socket.emit('ansi-output', AnsiUtil.warningLine('All matching files already flagged'));
+      return;
+    }
+
+    // Add to flagged list
+    session.flaggedFiles = (session.flaggedFiles || []).concat(newFiles);
+
+    socket.emit('ansi-output', AnsiUtil.successLine(`Flagged ${newFiles.length} file(s)`));
+
+    // Show flagged files
+    newFiles.forEach(file => {
+      socket.emit('ansi-output',
+        `  ${AnsiUtil.colorize(file.filename.padEnd(20), 'white')} ` +
+        `${AnsiUtil.colorize(formatFileSize(file.size).padStart(10), 'cyan')}\r\n`
+      );
+    });
+  } catch (error) {
+    console.error('[flagFiles] Error:', error);
+    socket.emit('ansi-output', AnsiUtil.errorLine('Error searching for files'));
+  }
 }
 
 /**

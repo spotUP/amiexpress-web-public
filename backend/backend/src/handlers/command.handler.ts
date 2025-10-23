@@ -57,6 +57,7 @@ import {
   handleFileListCommand,
   handleFileListRawCommand,
   handleAlterFlagsCommand,
+  handleFlagInput,
   handleFileStatusCommand,
   handleReadBulletinCommand,
   handleBulletinInput as handleBulletinInputFromDisplayFileCommands,
@@ -630,6 +631,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle file flagging input (A command)
+  if (session.subState === 'FLAG_INPUT') {
+    await handleFlagInput(socket, session, data);
+    return;
+  }
+
   // Handle JM (Join Message Base) input
   if (session.subState === 'JM_INPUT') {
     console.log('📬 In JM input state');
@@ -1113,7 +1120,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'A': // Alter Flags (file flagging) (internalCommandA) - express.e:24601-24605
-      handleAlterFlagsCommand(socket, session, commandArgs);
+      await handleAlterFlagsCommand(socket, session, commandArgs);
       return;
 
     case 'E': // Enter Message (internalCommandE) - express.e:24860-24872
