@@ -53,6 +53,16 @@ import {
   setNavigationCommandsDependencies
 } from './navigation-commands.handler';
 import {
+  handleQuestionMarkCommand,
+  handleFileListCommand,
+  handleFileListRawCommand,
+  handleAlterFlagsCommand,
+  handleFileStatusCommand,
+  handleReadBulletinCommand,
+  handleBulletinInput as handleBulletinInputFromDisplayFileCommands,
+  setDisplayFileCommandsDependencies
+} from './display-file-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -1658,20 +1668,20 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       }
       break;
 
-    case 'F': // File Areas (internalCommandF) - displayFileList(params)
-      displayFileList(socket, session, params, false);
+    case 'F': // File Listings (internalCommandF) - express.e:24877-24881
+      handleFileListCommand(socket, session, commandArgs);
       return;
 
-    case 'FR': // File Areas Reverse (internalCommandFR) - displayFileList(params, TRUE)
-      displayFileList(socket, session, params, true);
+    case 'FR': // File Listings Raw (internalCommandFR) - express.e:24883-24887
+      handleFileListRawCommand(socket, session, commandArgs);
       return;
 
     case 'FM': // File Maintenance (internalCommandFM) - maintenanceFileSearch()
       displayFileMaintenance(socket, session, params);
       return; // Don't continue to menu display
 
-    case 'FS': // File Status (internalCommandFS) - fileStatus()
-      await displayFileStatus(socket, session, params);
+    case 'FS': // File Status (internalCommandFS) - express.e:24872-24875
+      handleFileStatusCommand(socket, session);
       return;
 
     case 'N': // New Files (internalCommandN) - express.e:25275-25279
@@ -1711,8 +1721,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleTimeCommand(socket, session);
       return;
 
-    case 'B': // Bulletins (internalCommandB) - express.e:24607-24652
-      handleBulletinCommand(socket, session, commandArgs);
+    case 'B': // Read Bulletin (internalCommandB) - express.e:24607-24656
+      handleReadBulletinCommand(socket, session, commandArgs);
       return;
 
     case 'H': // Help (internalCommandH) - express.e:25075-25087
@@ -1858,29 +1868,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case '?': // Help (internalCommandQuestionMark)
-      socket.emit('ansi-output', '\x1b[36m-= Command Help =-\x1b[0m\r\n');
-      socket.emit('ansi-output', '0 - Remote Shell\r\n');
-      socket.emit('ansi-output', '1 - Account Editing\r\n');
-      socket.emit('ansi-output', '2 - View Callers Log\r\n');
-      socket.emit('ansi-output', '3 - Edit Directory Files\r\n');
-      socket.emit('ansi-output', '4 - Edit Any File\r\n');
-      socket.emit('ansi-output', '5 - Change Directory\r\n');
-      socket.emit('ansi-output', 'R - Read Messages\r\n');
-      socket.emit('ansi-output', 'A - Post Message\r\n');
-      socket.emit('ansi-output', 'J - Join Conference\r\n');
-      socket.emit('ansi-output', 'JM - Join Message Base\r\n');
-      socket.emit('ansi-output', 'F - File Areas\r\n');
-      socket.emit('ansi-output', 'N - New Files\r\n');
-      socket.emit('ansi-output', 'D - Download Files\r\n');
-      socket.emit('ansi-output', 'U - Upload Files\r\n');
-      socket.emit('ansi-output', 'O - Page Sysop for Chat\r\n');
-      socket.emit('ansi-output', 'C - Comment to Sysop\r\n');
-      socket.emit('ansi-output', 'X - Expert Mode Toggle\r\n');
-      socket.emit('ansi-output', 'G - Goodbye\r\n');
-      socket.emit('ansi-output', 'Q - Quiet Node\r\n');
-      socket.emit('ansi-output', '? - This help\r\n');
-      break;
+    case '?': // Show Menu in Expert Mode (internalCommandQuestionMark) - express.e:24594-24599
+      handleQuestionMarkCommand(socket, session);
+      return;
 
     case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089
       // Searches for help files in BBS:Help/ directory

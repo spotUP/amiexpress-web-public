@@ -42,6 +42,9 @@ import {
   setNavigationCommandsDependencies
 } from './handlers/navigation-commands.handler';
 import {
+  setDisplayFileCommandsDependencies
+} from './handlers/display-file-commands.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -836,6 +839,13 @@ async function initializeData() {
       joinConference,
       checkConfAccess,
       displayNewFiles
+    });
+
+    // Inject dependencies into display/file commands handler
+    setDisplayFileCommandsDependencies({
+      displayScreen,
+      findSecurityScreen,
+      confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens')
     });
 
     // Inject dependencies into command handler
