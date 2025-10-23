@@ -108,7 +108,7 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
   const newMessagesQuery = await db.query(
     `SELECT c.id, c.name, COUNT(m.id) as new_count
      FROM conferences c
-     LEFT JOIN messages m ON m.conference_id = c.id AND m.timestamp > $1
+     LEFT JOIN messages m ON m.conferenceid = c.id AND m.timestamp > $1
      GROUP BY c.id, c.name
      HAVING COUNT(m.id) > 0
      ORDER BY c.id`,
