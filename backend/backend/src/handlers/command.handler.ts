@@ -412,12 +412,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
     // Handle file maintenance operations
     if (session.tempData?.operation === 'delete_files') {
-      handleFileDeleteConfirmation(socket, session, input);
+      await handleFileDeleteConfirmation(socket, session, input);
       return;
     }
 
     if (session.tempData?.operation === 'move_files') {
-      handleFileMoveConfirmation(socket, session, input);
+      await handleFileMoveConfirmation(socket, session, input);
       return;
     }
 

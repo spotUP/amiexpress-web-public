@@ -346,7 +346,7 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
 }
 
 // handleFileMove() - Move files between areas (FM M command)
-export function handleFileMove(socket: any, session: BBSSession, params: string[]) {
+export async function handleFileMove(socket: any, session: BBSSession, params: string[]) {
   if (params.length < 2) {
     socket.emit('ansi-output', 'Move files functionality.\r\n');
     socket.emit('ansi-output', 'Usage: FM M <filename> <destination_area>\r\n');
@@ -368,8 +368,11 @@ export function handleFileMove(socket: any, session: BBSSession, params: string[
     return;
   }
 
+  // Get all file areas in current conference from database
+  const allAreas = await _getFileAreas(session.currentConf || 1);
+
   // Check destination area exists
-  const destArea = fileAreas.find(a => a.id === destAreaId);
+  const destArea = allAreas.find((a: any) => a.id === destAreaId);
   if (!destArea) {
     socket.emit('ansi-output', '\r\n\x1b[31mDestination file area not found.\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
@@ -378,18 +381,8 @@ export function handleFileMove(socket: any, session: BBSSession, params: string[
     return;
   }
 
-  // Find matching files in current conference
-  const sourceAreas = fileAreas.filter(a => a.conferenceId === session.currentConf);
-  const matchingFiles: any[] = [];
-
-  sourceAreas.forEach(area => {
-    const areaFiles = fileEntries.filter(f => f.areaId === area.id);
-    areaFiles.forEach(file => {
-      if (matchesWildcard(file.filename, filename)) {
-        matchingFiles.push({ file, area });
-      }
-    });
-  });
+  // Search files using database (with wildcard support)
+  const matchingFiles = await _searchFilesByName(filename, session.currentConf || 1);
 
   if (matchingFiles.length === 0) {
     socket.emit('ansi-output', `\r\nNo files matching "${filename}" found in current conference.\r\n`);
@@ -401,7 +394,7 @@ export function handleFileMove(socket: any, session: BBSSession, params: string[
 
   // Check permissions (sysop or file owner)
   const userLevel = session.user?.secLevel || 0;
-  const allowedFiles = matchingFiles.filter(({ file }) =>
+  const allowedFiles = matchingFiles.filter((file: any) =>
     userLevel >= 200 || file.uploader.toLowerCase() === session.user?.username.toLowerCase()
   );
 
@@ -415,8 +408,8 @@ export function handleFileMove(socket: any, session: BBSSession, params: string[
 
   // Display files to be moved
   socket.emit('ansi-output', `\r\nFiles matching "${filename}" to move to ${destArea.name}:\r\n\r\n`);
-  allowedFiles.forEach(({ file, area }, index) => {
-    socket.emit('ansi-output', `${index + 1}. ${file.filename} (${area.name} -> ${destArea.name})\r\n`);
+  allowedFiles.forEach((file: any, index: number) => {
+    socket.emit('ansi-output', `${index + 1}. ${file.filename} (${file.areaname} -> ${destArea.name})\r\n`);
   });
 
   socket.emit('ansi-output', '\r\n\x1b[32mEnter file numbers to move (comma-separated) or "ALL" for all: \x1b[0m');
@@ -431,7 +424,7 @@ export function handleFileMove(socket: any, session: BBSSession, params: string[
   session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for input
 }
 
-export function handleFileMoveConfirmation(socket: any, session: BBSSession, input: string) {
+export async function handleFileMoveConfirmation(socket: any, session: BBSSession, input: string) {
   const tempData = session.tempData as { operation: string, allowedFiles: any[], destArea: any, filename: string };
 
   if (!tempData || tempData.operation !== 'move_files') {
@@ -464,23 +457,23 @@ export function handleFileMoveConfirmation(socket: any, session: BBSSession, inp
   }
 
   // Move files in database
-  const movePromises = filesToMove.map(({ file }) =>
-    db.updateFileEntry(file.id, { areaId: tempData.destArea.id }).catch((err: any) => console.error('Error moving file:', err))
+  const movePromises = filesToMove.map((file: any) =>
+    _moveFileEntry(file.id, tempData.destArea.id).catch((err: any) => console.error('Error moving file:', err))
   );
 
-  Promise.all(movePromises).then(() => {
-    socket.emit('ansi-output', `\r\n\x1b[32mMoved ${filesToMove.length} file(s) to ${tempData.destArea.name} successfully.\x1b[0m\r\n`);
+  await Promise.all(movePromises);
 
-    // Log move
-    filesToMove.forEach(({ file }) => {
-      callersLog(session.user!.id, session.user!.username, 'Moved file', `${file.filename} to ${tempData.destArea.name}`);
-    });
+  socket.emit('ansi-output', `\r\n\x1b[32mMoved ${filesToMove.length} file(s) to ${tempData.destArea.name} successfully.\x1b[0m\r\n`);
 
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+  // Log move
+  filesToMove.forEach((file: any) => {
+    callersLog(session.user!.id, session.user!.username, 'Moved file', `${file.filename} to ${tempData.destArea.name}`);
   });
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.tempData = undefined;
 }
 
 // handleFileSearch() - Search files by pattern (FM S command)
