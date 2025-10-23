@@ -375,6 +375,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // Like AmiExpress: after command completes, set menuPause=TRUE and display menu
         session.menuPause = true;
         displayMainMenu(socket, session);
+      } else if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
+        // After conference join, display the main menu
+        session.menuPause = true;
+        displayMainMenu(socket, session);
       } else if (session.subState === LoggedOnSubState.FILE_LIST) {
         // Return to file area selection
         session.subState = LoggedOnSubState.FILE_AREA_SELECT;
