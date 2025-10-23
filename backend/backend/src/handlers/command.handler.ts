@@ -123,6 +123,7 @@ import {
 import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,
+  handleMessageReaderNav,
   setMessagingDependencies
 } from './messaging.handler';
 import {
@@ -637,6 +638,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   if (session.subState === 'CM_INPUT_LOW_MSG') {
     console.log('⚙️  In CM low message input state');
     await handleCMNumericInput(socket, session, data.trim(), 'LOW_MSG');
+    return;
+  }
+
+  // Handle message reader navigation
+  if (session.subState === 'MSG_READER_NAV') {
+    console.log('📖 In message reader navigation state');
+    await handleMessageReaderNav(socket, session, data.trim());
     return;
   }
 
