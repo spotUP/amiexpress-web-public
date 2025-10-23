@@ -125,7 +125,8 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
   }
 
   // Update last scan time
-  await db.updateUser(session.user!.id, { lastScanTime: new Date() });
+  // TODO: Add lastScanTime column to users table
+  // await db.updateUser(session.user!.id, { lastScanTime: new Date() });
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
 
