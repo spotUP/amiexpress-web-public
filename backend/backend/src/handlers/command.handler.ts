@@ -358,6 +358,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   if (session.subState === LoggedOnSubState.DISPLAY_BULL ||
       session.subState === LoggedOnSubState.CONF_SCAN ||
       session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
+      session.subState === LoggedOnSubState.DISPLAY_MENU ||
       session.subState === LoggedOnSubState.FILE_LIST) {
     console.log('📋 In display state, continuing to next state');
     try {
