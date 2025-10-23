@@ -319,12 +319,12 @@ io.on('connection', async (socket) => {
   const session: BBSSession = {
     state: BBSState.AWAIT,
     subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
-    currentConf: 4, // Start in General conference (ID 4)
-    currentMsgBase: 7, // Start in Main message base (ID 7)
+    currentConf: 1, // Start in General conference (ID 1) → BBS/Conf01/
+    currentMsgBase: 1, // Start in Main message base (ID 1)
     timeRemaining: 60, // 60 minutes default
     lastActivity: Date.now(),
-    confRJoin: 4, // Default to General conference (ID 4)
-    msgBaseRJoin: 7, // Default to Main message base (ID 7)
+    confRJoin: 1, // Default to General conference (ID 1)
+    msgBaseRJoin: 1, // Default to Main message base (ID 1)
     commandBuffer: '', // Buffer for command input
     menuPause: true, // Like AmiExpress - menu displays immediately by default
     inputBuffer: '', // Buffer for line-based input

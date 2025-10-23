@@ -2323,84 +2323,105 @@ export class Database {
   async initializeDefaultData(): Promise<void> {
     const client = await this.pool.connect();
     try {
-      // Step 1: Create conferences and get their IDs
+      // Step 1: Create conferences with EXPLICIT IDs matching BBS structure
+      // CRITICAL: BBS directories Conf01, Conf02, Conf03 must map to IDs 1, 2, 3
       let confIds: { [key: string]: number } = {};
       try {
-        console.log('[DB Init Step 1/5] Creating default conferences...');
+        console.log('[DB Init Step 1/5] Creating default conferences with explicit IDs...');
+        // These IDs MUST match the BBS Conf## directory numbers
         const conferences = [
-          { name: 'General', description: 'General discussion' },
-          { name: 'Tech Support', description: 'Technical support' },
-          { name: 'Announcements', description: 'System announcements' }
+          { id: 1, name: 'General', description: 'General discussion' },          // Maps to BBS/Conf01/
+          { id: 2, name: 'Tech Support', description: 'Technical support' },      // Maps to BBS/Conf02/
+          { id: 3, name: 'Announcements', description: 'System announcements' }   // Maps to BBS/Conf03/
         ];
 
         for (const conf of conferences) {
-          const existing = await client.query('SELECT id FROM conferences WHERE name = $1', [conf.name]);
+          const existing = await client.query('SELECT id FROM conferences WHERE id = $1', [conf.id]);
           if (existing.rows.length === 0) {
-            const result = await client.query('INSERT INTO conferences (name, description) VALUES ($1, $2) RETURNING id', [conf.name, conf.description]);
-            confIds[conf.name] = result.rows[0].id;
-            console.log(`  ✓ Created conference: ${conf.name} (ID: ${confIds[conf.name]})`);
+            // Insert with explicit ID
+            await client.query(
+              'INSERT INTO conferences (id, name, description) VALUES ($1, $2, $3)',
+              [conf.id, conf.name, conf.description]
+            );
+            confIds[conf.name] = conf.id;
+            console.log(`  ✓ Created conference: ${conf.name} (ID: ${conf.id}) → BBS/Conf0${conf.id}/`);
           } else {
             confIds[conf.name] = existing.rows[0].id;
-            console.log(`  • Conference already exists: ${conf.name} (ID: ${confIds[conf.name]})`);
+            console.log(`  • Conference already exists: ${conf.name} (ID: ${conf.id}) → BBS/Conf0${conf.id}/`);
           }
         }
-        console.log('[DB Init Step 1/5] ✓ Conferences initialized');
+
+        // Update sequence to continue from max ID + 1
+        await client.query(`SELECT setval('conferences_id_seq', (SELECT MAX(id) FROM conferences), true)`);
+
+        console.log('[DB Init Step 1/5] ✓ Conferences initialized with explicit IDs');
       } catch (error) {
         console.error('[DB Init Step 1/5] ✗ Failed to create conferences:', error);
         throw error;
       }
 
-      // Step 2: Create message bases using actual conference IDs
+      // Step 2: Create message bases with EXPLICIT IDs
       try {
-        console.log('[DB Init Step 2/5] Creating default message bases...');
+        console.log('[DB Init Step 2/5] Creating default message bases with explicit IDs...');
         const messageBases = [
-          { name: 'Main', conferenceName: 'General' },
-          { name: 'Off Topic', conferenceName: 'General' },
-          { name: 'Support', conferenceName: 'Tech Support' },
-          { name: 'News', conferenceName: 'Announcements' }
+          { id: 1, name: 'Main', conferenceName: 'General' },             // Conference 1, Message Base 1
+          { id: 2, name: 'Off Topic', conferenceName: 'General' },        // Conference 1, Message Base 2
+          { id: 3, name: 'Support', conferenceName: 'Tech Support' },     // Conference 2, Message Base 3
+          { id: 4, name: 'News', conferenceName: 'Announcements' }        // Conference 3, Message Base 4
         ];
 
         for (const mb of messageBases) {
           const conferenceId = confIds[mb.conferenceName];
-          const existing = await client.query('SELECT id FROM message_bases WHERE name = $1 AND conferenceid = $2', [mb.name, conferenceId]);
+          const existing = await client.query('SELECT id FROM message_bases WHERE id = $1', [mb.id]);
           if (existing.rows.length === 0) {
-            await client.query('INSERT INTO message_bases (name, conferenceid) VALUES ($1, $2)', [mb.name, conferenceId]);
-            console.log(`  ✓ Created message base: ${mb.name} in conference ${mb.conferenceName}`);
+            await client.query(
+              'INSERT INTO message_bases (id, name, conferenceid) VALUES ($1, $2, $3)',
+              [mb.id, mb.name, conferenceId]
+            );
+            console.log(`  ✓ Created message base: ${mb.name} (ID: ${mb.id}) in conference ${mb.conferenceName} (ID: ${conferenceId})`);
           } else {
-            console.log(`  • Message base already exists: ${mb.name} in conference ${mb.conferenceName}`);
+            console.log(`  • Message base already exists: ${mb.name} (ID: ${mb.id}) in conference ${mb.conferenceName}`);
           }
         }
-        console.log('[DB Init Step 2/5] ✓ Message bases initialized');
+
+        // Update sequence
+        await client.query(`SELECT setval('message_bases_id_seq', (SELECT MAX(id) FROM message_bases), true)`);
+
+        console.log('[DB Init Step 2/5] ✓ Message bases initialized with explicit IDs');
       } catch (error) {
         console.error('[DB Init Step 2/5] ✗ Failed to create message bases:', error);
         throw error;
       }
 
-      // Step 3: Create file areas using actual conference IDs
+      // Step 3: Create file areas with EXPLICIT IDs
       try {
-        console.log('[DB Init Step 3/5] Creating default file areas...');
+        console.log('[DB Init Step 3/5] Creating default file areas with explicit IDs...');
         const fileAreas = [
-          { name: 'General Files', description: 'General purpose file area', path: '/files/general', conferenceName: 'General', maxFiles: 100, uploadAccess: 10, downloadAccess: 1 },
-          { name: 'Utilities', description: 'System utilities and tools', path: '/files/utils', conferenceName: 'General', maxFiles: 50, uploadAccess: 50, downloadAccess: 1 },
-          { name: 'Games', description: 'BBS games and entertainment', path: '/files/games', conferenceName: 'Tech Support', maxFiles: 75, uploadAccess: 25, downloadAccess: 1 },
-          { name: 'Tech Files', description: 'Technical documentation and tools', path: '/files/tech', conferenceName: 'Tech Support', maxFiles: 60, uploadAccess: 20, downloadAccess: 1 },
-          { name: 'System News', description: 'System announcements and updates', path: '/files/news', conferenceName: 'Announcements', maxFiles: 30, uploadAccess: 100, downloadAccess: 1 }
+          { id: 1, name: 'General Files', description: 'General purpose file area', path: '/files/general', conferenceName: 'General', maxFiles: 100, uploadAccess: 10, downloadAccess: 1 },
+          { id: 2, name: 'Utilities', description: 'System utilities and tools', path: '/files/utils', conferenceName: 'General', maxFiles: 50, uploadAccess: 50, downloadAccess: 1 },
+          { id: 3, name: 'Games', description: 'BBS games and entertainment', path: '/files/games', conferenceName: 'Tech Support', maxFiles: 75, uploadAccess: 25, downloadAccess: 1 },
+          { id: 4, name: 'Tech Files', description: 'Technical documentation and tools', path: '/files/tech', conferenceName: 'Tech Support', maxFiles: 60, uploadAccess: 20, downloadAccess: 1 },
+          { id: 5, name: 'System News', description: 'System announcements and updates', path: '/files/news', conferenceName: 'Announcements', maxFiles: 30, uploadAccess: 100, downloadAccess: 1 }
         ];
 
         for (const area of fileAreas) {
           const conferenceId = confIds[area.conferenceName];
-          const existing = await client.query('SELECT id FROM file_areas WHERE name = $1 AND conferenceid = $2', [area.name, conferenceId]);
+          const existing = await client.query('SELECT id FROM file_areas WHERE id = $1', [area.id]);
           if (existing.rows.length === 0) {
             await client.query(`
-              INSERT INTO file_areas (name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess)
-              VALUES ($1, $2, $3, $4, $5, $6, $7)
-            `, [area.name, area.description, area.path, conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
-            console.log(`  ✓ Created file area: ${area.name} in conference ${area.conferenceName}`);
+              INSERT INTO file_areas (id, name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [area.id, area.name, area.description, area.path, conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
+            console.log(`  ✓ Created file area: ${area.name} (ID: ${area.id}) in conference ${area.conferenceName} (ID: ${conferenceId})`);
           } else {
-            console.log(`  • File area already exists: ${area.name} in conference ${area.conferenceName}`);
+            console.log(`  • File area already exists: ${area.name} (ID: ${area.id}) in conference ${area.conferenceName}`);
           }
         }
-        console.log('[DB Init Step 3/5] ✓ File areas initialized');
+
+        // Update sequence
+        await client.query(`SELECT setval('file_areas_id_seq', (SELECT MAX(id) FROM file_areas), true)`);
+
+        console.log('[DB Init Step 3/5] ✓ File areas initialized with explicit IDs');
       } catch (error) {
         console.error('[DB Init Step 3/5] ✗ Failed to create file areas:', error);
         throw error;
