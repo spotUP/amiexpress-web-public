@@ -445,6 +445,54 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // PRIORITY 2: Handle group chat room mode input
+  // When user is in a chat room, intercept all input
+  if (session.subState === LoggedOnSubState.CHAT_ROOM) {
+    console.log('💬 User in CHAT_ROOM mode, handling room input');
+    const input = data.trim();
+
+    // Check for /LEAVE or /EXIT command
+    if (input.toUpperCase() === '/LEAVE' || input.toUpperCase() === '/EXIT') {
+      const { handleRoomLeave } = require('./group-chat.handler');
+      await handleRoomLeave(socket, session);
+      return;
+    }
+
+    // Check for /WHO command
+    if (input.toUpperCase() === '/WHO') {
+      const members = await db.getRoomMembers(session.currentRoomId);
+      socket.emit('ansi-output', '\r\n\x1b[36mUsers in room (' + members.length + '):\x1b[0m\r\n');
+      for (const member of members) {
+        const modBadge = member.is_moderator ? ' \x1b[33m[MOD]\x1b[0m' : '';
+        const muteBadge = member.is_muted ? ' \x1b[31m[MUTED]\x1b[0m' : '';
+        socket.emit('ansi-output', '  ' + member.username + modBadge + muteBadge + '\r\n');
+      }
+      socket.emit('ansi-output', '\r\n');
+      return;
+    }
+
+    // Check for /HELP command
+    if (input.toUpperCase() === '/HELP') {
+      socket.emit('ansi-output',
+        '\r\n' +
+        '\x1b[36mChat Room Commands:\x1b[0m\r\n' +
+        '  \x1b[33m/LEAVE\x1b[0m or \x1b[33m/EXIT\x1b[0m  - Leave the room\r\n' +
+        '  \x1b[33m/WHO\x1b[0m               - List users in room\r\n' +
+        '  \x1b[33m/HELP\x1b[0m              - Show this help\r\n' +
+        '  \x1b[33m<text>\x1b[0m             - Send message (max 500 chars)\r\n' +
+        '\r\n'
+      );
+      return;
+    }
+
+    // Regular message - send to room
+    if (input.length > 0) {
+      const { handleRoomMessage } = require('./group-chat.handler');
+      await handleRoomMessage(socket, session, { message: input });
+    }
+    return;
+  }
+
   // Handle substate-specific input
   if (session.subState === LoggedOnSubState.DISPLAY_BULL ||
       session.subState === LoggedOnSubState.CONF_SCAN ||
@@ -1563,6 +1611,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'CHAT': // Internode Chat (User-to-User Chat)
       await handleChatCommand(socket, session, params);
+      return;
+
+    case 'ROOM': // Group Chat Rooms (Modern Enhancement)
+      const { handleRoomCommand } = require('./room-commands.handler');
+      await handleRoomCommand(socket, session, params);
       return;
 
     case 'RL': // RELOGON (internalCommandRL) - express.e:25534-25539

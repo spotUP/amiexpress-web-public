@@ -82,6 +82,7 @@ export enum LoggedOnSubState {
   CHAT_PAGE_SYSOP = 'chat_page_sysop',
   CHAT_SESSION = 'chat_session',
   CHAT = 'chat',  // Internode chat (user-to-user chat mode)
+  CHAT_ROOM = 'chat_room',  // Group chat room mode
 
   // Conference operations
   CONFERENCE_SELECT = 'conference_select',

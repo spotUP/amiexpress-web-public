@@ -689,16 +689,6 @@ export class Database {
         ON chat_room_messages(sender_id);
       `);
 
-          description TEXT,
-          script TEXT NOT NULL,
-          triggers JSONB,
-          priority INTEGER DEFAULT 0,
-          enabled BOOLEAN DEFAULT TRUE,
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-
       // Node sessions table
       await client.query(`
         CREATE TABLE IF NOT EXISTS node_sessions (
@@ -2723,6 +2713,308 @@ export class Database {
     }
   }
 
+  // ===== CHAT ROOM METHODS (Phase 2 - Group Chat) =====
+
+  async createChatRoom(room: {
+    roomId: string;
+    roomName: string;
+    topic?: string;
+    createdBy: string;
+    createdByUsername: string;
+    isPublic?: boolean;
+    maxUsers?: number;
+    isPersistent?: boolean;
+    password?: string;
+  }): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO chat_rooms (
+          room_id, room_name, topic, created_by, created_by_username,
+          is_public, max_users, is_persistent, password
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `;
+      await client.query(sql, [
+        room.roomId,
+        room.roomName,
+        room.topic || null,
+        room.createdBy,
+        room.createdByUsername,
+        room.isPublic !== false,
+        room.maxUsers || 50,
+        room.isPersistent !== false,
+        room.password || null
+      ]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatRoom(roomId: string): Promise<any> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM chat_rooms WHERE room_id = $1`;
+      const result = await client.query(sql, [roomId]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatRoomByName(roomName: string): Promise<any> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM chat_rooms WHERE room_name = $1`;
+      const result = await client.query(sql, [roomName]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listChatRooms(onlyPublic: boolean = true): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = onlyPublic
+        ? `SELECT r.*,
+           (SELECT COUNT(*) FROM chat_room_members WHERE room_id = r.room_id) as member_count
+           FROM chat_rooms r
+           WHERE is_public = TRUE
+           ORDER BY created_at DESC`
+        : `SELECT r.*,
+           (SELECT COUNT(*) FROM chat_room_members WHERE room_id = r.room_id) as member_count
+           FROM chat_rooms r
+           ORDER BY created_at DESC`;
+      const result = await client.query(sql);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteChatRoom(roomId: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `DELETE FROM chat_rooms WHERE room_id = $1`;
+      await client.query(sql, [roomId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async joinChatRoom(roomId: string, userId: string, username: string, socketId: string, isModerator: boolean = false): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (room_id, user_id) DO UPDATE
+        SET socket_id = $4, is_moderator = $5
+      `;
+      await client.query(sql, [roomId, userId, username, socketId, isModerator]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async leaveChatRoom(roomId: string, userId: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `DELETE FROM chat_room_members WHERE room_id = $1 AND user_id = $2`;
+      await client.query(sql, [roomId, userId]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getRoomMembers(roomId: string): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM chat_room_members
+        WHERE room_id = $1
+        ORDER BY joined_at ASC
+      `;
+      const result = await client.query(sql, [roomId]);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getRoomMemberCount(roomId: string): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT COUNT(*) as count FROM chat_room_members WHERE room_id = $1`;
+      const result = await client.query(sql, [roomId]);
+      return parseInt(result.rows[0].count);
+    } finally {
+      client.release();
+    }
+  }
+
+  async saveChatRoomMessage(message: {
+    roomId: string;
+    senderId: string;
+    senderUsername: string;
+    message: string;
+    messageType?: string;
+  }): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO chat_room_messages (room_id, sender_id, sender_username, message, message_type)
+        VALUES ($1, $2, $3, $4, $5)
+      `;
+      await client.query(sql, [
+        message.roomId,
+        message.senderId,
+        message.senderUsername,
+        message.message,
+        message.messageType || 'message'
+      ]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChatRoomHistory(roomId: string, limit: number = 50): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT * FROM chat_room_messages
+        WHERE room_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+      `;
+      const result = await client.query(sql, [roomId, limit]);
+      return result.rows.reverse();
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateRoomMember(roomId: string, userId: string, updates: {
+    isMuted?: boolean;
+    isModerator?: boolean;
+  }): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sets: string[] = [];
+      const values: any[] = [];
+      let paramCount = 1;
+
+      if (updates.isMuted !== undefined) {
+        sets.push('is_muted = $' + paramCount++);
+        values.push(updates.isMuted);
+      }
+      if (updates.isModerator !== undefined) {
+        sets.push('is_moderator = $' + paramCount++);
+        values.push(updates.isModerator);
+      }
+
+      if (sets.length === 0) return;
+
+      values.push(roomId, userId);
+      const sql = `
+        UPDATE chat_room_members
+        SET ` + sets.join(', ') + `
+        WHERE room_id = $` + paramCount++ + ` AND user_id = $` + paramCount++;
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUserRooms(userId: string): Promise<any[]> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT r.*, m.is_moderator, m.is_muted, m.joined_at
+        FROM chat_rooms r
+        INNER JOIN chat_room_members m ON r.room_id = m.room_id
+        WHERE m.user_id = $1
+        ORDER BY m.joined_at DESC
+      `;
+      const result = await client.query(sql, [userId]);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async isUserInRoom(roomId: string, userId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT 1 FROM chat_room_members WHERE room_id = $1 AND user_id = $2`;
+      const result = await client.query(sql, [roomId, userId]);
+      return result.rows.length > 0;
+    } finally {
+      client.release();
+    }
+  }
+
+  async isUserModerator(roomId: string, userId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT is_moderator FROM chat_room_members WHERE room_id = $1 AND user_id = $2`;
+      const result = await client.query(sql, [roomId, userId]);
+      return result.rows[0]?.is_moderator || false;
+    } finally {
+      client.release();
+    }
+  }
+
+  async isUserMuted(roomId: string, userId: string): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT is_muted FROM chat_room_members WHERE room_id = $1 AND user_id = $2`;
+      const result = await client.query(sql, [roomId, userId]);
+      return result.rows[0]?.is_muted || false;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateChatRoom(roomId: string, updates: { topic?: string; isPublic?: boolean; maxUsers?: number; password?: string }): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields = [];
+      const values = [];
+      let paramIndex = 1;
+
+      if (updates.topic !== undefined) {
+        fields.push(`topic = $${paramIndex++}`);
+        values.push(updates.topic);
+      }
+      if (updates.isPublic !== undefined) {
+        fields.push(`is_public = $${paramIndex++}`);
+        values.push(updates.isPublic);
+      }
+      if (updates.maxUsers !== undefined) {
+        fields.push(`max_users = $${paramIndex++}`);
+        values.push(updates.maxUsers);
+      }
+      if (updates.password !== undefined) {
+        fields.push(`password = $${paramIndex++}`);
+        values.push(updates.password);
+      }
+
+      if (fields.length === 0) {
+        return; // Nothing to update
+      }
+
+      fields.push(`updated_at = $${paramIndex++}`);
+      values.push(new Date());
+
+      values.push(roomId); // Add roomId as the last parameter
+
+      const sql = `UPDATE chat_rooms SET ${fields.join(', ')} WHERE room_id = $${paramIndex}`;
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
 }
 
 // Export singleton instance

@@ -287,6 +287,23 @@ setChatCommandsDependencies({
   handleChatRequest: require('./handlers/internode-chat.handler').handleChatRequest
 });
 
+// Initialize group chat room handler dependencies
+const { setGroupChatDependencies } = require('./handlers/group-chat.handler');
+const { setRoomCommandsDependencies } = require('./handlers/room-commands.handler');
+
+setGroupChatDependencies({ db, sessions, io });
+setRoomCommandsDependencies({
+  db,
+  sessions,
+  io,
+  handleRoomCreate: require('./handlers/group-chat.handler').handleRoomCreate,
+  handleRoomJoin: require('./handlers/group-chat.handler').handleRoomJoin,
+  handleRoomLeave: require('./handlers/group-chat.handler').handleRoomLeave,
+  handleRoomList: require('./handlers/group-chat.handler').handleRoomList,
+  handleRoomKick: require('./handlers/group-chat.handler').handleRoomKick,
+  handleRoomMute: require('./handlers/group-chat.handler').handleRoomMute
+});
+
 app.use(cors());
 app.use(express.json());
 
@@ -859,6 +876,65 @@ io.on('connection', async (socket) => {
     await handleChatEnd(socket, session);
   });
 
+  // ===== GROUP CHAT ROOM EVENTS =====
+  // Real-time multi-user chat room Socket.io handlers
+
+  socket.on('room:create', async (data: { roomName: string; topic?: string; isPublic?: boolean; password?: string; maxUsers?: number }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleRoomCreate } = require('./handlers/group-chat.handler');
+    await handleRoomCreate(socket, session, data);
+  });
+
+  socket.on('room:join', async (data: { roomId?: string; roomName?: string; password?: string }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleRoomJoin } = require('./handlers/group-chat.handler');
+    await handleRoomJoin(socket, session, data);
+  });
+
+  socket.on('room:leave', async () => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleRoomLeave } = require('./handlers/group-chat.handler');
+    await handleRoomLeave(socket, session);
+  });
+
+  socket.on('room:message', async (data: { message: string }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleRoomMessage } = require('./handlers/group-chat.handler');
+    await handleRoomMessage(socket, session, data);
+  });
+
+  socket.on('room:list', async (data?: { showPrivate?: boolean }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleRoomList } = require('./handlers/group-chat.handler');
+    await handleRoomList(socket, session, data);
+  });
+
+  socket.on('room:kick', async (data: { targetUsername: string }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleRoomKick } = require('./handlers/group-chat.handler');
+    await handleRoomKick(socket, session, data);
+  });
+
+  socket.on('room:mute', async (data: { targetUsername: string; mute: boolean }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleRoomMute } = require('./handlers/group-chat.handler');
+    await handleRoomMute(socket, session, data);
+  });
+
   socket.on('disconnect', async () => {
     console.log('Client disconnected');
 
@@ -868,6 +944,12 @@ io.on('connection', async (socket) => {
     if (session && session.subState === LoggedOnSubState.CHAT) {
       const { handleChatDisconnect } = require('./handlers/internode-chat.handler');
       await handleChatDisconnect(socket, session);
+    }
+
+    // Handle group chat room cleanup if user was in a room
+    if (session && session.subState === LoggedOnSubState.CHAT_ROOM) {
+      const { handleRoomDisconnect } = require('./handlers/group-chat.handler');
+      await handleRoomDisconnect(socket, session);
     }
 
     // Log user logout if they were logged in (express.e:9493 callersLog)
