@@ -13,6 +13,7 @@ let db: any;
 let callersLog: (userId: string | null, username: string, action: string, details?: string, nodeId?: number) => Promise<void>;
 let getUserStats: (userId: string) => Promise<any>;
 let _searchFilesByName: any;
+let _searchFilesAdvanced: any;
 let _getFileEntry: any;
 let _deleteFileEntry: any;
 let _moveFileEntry: any;
@@ -42,6 +43,7 @@ export function setGetUserStats(fn: typeof getUserStats) {
 
 export function setFileMaintenanceDependencies(deps: {
   searchFilesByName: any;
+  searchFilesAdvanced: any;
   getFileEntry: any;
   deleteFileEntry: any;
   moveFileEntry: any;
@@ -49,6 +51,7 @@ export function setFileMaintenanceDependencies(deps: {
   getFileAreas: any;
 }) {
   _searchFilesByName = deps.searchFilesByName;
+  _searchFilesAdvanced = deps.searchFilesAdvanced;
   _getFileEntry = deps.getFileEntry;
   _deleteFileEntry = deps.deleteFileEntry;
   _moveFileEntry = deps.moveFileEntry;
@@ -477,7 +480,7 @@ export async function handleFileMoveConfirmation(socket: any, session: BBSSessio
 }
 
 // handleFileSearch() - Search files by pattern (FM S command)
-export function handleFileSearch(socket: any, session: BBSSession, params: string[]) {
+export async function handleFileSearch(socket: any, session: BBSSession, params: string[]) {
   if (params.length === 0) {
     socket.emit('ansi-output', 'Search files functionality.\r\n');
     socket.emit('ansi-output', 'Usage: FM S <search_pattern> [area]\r\n');
@@ -489,51 +492,36 @@ export function handleFileSearch(socket: any, session: BBSSession, params: strin
     return;
   }
 
-  const searchPattern = params[0].toLowerCase();
+  const searchPattern = params[0];
   const areaParam = params.length > 1 ? params[1] : null;
 
-  // Determine which file areas to search
-  let targetAreas: any[] = [];
+  // Validate area parameter if provided
+  let areaId: number | undefined = undefined;
   if (areaParam) {
-    // Specific area requested
-    const areaId = parseInt(areaParam);
-    if (isNaN(areaId)) {
+    const parsedAreaId = parseInt(areaParam);
+    if (isNaN(parsedAreaId)) {
       socket.emit('ansi-output', '\r\n\x1b[31mInvalid area number.\x1b[0m\r\n');
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
     }
-    const area = fileAreas.find(a => a.id === areaId);
-    if (!area) {
+
+    // Verify area exists
+    const allAreas = await _getFileAreas(session.currentConf || 1);
+    const areaExists = allAreas.find((a: any) => a.id === parsedAreaId);
+    if (!areaExists) {
       socket.emit('ansi-output', '\r\n\x1b[31mFile area not found.\x1b[0m\r\n');
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
     }
-    targetAreas = [area];
-  } else {
-    // All areas in current conference
-    targetAreas = fileAreas.filter(a => a.conferenceId === session.currentConf);
+    areaId = parsedAreaId;
   }
 
-  // Search files
-  const matchingFiles: any[] = [];
-  targetAreas.forEach(area => {
-    const areaFiles = fileEntries.filter(f => f.areaId === area.id);
-    areaFiles.forEach(file => {
-      const filename = file.filename.toLowerCase();
-      const description = (file.fileIdDiz || file.description || '').toLowerCase();
-      const uploader = file.uploader.toLowerCase();
-
-      if (filename.includes(searchPattern) ||
-          description.includes(searchPattern) ||
-          uploader.includes(searchPattern)) {
-        matchingFiles.push({ file, area });
-      }
-    });
-  });
+  // Search files using database (searches filename, description, and uploader)
+  const matchingFiles = await _searchFilesAdvanced(searchPattern, session.currentConf || 1, areaId);
 
   // Display results
   socket.emit('ansi-output', `\r\nSearch results for "${searchPattern}":\r\n\r\n`);
@@ -543,14 +531,14 @@ export function handleFileSearch(socket: any, session: BBSSession, params: strin
   } else {
     socket.emit('ansi-output', `Found ${matchingFiles.length} file(s):\r\n\r\n`);
 
-    matchingFiles.forEach(({ file, area }) => {
+    matchingFiles.forEach((file: any) => {
       const sizeKB = Math.ceil(file.size / 1024);
-      const dateStr = file.uploadDate.toLocaleDateString();
-      const description = file.fileIdDiz || file.description;
+      const dateStr = new Date(file.uploaddate).toLocaleDateString();
+      const description = file.fileid_diz || file.description;
 
       socket.emit('ansi-output', `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
       socket.emit('ansi-output', `  ${description}\r\n`);
-      socket.emit('ansi-output', `  Area: ${area.name}\r\n\r\n`);
+      socket.emit('ansi-output', `  Area: ${file.areaname}\r\n\r\n`);
     });
   }
 

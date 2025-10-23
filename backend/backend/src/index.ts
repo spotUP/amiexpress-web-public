@@ -765,6 +765,56 @@ async function searchFilesByName(filename: string, conferenceId: number): Promis
   }
 }
 
+// Advanced file search (FM S command) - searches filename, description, and uploader
+async function searchFilesAdvanced(
+  searchPattern: string,
+  conferenceId: number,
+  areaId?: number
+): Promise<any[]> {
+  try {
+    const sqlPattern = `%${searchPattern.toLowerCase()}%`;
+
+    let query = `
+      SELECT
+        fe.id,
+        fe.filename,
+        fe.description,
+        fe.fileid_diz,
+        fe.size,
+        fe.uploader,
+        fe.uploaddate,
+        fe.downloads,
+        fa.name AS areaname,
+        fa.id AS areaid
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fa.conferenceid = $1
+        AND (
+          LOWER(fe.filename) LIKE $2
+          OR LOWER(fe.description) LIKE $2
+          OR LOWER(fe.fileid_diz) LIKE $2
+          OR LOWER(fe.uploader) LIKE $2
+        )
+    `;
+
+    const params: any[] = [conferenceId, sqlPattern];
+
+    // If specific area requested, add filter
+    if (areaId !== undefined) {
+      query += ` AND fa.id = $3`;
+      params.push(areaId);
+    }
+
+    query += ` ORDER BY fe.uploaddate DESC`;
+
+    const result = await db.query(query, params);
+    return result.rows;
+  } catch (error) {
+    console.error('[searchFilesAdvanced] Error:', error);
+    return [];
+  }
+}
+
 // Conference Maintenance Database Functions (express.e:22686+)
 
 // Reset new mail scan pointers for all users in a conference/message base
@@ -1287,6 +1337,7 @@ async function initializeData() {
     // Inject file maintenance dependencies
     setFileMaintenanceDependencies({
       searchFilesByName,
+      searchFilesAdvanced,
       getFileEntry,
       deleteFileEntry,
       moveFileEntry,
