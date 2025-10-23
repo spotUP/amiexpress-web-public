@@ -63,6 +63,14 @@ import {
   setDisplayFileCommandsDependencies
 } from './display-file-commands.handler';
 import {
+  handleAnsiModeCommand,
+  handleExpertModeCommand,
+  handleCommentToSysopCommand,
+  handlePageSysopCommand,
+  handleOnlineMessageCommand,
+  setPreferenceChatCommandsDependencies
+} from './preference-chat-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -1078,37 +1086,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'OLM': // Send online message (internalCommandOLM) - 1:1 with AmiExpress OLM
-      socket.emit('ansi-output', '\x1b[36m-= Send Online Message =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Send a message to users currently online.\r\n\r\n');
-
-      // Get all online users (excluding quiet nodes)
-      const onlineUsers = Array.from(sessions.values())
-        .filter(sess => sess.state === BBSState.LOGGEDON && sess.user && !sess.user.quietNode)
-        .map(sess => ({
-          username: sess.user!.username,
-          conference: sess.currentConfName,
-          idle: Math.floor((Date.now() - sess.lastActivity) / 60000)
-        }));
-
-      if (onlineUsers.length === 0) {
-        socket.emit('ansi-output', 'No users currently online.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', 'Currently online users:\r\n\r\n');
-      onlineUsers.forEach((user, index) => {
-        const idleStr = user.idle > 0 ? ` (${user.idle}min idle)` : '';
-        socket.emit('ansi-output', `${index + 1}. ${user.username.padEnd(15)} ${user.conference}${idleStr}\r\n`);
-      });
-
-      socket.emit('ansi-output', '\r\n\x1b[32mSelect user (1-\x1b[33m' + onlineUsers.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_AREA_SELECT;
-      session.tempData = { olmMode: true, onlineUsers };
-      return; // Stay in input mode
+    case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25470
+      handleOnlineMessageCommand(socket, session, commandArgs);
+      return;
 
     case 'RL': // RELOGON (internalCommandRL) - 1:1 with AmiExpress relogon
       socket.emit('ansi-output', '\x1b[36m-= Relogon =-\x1b[0m\r\n');
@@ -1349,27 +1329,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'X': // Expert Mode Toggle (internalCommandX) - 1:1 with AmiExpress expert mode
-      socket.emit('ansi-output', '\x1b[36m-= Expert Mode Toggle =-\x1b[0m\r\n');
-
-      const currentExpert = session.user!.expert;
-      session.user!.expert = !currentExpert;
-
-      // Update in database
-      await db.updateUser(session.user!.id, { expert: session.user!.expert });
-
-      socket.emit('ansi-output', `Expert mode is now ${session.user!.expert ? 'ON' : 'OFF'}.\r\n`);
-
-      if (session.user!.expert) {
-        socket.emit('ansi-output', 'Menu will not be displayed after commands.\r\n');
-        socket.emit('ansi-output', 'Type ? for help.\r\n');
-      } else {
-        socket.emit('ansi-output', 'Menu will be displayed after each command.\r\n');
-      }
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'X': // Expert Mode Toggle (internalCommandX) - express.e:26113-26122
+      handleExpertModeCommand(socket, session);
       return;
 
     case 'Z': // Zippy Text Search (internalCommandZ) - 1:1 with AmiExpress zippy search
@@ -1681,33 +1642,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       await handleNewFilesCommand(socket, session, commandArgs);
       return;
 
-    case 'O': // Operator Page (internalCommandO) - Sysop Chat
-      // Check if user is already paging
-      if (chatState.pagingUsers.includes(session.user!.id)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mYou are already paging the sysop.\x1b[0m\r\n\r\n');
-        break;
-      }
-
-      // Check page limits (like pagesAllowed in AmiExpress)
-      const userPagesRemaining = session.user?.secLevel === 255 ? -1 : 3; // Sysop unlimited, users limited
-
-      if (userPagesRemaining !== -1 && userPagesRemaining <= 0) {
-        socket.emit('ansi-output', '\x1b[36m-= Comment to Sysop =-\x1b[0m\r\n');
-        socket.emit('ansi-output', 'You have exceeded your paging limit.\r\n');
-        socket.emit('ansi-output', 'You can use \'C\' to leave a comment.\r\n\r\n');
-        break;
-      }
-
-      // Check if sysop is available (like sysopAvail in AmiExpress)
-      if (!chatState.sysopAvailable && (session.user?.secLevel || 0) < 200) { // 200 = override level
-        socket.emit('ansi-output', '\r\n\x1b[31mSorry, the sysop is not around right now.\x1b[0m\r\n');
-        socket.emit('ansi-output', 'You can use \'C\' to leave a comment.\r\n\r\n');
-        break;
-      }
-
-      // Start paging process (like ccom() in AmiExpress)
-      startSysopPage(socket, session);
-      return; // Don't continue to menu display
+    case 'O': // Page Sysop (internalCommandO) - express.e:25372-25404
+      handlePageSysopCommand(socket, session);
+      return;
 
 
     case 'T': // Time/Date Display (internalCommandT) - express.e:25622-25644
@@ -1722,18 +1659,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleHelpCommand(socket, session, commandArgs);
       return;
 
-    case 'M': // Toggle ANSI Color (internalCommandM) - express.e:25239-25249
-      // 1:1 port: Simple toggle for ANSI color on/off
-      if (session.ansiColour === false || session.ansiColour === undefined) {
-        session.ansiColour = true;
-        socket.emit('ansi-output', '\r\n\x1b[32mAnsi Color On\x1b[0m\r\n');
-      } else {
-        session.ansiColour = false;
-        socket.emit('ansi-output', '\r\nAnsi Color Off\r\n');
-      }
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'M': // Toggle ANSI Color (internalCommandM) - express.e:25239-25248
+      handleAnsiModeCommand(socket, session);
       return;
 
     case 'NM': // New Messages (internalCommandNM) - express.e:25281
@@ -1792,17 +1719,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'C': // Comment to Sysop (internalCommandC)
-      socket.emit('ansi-output', '\x1b[36m-= Comment to Sysop =-\x1b[0m\r\n');
-
-      // Like AmiExpress: This is exactly the same as ENTER MESSAGE except addressed to sysop
-      socket.emit('ansi-output', 'Enter your comment to the sysop (press Enter to abort):\r\n');
-      socket.emit('ansi-output', 'Subject: ');
-
-      session.inputBuffer = ''; // Clear input buffer
-      session.tempData = { isCommentToSysop: true };
-      session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
-      return; // Don't call displayMainMenu - stay in input mode
+    case 'C': // Comment to Sysop (internalCommandC) - express.e:24658-24670
+      handleCommentToSysopCommand(socket, session, commandArgs);
+      return;
 
     case 'CF': // Comment with Flags (internalCommandCF) - express.e:24672
       // Phase 9: Security/ACS System implemented
@@ -1839,27 +1758,6 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleQuietModeCommand(socket, session);
       return;
 
-    case 'X': // Expert Mode Toggle (internalCommandX) - express.e:26113
-      // Toggle expert mode (shortcuts vs full commands)
-      if (session.user?.expert === 'X') {
-        // Disable expert mode
-        socket.emit('ansi-output', '\r\n\x1b[33mExpert mode disabled\x1b[0m\r\n');
-        session.user.expert = 'N';
-        if (session.user) {
-          await db.updateUser(session.user.id, { expert: 'N' });
-        }
-      } else {
-        // Enable expert mode
-        socket.emit('ansi-output', '\r\n\x1b[33mExpert mode enabled\x1b[0m\r\n');
-        if (session.user) {
-          session.user.expert = 'X';
-          await db.updateUser(session.user.id, { expert: 'X' });
-        }
-      }
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
 
     case '?': // Show Menu in Expert Mode (internalCommandQuestionMark) - express.e:24594-24599
       handleQuestionMarkCommand(socket, session);

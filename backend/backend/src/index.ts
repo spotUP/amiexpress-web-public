@@ -45,6 +45,9 @@ import {
   setDisplayFileCommandsDependencies
 } from './handlers/display-file-commands.handler';
 import {
+  setPreferenceChatCommandsDependencies
+} from './handlers/preference-chat-commands.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -846,6 +849,11 @@ async function initializeData() {
       displayScreen,
       findSecurityScreen,
       confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens')
+    });
+
+    // Inject dependencies into preference/chat commands handler
+    setPreferenceChatCommandsDependencies({
+      startSysopPage
     });
 
     // Inject dependencies into command handler
