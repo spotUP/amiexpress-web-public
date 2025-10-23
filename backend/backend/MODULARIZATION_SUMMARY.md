@@ -278,17 +278,31 @@ The remaining code is **intentionally kept** in command.handler.ts:
 
 ## Commands Summary
 
-### Functional Commands (38)
-D, U, S, J, G, Q, H, R, E, T, N, <, >, <<, >>, F, FR, FS, A, B, ?, M, X, C, O, OLM, GR, MS, CF, JM, VER, WHO, WHD, W, RL, V, VS, 1, 2, RZ, US, UP, DS
+### Functional Commands (40)
+D, U, S, J, G, Q, H, R, E, T, N, <, >, <<, >>, F, FR, FS, A, B, ?, M, X, C, O, OLM, GR, MS, CF, JM, VER, WHO, WHD, W, RL, V, VS, Z, 1, 2, RZ, US, UP, DS, CM
 
-### Stubbed Commands (14)
-Z, ZOOM, 0, 3, 4, 5, VO, NM, CM, FR (partial), U (partial), D (partial), FM, and several file operations
+### Stubbed Commands (12)
+ZOOM, 0, 3, 4, 5, VO, NM, FR (partial), U (partial), D (partial), FM, and several file operations
 
 ---
 
+## Session 5: Advanced Features (Commands 41-42)
+- **Z Command (Zippy Search)** - Full database implementation
+  - Database search across file_entries and file_areas
+  - Case-insensitive filename and description search
+  - Formatted output with file details
+  - Added searchFileDescriptions() database function
+- **CM Command (Conference Maintenance)** - Full ANSI menu
+  - Complete full-screen ANSI menu system with cursor positioning
+  - 13+ configuration options for sysop conference management
+  - Real-time statistics display
+  - Database functions for pointer resets and message number updates
+  - Conference/message base navigation with +/- keys
+- Commits: 2 (33ebea5, 5771708)
+
 ## Next Steps (If Needed)
 
-1. **Implement Stubbed Commands** - Complete Z, ZOOM, VO, file operations
+1. **Implement Stubbed Commands** - Complete ZOOM, VO, file operations
 2. **Add Testing** - Unit tests for each handler
 3. **Performance Optimization** - Profile and optimize hot paths
 4. **Documentation** - Add JSDoc comments to all handlers
@@ -310,5 +324,6 @@ The modularization effort has been a **complete success**! The codebase is now:
 
 ---
 
-*Generated during Session 4 of the modularization effort*
-*Total sessions: 4 | Total commits: 8 | Total lines modularized: 3,697*
+*Generated during Session 5 of the modularization effort*
+*Total sessions: 5 | Total commits: 11 | Total lines modularized: 4,171*
+*Latest updates: Z (Zippy Search) and CM (Conference Maintenance) fully implemented*
