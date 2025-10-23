@@ -1119,7 +1119,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'FM': // File Maintenance (internalCommandFM) - maintenanceFileSearch()
-      displayFileMaintenance(socket, session, params);
+      await displayFileMaintenance(socket, session, params);
       return; // Don't continue to menu display
 
     case 'FS': // File Status (internalCommandFS) - express.e:24872-24875

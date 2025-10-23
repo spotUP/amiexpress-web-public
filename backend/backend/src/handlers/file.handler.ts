@@ -201,7 +201,7 @@ export function displaySelectedFileAreas(socket: any, session: BBSSession, fileA
 // ===== File Maintenance (FM command) =====
 
 // displayFileMaintenance() - File maintenance/search (FM command)
-export function displayFileMaintenance(socket: any, session: BBSSession, params: string) {
+export async function displayFileMaintenance(socket: any, session: BBSSession, params: string) {
   socket.emit('ansi-output', '\x1b[36m-= File Maintenance =-\x1b[0m\r\n');
   socket.emit('ansi-output', 'File maintenance and search functionality.\r\n\r\n');
 
@@ -211,15 +211,15 @@ export function displayFileMaintenance(socket: any, session: BBSSession, params:
 
   if (operation === 'D') {
     // Delete files
-    handleFileDelete(socket, session, parsedParams.slice(1));
+    await handleFileDelete(socket, session, parsedParams.slice(1));
     return;
   } else if (operation === 'M') {
     // Move files
-    handleFileMove(socket, session, parsedParams.slice(1));
+    await handleFileMove(socket, session, parsedParams.slice(1));
     return;
   } else if (operation === 'S') {
     // Search files
-    handleFileSearch(socket, session, parsedParams.slice(1));
+    await handleFileSearch(socket, session, parsedParams.slice(1));
     return;
   } else {
     // Show menu
@@ -236,7 +236,7 @@ export function displayFileMaintenance(socket: any, session: BBSSession, params:
 }
 
 // handleFileDelete() - Delete files (FM D command)
-export function handleFileDelete(socket: any, session: BBSSession, params: string[]) {
+export async function handleFileDelete(socket: any, session: BBSSession, params: string[]) {
   if (params.length === 0) {
     socket.emit('ansi-output', 'Delete files functionality.\r\n');
     socket.emit('ansi-output', 'Usage: FM D <filename> [area]\r\n');
@@ -248,45 +248,10 @@ export function handleFileDelete(socket: any, session: BBSSession, params: strin
     return;
   }
 
-  const filename = params[0].toUpperCase();
-  const areaParam = params.length > 1 ? params[1] : null;
+  const filename = params[0];
 
-  // Determine which file areas to search
-  let targetAreas: any[] = [];
-  if (areaParam) {
-    // Specific area requested
-    const areaId = parseInt(areaParam);
-    if (isNaN(areaId)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid area number.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-    const area = fileAreas.find(a => a.id === areaId);
-    if (!area) {
-      socket.emit('ansi-output', '\r\n\x1b[31mFile area not found.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-    targetAreas = [area];
-  } else {
-    // All areas in current conference
-    targetAreas = fileAreas.filter(a => a.conferenceId === session.currentConf);
-  }
-
-  // Find matching files
-  const matchingFiles: any[] = [];
-  targetAreas.forEach(area => {
-    const areaFiles = fileEntries.filter(f => f.areaId === area.id);
-    areaFiles.forEach(file => {
-      if (matchesWildcard(file.filename, filename)) {
-        matchingFiles.push({ file, area });
-      }
-    });
-  });
+  // Search files using database (with wildcard support)
+  const matchingFiles = await _searchFilesByName(filename, session.currentConf || 1);
 
   if (matchingFiles.length === 0) {
     socket.emit('ansi-output', `\r\nNo files matching "${filename}" found.\r\n`);
@@ -298,7 +263,7 @@ export function handleFileDelete(socket: any, session: BBSSession, params: strin
 
   // Check permissions (sysop or file owner)
   const userLevel = session.user?.secLevel || 0;
-  const allowedFiles = matchingFiles.filter(({ file }) =>
+  const allowedFiles = matchingFiles.filter((file: any) =>
     userLevel >= 200 || file.uploader.toLowerCase() === session.user?.username.toLowerCase()
   );
 
@@ -312,8 +277,8 @@ export function handleFileDelete(socket: any, session: BBSSession, params: strin
 
   // Display files to be deleted
   socket.emit('ansi-output', `\r\nFiles matching "${filename}":\r\n\r\n`);
-  allowedFiles.forEach(({ file, area }, index) => {
-    socket.emit('ansi-output', `${index + 1}. ${file.filename} (${area.name})\r\n`);
+  allowedFiles.forEach((file: any, index: number) => {
+    socket.emit('ansi-output', `${index + 1}. ${file.filename} (${file.areaname})\r\n`);
   });
 
   socket.emit('ansi-output', '\r\n\x1b[31mWARNING: This action cannot be undone!\x1b[0m\r\n');
@@ -328,7 +293,7 @@ export function handleFileDelete(socket: any, session: BBSSession, params: strin
   session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for input
 }
 
-export function handleFileDeleteConfirmation(socket: any, session: BBSSession, input: string) {
+export async function handleFileDeleteConfirmation(socket: any, session: BBSSession, input: string) {
   const tempData = session.tempData as { operation: string, allowedFiles: any[], filename: string };
 
   if (!tempData || tempData.operation !== 'delete_files') {
@@ -361,23 +326,23 @@ export function handleFileDeleteConfirmation(socket: any, session: BBSSession, i
   }
 
   // Delete files from database
-  const deletePromises = filesToDelete.map(({ file }) =>
-    db.deleteFileEntry(file.id).catch((err: any) => console.error('Error deleting file:', err))
+  const deletePromises = filesToDelete.map((file: any) =>
+    _deleteFileEntry(file.id).catch((err: any) => console.error('Error deleting file:', err))
   );
 
-  Promise.all(deletePromises).then(() => {
-    socket.emit('ansi-output', `\r\n\x1b[32mDeleted ${filesToDelete.length} file(s) successfully.\x1b[0m\r\n`);
+  await Promise.all(deletePromises);
 
-    // Log deletion
-    filesToDelete.forEach(({ file }) => {
-      callersLog(session.user!.id, session.user!.username, 'Deleted file', file.filename);
-    });
+  socket.emit('ansi-output', `\r\n\x1b[32mDeleted ${filesToDelete.length} file(s) successfully.\x1b[0m\r\n`);
 
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+  // Log deletion
+  filesToDelete.forEach((file: any) => {
+    callersLog(session.user!.id, session.user!.username, 'Deleted file', file.filename);
   });
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.tempData = undefined;
 }
 
 // handleFileMove() - Move files between areas (FM M command)
