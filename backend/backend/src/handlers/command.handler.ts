@@ -1157,7 +1157,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return; // Don't continue to menu display
 
     case 'FS': // File Status (internalCommandFS) - express.e:24872-24875
-      handleFileStatusCommand(socket, session);
+      await handleFileStatusCommand(socket, session);
       return;
 
     case 'N': // New Files (internalCommandN) - express.e:25275-25279

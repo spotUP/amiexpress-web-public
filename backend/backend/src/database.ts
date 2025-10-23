@@ -1528,6 +1528,36 @@ export class Database {
     }
   }
 
+  async getFileStatisticsByConference(conferenceId: number): Promise<{
+    totalFiles: number;
+    totalBytes: number;
+    totalUploads: number;
+    totalDownloads: number;
+  }> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT
+          COUNT(*) as totalfiles,
+          COALESCE(SUM(fe.size), 0) as totalbytes,
+          COALESCE(SUM(fe.downloads), 0) as totaldownloads
+        FROM file_entries fe
+        JOIN file_areas fa ON fe.areaid = fa.id
+        WHERE fa.conferenceid = $1
+      `;
+      const result = await client.query(sql, [conferenceId]);
+      const row = result.rows[0];
+      return {
+        totalFiles: parseInt(row.totalfiles) || 0,
+        totalBytes: parseInt(row.totalbytes) || 0,
+        totalUploads: 0, // Not tracked in file_entries, would need separate upload tracking
+        totalDownloads: parseInt(row.totaldownloads) || 0
+      };
+    } finally {
+      client.release();
+    }
+  }
+
   // Node session management methods
   async createNodeSession(session: Omit<NodeSession, 'created' | 'updated'>): Promise<void> {
     const client = await this.pool.connect();

@@ -297,7 +297,7 @@ export function handleAlterFlagsCommand(socket: any, session: BBSSession, params
  * Displays file statistics for the current conference.
  * Shows total files, total bytes, etc.
  */
-export function handleFileStatusCommand(socket: any, session: BBSSession): void {
+export async function handleFileStatusCommand(socket: any, session: BBSSession): Promise<void> {
   if (!checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING)) {
     ErrorHandler.permissionDenied(socket, 'view file statistics', {
       nextState: LoggedOnSubState.DISPLAY_MENU
@@ -305,13 +305,82 @@ export function handleFileStatusCommand(socket: any, session: BBSSession): void 
     return;
   }
 
-  // TODO: Implement fileStatus(0) - requires file database
+  await displayFileStatus(socket, session);
+}
+
+/**
+ * Display file status - express.e:24141-24187 fileStatus()
+ */
+async function displayFileStatus(socket: any, session: BBSSession): Promise<void> {
+  const conferenceId = session.currentConf || 1;
+
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('File statistics not yet implemented'));
+  socket.emit('ansi-output', AnsiUtil.headerBox('File Statistics'));
+  socket.emit('ansi-output', '\r\n');
+
+  // Get conference file statistics
+  const stats = await _db.getFileStatisticsByConference(conferenceId);
+
+  // Get user statistics
+  const user = session.user;
+  const userUploads = user?.uploads || 0;
+  const userDownloads = user?.downloads || 0;
+  const userBytesUp = user?.bytesUpload || 0;
+  const userBytesDown = user?.bytesDownload || 0;
+  const userRatio = user?.ratio || 0;
+  const userRatioType = user?.ratioType || 0;
+
+  // Display header - express.e:24148-24153
+  socket.emit('ansi-output', AnsiUtil.colorize('              Uploads                 Downloads', 'green') + '\r\n');
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('    Section   Files    Bytes          Files    Bytes          Ratio', 'green') + '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('    -------   -------  -------------- -------  -------------- -----', 'white') + '\r\n');
+
+  // Display user statistics - express.e:24157-24177
+  const filesUp = String(userUploads).padStart(7);
+  const bytesUp = formatBytes(userBytesUp).padStart(14);
+  const filesDown = String(userDownloads).padStart(7);
+  const bytesDown = formatBytes(userBytesDown).padStart(14);
+  const ratio = userRatio > 0 ? `${userRatio}:1` : 'DSBLD';
+
+  socket.emit('ansi-output',
+    AnsiUtil.colorize('    User    ', 'yellow') +
+    AnsiUtil.colorize(`  ${filesUp}  `, 'white') +
+    AnsiUtil.colorize(`${bytesUp} `, 'white') +
+    AnsiUtil.colorize(`${filesDown}  `, 'white') +
+    AnsiUtil.colorize(`${bytesDown} `, 'white') +
+    AnsiUtil.colorize(`${ratio.padStart(5)}`, userRatio > 0 ? 'white' : 'red') +
+    '\r\n'
+  );
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('Conference File Area Statistics:', 'cyan') + '\r\n');
+  socket.emit('ansi-output', '\r\n');
+
+  // Display conference statistics
+  socket.emit('ansi-output', `  ${AnsiUtil.colorize('Total Files:', 'white')} ${AnsiUtil.colorize(String(stats.totalFiles), 'yellow')}\r\n`);
+  socket.emit('ansi-output', `  ${AnsiUtil.colorize('Total Bytes:', 'white')} ${AnsiUtil.colorize(formatBytes(stats.totalBytes), 'yellow')}\r\n`);
+  socket.emit('ansi-output', `  ${AnsiUtil.colorize('Total Downloads:', 'white')} ${AnsiUtil.colorize(String(stats.totalDownloads), 'yellow')}\r\n`);
+
+  // Calculate average file size
+  const avgFileSize = stats.totalFiles > 0 ? Math.round(stats.totalBytes / stats.totalFiles) : 0;
+  socket.emit('ansi-output', `  ${AnsiUtil.colorize('Average File Size:', 'white')} ${AnsiUtil.colorize(formatBytes(avgFileSize), 'yellow')}\r\n`);
+
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
+}
+
+/**
+ * Format bytes for display
+ */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0';
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`;
 }
 
 /**
