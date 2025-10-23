@@ -61,6 +61,9 @@ import {
   setUtilityCommandsDependencies
 } from './handlers/utility-commands.handler';
 import {
+  setSysopCommandsDependencies
+} from './handlers/sysop-commands.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -896,6 +899,13 @@ async function initializeData() {
       confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens'),
       findSecurityScreen,
       displayScreen
+    });
+
+    // Inject dependencies into sysop commands handler
+    setSysopCommandsDependencies({
+      getRecentCallerActivity,
+      setEnvStat,
+      displayAccountEditingMenu
     });
 
     // Inject dependencies into command handler

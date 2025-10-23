@@ -102,6 +102,15 @@ import {
   setUtilityCommandsDependencies
 } from './utility-commands.handler';
 import {
+  handleRemoteShellCommand,
+  handleAccountEditingCommand,
+  handleCallersLogCommand,
+  handleEditDirectoryFilesCommand,
+  handleEditAnyFileCommand,
+  handleChangeDirectoryCommand,
+  setSysopCommandsDependencies
+} from './sysop-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -950,163 +959,28 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       displayUploadInterface(socket, session, params);
       return;
 
-    case '0': // Remote Shell (internalCommand0)
-      console.log('Processing command 0');
-      socket.emit('ansi-output', '\x1b[36m-= Remote Shell =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Remote shell access not available.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case '0': // Remote Shell (internalCommand0) - express.e:24424-24451
+      handleRemoteShellCommand(socket, session);
       return;
 
-    case '1': // Account Editing (internalCommand1) - 1:1 with AmiExpress account editing
-      // Check sysop permissions (like AmiExpress secStatus check)
-      if ((session.user?.secLevel || 0) < 200) { // Sysop level required
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      // Start account editing workflow (like accountEdit() in AmiExpress)
-      displayAccountEditingMenu(socket, session);
-      return; // Stay in input mode
-
-    case '2': // View Callers Log (internalCommand2) - 1:1 with AmiExpress callers log
-      // Check sysop permissions
-      if ((session.user?.secLevel || 0) < 200) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', '\x1b[36m-= Callers Log =-\x1b[0m\r\n');
-
-      // In web version, we read from caller_activity table
-      // In real AmiExpress (express.e:9493), this reads BBS:NODE{x}/CALLERSLOG backwards
-      socket.emit('ansi-output', 'Recent caller activity:\r\n\r\n');
-
-      // Get recent caller activity from database (last 20 entries)
-      const recentActivity = await getRecentCallerActivity(20);
-
-      if (recentActivity.length === 0) {
-        socket.emit('ansi-output', 'No caller activity recorded yet.\r\n');
-      } else {
-        recentActivity.forEach(entry => {
-          const timestamp = new Date(entry.timestamp);
-          const timeStr = timestamp.toLocaleTimeString('en-US', { hour12: false });
-          const details = entry.details ? ` - ${entry.details}` : '';
-          socket.emit('ansi-output', `${timeStr} ${entry.username.padEnd(15)} ${entry.action}${details}\r\n`);
-        });
-      }
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case '1': // Account Editing (internalCommand1) - express.e:24453-24459
+      handleAccountEditingCommand(socket, session);
       return;
 
-    case '3': // Edit Directory Files (internalCommand3) - 1:1 with AmiExpress MicroEmacs
-      // Check sysop permissions
-      if ((session.user?.secLevel || 0) < 200) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', '\x1b[36m-= Edit Directory Files =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Directory file editing allows you to edit file directory listings.\r\n\r\n');
-
-      // Display available file areas for editing
-      const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
-      if (currentFileAreas.length === 0) {
-        socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', 'Available file areas:\r\n');
-      currentFileAreas.forEach((area, index) => {
-        socket.emit('ansi-output', `${index + 1}. ${area.name}\r\n`);
-      });
-
-      socket.emit('ansi-output', '\r\nSelect file area to edit (1-' + currentFileAreas.length + ') or press Enter to cancel: ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { editDirectories: true, fileAreas: currentFileAreas };
-      return; // Stay in input mode
-
-    case '4': // Edit Any File (internalCommand4) - express.e:24517
-      // Phase 9: Security/ACS System implemented
-      // ✅ setEnvStat(ENV_EMACS) - express.e:24518 [IMPLEMENTED]
-      // ✅ checkSecurity(ACS_EDIT_FILES) - express.e:24519 [IMPLEMENTED]
-
-      // Phase 9: Check security permission (express.e:24519)
-      if (!checkSecurity(session, ACSCode.EDIT_FILES)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. File editing privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      // Phase 9: Set environment status (express.e:24518)
-      setEnvStat(session, EnvStat.EMACS);
-
-      socket.emit('ansi-output', '\x1b[36m-= Edit Any File =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Edit any file on the system (sysop only).\r\n\r\n');
-
-      // TODO for 100% 1:1: Implement editAnyFile(params) - express.e:24520
-      // This should:
-      // 1. Parse filename from params or prompt for it
-      // 2. Load file into MicroEmacs-style editor
-      // 3. Allow full editing capabilities
-      // 4. Save changes back to file
-
-      socket.emit('ansi-output', '\x1b[33mFile editor not yet implemented.\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This command will allow editing any file on the system.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case '2': // View Callers Log (internalCommand2) - express.e:24461-24509
+      await handleCallersLogCommand(socket, session, params);
       return;
 
-    case '5': // Change Directory (internalCommand5) - express.e:24523
-      // Phase 9: Security/ACS System implemented
-      // ✅ setEnvStat(ENV_SYSOP) - express.e:24524 [IMPLEMENTED]
-      // ✅ checkSecurity(ACS_SYSOP_COMMANDS) - express.e:24525 [IMPLEMENTED]
+    case '3': // Edit Directory Files (internalCommand3) - express.e:24511-24515
+      handleEditDirectoryFilesCommand(socket, session, params);
+      return;
 
-      // Phase 9: Check security permission (express.e:24525)
-      if (!checkSecurity(session, ACSCode.SYSOP_COMMANDS)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
+    case '4': // Edit Any File (internalCommand4) - express.e:24517-24521
+      handleEditAnyFileCommand(socket, session, params);
+      return;
 
-      // Phase 9: Set environment status (express.e:24524)
-      setEnvStat(session, EnvStat.SYSOP);
-
-      socket.emit('ansi-output', '\x1b[36m-= Change Directory =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Navigate and execute files anywhere on the system (sysop only).\r\n\r\n');
-
-      // TODO for 100% 1:1: Implement myDirAnyWhere(params) - express.e:24526
-      // This should:
-      // 1. Parse directory path from params or prompt
-      // 2. Change to that directory
-      // 3. Show directory listing
-      // 4. Allow execution of programs from any location
-
-      socket.emit('ansi-output', '\x1b[33mDirectory navigation not yet implemented.\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This command allows sysop to navigate the entire filesystem.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case '5': // Change Directory (internalCommand5) - express.e:24523-24527
+      handleChangeDirectoryCommand(socket, session, params);
       return;
 
     case 'MS': // Mail Scan (internalCommandMS) - express.e:25250-25279
@@ -1253,40 +1127,6 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       socket.emit('ansi-output', '\x1b[32mSelect topic (1-3) or press Enter to cancel: \x1b[0m');
       session.subState = LoggedOnSubState.FILE_DIR_SELECT;
       session.tempData = { votingBooth: true };
-      return; // Stay in input mode
-
-    case '4': // Edit Any File (internalCommand4) - 1:1 with AmiExpress MicroEmacs
-      // Check sysop permissions
-      if ((session.user?.secLevel || 0) < 200) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', '\x1b[36m-= Edit Any File =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This allows you to edit any text file on the system.\r\n\r\n');
-      socket.emit('ansi-output', 'Enter full path and filename to edit (or press Enter to cancel): ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for file path input
-      session.tempData = { editAnyFile: true };
-      return; // Stay in input mode
-
-    case '5': // List System Directories (internalCommand5) - 1:1 with AmiExpress List command
-      // Check sysop permissions
-      if ((session.user?.secLevel || 0) < 200) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', '\x1b[36m-= List System Directories =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This works just like the AmigaDos List command.\r\n\r\n');
-      socket.emit('ansi-output', 'Enter path to list (or press Enter to cancel): ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT; // Reuse for path input
-      session.tempData = { listDirectories: true };
       return; // Stay in input mode
 
     case 'R': // Read Messages (internalCommandR) - express.e:25518-25531
