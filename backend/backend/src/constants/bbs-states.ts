@@ -38,6 +38,9 @@ export enum LoggedOnSubState {
   UPLOAD_FILENAME_INPUT = 'upload_filename_input',
   UPLOAD_DESC_INPUT = 'upload_desc_input',
   FILE_LIST_DIR_INPUT = 'file_list_dir_input',  // F command directory input
+  FLAG_INPUT = 'flag_input',                    // A command flag input
+  FLAG_CLEAR_INPUT = 'flag_clear_input',        // A command clear flag input
+  FLAG_FROM_INPUT = 'flag_from_input',          // A command flag from input
   FILES_MAINTENANCE = 'files_maintenance',
   FILES_MAINT_SELECT = 'files_maint_select',
   FILES_MAINT_AREA_SELECT = 'files_maint_area_select',

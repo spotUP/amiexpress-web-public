@@ -268,24 +268,12 @@ function formatDate(date: Date): string {
  * ENDPROC RESULT_SUCCESS
  *
  * Allows users to flag files for download.
- * Files can be flagged by name or pattern.
+ * Interactive flag management system.
  */
 export async function handleAlterFlagsCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
-  if (!checkSecurity(session.user, ACSPermission.DOWNLOAD)) {
-    ErrorHandler.permissionDenied(socket, 'flag files for download', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  console.log('[ENV] Files');
-
-  // Initialize flagged files array if not exists
-  if (!session.flaggedFiles) {
-    session.flaggedFiles = [];
-  }
-
-  await alterFlags(socket, session, params);
+  // Use the new AlterFlagsHandler
+  const { AlterFlagsHandler } = require('./alter-flags.handler');
+  await AlterFlagsHandler.handleAlterFlagsCommand(socket, session, params);
 }
 
 /**
@@ -484,18 +472,12 @@ async function flagFiles(socket: any, session: BBSSession, pattern: string): Pro
  *   fileStatus(0)
  * ENDPROC RESULT_SUCCESS
  *
- * Displays file statistics for the current conference.
- * Shows total files, total bytes, etc.
+ * Displays file upload/download statistics per conference.
  */
 export async function handleFileStatusCommand(socket: any, session: BBSSession): Promise<void> {
-  if (!checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING)) {
-    ErrorHandler.permissionDenied(socket, 'view file statistics', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  await displayFileStatus(socket, session);
+  // Use the new FileStatusHandler
+  const { FileStatusHandler } = require('./file-status.handler');
+  await FileStatusHandler.handleFileStatusCommand(socket, session);
 }
 
 /**

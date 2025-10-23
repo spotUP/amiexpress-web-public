@@ -680,6 +680,15 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle flag input (A command continuation)
+  if (session.subState === LoggedOnSubState.FLAG_INPUT ||
+      session.subState === LoggedOnSubState.FLAG_CLEAR_INPUT ||
+      session.subState === LoggedOnSubState.FLAG_FROM_INPUT) {
+    const { AlterFlagsHandler } = require('./alter-flags.handler');
+    await AlterFlagsHandler.handleFlagInput(socket, session, data.trim());
+    return;
+  }
+
   // Handle file maintenance operations
   if (session.tempData?.operation === 'delete_files') {
     await handleFileDeleteConfirmation(socket, session, input);
