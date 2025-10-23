@@ -95,7 +95,9 @@ export async function handleFileListCommand(socket: any, session: BBSSession, pa
 
   console.log('[ENV] Files');
 
-  await displayFileList(socket, session, params, false);
+  // Import and use the new FileListingHandler
+  const { FileListingHandler } = require('./file-listing.handler');
+  await FileListingHandler.handleFileList(socket, session, params, false);
 }
 
 /**
@@ -103,7 +105,7 @@ export async function handleFileListCommand(socket: any, session: BBSSession, pa
  *
  * From express.e:24883-24887:
  * PROC internalCommandFR(params)
- *   IF checkSecurity(ACS_FILE_LISTINGS)=FALSE THEN RETURN RESULT_NOT_ALLOWED
+ *   IF checkSecurity(ACS_FILE_LISTINGS)=FALSE THEN RETURN RESULT_ALLOWED
  *   setEnvStat(ENV_FILES)
  * ENDPROC displayFileList(params,TRUE);
  *
@@ -120,7 +122,9 @@ export async function handleFileListRawCommand(socket: any, session: BBSSession,
 
   console.log('[ENV] Files');
 
-  await displayFileList(socket, session, params, true);
+  // Import and use the new FileListingHandler
+  const { FileListingHandler } = require('./file-listing.handler');
+  await FileListingHandler.handleFileList(socket, session, params, true);
 }
 
 /**

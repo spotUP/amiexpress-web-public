@@ -35,6 +35,9 @@ export enum LoggedOnSubState {
   FILES_VIEW_AREA = 'files_view_area',
   FILES_DOWNLOAD = 'files_download',
   FILES_UPLOAD = 'files_upload',
+  UPLOAD_FILENAME_INPUT = 'upload_filename_input',
+  UPLOAD_DESC_INPUT = 'upload_desc_input',
+  FILE_LIST_DIR_INPUT = 'file_list_dir_input',  // F command directory input
   FILES_MAINTENANCE = 'files_maintenance',
   FILES_MAINT_SELECT = 'files_maint_select',
   FILES_MAINT_AREA_SELECT = 'files_maint_area_select',

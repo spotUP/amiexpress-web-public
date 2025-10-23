@@ -7,9 +7,10 @@
 
 import { BBSSession } from '../index';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
+import { validateFilename, checkForFile } from '../utils/file-upload.util';
 
 // Import from other handlers
-import { displayScreen, doPause } from './screen.handler';
+import { displayScreen, doPause, hasKeysFile } from './screen.handler';
 import { displayConferenceBulletins, joinConference } from './conference.handler';
 import { displayDoorMenu, executeDoor } from './door.handler';
 import { startSysopPage } from './chat.handler';
@@ -19,7 +20,8 @@ import {
   displayFileStatus,
   displayNewFiles,
   displayUploadInterface,
-  displayDownloadInterface
+  displayDownloadInterface,
+  startFileUpload
 } from './file.handler';
 import {
   displayAccountEditingMenu
@@ -148,10 +150,15 @@ import {
   handleMessageBodyInput
 } from './message-entry.handler';
 
+// Import utilities
+import { AnsiUtil } from '../utils/ansi.util';
+
 // Dependencies (injected)
 let db: any;
 let config: any;
+let conferences: any[] = [];
 let messageBases: any[] = [];
+let fileAreas: any[] = [];
 let processOlmMessageQueue: any;
 let checkSecurity: any;
 let setEnvStat: any;
@@ -173,8 +180,16 @@ export function setConfig(cfg: any) {
   config = cfg;
 }
 
+export function setConferences(confs: any[]) {
+  conferences = confs;
+}
+
 export function setMessageBases(bases: any[]) {
   messageBases = bases;
+}
+
+export function setFileAreas(areas: any[]) {
+  fileAreas = areas;
 }
 
 export function setProcessOlmMessageQueue(fn: any) {
@@ -224,13 +239,29 @@ export function displayMainMenu(socket: any, session: BBSSession) {
     console.log('Sending screen clear: \\x1b[2J\\x1b[H');
     socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
 
+    // Like express.e:6567 - default cmdShortcuts to FALSE (line input mode)
+    session.cmdShortcuts = false;
+
     // CRITICAL FIX: Correct condition from express.e:28583
     // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
     // Note: Database stores expert as BOOLEAN (true/false), not string ("Y"/"N")
+    console.log('🔍 [Menu Display] Checking expert mode:');
+    console.log('  - session.user?.expert:', session.user?.expert);
+    console.log('  - session.doorExpertMode:', session.doorExpertMode);
+    console.log('  - Will display menu?', (session.user?.expert === false && !session.doorExpertMode));
+
     if ((session.user?.expert === false && !session.doorExpertMode) /* TODO: || FORCE_MENUS check */) {
       console.log('Displaying menu screen file');
       // Phase 8: Use authentic screen file system (express.e:28586 - displayScreen(SCREEN_MENU))
-      displayScreen(socket, session, SCREEN_MENU);
+      const screenDisplayed = displayScreen(socket, session, SCREEN_MENU);
+
+      // Like express.e:6572-6573 - check for .keys file and set cmdShortcuts accordingly
+      if (screenDisplayed && hasKeysFile(SCREEN_MENU, session.currentConf)) {
+        console.log('✓ .keys file exists, enabling hotkey mode (cmdShortcuts = true)');
+        session.cmdShortcuts = true;
+      } else {
+        console.log('No .keys file, using line input mode (cmdShortcuts = false)');
+      }
     }
 
     displayMenuPrompt(socket, session);
@@ -241,7 +272,7 @@ export function displayMainMenu(socket: any, session: BBSSession) {
   // Reset doorExpertMode after menu display (express.e:28586)
   session.doorExpertMode = false;
 
-  // Like AmiExpress: Check cmdShortcuts to determine input mode
+  // Like AmiExpress: Check cmdShortcuts to determine input mode (express.e:28598-28603)
   if (session.cmdShortcuts === false) {
     session.subState = LoggedOnSubState.READ_COMMAND;
   } else {
@@ -251,6 +282,14 @@ export function displayMainMenu(socket: any, session: BBSSession) {
 
 // Display menu prompt (displayMenuPrompt equivalent)
 export function displayMenuPrompt(socket: any, session: BBSSession) {
+  console.log('📋 displayMenuPrompt called');
+  console.log('  - bbsName:', config.get('bbsName'));
+  console.log('  - currentConf:', session.currentConf);
+  console.log('  - currentConfName:', session.currentConfName);
+  console.log('  - relConfNum:', session.relConfNum);
+  console.log('  - currentMsgBase:', session.currentMsgBase);
+  console.log('  - timeRemaining:', session.timeRemaining);
+
   // Like AmiExpress: Use BBS name, relative conference number, conference name
   const bbsName = config.get('bbsName');
   const timeLeft = Math.floor(session.timeRemaining);
@@ -259,15 +298,23 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   const msgBasesInConf = messageBases.filter(mb => mb.conferenceId === session.currentConf);
   const currentMsgBase = messageBases.find(mb => mb.id === session.currentMsgBase);
 
+  console.log('  - msgBasesInConf.length:', msgBasesInConf.length);
+  console.log('  - currentMsgBase found:', !!currentMsgBase);
+
   if (msgBasesInConf.length > 1 && currentMsgBase) {
     // Multiple message bases: show "ConfName - MsgBaseName"
     const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
-    socket.emit('ansi-output', `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `);
+    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
+    console.log('📋 Sending multi-msgbase prompt:', prompt);
+    socket.emit('ansi-output', prompt);
   } else {
     // Single message base: just show conference name
-    socket.emit('ansi-output', `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `);
+    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
+    console.log('📋 Sending single-msgbase prompt:', prompt);
+    socket.emit('ansi-output', prompt);
   }
 
+  console.log('📋 Setting subState to READ_COMMAND');
   session.subState = LoggedOnSubState.READ_COMMAND;
 }
 
@@ -365,8 +412,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   if (session.subState === LoggedOnSubState.DISPLAY_BULL ||
       session.subState === LoggedOnSubState.CONF_SCAN ||
       session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
-      session.subState === LoggedOnSubState.DISPLAY_MENU ||
-      session.subState === LoggedOnSubState.FILE_LIST) {
+      session.subState === LoggedOnSubState.DISPLAY_MENU) {
     console.log('📋 In display state, continuing to next state');
     try {
       // Any key continues to next state
@@ -387,12 +433,6 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // After conference join, display the main menu
         session.menuPause = true;
         displayMainMenu(socket, session);
-      } else if (session.subState === LoggedOnSubState.FILE_LIST) {
-        // Return to file area selection
-        session.subState = LoggedOnSubState.FILE_AREA_SELECT;
-        // Re-trigger F command to show file areas again
-        processBBSCommand(socket, session, 'F');
-        return;
       }
     } catch (error) {
       console.error('Error in display state handling:', error);
@@ -406,7 +446,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   // Handle file area selection (like getDirSpan in AmiExpress)
-   if (session.subState === LoggedOnSubState.FILE_AREA_SELECT) {
+   if (session.subState === LoggedOnSubState.FILES_SELECT_AREA) {
      console.log('📁 In file area selection state');
      const input = data.trim();
      const areaNumber = parseInt(input);
@@ -494,81 +534,196 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  // Handle directory selection for file listing (like getDirSpan interactive)
-  if (session.subState === LoggedOnSubState.FILE_DIR_SELECT) {
-    console.log('📂 In file directory selection state');
+  // Handle upload filename input (express.e:17658-17687)
+  if (session.subState === LoggedOnSubState.UPLOAD_FILENAME_INPUT) {
     const input = data.trim();
 
-    if (input === '') {
-      // Empty input - return to menu
-      socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      displayMainMenu(socket, session);
-      return;
-    }
-
-    // Handle file maintenance operations
-    if (session.tempData?.operation === 'delete_files') {
-      await handleFileDeleteConfirmation(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.operation === 'move_files') {
-      await handleFileMoveConfirmation(socket, session, input);
-      return;
-    }
-
-    // Handle account editing operations
-    if (session.tempData?.accountEditingMenu) {
-      handleAccountEditing(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.editUserAccount) {
-      handleEditUserAccount(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.viewUserStats) {
-      handleViewUserStats(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.changeSecLevel) {
-      handleChangeSecLevel(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.toggleUserFlags) {
-      handleToggleUserFlags(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.deleteUserAccount) {
-      handleDeleteUserAccount(socket, session, input);
-      return;
-    }
-
-    if (session.tempData?.searchUsers) {
-      handleSearchUsers(socket, session, input);
-      return;
-    }
-
-    // Handle regular file directory selection
-    const upperInput = input.toUpperCase();
-    const tempData = session.tempData as { fileAreas: any[], reverse: boolean, nonStop: boolean };
-    const dirSpan = getDirSpan(upperInput, tempData.fileAreas.length);
-
-    if (dirSpan.startDir === -1) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid directory selection.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    // Check for abort (A or a alone) - express.e:17667-17671
+    if ((input === 'A' || input === 'a') && input.length === 1) {
+      socket.emit('ansi-output', '\r\n');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
       return;
     }
 
-    // Display selected directories
-    displaySelectedFileAreas(socket, session, tempData.fileAreas, dirSpan, tempData.reverse, tempData.nonStop);
+    // Blank line - start transfer (express.e:17673)
+    if (input === '') {
+      socket.emit('ansi-output', '\r\n');
+
+      // Check if any files were queued
+      if (!session.tempData?.uploadBatch || session.tempData.uploadBatch.length === 0) {
+        socket.emit('ansi-output', 'No files queued for upload.\r\n');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        session.tempData = undefined;
+        return;
+      }
+
+      // Start transferring first file
+      session.tempData.currentUploadIndex = 0;
+      const firstFile = session.tempData.uploadBatch[0];
+
+      socket.emit('show-file-upload', {
+        accept: '*/*',
+        maxSize: 10 * 1024 * 1024, // 10MB max
+        uploadUrl: '/api/upload',
+        fieldName: 'file',
+        expectedFilename: firstFile.filename
+      });
+
+      session.subState = LoggedOnSubState.FILES_UPLOAD;
+      return;
+    }
+
+    // Validate filename (express.e:17680-17684, 19212-19231)
+    const validation = validateFilename(input);
+    if (!validation.valid) {
+      socket.emit('ansi-output', `\r\n${validation.error}\r\n`);
+      socket.emit('ansi-output', `\r\nFileName ${session.tempData.uploadCount}: `);
+      return;
+    }
+
+    // Check for duplicates (express.e:17685-17689)
+    const isDuplicate = await checkForFile(input, session.currentConf);
+    if (isDuplicate) {
+      socket.emit('ansi-output', 'File Exists, or has a symbol (#?*).\r\n');
+      socket.emit('ansi-output', `\r\nFileName ${session.tempData.uploadCount}: `);
+      return;
+    }
+
+    // Apply filename capitalization if configured (express.e:19257)
+    // TODO: Make this configurable via LVL_CAPITOLS_in_FILE
+    const capitalizeFilenames = false;  // Default to false for now
+    const finalFilename = capitalizeFilenames ? input.toUpperCase() : input;
+
+    // Store current filename
+    session.tempData.currentFilename = finalFilename;
+
+    // Prompt for description (express.e:17689-17698)
+    const maxDescLines = 10; // max_desclines from config
+    socket.emit('ansi-output', `\r\nPlease enter a description, you only have ${maxDescLines} lines.\r\n`);
+    socket.emit('ansi-output', 'Press return alone to end.  Begin  with (/) to make upload \'Private\' to Sysop.\r\n');
+    socket.emit('ansi-output', '                                [--------------------------------------------]\r\n');
+    socket.emit('ansi-output', `\x1b[13D${input.padEnd(13)}\x1b[0m:`); // Show filename with cursor at description start
+
+    // Initialize description storage
+    session.tempData.currentDescription = [];
+    session.tempData.maxDescLines = maxDescLines;
+    session.tempData.descLineCount = 0;
+
+    session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+    return;
+  }
+
+  // Handle upload description input (express.e:17700-17717)
+  if (session.subState === LoggedOnSubState.UPLOAD_DESC_INPUT) {
+    const input = data;
+
+    // Blank line ends description (express.e:17704-17707)
+    if (input.trim() === '') {
+      // Save file to upload batch
+      session.tempData.uploadBatch.push({
+        filename: session.tempData.currentFilename,
+        description: session.tempData.currentDescription.join('\n'),
+        isPrivate: session.tempData.currentDescription[0]?.startsWith('/')
+      });
+
+      // Move to next filename
+      session.tempData.uploadCount++;
+      socket.emit('ansi-output', `\r\nFileName ${session.tempData.uploadCount}: `);
+      session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
+      return;
+    }
+
+    // Store description line (max 44 chars as shown in express.e:17699)
+    const descLine = input.substring(0, 44);
+    session.tempData.currentDescription.push(descLine);
+    session.tempData.descLineCount++;
+
+    // Check if reached max lines
+    if (session.tempData.descLineCount >= session.tempData.maxDescLines) {
+      // Save file to upload batch
+      session.tempData.uploadBatch.push({
+        filename: session.tempData.currentFilename,
+        description: session.tempData.currentDescription.join('\n'),
+        isPrivate: session.tempData.currentDescription[0]?.startsWith('/')
+      });
+
+      // Move to next filename
+      session.tempData.uploadCount++;
+      socket.emit('ansi-output', `\r\nFileName ${session.tempData.uploadCount}: `);
+      session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
+      return;
+    }
+
+    // Prompt for next description line
+    socket.emit('ansi-output', '                                :');
+    return;
+  }
+
+  // Handle file upload state (cancel on any key press)
+  if (session.subState === LoggedOnSubState.FILES_UPLOAD) {
+    console.log('📤 In file upload state - canceling upload');
+    socket.emit('ansi-output', '\r\n\x1b[33mUpload canceled\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+    return;
+  }
+
+  // Handle file list directory input (F command continuation)
+  if (session.subState === LoggedOnSubState.FILE_LIST_DIR_INPUT) {
+    const { FileListingHandler } = require('./file-listing.handler');
+    await FileListingHandler.handleFileListDirInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle file maintenance operations
+  if (session.tempData?.operation === 'delete_files') {
+    await handleFileDeleteConfirmation(socket, session, input);
+    return;
+  }
+
+  if (session.tempData?.operation === 'move_files') {
+    await handleFileMoveConfirmation(socket, session, input);
+    return;
+  }
+
+  // Handle account editing operations
+  if (session.tempData?.accountEditingMenu) {
+    handleAccountEditing(socket, session, input);
+    return;
+  }
+
+  if (session.tempData?.editUserAccount) {
+    handleEditUserAccount(socket, session, input);
+    return;
+  }
+
+  if (session.tempData?.viewUserStats) {
+    handleViewUserStats(socket, session, input);
+    return;
+  }
+
+  if (session.tempData?.changeSecLevel) {
+    handleChangeSecLevel(socket, session, input);
+    return;
+  }
+
+  if (session.tempData?.toggleUserFlags) {
+    handleToggleUserFlags(socket, session, input);
+    return;
+  }
+
+  if (session.tempData?.deleteUserAccount) {
+    handleDeleteUserAccount(socket, session, input);
+    return;
+  }
+
+  if (session.tempData?.searchUsers) {
+    handleSearchUsers(socket, session, input);
     return;
   }
 
@@ -694,36 +849,182 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   // Handle message entry substates (E command flow)
+  // These states require LINE-BUFFERED input, not single-key hotkeys
+  // Initialize inputBuffer if needed
+  if (!session.inputBuffer && (
+    session.subState === LoggedOnSubState.POST_MESSAGE_TO ||
+    session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT ||
+    session.subState === LoggedOnSubState.POST_MESSAGE_PRIVATE
+  )) {
+    session.inputBuffer = '';
+  }
+
   if (session.subState === LoggedOnSubState.POST_MESSAGE_TO) {
-    handleMessageToInput(socket, session, data.trim());
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessageToInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+      // Client handles character echo, don't send back
+    }
     return;
   }
 
   if (session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
-    handleMessageSubjectInput(socket, session, data.trim());
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessageSubjectInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+      // Client handles character echo, don't send back
+    }
     return;
   }
 
   if (session.subState === LoggedOnSubState.POST_MESSAGE_PRIVATE) {
-    handleMessagePrivateInput(socket, session, data.trim());
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessagePrivateInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+      // Client handles character echo, don't send back
+    }
     return;
   }
 
   if (session.subState === LoggedOnSubState.POST_MESSAGE_BODY) {
-    await handleMessageBodyInput(socket, session, data);
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const line = session.inputBuffer;
+      session.inputBuffer = '';
+      socket.emit('ansi-output', '\r\n'); // Move to next line
+      await handleMessageBodyInput(socket, session, line);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      // Client handles character echo
+    }
     return;
   }
 
   // Handle message reader navigation (R command)
+  // Like express.e:11046 - uses lineInput (line-based input, not single char)
   if (session.subState === 'MSG_READER_NAV') {
-    const { handleMessageReaderNav } = await import('./messaging.handler');
-    await handleMessageReaderNav(socket, session, data.trim());
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      const { handleMessageReaderNav } = await import('./messaging.handler');
+      await handleMessageReaderNav(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+      // Client handles character echo
+    }
     return;
   }
 
   // Handle file flagging input (A command)
   if (session.subState === 'FLAG_INPUT') {
     await handleFlagInput(socket, session, data);
+    return;
+  }
+
+  // Handle J (Join Conference) input
+  if (session.subState === 'JOIN_CONF_INPUT') {
+    console.log('📡 In JOIN_CONF_INPUT state');
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      console.log('📡 Conference number entered:', input);
+
+      // Process conference number
+      const confNum = parseInt(input);
+      if (isNaN(confNum) || confNum < 1 || confNum > conferences.length) {
+        // express.e:25142-25150 - Redisplay JOINCONF and prompt again (no error message)
+        displayScreen(socket, session, 'JOINCONF');
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.complexPrompt([
+          { text: 'Conference Number ', color: 'white' },
+          { text: `(1-${conferences.length})`, color: 'cyan' },
+          { text: ': ', color: 'white' }
+        ]));
+        session.inputBuffer = '';
+        // Stay in JOIN_CONF_INPUT state to accept new input
+        return;
+      }
+
+      // Get conference and join it
+      const selectedConf = conferences[confNum - 1];
+      const confId = selectedConf.id;
+      const confMessageBases = messageBases.filter(mb => mb.conferenceId === confId);
+
+      if (confMessageBases.length === 0) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.errorLine('No message bases in this conference'));
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
+      }
+
+      const firstMsgBaseId = confMessageBases[0].id;
+      await joinConference(socket, session, confId, firstMsgBaseId);
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+      // Client handles character echo
+    }
     return;
   }
 
@@ -956,27 +1257,48 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   if (session.subState === LoggedOnSubState.READ_COMMAND) {
     console.log('✅ In READ_COMMAND state, reading line input');
-    // Express.e:28619-28633 - Read command text and transition to PROCESS_COMMAND
-    const input = data.trim();
-    if (input.length > 0) {
-      // Store command text in session for PROCESS_COMMAND state
-      session.commandText = input.toUpperCase();
-      console.log('📝 Command text stored:', session.commandText);
-      // Transition to PROCESS_COMMAND (express.e:28638)
-      session.subState = LoggedOnSubState.PROCESS_COMMAND;
-      // Process the command in the next event cycle
-      setTimeout(() => {
-        handleCommand(socket, session, '');  // Trigger process command
-      }, 0);
+    // Express.e:28619-28633 - Read command text using lineInput (line-buffered)
+
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+
+      if (input.length > 0) {
+        // Store command text in session for PROCESS_COMMAND state
+        session.commandText = input.toUpperCase();
+        console.log('📝 Command text stored:', session.commandText);
+        // Transition to PROCESS_COMMAND (express.e:28638)
+        session.subState = LoggedOnSubState.PROCESS_COMMAND;
+        // Process the command in the next event cycle
+        setTimeout(() => {
+          handleCommand(socket, session, '');  // Trigger process command
+        }, 0);
+      }
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      // Client handles character echo
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
     console.log('🔥 In READ_SHORTCUTS state, processing single key');
     try {
       // Process single character hotkeys immediately
+      // IMPORTANT: Use processCommand() to respect the command priority system:
+      // 1. SYSCMD, 2. BBSCMD (doors), 3. Internal commands (express.e:28228)
       const command = data.trim().toUpperCase();
       if (command.length > 0) {
-        processBBSCommand(socket, session, command).catch(error => {
+        processCommand(socket, session, command, '').catch(error => {
           console.error('Error processing shortcut command:', error);
           socket.emit('ansi-output', '\r\n\x1b[31mError processing command. Please try again.\x1b[0m\r\n');
           socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
@@ -1102,7 +1424,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
   console.log('Entering switch statement for command:', command);
   switch (command) {
     case 'D': // Download File(s) (internalCommandD) - express.e:24853-24857
-      handleDownloadCommand(socket, session, commandArgs);
+      handleDownloadCommand(socket, session, params);
       return;
 
     case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302
@@ -1150,11 +1472,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25470
-      handleOnlineMessageCommand(socket, session, commandArgs);
+      handleOnlineMessageCommand(socket, session, params);
       return;
 
     case 'RL': // RELOGON (internalCommandRL) - express.e:25534-25539
-      handleRelogonCommand(socket, session, commandArgs);
+      handleRelogonCommand(socket, session, params);
       return;
 
     case 'RZ': // Zmodem Upload Command (internalCommandRZ) - express.e:25608-25621
@@ -1166,11 +1488,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'V': // View a Text File (internalCommandV) - express.e:25675-25687
-      handleViewFileCommand(socket, session, commandArgs);
+      handleViewFileCommand(socket, session, params);
       return;
 
     case 'VS': // View Statistics - Same as V command (internalCommandV) - express.e:28376
-      handleViewFileCommand(socket, session, commandArgs);
+      handleViewFileCommand(socket, session, params);
       return;
 
     case 'VO': // Voting Booth (internalCommandVO) - express.e:25700-25710
@@ -1194,11 +1516,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'X': // Expert Mode Toggle (internalCommandX) - express.e:26113-26122
-      handleExpertModeCommand(socket, session);
+      await handleExpertModeCommand(socket, session);
       return;
 
     case 'Z': // Zippy Text Search (internalCommandZ) - express.e:26123-26213
-      await handleZippySearchCommand(socket, session, commandArgs);
+      await handleZippySearchCommand(socket, session, params);
       return;
 
     case 'ZOOM': // Zoo Mail (internalCommandZOOM) - express.e:26215-26240
@@ -1210,7 +1532,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'A': // Alter Flags (file flagging) (internalCommandA) - express.e:24601-24605
-      await handleAlterFlagsCommand(socket, session, commandArgs);
+      await handleAlterFlagsCommand(socket, session, params);
       return;
 
     case 'E': // Enter Message (internalCommandE) - express.e:24860-24872
@@ -1234,19 +1556,19 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'J': // Join Conference (internalCommandJ) - express.e:25113-25183
-      await handleJoinConferenceCommand(socket, session, commandArgs);
+      await handleJoinConferenceCommand(socket, session, params);
       return;
 
     case 'JM': // Join Message Base (internalCommandJM) - express.e:25185-25238
-      handleJoinMessageBaseCommand(socket, session, commandArgs);
+      handleJoinMessageBaseCommand(socket, session, params);
       return;
 
     case 'F': // File Listings (internalCommandF) - express.e:24877-24881
-      await handleFileListCommand(socket, session, commandArgs);
+      await handleFileListCommand(socket, session, params);
       return;
 
     case 'FR': // File Listings Raw (internalCommandFR) - express.e:24883-24887
-      await handleFileListRawCommand(socket, session, commandArgs);
+      await handleFileListRawCommand(socket, session, params);
       return;
 
     case 'FM': // File Maintenance (internalCommandFM) - maintenanceFileSearch()
@@ -1258,7 +1580,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'N': // New Files (internalCommandN) - express.e:25275-25279
-      await handleNewFilesCommand(socket, session, commandArgs);
+      await handleNewFilesCommand(socket, session, params);
       return;
 
     case 'O': // Page Sysop (internalCommandO) - express.e:25372-25404
@@ -1271,11 +1593,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'B': // Read Bulletin (internalCommandB) - express.e:24607-24656
-      handleReadBulletinCommand(socket, session, commandArgs);
+      handleReadBulletinCommand(socket, session, params);
       return;
 
     case 'H': // Help (internalCommandH) - express.e:25075-25087
-      handleHelpCommand(socket, session, commandArgs);
+      handleHelpCommand(socket, session, params);
       return;
 
     case 'M': // Toggle ANSI Color (internalCommandM) - express.e:25239-25248
@@ -1291,7 +1613,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'G': // Goodbye/Logoff (internalCommandG) - express.e:25047-25075
-      handleGoodbyeCommand(socket, session, commandArgs);
+      handleGoodbyeCommand(socket, session, params);
       return;
 
     case 'GR': // Greetings (internalCommandGreets) - express.e:24411-24423
@@ -1299,7 +1621,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'C': // Comment to Sysop (internalCommandC) - express.e:24658-24670
-      handleCommentToSysopCommand(socket, session, commandArgs);
+      handleCommentToSysopCommand(socket, session, params);
       return;
 
     case 'CF': // Conference Flags (internalCommandCF) - express.e:24672-24750
@@ -1316,7 +1638,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089-25111
-      handleHelpFilesCommand(socket, session, commandArgs);
+      handleHelpFilesCommand(socket, session, params);
       return;
 
     default:
