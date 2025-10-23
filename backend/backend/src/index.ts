@@ -39,6 +39,9 @@ import {
   setSystemCommandsDependencies
 } from './handlers/system-commands.handler';
 import {
+  setNavigationCommandsDependencies
+} from './handlers/navigation-commands.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -824,6 +827,15 @@ async function initializeData() {
     setSystemCommandsDependencies({
       displayScreen,
       findSecurityScreen
+    });
+
+    // Inject dependencies into navigation commands handler
+    setNavigationCommandsDependencies({
+      conferences,
+      messageBases,
+      joinConference,
+      checkConfAccess,
+      displayNewFiles
     });
 
     // Inject dependencies into command handler

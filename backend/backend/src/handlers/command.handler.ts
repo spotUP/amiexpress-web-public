@@ -44,6 +44,15 @@ import {
   setSystemCommandsDependencies
 } from './system-commands.handler';
 import {
+  handleTimeCommand,
+  handleNewFilesCommand,
+  handlePreviousConferenceCommand,
+  handleNextConferenceCommand,
+  handlePreviousMessageBaseCommand,
+  handleNextMessageBaseCommand,
+  setNavigationCommandsDependencies
+} from './navigation-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -1581,131 +1590,20 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
       return; // Don't call displayMainMenu - stay in input mode
 
-    case '<': // Previous Conference (internalCommandLT) - express.e:24529
-      // Check if user has join permission
-      // TODO: Implement checkSecurity(ACS_JOIN_CONFERENCE)
-
-      // Find previous accessible conference
-      let prevConf = session.currentConf - 1;
-      while (prevConf > 0) {
-        // TODO: Check if user has access to this conference with checkConfAccess()
-        // For now, assume all conferences are accessible
-        const conf = conferences.find(c => c.id === prevConf);
-        if (conf) {
-          break;
-        }
-        prevConf--;
-      }
-
-      if (prevConf < 1) {
-        // No previous conference - show join prompt
-        socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
-        socket.emit('ansi-output', 'At first conference. Select conference to join:\r\n');
-        conferences.forEach(conf => {
-          socket.emit('ansi-output', `${conf.id}. ${conf.name}\r\n`);
-        });
-        socket.emit('ansi-output', '\r\n\x1b[32mConference number: \x1b[0m');
-        session.subState = LoggedOnSubState.CONFERENCE_SELECT;
-        return;
-      } else {
-        // Join previous conference
-        await joinConference(socket, session, prevConf, 1);
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      }
+    case '<': // Previous Conference (internalCommandLT) - express.e:24529-24546
+      await handlePreviousConferenceCommand(socket, session);
       return;
 
-    case '>': // Next Conference (internalCommandGT) - express.e:24548
-      // Find next accessible conference
-      let nextConf = session.currentConf + 1;
-      const maxConf = Math.max(...conferences.map(c => c.id));
-
-      while (nextConf <= maxConf) {
-        const conf = conferences.find(c => c.id === nextConf);
-        if (conf) {
-          break;
-        }
-        nextConf++;
-      }
-
-      if (nextConf > maxConf) {
-        // No next conference - show join prompt
-        socket.emit('ansi-output', '\x1b[36m-= Join Conference =-\x1b[0m\r\n');
-        socket.emit('ansi-output', 'At last conference. Select conference to join:\r\n');
-        conferences.forEach(conf => {
-          socket.emit('ansi-output', `${conf.id}. ${conf.name}\r\n`);
-        });
-        socket.emit('ansi-output', '\r\n\x1b[32mConference number: \x1b[0m');
-        session.subState = LoggedOnSubState.CONFERENCE_SELECT;
-        return;
-      } else {
-        // Join next conference
-        await joinConference(socket, session, nextConf, 1);
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      }
+    case '>': // Next Conference (internalCommandGT) - express.e:24548-24564
+      await handleNextConferenceCommand(socket, session);
       return;
 
-    case '<<': // Previous Message Base (internalCommandLT2) - express.e:24566
-      {
-        const prevMsgBase = session.currentMsgBase - 1;
-
-        if (prevMsgBase < 1) {
-          // No previous message base - show join prompt
-          const currentConfBases = messageBases.filter(mb => mb.conferenceId === session.currentConf);
-          socket.emit('ansi-output', '\x1b[36m-= Join Message Base =-\x1b[0m\r\n');
-          socket.emit('ansi-output', 'At first message base. Select message base to join:\r\n');
-          currentConfBases.forEach(mb => {
-            socket.emit('ansi-output', `${mb.id}. ${mb.name}\r\n`);
-          });
-          socket.emit('ansi-output', '\r\n\x1b[32mMessage base number: \x1b[0m');
-          session.subState = LoggedOnSubState.CONFERENCE_SELECT;
-          session.tempData = { messageBaseSelect: true, currentConfBases };
-          return;
-        } else {
-          // Join previous message base
-          const prevBase = messageBases.find(mb => mb.id === prevMsgBase && mb.conferenceId === session.currentConf);
-          if (prevBase) {
-            session.currentMsgBase = prevMsgBase;
-            socket.emit('ansi-output', `\r\n\x1b[32mJoined message base: ${prevBase.name}\x1b[0m\r\n`);
-            socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-            session.menuPause = false;
-            session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-          }
-        }
-      }
+    case '<<': // Previous Message Base (internalCommandLT2) - express.e:24566-24578
+      await handlePreviousMessageBaseCommand(socket, session);
       return;
 
-    case '>>': // Next Message Base (internalCommandGT2) - express.e:24580
-      {
-        const currentConfBases = messageBases.filter(mb => mb.conferenceId === session.currentConf);
-        const nextMsgBase = session.currentMsgBase + 1;
-
-        if (nextMsgBase > currentConfBases.length) {
-          // No next message base - show join prompt
-          socket.emit('ansi-output', '\x1b[36m-= Join Message Base =-\x1b[0m\r\n');
-          socket.emit('ansi-output', 'At last message base. Select message base to join:\r\n');
-          currentConfBases.forEach(mb => {
-            socket.emit('ansi-output', `${mb.id}. ${mb.name}\r\n`);
-          });
-          socket.emit('ansi-output', '\r\n\x1b[32mMessage base number: \x1b[0m');
-          session.subState = LoggedOnSubState.CONFERENCE_SELECT;
-          session.tempData = { messageBaseSelect: true, currentConfBases };
-          return;
-        } else {
-          // Join next message base
-          const nextBase = messageBases.find(mb => mb.id === nextMsgBase && mb.conferenceId === session.currentConf);
-          if (nextBase) {
-            session.currentMsgBase = nextMsgBase;
-            socket.emit('ansi-output', `\r\n\x1b[32mJoined message base: ${nextBase.name}\x1b[0m\r\n`);
-            socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-            session.menuPause = false;
-            session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-          }
-        }
-      }
+    case '>>': // Next Message Base (internalCommandGT2) - express.e:24580-24592
+      await handleNextMessageBaseCommand(socket, session);
       return;
 
     case 'J': // Join Conference (internalCommandJ) - express.e:25113-25183
@@ -1776,8 +1674,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       await displayFileStatus(socket, session, params);
       return;
 
-    case 'N': // New Files (internalCommandN) - displayNewFiles(params)
-      displayNewFiles(socket, session, params);
+    case 'N': // New Files (internalCommandN) - express.e:25275-25279
+      await handleNewFilesCommand(socket, session, commandArgs);
       return;
 
     case 'O': // Operator Page (internalCommandO) - Sysop Chat
@@ -1809,17 +1707,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return; // Don't continue to menu display
 
 
-    case 'T': // Time/Date Display (internalCommandT) - express.e:25622
-      {
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('en-US');
-        const timeStr = now.toLocaleTimeString('en-US');
-        socket.emit('ansi-output', `\r\nIt is ${dateStr} ${timeStr}\r\n`);
-        socket.emit('ansi-output', `Time remaining: ${Math.floor(session.timeRemaining)} minutes\r\n`);
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      }
+    case 'T': // Time/Date Display (internalCommandT) - express.e:25622-25644
+      handleTimeCommand(socket, session);
       return;
 
     case 'B': // Bulletins (internalCommandB) - express.e:24607-24652
