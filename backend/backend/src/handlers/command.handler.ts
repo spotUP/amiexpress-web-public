@@ -77,6 +77,13 @@ import {
   setAdvancedCommandsDependencies
 } from './advanced-commands.handler';
 import {
+  handleJoinMessageBaseCommand,
+  handleNodeManagementCommand,
+  handleConferenceMaintenanceCommand,
+  handleJMInput,
+  setMessageCommandsDependencies
+} from './message-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -540,6 +547,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     }
+    return;
+  }
+
+  // Handle JM (Join Message Base) input
+  if (session.subState === 'JM_INPUT') {
+    console.log('📬 In JM input state');
+    handleJMInput(socket, session, data.trim());
     return;
   }
 
@@ -1548,53 +1562,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       await handleJoinConferenceCommand(socket, session, commandArgs);
       return;
 
-    case 'JM': // Join Message Base (internalCommandJM)
-      socket.emit('ansi-output', '\x1b[36m-= Join Message Base =-\x1b[0m\r\n');
-
-      // Check if there's a JoinMsgBase{sec}.txt file to display
-      // Note: In web version, we don't have file system access, so we'll show a generic message
-      socket.emit('ansi-output', 'Selecting message base...\r\n\r\n');
-
-      // Display available message bases for current conference
-      const currentConfBases = messageBases.filter(mb => mb.conferenceId === session.currentConf);
-      if (currentConfBases.length === 0) {
-        socket.emit('ansi-output', 'No message bases available in this conference.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', 'Available message bases:\r\n');
-      currentConfBases.forEach(mb => {
-        const currentIndicator = mb.id === session.currentMsgBase ? ' \x1b[32m<-- Current\x1b[0m' : '';
-        socket.emit('ansi-output', `${mb.id}. ${mb.name}${currentIndicator}\r\n`);
-      });
-
-      // Like AmiExpress: If params provided (e.g., "jm 2"), process immediately
-      if (params.trim()) {
-        const msgBaseId = parseInt(params.trim());
-        const selectedBase = currentConfBases.find(mb => mb.id === msgBaseId);
-        if (selectedBase) {
-          session.currentMsgBase = msgBaseId;
-          socket.emit('ansi-output', `\r\n\x1b[32mJoined message base: ${selectedBase.name}\x1b[0m\r\n`);
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        } else {
-          socket.emit('ansi-output', '\r\n\x1b[31mInvalid message base number.\x1b[0m\r\n');
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        }
-      } else {
-        // No params - prompt for input
-        socket.emit('ansi-output', '\r\n\x1b[32mMessage base number: \x1b[0m');
-        session.subState = LoggedOnSubState.CONFERENCE_SELECT; // Reuse for message base selection
-        session.tempData = { messageBaseSelect: true, currentConfBases };
-        return; // Stay in input mode
-      }
-      break;
+    case 'JM': // Join Message Base (internalCommandJM) - express.e:25185-25238
+      handleJoinMessageBaseCommand(socket, session, commandArgs);
+      return;
 
     case 'F': // File Listings (internalCommandF) - express.e:24877-24881
       handleFileListCommand(socket, session, commandArgs);
@@ -1637,38 +1607,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleAnsiModeCommand(socket, session);
       return;
 
-    case 'NM': // New Messages (internalCommandNM) - express.e:25281
-      // TODO: Implement new message scan from express.e
-      socket.emit('ansi-output', '\x1b[36m-= New Messages =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Scanning for new messages...\r\n\r\n');
-
-      // Count new messages since last login
-      const newMessages = messages.filter(msg =>
-        msg.conferenceId === session.currentConf &&
-        msg.timestamp > (session.user?.lastLogin || new Date(0))
-      );
-
-      if (newMessages.length > 0) {
-        socket.emit('ansi-output', `Found ${newMessages.length} new message(s) in this conference.\r\n`);
-      } else {
-        socket.emit('ansi-output', 'No new messages.\r\n');
-      }
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'NM': // Node Management (SYSOP) (internalCommandNM) - express.e:25281-25370
+      handleNodeManagementCommand(socket, session);
       return;
 
-    case 'CM': // Clear Message Scan Pointers (internalCommandCM) - express.e:24843
-      // Like AmiExpress: Clear message scan pointers so all messages appear as "new"
-      socket.emit('ansi-output', '\x1b[36m-= Clear Message Scan =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This will mark all messages as unread.\r\n');
-      socket.emit('ansi-output', 'Are you sure? (Y/N): ');
-      // TODO: Implement confirmation and clear scan pointers
-      socket.emit('ansi-output', '\r\n\x1b[33mNot yet implemented.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'CM': // Conference Maintenance (SYSOP) (internalCommandCM) - express.e:24843-24852
+      handleConferenceMaintenanceCommand(socket, session);
       return;
 
     case 'G': // Goodbye/Logoff (internalCommandG) - express.e:25047-25075

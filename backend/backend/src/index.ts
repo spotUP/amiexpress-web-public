@@ -51,6 +51,9 @@ import {
   setAdvancedCommandsDependencies
 } from './handlers/advanced-commands.handler';
 import {
+  setMessageCommandsDependencies
+} from './handlers/message-commands.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -864,6 +867,14 @@ async function initializeData() {
       conferences,
       messages,
       checkConfAccess
+    });
+
+    // Inject dependencies into message commands handler
+    setMessageCommandsDependencies({
+      messageBases,
+      conferences,
+      joinConference,
+      displayScreen
     });
 
     // Inject dependencies into command handler
