@@ -213,11 +213,14 @@ function App() {
 
     // Handle special keys (F1 for chat, etc.)
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-      // Handle F1 key for chat
-      if (event.key === 'F1' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        event.preventDefault();
-        ws.emit('command', '\x1b[OP'); // F1 key sequence
-        return false;
+      // Only handle special keys when logged in and not in login/signup mode
+      if (loginState.current === 'loggedin') {
+        // Handle F1 key for chat
+        if (event.key === 'F1' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+          event.preventDefault();
+          ws.emit('command', '\x1b[OP'); // F1 key sequence
+          return false;
+        }
       }
       return true;
     });
