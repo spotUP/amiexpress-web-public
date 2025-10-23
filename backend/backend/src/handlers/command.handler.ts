@@ -269,7 +269,50 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   console.log('data:', JSON.stringify(data));
   console.log('session.state:', session.state);
   console.log('session.subState:', session.subState);
-  console.log('session id:', sessions.has(socket.id) ? 'found' : 'NOT FOUND');
+
+  // Handle pre-login connection flow (AWAIT state)
+  if (session.state === BBSState.AWAIT) {
+    if (session.subState === LoggedOnSubState.DISPLAY_CONNECT) {
+      // User pressed key after AWAITSCREEN
+      console.log('📋 Connection screen viewed, moving to ANSI prompt');
+      session.subState = LoggedOnSubState.ANSI_PROMPT;
+      socket.emit('ansi-output', '\r\n\r\n\x1b[33mDo you support ANSI graphics? (Y/N): \x1b[0m');
+      return;
+    }
+
+    if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
+      // User answered ANSI prompt
+      const answer = data.toUpperCase();
+      if (answer === 'Y' || answer === 'N' || answer === '\r') {
+        const ansiEnabled = (answer === 'Y' || answer === '\r'); // Default to Yes on Enter
+        console.log('📋 ANSI preference set:', ansiEnabled);
+        session.ansiEnabled = ansiEnabled;
+
+        // Move to BBSTITLE screen
+        session.subState = LoggedOnSubState.DISPLAY_BBSTITLE;
+        const { displayScreen, doPause } = require('./screen.handler');
+        displayScreen(socket, session, 'BBSTITLE');
+        doPause(socket, session);
+        return;
+      }
+      // Invalid input, re-prompt
+      socket.emit('ansi-output', '\r\n\x1b[31mPlease answer Y or N: \x1b[0m');
+      return;
+    }
+
+    if (session.subState === LoggedOnSubState.DISPLAY_BBSTITLE) {
+      // User pressed key after BBSTITLE, now ready for login
+      console.log('📋 BBSTITLE viewed, transitioning to login');
+      session.state = BBSState.LOGON;
+      session.subState = undefined;
+      socket.emit('ansi-output', '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
+      socket.emit('prompt-login'); // Tell frontend to show login form
+      return;
+    }
+
+    return;
+  }
 
   if (session.state !== BBSState.LOGGEDON) {
     console.log('❌ Not in LOGGEDON state, ignoring command');

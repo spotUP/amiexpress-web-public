@@ -318,6 +318,7 @@ io.on('connection', async (socket) => {
 
   const session: BBSSession = {
     state: BBSState.AWAIT,
+    subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
     currentConf: 4, // Start in General conference (ID 4)
     currentMsgBase: 7, // Start in Main message base (ID 7)
     timeRemaining: 60, // 60 minutes default
@@ -349,6 +350,10 @@ io.on('connection', async (socket) => {
     lastNewReadConf: 0 // Last message auto-scanned
   };
   sessions.set(socket.id, session);
+
+  // Display connection screen (AWAITSCREEN) with node info
+  displayScreen(socket, session, 'AWAITSCREEN');
+  doPause(socket, session);
 
   // Execute login trigger for AREXX scripts
   await arexxEngine.executeTrigger('login', {

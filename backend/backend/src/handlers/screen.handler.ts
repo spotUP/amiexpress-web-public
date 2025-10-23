@@ -35,30 +35,52 @@ export function setConferences(confs: Conference[]) {
  * @param content - Screen file content with MCI codes
  * @param session - Current BBS session
  * @param bbsName - BBS name for %B variable
+ * @param sysopName - Sysop name for %S variable
+ * @param location - BBS location for %L variable
  * @returns Parsed content with MCI codes replaced
  */
-export function parseMciCodes(content: string, session: BBSSession, bbsName: string = 'AmiExpress-Web'): string {
+export function parseMciCodes(
+  content: string,
+  session: BBSSession,
+  bbsName: string = 'AmiExpress-Web',
+  sysopName: string = 'Sysop',
+  location: string = 'The Internet'
+): string {
   let parsed = content;
 
   // %B - BBS Name
   parsed = parsed.replace(/%B/g, bbsName);
 
+  // %S - Sysop Name
+  parsed = parsed.replace(/%S/g, sysopName);
+
+  // %L - Location
+  parsed = parsed.replace(/%L/g, location);
+
   // %CF - Current Conference Name
   parsed = parsed.replace(/%CF/g, session.currentConfName || 'Unknown');
 
-  // %R - Time Remaining (in minutes)
-  parsed = parsed.replace(/%R/g, Math.floor(session.timeRemaining / 60).toString());
+  // %R - Baud Rate (for connection screens) / Time Remaining (for logged-in screens)
+  // Use "38400" as default baud rate for web connections
+  parsed = parsed.replace(/%R/g, session.user ? Math.floor(session.timeRemaining / 60).toString() : '38400');
 
   // %D - Current Date
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
   parsed = parsed.replace(/%D/g, dateStr);
 
+  // %T - Current Time
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  parsed = parsed.replace(/%T/g, timeStr);
+
   // %U - Username
   parsed = parsed.replace(/%U/g, session.user?.username || 'Guest');
 
   // %N - Node Number (always 1 in web version)
   parsed = parsed.replace(/%N/g, '1');
+
+  // %C - Number of conferences
+  parsed = parsed.replace(/%C/g, conferences.length.toString());
 
   return parsed;
 }

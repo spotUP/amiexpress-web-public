@@ -9,6 +9,12 @@ export enum BBSState {
 }
 
 export enum LoggedOnSubState {
+  // Pre-login connection flow
+  DISPLAY_CONNECT = 'display_connect',  // AWAITSCREEN - node list and system info
+  ANSI_PROMPT = 'ansi_prompt',          // Prompt user for ANSI support (Y/N)
+  DISPLAY_BBSTITLE = 'display_bbstitle',  // BBSTITLE screen before login
+
+  // Post-login flow
   DISPLAY_TITLE = 'display_title',
   DISPLAY_LOGON = 'display_logon',
   DISPLAY_BULL = 'display_bull',
