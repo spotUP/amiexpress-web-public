@@ -54,6 +54,9 @@ import {
   setMessageCommandsDependencies
 } from './handlers/message-commands.handler';
 import {
+  setInfoCommandsDependencies
+} from './handlers/info-commands.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -875,6 +878,11 @@ async function initializeData() {
       conferences,
       joinConference,
       displayScreen
+    });
+
+    // Inject dependencies into info commands handler
+    setInfoCommandsDependencies({
+      sessions
     });
 
     // Inject dependencies into command handler

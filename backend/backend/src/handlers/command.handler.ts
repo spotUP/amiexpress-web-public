@@ -84,6 +84,13 @@ import {
   setMessageCommandsDependencies
 } from './message-commands.handler';
 import {
+  handleVersionCommand,
+  handleWhoCommand,
+  handleWhoDetailedCommand,
+  handleWriteUserParamsCommand,
+  setInfoCommandsDependencies
+} from './info-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -1187,134 +1194,20 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
-    case 'VER': // View ami-express version information (internalCommandVER) - 1:1 with AmiExpress VER
-      socket.emit('ansi-output', '\x1b[36m-= AmiExpress Web Version Information =-\x1b[0m\r\n\r\n');
-
-      socket.emit('ansi-output', 'AmiExpress Web v5.6.0\r\n');
-      socket.emit('ansi-output', 'Modern web implementation of the classic AmiExpress BBS\r\n\r\n');
-
-      socket.emit('ansi-output', 'Built with:\r\n');
-      socket.emit('ansi-output', '- Node.js backend\r\n');
-      socket.emit('ansi-output', '- React frontend\r\n');
-      socket.emit('ansi-output', '- SQLite database\r\n');
-      socket.emit('ansi-output', '- Socket.io real-time communication\r\n');
-      socket.emit('ansi-output', '- xterm.js terminal emulation\r\n\r\n');
-
-      socket.emit('ansi-output', 'Compatible with AmiExpress v5.6.0 features\r\n');
-      socket.emit('ansi-output', 'WebSocket-based file transfers\r\n');
-      socket.emit('ansi-output', 'Real-time chat and messaging\r\n');
-      socket.emit('ansi-output', 'Multi-node support\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'VER': // View ami-express version information (internalCommandVER) - express.e:25688-25699
+      handleVersionCommand(socket, session);
       return;
 
-    case 'W': // Write User Parameters (internalCommandW) - 1:1 with AmiExpress user parameters
-      socket.emit('ansi-output', '\x1b[36m-= User Parameters =-\x1b[0m\r\n\r\n');
-
-      const currentUser = session.user!;
-      socket.emit('ansi-output', `            1. LOGIN NAME..............${currentUser.username}\r\n`);
-      socket.emit('ansi-output', `            2. REAL NAME...............${currentUser.realname || 'Not set'}\r\n`);
-      socket.emit('ansi-output', `            3. INTERNET NAME...........${currentUser.username.toLowerCase()}\r\n`);
-      socket.emit('ansi-output', `            4. LOCATION................${currentUser.location || 'Not set'}\r\n`);
-      socket.emit('ansi-output', `            5. PHONE NUMBER............${currentUser.phone || 'Not set'}\r\n`);
-      socket.emit('ansi-output', `            6. PASSWORD................ENCRYPTED\r\n`);
-      socket.emit('ansi-output', `            7. LINES PER SCREEN........${currentUser.linesPerScreen || 23}\r\n`);
-      socket.emit('ansi-output', `            8. COMPUTER................${currentUser.computer || 'Unknown'}\r\n`);
-      socket.emit('ansi-output', `            9. SCREEN TYPE.............${currentUser.screenType || 'Web Terminal'}\r\n`);
-      socket.emit('ansi-output', `           10. SCREEN CLEAR............${currentUser.ansi ? 'Yes' : 'No'}\r\n`);
-      socket.emit('ansi-output', `           11. TRANSFER PROTOCOL.......WebSocket\r\n`);
-      socket.emit('ansi-output', `           12. EDITOR TYPE.............Prompt\r\n`);
-      socket.emit('ansi-output', `           13. ZOOM TYPE...............QWK\r\n`);
-      socket.emit('ansi-output', `           14. AVAILABLE FOR CHAT/OLM..${currentUser.availableForChat ? 'Yes' : 'No'}\r\n\r\n`);
-
-      socket.emit('ansi-output', 'Which to change <CR>= QUIT ? ');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { userParameters: true };
-      return; // Stay in input mode
-
-    case 'WHO': // Node Information (internalCommandWHO) - 1:1 with AmiExpress WHO
-      socket.emit('ansi-output', '\x1b[36m-= Online Users (WHO) =-\x1b[0m\r\n\r\n');
-
-      // Get all online users
-      const allOnlineUsers = Array.from(sessions.values())
-        .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
-        .map(sess => ({
-          username: sess.user!.username,
-          realname: sess.user!.realname,
-          conference: sess.currentConfName,
-          idle: Math.floor((Date.now() - sess.lastActivity) / 60000),
-          node: 'Web1', // All users on same node for now
-          quiet: sess.user!.quietNode
-        }));
-
-      if (allOnlineUsers.length === 0) {
-        socket.emit('ansi-output', 'No users currently online.\r\n');
-      } else {
-        socket.emit('ansi-output', 'User Name'.padEnd(16) + 'Real Name'.padEnd(20) + 'Conference'.padEnd(15) + 'Idle  Node\r\n');
-        socket.emit('ansi-output', '='.repeat(75) + '\r\n');
-
-        allOnlineUsers.forEach(userInfo => {
-          if (!userInfo.quiet || session.user?.secLevel === 255) { // Sysops can see quiet users
-            const idleStr = userInfo.idle > 0 ? userInfo.idle.toString().padStart(4) : '    ';
-            const quietIndicator = userInfo.quiet ? ' (Q)' : '';
-            socket.emit('ansi-output',
-              userInfo.username.padEnd(16) +
-              userInfo.realname.padEnd(20) +
-              userInfo.conference.padEnd(15) +
-              idleStr + '  ' +
-              userInfo.node + quietIndicator + '\r\n'
-            );
-          }
-        });
-      }
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'W': // Write User Parameters (internalCommandW) - express.e:25712-25785
+      handleWriteUserParamsCommand(socket, session);
       return;
 
-    case 'WHD': // Who's Online - Detailed (internalCommandWHD) - express.e:26104
-      socket.emit('ansi-output', '\x1b[36m-= Online Users (Detailed) =-\x1b[0m\r\n\r\n');
+    case 'WHO': // Node Information (internalCommandWHO) - express.e:26094-26103
+      handleWhoCommand(socket, session);
+      return;
 
-      // Get all online users with detailed status
-      const detailedOnlineUsers = Array.from(sessions.values())
-        .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
-        .map(sess => ({
-          username: sess.user!.username,
-          realname: sess.user!.realname,
-          conference: sess.currentConfName,
-          idle: Math.floor((Date.now() - sess.lastActivity) / 60000),
-          node: 'Web1',
-          quiet: sess.user!.quietNode,
-          subState: sess.subState || 'UNKNOWN',
-          // Determine activity based on substate
-          activity: getActivityFromSubState(sess.subState)
-        }));
-
-      if (detailedOnlineUsers.length === 0) {
-        socket.emit('ansi-output', 'No users currently online.\r\n');
-      } else {
-        socket.emit('ansi-output', 'User Name'.padEnd(16) + 'Real Name'.padEnd(20) + 'Activity'.padEnd(20) + 'Node\r\n');
-        socket.emit('ansi-output', '='.repeat(75) + '\r\n');
-
-        detailedOnlineUsers.forEach(userInfo => {
-          if (!userInfo.quiet || session.user?.secLevel === 255) { // Sysops can see quiet users
-            const quietIndicator = userInfo.quiet ? ' (Q)' : '';
-            socket.emit('ansi-output',
-              userInfo.username.padEnd(16) +
-              userInfo.realname.padEnd(20) +
-              userInfo.activity.padEnd(20) +
-              userInfo.node + quietIndicator + '\r\n'
-            );
-          }
-        });
-      }
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'WHD': // Who's Online - Detailed (internalCommandWHD) - express.e:26104-26112
+      handleWhoDetailedCommand(socket, session);
       return;
 
     case 'X': // Expert Mode Toggle (internalCommandX) - express.e:26113-26122
