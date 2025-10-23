@@ -121,7 +121,8 @@ import {
   setFileEntries,
   setDatabase as setDatabaseForFileHandler,
   setCallersLog,
-  setGetUserStats
+  setGetUserStats,
+  setFileMaintenanceDependencies
 } from './handlers/file.handler';
 import {
   displayAccountEditingMenu,
@@ -630,7 +631,8 @@ async function searchFileDescriptions(searchPattern: string, conferenceId: numbe
         fe.uploader,
         fe.uploaddate,
         fe.downloads,
-        fa.name AS areaname
+        fa.name AS areaname,
+        fa.id AS areaid
       FROM file_entries fe
       JOIN file_areas fa ON fe.areaid = fa.id
       WHERE fa.conferenceid = $1
@@ -645,6 +647,120 @@ async function searchFileDescriptions(searchPattern: string, conferenceId: numbe
     return result.rows;
   } catch (error) {
     console.error('[searchFileDescriptions] Database error:', error);
+    return [];
+  }
+}
+
+// File Maintenance Database Functions (express.e:24889-25085, FM command)
+
+// Get file entry by ID
+async function getFileEntry(fileId: number): Promise<any | null> {
+  try {
+    const result = await db.query(`
+      SELECT
+        fe.*,
+        fa.name AS areaname,
+        fa.conferenceid
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fe.id = $1
+    `, [fileId]);
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('[getFileEntry] Error:', error);
+    return null;
+  }
+}
+
+// Delete file entry from database (express.e:26914, maintenanceFileDelete)
+async function deleteFileEntry(fileId: number): Promise<boolean> {
+  try {
+    const result = await db.query(`
+      DELETE FROM file_entries WHERE id = $1
+    `, [fileId]);
+    return (result.rowCount || 0) > 0;
+  } catch (error) {
+    console.error('[deleteFileEntry] Error:', error);
+    return false;
+  }
+}
+
+// Move file to another area (express.e:27087, maintenanceFileMove)
+async function moveFileEntry(fileId: number, newAreaId: number): Promise<boolean> {
+  try {
+    const result = await db.query(`
+      UPDATE file_entries
+      SET areaid = $2
+      WHERE id = $1
+    `, [fileId, newAreaId]);
+    return (result.rowCount || 0) > 0;
+  } catch (error) {
+    console.error('[moveFileEntry] Error:', error);
+    return false;
+  }
+}
+
+// Update file description
+async function updateFileDescription(fileId: number, newDescription: string): Promise<boolean> {
+  try {
+    const result = await db.query(`
+      UPDATE file_entries
+      SET description = $2
+      WHERE id = $1
+    `, [fileId, newDescription]);
+    return (result.rowCount || 0) > 0;
+  } catch (error) {
+    console.error('[updateFileDescription] Error:', error);
+    return false;
+  }
+}
+
+// Get all file areas in a conference
+async function getFileAreas(conferenceId: number): Promise<any[]> {
+  try {
+    const result = await db.query(`
+      SELECT id, name, description
+      FROM file_areas
+      WHERE conferenceid = $1
+      ORDER BY id
+    `, [conferenceId]);
+    return result.rows;
+  } catch (error) {
+    console.error('[getFileAreas] Error:', error);
+    return [];
+  }
+}
+
+// Search files by exact filename match (for FM command)
+async function searchFilesByName(filename: string, conferenceId: number): Promise<any[]> {
+  try {
+    // Support wildcards: * -> %, ? -> _
+    const sqlPattern = filename.toUpperCase()
+      .replace(/\*/g, '%')
+      .replace(/\?/g, '_');
+
+    const query = `
+      SELECT
+        fe.id,
+        fe.filename,
+        fe.description,
+        fe.size,
+        fe.uploader,
+        fe.uploaddate,
+        fe.downloads,
+        fa.name AS areaname,
+        fa.id AS areaid
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fa.conferenceid = $1
+        AND UPPER(fe.filename) LIKE $2
+      ORDER BY fe.uploaddate DESC
+    `;
+
+    const result = await db.query(query, [conferenceId, sqlPattern]);
+    return result.rows;
+  } catch (error) {
+    console.error('[searchFilesByName] Error:', error);
     return [];
   }
 }
@@ -1167,6 +1283,16 @@ async function initializeData() {
     setDatabaseForFileHandler(db);
     setCallersLog(callersLog);
     setGetUserStats(getUserStats);
+
+    // Inject file maintenance dependencies
+    setFileMaintenanceDependencies({
+      searchFilesByName,
+      getFileEntry,
+      deleteFileEntry,
+      moveFileEntry,
+      updateFileDescription,
+      getFileAreas
+    });
 
     // Load some recent messages
     messages = await db.getMessages(1, 1, { limit: 50 });

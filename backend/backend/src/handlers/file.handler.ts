@@ -12,6 +12,12 @@ let fileEntries: any[] = [];
 let db: any;
 let callersLog: (userId: string | null, username: string, action: string, details?: string, nodeId?: number) => Promise<void>;
 let getUserStats: (userId: string) => Promise<any>;
+let _searchFilesByName: any;
+let _getFileEntry: any;
+let _deleteFileEntry: any;
+let _moveFileEntry: any;
+let _updateFileDescription: any;
+let _getFileAreas: any;
 
 // Dependency injection setters
 export function setFileAreas(areas: any[]) {
@@ -32,6 +38,22 @@ export function setCallersLog(fn: typeof callersLog) {
 
 export function setGetUserStats(fn: typeof getUserStats) {
   getUserStats = fn;
+}
+
+export function setFileMaintenanceDependencies(deps: {
+  searchFilesByName: any;
+  getFileEntry: any;
+  deleteFileEntry: any;
+  moveFileEntry: any;
+  updateFileDescription: any;
+  getFileAreas: any;
+}) {
+  _searchFilesByName = deps.searchFilesByName;
+  _getFileEntry = deps.getFileEntry;
+  _deleteFileEntry = deps.deleteFileEntry;
+  _moveFileEntry = deps.moveFileEntry;
+  _updateFileDescription = deps.updateFileDescription;
+  _getFileAreas = deps.getFileAreas;
 }
 
 // ===== File Area Display =====
