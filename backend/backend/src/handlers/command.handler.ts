@@ -75,6 +75,9 @@ import {
   setPreferenceChatCommandsDependencies
 } from './preference-chat-commands.handler';
 import {
+  handleChatCommand
+} from './chat-commands.handler';
+import {
   handleGreetingsCommand,
   handleMailScanCommand,
   handleConferenceFlagsCommand,
@@ -405,6 +408,40 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   if (session.state !== BBSState.LOGGEDON) {
     console.log('❌ Not in LOGGEDON state, ignoring command');
+    return;
+  }
+
+  // PRIORITY 1: Handle internode chat mode input
+  // When user is in active chat session, intercept all input
+  if (session.subState === LoggedOnSubState.CHAT) {
+    console.log('💬 User in CHAT mode, handling chat input');
+    const input = data.trim();
+
+    // Check for /END or /EXIT command
+    if (input.toUpperCase() === '/END' || input.toUpperCase() === '/EXIT') {
+      const { handleChatEnd } = require('./internode-chat.handler');
+      await handleChatEnd(socket, session);
+      return;
+    }
+
+    // Check for /HELP command
+    if (input.toUpperCase() === '/HELP') {
+      socket.emit('ansi-output',
+        '\r\n' +
+        '\x1b[36mChat Mode Commands:\x1b[0m\r\n' +
+        '  \x1b[33m/END\x1b[0m or \x1b[33m/EXIT\x1b[0m  - End chat session\r\n' +
+        '  \x1b[33m/HELP\x1b[0m             - Show this help\r\n' +
+        '  \x1b[33m<text>\x1b[0m            - Send message (max 500 chars)\r\n' +
+        '\r\n'
+      );
+      return;
+    }
+
+    // Regular message - send to chat partner
+    if (input.length > 0) {
+      const { handleChatMessage } = require('./internode-chat.handler');
+      await handleChatMessage(socket, session, { message: input });
+    }
     return;
   }
 
@@ -1522,6 +1559,10 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25470
       handleOnlineMessageCommand(socket, session, params);
+      return;
+
+    case 'CHAT': // Internode Chat (User-to-User Chat)
+      await handleChatCommand(socket, session, params);
       return;
 
     case 'RL': // RELOGON (internalCommandRL) - express.e:25534-25539

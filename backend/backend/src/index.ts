@@ -275,6 +275,18 @@ const sessions = new Map<string, BBSSession>();
 // Initialize handlers
 const authHandler = new AuthHandler(db);
 
+// Initialize internode chat handler dependencies
+const { setInternodeChatDependencies } = require('./handlers/internode-chat.handler');
+const { setChatCommandsDependencies, handleChatCommand } = require('./handlers/chat-commands.handler');
+
+setInternodeChatDependencies({ db, sessions, io });
+setChatCommandsDependencies({
+  db,
+  sessions,
+  io,
+  handleChatRequest: require('./handlers/internode-chat.handler').handleChatRequest
+});
+
 app.use(cors());
 app.use(express.json());
 
@@ -804,11 +816,61 @@ io.on('connection', async (socket) => {
     }
   });
 
+  // ===== INTERNODE CHAT EVENTS =====
+  // Real-time user-to-user chat Socket.io handlers
+
+  socket.on('chat:request', async (data: { targetUsername: string }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleChatRequest } = require('./handlers/internode-chat.handler');
+    await handleChatRequest(socket, session, data);
+  });
+
+  socket.on('chat:accept', async (data: { sessionId: string }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleChatAccept } = require('./handlers/internode-chat.handler');
+    await handleChatAccept(socket, session, data);
+  });
+
+  socket.on('chat:decline', async (data: { sessionId: string }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleChatDecline } = require('./handlers/internode-chat.handler');
+    await handleChatDecline(socket, session, data);
+  });
+
+  socket.on('chat:message', async (data: { message: string }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleChatMessage } = require('./handlers/internode-chat.handler');
+    await handleChatMessage(socket, session, data);
+  });
+
+  socket.on('chat:end', async () => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const { handleChatEnd } = require('./handlers/internode-chat.handler');
+    await handleChatEnd(socket, session);
+  });
+
   socket.on('disconnect', async () => {
     console.log('Client disconnected');
 
-    // Log user logout if they were logged in (express.e:9493 callersLog)
     const session = sessions.get(socket.id);
+
+    // Handle internode chat cleanup if user was in chat
+    if (session && session.subState === LoggedOnSubState.CHAT) {
+      const { handleChatDisconnect } = require('./handlers/internode-chat.handler');
+      await handleChatDisconnect(socket, session);
+    }
+
+    // Log user logout if they were logged in (express.e:9493 callersLog)
     if (session?.user) {
       await callersLog(session.user.id, session.user.username, 'Logged off');
     }
