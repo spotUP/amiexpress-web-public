@@ -364,6 +364,13 @@ io.on('connection', async (socket) => {
 
   socket.on('login', async (data: { token?: string; username?: string; password?: string }) => {
     try {
+      // Enforce connection screen flow - don't allow login until user is in LOGON state
+      if (session.state === BBSState.AWAIT) {
+        console.log('Login attempt blocked - user must view connection screens first');
+        socket.emit('login-failed', 'Please view connection screens first');
+        return;
+      }
+
       let user;
 
       // Check if login is with JWT token or username/password
