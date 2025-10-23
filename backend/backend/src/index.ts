@@ -1434,7 +1434,7 @@ async function initializeData() {
     setDisplayFileCommandsDependencies({
       displayScreen,
       findSecurityScreen,
-      confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens'),
+      confScreenDir: path.join(config.dataDir || path.join(__dirname, '../../BBS'), 'BBS', 'Conf01', 'Screens'),
       db
     });
 
@@ -1472,7 +1472,7 @@ async function initializeData() {
     setUtilityCommandsDependencies({
       handleGoodbyeCommand,
       messages,
-      confScreenDir: path.join(config.dataDir, 'BBS', 'Conf01', 'Screens'),
+      confScreenDir: path.join(config.dataDir || path.join(__dirname, '../../BBS'), 'BBS', 'Conf01', 'Screens'),
       findSecurityScreen,
       displayScreen,
       searchFileDescriptions

@@ -178,7 +178,9 @@ export function setMessageBases(bases: any[]) {
 }
 
 export function setProcessOlmMessageQueue(fn: any) {
+  console.log('🔧 setProcessOlmMessageQueue called, fn type:', typeof fn);
   processOlmMessageQueue = fn;
+  console.log('🔧 processOlmMessageQueue set, now type:', typeof processOlmMessageQueue);
 }
 
 export function setCheckSecurity(fn: any) {
@@ -205,9 +207,14 @@ export function setConstants(constants: any) {
 
 export function displayMainMenu(socket: any, session: BBSSession) {
   console.log('displayMainMenu called, current subState:', session.subState, 'menuPause:', session.menuPause);
+  console.log('🔍 processOlmMessageQueue type:', typeof processOlmMessageQueue);
 
   // Like express.e:28594 - process OLM message queue before displaying menu
-  processOlmMessageQueue(socket, session, true);
+  if (typeof processOlmMessageQueue === 'function') {
+    processOlmMessageQueue(socket, session, true);
+  } else {
+    console.warn('⚠️  processOlmMessageQueue not injected yet, skipping OLM queue processing');
+  }
 
   // Like AmiExpress: only display menu if menuPause is TRUE
   if (session.menuPause) {
