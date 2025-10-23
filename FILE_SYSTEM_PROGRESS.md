@@ -7,7 +7,7 @@ Implementing the complete file system for AmiExpress BBS, following the 1:1 port
 
 ## Implementation Status
 
-### ✅ Completed (7/19 items)
+### ✅ Completed (8/19 items)
 
 #### 1. DIR File Reading and Parsing
 **File:** `backend/backend/src/utils/dir-file-reader.util.ts`
@@ -155,16 +155,28 @@ System: Return to menu
 - Multi-state input handling
 - Shows flagged files before each prompt
 
-### 🚧 In Progress (1/19 items)
+#### 8. D Command - Download Single File ✅
+**File:** `backend/backend/src/handlers/download.handler.ts` (370 lines)
+**Port from:** express.e:24853, 19791, 20075+
+**Completed:** Session 3 (2025-10-23)
 
-#### 8. D Command - Download Single File
-**Port from:** express.e:24853, 14957+
-**Status:** Next to implement
-**Next Steps:**
-1. Read express.e:24853 for D command
-2. Read express.e:14957+ for downloadFile function
-3. Implement download handler
-4. Protocol selection framework
+**Implementation:**
+- handleDownloadCommand() - D command entry point (express.e:24853)
+- beginDLF() - Begin download flow (express.e:19791)
+- downloadAFile() - Main download logic (express.e:20075)
+- Interactive filename prompting with state machine
+- File validation (path separators, wildcards)
+- Conference directory searching (DIR1-DIR20)
+- Ratio checking (upload/download limits) - express.e:19825
+- Download confirmation prompt
+- HTTP download link generation for web context
+- Download statistics tracking - express.e:9475
+
+**Web Context Adaptation:**
+- Uses HTTP downloads instead of Zmodem/Xmodem
+- Generates /api/download/{conf}/{dir}/{filename} URLs
+- Emits Socket.io 'download-file' event
+- Preserves all express.e validation and security logic
 
 ### 📋 Remaining Items (11/19)
 
@@ -518,4 +530,4 @@ Progress: 5/18 file system items completed
 
 ---
 
-**Session Summary:** Successfully implemented the foundation of the AmiExpress file system (5/18 items). The file listing and flagging utilities are complete and integrated. Backend compiles and runs successfully. Ready for manual testing and download implementation.
+**Latest Update:** Session 3 (2025-10-23) - Implemented D command (download single file) with full ratio checking and web context adaptation. 8/19 items completed (42% complete). Backend compiles and runs successfully. Ready for manual testing and HTTP endpoint implementation.

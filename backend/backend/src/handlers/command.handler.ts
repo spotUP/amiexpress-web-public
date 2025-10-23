@@ -689,6 +689,19 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle download input (D command continuation)
+  if (session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT) {
+    const { DownloadHandler } = require('./download.handler');
+    await DownloadHandler.handleFilenameInput(socket, session, data.trim());
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT) {
+    const { DownloadHandler } = require('./download.handler');
+    await DownloadHandler.handleConfirmInput(socket, session, data.trim());
+    return;
+  }
+
   // Handle file maintenance operations
   if (session.tempData?.operation === 'delete_files') {
     await handleFileDeleteConfirmation(socket, session, input);
@@ -1433,7 +1446,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
   console.log('Entering switch statement for command:', command);
   switch (command) {
     case 'D': // Download File(s) (internalCommandD) - express.e:24853-24857
-      handleDownloadCommand(socket, session, params);
+      const { DownloadHandler } = require('./download.handler');
+      await DownloadHandler.handleDownloadCommand(socket, session, params);
       return;
 
     case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302
