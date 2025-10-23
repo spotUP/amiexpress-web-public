@@ -1557,16 +1557,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL; // Wait for key press
       return; // Don't call displayMainMenu
 
-    case 'A': // Post Message (internalCommandE - message entry)
-      // Enhanced for Phase 7 Part 2 - added conference context
-      // Start message posting workflow - prompt for subject first
-      socket.emit('ansi-output', '\x1b[36m-= Post Message =-\x1b[0m\r\n');
-      socket.emit('ansi-output', `Posting to: ${session.currentConfName}\r\n`);
-      socket.emit('ansi-output', '\r\nEnter your message subject (or press Enter to abort):\r\n');
-      socket.emit('ansi-output', '\x1b[32mSubject: \x1b[0m');
-      session.inputBuffer = ''; // Clear input buffer
-      session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
-      return; // Don't call displayMainMenu - stay in input mode
+    case 'A': // Alter Flags (file flagging) (internalCommandA) - express.e:24601-24605
+      handleAlterFlagsCommand(socket, session, commandArgs);
+      return;
 
     case 'E': // Enter Message (internalCommandE) - express.e:24860-24872
       // Enhanced for Phase 7 Part 2 - improved prompts and validation
