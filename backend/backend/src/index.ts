@@ -64,6 +64,9 @@ import {
   setSysopCommandsDependencies
 } from './handlers/sysop-commands.handler';
 import {
+  setTransferMiscCommandsDependencies
+} from './handlers/transfer-misc-commands.handler';
+import {
   displayDoorMenu,
   executeDoor,
   initializeDoors,
@@ -906,6 +909,14 @@ async function initializeData() {
       getRecentCallerActivity,
       setEnvStat,
       displayAccountEditingMenu
+    });
+
+    // Inject dependencies into transfer/misc commands handler
+    setTransferMiscCommandsDependencies({
+      setEnvStat,
+      displayUploadInterface,
+      displayDownloadInterface,
+      fileAreas
     });
 
     // Inject dependencies into command handler

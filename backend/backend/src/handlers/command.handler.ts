@@ -111,6 +111,14 @@ import {
   setSysopCommandsDependencies
 } from './sysop-commands.handler';
 import {
+  handleZmodemUploadCommand,
+  handleSysopUploadCommand,
+  handleNodeUptimeCommand,
+  handleVotingBoothCommand,
+  handleDownloadWithStatusCommand,
+  setTransferMiscCommandsDependencies
+} from './transfer-misc-commands.handler';
+import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
   loadCommands,
@@ -910,10 +918,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'DS': // Download with Status (internalCommandD with DS flag) - express.e:28302
-      // DS is handled by same function as D in express.e
-      // The difference is DS shows download status/progress
-      // TODO for 100% 1:1: Implement status display during download - express.e:24853
-      displayDownloadInterface(socket, session, params);
+      handleDownloadWithStatusCommand(socket, session, params);
       return;
 
     case 'U': // Upload File(s) (internalCommandU) - express.e:25646-25658
@@ -921,42 +926,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'UP': // Upload Status / Node Uptime (internalCommandUP) - express.e:25667
-      // Shows when the node was started
-      const uptimeMs = Date.now() - (session.nodeStartTime || Date.now());
-      const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
-      const uptimeMins = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
-      const startTime = session.nodeStartTime ? new Date(session.nodeStartTime).toLocaleString() : 'Unknown';
-
-      socket.emit('ansi-output', `\r\n\x1b[36mNode 1 was started at ${startTime}.\x1b[0m\r\n`);
-      socket.emit('ansi-output', `\x1b[32mUptime: ${uptimeHours}h ${uptimeMins}m\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      handleNodeUptimeCommand(socket, session);
       return;
 
-    case 'US': // Sysop Upload (internalCommandUS) - express.e:25660
-      // Phase 9: Security/ACS System implemented
-      // ✅ checkSecurity(ACS_SYSOP_COMMANDS) - express.e:25661 [IMPLEMENTED]
-      // ✅ setEnvStat(ENV_UPLOADING) - express.e:25662 [IMPLEMENTED]
-
-      // Phase 9: Check security permission (express.e:25661)
-      if (!checkSecurity(session, ACSCode.SYSOP_COMMANDS)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Sysop privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      // Phase 9: Set environment status (express.e:25662)
-      setEnvStat(session, EnvStat.UPLOADING);
-
-      socket.emit('ansi-output', '\x1b[36m-= Sysop Upload =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Special sysop upload mode - bypasses ratio checks.\r\n\r\n');
-
-      // TODO for 100% 1:1: Implement sysopUpload() - express.e:25664
-      // This should bypass all ratio/security checks for sysop uploads
-      displayUploadInterface(socket, session, params);
+    case 'US': // Sysop Upload (internalCommandUS) - express.e:25660-25665
+      handleSysopUploadCommand(socket, session, params);
       return;
 
     case '0': // Remote Shell (internalCommand0) - express.e:24424-24451
@@ -995,50 +969,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleRelogonCommand(socket, session, commandArgs);
       return;
 
-    case 'RZ': // Zmodem Upload Command (internalCommandRZ) - 1:1 with AmiExpress RZ
-      socket.emit('ansi-output', '\x1b[36m-= Zmodem Upload =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This command starts an immediate Zmodem upload.\r\n\r\n');
-
-      // Check if there are file directories to upload to
-      const uploadFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
-      if (uploadFileAreas.length === 0) {
-        socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      socket.emit('ansi-output', 'Available file areas:\r\n');
-      uploadFileAreas.forEach((area, index) => {
-        socket.emit('ansi-output', `${index + 1}. ${area.name} - ${area.description}\r\n`);
-      });
-
-      socket.emit('ansi-output', '\r\n\x1b[32mSelect file area (1-\x1b[33m' + uploadFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_AREA_SELECT;
-      session.tempData = { rzUploadMode: true, fileAreas: uploadFileAreas };
-      return; // Stay in input mode
+    case 'RZ': // Zmodem Upload Command (internalCommandRZ) - express.e:25608-25621
+      handleZmodemUploadCommand(socket, session);
+      return;
 
     case 'S': // User Statistics (internalCommandS) - express.e:25540-25568
       handleUserStatsCommand(socket, session);
-      return;
-
-    case 'UP': // Display uptime for node (internalCommandUP) - 1:1 with AmiExpress UP
-      socket.emit('ansi-output', '\x1b[36m-= System Uptime =-\x1b[0m\r\n\r\n');
-
-      const uptime = process.uptime();
-      const days = Math.floor(uptime / 86400);
-      const hours = Math.floor((uptime % 86400) / 3600);
-      const minutes = Math.floor((uptime % 3600) / 60);
-      const seconds = Math.floor(uptime % 60);
-
-      socket.emit('ansi-output', `System has been up for: ${days} days, ${hours} hours, ${minutes} minutes, ${seconds} seconds\r\n`);
-      socket.emit('ansi-output', `Started: ${new Date(Date.now() - uptime * 1000).toLocaleString()}\r\n`);
-      socket.emit('ansi-output', `Current time: ${new Date().toLocaleString()}\r\n\r\n`);
-
-      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
 
     case 'V': // View a Text File (internalCommandV) - express.e:25675-25687
@@ -1049,41 +985,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleViewFileCommand(socket, session, commandArgs);
       return;
 
-    case 'VO': // Voting Booth (internalCommandVO) - express.e:25700
-      // Phase 9: Security/ACS System implemented
-      // ✅ checkSecurity(ACS_VOTE) - express.e:25701 [IMPLEMENTED]
-      // ✅ setEnvStat(ENV_DOORS) - express.e:25703 [IMPLEMENTED]
-      // TODO for 100% 1:1: setEnvMsg('Voting Booth') - express.e:25704
-
-      // Phase 9: Check security permission (express.e:25701)
-      if (!checkSecurity(session, ACSCode.VOTE)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mAccess denied. Voting privileges required.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      // Phase 9: Set environment status (express.e:25703)
-      setEnvStat(session, EnvStat.DOORS);
-
-      socket.emit('ansi-output', '\x1b[36m-= Voting Booth =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Voice your opinion on various topics.\r\n\r\n');
-
-      // TODO for 100% 1:1: Implement voting system - express.e:25705-25708
-      // If user has ACS_MODIFY_VOTE: call voteMenu() (create/edit votes)
-      // Otherwise: call vote() (just vote on existing items)
-      // This requires:
-      // - Vote database tables
-      // - Vote creation/editing interface
-      // - Vote results display
-      // - Multi-choice voting support
-
-      socket.emit('ansi-output', '\x1b[33mVoting booth not yet implemented.\x1b[0m\r\n');
-      socket.emit('ansi-output', 'This system allows users to participate in polls and surveys.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    case 'VO': // Voting Booth (internalCommandVO) - express.e:25700-25710
+      handleVotingBoothCommand(socket, session);
       return;
 
     case 'VER': // View ami-express version information (internalCommandVER) - express.e:25688-25699
@@ -1113,21 +1016,6 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
     case 'ZOOM': // Zoo Mail (internalCommandZOOM) - express.e:26215-26240
       handleZoomCommand(socket, session);
       return;
-
-    case 'VODUP': // Voting Booth (DUPLICATE - real one is earlier) - 1:1 with AmiExpress voting booth
-      socket.emit('ansi-output', '\x1b[36m-= Voting Booth =-\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Participate in community polls and surveys.\r\n\r\n');
-
-      // Check if voting booth is available for this conference
-      socket.emit('ansi-output', 'Available voting topics:\r\n\r\n');
-      socket.emit('ansi-output', '1. System Features Survey\r\n');
-      socket.emit('ansi-output', '2. Conference Improvements\r\n');
-      socket.emit('ansi-output', '3. File Area Organization\r\n\r\n');
-
-      socket.emit('ansi-output', '\x1b[32mSelect topic (1-3) or press Enter to cancel: \x1b[0m');
-      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
-      session.tempData = { votingBooth: true };
-      return; // Stay in input mode
 
     case 'R': // Read Messages (internalCommandR) - express.e:25518-25531
       // Enhanced for Phase 7 Part 2 - improved sorting and display
