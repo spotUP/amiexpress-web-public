@@ -117,6 +117,9 @@ import {
   handleSysopUploadCommand,
   handleNodeUptimeCommand,
   handleVotingBoothCommand,
+  handleVoteTopicSelect,
+  handleVoteAnswerInput,
+  handleVoteMenuChoice,
   handleDownloadWithStatusCommand,
   setTransferMiscCommandsDependencies
 } from './transfer-misc-commands.handler';
@@ -648,6 +651,25 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle voting booth states
+  if (session.subState === 'VO_TOPIC_SELECT') {
+    console.log('🗳️  In vote topic selection state');
+    await handleVoteTopicSelect(socket, session, data.trim());
+    return;
+  }
+
+  if (session.subState === 'VO_ANSWER_INPUT') {
+    console.log('🗳️  In vote answer input state');
+    await handleVoteAnswerInput(socket, session, data.trim());
+    return;
+  }
+
+  if (session.subState === 'VO_MENU_CHOICE') {
+    console.log('🗳️  In vote menu choice state');
+    await handleVoteMenuChoice(socket, session, data.trim());
+    return;
+  }
+
   // Handle message posting workflow (line-based input like login system)
   console.log('📝 Checking if in POST_MESSAGE_SUBJECT state:', session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT);
   if (session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
@@ -1021,7 +1043,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'VO': // Voting Booth (internalCommandVO) - express.e:25700-25710
-      handleVotingBoothCommand(socket, session);
+      await handleVotingBoothCommand(socket, session);
       return;
 
     case 'VER': // View ami-express version information (internalCommandVER) - express.e:25688-25699

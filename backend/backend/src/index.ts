@@ -749,6 +749,233 @@ async function updateMessageNumberRange(conferenceId: number, messageBaseId: num
   }
 }
 
+// Voting Booth Database Functions (express.e:20782-21036, vote() and voteMenu())
+
+// Get all active vote topics for a conference
+async function getActiveVoteTopics(conferenceId: number): Promise<any[]> {
+  try {
+    const result = await db.query(`
+      SELECT
+        vt.id,
+        vt.topic_number,
+        vt.title,
+        vt.description,
+        vt.created_at,
+        vt.created_by,
+        COUNT(DISTINCT vq.id) as question_count
+      FROM vote_topics vt
+      LEFT JOIN vote_questions vq ON vt.id = vq.topic_id
+      WHERE vt.conference_id = $1 AND vt.is_active = true
+      GROUP BY vt.id, vt.topic_number, vt.title, vt.description, vt.created_at, vt.created_by
+      ORDER BY vt.topic_number
+    `, [conferenceId]);
+    return result.rows;
+  } catch (error) {
+    console.error('[getActiveVoteTopics] Error:', error);
+    return [];
+  }
+}
+
+// Get a specific vote topic by conference and topic number
+async function getVoteTopic(conferenceId: number, topicNumber: number): Promise<any | null> {
+  try {
+    const result = await db.query(`
+      SELECT * FROM vote_topics
+      WHERE conference_id = $1 AND topic_number = $2 AND is_active = true
+    `, [conferenceId, topicNumber]);
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error('[getVoteTopic] Error:', error);
+    return null;
+  }
+}
+
+// Get all questions for a vote topic
+async function getVoteQuestions(topicId: number): Promise<any[]> {
+  try {
+    const result = await db.query(`
+      SELECT * FROM vote_questions
+      WHERE topic_id = $1
+      ORDER BY question_number
+    `, [topicId]);
+    return result.rows;
+  } catch (error) {
+    console.error('[getVoteQuestions] Error:', error);
+    return [];
+  }
+}
+
+// Get all answers for a question
+async function getVoteAnswers(questionId: number): Promise<any[]> {
+  try {
+    const result = await db.query(`
+      SELECT * FROM vote_answers
+      WHERE question_id = $1
+      ORDER BY answer_letter
+    `, [questionId]);
+    return result.rows;
+  } catch (error) {
+    console.error('[getVoteAnswers] Error:', error);
+    return [];
+  }
+}
+
+// Check if user has already voted on a topic
+async function hasUserVoted(userId: string, topicId: number): Promise<boolean> {
+  try {
+    const result = await db.query(`
+      SELECT 1 FROM vote_status
+      WHERE user_id = $1 AND topic_id = $2
+    `, [userId, topicId]);
+    return result.rows.length > 0;
+  } catch (error) {
+    console.error('[hasUserVoted] Error:', error);
+    return false;
+  }
+}
+
+// Submit user's votes for a topic
+async function submitVote(userId: string, topicId: number, conferenceId: number, votes: Array<{questionId: number, answerId: number}>): Promise<boolean> {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Insert all vote results
+    for (const vote of votes) {
+      // Insert or update the user's vote
+      await client.query(`
+        INSERT INTO vote_results (user_id, topic_id, question_id, answer_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id, question_id)
+        DO UPDATE SET answer_id = $4, voted_at = CURRENT_TIMESTAMP
+      `, [userId, topicId, vote.questionId, vote.answerId]);
+
+      // Increment the answer's vote count
+      await client.query(`
+        UPDATE vote_answers
+        SET vote_count = vote_count + 1
+        WHERE id = $1
+      `, [vote.answerId]);
+    }
+
+    // Mark the topic as voted by this user
+    await client.query(`
+      INSERT INTO vote_status (user_id, topic_id, conference_id)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (user_id, topic_id) DO NOTHING
+    `, [userId, topicId, conferenceId]);
+
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[submitVote] Error:', error);
+    return false;
+  } finally {
+    client.release();
+  }
+}
+
+// Get voting statistics for a topic
+async function getVoteStatistics(topicId: number): Promise<any[]> {
+  try {
+    const result = await db.query(`
+      SELECT
+        vq.id as question_id,
+        vq.question_number,
+        vq.question_text,
+        va.id as answer_id,
+        va.answer_letter,
+        va.answer_text,
+        va.vote_count,
+        (SELECT COUNT(*) FROM vote_results WHERE question_id = vq.id) as total_question_votes
+      FROM vote_questions vq
+      LEFT JOIN vote_answers va ON vq.id = va.question_id
+      WHERE vq.topic_id = $1
+      ORDER BY vq.question_number, va.answer_letter
+    `, [topicId]);
+    return result.rows;
+  } catch (error) {
+    console.error('[getVoteStatistics] Error:', error);
+    return [];
+  }
+}
+
+// Create new vote topic (sysop function)
+async function createVoteTopic(conferenceId: number, topicNumber: number, title: string, description: string, userId: string): Promise<number | null> {
+  try {
+    const result = await db.query(`
+      INSERT INTO vote_topics (conference_id, topic_number, title, description, created_by)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id
+    `, [conferenceId, topicNumber, title, description, userId]);
+    return result.rows[0].id;
+  } catch (error) {
+    console.error('[createVoteTopic] Error:', error);
+    return null;
+  }
+}
+
+// Create vote question
+async function createVoteQuestion(topicId: number, questionNumber: number, questionText: string): Promise<number | null> {
+  try {
+    const result = await db.query(`
+      INSERT INTO vote_questions (topic_id, question_number, question_text)
+      VALUES ($1, $2, $3)
+      RETURNING id
+    `, [topicId, questionNumber, questionText]);
+    return result.rows[0].id;
+  } catch (error) {
+    console.error('[createVoteQuestion] Error:', error);
+    return null;
+  }
+}
+
+// Create vote answer
+async function createVoteAnswer(questionId: number, answerLetter: string, answerText: string): Promise<number | null> {
+  try {
+    const result = await db.query(`
+      INSERT INTO vote_answers (question_id, answer_letter, answer_text)
+      VALUES ($1, $2, $3)
+      RETURNING id
+    `, [questionId, answerLetter.toUpperCase(), answerText]);
+    return result.rows[0].id;
+  } catch (error) {
+    console.error('[createVoteAnswer] Error:', error);
+    return null;
+  }
+}
+
+// Delete vote topic (sysop function)
+async function deleteVoteTopic(topicId: number): Promise<boolean> {
+  try {
+    // CASCADE will handle deleting questions, answers, results, and status
+    await db.query(`
+      DELETE FROM vote_topics WHERE id = $1
+    `, [topicId]);
+    return true;
+  } catch (error) {
+    console.error('[deleteVoteTopic] Error:', error);
+    return false;
+  }
+}
+
+// Get next available topic number for a conference
+async function getNextTopicNumber(conferenceId: number): Promise<number> {
+  try {
+    const result = await db.query(`
+      SELECT COALESCE(MAX(topic_number), 0) + 1 as next_number
+      FROM vote_topics
+      WHERE conference_id = $1
+    `, [conferenceId]);
+    const nextNum = result.rows[0].next_number;
+    return nextNum <= 25 ? nextNum : 0; // Return 0 if all 25 slots are full
+  } catch (error) {
+    console.error('[getNextTopicNumber] Error:', error);
+    return 0;
+  }
+}
+
 // Load flagged files for user (express.e:2757)
 // In express.e, reads from BBS:Partdownload/flagged{slot} and dump{slot}
 // For web version, we store in database but maintain exact behavior
@@ -1057,7 +1284,19 @@ async function initializeData() {
       setEnvStat,
       displayUploadInterface,
       displayDownloadInterface,
-      fileAreas
+      fileAreas,
+      getActiveVoteTopics,
+      getVoteTopic,
+      getVoteQuestions,
+      getVoteAnswers,
+      hasUserVoted,
+      submitVote,
+      getVoteStatistics,
+      createVoteTopic,
+      createVoteQuestion,
+      createVoteAnswer,
+      deleteVoteTopic,
+      getNextTopicNumber
     });
 
     // Inject dependencies into messaging handler

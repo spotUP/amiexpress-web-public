@@ -781,6 +781,71 @@ export class Database {
         )
       `);
 
+      // Voting Booth System tables (express.e:20782-21036, vote() and voteMenu())
+      // Vote topics - max 25 per conference
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS vote_topics (
+          id SERIAL PRIMARY KEY,
+          conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+          topic_number INTEGER NOT NULL CHECK (topic_number >= 1 AND topic_number <= 25),
+          title TEXT NOT NULL,
+          description TEXT,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+          is_active BOOLEAN DEFAULT TRUE,
+          UNIQUE (conference_id, topic_number)
+        )
+      `);
+
+      // Vote questions - multiple questions per topic
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS vote_questions (
+          id SERIAL PRIMARY KEY,
+          topic_id INTEGER NOT NULL REFERENCES vote_topics(id) ON DELETE CASCADE,
+          question_number INTEGER NOT NULL,
+          question_text TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (topic_id, question_number)
+        )
+      `);
+
+      // Vote answers - multiple answer choices per question
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS vote_answers (
+          id SERIAL PRIMARY KEY,
+          question_id INTEGER NOT NULL REFERENCES vote_questions(id) ON DELETE CASCADE,
+          answer_letter CHAR(1) NOT NULL CHECK (answer_letter >= 'A' AND answer_letter <= 'Z'),
+          answer_text TEXT NOT NULL,
+          vote_count INTEGER DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (question_id, answer_letter)
+        )
+      `);
+
+      // Vote results - tracks individual user votes
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS vote_results (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          topic_id INTEGER NOT NULL REFERENCES vote_topics(id) ON DELETE CASCADE,
+          question_id INTEGER NOT NULL REFERENCES vote_questions(id) ON DELETE CASCADE,
+          answer_id INTEGER NOT NULL REFERENCES vote_answers(id) ON DELETE CASCADE,
+          voted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (user_id, question_id)
+        )
+      `);
+
+      // Vote status - tracks which users have completed voting on which topics
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS vote_status (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          topic_id INTEGER NOT NULL REFERENCES vote_topics(id) ON DELETE CASCADE,
+          conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+          completed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, topic_id)
+        )
+      `);
+
       // Create indexes for performance
       await this.createIndexes(client);
     } finally {
@@ -825,6 +890,16 @@ export class Database {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_node ON caller_activity(node_id, timestamp DESC)`);
 
     // User stats indexes (user_id is already primary key)
+
+    // Voting booth indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_topics_conference ON vote_topics(conference_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_topics_active ON vote_topics(is_active)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_questions_topic ON vote_questions(topic_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_answers_question ON vote_answers(question_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_results_user ON vote_results(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_results_topic ON vote_results(topic_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_status_user ON vote_status(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_status_conference ON vote_status(conference_id)`);
   }
 
 
