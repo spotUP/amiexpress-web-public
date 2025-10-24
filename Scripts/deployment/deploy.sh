@@ -54,9 +54,6 @@ send_webhook() {
     # Detect webhook type (Discord vs Slack)
     if [[ "$WEBHOOK_URL" == *"discord.com"* ]]; then
         # Discord webhook format - use jq for proper JSON encoding
-        echo "[DEBUG] Sending webhook: $title" >&2
-
-        # Build JSON payload with jq for proper escaping
         JSON_PAYLOAD=$(jq -n \
             --arg title "$title" \
             --arg description "$description" \
@@ -74,13 +71,9 @@ send_webhook() {
                 }]
             }')
 
-        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
+        curl -s -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d "$JSON_PAYLOAD" 2>&1 || true)
-        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-        if [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "200" ]; then
-            echo "[WARNING] Webhook failed with code $HTTP_CODE: $RESPONSE" >&2
-        fi
+            -d "$JSON_PAYLOAD" > /dev/null 2>&1 || true
     elif [[ "$WEBHOOK_URL" == *"hooks.slack.com"* ]]; then
         # Slack webhook format
         JSON_PAYLOAD=$(jq -n \
@@ -179,17 +172,9 @@ echo ""
 
 # Trigger deployment
 echo -e "${YELLOW}→${NC} Triggering backend deployment..."
-echo "[DEBUG] SERVICE_ID=$SERVICE_ID" >&2
-echo "[DEBUG] COMMIT_SHA=$COMMIT_SHA" >&2
-echo "[DEBUG] Running: render deploys create \"$SERVICE_ID\" --commit \"$COMMIT_SHA\" --confirm -o json" >&2
 
-set +e  # Temporarily disable exit on error to capture output
 DEPLOY_OUTPUT=$(render deploys create "$SERVICE_ID" --commit "$COMMIT_SHA" --confirm -o json 2>&1)
 DEPLOY_EXIT=$?
-set -e  # Re-enable exit on error
-
-echo "[DEBUG] DEPLOY_EXIT=$DEPLOY_EXIT" >&2
-echo "[DEBUG] DEPLOY_OUTPUT=$DEPLOY_OUTPUT" >&2
 
 if [ $DEPLOY_EXIT -ne 0 ]; then
     echo -e "${RED}✗ Error: Failed to trigger deployment${NC}"
@@ -289,11 +274,6 @@ PRODUCTION_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://bbs\.uprough\.net' ||
 echo -e "${GREEN}✓${NC} Frontend deployment complete!"
 echo ""
 
-# Debug: Log before webhook call
-echo "[DEBUG] About to send frontend webhook..." >&2
-echo "[DEBUG] WEBHOOK_URL is set: $([ -n "$WEBHOOK_URL" ] && echo "yes" || echo "NO")" >&2
-echo "[DEBUG] PRODUCTION_URL=$PRODUCTION_URL" >&2
-
 # Send frontend success webhook
 send_webhook \
     "Frontend Deployed" \
@@ -303,8 +283,6 @@ send_webhook \
 **Commit:** \`$COMMIT_SHORT\`" \
     "65280" \
     "✅"
-
-echo "[DEBUG] Frontend webhook call completed" >&2
 
 # ============================================
 # Deployment Summary
@@ -329,9 +307,6 @@ echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Debug: Log before final webhook call
-echo "[DEBUG] About to send 'Deployment Complete' webhook..." >&2
-
 # Send final success webhook
 send_webhook \
     "Deployment Complete 🎉" \
@@ -342,7 +317,5 @@ send_webhook \
 **Commit:** \`$COMMIT_SHORT\` - $COMMIT_MSG" \
     "3447003" \
     "🎉"
-
-echo "[DEBUG] 'Deployment Complete' webhook call completed" >&2
 
 exit 0
