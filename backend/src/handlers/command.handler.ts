@@ -300,6 +300,14 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
     processOlmQueue(socket, session);
   }
 
+  // Show sysop commands if user is sysop (even in expert mode)
+  if (session.user && session.user.secLevel >= 255) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', '\x1b[33mSYSOP COMMANDS\x1b[0m\r\n');
+    socket.emit('ansi-output', '[\x1b[36mWEBHOOK\x1b[0m] Manage Hooks  [\x1b[36mNM\x1b[0m] Node Mgmt  [\x1b[36mCM\x1b[0m] Conf Maint\r\n');
+    socket.emit('ansi-output', '\x1b[36m------------------------------------------------------------------------------\x1b[0m\r\n');
+  }
+
   // Like AmiExpress: Use BBS name, relative conference number, conference name
   const bbsName = config.get('bbsName');
   const timeLeft = Math.floor(session.timeRemaining);
