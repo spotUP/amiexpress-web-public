@@ -453,7 +453,18 @@ io.on('connection', async (socket) => {
   console.log('Client connected');
 
   // Initialize session with multi-node support
-  const nodeSession = await nodeManager.assignSessionToNode(socket.id, socket.id);
+  let nodeSession;
+  try {
+    nodeSession = await nodeManager.assignSessionToNode(socket.id, socket.id);
+  } catch (error) {
+    console.error('Failed to assign node to session:', error);
+    socket.emit('ansi-output', '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[31mSorry, all nodes are busy.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[33mPlease try again in a moment.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+    socket.disconnect();
+    return;
+  }
 
   const session: BBSSession = {
     state: BBSState.AWAIT,

@@ -16,7 +16,8 @@ export class NodeManager {
   private async initializeNodes(): Promise<void> {
     // Load nodes from database
     // For now, create default nodes if they don't exist
-    for (let i = 1; i <= 3; i++) {
+    // Increased to 20 nodes for web-based BBS with multiple simultaneous connections
+    for (let i = 1; i <= 20; i++) {
       if (!this.nodes.has(i)) {
         const nodeInfo: NodeInfo = {
           id: i,
