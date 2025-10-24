@@ -2324,8 +2324,9 @@ export class Database {
 
   // Utility methods
   async hashPassword(password: string): Promise<string> {
-    // Use bcrypt with 12 salt rounds (industry standard for security)
-    const saltRounds = 12;
+    // Use bcrypt with 10 salt rounds (balances security and performance)
+    // 10 rounds is industry standard and matches new user registration
+    const saltRounds = 10;
     return await bcrypt.hash(password, saltRounds);
   }
 
