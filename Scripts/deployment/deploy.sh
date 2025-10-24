@@ -30,11 +30,11 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Webhook configuration
-# Load from .env file if it exists
+# Load from .env.local file if it exists
 PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-if [ -f "$PROJECT_ROOT/.env" ]; then
-    # Source .env file and extract DEPLOY_WEBHOOK_URL
-    WEBHOOK_URL=$(grep -E "^DEPLOY_WEBHOOK_URL=" "$PROJECT_ROOT/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+    # Source .env.local file and extract DEPLOY_WEBHOOK_URL
+    WEBHOOK_URL=$(grep -E "^DEPLOY_WEBHOOK_URL=" "$PROJECT_ROOT/.env.local" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
 else
     # Fallback to environment variable
     WEBHOOK_URL="${DEPLOY_WEBHOOK_URL:-}"

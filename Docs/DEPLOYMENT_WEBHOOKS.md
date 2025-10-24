@@ -26,19 +26,19 @@ Automatic notifications for:
 2. Search for "Incoming Webhooks" → Add to Slack
 3. Choose channel → Copy webhook URL
 
-### Step 2: Add to .env File
+### Step 2: Add to .env.local File
 
-Add the webhook URL to your `.env` file in the project root:
+Add the webhook URL to your `.env.local` file in the project root:
 
 ```bash
-# Create .env if it doesn't exist
-cp .env.example .env
+# Create .env.local if it doesn't exist
+cp .env.example .env.local
 
-# Edit .env and add your webhook URL
+# Edit .env.local and add your webhook URL
 DEPLOY_WEBHOOK_URL=https://discord.com/api/webhooks/1234567890/abcdefghijklmnop
 ```
 
-**Important:** The `.env` file is in `.gitignore` so your webhook URL stays private.
+**Important:** The `.env.local` file is in `.gitignore` so your webhook URL stays private.
 
 **Alternative - Environment Variable:**
 
@@ -47,7 +47,7 @@ If you prefer, you can also set it as a shell environment variable:
 export DEPLOY_WEBHOOK_URL="your-webhook-url"
 ```
 
-The script will check `.env` first, then fall back to the environment variable.
+The script will check `.env.local` first, then fall back to the environment variable.
 
 ### Step 3: Deploy!
 
@@ -102,9 +102,9 @@ Same information, formatted for Slack with color-coded attachments.
 
 ## Disable Notifications
 
-**Option 1 - Remove from .env:**
+**Option 1 - Remove from .env.local:**
 ```bash
-# Edit .env and remove or comment out the line:
+# Edit .env.local and remove or comment out the line:
 # DEPLOY_WEBHOOK_URL=
 ```
 
@@ -133,13 +133,13 @@ export DEPLOY_WEBHOOK_URL="https://discord.com/api/webhooks/123/abc"
 
 ### Not receiving notifications?
 
-1. **Check the .env file:**
+1. **Check the .env.local file:**
    ```bash
-   grep DEPLOY_WEBHOOK_URL .env
+   grep DEPLOY_WEBHOOK_URL .env.local
    ```
    Should show your webhook URL.
 
-2. **Check the environment variable (if not using .env):**
+2. **Check the environment variable (if not using .env.local):**
    ```bash
    echo $DEPLOY_WEBHOOK_URL
    ```
@@ -181,7 +181,7 @@ Edit the `send_webhook()` function in `Scripts/deployment/deploy.sh` to customiz
 ## Security Note
 
 Webhook URLs allow anyone to send messages to your channel. Keep them private:
-- ✅ Store in `.env` file (already in `.gitignore`)
+- ✅ Store in `.env.local` file (already in `.gitignore`)
 - ❌ Never commit webhook URLs to git
 - ❌ Don't share webhook URLs publicly
 - ✅ Use `.env.example` for documentation (without actual URLs)
