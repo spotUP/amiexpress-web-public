@@ -53,12 +53,12 @@ send_webhook() {
 
     # Detect webhook type (Discord vs Slack)
     if [[ "$WEBHOOK_URL" == *"discord.com"* ]]; then
-        # Discord webhook format
+        # Discord webhook format (emojis removed from JSON to prevent parsing errors)
         curl -s -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{
                 \"embeds\": [{
-                    \"title\": \"$emoji $title\",
+                    \"title\": \"$title\",
                     \"description\": \"$description\",
                     \"color\": $color,
                     \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
@@ -72,7 +72,7 @@ send_webhook() {
         curl -s -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{
-                \"text\": \"$emoji *$title*\",
+                \"text\": \"*$title*\",
                 \"attachments\": [{
                     \"color\": \"$([ $color -eq 65280 ] && echo 'good' || [ $color -eq 16711680 ] && echo 'danger' || echo 'warning')\",
                     \"text\": \"$description\",
