@@ -66,7 +66,7 @@ send_webhook() {
                         \"text\": \"AmiExpress Deployment\"
                     }
                 }]
-            }" > /dev/null
+            }" > /dev/null 2>&1 || true  # Don't exit on webhook failure
     elif [[ "$WEBHOOK_URL" == *"hooks.slack.com"* ]]; then
         # Slack webhook format
         curl -s -X POST "$WEBHOOK_URL" \
@@ -79,7 +79,7 @@ send_webhook() {
                     \"footer\": \"AmiExpress Deployment\",
                     \"ts\": $(date +%s)
                 }]
-            }" > /dev/null
+            }" > /dev/null 2>&1 || true  # Don't exit on webhook failure
     fi
 }
 
