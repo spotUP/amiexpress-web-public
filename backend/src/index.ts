@@ -980,10 +980,15 @@ io.on('connection', async (socket) => {
         socket.emit('ansi-output', `\r\n\x1b[32mFile selected: ${data.originalname}\x1b[0m\r\n`);
         socket.emit('ansi-output', `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`);
 
+        console.log('[file-uploaded] File selected, checking for DIZ...');
+        console.log('[file-uploaded] config.dataDir:', config.get('dataDir'));
+
         // Try to extract FILE_ID.DIZ (express.e:19258-19285)
         if (data.path) {
-          const nodeWorkDir = getNodeWorkDir(0, config.dataDir);
           try {
+            const nodeWorkDir = getNodeWorkDir(0, config.get('dataDir'));
+            console.log('[file-uploaded] nodeWorkDir:', nodeWorkDir);
+
             socket.emit('ansi-output', 'Checking for FILE_ID.DIZ...\r\n');
 
             // Add 10 second timeout to prevent hanging
