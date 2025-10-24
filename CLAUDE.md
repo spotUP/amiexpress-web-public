@@ -318,17 +318,21 @@ Copy this and check EVERY item before deploying:
 [ ] Updated relevant documentation in Docs/ if needed?
 [ ] Documented any breaking changes or new features?
 
-# 5. DEPLOYMENT
-[ ] Using ./Scripts/deployment/deploy.sh (NOT separate scripts)?
+# 5. DEPLOYMENT - CRITICAL: ALWAYS DEPLOY BOTH SERVICES
+[ ] Using ./Scripts/deployment/deploy.sh (deploys BOTH backend AND frontend)?
+[ ] NEVER use deploy-render.sh or deploy-vercel.sh alone
 [ ] Committed all changes?
 [ ] Pushed to GitHub?
+[ ] Wait for BOTH backend and frontend to complete deployment
+[ ] Verify deploy.sh completed successfully (no errors)
 
-# 6. POST-DEPLOYMENT
+# 6. POST-DEPLOYMENT - VERIFY BOTH SERVICES
+[ ] Backend: curl https://amiexpress-backend.onrender.com/ (returns API message?)
+[ ] Frontend: curl https://bbs.uprough.net (returns 200?)
 [ ] Check Render logs: render logs --resources srv-d3naaffdiees73eebd0g --limit 50 -o text
 [ ] Look for "Database schema initialized" and "Server running on port 10000"
-[ ] curl https://amiexpress-backend.onrender.com/ (returns API message?)
-[ ] curl https://bbs.uprough.net (returns 200?)
 [ ] Test in browser - WebSocket connected?
+[ ] Verify both services show new commit in production
 
 # === IF ANY STEP FAILS, DO NOT DEPLOY ===
 ```
@@ -438,10 +442,13 @@ curl -I https://bbs.uprough.net
 
 ### Deployment Rules to NEVER Break:
 
-1. **ALWAYS deploy both backend and frontend together**
+1. **🚨 CRITICAL: ALWAYS deploy BOTH backend AND frontend together - NO EXCEPTIONS 🚨**
+   - **ALWAYS** use `./Scripts/deployment/deploy.sh` - it deploys both
+   - **NEVER** use `deploy-render.sh` or `deploy-vercel.sh` alone
+   - **NEVER** deploy only one service - this causes production errors
    - Backend changes may need frontend updates (API changes)
    - Frontend changes may need backend updates (WebSocket protocol)
-   - Use `./Scripts/deployment/deploy.sh` - it deploys both
+   - Wait for BOTH deployments to complete before considering deployment done
 
 2. **NEVER commit without testing locally first**
    - Run backend locally and check for errors
