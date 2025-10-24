@@ -2028,12 +2028,70 @@ let fileAreas: any[] = [];
 let fileEntries: any[] = [];
 let messages: any[] = [];
 
+// Initialize default webhook from environment variables
+async function initializeDefaultWebhook() {
+  try {
+    const webhookUrl = process.env.BBS_WEBHOOK_URL || process.env.DEPLOY_WEBHOOK_URL;
+
+    if (!webhookUrl) {
+      console.log('[Webhook Init] No webhook URL configured in environment variables');
+      return;
+    }
+
+    // Check if any webhooks exist
+    const existingWebhooks = await db.getWebhooks();
+
+    if (existingWebhooks.length > 0) {
+      console.log(`[Webhook Init] Found ${existingWebhooks.length} existing webhook(s), skipping initialization`);
+      return;
+    }
+
+    // Create default webhook with all triggers
+    const allTriggers = [
+      'new_upload',
+      'new_message',
+      'new_user',
+      'sysop_paged',
+      'user_login',
+      'user_logout',
+      'file_downloaded',
+      'comment_posted',
+      'node_full',
+      'system_error',
+      'conference_joined',
+      'security_changed',
+      'door_launched',
+      'vote_cast',
+      'private_message',
+      'user_kicked',
+      'mail_scan'
+    ];
+
+    const webhookType = webhookUrl.includes('discord.com') ? 'discord' : 'slack';
+
+    await db.createWebhook({
+      name: 'BBS Discord Notifications',
+      url: webhookUrl,
+      type: webhookType,
+      enabled: true,
+      triggers: allTriggers
+    });
+
+    console.log(`[Webhook Init] ✓ Created default ${webhookType} webhook with ${allTriggers.length} triggers`);
+  } catch (error) {
+    console.error('[Webhook Init] Error initializing default webhook:', error);
+  }
+}
+
 // Initialize data from database
 async function initializeData() {
   try {
     // Initialize database schema first
     await db.init();
     console.log('Database schema initialized');
+
+    // Initialize default webhook if configured
+    await initializeDefaultWebhook();
 
     conferences = await db.getConferences();
     if (conferences.length === 0) {
