@@ -33,6 +33,261 @@
 
 ---
 
+## 🚨 CRITICAL: Database Initialization & Schema Management 🚨
+
+**Database errors WILL crash production. Follow these rules religiously.**
+
+### Database Initialization Rules:
+
+1. **The Database class uses a singleton pattern:**
+   ```typescript
+   // backend/src/database.ts exports:
+   export const db = new Database();
+   ```
+
+2. **ALWAYS call `await db.init()` before ANY database operations:**
+   ```typescript
+   // ✓ CORRECT in backend/src/index.ts initializeData():
+   async function initializeData() {
+     await db.init();  // MUST be first!
+     console.log('Database schema initialized');
+
+     const conferences = await db.getConferences();
+     // ... rest of initialization
+   }
+
+   // ✗ WRONG:
+   async function initializeData() {
+     const conferences = await db.getConferences(); // WILL CRASH!
+   }
+   ```
+
+3. **The init() method creates ALL tables:**
+   - It calls `initDatabase()` which calls `createTables()`
+   - Tables are created using `CREATE TABLE IF NOT EXISTS`
+   - Default data is inserted after tables are created
+
+4. **init() must be idempotent (safe to call multiple times):**
+   - First call: creates tables and inserts default data
+   - Subsequent calls: safe, does nothing if tables exist
+
+### Schema Change Rules:
+
+**BEFORE adding any new tables or columns:**
+
+1. **Test locally FIRST:**
+   ```bash
+   cd backend
+   npm run dev
+   # Check console for "Database tables created successfully"
+   # Test the feature works locally
+   ```
+
+2. **Consider existing production data:**
+   - Is there an old version of this table?
+   - Will foreign keys break?
+   - Do you need to DROP old tables first?
+
+3. **Use proper DROP CASCADE for schema changes:**
+   ```typescript
+   // ✓ CORRECT: Drop dependent tables first
+   await client.query(`DROP TABLE IF EXISTS chat_room_messages CASCADE`);
+   await client.query(`DROP TABLE IF EXISTS chat_room_members CASCADE`);
+   await client.query(`DROP TABLE IF EXISTS chat_rooms CASCADE`);
+
+   // Then create with new schema
+   await client.query(`CREATE TABLE IF NOT EXISTS chat_rooms ( ... )`);
+   ```
+
+4. **NEVER modify the Database constructor to call async code:**
+   ```typescript
+   // ✗ WRONG:
+   constructor() {
+     this.initDatabase(); // async call in constructor = BAD!
+   }
+
+   // ✓ CORRECT:
+   constructor() {
+     // Only synchronous setup
+   }
+
+   async init(): Promise<void> {
+     await this.initDatabase(); // Proper async initialization
+   }
+   ```
+
+### Common Database Errors & Fixes:
+
+**Error:** `relation "table_name" does not exist`
+- **Cause:** `db.init()` was not called before database queries
+- **Fix:** Add `await db.init()` at the start of `initializeData()`
+
+**Error:** `column "column_name" referenced in foreign key constraint does not exist`
+- **Cause:** Old table schema conflicts with new schema
+- **Fix:** Drop old tables CASCADE before creating new ones
+
+**Error:** `db.init is not a function`
+- **Cause:** The `init()` method doesn't exist in Database class
+- **Fix:** Add public `async init(): Promise<void>` method
+
+### Database Testing Checklist:
+
+Before deploying database changes:
+
+- [ ] Run `cd backend && npm run dev` locally
+- [ ] Check console: "Database tables created successfully"
+- [ ] Check console: "Default data initialized"
+- [ ] Test the feature works
+- [ ] Check for any database errors in console
+- [ ] Verify tables exist: `SELECT * FROM <table_name> LIMIT 1`
+
+---
+
+## 🚨 CRITICAL: Deployment Process - ALWAYS DEPLOY BOTH SERVICES 🚨
+
+**The biggest cause of production errors is deploying only backend OR only frontend.**
+
+### Deployment Architecture:
+
+```
+Production Stack:
+├─ Backend: Render.com (srv-d3naaffdiees73eebd0g)
+│  ├─ PostgreSQL database
+│  ├─ WebSocket server (Socket.io)
+│  └─ REST API
+│
+└─ Frontend: Vercel (bbs.uprough.net)
+   ├─ Static React app
+   ├─ xterm.js terminal
+   └─ Connects to backend via WebSocket
+```
+
+### MANDATORY Deployment Steps:
+
+**1. Test Locally Before Deploying:**
+```bash
+# Backend test:
+cd backend && npm run dev
+# Check console for errors, especially database init
+
+# Frontend test:
+cd frontend && npm run build
+# Check for TypeScript/build errors
+```
+
+**2. Commit Changes:**
+```bash
+git add .
+git commit -m "Description of changes"
+git push origin main
+```
+
+**3. Deploy BOTH Services:**
+```bash
+# Use the unified deployment script
+./Scripts/deployment/deploy.sh
+
+# NEVER use these (they're removed):
+# ./Scripts/deployment/deploy-render.sh  ✗ WRONG
+# ./Scripts/deployment/deploy-vercel.sh  ✗ WRONG
+```
+
+**4. Monitor Deployment:**
+```bash
+# Check Render logs for backend:
+render logs --resources srv-d3naaffdiees73eebd0g --limit 50 -o text
+
+# Look for these success messages:
+# - "Database schema initialized"
+# - "Database tables created successfully"
+# - "✅ Server running on port 10000"
+
+# Check for errors:
+# - "relation does not exist" = database not initialized
+# - "column referenced in foreign key" = schema mismatch
+# - "db.init is not a function" = missing init() method
+```
+
+**5. Verify Production:**
+```bash
+# Backend health:
+curl https://amiexpress-backend.onrender.com/
+# Expected: {"message":"AmiExpress Backend API"}
+
+# Frontend health:
+curl -I https://bbs.uprough.net
+# Expected: HTTP/2 200
+
+# Test in browser:
+# Visit https://bbs.uprough.net
+# Open console (F12)
+# Look for: "✅ Connected to BBS backend via websocket"
+```
+
+### Deployment Troubleshooting:
+
+**Backend won't start:**
+1. Check Render logs: `render logs --resources srv-d3naaffdiees73eebd0g --limit 50 -o text`
+2. Look for database errors (relation/column not exist)
+3. Check if `db.init()` is called in `initializeData()`
+4. Verify DATABASE_URL is set in Render environment variables
+
+**Frontend build fails:**
+1. Check Vercel build logs
+2. Look for TypeScript errors
+3. Test build locally: `cd frontend && npm run build`
+4. Common fix: Remove unused imports
+
+**WebSocket connection fails:**
+1. Check CORS configuration in `backend/src/config.ts`
+2. Verify `https://bbs.uprough.net` is in `corsOrigins`
+3. Check browser console for CORS errors
+4. Verify backend is running (not 502 error)
+
+### Deployment Rules to NEVER Break:
+
+1. **ALWAYS deploy both backend and frontend together**
+   - Backend changes may need frontend updates (API changes)
+   - Frontend changes may need backend updates (WebSocket protocol)
+   - Use `./Scripts/deployment/deploy.sh` - it deploys both
+
+2. **NEVER commit without testing locally first**
+   - Run backend locally and check for errors
+   - Build frontend locally and check for errors
+   - Saves time vs debugging in production
+
+3. **NEVER modify database schema without DROP CASCADE**
+   - Production database may have old schema
+   - Old schema + new code = crashes
+   - Always DROP old tables before CREATE new ones
+
+4. **NEVER skip checking Render logs after deployment**
+   - Errors don't always show in curl test
+   - Database errors appear in logs
+   - Check logs EVERY deployment
+
+5. **NEVER deploy during active user sessions**
+   - Backend restart kills WebSocket connections
+   - Users lose their session state
+   - Deploy during low-traffic times
+
+### Emergency Rollback:
+
+If deployment breaks production:
+
+```bash
+# 1. Find last working commit
+git log --oneline -10
+
+# 2. Deploy that commit
+./Scripts/deployment/deploy.sh <commit-sha>
+
+# Example:
+./Scripts/deployment/deploy.sh d796baf
+```
+
+---
+
 ## 🚨 MANDATORY: 1:1 PORT - ALWAYS CHECK E SOURCES FIRST 🚨
 
 **THIS IS THE #1 RULE - FAILURE TO FOLLOW THIS WASTES EVERYONE'S TIME**
