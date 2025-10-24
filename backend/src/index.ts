@@ -266,13 +266,57 @@ const io = new Server(server, {
   cors: {
     origin: config.get('corsOrigins'),
     methods: ["GET", "POST"]
-  }
+  },
+  // Optimize for multiple connections on Render free tier
+  pingTimeout: 60000, // Wait 60s for pong response before considering connection dead
+  pingInterval: 25000, // Send ping every 25s to keep connection alive
+  maxHttpBufferSize: 1e6, // 1MB max message size (reduced from 1MB default)
+  transports: ['websocket', 'polling'], // Prefer websocket, fallback to polling
+  allowEIO3: true, // Support older Socket.io clients
+  perMessageDeflate: false, // Disable compression to reduce CPU usage
+  httpCompression: false, // Disable HTTP compression to reduce CPU usage
+  connectTimeout: 45000, // 45s connection timeout
 });
 
 const port = process.env.PORT || config.get('port');
 
 // Store active sessions (in production, use Redis/database)
 const sessions = new Map<string, BBSSession>();
+
+// Connection rate limiting - track recent connections
+const recentConnections: Map<string, number[]> = new Map();
+const MAX_CONNECTIONS_PER_IP = 5; // Max 5 connections per IP
+const CONNECTION_WINDOW = 60000; // 60 second window
+
+function checkConnectionLimit(ip: string): boolean {
+  const now = Date.now();
+  const connections = recentConnections.get(ip) || [];
+
+  // Remove old connections outside the window
+  const recentConns = connections.filter(time => now - time < CONNECTION_WINDOW);
+
+  if (recentConns.length >= MAX_CONNECTIONS_PER_IP) {
+    return false; // Rate limit exceeded
+  }
+
+  // Add this connection
+  recentConns.push(now);
+  recentConnections.set(ip, recentConns);
+  return true;
+}
+
+// Cleanup old connection tracking data every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, connections] of recentConnections.entries()) {
+    const recent = connections.filter(time => now - time < CONNECTION_WINDOW);
+    if (recent.length === 0) {
+      recentConnections.delete(ip);
+    } else {
+      recentConnections.set(ip, recent);
+    }
+  }
+}, 5 * 60 * 1000); // 5 minutes
 
 // Helper: Get next available node ID (1-99)
 // In AmiExpress, each physical node had a number - we simulate this for websockets
@@ -450,7 +494,19 @@ app.get('/users/:id', authenticateToken(db), async (req: AuthRequest, res: Respo
 });
 
 io.on('connection', async (socket) => {
-  console.log('Client connected');
+  const clientIp = socket.handshake.address;
+  console.log(`Client connected from ${clientIp}`);
+
+  // Check connection rate limit
+  if (!checkConnectionLimit(clientIp)) {
+    console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);
+    socket.emit('ansi-output', '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[31mToo many connections from your IP.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[33mPlease wait a moment and try again.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
+    socket.disconnect();
+    return;
+  }
 
   // Initialize session with multi-node support
   let nodeSession;
