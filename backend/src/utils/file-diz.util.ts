@@ -94,22 +94,49 @@ export async function extractFileDizBuiltin(
 
   const dizPath = path.join(nodeWorkDir, 'FILE_ID.DIZ');
 
-  // Only handle .zip files for now
+  // Determine archive type and extraction command
   const ext = path.extname(uploadedFilePath).toLowerCase();
-  if (ext !== '.zip') {
+  let command: string;
+  let needsCwd = false;
+
+  if (ext === '.zip') {
+    // Extract FILE_ID.DIZ from zip archive
+    // -j = junk paths (extract to flat directory)
+    // -o = overwrite without prompting
+    // -C = case-insensitive matching
+    command = `unzip -jo -C "${uploadedFilePath}" FILE_ID.DIZ -d "${nodeWorkDir}"`;
+  } else if (ext === '.lha' || ext === '.lzh') {
+    // Extract FILE_ID.DIZ from lha/lzh archive
+    // e = extract
+    // q = quiet mode
+    command = `lha eq "${uploadedFilePath}" FILE_ID.DIZ`;
+    needsCwd = true;
+  } else if (ext === '.lzx') {
+    // Extract FILE_ID.DIZ from lzx archive (if unlzx is available)
+    // -e = extract
+    // -q = quiet
+    command = `unlzx -e -q "${uploadedFilePath}" FILE_ID.DIZ`;
+    needsCwd = true;
+  } else if (ext === '.tar' || ext === '.tgz' || ext === '.gz') {
+    // Extract FILE_ID.DIZ from tar/gzip archive
+    command = `tar -xzf "${uploadedFilePath}" FILE_ID.DIZ -C "${nodeWorkDir}" 2>/dev/null || tar -xf "${uploadedFilePath}" FILE_ID.DIZ -C "${nodeWorkDir}"`;
+  } else {
     console.log(`[FILE_ID.DIZ] File type ${ext} not supported for DIZ extraction`);
     return false;
   }
 
   try {
-    // Extract FILE_ID.DIZ from zip archive
-    // -j = junk paths (extract to flat directory)
-    // -o = overwrite without prompting
-    // -C = case-insensitive matching
-    const command = `unzip -jo -C "${uploadedFilePath}" FILE_ID.DIZ -d "${nodeWorkDir}"`;
     console.log(`[FILE_ID.DIZ] Running: ${command}`);
 
-    await execAsync(command, { timeout: 10000 });
+    if (needsCwd) {
+      // Some archivers need to be run from the target directory
+      await execAsync(command, {
+        timeout: 10000,
+        cwd: nodeWorkDir
+      });
+    } else {
+      await execAsync(command, { timeout: 10000 });
+    }
 
     const dizExists = await fileExists(dizPath);
     if (dizExists) {
@@ -117,7 +144,7 @@ export async function extractFileDizBuiltin(
       return true;
     }
   } catch (error: any) {
-    // unzip returns non-zero if FILE_ID.DIZ not found
+    // Extraction returns non-zero if FILE_ID.DIZ not found
     console.log(`[FILE_ID.DIZ] Extraction failed: ${error.message}`);
   }
 
