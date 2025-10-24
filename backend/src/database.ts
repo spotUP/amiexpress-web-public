@@ -354,6 +354,11 @@ export class Database {
       await this.createTables();
       console.log('Database tables created successfully');
 
+      // Run migrations to add missing columns to existing tables
+      console.log('Running database migrations...');
+      await this.runMigrations();
+      console.log('Database migrations completed');
+
       // Initialize default data
       await this.initializeDefaultData();
       console.log('Default data initialized');
@@ -361,6 +366,42 @@ export class Database {
       console.error('Failed to initialize database:', error);
       // Don't throw error - continue with server startup
       console.log('Continuing with server startup despite database initialization error');
+    }
+  }
+
+  // Run database migrations to add missing columns to existing tables
+  private async runMigrations(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Checking for missing columns in users table...');
+
+      // Migration 1: Add availableforchat column if it doesn't exist
+      await client.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS availableforchat BOOLEAN DEFAULT true
+      `);
+      console.log('✓ Ensured availableforchat column exists');
+
+      // Migration 2: Add quietnode column if it doesn't exist
+      await client.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS quietnode BOOLEAN DEFAULT false
+      `);
+      console.log('✓ Ensured quietnode column exists');
+
+      // Migration 3: Add autorejoin column if it doesn't exist
+      await client.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS autorejoin INTEGER DEFAULT 1
+      `);
+      console.log('✓ Ensured autorejoin column exists');
+
+      console.log('All migrations completed successfully');
+    } catch (error) {
+      console.error('Error running migrations:', error);
+      throw error;
+    } finally {
+      client.release();
     }
   }
 
