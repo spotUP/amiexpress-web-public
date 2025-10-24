@@ -212,6 +212,40 @@ function App() {
       localStorage.removeItem('bbs_auth_token');
     });
 
+    // Handle user not found - new user registration prompt (express.e:29608-29622)
+    ws.on('user-not-found', (data: { username: string; prompt: string }) => {
+      console.log('👤 User not found, prompting for new user creation:', data.username);
+      term.write('\x1b[33m' + data.prompt + '\x1b[0m');
+
+      // Change login state to wait for new user response
+      // Clear username buffer and store the attempted username
+      loginState.current = 'new-user-prompt';
+      newUserPromptUsername.current = data.username;
+      username.current = ''; // Clear buffer for response input
+    });
+
+    // Handle retry login request
+    ws.on('retry-login', () => {
+      console.log('🔄 Retrying login');
+      term.write('\r\n\r\nUsername: ');
+      loginState.current = 'username';
+      username.current = '';
+      password.current = '';
+    });
+
+    // Handle prompt for password (user exists, now ask for password)
+    ws.on('prompt-password', () => {
+      console.log('🔐 User exists, prompting for password');
+      loginState.current = 'password';
+      term.write('Password: ');
+    });
+
+    // Handle password masking mode (for registration)
+    ws.on('password-mode', (enabled: boolean) => {
+      console.log('🔒 Password mode:', enabled);
+      passwordMode.current = enabled;
+    });
+
     // Handle file upload request from server
     ws.on('show-file-upload', (options: { accept: string; maxSize: number; uploadUrl: string; fieldName: string }) => {
       console.log('📂 File upload requested:', options);
@@ -220,7 +254,7 @@ function App() {
 
     // Handle terminal input
     term.onData((data: string) => {
-      if (loginState.current === 'username' || loginState.current === 'password') {
+      if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'new-user-prompt') {
         // Handle login input (has its own echo logic)
         handleLoginInput(data, ws, term);
       } else {
@@ -228,8 +262,8 @@ function App() {
         // Only echo printable characters and backspace, not control sequences
         if (data.length === 1) {
           if (data >= ' ' && data <= '~') {
-            // Printable character - echo immediately
-            term.write(data);
+            // Printable character - echo immediately (mask with * if in password mode)
+            term.write(passwordMode.current ? '*' : data);
           } else if (data === '\x7f' || data === '\b') {
             // Backspace - erase immediately
             term.write('\b \b');
@@ -289,9 +323,11 @@ function App() {
 }
 
 // Global refs for login state (accessible from handleLoginInput)
-const loginState = { current: 'connecting' as 'connecting' | 'username' | 'password' | 'loggedin' };
+const loginState = { current: 'connecting' as 'connecting' | 'username' | 'checking-username' | 'password' | 'new-user-prompt' | 'loggedin' };
 const username = { current: '' };
 const password = { current: '' };
+const newUserPromptUsername = { current: '' };
+const passwordMode = { current: false }; // Track password masking mode during registration
 
 // Handle file upload
 function handleFileUpload(options: { accept: string; maxSize: number; uploadUrl: string; fieldName: string }, ws: Socket, term: Terminal) {
@@ -379,13 +415,36 @@ function handleLoginInput(data: string, ws: Socket, term: Terminal) {
   if (data === '\r' || data === '\n') {
     console.log('🔐 ENTER pressed in login state:', loginState.current);
     // Enter pressed - process current input
-    if (loginState.current === 'username') {
+    if (loginState.current === 'new-user-prompt') {
+      // Handle new user response (express.e:29622)
+      // Empty or 'C' = Continue as new user, 'R' = Retry login
+      const response = username.current.trim().toUpperCase();
+      console.log('👤 New user response:', response, 'for username:', newUserPromptUsername.current);
+
+      // Clear buffer and transition to loggedin state
+      username.current = '';
+      loginState.current = 'loggedin';
+
+      // Send response to backend
+      ws.emit('new-user-response', {
+        response: response || 'C', // Default to Continue if empty
+        username: newUserPromptUsername.current
+      });
+
+      term.write('\r\n');
+      return;
+    } else if (loginState.current === 'username') {
       if (username.current.trim().length === 0) {
         term.write('\r\nUsername cannot be empty. Username: ');
         return;
       }
-      loginState.current = 'password';
-      term.write('\r\nPassword: ');
+
+      // Send username to backend first to check if user exists
+      // Backend will emit 'user-not-found' or 'prompt-password'
+      console.log('🔐 Sending username to backend for validation:', username.current);
+      ws.emit('check-username', { username: username.current });
+      loginState.current = 'checking-username';
+      term.write('\r\n');
     } else if (loginState.current === 'password') {
       const pwd = password.current;
       if (pwd.trim().length === 0) {
@@ -431,7 +490,7 @@ function handleLoginInput(data: string, ws: Socket, term: Terminal) {
     }
   } else if (data === '\x7f' || data === '\b') {
     // Backspace
-    if (loginState.current === 'username' && username.current.length > 0) {
+    if ((loginState.current === 'username' || loginState.current === 'new-user-prompt') && username.current.length > 0) {
       username.current = username.current.slice(0, -1);
       term.write('\b \b'); // Erase character
     } else if (loginState.current === 'password' && password.current.length > 0) {
@@ -440,7 +499,7 @@ function handleLoginInput(data: string, ws: Socket, term: Terminal) {
     }
   } else if (data.length === 1 && data >= ' ' && data <= '~') {
     // Regular character
-    if (loginState.current === 'username') {
+    if (loginState.current === 'username' || loginState.current === 'new-user-prompt') {
       username.current += data;
       term.write(data);
     } else if (loginState.current === 'password') {

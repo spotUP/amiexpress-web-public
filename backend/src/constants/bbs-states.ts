@@ -5,6 +5,7 @@
 export enum BBSState {
   AWAIT = 'await',
   LOGON = 'logon',
+  REGISTERING = 'registering',  // New user account creation - express.e:30003+
   LOGGEDON = 'loggedon'
 }
 
@@ -89,6 +90,18 @@ export enum LoggedOnSubState {
   // OLM (Online Message) operations - express.e:25406-25515
   OLM_NODE_INPUT = 'olm_node_input',        // Waiting for node number input
   OLM_COMPOSE = 'olm_compose',              // Composing OLM message (line editor)
+
+  // New User Registration - express.e:30003-30310 (doNewUser)
+  NEW_USER_NAME = 'new_user_name',          // Entering name with duplicate check
+  NEW_USER_LOCATION = 'new_user_location',  // City, State
+  NEW_USER_PHONE = 'new_user_phone',        // Phone number
+  NEW_USER_EMAIL = 'new_user_email',        // E-Mail address
+  NEW_USER_PASSWORD = 'new_user_password',  // Password entry
+  NEW_USER_PASSWORD_CONFIRM = 'new_user_password_confirm', // Password confirmation
+  NEW_USER_LINES = 'new_user_lines',        // Lines per screen
+  NEW_USER_COMPUTER = 'new_user_computer',  // Computer type
+  NEW_USER_SCREEN_CLEAR = 'new_user_screen_clear', // Screen clear preference
+  NEW_USER_CONFIRM = 'new_user_confirm',    // Confirm all details
 
   // Conference operations
   CONFERENCE_SELECT = 'conference_select',

@@ -92,15 +92,9 @@ export async function handleLiveChatCommand(socket: Socket, session: BBSSession,
 }
 
 /**
- * Show LIVECHAT user selection (numbered list)
+ * Show LIVECHAT user selection (arrow key navigation)
  */
 async function showChatMenu(socket: Socket, session: BBSSession) {
-  let output = '\r\n';
-  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
-  output += '\x1b[36m                    SELECT USER TO CHAT\x1b[0m\r\n';
-  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
-  output += '\r\n';
-
   // Collect all online users except current user
   const onlineUsers: any[] = [];
   for (const [socketId, sess] of Array.from(sessions.entries())) {
@@ -118,6 +112,11 @@ async function showChatMenu(socket: Socket, session: BBSSession) {
   }
 
   if (onlineUsers.length === 0) {
+    let output = '\r\n';
+    output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+    output += '\x1b[36m                    SELECT USER TO CHAT\x1b[0m\r\n';
+    output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+    output += '\r\n';
     output += '\x1b[33mNo other users are currently online.\x1b[0m\r\n';
     output += '\r\n';
     output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
@@ -128,12 +127,34 @@ async function showChatMenu(socket: Socket, session: BBSSession) {
     return;
   }
 
-  // Display numbered list
-  output += '\x1b[33m#   Username          Real Name                Status\x1b[0m\r\n';
+  // Store user list and initialize selection
+  session.livechatUserList = onlineUsers;
+  session.livechatSelectedIndex = session.livechatSelectedIndex || 0;
+
+  // Display the list with arrow key navigation
+  renderChatUserList(socket, session);
+  session.subState = LoggedOnSubState.LIVECHAT_SELECT_USER;
+}
+
+/**
+ * Render the chat user list with current selection highlighted
+ */
+function renderChatUserList(socket: Socket, session: BBSSession) {
+  const onlineUsers = session.livechatUserList || [];
+  const selectedIndex = session.livechatSelectedIndex || 0;
+
+  let output = '\x1b[2J\x1b[H'; // Clear screen and move cursor to home
+  output += '\r\n';
+  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\x1b[36m                    SELECT USER TO CHAT\x1b[0m\r\n';
+  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\r\n';
+
+  // Display list with arrow key navigation
+  output += '\x1b[33mUsername          Real Name                Status\x1b[0m\r\n';
   output += '\x1b[33m' + '─'.repeat(63) + '\x1b[0m\r\n';
 
-  onlineUsers.forEach((user, index) => {
-    const num = String(index + 1).padEnd(4, ' ');
+  onlineUsers.forEach((user: any, index: number) => {
     const username = user.username.padEnd(16, ' ').substring(0, 16);
     const realname = user.realname.padEnd(23, ' ').substring(0, 23);
 
@@ -150,19 +171,20 @@ async function showChatMenu(socket: Socket, session: BBSSession) {
       statusText = 'Not Available';
     }
 
-    output += num + username + '  ' + realname + '  ' + statusColor + statusText + '\x1b[0m\r\n';
+    // Highlight selected row with blue background (44 = blue bg, 37 = white text)
+    if (index === selectedIndex) {
+      output += '\x1b[44m\x1b[37m> ' + username + realname + '  ' + statusText.padEnd(18) + '\x1b[0m\r\n';
+    } else {
+      output += '  ' + username + realname + '  ' + statusColor + statusText + '\x1b[0m\r\n';
+    }
   });
 
   output += '\r\n';
   output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
   output += '\r\n';
-  output += '\x1b[32mEnter number to chat (H for help, Q to quit): \x1b[0m';
+  output += '\x1b[32m↑/↓ to select, ENTER to chat, Q to quit\x1b[0m';
 
   socket.emit('ansi-output', output);
-
-  // Store user list in session for selection
-  session.livechatUserList = onlineUsers;
-  session.subState = LoggedOnSubState.LIVECHAT_SELECT_USER;
 }
 
 /**
@@ -426,51 +448,64 @@ export async function showLiveChatHelp(socket: Socket, session: BBSSession) {
 }
 
 /**
- * Handle user selection from numbered list
+ * Handle user selection with arrow keys
  * Called from command.handler.ts when in LIVECHAT_SELECT_USER state
  */
 export async function handleLiveChatSelection(socket: Socket, session: BBSSession, input: string) {
+  const userList = session.livechatUserList || [];
+  if (userList.length === 0) {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // Initialize selection index if not set
+  if (session.livechatSelectedIndex === undefined) {
+    session.livechatSelectedIndex = 0;
+  }
+
   const trimmedInput = input.trim().toUpperCase();
+
+  // Handle arrow keys for navigation
+  if (input === '\x1b[A') {
+    // Up arrow - move selection up
+    session.livechatSelectedIndex--;
+    if (session.livechatSelectedIndex < 0) {
+      session.livechatSelectedIndex = userList.length - 1; // Wrap to bottom
+    }
+    renderChatUserList(socket, session);
+    return;
+  } else if (input === '\x1b[B') {
+    // Down arrow - move selection down
+    session.livechatSelectedIndex++;
+    if (session.livechatSelectedIndex >= userList.length) {
+      session.livechatSelectedIndex = 0; // Wrap to top
+    }
+    renderChatUserList(socket, session);
+    return;
+  }
 
   // Q to quit
   if (trimmedInput === 'Q') {
-    socket.emit('ansi-output', '\r\n\x1b[33mLiveChat cancelled.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\x1b[2J\x1b[H\r\n\x1b[33mLiveChat cancelled.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.livechatUserList;
+    delete session.livechatSelectedIndex;
     return;
   }
 
-  // H for help
-  if (trimmedInput === 'H') {
-    await showLiveChatHelp(socket, session);
+  // Enter to select current user
+  if (input === '\r' || input === '\n') {
+    const selectedUser = userList[session.livechatSelectedIndex];
     delete session.livechatUserList;
+    delete session.livechatSelectedIndex;
+
+    // Clear screen and request chat with selected user
+    socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    await requestChat(socket, session, selectedUser.username);
     return;
   }
 
-  // Parse number
-  const num = parseInt(trimmedInput, 10);
-  if (isNaN(num) || num < 1) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid selection. Please enter a number, H for help, or Q to quit.\x1b[0m\r\n');
-    // Re-show the list
-    await showChatMenu(socket, session);
-    return;
-  }
-
-  // Check if number is in range
-  const userList = session.livechatUserList || [];
-  if (num > userList.length) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid number. Please select from 1-' + userList.length + '.\x1b[0m\r\n');
-    // Re-show the list
-    await showChatMenu(socket, session);
-    return;
-  }
-
-  // Get selected user
-  const selectedUser = userList[num - 1];
-  delete session.livechatUserList;
-
-  // Request chat with selected user
-  await requestChat(socket, session, selectedUser.username);
+  // Ignore other input (no need to show errors for arrow key navigation)
 }
 
 /**

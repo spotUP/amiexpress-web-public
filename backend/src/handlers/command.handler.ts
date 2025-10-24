@@ -376,12 +376,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
         console.log('📋 Graphics mode set:', session.ansiEnabled ? 'ANSI/RIP' : 'None');
 
-        // express.e:29551 - Display BBSTITLE screen
-        session.subState = LoggedOnSubState.DISPLAY_BBSTITLE;
+        // express.e:29551 - Display BBSTITLE screen and immediately show login prompt
         session.tempData.inputBuffer = ''; // Clear buffer
-        const { displayScreen, doPause } = require('./screen.handler');
+        const { displayScreen } = require('./screen.handler');
         displayScreen(socket, session, 'BBSTITLE');
-        doPause(socket, session);
+
+        // Immediately transition to login state (no key press required)
+        session.state = BBSState.LOGON;
+        session.subState = undefined;
+        socket.emit('ansi-output', '\r\n\r\n');
+        socket.emit('prompt-login'); // Tell frontend to show login form
         return;
       } else if (data === '\x7f' || data === '\b') {
         // Backspace - remove last character from buffer
@@ -412,8 +416,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  if (session.state !== BBSState.LOGGEDON) {
-    console.log('❌ Not in LOGGEDON state, ignoring command');
+  // Allow LOGGEDON and REGISTERING states to continue
+  // All other states (AWAIT, LOGON) are blocked
+  if (session.state !== BBSState.LOGGEDON && session.state !== BBSState.REGISTERING) {
+    console.log('❌ Not in LOGGEDON or REGISTERING state, ignoring command');
     return;
   }
 
@@ -484,15 +490,21 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     else if (data === '\x7f') {
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Transmit backspace to partner in real-time
-        await handleChatKeystroke(socket, session, { keystroke: '\x7f' });
+        // Don't transmit backspace if we're typing a command
+        const isCommand = session.inputBuffer.trim().startsWith('/');
+        if (!isCommand) {
+          await handleChatKeystroke(socket, session, { keystroke: '\x7f' });
+        }
       }
     }
     // Handle printable characters - real-time transmission
     else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Transmit character to partner in real-time
-      await handleChatKeystroke(socket, session, { keystroke: data });
+      // Don't transmit commands (starting with /) to partner
+      const isCommand = session.inputBuffer.trim().startsWith('/');
+      if (!isCommand) {
+        await handleChatKeystroke(socket, session, { keystroke: data });
+      }
     }
     return;
   }
@@ -621,6 +633,62 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // PRIORITY 7-16: Handle New User Registration states (express.e:30115-30310)
+  if (session.state === BBSState.REGISTERING) {
+    console.log('📝 [REGISTRATION] Handling input for subState:', session.subState);
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer || '';
+      session.inputBuffer = '';
+
+      const newUserHandler = require('./new-user.handler');
+
+      switch (session.subState) {
+        case LoggedOnSubState.NEW_USER_NAME:
+          await newUserHandler.handleNameInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_LOCATION:
+          await newUserHandler.handleLocationInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_PHONE:
+          await newUserHandler.handlePhoneInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_EMAIL:
+          await newUserHandler.handleEmailInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_PASSWORD:
+          await newUserHandler.handlePasswordInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_PASSWORD_CONFIRM:
+          await newUserHandler.handlePasswordConfirm(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_LINES:
+          await newUserHandler.handleLinesInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_COMPUTER:
+          await newUserHandler.handleComputerInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_SCREEN_CLEAR:
+          await newUserHandler.handleScreenClearInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_CONFIRM:
+          await newUserHandler.handleConfirmInput(socket, session, input);
+          break;
+      }
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
   // Handle substate-specific input
   if (session.subState === LoggedOnSubState.DISPLAY_BULL ||
       session.subState === LoggedOnSubState.CONF_SCAN ||
@@ -634,7 +702,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // Import and call performConferenceScan from message-scan.handler
         const { performConferenceScan } = require('./message-scan.handler');
         await performConferenceScan(socket, session);
+
+        // Automatically continue to next state without pause
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        await displayConferenceBulletins(socket, session);
       } else if (session.subState === LoggedOnSubState.CONF_SCAN) {
         // express.e:28555-28648 flow: confScan → CONF_BULL
         await displayConferenceBulletins(socket, session);
@@ -1535,6 +1606,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         setTimeout(() => {
           handleCommand(socket, session, '');  // Trigger process command
         }, 0);
+      } else {
+        // express.e:28228 - Empty command, just redisplay menu
+        // IF StrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
+        console.log('📝 Empty command, redisplaying menu');
+        session.menuPause = true;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        displayMainMenu(socket, session);
       }
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {

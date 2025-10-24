@@ -228,6 +228,7 @@ interface BBSSession {
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
   nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163
+  loginRetryCount: number; // Login retry counter - express.e:29461, 29560 (max 5 before disconnect)
 
   // Phase 10: Message Pointer System (express.e:199-200, 4882-4973)
   lastMsgReadConf: number; // Last message manually read (confBase.confYM) - express.e:199
@@ -343,6 +344,14 @@ setOlmDependencies({
     console.log('📊 [ENV] Setting environment stat:', envStat);
     // TODO: Implement full environment stat tracking
   }
+});
+
+// Initialize New User Registration handler dependencies - express.e:30003+
+const { setNewUserDependencies } = require('./handlers/new-user.handler');
+
+setNewUserDependencies({
+  db,
+  sessions
 });
 
 app.use(cors());
@@ -475,6 +484,7 @@ io.on('connection', async (socket) => {
     loginTime: Date.now(), // Login timestamp
     nodeStartTime: Date.now(), // Node start time for uptime
     nodeId: getNextAvailableNodeId(), // Assign unique virtual node ID - express.e:163
+    loginRetryCount: 0, // Initialize retry counter - express.e:29560
 
     // Phase 10: Initialize message pointers (express.e:199-200)
     lastMsgReadConf: 0, // Last message manually read
@@ -528,12 +538,60 @@ io.on('connection', async (socket) => {
       } else if (data.username && data.password) {
         console.log('Socket login attempt with username/password:', data.username);
 
-        // Authenticate with username/password
-        user = await db.authenticateUser(data.username, data.password);
-        if (!user) {
-          socket.emit('login-failed', 'Invalid username or password');
+        // express.e:29627-29628 - Empty username counts as retry
+        if (data.username.trim().length === 0) {
+          session.loginRetryCount++;
+          console.log(`Login retry count: ${session.loginRetryCount}/5 (empty username)`);
+
+          // express.e:29633-29637 - Check if too many errors
+          if (session.loginRetryCount >= 5) {
+            console.log('Too many login errors, disconnecting');
+            socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+            setTimeout(() => socket.disconnect(), 500);
+            return;
+          }
+
+          socket.emit('login-failed', 'Username cannot be empty');
           return;
         }
+
+        // express.e:29605-29631 - Check if user exists first, then authenticate
+        const existingUser = await db.getUserByUsername(data.username);
+
+        if (!existingUser) {
+          // User not found - express.e:29608-29622
+          // Prompt: "[R]etry your name or [C]ontinue as a new user?"
+          console.log('User not found, prompting for new user creation');
+          socket.emit('user-not-found', {
+            username: data.username,
+            prompt: data.username.toUpperCase() === 'NEW'
+              ? '[C]ontinue as a new user? '
+              : `\r\nThe name ${data.username} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
+          });
+          return;
+        }
+
+        // User exists, authenticate with password
+        user = await db.authenticateUser(data.username, data.password);
+        if (!user) {
+          // express.e:29670+ - Invalid password counts as retry
+          session.loginRetryCount++;
+          console.log(`Login retry count: ${session.loginRetryCount}/5 (invalid password)`);
+
+          // express.e:29633-29637 - Check if too many errors
+          if (session.loginRetryCount >= 5) {
+            console.log('Too many login errors, disconnecting');
+            socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+            setTimeout(() => socket.disconnect(), 500);
+            return;
+          }
+
+          socket.emit('login-failed', 'Invalid password');
+          return;
+        }
+
+        // Reset retry counter on successful login
+        session.loginRetryCount = 0;
 
         // Generate JWT tokens for this session
         const accessToken = await db.generateAccessToken(user);
@@ -600,8 +658,85 @@ io.on('connection', async (socket) => {
     }
   });
 
-  // Registration is now handled via REST API endpoints
-  // Socket registration removed - use /auth/register endpoint instead
+  // Check if username exists (called before password prompt)
+  socket.on('check-username', async (data: { username: string }) => {
+    try {
+      console.log('🔍 Checking if username exists:', data.username);
+
+      // Empty username check
+      if (data.username.trim().length === 0) {
+        session.loginRetryCount++;
+        if (session.loginRetryCount >= 5) {
+          socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+          setTimeout(() => socket.disconnect(), 500);
+          return;
+        }
+        socket.emit('login-failed', 'Username cannot be empty');
+        socket.emit('retry-login');
+        return;
+      }
+
+      const existingUser = await db.getUserByUsername(data.username);
+
+      if (!existingUser) {
+        // User not found - prompt for new user creation
+        console.log('User not found, prompting for new user creation');
+        socket.emit('user-not-found', {
+          username: data.username,
+          prompt: data.username.toUpperCase() === 'NEW'
+            ? '[C]ontinue as a new user? '
+            : `\r\nThe name ${data.username} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
+        });
+      } else {
+        // User exists - prompt for password
+        console.log('User exists, requesting password');
+        socket.emit('prompt-password');
+      }
+    } catch (error) {
+      console.error('Username check error:', error);
+      socket.emit('login-failed', 'Error checking username');
+      socket.emit('retry-login');
+    }
+  });
+
+  // express.e:29622 - Handle new user response (R=retry, C=continue as new user)
+  socket.on('new-user-response', async (data: { response: string; username: string }) => {
+    try {
+      const response = data.response.toUpperCase().trim();
+
+      if (response === 'C' || response === '') {
+        // Continue as new user - express.e:29646-29651
+        console.log('User chose to create new account:', data.username);
+
+        // Start new user account creation flow
+        session.state = BBSState.REGISTERING;
+        session.tempData = { newUsername: data.username };
+
+        // Import and call new user handler
+        const { startNewUserRegistration } = require('./handlers/new-user.handler');
+        await startNewUserRegistration(socket, session, data.username);
+      } else {
+        // express.e:29622 - Retry login increments retry counter
+        session.loginRetryCount++;
+        console.log(`Login retry count: ${session.loginRetryCount}/5 (user chose retry)`);
+
+        // express.e:29633-29637 - Check if too many errors
+        if (session.loginRetryCount >= 5) {
+          console.log('Too many login errors, disconnecting');
+          socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+          setTimeout(() => socket.disconnect(), 500);
+          return;
+        }
+
+        // Retry login - send back to login screen
+        console.log('User chose to retry login');
+        socket.emit('retry-login');
+      }
+    } catch (error) {
+      console.error('New user response error:', error);
+      socket.emit('login-failed', 'Registration error');
+    }
+  });
 
   socket.on('command', (data: string) => {
     console.log('=== COMMAND RECEIVED ===');
@@ -1028,7 +1163,7 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '- Real-time chat capabilities\r\n');
   socket.emit('ansi-output', '- PostgreSQL database backend\r\n');
   socket.emit('ansi-output', '- Full conference system\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m\r\n');
 
   // Move to next state after bulletin display
   // express.e:28555-28648 flow: BULL → NODE_BULL → confScan → CONF_BULL → MENU

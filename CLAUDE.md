@@ -1,5 +1,38 @@
 # AmiExpress-Web Project Guidelines
 
+## 🚨 CRITICAL: Database Column Names - ALWAYS USE LOWERCASE 🚨
+
+**PostgreSQL column names are CASE-SENSITIVE when quoted!**
+
+### Database Column Name Rules:
+
+1. **ALL columns are lowercase** (e.g., `availableforchat`, `seclevel`, `quietnode`)
+2. **NEVER use camelCase** in SQL queries (e.g., `"availableForChat"` will fail)
+3. **Use aliases for TypeScript** mapping:
+   ```sql
+   -- ✓ CORRECT:
+   SELECT availableforchat as "availableForChat" FROM users
+
+   -- ✗ WRONG:
+   SELECT "availableForChat" FROM users
+   ```
+
+4. **Common errors to avoid:**
+   - `"availableForChat"` → use `availableforchat`
+   - `"secLevel"` → use `seclevel`
+   - `"quietNode"` → use `quietnode`
+   - `"autoRejoin"` → use `autorejoin`
+   - `"confAccess"` → use `confaccess`
+
+5. **Before writing ANY SQL query:**
+   - Check `backend/src/database.ts` for existing column mappings (line ~197)
+   - Test the query in `psql` before adding to code
+   - Remember: PostgreSQL treats `"column"` as case-sensitive, `column` as lowercase
+
+**This error has occurred multiple times - ALWAYS verify column names!**
+
+---
+
 ## 🚨 MANDATORY: 1:1 PORT - ALWAYS CHECK E SOURCES FIRST 🚨
 
 **THIS IS THE #1 RULE - FAILURE TO FOLLOW THIS WASTES EVERYONE'S TIME**

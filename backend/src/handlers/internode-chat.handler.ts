@@ -751,13 +751,21 @@ export async function handleChatEnd(socket: Socket, session: BBSSession) {
       ? chatSession.recipientId
       : chatSession.initiatorId;
 
+    console.log(`🔍 [CHAT END] Looking for partner with ID: ${partnerId}`);
+
     let partnerSession: BBSSession | null = null;
+    let partnerSocketId: string | null = null;
     for (const [socketId, sess] of Array.from(sessions.entries())) {
+      console.log(`  Checking session: socketId=${socketId}, userId=${sess.user?.id}`);
       if (sess.user?.id === partnerId) {
         partnerSession = sess;
+        partnerSocketId = socketId;
+        console.log(`  ✅ FOUND PARTNER! socketId=${socketId}`);
         break;
       }
     }
+
+    console.log(`🔍 [CHAT END] Partner session found: ${!!partnerSession}, socketId: ${partnerSocketId}`);
 
     const roomName = `chat:${sessionId}`;
 
@@ -768,11 +776,13 @@ export async function handleChatEnd(socket: Socket, session: BBSSession) {
       duration
     });
 
-    // Reset scroll region, cursor color, and send end message to both users
-    io.to(roomName).emit('ansi-output',
+    // Build end message
+    const endMessage =
+      '\x1b[?25l' + // Hide cursor
       '\x1b[r' + // Reset scroll region to full screen
       '\x1b]12;#ff0000\x07' + // Reset cursor color to red (OSC 12)
-      '\x1b[2J\x1b[H' + // Clear screen and home cursor
+      '\x1b[2J\x1b[H' + // Clear entire screen and move cursor to home
+      '\x1b[3J' + // Clear scrollback buffer
       '\r\n\x1b[32m═══════════════════════════════════════════════════════════════\x1b[0m\r\n' +
       '\x1b[36m                     CHAT SESSION ENDED\x1b[0m\r\n' +
       '\x1b[32m═══════════════════════════════════════════════════════════════\x1b[0m\r\n' +
@@ -780,22 +790,38 @@ export async function handleChatEnd(socket: Socket, session: BBSSession) {
       `Chat with ${session.chatWithUsername} has ended.\r\n` +
       `Duration: ${duration} minute(s)\r\n` +
       `Messages exchanged: ${messageCount}\r\n` +
-      '\r\n'
-    );
+      '\r\n' +
+      '\x1b[32mPress any key to continue...\x1b[0m' +
+      '\x1b[?25h'; // Show cursor again
 
-    // Clean up both users
+    // Send to both users in the room
+    io.to(roomName).emit('ansi-output', endMessage);
+
+    // Clean up both users and set them to menu display state
+    console.log(`🧹 [CHAT END] Cleaning up initiating user: ${session.user?.username}`);
     await cleanupChatSession(socket, session);
-    if (partnerSession) {
-      const partnerSocket = io.sockets.sockets.get(partnerSession.socketId!);
+    session.menuPause = true; // Force menu redisplay
+
+    console.log(`🧹 [CHAT END] Attempting partner cleanup: partnerSession=${!!partnerSession}, partnerSocketId=${partnerSocketId}`);
+    if (partnerSession && partnerSocketId) {
+      const partnerSocket = io.sockets.sockets.get(partnerSocketId);
+      console.log(`🧹 [CHAT END] Partner socket found: ${!!partnerSocket}`);
       if (partnerSocket) {
+        console.log(`🧹 [CHAT END] Cleaning up partner user: ${partnerSession.user?.username}`);
         await cleanupChatSession(partnerSocket, partnerSession);
+        partnerSession.menuPause = true; // Force menu redisplay
+        console.log(`🧹 [CHAT END] Partner cleanup complete`);
+      } else {
+        console.log(`❌ [CHAT END] Partner socket NOT FOUND for socketId: ${partnerSocketId}`);
       }
+    } else {
+      console.log(`❌ [CHAT END] Partner session or socketId is NULL`);
     }
 
     // Leave Socket.io room
     socket.leave(roomName);
-    if (partnerSession?.socketId) {
-      io.sockets.sockets.get(partnerSession.socketId)?.leave(roomName);
+    if (partnerSocketId) {
+      io.sockets.sockets.get(partnerSocketId)?.leave(roomName);
     }
 
   } catch (error) {
@@ -874,12 +900,15 @@ export async function handleChatDisconnect(socket: Socket, session: BBSSession) 
  * Cleanup chat session - Restore user to previous state
  */
 async function cleanupChatSession(socket: Socket, session: BBSSession) {
-  // Restore previous state
-  if (session.previousSubState) {
-    session.subState = session.previousSubState;
-  } else {
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-  }
+  console.log(`🧹 [CLEANUP CHAT] Starting cleanup for user: ${session.user?.username}`);
+  console.log(`  Current subState: ${session.subState}`);
+  console.log(`  Previous subState: ${session.previousSubState}`);
+
+  // Always restore to DISPLAY_MENU after chat ends
+  // Don't use previousSubState as it might be a chat-related state like livechat_invitation_response
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+  console.log(`  New subState: ${session.subState}`);
 
   // Clear chat fields
   delete session.chatSessionId;

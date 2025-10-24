@@ -397,7 +397,7 @@ export class Database {
           protocol TEXT DEFAULT '/X Zmodem',
           editor TEXT DEFAULT 'Prompt',
           zoomtype TEXT DEFAULT 'QWK',
-          "availableForChat" BOOLEAN DEFAULT true,
+          availableforchat BOOLEAN DEFAULT true,
           quietnode BOOLEAN DEFAULT false,
           autorejoin INTEGER DEFAULT 1,
           confaccess TEXT DEFAULT 'XXX',
@@ -955,7 +955,7 @@ export class Database {
           linesperscreen, computer, screentype, protocol, editor, zoomtype,
           availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
           topuploadcps, topdownloadcps, bytelimit
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
       `;
 
       const values = [
@@ -1986,11 +1986,11 @@ export class Database {
     }
   }
 
-  // V2: Fixed to use proper quotes for camelCase column
+  // V2: Fixed to use lowercase column name
   async getUserByUsernameForOLMv2(username: string): Promise<{ id: string; username: string; availableForChat: boolean } | null> {
     const client = await this.pool.connect();
     try {
-      const sql = `SELECT id, username, "availableForChat" FROM users WHERE LOWER(username) = LOWER($1)`;
+      const sql = `SELECT id, username, availableforchat as "availableForChat" FROM users WHERE LOWER(username) = LOWER($1)`;
       const result = await client.query(sql, [username]);
       return result.rows.length > 0 ? result.rows[0] : null;
     } finally {
@@ -2214,9 +2214,9 @@ export class Database {
     const client = await this.pool.connect();
     try {
       const sql = `
-        SELECT id, username, realname, "secLevel"
+        SELECT id, username, realname, seclevel as "secLevel"
         FROM users
-        WHERE "availableForChat" = TRUE
+        WHERE availableforchat = TRUE
         ORDER BY username
       `;
       const result = await client.query(sql);

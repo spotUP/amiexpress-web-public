@@ -182,7 +182,9 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
 export function addAnsiEscapes(content: string): string {
   // Match ANSI sequences: [digits;digitsm or [digitm or [H or [2J etc
   // But NOT [%X] which are variable placeholders
-  return content.replace(/\[(?!%)([0-9;]*[A-Za-z])/g, '\x1b[$1');
+  // And NOT isolated brackets like [AmiExpress-Web] - only valid ANSI sequences
+  // Valid: [0m, [1;32m, [2J, [H, etc. - must start with digit or be special (H,J,K)
+  return content.replace(/\[([0-9;]+[A-Za-z]|[HJK]|2J)/g, '\x1b[$1');
 }
 
 /**
