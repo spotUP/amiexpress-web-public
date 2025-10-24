@@ -179,8 +179,17 @@ echo ""
 
 # Trigger deployment
 echo -e "${YELLOW}→${NC} Triggering backend deployment..."
+echo "[DEBUG] SERVICE_ID=$SERVICE_ID" >&2
+echo "[DEBUG] COMMIT_SHA=$COMMIT_SHA" >&2
+echo "[DEBUG] Running: render deploys create \"$SERVICE_ID\" --commit \"$COMMIT_SHA\" --confirm -o json" >&2
+
+set +e  # Temporarily disable exit on error to capture output
 DEPLOY_OUTPUT=$(render deploys create "$SERVICE_ID" --commit "$COMMIT_SHA" --confirm -o json 2>&1)
 DEPLOY_EXIT=$?
+set -e  # Re-enable exit on error
+
+echo "[DEBUG] DEPLOY_EXIT=$DEPLOY_EXIT" >&2
+echo "[DEBUG] DEPLOY_OUTPUT=$DEPLOY_OUTPUT" >&2
 
 if [ $DEPLOY_EXIT -ne 0 ]; then
     echo -e "${RED}✗ Error: Failed to trigger deployment${NC}"
