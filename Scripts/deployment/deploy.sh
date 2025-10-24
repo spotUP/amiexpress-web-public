@@ -29,6 +29,54 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
+# Webhook configuration
+# Set these environment variables to enable deployment notifications:
+# export DEPLOY_WEBHOOK_URL="your-discord-or-slack-webhook-url"
+WEBHOOK_URL="${DEPLOY_WEBHOOK_URL:-}"
+
+# Function to send webhook notification
+send_webhook() {
+    local title="$1"
+    local description="$2"
+    local color="$3"  # decimal color (e.g., 65280 for green, 16711680 for red)
+    local emoji="$4"
+
+    if [ -z "$WEBHOOK_URL" ]; then
+        return 0  # Skip if no webhook configured
+    fi
+
+    # Detect webhook type (Discord vs Slack)
+    if [[ "$WEBHOOK_URL" == *"discord.com"* ]]; then
+        # Discord webhook format
+        curl -s -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"embeds\": [{
+                    \"title\": \"$emoji $title\",
+                    \"description\": \"$description\",
+                    \"color\": $color,
+                    \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+                    \"footer\": {
+                        \"text\": \"AmiExpress Deployment\"
+                    }
+                }]
+            }" > /dev/null
+    elif [[ "$WEBHOOK_URL" == *"hooks.slack.com"* ]]; then
+        # Slack webhook format
+        curl -s -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"text\": \"$emoji *$title*\",
+                \"attachments\": [{
+                    \"color\": \"$([ $color -eq 65280 ] && echo 'good' || [ $color -eq 16711680 ] && echo 'danger' || echo 'warning')\",
+                    \"text\": \"$description\",
+                    \"footer\": \"AmiExpress Deployment\",
+                    \"ts\": $(date +%s)
+                }]
+            }" > /dev/null
+    fi
+}
+
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${CYAN}  AmiExpress Full-Stack Deployment${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -41,6 +89,13 @@ COMMIT_MSG=$(git log -1 --pretty=%B "$COMMIT_SHA" | head -1)
 
 echo -e "${BLUE}Commit:${NC} $COMMIT_SHORT - $COMMIT_MSG"
 echo ""
+
+# Send deployment started webhook
+send_webhook \
+    "Deployment Started" \
+    "Deploying commit \`$COMMIT_SHORT\`\\n\\n**Changes:**\\n$COMMIT_MSG" \
+    "3447003" \
+    "🚀"
 
 # Check prerequisites
 echo -e "${YELLOW}→${NC} Checking prerequisites..."
@@ -132,6 +187,14 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
 
         echo -e "${GREEN}✓ Backend deployment complete!${NC}"
         echo ""
+
+        # Send backend success webhook
+        send_webhook \
+            "Backend Deployed" \
+            "Backend successfully deployed to Render\\n\\n**Service:** amiexpress-backend\\n**Commit:** \`$COMMIT_SHORT\`" \
+            "65280" \
+            "✅"
+
         break
     elif echo "$LOG_SAMPLE" | grep -q "Build failed"; then
         echo -e "\n${RED}✗ Backend build failed!${NC}"
@@ -186,6 +249,13 @@ PRODUCTION_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://bbs\.uprough\.net' ||
 echo -e "${GREEN}✓${NC} Frontend deployment complete!"
 echo ""
 
+# Send frontend success webhook
+send_webhook \
+    "Frontend Deployed" \
+    "Frontend successfully deployed to Vercel\\n\\n**URL:** $PRODUCTION_URL\\n**Commit:** \`$COMMIT_SHORT\`" \
+    "65280" \
+    "✅"
+
 # ============================================
 # Deployment Summary
 # ============================================
@@ -208,5 +278,12 @@ echo -e "${BLUE}Commit:${NC} $COMMIT_SHORT - $COMMIT_MSG"
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
+
+# Send final success webhook
+send_webhook \
+    "Deployment Complete 🎉" \
+    "Full-stack deployment successful!\\n\\n**Backend:** https://amiexpress-backend.onrender.com\\n**Frontend:** $PRODUCTION_URL\\n**Commit:** \`$COMMIT_SHORT\` - $COMMIT_MSG" \
+    "3447003" \
+    "🎉"
 
 exit 0
