@@ -443,10 +443,12 @@ function handleLoginInput(data: string, ws: Socket, term: Terminal) {
       // Backend will emit 'user-not-found' or 'prompt-password'
       console.log('🔐 Sending username to backend for validation:', username.current);
       ws.emit('check-username', { username: username.current });
+      username.current = ''; // Clear buffer after sending to prevent accumulation
       loginState.current = 'checking-username';
       term.write('\r\n');
     } else if (loginState.current === 'password') {
       const pwd = password.current;
+      password.current = ''; // Clear buffer after reading to prevent accumulation
       if (pwd.trim().length === 0) {
         term.write('\r\nPassword cannot be empty. Password: ');
         return;
