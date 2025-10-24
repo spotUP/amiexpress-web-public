@@ -21,3 +21,8 @@ backend/*.zip
 
 # Other large files
 AmiExpress-Sources
+old/
+reference-boardBBS/
+
+# Scripts and deployment
+Scripts/
