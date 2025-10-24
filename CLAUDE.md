@@ -313,12 +313,17 @@ Copy this and check EVERY item before deploying:
 [ ] No hardcoded CORS origins (should use config.corsOrigins)?
 [ ] All database columns lowercase (not camelCase)?
 
-# 4. DEPLOYMENT
+# 4. DOCUMENTATION
+[ ] Created/updated changelog entry documenting all changes?
+[ ] Updated relevant documentation in Docs/ if needed?
+[ ] Documented any breaking changes or new features?
+
+# 5. DEPLOYMENT
 [ ] Using ./Scripts/deployment/deploy.sh (NOT separate scripts)?
 [ ] Committed all changes?
 [ ] Pushed to GitHub?
 
-# 5. POST-DEPLOYMENT
+# 6. POST-DEPLOYMENT
 [ ] Check Render logs: render logs --resources srv-d3naaffdiees73eebd0g --limit 50 -o text
 [ ] Look for "Database schema initialized" and "Server running on port 10000"
 [ ] curl https://amiexpress-backend.onrender.com/ (returns API message?)
