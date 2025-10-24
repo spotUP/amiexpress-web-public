@@ -2678,6 +2678,8 @@ export class Database {
       try {
         console.log('[DB Init Step 5/5] Cleaning up duplicate data...');
         await this.cleanupDuplicateConferences();
+        await this.cleanupDuplicateMessageBases();
+        await this.cleanupDuplicateFileAreas();
         console.log('[DB Init Step 5/5] ✓ Duplicate cleanup completed');
       } catch (error) {
         console.error('[DB Init Step 5/5] ✗ Failed to cleanup duplicates:', error);
@@ -2817,6 +2819,62 @@ export class Database {
         console.log(`✅ Total duplicate message bases deleted: ${totalDeleted}`);
       } else {
         console.log('No duplicate message bases found');
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  // Clean up duplicate file areas by name + conferenceId, keeping only the first occurrence
+  async cleanupDuplicateFileAreas(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Cleaning up duplicate file areas...');
+
+      // Find duplicate file area names within the same conference
+      const duplicates = await client.query(`
+        SELECT name, conferenceid, COUNT(*) as count
+        FROM file_areas
+        GROUP BY name, conferenceid
+        HAVING COUNT(*) > 1
+      `);
+
+      if (duplicates.rows.length > 0) {
+        console.log(`Found ${duplicates.rows.length} file area combinations with duplicates`);
+
+        let totalDeleted = 0;
+        for (const dup of duplicates.rows) {
+          // Get all IDs for this file area name + conference combination, ordered by ID (ascending)
+          const ids = await client.query(`
+            SELECT id FROM file_areas
+            WHERE name = $1 AND conferenceid = $2
+            ORDER BY id ASC
+          `, [dup.name, dup.conferenceid]);
+
+          const keepId = ids.rows[0].id;
+          const idsToDelete = ids.rows.slice(1).map((row: any) => row.id);
+
+          if (idsToDelete.length > 0) {
+            // Update file_entries to point to the kept file area
+            await client.query(`
+              UPDATE file_entries
+              SET areaid = $1
+              WHERE areaid = ANY($2)
+            `, [keepId, idsToDelete]);
+
+            // Delete duplicate file areas
+            await client.query(
+              `DELETE FROM file_areas WHERE id = ANY($1)`,
+              [idsToDelete]
+            );
+            console.log(`Deleted ${idsToDelete.length} duplicate entries for file area: ${dup.name} in conference ${dup.conferenceid}`);
+            totalDeleted += idsToDelete.length;
+          }
+        }
+
+        console.log(`✅ Total duplicate file areas deleted: ${totalDeleted}`);
+      } else {
+        console.log('No duplicate file areas found');
       }
     } finally {
       client.release();
