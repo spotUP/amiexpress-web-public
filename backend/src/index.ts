@@ -462,6 +462,73 @@ app.post('/api/upload', upload.single('file'), (req: Request, res: Response) => 
   }
 });
 
+// File download endpoint - express.e:20075+ (downloadAFile)
+app.get('/api/download/:fileId', async (req: Request, res: Response) => {
+  try {
+    const fileId = parseInt(req.params.fileId);
+
+    if (isNaN(fileId)) {
+      return res.status(400).json({ error: 'Invalid file ID' });
+    }
+
+    // Get file info from database
+    const fileEntry = await db.getFileEntry(fileId);
+
+    if (!fileEntry) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Determine file path
+    // Files can be in: active directory, private directory, or hold directory
+    // Try to find the file in these locations
+    const conferencePath = path.join(config.dataDir, 'BBS', `Conf${String(fileEntry.conferenceId || 1).padStart(2, '0')}`);
+
+    let filePath: string | null = null;
+    const possiblePaths = [
+      // Try stored path first if available
+      fileEntry.filePath,
+      // Try active file area directory
+      path.join(conferencePath, `Dir${fileEntry.areaId}`, fileEntry.filename),
+      // Try Node0/Playpen (recent uploads)
+      path.join(config.dataDir, 'Node0', 'Playpen', fileEntry.filename),
+      // Try HOLD directory (failed tests)
+      path.join(conferencePath, 'HOLD', fileEntry.filename),
+      // Try PRIVATE directory
+      path.join(conferencePath, 'PRIVATE', fileEntry.filename)
+    ].filter(p => p); // Filter out null/undefined
+
+    for (const testPath of possiblePaths) {
+      if (fs.existsSync(testPath!)) {
+        filePath = testPath!;
+        break;
+      }
+    }
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      console.error(`[Download] File not found on disk: ${fileEntry.filename}`);
+      return res.status(404).json({ error: 'File not found on server' });
+    }
+
+    console.log(`[Download] Serving file: ${fileEntry.filename} from ${filePath}`);
+
+    // Set headers for file download
+    res.setHeader('Content-Disposition', `attachment; filename="${fileEntry.filename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', fileEntry.size.toString());
+
+    // Stream file to client
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+
+    // Note: Download statistics are updated when frontend sends 'file-download-started' event
+    // This matches express.e flow where statistics are updated after transfer
+
+  } catch (error) {
+    console.error('[Download] Error:', error);
+    res.status(500).json({ error: 'Download failed' });
+  }
+});
+
 // Protected route example
 app.get('/users/:id', authenticateToken(db), async (req: AuthRequest, res: Response) => {
   try {
@@ -1103,6 +1170,80 @@ io.on('connection', async (socket) => {
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       session.tempData = undefined;
+    }
+  });
+
+  // Handle file download started - express.e:9475+ (logUDFile for downloads)
+  socket.on('file-download-started', async (data: { filename: string; fileId?: number }) => {
+    console.log('[Download] File download started:', data.filename);
+
+    if (!session.user) {
+      console.error('[Download] No user session for download');
+      return;
+    }
+
+    try {
+      // Get file info from database
+      let fileEntry;
+      if (data.fileId) {
+        fileEntry = await db.getFileEntry(data.fileId);
+      } else {
+        // Find by filename in current conference
+        const conferenceId = session.currentConf || 1;
+        const result = await db.query(
+          `SELECT fe.* FROM file_entries fe
+           JOIN file_areas fa ON fe.areaid = fa.id
+           WHERE fa.conferenceid = $1 AND fe.filename = $2
+           LIMIT 1`,
+          [conferenceId, data.filename]
+        );
+        fileEntry = result.rows[0];
+      }
+
+      if (!fileEntry) {
+        console.error('[Download] File not found in database:', data.filename);
+        return;
+      }
+
+      // Update file download count
+      await db.updateFileEntry(fileEntry.id, {
+        downloads: (fileEntry.downloads || 0) + 1
+      });
+
+      // Update user download statistics (express.e:9475-9492)
+      await db.updateUser(session.user.id, {
+        downloads: (session.user.downloads || 0) + 1,
+        bytesDownload: (session.user.bytesDownload || 0) + fileEntry.size
+      });
+
+      // Update user_stats table (for ratio calculations)
+      await db.query(
+        'UPDATE user_stats SET bytes_downloaded = bytes_downloaded + $1, files_downloaded = files_downloaded + 1 WHERE user_id = $2',
+        [fileEntry.size, session.user.id]
+      );
+
+      // Log file download (express.e:9493 callersLog)
+      await callersLog(session.user.id, session.user.username, 'Downloaded file', fileEntry.filename);
+
+      // Trigger webhook for file download
+      try {
+        const { webhookService, WebhookTrigger } = await import('./services/webhook.service');
+        const conference = await db.getConferenceById(session.currentConf);
+
+        await webhookService.sendWebhook(WebhookTrigger.FILE_DOWNLOADED, {
+          username: session.user.username,
+          filename: fileEntry.filename,
+          filesize: fileEntry.size,
+          conference: conference?.name || 'Unknown'
+        });
+      } catch (error) {
+        console.error('[Webhook] Error sending file download webhook:', error);
+      }
+
+      console.log(`[Download] Updated stats for ${session.user.username} - ${fileEntry.filename} (${fileEntry.size} bytes)`);
+
+    } catch (error) {
+      console.error('[Download] Error updating statistics:', error);
     }
   });
 

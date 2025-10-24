@@ -252,6 +252,12 @@ function App() {
       handleFileUpload(options, ws, term);
     });
 
+    // Handle file download request from server
+    ws.on('show-file-download', (options: { filename: string; size: number; downloadUrl: string; fileId?: number }) => {
+      console.log('📥 File download requested:', options);
+      handleFileDownload(options, ws, term);
+    });
+
     // Handle terminal input
     term.onData((data: string) => {
       if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'new-user-prompt') {
@@ -407,6 +413,47 @@ function handleFileUpload(options: { accept: string; maxSize: number; uploadUrl:
 
   // Trigger file picker
   input.click();
+}
+
+// Handle file download
+function handleFileDownload(options: { filename: string; size: number; downloadUrl: string; fileId?: number }, ws: Socket, term: Terminal) {
+  console.log('📥 Starting download:', options.filename);
+
+  // Determine backend URL based on environment
+  const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const backendUrl = isDevelopment
+    ? 'http://localhost:3001'
+    : (import.meta.env.VITE_API_URL || 'https://amiexpress-backend.onrender.com');
+
+  const downloadUrl = `${backendUrl}${options.downloadUrl}`;
+  console.log('📥 Download URL:', downloadUrl);
+
+  // Show download starting message
+  term.write(`\r\n\x1b[36mStarting download: ${options.filename}\x1b[0m\r\n`);
+  term.write(`\x1b[32mSize: ${Math.ceil(options.size / 1024)}KB\x1b[0m\r\n\r\n`);
+
+  // Create hidden anchor element for download
+  const anchor = document.createElement('a');
+  anchor.href = downloadUrl;
+  anchor.download = options.filename;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+
+  // Trigger download
+  anchor.click();
+
+  // Notify backend that download was initiated
+  ws.emit('file-download-started', {
+    filename: options.filename,
+    fileId: options.fileId
+  });
+
+  term.write(`\x1b[32m✓ Download started - check your browser's download folder\x1b[0m\r\n`);
+
+  // Cleanup
+  setTimeout(() => {
+    document.body.removeChild(anchor);
+  }, 100);
 }
 
 // Handle login input (username/password collection)

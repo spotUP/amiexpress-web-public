@@ -1535,6 +1535,22 @@ export class Database {
     }
   }
 
+  async getFileEntry(id: number): Promise<FileEntry | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        SELECT fe.*, fa.conferenceid as "conferenceId"
+        FROM file_entries fe
+        JOIN file_areas fa ON fe.areaid = fa.id
+        WHERE fe.id = $1
+      `;
+      const result = await client.query(sql, [id]);
+      return result.rows.length > 0 ? result.rows[0] as FileEntry : null;
+    } finally {
+      client.release();
+    }
+  }
+
   async incrementDownloadCount(id: number): Promise<void> {
     const client = await this.pool.connect();
     try {

@@ -1025,80 +1025,17 @@ export function handleFileDownload(socket: any, session: BBSSession, fileIndex: 
     return;
   }
 
-  socket.emit('ansi-output', `\r\n\x1b[32mSelected file: ${selectedFile.filename}\x1b[0m\r\n`);
-  socket.emit('ansi-output', 'Starting WebSocket file transfer...\r\n\r\n');
-
-  // In a real implementation, file data would be read from disk
-  // For demo, we'll simulate file transfer with placeholder data
-  const fileSize = selectedFile.size;
-  const chunkSize = 1024; // 1KB chunks
-  const totalChunks = Math.ceil(fileSize / chunkSize);
-
-  socket.emit('ansi-output', `File size: ${fileSize} bytes\r\n`);
-  socket.emit('ansi-output', `Transferring in ${totalChunks} chunks...\r\n\r\n`);
-
-  // Send file start
-  socket.emit('file-download-start', {
+  // Emit show-file-download event for frontend to handle
+  socket.emit('show-file-download', {
     filename: selectedFile.filename,
-    size: fileSize,
-    description: selectedFile.description
+    size: selectedFile.size,
+    downloadUrl: `/api/download/${selectedFile.id}`,
+    fileId: selectedFile.id
   });
 
-  // Simulate chunked transfer
-  let sentChunks = 0;
-  const transferInterval = setInterval(() => {
-    if (sentChunks >= totalChunks) {
-      clearInterval(transferInterval);
-      // Send file end
-      socket.emit('file-download-end');
-      socket.emit('ansi-output', '\r\n\x1b[32mFile transfer complete!\x1b[0m\r\n');
-
-      // Update download stats
-      db.updateFileEntry(selectedFile.id, { downloads: selectedFile.downloads + 1 });
-      db.updateUser(session.user!.id, {
-        downloads: (session.user!.downloads || 0) + 1,
-        bytesDownload: (session.user!.bytesDownload || 0) + fileSize
-      });
-
-      // Update user_stats table (for ratio calculations)
-      db.query(
-        'UPDATE user_stats SET bytes_downloaded = bytes_downloaded + $1, files_downloaded = files_downloaded + 1 WHERE user_id = $2',
-        [fileSize, session.user!.id]
-      ).catch((error: any) => console.error('Error updating user stats:', error));
-
-      // Log file download (express.e:9493 callersLog)
-      callersLog(session.user!.id, session.user!.username, 'Downloaded file', selectedFile.filename);
-
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
-      return;
-    }
-
-    // Send chunk (placeholder data)
-    const chunkData = 'x'.repeat(Math.min(chunkSize, fileSize - (sentChunks * chunkSize)));
-    socket.emit('file-download-chunk', {
-      chunk: chunkData,
-      chunkIndex: sentChunks,
-      totalChunks: totalChunks
-    });
-
-    sentChunks++;
-
-    // Update progress
-    const progress = Math.floor((sentChunks / totalChunks) * 100);
-    const progressBar = '[' + '='.repeat(Math.floor(progress / 5)) + ' '.repeat(20 - Math.floor(progress / 5)) + ']';
-
-    // Update progress display
-    if (sentChunks === 1) {
-      socket.emit('ansi-output', `Progress: ${progressBar} ${progress}%\r\n`);
-    } else {
-      socket.emit('ansi-output', '\x1b[1A\x1b[K'); // Move up and clear line
-      socket.emit('ansi-output', `Progress: ${progressBar} ${progress}%\r\n`);
-    }
-  }, 100); // Send chunk every 100ms for demo
-
-  // Store interval for cleanup
-  (session as any).downloadInterval = transferInterval;
+  // Return to menu after triggering download
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.tempData = undefined;
 }
