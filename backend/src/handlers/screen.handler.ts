@@ -212,6 +212,15 @@ export function displayScreen(socket: any, session: BBSSession, screenName: stri
 
     // Send to client
     socket.emit('ansi-output', parsed);
+
+    // If displaying MENU and user is sysop, append sysop commands
+    if (screenName.toUpperCase() === 'MENU' && session.user && session.user.secLevel >= 255) {
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', '\x1b[33mSYSOP COMMANDS\x1b[0m\r\n');
+      socket.emit('ansi-output', '[\x1b[36mWEBHOOK\x1b[0m] Manage Hooks  [\x1b[36mNM\x1b[0m] Node Mgmt  [\x1b[36mCM\x1b[0m] Conf Maint\r\n');
+      socket.emit('ansi-output', '\x1b[36m------------------------------------------------------------------------------\x1b[0m\r\n');
+    }
+
     return true;
   } else {
     // Fallback if screen not found
