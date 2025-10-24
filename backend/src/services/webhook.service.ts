@@ -56,9 +56,12 @@ class WebhookService {
    */
   async sendWebhook(trigger: WebhookTrigger, data: WebhookEventData['data']): Promise<void> {
     try {
+      console.log(`[Webhook] sendWebhook called - trigger: ${trigger}, data:`, data);
       const webhooks = await db.getWebhooksByTrigger(trigger);
+      console.log(`[Webhook] Found ${webhooks.length} webhooks for trigger ${trigger}`);
 
       if (webhooks.length === 0) {
+        console.log(`[Webhook] No webhooks configured for trigger ${trigger}, skipping`);
         return; // No webhooks configured for this trigger
       }
 
@@ -68,9 +71,11 @@ class WebhookService {
         data
       };
 
+      console.log(`[Webhook] Sending ${webhooks.length} webhook(s) for trigger ${trigger}`);
       // Send to all matching webhooks
       const promises = webhooks.map(webhook => this.sendToWebhook(webhook, eventData));
-      await Promise.allSettled(promises); // Don't fail if one webhook fails
+      const results = await Promise.allSettled(promises); // Don't fail if one webhook fails
+      console.log(`[Webhook] Completed sending webhooks for trigger ${trigger}, results:`, results);
     } catch (error) {
       console.error(`[Webhook] Error sending webhook for trigger ${trigger}:`, error);
     }
@@ -81,20 +86,29 @@ class WebhookService {
    */
   private async sendToWebhook(webhook: Webhook, eventData: WebhookEventData): Promise<void> {
     try {
-      if (!webhook.enabled) return;
+      console.log(`[Webhook] sendToWebhook called for ${webhook.name}, enabled: ${webhook.enabled}, type: ${webhook.type}`);
+
+      if (!webhook.enabled) {
+        console.log(`[Webhook] Skipping ${webhook.name} - webhook is disabled`);
+        return;
+      }
 
       const payload = webhook.type === 'discord'
         ? this.formatDiscordPayload(eventData)
         : this.formatSlackPayload(eventData);
 
-      await axios.post(webhook.url, payload, {
+      console.log(`[Webhook] Sending HTTP POST to ${webhook.url.substring(0, 50)}...`);
+      const response = await axios.post(webhook.url, payload, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 5000
       });
 
-      console.log(`[Webhook] Sent ${eventData.trigger} to ${webhook.name} (${webhook.type})`);
+      console.log(`[Webhook] ✅ Sent ${eventData.trigger} to ${webhook.name} (${webhook.type}), status: ${response.status}`);
     } catch (error: any) {
-      console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
+      console.error(`[Webhook] ❌ Failed to send to ${webhook.name}:`, error.message);
+      if (error.response) {
+        console.error(`[Webhook] Response status: ${error.response.status}, data:`, error.response.data);
+      }
     }
   }
 
