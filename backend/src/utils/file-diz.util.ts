@@ -98,14 +98,39 @@ export async function extractFileDizBuiltin(
   const ext = path.extname(uploadedFilePath).toLowerCase();
   const basename = path.basename(uploadedFilePath, ext);
 
-  // Special case: .txt files - use first 10 lines of the file itself as description
+  // Special case: .txt files - extract FILE_ID.DIZ from between tags
+  // Format: @BEGIN_FILE_ID.DIZ ... @END_FILE_ID.DIZ
   if (ext === '.txt') {
     try {
       const content = await fs.readFile(uploadedFilePath, 'utf-8');
-      const lines = content.split(/\r?\n/).slice(0, 10);
-      await fs.writeFile(dizPath, lines.join('\n'), 'utf-8');
-      console.log(`[FILE_ID.DIZ] Created FILE_ID.DIZ from .txt file (first 10 lines)`);
-      return true;
+
+      // Look for @BEGIN_FILE_ID.DIZ and @END_FILE_ID.DIZ tags
+      const beginTag = '@BEGIN_FILE_ID.DIZ';
+      const endTag = '@END_FILE_ID.DIZ';
+
+      const beginIndex = content.indexOf(beginTag);
+      const endIndex = content.indexOf(endTag);
+
+      if (beginIndex !== -1 && endIndex !== -1 && endIndex > beginIndex) {
+        // Extract content between tags
+        const dizContent = content.substring(beginIndex + beginTag.length, endIndex).trim();
+
+        // Limit to 10 lines and 44 chars per line
+        const lines = dizContent
+          .split(/\r?\n/)
+          .map(line => line.substring(0, 44))
+          .filter(line => line.trim().length > 0)
+          .slice(0, 10);
+
+        if (lines.length > 0) {
+          await fs.writeFile(dizPath, lines.join('\n'), 'utf-8');
+          console.log(`[FILE_ID.DIZ] Extracted FILE_ID.DIZ from .txt file (${lines.length} lines)`);
+          return true;
+        }
+      }
+
+      console.log(`[FILE_ID.DIZ] No @BEGIN_FILE_ID.DIZ/@END_FILE_ID.DIZ tags found in .txt file`);
+      return false;
     } catch (error: any) {
       console.log(`[FILE_ID.DIZ] Failed to read .txt file: ${error.message}`);
       return false;
