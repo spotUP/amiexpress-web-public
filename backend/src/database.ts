@@ -614,6 +614,15 @@ export class Database {
       `);
 
       // Chat rooms table (Group chat system - Phase 2)
+      // Drop old schema if it exists with wrong structure
+      try {
+        await client.query(`DROP TABLE IF EXISTS chat_room_messages CASCADE`);
+        await client.query(`DROP TABLE IF NOT EXISTS chat_room_members CASCADE`);
+        await client.query(`DROP TABLE IF EXISTS chat_rooms CASCADE`);
+      } catch (error) {
+        console.log('Note: Could not drop old chat_rooms tables (they may not exist)');
+      }
+
       await client.query(`
         CREATE TABLE IF NOT EXISTS chat_rooms (
           id SERIAL PRIMARY KEY,
