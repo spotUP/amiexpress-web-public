@@ -1856,7 +1856,8 @@ export class Database {
           id, nodeId, userId, socketId, state, subState, currentConf, currentMsgBase,
           timeRemaining, lastActivity, status, loadLevel, currentUser
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        ON CONFLICT (id) DO UPDATE SET
+        ON CONFLICT (nodeId) DO UPDATE SET
+          id = EXCLUDED.id,
           userId = EXCLUDED.userId,
           socketId = EXCLUDED.socketId,
           state = EXCLUDED.state,
