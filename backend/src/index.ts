@@ -697,14 +697,18 @@ io.on('connection', async (socket) => {
       await callersLog(user.id, user.username, 'Logged on');
 
       // Trigger webhook for user login
+      console.log(`[DEBUG] About to trigger USER_LOGIN webhook for ${user.username}`);
       try {
+        console.log('[DEBUG] Importing webhook service...');
         const { webhookService, WebhookTrigger } = await import('./services/webhook.service');
+        console.log('[DEBUG] Webhook service imported, calling sendWebhook...');
         await webhookService.sendWebhook(WebhookTrigger.USER_LOGIN, {
           username: user.username,
           userId: user.id,
           secLevel: user.secLevel,
           calls: user.calls + 1
         });
+        console.log('[DEBUG] sendWebhook call completed');
       } catch (error) {
         console.error('[Webhook] Error sending user login webhook:', error);
       }
