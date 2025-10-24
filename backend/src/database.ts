@@ -1569,6 +1569,17 @@ export class Database {
     }
   }
 
+  async getConferenceById(id: number): Promise<Conference | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM conferences WHERE id = $1`;
+      const result = await client.query(sql, [id]);
+      return result.rows.length > 0 ? result.rows[0] as Conference : null;
+    } finally {
+      client.release();
+    }
+  }
+
   async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
     const client = await this.pool.connect();
     try {
@@ -1593,6 +1604,25 @@ export class Database {
         created: row.created,
         updated: row.updated
       }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async getMessageBaseById(id: number): Promise<MessageBase | null> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `SELECT * FROM message_bases WHERE id = $1`;
+      const result = await client.query(sql, [id]);
+      if (result.rows.length === 0) return null;
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        name: row.name,
+        conferenceId: row.conferenceid,
+        created: row.created,
+        updated: row.updated
+      };
     } finally {
       client.release();
     }
