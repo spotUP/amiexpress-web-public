@@ -397,7 +397,8 @@ function handleFileUpload(options: { accept: string; maxSize: number; uploadUrl:
       ws.emit('file-uploaded', {
         filename: result.filename,
         originalname: result.originalname,
-        size: result.size
+        size: result.size,
+        path: result.path  // Include path for FILE_ID.DIZ extraction
       });
 
       term.write(`\x1b[32m✓ Upload complete\x1b[0m\r\n`);
