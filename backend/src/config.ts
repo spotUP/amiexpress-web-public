@@ -1,4 +1,5 @@
 // BBS Configuration System - mirrors AmiExpress configuration structure
+import * as path from 'path';
 
 export interface BBSConfig {
   // System Information
@@ -10,6 +11,9 @@ export interface BBSConfig {
   // Network Settings
   hostname: string;
   port: number;
+
+  // Path Settings
+  dataDir: string; // BBS data directory (contains BBS/, Node0/, etc.)
 
   // Time Settings
   timeZone: string;
@@ -83,6 +87,9 @@ export class ConfigManager {
       // Network Settings
       hostname: 'localhost',
       port: 3001,
+
+      // Path Settings
+      dataDir: process.env.BBS_DATA_DIR || path.join(__dirname, '..'),
 
       // Time Settings
       timeZone: 'UTC',

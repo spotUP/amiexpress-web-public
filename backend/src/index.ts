@@ -417,19 +417,35 @@ import * as fs from 'fs';
 
 const playpenStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Use Node0/Playpen for uploads (express.e uses ramPen or Node#/Playpen)
-    const playpenDir = path.join(config.dataDir, 'Node0', 'Playpen');
+    try {
+      // Use Node0/Playpen for uploads (express.e uses ramPen or Node#/Playpen)
+      const playpenDir = path.join(config.get('dataDir'), 'Node0', 'Playpen');
 
-    // Ensure directory exists
-    if (!fs.existsSync(playpenDir)) {
-      fs.mkdirSync(playpenDir, { recursive: true });
+      console.log('[Upload] BBS data directory:', config.get('dataDir'));
+      console.log('[Upload] Playpen directory:', playpenDir);
+
+      // Ensure directory exists
+      if (!fs.existsSync(playpenDir)) {
+        console.log('[Upload] Creating playpen directory...');
+        fs.mkdirSync(playpenDir, { recursive: true });
+        console.log('[Upload] Playpen directory created');
+      }
+
+      cb(null, playpenDir);
+    } catch (error) {
+      console.error('[Upload] Error setting destination:', error);
+      cb(error as Error, '');
     }
-
-    cb(null, playpenDir);
   },
   filename: (req, file, cb) => {
-    // Use original filename (already validated in UPLOAD_FILENAME_INPUT handler)
-    cb(null, file.originalname);
+    try {
+      // Use original filename (already validated in UPLOAD_FILENAME_INPUT handler)
+      console.log('[Upload] Storing file as:', file.originalname);
+      cb(null, file.originalname);
+    } catch (error) {
+      console.error('[Upload] Error setting filename:', error);
+      cb(error as Error, '');
+    }
   }
 });
 
