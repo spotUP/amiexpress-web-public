@@ -985,7 +985,11 @@ io.on('connection', async (socket) => {
           const nodeWorkDir = getNodeWorkDir(0, config.dataDir);
           try {
             socket.emit('ansi-output', 'Checking for FILE_ID.DIZ...\r\n');
-            const dizLines = await extractAndReadDiz(data.path, nodeWorkDir, [], 10);
+
+            // Add 10 second timeout to prevent hanging
+            const dizPromise = extractAndReadDiz(data.path, nodeWorkDir, [], 10);
+            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000));
+            const dizLines = await Promise.race([dizPromise, timeoutPromise]);
 
             if (dizLines && dizLines.length > 0) {
               // Found FILE_ID.DIZ - use it as description (express.e:19332+)
@@ -994,6 +998,7 @@ io.on('connection', async (socket) => {
               // Store DIZ as description
               session.tempData.currentDescription = dizLines;
               session.tempData.hasDiz = true;
+              session.tempData.skipDizExtraction = true; // Skip second extraction
 
               // Process upload immediately - no need to prompt
               session.tempData.uploadBatch.push({
@@ -1066,25 +1071,38 @@ io.on('connection', async (socket) => {
       if (data.path) {
         const nodeWorkDir = getNodeWorkDir(0, config.dataDir); // Node0/WorkDir
 
-        // Extract FILE_ID.DIZ (express.e:19258-19285)
-        console.log(`[FILE_ID.DIZ] Attempting extraction for ${currentFile.filename}`);
-        try {
-          const dizLines = await extractAndReadDiz(data.path, nodeWorkDir, [], 10);
-          if (dizLines && dizLines.length > 0) {
-            finalDescription = dizLines.join('\n');
-            console.log(`[FILE_ID.DIZ] Using FILE_ID.DIZ content (${dizLines.length} lines)`);
-            socket.emit('ansi-output', `\r\n\x1b[36m[FILE_ID.DIZ found and used for description]\x1b[0m\r\n`);
-          } else {
-            console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found, using batch description`);
+        // Extract FILE_ID.DIZ (express.e:19258-19285) - skip if already extracted
+        if (!session.tempData.skipDizExtraction) {
+          console.log(`[FILE_ID.DIZ] Attempting extraction for ${currentFile.filename}`);
+          try {
+            // Add 10 second timeout to prevent hanging
+            const dizPromise = extractAndReadDiz(data.path, nodeWorkDir, [], 10);
+            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000));
+            const dizLines = await Promise.race([dizPromise, timeoutPromise]);
+
+            if (dizLines && dizLines.length > 0) {
+              finalDescription = dizLines.join('\n');
+              console.log(`[FILE_ID.DIZ] Using FILE_ID.DIZ content (${dizLines.length} lines)`);
+              socket.emit('ansi-output', `\r\n\x1b[36m[FILE_ID.DIZ found and used for description]\x1b[0m\r\n`);
+            } else {
+              console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found or timed out, using batch description`);
+            }
+          } catch (error) {
+            console.error(`[FILE_ID.DIZ] Extraction error:`, error);
           }
-        } catch (error) {
-          console.error(`[FILE_ID.DIZ] Extraction error:`, error);
+        } else {
+          console.log(`[FILE_ID.DIZ] Skipping extraction - already done`);
         }
 
         // Test file integrity (express.e:19348-19354)
         socket.emit('ansi-output', `\r\nTesting... ${currentFile.filename}...\r\n`);
         try {
-          testStatus = await testFile(data.path, nodeWorkDir);
+          // Add 15 second timeout to prevent hanging on file tests
+          const testPromise = testFile(data.path, nodeWorkDir);
+          const timeoutPromise = new Promise<TestResult>((resolve) =>
+            setTimeout(() => resolve(TestResult.NOT_TESTED), 15000)
+          );
+          testStatus = await Promise.race([testPromise, timeoutPromise]);
           console.log(`[testFile] Result: ${testStatus}`);
 
           if (testStatus === TestResult.SUCCESS || testStatus === TestResult.NOT_TESTED) {
@@ -1097,6 +1115,7 @@ io.on('connection', async (socket) => {
         } catch (error) {
           console.error(`[testFile] Error:`, error);
           testStatus = TestResult.NOT_TESTED;
+          socket.emit('ansi-output', '\r\nTest skipped (error)...\r\n');
         }
       }
 
