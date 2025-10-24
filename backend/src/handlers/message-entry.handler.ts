@@ -198,11 +198,13 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     );
 
     // Trigger webhook for new message
+    console.log('[Message] About to trigger NEW_MESSAGE webhook');
     try {
       const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
       const conference = await _db.getConferenceById(session.currentConf);
       const messageBase = await _db.getMessageBaseById(session.currentMsgBase);
 
+      console.log(`[Message] Calling webhook for message: subject="${entry.subject}", toUser="${entry.toUser}", isPrivate=${entry.isPrivate}`);
       await webhookService.sendWebhook(WebhookTrigger.NEW_MESSAGE, {
         username: session.user!.username,
         subject: entry.subject,
@@ -211,6 +213,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
         toUser: entry.toUser,
         isPrivate: entry.isPrivate
       });
+      console.log('[Message] Webhook call completed');
 
       // If message is to sysop, also trigger COMMENT_POSTED webhook
       if (entry.toUser.toLowerCase() === 'sysop') {
