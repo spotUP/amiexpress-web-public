@@ -440,26 +440,37 @@ const upload = multer({
   }
 });
 
-// File upload endpoint
-app.post('/api/upload', upload.single('file'), (req: Request, res: Response) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file provided' });
+// File upload endpoint with error handling
+app.post('/api/upload', (req: Request, res: Response) => {
+  console.log('[Upload] Upload request received from:', req.headers.origin);
+
+  // Use multer middleware with error handling
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      console.error('[Upload] Multer error:', err);
+      return res.status(500).json({ error: `Upload failed: ${err.message}` });
     }
 
-    console.log('File upload received:', req.file.originalname, req.file.size, 'bytes');
-    console.log('Saved to:', req.file.path);
+    try {
+      if (!req.file) {
+        console.error('[Upload] No file in request');
+        return res.status(400).json({ error: 'No file provided' });
+      }
 
-    res.json({
-      filename: req.file.filename || req.file.originalname,
-      originalname: req.file.originalname,
-      size: req.file.size,
-      path: req.file.path  // Send file path instead of buffer
-    });
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'Upload failed' });
-  }
+      console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
+      console.log('[Upload] Saved to:', req.file.path);
+
+      res.json({
+        filename: req.file.filename || req.file.originalname,
+        originalname: req.file.originalname,
+        size: req.file.size,
+        path: req.file.path
+      });
+    } catch (error) {
+      console.error('[Upload] Processing error:', error);
+      res.status(500).json({ error: 'Upload processing failed' });
+    }
+  });
 });
 
 // File download endpoint - express.e:20075+ (downloadAFile)
