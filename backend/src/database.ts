@@ -407,6 +407,48 @@ export class Database {
       `);
       console.log('✓ Ensured autorejoin column exists');
 
+      // Migration 4: Add UNIQUE constraint to conferences.name
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'conferences_name_key'
+          ) THEN
+            ALTER TABLE conferences ADD CONSTRAINT conferences_name_key UNIQUE (name);
+          END IF;
+        END $$;
+      `);
+      console.log('✓ Ensured UNIQUE constraint on conferences.name');
+
+      // Migration 5: Add UNIQUE constraint to message_bases(name, conferenceid)
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'message_bases_name_conferenceid_key'
+          ) THEN
+            ALTER TABLE message_bases ADD CONSTRAINT message_bases_name_conferenceid_key UNIQUE (name, conferenceid);
+          END IF;
+        END $$;
+      `);
+      console.log('✓ Ensured UNIQUE constraint on message_bases(name, conferenceid)');
+
+      // Migration 6: Add UNIQUE constraint to file_areas(name, conferenceid)
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'file_areas_name_conferenceid_key'
+          ) THEN
+            ALTER TABLE file_areas ADD CONSTRAINT file_areas_name_conferenceid_key UNIQUE (name, conferenceid);
+          END IF;
+        END $$;
+      `);
+      console.log('✓ Ensured UNIQUE constraint on file_areas(name, conferenceid)');
+
       console.log('All migrations completed successfully');
     } catch (error) {
       console.error('Error running migrations:', error);
