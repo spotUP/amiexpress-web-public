@@ -51,6 +51,22 @@
    - Test the query in `psql` before adding to code
    - Remember: PostgreSQL treats `"column"` as case-sensitive, `column` as lowercase
 
+6. **🚨 CRITICAL: UPSERT ON CONFLICT clauses MUST use lowercase:**
+   ```sql
+   -- ✗ WRONG - Will cause "duplicate key value violates unique constraint" error:
+   INSERT INTO node_sessions (id, nodeId, ...) VALUES (...)
+   ON CONFLICT (nodeId) DO UPDATE SET ...
+
+   -- ✅ CORRECT - Use lowercase to match PostgreSQL internal storage:
+   INSERT INTO node_sessions (id, nodeId, ...) VALUES (...)
+   ON CONFLICT (nodeid) DO UPDATE SET ...
+   ```
+   - PostgreSQL stores unquoted column names as lowercase internally
+   - `nodeId` in CREATE TABLE becomes `nodeid` in PostgreSQL
+   - ON CONFLICT target MUST match the internal lowercase name
+   - This caused 502 errors on file upload (2025-10-25) - backend crashed on connection
+   - **ALWAYS use lowercase column names in ON CONFLICT clauses**
+
 **This error has occurred multiple times - ALWAYS verify column names!**
 
 ---
