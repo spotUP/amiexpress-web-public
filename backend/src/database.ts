@@ -264,8 +264,13 @@ export class Database {
     // Start health check monitoring
     this.startHealthCheck();
 
-    // Initialize database schema
-    this.initDatabase();
+    // Note: Database schema initialization happens via init() method
+    // which must be called explicitly before using the database
+  }
+
+  // Public initialization method - must be called before using database
+  async init(): Promise<void> {
+    await this.initDatabase();
   }
 
   // Attempt to reconnect to database
@@ -617,7 +622,7 @@ export class Database {
       // Drop old schema if it exists with wrong structure
       try {
         await client.query(`DROP TABLE IF EXISTS chat_room_messages CASCADE`);
-        await client.query(`DROP TABLE IF NOT EXISTS chat_room_members CASCADE`);
+        await client.query(`DROP TABLE IF EXISTS chat_room_members CASCADE`);
         await client.query(`DROP TABLE IF EXISTS chat_rooms CASCADE`);
       } catch (error) {
         console.log('Note: Could not drop old chat_rooms tables (they may not exist)');
