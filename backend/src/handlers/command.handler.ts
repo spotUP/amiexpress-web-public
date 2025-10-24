@@ -300,14 +300,6 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
     processOlmQueue(socket, session);
   }
 
-  // Show sysop commands if user is sysop (even in expert mode)
-  if (session.user && session.user.secLevel >= 255) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', '\x1b[33mSYSOP COMMANDS\x1b[0m\r\n');
-    socket.emit('ansi-output', '[\x1b[36mWEBHOOK\x1b[0m] Manage Hooks  [\x1b[36mNM\x1b[0m] Node Mgmt  [\x1b[36mCM\x1b[0m] Conf Maint\r\n');
-    socket.emit('ansi-output', '\x1b[36m------------------------------------------------------------------------------\x1b[0m\r\n');
-  }
-
   // Like AmiExpress: Use BBS name, relative conference number, conference name
   const bbsName = config.get('bbsName');
   const timeLeft = Math.floor(session.timeRemaining);
@@ -989,9 +981,21 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  // Handle WEBHOOK menu input
+  // Handle WEBHOOK menu input (main menu with arrow navigation)
   if (session.subState === LoggedOnSubState.FILE_DIR_SELECT && session.tempData?.webhookMenu) {
-    await WebhookCommandsHandler.handleWebhookMenuInput(socket, session, data.trim());
+    await WebhookCommandsHandler.handleWebhookMenuInput(socket, session, data);
+    return;
+  }
+
+  // Handle WEBHOOK list menu input (arrow selection of webhooks)
+  if (session.subState === LoggedOnSubState.FILE_DIR_SELECT && session.tempData?.webhookListMenu) {
+    await WebhookCommandsHandler.handleWebhookListInput(socket, session, data);
+    return;
+  }
+
+  // Handle WEBHOOK actions menu input (enable/disable/test/delete)
+  if (session.subState === LoggedOnSubState.FILE_DIR_SELECT && session.tempData?.webhookActionsMenu) {
+    await WebhookCommandsHandler.handleWebhookActionsInput(socket, session, data);
     return;
   }
 
@@ -1002,27 +1006,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  // Handle webhook add input
+  // Handle return to webhook action menu
+  if (session.tempData?.returnToWebhookActionMenu && session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
+    const menuData = session.tempData.returnToWebhookActionMenu;
+    await WebhookCommandsHandler.showWebhookActions(socket, session, menuData.webhookId);
+    return;
+  }
+
+  // Handle webhook add input (text input for new webhook)
   if (session.tempData?.webhookAdd) {
     await WebhookCommandsHandler.handleAddWebhookInput(socket, session, data.trim());
-    return;
-  }
-
-  // Handle webhook edit input
-  if (session.tempData?.webhookEdit) {
-    await WebhookCommandsHandler.handleEditWebhookInput(socket, session, data.trim());
-    return;
-  }
-
-  // Handle webhook delete input
-  if (session.tempData?.webhookDelete) {
-    await WebhookCommandsHandler.handleDeleteWebhookInput(socket, session, data.trim());
-    return;
-  }
-
-  // Handle webhook test input
-  if (session.tempData?.webhookTest) {
-    await WebhookCommandsHandler.handleTestWebhookInput(socket, session, data.trim());
     return;
   }
 
