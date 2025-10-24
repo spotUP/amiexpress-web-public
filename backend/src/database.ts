@@ -475,7 +475,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS conferences (
           id SERIAL PRIMARY KEY,
-          name TEXT NOT NULL,
+          name TEXT NOT NULL UNIQUE,
           description TEXT,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -489,7 +489,8 @@ export class Database {
           name TEXT NOT NULL,
           conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(name, conferenceid)
         )
       `);
 
@@ -525,7 +526,8 @@ export class Database {
           uploadaccess INTEGER DEFAULT 10,
           downloadaccess INTEGER DEFAULT 1,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(name, conferenceid)
         )
       `);
 
