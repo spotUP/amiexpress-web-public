@@ -105,7 +105,10 @@ echo ""
 # Send deployment started webhook
 send_webhook \
     "Deployment Started" \
-    "Deploying commit \`$COMMIT_SHORT\`\\n\\n**Changes:**\\n$COMMIT_MSG" \
+    "Deploying commit \`$COMMIT_SHORT\`
+
+**Changes:**
+$COMMIT_MSG" \
     "3447003" \
     "🚀"
 
@@ -203,7 +206,10 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
         # Send backend success webhook
         send_webhook \
             "Backend Deployed" \
-            "Backend successfully deployed to Render\\n\\n**Service:** amiexpress-backend\\n**Commit:** \`$COMMIT_SHORT\`" \
+            "Backend successfully deployed to Render
+
+**Service:** amiexpress-backend
+**Commit:** \`$COMMIT_SHORT\`" \
             "65280" \
             "✅"
 
@@ -264,7 +270,10 @@ echo ""
 # Send frontend success webhook
 send_webhook \
     "Frontend Deployed" \
-    "Frontend successfully deployed to Vercel\\n\\n**URL:** $PRODUCTION_URL\\n**Commit:** \`$COMMIT_SHORT\`" \
+    "Frontend successfully deployed to Vercel
+
+**URL:** $PRODUCTION_URL
+**Commit:** \`$COMMIT_SHORT\`" \
     "65280" \
     "✅"
 
@@ -294,7 +303,11 @@ echo ""
 # Send final success webhook
 send_webhook \
     "Deployment Complete 🎉" \
-    "Full-stack deployment successful!\\n\\n**Backend:** https://amiexpress-backend.onrender.com\\n**Frontend:** $PRODUCTION_URL\\n**Commit:** \`$COMMIT_SHORT\` - $COMMIT_MSG" \
+    "Full-stack deployment successful!
+
+**Backend:** https://amiexpress-backend.onrender.com
+**Frontend:** $PRODUCTION_URL
+**Commit:** \`$COMMIT_SHORT\` - $COMMIT_MSG" \
     "3447003" \
     "🎉"
 
