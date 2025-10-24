@@ -94,8 +94,41 @@ export async function extractFileDizBuiltin(
 
   const dizPath = path.join(nodeWorkDir, 'FILE_ID.DIZ');
 
-  // Determine archive type and extraction command
+  // Handle special cases first
   const ext = path.extname(uploadedFilePath).toLowerCase();
+  const basename = path.basename(uploadedFilePath, ext);
+
+  // Special case: .txt files - use first 10 lines of the file itself as description
+  if (ext === '.txt') {
+    try {
+      const content = await fs.readFile(uploadedFilePath, 'utf-8');
+      const lines = content.split(/\r?\n/).slice(0, 10);
+      await fs.writeFile(dizPath, lines.join('\n'), 'utf-8');
+      console.log(`[FILE_ID.DIZ] Created FILE_ID.DIZ from .txt file (first 10 lines)`);
+      return true;
+    } catch (error: any) {
+      console.log(`[FILE_ID.DIZ] Failed to read .txt file: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Check for companion .diz file (e.g., file.txt.diz or file.diz)
+  const companionDizPath = uploadedFilePath + '.diz';
+  const baseDizPath = path.join(path.dirname(uploadedFilePath), basename + '.diz');
+
+  for (const checkPath of [companionDizPath, baseDizPath]) {
+    if (await fileExists(checkPath)) {
+      try {
+        await fs.copyFile(checkPath, dizPath);
+        console.log(`[FILE_ID.DIZ] Found companion .diz file: ${checkPath}`);
+        return true;
+      } catch (error: any) {
+        console.log(`[FILE_ID.DIZ] Failed to copy companion .diz: ${error.message}`);
+      }
+    }
+  }
+
+  // Determine archive type and extraction command
   let command: string;
   let needsCwd = false;
 
@@ -116,6 +149,14 @@ export async function extractFileDizBuiltin(
     // -e = extract
     // -q = quiet
     command = `unlzx -e -q "${uploadedFilePath}" FILE_ID.DIZ`;
+    needsCwd = true;
+  } else if (ext === '.dms') {
+    // Extract FILE_ID.DIZ from DMS disk image
+    // DMS files need special handling:
+    // 1. Unpack the DMS to get the disk image
+    // 2. Extract FILE_ID.DIZ from the disk image
+    // For now, try xdms to unpack, then look for FILE_ID.DIZ
+    command = `xdms u "${uploadedFilePath}" +Q 2>/dev/null || dms u "${uploadedFilePath}"`;
     needsCwd = true;
   } else if (ext === '.tar' || ext === '.tgz' || ext === '.gz') {
     // Extract FILE_ID.DIZ from tar/gzip archive
