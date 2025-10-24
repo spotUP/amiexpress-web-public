@@ -132,7 +132,9 @@ export class ConfigManager {
       webEnabled: true,
       webPort: 5173,
       webHost: 'localhost',
-      corsOrigins: ['http://localhost:5173']
+      corsOrigins: process.env.CORS_ORIGINS
+        ? process.env.CORS_ORIGINS.split(',')
+        : ['http://localhost:5173', 'https://bbs.uprough.net']
     };
   }
 
