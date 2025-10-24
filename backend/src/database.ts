@@ -384,6 +384,13 @@ export class Database {
   private async runMigrations(): Promise<void> {
     const client = await this.pool.connect();
     try {
+      // CRITICAL: Clean up duplicates BEFORE applying UNIQUE constraints
+      console.log('Cleaning up duplicate data before applying constraints...');
+      await this.cleanupDuplicateConferences();
+      await this.cleanupDuplicateMessageBases();
+      await this.cleanupDuplicateFileAreas();
+      console.log('✓ Duplicate cleanup completed');
+
       console.log('Checking for missing columns in users table...');
 
       // Migration 1: Add availableforchat column if it doesn't exist
@@ -2774,18 +2781,6 @@ export class Database {
           stack: error instanceof Error ? error.stack : undefined
         });
         throw error;
-      }
-
-      // Step 5: Cleanup duplicates
-      try {
-        console.log('[DB Init Step 5/5] Cleaning up duplicate data...');
-        await this.cleanupDuplicateConferences();
-        await this.cleanupDuplicateMessageBases();
-        await this.cleanupDuplicateFileAreas();
-        console.log('[DB Init Step 5/5] ✓ Duplicate cleanup completed');
-      } catch (error) {
-        console.error('[DB Init Step 5/5] ✗ Failed to cleanup duplicates:', error);
-        // Don't throw - this is non-critical
       }
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
