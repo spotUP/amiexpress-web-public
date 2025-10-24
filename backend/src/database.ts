@@ -389,6 +389,7 @@ export class Database {
       await this.cleanupDuplicateConferences();
       await this.cleanupDuplicateMessageBases();
       await this.cleanupDuplicateFileAreas();
+      await this.cleanupDuplicateNodeSessions();
       console.log('✓ Duplicate cleanup completed');
 
       console.log('Checking for missing columns in users table...');
@@ -2988,6 +2989,54 @@ export class Database {
         console.log(`✅ Total duplicate file areas deleted: ${totalDeleted}`);
       } else {
         console.log('No duplicate file areas found');
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  async cleanupDuplicateNodeSessions(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      console.log('Cleaning up duplicate node sessions...');
+
+      // Find duplicate nodeids
+      const duplicates = await client.query(`
+        SELECT nodeid, COUNT(*) as count
+        FROM node_sessions
+        GROUP BY nodeid
+        HAVING COUNT(*) > 1
+      `);
+
+      if (duplicates.rows.length > 0) {
+        console.log(`Found ${duplicates.rows.length} nodeids with duplicates`);
+
+        let totalDeleted = 0;
+        for (const dup of duplicates.rows) {
+          // Get all session IDs for this nodeid, ordered by created DESC (keep most recent)
+          const sessions = await client.query(`
+            SELECT id FROM node_sessions
+            WHERE nodeid = $1
+            ORDER BY created DESC
+          `, [dup.nodeid]);
+
+          const keepId = sessions.rows[0].id;
+          const idsToDelete = sessions.rows.slice(1).map((row: any) => row.id);
+
+          if (idsToDelete.length > 0) {
+            // Delete duplicate node sessions
+            await client.query(
+              `DELETE FROM node_sessions WHERE id = ANY($1)`,
+              [idsToDelete]
+            );
+            console.log(`Deleted ${idsToDelete.length} duplicate sessions for nodeid: ${dup.nodeid}`);
+            totalDeleted += idsToDelete.length;
+          }
+        }
+
+        console.log(`✅ Total duplicate node sessions deleted: ${totalDeleted}`);
+      } else {
+        console.log('No duplicate node sessions found');
       }
     } finally {
       client.release();
