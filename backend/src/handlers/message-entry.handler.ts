@@ -197,6 +197,33 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       `#${messageId}: "${entry.subject}" to ${entry.toUser}`
     );
 
+    // Trigger webhook for new message
+    try {
+      const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+      const conference = await _db.getConferenceById(session.currentConf);
+      const messageBase = await _db.getMessageBaseById(session.currentMsgBase);
+
+      await webhookService.sendWebhook(WebhookTrigger.NEW_MESSAGE, {
+        username: session.user!.username,
+        subject: entry.subject,
+        conference: conference?.name || 'Unknown',
+        messageBase: messageBase?.name || 'Unknown',
+        toUser: entry.toUser,
+        isPrivate: entry.isPrivate
+      });
+
+      // If message is to sysop, also trigger COMMENT_POSTED webhook
+      if (entry.toUser.toLowerCase() === 'sysop') {
+        await webhookService.sendWebhook(WebhookTrigger.COMMENT_POSTED, {
+          username: session.user!.username,
+          subject: entry.subject,
+          conference: conference?.name || 'Unknown'
+        });
+      }
+    } catch (error) {
+      console.error('[Webhook] Error sending new message webhook:', error);
+    }
+
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.successLine(`Message #${messageId} posted successfully!`));
     socket.emit('ansi-output', '\r\n');

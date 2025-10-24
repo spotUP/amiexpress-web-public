@@ -696,6 +696,19 @@ io.on('connection', async (socket) => {
       // Log successful login (express.e:9493 callersLog)
       await callersLog(user.id, user.username, 'Logged on');
 
+      // Trigger webhook for user login
+      try {
+        const { webhookService, WebhookTrigger } = await import('./services/webhook.service');
+        await webhookService.sendWebhook(WebhookTrigger.USER_LOGIN, {
+          username: user.username,
+          userId: user.id,
+          secLevel: user.secLevel,
+          calls: user.calls + 1
+        });
+      } catch (error) {
+        console.error('[Webhook] Error sending user login webhook:', error);
+      }
+
       // Set user preferences
       session.confRJoin = user.autoRejoin || 1;
       session.msgBaseRJoin = 1; // Default message base
@@ -1002,6 +1015,22 @@ io.on('connection', async (socket) => {
 
       // Log file upload (express.e:9493 callersLog)
       await callersLog(session.user!.id, session.user!.username, 'Uploaded file', currentFile.filename);
+
+      // Trigger webhook for file upload
+      try {
+        const { webhookService, WebhookTrigger } = await import('./services/webhook.service');
+        const conference = await db.getConferenceById(session.currentConf);
+
+        await webhookService.sendWebhook(WebhookTrigger.NEW_UPLOAD, {
+          username: session.user!.username,
+          filename: currentFile.filename,
+          filesize: data.size,
+          conference: conference?.name || 'Unknown',
+          description: finalDescription.substring(0, 100)
+        });
+      } catch (error) {
+        console.error('[Webhook] Error sending file upload webhook:', error);
+      }
 
       // Update sysop upload statistics (express.e:19440)
       try {

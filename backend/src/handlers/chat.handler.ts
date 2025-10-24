@@ -93,6 +93,20 @@ export function startSysopPage(socket: any, session: BBSSession) {
   // Log the page (like callersLog in AmiExpress)
   console.log(`Operator paged at ${new Date().toISOString()} by ${session.user?.username}`);
 
+  // Trigger webhook for sysop page
+  (async () => {
+    try {
+      const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+      await webhookService.sendWebhook(WebhookTrigger.SYSOP_PAGED, {
+        username: session.user?.username || 'Unknown',
+        userId: session.user?.id,
+        message: 'Sysop page request via O command'
+      });
+    } catch (error) {
+      console.error('[Webhook] Error sending sysop page webhook:', error);
+    }
+  })();
+
   // Display paging message (like ccom() output)
   socket.emit('ansi-output', '\r\n\x1b[32mF1 Toggles chat\r\n');
 
