@@ -1931,6 +1931,10 @@ let messages: any[] = [];
 // Initialize data from database
 async function initializeData() {
   try {
+    // Initialize database schema first
+    await db.init();
+    console.log('Database schema initialized');
+
     conferences = await db.getConferences();
     if (conferences.length === 0) {
       await db.initializeDefaultData();
