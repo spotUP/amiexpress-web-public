@@ -1,5 +1,11 @@
 # Webhook Integration Guide
 
+**📚 For Sysops:** See [SYSOP_WEBHOOK_GUIDE.md](./SYSOP_WEBHOOK_GUIDE.md) for a step-by-step setup guide
+
+**👨‍💻 For Developers:** This document covers technical integration details
+
+---
+
 ## Overview
 AmiExpress-Web now supports webhooks for Discord and Slack notifications.
 
