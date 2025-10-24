@@ -141,6 +141,171 @@ Before deploying database changes:
 - [ ] Check for any database errors in console
 - [ ] Verify tables exist: `SELECT * FROM <table_name> LIMIT 1`
 
+### Real Errors We've Encountered (Learn From These!):
+
+**Error 1: "relation does not exist"**
+```
+error: relation "node_sessions" does not exist
+```
+- **What Happened:** Backend crashed on startup, users couldn't connect
+- **Root Cause:** `db.init()` was NOT called before database queries
+- **The Code That Broke:**
+  ```typescript
+  async function initializeData() {
+    const conferences = await db.getConferences(); // ❌ db.init() not called!
+  }
+  ```
+- **The Fix:**
+  ```typescript
+  async function initializeData() {
+    await db.init();  // ✅ MUST be first!
+    console.log('Database schema initialized');
+    const conferences = await db.getConferences();
+  }
+  ```
+- **Prevention Rule:** ALWAYS check `backend/src/index.ts initializeData()` has `await db.init()` as the FIRST line
+
+**Error 2: "column referenced in foreign key constraint does not exist"**
+```
+error: column "room_id" referenced in foreign key constraint does not exist
+```
+- **What Happened:** Database initialization failed, backend started but was broken
+- **Root Cause:** Production had old `chat_rooms` table schema, code tried to create new schema with `CREATE TABLE IF NOT EXISTS` which didn't modify existing table
+- **The Code That Broke:**
+  ```typescript
+  // Old table exists with different schema
+  await client.query(`CREATE TABLE IF NOT EXISTS chat_rooms (...)`); // ❌ Didn't change existing table!
+  ```
+- **The Fix:**
+  ```typescript
+  // Drop old schema first
+  await client.query(`DROP TABLE IF EXISTS chat_room_messages CASCADE`);
+  await client.query(`DROP TABLE IF EXISTS chat_room_members CASCADE`);
+  await client.query(`DROP TABLE IF EXISTS chat_rooms CASCADE`);
+
+  // Then create with new schema
+  await client.query(`CREATE TABLE IF NOT EXISTS chat_rooms (...)`); // ✅ Now it works!
+  ```
+- **Prevention Rule:** When changing table schema, ALWAYS use DROP CASCADE before CREATE
+
+**Error 3: "column does not exist"**
+```
+error: column "availableforchat" of relation "users" does not exist
+```
+- **What Happened:** New user registration failed in production
+- **Root Cause:** Production database had old schema without new columns we added
+- **Why It Happened:** We added columns locally, they worked in dev, but production database wasn't updated
+- **The Fix:** Manual SQL to add missing columns:
+  ```sql
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS availableforchat BOOLEAN DEFAULT true;
+  ```
+- **Prevention Rule:** Before deploying column additions, check if production needs ALTER TABLE
+
+**Error 4: "db.init is not a function"**
+```
+TypeError: db.init is not a function
+```
+- **What Happened:** Backend crashed on startup
+- **Root Cause:** We called `db.init()` but the Database class didn't have an `init()` method
+- **Why It Happened:** Constructor was calling `this.initDatabase()` directly (async in constructor - bad!)
+- **The Fix:**
+  ```typescript
+  class Database {
+    constructor() {
+      // ❌ WRONG: this.initDatabase();  // async in constructor!
+      // ✅ CORRECT: Don't call async code in constructor
+    }
+
+    async init(): Promise<void> {  // ✅ Add public init method
+      await this.initDatabase();
+    }
+  }
+  ```
+- **Prevention Rule:** NEVER call async code in constructors, always provide public `async init()` method
+
+**Error 5: Frontend worked locally but not in production**
+- **What Happened:** Changes worked in development but production was broken
+- **Root Cause:** Deployed backend to Render but forgot to deploy frontend to Vercel
+- **Why It Happened:** Used separate deployment scripts, easy to forget one
+- **The Fix:** Created unified `./Scripts/deployment/deploy.sh` that deploys BOTH
+- **Prevention Rule:** ALWAYS use `./Scripts/deployment/deploy.sh`, NEVER deploy only one service
+
+**Error 6: TypeScript build error on Vercel**
+```
+error TS6133: 'React' is declared but its value is never read.
+```
+- **What Happened:** Vercel build failed, frontend deployment blocked
+- **Root Cause:** Unused import in `frontend/src/main.tsx`
+- **Why It Happened:** React 17+ JSX transform doesn't need explicit React import, but we had it
+- **The Fix:** Remove unused import
+- **Prevention Rule:** Always run `cd frontend && npm run build` locally before deploying
+
+### Critical Deployment Lessons (2025-10-24 Session):
+
+From today's session, we learned these patterns cause production crashes:
+
+1. **Pattern: Database not initialized**
+   - Symptom: "relation does not exist" errors
+   - Always check: `initializeData()` starts with `await db.init()`
+   - Test: Backend should log "Database tables created successfully"
+
+2. **Pattern: Schema conflicts**
+   - Symptom: "foreign key constraint" errors
+   - Always use: DROP CASCADE before creating tables with schema changes
+   - Test: Delete local database and run backend to verify clean creation
+
+3. **Pattern: Deploying only one service**
+   - Symptom: Changes work locally but not in production
+   - Always use: `./Scripts/deployment/deploy.sh` (deploys both)
+   - Never use: `deploy-render.sh` or `deploy-vercel.sh` (removed!)
+
+4. **Pattern: Not testing builds locally**
+   - Symptom: Build failures in Vercel/Render
+   - Always run: `npm run build` in both backend and frontend
+   - Test: Both should complete without errors
+
+5. **Pattern: Async in constructors**
+   - Symptom: "is not a function" or race conditions
+   - Always provide: Public `async init()` method
+   - Never do: Call async code in constructor
+
+### Before Every Deployment - MANDATORY CHECKLIST:
+
+Copy this and check EVERY item before deploying:
+
+```bash
+# === PRE-DEPLOYMENT CHECKLIST ===
+
+# 1. DATABASE CHANGES
+[ ] If you modified database.ts createTables(), did you add DROP CASCADE?
+[ ] Does initializeData() start with await db.init()?
+[ ] Run backend locally and check console for "Database tables created successfully"
+
+# 2. BUILD TESTS
+[ ] cd backend && npm run dev (no errors?)
+[ ] cd frontend && npm run build (no TypeScript errors?)
+[ ] Test the feature works locally
+
+# 3. CODE REVIEW
+[ ] No async code in constructors?
+[ ] No hardcoded CORS origins (should use config.corsOrigins)?
+[ ] All database columns lowercase (not camelCase)?
+
+# 4. DEPLOYMENT
+[ ] Using ./Scripts/deployment/deploy.sh (NOT separate scripts)?
+[ ] Committed all changes?
+[ ] Pushed to GitHub?
+
+# 5. POST-DEPLOYMENT
+[ ] Check Render logs: render logs --resources srv-d3naaffdiees73eebd0g --limit 50 -o text
+[ ] Look for "Database schema initialized" and "Server running on port 10000"
+[ ] curl https://amiexpress-backend.onrender.com/ (returns API message?)
+[ ] curl https://bbs.uprough.net (returns 200?)
+[ ] Test in browser - WebSocket connected?
+
+# === IF ANY STEP FAILS, DO NOT DEPLOY ===
+```
+
 ---
 
 ## 🚨 CRITICAL: Deployment Process - ALWAYS DEPLOY BOTH SERVICES 🚨
