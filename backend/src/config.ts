@@ -89,7 +89,7 @@ export class ConfigManager {
       port: 3001,
 
       // Path Settings
-      dataDir: process.env.BBS_DATA_DIR || path.join(__dirname, '..'),
+      dataDir: process.env.BBS_DATA_DIR || process.cwd(),
 
       // Time Settings
       timeZone: 'UTC',
