@@ -46,6 +46,7 @@ import {
   handleEnterMessageCommand,
   setSystemCommandsDependencies
 } from './system-commands.handler';
+import { WebhookCommandsHandler } from './webhook-commands.handler';
 import {
   handleTimeCommand,
   handleNewFilesCommand,
@@ -977,6 +978,43 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     session.tempData = undefined;
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    return;
+  }
+
+  // Handle WEBHOOK menu input
+  if (session.subState === LoggedOnSubState.FILE_DIR_SELECT && session.tempData?.webhookMenu) {
+    await WebhookCommandsHandler.handleWebhookMenuInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle return to webhook menu
+  if (session.tempData?.returnToWebhookMenu && session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
+    delete session.tempData;
+    await WebhookCommandsHandler.handleWebhookCommand(socket, session);
+    return;
+  }
+
+  // Handle webhook add input
+  if (session.tempData?.webhookAdd) {
+    await WebhookCommandsHandler.handleAddWebhookInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle webhook edit input
+  if (session.tempData?.webhookEdit) {
+    await WebhookCommandsHandler.handleEditWebhookInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle webhook delete input
+  if (session.tempData?.webhookDelete) {
+    await WebhookCommandsHandler.handleDeleteWebhookInput(socket, session, data.trim());
+    return;
+  }
+
+  // Handle webhook test input
+  if (session.tempData?.webhookTest) {
+    await WebhookCommandsHandler.handleTestWebhookInput(socket, session, data.trim());
     return;
   }
 
@@ -2003,6 +2041,10 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'CM': // Conference Maintenance (SYSOP) (internalCommandCM) - express.e:24843-24852
       await handleConferenceMaintenanceCommand(socket, session);
+      return;
+
+    case 'WEBHOOK': // Webhook Management (SYSOP) - Custom web command
+      await WebhookCommandsHandler.handleWebhookCommand(socket, session);
       return;
 
     case 'G': // Goodbye/Logoff (internalCommandG) - express.e:25047-25075

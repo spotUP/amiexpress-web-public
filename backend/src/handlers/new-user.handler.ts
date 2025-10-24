@@ -402,6 +402,19 @@ async function createAccount(socket: Socket, session: any) {
       return;
     }
 
+    // Trigger webhook for new user registration
+    try {
+      const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+      await webhookService.sendWebhook(WebhookTrigger.NEW_USER, {
+        username: data.username,
+        userId: newUserId,
+        location: data.location,
+        computerType: data.computerType
+      });
+    } catch (error) {
+      console.error('[Webhook] Error sending new user webhook:', error);
+    }
+
     // Fetch the full user object
     const newUser = await db.getUserByUsername(data.username);
     if (!newUser) {

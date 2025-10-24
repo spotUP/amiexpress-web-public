@@ -701,6 +701,23 @@ The BBS uses proper substates:
 - `READ_SHORTCUTS` - Waits for hotkey input (expert mode)
 - always post daily changelogs to the bbs bulletins if there are any
 
+### 🚨 CRITICAL: Main Menu Updates
+
+**ALWAYS update the main menu when implementing new commands:**
+
+1. **After implementing a new command** - You MUST add it to the main menu
+2. **Main menu location** - `backend/BBS/Screens/MENU.TXT`
+3. **Check express.e first** - Verify the command doesn't already exist in the original
+4. **Custom commands** - If it's a custom command (not in express.e), clearly mark it
+5. **Use appropriate section** - Place commands in the correct category (MESSAGES, FILES, CONFERENCE, SYSTEM)
+6. **Test in BBS** - Verify the command appears and works correctly
+
+**Example:**
+If you implement a new `WEBHOOK` admin command:
+- Add it to the SYSTEM section or create an ADMIN section
+- Use format: `[WEBHOOK] Manage Hooks` or similar
+- Verify it's accessible only to sysops (security level check)
+
 ## Backend Architecture & Modularization
 
 ### MANDATORY: Modular Code Structure

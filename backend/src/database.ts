@@ -133,6 +133,17 @@ export interface MessageBase {
   updated: Date;
 }
 
+export interface Webhook {
+  id: number;
+  name: string;
+  url: string;
+  type: 'discord' | 'slack';
+  enabled: boolean;
+  triggers: string[]; // Array of trigger names
+  created: Date;
+  updated: Date;
+}
+
 export interface Session {
   id: string;
   userId?: string;
@@ -911,6 +922,20 @@ export class Database {
           conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
           completed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (user_id, topic_id)
+        )
+      `);
+
+      // Webhooks table - for Discord/Slack notifications
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS webhooks (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          url TEXT NOT NULL,
+          type TEXT NOT NULL CHECK (type IN ('discord', 'slack')),
+          enabled BOOLEAN DEFAULT true,
+          triggers TEXT[] DEFAULT '{}',
+          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
       `);
 
@@ -3141,6 +3166,146 @@ export class Database {
 
       const sql = `UPDATE chat_rooms SET ${fields.join(', ')} WHERE room_id = $${paramIndex}`;
       await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============================================================================
+  // WEBHOOK METHODS
+  // ============================================================================
+
+  async getWebhooks(): Promise<Webhook[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT * FROM webhooks ORDER BY id ASC
+      `);
+
+      return result.rows.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        url: row.url,
+        type: row.type,
+        enabled: row.enabled,
+        triggers: row.triggers || [],
+        created: row.created,
+        updated: row.updated
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async getWebhook(id: number): Promise<Webhook | null> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT * FROM webhooks WHERE id = $1
+      `, [id]);
+
+      if (result.rows.length === 0) return null;
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        name: row.name,
+        url: row.url,
+        type: row.type,
+        enabled: row.enabled,
+        triggers: row.triggers || [],
+        created: row.created,
+        updated: row.updated
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async createWebhook(data: { name: string; url: string; type: 'discord' | 'slack'; triggers: string[] }): Promise<number> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(`
+        INSERT INTO webhooks (name, url, type, enabled, triggers, created, updated)
+        VALUES ($1, $2, $3, true, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id
+      `, [data.name, data.url, data.type, data.triggers]);
+
+      return result.rows[0].id;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateWebhook(id: number, data: { name?: string; url?: string; type?: 'discord' | 'slack'; enabled?: boolean; triggers?: string[] }): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (data.name !== undefined) {
+        fields.push(`name = $${paramIndex++}`);
+        values.push(data.name);
+      }
+      if (data.url !== undefined) {
+        fields.push(`url = $${paramIndex++}`);
+        values.push(data.url);
+      }
+      if (data.type !== undefined) {
+        fields.push(`type = $${paramIndex++}`);
+        values.push(data.type);
+      }
+      if (data.enabled !== undefined) {
+        fields.push(`enabled = $${paramIndex++}`);
+        values.push(data.enabled);
+      }
+      if (data.triggers !== undefined) {
+        fields.push(`triggers = $${paramIndex++}`);
+        values.push(data.triggers);
+      }
+
+      if (fields.length === 0) return;
+
+      fields.push(`updated = $${paramIndex++}`);
+      values.push(new Date());
+      values.push(id);
+
+      const sql = `UPDATE webhooks SET ${fields.join(', ')} WHERE id = $${paramIndex}`;
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteWebhook(id: number): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query(`DELETE FROM webhooks WHERE id = $1`, [id]);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getWebhooksByTrigger(trigger: string): Promise<Webhook[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT * FROM webhooks
+        WHERE enabled = true AND $1 = ANY(triggers)
+        ORDER BY id ASC
+      `, [trigger]);
+
+      return result.rows.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        url: row.url,
+        type: row.type,
+        enabled: row.enabled,
+        triggers: row.triggers || [],
+        created: row.created,
+        updated: row.updated
+      }));
     } finally {
       client.release();
     }
