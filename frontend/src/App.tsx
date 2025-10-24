@@ -144,9 +144,9 @@ function App() {
       }
 
       // If we were waiting for connection to login, retry login now
-      if (loginState.current === 'password' && username.current && password.current) {
+      if (loginState.current === 'password' && newUserPromptUsername.current && password.current) {
         console.log('🔄 Connection established - retrying login automatically');
-        ws.emit('login', { username: username.current, password: password.current });
+        ws.emit('login', { username: newUserPromptUsername.current, password: password.current });
         loginState.current = 'loggedin';
       }
     });
@@ -442,9 +442,12 @@ function handleLoginInput(data: string, ws: Socket, term: Terminal) {
       // Send username to backend first to check if user exists
       // Backend will emit 'user-not-found' or 'prompt-password'
       console.log('🔐 Sending username to backend for validation:', username.current);
-      ws.emit('check-username', { username: username.current });
-      username.current = ''; // Clear buffer after sending to prevent accumulation
+      const submittedUsername = username.current; // Store for later login attempt
+      ws.emit('check-username', { username: submittedUsername });
+      username.current = ''; // Clear input buffer for next input (password or retry)
       loginState.current = 'checking-username';
+      // Store the submitted username in a separate variable for login
+      newUserPromptUsername.current = submittedUsername;
       term.write('\r\n');
     } else if (loginState.current === 'password') {
       const pwd = password.current;
@@ -475,7 +478,8 @@ function handleLoginInput(data: string, ws: Socket, term: Terminal) {
           clearTimeout(connectionTimeout);
           console.log('🔐 Socket connected! Retrying login...');
           term.write('\r\n\x1b[32mConnected! Logging in...\x1b[0m\r\n');
-          ws.emit('login', { username: username.current, password: pwd });
+          const usernameToLogin = newUserPromptUsername.current; // Use stored username
+          ws.emit('login', { username: usernameToLogin, password: pwd });
           loginState.current = 'loggedin';
           ws.off('connect', onConnect);
         };
@@ -484,10 +488,11 @@ function handleLoginInput(data: string, ws: Socket, term: Terminal) {
         return;
       }
 
-      // Attempt login
-      console.log('🔐 Attempting login with username:', username.current, 'password length:', pwd.length);
+      // Attempt login using stored username from check-username
+      const usernameToLogin = newUserPromptUsername.current; // Use stored username
+      console.log('🔐 Attempting login with username:', usernameToLogin, 'password length:', pwd.length);
       console.log('🔐 Socket connected:', ws.connected, 'readyState:', ws.io?.engine?.readyState);
-      ws.emit('login', { username: username.current, password: pwd });
+      ws.emit('login', { username: usernameToLogin, password: pwd });
       loginState.current = 'loggedin';
     }
   } else if (data === '\x7f' || data === '\b') {
