@@ -957,6 +957,29 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle USER CONFIGURATION (U command) parameter selection
+  if (session.subState === LoggedOnSubState.FILE_DIR_SELECT && session.tempData?.userParameters) {
+    const input = data.trim();
+
+    // Empty input (just Enter) = quit back to menu
+    if (input.length === 0) {
+      console.log('[USER CONFIG] User pressed Enter, returning to menu');
+      session.tempData = undefined;
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // TODO: Handle numbered parameter selection (0-14)
+    // For now, just return to menu for any input
+    socket.emit('ansi-output', '\r\n\x1b[33mParameter editing not yet implemented.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.tempData = undefined;
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    return;
+  }
+
   // Handle file list directory input (F command continuation)
   if (session.subState === LoggedOnSubState.FILE_LIST_DIR_INPUT) {
     const { FileListingHandler } = require('./file-listing.handler');
