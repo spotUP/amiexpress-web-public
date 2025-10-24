@@ -258,6 +258,13 @@ function App() {
       handleFileDownload(options, ws, term);
     });
 
+    // Echo file-uploaded events back to server to trigger processing
+    // This allows server-side code to trigger the file-uploaded handler by emitting to client
+    ws.on('file-uploaded', (data: any) => {
+      console.log('📤 Echoing file-uploaded event back to server:', data);
+      ws.emit('file-uploaded', data);
+    });
+
     // Handle terminal input
     term.onData((data: string) => {
       if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'new-user-prompt') {
