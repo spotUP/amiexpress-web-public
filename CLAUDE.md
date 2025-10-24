@@ -55,6 +55,58 @@
 
 ---
 
+## 🚨 CRITICAL: Database UNIQUE Constraints - ALWAYS PREVENT DUPLICATES 🚨
+
+**When creating or modifying database tables, ALWAYS add UNIQUE constraints to prevent duplicate data!**
+
+### UNIQUE Constraint Rules:
+
+1. **Identify natural unique keys** in your table design:
+   - Usernames must be unique
+   - File names must be unique within an area
+   - Conference/area names must be unique
+   - Node IDs must be unique
+
+2. **Add UNIQUE constraints in two places:**
+   ```sql
+   -- In CREATE TABLE statement:
+   CREATE TABLE IF NOT EXISTS table_name (
+     id SERIAL PRIMARY KEY,
+     name TEXT NOT NULL UNIQUE,
+     -- OR for composite keys:
+     UNIQUE(name, parent_id)
+   );
+
+   -- In migrations (for existing tables):
+   ALTER TABLE table_name
+   ADD CONSTRAINT table_name_field_key UNIQUE (field);
+   ```
+
+3. **Tables with UNIQUE constraints (2025-10-24):**
+   - `users(username)` - UNIQUE
+   - `conferences(name)` - UNIQUE
+   - `message_bases(name, conferenceid)` - UNIQUE composite
+   - `file_areas(name, conferenceid)` - UNIQUE composite
+   - `file_entries(filename, areaid)` - UNIQUE composite
+   - `node_sessions(nodeid)` - UNIQUE
+   - `webhooks(name)` - UNIQUE
+   - `bulletins(filename, conferenceid)` - UNIQUE composite
+
+4. **Before creating ANY new table, ask yourself:**
+   - What fields should NEVER have duplicates?
+   - Are there composite keys (multiple fields together) that should be unique?
+   - Add UNIQUE constraints for ALL such cases!
+
+5. **History lesson (why this is critical):**
+   - Production had 655 file areas when it should have had 5
+   - Each area was duplicated 131 times
+   - Without UNIQUE constraints, PostgreSQL allows unlimited duplicates
+   - This breaks the BBS interface and wastes database space
+
+**NEVER create a table without considering what should be UNIQUE!**
+
+---
+
 ## 🚨 CRITICAL: Database Initialization & Schema Management 🚨
 
 **Database errors WILL crash production. Follow these rules religiously.**

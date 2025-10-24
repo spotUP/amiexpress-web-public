@@ -7,7 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2025-10-24] - Webhook Interface Improvements & Performance Optimization
+## [2025-10-24] - Evening - BBS Webhooks & Database Integrity Improvements
+
+### Added
+- **Production webhook system fully working**
+  - BBS events now trigger Discord/Slack webhooks
+  - Auto-initialization of webhook from BBS_WEBHOOK_URL environment variable
+  - Supports all 17 webhook triggers (login, logout, new messages, file uploads, etc.)
+- **Database UNIQUE constraints** to prevent duplicate data
+  - Added to `conferences(name)`
+  - Added to `message_bases(name, conferenceid)`
+  - Added to `file_areas(name, conferenceid)`
+  - Added to `file_entries(filename, areaid)`
+  - Added to `node_sessions(nodeid)`
+  - Added to `webhooks(name)`
+  - Added to `bulletins(filename, conferenceid)`
+- **Database cleanup functions**
+  - `cleanupDuplicateFileAreas()` - Removes duplicate file areas
+  - `cleanupDuplicateMessageBases()` - Removes duplicate message bases
+  - Cleanup runs automatically during initialization
+- **Database helper methods**
+  - `getConferenceById()` - Get single conference by ID
+  - `getMessageBaseById()` - Get single message base by ID
+- **UNIQUE constraint guidance** added to CLAUDE.md
+  - Documentation of all tables with UNIQUE constraints
+  - Rules for identifying natural unique keys
+  - History lesson about the 650 duplicate file areas incident
+
+### Changed
+- **Deployment webhooks now use jq for JSON encoding**
+  - Properly escapes newlines, quotes, and special characters
+  - Prevents "invalid JSON" errors from Discord/Slack APIs
+  - HTTP 204 success responses confirmed
+- **Webhook service improvements**
+  - Better error handling and logging
+  - Supports both Discord and Slack formats
+  - Automatically detects webhook type from URL
+
+### Fixed
+- **Production database had 655 file areas instead of 5**
+  - Each of 5 default file areas was duplicated 131 times
+  - Cleanup function removed 650 duplicates
+  - UNIQUE constraints prevent future duplicates
+- **Message posting webhooks not working**
+  - Missing `getConferenceById()` and `getMessageBaseById()` methods
+  - Added these methods to database.ts
+  - Webhooks now fire correctly for all BBS events
+- **Duplicate SYSOP COMMANDS menu**
+  - Was displayed twice (in screen.handler.ts and command.handler.ts)
+  - Removed duplicate from command.handler.ts
+  - Now displays only once in main menu
+- **Deployment script Render CLI authentication issues**
+  - Token expiration caused silent failures
+  - Added debug logging to track webhook sends
+  - Script now requires `render login` and `render workspace set`
+- **Frontend deployment exceeding 100MB limit**
+  - Added `reference-boardBBS/`, `old/`, and `Scripts/` to `.vercelignore`
+  - Reduced deployment size significantly
+
+### Technical Details
+- **Webhook flow**: BBS event → `webhookService.sendWebhook()` → Database query for matching webhooks → HTTP POST to Discord/Slack
+- **Database migrations**: Added migrations 4-10 for UNIQUE constraints
+- **Root cause analysis**: Without UNIQUE constraints, multiple backend restarts or initialization race conditions created duplicates
+- **Prevention**: Database-level constraints enforce uniqueness regardless of application code
+
+## [2025-10-24] - Morning - Webhook Interface Improvements & Performance Optimization
 
 ### Added
 - **Arrow-key navigation** for webhook management interface
