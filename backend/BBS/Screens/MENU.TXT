@@ -8,12 +8,13 @@
 [33m%B[0m | [36mConf:[0m %CF | [36mTime:[0m %R min
 
 [33mMESSAGES[0m          [33mFILES[0m             [33mCONFERENCE[0m        [33mSYSTEM[0m
-[[36mR[0m] Read          [[36mF[0m] List          [[36mJ[0m]  Join Conf     [[36mW[0m] Who's Online
-[[36mE[0m] Post          [[36mU[0m] Upload        [[36mJM[0m] Join Base     [[36mO[0m] Page Sysop
-[[36mMS[0m] Mail Scan     [[36mD[0m] Download      [[36m<[0m][[36m>[0m] Prev/Next    [[36mT[0m] Time Left
-                  [[36mN[0m] New Files     [[36mX[0m]  eXpert Mode   [[36mS[0m] User Stats
-                  [[36mA[0m] Alter Flags                     [[36mC[0m] Comment
+[[36mR[0m] Read          [[36mF[0m] List          [[36mJ[0m]  Join Conf     [[36mWHO[0m] Who's Online
+[[36mE[0m] Post          [[36mU[0m] Upload        [[36mJM[0m] Join Base     [[36mW[0m] User Config
+[[36mMS[0m] Mail Scan     [[36mD[0m] Download      [[36m<[0m][[36m>[0m] Prev/Next    [[36mO[0m] Page Sysop
+                  [[36mN[0m] New Files     [[36mX[0m]  eXpert Mode   [[36mT[0m] Time Left
+                  [[36mA[0m] Alter Flags                     [[36mS[0m] User Stats
+                                                      [[36mC[0m] Comment
 
 [36m------------------------------------------------------------------------------[0m
-[[36mG[0m] Goodbye  [[36mQ[0m] Quick Logoff  [[36m?[0m] Help
+[[36mG[0m] Goodbye  [[36mQ[0m] Quiet Mode  [[36mH[0m] or [[36m?[0m] Help
 [36m------------------------------------------------------------------------------[0m
