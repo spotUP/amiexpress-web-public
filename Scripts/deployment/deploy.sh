@@ -280,6 +280,11 @@ PRODUCTION_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://bbs\.uprough\.net' ||
 echo -e "${GREEN}✓${NC} Frontend deployment complete!"
 echo ""
 
+# Debug: Log before webhook call
+echo "[DEBUG] About to send frontend webhook..." >&2
+echo "[DEBUG] WEBHOOK_URL is set: $([ -n "$WEBHOOK_URL" ] && echo "yes" || echo "NO")" >&2
+echo "[DEBUG] PRODUCTION_URL=$PRODUCTION_URL" >&2
+
 # Send frontend success webhook
 send_webhook \
     "Frontend Deployed" \
@@ -289,6 +294,8 @@ send_webhook \
 **Commit:** \`$COMMIT_SHORT\`" \
     "65280" \
     "✅"
+
+echo "[DEBUG] Frontend webhook call completed" >&2
 
 # ============================================
 # Deployment Summary
@@ -313,6 +320,9 @@ echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
+# Debug: Log before final webhook call
+echo "[DEBUG] About to send 'Deployment Complete' webhook..." >&2
+
 # Send final success webhook
 send_webhook \
     "Deployment Complete 🎉" \
@@ -323,5 +333,7 @@ send_webhook \
 **Commit:** \`$COMMIT_SHORT\` - $COMMIT_MSG" \
     "3447003" \
     "🎉"
+
+echo "[DEBUG] 'Deployment Complete' webhook call completed" >&2
 
 exit 0
