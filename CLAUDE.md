@@ -1,5 +1,27 @@
 # AmiExpress-Web Project Guidelines
 
+## 🚨 CRITICAL: Documentation Location 🚨
+
+**ALL new documentation files MUST be created in the `Docs/` directory.**
+
+### Documentation Organization Rules:
+
+1. **New documentation** - Always create in `Docs/` directory, NOT in project root
+2. **Existing root docs** - Can be moved to `Docs/` over time (not urgent)
+3. **README.md** - Exception: Main README.md stays in root
+4. **Config files** - Exception: CLAUDE.md and similar config files stay in root
+
+**Examples:**
+- ✅ CORRECT: `Docs/WEBHOOK_INTEGRATION.md`
+- ✅ CORRECT: `Docs/SYSOP_WEBHOOK_GUIDE.md`
+- ✅ CORRECT: `Docs/DEPLOYMENT_WEBHOOKS.md`
+- ✗ WRONG: `WEBHOOK_INTEGRATION.md` (in root)
+- ✗ WRONG: `SYSOP_WEBHOOK_GUIDE.md` (in root)
+
+**Why:** Keeps project root clean and organized. All user/developer documentation in one place.
+
+---
+
 ## 🚨 CRITICAL: Database Column Names - ALWAYS USE LOWERCASE 🚨
 
 **PostgreSQL column names are CASE-SENSITIVE when quoted!**
