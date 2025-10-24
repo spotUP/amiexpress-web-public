@@ -54,7 +54,9 @@ send_webhook() {
     # Detect webhook type (Discord vs Slack)
     if [[ "$WEBHOOK_URL" == *"discord.com"* ]]; then
         # Discord webhook format (emojis removed from JSON to prevent parsing errors)
-        curl -s -X POST "$WEBHOOK_URL" \
+        # Debug: show what we're sending
+        echo "[DEBUG] Sending webhook: $title" >&2
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{
                 \"embeds\": [{
@@ -66,7 +68,11 @@ send_webhook() {
                         \"text\": \"AmiExpress Deployment\"
                     }
                 }]
-            }" > /dev/null 2>&1 || true  # Don't exit on webhook failure
+            }" 2>&1 || true)
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        if [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "200" ]; then
+            echo "[WARNING] Webhook failed with code $HTTP_CODE: $RESPONSE" >&2
+        fi
     elif [[ "$WEBHOOK_URL" == *"hooks.slack.com"* ]]; then
         # Slack webhook format
         curl -s -X POST "$WEBHOOK_URL" \
