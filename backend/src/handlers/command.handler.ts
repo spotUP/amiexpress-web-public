@@ -907,7 +907,34 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
     // Blank line ends description (express.e:17704-17707)
     if (input.trim() === '') {
-      // Save file to upload batch
+      // Web upload mode: process uploaded file immediately
+      if (session.tempData.webUploadMode && session.tempData.currentUploadedFile) {
+        const uploadedFile = session.tempData.currentUploadedFile;
+
+        // Add file to batch with description
+        session.tempData.uploadBatch.push({
+          filename: uploadedFile.filename,
+          description: session.tempData.currentDescription.join('\n'),
+          isPrivate: session.tempData.currentDescription[0]?.startsWith('/')
+        });
+
+        // Set currentUploadIndex to 0 so file-uploaded handler can process it
+        session.tempData.currentUploadIndex = 0;
+
+        // Trigger file processing by manually calling file-uploaded logic
+        socket.emit('ansi-output', '\r\n\r\n\x1b[36mProcessing upload...\x1b[0m\r\n');
+
+        // Re-emit file-uploaded event with stored file data
+        socket.emit('file-uploaded', {
+          filename: uploadedFile.filename,
+          originalname: uploadedFile.filename,
+          size: uploadedFile.size,
+          path: uploadedFile.path
+        });
+        return;
+      }
+
+      // Original batch mode: Save file to upload batch
       session.tempData.uploadBatch.push({
         filename: session.tempData.currentFilename,
         description: session.tempData.currentDescription.join('\n'),

@@ -931,7 +931,7 @@ io.on('connection', async (socket) => {
   socket.on('file-uploaded', async (data: { filename: string; originalname: string; size: number; path?: string }) => {
     console.log('File uploaded event received:', data);
 
-    if (!session.tempData?.uploadMode || !session.tempData?.fileArea || !session.tempData?.uploadBatch) {
+    if (!session.tempData?.uploadMode || !session.tempData?.fileArea) {
       socket.emit('ansi-output', '\r\n\x1b[31mError: Upload session invalid\x1b[0m\r\n');
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -940,6 +940,76 @@ io.on('connection', async (socket) => {
       return;
     }
 
+    // Web upload mode: check if we need to prompt for description
+    if (session.tempData.webUploadMode) {
+      // First time file is uploaded - try to extract FILE_ID.DIZ first
+      if (!session.tempData.currentUploadedFile) {
+        session.tempData.currentUploadedFile = {
+          filename: data.originalname,
+          path: data.path,
+          size: data.size
+        };
+
+        socket.emit('ansi-output', `\r\n\x1b[32mFile selected: ${data.originalname}\x1b[0m\r\n`);
+        socket.emit('ansi-output', `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`);
+
+        // Try to extract FILE_ID.DIZ (express.e:19258-19285)
+        if (data.path) {
+          const nodeWorkDir = getNodeWorkDir(0, config.dataDir);
+          try {
+            socket.emit('ansi-output', 'Checking for FILE_ID.DIZ...\r\n');
+            const dizLines = await extractAndReadDiz(data.path, nodeWorkDir, [], 10);
+
+            if (dizLines && dizLines.length > 0) {
+              // Found FILE_ID.DIZ - use it as description (express.e:19332+)
+              socket.emit('ansi-output', '\x1b[36m[FILE_ID.DIZ found - using as description]\x1b[0m\r\n\r\n');
+
+              // Store DIZ as description
+              session.tempData.currentDescription = dizLines;
+              session.tempData.hasDiz = true;
+
+              // Process upload immediately - no need to prompt
+              session.tempData.uploadBatch.push({
+                filename: data.originalname,
+                description: dizLines.join('\n'),
+                isPrivate: false
+              });
+              session.tempData.currentUploadIndex = 0;
+
+              // Continue processing (fall through to batch processing below)
+            } else {
+              // No DIZ found - prompt for description (express.e:19291+)
+              socket.emit('ansi-output', 'No FILE_ID.DIZ found.\r\n\r\n');
+              socket.emit('ansi-output', 'Please enter a description (press Enter alone to finish):\r\n');
+              socket.emit('ansi-output', `${data.originalname.padEnd(13)}:`);
+
+              // Initialize description storage
+              session.tempData.currentDescription = [];
+              session.tempData.maxDescLines = 10;
+              session.tempData.descLineCount = 0;
+
+              session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+              return;
+            }
+          } catch (error) {
+            console.error('[FILE_ID.DIZ] Extraction error:', error);
+            // On error, fall back to prompting for description
+            socket.emit('ansi-output', 'Please enter a description (press Enter alone to finish):\r\n');
+            socket.emit('ansi-output', `${data.originalname.padEnd(13)}:`);
+
+            session.tempData.currentDescription = [];
+            session.tempData.maxDescLines = 10;
+            session.tempData.descLineCount = 0;
+
+            session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+            return;
+          }
+        }
+      }
+      // If currentUploadedFile exists and hasDiz is true, we've collected description - continue to process
+    }
+
+    // Original batch upload mode or processing after description
     const fileArea = session.tempData.fileArea;
     const currentIndex = session.tempData.currentUploadIndex || 0;
     const currentFile = session.tempData.uploadBatch[currentIndex];

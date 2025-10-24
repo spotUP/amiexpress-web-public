@@ -937,9 +937,8 @@ export function startFileUpload(socket: any, session: BBSSession, fileArea: any)
   socket.emit('ansi-output', '1,000,000 bytes available for uploading.  1,000,000 at one time.\r\n');
   socket.emit('ansi-output', 'Filename lengths above 12 are not allowed.\r\n\r\n');
 
-  // Start batch upload mode (express.e:17651-17653)
-  socket.emit('ansi-output', 'Batch UpLoading.....\r\n');
-  socket.emit('ansi-output', '\r\nUnlimited files.  Blank Line to start transfer.\r\n');
+  // Web-friendly flow: Show file picker immediately
+  socket.emit('ansi-output', '\x1b[36mSelect file to upload...\x1b[0m\r\n\r\n');
 
   // Initialize upload session data
   session.tempData = {
@@ -948,12 +947,19 @@ export function startFileUpload(socket: any, session: BBSSession, fileArea: any)
     uploadSessionId: socket.id,
     uploadBatch: [],
     uploadCount: 1,
-    uploadStartTime: Date.now()
+    uploadStartTime: Date.now(),
+    webUploadMode: true  // Flag for web-based upload flow
   };
 
-  // Prompt for first filename (express.e:17658-17661)
-  socket.emit('ansi-output', `\r\nFileName 1: `);
-  session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
+  // Trigger file picker immediately (web-friendly approach)
+  socket.emit('show-file-upload', {
+    accept: '*/*',
+    maxSize: 10 * 1024 * 1024, // 10MB max
+    uploadUrl: '/api/upload',
+    fieldName: 'file'
+  });
+
+  session.subState = LoggedOnSubState.FILES_UPLOAD;
 }
 
 export function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
