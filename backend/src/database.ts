@@ -449,6 +449,62 @@ export class Database {
       `);
       console.log('✓ Ensured UNIQUE constraint on file_areas(name, conferenceid)');
 
+      // Migration 7: Add UNIQUE constraint to file_entries(filename, areaid)
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'file_entries_filename_areaid_key'
+          ) THEN
+            ALTER TABLE file_entries ADD CONSTRAINT file_entries_filename_areaid_key UNIQUE (filename, areaid);
+          END IF;
+        END $$;
+      `);
+      console.log('✓ Ensured UNIQUE constraint on file_entries(filename, areaid)');
+
+      // Migration 8: Add UNIQUE constraint to node_sessions(nodeid)
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'node_sessions_nodeid_key'
+          ) THEN
+            ALTER TABLE node_sessions ADD CONSTRAINT node_sessions_nodeid_key UNIQUE (nodeid);
+          END IF;
+        END $$;
+      `);
+      console.log('✓ Ensured UNIQUE constraint on node_sessions(nodeid)');
+
+      // Migration 9: Add UNIQUE constraint to webhooks(name)
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'webhooks_name_key'
+          ) THEN
+            ALTER TABLE webhooks ADD CONSTRAINT webhooks_name_key UNIQUE (name);
+          END IF;
+        END $$;
+      `);
+      console.log('✓ Ensured UNIQUE constraint on webhooks(name)');
+
+      // Migration 10: Add UNIQUE constraint to bulletins(filename, conferenceid)
+      await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'bulletins_filename_conferenceid_key'
+          ) THEN
+            ALTER TABLE bulletins ADD CONSTRAINT bulletins_filename_conferenceid_key UNIQUE (filename, conferenceid);
+          END IF;
+        END $$;
+      `);
+      console.log('✓ Ensured UNIQUE constraint on bulletins(filename, conferenceid)');
+
       console.log('All migrations completed successfully');
     } catch (error) {
       console.error('Error running migrations:', error);
@@ -589,7 +645,8 @@ export class Database {
           votes INTEGER DEFAULT 0,
           status TEXT DEFAULT 'active',
           checked TEXT DEFAULT 'N',
-          comment TEXT
+          comment TEXT,
+          UNIQUE(filename, areaid)
         )
       `);
 
@@ -627,7 +684,8 @@ export class Database {
           filename TEXT NOT NULL,
           title TEXT NOT NULL,
           created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(filename, conferenceid)
         )
       `);
 
@@ -804,7 +862,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS node_sessions (
           id TEXT PRIMARY KEY,
-          nodeId INTEGER NOT NULL,
+          nodeId INTEGER NOT NULL UNIQUE,
           userId TEXT REFERENCES users(id),
           socketId TEXT NOT NULL,
           state TEXT NOT NULL,
@@ -973,7 +1031,7 @@ export class Database {
       await client.query(`
         CREATE TABLE IF NOT EXISTS webhooks (
           id SERIAL PRIMARY KEY,
-          name TEXT NOT NULL,
+          name TEXT NOT NULL UNIQUE,
           url TEXT NOT NULL,
           type TEXT NOT NULL CHECK (type IN ('discord', 'slack')),
           enabled BOOLEAN DEFAULT true,
