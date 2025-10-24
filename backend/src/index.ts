@@ -227,6 +227,7 @@ interface BBSSession {
   blockOLM: boolean; // Whether to block Online Messages (OLM) - express.e:310
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
+  nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163
 
   // Phase 10: Message Pointer System (express.e:199-200, 4882-4973)
   lastMsgReadConf: number; // Last message manually read (confBase.confYM) - express.e:199
@@ -272,6 +273,28 @@ const port = process.env.PORT || config.get('port');
 // Store active sessions (in production, use Redis/database)
 const sessions = new Map<string, BBSSession>();
 
+// Helper: Get next available node ID (1-99)
+// In AmiExpress, each physical node had a number - we simulate this for websockets
+function getNextAvailableNodeId(): number {
+  const usedNodeIds = new Set<number>();
+
+  // Collect all currently used node IDs
+  for (const session of sessions.values()) {
+    if (session.nodeId) {
+      usedNodeIds.add(session.nodeId);
+    }
+  }
+
+  // Find first available node ID (1-99)
+  for (let i = 1; i < 100; i++) {
+    if (!usedNodeIds.has(i)) {
+      return i;
+    }
+  }
+
+  return 1; // Fallback (shouldn't happen with 99 nodes)
+}
+
 // Initialize handlers
 const authHandler = new AuthHandler(db);
 
@@ -306,6 +329,20 @@ setRoomCommandsDependencies({
   handleRoomList: require('./handlers/group-chat.handler').handleRoomList,
   handleRoomKick: require('./handlers/group-chat.handler').handleRoomKick,
   handleRoomMute: require('./handlers/group-chat.handler').handleRoomMute
+});
+
+// Initialize OLM (Online Message) handler dependencies - express.e:25406-25515
+const { setOlmDependencies } = require('./handlers/olm.handler');
+
+setOlmDependencies({
+  db,
+  sessions,
+  io,
+  setEnvStat: (session: any, envStat: number) => {
+    // Placeholder for setEnvStat - express.e:24360
+    console.log('📊 [ENV] Setting environment stat:', envStat);
+    // TODO: Implement full environment stat tracking
+  }
 });
 
 app.use(cors());
@@ -437,6 +474,7 @@ io.on('connection', async (socket) => {
     blockOLM: false, // Block Online Messages
     loginTime: Date.now(), // Login timestamp
     nodeStartTime: Date.now(), // Node start time for uptime
+    nodeId: getNextAvailableNodeId(), // Assign unique virtual node ID - express.e:163
 
     // Phase 10: Initialize message pointers (express.e:199-200)
     lastMsgReadConf: 0, // Last message manually read

@@ -194,21 +194,22 @@ export async function handleChatRequest(socket: Socket, session: BBSSession, dat
     // Send invite to target user via terminal output
     console.log('📤 [CHAT] Sending invite to target:', targetSocketId);
 
-    // Display invitation in recipient's terminal
+    // Display invitation in recipient's terminal with Y/n prompt
     io.to(targetSocketId!).emit('ansi-output',
-      '\r\n\x1b[33m' + '═'.repeat(65) + '\x1b[0m\r\n' +
-      '\x1b[36m             INCOMING CHAT REQUEST\x1b[0m\r\n' +
-      '\x1b[33m' + '═'.repeat(65) + '\x1b[0m\r\n' +
-      '\r\n' +
-      `\x1b[32m${session.user.username}\x1b[0m wants to chat with you!\r\n` +
-      '\r\n' +
-      'Commands:\r\n' +
-      '  \x1b[32mCHAT ACCEPT\x1b[0m - Accept the chat request\r\n' +
-      '  \x1b[31mCHAT DECLINE\x1b[0m - Decline the chat request\r\n' +
-      '\r\n' +
-      'This invitation will expire in 30 seconds.\r\n' +
-      '\x1b[33m' + '─'.repeat(65) + '\x1b[0m\r\n'
+      '\r\n\r\n' +
+      '\x1b[36m' + session.user.username + '\x1b[0m wants to chat with you, accept (Y/n)? '
     );
+
+    // Set recipient's session state to LIVECHAT_INVITATION_RESPONSE
+    // and store the sessionId for handling Y/n response
+    const recipientSessions = Array.from(sessions.entries());
+    for (const [sid, sess] of recipientSessions) {
+      if (sess.user?.id === targetSession.user.id) {
+        sess.subState = LoggedOnSubState.LIVECHAT_INVITATION_RESPONSE;
+        sess.pendingChatSessionId = sessionId;
+        break;
+      }
+    }
 
     // Also emit Socket.io event for future frontend enhancements
     io.to(targetSocketId!).emit('chat:invite', {

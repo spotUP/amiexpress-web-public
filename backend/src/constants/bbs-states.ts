@@ -83,6 +83,12 @@ export enum LoggedOnSubState {
   CHAT_SESSION = 'chat_session',
   CHAT = 'chat',  // Internode chat (user-to-user chat mode)
   CHAT_ROOM = 'chat_room',  // Group chat room mode
+  LIVECHAT_SELECT_USER = 'livechat_select_user',  // Selecting user from numbered list
+  LIVECHAT_INVITATION_RESPONSE = 'livechat_invitation_response',  // Responding to Y/n invitation prompt
+
+  // OLM (Online Message) operations - express.e:25406-25515
+  OLM_NODE_INPUT = 'olm_node_input',        // Waiting for node number input
+  OLM_COMPOSE = 'olm_compose',              // Composing OLM message (line editor)
 
   // Conference operations
   CONFERENCE_SELECT = 'conference_select',

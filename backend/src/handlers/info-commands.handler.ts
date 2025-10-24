@@ -131,7 +131,7 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
       realname: sess.user!.realname || 'Unknown',
       conference: sess.currentConfName || 'General',
       idle: Math.floor((Date.now() - sess.lastActivity) / 60000),
-      node: 'Web1', // Single-node web version
+      node: sess.nodeId ? `Node ${sess.nodeId}` : 'Web1', // Virtual node number
       quiet: sess.user!.quietNode || false
     }));
 
@@ -204,7 +204,7 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
       realname: sess.user!.realname || 'Unknown',
       conference: sess.currentConfName || 'General',
       idle: Math.floor((Date.now() - sess.lastActivity) / 60000),
-      node: 'Web1',
+      node: sess.nodeId ? `Node ${sess.nodeId}` : 'Web1', // Virtual node number
       quiet: sess.user!.quietNode || false,
       subState: sess.subState || 'UNKNOWN',
       // Determine activity based on substate

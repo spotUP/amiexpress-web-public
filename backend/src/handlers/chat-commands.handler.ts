@@ -92,46 +92,77 @@ export async function handleLiveChatCommand(socket: Socket, session: BBSSession,
 }
 
 /**
- * Show CHAT menu
+ * Show LIVECHAT user selection (numbered list)
  */
 async function showChatMenu(socket: Socket, session: BBSSession) {
   let output = '\r\n';
   output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
-  output += '\x1b[36m                      INTERNODE CHAT\x1b[0m\r\n';
+  output += '\x1b[36m                    SELECT USER TO CHAT\x1b[0m\r\n';
   output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
   output += '\r\n';
-  output += '\x1b[32mAvailable Commands:\x1b[0m\r\n';
-  output += '\r\n';
-  output += '  \x1b[33mCHAT <username>\x1b[0m     - Request chat with user\r\n';
-  output += '  \x1b[33mCHAT WHO\x1b[0m            - List users available for chat\r\n';
-  output += '  \x1b[33mCHAT TOGGLE\x1b[0m         - Toggle your chat availability\r\n';
-  output += '  \x1b[33mCHAT END\x1b[0m            - Info about ending chat\r\n';
-  output += '  \x1b[33mCHAT HELP\x1b[0m           - Show this help\r\n';
-  output += '\r\n';
 
-  // Show current availability status
-  const isAvailable = session.user?.availableForChat || false;
-  output += '\x1b[32mCurrent Status:\x1b[0m\r\n';
-  if (isAvailable) {
-    output += '  You are \x1b[32mAVAILABLE\x1b[0m for chat\r\n';
-  } else {
-    output += '  You are \x1b[31mNOT AVAILABLE\x1b[0m for chat\r\n';
-    output += '  Use \x1b[33mCHAT TOGGLE\x1b[0m to become available\r\n';
+  // Collect all online users except current user
+  const onlineUsers: any[] = [];
+  for (const [socketId, sess] of Array.from(sessions.entries())) {
+    if (sess.user && sess.user.id !== session.user?.id) {
+      onlineUsers.push({
+        socketId,
+        username: sess.user.username,
+        realname: sess.user.realname || 'Unknown',
+        status: sess.subState === LoggedOnSubState.CHAT ? 'In Chat' :
+                (sess.user.availableForChat ? 'Available' : 'Not Available'),
+        availableForChat: sess.user.availableForChat,
+        inChat: sess.subState === LoggedOnSubState.CHAT
+      });
+    }
   }
 
-  // Show current chat status
-  if (session.subState === LoggedOnSubState.CHAT) {
-    output += '  Currently in chat with \x1b[36m' + session.chatWithUsername + '\x1b[0m\r\n';
-    output += '  Type \x1b[33m/END\x1b[0m to exit chat\r\n';
+  if (onlineUsers.length === 0) {
+    output += '\x1b[33mNo other users are currently online.\x1b[0m\r\n';
+    output += '\r\n';
+    output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+    output += '\r\n';
+    output += '\x1b[32mPress any key to continue...\x1b[0m';
+    socket.emit('ansi-output', output);
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
   }
+
+  // Display numbered list
+  output += '\x1b[33m#   Username          Real Name                Status\x1b[0m\r\n';
+  output += '\x1b[33m' + '─'.repeat(63) + '\x1b[0m\r\n';
+
+  onlineUsers.forEach((user, index) => {
+    const num = String(index + 1).padEnd(4, ' ');
+    const username = user.username.padEnd(16, ' ').substring(0, 16);
+    const realname = user.realname.padEnd(23, ' ').substring(0, 23);
+
+    let statusColor = '';
+    let statusText = '';
+    if (user.inChat) {
+      statusColor = '\x1b[33m';
+      statusText = 'In Chat';
+    } else if (user.availableForChat) {
+      statusColor = '\x1b[32m';
+      statusText = 'Available';
+    } else {
+      statusColor = '\x1b[31m';
+      statusText = 'Not Available';
+    }
+
+    output += num + username + '  ' + realname + '  ' + statusColor + statusText + '\x1b[0m\r\n';
+  });
 
   output += '\r\n';
   output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
   output += '\r\n';
-  output += '\x1b[32mPress any key to continue...\x1b[0m';
+  output += '\x1b[32mEnter number to chat (H for help, Q to quit): \x1b[0m';
 
   socket.emit('ansi-output', output);
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+  // Store user list in session for selection
+  session.livechatUserList = onlineUsers;
+  session.subState = LoggedOnSubState.LIVECHAT_SELECT_USER;
 }
 
 /**
@@ -347,5 +378,129 @@ async function declineChatInvitation(socket: Socket, session: BBSSession) {
   } catch (error) {
     console.error('[CHAT] Error declining chat:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError declining chat invitation.\x1b[0m\r\n');
+  }
+}
+
+/**
+ * Show LIVECHAT help menu
+ */
+export async function showLiveChatHelp(socket: Socket, session: BBSSession) {
+  let output = '\r\n';
+  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\x1b[36m                      LIVECHAT HELP\x1b[0m\r\n';
+  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\r\n';
+  output += '\x1b[32mAvailable Commands:\x1b[0m\r\n';
+  output += '\r\n';
+  output += '  \x1b[33mLIVECHAT\x1b[0m                - Select user from numbered list\r\n';
+  output += '  \x1b[33mLIVECHAT <username>\x1b[0m     - Request chat with specific user\r\n';
+  output += '  \x1b[33mLIVECHAT WHO\x1b[0m            - List users available for chat\r\n';
+  output += '  \x1b[33mLIVECHAT TOGGLE\x1b[0m         - Toggle your chat availability\r\n';
+  output += '  \x1b[33mLIVECHAT END\x1b[0m            - Info about ending chat\r\n';
+  output += '  \x1b[33mLIVECHAT HELP\x1b[0m           - Show this help\r\n';
+  output += '\r\n';
+
+  // Show current availability status
+  const isAvailable = session.user?.availableForChat || false;
+  output += '\x1b[32mCurrent Status:\x1b[0m\r\n';
+  if (isAvailable) {
+    output += '  You are \x1b[32mAVAILABLE\x1b[0m for chat\r\n';
+  } else {
+    output += '  You are \x1b[31mNOT AVAILABLE\x1b[0m for chat\r\n';
+    output += '  Use \x1b[33mLIVECHAT TOGGLE\x1b[0m to become available\r\n';
+  }
+
+  // Show current chat status
+  if (session.subState === LoggedOnSubState.CHAT) {
+    output += '  Currently in chat with \x1b[36m' + session.chatWithUsername + '\x1b[0m\r\n';
+    output += '  Type \x1b[33m/END\x1b[0m to exit chat\r\n';
+  }
+
+  output += '\r\n';
+  output += '\x1b[36m' + '═'.repeat(63) + '\x1b[0m\r\n';
+  output += '\r\n';
+  output += '\x1b[32mPress any key to continue...\x1b[0m';
+
+  socket.emit('ansi-output', output);
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+}
+
+/**
+ * Handle user selection from numbered list
+ * Called from command.handler.ts when in LIVECHAT_SELECT_USER state
+ */
+export async function handleLiveChatSelection(socket: Socket, session: BBSSession, input: string) {
+  const trimmedInput = input.trim().toUpperCase();
+
+  // Q to quit
+  if (trimmedInput === 'Q') {
+    socket.emit('ansi-output', '\r\n\x1b[33mLiveChat cancelled.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    delete session.livechatUserList;
+    return;
+  }
+
+  // H for help
+  if (trimmedInput === 'H') {
+    await showLiveChatHelp(socket, session);
+    delete session.livechatUserList;
+    return;
+  }
+
+  // Parse number
+  const num = parseInt(trimmedInput, 10);
+  if (isNaN(num) || num < 1) {
+    socket.emit('ansi-output', '\r\n\x1b[31mInvalid selection. Please enter a number, H for help, or Q to quit.\x1b[0m\r\n');
+    // Re-show the list
+    await showChatMenu(socket, session);
+    return;
+  }
+
+  // Check if number is in range
+  const userList = session.livechatUserList || [];
+  if (num > userList.length) {
+    socket.emit('ansi-output', '\r\n\x1b[31mInvalid number. Please select from 1-' + userList.length + '.\x1b[0m\r\n');
+    // Re-show the list
+    await showChatMenu(socket, session);
+    return;
+  }
+
+  // Get selected user
+  const selectedUser = userList[num - 1];
+  delete session.livechatUserList;
+
+  // Request chat with selected user
+  await requestChat(socket, session, selectedUser.username);
+}
+
+/**
+ * Handle Y/n invitation response
+ * Called from command.handler.ts when in LIVECHAT_INVITATION_RESPONSE state
+ */
+export async function handleLiveChatInvitationResponse(socket: Socket, session: BBSSession, input: string) {
+  const trimmedInput = input.trim().toUpperCase();
+  const sessionId = session.pendingChatSessionId;
+
+  // Clear pending state
+  delete session.pendingChatSessionId;
+
+  if (!sessionId) {
+    socket.emit('ansi-output', '\r\n\x1b[31mNo pending chat invitation.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // Default to Y (yes) if empty or starts with Y
+  const isAccept = trimmedInput === '' || trimmedInput.startsWith('Y');
+
+  if (isAccept) {
+    // Accept the invitation
+    console.log('💬 [LIVECHAT] User accepted via Y/n prompt');
+    await handleChatAcceptFn(socket, session, { sessionId });
+  } else {
+    // Decline the invitation
+    console.log('💬 [LIVECHAT] User declined via Y/n prompt');
+    await handleChatDeclineFn(socket, session, { sessionId });
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 }

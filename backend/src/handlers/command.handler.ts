@@ -71,7 +71,6 @@ import {
   handleExpertModeCommand,
   handleCommentToSysopCommand,
   handlePageSysopCommand,
-  handleOnlineMessageCommand,
   setPreferenceChatCommandsDependencies
 } from './preference-chat-commands.handler';
 import {
@@ -227,13 +226,6 @@ export function displayMainMenu(socket: any, session: BBSSession) {
   console.log('displayMainMenu called, current subState:', session.subState, 'menuPause:', session.menuPause);
   console.log('🔍 processOlmMessageQueue type:', typeof processOlmMessageQueue);
 
-  // Like express.e:28594 - process OLM message queue before displaying menu
-  if (typeof processOlmMessageQueue === 'function') {
-    processOlmMessageQueue(socket, session, true);
-  } else {
-    console.warn('⚠️  processOlmMessageQueue not injected yet, skipping OLM queue processing');
-  }
-
   // Like AmiExpress: only display menu if menuPause is TRUE
   if (session.menuPause) {
     console.log('menuPause is TRUE, displaying menu');
@@ -241,6 +233,14 @@ export function displayMainMenu(socket: any, session: BBSSession) {
     // Clear screen before displaying menu (like AmiExpress does)
     console.log('Sending screen clear: \\x1b[2J\\x1b[H');
     socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
+
+    // Like express.e:28594 - process OLM message queue AFTER clearing screen but BEFORE menu
+    // This ensures messages are visible and not immediately erased
+    if (typeof processOlmMessageQueue === 'function') {
+      processOlmMessageQueue(socket, session, true);
+    } else {
+      console.warn('⚠️  processOlmMessageQueue not injected yet, skipping OLM queue processing');
+    }
 
     // Like express.e:6567 - default cmdShortcuts to FALSE (line input mode)
     session.cmdShortcuts = false;
@@ -292,6 +292,12 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   console.log('  - relConfNum:', session.relConfNum);
   console.log('  - currentMsgBase:', session.currentMsgBase);
   console.log('  - timeRemaining:', session.timeRemaining);
+
+  // Process queued OLM messages before showing prompt - express.e:1464-1473
+  const { processOlmQueue } = require('./olm.handler');
+  if (processOlmQueue) {
+    processOlmQueue(socket, session);
+  }
 
   // Like AmiExpress: Use BBS name, relative conference number, conference name
   const bbsName = config.get('bbsName');
@@ -535,6 +541,82 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     if (input.length > 0) {
       const { handleRoomMessage } = require('./group-chat.handler');
       await handleRoomMessage(socket, session, { message: input });
+    }
+    return;
+  }
+
+  // PRIORITY 3: Handle LIVECHAT user selection
+  // When user is selecting from numbered list
+  if (session.subState === LoggedOnSubState.LIVECHAT_SELECT_USER) {
+    console.log('💬 [LIVECHAT] User selecting from numbered list');
+    const { handleLiveChatSelection } = require('./chat-commands.handler');
+    await handleLiveChatSelection(socket, session, data);
+    return;
+  }
+
+  // PRIORITY 4: Handle LIVECHAT invitation Y/n response
+  // When user is responding to a chat invitation
+  if (session.subState === LoggedOnSubState.LIVECHAT_INVITATION_RESPONSE) {
+    console.log('💬 [LIVECHAT] User responding to invitation with Y/n');
+    const { handleLiveChatInvitationResponse } = require('./chat-commands.handler');
+    await handleLiveChatInvitationResponse(socket, session, data);
+    return;
+  }
+
+  // PRIORITY 5: Handle OLM node input
+  // When user is entering node number for OLM (line-buffered)
+  if (session.subState === LoggedOnSubState.OLM_NODE_INPUT) {
+    console.log('📨 [OLM] User entering node number');
+
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer || '';
+      session.inputBuffer = '';
+
+      const { handleOlmNodeInput } = require('./olm.handler');
+      await handleOlmNodeInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      // Client handles character echo
+    }
+    return;
+  }
+
+  // PRIORITY 6: Handle OLM message composition
+  // When user is composing OLM message (line-buffered like READ_COMMAND)
+  if (session.subState === LoggedOnSubState.OLM_COMPOSE) {
+    console.log('📨 [OLM] User composing message');
+
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer || '';
+      session.inputBuffer = '';
+
+      const { handleOlmComposeInput } = require('./olm.handler');
+      await handleOlmComposeInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Client handles backspace echo
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      // Client handles character echo
     }
     return;
   }
@@ -1656,8 +1738,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleMailScanCommand(socket, session);
       return;
 
-    case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25470
-      handleOnlineMessageCommand(socket, session, params);
+    case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25503
+      const { handleOlmCommand: handleOlm } = require('./olm.handler');
+      await handleOlm(socket, session, params);
       return;
 
     case 'LIVECHAT': // Modern Real-Time Internode Chat (Enhancement)
@@ -1674,6 +1757,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
     case 'ROOM': // Group Chat Rooms (Modern Enhancement)
       const { handleRoomCommand } = require('./room-commands.handler');
       await handleRoomCommand(socket, session, params);
+      return;
+
+    case 'Q': // Quiet Mode / Block OLM (internalCommandQ) - express.e:25505-25515
+      const { handleQuietCommand } = require('./olm.handler');
+      await handleQuietCommand(socket, session);
       return;
 
     case 'RL': // RELOGON (internalCommandRL) - express.e:25534-25539
