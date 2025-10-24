@@ -53,39 +53,52 @@ send_webhook() {
 
     # Detect webhook type (Discord vs Slack)
     if [[ "$WEBHOOK_URL" == *"discord.com"* ]]; then
-        # Discord webhook format (emojis removed from JSON to prevent parsing errors)
-        # Debug: show what we're sending
+        # Discord webhook format - use jq for proper JSON encoding
         echo "[DEBUG] Sending webhook: $title" >&2
-        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{
-                \"embeds\": [{
-                    \"title\": \"$title\",
-                    \"description\": \"$description\",
-                    \"color\": $color,
-                    \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
-                    \"footer\": {
-                        \"text\": \"AmiExpress Deployment\"
+
+        # Build JSON payload with jq for proper escaping
+        JSON_PAYLOAD=$(jq -n \
+            --arg title "$title" \
+            --arg description "$description" \
+            --argjson color "$color" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+                embeds: [{
+                    title: $title,
+                    description: $description,
+                    color: $color,
+                    timestamp: $timestamp,
+                    footer: {
+                        text: "AmiExpress Deployment"
                     }
                 }]
-            }" 2>&1 || true)
+            }')
+
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD" 2>&1 || true)
         HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
         if [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "200" ]; then
             echo "[WARNING] Webhook failed with code $HTTP_CODE: $RESPONSE" >&2
         fi
     elif [[ "$WEBHOOK_URL" == *"hooks.slack.com"* ]]; then
         # Slack webhook format
+        JSON_PAYLOAD=$(jq -n \
+            --arg title "$title" \
+            --arg description "$description" \
+            --argjson color "$color" \
+            '{
+                text: ("*" + $title + "*"),
+                attachments: [{
+                    color: (if $color == 65280 then "good" elif $color == 16711680 then "danger" else "warning" end),
+                    text: $description,
+                    footer: "AmiExpress Deployment",
+                    ts: now
+                }]
+            }')
         curl -s -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d "{
-                \"text\": \"*$title*\",
-                \"attachments\": [{
-                    \"color\": \"$([ $color -eq 65280 ] && echo 'good' || [ $color -eq 16711680 ] && echo 'danger' || echo 'warning')\",
-                    \"text\": \"$description\",
-                    \"footer\": \"AmiExpress Deployment\",
-                    \"ts\": $(date +%s)
-                }]
-            }" > /dev/null 2>&1 || true  # Don't exit on webhook failure
+            -d "$JSON_PAYLOAD" > /dev/null 2>&1 || true  # Don't exit on webhook failure
     fi
 }
 
