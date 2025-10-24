@@ -30,9 +30,15 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Webhook configuration
-# Set these environment variables to enable deployment notifications:
-# export DEPLOY_WEBHOOK_URL="your-discord-or-slack-webhook-url"
-WEBHOOK_URL="${DEPLOY_WEBHOOK_URL:-}"
+# Load from .env file if it exists
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    # Source .env file and extract DEPLOY_WEBHOOK_URL
+    WEBHOOK_URL=$(grep -E "^DEPLOY_WEBHOOK_URL=" "$PROJECT_ROOT/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+else
+    # Fallback to environment variable
+    WEBHOOK_URL="${DEPLOY_WEBHOOK_URL:-}"
+fi
 
 # Function to send webhook notification
 send_webhook() {
