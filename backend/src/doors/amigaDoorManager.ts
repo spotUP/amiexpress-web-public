@@ -30,6 +30,7 @@ export interface AmigaDOSAssigns {
   'NODE3:': string;     // Node 3 data
   'Protocols:': string; // Transfer protocols
   'Utils:': string;     // Utility programs
+  'Libs:': string;      // Amiga libraries (.library files)
 }
 
 /**
@@ -63,7 +64,11 @@ export interface DoorArchive {
   files: string[];
   infoFiles: string[];       // *.info files found
   executables: string[];     // Executable files found
+  libraries: string[];       // Amiga library files (.library)
+  sourceFiles: string[];     // Source code files (.s, .asm, .c, .e, .rexx)
   isTypeScriptDoor?: boolean; // True if this is a TypeScript door package
+  isAREXXDoor?: boolean;     // True if this is an AREXX script door
+  hasSourceCode?: boolean;   // True if contains source code
   packageJson?: any;         // Parsed package.json for TypeScript doors
   metadata?: {
     fileidDiz?: string;
@@ -100,6 +105,7 @@ export class AmigaDoorManager {
       'NODE3:': path.join(this.bbsRoot, 'Node3'),
       'Protocols:': path.join(this.bbsRoot, 'Protocols'),
       'Utils:': path.join(this.bbsRoot, 'Utils'),
+      'Libs:': path.join(this.bbsRoot, 'Libs'),
     };
   }
 
@@ -422,10 +428,22 @@ export class AmigaDoorManager {
                name.endsWith('.ts') || name.endsWith('.js');
       });
 
-      // Determine if this is a TypeScript door
-      // TypeScript doors have:
-      // 1. package.json file, OR
-      // 2. .ts/.js files in root (not in BBS/ subdirectory)
+      // Find Amiga library files (.library)
+      const libraries = files.filter(f => f.toLowerCase().endsWith('.library'));
+
+      // Find source code files
+      const sourceFiles = files.filter(f => {
+        const name = f.toLowerCase();
+        return name.endsWith('.s') ||      // Amiga assembler
+               name.endsWith('.asm') ||    // Assembler
+               name.endsWith('.c') ||      // C source
+               name.endsWith('.h') ||      // C header
+               name.endsWith('.e') ||      // E source
+               name.endsWith('.rexx') ||   // AREXX script
+               name.endsWith('.rx');       // AREXX script (alternate extension)
+      });
+
+      // Detect door type
       const hasPackageJson = packageJson !== null;
       const hasRootTypeScript = files.some(f => {
         const name = f.toLowerCase();
@@ -436,6 +454,8 @@ export class AmigaDoorManager {
       const hasBBSStructure = files.some(f => f.toLowerCase().startsWith('bbs/'));
 
       const isTypeScriptDoor = (hasPackageJson || hasRootTypeScript) && !hasBBSStructure;
+      const isAREXXDoor = files.some(f => f.toLowerCase().endsWith('.rexx') || f.toLowerCase().endsWith('.rx'));
+      const hasSourceCode = sourceFiles.length > 0;
 
       return {
         filename: path.basename(archivePath),
@@ -446,7 +466,11 @@ export class AmigaDoorManager {
         files,
         infoFiles,
         executables,
+        libraries,
+        sourceFiles,
         isTypeScriptDoor,
+        isAREXXDoor,
+        hasSourceCode,
         packageJson,
       };
     } catch (error) {
@@ -651,6 +675,21 @@ export class AmigaDoorManager {
               fs.copyFileSync(srcPath, destPath);
               console.log(`  Copied: ${file}`);
             }
+          }
+        }
+
+        // Install Amiga library files (.library) to Libs/
+        const libraryFiles = extractedFiles.filter(f => f.toLowerCase().endsWith('.library'));
+        if (libraryFiles.length > 0) {
+          const libsDir = this.assigns['Libs:'];
+          fs.mkdirSync(libsDir, { recursive: true });
+
+          console.log(`Installing ${libraryFiles.length} Amiga library file(s):`);
+          for (const libraryFile of libraryFiles) {
+            const libraryName = path.basename(libraryFile);
+            const destPath = path.join(libsDir, libraryName);
+            fs.copyFileSync(libraryFile, destPath);
+            console.log(`  → Libs/${libraryName}`);
           }
         }
 
