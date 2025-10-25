@@ -181,6 +181,33 @@ export class DoorManager {
       }
     }
 
+    // Scan for installed Amiga doors (from Commands/BBSCmd/*.info files)
+    try {
+      const amigaDoorMgr = getAmigaDoorManager();
+      const amigaDoors = await amigaDoorMgr.scanInstalledDoors();
+
+      console.log(`[Door Manager] Found ${amigaDoors.length} installed Amiga door(s)`);
+
+      for (const amigaDoor of amigaDoors) {
+        doors.push({
+          id: crypto.createHash('md5').update(amigaDoor.command).digest('hex'),
+          name: amigaDoor.name || amigaDoor.command,
+          filename: `${amigaDoor.command}.info`,
+          type: 'amiga-installed',
+          command: amigaDoor.command,
+          location: amigaDoor.location,
+          doorType: amigaDoor.type,
+          size: 0, // .info files are small, size not critical
+          uploadDate: new Date(),
+          installed: amigaDoor.installed,
+          access: amigaDoor.access
+        });
+        console.log(`[Door Manager]   - ${amigaDoor.command}: ${amigaDoor.name || amigaDoor.location}`);
+      }
+    } catch (error) {
+      console.error('[Door Manager] Error scanning Amiga doors:', error);
+    }
+
     // Scan archives directory
     if (fs.existsSync(this.archivesPath)) {
       const archives = fs.readdirSync(this.archivesPath);

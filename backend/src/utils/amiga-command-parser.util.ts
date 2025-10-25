@@ -73,34 +73,46 @@ export function parseInfoFile(filePath: string): Map<string, string> {
   try {
     // Check if file exists
     if (!fs.existsSync(filePath)) {
+      console.error(`[parseInfoFile] File does not exist: ${filePath}`);
       return tooltypes;
     }
 
+    console.log(`[parseInfoFile] Parsing: ${filePath}`);
+
     // Use strings command to extract tooltypes from binary .info file
     // This maintains Amiga compatibility
-    const output = execSync(`strings "${filePath}"`, { encoding: 'utf8' });
-    const lines = output.split('\n');
+    try {
+      const output = execSync(`strings "${filePath}"`, { encoding: 'utf8' });
+      const lines = output.split('\n');
+      console.log(`[parseInfoFile] Found ${lines.length} lines from strings command`);
 
-    for (const line of lines) {
-      const trimmed = line.trim();
+      for (const line of lines) {
+        const trimmed = line.trim();
 
-      // Skip empty lines and non-tooltype lines
-      if (!trimmed || !trimmed.includes('=')) {
-        continue;
+        // Skip empty lines and non-tooltype lines
+        if (!trimmed || !trimmed.includes('=')) {
+          continue;
+        }
+
+        // Parse KEY=VALUE format
+        // Remove leading '+' if present (express.e uses +LOCATION format)
+        const cleanLine = trimmed.startsWith('+') ? trimmed.substring(1) : trimmed;
+        const [key, ...valueParts] = cleanLine.split('=');
+        const value = valueParts.join('=').trim(); // Handle values with '=' in them
+
+        if (key && value) {
+          console.log(`[parseInfoFile]   Tooltype: ${key.toUpperCase()}=${value}`);
+          tooltypes.set(key.toUpperCase(), value);
+        }
       }
 
-      // Parse KEY=VALUE format
-      // Remove leading '+' if present (express.e uses +LOCATION format)
-      const cleanLine = trimmed.startsWith('+') ? trimmed.substring(1) : trimmed;
-      const [key, ...valueParts] = cleanLine.split('=');
-      const value = valueParts.join('=').trim(); // Handle values with '=' in them
-
-      if (key && value) {
-        tooltypes.set(key.toUpperCase(), value);
-      }
+      console.log(`[parseInfoFile] Extracted ${tooltypes.size} tooltypes`);
+    } catch (cmdError) {
+      console.error(`[parseInfoFile] strings command failed:`, cmdError);
+      throw cmdError;
     }
   } catch (error) {
-    console.error(`Error parsing .info file ${filePath}:`, error);
+    console.error(`[parseInfoFile] Error parsing .info file ${filePath}:`, error);
   }
 
   return tooltypes;
