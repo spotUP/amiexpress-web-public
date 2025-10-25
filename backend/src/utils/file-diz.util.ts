@@ -14,6 +14,7 @@ import { extractFileDizFromLha } from './lha-extractor';
 import { extractFileDizFromZip } from './zip-extractor';
 import { extractFileDizFromTarAuto } from './tar-extractor';
 import { extractFileDizFromDms } from './dms-extractor';
+import { extractFileDizFromLzx } from './lzx-extractor';
 
 const execAsync = promisify(exec);
 
@@ -254,11 +255,15 @@ export async function extractFileDizBuiltin(
       return false;
     }
   } else if (ext === '.lzx') {
-    // Extract FILE_ID.DIZ from lzx archive (if unlzx is available)
-    // -e = extract
-    command = `unlzx -e "${path.resolve(uploadedFilePath)}" "${actualDizFilename}"`;
-    needsCwd = true;
-    extractedPath = path.join(nodeWorkDir, actualDizFilename);
+    // Extract FILE_ID.DIZ from lzx archive using pure TypeScript library
+    console.log(`[FILE_ID.DIZ] Using TypeScript LZX extractor`);
+    try {
+      const success = await extractFileDizFromLzx(uploadedFilePath, dizPath);
+      return success;
+    } catch (error: any) {
+      console.log(`[FILE_ID.DIZ] TypeScript LZX extractor failed: ${error.message}`);
+      return false;
+    }
   } else if (ext === '.dms') {
     // Extract FILE_ID.DIZ from DMS disk image using TypeScript library
     console.log(`[FILE_ID.DIZ] Using TypeScript DMS extractor`);
