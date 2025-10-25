@@ -36,6 +36,10 @@ import {
   setFileMaintenanceDependencies
 } from './file-maintenance.handler';
 import {
+  handleCFFlagSelectInput,
+  handleCFConfSelectInput
+} from './advanced-commands.handler';
+import {
   handleUserStatsCommand,
   handleJoinConferenceCommand,
   handleUploadCommand,
@@ -1703,6 +1707,117 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // Regular character - add to buffer and echo
       session.inputBuffer += data;
       socket.emit('ansi-output', data);
+    }
+    return;
+  }
+
+  // FM Command (File Maintenance) Input Handlers
+  // express.e:24889-25045
+
+  if (session.subState === LoggedOnSubState.FM_YESNO_INPUT) {
+    // Y/n prompt for using flagged files
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await FileMaintenanceHandler.handleYesNoInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.FM_FILENAME_INPUT) {
+    // Filename pattern input
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await FileMaintenanceHandler.handleFilenameInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.FM_DIRSPAN_INPUT) {
+    // Directory span input
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await FileMaintenanceHandler.handleDirSpanInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.FM_ACTION_INPUT) {
+    // D/M/V/Q action input
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await FileMaintenanceHandler.handleActionInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.FM_REMOVE_FLAG_INPUT) {
+    // Remove from flagged list Y/n
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await FileMaintenanceHandler.handleRemoveFlagInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  // CF Command (Conference Flags) Input Handlers
+  // express.e:24672-24841
+
+  if (session.subState === LoggedOnSubState.CF_FLAG_SELECT_INPUT) {
+    // M/A/F/Z flag type selection
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleCFFlagSelectInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.CF_CONF_SELECT_INPUT) {
+    // Conference numbers input
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleCFConfSelectInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
     }
     return;
   }
