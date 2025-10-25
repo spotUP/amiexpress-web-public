@@ -121,10 +121,17 @@ export class AmigaDoorSession {
       }
 
       // Set up reset vectors
-      this.emulator.writeMemory(0x0, 0x00);
-      this.emulator.writeMemory(0x1, 0x00);
-      this.emulator.writeMemory(0x2, 0x80);
-      this.emulator.writeMemory(0x3, 0x00); // Stack at 0x8000
+      // Stack pointer: Must be HIGH in memory and far above all loaded segments
+      // CODE: 0x1000-0x38E8, DATA: 0x3900-0x3A78
+      // Set stack to near top of 1MB memory (0x100000 - 0x1000 = 0xFF000)
+      // This gives ~1MB of stack space growing downward
+      const initialSP = 0xFE000; // 1,040,384 - leaves room at top for safety
+      this.emulator.writeMemory(0x0, (initialSP >> 24) & 0xFF);
+      this.emulator.writeMemory(0x1, (initialSP >> 16) & 0xFF);
+      this.emulator.writeMemory(0x2, (initialSP >> 8) & 0xFF);
+      this.emulator.writeMemory(0x3, initialSP & 0xFF);
+
+      console.log(`[AmigaDoorSession] Initial stack pointer set to: 0x${initialSP.toString(16)}`);
 
       this.emulator.writeMemory(0x4, (hunkFile.entryPoint >> 24) & 0xFF);
       this.emulator.writeMemory(0x5, (hunkFile.entryPoint >> 16) & 0xFF);
