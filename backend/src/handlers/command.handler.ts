@@ -2150,6 +2150,14 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     session.commandText = undefined; // Clear command text
     console.log('🔍 [AFTER COMMAND] subState is:', session.subState);
     console.log('🔍 [AFTER COMMAND] PROCESS_COMMAND const is:', LoggedOnSubState.PROCESS_COMMAND);
+    console.log('🔍 [AFTER COMMAND] inDoorManager:', session.inDoorManager);
+
+    // Skip menu display if Door Manager is active
+    if (session.inDoorManager) {
+      console.log('✅ [AFTER COMMAND] Door Manager is active - NOT showing menu');
+      return;
+    }
+
     if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
       console.log('⚠️ [AFTER COMMAND] subState is still PROCESS_COMMAND, showing menu');
       // Command didn't change state, so default to showing menu
