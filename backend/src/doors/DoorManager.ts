@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { Socket } from 'socket.io';
 import AdmZip from 'adm-zip';
+import { getAmigaDoorManager, DoorArchive } from './amigaDoorManager';
 
 interface DoorInfo {
   id: string;
@@ -522,12 +523,12 @@ export class DoorManager {
   }
 
   /**
-   * Process uploaded file
+   * Process uploaded file with smart analysis
    */
   private async processUpload(data: { filename: string; originalname: string; size: number }): Promise<void> {
     this.socket.emit('ansi-output', '\r\n\x1b[32m✓ File received: ' + data.originalname + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', `\x1b[36mSize: ${this.formatSize(data.size)}\x1b[0m\r\n`);
-    this.socket.emit('ansi-output', 'Processing...\r\n');
+    this.socket.emit('ansi-output', '\r\n\x1b[33m🔍 Analyzing archive contents...\x1b[0m\r\n');
 
     try {
       // Re-scan doors to include new upload
@@ -538,39 +539,171 @@ export class DoorManager {
         d.filename === data.filename || d.filename === data.originalname
       );
 
-      if (newDoor) {
-        this.socket.emit('ansi-output', '\x1b[32m✓ Upload successful!\x1b[0m\r\n\r\n');
-        this.socket.emit('ansi-output', 'Press any key to view door information...\r\n');
+      if (!newDoor || !newDoor.archivePath) {
+        throw new Error('Could not find uploaded door in archive');
+      }
 
-        // Set as current door and switch to info mode
-        this.state.currentDoor = newDoor;
+      // 🎯 SMART ANALYSIS: Use AmigaDoorManager to analyze archive
+      const amigaDoorMgr = getAmigaDoorManager();
+      const analysis = amigaDoorMgr.analyzeDoorArchive(newDoor.archivePath);
 
-        // Wait for keypress then show info
-        const showInfoOnce = (data: string) => {
+      if (!analysis) {
+        throw new Error('Failed to analyze archive');
+      }
+
+      // Display analysis results
+      this.socket.emit('ansi-output', '\r\n\x1b[36m━━━ Archive Analysis ━━━\x1b[0m\r\n');
+      this.socket.emit('ansi-output', `Format: ${analysis.format}\r\n`);
+      this.socket.emit('ansi-output', `Files: ${analysis.files.length}\r\n`);
+
+      // Determine door type and suggest action
+      let doorType = '';
+      let suggestion = '';
+      let canInstall = false;
+
+      if (analysis.isTypeScriptDoor) {
+        doorType = 'TypeScript Door';
+        suggestion = 'This appears to be a TypeScript/JavaScript door.\r\nReady to install and run.';
+        canInstall = true;
+      } else if (analysis.isAREXXDoor) {
+        doorType = 'AREXX Script Door';
+        suggestion = 'This is an AREXX script door.\r\nCan be installed and executed via AREXX interpreter.';
+        canInstall = true;
+      } else if (analysis.infoFiles.length > 0 && analysis.executables.length > 0) {
+        doorType = 'Amiga Binary Door';
+        suggestion = 'This is a native Amiga door with binary executables.\r\n🚀 Will run via 68000 CPU emulation!';
+        canInstall = true;
+      } else if (analysis.hasSourceCode) {
+        doorType = 'Source Code Archive';
+        const sourceTypes = [];
+        if (analysis.sourceFiles.some(f => f.endsWith('.s') || f.endsWith('.asm'))) sourceTypes.push('Assembler');
+        if (analysis.sourceFiles.some(f => f.endsWith('.c'))) sourceTypes.push('C');
+        if (analysis.sourceFiles.some(f => f.endsWith('.e'))) sourceTypes.push('E');
+        if (analysis.sourceFiles.some(f => f.endsWith('.rexx'))) sourceTypes.push('AREXX');
+
+        suggestion = `Contains source code: ${sourceTypes.join(', ')}\r\n\x1b[33m⚠ Requires manual porting to TypeScript.\x1b[0m`;
+        canInstall = false;
+      } else {
+        doorType = 'Unknown';
+        suggestion = 'Could not determine door type.\r\nArchive may be incomplete or unsupported format.';
+        canInstall = false;
+      }
+
+      this.socket.emit('ansi-output', `\r\n\x1b[32mType: ${doorType}\x1b[0m\r\n`);
+      this.socket.emit('ansi-output', `\r\n${suggestion}\r\n`);
+
+      // Show additional details
+      if (analysis.infoFiles.length > 0) {
+        this.socket.emit('ansi-output', `\r\nCommands: ${analysis.infoFiles.length}\r\n`);
+      }
+      if (analysis.executables.length > 0) {
+        this.socket.emit('ansi-output', `Executables: ${analysis.executables.length}\r\n`);
+      }
+      if (analysis.libraries.length > 0) {
+        this.socket.emit('ansi-output', `\x1b[36mLibraries: ${analysis.libraries.length} (will install to Libs/)\x1b[0m\r\n`);
+      }
+      if (analysis.sourceFiles.length > 0) {
+        this.socket.emit('ansi-output', `Source files: ${analysis.sourceFiles.length}\r\n`);
+      }
+
+      this.socket.emit('ansi-output', '\r\n');
+
+      // Set current door and store analysis
+      this.state.currentDoor = newDoor;
+      (this.state.currentDoor as any).analysis = analysis;
+
+      if (canInstall) {
+        // Offer installation
+        this.socket.emit('ansi-output', '\x1b[32mPress I to install, or any other key to view details\x1b[0m\r\n');
+
+        const handleChoice = (input: string) => {
+          this.socket.off('command', handleChoice);
+          if (input.toLowerCase() === 'i') {
+            this.installSmartDoor(newDoor, analysis);
+          } else {
+            this.state.mode = 'info';
+            this.showInfo();
+          }
+        };
+        this.socket.once('command', handleChoice);
+      } else {
+        // Just show info
+        this.socket.emit('ansi-output', 'Press any key to view details...\r\n');
+        const showInfoOnce = () => {
           this.socket.off('command', showInfoOnce);
           this.state.mode = 'info';
           this.showInfo();
         };
-        this.socket.on('command', showInfoOnce);
-      } else {
-        throw new Error('Could not find uploaded door in archive');
+        this.socket.once('command', showInfoOnce);
       }
 
     } catch (error) {
       this.socket.emit('ansi-output', '\x1b[31m✗ Error processing upload: ' + (error as Error).message + '\x1b[0m\r\n');
       this.socket.emit('ansi-output', 'Press any key to return to door list...\r\n');
 
-      const returnToList = (data: string) => {
+      const returnToList = () => {
         this.socket.off('command', returnToList);
         this.state.mode = 'list';
         this.showList();
       };
-      this.socket.on('command', returnToList);
+      this.socket.once('command', returnToList);
     }
   }
 
   /**
-   * Install a door
+   * Smart door installation using AmigaDoorManager
+   * Handles TypeScript, AREXX, and Amiga binary doors
+   */
+  private async installSmartDoor(door: DoorInfo, analysis: DoorArchive): Promise<void> {
+    if (!door.archivePath) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mError: No archive path\x1b[0m\r\n');
+      return;
+    }
+
+    this.socket.emit('ansi-output', '\r\n\x1b[33m📦 Installing ' + door.name + '...\x1b[0m\r\n\r\n');
+
+    try {
+      const amigaDoorMgr = getAmigaDoorManager();
+      const result = await amigaDoorMgr.installDoor(door.archivePath);
+
+      if (result.success) {
+        this.socket.emit('ansi-output', '\x1b[32m✓ ' + result.message + '\x1b[0m\r\n');
+
+        if (result.door) {
+          this.socket.emit('ansi-output', `\r\nCommand: ${result.door.command}\r\n`);
+          this.socket.emit('ansi-output', `Location: ${result.door.location}\r\n`);
+          if (result.door.type) {
+            this.socket.emit('ansi-output', `Type: ${result.door.type}\r\n`);
+          }
+        }
+
+        if (analysis.libraries.length > 0) {
+          this.socket.emit('ansi-output', `\r\n\x1b[36m✓ Installed ${analysis.libraries.length} library file(s) to Libs/\x1b[0m\r\n`);
+        }
+
+        this.socket.emit('ansi-output', '\r\n\x1b[32m✓ Installation complete!\x1b[0m\r\n');
+      } else {
+        this.socket.emit('ansi-output', '\x1b[31m✗ ' + result.message + '\x1b[0m\r\n');
+      }
+
+    } catch (error) {
+      this.socket.emit('ansi-output', '\x1b[31m✗ Installation error: ' + (error as Error).message + '\x1b[0m\r\n');
+    }
+
+    // Re-scan to update list
+    await this.scanDoors();
+
+    this.socket.emit('ansi-output', '\r\nPress any key to return to door list...\r\n');
+    const returnToList = () => {
+      this.socket.off('command', returnToList);
+      this.state.mode = 'list';
+      this.showList();
+    };
+    this.socket.once('command', returnToList);
+  }
+
+  /**
+   * Install a door (legacy method for simple ZIP extraction)
    */
   private async installDoor(door: DoorInfo): Promise<void> {
     if (!door.archivePath) {
