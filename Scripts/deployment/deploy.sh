@@ -140,84 +140,43 @@ echo -e "${GREEN}✓${NC} Prerequisites satisfied"
 echo ""
 
 # ============================================
-# PART 1: Deploy Backend to Render.com
+# PARALLEL DEPLOYMENT: Backend + Frontend
 # ============================================
 
 echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${MAGENTA}  [1/2] Deploying Backend to Render${NC}"
+echo -e "${MAGENTA}  Deploying Backend + Frontend in Parallel${NC}"
 echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
 # Service ID is embedded in the deploy hook URL
 SERVICE_ID="srv-d3naaffdiees73eebd0g"
 
-# Trigger deployment via Render Deploy Hook
-if [ -n "$RENDER_DEPLOY_HOOK" ]; then
-    echo -e "${YELLOW}→${NC} Triggering backend deployment via deploy hook..."
+# ============================================
+# STEP 1: Trigger both deployments
+# ============================================
 
+# Trigger backend deployment
+if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+    echo -e "${YELLOW}→${NC} [1/2] Triggering backend deployment..."
     HOOK_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$RENDER_DEPLOY_HOOK" 2>&1)
     HTTP_CODE=$(echo "$HOOK_RESPONSE" | tail -1)
 
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "202" ]; then
-        echo -e "${GREEN}✓${NC} Deploy hook triggered successfully (HTTP $HTTP_CODE)"
-        echo ""
-        # Wait a few seconds for build to start
-        sleep 5
+        echo -e "${GREEN}✓${NC} Backend triggered (HTTP $HTTP_CODE)"
     else
-        echo -e "${RED}✗ Error: Deploy hook returned HTTP $HTTP_CODE${NC}"
-        echo -e "${YELLOW}⚠ Continuing anyway - auto-deploy may pick it up${NC}"
-        echo ""
+        echo -e "${YELLOW}⚠${NC} Backend returned HTTP $HTTP_CODE (may still work)"
     fi
 else
-    echo -e "${YELLOW}⚠${NC}  No RENDER_DEPLOY_HOOK configured"
-    echo -e "${YELLOW}  Relying on auto-deploy from GitHub push...${NC}"
-    echo ""
-    # Wait longer for auto-deploy to detect the push
-    sleep 10
+    echo -e "${YELLOW}⚠${NC} No RENDER_DEPLOY_HOOK (relying on auto-deploy)"
 fi
 
-# Monitor deployment (optional - Render CLI may not be available)
-echo -e "${YELLOW}→${NC} Backend deployment initiated..."
-echo -e "${CYAN}  Dashboard:${NC} https://dashboard.render.com/web/$SERVICE_ID"
-echo ""
+# Trigger frontend deployment (in background)
+echo -e "${YELLOW}→${NC} [2/2] Triggering frontend deployment..."
 
-# Wait 30 seconds for build to start
-echo -e "${YELLOW}→${NC} Waiting 30s for build to start..."
-sleep 30
-
-echo -e "${GREEN}✓${NC} Backend deployment in progress"
-echo -e "${YELLOW}  Note: Build may take 2-3 minutes to complete${NC}"
-echo ""
-
-# Send backend webhook
-send_webhook \
-    "Backend Deployment Triggered" \
-    "Backend deployment initiated on Render
-
-**Service:** amiexpress-backend
-**Commit:** \`$COMMIT_SHORT\`
-**Dashboard:** https://dashboard.render.com/web/$SERVICE_ID" \
-    "3447003" \
-    "🔧"
-
-# ============================================
-# PART 2: Deploy Frontend to Vercel
-# ============================================
-
-echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${MAGENTA}  [2/2] Deploying Frontend to Vercel${NC}"
-echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-
-# Check if we're in the right directory
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
-echo -e "${YELLOW}→${NC} Deploying frontend to production..."
-
-# Deploy to Vercel production
-# --prod: Deploy to production
-# --yes: Skip confirmation prompts
+# Deploy to Vercel in background and capture output
 VERCEL_OUTPUT=$(vercel --prod --yes 2>&1)
 VERCEL_EXIT=$?
 
@@ -231,15 +190,29 @@ fi
 DEPLOYMENT_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | tail -1)
 PRODUCTION_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://bbs\.uprough\.net' || echo "https://bbs.uprough.net")
 
-echo -e "${GREEN}✓${NC} Frontend deployment complete!"
+echo -e "${GREEN}✓${NC} Frontend deployed"
 echo ""
 
-# Send frontend success webhook
+# ============================================
+# STEP 2: Report results
+# ============================================
+
+echo -e "${GREEN}✓${NC} Both deployments initiated!"
+echo -e "${CYAN}  Backend:${NC}  https://dashboard.render.com/web/$SERVICE_ID"
+echo -e "${CYAN}  Frontend:${NC} $PRODUCTION_URL"
+echo ""
+
+# Send webhooks
+send_webhook \
+    "Backend Deployment Triggered" \
+    "**Commit:** \`$COMMIT_SHORT\`
+**Dashboard:** https://dashboard.render.com/web/$SERVICE_ID" \
+    "3447003" \
+    "🔧"
+
 send_webhook \
     "Frontend Deployed" \
-    "Frontend successfully deployed to Vercel
-
-**URL:** $PRODUCTION_URL
+    "**URL:** $PRODUCTION_URL
 **Commit:** \`$COMMIT_SHORT\`" \
     "65280" \
     "✅"
