@@ -188,6 +188,17 @@ export class AmigaDoorSession {
         console.error(`[AmigaDoorSession] WARNING: PC not at entry point!`);
       }
 
+      // Check what's at address 4 (should be ExecBase on real Amiga)
+      const addr4_0 = this.emulator.readMemory(4);
+      const addr4_1 = this.emulator.readMemory(5);
+      const addr4_2 = this.emulator.readMemory(6);
+      const addr4_3 = this.emulator.readMemory(7);
+      const addr4Val = (addr4_0 << 24) | (addr4_1 << 16) | (addr4_2 << 8) | addr4_3;
+      console.log(`[AmigaDoorSession] ExecBase at address 4: 0x${addr4Val.toString(16)}`);
+      if (addr4Val === 0) {
+        console.log(`  ⚠️ WARNING: ExecBase is NULL! Door won't be able to call libraries!`);
+      }
+
       // Log first few instructions to see what door is doing
       console.log('[AmigaDoorSession] First 10 instructions at entry point:');
       for (let i = 0; i < 10; i++) {
@@ -315,25 +326,46 @@ export class AmigaDoorSession {
       const instr2 = this.emulator.readMemory(pcAfter + 2);
       const instr3 = this.emulator.readMemory(pcAfter + 3);
 
-      // JSR instruction: 0x4E B9 (JSR absolute.L)
-      // Followed by 4-byte address
-      if (instr0 === 0x4E && instr1 === 0xB9) {
-        const addr0 = this.emulator.readMemory(pcAfter + 2);
-        const addr1 = this.emulator.readMemory(pcAfter + 3);
-        const addr2 = this.emulator.readMemory(pcAfter + 4);
-        const addr3 = this.emulator.readMemory(pcAfter + 5);
-        const targetAddr = (addr0 << 24) | (addr1 << 16) | (addr2 << 8) | addr3;
+      // JSR instruction has multiple forms:
+      // 1. JSR absolute.L: 0x4E B9 xx xx xx xx
+      // 2. JSR (An) with displacement: 0x4E AE/AF xx xx (standard library calls!)
+      // 3. BSR (Branch to Subroutine): 0x61 xx
 
-        // Log ALL JSR calls every 100 iterations to see what door is calling
-        if (this.iterationCount % 100 === 0) {
-          console.log(`[JSR Detected] PC=0x${pcAfter.toString(16)} calling 0x${targetAddr.toString(16)}`);
+      if (instr0 === 0x4E) {
+        // JSR absolute.L: 0x4E B9
+        if (instr1 === 0xB9) {
+          const addr0 = this.emulator.readMemory(pcAfter + 2);
+          const addr1 = this.emulator.readMemory(pcAfter + 3);
+          const addr2 = this.emulator.readMemory(pcAfter + 4);
+          const addr3 = this.emulator.readMemory(pcAfter + 5);
+          const targetAddr = (addr0 << 24) | (addr1 << 16) | (addr2 << 8) | addr3;
+
+          if (this.iterationCount % 100 === 0) {
+            console.log(`[JSR absolute] PC=0x${pcAfter.toString(16)} calling 0x${targetAddr.toString(16)}`);
+          }
+
+          if (targetAddr >= 0xff0000 && targetAddr <= 0xffffff) {
+            console.log(`[*** LIBRARY CALL ***] JSR absolute to 0x${targetAddr.toString(16)} at PC=0x${pcAfter.toString(16)}`);
+          }
         }
+        // JSR (An) with displacement: 0x4E AE/AF (standard Amiga library call convention!)
+        // 0x4E AE = JSR (A6) with 16-bit displacement
+        // This is THE way Amiga programs call library functions!
+        else if (instr1 === 0xAE || instr1 === 0xAF) {
+          const offset = (instr2 << 8) | instr3;
+          // Convert to signed 16-bit
+          const signedOffset = offset > 0x7FFF ? offset - 0x10000 : offset;
+          const a6 = this.emulator.getRegister(14); // A6 register
+          const targetAddr = (a6 + signedOffset) >>> 0; // Ensure unsigned 32-bit
 
-        // Check if this is a library call (0xff0000 range)
-        if (targetAddr >= 0xff0000 && targetAddr <= 0xffffff) {
-          console.log(`[*** LIBRARY CALL ***] JSR to 0x${targetAddr.toString(16)} at PC=0x${pcAfter.toString(16)}`);
-          console.log(`  This should trigger trap handler!`);
-          console.log(`  Instruction bytes: ${instr0.toString(16)} ${instr1.toString(16)} ${addr0.toString(16)} ${addr1.toString(16)} ${addr2.toString(16)} ${addr3.toString(16)}`);
+          if (this.iterationCount % 100 === 0) {
+            console.log(`[JSR (A6)] PC=0x${pcAfter.toString(16)} calling (A6=${a6.toString(16)}) + offset ${signedOffset} = 0x${targetAddr.toString(16)}`);
+          }
+
+          // THIS IS A LIBRARY CALL! The trap handler should catch this!
+          console.log(`[*** LIBRARY CALL VIA A6 ***] JSR -${Math.abs(signedOffset)}(A6) at PC=0x${pcAfter.toString(16)}`);
+          console.log(`  A6=0x${a6.toString(16)}, offset=${signedOffset}, target=0x${targetAddr.toString(16)}`);
+          console.log(`  Instruction: 4E ${instr1.toString(16).padStart(2, '0')} ${instr2.toString(16).padStart(2, '0')} ${instr3.toString(16).padStart(2, '0')}`);
         }
       }
 
