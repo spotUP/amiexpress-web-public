@@ -89,6 +89,10 @@ export async function listLhaFiles(filepath: string): Promise<string[]> {
 
 /**
  * Find FILE_ID.DIZ in LHA archive and extract it
+ * Improved to match Door Manager's ZIP extraction logic:
+ * - Checks for FILE_ID.DIZ in root directory
+ * - Checks for FILE_ID.DIZ in any subdirectory (e.g., somedir/FILE_ID.DIZ)
+ * - Case-insensitive matching
  */
 export async function extractFileDizFromLha(
   filepath: string,
@@ -97,14 +101,24 @@ export async function extractFileDizFromLha(
   try {
     console.log(`[LHA] Extracting FILE_ID.DIZ from ${path.basename(filepath)}`);
 
-    // Find FILE_ID.DIZ (case-insensitive)
+    // Find FILE_ID.DIZ (case-insensitive, including subdirectories)
     const entries = await readLhaArchive(filepath);
-    const dizEntry = entries.find(
-      (e: LhaEntry) => e.name.toLowerCase() === 'file_id.diz'
-    );
+
+    console.log(`[LHA] Archive contains ${entries.length} files:`);
+    entries.forEach((e: LhaEntry) => {
+      console.log(`[LHA]   - ${e.name}`);
+    });
+
+    const dizEntry = entries.find((e: LhaEntry) => {
+      const lowerName = e.name.toLowerCase();
+      // Match: file_id.diz OR any/path/file_id.diz
+      return lowerName === 'file_id.diz' ||
+             lowerName.endsWith('/file_id.diz') ||
+             lowerName.endsWith('\\file_id.diz'); // Handle DOS/Windows paths
+    });
 
     if (!dizEntry) {
-      console.log(`[LHA] FILE_ID.DIZ not found in archive`);
+      console.log(`[LHA] FILE_ID.DIZ not found in archive (searched ${entries.length} files)`);
       return false;
     }
 
@@ -119,7 +133,7 @@ export async function extractFileDizFromLha(
 
     // Write to file
     await fs.writeFile(outputPath, Buffer.from(decompressed));
-    console.log(`[LHA] ✓ Extracted FILE_ID.DIZ to ${outputPath}`);
+    console.log(`[LHA] ✓ Extracted FILE_ID.DIZ to ${outputPath} (${decompressed.length} bytes)`);
 
     return true;
   } catch (error: any) {

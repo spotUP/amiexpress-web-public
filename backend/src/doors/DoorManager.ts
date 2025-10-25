@@ -138,12 +138,17 @@ export class DoorManager {
       for (const archive of archives) {
         const fullPath = path.join(this.archivesPath, archive);
         const stats = fs.statSync(fullPath);
+        const lowerArchive = archive.toLowerCase();
+        const isArchive = lowerArchive.endsWith('.zip') ||
+                         lowerArchive.endsWith('.lha') ||
+                         lowerArchive.endsWith('.lzh');
 
-        if (stats.isFile() && archive.toLowerCase().endsWith('.zip')) {
+        if (stats.isFile() && isArchive) {
           const doorInfo = await this.extractDoorInfo(fullPath);
+          const ext = path.extname(archive);
           doors.push({
             id: crypto.createHash('md5').update(archive).digest('hex'),
-            name: path.basename(archive, '.zip'),
+            name: path.basename(archive, ext),
             filename: archive,
             type: 'archive',
             size: stats.size,
@@ -162,51 +167,111 @@ export class DoorManager {
 
   /**
    * Extract door information from archive
+   * Supports: ZIP, LHA, LZH
    */
   private async extractDoorInfo(archivePath: string): Promise<Partial<DoorInfo>> {
     const info: Partial<DoorInfo> = {};
+    const ext = path.extname(archivePath).toLowerCase();
 
     try {
-      const zip = new AdmZip(archivePath);
-      const zipEntries = zip.getEntries();
+      if (ext === '.zip') {
+        // Handle ZIP archives with AdmZip
+        const zip = new AdmZip(archivePath);
+        const zipEntries = zip.getEntries();
 
-      // Look for FILE_ID.DIZ
-      const dizEntry = zipEntries.find(e =>
-        e.entryName.toLowerCase() === 'file_id.diz' ||
-        e.entryName.toLowerCase().endsWith('/file_id.diz')
-      );
-      if (dizEntry) {
-        info.fileidDiz = dizEntry.getData().toString('utf8');
-        // Parse DIZ for info
-        const parsed = this.parseFileidDiz(info.fileidDiz);
-        Object.assign(info, parsed);
-      }
+        // Look for FILE_ID.DIZ
+        const dizEntry = zipEntries.find(e =>
+          e.entryName.toLowerCase() === 'file_id.diz' ||
+          e.entryName.toLowerCase().endsWith('/file_id.diz')
+        );
+        if (dizEntry) {
+          info.fileidDiz = dizEntry.getData().toString('utf8');
+          // Parse DIZ for info
+          const parsed = this.parseFileidDiz(info.fileidDiz);
+          Object.assign(info, parsed);
+        }
 
-      // Look for README
-      const readmeEntry = zipEntries.find(e =>
-        /readme/i.test(e.entryName) && /\.(txt|md|doc)$/i.test(e.entryName)
-      );
-      if (readmeEntry) {
-        info.readme = readmeEntry.getData().toString('utf8');
-      }
+        // Look for README
+        const readmeEntry = zipEntries.find(e =>
+          /readme/i.test(e.entryName) && /\.(txt|md|doc)$/i.test(e.entryName)
+        );
+        if (readmeEntry) {
+          info.readme = readmeEntry.getData().toString('utf8');
+        }
 
-      // Look for NFO file
-      const nfoEntry = zipEntries.find(e => e.entryName.toLowerCase().endsWith('.nfo'));
-      if (nfoEntry) {
-        info.nfo = nfoEntry.getData().toString('utf8');
-      }
+        // Look for NFO file
+        const nfoEntry = zipEntries.find(e => e.entryName.toLowerCase().endsWith('.nfo'));
+        if (nfoEntry) {
+          info.nfo = nfoEntry.getData().toString('utf8');
+        }
 
-      // Look for executable
-      const exeEntry = zipEntries.find(e =>
-        !e.isDirectory && (
-          e.entryName.endsWith('.exe') ||
-          e.entryName.endsWith('.ts') ||
-          e.entryName.endsWith('.js') ||
-          (!path.extname(e.entryName) && e.entryName.includes('/'))
-        )
-      );
-      if (exeEntry) {
-        info.executable = exeEntry.entryName;
+        // Look for executable
+        const exeEntry = zipEntries.find(e =>
+          !e.isDirectory && (
+            e.entryName.endsWith('.exe') ||
+            e.entryName.endsWith('.ts') ||
+            e.entryName.endsWith('.js') ||
+            (!path.extname(e.entryName) && e.entryName.includes('/'))
+          )
+        );
+        if (exeEntry) {
+          info.executable = exeEntry.entryName;
+        }
+      } else if (ext === '.lha' || ext === '.lzh') {
+        // Handle LHA/LZH archives with lha-extractor
+        const { readLhaArchive } = await import('../utils/lha-extractor');
+        const entries = await readLhaArchive(archivePath);
+
+        // Look for FILE_ID.DIZ (case-insensitive, including subdirectories)
+        const dizEntry = entries.find((e: any) => {
+          const lowerName = e.name.toLowerCase();
+          return lowerName === 'file_id.diz' ||
+                 lowerName.endsWith('/file_id.diz') ||
+                 lowerName.endsWith('\\file_id.diz');
+        });
+        if (dizEntry) {
+          const LHA = require('../utils/lha.js');
+          const decompressed = LHA.unpack(dizEntry);
+          if (decompressed) {
+            info.fileidDiz = Buffer.from(decompressed).toString('utf8');
+            // Parse DIZ for info
+            const parsed = this.parseFileidDiz(info.fileidDiz);
+            Object.assign(info, parsed);
+          }
+        }
+
+        // Look for README
+        const readmeEntry = entries.find((e: any) =>
+          /readme/i.test(e.name) && /\.(txt|md|doc)$/i.test(e.name)
+        );
+        if (readmeEntry) {
+          const LHA = require('../utils/lha.js');
+          const decompressed = LHA.unpack(readmeEntry);
+          if (decompressed) {
+            info.readme = Buffer.from(decompressed).toString('utf8');
+          }
+        }
+
+        // Look for NFO file
+        const nfoEntry = entries.find((e: any) => e.name.toLowerCase().endsWith('.nfo'));
+        if (nfoEntry) {
+          const LHA = require('../utils/lha.js');
+          const decompressed = LHA.unpack(nfoEntry);
+          if (decompressed) {
+            info.nfo = Buffer.from(decompressed).toString('utf8');
+          }
+        }
+
+        // Look for executable
+        const exeEntry = entries.find((e: any) =>
+          e.name.endsWith('.exe') ||
+          e.name.endsWith('.ts') ||
+          e.name.endsWith('.js') ||
+          (!path.extname(e.name) && e.name.includes('/'))
+        );
+        if (exeEntry) {
+          info.executable = exeEntry.name;
+        }
       }
 
     } catch (error) {
