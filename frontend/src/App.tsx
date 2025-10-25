@@ -252,20 +252,20 @@ function App() {
     // Handle font preference response
     ws.on('font-preference', (data: { font: string }) => {
       console.log('🔤 Font preference received:', data.font);
-      if (terminal.current) {
-        terminal.current.options.fontFamily = `${data.font}, "Courier New", monospace`;
-        console.log('✅ Font applied:', data.font);
-      }
+      // Update terminal font with proper refresh for cross-browser compatibility
+      term.options.fontFamily = `${data.font}, "Courier New", monospace`;
+      term.refresh(0, term.rows - 1); // Force re-render for Firefox/Edge
+      console.log('✅ Font applied:', data.font);
     });
 
     // Handle font changed event (when user changes font via S command)
     ws.on('font-changed', (data: { font: string }) => {
       console.log('🔤 Font changed:', data.font);
-      if (terminal.current) {
-        terminal.current.options.fontFamily = `${data.font}, "Courier New", monospace`;
-        term.write(`\r\n\x1b[32mFont changed to ${data.font}\x1b[0m\r\n`);
-        console.log('✅ Font applied:', data.font);
-      }
+      // Update terminal font with proper refresh for cross-browser compatibility
+      term.options.fontFamily = `${data.font}, "Courier New", monospace`;
+      term.refresh(0, term.rows - 1); // Force re-render for Firefox/Edge
+      term.write(`\r\n\x1b[32mFont changed to ${data.font}\x1b[0m\r\n`);
+      console.log('✅ Font applied:', data.font);
     });
 
     // Handle file upload request from server
