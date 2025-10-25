@@ -47,12 +47,14 @@ interface DoorManagerState {
 
 export class DoorManager {
   private socket: Socket;
+  private session: any;
   private state: DoorManagerState;
   private doorsPath: string;
   private archivesPath: string;
 
-  constructor(socket: Socket) {
+  constructor(socket: Socket, session?: any) {
     this.socket = socket;
+    this.session = session;
     this.doorsPath = path.join(__dirname, '../../doors');
     this.archivesPath = path.join(__dirname, '../../doors/archives');
 
@@ -67,6 +69,11 @@ export class DoorManager {
       doors: [],
       scrollOffset: 0
     };
+
+    // Set session flag to prevent main command handler from interfering
+    if (this.session) {
+      this.session.inDoorManager = true;
+    }
   }
 
   /**
@@ -650,6 +657,7 @@ export class DoorManager {
 
     // Q - Quit
     if (key === 'q') {
+      this.cleanup();
       this.socket.emit('door-exit');
       return;
     }
@@ -692,6 +700,7 @@ export class DoorManager {
 
     // Q - Quit
     if (key === 'q') {
+      this.cleanup();
       this.socket.emit('door-exit');
       return;
     }
@@ -729,6 +738,7 @@ export class DoorManager {
 
     // Q - Quit
     if (key === 'q') {
+      this.cleanup();
       this.socket.emit('door-exit');
       return;
     }
@@ -765,10 +775,23 @@ export class DoorManager {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
+
+  /**
+   * Cleanup when exiting Door Manager
+   */
+  private cleanup(): void {
+    // Clear the session flag
+    if (this.session) {
+      delete this.session.inDoorManager;
+      // Set state to display menu
+      this.session.subState = 'display_menu';
+      this.session.menuPause = false;
+    }
+  }
 }
 
 // Export main function for door execution
-export async function executeDoor(socket: Socket): Promise<void> {
-  const manager = new DoorManager(socket);
+export async function executeDoor(socket: Socket, session?: any): Promise<void> {
+  const manager = new DoorManager(socket, session);
   await manager.start();
 }

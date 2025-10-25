@@ -357,6 +357,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   console.log('session.state:', session.state);
   console.log('session.subState:', session.subState);
 
+  // Skip processing if Door Manager is active (it handles its own input)
+  if (session.inDoorManager) {
+    console.log('Door Manager is active, skipping command processing');
+    return;
+  }
+
   // Handle pre-login connection flow (AWAIT state)
   if (session.state === BBSState.AWAIT) {
     if (session.subState === LoggedOnSubState.DISPLAY_CONNECT) {
@@ -2490,7 +2496,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'DOORMAN': { // Door Manager plugin - for installing/managing doors
       const { executeDoor } = await import('../doors/DoorManager');
-      await executeDoor(socket);
+      await executeDoor(socket, session);
       return;
     }
 
