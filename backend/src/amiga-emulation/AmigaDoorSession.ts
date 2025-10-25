@@ -166,6 +166,14 @@ export class AmigaDoorSession {
       // Emit ready status
       this.socket.emit('door:status', { status: 'running' });
 
+      // Verify PC is at entry point
+      const pc = this.emulator.getRegister(16); // PC = register 16
+      console.log(`[AmigaDoorSession] Program counter at start: 0x${pc.toString(16)} (expected: 0x${hunkFile.entryPoint.toString(16)})`);
+
+      if (pc !== hunkFile.entryPoint) {
+        console.error(`[AmigaDoorSession] WARNING: PC not at entry point!`);
+      }
+
       // Start execution loop
       this.runExecutionLoop();
 
@@ -183,19 +191,29 @@ export class AmigaDoorSession {
    * This allows for responsive I/O handling
    */
   private runExecutionLoop(): void {
-    if (!this.emulator || !this.isRunning) return;
+    if (!this.emulator || !this.isRunning) {
+      console.log('[AmigaDoorSession] Execution loop stopped - emulator or isRunning is false');
+      return;
+    }
 
     try {
       // Execute a small number of cycles (allows I/O to be processed)
       // 10000 cycles ≈ 1.25ms on original 8MHz 68000
-      this.emulator.execute(10000);
+      const cyclesExecuted = this.emulator.execute(10000);
+
+      if (cyclesExecuted === 0) {
+        console.warn('[AmigaDoorSession] CPU executed 0 cycles - door may have hit STOP or invalid instruction');
+        this.socket.emit('door:status', { status: 'completed' });
+        this.terminate();
+        return;
+      }
 
       // Schedule next iteration
       setImmediate(() => this.runExecutionLoop());
 
     } catch (error) {
       // STOP instruction or error
-      console.log('[AmigaDoorSession] Execution stopped:', error);
+      console.error('[AmigaDoorSession] Execution stopped with error:', error);
       this.socket.emit('door:status', { status: 'completed' });
       this.terminate();
     }
