@@ -55,8 +55,10 @@ export class FileListingHandler {
       // User specified directory in params
       dirSpan = parseDirSpan(parsedParams[0], maxDirs, this.canAccessHold(session));
     } else {
-      // Prompt user for directory
-      // TODO: Display FILEHELP screen if available
+      // Prompt user for directory (express.e:27646-27647)
+      // Display FILEHELP screen if available
+      await displayScreen(socket, session, 'FILEHELP', false); // Don't pause for file help
+
       const prompt = getDirSpanPrompt(maxDirs, this.canAccessHold(session));
       socket.emit('ansi-output', prompt);
 
