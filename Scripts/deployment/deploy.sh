@@ -156,6 +156,7 @@ SERVICE_ID="srv-d3naaffdiees73eebd0g"
 # ============================================
 
 # Trigger backend deployment
+BACKEND_SUCCESS=true
 if [ -n "$RENDER_DEPLOY_HOOK" ]; then
     echo -e "${YELLOW}→${NC} [1/2] Triggering backend deployment..."
     HOOK_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$RENDER_DEPLOY_HOOK" 2>&1)
@@ -165,6 +166,18 @@ if [ -n "$RENDER_DEPLOY_HOOK" ]; then
         echo -e "${GREEN}✓${NC} Backend triggered (HTTP $HTTP_CODE)"
     else
         echo -e "${YELLOW}⚠${NC} Backend returned HTTP $HTTP_CODE (may still work)"
+        BACKEND_SUCCESS=false
+        # Send error webhook
+        send_webhook \
+            "Backend Deployment Error" \
+            "Render deploy hook returned HTTP $HTTP_CODE
+
+**Commit:** \`$COMMIT_SHORT\`
+**Response:** \`\`\`
+$(echo "$HOOK_RESPONSE" | head -10)
+\`\`\`" \
+            "16711680" \
+            "❌"
     fi
 else
     echo -e "${YELLOW}⚠${NC} No RENDER_DEPLOY_HOOK (relying on auto-deploy)"
@@ -186,6 +199,16 @@ if [ $VERCEL_EXIT -eq 124 ]; then
     DEPLOYMENT_URL=""
     PRODUCTION_URL="https://bbs.uprough.net"
     echo ""
+    # Send timeout webhook
+    send_webhook \
+        "Frontend Deployment Timeout" \
+        "Vercel deployment timed out after 120 seconds
+
+**Commit:** \`$COMMIT_SHORT\`
+**Status:** Deployment may still be in progress on Vercel's side
+**URL:** $PRODUCTION_URL" \
+        "16776960" \
+        "⏱️"
 elif [ $VERCEL_EXIT -ne 0 ]; then
     echo -e "${YELLOW}⚠${NC} Vercel deployment failed (exit code: $VERCEL_EXIT)"
     echo "$VERCEL_OUTPUT"
@@ -193,6 +216,17 @@ elif [ $VERCEL_EXIT -ne 0 ]; then
     DEPLOYMENT_URL=""
     PRODUCTION_URL="https://bbs.uprough.net"
     echo ""
+    # Send error webhook
+    send_webhook \
+        "Frontend Deployment Error" \
+        "Vercel deployment failed with exit code $VERCEL_EXIT
+
+**Commit:** \`$COMMIT_SHORT\`
+**Error:** \`\`\`
+$(echo "$VERCEL_OUTPUT" | tail -20)
+\`\`\`" \
+        "16711680" \
+        "❌"
 else
     # Extract deployment URL (only on success)
     DEPLOYMENT_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | tail -1)
