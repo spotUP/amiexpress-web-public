@@ -372,7 +372,7 @@ async function createAccount(socket: Socket, session: any) {
     socket.emit('ansi-output', '\r\n\x1b[32mCreating your account...\x1b[0m\r\n');
 
     // Hash password with bcrypt
-    const bcrypt = await import('bcrypt');
+    const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     // Create user in database

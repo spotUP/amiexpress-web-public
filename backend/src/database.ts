@@ -3,7 +3,7 @@ require('dotenv').config({ override: true });
 
 import { Pool as PoolConstructor } from 'pg';
 import * as crypto from 'crypto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 
 // Import types from types.ts
@@ -2576,7 +2576,7 @@ export class Database {
       const user = result.rows[0];
 
       // Verify password with bcrypt
-      const bcrypt = await import('bcrypt');
+      const bcrypt = await import('bcryptjs');
       const passwordMatch = await bcrypt.compare(password, user.passwordhash);
 
       if (!passwordMatch) {
