@@ -97,6 +97,14 @@ export class AmiExpressLibrary {
       console.log(`[AmiExpress] Memory at 0x${stringPtr.toString(16)}: [${debugBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
       console.log(`[AmiExpress] Memory as ASCII: "${debugBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
 
+      // Check what's in the DATA segment (0x3900-0x3A78)
+      console.log('[AmiExpress] Checking DATA segment at 0x3900:');
+      const dataBytes: number[] = [];
+      for (let i = 0; i < 64; i++) {
+        dataBytes.push(this.emulator.readMemory(0x3900 + i));
+      }
+      console.log(`[AmiExpress] DATA at 0x3900: "${dataBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
+
       // Check if this looks like a pointer (first 4 bytes form an address)
       if (debugBytes.length >= 4) {
         const possiblePtr = (debugBytes[0] << 24) | (debugBytes[1] << 16) | (debugBytes[2] << 8) | debugBytes[3];
@@ -110,6 +118,16 @@ export class AmiExpressLibrary {
           console.log(`[AmiExpress] Memory at dereferenced addr 0x${possiblePtr.toString(16)}: [${derefBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
           console.log(`[AmiExpress] Dereferenced as ASCII: "${derefBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
         }
+      }
+
+      // CRITICAL: Check if stringPtr is actually within valid segment ranges
+      const inCodeSegment = (stringPtr >= 0x1000 && stringPtr < 0x38E8);
+      const inDataSegment = (stringPtr >= 0x3900 && stringPtr < 0x3A78);
+      console.log(`[AmiExpress] String pointer 0x${stringPtr.toString(16)} is in CODE: ${inCodeSegment}, DATA: ${inDataSegment}`);
+
+      if (!inCodeSegment && !inDataSegment) {
+        console.warn(`[AmiExpress] ⚠️ String pointer 0x${stringPtr.toString(16)} is OUTSIDE all loaded segments!`);
+        console.warn(`[AmiExpress]    CODE: 0x1000-0x38E8, DATA: 0x3900-0x3A78`);
       }
 
       // Read string from memory
