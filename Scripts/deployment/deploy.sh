@@ -236,33 +236,30 @@ send_webhook \
 # ============================================
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}✓ Full-Stack Deployment Successful${NC}"
+echo -e "${YELLOW}✓ Deployments Triggered Successfully${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${BLUE}Backend (Render):${NC}"
 echo -e "  Service URL: https://amiexpress-backend.onrender.com"
 echo -e "  Dashboard:   https://dashboard.render.com/web/$SERVICE_ID"
+echo -e "  Status:      🔨 Building..."
 echo ""
 echo -e "${BLUE}Frontend (Vercel):${NC}"
 echo -e "  Production:  $PRODUCTION_URL"
 if [ -n "$DEPLOYMENT_URL" ]; then
     echo -e "  Preview:     $DEPLOYMENT_URL"
 fi
+echo -e "  Status:      🔨 Building..."
 echo ""
 echo -e "${BLUE}Commit:${NC} $COMMIT_SHORT - $COMMIT_MSG"
+echo ""
+echo -e "${YELLOW}⏳ Builds typically complete in 30-60 seconds${NC}"
+echo -e "${CYAN}   Monitor progress at: https://dashboard.render.com/web/$SERVICE_ID${NC}"
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Send final success webhook
-send_webhook \
-    "Deployment Complete 🎉" \
-    "Full-stack deployment successful!
-
-**Backend:** https://amiexpress-backend.onrender.com
-**Frontend:** $PRODUCTION_URL
-**Commit:** \`$COMMIT_SHORT\` - $COMMIT_MSG" \
-    "3447003" \
-    "🎉"
+# Note: No final webhook - the "Started" webhooks are sufficient
+# A completion webhook would require polling Render/Vercel APIs
 
 exit 0
