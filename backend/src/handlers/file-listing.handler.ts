@@ -14,6 +14,7 @@ import { readDirFile, getDirFilePath, getHoldDirFilePath, DirFileEntry } from '.
 import { parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../utils/dir-span.util';
 import { FileFlagManager } from '../utils/file-flag.util';
 import { ParamsUtil } from '../utils/params.util';
+import { config } from '../config';
 
 /**
  * Display file list for a conference
@@ -30,7 +31,6 @@ export class FileListingHandler {
     params: string,
     reverse: boolean = false
   ): Promise<void> {
-    const config = (global as any).config;
     const bbsDataPath = config.get('dataDir');
 
     socket.emit('ansi-output', '\r\n');
@@ -97,7 +97,6 @@ export class FileListingHandler {
     session: Session,
     input: string
   ): Promise<void> {
-    const config = (global as any).config;
     const bbsDataPath = config.get('dataDir');
     const maxDirs = await this.getMaxDirs(session.currentConf, bbsDataPath);
 
@@ -137,7 +136,6 @@ export class FileListingHandler {
     hasNonStop: boolean,
     maxDirs: number
   ): Promise<void> {
-    const config = (global as any).config;
     const bbsDataPath = config.get('dataDir');
     const conferencePath = path.join(bbsDataPath, `Conf${String(session.currentConf).padStart(2, '0')}`);
 
