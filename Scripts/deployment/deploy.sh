@@ -212,18 +212,24 @@ echo ""
 
 # Send webhooks
 send_webhook \
-    "Backend Deployment Triggered" \
-    "**Commit:** \`$COMMIT_SHORT\`
-**Dashboard:** https://dashboard.render.com/web/$SERVICE_ID" \
-    "3447003" \
-    "🔧"
+    "Backend Deployment Started" \
+    "**Status:** Building on Render...
+**Commit:** \`$COMMIT_SHORT\`
+**Dashboard:** https://dashboard.render.com/web/$SERVICE_ID
+
+⏳ Build typically takes 30-60 seconds" \
+    "16776960" \
+    "🔨"
 
 send_webhook \
-    "Frontend Deployed" \
-    "**URL:** $PRODUCTION_URL
-**Commit:** \`$COMMIT_SHORT\`" \
-    "65280" \
-    "✅"
+    "Frontend Deployment Started" \
+    "**Status:** Auto-deploying via Vercel GitHub integration...
+**URL:** $PRODUCTION_URL
+**Commit:** \`$COMMIT_SHORT\`
+
+⏳ Build typically takes 30-60 seconds" \
+    "16776960" \
+    "🔨"
 
 # ============================================
 # Deployment Summary
