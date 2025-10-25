@@ -320,21 +320,30 @@ export function scanCommandDirectory(
 
   // Scan each directory for .info files
   for (const dirPath of searchPaths) {
+    console.log(`  Scanning ${commandType} directory: ${dirPath}`);
     if (!fs.existsSync(dirPath)) {
+      console.log(`    Directory does not exist, skipping`);
       continue;
     }
 
     const files = fs.readdirSync(dirPath);
+    console.log(`    Found ${files.length} file(s): ${files.join(', ')}`);
     for (const file of files) {
       if (file.endsWith('.info') || file.endsWith('.Info')) {
         const fullPath = path.join(dirPath, file);
+        console.log(`    Parsing .info file: ${fullPath}`);
         const cmd = loadCommandFromInfo(fullPath);
 
         if (cmd) {
+          console.log(`      Loaded command: ${cmd.name} → ${cmd.location}`);
           // Only add if not already found (maintains priority order)
           if (!commands.has(cmd.name)) {
             commands.set(cmd.name, cmd);
+          } else {
+            console.log(`      Command ${cmd.name} already loaded (skipping due to priority)`);
           }
+        } else {
+          console.log(`      Failed to parse .info file`);
         }
       }
     }

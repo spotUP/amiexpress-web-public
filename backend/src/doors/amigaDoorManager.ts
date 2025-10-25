@@ -943,6 +943,7 @@ export class AmigaDoorManager {
       // Reload command cache so the new door(s) are immediately available
       // This ensures installed doors take priority over internal commands
       console.log('[installDoor] Reloading command cache to pick up new door(s)...');
+      console.log('[installDoor] BBS root path:', this.bbsRoot);
       loadCommands(this.bbsRoot, 1, 0); // Conference 1, Node 0
       console.log('[installDoor] Command cache reloaded - door(s) now available');
 
