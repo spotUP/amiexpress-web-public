@@ -133,10 +133,18 @@ export function handleUserStatsCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize('Times Today', 'green') +
     AnsiUtil.colorize(':', 'yellow') + ' ' + timesToday + '\r\n');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  // Current Font (Web-specific feature)
+  const currentFont = (user as any).fontPreference || 'mosoul';
+  socket.emit('ansi-output', AnsiUtil.colorize('Font      ', 'green') +
+    AnsiUtil.colorize(':', 'yellow') + ' ' + currentFont + '\r\n');
 
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('[F]', 'cyan') + ' Change Font\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('[Q]', 'cyan') + ' Return to Menu\r\n');
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('Selection: ', 'yellow'));
+
+  session.subState = LoggedOnSubState.USER_STATS_MENU;
 }
 
 /**
@@ -285,4 +293,108 @@ export function handleDownloadCommand(socket: any, session: BBSSession, params: 
   // express.e:24856 - beginDLF(cmdcode,params)
   // Display download interface (calls displayDownloadInterface from file.handler.ts)
   _displayDownloadInterface(socket, session, params);
+}
+
+/**
+ * Handle user stats menu input (F=Font, Q=Quit)
+ * Web-specific extension to S command
+ */
+export function handleUserStatsMenuInput(socket: any, session: BBBSession, input: string): void {
+  const choice = input.trim().toUpperCase();
+
+  if (choice === 'F') {
+    // Show font selection menu
+    displayFontSelectionMenu(socket, session);
+  } else if (choice === 'Q' || choice === '') {
+    // Return to main menu
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  } else {
+    // Invalid choice
+    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid choice. Press F for fonts or Q to quit.'));
+    socket.emit('ansi-output', AnsiUtil.colorize('Selection: ', 'yellow'));
+  }
+}
+
+/**
+ * Display font selection menu
+ * Web-specific feature
+ */
+export function displayFontSelectionMenu(socket: any, session: BBSSession): void {
+  const fonts = [
+    { id: 'mosoul', name: "mO'sOul" },
+    { id: 'MicroKnight', name: 'MicroKnight' },
+    { id: 'MicroKnightPlus', name: 'MicroKnight Plus' },
+    { id: 'P0T-NOoDLE', name: 'P0T-NOoDLE' },
+    { id: 'Topaz_a500', name: 'Topaz (A500)' },
+    { id: 'Topaz_a1200', name: 'Topaz (A1200)' },
+    { id: 'TopazPlus_a500', name: 'Topaz Plus (A500)' },
+    { id: 'TopazPlus_a1200', name: 'Topaz Plus (A1200)' }
+  ];
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.headerBox('Select Font'));
+  socket.emit('ansi-output', '\r\n');
+
+  fonts.forEach((font, index) => {
+    const number = (index + 1).toString().padStart(2, ' ');
+    socket.emit('ansi-output', AnsiUtil.colorize(`[${number}]`, 'cyan') + ` ${font.name}\r\n`);
+  });
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('Selection (1-8 or Q to cancel): ', 'yellow'));
+  session.subState = LoggedOnSubState.FONT_SELECTION;
+}
+
+/**
+ * Handle font selection input
+ * Web-specific feature
+ */
+export async function handleFontSelectionInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const { db } = require('../database');
+
+  const fonts = [
+    'mosoul',
+    'MicroKnight',
+    'MicroKnightPlus',
+    'P0T-NOoDLE',
+    'Topaz_a500',
+    'Topaz_a1200',
+    'TopazPlus_a500',
+    'TopazPlus_a1200'
+  ];
+
+  const choice = input.trim().toUpperCase();
+
+  if (choice === 'Q' || choice === '') {
+    // Cancel, return to user stats menu
+    handleUserStatsCommand(socket, session);
+    return;
+  }
+
+  const selection = parseInt(choice, 10);
+  if (isNaN(selection) || selection < 1 || selection > fonts.length) {
+    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid choice. Enter 1-8 or Q to cancel.'));
+    socket.emit('ansi-output', AnsiUtil.colorize('Selection: ', 'yellow'));
+    return;
+  }
+
+  const selectedFont = fonts[selection - 1];
+
+  // Update user's font preference in database
+  try {
+    await db.updateUser(session.user.id, { fontPreference: selectedFont });
+    session.user.fontPreference = selectedFont;
+
+    // Notify frontend to change font
+    socket.emit('font-changed', { font: selectedFont });
+
+    socket.emit('ansi-output', AnsiUtil.successLine(`Font changed to ${selectedFont}!`));
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  } catch (error) {
+    console.error('Error updating font preference:', error);
+    socket.emit('ansi-output', AnsiUtil.errorLine('Error saving font preference.'));
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
 }

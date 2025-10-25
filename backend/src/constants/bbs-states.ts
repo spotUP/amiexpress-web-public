@@ -135,6 +135,10 @@ export enum LoggedOnSubState {
   W_EDIT_SCREENTYPE = 'w_edit_screentype',            // Edit screen type (option 9)
   W_EDIT_PROTOCOL = 'w_edit_protocol',                // Edit transfer protocol (option 11)
   W_EDIT_TRANSLATOR = 'w_edit_translator',            // Edit translator (option 15)
+
+  // User Stats (S command) - Web-specific font selection
+  USER_STATS_MENU = 'user_stats_menu',                // User stats menu with font option
+  FONT_SELECTION = 'font_selection',                  // Font selection menu
 }
 
 export enum SessionStatus {

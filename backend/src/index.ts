@@ -1561,6 +1561,31 @@ io.on('connection', async (socket) => {
     await handleRoomMute(socket, session, data);
   });
 
+  // Font preference handlers
+  socket.on('get-font-preference', async () => {
+    const session = sessions.get(socket.id);
+    if (!session || !session.user) {
+      socket.emit('font-preference', { font: 'mosoul' }); // Default
+      return;
+    }
+
+    const fontPreference = (session.user as any).fontPreference || 'mosoul';
+    socket.emit('font-preference', { font: fontPreference });
+  });
+
+  socket.on('set-font-preference', async (data: { font: string }) => {
+    const session = sessions.get(socket.id);
+    if (!session || !session.user) return;
+
+    try {
+      await db.updateUser(session.user.id, { fontPreference: data.font });
+      (session.user as any).fontPreference = data.font;
+      socket.emit('font-changed', { font: data.font });
+    } catch (error) {
+      console.error('Error updating font preference:', error);
+    }
+  });
+
   socket.on('disconnect', async () => {
     console.log('Client disconnected');
 

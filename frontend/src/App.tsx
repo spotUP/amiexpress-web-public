@@ -200,6 +200,9 @@ function App() {
         console.log('🔐 Auth token stored in localStorage');
       }
 
+      // Request user's font preference
+      ws.emit('get-font-preference');
+
       // Focus terminal after login so user can interact immediately
       term.focus();
     });
@@ -244,6 +247,25 @@ function App() {
     ws.on('password-mode', (enabled: boolean) => {
       console.log('🔒 Password mode:', enabled);
       passwordMode.current = enabled;
+    });
+
+    // Handle font preference response
+    ws.on('font-preference', (data: { font: string }) => {
+      console.log('🔤 Font preference received:', data.font);
+      if (terminal.current) {
+        terminal.current.options.fontFamily = `${data.font}, "Courier New", monospace`;
+        console.log('✅ Font applied:', data.font);
+      }
+    });
+
+    // Handle font changed event (when user changes font via S command)
+    ws.on('font-changed', (data: { font: string }) => {
+      console.log('🔤 Font changed:', data.font);
+      if (terminal.current) {
+        terminal.current.options.fontFamily = `${data.font}, "Courier New", monospace`;
+        term.write(`\r\n\x1b[32mFont changed to ${data.font}\x1b[0m\r\n`);
+        console.log('✅ Font applied:', data.font);
+      }
     });
 
     // Handle file upload request from server

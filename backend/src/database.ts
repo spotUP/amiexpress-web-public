@@ -415,6 +415,13 @@ export class Database {
       `);
       console.log('✓ Ensured autorejoin column exists');
 
+      // Migration 3.5: Add fontpreference column if it doesn't exist
+      await client.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS fontpreference TEXT DEFAULT 'mosoul'
+      `);
+      console.log('✓ Ensured fontpreference column exists');
+
       // Migration 4: Add UNIQUE constraint to conferences.name
       await client.query(`
         DO $$
