@@ -35,17 +35,20 @@ let db: any;
 let sessions: Map<string, BBSSession>;
 let io: any;
 let setEnvStatFn: any;
+let config: any;
 
 export function setOlmDependencies(deps: {
   db: any;
   sessions: Map<string, BBSSession>;
   io: any;
   setEnvStat: any;
+  config: any;
 }) {
   db = deps.db;
   sessions = deps.sessions;
   io = deps.io;
   setEnvStatFn = deps.setEnvStat;
+  config = deps.config;
 }
 
 /**
@@ -56,14 +59,19 @@ export async function handleOlmCommand(socket: Socket, session: BBSSession, para
   console.log('📨 [OLM] handleOlmCommand called with params:', params);
 
   // express.e:25416 - Check security ACS_OLM and multinode enabled
+  // IF((checkSecurity(ACS_OLM))=FALSE) OR (sopt.toggles[TOGGLES_MULTICOM]=FALSE) THEN RETURN RESULT_NOT_ALLOWED
   if (!checkSecurity(session.user, ACSPermission.OLM)) {
     socket.emit('ansi-output', '\r\n\x1b[31mAccess denied.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
-  // TODO: Check if multinode is enabled (sopt.toggles[TOGGLES_MULTICOM])
-  // For now, always allow
+  // Check if OLM is enabled (sopt.toggles[TOGGLES_MULTICOM])
+  if (!config.get('olmEnabled')) {
+    socket.emit('ansi-output', '\r\n\x1b[31mOLM system is disabled.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
 
   // express.e:25418 - Set environment status
   if (setEnvStatFn) {
@@ -362,6 +370,38 @@ export function processOlmQueue(socket: Socket, session: BBSSession) {
  * Q command - Toggle quiet mode (block OLMs)
  * express.e:25505-25515 - PROC internalCommandQ()
  */
+/**
+ * Send quiet flag to other nodes
+ * express.e:13536-13565 - PROC sendQuietFlag(opt)
+ *
+ * Broadcasts quiet mode status to all other connected nodes/sessions
+ * so they know not to send OLMs to users in quiet mode
+ */
+function sendQuietFlag(session: BBSSession, quietFlag: boolean) {
+  console.log(`🔇 [OLM] Broadcasting quiet flag: ${quietFlag} for user ${session.user?.username}`);
+
+  // Update database with user's quiet preference (persist across sessions)
+  if (session.user?.id && db) {
+    db.updateUser(session.user.id, { blockOLM: quietFlag }).catch((err: Error) => {
+      console.error('[OLM] Error updating blockOLM in database:', err);
+    });
+  }
+
+  // Broadcast to all other connected sessions (express.e uses shared memory)
+  // This allows other nodes to check if user has quiet mode on before sending OLM
+  if (io && session.user) {
+    io.emit('olm-quiet-status', {
+      userId: session.user.id,
+      username: session.user.username,
+      blockOLM: quietFlag
+    });
+  }
+}
+
+/**
+ * Q Command - Toggle Quiet Mode (block OLMs)
+ * express.e:25505-25515 - PROC internalCommandQ
+ */
 export async function handleQuietCommand(socket: Socket, session: BBSSession) {
   console.log('🔇 [OLM] handleQuietCommand called');
 
@@ -375,8 +415,9 @@ export async function handleQuietCommand(socket: Socket, session: BBSSession) {
   // express.e:25507 - Toggle quiet flag
   session.blockOLM = !session.blockOLM;
 
-  // TODO: Send quiet flag to other nodes via sendQuietFlag()
-  // For now, just local toggle
+  // Send quiet flag to other nodes (express.e:25508)
+  // Updates shared node status so other nodes know user is in quiet mode
+  sendQuietFlag(session, session.blockOLM);
 
   // express.e:25509-25513 - Display status
   if (session.blockOLM) {

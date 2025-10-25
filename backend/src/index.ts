@@ -387,7 +387,8 @@ setOlmDependencies({
     // Placeholder for setEnvStat - express.e:24360
     console.log('📊 [ENV] Setting environment stat:', envStat);
     // TODO: Implement full environment stat tracking
-  }
+  },
+  config
 });
 
 // Initialize New User Registration handler dependencies - express.e:30003+

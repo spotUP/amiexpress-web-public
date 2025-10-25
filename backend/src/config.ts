@@ -39,6 +39,9 @@ export interface BBSConfig {
   chatEnabled: boolean;
   chatTimeLimit: number;
 
+  // OLM (Online Message) Settings
+  olmEnabled: boolean;  // Equivalent to sopt.toggles[TOGGLES_MULTICOM] for OLM
+
   // Door Settings
   doorsEnabled: boolean;
   maxDoorTime: number;
@@ -114,6 +117,9 @@ export class ConfigManager {
       // Chat Settings
       chatEnabled: true,
       chatTimeLimit: 30,
+
+      // OLM Settings
+      olmEnabled: true,  // Enable OLM (Online Message) system
 
       // Door Settings
       doorsEnabled: true,
