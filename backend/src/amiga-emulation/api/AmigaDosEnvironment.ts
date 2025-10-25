@@ -93,9 +93,12 @@ export class AmigaDosEnvironment {
    */
   private setupTrapHandler(): void {
     // The trap handler will be called when a JSR to negative address is detected
+    console.log('[AmigaDosEnvironment] Setting up trap handler...');
     this.emulator.setTrapHandler((offset: number) => {
+      console.log(`[AmigaDOS] *** TRAP HANDLER CALLED *** offset=${offset} (0x${offset.toString(16)})`);
       this.handleLibraryCall(offset);
     });
+    console.log('[AmigaDosEnvironment] Trap handler configured successfully');
   }
 
   /**
