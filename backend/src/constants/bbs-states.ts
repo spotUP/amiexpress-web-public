@@ -58,6 +58,15 @@ export enum LoggedOnSubState {
   FILES_EDIT = 'files_edit',
   FILES_EDIT_SELECT = 'files_edit_select',
 
+  // File Maintenance (FM command) - express.e:24889-25045
+  FM_YESNO_INPUT = 'fm_yesno_input',                  // Y/n prompt for using flagged files
+  FM_FILENAME_INPUT = 'fm_filename_input',            // Filename pattern input
+  FM_DIRSPAN_INPUT = 'fm_dirspan_input',              // Directory span input
+  FM_ACTION_INPUT = 'fm_action_input',                // D/M/V/Q action input
+  FM_REMOVE_FLAG_INPUT = 'fm_remove_flag_input',      // Remove from flagged list Y/n
+  FM_CONFIRM_DELETE = 'fm_confirm_delete',            // Confirm file deletion
+  FM_MOVE_DEST_INPUT = 'fm_move_dest_input',          // Move destination directory input
+
   // Message operations
   READ_MESSAGES = 'read_messages',
   POST_MESSAGE = 'post_message',

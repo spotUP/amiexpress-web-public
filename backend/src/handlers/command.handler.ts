@@ -32,6 +32,10 @@ import {
   setBulletinDependencies
 } from './bulletin.handler';
 import {
+  FileMaintenanceHandler,
+  setFileMaintenanceDependencies
+} from './file-maintenance.handler';
+import {
   handleUserStatsCommand,
   handleJoinConferenceCommand,
   handleUploadCommand,
@@ -2062,9 +2066,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       await handleFileListRawCommand(socket, session, params);
       return;
 
-    case 'FM': // File Maintenance (internalCommandFM) - maintenanceFileSearch()
-      await displayFileMaintenance(socket, session, params);
-      return; // Don't continue to menu display
+    case 'FM': // File Maintenance (internalCommandFM) - express.e:24889-25045
+      await FileMaintenanceHandler.handleFileMaintenanceCommand(socket, session, params);
+      return;
 
     case 'FS': // File Status (internalCommandFS) - express.e:24872-24875
       await handleFileStatusCommand(socket, session);
@@ -2134,6 +2138,13 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089-25111
       handleHelpFilesCommand(socket, session, params);
+      return;
+
+    // === CUSTOM WEB COMMANDS (Not in express.e) ===
+    case 'DOORMAN':
+    case 'DOOR':
+    case 'DOORS': // Door Games Menu (Custom web command)
+      displayDoorMenu(socket, session, params);
       return;
 
     default:
