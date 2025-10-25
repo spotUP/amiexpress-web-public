@@ -2,6 +2,7 @@ import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
 import { ExecLibrary } from './ExecLibrary';
 import { DosLibrary } from './DosLibrary';
 import { IntuitionLibrary } from './IntuitionLibrary';
+import { AmiExpressLibrary } from './AmiExpressLibrary';
 import { LibraryLoader } from '../loader/LibraryLoader';
 
 /**
@@ -15,6 +16,7 @@ export class AmigaDosEnvironment {
   private execLibrary: ExecLibrary;
   private dosLibrary: DosLibrary;
   private intuitionLibrary: IntuitionLibrary;
+  private amiexpressLibrary: AmiExpressLibrary;
   private libraryLoader: LibraryLoader;
   private useNativeLibraries: boolean;
 
@@ -72,6 +74,7 @@ export class AmigaDosEnvironment {
     this.execLibrary = new ExecLibrary(emulator);
     this.dosLibrary = new DosLibrary(emulator);
     this.intuitionLibrary = new IntuitionLibrary(emulator);
+    this.amiexpressLibrary = new AmiExpressLibrary(emulator);
 
     // Initialize library loader for native libraries
     this.libraryLoader = new LibraryLoader(emulator, options?.libraryPaths);
@@ -119,6 +122,14 @@ export class AmigaDosEnvironment {
     // Route to appropriate library based on base address or offset ranges
     let handled = false;
 
+    // Try AmiExpress BBS library functions FIRST (highest priority for door I/O)
+    if (!handled) {
+      handled = this.amiexpressLibrary.handleCall(offset);
+      if (handled) {
+        console.log(`[AmigaDOS] Handled by AmiExpress BBS library`);
+      }
+    }
+
     // Try exec.library functions
     if (!handled) {
       handled = this.execLibrary.handleCall(normalizedOffset);
@@ -157,6 +168,9 @@ export class AmigaDosEnvironment {
    * Set callback for stdout/stderr output
    */
   setOutputCallback(callback: (data: string) => void): void {
+    // Forward to AmiExpress BBS library (primary for door I/O)
+    this.amiexpressLibrary.setOutputCallback(callback);
+    // Also forward to dos.library (fallback for standard I/O)
     this.dosLibrary.setOutputCallback(callback);
   }
 
@@ -164,6 +178,9 @@ export class AmigaDosEnvironment {
    * Queue input data from user
    */
   queueInput(data: string): void {
+    // Forward to AmiExpress BBS library (primary for door I/O)
+    this.amiexpressLibrary.queueInput(data);
+    // Also forward to dos.library (fallback for standard I/O)
     this.dosLibrary.queueInput(data);
   }
 
