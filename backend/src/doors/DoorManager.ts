@@ -82,14 +82,30 @@ export class DoorManager {
    */
   async start(): Promise<void> {
     try {
+      console.log('[Door Manager] start() called, clearing screen...');
       this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+
+      console.log('[Door Manager] Scanning doors...');
       await this.scanDoors();
+      console.log('[Door Manager] Found', this.state.doors.length, 'doors');
+
+      console.log('[Door Manager] Showing list...');
       this.showList();
+
+      console.log('[Door Manager] Setting up input handlers...');
       this.setupInputHandlers();
+      console.log('[Door Manager] Input handlers setup complete');
+
+      console.log('[Door Manager] Current state:', {
+        mode: this.state.mode,
+        inDoorManager: this.session?.inDoorManager,
+        hasInputHandler: !!this.inputHandler
+      });
     } catch (error) {
       console.error('[Door Manager] Error starting:', error);
       this.socket.emit('ansi-output', '\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n');
       this.socket.emit('ansi-output', `${(error as Error).message}\r\n\r\n`);
+      this.socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
       this.socket.emit('ansi-output', 'Press any key to return to main menu...\r\n');
 
       // Wait for keypress then exit
@@ -648,20 +664,31 @@ export class DoorManager {
    * Setup input handlers
    */
   private setupInputHandlers(): void {
-    console.log('[Door Manager] Setting up input handlers');
+    console.log('[Door Manager] setupInputHandlers() called');
+
+    // Check how many listeners are already registered
+    const listenerCount = this.socket.listenerCount('terminal-input');
+    console.log('[Door Manager] Existing terminal-input listeners:', listenerCount);
 
     // Store the handler so we can remove it later
     this.inputHandler = (data: string) => {
+      console.log('[Door Manager] *** INPUT HANDLER FIRED ***');
       console.log('[Door Manager] Received input:', JSON.stringify(data), 'mode:', this.state.mode);
       this.handleInput(data);
     };
 
+    console.log('[Door Manager] Registering terminal-input listener...');
     this.socket.on('terminal-input', this.inputHandler);
+
+    const newListenerCount = this.socket.listenerCount('terminal-input');
+    console.log('[Door Manager] terminal-input listeners after adding:', newListenerCount);
 
     // Handle file uploads from frontend
     this.socket.on('file-uploaded', (data: { filename: string; originalname: string; size: number }) => {
       this.processUpload(data);
     });
+
+    console.log('[Door Manager] Input handler setup complete');
   }
 
   /**
