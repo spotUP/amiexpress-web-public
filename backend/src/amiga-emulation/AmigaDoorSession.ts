@@ -27,6 +27,16 @@ export class AmigaDoorSession {
   private lastPCs: number[] = []; // Track recent PCs to detect loops
   private pcSamples: Map<number, number> = new Map(); // PC -> count
 
+  // Virtual time tracking (8MHz 68000 = 0.125 microseconds per cycle)
+  private totalCycles: number = 0;
+  private virtualTimeMicros: number = 0;
+  private readonly CYCLES_PER_MICROSECOND = 8; // 8MHz CPU
+
+  // DBRA loop detection
+  private lastPC: number = 0;
+  private samePCCount: number = 0;
+  private readonly DBRA_THRESHOLD = 50; // If same PC 50 times, it's a delay loop
+
   constructor(socket: Socket, config: DoorConfig) {
     this.socket = socket;
     this.config = {
@@ -207,6 +217,52 @@ export class AmigaDoorSession {
       // Sample PC before execution to track where we are
       const pcBefore = this.emulator.getRegister(16);
 
+      // Check for DBRA delay loop (same PC repeatedly)
+      if (pcBefore === this.lastPC) {
+        this.samePCCount++;
+
+        // If we've been at the same PC for DBRA_THRESHOLD iterations, it's a delay loop
+        if (this.samePCCount >= this.DBRA_THRESHOLD) {
+          // Read instruction bytes to confirm it's a DBRA loop
+          const instr0 = this.emulator.readMemory(pcBefore);
+          const instr1 = this.emulator.readMemory(pcBefore + 1);
+
+          // DBRA instruction: 51 c8 (or 51 cx where x is register)
+          const isDBRA = (instr0 === 0x51 && (instr1 & 0xF8) === 0xC8);
+
+          if (isDBRA) {
+            // This is a delay loop! Skip it by advancing virtual time
+            const d0 = this.emulator.getRegister(0);
+            const estimatedCycles = d0 * 10; // DBRA loop ≈ 10 cycles per iteration
+
+            console.log(`[DBRA Skip] Detected delay loop at PC=0x${pcBefore.toString(16)}, D0=${d0}`);
+            console.log(`  Skipping ~${estimatedCycles} cycles (${(estimatedCycles / this.CYCLES_PER_MICROSECOND / 1000).toFixed(2)}ms)`);
+
+            // Advance virtual time without executing cycles
+            this.totalCycles += estimatedCycles;
+            this.virtualTimeMicros = this.totalCycles / this.CYCLES_PER_MICROSECOND;
+
+            // Force loop to exit by setting D0 to -1 (0xFFFFFFFF)
+            this.emulator.setRegister(0, 0xFFFFFFFF);
+
+            // Execute just 1 cycle to let DBRA complete
+            this.emulator.execute(1);
+
+            // Reset detection counter
+            this.samePCCount = 0;
+            this.lastPC = this.emulator.getRegister(16);
+
+            // Continue immediately to next iteration
+            setImmediate(() => this.runExecutionLoop());
+            return;
+          }
+        }
+      } else {
+        this.samePCCount = 0;
+      }
+
+      this.lastPC = pcBefore;
+
       // Execute a small number of cycles (allows I/O to be processed)
       // 10000 cycles ≈ 1.25ms on original 8MHz 68000
       const cyclesExecuted = this.emulator.execute(10000);
@@ -220,6 +276,10 @@ export class AmigaDoorSession {
         this.terminate();
         return;
       }
+
+      // Update virtual time
+      this.totalCycles += cyclesExecuted;
+      this.virtualTimeMicros = this.totalCycles / this.CYCLES_PER_MICROSECOND;
 
       // Track PC to detect infinite loops
       this.iterationCount++;
@@ -248,8 +308,10 @@ export class AmigaDoorSession {
         const instr2 = this.emulator.readMemory(pcAfter + 2);
         const instr3 = this.emulator.readMemory(pcAfter + 3);
 
-        console.log(`[Door Trace] Iteration ${this.iterationCount}:`);
-        console.log(`  PC=0x${pcAfter.toString(16)}, SP=0x${sp.toString(16)}, D0=0x${d0.toString(16)}`);
+        const virtualTimeMs = this.virtualTimeMicros / 1000;
+
+        console.log(`[Door Trace] Iteration ${this.iterationCount} (Virtual time: ${virtualTimeMs.toFixed(2)}ms):`);
+        console.log(`  Total cycles: ${this.totalCycles}, PC=0x${pcAfter.toString(16)}, SP=0x${sp.toString(16)}, D0=0x${d0.toString(16)}`);
         console.log(`  Instruction bytes: ${instr0.toString(16).padStart(2, '0')} ${instr1.toString(16).padStart(2, '0')} ${instr2.toString(16).padStart(2, '0')} ${instr3.toString(16).padStart(2, '0')}`);
 
         // Show PC distribution
