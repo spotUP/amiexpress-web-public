@@ -95,14 +95,19 @@ export function parseInfoFile(filePath: string): Map<string, string> {
         }
 
         // Parse KEY=VALUE format
-        // Remove leading '+' if present (express.e uses +LOCATION format)
-        const cleanLine = trimmed.startsWith('+') ? trimmed.substring(1) : trimmed;
+        // Remove leading '+' or '#' if present (express.e uses +LOCATION, Amiga .info files use #LOCATION)
+        let cleanLine = trimmed;
+        if (cleanLine.startsWith('+') || cleanLine.startsWith('#')) {
+          cleanLine = cleanLine.substring(1);
+        }
+
         const [key, ...valueParts] = cleanLine.split('=');
         const value = valueParts.join('=').trim(); // Handle values with '=' in them
 
         if (key && value) {
-          console.log(`[parseInfoFile]   Tooltype: ${key.toUpperCase()}=${value}`);
-          tooltypes.set(key.toUpperCase(), value);
+          const cleanKey = key.toUpperCase().trim();
+          console.log(`[parseInfoFile]   Tooltype: ${cleanKey}=${value}`);
+          tooltypes.set(cleanKey, value);
         }
       }
 
