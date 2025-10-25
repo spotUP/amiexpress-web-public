@@ -732,8 +732,11 @@ export class AmigaDoorManager {
             continue;
           }
 
+          // Normalize path separators (convert backslash to forward slash for Linux compatibility)
+          const normalizedFilename = filename.replace(/\\/g, '/');
+
           // Create directory structure
-          const filePath = path.join(tempDir, filename);
+          const filePath = path.join(tempDir, normalizedFilename);
           const fileDir = path.dirname(filePath);
 
           if (!fs.existsSync(fileDir)) {
@@ -757,7 +760,9 @@ export class AmigaDoorManager {
 
         // Extract each file
         for (const filename of fileList) {
-          const outputPath = path.join(tempDir, filename);
+          // Normalize path separators (convert backslash to forward slash for Linux compatibility)
+          const normalizedFilename = filename.replace(/\\/g, '/');
+          const outputPath = path.join(tempDir, normalizedFilename);
           const outputDir = path.dirname(outputPath);
 
           // Create directory structure
