@@ -101,6 +101,9 @@ export class FileListingHandler {
     const bbsDataPath = config.get('dataDir');
     const maxDirs = await this.getMaxDirs(session.currentConf, bbsDataPath);
 
+    // Add line break after directory input
+    socket.emit('ansi-output', '\r\n');
+
     // Parse directory span
     const dirSpan = parseDirSpan(input, maxDirs, this.canAccessHold(session));
 
