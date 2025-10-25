@@ -214,9 +214,6 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
   console.log(`[executeAmigaDoor] Location: ${door.location}`);
 
   try {
-    // Create AmigaDoorSession to run the native Amiga executable
-    const amigaSession = new AmigaDoorSession(socket, session);
-
     // Get the BBS root from AmigaDoorManager (same location where doors are installed)
     const { getAmigaDoorManager } = require('../doors/amigaDoorManager');
     const amigaDoorMgr = getAmigaDoorManager();
@@ -239,8 +236,18 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
 
     console.log(`[executeAmigaDoor] Starting 68k emulation for: ${doorPath}`);
 
-    // Execute the Amiga door via 68k emulation
-    await amigaSession.executeDoor(doorPath, door.parameters || '');
+    // Create DoorConfig for AmigaDoorSession
+    const doorConfig = {
+      executablePath: doorPath,
+      timeout: 300, // 5 minutes
+      memorySize: 1024 * 1024 // 1MB
+    };
+
+    // Create AmigaDoorSession to run the native Amiga executable
+    const amigaSession = new AmigaDoorSession(socket, doorConfig);
+
+    // Start the door execution
+    await amigaSession.start();
 
     console.log(`[executeAmigaDoor] Door execution completed`);
   } catch (error) {
