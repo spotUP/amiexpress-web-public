@@ -122,38 +122,77 @@ export class AmigaDosEnvironment {
       }
     }
 
-    // Route to appropriate library based on base address or offset ranges
+    // Route to appropriate library based on base address
     let handled = false;
 
-    // Try AmiExpress BBS library functions FIRST (highest priority for door I/O)
-    if (!handled) {
+    // ROUTE BY LIBRARY BASE ADDRESS
+    // This allows multiple libraries to have functions at the same offset
+
+    if (libraryBase === 0xFF4000) {
+      // AEDoor.library - BBS door I/O functions
+      console.log(`[AmigaDOS] Routing to AEDoor.library (base=0xFF4000)`);
       handled = this.amiexpressLibrary.handleCall(offset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by AmiExpress BBS library`);
+        console.log(`[AmigaDOS] Handled by AEDoor.library (AmiExpressLibrary)`);
       }
-    }
-
-    // Try exec.library functions
-    if (!handled) {
+    } else if (libraryBase === 0xFF8000) {
+      // exec.library - System executive functions
+      // NOTE: Some doors also call BBS functions from ExecBase (non-standard)
+      console.log(`[AmigaDOS] Routing to exec.library (base=0xFF8000)`);
       handled = this.execLibrary.handleCall(normalizedOffset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by exec.library stub`);
+        console.log(`[AmigaDOS] Handled by exec.library`);
       }
-    }
 
-    // Try dos.library functions
-    if (!handled) {
+      // Fallback: Try AmiExpress BBS functions (some doors use ExecBase for BBS calls)
+      if (!handled) {
+        console.log(`[AmigaDOS] exec.library didn't handle offset ${normalizedOffset}, trying AEDoor functions...`);
+        handled = this.amiexpressLibrary.handleCall(offset);
+        if (handled) {
+          console.log(`[AmigaDOS] Handled by AEDoor functions via ExecBase (non-standard but common)`);
+        }
+      }
+    } else if (libraryBase === 0xFFFF0000) {
+      // dos.library - DOS functions
       handled = this.dosLibrary.handleCall(normalizedOffset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by dos.library stub`);
+        console.log(`[AmigaDOS] Handled by dos.library`);
       }
-    }
-
-    // Try intuition.library functions
-    if (!handled) {
+    } else if (libraryBase === 0xFFFF1000) {
+      // intuition.library - GUI functions
       handled = this.intuitionLibrary.handleCall(normalizedOffset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by intuition.library stub`);
+        console.log(`[AmigaDOS] Handled by intuition.library`);
+      }
+    } else {
+      // Unknown library base - try all libraries as fallback
+      console.log(`[AmigaDOS] Unknown library base 0x${libraryBase.toString(16)}, trying all libraries...`);
+
+      // Try in priority order
+      handled = this.amiexpressLibrary.handleCall(offset);
+      if (handled) {
+        console.log(`[AmigaDOS] Handled by AmiExpress BBS library (fallback)`);
+      }
+
+      if (!handled) {
+        handled = this.execLibrary.handleCall(normalizedOffset);
+        if (handled) {
+          console.log(`[AmigaDOS] Handled by exec.library (fallback)`);
+        }
+      }
+
+      if (!handled) {
+        handled = this.dosLibrary.handleCall(normalizedOffset);
+        if (handled) {
+          console.log(`[AmigaDOS] Handled by dos.library (fallback)`);
+        }
+      }
+
+      if (!handled) {
+        handled = this.intuitionLibrary.handleCall(normalizedOffset);
+        if (handled) {
+          console.log(`[AmigaDOS] Handled by intuition.library (fallback)`);
+        }
       }
     }
 

@@ -135,6 +135,9 @@ export class ExecLibrary {
       'gadtools.library': 0xFFFF5000,
       'utility.library': 0xFFFF6000,
       'asl.library': 0xFFFF7000,
+      // BBS door libraries
+      'AEDoor.library': 0xFF4000,     // AmiExpress door library (custom BBS library)
+      'aedoor.library': 0xFF4000,     // Case-insensitive alias
     };
 
     baseAddress = libraryBases[name] || 0;
