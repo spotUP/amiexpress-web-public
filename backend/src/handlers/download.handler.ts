@@ -8,6 +8,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
@@ -71,7 +72,6 @@ export class DownloadHandler {
     session: BBSSession,
     params: string
   ): Promise<string> {
-    const config = (global as any).config;
 
     // Parse parameters or prompt for filename
     let filename = params.trim();

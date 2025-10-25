@@ -7,6 +7,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
@@ -55,7 +56,6 @@ export class ViewFileHandler {
     session: BBSSession,
     params: string
   ): Promise<void> {
-    const config = (global as any).config;
 
     // express.e:20394-20395
     socket.emit('ansi-output', '\r\n');
@@ -122,7 +122,6 @@ export class ViewFileHandler {
     filename: string,
     nonStop: boolean
   ): Promise<void> {
-    const config = (global as any).config;
 
     // Validate filename - no special symbols - express.e:20460-20467
     if (!this.isValidFilename(filename)) {

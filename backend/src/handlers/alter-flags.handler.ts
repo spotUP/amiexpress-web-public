@@ -8,6 +8,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
@@ -40,7 +41,6 @@ export class AlterFlagsHandler {
 
     // Initialize flag manager if not exists
     if (!session.flagManager) {
-      const config = (global as any).config;
       session.flagManager = new FileFlagManager(
         config.get('dataDir'),
         session.user?.slotNumber || 0,

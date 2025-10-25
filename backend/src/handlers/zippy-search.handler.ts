@@ -7,6 +7,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
@@ -110,7 +111,6 @@ export class ZippySearchHandler {
     dirSpanParam: string,
     nonStop: boolean
   ): Promise<void> {
-    const config = (global as any).config;
 
     // UpperStr(ss) - express.e:26159
     const searchUpper = searchString.toUpperCase();

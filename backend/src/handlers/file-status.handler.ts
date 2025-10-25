@@ -6,6 +6,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
@@ -54,7 +55,6 @@ export class FileStatusHandler {
     if (!user) return;
 
     // Get system configuration
-    const config = (global as any).config;
     const totalConferences = 3; // TODO: Get from config
     const currentConf = session.currentConf || 1;
 
