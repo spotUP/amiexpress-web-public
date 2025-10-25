@@ -192,28 +192,45 @@ export async function extractFileDizBuiltin(
   }
 
   try {
-    console.log(`[FILE_ID.DIZ] Running: ${command}`);
+    console.log(`[FILE_ID.DIZ] Attempting extraction from ${ext} file`);
+    console.log(`[FILE_ID.DIZ] Upload path: ${uploadedFilePath}`);
+    console.log(`[FILE_ID.DIZ] Work dir: ${nodeWorkDir}`);
+    console.log(`[FILE_ID.DIZ] Command: ${command}`);
+    console.log(`[FILE_ID.DIZ] CWD mode: ${needsCwd}`);
 
+    let result;
     if (needsCwd) {
       // Some archivers need to be run from the target directory
-      await execAsync(command, {
+      result = await execAsync(command, {
         timeout: 10000,
         cwd: nodeWorkDir
       });
     } else {
-      await execAsync(command, { timeout: 10000 });
+      result = await execAsync(command, { timeout: 10000 });
     }
+
+    console.log(`[FILE_ID.DIZ] Command stdout: ${result.stdout}`);
+    console.log(`[FILE_ID.DIZ] Command stderr: ${result.stderr}`);
 
     const dizExists = await fileExists(dizPath);
+    console.log(`[FILE_ID.DIZ] FILE_ID.DIZ exists at ${dizPath}: ${dizExists}`);
+
     if (dizExists) {
-      console.log(`[FILE_ID.DIZ] Successfully extracted FILE_ID.DIZ`);
+      console.log(`[FILE_ID.DIZ] ✓ Successfully extracted FILE_ID.DIZ`);
       return true;
+    } else {
+      console.log(`[FILE_ID.DIZ] ✗ Command succeeded but FILE_ID.DIZ not found`);
     }
   } catch (error: any) {
-    // Extraction returns non-zero if FILE_ID.DIZ not found
-    console.log(`[FILE_ID.DIZ] Extraction failed: ${error.message}`);
+    // Extraction returns non-zero if FILE_ID.DIZ not found or command fails
+    console.error(`[FILE_ID.DIZ] ✗ Extraction error:`, error);
+    console.error(`[FILE_ID.DIZ] Error message: ${error.message}`);
+    console.error(`[FILE_ID.DIZ] Error code: ${error.code}`);
+    if (error.stdout) console.error(`[FILE_ID.DIZ] Error stdout: ${error.stdout}`);
+    if (error.stderr) console.error(`[FILE_ID.DIZ] Error stderr: ${error.stderr}`);
   }
 
+  console.log(`[FILE_ID.DIZ] Extraction from ${ext} failed - no FILE_ID.DIZ found`);
   return false;
 }
 

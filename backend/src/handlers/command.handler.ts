@@ -903,10 +903,26 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle upload description input (express.e:17700-17717)
   if (session.subState === LoggedOnSubState.UPLOAD_DESC_INPUT) {
-    const input = data;
+    // Initialize line buffer if needed
+    if (!session.tempData.currentLineBuffer) {
+      session.tempData.currentLineBuffer = '';
+    }
 
-    // Blank line ends description (express.e:17704-17707)
-    if (input.trim() === '') {
+    // Handle backspace
+    if (data === '\x7f' || data === '\b') {
+      if (session.tempData.currentLineBuffer.length > 0) {
+        session.tempData.currentLineBuffer = session.tempData.currentLineBuffer.slice(0, -1);
+      }
+      return;
+    }
+
+    // Handle Enter - complete the line
+    if (data === '\r' || data === '\n') {
+      const input = session.tempData.currentLineBuffer;
+      session.tempData.currentLineBuffer = ''; // Clear buffer
+
+      // Blank line ends description (express.e:17704-17707)
+      if (input.trim() === '') {
       // Web upload mode: process uploaded file immediately
       if (session.tempData.webUploadMode && session.tempData.currentUploadedFile) {
         const uploadedFile = session.tempData.currentUploadedFile;
@@ -969,8 +985,15 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       return;
     }
 
-    // Prompt for next description line
-    socket.emit('ansi-output', '                                :');
+      // Prompt for next description line
+      socket.emit('ansi-output', '                                :');
+      return;
+    }
+
+    // Regular character - add to buffer (accumulate until Enter)
+    if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.tempData.currentLineBuffer += data;
+    }
     return;
   }
 
