@@ -85,11 +85,40 @@ export class AmigaDoorSession {
 
       // Load the door executable
       const binary = fs.readFileSync(this.config.executablePath);
+      console.log(`[AmigaDoorSession] Binary size: ${binary.length} bytes`);
+
       const hunkLoader = new HunkLoader();
       const hunkFile = hunkLoader.parse(Buffer.from(binary));
 
+      console.log(`[AmigaDoorSession] Parsed ${hunkFile.segments.length} segments:`);
+      for (let i = 0; i < hunkFile.segments.length; i++) {
+        const seg = hunkFile.segments[i];
+        console.log(`[AmigaDoorSession]   Segment ${i}: ${seg.type.toUpperCase()} at 0x${seg.address.toString(16)}, size=${seg.size} bytes`);
+
+        // DEBUG: Show first 32 bytes of each segment
+        const preview = seg.data.slice(0, Math.min(32, seg.size));
+        console.log(`[AmigaDoorSession]   First bytes: [${Array.from(preview).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
+
+        if (seg.type === 'data') {
+          // Show as ASCII too for data segment
+          const ascii = Array.from(preview).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+          console.log(`[AmigaDoorSession]   As ASCII: "${ascii}"`);
+        }
+      }
+
       // Load into emulator
       hunkLoader.load(this.emulator, hunkFile);
+
+      // DEBUG: Verify data was loaded - read back from memory
+      console.log('[AmigaDoorSession] Verifying segments loaded into memory:');
+      for (let i = 0; i < hunkFile.segments.length; i++) {
+        const seg = hunkFile.segments[i];
+        const memBytes: number[] = [];
+        for (let j = 0; j < Math.min(32, seg.size); j++) {
+          memBytes.push(this.emulator.readMemory(seg.address + j));
+        }
+        console.log(`[AmigaDoorSession]   Segment ${i} at 0x${seg.address.toString(16)}: [${memBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
+      }
 
       // Set up reset vectors
       this.emulator.writeMemory(0x0, 0x00);
