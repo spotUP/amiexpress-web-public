@@ -145,14 +145,16 @@ export class ExecLibrary {
 
     if (baseAddress) {
       this.openLibraries.set(name, baseAddress);
-      console.log(`✅ [exec.library] OpenLibrary: Returning STUB base 0x${baseAddress.toString(16)}`);
+      console.log(`✅ [exec.library] OpenLibrary: Returning STUB base 0x${baseAddress.toString(16)} for "${name}"`);
     } else {
       console.warn(`⚠️  [exec.library] OpenLibrary: Unknown library "${name}" - returning NULL`);
       console.warn(`    Door may fail if this library is required!`);
       console.warn(`    Consider implementing stub for: ${name}`);
     }
 
+    // Set return value in D0
     this.emulator.setRegister(CPURegister.D0, baseAddress);
+    console.log(`[exec.library] OpenLibrary set D0 register to: 0x${baseAddress.toString(16)} for library "${name}"`);
   }
 
   /**
