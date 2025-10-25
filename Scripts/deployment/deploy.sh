@@ -176,22 +176,30 @@ echo -e "${YELLOW}→${NC} [2/2] Triggering frontend deployment..."
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
-# Deploy to Vercel in background and capture output
-VERCEL_OUTPUT=$(vercel --prod --yes 2>&1)
+# Deploy to Vercel with timeout (120 seconds)
+VERCEL_OUTPUT=$(timeout 120 vercel --prod --yes 2>&1)
 VERCEL_EXIT=$?
 
-if [ $VERCEL_EXIT -ne 0 ]; then
-    echo -e "${RED}✗ Error: Vercel deployment failed${NC}"
+if [ $VERCEL_EXIT -eq 124 ]; then
+    echo -e "${YELLOW}⚠${NC} Vercel deployment timed out (120s)"
+    echo -e "${YELLOW}  Deployment may still be in progress on Vercel's side${NC}"
+    DEPLOYMENT_URL=""
+    PRODUCTION_URL="https://bbs.uprough.net"
+    echo ""
+elif [ $VERCEL_EXIT -ne 0 ]; then
+    echo -e "${YELLOW}⚠${NC} Vercel deployment failed (exit code: $VERCEL_EXIT)"
     echo "$VERCEL_OUTPUT"
-    exit 1
+    echo -e "${YELLOW}  Continuing with backend deployment...${NC}"
+    DEPLOYMENT_URL=""
+    PRODUCTION_URL="https://bbs.uprough.net"
+    echo ""
+else
+    # Extract deployment URL (only on success)
+    DEPLOYMENT_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | tail -1)
+    PRODUCTION_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://bbs\.uprough\.net' || echo "https://bbs.uprough.net")
+    echo -e "${GREEN}✓${NC} Frontend deployed"
+    echo ""
 fi
-
-# Extract deployment URL
-DEPLOYMENT_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | tail -1)
-PRODUCTION_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://bbs\.uprough\.net' || echo "https://bbs.uprough.net")
-
-echo -e "${GREEN}✓${NC} Frontend deployed"
-echo ""
 
 # ============================================
 # STEP 2: Report results
