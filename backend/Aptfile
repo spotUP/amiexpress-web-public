@@ -7,6 +7,8 @@ lha
 # ZIP archives
 unzip
 
+# DMS disk images (Amiga)
+xdms
+
 # Note: tar and gzip are pre-installed on Render (Linux standard)
-# Note: unlzx (LZX archives) and xdms (DMS disk images) not in standard repos
-#       These Amiga formats will fall back to NOT_TESTED if uploaded
+# Note: unlzx (LZX archives) not in Ubuntu repos, handled via TypeScript
