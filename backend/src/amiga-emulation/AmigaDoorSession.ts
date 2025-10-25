@@ -80,7 +80,7 @@ export class AmigaDoorSession {
       // Set up output callback to send data to socket
       this.environment.setOutputCallback((data: string) => {
         console.log(`[AmigaDoorSession] Sending output to client: "${data}"`);
-        this.socket.emit('door:output', data);
+        this.socket.emit('ansi-output', data); // Send to standard BBS terminal event
       });
 
       // Load the door executable
