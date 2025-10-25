@@ -188,13 +188,61 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
       // Web version: Execute shell scripts instead of AREXX
       await executeScriptDoor(socket, session, door, doorSession);
       break;
+    case 'XIM': // eXpress Internal Module (Amiga executable)
+    case 'AIM': // Amiga Internal Module
+    case 'SIM': // Standard Internal Module
+    case 'TIM': // Text Internal Module
+    case 'IIM': // Interactive Internal Module
+      await executeAmigaDoor(socket, session, door, doorSession);
+      break;
     default:
-      socket.emit('ansi-output', 'Unknown door type.\r\n');
+      socket.emit('ansi-output', `Unknown door type: ${door.type}\r\n`);
+      console.error(`Unknown door type: ${door.type}`);
   }
 
   // Mark session as completed
   doorSession.endTime = new Date();
   doorSession.status = 'completed';
+}
+
+/**
+ * Execute Amiga door via 68000 CPU emulation
+ * Handles XIM, AIM, SIM, TIM, IIM door types
+ */
+async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doorSession: DoorSession) {
+  console.log(`[executeAmigaDoor] Starting Amiga door: ${door.name} (${door.type})`);
+  console.log(`[executeAmigaDoor] Location: ${door.location}`);
+
+  try {
+    // Create AmigaDoorSession to run the native Amiga executable
+    const amigaSession = new AmigaDoorSession(socket, session);
+
+    // Build the full path to the door executable
+    // door.location is already converted from Amiga paths (e.g., "doors/AquaBulls/AquaBulls")
+    const bbsRoot = path.join(__dirname, '../../BBS');
+    const doorPath = path.join(bbsRoot, door.location);
+
+    console.log(`[executeAmigaDoor] Full door path: ${doorPath}`);
+
+    // Check if door executable exists
+    if (!fs.existsSync(doorPath)) {
+      console.error(`[executeAmigaDoor] Door executable not found: ${doorPath}`);
+      socket.emit('ansi-output', '\r\n\x1b[31mDoor executable not found.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      return;
+    }
+
+    console.log(`[executeAmigaDoor] Starting 68k emulation for: ${doorPath}`);
+
+    // Execute the Amiga door via 68k emulation
+    await amigaSession.executeDoor(doorPath, door.parameters || '');
+
+    console.log(`[executeAmigaDoor] Door execution completed`);
+  } catch (error) {
+    console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  }
 }
 
 /**
