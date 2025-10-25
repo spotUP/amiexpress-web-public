@@ -37,11 +37,11 @@
 | **Substates Added** | 9 substates |
 
 ### Command Completion
-| Category | Before | After | Change |
-|----------|--------|-------|--------|
-| **Fully Implemented** | 41/47 (87%) | 42/47 (89%) | +1 |
-| **Partially Implemented** | 3/47 (6%) | 2/47 (4%) | -1 |
-| **Missing/N/A** | 3/47 (6%) | 3/47 (6%) | 0 |
+| Category | Before Session | After FM/CF | After W | Total Change |
+|----------|---------------|-------------|---------|--------------|
+| **Fully Implemented** | 41/47 (87%) | 42/47 (89%) | 43/47 (91%) | +2 |
+| **Partially Implemented** | 3/47 (6%) | 2/47 (4%) | 1/47 (2%) | -2 |
+| **Missing/N/A** | 3/47 (6%) | 3/47 (6%) | 3/47 (6%) | 0 |
 
 ### express.e Coverage
 | Command | Lines in express.e | Lines Implemented | Coverage |
@@ -257,8 +257,8 @@ if (session.subState === LoggedOnSubState.HANDLER_NAME) {
 
 ## 📋 Command Audit Results
 
-### Fully Implemented (42/47 = 89%)
-✅ A, B, C, D, E, F, FR, FS, G, H, J, JM, M, MS, N, O, Q, R, S, T, U, V, W, X, Z
+### Fully Implemented (43/47 = 91%)
+✅ A, B, C, D, E, F, FR, FS, G, H, J, JM, M, MS, N, O, Q, R, S, T, U, V, W (COMPLETE!), X, Z
 ✅ <, >, <<, >>
 ✅ 0, 1, 2, 3, 4, 5
 ✅ VER, WHO, WHD, VO
@@ -266,9 +266,8 @@ if (session.subState === LoggedOnSubState.HANDLER_NAME) {
 ✅ GR, RL, ^
 ✅ DOORMAN, DOOR, DOORS (custom web commands)
 
-### Partially Implemented (2/47 = 4%)
-⚠️ **W** - Displays menu correctly, interactive editing limited
-⚠️ **OLM** - Basic functionality, some advanced features missing
+### Partially Implemented (1/47 = 2%)
+⚠️ **OLM** - Basic functionality, 2 minor TODOs remaining (multinode check, quiet flag sync)
 
 ### Not Applicable (3/47 = 6%)
 🚫 **RZ** - Zmodem resume (web incompatible)
@@ -279,44 +278,28 @@ if (session.subState === LoggedOnSubState.HANDLER_NAME) {
 
 ## 🚧 Remaining Work
 
-### W Command Interactive Editing (Optional)
-**Current Status:** Menu displays correctly, shows all current values
-**Missing:** Interactive editing loop for 16+ options
-**Estimated Work:** 4-6 hours
+### OLM Command Minor TODOs (Optional)
+**Current Status:** Fully functional async messaging system
+**Missing:** 2 minor features
+**Estimated Work:** 1-2 hours
 **Priority:** LOW
 
-**Why Low Priority:**
-- Menu already displays all information correctly
-- Common operations (password, email, location, phone) accessible
-- Many options are Amiga-specific and don't apply to web version
-- Users can view their settings already
+**TODOs:**
+1. Check if multinode is enabled (sopt.toggles[TOGGLES_MULTICOM]) - currently always allows
+2. Send quiet flag to other nodes via sendQuietFlag() - currently local only
 
-**Options in express.e (0-16+):**
-0. Login Name
-1. Email Address
-2. Real Name
-3. Internet Name
-4. Location
-5. Phone Number
-6. Password
-7. Lines Per Screen
-8. Computer
-9. Screen Type
-10. Screen Clear
-11. Transfer Protocol
-12. Editor Type
-13. Zoom Type
-14. Available for Chat/OLM
-15. Translator
-16. Background File Check
-... (potentially more)
+**Why Low Priority:**
+- Core OLM functionality works perfectly
+- Both missing features are Amiga-specific multi-node networking
+- Web version handles multi-node differently (WebSocket rooms)
+- Users can send/receive OLMs successfully
 
 ---
 
 ## 🎯 Project Health Assessment
 
 ### Command Coverage
-**89% Complete** (42/47 commands fully functional)
+**91% Complete** (43/47 commands fully functional)
 - ✅ All user-facing commands work
 - ✅ All file operations work
 - ✅ All message operations work
