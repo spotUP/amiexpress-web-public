@@ -490,6 +490,52 @@ app.post('/api/upload', (req: Request, res: Response) => {
   });
 });
 
+// Door upload endpoint
+app.post('/api/upload/door', (req: Request, res: Response) => {
+  console.log('[Door Upload] Upload request received from:', req.headers.origin);
+
+  // Use multer middleware with 'door' field name
+  upload.single('door')(req, res, (err) => {
+    if (err) {
+      console.error('[Door Upload] Multer error:', err);
+      return res.status(500).json({ error: `Upload failed: ${err.message}` });
+    }
+
+    try {
+      if (!req.file) {
+        console.error('[Door Upload] No file in request');
+        return res.status(400).json({ error: 'No file provided' });
+      }
+
+      console.log('[Door Upload] Door file received:', req.file.originalname, req.file.size, 'bytes');
+      console.log('[Door Upload] Saved to:', req.file.path);
+
+      // Move file to doors/archives directory
+      const doorsArchivePath = path.join(__dirname, '../../doors/archives');
+      if (!fs.existsSync(doorsArchivePath)) {
+        fs.mkdirSync(doorsArchivePath, { recursive: true });
+      }
+
+      const destPath = path.join(doorsArchivePath, req.file.originalname);
+      fs.copyFileSync(req.file.path, destPath);
+      console.log('[Door Upload] Copied to archives:', destPath);
+
+      // Clean up temp file
+      fs.unlinkSync(req.file.path);
+
+      res.json({
+        filename: req.file.originalname,
+        originalname: req.file.originalname,
+        size: req.file.size,
+        path: destPath
+      });
+    } catch (error) {
+      console.error('[Door Upload] Processing error:', error);
+      res.status(500).json({ error: 'Door upload processing failed' });
+    }
+  });
+});
+
 // File download endpoint - express.e:20075+ (downloadAFile)
 app.get('/api/download/:fileId', async (req: Request, res: Response) => {
   try {
