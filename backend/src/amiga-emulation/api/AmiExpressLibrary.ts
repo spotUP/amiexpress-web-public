@@ -80,7 +80,8 @@ export class AmiExpressLibrary {
    */
   private aePuts(): boolean {
     const stringPtr = this.emulator.getRegister(CPURegister.A0);
-    console.log(`[AmiExpress] aePuts() called, string at: 0x${stringPtr.toString(16)}`);
+    const stackPtr = this.emulator.getRegister(CPURegister.A7); // SP
+    console.log(`[AmiExpress] aePuts() called, string at: 0x${stringPtr.toString(16)}, SP=0x${stackPtr.toString(16)}`);
 
     if (stringPtr === 0) {
       console.warn('[AmiExpress] aePuts() called with null pointer');
@@ -103,7 +104,8 @@ export class AmiExpressLibrary {
       for (let i = 0; i < 64; i++) {
         dataBytes.push(this.emulator.readMemory(0x3900 + i));
       }
-      console.log(`[AmiExpress] DATA at 0x3900: "${dataBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
+      console.log(`[AmiExpress] DATA at 0x3900 (hex): [${dataBytes.slice(0, 16).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
+      console.log(`[AmiExpress] DATA at 0x3900 (ASCII): "${dataBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
 
       // Check if this looks like a pointer (first 4 bytes form an address)
       if (debugBytes.length >= 4) {
