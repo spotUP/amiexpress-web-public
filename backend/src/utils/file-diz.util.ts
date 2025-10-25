@@ -9,14 +9,13 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { findFileIdDizInLzh } from './lzh-parser';
 import { extractFileDizFromLha } from './lha-extractor';
 import { extractFileDizFromZip } from './zip-extractor';
 import { extractFileDizFromTarAuto } from './tar-extractor';
 import { extractFileDizFromDms } from './dms-extractor';
 import { extractFileDizFromLzx } from './lzx-extractor';
 
-const execAsync = promisify(exec);
+const execAsync = promisify(exec); // Only used for user-configured EXAMINE commands
 
 // Express.e uses nodeWorkDir for temp file extraction
 // We'll use Node#/WorkDir for extracted DIZ files
@@ -133,10 +132,10 @@ async function findDizInArchive(uploadedFilePath: string, ext: string): Promise<
 }
 
 /**
- * Built-in FILE_ID.DIZ extractor using unzip
+ * Built-in FILE_ID.DIZ extractor using JavaScript archive libraries
  * This is a fallback if no EXAMINE commands are configured
  *
- * @param uploadedFilePath Full path to uploaded archive (.zip)
+ * @param uploadedFilePath Full path to uploaded archive (ZIP, LHA, LZX, etc.)
  * @param nodeWorkDir Directory where FILE_ID.DIZ should be extracted
  */
 export async function extractFileDizBuiltin(
@@ -218,11 +217,7 @@ export async function extractFileDizBuiltin(
     return false;
   }
 
-  // Determine archive type and extraction command
-  let command: string;
-  let needsCwd = false;
-  let extractedPath = dizPath; // Default: extracted file will be at dizPath
-
+  // Use JavaScript/TypeScript extractors for all supported formats
   if (ext === '.zip') {
     // Extract FILE_ID.DIZ from zip archive using pure TypeScript library
     console.log(`[FILE_ID.DIZ] Using TypeScript ZIP extractor`);
@@ -240,7 +235,7 @@ export async function extractFileDizBuiltin(
       const success = await extractFileDizFromLha(uploadedFilePath, dizPath);
       return success;
     } catch (error: any) {
-      console.log(`[FILE_ID.DIZ] TypeScript extractor failed: ${error.message}`);
+      console.log(`[FILE_ID.DIZ] TypeScript LHA extractor failed: ${error.message}`);
       return false;
     }
   } else if (ext === '.lzx') {
@@ -277,58 +272,6 @@ export async function extractFileDizBuiltin(
     console.log(`[FILE_ID.DIZ] File type ${ext} not supported for DIZ extraction`);
     return false;
   }
-
-  try {
-    console.log(`[FILE_ID.DIZ] Command: ${command}`);
-    console.log(`[FILE_ID.DIZ] CWD mode: ${needsCwd}`);
-
-    let result;
-    if (needsCwd) {
-      // Some archivers need to be run from the target directory
-      result = await execAsync(command, {
-        timeout: 10000,
-        cwd: nodeWorkDir
-      });
-    } else {
-      result = await execAsync(command, { timeout: 10000 });
-    }
-
-    console.log(`[FILE_ID.DIZ] Command stdout: ${result.stdout}`);
-    console.log(`[FILE_ID.DIZ] Command stderr: ${result.stderr}`);
-
-    // Check if file was extracted (might have different case)
-    const extractedExists = await fileExists(extractedPath);
-    console.log(`[FILE_ID.DIZ] Extracted file exists at ${extractedPath}: ${extractedExists}`);
-
-    if (extractedExists) {
-      // Rename to standard FILE_ID.DIZ if needed
-      if (extractedPath !== dizPath) {
-        console.log(`[FILE_ID.DIZ] Renaming ${actualDizFilename} to FILE_ID.DIZ`);
-        await fs.rename(extractedPath, dizPath);
-      }
-      console.log(`[FILE_ID.DIZ] ✓ Successfully extracted FILE_ID.DIZ`);
-      return true;
-    } else {
-      console.log(`[FILE_ID.DIZ] ✗ Command succeeded but file not found at ${extractedPath}`);
-
-      // Check if it's at dizPath anyway (some extractors might normalize names)
-      const dizExists = await fileExists(dizPath);
-      if (dizExists) {
-        console.log(`[FILE_ID.DIZ] ✓ Found at standard location ${dizPath}`);
-        return true;
-      }
-    }
-  } catch (error: any) {
-    // Extraction returns non-zero if FILE_ID.DIZ not found or command fails
-    console.error(`[FILE_ID.DIZ] ✗ Extraction error:`, error);
-    console.error(`[FILE_ID.DIZ] Error message: ${error.message}`);
-    console.error(`[FILE_ID.DIZ] Error code: ${error.code}`);
-    if (error.stdout) console.error(`[FILE_ID.DIZ] Error stdout: ${error.stdout}`);
-    if (error.stderr) console.error(`[FILE_ID.DIZ] Error stderr: ${error.stderr}`);
-  }
-
-  console.log(`[FILE_ID.DIZ] Extraction from ${ext} failed - file not extracted`);
-  return false;
 }
 
 /**
