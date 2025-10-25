@@ -87,58 +87,47 @@ export async function runExamineCommands(
 /**
  * Find FILE_ID.DIZ in archive (case-insensitive)
  * Returns the actual filename as it appears in the archive
+ * USES JAVASCRIPT EXTRACTORS - NO BINARIES!
  */
 async function findDizInArchive(uploadedFilePath: string, ext: string): Promise<string | null> {
   try {
-    let listCommand: string;
+    let files: string[] = [];
+
+    console.log(`[FILE_ID.DIZ] Listing archive contents with JavaScript extractor`);
 
     if (ext === '.zip') {
-      listCommand = `unzip -l "${uploadedFilePath}"`;
+      // Use adm-zip (JavaScript)
+      const AdmZip = require('adm-zip');
+      const zip = new AdmZip(uploadedFilePath);
+      files = zip.getEntries().map((e: any) => e.entryName);
     } else if (ext === '.lha' || ext === '.lzh') {
-      listCommand = `lha l "${uploadedFilePath}"`;
+      // Use lha.js (JavaScript)
+      const { listLhaFiles } = require('./lha-extractor');
+      files = await listLhaFiles(uploadedFilePath);
     } else if (ext === '.lzx') {
-      listCommand = `unlzx -v "${uploadedFilePath}"`;
+      // Use lzx-extractor.ts (TypeScript)
+      const { listLzxFiles } = require('./lzx-extractor');
+      files = await listLzxFiles(uploadedFilePath);
     } else {
       return null;
     }
 
-    console.log(`[FILE_ID.DIZ] Listing archive contents: ${listCommand}`);
-    const result = await execAsync(listCommand, { timeout: 5000 });
-    const output = result.stdout + result.stderr;
+    console.log(`[FILE_ID.DIZ] Archive contains ${files.length} files`);
 
     // Search for FILE_ID.DIZ case-insensitively
     // Match any variation: FILE_ID.DIZ, file_id.diz, File_Id.Diz, etc.
-    const lines = output.split('\n');
-    for (const line of lines) {
-      // Look for filename in the line (works for zip, lha, lzx formats)
-      const match = line.match(/\b(file_id\.diz)\b/i);
-      if (match) {
-        const actualFilename = match[1];
-        console.log(`[FILE_ID.DIZ] Found in archive: ${actualFilename}`);
-        return actualFilename;
+    for (const file of files) {
+      const filename = path.basename(file).toLowerCase();
+      if (filename === 'file_id.diz') {
+        console.log(`[FILE_ID.DIZ] Found in archive: ${file}`);
+        return file; // Return full path as it appears in archive
       }
     }
 
-    console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found in archive listing`);
+    console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found in archive (searched ${files.length} files)`);
     return null;
   } catch (error: any) {
     console.log(`[FILE_ID.DIZ] Failed to list archive: ${error.message}`);
-
-    // Fallback: Try TypeScript library for LHA/LZH
-    if ((ext === '.lha' || ext === '.lzh') && error.message.includes('not found')) {
-      console.log(`[FILE_ID.DIZ] lha command not found, using TypeScript library fallback...`);
-      try {
-        const dizName = await findFileIdDizInLzh(uploadedFilePath);
-        if (dizName) {
-          console.log(`[FILE_ID.DIZ] TypeScript library found: ${dizName}`);
-          // Return the actual filename so extraction can proceed
-          return dizName;
-        }
-      } catch (parseError: any) {
-        console.log(`[FILE_ID.DIZ] TypeScript library failed: ${parseError.message}`);
-      }
-    }
-
     return null;
   }
 }

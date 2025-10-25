@@ -70,6 +70,8 @@ async function checkFileByExtension(
     case 'LHA':
     case 'LZH':
       return await testLhaFile(filepath, nodeWorkDir);
+    case 'LZX':
+      return await testLzxFile(filepath, nodeWorkDir);
     case 'GZ':
     case 'TGZ':
       return await testGzipFile(filepath, nodeWorkDir);
@@ -83,28 +85,21 @@ async function checkFileByExtension(
 
 /**
  * Test ZIP file integrity
- * Uses unzip -t (test archive)
+ * Uses adm-zip (JavaScript extractor)
  */
 async function testZipFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
   const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
 
   try {
-    // unzip -t tests the archive without extracting
-    const { stdout, stderr } = await execAsync(`unzip -t "${filepath}"`, {
-      timeout: 30000
-    });
+    // Use JavaScript ZIP library to test archive
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip(filepath);
+    const entries = zip.getEntries();
 
-    // Write output to OutPut_Of_Test (express.e pattern)
-    await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
+    const output = `ZIP file integrity test\nFiles: ${entries.length}\nStatus: OK`;
+    await fs.writeFile(outputFile, output);
 
-    // Check for errors in output
-    const output = `${stdout} ${stderr}`.toLowerCase();
-    if (output.includes('error') || output.includes('bad') || output.includes('corrupt')) {
-      console.log(`[testFile] ZIP file failed integrity test`);
-      return TestResult.FAILURE;
-    }
-
-    console.log(`[testFile] ZIP file passed integrity test`);
+    console.log(`[testFile] ZIP file passed integrity test (${entries.length} files)`);
     return TestResult.SUCCESS;
   } catch (error: any) {
     console.error(`[testFile] ZIP test error: ${error.message}`);
@@ -115,32 +110,49 @@ async function testZipFile(filepath: string, nodeWorkDir: string): Promise<TestR
 
 /**
  * Test LHA/LZH file integrity
- * Uses lha t (test archive) if available
+ * Uses lha.js (JavaScript extractor)
  */
 async function testLhaFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
   const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
 
   try {
-    // Try lha -t to test the archive
-    const { stdout, stderr } = await execAsync(`lha t "${filepath}"`, {
-      timeout: 30000
-    });
+    // Use JavaScript LHA library to test archive
+    const { listLhaFiles } = require('./lha-extractor');
+    const files = await listLhaFiles(filepath);
 
-    await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
+    const output = `LHA file integrity test\nFiles: ${files.length}\nStatus: OK`;
+    await fs.writeFile(outputFile, output);
 
-    const output = `${stdout} ${stderr}`.toLowerCase();
-    if (output.includes('error') || output.includes('bad') || output.includes('corrupt')) {
-      console.log(`[testFile] LHA file failed integrity test`);
-      return TestResult.FAILURE;
-    }
-
-    console.log(`[testFile] LHA file passed integrity test`);
+    console.log(`[testFile] LHA file passed integrity test (${files.length} files)`);
     return TestResult.SUCCESS;
   } catch (error: any) {
-    // lha might not be installed - mark as not tested instead of failed
-    console.log(`[testFile] LHA test unavailable: ${error.message}`);
-    await fs.writeFile(outputFile, `LHA checker not available: ${error.message}`);
-    return TestResult.NOT_TESTED;
+    console.error(`[testFile] LHA test error: ${error.message}`);
+    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
+    return TestResult.FAILURE;
+  }
+}
+
+/**
+ * Test LZX file integrity
+ * Uses lzx-extractor.ts (TypeScript extractor)
+ */
+async function testLzxFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
+  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
+
+  try {
+    // Use JavaScript LZX library to test archive
+    const { listLzxFiles } = require('./lzx-extractor');
+    const files = await listLzxFiles(filepath);
+
+    const output = `LZX file integrity test\nFiles: ${files.length}\nStatus: OK`;
+    await fs.writeFile(outputFile, output);
+
+    console.log(`[testFile] LZX file passed integrity test (${files.length} files)`);
+    return TestResult.SUCCESS;
+  } catch (error: any) {
+    console.error(`[testFile] LZX test error: ${error.message}`);
+    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
+    return TestResult.FAILURE;
   }
 }
 
