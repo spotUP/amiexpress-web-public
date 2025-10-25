@@ -297,16 +297,32 @@ export class AmigaDoorSession {
         }
       }
 
+      // Check for JSR to library addresses (detect library calls)
+      const instr0 = this.emulator.readMemory(pcAfter);
+      const instr1 = this.emulator.readMemory(pcAfter + 1);
+      const instr2 = this.emulator.readMemory(pcAfter + 2);
+      const instr3 = this.emulator.readMemory(pcAfter + 3);
+
+      // JSR instruction: 0x4E B9 (JSR absolute.L)
+      // Followed by 4-byte address
+      if (instr0 === 0x4E && instr1 === 0xB9) {
+        const addr0 = this.emulator.readMemory(pcAfter + 2);
+        const addr1 = this.emulator.readMemory(pcAfter + 3);
+        const addr2 = this.emulator.readMemory(pcAfter + 4);
+        const addr3 = this.emulator.readMemory(pcAfter + 5);
+        const targetAddr = (addr0 << 24) | (addr1 << 16) | (addr2 << 8) | addr3;
+
+        // Check if this is a library call (0xff0000 range)
+        if (targetAddr >= 0xff0000 && targetAddr <= 0xffffff) {
+          console.log(`[Library Call Detected] JSR to 0x${targetAddr.toString(16)} at PC=0x${pcAfter.toString(16)}`);
+          console.log(`  This should trigger trap handler!`);
+        }
+      }
+
       // Every 500 iterations (~5 seconds), log status
       if (this.iterationCount % 500 === 0) {
         const sp = this.emulator.getRegister(15);
         const d0 = this.emulator.getRegister(0);
-
-        // Read instruction bytes at current PC
-        const instr0 = this.emulator.readMemory(pcAfter);
-        const instr1 = this.emulator.readMemory(pcAfter + 1);
-        const instr2 = this.emulator.readMemory(pcAfter + 2);
-        const instr3 = this.emulator.readMemory(pcAfter + 3);
 
         const virtualTimeMs = this.virtualTimeMicros / 1000;
 
