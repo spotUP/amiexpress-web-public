@@ -1,2 +1,12 @@
+# Archive extraction and testing tools for AmiExpress BBS
+# Used for FILE_ID.DIZ extraction and file integrity testing
+
+# LHA/LZH archives (Amiga standard)
 lha
+
+# ZIP archives
 unzip
+
+# Note: tar and gzip are pre-installed on Render (Linux standard)
+# Note: unlzx (LZX archives) and xdms (DMS disk images) not in standard repos
+#       These Amiga formats will fall back to NOT_TESTED if uploaded
