@@ -419,24 +419,31 @@ export class AmigaDoorManager {
       }
 
       // Detect standard AmiExpress door structure
-      const hasCommandsDir = files.some(f => f.match(/^[^/\\]*Commands\/BBSCmd\//i));
-      const hasDoorsDir = files.some(f => f.match(/^[^/\\]*Doors\//i));
+      // Handle both forward slash (/) and backslash (\) path separators
+      const hasCommandsDir = files.some(f => f.match(/^[^/\\]*Commands[/\\]BBSCmd[/\\]/i));
+      const hasDoorsDir = files.some(f => f.match(/^[^/\\]*Doors[/\\]/i));
       const isStandardDoorStructure = hasCommandsDir && hasDoorsDir;
+
+      console.log(`[AnalyzeDoorArchive] hasCommandsDir: ${hasCommandsDir}, hasDoorsDir: ${hasDoorsDir}, isStandard: ${isStandardDoorStructure}`);
 
       // Extract BBS commands from Commands/BBSCmd/*.info
       const bbsCommands: string[] = [];
-      const commandsDirectory = files.find(f => f.match(/^[^/\\]*Commands\/BBSCmd\//i))
-        ?.replace(/\/[^/]*$/, ''); // Get directory path without filename
+      const commandsDirectory = files.find(f => f.match(/^[^/\\]*Commands[/\\]BBSCmd[/\\]/i))
+        ?.replace(/[/\\][^/\\]*$/, ''); // Get directory path without filename (handle both / and \)
 
       if (commandsDirectory) {
-        const commandPrefix = commandsDirectory + '/';
-        const commandInfoFiles = files.filter(f =>
-          f.startsWith(commandPrefix) && f.toLowerCase().endsWith('.info')
-        );
+        // Match with both separators
+        const commandInfoFiles = files.filter(f => {
+          const normalized = f.replace(/\\/g, '/');
+          const normalizedPrefix = commandsDirectory.replace(/\\/g, '/');
+          return normalized.startsWith(normalizedPrefix + '/') && f.toLowerCase().endsWith('.info');
+        });
 
         for (const infoFile of commandInfoFiles) {
           // Extract command name (filename without .info extension)
-          const basename = path.basename(infoFile, '.info');
+          // Normalize backslashes to forward slashes for path.basename to work correctly
+          const normalized = infoFile.replace(/\\/g, '/');
+          const basename = path.basename(normalized, '.info');
           bbsCommands.push(basename);
         }
       }
@@ -445,14 +452,14 @@ export class AmigaDoorManager {
       let doorsDirectory: string | undefined;
       let doorName: string | undefined;
 
-      const doorsPath = files.find(f => f.match(/^[^/\\]*Doors\//i));
+      const doorsPath = files.find(f => f.match(/^[^/\\]*Doors[/\\]/i));
       if (doorsPath) {
-        // Extract: "otl-ab10/Doors/AquaBulls/..." -> "Doors/AquaBulls"
-        const match = doorsPath.match(/^([^/\\]*Doors\/[^/\\]+)/i);
+        // Extract: "otl-ab10\Doors\AquaBulls\..." or "otl-ab10/Doors/AquaBulls/..." -> "Doors/AquaBulls"
+        const match = doorsPath.match(/^([^/\\]*Doors[/\\][^/\\]+)/i);
         if (match) {
           doorsDirectory = match[1];
-          // Extract door name from "Doors/AquaBulls" -> "AquaBulls"
-          doorName = doorsDirectory.split('/')[1];
+          // Extract door name from "Doors\AquaBulls" or "Doors/AquaBulls" -> "AquaBulls"
+          doorName = doorsDirectory.split(/[/\\]/)[1];
         }
       }
 
@@ -472,7 +479,7 @@ export class AmigaDoorManager {
         }
 
         // Files in Doors/ directory without extension (typical Amiga binaries)
-        if (f.match(/Doors\//i) && !path.extname(baseName)) {
+        if (f.match(/Doors[/\\]/i) && !path.extname(baseName)) {
           // Exclude common non-executable files
           if (baseName.toLowerCase() === 'readme' ||
               baseName.toLowerCase() === 'install' ||
@@ -486,7 +493,9 @@ export class AmigaDoorManager {
             return true;
           }
           // If in Doors/ subdirectory matching doorName, likely executable
-          if (doorName && f.includes(`Doors/${doorName}/`) && baseName === doorName) {
+          // Normalize path separators for comparison
+          const normalizedPath = f.replace(/\\/g, '/');
+          if (doorName && normalizedPath.includes(`Doors/${doorName}/`) && baseName === doorName) {
             return true;
           }
         }
