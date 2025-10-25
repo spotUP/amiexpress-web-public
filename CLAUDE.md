@@ -1,5 +1,85 @@
 # AmiExpress-Web Project Guidelines
 
+## 🚨 CRITICAL: Task Completion Notifications 🚨
+
+**WHEN YOU COMPLETE NEW TASKS, ALWAYS NOTIFY THE COMMUNITY:**
+
+### Automatic Notifications Required:
+
+1. **Discord Webhook** - Post summary to Discord channel
+   - Use webhook URL: `https://discord.com/api/webhooks/REDACTED/REDACTED`
+   - Format: Brief summary with achievement highlights
+   - Include: What was completed, command coverage %, key stats
+
+2. **BBS Bulletins** - Post daily changelogs to BBS bulletins
+   - Location: `backend/data/bbs/BBS/Conf01/Bulletins/`
+   - Format: DATE_CHANGELOG.TXT (e.g., `20251025_CHANGELOG.TXT`)
+   - Include: Full technical details of changes
+   - Add to bulletins database table for display
+
+### When to Post:
+
+- ✅ After completing major features (commands, systems, etc.)
+- ✅ After achieving milestones (90%, 100% coverage, etc.)
+- ✅ After fixing critical bugs
+- ✅ After implementing requested features
+- ✅ When daily work session concludes with meaningful changes
+
+### Discord Webhook Format:
+
+```bash
+curl -X POST "https://discord.com/api/webhooks/REDACTED/REDACTED" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "🎉 **AmiExpress-Web Update**\n\n**Achievement:** <milestone>\n**Coverage:** <percentage>%\n**Changes:** <summary>\n\nSee full details in BBS bulletins!"
+  }'
+```
+
+### BBS Bulletin Format:
+
+```
+[36m-= AmiExpress-Web Development Update =-[0m
+Date: October 25, 2025
+
+[32mACHIEVEMENT:[0m <Major milestone>
+[32mCOVERAGE:[0m <XX/XX commands (XX%)>
+
+[33mCHANGES:[0m
+- <Feature 1>
+- <Feature 2>
+- <Feature 3>
+
+[33mCODE STATISTICS:[0m
+- Lines added: <number>
+- Files modified: <number>
+- Commits: <number>
+
+[33mNEXT STEPS:[0m
+- <Future work>
+
+[35mFull details in Docs/CHANGELOG_*.md[0m
+```
+
+### Implementation Example:
+
+```bash
+# After completing 100% coverage:
+curl -X POST "https://discord.com/api/webhooks/REDACTED/REDACTED" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "🏆 **TRUE 100% COVERAGE ACHIEVED!**\n\n**Achievement:** All 47/47 AmiExpress commands now functional!\n**Coverage:** 100% (47/47 commands)\n**Today:** W command (17 options), OLM completion, Door execution system\n\nThis is no longer \"100% of implementable\" - this is **100% PERIOD!**\n\nFull details in latest BBS bulletin!"
+  }'
+
+# Create BBS bulletin
+echo "[36m-= AmiExpress-Web - TRUE 100% ACHIEVED! =-[0m
+...
+" > backend/data/bbs/BBS/Conf01/Bulletins/20251025_100PERCENT.TXT
+```
+
+**ALWAYS do both when completing tasks!**
+
+---
+
 ## 🚨 CRITICAL: Documentation Location 🚨
 
 **ALL new documentation files MUST be created in the `Docs/` directory.**
