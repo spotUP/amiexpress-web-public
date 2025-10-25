@@ -9,6 +9,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { findFileIdDizInLzh } from './lzh-parser';
+import { extractFileDizFromLha } from './lha-extractor';
 
 const execAsync = promisify(exec);
 
@@ -117,6 +119,22 @@ async function findDizInArchive(uploadedFilePath: string, ext: string): Promise<
     return null;
   } catch (error: any) {
     console.log(`[FILE_ID.DIZ] Failed to list archive: ${error.message}`);
+
+    // Fallback: Try TypeScript library for LHA/LZH
+    if ((ext === '.lha' || ext === '.lzh') && error.message.includes('not found')) {
+      console.log(`[FILE_ID.DIZ] lha command not found, using TypeScript library fallback...`);
+      try {
+        const dizName = await findFileIdDizInLzh(uploadedFilePath);
+        if (dizName) {
+          console.log(`[FILE_ID.DIZ] TypeScript library found: ${dizName}`);
+          // Return the actual filename so extraction can proceed
+          return dizName;
+        }
+      } catch (parseError: any) {
+        console.log(`[FILE_ID.DIZ] TypeScript library failed: ${parseError.message}`);
+      }
+    }
+
     return null;
   }
 }
@@ -220,13 +238,15 @@ export async function extractFileDizBuiltin(
     command = `unzip -jo "${uploadedFilePath}" "${actualDizFilename}" -d "${nodeWorkDir}"`;
     extractedPath = path.join(nodeWorkDir, actualDizFilename);
   } else if (ext === '.lha' || ext === '.lzh') {
-    // Extract FILE_ID.DIZ from lha/lzh archive
-    // lha extracts to current directory, so we need to use cwd
-    // e = extract with paths, but FILE_ID.DIZ is usually in root
-    // NOTE: Must use absolute path for archive when using cwd
-    command = `lha e "${path.resolve(uploadedFilePath)}" "${actualDizFilename}"`;
-    needsCwd = true;
-    extractedPath = path.join(nodeWorkDir, actualDizFilename);
+    // Extract FILE_ID.DIZ from lha/lzh archive using pure TypeScript library
+    console.log(`[FILE_ID.DIZ] Using TypeScript LHA extractor`);
+    try {
+      const success = await extractFileDizFromLha(uploadedFilePath, dizPath);
+      return success;
+    } catch (error: any) {
+      console.log(`[FILE_ID.DIZ] TypeScript extractor failed: ${error.message}`);
+      return false;
+    }
   } else if (ext === '.lzx') {
     // Extract FILE_ID.DIZ from lzx archive (if unlzx is available)
     // -e = extract
