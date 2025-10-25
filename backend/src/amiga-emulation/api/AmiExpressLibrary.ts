@@ -214,17 +214,47 @@ export class AmiExpressLibrary {
   }
 
   /**
-   * Helper: Read null-terminated string from memory
+   * Helper: Read string from memory
+   * Supports both C-style null-terminated strings and BCPL/AmigaDOS BSTR format
    */
   private readString(address: number, maxLength: number = 1024): string {
+    if (address === 0) return '';
+
+    // Check if this is a BSTR (BCPL string) - first byte is length
+    const firstByte = this.emulator.readMemory(address);
+
+    // If first byte looks like a length (1-255), try reading as BSTR
+    if (firstByte > 0 && firstByte < 128) {
+      const bstrLength = firstByte;
+      let bstrResult = '';
+      for (let i = 0; i < bstrLength && i < maxLength; i++) {
+        const byte = this.emulator.readMemory(address + 1 + i);
+        if (byte === 0) break;
+        bstrResult += String.fromCharCode(byte);
+      }
+      // If we got a valid string, return it
+      if (bstrResult.length > 0) {
+        console.log(`[AmiExpress] Read BSTR: length=${bstrLength}, content="${bstrResult}"`);
+        return bstrResult;
+      }
+    }
+
+    // Otherwise read as C-style null-terminated string
     let result = '';
     let offset = 0;
 
     while (offset < maxLength) {
       const byte = this.emulator.readMemory(address + offset);
       if (byte === 0) break;
-      result += String.fromCharCode(byte);
+      // Skip non-printable characters except newline/carriage return
+      if (byte >= 32 || byte === 10 || byte === 13) {
+        result += String.fromCharCode(byte);
+      }
       offset++;
+    }
+
+    if (result.length > 0) {
+      console.log(`[AmiExpress] Read C-string: "${result}"`);
     }
 
     return result;
