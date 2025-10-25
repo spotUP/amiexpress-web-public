@@ -182,7 +182,7 @@ function displayDailyLimits(socket: Socket, gameState: PhreakWarsGameState) {
  * Execute Phreak Wars door
  */
 export async function executePhreakWarsDoor(socket: Socket, session: BBSSession, door: Door, doorSession: DoorSession) {
-  console.log('🚀 Executing Phreak Wars door for user:', session.user?.username);
+  console.log('Executing Phreak Wars door for user:', session.user?.username);
 
   // Initialize or load game state
   const userId = session.user!.id;

@@ -875,9 +875,9 @@ export class DoorManager {
    * Process uploaded file with smart analysis
    */
   private async processUpload(data: { filename: string; originalname: string; size: number; path?: string }): Promise<void> {
-    this.socket.emit('ansi-output', '\r\n\x1b[32m✓ File received: ' + data.originalname + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\r\n\x1b[32m* File received: ' + data.originalname + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', `\x1b[36mSize: ${this.formatSize(data.size)}\x1b[0m\r\n`);
-    this.socket.emit('ansi-output', '\r\n\x1b[33m🔍 Analyzing archive contents...\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\r\n\x1b[33mAnalyzing archive contents...\x1b[0m\r\n');
 
     try {
       // Construct archive path (use provided path or construct from archives directory)
@@ -915,7 +915,7 @@ export class DoorManager {
 
       // Show standard door structure if detected
       if (analysis.isStandardDoorStructure) {
-        this.socket.emit('ansi-output', '\r\n\x1b[32m✓ Standard AmiExpress Door Structure Detected!\x1b[0m\r\n');
+        this.socket.emit('ansi-output', '\r\n\x1b[32m* Standard AmiExpress Door Structure Detected!\x1b[0m\r\n');
 
         if (analysis.metadata?.doorName) {
           this.socket.emit('ansi-output', `\x1b[36mDoor Name:\x1b[0m ${analysis.metadata.doorName}\r\n`);
@@ -956,7 +956,7 @@ export class DoorManager {
 
       if (analysis.isStandardDoorStructure) {
         doorType = 'Standard AmiExpress Door';
-        suggestion = 'Ready to install to BBS structure!\r\n\x1b[36mCommands will be copied to Commands/BBSCmd/\x1b[0m\r\n\x1b[36mExecutables will be copied to Doors/\x1b[0m\r\n🚀 Will run via 68000 CPU emulation!';
+        suggestion = 'Ready to install to BBS structure!\r\n\x1b[36mCommands will be copied to Commands/BBSCmd/\x1b[0m\r\n\x1b[36mExecutables will be copied to Doors/\x1b[0m\r\n* Will run via 68000 CPU emulation!';
         canInstall = true;
       } else if (analysis.isTypeScriptDoor) {
         doorType = 'TypeScript Door';
@@ -968,7 +968,7 @@ export class DoorManager {
         canInstall = true;
       } else if (analysis.infoFiles.length > 0 && analysis.executables.length > 0) {
         doorType = 'Amiga Binary Door';
-        suggestion = 'This is a native Amiga door with binary executables.\r\n🚀 Will run via 68000 CPU emulation!';
+        suggestion = 'This is a native Amiga door with binary executables.\r\n* Will run via 68000 CPU emulation!';
         canInstall = true;
       } else if (analysis.hasSourceCode) {
         doorType = 'Source Code Archive';
@@ -978,7 +978,7 @@ export class DoorManager {
         if (analysis.sourceFiles.some(f => f.endsWith('.e'))) sourceTypes.push('E');
         if (analysis.sourceFiles.some(f => f.endsWith('.rexx'))) sourceTypes.push('AREXX');
 
-        suggestion = `Contains source code: ${sourceTypes.join(', ')}\r\n\x1b[33m⚠ Requires manual porting to TypeScript.\x1b[0m`;
+        suggestion = `Contains source code: ${sourceTypes.join(', ')}\r\n\x1b[33m! Requires manual porting to TypeScript.\x1b[0m`;
         canInstall = false;
       } else {
         doorType = 'Unknown';
@@ -1058,7 +1058,7 @@ export class DoorManager {
         toString: error?.toString()
       });
 
-      this.socket.emit('ansi-output', '\r\n\x1b[31m✗ Error processing upload: ' + (error as Error).message + '\x1b[0m\r\n');
+      this.socket.emit('ansi-output', '\r\n\x1b[31mX Error processing upload: ' + (error as Error).message + '\x1b[0m\r\n');
       this.socket.emit('ansi-output', 'Press any key to return to door list...\r\n');
 
       const returnToList = () => {
@@ -1080,14 +1080,14 @@ export class DoorManager {
       return;
     }
 
-    this.socket.emit('ansi-output', '\r\n\x1b[33m📦 Installing ' + door.name + '...\x1b[0m\r\n\r\n');
+    this.socket.emit('ansi-output', '\r\n\x1b[33mInstalling ' + door.name + '...\x1b[0m\r\n\r\n');
 
     try {
       const amigaDoorMgr = getAmigaDoorManager();
       const result = await amigaDoorMgr.installDoor(door.archivePath);
 
       if (result.success) {
-        this.socket.emit('ansi-output', '\x1b[32m✓ ' + result.message + '\x1b[0m\r\n');
+        this.socket.emit('ansi-output', '\x1b[32m* ' + result.message + '\x1b[0m\r\n');
 
         if (result.door) {
           this.socket.emit('ansi-output', `\r\nCommand: ${result.door.command}\r\n`);
@@ -1098,16 +1098,16 @@ export class DoorManager {
         }
 
         if (analysis.libraries.length > 0) {
-          this.socket.emit('ansi-output', `\r\n\x1b[36m✓ Installed ${analysis.libraries.length} library file(s) to Libs/\x1b[0m\r\n`);
+          this.socket.emit('ansi-output', `\r\n\x1b[36m* Installed ${analysis.libraries.length} library file(s) to Libs/\x1b[0m\r\n`);
         }
 
-        this.socket.emit('ansi-output', '\r\n\x1b[32m✓ Installation complete!\x1b[0m\r\n');
+        this.socket.emit('ansi-output', '\r\n\x1b[32m* Installation complete!\x1b[0m\r\n');
       } else {
-        this.socket.emit('ansi-output', '\x1b[31m✗ ' + result.message + '\x1b[0m\r\n');
+        this.socket.emit('ansi-output', '\x1b[31mX ' + result.message + '\x1b[0m\r\n');
       }
 
     } catch (error) {
-      this.socket.emit('ansi-output', '\x1b[31m✗ Installation error: ' + (error as Error).message + '\x1b[0m\r\n');
+      this.socket.emit('ansi-output', '\x1b[31mX Installation error: ' + (error as Error).message + '\x1b[0m\r\n');
     }
 
     // Re-scan to update list

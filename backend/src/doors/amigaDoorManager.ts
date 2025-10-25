@@ -690,7 +690,7 @@ export class AmigaDoorManager {
    */
   async installDoor(archivePath: string): Promise<{ success: boolean; message: string; door?: DoorInfo; doorPath?: string }> {
     try {
-      const analysis = this.analyzeDoorArchive(archivePath);
+      const analysis = await this.analyzeDoorArchive(archivePath);
       if (!analysis) {
         return { success: false, message: 'Failed to analyze archive' };
       }
@@ -752,7 +752,7 @@ export class AmigaDoorManager {
           console.log(`[LHA] Extracted: ${filename} => ${filePath} (${decompressed.length} bytes)`);
         }
 
-        console.log(`[LHA] ✓ Extraction complete`);
+        console.log(`[LHA] Extraction complete`);
       } else if (analysis.format === 'LZX') {
         // Use JavaScript LZX extractor
         console.log('[LZX] Extracting using JavaScript LZX library...');
@@ -784,7 +784,7 @@ export class AmigaDoorManager {
           }
         }
 
-        console.log(`[LZX] ✓ Extraction complete`);
+        console.log(`[LZX] Extraction complete`);
       }
 
       // Analyze extracted structure

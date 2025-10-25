@@ -102,6 +102,47 @@ echo "[36m-= AmiExpress-Web - TRUE 100% ACHIEVED! =-[0m
 
 ---
 
+## 🚨 CRITICAL: NO EMOJIS IN BBS OUTPUT 🚨
+
+**NEVER use emojis in any BBS terminal output or user-facing messages.**
+
+### Why This Matters:
+
+- Classic Amiga terminals cannot display emojis
+- Emojis break terminal rendering and display as garbage characters
+- This is a 1:1 port of AmiExpress - authentic experience required
+- Modern Unicode emojis did not exist in the Amiga era
+
+### Rules:
+
+1. **BBS Terminal Output** - NO emojis in any `socket.emit('ansi-output', ...)` messages
+2. **Console Logs** - NO emojis in console.log() statements (keeps logs clean)
+3. **Error Messages** - Use text symbols instead: `*` `X` `!` `-` `+`
+4. **Success Indicators** - Use `*` or `[OK]` instead of ✓ or ✅
+5. **Error Indicators** - Use `X` or `[ERROR]` instead of ✗ or ❌
+6. **Warnings** - Use `!` or `[WARNING]` instead of ⚠️
+7. **Status Symbols** - Use ASCII art or text instead of 🚀 🔍 📦 etc.
+
+### Correct Replacements:
+
+```typescript
+// ❌ WRONG - Uses emojis
+this.socket.emit('ansi-output', '✓ File received\r\n');
+this.socket.emit('ansi-output', '🔍 Analyzing...\r\n');
+this.socket.emit('ansi-output', '✗ Error occurred\r\n');
+console.log('🚀 Starting process...');
+
+// ✅ CORRECT - Uses ASCII text
+this.socket.emit('ansi-output', '* File received\r\n');
+this.socket.emit('ansi-output', 'Analyzing...\r\n');
+this.socket.emit('ansi-output', 'X Error occurred\r\n');
+console.log('Starting process...');
+```
+
+**ALWAYS check for emojis before deploying BBS code!**
+
+---
+
 ## 🚨 CRITICAL: Database Column Names - ALWAYS USE LOWERCASE 🚨
 
 **PostgreSQL column names are CASE-SENSITIVE when quoted!**
