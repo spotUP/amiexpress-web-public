@@ -105,6 +105,20 @@ import {
   handleWhoCommand,
   handleWhoDetailedCommand,
   handleWriteUserParamsCommand,
+  handleWOptionSelectInput,
+  handleWEditNameInput,
+  handleWEditEmailInput,
+  handleWEditRealnameInput,
+  handleWEditInternetnameInput,
+  handleWEditLocationInput,
+  handleWEditPhoneInput,
+  handleWEditPasswordInput,
+  handleWEditPasswordConfirmInput,
+  handleWEditLinesInput,
+  handleWEditComputerInput,
+  handleWEditScreentypeInput,
+  handleWEditProtocolInput,
+  handleWEditTranslatorInput,
   setInfoCommandsDependencies
 } from './info-commands.handler';
 import {
@@ -1814,6 +1828,219 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = session.inputBuffer;
       session.inputBuffer = '';
       await handleCFConfSelectInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  // W Command (Write User Parameters) Input Handlers
+  // express.e:25712-26092
+
+  if (session.subState === LoggedOnSubState.W_OPTION_SELECT) {
+    // Option selection (0-16 or CR to quit)
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWOptionSelectInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_NAME) {
+    // Edit username
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditNameInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_EMAIL) {
+    // Edit email
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditEmailInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_REALNAME) {
+    // Edit real name
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditRealnameInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_INTERNETNAME) {
+    // Edit internet name
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditInternetnameInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_LOCATION) {
+    // Edit location
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditLocationInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_PHONE) {
+    // Edit phone
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditPhoneInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_PASSWORD) {
+    // Edit password (first entry)
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      handleWEditPasswordInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_PASSWORD_CONFIRM) {
+    // Edit password (confirmation)
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditPasswordConfirmInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_LINES) {
+    // Edit lines per screen
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditLinesInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_COMPUTER) {
+    // Edit computer type
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditComputerInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_SCREENTYPE) {
+    // Edit screen type
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditScreentypeInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_PROTOCOL) {
+    // Edit transfer protocol
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditProtocolInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_TRANSLATOR) {
+    // Edit translator
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditTranslatorInput(socket, session, input);
     } else if (data === '\x7f') {
       if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
     } else if (data.length === 1 && data >= ' ' && data <= '~') {

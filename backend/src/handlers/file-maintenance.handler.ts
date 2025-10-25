@@ -21,7 +21,7 @@ import { ACSPermission } from '../constants/acs-permissions';
 import { checkSecurity } from '../utils/acs.util';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
-import { FileFlagManager } from '../utils/file-flag-manager.util';
+import { FileFlagManager } from '../utils/file-flag.util';
 import * as path from 'path';
 import * as fs from 'fs';
 

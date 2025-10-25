@@ -119,6 +119,22 @@ export enum LoggedOnSubState {
   // Conference Flags (CF command) - express.e:24672-24841
   CF_FLAG_SELECT_INPUT = 'cf_flag_select_input',      // M/A/F/Z flag type selection
   CF_CONF_SELECT_INPUT = 'cf_conf_select_input',      // Conference numbers input
+
+  // Write User Parameters (W command) - express.e:25712-26092
+  W_OPTION_SELECT = 'w_option_select',                // Option selection (0-16 or CR)
+  W_EDIT_NAME = 'w_edit_name',                        // Edit username (option 0)
+  W_EDIT_EMAIL = 'w_edit_email',                      // Edit email (option 1)
+  W_EDIT_REALNAME = 'w_edit_realname',                // Edit real name (option 2)
+  W_EDIT_INTERNETNAME = 'w_edit_internetname',        // Edit internet name (option 3)
+  W_EDIT_LOCATION = 'w_edit_location',                // Edit location (option 4)
+  W_EDIT_PHONE = 'w_edit_phone',                      // Edit phone (option 5)
+  W_EDIT_PASSWORD = 'w_edit_password',                // Edit password (option 6)
+  W_EDIT_PASSWORD_CONFIRM = 'w_edit_password_confirm',// Confirm password (option 6)
+  W_EDIT_LINES = 'w_edit_lines',                      // Edit lines per screen (option 7)
+  W_EDIT_COMPUTER = 'w_edit_computer',                // Edit computer (option 8)
+  W_EDIT_SCREENTYPE = 'w_edit_screentype',            // Edit screen type (option 9)
+  W_EDIT_PROTOCOL = 'w_edit_protocol',                // Edit transfer protocol (option 11)
+  W_EDIT_TRANSLATOR = 'w_edit_translator',            // Edit translator (option 15)
 }
 
 export enum SessionStatus {
