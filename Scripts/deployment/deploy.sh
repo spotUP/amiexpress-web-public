@@ -124,16 +124,16 @@ $COMMIT_MSG" \
 # Check prerequisites
 echo -e "${YELLOW}→${NC} Checking prerequisites..."
 
-if ! command -v render &> /dev/null; then
-    echo -e "${RED}✗ Error: Render CLI not installed${NC}"
-    echo -e "${YELLOW}  Install: npm install -g @render/cli${NC}"
-    exit 1
-fi
-
 if ! command -v vercel &> /dev/null; then
     echo -e "${RED}✗ Error: Vercel CLI not installed${NC}"
     echo -e "${YELLOW}  Install: npm install -g vercel${NC}"
     exit 1
+fi
+
+if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+    echo -e "${YELLOW}⚠ Warning: RENDER_DEPLOY_HOOK not configured${NC}"
+    echo -e "${YELLOW}  Backend deployment will rely on auto-deploy from GitHub${NC}"
+    echo ""
 fi
 
 echo -e "${GREEN}✓${NC} Prerequisites satisfied"
@@ -148,30 +148,8 @@ echo -e "${MAGENTA}  [1/2] Deploying Backend to Render${NC}"
 echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Get backend service ID
-echo -e "${YELLOW}→${NC} Finding Render backend service..."
-SERVICES_JSON=$(render services list -o json 2>/dev/null)
-
-if [ -z "$SERVICES_JSON" ]; then
-    echo -e "${RED}✗ Error: Failed to fetch Render services${NC}"
-    echo -e "${YELLOW}  Run 'render login' to authenticate${NC}"
-    exit 1
-fi
-
-# Extract backend service ID
-if command -v jq &> /dev/null; then
-    SERVICE_ID=$(echo "$SERVICES_JSON" | jq -r '.[] | select(.service.name == "amiexpress-backend") | .service.id' 2>/dev/null | head -1)
-else
-    SERVICE_ID=$(echo "$SERVICES_JSON" | grep -A 20 '"name": "amiexpress-backend"' | grep -o '"id": "srv-[^"]*"' | head -1 | cut -d'"' -f4)
-fi
-
-if [ -z "$SERVICE_ID" ]; then
-    echo -e "${RED}✗ Error: Could not find amiexpress-backend service${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✓${NC} Found service: ${CYAN}$SERVICE_ID${NC}"
-echo ""
+# Service ID is embedded in the deploy hook URL
+SERVICE_ID="srv-d3naaffdiees73eebd0g"
 
 # Trigger deployment via Render Deploy Hook
 if [ -n "$RENDER_DEPLOY_HOOK" ]; then
@@ -198,57 +176,29 @@ else
     sleep 10
 fi
 
-# Monitor backend deployment
-echo -e "${YELLOW}→${NC} Monitoring backend build (max 5 minutes)..."
+# Monitor deployment (optional - Render CLI may not be available)
+echo -e "${YELLOW}→${NC} Backend deployment initiated..."
+echo -e "${CYAN}  Dashboard:${NC} https://dashboard.render.com/web/$SERVICE_ID"
+echo ""
 
-MAX_WAIT=300  # 5 minutes
-ELAPSED=0
-CHECK_INTERVAL=10
+# Wait 30 seconds for build to start
+echo -e "${YELLOW}→${NC} Waiting 30s for build to start..."
+sleep 30
 
-while [ $ELAPSED -lt $MAX_WAIT ]; do
-    # Check build logs for completion
-    LOG_SAMPLE=$(render logs --resources "$SERVICE_ID" --type build --limit 5 -o text 2>/dev/null || echo "")
+echo -e "${GREEN}✓${NC} Backend deployment in progress"
+echo -e "${YELLOW}  Note: Build may take 2-3 minutes to complete${NC}"
+echo ""
 
-    if echo "$LOG_SAMPLE" | grep -q "Build successful"; then
-        echo -e "\n${GREEN}✓ Backend build successful!${NC}"
-        echo ""
-
-        # Wait for service to restart
-        echo -e "${YELLOW}→${NC} Waiting for backend service to restart..."
-        sleep 10
-
-        echo -e "${GREEN}✓ Backend deployment complete!${NC}"
-        echo ""
-
-        # Send backend success webhook
-        send_webhook \
-            "Backend Deployed" \
-            "Backend successfully deployed to Render
+# Send backend webhook
+send_webhook \
+    "Backend Deployment Triggered" \
+    "Backend deployment initiated on Render
 
 **Service:** amiexpress-backend
-**Commit:** \`$COMMIT_SHORT\`" \
-            "65280" \
-            "✅"
-
-        break
-    elif echo "$LOG_SAMPLE" | grep -q "Build failed"; then
-        echo -e "\n${RED}✗ Backend build failed!${NC}"
-        echo ""
-        echo -e "${YELLOW}Check logs:${NC} render logs --resources $SERVICE_ID --type build"
-        echo -e "${YELLOW}Dashboard:${NC}  https://dashboard.render.com/web/$SERVICE_ID"
-        exit 1
-    fi
-
-    echo -ne "  Waiting for build... ${ELAPSED}s / ${MAX_WAIT}s\r"
-    sleep $CHECK_INTERVAL
-    ELAPSED=$((ELAPSED + CHECK_INTERVAL))
-done
-
-if [ $ELAPSED -ge $MAX_WAIT ]; then
-    echo -e "\n${YELLOW}⚠ Backend deployment timeout after ${MAX_WAIT}s${NC}"
-    echo -e "${YELLOW}  Continuing with frontend deployment...${NC}"
-    echo ""
-fi
+**Commit:** \`$COMMIT_SHORT\`
+**Dashboard:** https://dashboard.render.com/web/$SERVICE_ID" \
+    "3447003" \
+    "🔧"
 
 # ============================================
 # PART 2: Deploy Frontend to Vercel
