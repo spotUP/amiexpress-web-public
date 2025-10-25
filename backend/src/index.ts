@@ -1015,10 +1015,11 @@ io.on('connection', async (socket) => {
 
               // Continue processing (fall through to batch processing below)
             } else {
-              // No DIZ found - prompt for description (express.e:19291+)
+              // No DIZ found - prompt for description (express.e:17720-17731)
               socket.emit('ansi-output', 'No FILE_ID.DIZ found.\r\n\r\n');
               socket.emit('ansi-output', 'Please enter a description (press Enter alone to finish):\r\n');
-              socket.emit('ansi-output', `${data.originalname.padEnd(13)}:`);
+              // express.e:17731 - filename (13 chars) + 19 spaces + ':'
+              socket.emit('ansi-output', `${data.originalname.substring(0, 13).padEnd(13)}                   :`);
 
               // Initialize description storage
               session.tempData.currentDescription = [];
@@ -1032,9 +1033,10 @@ io.on('connection', async (socket) => {
             }
           } catch (error) {
             console.error('[FILE_ID.DIZ] Extraction error:', error);
-            // On error, fall back to prompting for description
+            // On error, fall back to prompting for description (express.e:17720-17731)
             socket.emit('ansi-output', 'Please enter a description (press Enter alone to finish):\r\n');
-            socket.emit('ansi-output', `${data.originalname.padEnd(13)}:`);
+            // express.e:17731 - filename (13 chars) + 19 spaces + ':'
+            socket.emit('ansi-output', `${data.originalname.substring(0, 13).padEnd(13)}                   :`);
 
             session.tempData.currentDescription = [];
             session.tempData.maxDescLines = 10;

@@ -985,7 +985,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       return;
     }
 
-      // Prompt for next description line
+      // Prompt for next description line (express.e:17747)
+      // Format: 32 spaces + ':' (aligns with first line at column 33)
       socket.emit('ansi-output', '                                :');
       return;
     }
