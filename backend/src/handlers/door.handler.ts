@@ -96,17 +96,45 @@ export function setConstants(constants: {
 /**
  * Display door games menu (DOORS command)
  */
-export function displayDoorMenu(socket: any, session: BBSSession, params: string) {
+export async function displayDoorMenu(socket: any, session: BBSSession, params: string) {
   socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
 
-  // Get available doors for current user
+  // Get TypeScript doors for current user
   const availableDoors = doors.filter(door =>
     door.enabled &&
     (!door.conferenceId || door.conferenceId === session.currentConf) &&
     (session.user?.secLevel || 0) >= door.accessLevel
   );
 
-  if (availableDoors.length === 0) {
+  // Also scan for installed Amiga doors
+  const { getAmigaDoorManager } = require('../doors/amigaDoorManager');
+  const amigaDoorMgr = getAmigaDoorManager();
+  const amigaDoors = await amigaDoorMgr.scanInstalledDoors();
+
+  // Filter Amiga doors by access level
+  const availableAmigaDoors = amigaDoors.filter(door =>
+    door.installed &&
+    (session.user?.secLevel || 0) >= (door.access || 0)
+  );
+
+  console.log(`[DOOR Command] Found ${availableDoors.length} TypeScript doors, ${availableAmigaDoors.length} Amiga doors`);
+
+  // Convert Amiga doors to the format expected by this function
+  const amigaDoorsList = availableAmigaDoors.map(door => ({
+    id: door.command,
+    name: door.name || door.command,
+    description: `${door.location} (${door.type})`,
+    accessLevel: door.access || 0,
+    enabled: true,
+    conferenceId: null,
+    isAmigaDoor: true,
+    command: door.command
+  }));
+
+  // Combine both lists
+  const allDoors = [...availableDoors, ...amigaDoorsList];
+
+  if (allDoors.length === 0) {
     socket.emit('ansi-output', 'No doors are currently available.\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -116,15 +144,15 @@ export function displayDoorMenu(socket: any, session: BBSSession, params: string
 
   socket.emit('ansi-output', 'Available doors:\r\n\r\n');
 
-  availableDoors.forEach((door, index) => {
+  allDoors.forEach((door, index) => {
     socket.emit('ansi-output', `${index + 1}. ${door.name}\r\n`);
     socket.emit('ansi-output', `   ${door.description}\r\n`);
     socket.emit('ansi-output', `   Access Level: ${door.accessLevel}\r\n\r\n`);
   });
 
-  socket.emit('ansi-output', '\x1b[32mSelect door (1-\x1b[33m' + availableDoors.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
+  socket.emit('ansi-output', '\x1b[32mSelect door (1-\x1b[33m' + allDoors.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
   session.subState = LoggedOnSubState.FILE_AREA_SELECT; // Reuse for door selection
-  session.tempData = { doorMode: true, availableDoors };
+  session.tempData = { doorMode: true, availableDoors: allDoors };
 }
 
 /**

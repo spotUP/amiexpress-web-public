@@ -189,6 +189,17 @@ export class DoorManager {
       console.log(`[Door Manager] Found ${amigaDoors.length} installed Amiga door(s)`);
 
       for (const amigaDoor of amigaDoors) {
+        // Calculate door size (executable + docs if exists)
+        let doorSize = 0;
+        if (amigaDoor.resolvedPath && fs.existsSync(amigaDoor.resolvedPath)) {
+          try {
+            const stats = fs.statSync(amigaDoor.resolvedPath);
+            doorSize = stats.size;
+          } catch (error) {
+            console.error(`[Door Manager] Error getting size for ${amigaDoor.resolvedPath}:`, error);
+          }
+        }
+
         doors.push({
           id: crypto.createHash('md5').update(amigaDoor.command).digest('hex'),
           name: amigaDoor.name || amigaDoor.command,
@@ -197,12 +208,12 @@ export class DoorManager {
           command: amigaDoor.command,
           location: amigaDoor.location,
           doorType: amigaDoor.type,
-          size: 0, // .info files are small, size not critical
+          size: doorSize,
           uploadDate: new Date(),
           installed: amigaDoor.installed,
           access: amigaDoor.access
         });
-        console.log(`[Door Manager]   - ${amigaDoor.command}: ${amigaDoor.name || amigaDoor.location}`);
+        console.log(`[Door Manager]   - ${amigaDoor.command}: ${amigaDoor.name || amigaDoor.location} (${doorSize} bytes)`);
       }
     } catch (error) {
       console.error('[Door Manager] Error scanning Amiga doors:', error);

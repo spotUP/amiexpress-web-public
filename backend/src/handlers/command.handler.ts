@@ -2499,7 +2499,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
     // === CUSTOM WEB COMMANDS (Not in express.e) ===
     case 'DOOR':
     case 'DOORS': // Door Games Menu - lists doors with arrow key navigation
-      displayDoorMenu(socket, session, params);
+      await displayDoorMenu(socket, session, params);
       return;
 
     case 'DOORMAN': { // Door Manager plugin - for installing/managing doors
