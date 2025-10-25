@@ -141,6 +141,17 @@ export class AmigaDoorSession {
       // Reset CPU
       this.emulator.reset();
 
+      // CRITICAL: Manually set stack pointer AFTER reset
+      // The reset vectors don't seem to be working, so force it directly
+      this.emulator.setRegister(15, initialSP); // A7/SP = register 15
+
+      const actualSP = this.emulator.getRegister(15);
+      console.log(`[AmigaDoorSession] Stack pointer after reset: 0x${actualSP.toString(16)}`);
+
+      if (actualSP !== initialSP) {
+        console.error(`[AmigaDoorSession] WARNING: SP mismatch! Expected 0x${initialSP.toString(16)}, got 0x${actualSP.toString(16)}`);
+      }
+
       this.isRunning = true;
 
       // Set up timeout
