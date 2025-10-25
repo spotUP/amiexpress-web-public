@@ -70,10 +70,16 @@ export interface DoorArchive {
   isAREXXDoor?: boolean;     // True if this is an AREXX script door
   hasSourceCode?: boolean;   // True if contains source code
   packageJson?: any;         // Parsed package.json for TypeScript doors
+  // Standard AmiExpress door structure detection
+  isStandardDoorStructure?: boolean; // True if has Commands/BBSCmd/ + Doors/ structure
+  bbsCommands?: string[];    // Command names from Commands/BBSCmd/*.info
+  doorsDirectory?: string;   // Path to Doors/ directory in archive
+  commandsDirectory?: string; // Path to Commands/BBSCmd/ in archive
   metadata?: {
     fileidDiz?: string;
     readme?: string;
     guide?: string;
+    doorName?: string;       // Extracted from Doors/ directory name
   };
 }
 
@@ -419,13 +425,80 @@ export class AmigaDoorManager {
         files = this.listLzxContents(archivePath);
       }
 
+      // Detect standard AmiExpress door structure
+      const hasCommandsDir = files.some(f => f.match(/^[^/\\]*Commands\/BBSCmd\//i));
+      const hasDoorsDir = files.some(f => f.match(/^[^/\\]*Doors\//i));
+      const isStandardDoorStructure = hasCommandsDir && hasDoorsDir;
+
+      // Extract BBS commands from Commands/BBSCmd/*.info
+      const bbsCommands: string[] = [];
+      const commandsDirectory = files.find(f => f.match(/^[^/\\]*Commands\/BBSCmd\//i))
+        ?.replace(/\/[^/]*$/, ''); // Get directory path without filename
+
+      if (commandsDirectory) {
+        const commandPrefix = commandsDirectory + '/';
+        const commandInfoFiles = files.filter(f =>
+          f.startsWith(commandPrefix) && f.toLowerCase().endsWith('.info')
+        );
+
+        for (const infoFile of commandInfoFiles) {
+          // Extract command name (filename without .info extension)
+          const basename = path.basename(infoFile, '.info');
+          bbsCommands.push(basename);
+        }
+      }
+
+      // Find Doors/ directory and extract door name
+      let doorsDirectory: string | undefined;
+      let doorName: string | undefined;
+
+      const doorsPath = files.find(f => f.match(/^[^/\\]*Doors\//i));
+      if (doorsPath) {
+        // Extract: "otl-ab10/Doors/AquaBulls/..." -> "Doors/AquaBulls"
+        const match = doorsPath.match(/^([^/\\]*Doors\/[^/\\]+)/i);
+        if (match) {
+          doorsDirectory = match[1];
+          // Extract door name from "Doors/AquaBulls" -> "AquaBulls"
+          doorName = doorsDirectory.split('/')[1];
+        }
+      }
+
       // Find .info files and executables
       const infoFiles = files.filter(f => f.toLowerCase().endsWith('.info'));
+
+      // Enhanced executable detection
       const executables = files.filter(f => {
         const name = f.toLowerCase();
-        return name.endsWith('.000') || name.endsWith('.020') ||
-               name.endsWith('.x') || name.endsWith('.xim') ||
-               name.endsWith('.ts') || name.endsWith('.js');
+        const baseName = path.basename(f);
+
+        // Known Amiga executable extensions
+        if (name.endsWith('.000') || name.endsWith('.020') ||
+            name.endsWith('.x') || name.endsWith('.xim') ||
+            name.endsWith('.ts') || name.endsWith('.js')) {
+          return true;
+        }
+
+        // Files in Doors/ directory without extension (typical Amiga binaries)
+        if (f.match(/Doors\//i) && !path.extname(baseName)) {
+          // Exclude common non-executable files
+          if (baseName.toLowerCase() === 'readme' ||
+              baseName.toLowerCase() === 'install' ||
+              baseName.toLowerCase() === 'fileid' ||
+              baseName.toLowerCase() === 'file_id') {
+            return false;
+          }
+          // If the same name exists with .info extension, it's likely an executable
+          const correspondingInfo = f + '.info';
+          if (files.includes(correspondingInfo)) {
+            return true;
+          }
+          // If in Doors/ subdirectory matching doorName, likely executable
+          if (doorName && f.includes(`Doors/${doorName}/`) && baseName === doorName) {
+            return true;
+          }
+        }
+
+        return false;
       });
 
       // Find Amiga library files (.library)
@@ -457,6 +530,35 @@ export class AmigaDoorManager {
       const isAREXXDoor = files.some(f => f.toLowerCase().endsWith('.rexx') || f.toLowerCase().endsWith('.rx'));
       const hasSourceCode = sourceFiles.length > 0;
 
+      // Parse metadata files (file_id.diz, readme, .guide)
+      let fileidDiz: string | undefined;
+      let readme: string | undefined;
+      let guide: string | undefined;
+
+      // Find and extract file_id.diz
+      const fileidDizPath = files.find(f =>
+        f.toLowerCase().endsWith('file_id.diz') ||
+        f.toLowerCase().endsWith('fileid.diz')
+      );
+
+      if (fileidDizPath) {
+        try {
+          if (isZip) {
+            const AdmZip = require('adm-zip');
+            const zip = new AdmZip(archivePath);
+            const entry = zip.getEntry(fileidDizPath);
+            if (entry) {
+              fileidDiz = entry.getData().toString('utf8');
+            }
+          } else if (isLha) {
+            // For LHA, we'd need to extract - skip for now, will handle in installDoor
+            console.log('[AmigaDoorManager] file_id.diz found in LHA:', fileidDizPath);
+          }
+        } catch (e) {
+          console.error('Error parsing file_id.diz:', e);
+        }
+      }
+
       return {
         filename: path.basename(archivePath),
         path: archivePath,
@@ -472,6 +574,17 @@ export class AmigaDoorManager {
         isAREXXDoor,
         hasSourceCode,
         packageJson,
+        // Standard AmiExpress door structure
+        isStandardDoorStructure,
+        bbsCommands,
+        doorsDirectory,
+        commandsDirectory,
+        metadata: {
+          fileidDiz,
+          readme,
+          guide,
+          doorName,
+        },
       };
     } catch (error) {
       console.error('Error analyzing archive:', error);
@@ -620,50 +733,77 @@ export class AmigaDoorManager {
       for (const infoFile of infoFiles) {
         const relativePath = path.relative(tempDir, infoFile);
 
-        // Determine if archive has BBS/ structure
+        // Detect archive structure patterns:
+        // 1. BBS/Commands/BBSCmd/ (full BBS structure)
+        // 2. Commands/BBSCmd/ (standard door structure)
+        // 3. Archive-name/Commands/BBSCmd/ (archive root + standard structure)
         const hasBBSStructure = relativePath.match(/^BBS[/\\]Commands[/\\]BBSCmd[/\\]/i);
+        const hasStandardStructure = relativePath.match(/Commands[/\\]BBSCmd[/\\]/i);
+        const hasCommandsDir = hasStandardStructure || hasBBSStructure;
+
+        // Only process .info files that are in Commands/BBSCmd/ directory
+        if (!hasCommandsDir) {
+          console.log(`Skipping .info file not in Commands/BBSCmd/: ${relativePath}`);
+          continue;
+        }
 
         // Destination for .info file
         const infoDestDir = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
         const infoFileName = path.basename(infoFile);
         const infoDestPath = path.join(infoDestDir, infoFileName);
 
-        // Parse .info to find door location
-        const metadata = this.parseInfoFile(infoFile);
-        if (!metadata || !metadata.doorName) {
-          console.log(`Skipping .info file without door name: ${infoFileName}`);
-          continue;
-        }
+        // Extract command name from .info filename
+        const commandName = path.basename(infoFileName, '.info');
 
         // Copy .info file
         fs.mkdirSync(infoDestDir, { recursive: true });
         fs.copyFileSync(infoFile, infoDestPath);
-        console.log(`Installed command: ${infoFileName} → Commands/BBSCmd/`);
+        console.log(`Installed command: ${commandName} (${infoFileName} → Commands/BBSCmd/)`);
 
-        // Find and copy door files
-        const doorName = metadata.doorName;
-        const doorDestDir = path.join(this.assigns['Doors:'], doorName);
-        fs.mkdirSync(doorDestDir, { recursive: true });
+        // Find corresponding door in Doors/ directory
+        // Look for Doors/[DoorName]/ where DoorName matches or contains the command
+        const doorsPattern = hasBBSStructure ? 'BBS/Doors' : 'Doors';
+        const doorsDirMatch = extractedFiles.find(f => {
+          const rel = path.relative(tempDir, f);
+          return rel.match(new RegExp(`${doorsPattern}[/\\\\]([^/\\\\]+)[/\\\\]`, 'i'));
+        });
 
-        // Find door files in archive
-        let doorSourceDir: string;
-        if (hasBBSStructure) {
-          // Archive has BBS/Doors/[DoorName]/ structure
-          doorSourceDir = path.join(tempDir, 'BBS', 'Doors', doorName);
-        } else {
-          // Flat or mixed structure - look for door files
-          const doorFiles = extractedFiles.filter(f => {
-            const name = path.basename(f);
-            return name.toLowerCase().startsWith(doorName.toLowerCase());
-          });
+        let doorName: string | undefined;
+        let doorSourceDir: string | undefined;
 
-          if (doorFiles.length > 0) {
-            // Find common directory for door files
-            doorSourceDir = path.dirname(doorFiles[0]);
-          } else {
-            doorSourceDir = tempDir;
+        if (doorsDirMatch) {
+          // Extract door name from path: "Doors/AquaBulls/..." → "AquaBulls"
+          const rel = path.relative(tempDir, doorsDirMatch);
+          const match = rel.match(new RegExp(`${doorsPattern}[/\\\\]([^/\\\\]+)[/\\\\]`, 'i'));
+          if (match) {
+            doorName = match[1];
+            const doorPathPrefix = hasBBSStructure ? path.join(tempDir, 'BBS', 'Doors') : path.join(tempDir, 'Doors');
+
+            // Handle archive root prefix (e.g., "otl-ab10/Doors/")
+            const archiveRootDoors = extractedFiles.find(f => f.match(/Doors[/\\]/));
+            if (archiveRootDoors) {
+              const parts = path.relative(tempDir, archiveRootDoors).split(path.sep);
+              if (parts.length > 2 && parts[0] !== 'BBS' && parts[0] !== 'Doors') {
+                // Has archive root prefix
+                doorSourceDir = path.join(tempDir, parts[0], 'Doors', doorName);
+              } else {
+                doorSourceDir = path.join(doorPathPrefix, doorName);
+              }
+            } else {
+              doorSourceDir = path.join(doorPathPrefix, doorName);
+            }
           }
         }
+
+        if (!doorName || !doorSourceDir || !fs.existsSync(doorSourceDir)) {
+          console.log(`Warning: Could not find door directory for command ${commandName}`);
+          continue;
+        }
+
+        // Copy door files
+        const doorDestDir = path.join(this.assigns['Doors:'], doorName);
+        fs.mkdirSync(doorDestDir, { recursive: true });
+        console.log(`Installing door: ${doorName} → Doors/${doorName}/`);
 
         // Copy all door files
         if (fs.existsSync(doorSourceDir)) {

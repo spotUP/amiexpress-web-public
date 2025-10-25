@@ -525,27 +525,25 @@ export class DoorManager {
   /**
    * Process uploaded file with smart analysis
    */
-  private async processUpload(data: { filename: string; originalname: string; size: number }): Promise<void> {
+  private async processUpload(data: { filename: string; originalname: string; size: number; path?: string }): Promise<void> {
     this.socket.emit('ansi-output', '\r\n\x1b[32m✓ File received: ' + data.originalname + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', `\x1b[36mSize: ${this.formatSize(data.size)}\x1b[0m\r\n`);
     this.socket.emit('ansi-output', '\r\n\x1b[33m🔍 Analyzing archive contents...\x1b[0m\r\n');
 
     try {
-      // Re-scan doors to include new upload
-      await this.scanDoors();
+      // Construct archive path (use provided path or construct from archives directory)
+      const archivePath = data.path || path.join(this.archivesPath, data.originalname);
 
-      // Find the newly uploaded door (using originalname for matching)
-      const newDoor = this.state.doors.find(d =>
-        d.filename === data.filename || d.filename === data.originalname
-      );
-
-      if (!newDoor || !newDoor.archivePath) {
-        throw new Error('Could not find uploaded door in archive');
+      // Verify file exists
+      if (!fs.existsSync(archivePath)) {
+        throw new Error(`Uploaded file not found: ${archivePath}`);
       }
+
+      console.log('[Door Manager] Analyzing archive:', archivePath);
 
       // 🎯 SMART ANALYSIS: Use AmigaDoorManager to analyze archive
       const amigaDoorMgr = getAmigaDoorManager();
-      const analysis = amigaDoorMgr.analyzeDoorArchive(newDoor.archivePath);
+      const analysis = amigaDoorMgr.analyzeDoorArchive(archivePath);
 
       if (!analysis) {
         throw new Error('Failed to analyze archive');
@@ -556,12 +554,52 @@ export class DoorManager {
       this.socket.emit('ansi-output', `Format: ${analysis.format}\r\n`);
       this.socket.emit('ansi-output', `Files: ${analysis.files.length}\r\n`);
 
+      // Show standard door structure if detected
+      if (analysis.isStandardDoorStructure) {
+        this.socket.emit('ansi-output', '\r\n\x1b[32m✓ Standard AmiExpress Door Structure Detected!\x1b[0m\r\n');
+
+        if (analysis.metadata?.doorName) {
+          this.socket.emit('ansi-output', `\x1b[36mDoor Name:\x1b[0m ${analysis.metadata.doorName}\r\n`);
+        }
+
+        if (analysis.bbsCommands && analysis.bbsCommands.length > 0) {
+          this.socket.emit('ansi-output', `\x1b[36mBBS Commands:\x1b[0m ${analysis.bbsCommands.join(', ')}\r\n`);
+        }
+
+        if (analysis.executables.length > 0) {
+          this.socket.emit('ansi-output', `\x1b[36mExecutables:\x1b[0m ${analysis.executables.length}\r\n`);
+          analysis.executables.slice(0, 3).forEach(exe => {
+            this.socket.emit('ansi-output', `  • ${exe}\r\n`);
+          });
+          if (analysis.executables.length > 3) {
+            this.socket.emit('ansi-output', `  ... and ${analysis.executables.length - 3} more\r\n`);
+          }
+        }
+
+        if (analysis.libraries.length > 0) {
+          this.socket.emit('ansi-output', `\x1b[36mLibraries:\x1b[0m ${analysis.libraries.length} (will install to Libs/)\r\n`);
+        }
+      }
+
+      // Show file_id.diz if available
+      if (analysis.metadata?.fileidDiz) {
+        this.socket.emit('ansi-output', '\r\n\x1b[33m─── FILE_ID.DIZ ───\x1b[0m\r\n');
+        const dizLines = analysis.metadata.fileidDiz.split('\n').slice(0, 8);
+        dizLines.forEach(line => {
+          this.socket.emit('ansi-output', `\x1b[37m${line}\x1b[0m\r\n`);
+        });
+      }
+
       // Determine door type and suggest action
       let doorType = '';
       let suggestion = '';
       let canInstall = false;
 
-      if (analysis.isTypeScriptDoor) {
+      if (analysis.isStandardDoorStructure) {
+        doorType = 'Standard AmiExpress Door';
+        suggestion = 'Ready to install to BBS structure!\r\n\x1b[36mCommands will be copied to Commands/BBSCmd/\x1b[0m\r\n\x1b[36mExecutables will be copied to Doors/\x1b[0m\r\n🚀 Will run via 68000 CPU emulation!';
+        canInstall = true;
+      } else if (analysis.isTypeScriptDoor) {
         doorType = 'TypeScript Door';
         suggestion = 'This appears to be a TypeScript/JavaScript door.\r\nReady to install and run.';
         canInstall = true;
@@ -592,24 +630,39 @@ export class DoorManager {
       this.socket.emit('ansi-output', `\r\n\x1b[32mType: ${doorType}\x1b[0m\r\n`);
       this.socket.emit('ansi-output', `\r\n${suggestion}\r\n`);
 
-      // Show additional details
-      if (analysis.infoFiles.length > 0) {
-        this.socket.emit('ansi-output', `\r\nCommands: ${analysis.infoFiles.length}\r\n`);
-      }
-      if (analysis.executables.length > 0) {
-        this.socket.emit('ansi-output', `Executables: ${analysis.executables.length}\r\n`);
-      }
-      if (analysis.libraries.length > 0) {
-        this.socket.emit('ansi-output', `\x1b[36mLibraries: ${analysis.libraries.length} (will install to Libs/)\x1b[0m\r\n`);
-      }
-      if (analysis.sourceFiles.length > 0) {
-        this.socket.emit('ansi-output', `Source files: ${analysis.sourceFiles.length}\r\n`);
+      // Show additional details for non-standard doors
+      if (!analysis.isStandardDoorStructure) {
+        if (analysis.infoFiles.length > 0) {
+          this.socket.emit('ansi-output', `\r\nCommands: ${analysis.infoFiles.length}\r\n`);
+        }
+        if (analysis.executables.length > 0) {
+          this.socket.emit('ansi-output', `Executables: ${analysis.executables.length}\r\n`);
+        }
+        if (analysis.libraries.length > 0) {
+          this.socket.emit('ansi-output', `\x1b[36mLibraries: ${analysis.libraries.length} (will install to Libs/)\x1b[0m\r\n`);
+        }
+        if (analysis.sourceFiles.length > 0) {
+          this.socket.emit('ansi-output', `Source files: ${analysis.sourceFiles.length}\r\n`);
+        }
       }
 
       this.socket.emit('ansi-output', '\r\n');
 
+      // Create a temporary door object for installation
+      const tempDoor: DoorInfo = {
+        id: crypto.createHash('md5').update(archivePath).digest('hex'),
+        name: analysis.metadata?.doorName || path.basename(data.originalname, path.extname(data.originalname)),
+        filename: data.originalname,
+        type: 'archive',
+        size: data.size,
+        uploadDate: new Date(),
+        installed: false,
+        archivePath: archivePath,
+        fileidDiz: analysis.metadata?.fileidDiz,
+      };
+
       // Set current door and store analysis
-      this.state.currentDoor = newDoor;
+      this.state.currentDoor = tempDoor;
       (this.state.currentDoor as any).analysis = analysis;
 
       if (canInstall) {
@@ -619,7 +672,7 @@ export class DoorManager {
         const handleChoice = (input: string) => {
           this.socket.off('command', handleChoice);
           if (input.toLowerCase() === 'i') {
-            this.installSmartDoor(newDoor, analysis);
+            this.installSmartDoor(tempDoor, analysis);
           } else {
             this.state.mode = 'info';
             this.showInfo();
