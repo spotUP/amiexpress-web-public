@@ -1306,3 +1306,8 @@ function SAEO_DMS() {
 		return zo;
 	}
 }
+
+// Export for Node.js (CommonJS)
+if (typeof module !== 'undefined' && module.exports) {
+	module.exports = SAEO_DMS;
+}

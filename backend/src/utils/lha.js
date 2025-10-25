@@ -1,4 +1,4 @@
-LHA = {}
+var LHA = LHA || {};
 
 /**
  * Reads an LhA archive file from a URL
@@ -319,4 +319,9 @@ LHA._build_single_code_tree = function (tree, code) {
     for (var i = 0; i < tree.max_codes; i++) {
         tree.code_lengths[i] = 0;
     }
+}
+
+// Export for Node.js (CommonJS)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = LHA;
 }
