@@ -35,8 +35,16 @@ interface DoorInfo {
   description?: string;
 }
 
+interface ArchiveFileEntry {
+  name: string;           // File/directory name
+  fullPath: string;       // Full path in archive
+  isDirectory: boolean;
+  size: number;
+  extension: string;
+}
+
 interface DoorManagerState {
-  mode: 'list' | 'info' | 'upload' | 'docs';
+  mode: 'list' | 'info' | 'upload' | 'docs' | 'browse-archive' | 'view-file';
   selectedIndex: number;
   doors: DoorInfo[];
   currentDoor?: DoorInfo;
@@ -44,6 +52,15 @@ interface DoorManagerState {
   uploadFilename?: string;
   docsContent?: string;
   scrollOffset: number;
+  // Archive browser state
+  archiveFiles?: ArchiveFileEntry[];
+  currentPath?: string;          // Current directory path in archive
+  selectedFileIndex?: number;
+  viewingFile?: {
+    name: string;
+    content: string;
+    type: 'text' | 'amigaguide';
+  };
 }
 
 export class DoorManager {
@@ -469,31 +486,363 @@ export class DoorManager {
    * Display documentation viewer
    */
   private showDocs(): void {
-    if (!this.state.currentDoor || !this.state.docsContent) return;
+    if (!this.state.currentDoor) return;
+
+    // Launch interactive archive browser
+    this.browseArchive();
+  }
+
+  /**
+   * Interactive archive browser - navigate files and directories
+   */
+  private async browseArchive(): Promise<void> {
+    if (!this.state.currentDoor || !this.state.currentDoor.archivePath) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mNo archive available to browse\x1b[0m\r\n');
+      return;
+    }
+
+    try {
+      // Extract file list from archive
+      const files = await this.extractArchiveFileList(this.state.currentDoor.archivePath);
+
+      if (!files || files.length === 0) {
+        this.socket.emit('ansi-output', '\r\n\x1b[31mNo files found in archive\x1b[0m\r\n');
+        return;
+      }
+
+      // Initialize browser state
+      this.state.archiveFiles = files;
+      this.state.currentPath = '';  // Root of archive
+      this.state.selectedFileIndex = 0;
+      this.state.scrollOffset = 0;
+      this.state.mode = 'browse-archive';
+
+      this.showArchiveBrowser();
+    } catch (error) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mError browsing archive: ' + (error as Error).message + '\x1b[0m\r\n');
+    }
+  }
+
+  /**
+   * Extract file and directory list from archive
+   */
+  private async extractArchiveFileList(archivePath: string): Promise<ArchiveFileEntry[]> {
+    const entries: ArchiveFileEntry[] = [];
+    const ext = path.extname(archivePath).toLowerCase();
+
+    if (ext === '.zip') {
+      const AdmZip = require('adm-zip');
+      const zip = new AdmZip(archivePath);
+      const zipEntries = zip.getEntries();
+
+      for (const entry of zipEntries) {
+        const name = entry.entryName;
+        // Skip macOS metadata files
+        if (name.includes('__MACOSX') || name.endsWith('.DS_Store')) continue;
+
+        entries.push({
+          name: path.basename(name),
+          fullPath: name,
+          isDirectory: entry.isDirectory,
+          size: entry.header.size,
+          extension: path.extname(name).toLowerCase()
+        });
+      }
+    } else if (ext === '.lha' || ext === '.lzh') {
+      // Use AmigaDoorManager to list LHA contents
+      const amigaDoorMgr = getAmigaDoorManager();
+      const analysis = amigaDoorMgr.analyzeDoorArchive(archivePath);
+
+      if (analysis && analysis.files) {
+        for (const file of analysis.files) {
+          // Skip macOS metadata
+          if (file.includes('__MACOSX') || file.endsWith('.DS_Store')) continue;
+
+          // Detect if it's a directory (ends with /)
+          const isDir = file.endsWith('/');
+          const cleanPath = isDir ? file.slice(0, -1) : file;
+
+          entries.push({
+            name: path.basename(cleanPath),
+            fullPath: file,
+            isDirectory: isDir,
+            size: 0, // LHA listing doesn't provide sizes easily
+            extension: path.extname(cleanPath).toLowerCase()
+          });
+        }
+      }
+    } else if (ext === '.lzx') {
+      // Similar to LHA
+      const amigaDoorMgr = getAmigaDoorManager();
+      const analysis = amigaDoorMgr.analyzeDoorArchive(archivePath);
+
+      if (analysis && analysis.files) {
+        for (const file of analysis.files) {
+          if (file.includes('__MACOSX') || file.endsWith('.DS_Store')) continue;
+
+          const isDir = file.endsWith('/');
+          const cleanPath = isDir ? file.slice(0, -1) : file;
+
+          entries.push({
+            name: path.basename(cleanPath),
+            fullPath: file,
+            isDirectory: isDir,
+            size: 0,
+            extension: path.extname(cleanPath).toLowerCase()
+          });
+        }
+      }
+    }
+
+    return entries;
+  }
+
+  /**
+   * Display archive browser with current directory
+   */
+  private showArchiveBrowser(): void {
+    if (!this.state.archiveFiles) return;
 
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
 
     // Header
-    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOCUMENTATION ', 80) + '\x1b[0m\r\n');
+    const currentPath = this.state.currentPath || '/';
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' ARCHIVE BROWSER ', 80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\r\n');
+    this.socket.emit('ansi-output', `\x1b[36mPath:\x1b[0m ${currentPath}\r\n`);
+    this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+
+    // Filter files for current directory
+    const currentFiles = this.getFilesInCurrentPath();
+
+    if (currentFiles.length === 0) {
+      this.socket.emit('ansi-output', '\r\n\x1b[33mEmpty directory\x1b[0m\r\n');
+    } else {
+      // Display files with selection
+      const pageSize = 15;
+      const start = this.state.scrollOffset || 0;
+      const end = Math.min(start + pageSize, currentFiles.length);
+
+      for (let i = start; i < end; i++) {
+        const file = currentFiles[i];
+        const isSelected = i === (this.state.selectedFileIndex || 0);
+
+        // Format entry
+        let icon = file.isDirectory ? '\x1b[36m[DIR]\x1b[0m' : '     ';
+
+        // Special icons for known file types
+        if (!file.isDirectory) {
+          if (file.extension === '.guide') icon = '\x1b[35m[GDE]\x1b[0m';
+          else if (file.extension === '.txt' || file.extension === '.doc') icon = '\x1b[37m[TXT]\x1b[0m';
+          else if (file.extension === '.info') icon = '\x1b[33m[NFO]\x1b[0m';
+          else icon = '     ';
+        }
+
+        const name = file.name.substring(0, 50).padEnd(50);
+        const size = file.isDirectory ? '     ' : this.formatSize(file.size).padStart(8);
+
+        if (isSelected) {
+          this.socket.emit('ansi-output', `\x1b[0;37;44m ${icon} ${name} ${size} \x1b[0m\r\n`);
+        } else {
+          this.socket.emit('ansi-output', ` ${icon} ${name} ${size}\r\n`);
+        }
+      }
+
+      // Show scroll indicator
+      if (currentFiles.length > pageSize) {
+        const current = Math.floor((this.state.selectedFileIndex || 0) / pageSize) + 1;
+        const total = Math.ceil(currentFiles.length / pageSize);
+        this.socket.emit('ansi-output', `\r\n\x1b[90mPage ${current}/${total}\x1b[0m\r\n`);
+      }
+    }
+
+    // Footer with commands
+    this.socket.emit('ansi-output', '\r\n');
+    this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Navigate  ');
+    this.socket.emit('ansi-output', '\x1b[33mENTER\x1b[0m Open  ');
+    if (this.state.currentPath && this.state.currentPath !== '') {
+      this.socket.emit('ansi-output', '\x1b[33mBACKSPACE\x1b[0m Up  ');
+    }
+    this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back to Info  ');
+    this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
+  }
+
+  /**
+   * Get files in current directory path
+   */
+  private getFilesInCurrentPath(): ArchiveFileEntry[] {
+    if (!this.state.archiveFiles) return [];
+
+    const currentPath = this.state.currentPath || '';
+    const result: ArchiveFileEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const file of this.state.archiveFiles) {
+      let relativePath = file.fullPath;
+
+      // Remove current path prefix
+      if (currentPath && relativePath.startsWith(currentPath + '/')) {
+        relativePath = relativePath.substring(currentPath.length + 1);
+      } else if (currentPath && currentPath !== '') {
+        // Not in current directory
+        continue;
+      }
+
+      // If in root and file is nested, skip
+      if (!currentPath && relativePath.includes('/')) {
+        // Extract first directory
+        const firstDir = relativePath.split('/')[0];
+        if (!seen.has(firstDir)) {
+          seen.add(firstDir);
+          result.push({
+            name: firstDir,
+            fullPath: currentPath ? currentPath + '/' + firstDir : firstDir,
+            isDirectory: true,
+            size: 0,
+            extension: ''
+          });
+        }
+        continue;
+      }
+
+      // If has more subdirectories, show as directory
+      if (relativePath.includes('/')) {
+        const nextDir = relativePath.split('/')[0];
+        if (!seen.has(nextDir)) {
+          seen.add(nextDir);
+          result.push({
+            name: nextDir,
+            fullPath: currentPath ? currentPath + '/' + nextDir : nextDir,
+            isDirectory: true,
+            size: 0,
+            extension: ''
+          });
+        }
+      } else if (!file.isDirectory) {
+        // File in current directory
+        result.push(file);
+      }
+    }
+
+    // Sort: directories first, then files
+    return result.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  /**
+   * View a file from the archive
+   */
+  private async viewArchiveFile(file: ArchiveFileEntry): Promise<void> {
+    if (!this.state.currentDoor || !this.state.currentDoor.archivePath) return;
+
+    try {
+      const archivePath = this.state.currentDoor.archivePath;
+      const ext = path.extname(archivePath).toLowerCase();
+      let content = '';
+
+      // Extract file content
+      if (ext === '.zip') {
+        const AdmZip = require('adm-zip');
+        const zip = new AdmZip(archivePath);
+        const entry = zip.getEntry(file.fullPath);
+
+        if (entry) {
+          content = entry.getData().toString('utf8');
+        }
+      } else if (ext === '.lha' || ext === '.lzh' || ext === '.lzx') {
+        // For LHA/LZX, we'd need to extract - for now show placeholder
+        content = '[LHA/LZX file viewing requires extraction - not yet implemented]\r\n\r\n';
+        content += `File: ${file.name}\r\n`;
+        content += `Path: ${file.fullPath}\r\n`;
+      }
+
+      // Determine file type
+      let fileType: 'text' | 'amigaguide' = 'text';
+      if (file.extension === '.guide') {
+        fileType = 'amigaguide';
+      }
+
+      // Store viewing state
+      this.state.viewingFile = {
+        name: file.name,
+        content,
+        type: fileType
+      };
+      this.state.scrollOffset = 0;
+      this.state.mode = 'view-file';
+
+      this.showFileViewer();
+    } catch (error) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mError reading file: ' + (error as Error).message + '\x1b[0m\r\n');
+    }
+  }
+
+  /**
+   * Display file content viewer
+   */
+  private showFileViewer(): void {
+    if (!this.state.viewingFile) return;
+
+    this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+
+    const file = this.state.viewingFile;
+
+    // Header
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(` ${file.name.toUpperCase()} `, 80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\r\n');
 
     // Show content with paging
-    const lines = this.state.docsContent.split('\n');
+    if (file.type === 'amigaguide') {
+      // Parse and render AmigaGuide
+      this.renderAmigaGuide(file.content);
+    } else {
+      // Display as plain text
+      const lines = file.content.split('\n');
+      const pageSize = 20;
+      const start = this.state.scrollOffset || 0;
+      const end = Math.min(start + pageSize, lines.length);
+
+      for (let i = start; i < end; i++) {
+        this.socket.emit('ansi-output', `${lines[i]}\r\n`);
+      }
+
+      // Footer
+      this.socket.emit('ansi-output', '\r\n');
+      this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+      this.socket.emit('ansi-output', `\x1b[90mLine ${start + 1}-${end} of ${lines.length}\x1b[0m\r\n`);
+    }
+
+    this.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Scroll  ');
+    this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back to Browser  ');
+    this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
+  }
+
+  /**
+   * Render AmigaGuide content (simplified)
+   */
+  private renderAmigaGuide(content: string): void {
+    // Basic AmigaGuide rendering
+    // TODO: Integrate with full AmigaGuideViewer when available
+    const lines = content.split('\n');
     const pageSize = 20;
-    const start = this.state.scrollOffset;
+    const start = this.state.scrollOffset || 0;
     const end = Math.min(start + pageSize, lines.length);
 
     for (let i = start; i < end; i++) {
-      this.socket.emit('ansi-output', `${lines[i]}\r\n`);
-    }
+      let line = lines[i];
 
-    // Footer
-    this.socket.emit('ansi-output', '\r\n');
-    this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
-    this.socket.emit('ansi-output', `\x1b[90mLine ${start + 1}-${end} of ${lines.length}\x1b[0m\r\n`);
-    this.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Scroll  ');
-    this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
-    this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
+      // Simple AmigaGuide tag processing
+      // @node, @title, @{}, etc.
+      line = line.replace(/@\{[^}]*\}/g, ''); // Remove formatting codes
+      line = line.replace(/@node .*/i, ''); // Remove node declarations
+      line = line.replace(/@title .*/i, ''); // Remove title declarations
+
+      this.socket.emit('ansi-output', `${line}\r\n`);
+    }
   }
 
   /**
@@ -896,6 +1245,12 @@ export class DoorManager {
       case 'docs':
         this.handleDocsInput(key, data);
         break;
+      case 'browse-archive':
+        this.handleBrowseArchiveInput(key, data);
+        break;
+      case 'view-file':
+        this.handleViewFileInput(key, data);
+        break;
       case 'upload':
         this.handleUploadInput(key);
         break;
@@ -1035,6 +1390,134 @@ export class DoorManager {
       this.state.mode = 'info';
       this.state.scrollOffset = 0;
       this.showInfo();
+      return;
+    }
+
+    // Q - Quit
+    if (key === 'q') {
+      this.cleanup();
+      this.socket.emit('door-exit');
+      return;
+    }
+  }
+
+  /**
+   * Handle input in archive browser mode
+   */
+  private handleBrowseArchiveInput(key: string, rawData: string): void {
+    const currentFiles = this.getFilesInCurrentPath();
+    const selectedIndex = this.state.selectedFileIndex || 0;
+
+    // Arrow keys for navigation
+    if (rawData === '\x1b[A' || rawData === '\x1b\x5b\x41') { // Up arrow
+      if (selectedIndex > 0) {
+        this.state.selectedFileIndex = selectedIndex - 1;
+
+        // Adjust scroll offset
+        const pageSize = 15;
+        if (this.state.selectedFileIndex < this.state.scrollOffset) {
+          this.state.scrollOffset = Math.max(0, this.state.scrollOffset - pageSize);
+        }
+
+        this.showArchiveBrowser();
+      }
+      return;
+    }
+
+    if (rawData === '\x1b[B' || rawData === '\x1b\x5b\x42') { // Down arrow
+      if (selectedIndex < currentFiles.length - 1) {
+        this.state.selectedFileIndex = selectedIndex + 1;
+
+        // Adjust scroll offset
+        const pageSize = 15;
+        if (this.state.selectedFileIndex >= this.state.scrollOffset + pageSize) {
+          this.state.scrollOffset = Math.min(
+            currentFiles.length - pageSize,
+            this.state.scrollOffset + pageSize
+          );
+        }
+
+        this.showArchiveBrowser();
+      }
+      return;
+    }
+
+    // Enter - Open file or directory
+    if (key === '\r' || key === '\n') {
+      if (currentFiles.length > 0) {
+        const selectedFile = currentFiles[selectedIndex];
+
+        if (selectedFile.isDirectory) {
+          // Navigate into directory
+          this.state.currentPath = selectedFile.fullPath;
+          this.state.selectedFileIndex = 0;
+          this.state.scrollOffset = 0;
+          this.showArchiveBrowser();
+        } else {
+          // View file
+          this.viewArchiveFile(selectedFile);
+        }
+      }
+      return;
+    }
+
+    // Backspace - Go up one directory
+    if (rawData === '\x7f' || rawData === '\x08' || key === '\b') {
+      if (this.state.currentPath && this.state.currentPath !== '') {
+        // Go up one level
+        const parts = this.state.currentPath.split('/');
+        parts.pop();
+        this.state.currentPath = parts.join('/');
+        this.state.selectedFileIndex = 0;
+        this.state.scrollOffset = 0;
+        this.showArchiveBrowser();
+      }
+      return;
+    }
+
+    // B - Back to info
+    if (key === 'b') {
+      this.state.mode = 'info';
+      this.state.scrollOffset = 0;
+      this.showInfo();
+      return;
+    }
+
+    // Q - Quit
+    if (key === 'q') {
+      this.cleanup();
+      this.socket.emit('door-exit');
+      return;
+    }
+  }
+
+  /**
+   * Handle input in file viewer mode
+   */
+  private handleViewFileInput(key: string, rawData: string): void {
+    if (!this.state.viewingFile) return;
+
+    const lines = this.state.viewingFile.content.split('\n');
+    const pageSize = 20;
+
+    // Arrow keys for scrolling
+    if (rawData === '\x1b[A' || rawData === '\x1b\x5b\x41') { // Up arrow
+      this.state.scrollOffset = Math.max(0, this.state.scrollOffset - 1);
+      this.showFileViewer();
+      return;
+    }
+
+    if (rawData === '\x1b[B' || rawData === '\x1b\x5b\x42') { // Down arrow
+      this.state.scrollOffset = Math.min(lines.length - pageSize, this.state.scrollOffset + 1);
+      this.showFileViewer();
+      return;
+    }
+
+    // B - Back to archive browser
+    if (key === 'b') {
+      this.state.mode = 'browse-archive';
+      this.state.scrollOffset = 0;
+      this.showArchiveBrowser();
       return;
     }
 
