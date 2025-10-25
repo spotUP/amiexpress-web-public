@@ -188,6 +188,17 @@ export class AmigaDoorSession {
         console.error(`[AmigaDoorSession] WARNING: PC not at entry point!`);
       }
 
+      // Log first few instructions to see what door is doing
+      console.log('[AmigaDoorSession] First 10 instructions at entry point:');
+      for (let i = 0; i < 10; i++) {
+        const addr = hunkFile.entryPoint + (i * 2);
+        const b0 = this.emulator.readMemory(addr);
+        const b1 = this.emulator.readMemory(addr + 1);
+        const b2 = this.emulator.readMemory(addr + 2);
+        const b3 = this.emulator.readMemory(addr + 3);
+        console.log(`  0x${addr.toString(16)}: ${b0.toString(16).padStart(2, '0')} ${b1.toString(16).padStart(2, '0')} ${b2.toString(16).padStart(2, '0')} ${b3.toString(16).padStart(2, '0')}`);
+      }
+
       // Start execution loop
       console.log('[AmigaDoorSession] About to call runExecutionLoop()...');
       console.log(`[AmigaDoorSession] isRunning=${this.isRunning}, emulator=${!!this.emulator}`);
@@ -264,8 +275,9 @@ export class AmigaDoorSession {
       this.lastPC = pcBefore;
 
       // Execute a small number of cycles (allows I/O to be processed)
-      // 10000 cycles ≈ 1.25ms on original 8MHz 68000
-      const cyclesExecuted = this.emulator.execute(10000);
+      // Reduced to 1000 cycles to catch JSR instructions more reliably
+      // 1000 cycles ≈ 0.125ms on original 8MHz 68000
+      const cyclesExecuted = this.emulator.execute(1000);
 
       if (cyclesExecuted === 0) {
         console.warn('[AmigaDoorSession] CPU executed 0 cycles - door completed or hit invalid instruction');
@@ -297,7 +309,7 @@ export class AmigaDoorSession {
         }
       }
 
-      // Check for JSR to library addresses (detect library calls)
+      // Check for JSR instructions (detect all function calls)
       const instr0 = this.emulator.readMemory(pcAfter);
       const instr1 = this.emulator.readMemory(pcAfter + 1);
       const instr2 = this.emulator.readMemory(pcAfter + 2);
@@ -312,10 +324,16 @@ export class AmigaDoorSession {
         const addr3 = this.emulator.readMemory(pcAfter + 5);
         const targetAddr = (addr0 << 24) | (addr1 << 16) | (addr2 << 8) | addr3;
 
+        // Log ALL JSR calls every 100 iterations to see what door is calling
+        if (this.iterationCount % 100 === 0) {
+          console.log(`[JSR Detected] PC=0x${pcAfter.toString(16)} calling 0x${targetAddr.toString(16)}`);
+        }
+
         // Check if this is a library call (0xff0000 range)
         if (targetAddr >= 0xff0000 && targetAddr <= 0xffffff) {
-          console.log(`[Library Call Detected] JSR to 0x${targetAddr.toString(16)} at PC=0x${pcAfter.toString(16)}`);
+          console.log(`[*** LIBRARY CALL ***] JSR to 0x${targetAddr.toString(16)} at PC=0x${pcAfter.toString(16)}`);
           console.log(`  This should trigger trap handler!`);
+          console.log(`  Instruction bytes: ${instr0.toString(16)} ${instr1.toString(16)} ${addr0.toString(16)} ${addr1.toString(16)} ${addr2.toString(16)} ${addr3.toString(16)}`);
         }
       }
 
