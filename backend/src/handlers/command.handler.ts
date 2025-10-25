@@ -2169,6 +2169,36 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
     // If command changed subState (e.g., to DISPLAY_CONF_BULL), let handleCommand handle it on next input
     return;
+  } else if (session.subState === LoggedOnSubState.USER_STATS_MENU) {
+    // Handle user stats menu input (F=Font, Q=Quit)
+    console.log('📊 In USER_STATS_MENU state, processing input');
+    const { handleUserStatsMenuInput } = require('./user-commands.handler');
+    handleUserStatsMenuInput(socket, session, data);
+    return;
+  } else if (session.subState === LoggedOnSubState.FONT_SELECTION) {
+    // Handle font selection input (1-8 or Q)
+    console.log('🔤 In FONT_SELECTION state, buffering input');
+
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+
+      const { handleFontSelectionInput } = require('./user-commands.handler');
+      handleFontSelectionInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
   } else {
     console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
   }
