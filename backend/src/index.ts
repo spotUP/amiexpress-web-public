@@ -1209,10 +1209,14 @@ io.on('connection', async (socket) => {
       }
 
       // Update user stats in users table (for backward compatibility)
-      await db.updateUser(session.user!.id, {
-        uploads: (session.user!.uploads || 0) + 1,
-        bytesUpload: (session.user!.bytesUpload || 0) + data.size
-      });
+      // Use SQL arithmetic to avoid JavaScript number overflow for bytesUpload (BIGINT)
+      await db.query(`
+        UPDATE users
+        SET uploads = uploads + 1,
+            bytesupload = bytesupload + $1,
+            updated = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [data.size, session.user!.id]);
 
       // Update user_stats table (for ratio calculations)
       await db.query(
@@ -1354,10 +1358,14 @@ io.on('connection', async (socket) => {
       });
 
       // Update user download statistics (express.e:9475-9492)
-      await db.updateUser(session.user.id, {
-        downloads: (session.user.downloads || 0) + 1,
-        bytesDownload: (session.user.bytesDownload || 0) + fileEntry.size
-      });
+      // Use SQL arithmetic to avoid JavaScript number overflow for bytesDownload (BIGINT)
+      await db.query(`
+        UPDATE users
+        SET downloads = downloads + 1,
+            bytesdownload = bytesdownload + $1,
+            updated = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [fileEntry.size, session.user.id]);
 
       // Update user_stats table (for ratio calculations)
       await db.query(
