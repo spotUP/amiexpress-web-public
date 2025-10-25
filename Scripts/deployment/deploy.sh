@@ -192,58 +192,14 @@ else
     echo -e "${YELLOW}⚠${NC} No RENDER_DEPLOY_HOOK (relying on auto-deploy)"
 fi
 
-# Trigger frontend deployment
-echo -e "${YELLOW}→${NC} [2/2] Triggering frontend deployment..."
+# Frontend deployment via Vercel GitHub integration
+echo -e "${YELLOW}→${NC} [2/2] Frontend deployment..."
+echo -e "${GREEN}✓${NC} Frontend will auto-deploy via Vercel's GitHub integration"
+echo ""
 
-PROJECT_ROOT="$(git rev-parse --show-toplevel)"
-cd "$PROJECT_ROOT"
-
-# Deploy to Vercel with timeout (120 seconds)
-# Redirect stdin from /dev/null to prevent interactive prompts from hanging
-VERCEL_OUTPUT=$(timeout 120 vercel --prod --yes </dev/null 2>&1)
-VERCEL_EXIT=$?
-
-if [ $VERCEL_EXIT -eq 124 ]; then
-    echo -e "${YELLOW}⚠${NC} Vercel deployment timed out (120s)"
-    echo -e "${YELLOW}  Deployment may still be in progress on Vercel's side${NC}"
-    DEPLOYMENT_URL=""
-    PRODUCTION_URL="https://bbs.uprough.net"
-    echo ""
-    # Send timeout webhook
-    send_webhook \
-        "Frontend Deployment Timeout" \
-        "Vercel deployment timed out after 120 seconds
-
-**Commit:** \`$COMMIT_SHORT\`
-**Status:** Deployment may still be in progress on Vercel's side
-**URL:** $PRODUCTION_URL" \
-        "16776960" \
-        "⏱️"
-elif [ $VERCEL_EXIT -ne 0 ]; then
-    echo -e "${YELLOW}⚠${NC} Vercel deployment failed (exit code: $VERCEL_EXIT)"
-    echo "$VERCEL_OUTPUT"
-    echo -e "${YELLOW}  Continuing with backend deployment...${NC}"
-    DEPLOYMENT_URL=""
-    PRODUCTION_URL="https://bbs.uprough.net"
-    echo ""
-    # Send error webhook
-    send_webhook \
-        "Frontend Deployment Error" \
-        "Vercel deployment failed with exit code $VERCEL_EXIT
-
-**Commit:** \`$COMMIT_SHORT\`
-**Error:** \`\`\`
-$(echo "$VERCEL_OUTPUT" | tail -20)
-\`\`\`" \
-        "16711680" \
-        "❌"
-else
-    # Extract deployment URL (only on success)
-    DEPLOYMENT_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | tail -1)
-    PRODUCTION_URL=$(echo "$VERCEL_OUTPUT" | grep -oE 'https://bbs\.uprough\.net' || echo "https://bbs.uprough.net")
-    echo -e "${GREEN}✓${NC} Frontend deployed"
-    echo ""
-fi
+# Set production URL (Vercel auto-deploys from GitHub)
+DEPLOYMENT_URL=""
+PRODUCTION_URL="https://bbs.uprough.net"
 
 # ============================================
 # STEP 2: Report results
