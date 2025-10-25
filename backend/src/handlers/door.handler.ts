@@ -217,11 +217,16 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     // Create AmigaDoorSession to run the native Amiga executable
     const amigaSession = new AmigaDoorSession(socket, session);
 
+    // Get the BBS root from AmigaDoorManager (same location where doors are installed)
+    const { getAmigaDoorManager } = require('../doors/amigaDoorManager');
+    const amigaDoorMgr = getAmigaDoorManager();
+    const bbsRoot = amigaDoorMgr.bbsRoot;
+
     // Build the full path to the door executable
-    // door.location is already converted from Amiga paths (e.g., "doors/AquaBulls/AquaBulls")
-    const bbsRoot = path.join(__dirname, '../../BBS');
+    // door.location is already converted from Amiga paths (e.g., "Doors/AquaBulls/AquaBulls")
     const doorPath = path.join(bbsRoot, door.location);
 
+    console.log(`[executeAmigaDoor] BBS root: ${bbsRoot}`);
     console.log(`[executeAmigaDoor] Full door path: ${doorPath}`);
 
     // Check if door executable exists

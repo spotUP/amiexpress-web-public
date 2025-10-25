@@ -87,7 +87,7 @@ export interface DoorArchive {
  * AmigaDoor Manager Class
  */
 export class AmigaDoorManager {
-  private bbsRoot: string;
+  public bbsRoot: string;
   private assigns: AmigaDOSAssigns;
 
   constructor(bbsRoot: string) {
