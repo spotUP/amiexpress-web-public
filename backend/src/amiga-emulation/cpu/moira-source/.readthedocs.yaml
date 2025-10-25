@@ -1,0 +1,13 @@
+version: 2
+
+python:
+  version: "3"
+  install:
+      - method: pip
+        path: .
+
+sphinx:
+  configuration: Docs/conf.py
+  builder: html
+  fail_on_warning: true
+  

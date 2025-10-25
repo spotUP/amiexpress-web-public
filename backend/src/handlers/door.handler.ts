@@ -8,6 +8,7 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 
 // Types (will be provided by index.ts)
 interface BBSSession {
@@ -252,8 +253,28 @@ async function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, 
 }
 
 /**
- * Execute native (Node.js) door
- * Web version: Executes Node.js scripts instead of Amiga native executables
+ * Check if file is an Amiga executable (Hunk format)
+ * Amiga executables start with 0x000003F3 (HUNK_HEADER)
+ */
+function isAmigaBinary(filePath: string): boolean {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = Buffer.alloc(4);
+    fs.readSync(fd, buffer, 0, 4, 0);
+    fs.closeSync(fd);
+
+    // Check for Hunk format magic number
+    const magic = buffer.readUInt32BE(0);
+    return magic === 0x000003F3;
+  } catch (error) {
+    console.error('Error checking if file is Amiga binary:', error);
+    return false;
+  }
+}
+
+/**
+ * Execute native door - Detects Amiga binaries and uses 68k emulation
+ * Web version: Executes Node.js scripts OR Amiga native executables via emulation
  * express.e equivalent: SystemTagList() execution
  */
 async function executeNativeDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
@@ -266,6 +287,32 @@ async function executeNativeDoor(socket: any, session: BBSSession, door: Door, d
     socket.emit('ansi-output', `\r\n\x1b[31mError: Door file not found: ${door.path}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
+    return;
+  }
+
+  // 🎉 HISTORIC MOMENT: Check if this is an Amiga binary!
+  if (isAmigaBinary(doorPath)) {
+    console.log('🚀 [AMIGA DOOR] Detected Amiga binary! Starting 68k emulation...');
+    socket.emit('ansi-output', '\r\n\x1b[36m🚀 Starting Amiga 68000 emulation...\x1b[0m\r\n\r\n');
+
+    try {
+      const amigaSession = new AmigaDoorSession(socket, {
+        executablePath: doorPath,
+        timeout: 600,  // 10 minutes
+        memorySize: 1024 * 1024  // 1MB
+      });
+
+      await amigaSession.start();
+
+      // Wait for session to complete
+      // The AmigaDoorSession handles its own lifecycle
+      socket.emit('ansi-output', '\r\n\x1b[32mAmiga door session completed.\x1b[0m\r\n');
+    } catch (error) {
+      console.error('[AMIGA DOOR] Error:', error);
+      socket.emit('ansi-output', `\r\n\x1b[31mAmiga door error: ${(error as Error).message}\x1b[0m\r\n`);
+      doorSession.status = 'error';
+    }
+
     return;
   }
 
