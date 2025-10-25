@@ -80,10 +80,25 @@ export class DoorManager {
    * Main entry point - Start the Door Manager
    */
   async start(): Promise<void> {
-    this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
-    await this.scanDoors();
-    this.showList();
-    this.setupInputHandlers();
+    try {
+      this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+      await this.scanDoors();
+      this.showList();
+      this.setupInputHandlers();
+    } catch (error) {
+      console.error('[Door Manager] Error starting:', error);
+      this.socket.emit('ansi-output', '\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n');
+      this.socket.emit('ansi-output', `${(error as Error).message}\r\n\r\n`);
+      this.socket.emit('ansi-output', 'Press any key to return to main menu...\r\n');
+
+      // Wait for keypress then exit
+      const exitHandler = () => {
+        this.socket.off('terminal-input', exitHandler);
+        this.cleanup();
+        this.socket.emit('door-exit');
+      };
+      this.socket.once('terminal-input', exitHandler);
+    }
   }
 
   /**
@@ -857,6 +872,27 @@ export class DoorManager {
 
 // Export main function for door execution
 export async function executeDoor(socket: Socket, session?: any): Promise<void> {
-  const manager = new DoorManager(socket, session);
-  await manager.start();
+  try {
+    const manager = new DoorManager(socket, session);
+    await manager.start();
+  } catch (error) {
+    console.error('[Door Manager] Fatal error:', error);
+    socket.emit('ansi-output', '\r\n\x1b[31mFatal error in Door Manager\x1b[0m\r\n');
+    socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
+    socket.emit('ansi-output', 'Press any key to return to main menu...\r\n');
+
+    // Clean up session state
+    if (session) {
+      delete session.inDoorManager;
+      session.subState = 'display_menu';
+      session.menuPause = false;
+    }
+
+    // Wait for keypress then exit
+    const exitHandler = () => {
+      socket.off('terminal-input', exitHandler);
+      socket.emit('door-exit');
+    };
+    socket.once('terminal-input', exitHandler);
+  }
 }
