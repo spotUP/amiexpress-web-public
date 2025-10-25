@@ -173,7 +173,8 @@ export class DoorManager {
         const lowerArchive = archive.toLowerCase();
         const isArchive = lowerArchive.endsWith('.zip') ||
                          lowerArchive.endsWith('.lha') ||
-                         lowerArchive.endsWith('.lzh');
+                         lowerArchive.endsWith('.lzh') ||
+                         lowerArchive.endsWith('.lzx');
 
         if (stats.isFile() && isArchive) {
           const doorInfo = await this.extractDoorInfo(fullPath);
@@ -199,7 +200,7 @@ export class DoorManager {
 
   /**
    * Extract door information from archive
-   * Supports: ZIP, LHA, LZH
+   * Supports: ZIP, LHA, LZH, LZX
    */
   private async extractDoorInfo(archivePath: string): Promise<Partial<DoorInfo>> {
     const info: Partial<DoorInfo> = {};
@@ -249,8 +250,8 @@ export class DoorManager {
         if (exeEntry) {
           info.executable = exeEntry.entryName;
         }
-      } else if (ext === '.lha' || ext === '.lzh') {
-        // Handle LHA/LZH archives with lha-extractor
+      } else if (ext === '.lha' || ext === '.lzh' || ext === '.lzx') {
+        // Handle LHA/LZH/LZX archives with lha-extractor
         const { readLhaArchive } = await import('../utils/lha-extractor');
         const entries = await readLhaArchive(archivePath);
 
@@ -501,7 +502,7 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
     this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' UPLOAD DOOR ', 80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\r\n');
-    this.socket.emit('ansi-output', 'Upload a door archive (ZIP format)\r\n\r\n');
+    this.socket.emit('ansi-output', 'Upload a door archive (ZIP, LHA, LZH, or LZX format)\r\n\r\n');
     this.socket.emit('ansi-output', 'The archive should contain:\r\n');
     this.socket.emit('ansi-output', '  - Door executable (.ts, .js, or Amiga binary)\r\n');
     this.socket.emit('ansi-output', '  - FILE_ID.DIZ (optional, but recommended)\r\n');
@@ -509,14 +510,14 @@ export class DoorManager {
 
     // Trigger file picker on frontend
     this.socket.emit('show-file-upload', {
-      accept: '.zip',
+      accept: '.zip,.lha,.lzh,.lzx',
       maxSize: 10 * 1024 * 1024, // 10MB
       uploadUrl: '/api/upload/door',
       fieldName: 'door'
     });
 
     this.socket.emit('ansi-output', '\x1b[33mA file picker has opened in your browser.\x1b[0m\r\n');
-    this.socket.emit('ansi-output', '\x1b[36mSelect a ZIP file to upload...\x1b[0m\r\n\r\n');
+    this.socket.emit('ansi-output', '\x1b[36mSelect an archive file to upload (ZIP/LHA/LZH/LZX)...\x1b[0m\r\n\r\n');
     this.socket.emit('ansi-output', '\x1b[90mPress Q to cancel\x1b[0m\r\n');
   }
 
