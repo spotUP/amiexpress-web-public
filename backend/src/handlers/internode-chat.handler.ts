@@ -555,7 +555,7 @@ export async function handleChatKeystroke(socket: Socket, session: BBBSession, d
 
     // Show solid cursor while typing
     const typingPreview =
-      '\x1b[22;1H' + // Move to line 22
+      '\x1b[22;1H' + // Move to line 22 (typing preview line)
       '\x1b[K' + // Clear line
       (partnerSession.partnerTypingBuffer.length > 0
         ? `\x1b[90m\x1b[${userColor}m${session.user!.username}:\x1b[0m ${partnerSession.partnerTypingBuffer}\x1b[${userColor}m█\x1b[0m`
@@ -598,7 +598,7 @@ export async function handleChatKeystroke(socket: Socket, session: BBBSession, d
 export async function handleChatMessage(socket: Socket, session: BBSSession, data: { message: string }) {
   try {
     const { message } = data;
-    console.log('💬 [CHAT MESSAGE] Received message:', { message, from: session.user?.username, subState: session.subState });
+    console.log('\n💬 [CHAT MESSAGE] Received message:', { message, from: session.user?.username, subState: session.subState });
 
     // Validation 1: Check if in chat mode
     if (session.subState !== LoggedOnSubState.CHAT) {
@@ -696,15 +696,19 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
     const userColor = usernameColors[Math.abs(hash) % usernameColors.length];
 
     // Insert message into scroll region while keeping cursor at line 24
-    // Clear typing preview (line 22), scroll message at line 21, restore cursor to line 24
-    // Format: cyan timestamp user-color username: message
+    // To prevent collision when both users send simultaneously:
+    // 1. Save cursor, clear typing preview
+    // 2. Create new line at bottom of scroll (pushes existing messages up)
+    // 3. Write message to the newly created line
+    // 4. Restore cursor
     const insertMessage =
-      '\x1b[22;1H' + // Move to line 22 (typing preview line)
-      '\x1b[K' + // Clear typing preview (removes cursor from there)
-      '\x1b[21;1H' + // Move to line 21 (bottom of scroll region)
-      `\r\n\x1b[36m${timestamp}\x1b[0m \x1b[${userColor}m${session.user!.username}:\x1b[0m ${utf8Message}` + // Newline scrolls region up, message appears at line 21
-      '\x1b[24;1H' + // Move cursor back to line 24 (input line) - absolute positioning handles column 1
-      '\x1b[K'; // Clear input line for next message
+      '\x1b7' + // Save cursor position (saves line 24 input line position)
+      '\x1b[22;1H\x1b[K' + // Clear typing preview at line 22
+      '\x1b[20;1H' + // Move to line 20 (one above bottom of scroll region)
+      '\r\n' + // Create newline, scroll region up, cursor now at line 21 column 1
+      `\x1b[36m${timestamp}\x1b[0m \x1b[${userColor}m${session.user!.username}:\x1b[0m ${utf8Message}` + // Write message at line 21
+      '\x1b8' + // Restore cursor to line 24
+      '\x1b[K'; // Clear input line
 
     io.to(roomName).emit('ansi-output', insertMessage);
     console.log('✅ [CHAT MESSAGE] Emitted message in scroll region:', insertMessage.substring(0, 50) + '...');
