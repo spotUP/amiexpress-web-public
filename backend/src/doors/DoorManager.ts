@@ -551,7 +551,7 @@ export class DoorManager {
     } else if (ext === '.lha' || ext === '.lzh') {
       // Use AmigaDoorManager to list LHA contents
       const amigaDoorMgr = getAmigaDoorManager();
-      const analysis = amigaDoorMgr.analyzeDoorArchive(archivePath);
+      const analysis = await amigaDoorMgr.analyzeDoorArchive(archivePath);
 
       if (analysis && analysis.files) {
         for (const file of analysis.files) {
@@ -574,7 +574,7 @@ export class DoorManager {
     } else if (ext === '.lzx') {
       // Similar to LHA
       const amigaDoorMgr = getAmigaDoorManager();
-      const analysis = amigaDoorMgr.analyzeDoorArchive(archivePath);
+      const analysis = await amigaDoorMgr.analyzeDoorArchive(archivePath);
 
       if (analysis && analysis.files) {
         for (const file of analysis.files) {
@@ -892,7 +892,7 @@ export class DoorManager {
 
       // 🎯 SMART ANALYSIS: Use AmigaDoorManager to analyze archive
       const amigaDoorMgr = getAmigaDoorManager();
-      const analysis = amigaDoorMgr.analyzeDoorArchive(archivePath);
+      const analysis = await amigaDoorMgr.analyzeDoorArchive(archivePath);
 
       if (!analysis) {
         throw new Error('Failed to analyze archive');

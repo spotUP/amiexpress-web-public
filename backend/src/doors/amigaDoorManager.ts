@@ -362,27 +362,18 @@ export class AmigaDoorManager {
   }
 
   /**
-   * List LZX archive contents
+   * List LZX archive contents (async - uses JavaScript extractor)
    */
-  private listLzxContents(archivePath: string): string[] {
+  private async listLzxContents(archivePath: string): Promise<string[]> {
     try {
-      const unlzxPath = path.join(__dirname, '../../bin/unlzx');
-      const output = execSync(`"${unlzxPath}" -v "${archivePath}"`, { encoding: 'utf8' });
-      const lines = output.split('\n');
-      const files: string[] = [];
+      // Use JavaScript LZX extractor
+      const { listLzxFiles } = require('../utils/lzx-extractor');
+      const files = await listLzxFiles(archivePath);
 
-      // Parse unlzx output format
-      // Example: "    49  100%  27-Sep-1994 BBS/Commands/BBS.CMD"
-      for (const line of lines) {
-        // Look for lines with file information (size, ratio, date, filename)
-        const match = line.match(/^\s+\d+\s+\d+%\s+\d+-\w+-\d+\s+(.+)$/);
-        if (match) {
-          files.push(match[1].trim());
-        }
-      }
+      console.log(`[LZX] JavaScript extractor found ${files.length} files`);
       return files;
     } catch (error) {
-      console.error('Error listing LZX contents:', error);
+      console.error('[LZX] Error:', error);
       return [];
     }
   }
@@ -390,7 +381,7 @@ export class AmigaDoorManager {
   /**
    * Analyze door archive structure
    */
-  analyzeDoorArchive(archivePath: string): DoorArchive | null {
+  async analyzeDoorArchive(archivePath: string): Promise<DoorArchive | null> {
     try {
       const stats = fs.statSync(archivePath);
       const ext = path.extname(archivePath).toLowerCase();
@@ -421,9 +412,9 @@ export class AmigaDoorManager {
           }
         }
       } else if (isLha) {
-        files = this.listLhaContents(archivePath);
+        files = await this.listLhaContents(archivePath);
       } else if (isLzx) {
-        files = this.listLzxContents(archivePath);
+        files = await this.listLzxContents(archivePath);
       }
 
       // Detect standard AmiExpress door structure
@@ -746,8 +737,35 @@ export class AmigaDoorManager {
 
         console.log(`[LHA] ✓ Extraction complete`);
       } else if (analysis.format === 'LZX') {
-        const unlzxPath = path.join(__dirname, '../../bin/unlzx');
-        execSync(`"${unlzxPath}" -x "${archivePath}" -o "${tempDir}"`, { encoding: 'utf8' });
+        // Use JavaScript LZX extractor
+        console.log('[LZX] Extracting using JavaScript LZX library...');
+        const { extractFileFromLzx, listLzxFiles } = require('../utils/lzx-extractor');
+
+        // List all files in archive
+        const fileList = await listLzxFiles(archivePath);
+        console.log(`[LZX] Found ${fileList.length} files to extract`);
+
+        // Extract each file
+        for (const filename of fileList) {
+          const outputPath = path.join(tempDir, filename);
+          const outputDir = path.dirname(outputPath);
+
+          // Create directory structure
+          if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+          }
+
+          // Extract file
+          const success = await extractFileFromLzx(archivePath, filename, outputPath);
+
+          if (!success) {
+            console.warn(`[LZX] Failed to extract: ${filename}`);
+          } else {
+            console.log(`[LZX] Extracted: ${filename}`);
+          }
+        }
+
+        console.log(`[LZX] ✓ Extraction complete`);
       }
 
       // Analyze extracted structure
