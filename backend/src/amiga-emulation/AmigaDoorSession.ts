@@ -176,7 +176,10 @@ export class AmigaDoorSession {
       }
 
       // Start execution loop
+      console.log('[AmigaDoorSession] About to call runExecutionLoop()...');
+      console.log(`[AmigaDoorSession] isRunning=${this.isRunning}, emulator=${!!this.emulator}`);
       this.runExecutionLoop();
+      console.log('[AmigaDoorSession] runExecutionLoop() called (async - will continue in background)');
 
     } catch (error) {
       console.error('[AmigaDoorSession] Error starting door:', error);
@@ -192,15 +195,19 @@ export class AmigaDoorSession {
    * This allows for responsive I/O handling
    */
   private runExecutionLoop(): void {
+    console.log(`[AmigaDoorSession] runExecutionLoop() START - isRunning=${this.isRunning}, emulator=${!!this.emulator}`);
+
     if (!this.emulator || !this.isRunning) {
-      console.log('[AmigaDoorSession] Execution loop stopped');
+      console.log('[AmigaDoorSession] Execution loop stopped - early exit');
       return;
     }
 
     try {
       // Execute a small number of cycles (allows I/O to be processed)
       // 10000 cycles ≈ 1.25ms on original 8MHz 68000
+      console.log('[AmigaDoorSession] About to execute 10000 cycles...');
       const cyclesExecuted = this.emulator.execute(10000);
+      console.log(`[AmigaDoorSession] Executed ${cyclesExecuted} cycles`);
 
       if (cyclesExecuted === 0) {
         console.warn('[AmigaDoorSession] CPU executed 0 cycles - door completed or hit invalid instruction');
