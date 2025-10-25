@@ -45,7 +45,9 @@ async function testDoor() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
 
-  const doorPath = path.join(__dirname, 'BBS/Doors/WeekConfTop/WeekConfTop.XIM');
+  // Test BestConf door (different functionality than WeekConfTop)
+  const doorPath = path.join(__dirname, 'BBS/Doors/BestConf/BestConf.XIM');
+  // const doorPath = path.join(__dirname, 'BBS/Doors/WeekConfTop/WeekConfTop.XIM');
 
   console.log('[Test] Door path:', doorPath);
   console.log('[Test] Creating door session...');
