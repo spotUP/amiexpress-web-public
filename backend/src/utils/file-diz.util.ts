@@ -79,6 +79,49 @@ export async function runExamineCommands(
 }
 
 /**
+ * Find FILE_ID.DIZ in archive (case-insensitive)
+ * Returns the actual filename as it appears in the archive
+ */
+async function findDizInArchive(uploadedFilePath: string, ext: string): Promise<string | null> {
+  try {
+    let listCommand: string;
+
+    if (ext === '.zip') {
+      listCommand = `unzip -l "${uploadedFilePath}"`;
+    } else if (ext === '.lha' || ext === '.lzh') {
+      listCommand = `lha l "${uploadedFilePath}"`;
+    } else if (ext === '.lzx') {
+      listCommand = `unlzx -v "${uploadedFilePath}"`;
+    } else {
+      return null;
+    }
+
+    console.log(`[FILE_ID.DIZ] Listing archive contents: ${listCommand}`);
+    const result = await execAsync(listCommand, { timeout: 5000 });
+    const output = result.stdout + result.stderr;
+
+    // Search for FILE_ID.DIZ case-insensitively
+    // Match any variation: FILE_ID.DIZ, file_id.diz, File_Id.Diz, etc.
+    const lines = output.split('\n');
+    for (const line of lines) {
+      // Look for filename in the line (works for zip, lha, lzx formats)
+      const match = line.match(/\b(file_id\.diz)\b/i);
+      if (match) {
+        const actualFilename = match[1];
+        console.log(`[FILE_ID.DIZ] Found in archive: ${actualFilename}`);
+        return actualFilename;
+      }
+    }
+
+    console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found in archive listing`);
+    return null;
+  } catch (error: any) {
+    console.log(`[FILE_ID.DIZ] Failed to list archive: ${error.message}`);
+    return null;
+  }
+}
+
+/**
  * Built-in FILE_ID.DIZ extractor using unzip
  * This is a fallback if no EXAMINE commands are configured
  *
@@ -153,28 +196,43 @@ export async function extractFileDizBuiltin(
     }
   }
 
+  // First, try to find FILE_ID.DIZ in archive (case-insensitive search)
+  console.log(`[FILE_ID.DIZ] Attempting extraction from ${ext} file`);
+  console.log(`[FILE_ID.DIZ] Upload path: ${uploadedFilePath}`);
+  console.log(`[FILE_ID.DIZ] Work dir: ${nodeWorkDir}`);
+
+  const actualDizFilename = await findDizInArchive(uploadedFilePath, ext);
+  if (!actualDizFilename) {
+    console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found in archive - skipping extraction`);
+    return false;
+  }
+
   // Determine archive type and extraction command
   let command: string;
   let needsCwd = false;
+  let extractedPath = dizPath; // Default: extracted file will be at dizPath
 
   if (ext === '.zip') {
     // Extract FILE_ID.DIZ from zip archive
     // -j = junk paths (extract to flat directory)
     // -o = overwrite without prompting
-    // -C = case-insensitive matching
-    command = `unzip -jo -C "${uploadedFilePath}" FILE_ID.DIZ -d "${nodeWorkDir}"`;
+    // -C = case-insensitive matching (but we already know exact filename)
+    command = `unzip -jo "${uploadedFilePath}" "${actualDizFilename}" -d "${nodeWorkDir}"`;
+    extractedPath = path.join(nodeWorkDir, actualDizFilename);
   } else if (ext === '.lha' || ext === '.lzh') {
     // Extract FILE_ID.DIZ from lha/lzh archive
-    // e = extract
-    // q = quiet mode
-    command = `lha eq "${uploadedFilePath}" FILE_ID.DIZ`;
+    // lha extracts to current directory, so we need to use cwd
+    // e = extract with paths, but FILE_ID.DIZ is usually in root
+    // NOTE: Must use absolute path for archive when using cwd
+    command = `lha e "${path.resolve(uploadedFilePath)}" "${actualDizFilename}"`;
     needsCwd = true;
+    extractedPath = path.join(nodeWorkDir, actualDizFilename);
   } else if (ext === '.lzx') {
     // Extract FILE_ID.DIZ from lzx archive (if unlzx is available)
     // -e = extract
-    // -q = quiet
-    command = `unlzx -e -q "${uploadedFilePath}" FILE_ID.DIZ`;
+    command = `unlzx -e "${path.resolve(uploadedFilePath)}" "${actualDizFilename}"`;
     needsCwd = true;
+    extractedPath = path.join(nodeWorkDir, actualDizFilename);
   } else if (ext === '.dms') {
     // Extract FILE_ID.DIZ from DMS disk image
     // DMS files need special handling:
@@ -185,16 +243,14 @@ export async function extractFileDizBuiltin(
     needsCwd = true;
   } else if (ext === '.tar' || ext === '.tgz' || ext === '.gz') {
     // Extract FILE_ID.DIZ from tar/gzip archive
-    command = `tar -xzf "${uploadedFilePath}" FILE_ID.DIZ -C "${nodeWorkDir}" 2>/dev/null || tar -xf "${uploadedFilePath}" FILE_ID.DIZ -C "${nodeWorkDir}"`;
+    command = `tar -xzf "${uploadedFilePath}" "${actualDizFilename}" -C "${nodeWorkDir}" 2>/dev/null || tar -xf "${uploadedFilePath}" "${actualDizFilename}" -C "${nodeWorkDir}"`;
+    extractedPath = path.join(nodeWorkDir, actualDizFilename);
   } else {
     console.log(`[FILE_ID.DIZ] File type ${ext} not supported for DIZ extraction`);
     return false;
   }
 
   try {
-    console.log(`[FILE_ID.DIZ] Attempting extraction from ${ext} file`);
-    console.log(`[FILE_ID.DIZ] Upload path: ${uploadedFilePath}`);
-    console.log(`[FILE_ID.DIZ] Work dir: ${nodeWorkDir}`);
     console.log(`[FILE_ID.DIZ] Command: ${command}`);
     console.log(`[FILE_ID.DIZ] CWD mode: ${needsCwd}`);
 
@@ -212,14 +268,27 @@ export async function extractFileDizBuiltin(
     console.log(`[FILE_ID.DIZ] Command stdout: ${result.stdout}`);
     console.log(`[FILE_ID.DIZ] Command stderr: ${result.stderr}`);
 
-    const dizExists = await fileExists(dizPath);
-    console.log(`[FILE_ID.DIZ] FILE_ID.DIZ exists at ${dizPath}: ${dizExists}`);
+    // Check if file was extracted (might have different case)
+    const extractedExists = await fileExists(extractedPath);
+    console.log(`[FILE_ID.DIZ] Extracted file exists at ${extractedPath}: ${extractedExists}`);
 
-    if (dizExists) {
+    if (extractedExists) {
+      // Rename to standard FILE_ID.DIZ if needed
+      if (extractedPath !== dizPath) {
+        console.log(`[FILE_ID.DIZ] Renaming ${actualDizFilename} to FILE_ID.DIZ`);
+        await fs.rename(extractedPath, dizPath);
+      }
       console.log(`[FILE_ID.DIZ] ✓ Successfully extracted FILE_ID.DIZ`);
       return true;
     } else {
-      console.log(`[FILE_ID.DIZ] ✗ Command succeeded but FILE_ID.DIZ not found`);
+      console.log(`[FILE_ID.DIZ] ✗ Command succeeded but file not found at ${extractedPath}`);
+
+      // Check if it's at dizPath anyway (some extractors might normalize names)
+      const dizExists = await fileExists(dizPath);
+      if (dizExists) {
+        console.log(`[FILE_ID.DIZ] ✓ Found at standard location ${dizPath}`);
+        return true;
+      }
     }
   } catch (error: any) {
     // Extraction returns non-zero if FILE_ID.DIZ not found or command fails
@@ -230,7 +299,7 @@ export async function extractFileDizBuiltin(
     if (error.stderr) console.error(`[FILE_ID.DIZ] Error stderr: ${error.stderr}`);
   }
 
-  console.log(`[FILE_ID.DIZ] Extraction from ${ext} failed - no FILE_ID.DIZ found`);
+  console.log(`[FILE_ID.DIZ] Extraction from ${ext} failed - file not extracted`);
   return false;
 }
 
