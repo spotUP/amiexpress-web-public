@@ -340,61 +340,23 @@ export class AmigaDoorManager {
    */
   private listLhaContents(archivePath: string): string[] {
     try {
-      // Try command-line lha first
-      try {
-        const output = execSync(`lha -l "${archivePath}"`, { encoding: 'utf8' });
-        console.log('[LHA] Command output:', output.substring(0, 500));
-        const lines = output.split('\n');
-        const files: string[] = [];
+      // Use JavaScript LHA extractor
+      const LHA = require('../utils/lha.js');
 
-        for (const line of lines) {
-          // LHA output format varies, try multiple patterns
-          if (line.match(/^\[[\w-]+\]/)) {
-            const parts = line.split(/\s+/);
-            if (parts.length >= 8) {
-              const filename = parts.slice(7).join(' ');
-              files.push(filename);
-            }
-          }
-        }
+      // Read file synchronously
+      const buffer = fs.readFileSync(archivePath);
+      const data = new Uint8Array(buffer);
 
-        if (files.length > 0) {
-          console.log(`[LHA] Found ${files.length} files via command`);
-          return files;
-        }
-      } catch (cmdError) {
-        console.log('[LHA] Command failed, trying extraction method:', (cmdError as Error).message);
-      }
+      // Parse LHA archive
+      const entries = LHA.read(data);
 
-      // Fallback: Extract to temp directory and list files
-      const tempDir = path.join(__dirname, '../../temp/lha-list', crypto.randomBytes(8).toString('hex'));
-      fs.mkdirSync(tempDir, { recursive: true });
+      // Extract filenames
+      const files = entries.map((e: any) => e.name);
 
-      try {
-        console.log(`[LHA] Extracting to temp: ${tempDir}`);
-        execSync(`lha x "${archivePath}"`, { cwd: tempDir, encoding: 'utf8' });
-
-        // List all extracted files recursively
-        const files = this.getFilesRecursive(tempDir);
-        const relativeFiles = files.map(f => path.relative(tempDir, f));
-
-        console.log(`[LHA] Extracted ${relativeFiles.length} files`);
-
-        // Cleanup
-        fs.rmSync(tempDir, { recursive: true, force: true });
-
-        return relativeFiles;
-      } catch (extractError) {
-        console.error('[LHA] Extraction failed:', (extractError as Error).message);
-        // Cleanup on error
-        if (fs.existsSync(tempDir)) {
-          fs.rmSync(tempDir, { recursive: true, force: true });
-        }
-      }
-
-      return [];
+      console.log(`[LHA] JavaScript extractor found ${files.length} files`);
+      return files;
     } catch (error) {
-      console.error('[LHA] Complete failure:', error);
+      console.error('[LHA] Error:', error);
       return [];
     }
   }
@@ -748,7 +710,41 @@ export class AmigaDoorManager {
         const zip = new AdmZip(archivePath);
         zip.extractAllTo(tempDir, true);
       } else if (analysis.format === 'LHA') {
-        execSync(`lha x "${archivePath}"`, { cwd: tempDir });
+        // Use JavaScript LHA extractor
+        console.log('[LHA] Extracting using JavaScript LHA library...');
+        const LHA = require('../utils/lha.js');
+
+        // Read archive
+        const buffer = fs.readFileSync(archivePath);
+        const data = new Uint8Array(buffer);
+
+        // Parse and extract all files
+        const entries = LHA.read(data);
+        console.log(`[LHA] Found ${entries.length} files to extract`);
+
+        for (const entry of entries) {
+          const filename = entry.name;
+          const decompressed = LHA.unpack(entry);
+
+          if (!decompressed) {
+            console.warn(`[LHA] Failed to decompress: ${filename}`);
+            continue;
+          }
+
+          // Create directory structure
+          const filePath = path.join(tempDir, filename);
+          const fileDir = path.dirname(filePath);
+
+          if (!fs.existsSync(fileDir)) {
+            fs.mkdirSync(fileDir, { recursive: true });
+          }
+
+          // Write file
+          fs.writeFileSync(filePath, Buffer.from(decompressed));
+          console.log(`[LHA] Extracted: ${filename} (${decompressed.length} bytes)`);
+        }
+
+        console.log(`[LHA] ✓ Extraction complete`);
       } else if (analysis.format === 'LZX') {
         const unlzxPath = path.join(__dirname, '../../bin/unlzx');
         execSync(`"${unlzxPath}" -x "${archivePath}" -o "${tempDir}"`, { encoding: 'utf8' });
