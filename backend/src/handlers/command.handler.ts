@@ -2483,18 +2483,10 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     // === CUSTOM WEB COMMANDS (Not in express.e) ===
-    case 'DOOORMAN': // Door launcher (3 o's) - shows menu of doors to run
+    case 'DOORMAN':
     case 'DOOR':
+    case 'DOORS': // Door Games Menu (Custom web command)
       displayDoorMenu(socket, session, params);
-      return;
-
-    case 'DOORMAN': // Door Manager tool (2 o's) - for managing/installing doors
-      // TODO: Implement Door Manager tool integration
-      socket.emit('ansi-output', '\r\n\x1b[33mDoor Manager (DOORMAN) - Coming Soon!\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Use \x1b[36mDOOORMAN\x1b[0m to launch doors.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
 
     default:

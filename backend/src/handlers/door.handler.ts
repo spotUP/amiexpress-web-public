@@ -93,10 +93,7 @@ export function setConstants(constants: {
 }
 
 /**
- * Display door games menu (DOOORMAN command - 3 o's)
- * Lists all available doors and prompts user to select one
- *
- * Note: DOORMAN (2 o's) is a separate door manager tool for installing/managing doors
+ * Display door games menu (DOORS command)
  */
 export function displayDoorMenu(socket: any, session: BBSSession, params: string) {
   socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
