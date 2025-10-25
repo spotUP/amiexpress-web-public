@@ -35,9 +35,12 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 if [ -f "$PROJECT_ROOT/.env.local" ]; then
     # Source .env.local file and extract DEPLOY_WEBHOOK_URL
     WEBHOOK_URL=$(grep -E "^DEPLOY_WEBHOOK_URL=" "$PROJECT_ROOT/.env.local" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+    # Also extract RENDER_DEPLOY_HOOK
+    RENDER_DEPLOY_HOOK=$(grep -E "^RENDER_DEPLOY_HOOK=" "$PROJECT_ROOT/.env.local" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
 else
     # Fallback to environment variable
     WEBHOOK_URL="${DEPLOY_WEBHOOK_URL:-}"
+    RENDER_DEPLOY_HOOK="${RENDER_DEPLOY_HOOK:-}"
 fi
 
 # Function to send webhook notification
@@ -170,23 +173,30 @@ fi
 echo -e "${GREEN}✓${NC} Found service: ${CYAN}$SERVICE_ID${NC}"
 echo ""
 
-# Trigger deployment
-echo -e "${YELLOW}→${NC} Triggering backend deployment..."
+# Trigger deployment via Render Deploy Hook
+if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+    echo -e "${YELLOW}→${NC} Triggering backend deployment via deploy hook..."
 
-DEPLOY_OUTPUT=$(render deploys create "$SERVICE_ID" --commit "$COMMIT_SHA" --confirm -o json 2>&1)
-DEPLOY_EXIT=$?
+    HOOK_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$RENDER_DEPLOY_HOOK" 2>&1)
+    HTTP_CODE=$(echo "$HOOK_RESPONSE" | tail -1)
 
-if [ $DEPLOY_EXIT -ne 0 ]; then
-    echo -e "${RED}✗ Error: Failed to trigger deployment${NC}"
-    echo "$DEPLOY_OUTPUT"
-    exit 1
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+        echo -e "${GREEN}✓${NC} Deploy hook triggered successfully"
+        echo ""
+        # Wait a few seconds for build to start
+        sleep 5
+    else
+        echo -e "${RED}✗ Error: Deploy hook returned HTTP $HTTP_CODE${NC}"
+        echo -e "${YELLOW}⚠ Continuing anyway - auto-deploy may pick it up${NC}"
+        echo ""
+    fi
+else
+    echo -e "${YELLOW}⚠${NC}  No RENDER_DEPLOY_HOOK configured"
+    echo -e "${YELLOW}  Relying on auto-deploy from GitHub push...${NC}"
+    echo ""
+    # Wait longer for auto-deploy to detect the push
+    sleep 10
 fi
-
-# Extract deployment ID
-DEPLOY_ID=$(echo "$DEPLOY_OUTPUT" | jq -r '.id' 2>/dev/null || echo "unknown")
-
-echo -e "${GREEN}✓${NC} Backend deployment triggered: ${CYAN}$DEPLOY_ID${NC}"
-echo ""
 
 # Monitor backend deployment
 echo -e "${YELLOW}→${NC} Monitoring backend build (max 5 minutes)..."
