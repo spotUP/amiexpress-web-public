@@ -88,7 +88,16 @@ export class AmiExpressLibrary {
     }
 
     try {
-      // Read null-terminated string from memory
+      // DEBUG: Read first 16 bytes from memory to see what's there
+      const debugBytes: number[] = [];
+      for (let i = 0; i < 16; i++) {
+        const byte = this.emulator.readMemory(stringPtr + i);
+        debugBytes.push(byte);
+      }
+      console.log(`[AmiExpress] Memory at 0x${stringPtr.toString(16)}: [${debugBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
+      console.log(`[AmiExpress] Memory as ASCII: "${debugBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
+
+      // Read string from memory
       const text = this.readString(stringPtr);
       console.log(`[AmiExpress] aePuts() output: "${text}"`);
 
