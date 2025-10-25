@@ -379,6 +379,16 @@ export class AmigaDoorSession {
         }
       }
 
+      // Log first 10 iterations in detail
+      if (this.iterationCount <= 10) {
+        const sp = this.emulator.getRegister(15);
+        const d0 = this.emulator.getRegister(0);
+        const a6 = this.emulator.getRegister(14);
+
+        console.log(`[Door Iteration ${this.iterationCount}] PC=0x${pcAfter.toString(16)}, SP=0x${sp.toString(16)}, A6=0x${a6.toString(16)}, D0=0x${d0.toString(16)}`);
+        console.log(`  Instruction: ${instr0.toString(16).padStart(2, '0')} ${instr1.toString(16).padStart(2, '0')} ${instr2.toString(16).padStart(2, '0')} ${instr3.toString(16).padStart(2, '0')}`);
+      }
+
       // Every 500 iterations (~5 seconds), log status
       if (this.iterationCount % 500 === 0) {
         const sp = this.emulator.getRegister(15);
