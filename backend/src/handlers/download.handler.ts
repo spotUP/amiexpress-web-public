@@ -12,6 +12,8 @@ import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
+import { checkDownloadRatios, updateDownloadStats } from '../utils/download-ratios.util';
+import { logDownload } from '../utils/download-logging.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -111,11 +113,10 @@ export class DownloadHandler {
       return 'FAILURE';
     }
 
-    // Check ratio requirements - express.e:20085-20095
-    // TODO: Implement ratio checking via checkRatiosAndTime()
-    const canDownload = await this.checkDownloadRatios(session, fileInfo.size);
-    if (!canDownload) {
-      socket.emit('ansi-output', '\r\n\x1b[31mNot enough free bytes for requested downloads.\x1b[0m\r\n');
+    // Check ratio requirements - express.e:20085-20095, 19823+
+    const ratioCheck = await checkDownloadRatios(session.user, fileInfo.size);
+    if (!ratioCheck.canDownload) {
+      socket.emit('ansi-output', `\r\n\x1b[31m${ratioCheck.errorMessage}\x1b[0m\r\n`);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return 'FAILURE';
     }
@@ -212,9 +213,14 @@ export class DownloadHandler {
     socket.emit('ansi-output', `\r\n\x1b[36mDownload link: ${downloadUrl}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\r\n\x1b[32mClick the download link or use your browser\'s download feature.\x1b[0m\r\n');
 
-    // Update download statistics
-    // TODO: Implement via logUDFile - express.e:9475+
-    await this.updateDownloadStats(session, fileInfo);
+    // Log download activity - express.e:9475+
+    if (session.user) {
+      const isFree = false; // TODO: Check if file is marked as free download
+      await logDownload(session.user, fileInfo.name, fileInfo.size, isFree);
+
+      // Update user download statistics
+      await updateDownloadStats(session.user, fileInfo.size);
+    }
 
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }

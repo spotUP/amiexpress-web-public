@@ -16,6 +16,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 import { isNewFileEntry } from '../utils/dir-file-reader.util';
+import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
+import { getMaxDirs } from '../utils/max-dirs.util';
 
 /**
  * Zippy Search Handler
@@ -44,9 +46,13 @@ export class ZippySearchHandler {
     // express.e:26137-26140
     socket.emit('ansi-output', '\r\n');
 
-    // Check if conference has files - express.e:26141-26144
-    // maxDirs check - for now assume conferences have files
-    // TODO: Implement maxDirs checking
+    // Check if conference has files - express.e:26138-26141
+    const maxDirs = await getMaxDirs(session.currentConf || 1, config.get('dataDir'));
+    if (maxDirs === 0) {
+      socket.emit('ansi-output', '\x1b[31mNo files available in this conference.\x1b[0m\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
 
     // Parse parameters - express.e:26146
     const paramParts = params.trim().split(/\s+/);
@@ -112,6 +118,12 @@ export class ZippySearchHandler {
     nonStop: boolean
   ): Promise<void> {
 
+    // Initialize pause state
+    initPauseState(session);
+    if (nonStop) {
+      setNonStopMode(session, true);
+    }
+
     // UpperStr(ss) - express.e:26159
     const searchUpper = searchString.toUpperCase();
 
@@ -164,7 +176,7 @@ export class ZippySearchHandler {
         }
 
         // Call zippy() - express.e:26203
-        const stat = await this.zippy(socket, dirFilePath, searchUpper, nonStop);
+        const stat = await this.zippy(socket, session, dirFilePath, searchUpper, nonStop);
 
         if (stat < 0) {
           socket.emit('ansi-output', '\r\n');
@@ -186,6 +198,7 @@ export class ZippySearchHandler {
    */
   private static async zippy(
     socket: Socket,
+    session: BBSSession,
     dirFilePath: string,
     searchString: string,
     nonStop: boolean
@@ -208,9 +221,6 @@ export class ZippySearchHandler {
 
       // Read file line by line - express.e:27552-27620
       for await (const line of rl) {
-        // Check for break (Ctrl-C) - express.e:27553-27567
-        // TODO: Implement pause/break checking
-
         const trimmedLine = line.trim();
 
         // Check if this is a new file entry - express.e:27569
@@ -220,7 +230,13 @@ export class ZippySearchHandler {
             for (const entryLine of currentEntry) {
               socket.emit('ansi-output', entryLine + '\r\n');
             }
-            // TODO: Implement pause functionality - express.e:27583-27585
+
+            // Check for pause - express.e:27583-27585
+            const shouldContinue = await flagPause(socket, session, currentEntry.length);
+            if (!shouldContinue) {
+              rl.close();
+              return -1; // RESULT_FAILURE
+            }
           }
 
           // Reset for new entry - express.e:27589-27592

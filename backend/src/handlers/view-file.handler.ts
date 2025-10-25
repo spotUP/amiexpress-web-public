@@ -15,6 +15,8 @@ import { ACSPermission } from '../constants/acs-permissions';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
+import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
+import { getMaxDirs } from '../utils/max-dirs.util';
 
 /**
  * View File Handler
@@ -60,9 +62,13 @@ export class ViewFileHandler {
     // express.e:20394-20395
     socket.emit('ansi-output', '\r\n');
 
-    // Check if conference has files - express.e:20396-20399
-    // maxDirs check - for now assume conferences have files
-    // TODO: Implement maxDirs checking
+    // Check if conference has files - express.e:20399-20402
+    const maxDirs = await getMaxDirs(session.currentConf || 1, config.get('dataDir'));
+    if (maxDirs === 0) {
+      socket.emit('ansi-output', 'No files available in this conference.\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
 
     // Parse parameters - express.e:20401
     const paramParts = params.trim().toUpperCase().split(/\s+/);
@@ -160,6 +166,12 @@ export class ViewFileHandler {
       return;
     }
 
+    // Initialize pause state
+    initPauseState(session);
+    if (nonStop) {
+      setNonStopMode(session, true);
+    }
+
     // Display file contents - express.e:20492-20541
     socket.emit('ansi-output', `\r\n\x1b[32mViewing: ${filename}\x1b[0m\r\n\r\n`);
 
@@ -180,9 +192,13 @@ export class ViewFileHandler {
         lineCount++;
 
         // Check for pause - express.e:20517-20527
-        if (!nonStop && lineCount % linesPerPage === 0) {
-          // TODO: Implement pause functionality
-          // For now, just continue
+        if (lineCount % linesPerPage === 0) {
+          const shouldContinue = await flagPause(socket, session, 0);
+          if (!shouldContinue) {
+            rl.close();
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            return;
+          }
         }
       }
 

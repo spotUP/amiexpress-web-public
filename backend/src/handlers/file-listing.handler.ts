@@ -8,7 +8,8 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { Socket } from 'socket.io';
-import { Session } from '../types/session.types';
+// Session type - using any for now since BBSSession is defined in index.ts
+type Session = any;
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { readDirFile, getDirFilePath, getHoldDirFilePath, DirFileEntry } from '../utils/dir-file-reader.util';
 import { parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../utils/dir-span.util';
@@ -16,6 +17,8 @@ import { FileFlagManager } from '../utils/file-flag.util';
 import { ParamsUtil } from '../utils/params.util';
 import { config } from '../config';
 import { getConferenceDir } from '../utils/file-hold.util';
+import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
+import { getMaxDirs } from '../utils/max-dirs.util';
 
 /**
  * Display file list for a conference
@@ -37,7 +40,7 @@ export class FileListingHandler {
     socket.emit('ansi-output', '\r\n');
 
     // Check if conference has file areas
-    const maxDirs = await this.getMaxDirs(session.currentConf, bbsDataPath);
+    const maxDirs = await getMaxDirs(session.currentConf, bbsDataPath);
     if (maxDirs === 0) {
       socket.emit('ansi-output', '\x1b[31mSorry, No file areas available.\x1b[0m\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -101,7 +104,7 @@ export class FileListingHandler {
     input: string
   ): Promise<void> {
     const bbsDataPath = config.get('dataDir');
-    const maxDirs = await this.getMaxDirs(session.currentConf, bbsDataPath);
+    const maxDirs = await getMaxDirs(session.currentConf, bbsDataPath);
 
     // Add line break after directory input
     socket.emit('ansi-output', '\r\n');
@@ -145,8 +148,11 @@ export class FileListingHandler {
     const bbsDataPath = config.get('dataDir');
     const conferencePath = getConferenceDir(session.currentConf, bbsDataPath);
 
-    let lineCount = 0;
-    const userLineLen = session.user?.pageLength || 23;
+    // Initialize pause state (express.e:27633-27634)
+    initPauseState(session);
+    if (hasNonStop) {
+      setNonStopMode(session, true);
+    }
 
     // Determine loop direction
     let currentDir: number;
@@ -182,10 +188,11 @@ export class FileListingHandler {
         socket.emit('ansi-output', `Scanning directory ${dirDisplayName}\r\n`);
       }
 
-      // Check for pause before listing
-      if (!hasNonStop && lineCount >= userLineLen) {
-        // TODO: Implement flagPause
-        lineCount = 0;
+      // Check for pause before listing (express.e:28025+)
+      const shouldContinue = await flagPause(socket, session, 1);
+      if (!shouldContinue) {
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
       }
 
       // Read and display DIR file
@@ -193,7 +200,11 @@ export class FileListingHandler {
 
       if (entries.length === 0) {
         socket.emit('ansi-output', '\x1b[33mNo files in this directory.\x1b[0m\r\n');
-        lineCount++;
+        const shouldContinue = await flagPause(socket, session, 1);
+        if (!shouldContinue) {
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          return;
+        }
       } else {
         // Display entries (reverse if needed)
         const displayEntries = reverse ? entries.reverse() : entries;
@@ -201,18 +212,22 @@ export class FileListingHandler {
         for (const entry of displayEntries) {
           // Display file entry
           await this.displayFileEntry(socket, session, entry, hasNonStop);
-          lineCount += entry.rawLines.length;
 
-          // Check for pause
-          if (!hasNonStop && lineCount >= userLineLen) {
-            // TODO: Implement flagPause with flag support
-            lineCount = 0;
+          // Check for pause after each entry (express.e:27613)
+          const shouldContinue = await flagPause(socket, session, entry.rawLines.length);
+          if (!shouldContinue) {
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            return;
           }
         }
       }
 
       socket.emit('ansi-output', '\r\n');
-      lineCount++;
+      const shouldContinue = await flagPause(socket, session, 1);
+      if (!shouldContinue) {
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
+      }
 
       // Move to next directory
       if (reverse) {
@@ -242,27 +257,6 @@ export class FileListingHandler {
     }
   }
 
-  /**
-   * Get maximum directory number for a conference
-   */
-  private static async getMaxDirs(confNum: number, bbsDataPath: string): Promise<number> {
-    // TODO: Read from conference config or scan for DIR files
-    // For now, return a default value
-    const conferencePath = getConferenceDir(confNum, bbsDataPath);
-
-    // Scan for DIR files (DIR1, DIR2, DIR3, ...)
-    let maxDirs = 0;
-    for (let i = 1; i <= 20; i++) {
-      const dirPath = getDirFilePath(conferencePath, i);
-      if (fs.existsSync(dirPath)) {
-        maxDirs = i;
-      } else {
-        break;
-      }
-    }
-
-    return maxDirs;
-  }
 
   /**
    * Check if user can access HOLD directory

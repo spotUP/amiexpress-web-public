@@ -148,10 +148,16 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
       await executeWebDoor(socket, session, door, doorSession);
       break;
     case 'native':
-      socket.emit('ansi-output', 'Native door execution not implemented yet.\r\n');
+      // NOTE: Native Amiga door execution not applicable for web-based BBS
+      // express.e door execution uses Amiga-specific system calls
+      socket.emit('ansi-output', '\r\n\x1b[31mNative Amiga doors not supported in web version.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[33mUse web-based doors instead.\x1b[0m\r\n\r\n');
       break;
     case 'script':
-      socket.emit('ansi-output', 'Script door execution not implemented yet.\r\n');
+      // NOTE: AREXX script execution not applicable for web-based BBS
+      // express.e uses AREXX which is Amiga-specific
+      socket.emit('ansi-output', '\r\n\x1b[31mAREXX script doors not supported in web version.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[33mUse web-based doors instead.\x1b[0m\r\n\r\n');
       break;
     default:
       socket.emit('ansi-output', 'Unknown door type.\r\n');
