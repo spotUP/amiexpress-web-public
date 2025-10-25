@@ -359,7 +359,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Skip processing if Door Manager is active (it handles its own input)
   if (session.inDoorManager) {
-    console.log('Door Manager is active, skipping command processing');
+    console.log('[Command Handler] Door Manager is active (inDoorManager=true), skipping command processing for input:', JSON.stringify(data));
     return;
   }
 

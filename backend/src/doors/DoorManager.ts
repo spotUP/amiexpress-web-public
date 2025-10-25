@@ -51,6 +51,7 @@ export class DoorManager {
   private state: DoorManagerState;
   private doorsPath: string;
   private archivesPath: string;
+  private inputHandler?: (data: string) => void;
 
   constructor(socket: Socket, session?: any) {
     this.socket = socket;
@@ -647,9 +648,15 @@ export class DoorManager {
    * Setup input handlers
    */
   private setupInputHandlers(): void {
-    this.socket.on('terminal-input', (data: string) => {
+    console.log('[Door Manager] Setting up input handlers');
+
+    // Store the handler so we can remove it later
+    this.inputHandler = (data: string) => {
+      console.log('[Door Manager] Received input:', JSON.stringify(data), 'mode:', this.state.mode);
       this.handleInput(data);
-    });
+    };
+
+    this.socket.on('terminal-input', this.inputHandler);
 
     // Handle file uploads from frontend
     this.socket.on('file-uploaded', (data: { filename: string; originalname: string; size: number }) => {
@@ -661,6 +668,7 @@ export class DoorManager {
    * Handle keyboard input
    */
   private handleInput(data: string): void {
+    console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
     const key = data.toLowerCase();
 
     // Handle based on current mode
@@ -860,6 +868,15 @@ export class DoorManager {
    * Cleanup when exiting Door Manager
    */
   private cleanup(): void {
+    console.log('[Door Manager] Cleaning up...');
+
+    // Remove input handler
+    if (this.inputHandler) {
+      console.log('[Door Manager] Removing input handler');
+      this.socket.off('terminal-input', this.inputHandler);
+      this.inputHandler = undefined;
+    }
+
     // Clear the session flag
     if (this.session) {
       delete this.session.inDoorManager;
