@@ -2488,15 +2488,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       displayDoorMenu(socket, session, params);
       return;
 
-    case 'DOORMAN': // Door Manager plugin - for installing/managing doors
-      // TODO: Implement Door Manager plugin integration
-      socket.emit('ansi-output', '\r\n\x1b[36m-= Door Manager =-\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[33mDoor Manager plugin coming soon!\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Use \x1b[36mDOORS\x1b[0m to view and run installed doors.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    case 'DOORMAN': { // Door Manager plugin - for installing/managing doors
+      const { executeDoor } = await import('../doors/DoorManager');
+      await executeDoor(socket);
       return;
+    }
 
     default:
       socket.emit('ansi-output', `\r\nUnknown command: ${command}\r\n`);
