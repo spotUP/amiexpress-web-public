@@ -135,35 +135,45 @@ export class AmigaDoorSession {
       }
 
       // Set up reset vectors
-      // Stack pointer: Must be HIGH in memory and far above all loaded segments
-      // CODE: 0x1000-0x38E8, DATA: 0x3900-0x3A78
-      // Set stack to near top of 1MB memory (0x100000 - 0x1000 = 0xFF000)
-      // This gives ~1MB of stack space growing downward
-      const initialSP = 0xFE000; // 1,040,384 - leaves room at top for safety
+      // Address 0-3: Initial stack pointer
+      // Address 4-7: Initial program counter
+      const initialSP = 0xFE000; // Stack near top of memory
       this.emulator.writeMemory(0x0, (initialSP >> 24) & 0xFF);
       this.emulator.writeMemory(0x1, (initialSP >> 16) & 0xFF);
       this.emulator.writeMemory(0x2, (initialSP >> 8) & 0xFF);
       this.emulator.writeMemory(0x3, initialSP & 0xFF);
-
-      console.log(`[AmigaDoorSession] Initial stack pointer set to: 0x${initialSP.toString(16)}`);
 
       this.emulator.writeMemory(0x4, (hunkFile.entryPoint >> 24) & 0xFF);
       this.emulator.writeMemory(0x5, (hunkFile.entryPoint >> 16) & 0xFF);
       this.emulator.writeMemory(0x6, (hunkFile.entryPoint >> 8) & 0xFF);
       this.emulator.writeMemory(0x7, hunkFile.entryPoint & 0xFF);
 
-      // Reset CPU
+      console.log(`[AmigaDoorSession] Reset vectors: SP=0x${initialSP.toString(16)}, PC=0x${hunkFile.entryPoint.toString(16)}`);
+
+      // Reset CPU (reads vectors from addresses 0 and 4)
       this.emulator.reset();
 
-      // CRITICAL: Manually set stack pointer AFTER reset
-      // The reset vectors don't seem to be working, so force it directly
-      this.emulator.setRegister(15, initialSP); // A7/SP = register 15
+      // NOW set up ExecBase at address 4 (AFTER reset has read the PC vector)
+      const execBaseAddr = 0xFF0000;
+      this.emulator.writeMemory(0x4, (execBaseAddr >> 24) & 0xFF);
+      this.emulator.writeMemory(0x5, (execBaseAddr >> 16) & 0xFF);
+      this.emulator.writeMemory(0x6, (execBaseAddr >> 8) & 0xFF);
+      this.emulator.writeMemory(0x7, execBaseAddr & 0xFF);
+
+      console.log(`[AmigaDoorSession] ExecBase set at address 4: 0x${execBaseAddr.toString(16)} (after reset)`);
+      console.log(`[AmigaDoorSession] Library trap mechanism ready (Moira intercepts 0xFF0000+ reads)`);
+      console.log(`[AmigaDoorSession] Expected: Door will JSR -552(A6) -> 0xFEFDD8`);
 
       const actualSP = this.emulator.getRegister(15);
+      const actualPC = this.emulator.getRegister(16);
       console.log(`[AmigaDoorSession] Stack pointer after reset: 0x${actualSP.toString(16)}`);
+      console.log(`[AmigaDoorSession] Program counter after reset: 0x${actualPC.toString(16)}`);
 
       if (actualSP !== initialSP) {
         console.error(`[AmigaDoorSession] WARNING: SP mismatch! Expected 0x${initialSP.toString(16)}, got 0x${actualSP.toString(16)}`);
+      }
+      if (actualPC !== hunkFile.entryPoint) {
+        console.error(`[AmigaDoorSession] WARNING: PC mismatch! Expected 0x${hunkFile.entryPoint.toString(16)}, got 0x${actualPC.toString(16)}`);
       }
 
       this.isRunning = true;
