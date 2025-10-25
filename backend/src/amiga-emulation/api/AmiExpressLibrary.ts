@@ -97,6 +97,21 @@ export class AmiExpressLibrary {
       console.log(`[AmiExpress] Memory at 0x${stringPtr.toString(16)}: [${debugBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
       console.log(`[AmiExpress] Memory as ASCII: "${debugBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
 
+      // Check if this looks like a pointer (first 4 bytes form an address)
+      if (debugBytes.length >= 4) {
+        const possiblePtr = (debugBytes[0] << 24) | (debugBytes[1] << 16) | (debugBytes[2] << 8) | debugBytes[3];
+        if (possiblePtr > 0x1000 && possiblePtr < 0x100000) {
+          console.log(`[AmiExpress] First 4 bytes look like pointer: 0x${possiblePtr.toString(16)}`);
+          // Read 32 bytes from that address to see if there's a string there
+          const derefBytes: number[] = [];
+          for (let i = 0; i < 32; i++) {
+            derefBytes.push(this.emulator.readMemory(possiblePtr + i));
+          }
+          console.log(`[AmiExpress] Memory at dereferenced addr 0x${possiblePtr.toString(16)}: [${derefBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
+          console.log(`[AmiExpress] Dereferenced as ASCII: "${derefBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
+        }
+      }
+
       // Read string from memory
       const text = this.readString(stringPtr);
       console.log(`[AmiExpress] aePuts() output: "${text}"`);
