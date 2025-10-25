@@ -100,7 +100,7 @@ export class DownloadHandler {
 
     // Check if file exists in conference
     const fileInfo = await this.findFileInConference(
-      config.dataDir,
+      config.get('dataDir'),
       session.currentConf || 1,
       filename
     );

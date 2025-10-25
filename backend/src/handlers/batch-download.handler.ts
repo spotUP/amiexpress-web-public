@@ -61,7 +61,7 @@ export class BatchDownloadHandler {
     // Validate and prepare each file - express.e:15671+
     for (const flagItem of flaggedFiles) {
       const fileInfo = await this.findFileInConference(
-        config.dataDir,
+        config.get('dataDir'),
         flagItem.confNum,
         flagItem.fileName
       );

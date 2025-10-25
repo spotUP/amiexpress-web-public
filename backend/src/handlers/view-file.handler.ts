@@ -133,7 +133,7 @@ export class ViewFileHandler {
 
     // Search for file in conference directories - express.e:20469-20475
     const fileInfo = await this.findFileInConference(
-      config.dataDir,
+      config.get('dataDir'),
       session.currentConf || 1,
       filename
     );

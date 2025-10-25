@@ -31,7 +31,7 @@ export class FileListingHandler {
     reverse: boolean = false
   ): Promise<void> {
     const config = (global as any).config;
-    const bbsDataPath = config.dataDir;
+    const bbsDataPath = config.get('dataDir');
 
     socket.emit('ansi-output', '\r\n');
 
@@ -98,7 +98,7 @@ export class FileListingHandler {
     input: string
   ): Promise<void> {
     const config = (global as any).config;
-    const bbsDataPath = config.dataDir;
+    const bbsDataPath = config.get('dataDir');
     const maxDirs = await this.getMaxDirs(session.currentConf, bbsDataPath);
 
     // Parse directory span
@@ -138,7 +138,7 @@ export class FileListingHandler {
     maxDirs: number
   ): Promise<void> {
     const config = (global as any).config;
-    const bbsDataPath = config.dataDir;
+    const bbsDataPath = config.get('dataDir');
     const conferencePath = path.join(bbsDataPath, `Conf${String(session.currentConf).padStart(2, '0')}`);
 
     let lineCount = 0;

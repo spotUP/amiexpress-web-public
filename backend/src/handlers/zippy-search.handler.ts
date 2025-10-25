@@ -149,7 +149,7 @@ export class ZippySearchHandler {
     // Loop through directories - express.e:26180-26207
     if (searchString.length > 0) {
       for (let dirNum = startDir; dirNum <= endDir; dirNum++) {
-        const confPath = path.join(config.dataDir, 'BBS', `Conf${String(session.currentConf || 1).padStart(2, '0')}`);
+        const confPath = path.join(config.get('dataDir'), 'BBS', `Conf${String(session.currentConf || 1).padStart(2, '0')}`);
 
         let dirFilePath: string;
 

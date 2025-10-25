@@ -508,7 +508,7 @@ app.get('/api/download/:fileId', async (req: Request, res: Response) => {
     // Determine file path
     // Files can be in: active directory, private directory, or hold directory
     // Try to find the file in these locations
-    const conferencePath = path.join(config.dataDir, 'BBS', `Conf${String(fileEntry.conferenceId || 1).padStart(2, '0')}`);
+    const conferencePath = path.join(config.get('dataDir'), 'BBS', `Conf${String(fileEntry.conferenceId || 1).padStart(2, '0')}`);
 
     let filePath: string | null = null;
     const possiblePaths = [
@@ -517,7 +517,7 @@ app.get('/api/download/:fileId', async (req: Request, res: Response) => {
       // Try active file area directory
       path.join(conferencePath, `Dir${fileEntry.areaId}`, fileEntry.filename),
       // Try Node0/Playpen (recent uploads)
-      path.join(config.dataDir, 'Node0', 'Playpen', fileEntry.filename),
+      path.join(config.get('dataDir'), 'Node0', 'Playpen', fileEntry.filename),
       // Try HOLD directory (failed tests)
       path.join(conferencePath, 'HOLD', fileEntry.filename),
       // Try PRIVATE directory
@@ -981,7 +981,7 @@ io.on('connection', async (socket) => {
         socket.emit('ansi-output', `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`);
 
         console.log('[file-uploaded] File selected, checking for DIZ...');
-        console.log('[file-uploaded] config.dataDir:', config.get('dataDir'));
+        console.log('[file-uploaded] config.get('dataDir'):', config.get('dataDir'));
 
         // Try to extract FILE_ID.DIZ (express.e:19258-19285)
         if (data.path) {
@@ -1078,7 +1078,7 @@ io.on('connection', async (socket) => {
       let fileStatus: 'active' | 'private' | 'hold' = currentFile.isPrivate ? 'private' : 'active';
 
       if (data.path) {
-        const nodeWorkDir = getNodeWorkDir(0, config.dataDir); // Node0/WorkDir
+        const nodeWorkDir = getNodeWorkDir(0, config.get('dataDir')); // Node0/WorkDir
 
         // Extract FILE_ID.DIZ (express.e:19258-19285) - skip if already extracted
         if (!session.tempData.skipDizExtraction) {
@@ -1147,7 +1147,7 @@ io.on('connection', async (socket) => {
             currentFile.filename,
             fileStatus,
             session.currentConf,
-            config.dataDir
+            config.get('dataDir')
           );
           console.log(`[Upload] File moved to: ${finalFilePath}`);
         } catch (error: any) {
@@ -1187,7 +1187,7 @@ io.on('connection', async (socket) => {
 
       // Write to DIR file (express.e:19473-19509)
       try {
-        const conferencePath = getConferenceDir(session.currentConf, config.dataDir);
+        const conferencePath = getConferenceDir(session.currentConf, config.get('dataDir'));
         await writeUploadToDirFile(
           currentFile.filename,
           data.size,
@@ -1239,11 +1239,11 @@ io.on('connection', async (socket) => {
 
       // Update sysop upload statistics (express.e:19440)
       try {
-        const conferencePath = getConferenceDir(session.currentConf, config.dataDir);
+        const conferencePath = getConferenceDir(session.currentConf, config.get('dataDir'));
         await updateSysopUploadStats(
           conferencePath,
           session.currentConf,
-          config.dataDir,
+          config.get('dataDir'),
           fileStatus === 'hold' || fileStatus === 'private'
         );
       } catch (error: any) {
@@ -2497,7 +2497,7 @@ async function initializeData() {
     setDisplayFileCommandsDependencies({
       displayScreen,
       findSecurityScreen,
-      confScreenDir: path.join(config.dataDir || path.join(__dirname, '..'), 'BBS', 'Conf01', 'Screens'),
+      confScreenDir: path.join(config.get('dataDir') || path.join(__dirname, '..'), 'BBS', 'Conf01', 'Screens'),
       db
     });
 
@@ -2536,7 +2536,7 @@ async function initializeData() {
     setUtilityCommandsDependencies({
       handleGoodbyeCommand,
       messages,
-      confScreenDir: path.join(config.dataDir || path.join(__dirname, '..'), 'BBS', 'Conf01', 'Screens'),
+      confScreenDir: path.join(config.get('dataDir') || path.join(__dirname, '..'), 'BBS', 'Conf01', 'Screens'),
       findSecurityScreen,
       displayScreen,
       searchFileDescriptions

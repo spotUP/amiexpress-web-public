@@ -42,7 +42,7 @@ export class AlterFlagsHandler {
     if (!session.flagManager) {
       const config = (global as any).config;
       session.flagManager = new FileFlagManager(
-        config.dataDir,
+        config.get('dataDir'),
         session.user?.slotNumber || 0,
         0 // node number
       );
