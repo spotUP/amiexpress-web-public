@@ -33,12 +33,19 @@ NC='\033[0m' # No Color
 # Load from .env.local file if it exists
 PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 if [ -f "$PROJECT_ROOT/.env.local" ]; then
-    # Source .env.local file and extract DEPLOY_WEBHOOK_URL
+    # Source .env.local file and extract variables
     WEBHOOK_URL=$(grep -E "^DEPLOY_WEBHOOK_URL=" "$PROJECT_ROOT/.env.local" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
-    # Also extract RENDER_DEPLOY_HOOK
     RENDER_DEPLOY_HOOK=$(grep -E "^RENDER_DEPLOY_HOOK=" "$PROJECT_ROOT/.env.local" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+
+    # Also extract Vercel credentials (needed for deployment)
+    VERCEL_PROJECT_ID=$(grep -E "^VERCEL_PROJECT_ID=" "$PROJECT_ROOT/.env.local" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+    VERCEL_ORG_ID=$(grep -E "^VERCEL_ORG_ID=" "$PROJECT_ROOT/.env.local" | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+
+    # Export Vercel variables for vercel CLI
+    export VERCEL_PROJECT_ID
+    export VERCEL_ORG_ID
 else
-    # Fallback to environment variable
+    # Fallback to environment variables
     WEBHOOK_URL="${DEPLOY_WEBHOOK_URL:-}"
     RENDER_DEPLOY_HOOK="${RENDER_DEPLOY_HOOK:-}"
 fi
@@ -74,9 +81,10 @@ send_webhook() {
                 }]
             }')
 
+        # Send webhook (no longer hiding errors for debugging)
         curl -s -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d "$JSON_PAYLOAD" > /dev/null 2>&1 || true
+            -d "$JSON_PAYLOAD" > /dev/null || echo "  (webhook error)" >&2
     elif [[ "$WEBHOOK_URL" == *"hooks.slack.com"* ]]; then
         # Slack webhook format
         JSON_PAYLOAD=$(jq -n \
@@ -92,9 +100,10 @@ send_webhook() {
                     ts: now
                 }]
             }')
+        # Send webhook (no longer hiding errors for debugging)
         curl -s -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d "$JSON_PAYLOAD" > /dev/null 2>&1 || true  # Don't exit on webhook failure
+            -d "$JSON_PAYLOAD" > /dev/null || echo "  (webhook error)" >&2  # Don't exit on webhook failure
     fi
 }
 
@@ -183,14 +192,15 @@ else
     echo -e "${YELLOW}⚠${NC} No RENDER_DEPLOY_HOOK (relying on auto-deploy)"
 fi
 
-# Trigger frontend deployment (in background)
+# Trigger frontend deployment
 echo -e "${YELLOW}→${NC} [2/2] Triggering frontend deployment..."
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
 # Deploy to Vercel with timeout (120 seconds)
-VERCEL_OUTPUT=$(timeout 120 vercel --prod --yes 2>&1)
+# Redirect stdin from /dev/null to prevent interactive prompts from hanging
+VERCEL_OUTPUT=$(timeout 120 vercel --prod --yes </dev/null 2>&1)
 VERCEL_EXIT=$?
 
 if [ $VERCEL_EXIT -eq 124 ]; then
