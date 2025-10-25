@@ -892,11 +892,21 @@ export class DoorManager {
 
       // 🎯 SMART ANALYSIS: Use AmigaDoorManager to analyze archive
       const amigaDoorMgr = getAmigaDoorManager();
-      const analysis = await amigaDoorMgr.analyzeDoorArchive(archivePath);
+      let analysis;
+
+      try {
+        analysis = await amigaDoorMgr.analyzeDoorArchive(archivePath);
+      } catch (analyzeError: any) {
+        console.error('[Door Manager] analyzeDoorArchive CRASHED:', analyzeError);
+        console.error('[Door Manager] Error stack:', analyzeError.stack);
+        throw new Error(`Archive analysis crashed: ${analyzeError.message}`);
+      }
 
       if (!analysis) {
         throw new Error('Failed to analyze archive');
       }
+
+      console.log('[Door Manager] Analysis completed successfully');
 
       // Display analysis results
       this.socket.emit('ansi-output', '\r\n\x1b[36m━━━ Archive Analysis ━━━\x1b[0m\r\n');
@@ -1040,7 +1050,15 @@ export class DoorManager {
       }
 
     } catch (error) {
-      this.socket.emit('ansi-output', '\x1b[31m✗ Error processing upload: ' + (error as Error).message + '\x1b[0m\r\n');
+      console.error('[Door Manager] processUpload ERROR:', error);
+      console.error('[Door Manager] Error stack:', (error as Error).stack);
+      console.error('[Door Manager] Error details:', {
+        message: (error as Error).message,
+        name: (error as Error).name,
+        toString: error?.toString()
+      });
+
+      this.socket.emit('ansi-output', '\r\n\x1b[31m✗ Error processing upload: ' + (error as Error).message + '\x1b[0m\r\n');
       this.socket.emit('ansi-output', 'Press any key to return to door list...\r\n');
 
       const returnToList = () => {
