@@ -1156,6 +1156,16 @@ io.on('connection', async (socket) => {
         }
       }
 
+      // Check for duplicate file in this area (UNIQUE constraint on filename, areaid)
+      const existingFile = await db.query(
+        'SELECT id, filename FROM file_entries WHERE filename = $1 AND areaid = $2',
+        [currentFile.filename, fileArea.id]
+      );
+
+      if (existingFile.rows.length > 0) {
+        throw new Error(`File "${currentFile.filename}" already exists in this area. Delete the old file first or choose a different filename.`);
+      }
+
       // Save file to database
       const fileEntry = {
         filename: currentFile.filename,
@@ -1291,9 +1301,12 @@ io.on('connection', async (socket) => {
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       session.tempData = undefined;
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('File upload error:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mError saving file to database\x1b[0m\r\n');
+
+      // Show specific error message to user
+      const errorMessage = error.message || 'Unknown database error';
+      socket.emit('ansi-output', `\r\n\x1b[31mUpload failed: ${errorMessage}\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
