@@ -16,7 +16,7 @@ function App() {
     const term = new Terminal({
       fontFamily: 'mosoul, "Courier New", monospace',
       fontSize: 16,
-      lineHeight: 1.0, // Bitmap fonts need exact line height (no extra spacing)
+      lineHeight: 1.2, // Revert to original - 1.0 was too tight
       theme: {
         background: '#000000',
         foreground: '#ffffff',
@@ -249,16 +249,16 @@ function App() {
       passwordMode.current = enabled;
     });
 
-    // Font metrics for Amiga bitmap fonts (designed for specific pixel sizes)
+    // Font metrics for Amiga TTF fonts
     const fontMetrics: Record<string, { size: number; lineHeight: number }> = {
-      'mosoul': { size: 16, lineHeight: 1.0 },
-      'MicroKnight': { size: 16, lineHeight: 1.0 },
-      'MicroKnightPlus': { size: 16, lineHeight: 1.0 },
-      'P0T-NOoDLE': { size: 16, lineHeight: 1.0 },
-      'Topaz_a500': { size: 16, lineHeight: 1.0 },
-      'Topaz_a1200': { size: 16, lineHeight: 1.0 },
-      'TopazPlus_a500': { size: 16, lineHeight: 1.0 },
-      'TopazPlus_a1200': { size: 16, lineHeight: 1.0 }
+      'mosoul': { size: 16, lineHeight: 1.2 },
+      'MicroKnight': { size: 16, lineHeight: 1.2 },
+      'MicroKnightPlus': { size: 16, lineHeight: 1.2 },
+      'P0T-NOoDLE': { size: 16, lineHeight: 1.2 },
+      'Topaz_a500': { size: 16, lineHeight: 1.2 },
+      'Topaz_a1200': { size: 16, lineHeight: 1.2 },
+      'TopazPlus_a500': { size: 16, lineHeight: 1.2 },
+      'TopazPlus_a1200': { size: 16, lineHeight: 1.2 }
     };
 
     // Handle font preference response

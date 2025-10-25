@@ -102,16 +102,13 @@ body {
   font-size: 16px !important;
 }
 
-/* BBS Terminal Styles - Optimized for bitmap fonts */
+/* BBS Terminal Styles */
 .xterm {
   font-size: 16px !important;
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
   text-rendering: optimizeSpeed !important;
-  image-rendering: pixelated !important; /* Crisp bitmap rendering */
-  image-rendering: -moz-crisp-edges !important;
-  image-rendering: crisp-edges !important;
 }
 
 .xterm .xterm-rows {
@@ -119,7 +116,6 @@ body {
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
-  letter-spacing: 0 !important; /* No extra spacing for bitmap fonts */
 }
 
 .xterm .xterm-viewport {
