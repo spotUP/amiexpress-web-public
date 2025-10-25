@@ -388,6 +388,7 @@ export async function handleChatAccept(socket: Socket, session: BBSSession, data
     const initiatorColor = getUsernameColor(initiatorSession.user!.username);
     const initiatorCursorHex = ansiColorToHex(initiatorColor);
     const setupScreen =
+      '\x1b%G' + // Select UTF-8 character set (fixes åäö and other international characters)
       '\x1b[2J\x1b[H' + // Clear screen, home cursor
       '\x1b[1;21r' + // Set scroll region to lines 1-21 (messages area - allows scrolling)
       `\x1b]12;#${initiatorCursorHex}\x07` + // Set cursor color to user's chat color (OSC 12)
@@ -408,6 +409,7 @@ export async function handleChatAccept(socket: Socket, session: BBSSession, data
     const recipientColor = getUsernameColor(recipientSession.user!.username);
     const recipientCursorHex = ansiColorToHex(recipientColor);
     const setupScreenRecipient =
+      '\x1b%G' + // Select UTF-8 character set (fixes åäö and other international characters)
       '\x1b[2J\x1b[H' + // Clear screen, home cursor
       '\x1b[1;21r' + // Set scroll region to lines 1-21 (messages area - allows scrolling)
       `\x1b]12;#${recipientCursorHex}\x07` + // Set cursor color to user's chat color (OSC 12)
@@ -637,9 +639,11 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
     }
     console.log('✅ [CHAT MESSAGE] Validation 4 passed: Message length OK');
 
-    // Sanitize message (remove ANSI escape codes)
+    // Sanitize message (remove ANSI escape codes) and ensure UTF-8 encoding
     const sanitized = message.replace(/\x1b/g, '');
-    console.log('🧹 [CHAT MESSAGE] Sanitized message:', sanitized);
+    // Ensure proper UTF-8 encoding for international characters (åäö, etc.)
+    const utf8Message = Buffer.from(sanitized, 'utf8').toString('utf8');
+    console.log('🧹 [CHAT MESSAGE] Sanitized message:', utf8Message);
 
     // Save message to database
     console.log('💾 [CHAT MESSAGE] Saving to database...');
@@ -647,7 +651,7 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
       session.chatSessionId!,
       session.user!.id,
       session.user!.username,
-      sanitized
+      utf8Message
     );
     console.log('✅ [CHAT MESSAGE] Message saved to database');
 
@@ -678,7 +682,7 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
       sessionId: session.chatSessionId,
       from: session.user!.username,
       fromId: session.user!.id,
-      message: sanitized,
+      message: utf8Message,
       timestamp
     });
     console.log('✅ [CHAT MESSAGE] Emitted chat:message-received event');
@@ -698,7 +702,8 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
       '\x1b[22;1H' + // Move to line 22 (typing preview line)
       '\x1b[K' + // Clear typing preview (removes cursor from there)
       '\x1b[21;1H' + // Move to line 21 (bottom of scroll region)
-      `\r\n\x1b[36m${timestamp}\x1b[0m \x1b[${userColor}m${session.user!.username}:\x1b[0m ${sanitized}` + // Newline scrolls region up, message appears at line 21
+      `\r\n\x1b[36m${timestamp}\x1b[0m \x1b[${userColor}m${session.user!.username}:\x1b[0m ${utf8Message}` + // Newline scrolls region up, message appears at line 21
+      '\r' + // Return to column 1 (prevents message collision when multiple messages arrive simultaneously)
       '\x1b[24;1H' + // Move cursor back to line 24 (input line)
       '\r\x1b[K'; // Clear input line for next message
 

@@ -2282,6 +2282,7 @@ export class Database {
           recipient_username as "recipientUsername",
           recipient_socket as "recipientSocket",
           status,
+          started_at as "startedAt",
           created_at as "createdAt",
           ended_at as "endedAt"
         FROM chat_sessions
@@ -2307,6 +2308,7 @@ export class Database {
           recipient_username as "recipientUsername",
           recipient_socket as "recipientSocket",
           status,
+          started_at as "startedAt",
           created_at as "createdAt",
           ended_at as "endedAt"
         FROM chat_sessions
