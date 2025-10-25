@@ -696,17 +696,13 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
     const userColor = usernameColors[Math.abs(hash) % usernameColors.length];
 
     // Insert message into scroll region while keeping cursor at line 24
-    // To prevent collision when both users send simultaneously:
-    // 1. Save cursor, clear typing preview
-    // 2. Create new line at bottom of scroll (pushes existing messages up)
-    // 3. Write message to the newly created line
-    // 4. Restore cursor
+    // Explicitly scroll the region up, then write message at bottom
     const insertMessage =
-      '\x1b7' + // Save cursor position (saves line 24 input line position)
+      '\x1b7' + // Save cursor position (line 24)
       '\x1b[22;1H\x1b[K' + // Clear typing preview at line 22
-      '\x1b[20;1H' + // Move to line 20 (one above bottom of scroll region)
-      '\r\n' + // Create newline, scroll region up, cursor now at line 21 column 1
-      `\x1b[36m${timestamp}\x1b[0m \x1b[${userColor}m${session.user!.username}:\x1b[0m ${utf8Message}` + // Write message at line 21
+      '\x1b[S' + // Scroll Up (SU): Scroll the scroll region up by 1 line
+      '\x1b[21;1H' + // Move to line 21 (now a blank line after scroll)
+      `\x1b[36m${timestamp}\x1b[0m \x1b[${userColor}m${session.user!.username}:\x1b[0m ${utf8Message}` + // Write message
       '\x1b8' + // Restore cursor to line 24
       '\x1b[K'; // Clear input line
 
