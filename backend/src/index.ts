@@ -1025,6 +1025,8 @@ io.on('connection', async (socket) => {
               session.tempData.maxDescLines = 10;
               session.tempData.descLineCount = 0;
 
+              // Switch to line input mode (disable hotkeys)
+              socket.emit('set-input-mode', 'line');
               session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
               return;
             }
@@ -1038,6 +1040,8 @@ io.on('connection', async (socket) => {
             session.tempData.maxDescLines = 10;
             session.tempData.descLineCount = 0;
 
+            // Switch to line input mode (disable hotkeys)
+            socket.emit('set-input-mode', 'line');
             session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
             return;
           }
@@ -1161,9 +1165,12 @@ io.on('connection', async (socket) => {
         uploadDate: new Date(),
         downloads: 0,
         areaId: fileArea.id,
+        fileIdDiz: finalDescription,  // Store DIZ text if extracted
+        rating: undefined,
+        votes: undefined,
         status: fileStatus,  // active, private, or hold based on test result
         checked: checkedMarker,  // P/F/N status marker
-        filePath: finalFilePath  // Store actual file path
+        comment: undefined  // Optional sysop comment
       };
 
       await db.createFileEntry(fileEntry);
