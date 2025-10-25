@@ -554,13 +554,16 @@ export async function handleChatKeystroke(socket: Socket, session: BBBSession, d
     }
 
     // Show solid cursor while typing
+    // CRITICAL: Use save/restore cursor to preserve partner's typing position
+    // Otherwise moving to line 22 and back to line 24 disrupts their cursor position
     const typingPreview =
+      '\x1b7' + // Save partner's cursor position (they're typing at line 24)
       '\x1b[22;1H' + // Move to line 22 (typing preview line)
       '\x1b[K' + // Clear line
       (partnerSession.partnerTypingBuffer.length > 0
         ? `\x1b[90m\x1b[${userColor}m${session.user!.username}:\x1b[0m ${partnerSession.partnerTypingBuffer}\x1b[${userColor}m█\x1b[0m`
         : '') +
-      '\x1b[24;1H'; // Move cursor back to input line
+      '\x1b8'; // Restore partner's cursor position (preserves column position at line 24)
 
     // Send typing preview to partner
     io.to(partnerSocketId).emit('ansi-output', typingPreview);
@@ -573,10 +576,11 @@ export async function handleChatKeystroke(socket: Socket, session: BBBSession, d
           // Idle - send blinking cursor
           const showCursor = Math.floor(Date.now() / 530) % 2 === 0;
           const blinkPreview =
+            '\x1b7' + // Save partner's cursor position
             '\x1b[22;1H' +
             '\x1b[K' +
             `\x1b[90m\x1b[${userColor}m${session.user!.username}:\x1b[0m ${partnerSession.partnerTypingBuffer}${showCursor ? `\x1b[${userColor}m█\x1b[0m` : ' '}` +
-            '\x1b[24;1H';
+            '\x1b8'; // Restore partner's cursor position
           io.to(partnerSocketId).emit('ansi-output', blinkPreview);
         } else if (partnerSession.typingBlinkTimer) {
           // Typing again or buffer cleared - stop blinking
