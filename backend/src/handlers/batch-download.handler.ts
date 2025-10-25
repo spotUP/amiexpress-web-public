@@ -261,7 +261,14 @@ export class BatchDownloadHandler {
     user.bytesDownload = (user.bytesDownload || 0) + fileInfo.size;
     user.dailyBytesDld = (user.dailyBytesDld || 0) + fileInfo.size;
 
-    // TODO: Save to database
+    // Save to database
+    const db = require('../database').db;
+    await db.updateUser(user.id, {
+      downloads: user.downloads,
+      bytesDownload: user.bytesDownload,
+      dailyBytesDld: user.dailyBytesDld
+    });
+
     console.log(`[BATCH DOWNLOAD] User ${user.username} downloaded ${fileInfo.name} (${fileInfo.size} bytes)`);
   }
 }

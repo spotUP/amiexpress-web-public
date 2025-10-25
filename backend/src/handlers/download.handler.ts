@@ -215,11 +215,16 @@ export class DownloadHandler {
 
     // Log download activity - express.e:9475+
     if (session.user) {
-      const isFree = false; // TODO: Check if file is marked as free download
+      // Check if file is marked as free download
+      // express.e:12740 - IF((fBlock.comment[0]="F") OR (freeDownloads))
+      const isFree = this.isFreeDownload(fileInfo);
+
       await logDownload(session.user, fileInfo.name, fileInfo.size, isFree);
 
-      // Update user download statistics
-      await updateDownloadStats(session.user, fileInfo.size);
+      // Update user download statistics (only if not free)
+      if (!isFree) {
+        await updateDownloadStats(session.user, fileInfo.size);
+      }
     }
 
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -345,7 +350,29 @@ export class DownloadHandler {
     user.bytesDownload = (user.bytesDownload || 0) + fileInfo.size;
     user.dailyBytesDld = (user.dailyBytesDld || 0) + fileInfo.size;
 
-    // TODO: Save to database
+    // Save to database
+    const db = require('../database').db;
+    await db.updateUser(user.id, {
+      downloads: user.downloads,
+      bytesDownload: user.bytesDownload,
+      dailyBytesDld: user.dailyBytesDld
+    });
+
     console.log(`[DOWNLOAD STATS] User ${user.username} downloaded ${fileInfo.name} (${fileInfo.size} bytes)`);
+  }
+
+  /**
+   * Check if file is marked as free download
+   * Port from express.e:12740 - IF((fBlock.comment[0]="F") OR (freeDownloads))
+   */
+  private static isFreeDownload(fileInfo: any): boolean {
+    // Check if file comment starts with "F" (free marker)
+    if (fileInfo.comment && fileInfo.comment.toUpperCase().startsWith('F')) {
+      return true;
+    }
+
+    // TODO: Check if conference has FREEDOWNLOADS tooltype enabled
+    // For now, only check comment marker
+    return false;
   }
 }

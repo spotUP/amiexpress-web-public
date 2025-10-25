@@ -187,10 +187,8 @@ export class AlterFlagsHandler {
         return 0; // Enter pressed, cancel
       }
 
-      // Flag from this file onwards
-      // TODO: Implement flagFrom() functionality
-      // For now, just flag the single file
-      manager.addFlag(fromInput, session.currentConf || -1);
+      // Flag from this file onwards - express.e:12563-12592
+      await this.flagFrom(socket, session, fromInput, manager);
       return 1;
     }
 
@@ -252,6 +250,76 @@ export class AlterFlagsHandler {
 
       // Continue prompting
       await this.flagFiles(socket, session, '');
+    }
+  }
+
+  /**
+   * Flag from filename onwards
+   * Port from express.e:12563-12592 flagFrom()
+   *
+   * Flags all files in the current directory starting from the specified filename
+   */
+  private static async flagFrom(
+    socket: Socket,
+    session: BBSSession,
+    filename: string,
+    manager: any
+  ): Promise<void> {
+    const config = require('../config').config;
+    const bbsDataPath = config.get('dataDir');
+    const confNum = session.currentConf || 1;
+    const { readDirFile } = require('../utils/dir-file-reader.util');
+    const { getMaxDirs } = require('../utils/max-dirs.util');
+    const { getConferenceDir } = require('../utils/file-hold.util');
+    const path = require('path');
+
+    // Get max dirs for current conference
+    const maxDirs = await getMaxDirs(confNum, bbsDataPath);
+    if (maxDirs === 0) {
+      socket.emit('ansi-output', '\x1b[31mNo file areas in this conference.\x1b[0m\r\n');
+      return;
+    }
+
+    // Read DIR file for current directory (upload directory = maxDirs)
+    // express.e:12568 - StringF(tempStr,'\sdir\d',currentConfDir,maxDirs)
+    const conferencePath = getConferenceDir(confNum, bbsDataPath);
+    const dirFilePath = path.join(conferencePath, `DIR${maxDirs}`);
+
+    try {
+      const entries = await readDirFile(dirFilePath);
+
+      let foundStart = false;
+      let flaggedCount = 0;
+      const filenameUpper = filename.toUpperCase();
+
+      // Loop through all entries - express.e:12570-12586
+      for (const entry of entries) {
+        if (!entry.filename) continue;
+
+        const entryFilename = entry.filename.toUpperCase();
+
+        // express.e:12580-12582 - Start flagging when we find the matching filename
+        if (!foundStart && entryFilename === filenameUpper) {
+          foundStart = true;
+        }
+
+        // express.e:12579 - Flag if we've found the start file
+        if (foundStart) {
+          manager.addFlag(entry.filename, confNum);
+          flaggedCount++;
+        }
+      }
+
+      // express.e:12587 - Error if filename not found
+      if (!foundStart) {
+        socket.emit('ansi-output', '\x1b[31mSorry filename not found!\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', `\x1b[32mFlagged ${flaggedCount} file(s) from ${filename} onwards.\x1b[0m\r\n`);
+      }
+
+    } catch (error) {
+      console.error('[FLAG FROM] Error reading DIR file:', error);
+      socket.emit('ansi-output', '\x1b[31mError reading file list.\x1b[0m\r\n');
     }
   }
 }
