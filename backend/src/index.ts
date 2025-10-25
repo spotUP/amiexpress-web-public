@@ -981,7 +981,7 @@ io.on('connection', async (socket) => {
         socket.emit('ansi-output', `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`);
 
         console.log('[file-uploaded] File selected, checking for DIZ...');
-        console.log('[file-uploaded] config.get('dataDir'):', config.get('dataDir'));
+        console.log('[file-uploaded] dataDir:', config.get('dataDir'));
 
         // Try to extract FILE_ID.DIZ (express.e:19258-19285)
         if (data.path) {
