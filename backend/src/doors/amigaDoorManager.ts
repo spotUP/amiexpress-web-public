@@ -734,18 +734,22 @@ export class AmigaDoorManager {
 
           // Normalize path separators (convert backslash to forward slash for Linux compatibility)
           const normalizedFilename = filename.replace(/\\/g, '/');
+          console.log(`[LHA] Normalizing path: "${filename}" => "${normalizedFilename}"`);
 
           // Create directory structure
           const filePath = path.join(tempDir, normalizedFilename);
           const fileDir = path.dirname(filePath);
+          console.log(`[LHA] File path: ${filePath}`);
+          console.log(`[LHA] File dir: ${fileDir}`);
 
           if (!fs.existsSync(fileDir)) {
             fs.mkdirSync(fileDir, { recursive: true });
+            console.log(`[LHA] Created directory: ${fileDir}`);
           }
 
           // Write file
           fs.writeFileSync(filePath, Buffer.from(decompressed));
-          console.log(`[LHA] Extracted: ${filename} (${decompressed.length} bytes)`);
+          console.log(`[LHA] Extracted: ${filename} => ${filePath} (${decompressed.length} bytes)`);
         }
 
         console.log(`[LHA] ✓ Extraction complete`);
@@ -785,7 +789,12 @@ export class AmigaDoorManager {
 
       // Analyze extracted structure
       const extractedFiles = this.getFilesRecursive(tempDir);
+      console.log(`[installDoor] Found ${extractedFiles.length} extracted files:`);
+      extractedFiles.forEach(f => console.log(`[installDoor]   - ${f}`));
+
       const infoFiles = extractedFiles.filter(f => f.toLowerCase().endsWith('.info'));
+      console.log(`[installDoor] Found ${infoFiles.length} .info files:`);
+      infoFiles.forEach(f => console.log(`[installDoor]   - ${f}`));
 
       if (infoFiles.length === 0) {
         this.cleanup(tempDir);
