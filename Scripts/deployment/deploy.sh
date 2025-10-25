@@ -158,8 +158,8 @@ if [ -n "$RENDER_DEPLOY_HOOK" ]; then
     HOOK_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$RENDER_DEPLOY_HOOK" 2>&1)
     HTTP_CODE=$(echo "$HOOK_RESPONSE" | tail -1)
 
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-        echo -e "${GREEN}✓${NC} Deploy hook triggered successfully"
+    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "202" ]; then
+        echo -e "${GREEN}✓${NC} Deploy hook triggered successfully (HTTP $HTTP_CODE)"
         echo ""
         # Wait a few seconds for build to start
         sleep 5
