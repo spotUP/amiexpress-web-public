@@ -412,8 +412,10 @@ export class AmigaDoorManager {
         }
       } else if (isLha) {
         files = await this.listLhaContents(archivePath);
+        console.log(`[AnalyzeDoorArchive] LHA files found (${files.length}):`, files);
       } else if (isLzx) {
         files = await this.listLzxContents(archivePath);
+        console.log(`[AnalyzeDoorArchive] LZX files found (${files.length}):`, files);
       }
 
       // Detect standard AmiExpress door structure
