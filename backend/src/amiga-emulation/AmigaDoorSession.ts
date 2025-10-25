@@ -7,6 +7,7 @@ import * as fs from 'fs';
 /**
  * AmigaDoorSession - Manages a single user's door execution session
  * Connects emulated Amiga door to Socket.io for real-time I/O
+ * Version: 2025-10-25 - Reduced logging spam
  */
 
 export interface DoorConfig {
