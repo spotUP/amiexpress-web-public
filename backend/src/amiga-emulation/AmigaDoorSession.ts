@@ -23,6 +23,9 @@ export class AmigaDoorSession {
   private config: DoorConfig;
   private isRunning: boolean = false;
   private executionTimer: NodeJS.Timeout | null = null;
+  private iterationCount: number = 0;
+  private lastPCs: number[] = []; // Track recent PCs to detect loops
+  private pcSamples: Map<number, number> = new Map(); // PC -> count
 
   constructor(socket: Socket, config: DoorConfig) {
     this.socket = socket;
@@ -195,19 +198,18 @@ export class AmigaDoorSession {
    * This allows for responsive I/O handling
    */
   private runExecutionLoop(): void {
-    console.log(`[AmigaDoorSession] runExecutionLoop() START - isRunning=${this.isRunning}, emulator=${!!this.emulator}`);
-
     if (!this.emulator || !this.isRunning) {
       console.log('[AmigaDoorSession] Execution loop stopped - early exit');
       return;
     }
 
     try {
+      // Sample PC before execution to track where we are
+      const pcBefore = this.emulator.getRegister(16);
+
       // Execute a small number of cycles (allows I/O to be processed)
       // 10000 cycles ≈ 1.25ms on original 8MHz 68000
-      console.log('[AmigaDoorSession] About to execute 10000 cycles...');
       const cyclesExecuted = this.emulator.execute(10000);
-      console.log(`[AmigaDoorSession] Executed ${cyclesExecuted} cycles`);
 
       if (cyclesExecuted === 0) {
         console.warn('[AmigaDoorSession] CPU executed 0 cycles - door completed or hit invalid instruction');
@@ -217,6 +219,50 @@ export class AmigaDoorSession {
         this.socket.emit('door:status', { status: 'completed' });
         this.terminate();
         return;
+      }
+
+      // Track PC to detect infinite loops
+      this.iterationCount++;
+      const pcAfter = this.emulator.getRegister(16);
+
+      // Sample PC every 100 iterations
+      if (this.iterationCount % 100 === 0) {
+        this.lastPCs.push(pcAfter);
+        const count = this.pcSamples.get(pcAfter) || 0;
+        this.pcSamples.set(pcAfter, count + 1);
+
+        // Keep only last 10 samples
+        if (this.lastPCs.length > 10) {
+          this.lastPCs.shift();
+        }
+      }
+
+      // Every 500 iterations (~5 seconds), log status
+      if (this.iterationCount % 500 === 0) {
+        const sp = this.emulator.getRegister(15);
+        const d0 = this.emulator.getRegister(0);
+
+        // Read instruction bytes at current PC
+        const instr0 = this.emulator.readMemory(pcAfter);
+        const instr1 = this.emulator.readMemory(pcAfter + 1);
+        const instr2 = this.emulator.readMemory(pcAfter + 2);
+        const instr3 = this.emulator.readMemory(pcAfter + 3);
+
+        console.log(`[Door Trace] Iteration ${this.iterationCount}:`);
+        console.log(`  PC=0x${pcAfter.toString(16)}, SP=0x${sp.toString(16)}, D0=0x${d0.toString(16)}`);
+        console.log(`  Instruction bytes: ${instr0.toString(16).padStart(2, '0')} ${instr1.toString(16).padStart(2, '0')} ${instr2.toString(16).padStart(2, '0')} ${instr3.toString(16).padStart(2, '0')}`);
+
+        // Show PC distribution
+        console.log(`  Last 10 PC samples: [${this.lastPCs.map(pc => '0x' + pc.toString(16)).join(', ')}]`);
+
+        // Detect tight loop (same PC appearing frequently)
+        const maxCount = Math.max(...Array.from(this.pcSamples.values()));
+        if (maxCount > 5) {
+          const loopPC = Array.from(this.pcSamples.entries()).find(([pc, count]) => count === maxCount);
+          if (loopPC) {
+            console.warn(`  ⚠️ POSSIBLE INFINITE LOOP: PC 0x${loopPC[0].toString(16)} seen ${loopPC[1]} times`);
+          }
+        }
       }
 
       // Schedule next iteration (no logging - happens hundreds of times/sec)
