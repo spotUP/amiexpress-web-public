@@ -703,9 +703,8 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
       '\x1b[K' + // Clear typing preview (removes cursor from there)
       '\x1b[21;1H' + // Move to line 21 (bottom of scroll region)
       `\r\n\x1b[36m${timestamp}\x1b[0m \x1b[${userColor}m${session.user!.username}:\x1b[0m ${utf8Message}` + // Newline scrolls region up, message appears at line 21
-      '\r' + // Return to column 1 (prevents message collision when multiple messages arrive simultaneously)
-      '\x1b[24;1H' + // Move cursor back to line 24 (input line)
-      '\r\x1b[K'; // Clear input line for next message
+      '\x1b[24;1H' + // Move cursor back to line 24 (input line) - absolute positioning handles column 1
+      '\x1b[K'; // Clear input line for next message
 
     io.to(roomName).emit('ansi-output', insertMessage);
     console.log('✅ [CHAT MESSAGE] Emitted message in scroll region:', insertMessage.substring(0, 50) + '...');
