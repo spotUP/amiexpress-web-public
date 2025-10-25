@@ -154,7 +154,10 @@ export class AmigaDoorSession {
       this.emulator.reset();
 
       // NOW set up ExecBase at address 4 (AFTER reset has read the PC vector)
-      const execBaseAddr = 0xFF0000;
+      // Use 0xFF8000 instead of 0xFF0000 so that negative offsets stay >= 0xFF0000
+      // (Moira's trap handler only intercepts reads >= 0xFF0000)
+      // With ExecBase=0xFF8000, function at -6000 would be 0xFF6000 (still >= 0xFF0000)
+      const execBaseAddr = 0xFF8000;
       this.emulator.writeMemory(0x4, (execBaseAddr >> 24) & 0xFF);
       this.emulator.writeMemory(0x5, (execBaseAddr >> 16) & 0xFF);
       this.emulator.writeMemory(0x6, (execBaseAddr >> 8) & 0xFF);
@@ -175,6 +178,20 @@ export class AmigaDoorSession {
       if (actualPC !== hunkFile.entryPoint) {
         console.error(`[AmigaDoorSession] WARNING: PC mismatch! Expected 0x${hunkFile.entryPoint.toString(16)}, got 0x${actualPC.toString(16)}`);
       }
+
+      // CRITICAL: Push a return address to stack for when door does RTS to exit
+      // On real Amiga, the OS calls the door with JSR, which pushes a return address
+      // We simulate this by pushing a sentinel address that we can detect
+      const exitSentinel = 0xDEADBEEF; // Unique address to detect door exit
+      const newSP = actualSP - 4; // Push 4 bytes
+      this.emulator.writeMemory(newSP, (exitSentinel >> 24) & 0xFF);
+      this.emulator.writeMemory(newSP + 1, (exitSentinel >> 16) & 0xFF);
+      this.emulator.writeMemory(newSP + 2, (exitSentinel >> 8) & 0xFF);
+      this.emulator.writeMemory(newSP + 3, exitSentinel & 0xFF);
+      this.emulator.setRegister(15, newSP); // Update SP
+
+      console.log(`[AmigaDoorSession] Pushed exit sentinel 0x${exitSentinel.toString(16)} to stack`);
+      console.log(`[AmigaDoorSession] When door executes RTS to exit, PC will become 0x${exitSentinel.toString(16)}`);
 
       this.isRunning = true;
 
@@ -296,9 +313,10 @@ export class AmigaDoorSession {
       this.lastPC = pcBefore;
 
       // Execute a small number of cycles (allows I/O to be processed)
-      // Reduced to 1000 cycles to catch JSR instructions more reliably
-      // 1000 cycles ≈ 0.125ms on original 8MHz 68000
-      const cyclesExecuted = this.emulator.execute(1000);
+      // Use 1 cycle for first 20 iterations to see exact execution flow
+      // Then 1000 cycles for normal operation
+      const cyclesToExecute = this.iterationCount <= 20 ? 1 : 1000;
+      const cyclesExecuted = this.emulator.execute(cyclesToExecute);
 
       if (cyclesExecuted === 0) {
         console.warn('[AmigaDoorSession] CPU executed 0 cycles - door completed or hit invalid instruction');
@@ -317,6 +335,15 @@ export class AmigaDoorSession {
       // Track PC to detect infinite loops
       this.iterationCount++;
       const pcAfter = this.emulator.getRegister(16);
+
+      // Check for exit sentinel - door executed RTS to exit
+      if (pcAfter === 0xDEADBEEF) {
+        console.log('[AmigaDoorSession] Door executed RTS to exit sentinel - door completed successfully!');
+        this.socket.emit('door:status', { status: 'completed' });
+        this.socket.emit('ansi-output', '\r\n\r\n[Door completed]\r\n');
+        this.terminate();
+        return;
+      }
 
       // Sample PC every 100 iterations
       if (this.iterationCount % 100 === 0) {
@@ -368,19 +395,15 @@ export class AmigaDoorSession {
           const a6 = this.emulator.getRegister(14); // A6 register
           const targetAddr = (a6 + signedOffset) >>> 0; // Ensure unsigned 32-bit
 
-          if (this.iterationCount % 100 === 0) {
-            console.log(`[JSR (A6)] PC=0x${pcAfter.toString(16)} calling (A6=${a6.toString(16)}) + offset ${signedOffset} = 0x${targetAddr.toString(16)}`);
+          // Log library calls in first 20 iterations only
+          if (this.iterationCount <= 20) {
+            console.log(`  [Lib Call] JSR -${Math.abs(signedOffset)}(A6) → 0x${targetAddr.toString(16)} from PC=0x${pcBefore.toString(16)}`);
           }
-
-          // THIS IS A LIBRARY CALL! The trap handler should catch this!
-          console.log(`[*** LIBRARY CALL VIA A6 ***] JSR -${Math.abs(signedOffset)}(A6) at PC=0x${pcAfter.toString(16)}`);
-          console.log(`  A6=0x${a6.toString(16)}, offset=${signedOffset}, target=0x${targetAddr.toString(16)}`);
-          console.log(`  Instruction: 4E ${instr1.toString(16).padStart(2, '0')} ${instr2.toString(16).padStart(2, '0')} ${instr3.toString(16).padStart(2, '0')}`);
         }
       }
 
-      // Log first 10 iterations in detail
-      if (this.iterationCount <= 10) {
+      // Log first 20 iterations in detail (1 cycle each for tracing)
+      if (this.iterationCount <= 20) {
         const sp = this.emulator.getRegister(15);
         const d0 = this.emulator.getRegister(0);
         const a6 = this.emulator.getRegister(14);
