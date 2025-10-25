@@ -11,6 +11,9 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { findFileIdDizInLzh } from './lzh-parser';
 import { extractFileDizFromLha } from './lha-extractor';
+import { extractFileDizFromZip } from './zip-extractor';
+import { extractFileDizFromTarAuto } from './tar-extractor';
+import { extractFileDizFromDms } from './dms-extractor';
 
 const execAsync = promisify(exec);
 
@@ -231,12 +234,15 @@ export async function extractFileDizBuiltin(
   let extractedPath = dizPath; // Default: extracted file will be at dizPath
 
   if (ext === '.zip') {
-    // Extract FILE_ID.DIZ from zip archive
-    // -j = junk paths (extract to flat directory)
-    // -o = overwrite without prompting
-    // -C = case-insensitive matching (but we already know exact filename)
-    command = `unzip -jo "${uploadedFilePath}" "${actualDizFilename}" -d "${nodeWorkDir}"`;
-    extractedPath = path.join(nodeWorkDir, actualDizFilename);
+    // Extract FILE_ID.DIZ from zip archive using pure TypeScript library
+    console.log(`[FILE_ID.DIZ] Using TypeScript ZIP extractor`);
+    try {
+      const success = await extractFileDizFromZip(uploadedFilePath, dizPath);
+      return success;
+    } catch (error: any) {
+      console.log(`[FILE_ID.DIZ] TypeScript ZIP extractor failed: ${error.message}`);
+      return false;
+    }
   } else if (ext === '.lha' || ext === '.lzh') {
     // Extract FILE_ID.DIZ from lha/lzh archive using pure TypeScript library
     console.log(`[FILE_ID.DIZ] Using TypeScript LHA extractor`);
@@ -254,17 +260,25 @@ export async function extractFileDizBuiltin(
     needsCwd = true;
     extractedPath = path.join(nodeWorkDir, actualDizFilename);
   } else if (ext === '.dms') {
-    // Extract FILE_ID.DIZ from DMS disk image
-    // DMS files need special handling:
-    // 1. Unpack the DMS to get the disk image
-    // 2. Extract FILE_ID.DIZ from the disk image
-    // For now, try xdms to unpack, then look for FILE_ID.DIZ
-    command = `xdms u "${uploadedFilePath}" +Q 2>/dev/null || dms u "${uploadedFilePath}"`;
-    needsCwd = true;
+    // Extract FILE_ID.DIZ from DMS disk image using TypeScript library
+    console.log(`[FILE_ID.DIZ] Using TypeScript DMS extractor`);
+    try {
+      const success = await extractFileDizFromDms(uploadedFilePath, dizPath);
+      return success;
+    } catch (error: any) {
+      console.log(`[FILE_ID.DIZ] TypeScript DMS extractor failed: ${error.message}`);
+      return false;
+    }
   } else if (ext === '.tar' || ext === '.tgz' || ext === '.gz') {
-    // Extract FILE_ID.DIZ from tar/gzip archive
-    command = `tar -xzf "${uploadedFilePath}" "${actualDizFilename}" -C "${nodeWorkDir}" 2>/dev/null || tar -xf "${uploadedFilePath}" "${actualDizFilename}" -C "${nodeWorkDir}"`;
-    extractedPath = path.join(nodeWorkDir, actualDizFilename);
+    // Extract FILE_ID.DIZ from tar/gzip archive using pure TypeScript library
+    console.log(`[FILE_ID.DIZ] Using TypeScript TAR/GZ extractor`);
+    try {
+      const success = await extractFileDizFromTarAuto(uploadedFilePath, dizPath);
+      return success;
+    } catch (error: any) {
+      console.log(`[FILE_ID.DIZ] TypeScript TAR/GZ extractor failed: ${error.message}`);
+      return false;
+    }
   } else {
     console.log(`[FILE_ID.DIZ] File type ${ext} not supported for DIZ extraction`);
     return false;
