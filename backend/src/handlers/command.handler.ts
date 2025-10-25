@@ -2123,8 +2123,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleCommentToSysopCommand(socket, session, params);
       return;
 
-    case 'CF': // Conference Flags (internalCommandCF) - express.e:24672-24750
-      handleConferenceFlagsCommand(socket, session);
+    case 'CF': // Conference Flags (internalCommandCF) - express.e:24672-24841
+      await handleConferenceFlagsCommand(socket, session);
       return;
 
     case 'Q': // Quiet Mode Toggle (internalCommandQ) - express.e:25504-25516

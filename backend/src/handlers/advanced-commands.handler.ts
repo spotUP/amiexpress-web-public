@@ -250,19 +250,20 @@ export function handleMailScanCommand(socket: any, session: BBSSession): void {
 /**
  * CF Command - Conference Flags
  *
- * From express.e:24672-24750:
+ * From express.e:24672-24841 (170 lines):
  * PROC internalCommandCF()
  *   - Check ACS_CONFFLAGS permission
- *   - Display list of conferences with M/A/F/Z flags
+ *   - Display full-screen list of conferences with M/A/F/Z flags
  *   - Allow user to toggle flags for individual conferences
- *   - Parse patterns like "1,3-5,7" for bulk changes
- *   - Save conference flag preferences per user
+ *   - Parse patterns like "1,3,5" or "1.2" for bulk changes
+ *   - Special commands: * (toggle all), + (all on), - (all off)
+ *   - Save conference flag preferences per user in conf_base table
  * ENDPROC
  *
  * Manages which conferences are flagged for automatic scanning.
- * M = Mail scan, A = Auto-join, F = File scan, Z = Auto-read
+ * M = Mail scan, A = All messages, F = File scan, Z = Zoom scan
  */
-export function handleConferenceFlagsCommand(socket: any, session: BBSSession): void {
+export async function handleConferenceFlagsCommand(socket: any, session: BBSSession): Promise<void> {
   if (!checkSecurity(session.user, ACSPermission.CONFFLAGS)) {
     ErrorHandler.permissionDenied(socket, 'manage conference flags', {
       nextState: LoggedOnSubState.DISPLAY_MENU
@@ -270,24 +271,278 @@ export function handleConferenceFlagsCommand(socket: any, session: BBSSession): 
     return;
   }
 
-  // TODO: Implement full conference flag management - express.e:24685-24750
-  // This requires:
-  // - Display list of conferences with current flag status
-  // - Allow toggle of individual conference flags
-  // - Parse flag patterns like "1,3-5,7" for bulk changes
-  // - Save conference flag preferences per user
-  // - Database table for user conference flags
+  // Initialize CF session state
+  session.tempData = session.tempData || {};
+  session.tempData.cfLoop = true;
+
+  // Start displaying the conference flags menu
+  await displayConferenceFlagsMenu(socket, session);
+}
+
+/**
+ * Display conference flags menu
+ * express.e:24687-24733
+ */
+async function displayConferenceFlagsMenu(socket: any, session: BBSSession): Promise<void> {
+  // express.e:24688 - Clear screen
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+  socket.emit('ansi-output', '\r\n');
+
+  // express.e:24689-24690 - Header
+  socket.emit('ansi-output', AnsiUtil.colorize('        M A F Z Conference                      M A F Z Conference', 'green'));
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('        ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~         ~ ~ ~ ~ ~~~~~~~~~~~~~~~~~~~~~~~', 'yellow'));
+  socket.emit('ansi-output', '\r\n\r\n');
+
+  // express.e:24692-24731 - List all accessible conferences with flags
+  const { db } = require('../database');
+  let n = 0;
+
+  for (const conf of _conferences) {
+    // Check if user has access to this conference
+    if (!_checkConfAccess(session.user, conf.id)) {
+      continue;
+    }
+
+    // Get message bases for this conference
+    const msgBases = await db.getMessageBases(conf.id);
+
+    for (let m = 0; m < msgBases.length; m++) {
+      const msgBase = msgBases[m];
+
+      // Get user's scan flags for this conference/base
+      const scanFlags = await getUserScanFlags(session.user.id, conf.id, msgBase.id);
+
+      // express.e:24695-24726 - Determine flag status (*, F, D, or space)
+      const mailFlag = (scanFlags & MAIL_SCAN_MASK) ? '*' : ' ';
+      const fileFlag = (scanFlags & FILE_SCAN_MASK) ? '*' : ' ';
+      const allFlag = (scanFlags & MAILSCAN_ALL) ? '*' : ' ';
+      const zoomFlag = (scanFlags & ZOOM_SCAN_MASK) ? '*' : ' ';
+
+      // express.e:24728-24730 - Format conference name
+      let confStr: string;
+      let confTitle: string;
+
+      if (msgBases.length > 1) {
+        confStr = `${conf.id}.${m + 1}`;
+        confTitle = `${conf.name} - ${msgBase.name}`;
+      } else {
+        confStr = `${conf.id}`;
+        confTitle = conf.name;
+      }
+
+      // express.e:24731 - Output formatted line
+      const line = AnsiUtil.colorize('[', 'blue') +
+        confStr.padEnd(5) +
+        AnsiUtil.colorize('] ', 'blue') +
+        AnsiUtil.colorize(`${mailFlag} ${allFlag} ${fileFlag} ${zoomFlag} `, 'cyan') +
+        confTitle.substring(0, 23);
+
+      socket.emit('ansi-output', line);
+
+      // express.e:24732-24733 - Two columns
+      if (n % 2 === 1) {
+        socket.emit('ansi-output', '\r\n');
+      } else {
+        socket.emit('ansi-output', ' ');
+      }
+      n++;
+    }
+  }
+
+  // express.e:24735-24737 - Prompt for flag type to edit
+  socket.emit('ansi-output', '\r\n\r\nEdit which flags ');
+  socket.emit('ansi-output', AnsiUtil.colorize('[M]', 'green') + 'ailScan, ');
+  socket.emit('ansi-output', AnsiUtil.colorize('[A]', 'green') + 'll Messages, ');
+  socket.emit('ansi-output', AnsiUtil.colorize('[F]', 'green') + 'ileScan, ');
+  socket.emit('ansi-output', AnsiUtil.colorize('[Z]', 'green') + 'oom >: ');
+
+  // Store context for input
+  session.subState = LoggedOnSubState.CF_FLAG_SELECT_INPUT;
+}
+
+/**
+ * Handle flag selection input (M/A/F/Z)
+ * express.e:24738-24750
+ */
+export async function handleCFFlagSelectInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const ch = input.trim().toUpperCase();
+  let editMask: number;
+
+  // express.e:24738-24747
+  if (ch === 'M') {
+    editMask = MAIL_SCAN_MASK;
+  } else if (ch === 'F') {
+    editMask = FILE_SCAN_MASK;
+  } else if (ch === 'Z') {
+    editMask = ZOOM_SCAN_MASK;
+  } else if (ch === 'A') {
+    editMask = MAILSCAN_ALL;
+  } else {
+    // express.e:24748-24750 - Exit if invalid
+    session.tempData.cfLoop = false;
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  socket.emit('ansi-output', ch + '\r\n');
+
+  // express.e:24753-24754 - Prompt for conference numbers
+  socket.emit('ansi-output', "Enter Conference Numbers, ");
+  socket.emit('ansi-output', AnsiUtil.colorize('*', 'yellow') + " toggle all, ");
+  socket.emit('ansi-output', AnsiUtil.colorize('-', 'yellow') + " All off, ");
+  socket.emit('ansi-output', AnsiUtil.colorize('+', 'yellow') + " All on >: ");
+
+  session.tempData.cfEditMask = editMask;
+  session.subState = LoggedOnSubState.CF_CONF_SELECT_INPUT;
+}
+
+/**
+ * Handle conference selection input
+ * express.e:24755-24835
+ */
+export async function handleCFConfSelectInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const confNums = input.trim();
+  const editMask = session.tempData.cfEditMask;
+  const { db } = require('../database');
 
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Conference Flags'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('Conference flag management not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'This allows you to select which conferences to scan for new messages.\r\n');
-  socket.emit('ansi-output', 'Flags: M=Mail A=Auto-join F=File Z=Auto-read\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
 
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // express.e:24757 - Empty input, return to menu
+  if (confNums.length === 0) {
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.tempData = {};
+    return;
+  }
+
+  // express.e:24759-24767 - '+' = all on
+  if (confNums === '+') {
+    for (const conf of _conferences) {
+      if (!_checkConfAccess(session.user, conf.id)) continue;
+
+      const msgBases = await db.getMessageBases(conf.id);
+      for (const msgBase of msgBases) {
+        await toggleScanFlag(session.user.id, conf.id, msgBase.id, editMask, true);
+      }
+    }
+  }
+  // express.e:24768-24776 - '-' = all off
+  else if (confNums === '-') {
+    for (const conf of _conferences) {
+      if (!_checkConfAccess(session.user, conf.id)) continue;
+
+      const msgBases = await db.getMessageBases(conf.id);
+      for (const msgBase of msgBases) {
+        await toggleScanFlag(session.user.id, conf.id, msgBase.id, editMask, false);
+      }
+    }
+  }
+  // express.e:24777-24834 - Parse comma-separated list
+  else {
+    const confList = confNums.split(',').map(s => s.trim()).filter(s => s.length > 0);
+
+    for (const confStr of confList) {
+      // Check if it's a conference.base format (e.g., "1.2")
+      const parts = confStr.split('.');
+      const confId = parseInt(parts[0]);
+      const baseNum = parts.length > 1 ? parseInt(parts[1]) : null;
+
+      if (isNaN(confId)) continue;
+
+      const conf = _conferences.find(c => c.id === confId);
+      if (!conf || !_checkConfAccess(session.user, confId)) continue;
+
+      const msgBases = await db.getMessageBases(confId);
+
+      if (baseNum !== null) {
+        // Specific message base
+        const msgBase = msgBases[baseNum - 1];
+        if (msgBase) {
+          await toggleScanFlag(session.user.id, confId, msgBase.id, editMask, null); // XOR toggle
+        }
+      } else {
+        // All message bases in conference
+        for (const msgBase of msgBases) {
+          await toggleScanFlag(session.user.id, confId, msgBase.id, editMask, null); // XOR toggle
+        }
+      }
+    }
+  }
+
+  // express.e:24836-24838 - Loop back to menu
+  await displayConferenceFlagsMenu(socket, session);
+}
+
+// === UTILITY FUNCTIONS ===
+
+// Scan flag bit masks (from express.e)
+const MAIL_SCAN_MASK = 4;   // Bit 2 - Mail scanning enabled
+const FILE_SCAN_MASK = 8;   // Bit 3 - File scanning enabled
+const ZOOM_SCAN_MASK = 16;  // Bit 4 - Zoom scanning enabled
+const MAILSCAN_ALL = 32;    // Bit 5 - Scan all messages (not just new)
+
+/**
+ * Get user's scan flags for a conference/base
+ */
+async function getUserScanFlags(userId: string, confId: number, msgBaseId: number): Promise<number> {
+  const { db } = require('../database');
+
+  try {
+    const result = await db.query(
+      'SELECT scan_flags FROM conf_base WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3',
+      [userId, confId, msgBaseId]
+    );
+
+    if (result.rows.length > 0) {
+      return result.rows[0].scan_flags || 12; // Default: MAIL_SCAN_MASK | FILE_SCAN_MASK
+    }
+
+    // No entry yet, return default
+    return 12; // MAIL_SCAN_MASK | FILE_SCAN_MASK
+  } catch (error) {
+    console.error('[CF] Error getting scan flags:', error);
+    return 12;
+  }
+}
+
+/**
+ * Toggle scan flag for a conference/base
+ * @param mode - true=OR (set), false=AND NOT (clear), null=XOR (toggle)
+ */
+async function toggleScanFlag(
+  userId: string,
+  confId: number,
+  msgBaseId: number,
+  mask: number,
+  mode: boolean | null
+): Promise<void> {
+  const { db } = require('../database');
+
+  try {
+    // Get current flags
+    const currentFlags = await getUserScanFlags(userId, confId, msgBaseId);
+
+    // Calculate new flags
+    let newFlags: number;
+    if (mode === true) {
+      newFlags = currentFlags | mask; // OR - set bit
+    } else if (mode === false) {
+      newFlags = currentFlags & ~mask; // AND NOT - clear bit
+    } else {
+      newFlags = currentFlags ^ mask; // XOR - toggle bit
+    }
+
+    // Upsert to database
+    await db.query(
+      `INSERT INTO conf_base (user_id, conference_id, message_base_id, scan_flags)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, conference_id, message_base_id)
+       DO UPDATE SET scan_flags = $4`,
+      [userId, confId, msgBaseId, newFlags]
+    );
+  } catch (error) {
+    console.error('[CF] Error toggling scan flag:', error);
+  }
 }

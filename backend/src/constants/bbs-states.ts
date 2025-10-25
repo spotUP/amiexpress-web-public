@@ -115,6 +115,10 @@ export enum LoggedOnSubState {
   // Conference operations
   CONFERENCE_SELECT = 'conference_select',
   CONFERENCE_JOIN = 'conference_join',
+
+  // Conference Flags (CF command) - express.e:24672-24841
+  CF_FLAG_SELECT_INPUT = 'cf_flag_select_input',      // M/A/F/Z flag type selection
+  CF_CONF_SELECT_INPUT = 'cf_conf_select_input',      // Conference numbers input
 }
 
 export enum SessionStatus {
