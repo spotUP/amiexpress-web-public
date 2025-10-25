@@ -635,6 +635,95 @@ git log --oneline -10
 
 ---
 
+## 🚨 MANDATORY: Check Production Logs After Every Deployment 🚨
+
+**ALWAYS check Render production logs after deploying code changes.**
+
+### Why This Is Critical:
+
+- Production errors are different from local errors
+- Database schema mismatches only appear in production
+- Missing environment variables only break in production
+- Socket.IO event handlers may behave differently
+- **Silent failures hide critical bugs**
+
+### Required Steps After EVERY Deployment:
+
+**1. Wait for build to complete (30-60 seconds)**
+
+**2. Check Render Dashboard logs:**
+   - Visit: https://dashboard.render.com/web/srv-d3naaffdiees73eebd0g
+   - Click "Logs" tab
+   - Look for these success markers:
+     - `✅ Database tables created successfully`
+     - `✅ Server running on port 10000`
+     - `🌐 BBS accessible at http://localhost:10000/`
+
+**3. Look for errors immediately:**
+   - Red error messages
+   - Stack traces
+   - `TypeError:` or `ReferenceError:`
+   - `... is not a function`
+   - `Cannot read property ... of undefined`
+
+**4. Test the feature you just deployed:**
+   - Connect to https://bbs.uprough.net
+   - Try the command/feature you changed
+   - Watch logs in real-time while testing
+   - Look for console.log output you added
+
+**5. Common production-only errors:**
+   ```
+   # Missing database method:
+   TypeError: _db.updateReadPointer is not a function
+   → Add the missing method to database.ts
+
+   # Column doesn't exist:
+   error: column "availableforchat" does not exist
+   → Check database migrations, column names lowercase
+
+   # Module not found:
+   Error: Cannot find module '../doors/DoorManager'
+   → Check file paths, TypeScript compilation
+
+   # Socket event not firing:
+   [Door Manager] Setting up input handlers
+   (but no "*** INPUT HANDLER FIRED ***")
+   → Event listener not registered or being consumed
+   ```
+
+### Render CLI Commands (if authenticated):
+
+```bash
+# Tail logs in real-time:
+render logs -r srv-d3naaffdiees73eebd0g --tail --type app -o text
+
+# Get last 100 log lines:
+render logs -r srv-d3naaffdiees73eebd0g --limit 100 --type app -o text
+
+# Search for specific text:
+render logs -r srv-d3naaffdiees73eebd0g --text "Error" --limit 50 -o text
+```
+
+### Fix-Deploy-Verify Loop:
+
+1. **Deploy** → Wait 60 seconds
+2. **Check logs** → Find errors
+3. **Fix locally** → Test locally first
+4. **Deploy again** → Wait 60 seconds
+5. **Verify logs** → No errors? Test feature
+6. **Success!**
+
+**Never assume deployment succeeded without checking logs!**
+
+**This could have prevented:**
+- updateReadPointer crash (2025-10-25)
+- Door Manager input handler not working (2025-10-25)
+- Database column name mismatches (multiple times)
+- Missing environment variables (multiple times)
+
+---
+
 ## 🚨 MANDATORY: 1:1 PORT - ALWAYS CHECK E SOURCES FIRST 🚨
 
 **THIS IS THE #1 RULE - FAILURE TO FOLLOW THIS WASTES EVERYONE'S TIME**
