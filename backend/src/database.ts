@@ -1454,6 +1454,21 @@ export class Database {
     }
   }
 
+  async updateReadPointer(userId: number, conferenceId: number, messageBaseId: number, lastRead: number): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const sql = `
+        INSERT INTO conf_base (user_id, conference_id, message_base_id, last_msg_read_conf)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id, conference_id, message_base_id)
+        DO UPDATE SET last_msg_read_conf = $4
+      `;
+      await client.query(sql, [userId.toString(), conferenceId, messageBaseId, lastRead]);
+    } finally {
+      client.release();
+    }
+  }
+
   // File management methods
   async createFileEntry(file: Omit<FileEntry, 'id'>): Promise<number> {
     const client = await this.pool.connect();
