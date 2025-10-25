@@ -110,11 +110,11 @@ export class DoorManager {
 
       // Wait for keypress then exit
       const exitHandler = () => {
-        this.socket.off('terminal-input', exitHandler);
+        this.socket.off('command', exitHandler);
         this.cleanup();
         this.socket.emit('door-exit');
       };
-      this.socket.once('terminal-input', exitHandler);
+      this.socket.once('command', exitHandler);
     }
   }
 
@@ -546,11 +546,11 @@ export class DoorManager {
 
         // Wait for keypress then show info
         const showInfoOnce = (data: string) => {
-          this.socket.off('terminal-input', showInfoOnce);
+          this.socket.off('command', showInfoOnce);
           this.state.mode = 'info';
           this.showInfo();
         };
-        this.socket.on('terminal-input', showInfoOnce);
+        this.socket.on('command', showInfoOnce);
       } else {
         throw new Error('Could not find uploaded door in archive');
       }
@@ -560,11 +560,11 @@ export class DoorManager {
       this.socket.emit('ansi-output', 'Press any key to return to door list...\r\n');
 
       const returnToList = (data: string) => {
-        this.socket.off('terminal-input', returnToList);
+        this.socket.off('command', returnToList);
         this.state.mode = 'list';
         this.showList();
       };
-      this.socket.on('terminal-input', returnToList);
+      this.socket.on('command', returnToList);
     }
   }
 
@@ -618,10 +618,10 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\r\nPress any key to continue...\r\n');
 
     const continueHandler = (data: string) => {
-      this.socket.off('terminal-input', continueHandler);
+      this.socket.off('command', continueHandler);
       this.showInfo();
     };
-    this.socket.on('terminal-input', continueHandler);
+    this.socket.on('command', continueHandler);
   }
 
   /**
@@ -654,10 +654,10 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\r\nPress any key to continue...\r\n');
 
     const continueHandler = (data: string) => {
-      this.socket.off('terminal-input', continueHandler);
+      this.socket.off('command', continueHandler);
       this.showInfo();
     };
-    this.socket.on('terminal-input', continueHandler);
+    this.socket.on('command', continueHandler);
   }
 
   /**
@@ -667,8 +667,8 @@ export class DoorManager {
     console.log('[Door Manager] setupInputHandlers() called');
 
     // Check how many listeners are already registered
-    const listenerCount = this.socket.listenerCount('terminal-input');
-    console.log('[Door Manager] Existing terminal-input listeners:', listenerCount);
+    const commandListenerCount = this.socket.listenerCount('command');
+    console.log('[Door Manager] Existing command listeners:', commandListenerCount);
 
     // Store the handler so we can remove it later
     this.inputHandler = (data: string) => {
@@ -677,11 +677,11 @@ export class DoorManager {
       this.handleInput(data);
     };
 
-    console.log('[Door Manager] Registering terminal-input listener...');
-    this.socket.on('terminal-input', this.inputHandler);
+    console.log('[Door Manager] Registering command listener...');
+    this.socket.on('command', this.inputHandler);
 
-    const newListenerCount = this.socket.listenerCount('terminal-input');
-    console.log('[Door Manager] terminal-input listeners after adding:', newListenerCount);
+    const newListenerCount = this.socket.listenerCount('command');
+    console.log('[Door Manager] command listeners after adding:', newListenerCount);
 
     // Handle file uploads from frontend
     this.socket.on('file-uploaded', (data: { filename: string; originalname: string; size: number }) => {
@@ -899,8 +899,8 @@ export class DoorManager {
 
     // Remove input handler
     if (this.inputHandler) {
-      console.log('[Door Manager] Removing input handler');
-      this.socket.off('terminal-input', this.inputHandler);
+      console.log('[Door Manager] Removing command listener');
+      this.socket.off('command', this.inputHandler);
       this.inputHandler = undefined;
     }
 
@@ -934,9 +934,9 @@ export async function executeDoor(socket: Socket, session?: any): Promise<void> 
 
     // Wait for keypress then exit
     const exitHandler = () => {
-      socket.off('terminal-input', exitHandler);
+      socket.off('command', exitHandler);
       socket.emit('door-exit');
     };
-    socket.once('terminal-input', exitHandler);
+    socket.once('command', exitHandler);
   }
 }
