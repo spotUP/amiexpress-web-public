@@ -5,6 +5,10 @@
  * Based on express.e door system.
  */
 
+import { spawn } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
+
 // Types (will be provided by index.ts)
 interface BBSSession {
   currentConf?: number;
@@ -148,16 +152,12 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
       await executeWebDoor(socket, session, door, doorSession);
       break;
     case 'native':
-      // NOTE: Native Amiga door execution not applicable for web-based BBS
-      // express.e door execution uses Amiga-specific system calls
-      socket.emit('ansi-output', '\r\n\x1b[31mNative Amiga doors not supported in web version.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[33mUse web-based doors instead.\x1b[0m\r\n\r\n');
+      // Web version: Execute Node.js scripts instead of Amiga native executables
+      await executeNativeDoor(socket, session, door, doorSession);
       break;
     case 'script':
-      // NOTE: AREXX script execution not applicable for web-based BBS
-      // express.e uses AREXX which is Amiga-specific
-      socket.emit('ansi-output', '\r\n\x1b[31mAREXX script doors not supported in web version.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[33mUse web-based doors instead.\x1b[0m\r\n\r\n');
+      // Web version: Execute shell scripts instead of AREXX
+      await executeScriptDoor(socket, session, door, doorSession);
       break;
     default:
       socket.emit('ansi-output', 'Unknown door type.\r\n');
@@ -247,6 +247,217 @@ async function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, 
   }
 
   socket.emit('ansi-output', '\r\n\x1b[32mCheckUP completed. Press any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+}
+
+/**
+ * Execute native (Node.js) door
+ * Web version: Executes Node.js scripts instead of Amiga native executables
+ * express.e equivalent: SystemTagList() execution
+ */
+async function executeNativeDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
+  console.log(`🚪 [DOOR] Executing native door: ${door.name} (${door.path})`);
+
+  // Check if door file exists
+  const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
+
+  if (!fs.existsSync(doorPath)) {
+    socket.emit('ansi-output', `\r\n\x1b[31mError: Door file not found: ${door.path}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    doorSession.status = 'error';
+    return;
+  }
+
+  // Prepare environment variables for door script
+  const env = {
+    ...process.env,
+    BBS_USERNAME: session.user?.username || 'Guest',
+    BBS_USER_ID: session.user?.id || '',
+    BBS_SECURITY_LEVEL: session.user?.secLevel?.toString() || '0',
+    BBS_DOOR_ID: door.id,
+    BBS_DOOR_NAME: door.name,
+    BBS_NODE: '1' // Node number for multi-node support
+  };
+
+  // Execute Node.js script
+  socket.emit('ansi-output', `\r\n\x1b[36mLaunching ${door.name}...\x1b[0m\r\n\r\n`);
+
+  try {
+    const doorProcess = spawn('node', [doorPath, ...(door.parameters || [])], {
+      env,
+      cwd: path.dirname(doorPath)
+    });
+
+    // Capture stdout and send to user
+    doorProcess.stdout.on('data', (data: Buffer) => {
+      const output = data.toString();
+      socket.emit('ansi-output', output);
+
+      // Store in door session history
+      if (!doorSession.output) doorSession.output = [];
+      doorSession.output.push(output);
+    });
+
+    // Capture stderr
+    doorProcess.stderr.on('data', (data: Buffer) => {
+      const error = data.toString();
+      console.error(`[DOOR ${door.id}] Error:`, error);
+      socket.emit('ansi-output', `\x1b[31m${error}\x1b[0m`);
+    });
+
+    // Wait for door to complete
+    await new Promise<void>((resolve, reject) => {
+      doorProcess.on('close', (code: number) => {
+        console.log(`[DOOR ${door.id}] Exited with code ${code}`);
+
+        if (code === 0) {
+          socket.emit('ansi-output', `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          resolve();
+        } else {
+          socket.emit('ansi-output', `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          doorSession.status = 'error';
+          resolve(); // Still resolve to continue
+        }
+      });
+
+      doorProcess.on('error', (err: Error) => {
+        console.error(`[DOOR ${door.id}] Spawn error:`, err);
+        socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${err.message}\x1b[0m\r\n`);
+        doorSession.status = 'error';
+        reject(err);
+      });
+
+      // Timeout after 10 minutes
+      setTimeout(() => {
+        doorProcess.kill();
+        socket.emit('ansi-output', '\r\n\x1b[31mDoor execution timeout (10 minutes).\x1b[0m\r\n');
+        doorSession.status = 'error';
+        resolve();
+      }, 600000);
+    });
+
+  } catch (error: any) {
+    console.error(`[DOOR ${door.id}] Execution error:`, error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+    doorSession.status = 'error';
+  }
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+}
+
+/**
+ * Execute script door (shell script)
+ * Web version: Executes shell scripts instead of AREXX
+ * express.e equivalent: Execute() AREXX command
+ */
+async function executeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
+  console.log(`🚪 [DOOR] Executing script door: ${door.name} (${door.path})`);
+
+  // Check if door script exists
+  const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
+
+  if (!fs.existsSync(doorPath)) {
+    socket.emit('ansi-output', `\r\n\x1b[31mError: Script not found: ${door.path}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    doorSession.status = 'error';
+    return;
+  }
+
+  // Prepare environment variables for script
+  const env = {
+    ...process.env,
+    BBS_USERNAME: session.user?.username || 'Guest',
+    BBS_USER_ID: session.user?.id || '',
+    BBS_SECURITY_LEVEL: session.user?.secLevel?.toString() || '0',
+    BBS_DOOR_ID: door.id,
+    BBS_DOOR_NAME: door.name,
+    BBS_NODE: '1'
+  };
+
+  // Execute shell script
+  socket.emit('ansi-output', `\r\n\x1b[36mLaunching ${door.name}...\x1b[0m\r\n\r\n`);
+
+  try {
+    // Determine shell based on script extension
+    const ext = path.extname(doorPath).toLowerCase();
+    let command: string;
+    let args: string[];
+
+    if (ext === '.sh' || ext === '.bash') {
+      command = 'bash';
+      args = [doorPath, ...(door.parameters || [])];
+    } else if (ext === '.py' || ext === '.python') {
+      command = 'python3';
+      args = [doorPath, ...(door.parameters || [])];
+    } else {
+      // Generic executable
+      command = doorPath;
+      args = door.parameters || [];
+    }
+
+    const doorProcess = spawn(command, args, {
+      env,
+      cwd: path.dirname(doorPath)
+    });
+
+    // Capture stdout and send to user
+    doorProcess.stdout.on('data', (data: Buffer) => {
+      const output = data.toString();
+      socket.emit('ansi-output', output);
+
+      // Store in door session history
+      if (!doorSession.output) doorSession.output = [];
+      doorSession.output.push(output);
+    });
+
+    // Capture stderr
+    doorProcess.stderr.on('data', (data: Buffer) => {
+      const error = data.toString();
+      console.error(`[DOOR ${door.id}] Error:`, error);
+      socket.emit('ansi-output', `\x1b[31m${error}\x1b[0m`);
+    });
+
+    // Wait for door to complete
+    await new Promise<void>((resolve, reject) => {
+      doorProcess.on('close', (code: number) => {
+        console.log(`[DOOR ${door.id}] Exited with code ${code}`);
+
+        if (code === 0) {
+          socket.emit('ansi-output', `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          resolve();
+        } else {
+          socket.emit('ansi-output', `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          doorSession.status = 'error';
+          resolve(); // Still resolve to continue
+        }
+      });
+
+      doorProcess.on('error', (err: Error) => {
+        console.error(`[DOOR ${door.id}] Spawn error:`, err);
+        socket.emit('ansi-output', `\r\n\x1b[31mError executing script: ${err.message}\x1b[0m\r\n`);
+        doorSession.status = 'error';
+        reject(err);
+      });
+
+      // Timeout after 10 minutes
+      setTimeout(() => {
+        doorProcess.kill();
+        socket.emit('ansi-output', '\r\n\x1b[31mScript execution timeout (10 minutes).\x1b[0m\r\n');
+        doorSession.status = 'error';
+        resolve();
+      }, 600000);
+    });
+
+  } catch (error: any) {
+    console.error(`[DOOR ${door.id}] Execution error:`, error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+    doorSession.status = 'error';
+  }
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
