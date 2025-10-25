@@ -15,6 +15,7 @@ import { parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../u
 import { FileFlagManager } from '../utils/file-flag.util';
 import { ParamsUtil } from '../utils/params.util';
 import { config } from '../config';
+import { getConferenceDir } from '../utils/file-hold.util';
 
 /**
  * Display file list for a conference
@@ -137,7 +138,7 @@ export class FileListingHandler {
     maxDirs: number
   ): Promise<void> {
     const bbsDataPath = config.get('dataDir');
-    const conferencePath = path.join(bbsDataPath, `Conf${String(session.currentConf).padStart(2, '0')}`);
+    const conferencePath = getConferenceDir(session.currentConf, bbsDataPath);
 
     let lineCount = 0;
     const userLineLen = session.user?.pageLength || 23;
@@ -242,7 +243,7 @@ export class FileListingHandler {
   private static async getMaxDirs(confNum: number, bbsDataPath: string): Promise<number> {
     // TODO: Read from conference config or scan for DIR files
     // For now, return a default value
-    const conferencePath = path.join(bbsDataPath, `Conf${String(confNum).padStart(2, '0')}`);
+    const conferencePath = getConferenceDir(confNum, bbsDataPath);
 
     // Scan for DIR files (DIR1, DIR2, DIR3, ...)
     let maxDirs = 0;
