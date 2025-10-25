@@ -14,14 +14,25 @@ export class AmiExpressLibrary {
   private inputQueue: string[] = [];
 
   // AmiExpress library function offsets
-  // These are custom BBS functions, not standard AmigaDOS
-  private readonly AMIEXPRESS_BASE = 0xff0000;
-  private readonly FUNC_AEPUTS = 0xff0000;      // aePuts() - Write string to terminal
-  private readonly FUNC_AEGETS = 0xff0002;      // aeGets() - Read line from terminal
-  private readonly FUNC_AEPUTCH = 0xff0004;     // aePutCh() - Write single character
-  private readonly FUNC_AEGETCH = 0xff0006;     // aeGetCh() - Read single character
-  private readonly FUNC_AECLEARSCREEN = 0xff0008; // Clear screen
-  private readonly FUNC_AEGETUSER = 0xff000a;   // Get user information
+  // These are the ACTUAL addresses that the trap handler receives when doors call library functions
+  // ExecBase is at 0xFF8000, so negative offsets from there result in these addresses
+  //
+  // From test trace: Door called JSR -552(A6) with A6=0xFF8000 → 0xFF7DD8
+  // So -552 (0xFFFFFDD8) with base 0xFF8000 = 0xFF7DD8
+  //
+  // Standard Amiga library convention: functions at multiples of 6
+  // Let's map common offsets (we'll discover the actual ones through testing)
+
+  private readonly EXEC_BASE = 0xFF8000;  // ExecBase address we use
+
+  // CRITICAL: Map actual addresses, not offsets!
+  // When door calls JSR -552(A6), trap handler receives 0xFF8000 - 552 = 0xFF7DD8
+  private readonly FUNC_AEPUTS = 0xFF7DD8;        // Offset -552 - Output string (discovered in test!)
+  private readonly FUNC_AEGETS = 0xFF7DCE;        // Offset -562 - Input line (guess)
+  private readonly FUNC_AEPUTCH = 0xFF7DC4;       // Offset -572 - Output char (guess)
+  private readonly FUNC_AEGETCH = 0xFF7DBA;       // Offset -582 - Input char (guess)
+  private readonly FUNC_AECLEARSCREEN = 0xFF7DB0; // Offset -592 - Clear screen (guess)
+  private readonly FUNC_AEGETUSER = 0xFF7DA6;     // Offset -602 - Get user info (guess)
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
@@ -75,18 +86,34 @@ export class AmiExpressLibrary {
 
   /**
    * aePuts() - Write string to terminal
-   * A0 = Pointer to null-terminated string
+   * Check A0, A1, A2 to find the string pointer (calling convention may vary)
    * Returns: void
    */
   private aePuts(): boolean {
-    const stringPtr = this.emulator.getRegister(CPURegister.A0);
+    const a0 = this.emulator.getRegister(CPURegister.A0);
+    const a1 = this.emulator.getRegister(CPURegister.A1);
+    const a2 = this.emulator.getRegister(CPURegister.A2);
     const stackPtr = this.emulator.getRegister(CPURegister.A7); // SP
-    console.log(`[AmiExpress] aePuts() called, string at: 0x${stringPtr.toString(16)}, SP=0x${stackPtr.toString(16)}`);
 
-    if (stringPtr === 0) {
-      console.warn('[AmiExpress] aePuts() called with null pointer');
-      return true;
+    console.log(`[AmiExpress] aePuts() called:`);
+    console.log(`  A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, A2=0x${a2.toString(16)}, SP=0x${stackPtr.toString(16)}`);
+
+    // Try A1 first (LEA instruction loads into A1 before call)
+    let stringPtr = a1;
+    if (stringPtr === 0 || stringPtr < 0x1000) {
+      // Try A0
+      stringPtr = a0;
+      if (stringPtr === 0 || stringPtr < 0x1000) {
+        // Try A2
+        stringPtr = a2;
+        if (stringPtr === 0 || stringPtr < 0x1000) {
+          console.warn('[AmiExpress] aePuts() called with null/invalid pointer in A0/A1/A2');
+          return true;
+        }
+      }
     }
+
+    console.log(`[AmiExpress] Using string pointer: 0x${stringPtr.toString(16)}`);
 
     try {
       // DEBUG: Read first 16 bytes from memory to see what's there
@@ -264,43 +291,49 @@ export class AmiExpressLibrary {
   private readString(address: number, maxLength: number = 1024): string {
     if (address === 0) return '';
 
-    // Check if this is a BSTR (BCPL string) - first byte is length
-    const firstByte = this.emulator.readMemory(address);
+    // ALWAYS try C-style null-terminated string first (most common in door code)
+    let result = '';
+    let offset = 0;
+    let hasNullTerminator = false;
 
-    // If first byte looks like a length (1-255), try reading as BSTR
+    while (offset < maxLength) {
+      const byte = this.emulator.readMemory(address + offset);
+      if (byte === 0) {
+        hasNullTerminator = true;
+        break;
+      }
+      // Accept printable characters and common whitespace
+      if (byte >= 32 || byte === 10 || byte === 13 || byte === 9) {
+        result += String.fromCharCode(byte);
+      }
+      offset++;
+    }
+
+    // If we found a null-terminated string, return it
+    if (result.length > 0 && hasNullTerminator) {
+      console.log(`[AmiExpress] Read C-string: "${result}"`);
+      return result;
+    }
+
+    // If C-string didn't work, try BSTR (BCPL string - first byte is length)
+    const firstByte = this.emulator.readMemory(address);
     if (firstByte > 0 && firstByte < 128) {
       const bstrLength = firstByte;
       let bstrResult = '';
       for (let i = 0; i < bstrLength && i < maxLength; i++) {
         const byte = this.emulator.readMemory(address + 1 + i);
         if (byte === 0) break;
-        bstrResult += String.fromCharCode(byte);
+        if (byte >= 32 || byte === 10 || byte === 13 || byte === 9) {
+          bstrResult += String.fromCharCode(byte);
+        }
       }
-      // If we got a valid string, return it
       if (bstrResult.length > 0) {
         console.log(`[AmiExpress] Read BSTR: length=${bstrLength}, content="${bstrResult}"`);
         return bstrResult;
       }
     }
 
-    // Otherwise read as C-style null-terminated string
-    let result = '';
-    let offset = 0;
-
-    while (offset < maxLength) {
-      const byte = this.emulator.readMemory(address + offset);
-      if (byte === 0) break;
-      // Skip non-printable characters except newline/carriage return
-      if (byte >= 32 || byte === 10 || byte === 13) {
-        result += String.fromCharCode(byte);
-      }
-      offset++;
-    }
-
-    if (result.length > 0) {
-      console.log(`[AmiExpress] Read C-string: "${result}"`);
-    }
-
+    // Return whatever we got (may be empty)
     return result;
   }
 }
