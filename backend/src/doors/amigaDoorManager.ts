@@ -340,22 +340,61 @@ export class AmigaDoorManager {
    */
   private listLhaContents(archivePath: string): string[] {
     try {
-      const output = execSync(`lha -l "${archivePath}"`, { encoding: 'utf8' });
-      const lines = output.split('\n');
-      const files: string[] = [];
+      // Try command-line lha first
+      try {
+        const output = execSync(`lha -l "${archivePath}"`, { encoding: 'utf8' });
+        console.log('[LHA] Command output:', output.substring(0, 500));
+        const lines = output.split('\n');
+        const files: string[] = [];
 
-      for (const line of lines) {
-        if (line.match(/^\[[\w-]+\]/)) {
-          const parts = line.split(/\s+/);
-          if (parts.length >= 8) {
-            const filename = parts.slice(7).join(' ');
-            files.push(filename);
+        for (const line of lines) {
+          // LHA output format varies, try multiple patterns
+          if (line.match(/^\[[\w-]+\]/)) {
+            const parts = line.split(/\s+/);
+            if (parts.length >= 8) {
+              const filename = parts.slice(7).join(' ');
+              files.push(filename);
+            }
           }
         }
+
+        if (files.length > 0) {
+          console.log(`[LHA] Found ${files.length} files via command`);
+          return files;
+        }
+      } catch (cmdError) {
+        console.log('[LHA] Command failed, trying extraction method:', (cmdError as Error).message);
       }
-      return files;
+
+      // Fallback: Extract to temp directory and list files
+      const tempDir = path.join(__dirname, '../../temp/lha-list', crypto.randomBytes(8).toString('hex'));
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      try {
+        console.log(`[LHA] Extracting to temp: ${tempDir}`);
+        execSync(`lha x "${archivePath}"`, { cwd: tempDir, encoding: 'utf8' });
+
+        // List all extracted files recursively
+        const files = this.getFilesRecursive(tempDir);
+        const relativeFiles = files.map(f => path.relative(tempDir, f));
+
+        console.log(`[LHA] Extracted ${relativeFiles.length} files`);
+
+        // Cleanup
+        fs.rmSync(tempDir, { recursive: true, force: true });
+
+        return relativeFiles;
+      } catch (extractError) {
+        console.error('[LHA] Extraction failed:', (extractError as Error).message);
+        // Cleanup on error
+        if (fs.existsSync(tempDir)) {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+      }
+
+      return [];
     } catch (error) {
-      console.error('Error listing LHA contents:', error);
+      console.error('[LHA] Complete failure:', error);
       return [];
     }
   }
