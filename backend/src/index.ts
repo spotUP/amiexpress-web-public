@@ -959,6 +959,12 @@ io.on('connection', async (socket) => {
   socket.on('file-uploaded', async (data: { filename: string; originalname: string; size: number; path?: string }) => {
     console.log('File uploaded event received:', data);
 
+    // Check if Door Manager is active - it has its own file-uploaded handler
+    if (session.inDoorManager) {
+      console.log('[file-uploaded] Door Manager is active, skipping normal file upload handler');
+      return;
+    }
+
     if (!session.tempData?.uploadMode || !session.tempData?.fileArea) {
       socket.emit('ansi-output', '\r\n\x1b[31mError: Upload session invalid\x1b[0m\r\n');
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
