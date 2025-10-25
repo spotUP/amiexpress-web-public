@@ -997,8 +997,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  // Handle file upload state (cancel on any key press)
+  // Handle file upload state
   if (session.subState === LoggedOnSubState.FILES_UPLOAD) {
+    // In web upload mode, ignore key presses - wait for file-uploaded event
+    // User is interacting with browser file picker, not terminal
+    if (session.tempData?.webUploadMode) {
+      console.log('📤 In web upload mode - ignoring key press (waiting for file-uploaded event)');
+      return;
+    }
+
+    // In terminal mode, any key press cancels upload
     console.log('📤 In file upload state - canceling upload');
     socket.emit('ansi-output', '\r\n\x1b[33mUpload canceled\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
