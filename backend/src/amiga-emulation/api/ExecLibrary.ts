@@ -99,7 +99,13 @@ export class ExecLibrary {
     // Read library name from memory
     const name = this.readString(namePtr);
 
+    // Debug: Show exact bytes of library name
+    const nameBytes = [];
+    for (let i = 0; i < name.length; i++) {
+      nameBytes.push(name.charCodeAt(i).toString(16).padStart(2, '0'));
+    }
     console.log(`📚 [exec.library] OpenLibrary(name="${name}", version=${version})`);
+    console.log(`   Library name bytes: [${nameBytes.join(' ')}] length=${name.length}`);
 
     let baseAddress = 0;
 
