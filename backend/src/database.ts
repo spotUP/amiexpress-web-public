@@ -233,22 +233,41 @@ export class Database {
     this.dbPath = path.join(dbDir, dbFile);
 
     console.log('Initializing SQLite database connection...');
-    console.log(`Database path: ${this.dbPath}`);
-
-    // Ensure database directory exists
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-      console.log(`Created database directory: ${dbDir}`);
-    }
+    console.log(`Database directory: ${dbDir}`);
+    console.log(`Database file: ${dbFile}`);
+    console.log(`Full path: ${this.dbPath}`);
 
     try {
+      // Ensure database directory exists
+      if (!fs.existsSync(dbDir)) {
+        console.log(`Creating database directory: ${dbDir}`);
+        fs.mkdirSync(dbDir, { recursive: true });
+        console.log(`✓ Directory created`);
+      } else {
+        console.log(`✓ Directory exists: ${dbDir}`);
+      }
+
+      console.log('Opening SQLite database...');
       this.db = new BetterSqlite3(this.dbPath);
+      console.log('✓ Database opened');
+      
+      console.log('Setting WAL mode...');
       this.db.pragma('journal_mode = WAL');
+      console.log('✓ WAL mode set');
+      
+      console.log('Enabling foreign keys...');
       this.db.pragma('foreign_keys = ON');
+      console.log('✓ Foreign keys enabled');
+      
       this.isConnected = true;
       console.log('✅ Connected to SQLite database');
     } catch (error) {
-      console.error('❌ Failed to connect to SQLite database:', error);
+      console.error('❌ Failed to connect to SQLite database:');
+      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('Error message:', error instanceof Error ? error.message : String(error));
+      if (error instanceof Error && error.stack) {
+        console.error('Stack trace:', error.stack.substring(0, 500));
+      }
       throw error;
     }
   }
@@ -2552,5 +2571,26 @@ export class Database {
   async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {}
 }
 
-// Export singleton instance
-export const db = new Database();
+// Lazy singleton - initialized on first access
+class DatabaseSingleton {
+  private static instance: Database | null = null;
+
+  static getInstance(): Database {
+    if (!this.instance) {
+      this.instance = new Database();
+    }
+    return this.instance;
+  }
+}
+
+// Export lazy-initialized singleton
+export const db = new Proxy({} as Database, {
+  get(target, prop) {
+    const instance = DatabaseSingleton.getInstance();
+    const value = (instance as any)[prop];
+    if (typeof value === 'function') {
+      return value.bind(instance);
+    }
+    return value;
+  }
+});
