@@ -1,0 +1,14 @@
+Conference Menu
+===============
+
+Available Commands:
+[R]ead Messages
+[P]ost Message
+[F]ile Areas
+[L]ist Files
+[U]pload Files
+[D]ownload Files
+[B]ulletins
+[Q]uit to Main Menu
+
+Command:
