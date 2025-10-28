@@ -1,7 +1,7 @@
 // Load environment variables FIRST
 require('dotenv').config({ override: true });
 
-import Database from 'better-sqlite3';
+import BetterSqlite3 from 'better-sqlite3';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
@@ -222,7 +222,7 @@ function fieldToColumn(field: string): string {
 }
 
 export class Database {
-  private db?: Database.Database;
+  private db?: BetterSqlite3.Database;
   private isConnected: boolean = false;
   private dbPath: string;
 
@@ -242,7 +242,7 @@ export class Database {
     }
 
     try {
-      this.db = new Database(this.dbPath);
+      this.db = new BetterSqlite3(this.dbPath);
       this.db.pragma('journal_mode = WAL');
       this.db.pragma('foreign_keys = ON');
       this.isConnected = true;
