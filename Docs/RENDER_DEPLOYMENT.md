@@ -29,70 +29,100 @@ This guide covers deploying AmiExpress Web to Render.com using SQLite as the dat
 
 ## Prerequisites
 
-1. **Render.com Account**
-   - Sign up at https://render.com
-   - Free tier available for testing
+1. **Render.com Project** ✅
+   - Project: `AmiExpress-Web`
+   - Services already created:
+     - `amiexpress-backend` (Web Service)
+     - `amiexpress-frontend` (Static Site)
 
-2. **GitHub Repository**
-   - Code must be pushed to GitHub
-   - Render.com will auto-deploy from your repo
+2. **GitHub Repository** ✅
+   - Code pushed to GitHub
+   - SQLite migration complete
 
-## Deployment Steps
+## Reconfigure Existing Services for SQLite
 
-### Manual Deployment (Free Method)
+### Step 1: Update Backend Service (amiexpress-backend)
 
-1. **Connect Repository**
-   - Go to https://dashboard.render.com
-   - Click "New +" → "Web Service"
-   - Connect your GitHub repository
-   - Select the `amiexpress-web` repository
+1. **Go to Backend Service**
+   - Dashboard → AmiExpress-Web → amiexpress-backend
+   - Click "Environment" tab
 
-2. **Configure Backend Service**
-   - Name: `amiexpress-backend`
-   - Region: Oregon (or nearest to your users)
-   - Branch: `main`
-   - Root Directory: `backend`
-   - Runtime: Node
-   - Build Command: `npm install`
-   - Start Command: `npm start`
-   - Plan: Starter ($7/month) or Free
+2. **Remove Old PostgreSQL Variables**
+   - Delete: `DATABASE_URL`
+   - Delete: `POSTGRES_URL`
+   - Delete: `POSTGRES_PRISMA_URL`
+   - Delete: any other POSTGRES_* variables
 
-3. **Add Environment Variables**
+3. **Add New SQLite Variables**
    ```
    NODE_ENV=production
    PORT=3001
    DATABASE_DIR=/opt/render/project/src/backend/data
    DATABASE_FILE=amiexpress.db
-   JWT_SECRET=<generate-random-secret>
-   JWT_REFRESH_SECRET=<generate-random-secret>
    ```
 
-4. **Add Persistent Disk**
+4. **Keep/Add These Variables**
+   ```
+   JWT_SECRET=<your-existing-or-new-secret>
+   JWT_REFRESH_SECRET=<your-existing-or-new-secret>
+   ```
+
+5. **Add Persistent Disk** (CRITICAL for SQLite)
+   - Click "Disks" tab
    - Click "Add Disk"
    - Name: `sqlite-data`
    - Mount Path: `/opt/render/project/src/backend/data`
    - Size: 1 GB
-   - This ensures your SQLite database persists across deployments
+   - Click "Save"
 
-5. **Deploy Backend**
-   - Click "Create Web Service"
-   - Wait for build to complete (~2-3 minutes)
-   - Note the service URL (e.g., https://amiexpress-backend.onrender.com)
+6. **Verify Build Settings**
+   - Settings tab → Build & Deploy
+   - Root Directory: `backend`
+   - Build Command: `npm install`
+   - Start Command: `npm start`
 
-6. **Configure Frontend Service**
-   - Click "New +" → "Static Site"
-   - Name: `amiexpress-frontend`
+7. **Trigger Manual Deploy**
+   - Click "Manual Deploy" → "Deploy latest commit"
+   - Or wait for auto-deploy from GitHub push
+
+### Step 2: Update Frontend Service (amiexpress-frontend)
+
+1. **Go to Frontend Service**
+   - Dashboard → AmiExpress-Web → amiexpress-frontend
+   - Click "Environment" tab
+
+2. **Update API URL**
+   ```
+   VITE_API_URL=https://amiexpress-backend.onrender.com
+   ```
+
+3. **Verify Build Settings**
+   - Settings tab → Build & Deploy
    - Build Command: `cd client && npm install && npm run build`
    - Publish Directory: `client/dist`
-   - Add Environment Variable:
+
+4. **Trigger Manual Deploy**
+   - Click "Manual Deploy" → "Deploy latest commit"
+
+### Step 3: Verify Deployment
+
+1. **Check Backend Logs**
+   - amiexpress-backend → Logs tab
+   - Look for:
      ```
-     VITE_API_URL=https://amiexpress-backend.onrender.com
+     ✅ Connected to SQLite database
+     Database path: /opt/render/project/src/backend/data/amiexpress.db
+     ✓ Database initialization completed successfully
+     Server started on port 3001
      ```
 
-7. **Deploy Frontend**
-   - Click "Create Static Site"
-   - Wait for build to complete
-   - Your frontend will be live at https://amiexpress-frontend.onrender.com
+2. **Check Frontend**
+   - Visit https://amiexpress-frontend.onrender.com
+   - Should load the BBS interface
+
+3. **Test Connection**
+   - Try logging in with sysop/sysop
+   - Verify WebSocket connection works
 
 ## Database Management
 
