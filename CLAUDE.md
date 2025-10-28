@@ -144,8 +144,8 @@ console.log('Starting process...');
 ---
 
 ## 🚨 CRITICAL: Database Column Names - ALWAYS USE LOWERCASE 🚨
+**SQLite Notes:**
 
-**PostgreSQL column names are CASE-SENSITIVE when quoted!**
 
 ### Database Column Name Rules:
 
@@ -169,8 +169,8 @@ console.log('Starting process...');
 
 5. **Before writing ANY SQL query:**
    - Check `backend/src/database.ts` for existing column mappings (line ~197)
-   - Test the query in `psql` before adding to code
-   - Remember: PostgreSQL treats `"column"` as case-sensitive, `column` as lowercase
+   - Test queries with SQLite before adding to code
+   - SQLite is case-insensitive for column names
 
 6. **🚨 CRITICAL: UPSERT ON CONFLICT clauses MUST use lowercase:**
    ```sql
@@ -237,7 +237,7 @@ console.log('Starting process...');
 5. **History lesson (why this is critical):**
    - Production had 655 file areas when it should have had 5
    - Each area was duplicated 131 times
-   - Without UNIQUE constraints, PostgreSQL allows unlimited duplicates
+   - Without UNIQUE constraints, databases allow unlimited duplicates
    - This breaks the BBS interface and wastes database space
 
 **NEVER create a table without considering what should be UNIQUE!**
@@ -536,8 +536,8 @@ Copy this and check EVERY item before deploying:
 
 ```
 Production Stack:
-├─ Backend: Render.com (srv-d3naaffdiees73eebd0g)
-│  ├─ PostgreSQL database
+├─ Backend: Render.com
+│  ├─ SQLite database (file-based)
 │  ├─ WebSocket server (Socket.io)
 │  └─ REST API
 │

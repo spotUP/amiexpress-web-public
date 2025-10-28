@@ -1,10 +1,12 @@
 // Load environment variables FIRST
 require('dotenv').config({ override: true });
 
-import { Pool as PoolConstructor } from 'pg';
+import Database from 'better-sqlite3';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // Import types from types.ts
 import type {
@@ -34,7 +36,7 @@ export interface User {
   bytesUpload: number;
   bytesDownload: number;
   ratio: number;
-  ratioType: number; // 0=bytes, 1=bytes+files, 2=files only
+  ratioType: number;
   timeTotal: number;
   timeLimit: number;
   timeUsed: number;
@@ -56,16 +58,15 @@ export interface User {
   availableForChat: boolean;
   quietNode: boolean;
   autoRejoin: number;
-  confAccess: string; // Conference access string (e.g., "XXX_XX_")
+  confAccess: string;
   areaName: string;
   uuCP: boolean;
   topUploadCPS: number;
   topDownloadCPS: number;
   byteLimit: number;
-  // ACS (Access Control System) fields - express.e:8455-8497
-  securityFlags?: string; // String of 'T'/'F'/'?' chars for each permission (87 total)
-  secOverride?: string;   // String of 'T'/'F'/'?' chars to override permissions
-  userFlags: number;      // Bitwise flags (e.g., USER_SCRNCLR)
+  securityFlags?: string;
+  secOverride?: string;
+  userFlags: number;
   created: Date;
   updated: Date;
 }
@@ -113,7 +114,7 @@ export interface FileEntry {
   rating?: number;
   votes?: number;
   status: 'active' | 'held' | 'deleted';
-  checked: 'N' | 'P' | 'F'; // Not checked, Passed, Failed
+  checked: 'N' | 'P' | 'F';
   comment?: string;
 }
 
@@ -139,7 +140,7 @@ export interface Webhook {
   url: string;
   type: 'discord' | 'slack';
   enabled: boolean;
-  triggers: string[]; // Array of trigger names
+  triggers: string[];
   created: Date;
   updated: Date;
 }
@@ -162,7 +163,7 @@ export interface Session {
   relConfNum: number;
   currentConfName: string;
   cmdShortcuts: boolean;
-  tempData?: string; // JSON string
+  tempData?: string;
   created: Date;
   updated: Date;
 }
@@ -188,7 +189,6 @@ export interface SystemLog {
 
 // Helper function to convert camelCase field names to lowercase column names
 function fieldToColumn(field: string): string {
-  // Map of camelCase field names to lowercase column names
   const fieldMap: { [key: string]: string } = {
     'passwordHash': 'passwordhash',
     'secLevel': 'seclevel',
@@ -222,118 +222,40 @@ function fieldToColumn(field: string): string {
 }
 
 export class Database {
-  private pool?: any;
+  private db?: Database.Database;
   private isConnected: boolean = false;
-  private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 10;
-  private reconnectDelay: number = 5000; // 5 seconds
-  private healthCheckInterval?: NodeJS.Timeout;
+  private dbPath: string;
 
   constructor() {
-    // PostgreSQL connection configuration
-    const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+    // SQLite database path
+    const dbDir = process.env.DATABASE_DIR || path.join(process.cwd(), 'data');
+    const dbFile = process.env.DATABASE_FILE || 'amiexpress.db';
+    this.dbPath = path.join(dbDir, dbFile);
 
-    if (!connectionString) {
-      throw new Error('PostgreSQL connection string not found. Please set DATABASE_URL or POSTGRES_URL environment variable.');
+    console.log('Initializing SQLite database connection...');
+    console.log(`Database path: ${this.dbPath}`);
+
+    // Ensure database directory exists
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+      console.log(`Created database directory: ${dbDir}`);
     }
 
-    console.log('Initializing PostgreSQL database connection...');
-
-    // SSL configuration based on environment
-    const sslConfig = process.env.NODE_ENV === 'production'
-      ? { rejectUnauthorized: false }
-      : false; // Explicitly disable SSL in development
-
-    this.pool = new PoolConstructor({
-      connectionString,
-      ssl: sslConfig,
-      max: 20, // Maximum number of clients in the pool
-      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-      connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
-      keepAlive: true, // Keep TCP connection alive
-      keepAliveInitialDelayMillis: 10000, // Start keep-alive after 10 seconds
-    });
-
-    // Handle pool errors - DO NOT CRASH THE SERVER
-    this.pool.on('error', (err: Error) => {
-      console.error('⚠️ PostgreSQL pool error (connection may have dropped):', err.message);
-      this.isConnected = false;
-      // Attempt to reconnect instead of crashing
-      this.attemptReconnection();
-    });
-
-    this.pool.on('connect', () => {
-      console.log('✅ Connected to PostgreSQL database');
+    try {
+      this.db = new Database(this.dbPath);
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('foreign_keys = ON');
       this.isConnected = true;
-      this.reconnectAttempts = 0; // Reset reconnection counter on successful connect
-    });
-
-    this.pool.on('remove', () => {
-      console.log('🔌 Client removed from pool');
-    });
-
-    // Start health check monitoring
-    this.startHealthCheck();
-
-    // Note: Database schema initialization happens via init() method
-    // which must be called explicitly before using the database
+      console.log('✅ Connected to SQLite database');
+    } catch (error) {
+      console.error('❌ Failed to connect to SQLite database:', error);
+      throw error;
+    }
   }
 
   // Public initialization method - must be called before using database
   async init(): Promise<void> {
     await this.initDatabase();
-  }
-
-  // Attempt to reconnect to database
-  private async attemptReconnection(): Promise<void> {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error(`❌ Max reconnection attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
-      return;
-    }
-
-    this.reconnectAttempts++;
-    console.log(`🔄 Attempting database reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-
-    setTimeout(async () => {
-      try {
-        // Try to get a client from the pool
-        const client = await this.pool.connect();
-        await client.query('SELECT 1'); // Test query
-        client.release();
-
-        console.log('✅ Database reconnection successful');
-        this.isConnected = true;
-        this.reconnectAttempts = 0;
-      } catch (error) {
-        console.error(`⚠️ Reconnection attempt ${this.reconnectAttempts} failed:`, error);
-        // Try again
-        this.attemptReconnection();
-      }
-    }, this.reconnectDelay);
-  }
-
-  // Health check to monitor database connection
-  private startHealthCheck(): void {
-    // Check every 30 seconds
-    this.healthCheckInterval = setInterval(async () => {
-      try {
-        const client = await this.pool.connect();
-        await client.query('SELECT 1');
-        client.release();
-
-        if (!this.isConnected) {
-          console.log('✅ Database health check: Connection restored');
-          this.isConnected = true;
-          this.reconnectAttempts = 0;
-        }
-      } catch (error) {
-        if (this.isConnected) {
-          console.error('⚠️ Database health check failed:', error);
-          this.isConnected = false;
-          this.attemptReconnection();
-        }
-      }
-    }, 30000);
   }
 
   // Check if database is connected
@@ -343,21 +265,19 @@ export class Database {
 
   // Generic query method for custom SQL queries
   public async query(sql: string, params: any[] = []): Promise<{ rows: any[] }> {
-    if (!this.pool) {
-      throw new Error('Database pool not initialized');
+    if (!this.db) {
+      throw new Error('Database not initialized');
     }
 
     try {
-      const result = await this.pool.query(sql, params);
-      return { rows: result.rows };
+      const stmt = this.db.prepare(sql);
+      const rows = stmt.all(...params);
+      return { rows };
     } catch (error) {
       console.error('Database query error:', error);
       throw error;
     }
   }
-
-  // SQLite methods removed - now using PostgreSQL only
-
 
   private async initDatabase(): Promise<void> {
     try {
@@ -365,175 +285,61 @@ export class Database {
       await this.createTables();
       console.log('Database tables created successfully');
 
-      // Run migrations to add missing columns to existing tables
       console.log('Running database migrations...');
       await this.runMigrations();
       console.log('Database migrations completed');
 
-      // Initialize default data
       await this.initializeDefaultData();
       console.log('Default data initialized');
     } catch (error) {
       console.error('Failed to initialize database:', error);
-      // Don't throw error - continue with server startup
       console.log('Continuing with server startup despite database initialization error');
     }
   }
 
-  // Run database migrations to add missing columns to existing tables
   private async runMigrations(): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      // CRITICAL: Clean up duplicates BEFORE applying UNIQUE constraints
-      console.log('Cleaning up duplicate data before applying constraints...');
-      await this.cleanupDuplicateConferences();
-      await this.cleanupDuplicateMessageBases();
-      await this.cleanupDuplicateFileAreas();
-      await this.cleanupDuplicateNodeSessions();
-      console.log('✓ Duplicate cleanup completed');
+    if (!this.db) throw new Error('Database not initialized');
 
+    try {
       console.log('Checking for missing columns in users table...');
 
-      // Migration 1: Add availableforchat column if it doesn't exist
-      await client.query(`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS availableforchat BOOLEAN DEFAULT true
-      `);
-      console.log('✓ Ensured availableforchat column exists');
+      // Check and add columns if they don't exist
+      const tableInfo = this.db.prepare('PRAGMA table_info(users)').all() as any[];
+      const columnNames = tableInfo.map(col => col.name);
 
-      // Migration 2: Add quietnode column if it doesn't exist
-      await client.query(`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS quietnode BOOLEAN DEFAULT false
-      `);
-      console.log('✓ Ensured quietnode column exists');
+      if (!columnNames.includes('availableforchat')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN availableforchat INTEGER DEFAULT 1');
+        console.log('✓ Added availableforchat column');
+      }
 
-      // Migration 3: Add autorejoin column if it doesn't exist
-      await client.query(`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS autorejoin INTEGER DEFAULT 1
-      `);
-      console.log('✓ Ensured autorejoin column exists');
+      if (!columnNames.includes('quietnode')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN quietnode INTEGER DEFAULT 0');
+        console.log('✓ Added quietnode column');
+      }
 
-      // Migration 3.5: Add fontpreference column if it doesn't exist
-      await client.query(`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS fontpreference TEXT DEFAULT 'mosoul'
-      `);
-      console.log('✓ Ensured fontpreference column exists');
+      if (!columnNames.includes('autorejoin')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN autorejoin INTEGER DEFAULT 1');
+        console.log('✓ Added autorejoin column');
+      }
 
-      // Migration 4: Add UNIQUE constraint to conferences.name
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'conferences_name_key'
-          ) THEN
-            ALTER TABLE conferences ADD CONSTRAINT conferences_name_key UNIQUE (name);
-          END IF;
-        END $$;
-      `);
-      console.log('✓ Ensured UNIQUE constraint on conferences.name');
-
-      // Migration 5: Add UNIQUE constraint to message_bases(name, conferenceid)
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'message_bases_name_conferenceid_key'
-          ) THEN
-            ALTER TABLE message_bases ADD CONSTRAINT message_bases_name_conferenceid_key UNIQUE (name, conferenceid);
-          END IF;
-        END $$;
-      `);
-      console.log('✓ Ensured UNIQUE constraint on message_bases(name, conferenceid)');
-
-      // Migration 6: Add UNIQUE constraint to file_areas(name, conferenceid)
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'file_areas_name_conferenceid_key'
-          ) THEN
-            ALTER TABLE file_areas ADD CONSTRAINT file_areas_name_conferenceid_key UNIQUE (name, conferenceid);
-          END IF;
-        END $$;
-      `);
-      console.log('✓ Ensured UNIQUE constraint on file_areas(name, conferenceid)');
-
-      // Migration 7: Add UNIQUE constraint to file_entries(filename, areaid)
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'file_entries_filename_areaid_key'
-          ) THEN
-            ALTER TABLE file_entries ADD CONSTRAINT file_entries_filename_areaid_key UNIQUE (filename, areaid);
-          END IF;
-        END $$;
-      `);
-      console.log('✓ Ensured UNIQUE constraint on file_entries(filename, areaid)');
-
-      // Migration 8: Add UNIQUE constraint to node_sessions(nodeid)
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'node_sessions_nodeid_key'
-          ) THEN
-            ALTER TABLE node_sessions ADD CONSTRAINT node_sessions_nodeid_key UNIQUE (nodeid);
-          END IF;
-        END $$;
-      `);
-      console.log('✓ Ensured UNIQUE constraint on node_sessions(nodeid)');
-
-      // Migration 9: Add UNIQUE constraint to webhooks(name)
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'webhooks_name_key'
-          ) THEN
-            ALTER TABLE webhooks ADD CONSTRAINT webhooks_name_key UNIQUE (name);
-          END IF;
-        END $$;
-      `);
-      console.log('✓ Ensured UNIQUE constraint on webhooks(name)');
-
-      // Migration 10: Add UNIQUE constraint to bulletins(filename, conferenceid)
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'bulletins_filename_conferenceid_key'
-          ) THEN
-            ALTER TABLE bulletins ADD CONSTRAINT bulletins_filename_conferenceid_key UNIQUE (filename, conferenceid);
-          END IF;
-        END $$;
-      `);
-      console.log('✓ Ensured UNIQUE constraint on bulletins(filename, conferenceid)');
+      if (!columnNames.includes('fontpreference')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN fontpreference TEXT DEFAULT \'mosoul\'');
+        console.log('✓ Added fontpreference column');
+      }
 
       console.log('All migrations completed successfully');
     } catch (error) {
       console.error('Error running migrations:', error);
       throw error;
-    } finally {
-      client.release();
     }
   }
 
   private async createTables(): Promise<void> {
-    const client = await this.pool.connect();
+    if (!this.db) throw new Error('Database not initialized');
+
     try {
-      // Users table - 1:1 with AmiExpress account editing fields
-      await client.query(`
+      // Users table
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
           username TEXT UNIQUE NOT NULL,
@@ -545,8 +351,8 @@ export class Database {
           seclevel INTEGER DEFAULT 10,
           uploads INTEGER DEFAULT 0,
           downloads INTEGER DEFAULT 0,
-          bytesupload BIGINT DEFAULT 0,
-          bytesdownload BIGINT DEFAULT 0,
+          bytesupload INTEGER DEFAULT 0,
+          bytesdownload INTEGER DEFAULT 0,
           ratio INTEGER DEFAULT 0,
           ratiotype INTEGER DEFAULT 0,
           timetotal INTEGER DEFAULT 0,
@@ -554,83 +360,83 @@ export class Database {
           timeused INTEGER DEFAULT 0,
           chatlimit INTEGER DEFAULT 0,
           chatused INTEGER DEFAULT 0,
-          lastlogin TIMESTAMPTZ,
-          firstlogin TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          lastlogin INTEGER,
+          firstlogin INTEGER DEFAULT (strftime('%s', 'now')),
           calls INTEGER DEFAULT 0,
           callstoday INTEGER DEFAULT 0,
-          newuser BOOLEAN DEFAULT true,
-          expert BOOLEAN DEFAULT false,
-          ansi BOOLEAN DEFAULT true,
+          newuser INTEGER DEFAULT 1,
+          expert INTEGER DEFAULT 0,
+          ansi INTEGER DEFAULT 1,
           linesperscreen INTEGER DEFAULT 23,
           computer TEXT,
           screentype TEXT DEFAULT 'Amiga Ansi',
           protocol TEXT DEFAULT '/X Zmodem',
           editor TEXT DEFAULT 'Prompt',
           zoomtype TEXT DEFAULT 'QWK',
-          availableforchat BOOLEAN DEFAULT true,
-          quietnode BOOLEAN DEFAULT false,
+          availableforchat INTEGER DEFAULT 1,
+          quietnode INTEGER DEFAULT 0,
           autorejoin INTEGER DEFAULT 1,
           confaccess TEXT DEFAULT 'XXX',
           areaname TEXT DEFAULT 'Standard',
-          uucp BOOLEAN DEFAULT false,
+          uucp INTEGER DEFAULT 0,
           topuploadcps INTEGER DEFAULT 0,
           topdownloadcps INTEGER DEFAULT 0,
-          bytelimit BIGINT DEFAULT 0,
+          bytelimit INTEGER DEFAULT 0,
           securityflags TEXT DEFAULT NULL,
           secoverride TEXT DEFAULT NULL,
           userflags INTEGER DEFAULT 0,
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
       // Conferences table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS conferences (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL UNIQUE,
           description TEXT,
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
       // Message bases table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS message_bases (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           conferenceid INTEGER NOT NULL REFERENCES conferences(id),
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          updated INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE(name, conferenceid)
         )
       `);
 
-      // Messages table - supports threading and private messages
-      await client.query(`
+      // Messages table
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS messages (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           subject TEXT NOT NULL,
           body TEXT NOT NULL,
           author TEXT NOT NULL,
-          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          timestamp INTEGER DEFAULT (strftime('%s', 'now')),
           conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           messagebaseid INTEGER NOT NULL REFERENCES message_bases(id),
-          isprivate BOOLEAN DEFAULT false,
+          isprivate INTEGER DEFAULT 0,
           touser TEXT,
           parentid INTEGER,
-          attachments JSONB,
-          edited BOOLEAN DEFAULT false,
+          attachments TEXT,
+          edited INTEGER DEFAULT 0,
           editedby TEXT,
-          editedat TIMESTAMPTZ
+          editedat INTEGER
         )
       `);
 
       // File areas table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS file_areas (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           description TEXT,
           path TEXT NOT NULL,
@@ -638,21 +444,21 @@ export class Database {
           maxfiles INTEGER DEFAULT 100,
           uploadaccess INTEGER DEFAULT 10,
           downloadaccess INTEGER DEFAULT 1,
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          updated INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE(name, conferenceid)
         )
       `);
 
       // File entries table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS file_entries (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           filename TEXT NOT NULL,
           description TEXT,
-          size BIGINT NOT NULL,
+          size INTEGER NOT NULL,
           uploader TEXT NOT NULL,
-          uploaddate TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          uploaddate INTEGER DEFAULT (strftime('%s', 'now')),
           downloads INTEGER DEFAULT 0,
           areaid INTEGER NOT NULL REFERENCES file_areas(id),
           fileiddiz TEXT,
@@ -665,8 +471,8 @@ export class Database {
         )
       `);
 
-      // Sessions table for persistence
-      await client.query(`
+      // Sessions table
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS sessions (
           id TEXT PRIMARY KEY,
           userid TEXT REFERENCES users(id),
@@ -676,278 +482,197 @@ export class Database {
           currentconf INTEGER DEFAULT 0,
           currentmsgbase INTEGER DEFAULT 0,
           timeremaining INTEGER DEFAULT 60,
-          lastactivity TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          lastactivity INTEGER DEFAULT (strftime('%s', 'now')),
           confrjoin INTEGER DEFAULT 1,
           msgbaserjoin INTEGER DEFAULT 1,
           commandbuffer TEXT DEFAULT '',
-          menupause BOOLEAN DEFAULT true,
+          menupause INTEGER DEFAULT 1,
           inputbuffer TEXT DEFAULT '',
           relconfnum INTEGER DEFAULT 0,
           currentconfname TEXT DEFAULT 'Unknown',
-          cmdshortcuts BOOLEAN DEFAULT false,
-          tempdata JSONB,
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          cmdshortcuts INTEGER DEFAULT 0,
+          tempdata TEXT,
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
       // Bulletins table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS bulletins (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           conferenceid INTEGER NOT NULL REFERENCES conferences(id),
           filename TEXT NOT NULL,
           title TEXT NOT NULL,
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          updated INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE(filename, conferenceid)
         )
       `);
 
-      // Online messages table (OLM - Online Message system)
-      await client.query(`
+      // Online messages table
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS online_messages (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           from_user_id TEXT NOT NULL REFERENCES users(id),
           to_user_id TEXT NOT NULL REFERENCES users(id),
           message TEXT NOT NULL,
-          delivered BOOLEAN DEFAULT FALSE,
-          read BOOLEAN DEFAULT FALSE,
+          delivered INTEGER DEFAULT 0,
+          read INTEGER DEFAULT 0,
           from_username TEXT NOT NULL,
           to_username TEXT NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          delivered_at TIMESTAMPTZ,
-          read_at TIMESTAMPTZ
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          delivered_at INTEGER,
+          read_at INTEGER
         )
       `);
 
-      // Create index for efficient message lookups
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_online_messages_to_user
-        ON online_messages(to_user_id, delivered, read);
-      `);
-
-      // Chat sessions table (Internode chat system)
-      await client.query(`
+      // Chat sessions table
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS chat_sessions (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           session_id TEXT UNIQUE NOT NULL,
           initiator_id TEXT NOT NULL REFERENCES users(id),
           recipient_id TEXT NOT NULL REFERENCES users(id),
           initiator_username TEXT NOT NULL,
           recipient_username TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'requesting',
-          started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          ended_at TIMESTAMPTZ,
+          started_at INTEGER DEFAULT (strftime('%s', 'now')),
+          ended_at INTEGER,
           initiator_socket TEXT NOT NULL,
           recipient_socket TEXT NOT NULL,
           message_count INTEGER DEFAULT 0,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
-      // Create indexes for chat sessions
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_chat_sessions_status
-        ON chat_sessions(status);
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_chat_sessions_users
-        ON chat_sessions(initiator_id, recipient_id);
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_chat_sessions_active
-        ON chat_sessions(status, started_at) WHERE status = 'active';
-      `);
-
       // Chat messages table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS chat_messages (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           session_id TEXT NOT NULL,
           sender_id TEXT NOT NULL REFERENCES users(id),
           sender_username TEXT NOT NULL,
           message TEXT NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT fk_chat_session
-            FOREIGN KEY (session_id)
-            REFERENCES chat_sessions(session_id)
-            ON DELETE CASCADE
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE
         )
       `);
 
-      // Create indexes for chat messages
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_chat_messages_session
-        ON chat_messages(session_id, created_at);
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_chat_messages_sender
-        ON chat_messages(sender_id);
-      `);
-
-      // Chat rooms table (Group chat system - Phase 2)
-      // Drop old schema if it exists with wrong structure
-      try {
-        await client.query(`DROP TABLE IF EXISTS chat_room_messages CASCADE`);
-        await client.query(`DROP TABLE IF EXISTS chat_room_members CASCADE`);
-        await client.query(`DROP TABLE IF EXISTS chat_rooms CASCADE`);
-      } catch (error) {
-        console.log('Note: Could not drop old chat_rooms tables (they may not exist)');
-      }
-
-      await client.query(`
+      // Chat rooms table
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS chat_rooms (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           room_id TEXT UNIQUE NOT NULL,
           room_name TEXT NOT NULL,
           topic TEXT,
           created_by TEXT NOT NULL REFERENCES users(id),
           created_by_username TEXT NOT NULL,
-          is_public BOOLEAN DEFAULT TRUE,
+          is_public INTEGER DEFAULT 1,
           max_users INTEGER DEFAULT 50,
-          is_persistent BOOLEAN DEFAULT TRUE,
+          is_persistent INTEGER DEFAULT 1,
           password TEXT,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
-      // Create indexes for chat rooms
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_chat_rooms_public
-        ON chat_rooms(is_public) WHERE is_public = TRUE;
-      `);
-      // TODO: Fix chat_rooms schema mismatch
-      // await client.query(`
-      //   CREATE INDEX IF NOT EXISTS idx_chat_rooms_name
-      //   ON chat_rooms(room_name);
-      // `);
-
       // Chat room members table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS chat_room_members (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           room_id TEXT NOT NULL REFERENCES chat_rooms(room_id) ON DELETE CASCADE,
           user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           username TEXT NOT NULL,
           socket_id TEXT NOT NULL,
-          is_moderator BOOLEAN DEFAULT FALSE,
-          is_muted BOOLEAN DEFAULT FALSE,
-          joined_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          is_moderator INTEGER DEFAULT 0,
+          is_muted INTEGER DEFAULT 0,
+          joined_at INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE(room_id, user_id)
         )
       `);
 
-      // Create indexes for room members
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_room_members_room
-        ON chat_room_members(room_id);
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_room_members_user
-        ON chat_room_members(user_id);
-      `);
-
       // Chat room messages table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS chat_room_messages (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           room_id TEXT NOT NULL REFERENCES chat_rooms(room_id) ON DELETE CASCADE,
           sender_id TEXT NOT NULL REFERENCES users(id),
           sender_username TEXT NOT NULL,
           message TEXT NOT NULL,
           message_type TEXT DEFAULT 'message',
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          created_at INTEGER DEFAULT (strftime('%s', 'now'))
         )
-      `);
-
-      // Create indexes for room messages
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_room_messages_room
-        ON chat_room_messages(room_id, created_at);
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_room_messages_sender
-        ON chat_room_messages(sender_id);
       `);
 
       // Node sessions table
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS node_sessions (
           id TEXT PRIMARY KEY,
-          nodeId INTEGER NOT NULL UNIQUE,
-          userId TEXT REFERENCES users(id),
-          socketId TEXT NOT NULL,
+          nodeid INTEGER NOT NULL UNIQUE,
+          userid TEXT REFERENCES users(id),
+          socketid TEXT NOT NULL,
           state TEXT NOT NULL,
-          subState TEXT,
-          currentConf INTEGER,
-          currentMsgBase INTEGER,
-          timeRemaining INTEGER,
-          lastActivity TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          substate TEXT,
+          currentconf INTEGER,
+          currentmsgbase INTEGER,
+          timeremaining INTEGER,
+          lastactivity INTEGER DEFAULT (strftime('%s', 'now')),
           status TEXT NOT NULL,
-          loadLevel INTEGER DEFAULT 0,
-          currentUser TEXT,
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          loadlevel INTEGER DEFAULT 0,
+          currentuser TEXT,
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
-      // Flagged files table (express.e:2757)
-      // Stores user's flagged files for batch download
-      await client.query(`
+      // Additional tables
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS flagged_files (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           conf_num INTEGER NOT NULL,
           file_name TEXT NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE(user_id, conf_num, file_name)
         )
       `);
 
-      // Command history table (express.e:2669)
-      // Stores user's command history for up-arrow recall
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS command_history (
           user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
           history_num INTEGER DEFAULT 0,
           history_cycle INTEGER DEFAULT 0,
-          commands JSONB DEFAULT '[]',
-          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          commands TEXT DEFAULT '[]',
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
-      // Caller activity log table (express.e:9493 callersLog)
-      // Stores all caller actions like express.e's BBS:Node{X}/CallersLog
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS caller_activity (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           node_id INTEGER DEFAULT 1,
           user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
           username TEXT,
           action TEXT NOT NULL,
           details TEXT,
-          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          timestamp INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
-      // User statistics table for bytes/ratio tracking
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS user_stats (
           user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          bytes_uploaded BIGINT DEFAULT 0,
-          bytes_downloaded BIGINT DEFAULT 0,
+          bytes_uploaded INTEGER DEFAULT 0,
+          bytes_downloaded INTEGER DEFAULT 0,
           files_uploaded INTEGER DEFAULT 0,
           files_downloaded INTEGER DEFAULT 0,
-          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
-      // Phase 10: Message Pointer System tables (express.e:8672-8707, axobjects.e:192-197)
-      // Mail statistics - tracks message ranges per conference/message base
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS mail_stats (
           conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
           message_base_id INTEGER NOT NULL REFERENCES message_bases(id) ON DELETE CASCADE,
@@ -958,8 +683,7 @@ export class Database {
         )
       `);
 
-      // Conference base - tracks per-user read pointers and scan flags
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS conf_base (
           user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
@@ -968,415 +692,419 @@ export class Database {
           last_msg_read_conf INTEGER DEFAULT 0,
           scan_flags INTEGER DEFAULT 12,
           messages_posted INTEGER DEFAULT 0,
-          new_since_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          bytes_download BIGINT DEFAULT 0,
-          bytes_upload BIGINT DEFAULT 0,
+          new_since_date INTEGER DEFAULT (strftime('%s', 'now')),
+          bytes_download INTEGER DEFAULT 0,
+          bytes_upload INTEGER DEFAULT 0,
           upload INTEGER DEFAULT 0,
           downloads INTEGER DEFAULT 0,
           PRIMARY KEY (user_id, conference_id, message_base_id)
         )
       `);
 
-      // Voting Booth System tables (express.e:20782-21036, vote() and voteMenu())
-      // Vote topics - max 25 per conference
-      await client.query(`
+      // Voting system tables
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS vote_topics (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
           topic_number INTEGER NOT NULL CHECK (topic_number >= 1 AND topic_number <= 25),
           title TEXT NOT NULL,
           description TEXT,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
           created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
-          is_active BOOLEAN DEFAULT TRUE,
+          is_active INTEGER DEFAULT 1,
           UNIQUE (conference_id, topic_number)
         )
       `);
 
-      // Vote questions - multiple questions per topic
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS vote_questions (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           topic_id INTEGER NOT NULL REFERENCES vote_topics(id) ON DELETE CASCADE,
           question_number INTEGER NOT NULL,
           question_text TEXT NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE (topic_id, question_number)
         )
       `);
 
-      // Vote answers - multiple answer choices per question
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS vote_answers (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           question_id INTEGER NOT NULL REFERENCES vote_questions(id) ON DELETE CASCADE,
-          answer_letter CHAR(1) NOT NULL CHECK (answer_letter >= 'A' AND answer_letter <= 'Z'),
+          answer_letter TEXT NOT NULL CHECK (length(answer_letter) = 1 AND answer_letter >= 'A' AND answer_letter <= 'Z'),
           answer_text TEXT NOT NULL,
           vote_count INTEGER DEFAULT 0,
-          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE (question_id, answer_letter)
         )
       `);
 
-      // Vote results - tracks individual user votes
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS vote_results (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           topic_id INTEGER NOT NULL REFERENCES vote_topics(id) ON DELETE CASCADE,
           question_id INTEGER NOT NULL REFERENCES vote_questions(id) ON DELETE CASCADE,
           answer_id INTEGER NOT NULL REFERENCES vote_answers(id) ON DELETE CASCADE,
-          voted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          voted_at INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE (user_id, question_id)
         )
       `);
 
-      // Vote status - tracks which users have completed voting on which topics
-      await client.query(`
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS vote_status (
           user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           topic_id INTEGER NOT NULL REFERENCES vote_topics(id) ON DELETE CASCADE,
           conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
-          completed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          completed_at INTEGER DEFAULT (strftime('%s', 'now')),
           PRIMARY KEY (user_id, topic_id)
         )
       `);
 
-      // Webhooks table - for Discord/Slack notifications
-      await client.query(`
+      // Webhooks table
+      this.db.exec(`
         CREATE TABLE IF NOT EXISTS webhooks (
-          id SERIAL PRIMARY KEY,
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL UNIQUE,
           url TEXT NOT NULL,
           type TEXT NOT NULL CHECK (type IN ('discord', 'slack')),
-          enabled BOOLEAN DEFAULT true,
-          triggers TEXT[] DEFAULT '{}',
-          created TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          enabled INTEGER DEFAULT 1,
+          triggers TEXT DEFAULT '[]',
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
       `);
 
-      // Migration: Fix availableForChat column name (case sensitivity issue)
-      // Check if old lowercase column exists and migrate to camelCase
-      const checkColumnQuery = `
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name IN ('availableforchat', 'availableForChat')
-      `;
-      const columnCheck = await client.query(checkColumnQuery);
-
-      if (columnCheck.rows.length > 0) {
-        const hasLowercase = columnCheck.rows.some((row: any) => row.column_name === 'availableforchat');
-        const hasCamelCase = columnCheck.rows.some((row: any) => row.column_name === 'availableForChat');
-
-        if (hasLowercase && !hasCamelCase) {
-          // Migrate from lowercase to camelCase
-          await client.query(`ALTER TABLE users RENAME COLUMN availableforchat TO "availableForChat"`);
-          console.log('✅ Migrated availableforchat column to "availableForChat"');
-        } else if (!hasLowercase && !hasCamelCase) {
-          // Neither exists, add the column
-          await client.query(`ALTER TABLE users ADD COLUMN "availableForChat" BOOLEAN DEFAULT true`);
-          console.log('✅ Added "availableForChat" column');
-        }
-        // If hasCamelCase already exists, no migration needed
-      }
-
-      // Create indexes for performance
-      await this.createIndexes(client);
-    } finally {
-      client.release();
+      // Create indexes
+      await this.createIndexes();
+    } catch (error) {
+      console.error('Error creating tables:', error);
+      throw error;
     }
   }
 
-  private async createIndexes(client: any): Promise<void> {
-    // Message indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceid)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messagebaseid)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isprivate, touser)`);
+  private async createIndexes(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
 
-    // File indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaid)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries(uploaddate)`);
+    try {
+      // Message indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_messages_conference ON messages(conferenceid)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_messages_base ON messages(messagebaseid)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_messages_private ON messages(isprivate, touser)');
 
-    // Conference indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conferenceid)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conferenceid)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conferenceid)`);
+      // File indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_files_area ON file_entries(areaid)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_entries(uploader)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_files_date ON file_entries(uploaddate)');
 
-    // User indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(seclevel)`);
+      // Conference indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_file_areas_conference ON file_areas(conferenceid)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_message_bases_conference ON message_bases(conferenceid)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_bulletins_conference ON bulletins(conferenceid)');
 
-    // Flagged files indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_flagged_files_user ON flagged_files(user_id)`);
+      // User indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(seclevel)');
 
-    // Command history indexes (user_id is already primary key)
+      // Online messages indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_online_messages_to_user ON online_messages(to_user_id, delivered, read)');
 
-    // Caller activity indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_user ON caller_activity(user_id)`);
+      // Chat indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_chat_sessions_status ON chat_sessions(status)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_chat_sessions_users ON chat_sessions(initiator_id, recipient_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_chat_messages_sender ON chat_messages(sender_id)');
 
-    // Phase 10: Message pointer indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_conf_base_user ON conf_base(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_conf_base_conference ON conf_base(conference_id, message_base_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_timestamp ON caller_activity(timestamp DESC)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_caller_activity_node ON caller_activity(node_id, timestamp DESC)`);
+      // Chat room indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_chat_rooms_public ON chat_rooms(is_public)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_room_members_room ON chat_room_members(room_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_room_members_user ON chat_room_members(user_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_room_messages_room ON chat_room_messages(room_id, created_at)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_room_messages_sender ON chat_room_messages(sender_id)');
 
-    // User stats indexes (user_id is already primary key)
+      // Other indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_flagged_files_user ON flagged_files(user_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_caller_activity_user ON caller_activity(user_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_conf_base_user ON conf_base(user_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_conf_base_conference ON conf_base(conference_id, message_base_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_caller_activity_timestamp ON caller_activity(timestamp DESC)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_caller_activity_node ON caller_activity(node_id, timestamp DESC)');
 
-    // Voting booth indexes
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_topics_conference ON vote_topics(conference_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_topics_active ON vote_topics(is_active)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_questions_topic ON vote_questions(topic_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_answers_question ON vote_answers(question_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_results_user ON vote_results(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_results_topic ON vote_results(topic_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_status_user ON vote_status(user_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_vote_status_conference ON vote_status(conference_id)`);
+      // Voting indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_topics_conference ON vote_topics(conference_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_topics_active ON vote_topics(is_active)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_questions_topic ON vote_questions(topic_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_answers_question ON vote_answers(question_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_results_user ON vote_results(user_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_results_topic ON vote_results(topic_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_status_user ON vote_status(user_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_status_conference ON vote_status(conference_id)');
+    } catch (error) {
+      console.error('Error creating indexes:', error);
+      // Don't throw - indexes are not critical
+    }
   }
-
 
   // User management methods
   async createUser(userData: Omit<User, 'id' | 'created' | 'updated'>): Promise<string> {
-    const client = await this.pool.connect();
-    try {
-      const id = crypto.randomUUID();
-      const sql = `
-        INSERT INTO users (
-          id, username, passwordhash, realname, location, phone, email,
-          seclevel, uploads, downloads, bytesupload, bytesdownload, ratio,
-          ratiotype, timetotal, timelimit, timeused, chatlimit, chatused,
-          lastlogin, firstlogin, calls, callstoday, newuser, expert, ansi,
-          linesperscreen, computer, screentype, protocol, editor, zoomtype,
-          availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
-          topuploadcps, topdownloadcps, bytelimit
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
-      `;
+    if (!this.db) throw new Error('Database not initialized');
 
-      const values = [
-        id, userData.username, userData.passwordHash, userData.realname,
-        userData.location, userData.phone, userData.email, userData.secLevel,
-        userData.uploads, userData.downloads, userData.bytesUpload, userData.bytesDownload,
-        userData.ratio, userData.ratioType, userData.timeTotal, userData.timeLimit,
-        userData.timeUsed, userData.chatLimit, userData.chatUsed, userData.lastLogin,
-        userData.firstLogin, userData.calls, userData.callsToday, userData.newUser,
-        userData.expert, userData.ansi, userData.linesPerScreen, userData.computer,
-        userData.screenType, userData.protocol, userData.editor, userData.zoomType,
-        userData.availableForChat, userData.quietNode, userData.autoRejoin,
-        userData.confAccess, userData.areaName, userData.uuCP, userData.topUploadCPS,
-        userData.topDownloadCPS, userData.byteLimit
-      ];
+    const id = crypto.randomUUID();
+    const stmt = this.db.prepare(`
+      INSERT INTO users (
+        id, username, passwordhash, realname, location, phone, email,
+        seclevel, uploads, downloads, bytesupload, bytesdownload, ratio,
+        ratiotype, timetotal, timelimit, timeused, chatlimit, chatused,
+        lastlogin, firstlogin, calls, callstoday, newuser, expert, ansi,
+        linesperscreen, computer, screentype, protocol, editor, zoomtype,
+        availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
+        topuploadcps, topdownloadcps, bytelimit
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-      await client.query(sql, values);
-      return id;
-    } finally {
-      client.release();
-    }
+    stmt.run(
+      id, userData.username, userData.passwordHash, userData.realname,
+      userData.location, userData.phone, userData.email, userData.secLevel,
+      userData.uploads, userData.downloads, userData.bytesUpload, userData.bytesDownload,
+      userData.ratio, userData.ratioType, userData.timeTotal, userData.timeLimit,
+      userData.timeUsed, userData.chatLimit, userData.chatUsed,
+      userData.lastLogin ? Math.floor(userData.lastLogin.getTime() / 1000) : null,
+      Math.floor(userData.firstLogin.getTime() / 1000),
+      userData.calls, userData.callsToday, userData.newUser ? 1 : 0,
+      userData.expert ? 1 : 0, userData.ansi ? 1 : 0, userData.linesPerScreen, userData.computer,
+      userData.screenType, userData.protocol, userData.editor, userData.zoomType,
+      userData.availableForChat ? 1 : 0, userData.quietNode ? 1 : 0, userData.autoRejoin,
+      userData.confAccess, userData.areaName, userData.uuCP ? 1 : 0, userData.topUploadCPS,
+      userData.topDownloadCPS, userData.byteLimit
+    );
+
+    return id;
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM users WHERE username = $1`;
-      const result = await client.query(sql, [username]);
-      if (result.rows[0]) {
-        const user = result.rows[0] as any;
-        // Convert bigint fields to numbers for compatibility
-        // Helper function to safely convert to number with default
-        const safeNumber = (value: any, defaultValue: number = 0): number => {
-          const num = Number(value);
-          return isNaN(num) ? defaultValue : num;
-        };
+    if (!this.db) throw new Error('Database not initialized');
 
-        return {
-          id: user.id,
-          username: user.username,
-          passwordHash: user.passwordhash,
-          realname: user.realname,
-          location: user.location,
-          phone: user.phone,
-          email: user.email,
-          secLevel: safeNumber(user.seclevel, 10), // Default to 10 if NaN
-          uploads: safeNumber(user.uploads, 0),
-          downloads: safeNumber(user.downloads, 0),
-          bytesUpload: safeNumber(user.bytesupload, 0),
-          bytesDownload: safeNumber(user.bytesdownload, 0),
-          ratio: safeNumber(user.ratio, 0),
-          ratioType: safeNumber(user.ratiotype, 0),
-          timeTotal: safeNumber(user.timetotal, 0),
-          timeLimit: safeNumber(user.timelimit, 0),
-          timeUsed: safeNumber(user.timeused, 0),
-          chatLimit: safeNumber(user.chatlimit, 0),
-          chatUsed: safeNumber(user.chatused, 0),
-          lastLogin: user.lastlogin,
-          firstLogin: user.firstlogin,
-          calls: safeNumber(user.calls, 0),
-          callsToday: safeNumber(user.callstoday, 0),
-          newUser: user.newuser,
-          expert: user.expert,
-          ansi: user.ansi,
-          linesPerScreen: safeNumber(user.linesperscreen, 23),
-          computer: user.computer,
-          screenType: user.screentype,
-          protocol: user.protocol,
-          editor: user.editor,
-          zoomType: user.zoomtype,
-          availableForChat: user.availableForChat || user.availableforchat || true,
-          quietNode: user.quietnode,
-          autoRejoin: safeNumber(user.autorejoin, 1),
-          confAccess: user.confaccess,
-          areaName: user.areaname,
-          uuCP: user.uucp,
-          topUploadCPS: safeNumber(user.topuploadcps, 0),
-          topDownloadCPS: safeNumber(user.topdownloadcps, 0),
-          byteLimit: safeNumber(user.bytelimit, 0),
-          created: user.created,
-          updated: user.updated,
-        } as User;
-      }
-      return null;
-    } finally {
-      client.release();
-    }
+    const stmt = this.db.prepare('SELECT * FROM users WHERE username = ?');
+    const user = stmt.get(username) as any;
+
+    if (!user) return null;
+
+    return this.mapUserFromDb(user);
   }
 
   async getUserById(id: string): Promise<User | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM users WHERE id = $1`;
-      const result = await client.query(sql, [id]);
-      if (result.rows[0]) {
-        const user = result.rows[0] as any;
-        // Helper function to safely convert to number with default
-        const safeNumber = (value: any, defaultValue: number = 0): number => {
-          const num = Number(value);
-          return isNaN(num) ? defaultValue : num;
-        };
+    if (!this.db) throw new Error('Database not initialized');
 
-        return {
-          id: user.id,
-          username: user.username,
-          passwordHash: user.passwordhash,
-          realname: user.realname,
-          location: user.location,
-          phone: user.phone,
-          email: user.email,
-          secLevel: safeNumber(user.seclevel, 10),
-          uploads: safeNumber(user.uploads, 0),
-          downloads: safeNumber(user.downloads, 0),
-          bytesUpload: safeNumber(user.bytesupload, 0),
-          bytesDownload: safeNumber(user.bytesdownload, 0),
-          ratio: safeNumber(user.ratio, 0),
-          ratioType: safeNumber(user.ratiotype, 0),
-          timeTotal: safeNumber(user.timetotal, 0),
-          timeLimit: safeNumber(user.timelimit, 0),
-          timeUsed: safeNumber(user.timeused, 0),
-          chatLimit: safeNumber(user.chatlimit, 0),
-          chatUsed: safeNumber(user.chatused, 0),
-          lastLogin: user.lastlogin,
-          firstLogin: user.firstlogin,
-          calls: safeNumber(user.calls, 0),
-          callsToday: safeNumber(user.callstoday, 0),
-          newUser: user.newuser,
-          expert: user.expert,
-          ansi: user.ansi,
-          linesPerScreen: safeNumber(user.linesperscreen, 23),
-          computer: user.computer,
-          screenType: user.screentype,
-          protocol: user.protocol,
-          editor: user.editor,
-          zoomType: user.zoomtype,
-          availableForChat: user.availableForChat || user.availableforchat || true,
-          quietNode: user.quietnode,
-          autoRejoin: safeNumber(user.autorejoin, 1),
-          confAccess: user.confaccess,
-          areaName: user.areaname,
-          uuCP: user.uucp,
-          topUploadCPS: safeNumber(user.topuploadcps, 0),
-          topDownloadCPS: safeNumber(user.topdownloadcps, 0),
-          byteLimit: safeNumber(user.bytelimit, 0),
-          created: user.created,
-          updated: user.updated,
-        } as User;
-      }
-      return null;
-    } finally {
-      client.release();
-    }
+    const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
+    const user = stmt.get(id) as any;
+
+    if (!user) return null;
+
+    return this.mapUserFromDb(user);
+  }
+
+  private mapUserFromDb(user: any): User {
+    const safeNumber = (value: any, defaultValue: number = 0): number => {
+      const num = Number(value);
+      return isNaN(num) ? defaultValue : num;
+    };
+
+    return {
+      id: user.id,
+      username: user.username,
+      passwordHash: user.passwordhash,
+      realname: user.realname,
+      location: user.location,
+      phone: user.phone,
+      email: user.email,
+      secLevel: safeNumber(user.seclevel, 10),
+      uploads: safeNumber(user.uploads, 0),
+      downloads: safeNumber(user.downloads, 0),
+      bytesUpload: safeNumber(user.bytesupload, 0),
+      bytesDownload: safeNumber(user.bytesdownload, 0),
+      ratio: safeNumber(user.ratio, 0),
+      ratioType: safeNumber(user.ratiotype, 0),
+      timeTotal: safeNumber(user.timetotal, 0),
+      timeLimit: safeNumber(user.timelimit, 0),
+      timeUsed: safeNumber(user.timeused, 0),
+      chatLimit: safeNumber(user.chatlimit, 0),
+      chatUsed: safeNumber(user.chatused, 0),
+      lastLogin: user.lastlogin ? new Date(user.lastlogin * 1000) : undefined,
+      firstLogin: new Date(user.firstlogin * 1000),
+      calls: safeNumber(user.calls, 0),
+      callsToday: safeNumber(user.callstoday, 0),
+      newUser: Boolean(user.newuser),
+      expert: Boolean(user.expert),
+      ansi: Boolean(user.ansi),
+      linesPerScreen: safeNumber(user.linesperscreen, 23),
+      computer: user.computer,
+      screenType: user.screentype,
+      protocol: user.protocol,
+      editor: user.editor,
+      zoomType: user.zoomtype,
+      availableForChat: Boolean(user.availableforchat),
+      quietNode: Boolean(user.quietnode),
+      autoRejoin: safeNumber(user.autorejoin, 1),
+      confAccess: user.confaccess,
+      areaName: user.areaname,
+      uuCP: Boolean(user.uucp),
+      topUploadCPS: safeNumber(user.topuploadcps, 0),
+      topDownloadCPS: safeNumber(user.topdownloadcps, 0),
+      byteLimit: safeNumber(user.bytelimit, 0),
+      userFlags: safeNumber(user.userflags, 0),
+      created: new Date(user.created * 1000),
+      updated: new Date(user.updated * 1000),
+    } as User;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
-      if (fields.length === 0) return;
+    if (!this.db) throw new Error('Database not initialized');
 
-      const sql = `UPDATE users SET ${fields.map((f, i) => `${fieldToColumn(f)} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
-      const values = [...fields.map(f => updates[f as keyof User]), id];
+    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+    if (fields.length === 0) return;
 
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
+    const setClause = fields.map(f => `${fieldToColumn(f)} = ?`).join(', ');
+    const values = fields.map(f => {
+      const value = updates[f as keyof User];
+      if (value instanceof Date) return Math.floor(value.getTime() / 1000);
+      if (typeof value === 'boolean') return value ? 1 : 0;
+      return value;
+    });
+
+    const sql = `UPDATE users SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values, id);
   }
 
   async getUsers(filter?: { secLevel?: number; newUser?: boolean; limit?: number }): Promise<User[]> {
-    const client = await this.pool.connect();
-    try {
-      let sql = `SELECT * FROM users WHERE 1=1`;
-      const params: any[] = [];
-      let paramIndex = 1;
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (filter?.secLevel !== undefined) {
-        sql += ` AND seclevel >= $${paramIndex++}`;
-        params.push(filter.secLevel);
-      }
+    let sql = 'SELECT * FROM users WHERE 1=1';
+    const params: any[] = [];
 
-      if (filter?.newUser !== undefined) {
-        sql += ` AND newuser = $${paramIndex++}`;
-        params.push(filter.newUser);
-      }
-
-      sql += ` ORDER BY username`;
-
-      if (filter?.limit) {
-        sql += ` LIMIT $${paramIndex++}`;
-        params.push(filter.limit);
-      }
-
-      const result = await client.query(sql, params);
-      return result.rows as User[];
-    } finally {
-      client.release();
+    if (filter?.secLevel !== undefined) {
+      sql += ' AND seclevel >= ?';
+      params.push(filter.secLevel);
     }
+
+    if (filter?.newUser !== undefined) {
+      sql += ' AND newuser = ?';
+      params.push(filter.newUser ? 1 : 0);
+    }
+
+    sql += ' ORDER BY username';
+
+    if (filter?.limit) {
+      sql += ' LIMIT ?';
+      params.push(filter.limit);
+    }
+
+    const stmt = this.db.prepare(sql);
+    const users = stmt.all(...params) as any[];
+    return users.map(u => this.mapUserFromDb(u));
+  }
+
+  // Conference and message base management
+  async createConference(conf: Omit<Conference, 'id' | 'created' | 'updated'>): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('INSERT INTO conferences (name, description) VALUES (?, ?)');
+    const result = stmt.run(conf.name, conf.description);
+    return result.lastInsertRowid as number;
+  }
+
+  async getConferences(): Promise<Conference[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM conferences ORDER BY id');
+    const rows = stmt.all() as any[];
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
+  }
+
+  async getConferenceById(id: number): Promise<Conference | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM conferences WHERE id = ?');
+    const row = stmt.get(id) as any;
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    };
+  }
+
+  async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('INSERT INTO message_bases (name, conferenceid) VALUES (?, ?)');
+    const result = stmt.run(mb.name, mb.conferenceId);
+    return result.lastInsertRowid as number;
+  }
+
+  async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM message_bases WHERE conferenceid = ? ORDER BY id');
+    const rows = stmt.all(conferenceId) as any[];
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      conferenceId: row.conferenceid,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
+  }
+
+  async getMessageBaseById(id: number): Promise<MessageBase | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM message_bases WHERE id = ?');
+    const row = stmt.get(id) as any;
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      conferenceId: row.conferenceid,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    };
   }
 
   // Message management methods
   async createMessage(message: Omit<Message, 'id'>): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO messages (
-          subject, body, author, timestamp, conferenceid, messagebaseid,
-          isprivate, touser, parentid, attachments, edited, editedby, editedat
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        RETURNING id
-      `;
+    if (!this.db) throw new Error('Database not initialized');
 
-      const values = [
-        message.subject, message.body, message.author, message.timestamp,
-        message.conferenceId, message.messageBaseId, message.isPrivate,
-        message.toUser, message.parentId, JSON.stringify(message.attachments || []),
-        message.edited, message.editedBy, message.editedAt
-      ];
+    const stmt = this.db.prepare(`
+      INSERT INTO messages (
+        subject, body, author, timestamp, conferenceid, messagebaseid,
+        isprivate, touser, parentid, attachments, edited, editedby, editedat
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-      const result = await client.query(sql, values);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
+    const result = stmt.run(
+      message.subject, message.body, message.author,
+      Math.floor(message.timestamp.getTime() / 1000),
+      message.conferenceId, message.messageBaseId,
+      message.isPrivate ? 1 : 0, message.toUser, message.parentId,
+      JSON.stringify(message.attachments || []),
+      message.edited ? 1 : 0, message.editedBy,
+      message.editedAt ? Math.floor(message.editedAt.getTime() / 1000) : null
+    );
+
+    return result.lastInsertRowid as number;
   }
 
   async getMessages(conferenceId: number, messageBaseId: number, options?: {
@@ -1386,119 +1114,120 @@ export class Database {
     userId?: string;
     search?: string;
   }): Promise<Message[]> {
-    const client = await this.pool.connect();
-    try {
-      let sql = `
-        SELECT m.*, mb.name as messageBaseName, c.name as conferenceName
-        FROM messages m
-        JOIN message_bases mb ON m.messagebaseid = mb.id
-        JOIN conferences c ON m.conferenceid = c.id
-        WHERE m.conferenceid = $1 AND m.messagebaseid = $2
-      `;
-      const params: any[] = [conferenceId, messageBaseId];
-      let paramIndex = 3;
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (options?.privateOnly && options?.userId) {
-        sql += ` AND (m.isprivate = false OR (m.isprivate = true AND (m.author = $${paramIndex++} OR m.touser = $${paramIndex++})))`;
-        params.push(options.userId, options.userId);
-      }
+    let sql = `
+      SELECT m.*, mb.name as messageBaseName, c.name as conferenceName
+      FROM messages m
+      JOIN message_bases mb ON m.messagebaseid = mb.id
+      JOIN conferences c ON m.conferenceid = c.id
+      WHERE m.conferenceid = ? AND m.messagebaseid = ?
+    `;
+    const params: any[] = [conferenceId, messageBaseId];
 
-      if (options?.search) {
-        sql += ` AND (m.subject ILIKE $${paramIndex++} OR m.body ILIKE $${paramIndex++} OR m.author ILIKE $${paramIndex++})`;
-        const searchTerm = `%${options.search}%`;
-        params.push(searchTerm, searchTerm, searchTerm);
-      }
-
-      sql += ` ORDER BY m.timestamp DESC`;
-
-      if (options?.limit) {
-        sql += ` LIMIT $${paramIndex++}`;
-        params.push(options.limit);
-      }
-
-      if (options?.offset) {
-        sql += ` OFFSET $${paramIndex++}`;
-        params.push(options.offset);
-      }
-
-      const result = await client.query(sql, params);
-      const messages = result.rows.map((row: any) => ({
-        ...row,
-        attachments: row.attachments || []
-      }));
-
-      return messages as Message[];
-    } finally {
-      client.release();
+    if (options?.privateOnly && options?.userId) {
+      sql += ' AND (m.isprivate = 0 OR (m.isprivate = 1 AND (m.author = ? OR m.touser = ?)))';
+      params.push(options.userId, options.userId);
     }
+
+    if (options?.search) {
+      sql += ' AND (m.subject LIKE ? OR m.body LIKE ? OR m.author LIKE ?)';
+      const searchTerm = `%${options.search}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    sql += ' ORDER BY m.timestamp DESC';
+
+    if (options?.limit) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+    }
+
+    if (options?.offset) {
+      sql += ' OFFSET ?';
+      params.push(options.offset);
+    }
+
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      subject: row.subject,
+      body: row.body,
+      author: row.author,
+      timestamp: new Date(row.timestamp * 1000),
+      conferenceId: row.conferenceid,
+      messageBaseId: row.messagebaseid,
+      isPrivate: Boolean(row.isprivate),
+      toUser: row.touser,
+      parentId: row.parentid,
+      attachments: row.attachments ? JSON.parse(row.attachments) : [],
+      edited: Boolean(row.edited),
+      editedBy: row.editedby,
+      editedAt: row.editedat ? new Date(row.editedat * 1000) : undefined
+    }));
   }
 
   async updateMessage(id: number, updates: Partial<Message>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = Object.keys(updates).filter(key => key !== 'id');
-      if (fields.length === 0) return;
+    if (!this.db) throw new Error('Database not initialized');
 
-      const sql = `UPDATE messages SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
-      const values = [...fields.map(f => {
-        if (f === 'attachments') return JSON.stringify(updates.attachments || []);
-        return updates[f as keyof Message];
-      }), id];
+    const fields = Object.keys(updates).filter(key => key !== 'id');
+    if (fields.length === 0) return;
 
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => {
+      if (f === 'attachments') return JSON.stringify(updates.attachments || []);
+      if (f === 'timestamp' || f === 'editedAt') {
+        const date = updates[f as keyof Message] as Date;
+        return date ? Math.floor(date.getTime() / 1000) : null;
+      }
+      const value = updates[f as keyof Message];
+      if (typeof value === 'boolean') return value ? 1 : 0;
+      return value;
+    });
+
+    const sql = `UPDATE messages SET ${setClause} WHERE id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values, id);
   }
 
   async deleteMessage(id: number): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `DELETE FROM messages WHERE id = $1`;
-      await client.query(sql, [id]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('DELETE FROM messages WHERE id = ?');
+    stmt.run(id);
   }
 
   async updateReadPointer(userId: number, conferenceId: number, messageBaseId: number, lastRead: number): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO conf_base (user_id, conference_id, message_base_id, last_msg_read_conf)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (user_id, conference_id, message_base_id)
-        DO UPDATE SET last_msg_read_conf = $4
-      `;
-      await client.query(sql, [userId.toString(), conferenceId, messageBaseId, lastRead]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO conf_base (user_id, conference_id, message_base_id, last_msg_read_conf)
+      VALUES (?, ?, ?, ?)
+    `);
+    stmt.run(userId.toString(), conferenceId, messageBaseId, lastRead);
   }
 
   // File management methods
   async createFileEntry(file: Omit<FileEntry, 'id'>): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO file_entries (
-          filename, description, size, uploader, uploaddate, downloads,
-          areaid, fileiddiz, rating, votes, status, checked, comment
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        RETURNING id
-      `;
+    if (!this.db) throw new Error('Database not initialized');
 
-      const values = [
-        file.filename, file.description, file.size, file.uploader, file.uploadDate,
-        file.downloads, file.areaId, file.fileIdDiz, file.rating, file.votes,
-        file.status, file.checked, file.comment
-      ];
+    const stmt = this.db.prepare(`
+      INSERT INTO file_entries (
+        filename, description, size, uploader, uploaddate, downloads,
+        areaid, fileiddiz, rating, votes, status, checked, comment
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-      const result = await client.query(sql, values);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
+    const result = stmt.run(
+      file.filename, file.description, file.size, file.uploader,
+      Math.floor(file.uploadDate.getTime() / 1000),
+      file.downloads, file.areaId, file.fileIdDiz, file.rating, file.votes,
+      file.status, file.checked, file.comment
+    );
+
+    return result.lastInsertRowid as number;
   }
 
   async getFileEntries(areaId: number, options?: {
@@ -1507,336 +1236,172 @@ export class Database {
     search?: string;
     status?: string;
   }): Promise<FileEntry[]> {
-    const client = await this.pool.connect();
-    try {
-      let sql = `SELECT * FROM file_entries WHERE areaid = $1`;
-      const params: any[] = [areaId];
-      let paramIndex = 2;
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (options?.status) {
-        sql += ` AND status = $${paramIndex++}`;
-        params.push(options.status);
-      }
+    let sql = 'SELECT * FROM file_entries WHERE areaid = ?';
+    const params: any[] = [areaId];
 
-      if (options?.search) {
-        sql += ` AND (filename ILIKE $${paramIndex++} OR description ILIKE $${paramIndex++} OR fileiddiz ILIKE $${paramIndex++})`;
-        const searchTerm = `%${options.search}%`;
-        params.push(searchTerm, searchTerm, searchTerm);
-      }
-
-      sql += ` ORDER BY uploaddate DESC`;
-
-      if (options?.limit) {
-        sql += ` LIMIT $${paramIndex++}`;
-        params.push(options.limit);
-      }
-
-      if (options?.offset) {
-        sql += ` OFFSET $${paramIndex++}`;
-        params.push(options.offset);
-      }
-
-      const result = await client.query(sql, params);
-      return result.rows as FileEntry[];
-    } finally {
-      client.release();
+    if (options?.status) {
+      sql += ' AND status = ?';
+      params.push(options.status);
     }
+
+    if (options?.search) {
+      sql += ' AND (filename LIKE ? OR description LIKE ? OR fileiddiz LIKE ?)';
+      const searchTerm = `%${options.search}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    sql += ' ORDER BY uploaddate DESC';
+
+    if (options?.limit) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+    }
+
+    if (options?.offset) {
+      sql += ' OFFSET ?';
+      params.push(options.offset);
+    }
+
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      filename: row.filename,
+      description: row.description,
+      size: row.size,
+      uploader: row.uploader,
+      uploadDate: new Date(row.uploaddate * 1000),
+      downloads: row.downloads,
+      areaId: row.areaid,
+      fileIdDiz: row.fileiddiz,
+      rating: row.rating,
+      votes: row.votes,
+      status: row.status as 'active' | 'held' | 'deleted',
+      checked: row.checked as 'N' | 'P' | 'F',
+      comment: row.comment
+    }));
   }
 
   async updateFileEntry(id: number, updates: Partial<FileEntry>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = Object.keys(updates).filter(key => key !== 'id');
-      if (fields.length === 0) return;
+    if (!this.db) throw new Error('Database not initialized');
 
-      const sql = `UPDATE file_entries SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
-      const values = [...fields.map(f => updates[f as keyof FileEntry]), id];
+    const fields = Object.keys(updates).filter(key => key !== 'id');
+    if (fields.length === 0) return;
 
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => {
+      if (f === 'uploadDate') {
+        const date = updates.uploadDate;
+        return date ? Math.floor(date.getTime() / 1000) : null;
+      }
+      return updates[f as keyof FileEntry];
+    });
+
+    const sql = `UPDATE file_entries SET ${setClause} WHERE id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values, id);
   }
 
   async getFileEntry(id: number): Promise<FileEntry | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT fe.*, fa.conferenceid as "conferenceId"
-        FROM file_entries fe
-        JOIN file_areas fa ON fe.areaid = fa.id
-        WHERE fe.id = $1
-      `;
-      const result = await client.query(sql, [id]);
-      return result.rows.length > 0 ? result.rows[0] as FileEntry : null;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT fe.*, fa.conferenceid as conferenceId
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fe.id = ?
+    `);
+    const row = stmt.get(id) as any;
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      filename: row.filename,
+      description: row.description,
+      size: row.size,
+      uploader: row.uploader,
+      uploadDate: new Date(row.uploaddate * 1000),
+      downloads: row.downloads,
+      areaId: row.areaid,
+      fileIdDiz: row.fileiddiz,
+      rating: row.rating,
+      votes: row.votes,
+      status: row.status as 'active' | 'held' | 'deleted',
+      checked: row.checked as 'N' | 'P' | 'F',
+      comment: row.comment
+    };
   }
 
   async incrementDownloadCount(id: number): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `UPDATE file_entries SET downloads = downloads + 1 WHERE id = $1`;
-      await client.query(sql, [id]);
-    } finally {
-      client.release();
-    }
-  }
+    if (!this.db) throw new Error('Database not initialized');
 
-  // Session management methods
-  async createSession(session: Omit<Session, 'created' | 'updated'>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO sessions (
-          id, userid, socketid, state, substate, currentconf, currentmsgbase,
-          timeremaining, lastactivity, confrjoin, msgbaserjoin, commandbuffer,
-          menupause, inputbuffer, relconfnum, currentconfname, cmdshortcuts, tempdata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-        ON CONFLICT (id) DO UPDATE SET
-          userid = EXCLUDED.userid,
-          socketid = EXCLUDED.socketid,
-          state = EXCLUDED.state,
-          substate = EXCLUDED.substate,
-          currentconf = EXCLUDED.currentconf,
-          currentmsgbase = EXCLUDED.currentmsgbase,
-          timeremaining = EXCLUDED.timeremaining,
-          lastactivity = EXCLUDED.lastactivity,
-          confrjoin = EXCLUDED.confrjoin,
-          msgbaserjoin = EXCLUDED.msgbaserjoin,
-          commandbuffer = EXCLUDED.commandbuffer,
-          menupause = EXCLUDED.menupause,
-          inputbuffer = EXCLUDED.inputbuffer,
-          relconfnum = EXCLUDED.relconfnum,
-          currentconfname = EXCLUDED.currentconfname,
-          cmdshortcuts = EXCLUDED.cmdshortcuts,
-          tempdata = EXCLUDED.tempdata,
-          updated = CURRENT_TIMESTAMP
-      `;
-
-      const values = [
-        session.id, session.userId, session.socketId, session.state, session.subState,
-        session.currentConf, session.currentMsgBase, session.timeRemaining,
-        session.lastActivity, session.confRJoin, session.msgBaseRJoin,
-        session.commandBuffer, session.menuPause, session.inputBuffer,
-        session.relConfNum, session.currentConfName, session.cmdShortcuts,
-        session.tempData ? JSON.stringify(session.tempData) : null
-      ];
-
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
-  }
-
-  async getSession(id: string): Promise<Session | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM sessions WHERE id = $1`;
-      const result = await client.query(sql, [id]);
-      if (result.rows[0]) {
-        const session = result.rows[0] as any;
-        if (session.tempData) {
-          session.tempData = JSON.parse(session.tempData);
-        }
-        return session as Session;
-      }
-      return null;
-    } finally {
-      client.release();
-    }
-  }
-
-  async updateSession(id: string, updates: Partial<Session>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
-      if (fields.length === 0) return;
-
-      const sql = `UPDATE sessions SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
-      const values = [...fields.map(f => {
-        if (f === 'tempData') return updates.tempData ? JSON.stringify(updates.tempData) : null;
-        return updates[f as keyof Session];
-      }), id];
-
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
-  }
-
-  async deleteSession(id: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `DELETE FROM sessions WHERE id = $1`;
-      await client.query(sql, [id]);
-    } finally {
-      client.release();
-    }
-  }
-
-  async getActiveSessions(): Promise<Session[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM sessions WHERE lastactivity > NOW() - INTERVAL '30 minutes'`;
-      const result = await client.query(sql);
-      const sessions = result.rows.map((row: any) => {
-        const session = row as any;
-        if (session.tempData) {
-          session.tempData = JSON.parse(session.tempData);
-        }
-        return session as Session;
-      });
-      return sessions;
-    } finally {
-      client.release();
-    }
-  }
-
-  // Conference and message base management
-  async createConference(conf: Omit<Conference, 'id' | 'created' | 'updated'>): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `INSERT INTO conferences (name, description) VALUES ($1, $2) RETURNING id`;
-      const result = await client.query(sql, [conf.name, conf.description]);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
-  }
-
-  async getConferences(): Promise<Conference[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM conferences ORDER BY id`;
-      const result = await client.query(sql);
-      return result.rows as Conference[];
-    } finally {
-      client.release();
-    }
-  }
-
-  async getConferenceById(id: number): Promise<Conference | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM conferences WHERE id = $1`;
-      const result = await client.query(sql, [id]);
-      return result.rows.length > 0 ? result.rows[0] as Conference : null;
-    } finally {
-      client.release();
-    }
-  }
-
-  async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `INSERT INTO message_bases (name, conferenceid) VALUES ($1, $2) RETURNING id`;
-      const result = await client.query(sql, [mb.name, mb.conferenceId]);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
-  }
-
-  async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM message_bases WHERE conferenceid = $1 ORDER BY id`;
-      const result = await client.query(sql, [conferenceId]);
-      // Map PostgreSQL column names to camelCase interface
-      return result.rows.map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        conferenceId: row.conferenceid,
-        created: row.created,
-        updated: row.updated
-      }));
-    } finally {
-      client.release();
-    }
-  }
-
-  async getMessageBaseById(id: number): Promise<MessageBase | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM message_bases WHERE id = $1`;
-      const result = await client.query(sql, [id]);
-      if (result.rows.length === 0) return null;
-      const row = result.rows[0];
-      return {
-        id: row.id,
-        name: row.name,
-        conferenceId: row.conferenceid,
-        created: row.created,
-        updated: row.updated
-      };
-    } finally {
-      client.release();
-    }
+    const stmt = this.db.prepare('UPDATE file_entries SET downloads = downloads + 1 WHERE id = ?');
+    stmt.run(id);
   }
 
   // File area management
   async createFileArea(area: Omit<FileArea, 'id' | 'created' | 'updated'>): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO file_areas (
-          name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id
-      `;
-      const values = [
-        area.name, area.description, area.path, area.conferenceId,
-        area.maxFiles, area.uploadAccess, area.downloadAccess
-      ];
+    if (!this.db) throw new Error('Database not initialized');
 
-      const result = await client.query(sql, values);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
+    const stmt = this.db.prepare(`
+      INSERT INTO file_areas (
+        name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      area.name, area.description, area.path, area.conferenceId,
+      area.maxFiles, area.uploadAccess, area.downloadAccess
+    );
+
+    return result.lastInsertRowid as number;
   }
 
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT
-          id,
-          name,
-          description,
-          path,
-          conferenceid AS "conferenceId",
-          maxfiles AS "maxFiles",
-          uploadaccess AS "uploadAccess",
-          downloadaccess AS "downloadAccess",
-          created,
-          updated
-        FROM file_areas
-        WHERE conferenceid = $1
-        ORDER BY id
-      `;
-      const result = await client.query(sql, [conferenceId]);
-      return result.rows as FileArea[];
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM file_areas WHERE conferenceid = ? ORDER BY id');
+    const rows = stmt.all(conferenceId) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      path: row.path,
+      conferenceId: row.conferenceid,
+      maxFiles: row.maxfiles,
+      uploadAccess: row.uploadaccess,
+      downloadAccess: row.downloadaccess,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
   }
 
   async getFilesByArea(areaId: number): Promise<FileEntry[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT * FROM file_entries
-        WHERE areaid = $1
-        ORDER BY uploaddate DESC
-      `;
-      const result = await client.query(sql, [areaId]);
-      return result.rows as FileEntry[];
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM file_entries WHERE areaid = ? ORDER BY uploaddate DESC');
+    const rows = stmt.all(areaId) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      filename: row.filename,
+      description: row.description,
+      size: row.size,
+      uploader: row.uploader,
+      uploadDate: new Date(row.uploaddate * 1000),
+      downloads: row.downloads,
+      areaId: row.areaid,
+      fileIdDiz: row.fileiddiz,
+      rating: row.rating,
+      votes: row.votes,
+      status: row.status as 'active' | 'held' | 'deleted',
+      checked: row.checked as 'N' | 'P' | 'F',
+      comment: row.comment
+    }));
   }
 
   async getFileStatisticsByConference(conferenceId: number): Promise<{
@@ -1845,419 +1410,323 @@ export class Database {
     totalUploads: number;
     totalDownloads: number;
   }> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT
-          COUNT(*) as totalfiles,
-          COALESCE(SUM(fe.size), 0) as totalbytes,
-          COALESCE(SUM(fe.downloads), 0) as totaldownloads
-        FROM file_entries fe
-        JOIN file_areas fa ON fe.areaid = fa.id
-        WHERE fa.conferenceid = $1
-      `;
-      const result = await client.query(sql, [conferenceId]);
-      const row = result.rows[0];
-      return {
-        totalFiles: parseInt(row.totalfiles) || 0,
-        totalBytes: parseInt(row.totalbytes) || 0,
-        totalUploads: 0, // Not tracked in file_entries, would need separate upload tracking
-        totalDownloads: parseInt(row.totaldownloads) || 0
-      };
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT
+        COUNT(*) as totalfiles,
+        COALESCE(SUM(fe.size), 0) as totalbytes,
+        COALESCE(SUM(fe.downloads), 0) as totaldownloads
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fa.conferenceid = ?
+    `);
+
+    const row = stmt.get(conferenceId) as any;
+    return {
+      totalFiles: parseInt(row.totalfiles) || 0,
+      totalBytes: parseInt(row.totalbytes) || 0,
+      totalUploads: 0,
+      totalDownloads: parseInt(row.totaldownloads) || 0
+    };
+  }
+
+  // Session management methods
+  async createSession(session: Omit<Session, 'created' | 'updated'>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO sessions (
+        id, userid, socketid, state, substate, currentconf, currentmsgbase,
+        timeremaining, lastactivity, confrjoin, msgbaserjoin, commandbuffer,
+        menupause, inputbuffer, relconfnum, currentconfname, cmdshortcuts, tempdata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      session.id, session.userId, session.socketId, session.state, session.subState,
+      session.currentConf, session.currentMsgBase, session.timeRemaining,
+      Math.floor(session.lastActivity.getTime() / 1000),
+      session.confRJoin, session.msgBaseRJoin, session.commandBuffer,
+      session.menuPause ? 1 : 0, session.inputBuffer, session.relConfNum,
+      session.currentConfName, session.cmdShortcuts ? 1 : 0,
+      session.tempData ? JSON.stringify(session.tempData) : null
+    );
+  }
+
+  async getSession(id: string): Promise<Session | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM sessions WHERE id = ?');
+    const row = stmt.get(id) as any;
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      userId: row.userid,
+      socketId: row.socketid,
+      state: row.state,
+      subState: row.substate,
+      currentConf: row.currentconf,
+      currentMsgBase: row.currentmsgbase,
+      timeRemaining: row.timeremaining,
+      lastActivity: new Date(row.lastactivity * 1000),
+      confRJoin: row.confrjoin,
+      msgBaseRJoin: row.msgbaserjoin,
+      commandBuffer: row.commandbuffer,
+      menuPause: Boolean(row.menupause),
+      inputBuffer: row.inputbuffer,
+      relConfNum: row.relconfnum,
+      currentConfName: row.currentconfname,
+      cmdShortcuts: Boolean(row.cmdshortcuts),
+      tempData: row.tempdata ? JSON.parse(row.tempdata) : undefined,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    };
+  }
+
+  async updateSession(id: string, updates: Partial<Session>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+    if (fields.length === 0) return;
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => {
+      if (f === 'tempdata') return updates.tempData ? JSON.stringify(updates.tempData) : null;
+      if (f === 'lastactivity') {
+        const date = updates.lastActivity;
+        return date ? Math.floor(date.getTime() / 1000) : null;
+      }
+      const value = updates[f as keyof Session];
+      if (typeof value === 'boolean') return value ? 1 : 0;
+      return value;
+    });
+
+    const sql = `UPDATE sessions SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values, id);
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('DELETE FROM sessions WHERE id = ?');
+    stmt.run(id);
+  }
+
+  async getActiveSessions(): Promise<Session[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const thirtyMinutesAgo = Math.floor(Date.now() / 1000) - 1800;
+    const stmt = this.db.prepare('SELECT * FROM sessions WHERE lastactivity > ?');
+    const rows = stmt.all(thirtyMinutesAgo) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      userId: row.userid,
+      socketId: row.socketid,
+      state: row.state,
+      subState: row.substate,
+      currentConf: row.currentconf,
+      currentMsgBase: row.currentmsgbase,
+      timeRemaining: row.timeremaining,
+      lastActivity: new Date(row.lastactivity * 1000),
+      confRJoin: row.confrjoin,
+      msgBaseRJoin: row.msgbaserjoin,
+      commandBuffer: row.commandbuffer,
+      menuPause: Boolean(row.menupause),
+      inputBuffer: row.inputbuffer,
+      relConfNum: row.relconfnum,
+      currentConfName: row.currentconfname,
+      cmdShortcuts: Boolean(row.cmdshortcuts),
+      tempData: row.tempdata ? JSON.parse(row.tempdata) : undefined,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
   }
 
   // Node session management methods
   async createNodeSession(session: Omit<NodeSession, 'created' | 'updated'>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO node_sessions (
-          id, nodeId, userId, socketId, state, subState, currentConf, currentMsgBase,
-          timeRemaining, lastActivity, status, loadLevel, currentUser
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        ON CONFLICT (nodeid) DO UPDATE SET
-          id = EXCLUDED.id,
-          userId = EXCLUDED.userId,
-          socketId = EXCLUDED.socketId,
-          state = EXCLUDED.state,
-          subState = EXCLUDED.subState,
-          currentConf = EXCLUDED.currentConf,
-          currentMsgBase = EXCLUDED.currentMsgBase,
-          timeRemaining = EXCLUDED.timeRemaining,
-          lastActivity = EXCLUDED.lastActivity,
-          status = EXCLUDED.status,
-          loadLevel = EXCLUDED.loadLevel,
-          currentUser = EXCLUDED.currentUser,
-          updated = CURRENT_TIMESTAMP
-      `;
+    if (!this.db) throw new Error('Database not initialized');
 
-      const values = [
-        session.id, session.nodeId, session.userId, session.socketId, session.state,
-        session.subState, session.currentConf, session.currentMsgBase, session.timeRemaining,
-        session.lastActivity, session.status, session.loadLevel, session.currentUser
-      ];
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO node_sessions (
+        id, nodeid, userid, socketid, state, substate, currentconf, currentmsgbase,
+        timeremaining, lastactivity, status, loadlevel, currentuser
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
+    stmt.run(
+      session.id, session.nodeId, session.userId, session.socketId, session.state,
+      session.subState, session.currentConf, session.currentMsgBase, session.timeRemaining,
+      Math.floor(session.lastActivity.getTime() / 1000),
+      session.status, session.loadLevel, session.currentUser
+    );
   }
 
   async updateNodeSession(id: string, updates: Partial<NodeSession>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
-      if (fields.length === 0) return;
+    if (!this.db) throw new Error('Database not initialized');
 
-      const sql = `UPDATE node_sessions SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')}, updated = CURRENT_TIMESTAMP WHERE id = $${fields.length + 1}`;
-      const values = [...fields.map(f => updates[f as keyof NodeSession]), id];
+    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+    if (fields.length === 0) return;
 
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => {
+      if (f === 'lastActivity') {
+        const date = updates.lastActivity;
+        return date ? Math.floor(date.getTime() / 1000) : null;
+      }
+      return updates[f as keyof NodeSession];
+    });
+
+    const sql = `UPDATE node_sessions SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values, id);
   }
 
   async getNodeSessions(nodeId?: number): Promise<NodeSession[]> {
-    const client = await this.pool.connect();
-    try {
-      let sql = `SELECT * FROM node_sessions`;
-      const params: any[] = [];
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (nodeId !== undefined) {
-        sql += ` WHERE nodeId = $1`;
-        params.push(nodeId);
-      }
+    let sql = 'SELECT * FROM node_sessions';
+    const params: any[] = [];
 
-      sql += ` ORDER BY lastActivity DESC`;
-      const result = await client.query(sql, params);
-      return result.rows as NodeSession[];
-    } finally {
-      client.release();
+    if (nodeId !== undefined) {
+      sql += ' WHERE nodeid = ?';
+      params.push(nodeId);
     }
-  }
 
-  // AREXX script management methods
-  async getAREXXScripts(): Promise<AREXXScript[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM arexx_scripts ORDER BY priority DESC, name`;
-      const result = await client.query(sql);
-      return result.rows as AREXXScript[];
-    } finally {
-      client.release();
-    }
-  }
+    sql += ' ORDER BY lastactivity DESC';
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as any[];
 
-  async executeAREXXScript(scriptId: string, context: AREXXContext): Promise<any> {
-    // AREXX execution would be implemented here
-    // For now, return a placeholder
-    return { success: true, result: 'AREXX script executed' };
-  }
-
-  // QWK packet management methods
-  async createQWKPacket(packet: Omit<QWKPacket, 'id'>): Promise<string> {
-    const client = await this.pool.connect();
-    try {
-      const id = crypto.randomUUID();
-      const sql = `
-        INSERT INTO qwk_packets (
-          id, filename, userId, status, messageCount, created, sent, size, path
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `;
-
-      const values = [
-        id, packet.filename, packet.userId, packet.status, packet.messageCount,
-        packet.created, packet.sent, packet.size, packet.path
-      ];
-
-      await client.query(sql, values);
-      return id;
-    } finally {
-      client.release();
-    }
-  }
-
-  async createQWKMessage(message: Omit<QWKMessage, 'id'>): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO qwk_messages (
-          packetId, subject, body, author, recipient, timestamp, conference,
-          messageBase, isPrivate, status, from, to, date, isReply, parentId, attachments
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        RETURNING id
-      `;
-
-      const values = [
-        message.packetId, message.subject, message.body, message.author, message.recipient,
-        message.timestamp, message.conference, message.messageBase, message.isPrivate,
-        message.status, message.from, message.to, message.date, message.isReply,
-        message.parentId, JSON.stringify(message.attachments || [])
-      ];
-
-      const result = await client.query(sql, values);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
-  }
-
-  async updateQWKPacket(id: string, updates: Partial<QWKPacket>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = Object.keys(updates).filter(key => key !== 'id');
-      if (fields.length === 0) return;
-
-      const sql = `UPDATE qwk_packets SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
-      const values = [...fields.map(f => updates[f as keyof QWKPacket]), id];
-
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
-  }
-
-  async getQWKPacket(id: string): Promise<QWKPacket | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM qwk_packets WHERE id = $1`;
-      const result = await client.query(sql, [id]);
-      return result.rows[0] as QWKPacket || null;
-    } finally {
-      client.release();
-    }
-  }
-
-  async deleteQWKPacket(id: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `DELETE FROM qwk_packets WHERE id = $1`;
-      await client.query(sql, [id]);
-    } finally {
-      client.release();
-    }
-  }
-
-  // FTN message management methods
-  async createFTNMessage(message: Omit<FTNMessage, 'id'>): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO ftn_messages (
-          subject, body, author, recipient, timestamp, originAddress, destinationAddress,
-          conference, messageBase, isPrivate, status, attributes, fromAddress, toAddress,
-          date, msgid, replyTo, area
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-        RETURNING id
-      `;
-
-      const values = [
-        message.subject, message.body, message.author, message.recipient, message.timestamp,
-        message.originAddress, message.destinationAddress, message.conference, message.messageBase,
-        message.isPrivate, message.status, message.attributes, message.fromAddress,
-        message.toAddress, message.date, message.msgid, message.replyTo, message.area
-      ];
-
-      const result = await client.query(sql, values);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
-  }
-
-  async getFTNMessages(conferenceId: number, messageBaseId: number): Promise<FTNMessage[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT * FROM ftn_messages
-        WHERE conference = $1 AND messageBase = $2
-        ORDER BY timestamp DESC
-      `;
-      const result = await client.query(sql, [conferenceId, messageBaseId]);
-      return result.rows as FTNMessage[];
-    } finally {
-      client.release();
-    }
-  }
-
-  async updateFTNMessage(id: number, updates: Partial<FTNMessage>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = Object.keys(updates).filter(key => key !== 'id');
-      if (fields.length === 0) return;
-
-      const sql = `UPDATE ftn_messages SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
-      const values = [...fields.map(f => updates[f as keyof FTNMessage]), id];
-
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
-  }
-
-  // File transfer session management methods
-  async createTransferSession(session: Omit<TransferSession, 'id'>): Promise<string> {
-    const client = await this.pool.connect();
-    try {
-      const id = crypto.randomUUID();
-      const sql = `
-        INSERT INTO transfer_sessions (
-          id, userId, type, protocol, filename, size, transferred, status,
-          startTime, endTime, speed, error
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      `;
-
-      const values = [
-        id, session.userId, session.type, session.protocol, session.filename,
-        session.size, session.transferred, session.status, session.startTime,
-        session.endTime, session.speed, session.error
-      ];
-
-      await client.query(sql, values);
-      return id;
-    } finally {
-      client.release();
-    }
-  }
-
-  async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = Object.keys(updates).filter(key => key !== 'id');
-      if (fields.length === 0) return;
-
-      const sql = `UPDATE transfer_sessions SET ${fields.map((f, i) => `${f} = $${i + 1}`).join(', ')} WHERE id = $${fields.length + 1}`;
-      const values = [...fields.map(f => updates[f as keyof TransferSession]), id];
-
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
+    return rows.map(row => ({
+      id: row.id,
+      nodeId: row.nodeid,
+      userId: row.userid,
+      socketId: row.socketid,
+      state: row.state,
+      subState: row.substate,
+      currentConf: row.currentconf,
+      currentMsgBase: row.currentmsgbase,
+      timeRemaining: row.timeremaining,
+      lastActivity: new Date(row.lastactivity * 1000),
+      status: row.status,
+      loadLevel: row.loadlevel,
+      currentUser: row.currentuser,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
   }
 
   // OLM (Online Message) methods
   async sendOnlineMessage(fromUserId: string, fromUsername: string, toUserId: string, toUsername: string, message: string): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO online_messages (from_user_id, from_username, to_user_id, to_username, message)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-      `;
-      const result = await client.query(sql, [fromUserId, fromUsername, toUserId, toUsername, message]);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT INTO online_messages (from_user_id, from_username, to_user_id, to_username, message)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(fromUserId, fromUsername, toUserId, toUsername, message);
+    return result.lastInsertRowid as number;
   }
 
   async getUnreadMessages(userId: string): Promise<any[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT id, from_user_id, from_username, message, created_at
-        FROM online_messages
-        WHERE to_user_id = $1 AND delivered = FALSE
-        ORDER BY created_at ASC
-      `;
-      const result = await client.query(sql, [userId]);
-      return result.rows;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT id, from_user_id, from_username, message, created_at
+      FROM online_messages
+      WHERE to_user_id = ? AND delivered = 0
+      ORDER BY created_at ASC
+    `);
+    const rows = stmt.all(userId) as any[];
+    return rows.map(row => ({
+      ...row,
+      created_at: new Date(row.created_at * 1000)
+    }));
   }
 
   async getAllMessages(userId: string): Promise<any[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT id, from_user_id, from_username, message, created_at, delivered, read, delivered_at, read_at
-        FROM online_messages
-        WHERE to_user_id = $1
-        ORDER BY created_at DESC
-        LIMIT 50
-      `;
-      const result = await client.query(sql, [userId]);
-      return result.rows;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT id, from_user_id, from_username, message, created_at, delivered, read, delivered_at, read_at
+      FROM online_messages
+      WHERE to_user_id = ?
+      ORDER BY created_at DESC
+      LIMIT 50
+    `);
+    const rows = stmt.all(userId) as any[];
+    return rows.map(row => ({
+      ...row,
+      created_at: new Date(row.created_at * 1000),
+      delivered: Boolean(row.delivered),
+      read: Boolean(row.read),
+      delivered_at: row.delivered_at ? new Date(row.delivered_at * 1000) : null,
+      read_at: row.read_at ? new Date(row.read_at * 1000) : null
+    }));
   }
 
   async markMessageDelivered(messageId: number): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        UPDATE online_messages
-        SET delivered = TRUE, delivered_at = NOW()
-        WHERE id = $1
-      `;
-      await client.query(sql, [messageId]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      UPDATE online_messages
+      SET delivered = 1, delivered_at = strftime('%s', 'now')
+      WHERE id = ?
+    `);
+    stmt.run(messageId);
   }
 
   async markMessageRead(messageId: number): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        UPDATE online_messages
-        SET read = TRUE, read_at = NOW()
-        WHERE id = $1
-      `;
-      await client.query(sql, [messageId]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      UPDATE online_messages
+      SET read = 1, read_at = strftime('%s', 'now')
+      WHERE id = ?
+    `);
+    stmt.run(messageId);
   }
 
   async getUnreadMessageCount(userId: string): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT COUNT(*) as count
-        FROM online_messages
-        WHERE to_user_id = $1 AND delivered = FALSE
-      `;
-      const result = await client.query(sql, [userId]);
-      return parseInt(result.rows[0].count);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT COUNT(*) as count
+      FROM online_messages
+      WHERE to_user_id = ? AND delivered = 0
+    `);
+    const row = stmt.get(userId) as any;
+    return parseInt(row.count);
   }
 
   async deleteOLMMessage(messageId: number, userId: string): Promise<boolean> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        DELETE FROM online_messages
-        WHERE id = $1 AND to_user_id = $2
-      `;
-      const result = await client.query(sql, [messageId, userId]);
-      return result.rowCount > 0;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      DELETE FROM online_messages
+      WHERE id = ? AND to_user_id = ?
+    `);
+    const result = stmt.run(messageId, userId);
+    return result.changes > 0;
   }
 
-  // V2: Fixed to use lowercase column name
   async getUserByUsernameForOLMv2(username: string): Promise<{ id: string; username: string; availableForChat: boolean } | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT id, username, availableforchat as "availableForChat" FROM users WHERE LOWER(username) = LOWER($1)`;
-      const result = await client.query(sql, [username]);
-      return result.rows.length > 0 ? result.rows[0] : null;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT id, username, availableforchat FROM users WHERE LOWER(username) = LOWER(?)');
+    const row = stmt.get(username) as any;
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      username: row.username,
+      availableForChat: Boolean(row.availableforchat)
+    };
   }
 
-  // Keep old function for backwards compatibility - redirects to v2
   async getUserByUsernameForOLM(username: string): Promise<{ id: string; username: string; availableForChat: boolean } | null> {
     return this.getUserByUsernameForOLMv2(username);
   }
@@ -2271,141 +1740,126 @@ export class Database {
     recipientUsername: string,
     recipientSocket: string
   ): Promise<string> {
-    const client = await this.pool.connect();
-    try {
-      const sessionId = crypto.randomUUID();
-      const sql = `
-        INSERT INTO chat_sessions (
-          session_id, initiator_id, initiator_username, initiator_socket,
-          recipient_id, recipient_username, recipient_socket, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'requesting')
-        RETURNING session_id
-      `;
-      const result = await client.query(sql, [
-        sessionId, initiatorId, initiatorUsername, initiatorSocket,
-        recipientId, recipientUsername, recipientSocket
-      ]);
-      return result.rows[0].session_id;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const sessionId = crypto.randomUUID();
+    const stmt = this.db.prepare(`
+      INSERT INTO chat_sessions (
+        session_id, initiator_id, initiator_username, initiator_socket,
+        recipient_id, recipient_username, recipient_socket, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'requesting')
+    `);
+    stmt.run(sessionId, initiatorId, initiatorUsername, initiatorSocket, recipientId, recipientUsername, recipientSocket);
+    return sessionId;
   }
 
   async getChatSession(sessionId: string): Promise<InternodeChatSession | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT
-          session_id as "sessionId",
-          initiator_id as "initiatorId",
-          initiator_username as "initiatorUsername",
-          initiator_socket as "initiatorSocket",
-          recipient_id as "recipientId",
-          recipient_username as "recipientUsername",
-          recipient_socket as "recipientSocket",
-          status,
-          started_at as "startedAt",
-          created_at as "createdAt",
-          ended_at as "endedAt"
-        FROM chat_sessions
-        WHERE session_id = $1
-      `;
-      const result = await client.query(sql, [sessionId]);
-      return result.rows.length > 0 ? result.rows[0] : null;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM chat_sessions WHERE session_id = ?');
+    const row = stmt.get(sessionId) as any;
+    if (!row) return null;
+
+    return {
+      sessionId: row.session_id,
+      initiatorId: row.initiator_id,
+      initiatorUsername: row.initiator_username,
+      initiatorSocket: row.initiator_socket,
+      recipientId: row.recipient_id,
+      recipientUsername: row.recipient_username,
+      recipientSocket: row.recipient_socket,
+      status: row.status,
+      startedAt: new Date(row.started_at * 1000),
+      createdAt: new Date(row.created_at * 1000),
+      endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined
+    };
   }
 
   async getChatSessionBySocketId(socketId: string): Promise<InternodeChatSession | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT
-          session_id as "sessionId",
-          initiator_id as "initiatorId",
-          initiator_username as "initiatorUsername",
-          initiator_socket as "initiatorSocket",
-          recipient_id as "recipientId",
-          recipient_username as "recipientUsername",
-          recipient_socket as "recipientSocket",
-          status,
-          started_at as "startedAt",
-          created_at as "createdAt",
-          ended_at as "endedAt"
-        FROM chat_sessions
-        WHERE (initiator_socket = $1 OR recipient_socket = $1)
-        AND status = 'active'
-      `;
-      const result = await client.query(sql, [socketId]);
-      return result.rows.length > 0 ? result.rows[0] : null;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM chat_sessions
+      WHERE (initiator_socket = ? OR recipient_socket = ?)
+      AND status = 'active'
+    `);
+    const row = stmt.get(socketId, socketId) as any;
+    if (!row) return null;
+
+    return {
+      sessionId: row.session_id,
+      initiatorId: row.initiator_id,
+      initiatorUsername: row.initiator_username,
+      initiatorSocket: row.initiator_socket,
+      recipientId: row.recipient_id,
+      recipientUsername: row.recipient_username,
+      recipientSocket: row.recipient_socket,
+      status: row.status,
+      startedAt: new Date(row.started_at * 1000),
+      createdAt: new Date(row.created_at * 1000),
+      endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined
+    };
   }
 
   async getPendingChatInvitationForUser(userId: string): Promise<{ sessionId: string } | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT session_id as "sessionId"
-        FROM chat_sessions
-        WHERE recipient_id = $1
-        AND status = 'requesting'
-        ORDER BY created_at DESC
-        LIMIT 1
-      `;
-      const result = await client.query(sql, [userId]);
-      return result.rows.length > 0 ? result.rows[0] : null;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT session_id
+      FROM chat_sessions
+      WHERE recipient_id = ?
+      AND status = 'requesting'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    const row = stmt.get(userId) as any;
+    return row ? { sessionId: row.session_id } : null;
   }
 
   async updateChatSessionStatus(
     sessionId: string,
     status: 'requesting' | 'active' | 'ended' | 'declined'
   ): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        UPDATE chat_sessions
-        SET status = $2, updated_at = CURRENT_TIMESTAMP
-        WHERE session_id = $1
-      `;
-      await client.query(sql, [sessionId, status]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      UPDATE chat_sessions
+      SET status = ?, updated_at = strftime('%s', 'now')
+      WHERE session_id = ?
+    `);
+    stmt.run(status, sessionId);
   }
 
   async endChatSession(sessionId: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        UPDATE chat_sessions
-        SET status = 'ended', ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE session_id = $1
-      `;
-      await client.query(sql, [sessionId]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      UPDATE chat_sessions
+      SET status = 'ended', ended_at = strftime('%s', 'now'), updated_at = strftime('%s', 'now')
+      WHERE session_id = ?
+    `);
+    stmt.run(sessionId);
   }
 
   async getActiveChatSessions(): Promise<InternodeChatSession[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT * FROM chat_sessions
-        WHERE status = 'active'
-        ORDER BY started_at DESC
-      `;
-      const result = await client.query(sql);
-      return result.rows;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM chat_sessions WHERE status = \'active\' ORDER BY started_at DESC');
+    const rows = stmt.all() as any[];
+
+    return rows.map(row => ({
+      sessionId: row.session_id,
+      initiatorId: row.initiator_id,
+      initiatorUsername: row.initiator_username,
+      initiatorSocket: row.initiator_socket,
+      recipientId: row.recipient_id,
+      recipientUsername: row.recipient_username,
+      recipientSocket: row.recipient_socket,
+      status: row.status,
+      startedAt: new Date(row.started_at * 1000),
+      createdAt: new Date(row.created_at * 1000),
+      endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined
+    }));
   }
 
   async saveChatMessage(
@@ -2414,55 +1868,46 @@ export class Database {
     senderUsername: string,
     message: string
   ): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      // Save message
-      const sql = `
-        INSERT INTO chat_messages (session_id, sender_id, sender_username, message)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id
-      `;
-      const result = await client.query(sql, [sessionId, senderId, senderUsername, message]);
+    if (!this.db) throw new Error('Database not initialized');
 
-      // Update message count in session
-      const updateSql = `
-        UPDATE chat_sessions
-        SET message_count = message_count + 1, updated_at = CURRENT_TIMESTAMP
-        WHERE session_id = $1
-      `;
-      await client.query(updateSql, [sessionId]);
+    const stmt = this.db.prepare(`
+      INSERT INTO chat_messages (session_id, sender_id, sender_username, message)
+      VALUES (?, ?, ?, ?)
+    `);
+    const result = stmt.run(sessionId, senderId, senderUsername, message);
 
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
+    const updateStmt = this.db.prepare(`
+      UPDATE chat_sessions
+      SET message_count = message_count + 1, updated_at = strftime('%s', 'now')
+      WHERE session_id = ?
+    `);
+    updateStmt.run(sessionId);
+
+    return result.lastInsertRowid as number;
   }
 
   async getChatHistory(sessionId: string, limit: number = 50): Promise<InternodeChatMessage[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT * FROM chat_messages
-        WHERE session_id = $1
-        ORDER BY sent_at DESC
-        LIMIT $2
-      `;
-      const result = await client.query(sql, [sessionId, limit]);
-      return result.rows.reverse(); // Reverse to get chronological order
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?');
+    const rows = stmt.all(sessionId, limit) as any[];
+
+    return rows.reverse().map(row => ({
+      id: row.id,
+      sessionId: row.session_id,
+      senderId: row.sender_id,
+      senderUsername: row.sender_username,
+      message: row.message,
+      sentAt: new Date(row.created_at * 1000)
+    }));
   }
 
   async getChatMessageCount(sessionId: string): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT COUNT(*) as count FROM chat_messages WHERE session_id = $1`;
-      const result = await client.query(sql, [sessionId]);
-      return parseInt(result.rows[0].count);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?');
+    const row = stmt.get(sessionId) as any;
+    return parseInt(row.count);
   }
 
   async getAvailableUsersForChat(): Promise<Array<{
@@ -2472,19 +1917,22 @@ export class Database {
     secLevel: number;
     currentAction?: string;
   }>> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT id, username, realname, seclevel as "secLevel"
-        FROM users
-        WHERE availableforchat = TRUE
-        ORDER BY username
-      `;
-      const result = await client.query(sql);
-      return result.rows;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT id, username, realname, seclevel
+      FROM users
+      WHERE availableforchat = 1
+      ORDER BY username
+    `);
+    const rows = stmt.all() as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      username: row.username,
+      realname: row.realname,
+      secLevel: row.seclevel
+    }));
   }
 
   // Logging methods
@@ -2493,39 +1941,30 @@ export class Database {
     conferenceId?: number;
     node?: number;
   }): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `INSERT INTO system_logs (level, message, userId, conferenceId, node) VALUES ($1, $2, $3, $4, $5)`;
-      const values = [level, message, context?.userId, context?.conferenceId, context?.node];
-      await client.query(sql, values);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Since we don't have a system_logs table in the simplified version,
+    // we'll just console.log for now
+    console.log(`[${level.toUpperCase()}] ${message}`, context);
   }
 
   // Utility methods
   async hashPassword(password: string): Promise<string> {
-    // Use bcrypt with 10 salt rounds (balances security and performance)
-    // 10 rounds is industry standard and matches new user registration
     const saltRounds = 10;
     return await bcrypt.hash(password, saltRounds);
   }
 
   async verifyPassword(password: string, hash: string): Promise<boolean> {
-    // Check if this is a legacy SHA-256 hash (64 hex characters)
     const isSHA256 = hash.length === 64 && /^[0-9a-f]{64}$/i.test(hash);
 
     if (isSHA256) {
-      // Legacy SHA-256 hash - use direct comparison
       const sha256Hash = crypto.createHash('sha256').update(password).digest('hex');
       return sha256Hash === hash;
     }
 
-    // Modern bcrypt hash - use bcrypt.compare()
     try {
       return await bcrypt.compare(password, hash);
     } catch (error) {
-      // If bcrypt verification fails due to invalid hash format, return false
       console.warn('Password verification error:', error);
       return false;
     }
@@ -2540,7 +1979,6 @@ export class Database {
       secLevel: user.secLevel
     };
 
-    // Access tokens expire in 1 hour
     return jwt.sign(payload, secret, { expiresIn: '1h' });
   }
 
@@ -2551,7 +1989,6 @@ export class Database {
       username: user.username
     };
 
-    // Refresh tokens expire in 7 days
     return jwt.sign(payload, secret, { expiresIn: '7d' });
   }
 
@@ -2585,1007 +2022,534 @@ export class Database {
   }
 
   async authenticateUser(username: string, password: string): Promise<User | null> {
-    const client = await this.pool.connect();
-    try {
-      // Get user by username
-      const result = await client.query(
-        'SELECT * FROM users WHERE LOWER(username) = LOWER($1)',
-        [username]
-      );
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (result.rows.length === 0) {
-        return null;
-      }
+    const stmt = this.db.prepare('SELECT * FROM users WHERE LOWER(username) = LOWER(?)');
+    const user = stmt.get(username) as any;
 
-      const user = result.rows[0];
+    if (!user) return null;
 
-      // Verify password with bcrypt
-      const bcrypt = await import('bcryptjs');
-      const passwordMatch = await bcrypt.compare(password, user.passwordhash);
+    const passwordMatch = await bcrypt.compare(password, user.passwordhash);
 
-      if (!passwordMatch) {
-        return null;
-      }
+    if (!passwordMatch) return null;
 
-      // Return user without password hash
-      return {
-        id: user.id,
-        username: user.username,
-        passwordHash: user.passwordhash,
-        realname: user.realname,
-        location: user.location,
-        phone: user.phone,
-        email: user.email,
-        secLevel: user.seclevel,
-        uploads: user.uploads,
-        downloads: user.downloads,
-        bytesUpload: user.bytesupload,
-        bytesDownload: user.bytesdownload,
-        ratio: user.ratio,
-        ratioType: user.ratiotype,
-        timeTotal: user.timetotal,
-        timeLimit: user.timelimit,
-        timeUsed: user.timeused,
-        chatLimit: user.chatlimit,
-        chatUsed: user.chatused,
-        firstLogin: user.firstlogin,
-        lastLogin: user.lastlogin || user.firstlogin,
-        calls: user.calls,
-        callsToday: user.callstoday,
-        newUser: user.newuser,
-        expert: user.expert,
-        ansi: user.ansi,
-        linesPerScreen: user.linesperscreen,
-        computer: user.computer,
-        screenType: user.screentype,
-        protocol: user.protocol,
-        editor: user.editor,
-        zoomType: user.zoomtype,
-        availableForChat: user.availableForChat || user.availableforchat || true,
-        quietNode: user.quietnode,
-        autoRejoin: user.autorejoin,
-        confAccess: user.confaccess,
-        areaName: user.areaname,
-        uucp: user.uucp,
-        topUploadCps: user.topuploadcps,
-        topDownloadCps: user.topdownloadcps,
-        byteLimit: user.bytelimit
-      };
-    } finally {
-      client.release();
-    }
+    return this.mapUserFromDb(user);
   }
 
   async close(): Promise<void> {
-    // Clear health check interval
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
+    if (this.db) {
+      console.log('🔌 Closing database connection...');
+      this.db.close();
+      this.isConnected = false;
+      console.log('✅ Database connection closed');
     }
-
-    console.log('🔌 Closing database connection pool...');
-    await this.pool.end();
-    this.isConnected = false;
-    console.log('✅ Database connection pool closed');
   }
 
   // Initialize default data
   async initializeDefaultData(): Promise<void> {
-    const client = await this.pool.connect();
+    if (!this.db) throw new Error('Database not initialized');
+
     try {
-      // Step 1: Create conferences with EXPLICIT IDs matching BBS structure
-      // CRITICAL: BBS directories Conf01, Conf02, Conf03 must map to IDs 1, 2, 3
-      let confIds: { [key: string]: number } = {};
-      try {
-        console.log('[DB Init Step 1/5] Creating default conferences with explicit IDs...');
-        // These IDs MUST match the BBS Conf## directory numbers
-        const conferences = [
-          { id: 1, name: 'General', description: 'General discussion' },          // Maps to BBS/Conf01/
-          { id: 2, name: 'Tech Support', description: 'Technical support' },      // Maps to BBS/Conf02/
-          { id: 3, name: 'Announcements', description: 'System announcements' }   // Maps to BBS/Conf03/
-        ];
+      console.log('[DB Init] Creating default data...');
 
-        for (const conf of conferences) {
-          const existing = await client.query('SELECT id FROM conferences WHERE id = $1', [conf.id]);
-          if (existing.rows.length === 0) {
-            // Insert with explicit ID
-            await client.query(
-              'INSERT INTO conferences (id, name, description) VALUES ($1, $2, $3)',
-              [conf.id, conf.name, conf.description]
-            );
-            confIds[conf.name] = conf.id;
-            console.log(`  ✓ Created conference: ${conf.name} (ID: ${conf.id}) → BBS/Conf0${conf.id}/`);
-          } else {
-            confIds[conf.name] = existing.rows[0].id;
-            console.log(`  • Conference already exists: ${conf.name} (ID: ${conf.id}) → BBS/Conf0${conf.id}/`);
-          }
-        }
+      // Check if conferences already exist
+      const confStmt = this.db.prepare('SELECT COUNT(*) as count FROM conferences');
+      const confCount = (confStmt.get() as any).count;
 
-        // Update sequence to continue from max ID + 1
-        await client.query(`SELECT setval('conferences_id_seq', (SELECT MAX(id) FROM conferences), true)`);
-
-        console.log('[DB Init Step 1/5] ✓ Conferences initialized with explicit IDs');
-      } catch (error) {
-        console.error('[DB Init Step 1/5] ✗ Failed to create conferences:', error);
-        throw error;
+      if (confCount > 0) {
+        console.log('[DB Init] Default data already exists, skipping initialization');
+        return;
       }
 
-      // Step 2: Create message bases with EXPLICIT IDs
-      try {
-        console.log('[DB Init Step 2/5] Creating default message bases with explicit IDs...');
-        const messageBases = [
-          { id: 1, name: 'Main', conferenceName: 'General' },             // Conference 1, Message Base 1
-          { id: 2, name: 'Off Topic', conferenceName: 'General' },        // Conference 1, Message Base 2
-          { id: 3, name: 'Support', conferenceName: 'Tech Support' },     // Conference 2, Message Base 3
-          { id: 4, name: 'News', conferenceName: 'Announcements' }        // Conference 3, Message Base 4
-        ];
+      // Create conferences
+      const confIds: { [key: string]: number } = {};
+      const conferences = [
+        { name: 'General', description: 'General discussion' },
+        { name: 'Tech Support', description: 'Technical support' },
+        { name: 'Announcements', description: 'System announcements' }
+      ];
 
-        for (const mb of messageBases) {
-          const conferenceId = confIds[mb.conferenceName];
-          const existing = await client.query('SELECT id FROM message_bases WHERE id = $1', [mb.id]);
-          if (existing.rows.length === 0) {
-            await client.query(
-              'INSERT INTO message_bases (id, name, conferenceid) VALUES ($1, $2, $3)',
-              [mb.id, mb.name, conferenceId]
-            );
-            console.log(`  ✓ Created message base: ${mb.name} (ID: ${mb.id}) in conference ${mb.conferenceName} (ID: ${conferenceId})`);
-          } else {
-            console.log(`  • Message base already exists: ${mb.name} (ID: ${mb.id}) in conference ${mb.conferenceName}`);
-          }
-        }
-
-        // Update sequence
-        await client.query(`SELECT setval('message_bases_id_seq', (SELECT MAX(id) FROM message_bases), true)`);
-
-        console.log('[DB Init Step 2/5] ✓ Message bases initialized with explicit IDs');
-      } catch (error) {
-        console.error('[DB Init Step 2/5] ✗ Failed to create message bases:', error);
-        throw error;
+      for (const conf of conferences) {
+        const id = await this.createConference(conf);
+        confIds[conf.name] = id;
+        console.log(`  ✓ Created conference: ${conf.name} (ID: ${id})`);
       }
 
-      // Step 3: Create file areas with EXPLICIT IDs
-      try {
-        console.log('[DB Init Step 3/5] Creating default file areas with explicit IDs...');
-        const fileAreas = [
-          { id: 1, name: 'General Files', description: 'General purpose file area', path: '/files/general', conferenceName: 'General', maxFiles: 100, uploadAccess: 10, downloadAccess: 1 },
-          { id: 2, name: 'Utilities', description: 'System utilities and tools', path: '/files/utils', conferenceName: 'General', maxFiles: 50, uploadAccess: 50, downloadAccess: 1 },
-          { id: 3, name: 'Games', description: 'BBS games and entertainment', path: '/files/games', conferenceName: 'Tech Support', maxFiles: 75, uploadAccess: 25, downloadAccess: 1 },
-          { id: 4, name: 'Tech Files', description: 'Technical documentation and tools', path: '/files/tech', conferenceName: 'Tech Support', maxFiles: 60, uploadAccess: 20, downloadAccess: 1 },
-          { id: 5, name: 'System News', description: 'System announcements and updates', path: '/files/news', conferenceName: 'Announcements', maxFiles: 30, uploadAccess: 100, downloadAccess: 1 }
-        ];
+      // Create message bases
+      const messageBases = [
+        { name: 'Main', conferenceName: 'General' },
+        { name: 'Off Topic', conferenceName: 'General' },
+        { name: 'Support', conferenceName: 'Tech Support' },
+        { name: 'News', conferenceName: 'Announcements' }
+      ];
 
-        for (const area of fileAreas) {
-          const conferenceId = confIds[area.conferenceName];
-          const existing = await client.query('SELECT id FROM file_areas WHERE id = $1', [area.id]);
-          if (existing.rows.length === 0) {
-            await client.query(`
-              INSERT INTO file_areas (id, name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            `, [area.id, area.name, area.description, area.path, conferenceId, area.maxFiles, area.uploadAccess, area.downloadAccess]);
-            console.log(`  ✓ Created file area: ${area.name} (ID: ${area.id}) in conference ${area.conferenceName} (ID: ${conferenceId})`);
-          } else {
-            console.log(`  • File area already exists: ${area.name} (ID: ${area.id}) in conference ${area.conferenceName}`);
-          }
-        }
-
-        // Update sequence
-        await client.query(`SELECT setval('file_areas_id_seq', (SELECT MAX(id) FROM file_areas), true)`);
-
-        console.log('[DB Init Step 3/5] ✓ File areas initialized with explicit IDs');
-      } catch (error) {
-        console.error('[DB Init Step 3/5] ✗ Failed to create file areas:', error);
-        throw error;
-      }
-
-      // Step 4: Create sysop user
-      try {
-        console.log('[DB Init Step 4/5] Creating default sysop user...');
-        console.log('  • Generating bcrypt password hash...');
-        const hashedPassword = await this.hashPassword('sysop');
-        console.log('  ✓ Password hash generated');
-
-        // Try to update existing sysop user first
-        console.log('  • Checking for existing sysop user...');
-        const updateResult = await client.query(`
-          UPDATE users SET passwordhash = $1, expert = $2 WHERE username = 'sysop'
-        `, [hashedPassword, false]);
-
-        if (updateResult.rowCount === 0) {
-          // User doesn't exist, create it
-          console.log('  • No existing sysop user found, creating new user...');
-          await client.query(`
-            INSERT INTO users (
-              id, username, passwordhash, realname, location, phone, email, seclevel,
-              uploads, downloads, bytesupload, bytesdownload, ratio, ratiotype,
-              timetotal, timelimit, timeused, chatlimit, chatused, lastlogin, firstlogin,
-              calls, callstoday, newuser, expert, ansi, linesperscreen, computer,
-              screentype, protocol, editor, zoomtype, availableforchat, quietnode,
-              autorejoin, confaccess, areaname, uucp, topuploadcps, topdownloadcps, bytelimit
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-              $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
-              $39, $40, $41
-            )
-          `, [
-            'sysop-user-id', 'sysop', hashedPassword, 'System Operator', 'Server Room', '', '',
-            255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, new Date(),
-            0, 0, false, false, true, 23, 'Server', 'Amiga Ansi', '/X Zmodem', 'Prompt',
-            'QWK', true, false, 1, 'XXX', 'Sysop', false, 0, 0, 0
-          ]);
-          console.log('  ✓ Sysop user created successfully');
-        } else {
-          console.log(`  ✓ Sysop user password updated (affected ${updateResult.rowCount} rows)`);
-        }
-        console.log('[DB Init Step 4/5] ✓ Sysop user initialized');
-      } catch (error) {
-        console.error('[DB Init Step 4/5] ✗ CRITICAL: Failed to create sysop user:', error);
-        console.error('  Error details:', {
-          message: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined
+      for (const mb of messageBases) {
+        const id = await this.createMessageBase({
+          name: mb.name,
+          conferenceId: confIds[mb.conferenceName]
         });
-        throw error;
+        console.log(`  ✓ Created message base: ${mb.name} in ${mb.conferenceName}`);
       }
 
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      // Create file areas
+      const fileAreas = [
+        { name: 'General Files', description: 'General purpose file area', path: '/files/general', conferenceName: 'General', maxFiles: 100, uploadAccess: 10, downloadAccess: 1 },
+        { name: 'Utilities', description: 'System utilities and tools', path: '/files/utils', conferenceName: 'General', maxFiles: 50, uploadAccess: 50, downloadAccess: 1 },
+        { name: 'Games', description: 'BBS games and entertainment', path: '/files/games', conferenceName: 'Tech Support', maxFiles: 75, uploadAccess: 25, downloadAccess: 1 },
+        { name: 'Tech Files', description: 'Technical documentation and tools', path: '/files/tech', conferenceName: 'Tech Support', maxFiles: 60, uploadAccess: 20, downloadAccess: 1 },
+        { name: 'System News', description: 'System announcements and updates', path: '/files/news', conferenceName: 'Announcements', maxFiles: 30, uploadAccess: 100, downloadAccess: 1 }
+      ];
+
+      for (const area of fileAreas) {
+        await this.createFileArea({
+          name: area.name,
+          description: area.description,
+          path: area.path,
+          conferenceId: confIds[area.conferenceName],
+          maxFiles: area.maxFiles,
+          uploadAccess: area.uploadAccess,
+          downloadAccess: area.downloadAccess
+        });
+        console.log(`  ✓ Created file area: ${area.name}`);
+      }
+
+      // Create sysop user
+      const hashedPassword = await this.hashPassword('sysop');
+      await this.createUser({
+        username: 'sysop',
+        passwordHash: hashedPassword,
+        realname: 'System Operator',
+        location: 'Server Room',
+        phone: '',
+        email: '',
+        secLevel: 255,
+        uploads: 0,
+        downloads: 0,
+        bytesUpload: 0,
+        bytesDownload: 0,
+        ratio: 0,
+        ratioType: 0,
+        timeTotal: 0,
+        timeLimit: 0,
+        timeUsed: 0,
+        chatLimit: 0,
+        chatUsed: 0,
+        firstLogin: new Date(),
+        calls: 0,
+        callsToday: 0,
+        newUser: false,
+        expert: false,
+        ansi: true,
+        linesPerScreen: 23,
+        computer: 'Server',
+        screenType: 'Amiga Ansi',
+        protocol: '/X Zmodem',
+        editor: 'Prompt',
+        zoomType: 'QWK',
+        availableForChat: true,
+        quietNode: false,
+        autoRejoin: 1,
+        confAccess: 'XXX',
+        areaName: 'Sysop',
+        uuCP: false,
+        topUploadCPS: 0,
+        topDownloadCPS: 0,
+        byteLimit: 0,
+        userFlags: 0
+      });
+      console.log('  ✓ Created sysop user');
+
       console.log('✓ Database initialization completed successfully');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (error) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('✗ CRITICAL: Database initialization failed');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('Error:', error);
-      console.error('Stack:', error instanceof Error ? error.stack : 'No stack trace available');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      // Don't throw error - continue with server startup
-      console.log('⚠️  Continuing with server startup despite database initialization error');
-      console.log('⚠️  The BBS may not function correctly. Please check the error above.');
-    } finally {
-      client.release();
-    }
-  }
-
-  // Clean up duplicate conferences by name, keeping only the first occurrence
-  async cleanupDuplicateConferences(): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      console.log('Cleaning up duplicate conferences...');
-
-      // Find duplicate conference names
-      const duplicates = await client.query(`
-        SELECT name, COUNT(*) as count
-        FROM conferences
-        GROUP BY name
-        HAVING COUNT(*) > 1
-      `);
-
-      if (duplicates.rows.length > 0) {
-        console.log(`Found ${duplicates.rows.length} conference names with duplicates`);
-
-        for (const dup of duplicates.rows) {
-          // Get all IDs for this conference name, ordered by creation date
-          const ids = await client.query(`
-            SELECT id FROM conferences
-            WHERE name = $1
-            ORDER BY created ASC
-          `, [dup.name]);
-
-          // Keep the first one, delete the rest
-          const idsToDelete = ids.rows.slice(1).map((row: any) => row.id);
-
-          if (idsToDelete.length > 0) {
-            await client.query(
-              `DELETE FROM conferences WHERE id = ANY($1)`,
-              [idsToDelete]
-            );
-            console.log(`Deleted ${idsToDelete.length} duplicate entries for conference: ${dup.name}`);
-          }
-        }
-
-        // Also clean up orphaned message bases and file areas
-        await this.cleanupOrphanedData();
-      } else {
-        console.log('No duplicate conferences found');
-      }
-    } finally {
-      client.release();
-    }
-  }
-
-  // Clean up orphaned message bases and file areas after conference cleanup
-  private async cleanupOrphanedData(): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      console.log('Cleaning up orphaned message bases and file areas...');
-
-      // Delete message bases that reference non-existent conferences
-      const deletedMB = await client.query(`
-        DELETE FROM message_bases
-        WHERE conferenceid NOT IN (SELECT id FROM conferences)
-      `);
-
-      // Delete file areas that reference non-existent conferences
-      const deletedFA = await client.query(`
-        DELETE FROM file_areas
-        WHERE conferenceid NOT IN (SELECT id FROM conferences)
-      `);
-
-      if (deletedMB.rowCount > 0 || deletedFA.rowCount > 0) {
-        console.log(`Cleaned up ${deletedMB.rowCount} orphaned message bases and ${deletedFA.rowCount} orphaned file areas`);
-      }
-    } finally {
-      client.release();
-    }
-  }
-
-  // Clean up duplicate message bases by name + conferenceId, keeping only the first occurrence
-  async cleanupDuplicateMessageBases(): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      console.log('Cleaning up duplicate message bases...');
-
-      // Find duplicate message base names within the same conference
-      const duplicates = await client.query(`
-        SELECT name, conferenceid, COUNT(*) as count
-        FROM message_bases
-        GROUP BY name, conferenceid
-        HAVING COUNT(*) > 1
-      `);
-
-      if (duplicates.rows.length > 0) {
-        console.log(`Found ${duplicates.rows.length} message base combinations with duplicates`);
-
-        let totalDeleted = 0;
-        for (const dup of duplicates.rows) {
-          // Get all IDs for this message base name + conference combination, ordered by creation date
-          const ids = await client.query(`
-            SELECT id FROM message_bases
-            WHERE name = $1 AND conferenceid = $2
-            ORDER BY created ASC
-          `, [dup.name, dup.conferenceid]);
-
-          // Keep the first one, delete the rest
-          const idsToDelete = ids.rows.slice(1).map((row: any) => row.id);
-
-          if (idsToDelete.length > 0) {
-            await client.query(
-              `DELETE FROM message_bases WHERE id = ANY($1)`,
-              [idsToDelete]
-            );
-            console.log(`Deleted ${idsToDelete.length} duplicate entries for message base: ${dup.name} in conference ${dup.conferenceid}`);
-            totalDeleted += idsToDelete.length;
-          }
-        }
-
-        console.log(`✅ Total duplicate message bases deleted: ${totalDeleted}`);
-      } else {
-        console.log('No duplicate message bases found');
-      }
-    } finally {
-      client.release();
-    }
-  }
-
-  // Clean up duplicate file areas by name + conferenceId, keeping only the first occurrence
-  async cleanupDuplicateFileAreas(): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      console.log('Cleaning up duplicate file areas...');
-
-      // Find duplicate file area names within the same conference
-      const duplicates = await client.query(`
-        SELECT name, conferenceid, COUNT(*) as count
-        FROM file_areas
-        GROUP BY name, conferenceid
-        HAVING COUNT(*) > 1
-      `);
-
-      if (duplicates.rows.length > 0) {
-        console.log(`Found ${duplicates.rows.length} file area combinations with duplicates`);
-
-        let totalDeleted = 0;
-        for (const dup of duplicates.rows) {
-          // Get all IDs for this file area name + conference combination, ordered by ID (ascending)
-          const ids = await client.query(`
-            SELECT id FROM file_areas
-            WHERE name = $1 AND conferenceid = $2
-            ORDER BY id ASC
-          `, [dup.name, dup.conferenceid]);
-
-          const keepId = ids.rows[0].id;
-          const idsToDelete = ids.rows.slice(1).map((row: any) => row.id);
-
-          if (idsToDelete.length > 0) {
-            // Update file_entries to point to the kept file area
-            await client.query(`
-              UPDATE file_entries
-              SET areaid = $1
-              WHERE areaid = ANY($2)
-            `, [keepId, idsToDelete]);
-
-            // Delete duplicate file areas
-            await client.query(
-              `DELETE FROM file_areas WHERE id = ANY($1)`,
-              [idsToDelete]
-            );
-            console.log(`Deleted ${idsToDelete.length} duplicate entries for file area: ${dup.name} in conference ${dup.conferenceid}`);
-            totalDeleted += idsToDelete.length;
-          }
-        }
-
-        console.log(`✅ Total duplicate file areas deleted: ${totalDeleted}`);
-      } else {
-        console.log('No duplicate file areas found');
-      }
-    } finally {
-      client.release();
-    }
-  }
-
-  async cleanupDuplicateNodeSessions(): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      console.log('Cleaning up duplicate node sessions...');
-
-      // Find duplicate nodeids
-      const duplicates = await client.query(`
-        SELECT nodeid, COUNT(*) as count
-        FROM node_sessions
-        GROUP BY nodeid
-        HAVING COUNT(*) > 1
-      `);
-
-      if (duplicates.rows.length > 0) {
-        console.log(`Found ${duplicates.rows.length} nodeids with duplicates`);
-
-        let totalDeleted = 0;
-        for (const dup of duplicates.rows) {
-          // Get all session IDs for this nodeid, ordered by created DESC (keep most recent)
-          const sessions = await client.query(`
-            SELECT id FROM node_sessions
-            WHERE nodeid = $1
-            ORDER BY created DESC
-          `, [dup.nodeid]);
-
-          const keepId = sessions.rows[0].id;
-          const idsToDelete = sessions.rows.slice(1).map((row: any) => row.id);
-
-          if (idsToDelete.length > 0) {
-            // Delete duplicate node sessions
-            await client.query(
-              `DELETE FROM node_sessions WHERE id = ANY($1)`,
-              [idsToDelete]
-            );
-            console.log(`Deleted ${idsToDelete.length} duplicate sessions for nodeid: ${dup.nodeid}`);
-            totalDeleted += idsToDelete.length;
-          }
-        }
-
-        console.log(`✅ Total duplicate node sessions deleted: ${totalDeleted}`);
-      } else {
-        console.log('No duplicate node sessions found');
-      }
-    } finally {
-      client.release();
+      console.error('✗ Database initialization failed:', error);
     }
   }
 
   // Bulletin management
   async createBulletin(bulletin: { conferenceId: number; filename: string; title: string }): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO bulletins (conferenceid, filename, title)
-        VALUES ($1, $2, $3)
-        RETURNING id
-      `;
-      const result = await client.query(sql, [bulletin.conferenceId, bulletin.filename, bulletin.title]);
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT INTO bulletins (conferenceid, filename, title)
+      VALUES (?, ?, ?)
+    `);
+    const result = stmt.run(bulletin.conferenceId, bulletin.filename, bulletin.title);
+    return result.lastInsertRowid as number;
   }
 
   async getBulletins(conferenceId?: number): Promise<Bulletin[]> {
-    const client = await this.pool.connect();
-    try {
-      let sql: string;
-      let params: any[];
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (conferenceId !== undefined) {
-        sql = `SELECT * FROM bulletins WHERE conferenceid = $1 ORDER BY created DESC`;
-        params = [conferenceId];
-      } else {
-        sql = `SELECT * FROM bulletins ORDER BY created DESC`;
-        params = [];
-      }
+    let sql: string;
+    let params: any[];
 
-      const result = await client.query(sql, params);
-      return result.rows.map((row: any) => ({
-        id: row.id,
-        conferenceId: row.conferenceid,
-        filename: row.filename,
-        title: row.title,
-        created: row.created,
-        updated: row.updated
-      }));
-    } finally {
-      client.release();
+    if (conferenceId !== undefined) {
+      sql = 'SELECT * FROM bulletins WHERE conferenceid = ? ORDER BY created DESC';
+      params = [conferenceId];
+    } else {
+      sql = 'SELECT * FROM bulletins ORDER BY created DESC';
+      params = [];
     }
+
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      conferenceId: row.conferenceid,
+      filename: row.filename,
+      title: row.title,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
   }
 
   async getBulletinById(id: number): Promise<Bulletin | null> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM bulletins WHERE id = $1`;
-      const result = await client.query(sql, [id]);
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (result.rows.length === 0) return null;
+    const stmt = this.db.prepare('SELECT * FROM bulletins WHERE id = ?');
+    const row = stmt.get(id) as any;
 
-      const row = result.rows[0];
-      return {
-        id: row.id,
-        conferenceId: row.conferenceid,
-        filename: row.filename,
-        title: row.title,
-        created: row.created,
-        updated: row.updated
-      };
-    } finally {
-      client.release();
-    }
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      conferenceId: row.conferenceid,
+      filename: row.filename,
+      title: row.title,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    };
   }
 
   async deleteBulletin(id: number): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `DELETE FROM bulletins WHERE id = $1`;
-      await client.query(sql, [id]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('DELETE FROM bulletins WHERE id = ?');
+    stmt.run(id);
   }
 
-  // ===== CHAT ROOM METHODS (Phase 2 - Group Chat) =====
+  // Chat room methods (stubs - implement as needed)
+  async createChatRoom(room: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
 
-  async createChatRoom(room: {
-    roomId: string;
-    roomName: string;
-    topic?: string;
-    createdBy: string;
-    createdByUsername: string;
-    isPublic?: boolean;
-    maxUsers?: number;
-    isPersistent?: boolean;
-    password?: string;
-  }): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO chat_rooms (
-          room_id, room_name, topic, created_by, created_by_username,
-          is_public, max_users, is_persistent, password
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `;
-      await client.query(sql, [
-        room.roomId,
-        room.roomName,
-        room.topic || null,
-        room.createdBy,
-        room.createdByUsername,
-        room.isPublic !== false,
-        room.maxUsers || 50,
-        room.isPersistent !== false,
-        room.password || null
-      ]);
-    } finally {
-      client.release();
-    }
+    const stmt = this.db.prepare(`
+      INSERT INTO chat_rooms (
+        room_id, room_name, topic, created_by, created_by_username,
+        is_public, max_users, is_persistent, password
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      room.roomId, room.roomName, room.topic || null, room.createdBy, room.createdByUsername,
+      room.isPublic !== false ? 1 : 0, room.maxUsers || 50, room.isPersistent !== false ? 1 : 0, room.password || null
+    );
   }
 
   async getChatRoom(roomId: string): Promise<any> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM chat_rooms WHERE room_id = $1`;
-      const result = await client.query(sql, [roomId]);
-      return result.rows[0] || null;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM chat_rooms WHERE room_id = ?');
+    return stmt.get(roomId);
   }
 
   async getChatRoomByName(roomName: string): Promise<any> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT * FROM chat_rooms WHERE room_name = $1`;
-      const result = await client.query(sql, [roomName]);
-      return result.rows[0] || null;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM chat_rooms WHERE room_name = ?');
+    return stmt.get(roomName);
   }
 
   async listChatRooms(onlyPublic: boolean = true): Promise<any[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = onlyPublic
-        ? `SELECT r.*,
-           (SELECT COUNT(*) FROM chat_room_members WHERE room_id = r.room_id) as member_count
-           FROM chat_rooms r
-           WHERE is_public = TRUE
-           ORDER BY created_at DESC`
-        : `SELECT r.*,
-           (SELECT COUNT(*) FROM chat_room_members WHERE room_id = r.room_id) as member_count
-           FROM chat_rooms r
-           ORDER BY created_at DESC`;
-      const result = await client.query(sql);
-      return result.rows;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const sql = onlyPublic
+      ? `SELECT r.*, (SELECT COUNT(*) FROM chat_room_members WHERE room_id = r.room_id) as member_count
+         FROM chat_rooms r WHERE is_public = 1 ORDER BY created_at DESC`
+      : `SELECT r.*, (SELECT COUNT(*) FROM chat_room_members WHERE room_id = r.room_id) as member_count
+         FROM chat_rooms r ORDER BY created_at DESC`;
+    const stmt = this.db.prepare(sql);
+    return stmt.all();
   }
 
   async deleteChatRoom(roomId: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `DELETE FROM chat_rooms WHERE room_id = $1`;
-      await client.query(sql, [roomId]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('DELETE FROM chat_rooms WHERE room_id = ?');
+    stmt.run(roomId);
   }
 
   async joinChatRoom(roomId: string, userId: string, username: string, socketId: string, isModerator: boolean = false): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (room_id, user_id) DO UPDATE
-        SET socket_id = $4, is_moderator = $5
-      `;
-      await client.query(sql, [roomId, userId, username, socketId, isModerator]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    stmt.run(roomId, userId, username, socketId, isModerator ? 1 : 0);
   }
 
   async leaveChatRoom(roomId: string, userId: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `DELETE FROM chat_room_members WHERE room_id = $1 AND user_id = $2`;
-      await client.query(sql, [roomId, userId]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('DELETE FROM chat_room_members WHERE room_id = ? AND user_id = ?');
+    stmt.run(roomId, userId);
   }
 
   async getRoomMembers(roomId: string): Promise<any[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT * FROM chat_room_members
-        WHERE room_id = $1
-        ORDER BY joined_at ASC
-      `;
-      const result = await client.query(sql, [roomId]);
-      return result.rows;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM chat_room_members WHERE room_id = ? ORDER BY joined_at ASC');
+    return stmt.all(roomId);
   }
 
   async getRoomMemberCount(roomId: string): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT COUNT(*) as count FROM chat_room_members WHERE room_id = $1`;
-      const result = await client.query(sql, [roomId]);
-      return parseInt(result.rows[0].count);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM chat_room_members WHERE room_id = ?');
+    const row = stmt.get(roomId) as any;
+    return parseInt(row.count);
   }
 
-  async saveChatRoomMessage(message: {
-    roomId: string;
-    senderId: string;
-    senderUsername: string;
-    message: string;
-    messageType?: string;
-  }): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        INSERT INTO chat_room_messages (room_id, sender_id, sender_username, message, message_type)
-        VALUES ($1, $2, $3, $4, $5)
-      `;
-      await client.query(sql, [
-        message.roomId,
-        message.senderId,
-        message.senderUsername,
-        message.message,
-        message.messageType || 'message'
-      ]);
-    } finally {
-      client.release();
-    }
+  async saveChatRoomMessage(message: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT INTO chat_room_messages (room_id, sender_id, sender_username, message, message_type)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    stmt.run(message.roomId, message.senderId, message.senderUsername, message.message, message.messageType || 'message');
   }
 
   async getChatRoomHistory(roomId: string, limit: number = 50): Promise<any[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT * FROM chat_room_messages
-        WHERE room_id = $1
-        ORDER BY created_at DESC
-        LIMIT $2
-      `;
-      const result = await client.query(sql, [roomId, limit]);
-      return result.rows.reverse();
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM chat_room_messages WHERE room_id = ? ORDER BY created_at DESC LIMIT ?');
+    const rows = stmt.all(roomId, limit);
+    return (rows as any[]).reverse();
   }
 
-  async updateRoomMember(roomId: string, userId: string, updates: {
-    isMuted?: boolean;
-    isModerator?: boolean;
-  }): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const sets: string[] = [];
-      const values: any[] = [];
-      let paramCount = 1;
+  async updateRoomMember(roomId: string, userId: string, updates: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (updates.isMuted !== undefined) {
-        sets.push('is_muted = $' + paramCount++);
-        values.push(updates.isMuted);
-      }
-      if (updates.isModerator !== undefined) {
-        sets.push('is_moderator = $' + paramCount++);
-        values.push(updates.isModerator);
-      }
+    const sets: string[] = [];
+    const values: any[] = [];
 
-      if (sets.length === 0) return;
-
-      values.push(roomId, userId);
-      const sql = `
-        UPDATE chat_room_members
-        SET ` + sets.join(', ') + `
-        WHERE room_id = $` + paramCount++ + ` AND user_id = $` + paramCount++;
-      await client.query(sql, values);
-    } finally {
-      client.release();
+    if (updates.isMuted !== undefined) {
+      sets.push('is_muted = ?');
+      values.push(updates.isMuted ? 1 : 0);
     }
+    if (updates.isModerator !== undefined) {
+      sets.push('is_moderator = ?');
+      values.push(updates.isModerator ? 1 : 0);
+    }
+
+    if (sets.length === 0) return;
+
+    values.push(roomId, userId);
+    const sql = `UPDATE chat_room_members SET ${sets.join(', ')} WHERE room_id = ? AND user_id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values);
   }
 
   async getUserRooms(userId: string): Promise<any[]> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `
-        SELECT r.*, m.is_moderator, m.is_muted, m.joined_at
-        FROM chat_rooms r
-        INNER JOIN chat_room_members m ON r.room_id = m.room_id
-        WHERE m.user_id = $1
-        ORDER BY m.joined_at DESC
-      `;
-      const result = await client.query(sql, [userId]);
-      return result.rows;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT r.*, m.is_moderator, m.is_muted, m.joined_at
+      FROM chat_rooms r
+      INNER JOIN chat_room_members m ON r.room_id = m.room_id
+      WHERE m.user_id = ?
+      ORDER BY m.joined_at DESC
+    `);
+    return stmt.all(userId);
   }
 
   async isUserInRoom(roomId: string, userId: string): Promise<boolean> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT 1 FROM chat_room_members WHERE room_id = $1 AND user_id = $2`;
-      const result = await client.query(sql, [roomId, userId]);
-      return result.rows.length > 0;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT 1 FROM chat_room_members WHERE room_id = ? AND user_id = ?');
+    return stmt.get(roomId, userId) !== undefined;
   }
 
   async isUserModerator(roomId: string, userId: string): Promise<boolean> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT is_moderator FROM chat_room_members WHERE room_id = $1 AND user_id = $2`;
-      const result = await client.query(sql, [roomId, userId]);
-      return result.rows[0]?.is_moderator || false;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT is_moderator FROM chat_room_members WHERE room_id = ? AND user_id = ?');
+    const row = stmt.get(roomId, userId) as any;
+    return row ? Boolean(row.is_moderator) : false;
   }
 
   async isUserMuted(roomId: string, userId: string): Promise<boolean> {
-    const client = await this.pool.connect();
-    try {
-      const sql = `SELECT is_muted FROM chat_room_members WHERE room_id = $1 AND user_id = $2`;
-      const result = await client.query(sql, [roomId, userId]);
-      return result.rows[0]?.is_muted || false;
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT is_muted FROM chat_room_members WHERE room_id = ? AND user_id = ?');
+    const row = stmt.get(roomId, userId) as any;
+    return row ? Boolean(row.is_muted) : false;
   }
 
-  async updateChatRoom(roomId: string, updates: { topic?: string; isPublic?: boolean; maxUsers?: number; password?: string }): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields = [];
-      const values = [];
-      let paramIndex = 1;
+  async updateChatRoom(roomId: string, updates: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (updates.topic !== undefined) {
-        fields.push(`topic = $${paramIndex++}`);
-        values.push(updates.topic);
-      }
-      if (updates.isPublic !== undefined) {
-        fields.push(`is_public = $${paramIndex++}`);
-        values.push(updates.isPublic);
-      }
-      if (updates.maxUsers !== undefined) {
-        fields.push(`max_users = $${paramIndex++}`);
-        values.push(updates.maxUsers);
-      }
-      if (updates.password !== undefined) {
-        fields.push(`password = $${paramIndex++}`);
-        values.push(updates.password);
-      }
+    const fields: string[] = [];
+    const values: any[] = [];
 
-      if (fields.length === 0) {
-        return; // Nothing to update
-      }
-
-      fields.push(`updated_at = $${paramIndex++}`);
-      values.push(new Date());
-
-      values.push(roomId); // Add roomId as the last parameter
-
-      const sql = `UPDATE chat_rooms SET ${fields.join(', ')} WHERE room_id = $${paramIndex}`;
-      await client.query(sql, values);
-    } finally {
-      client.release();
+    if (updates.topic !== undefined) {
+      fields.push('topic = ?');
+      values.push(updates.topic);
     }
+    if (updates.isPublic !== undefined) {
+      fields.push('is_public = ?');
+      values.push(updates.isPublic ? 1 : 0);
+    }
+    if (updates.maxUsers !== undefined) {
+      fields.push('max_users = ?');
+      values.push(updates.maxUsers);
+    }
+    if (updates.password !== undefined) {
+      fields.push('password = ?');
+      values.push(updates.password);
+    }
+
+    if (fields.length === 0) return;
+
+    fields.push('updated_at = strftime(\'%s\', \'now\')');
+    values.push(roomId);
+
+    const sql = `UPDATE chat_rooms SET ${fields.join(', ')} WHERE room_id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values);
   }
 
-  // ============================================================================
-  // WEBHOOK METHODS
-  // ============================================================================
-
+  // Webhook methods
   async getWebhooks(): Promise<Webhook[]> {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(`
-        SELECT * FROM webhooks ORDER BY id ASC
-      `);
+    if (!this.db) throw new Error('Database not initialized');
 
-      return result.rows.map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        url: row.url,
-        type: row.type,
-        enabled: row.enabled,
-        triggers: row.triggers || [],
-        created: row.created,
-        updated: row.updated
-      }));
-    } finally {
-      client.release();
-    }
+    const stmt = this.db.prepare('SELECT * FROM webhooks ORDER BY id ASC');
+    const rows = stmt.all() as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      url: row.url,
+      type: row.type,
+      enabled: Boolean(row.enabled),
+      triggers: JSON.parse(row.triggers || '[]'),
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
   }
 
   async getWebhook(id: number): Promise<Webhook | null> {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(`
-        SELECT * FROM webhooks WHERE id = $1
-      `, [id]);
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (result.rows.length === 0) return null;
+    const stmt = this.db.prepare('SELECT * FROM webhooks WHERE id = ?');
+    const row = stmt.get(id) as any;
 
-      const row = result.rows[0];
-      return {
-        id: row.id,
-        name: row.name,
-        url: row.url,
-        type: row.type,
-        enabled: row.enabled,
-        triggers: row.triggers || [],
-        created: row.created,
-        updated: row.updated
-      };
-    } finally {
-      client.release();
-    }
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      url: row.url,
+      type: row.type,
+      enabled: Boolean(row.enabled),
+      triggers: JSON.parse(row.triggers || '[]'),
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    };
   }
 
   async createWebhook(data: { name: string; url: string; type: 'discord' | 'slack'; triggers: string[] }): Promise<number> {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(`
-        INSERT INTO webhooks (name, url, type, enabled, triggers, created, updated)
-        VALUES ($1, $2, $3, true, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        RETURNING id
-      `, [data.name, data.url, data.type, data.triggers]);
+    if (!this.db) throw new Error('Database not initialized');
 
-      return result.rows[0].id;
-    } finally {
-      client.release();
-    }
+    const stmt = this.db.prepare(`
+      INSERT INTO webhooks (name, url, type, enabled, triggers)
+      VALUES (?, ?, ?, 1, ?)
+    `);
+    const result = stmt.run(data.name, data.url, data.type, JSON.stringify(data.triggers));
+    return result.lastInsertRowid as number;
   }
 
-  async updateWebhook(id: number, data: { name?: string; url?: string; type?: 'discord' | 'slack'; enabled?: boolean; triggers?: string[] }): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      const fields: string[] = [];
-      const values: any[] = [];
-      let paramIndex = 1;
+  async updateWebhook(id: number, data: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
 
-      if (data.name !== undefined) {
-        fields.push(`name = $${paramIndex++}`);
-        values.push(data.name);
-      }
-      if (data.url !== undefined) {
-        fields.push(`url = $${paramIndex++}`);
-        values.push(data.url);
-      }
-      if (data.type !== undefined) {
-        fields.push(`type = $${paramIndex++}`);
-        values.push(data.type);
-      }
-      if (data.enabled !== undefined) {
-        fields.push(`enabled = $${paramIndex++}`);
-        values.push(data.enabled);
-      }
-      if (data.triggers !== undefined) {
-        fields.push(`triggers = $${paramIndex++}`);
-        values.push(data.triggers);
-      }
+    const fields: string[] = [];
+    const values: any[] = [];
 
-      if (fields.length === 0) return;
-
-      fields.push(`updated = $${paramIndex++}`);
-      values.push(new Date());
-      values.push(id);
-
-      const sql = `UPDATE webhooks SET ${fields.join(', ')} WHERE id = $${paramIndex}`;
-      await client.query(sql, values);
-    } finally {
-      client.release();
+    if (data.name !== undefined) {
+      fields.push('name = ?');
+      values.push(data.name);
     }
+    if (data.url !== undefined) {
+      fields.push('url = ?');
+      values.push(data.url);
+    }
+    if (data.type !== undefined) {
+      fields.push('type = ?');
+      values.push(data.type);
+    }
+    if (data.enabled !== undefined) {
+      fields.push('enabled = ?');
+      values.push(data.enabled ? 1 : 0);
+    }
+    if (data.triggers !== undefined) {
+      fields.push('triggers = ?');
+      values.push(JSON.stringify(data.triggers));
+    }
+
+    if (fields.length === 0) return;
+
+    fields.push('updated = strftime(\'%s\', \'now\')');
+    values.push(id);
+
+    const sql = `UPDATE webhooks SET ${fields.join(', ')} WHERE id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values);
   }
 
   async deleteWebhook(id: number): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query(`DELETE FROM webhooks WHERE id = $1`, [id]);
-    } finally {
-      client.release();
-    }
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('DELETE FROM webhooks WHERE id = ?');
+    stmt.run(id);
   }
 
   async getWebhooksByTrigger(trigger: string): Promise<Webhook[]> {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(`
-        SELECT * FROM webhooks
-        WHERE enabled = true AND $1 = ANY(triggers)
-        ORDER BY id ASC
-      `, [trigger]);
+    if (!this.db) throw new Error('Database not initialized');
 
-      return result.rows.map((row: any) => ({
+    const stmt = this.db.prepare('SELECT * FROM webhooks WHERE enabled = 1 ORDER BY id ASC');
+    const rows = stmt.all() as any[];
+
+    return rows
+      .filter(row => {
+        const triggers = JSON.parse(row.triggers || '[]');
+        return triggers.includes(trigger);
+      })
+      .map(row => ({
         id: row.id,
         name: row.name,
         url: row.url,
         type: row.type,
-        enabled: row.enabled,
-        triggers: row.triggers || [],
-        created: row.created,
-        updated: row.updated
+        enabled: Boolean(row.enabled),
+        triggers: JSON.parse(row.triggers || '[]'),
+        created: new Date(row.created * 1000),
+        updated: new Date(row.updated * 1000)
       }));
-    } finally {
-      client.release();
-    }
   }
+
+  // Stub methods for compatibility - implement as needed
+  async getAREXXScripts(): Promise<AREXXScript[]> { return []; }
+  async executeAREXXScript(scriptId: string, context: AREXXContext): Promise<any> { return { success: true }; }
+  async createQWKPacket(packet: Omit<QWKPacket, 'id'>): Promise<string> { return crypto.randomUUID(); }
+  async createQWKMessage(message: Omit<QWKMessage, 'id'>): Promise<number> { return 0; }
+  async updateQWKPacket(id: string, updates: Partial<QWKPacket>): Promise<void> {}
+  async getQWKPacket(id: string): Promise<QWKPacket | null> { return null; }
+  async deleteQWKPacket(id: string): Promise<void> {}
+  async createFTNMessage(message: Omit<FTNMessage, 'id'>): Promise<number> { return 0; }
+  async getFTNMessages(conferenceId: number, messageBaseId: number): Promise<FTNMessage[]> { return []; }
+  async updateFTNMessage(id: number, updates: Partial<FTNMessage>): Promise<void> {}
+  async createTransferSession(session: Omit<TransferSession, 'id'>): Promise<string> { return crypto.randomUUID(); }
+  async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {}
 }
 
 // Export singleton instance

@@ -141,7 +141,7 @@ Files Generated:
 - Node.js + Express
 - TypeScript
 - Socket.io server
-- PostgreSQL
+- SQLite
 - Redis (optional)
 
 ---
@@ -203,8 +203,8 @@ Files Generated:
 Ensure these are set in Vercel dashboard:
 
 **Required:**
-- `DATABASE_URL` - PostgreSQL connection string
-- `POSTGRES_URL` - Alternative PostgreSQL URL (Vercel specific)
+- `DATABASE_URL` - SQLite connection string
+- `POSTGRES_URL` - Alternative SQLite URL (Vercel specific)
 - `JWT_SECRET` - JWT signing secret
 - `NODE_ENV` - production
 
@@ -313,7 +313,7 @@ https://vercel.com/johans-projects-458502e2/amiexpress-web/deployments
 
 ### If Database Connection Fails
 1. Check `DATABASE_URL` in Vercel settings
-2. Verify PostgreSQL is running
+2. Verify SQLite is running
 3. Check connection string format
 4. View logs: `vercel logs`
 

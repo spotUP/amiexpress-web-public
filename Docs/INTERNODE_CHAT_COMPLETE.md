@@ -15,7 +15,7 @@ Internode chat is a fully functional, real-time user-to-user chat system integra
 **Key Features:**
 - Real-time 1:1 chat between users on different nodes
 - Socket.io-based messaging with < 100ms latency
-- Persistent chat history in PostgreSQL
+- Persistent chat history in SQLite
 - Full BBS command integration (CHAT command with 5 subcommands)
 - Graceful state management and disconnect handling
 - Complete security validation and input sanitization
@@ -105,7 +105,7 @@ Internode chat is a fully functional, real-time user-to-user chat system integra
 │  - chat_sessions table (session metadata)                   │
 │  - chat_messages table (message history)                    │
 │  - 10 database methods (CRUD + queries)                     │
-│  - PostgreSQL with proper indexing                          │
+│  - SQLite with proper indexing                          │
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -436,7 +436,7 @@ handleCommand() {
 - **Memory Usage:** ~500 bytes per active chat
 
 **Scaling:**
-- Database: PostgreSQL can handle 1000s of concurrent writes
+- Database: SQLite can handle 1000s of concurrent writes
 - Socket.io: Handles 10,000+ concurrent connections
 - Redis: Can store millions of sessions
 - **Bottleneck:** Database writes (easily optimized with batching)
@@ -584,7 +584,7 @@ git push origin main
 ```bash
 # Check logs for:
 # ✅ "Database tables created successfully"
-# ✅ "Connected to PostgreSQL database"
+# ✅ "Connected to SQLite database"
 # ✅ "Server started on port 3001"
 ```
 

@@ -87,18 +87,11 @@ fi
 NPM_VERSION=$(npm --version)
 print_success "npm $NPM_VERSION found"
 
-# Check PostgreSQL
-if ! command -v psql &> /dev/null; then
-    print_warning "PostgreSQL client not found in PATH"
+# Check SQLite
+if command -v sqlite3 &> /dev/null; then
+    print_success "SQLite3 found"
 else
-    print_success "PostgreSQL client found"
-fi
-
-# Check if PostgreSQL is running
-if ! lsof -i:5432 &> /dev/null; then
-    print_warning "PostgreSQL may not be running on port 5432"
-else
-    print_success "PostgreSQL is running"
+    print_warning "SQLite3 not found (optional for manual database inspection)"
 fi
 
 # Step 2: Clean up existing processes
@@ -152,7 +145,8 @@ if [ ! -f "$BACKEND_ENV" ]; then
     print_info "Creating $BACKEND_ENV"
     cat > "$BACKEND_ENV" << EOF
 # Local development environment variables
-DATABASE_URL=postgresql://$(whoami)@localhost/amiexpress
+DATABASE_DIR=./data
+DATABASE_FILE=amiexpress.db
 NODE_ENV=development
 PORT=3001
 EOF
@@ -191,7 +185,8 @@ cd backend
 mkdir -p ../logs
 
 print_info "Starting backend on port 3001..."
-DATABASE_URL="postgresql://$(whoami)@localhost/amiexpress" \
+DATABASE_DIR="./data" \
+DATABASE_FILE="amiexpress.db" \
 NODE_ENV=development \
 npm run dev > ../logs/backend.log 2>&1 &
 

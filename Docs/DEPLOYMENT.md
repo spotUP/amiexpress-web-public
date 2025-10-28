@@ -18,7 +18,7 @@
 │  ├─ URL: https://amiexpress-backend.onrender.com       │
 │  ├─ Node.js + Express + Socket.io                      │
 │  ├─ WebSocket server for real-time BBS                 │
-│  └─ PostgreSQL database (Render)                       │
+│  └─ SQLite database (file-based)                       │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -190,7 +190,8 @@ Set these in Render dashboard under Environment tab:
 
 ```bash
 # Required
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
+DATABASE_DIR=./data
+DATABASE_FILE=amiexpress.db
 PORT=3001
 NODE_ENV=production
 

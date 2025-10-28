@@ -1,15 +1,15 @@
 # Database Initialization Error Fix Documentation
 
 ## Issue Summary
-The AmiExpress Web backend was failing to initialize its PostgreSQL database with the error:
+The AmiExpress Web backend was failing to initialize its SQLite database with the error:
 ```
 Failed to initialize database: error: column "conferenceId" does not exist
 ```
 
 ## Root Cause Analysis
-The issue was caused by inconsistent column naming between PostgreSQL table creation and query references:
+The issue was caused by inconsistent column naming between SQLite table creation and query references:
 
-1. **PostgreSQL Column Name Handling**: PostgreSQL converts unquoted column names to lowercase by default
+1. **SQLite Column Name Handling**: SQLite converts unquoted column names to lowercase by default
 2. **Code Inconsistency**: The code was using camelCase column names in some places (e.g., `"conferenceId"`) but lowercase in others (e.g., `conferenceid`)
 3. **Mixed Quoting**: Some CREATE TABLE statements used quoted camelCase names while others used unquoted lowercase names
 
@@ -94,14 +94,14 @@ timeout 15s node dist/index.js
 
 ## Technical Details
 
-### PostgreSQL Column Name Rules
+### SQLite Column Name Rules
 - Unquoted identifiers are converted to lowercase
 - Quoted identifiers preserve case sensitivity
 - Mixed usage leads to "column does not exist" errors
 
 ### TypeScript/JavaScript Considerations
 - The codebase uses camelCase for property names
-- PostgreSQL queries must match the actual column names in the database
+- SQLite queries must match the actual column names in the database
 - Inconsistent naming causes runtime query failures
 
 ## Impact Assessment
@@ -134,7 +134,7 @@ timeout 15s node dist/index.js
 - **Commit Hash**: b86443e
 - **Branch**: main
 - **Files Changed**: 2 files, 51 insertions(+), 41 deletions(-)
-- **Commit Message**: "Fix PostgreSQL database initialization error"
+- **Commit Message**: "Fix SQLite database initialization error"
 
 ## Deployment Notes
 This fix resolves the database initialization error that was preventing proper server startup. The backend can now be deployed successfully to production environments with full database functionality.

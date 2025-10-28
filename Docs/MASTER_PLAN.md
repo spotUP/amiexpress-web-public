@@ -2,7 +2,7 @@
 
 ## EXECUTIVE SUMMARY
 
-**AmiExpress-Web** is a 100% complete, production-ready web port of the legendary Commodore Amiga AmiExpress BBS system (v5.6.0), bringing classic 1990s BBS culture to modern web browsers through TypeScript, React, Socket.io, and PostgreSQL.
+**AmiExpress-Web** is a 100% complete, production-ready web port of the legendary Commodore Amiga AmiExpress BBS system (v5.6.0), bringing classic 1990s BBS culture to modern web browsers through TypeScript, React, Socket.io, and SQLite.
 
 **Status:** ✅ Production-ready, fully featured, secure
 **Completion:** 100% (Core: 100%, Advanced: 100%, Security: 100%)
@@ -17,7 +17,7 @@
 |----------|-----------|--------|-------|
 | **Core BBS** | 100% | ✅ Production | All essential commands working |
 | **State Machine** | 100% | ✅ Production | 1:1 AmiExpress state mapping |
-| **Database** | 100% | ✅ Production | PostgreSQL + migration system |
+| **Database** | 100% | ✅ Production | SQLite + migration system |
 | **User System** | 100% | ✅ Production | 110+ fields, full auth |
 | **Message System** | 100% | ✅ Production | Threading, privacy, filtering |
 | **File System** | 100% | ✅ Production | Upload/download, FILE_ID.DIZ |
@@ -69,7 +69,7 @@
 VERCEL (Primary)                  RENDER.COM (WebSocket)
 ├─ Frontend (CDN)                ├─ Backend (Persistent)
 ├─ Backend (Serverless)          ├─ WebSocket Server
-└─ PostgreSQL                    └─ PostgreSQL
+└─ SQLite                    └─ SQLite
 ```
 
 ---
@@ -79,7 +79,7 @@ VERCEL (Primary)                  RENDER.COM (WebSocket)
 ### ✅ PHASE 1: FOUNDATION (COMPLETED)
 **Timeline:** Months 1-3 | **Status:** 100% Complete
 
-- [x] Database schema (PostgreSQL + migrations)
+- [x] Database schema (SQLite + migrations)
 - [x] Core state machine (3 states, 13 substates)
 - [x] User authentication (JWT + SHA-256)
 - [x] Session management (persistent)
@@ -428,7 +428,7 @@ const redis = new Redis(process.env.REDIS_URL);
 ### Infrastructure Costs (Monthly)
 
 - **Vercel Pro:** $20/month
-- **Render.com:** $7-25/month (PostgreSQL)
+- **Render.com:** $7-25/month (SQLite)
 - **Redis Cloud:** $10-30/month
 - **Monitoring (Sentry):** $26/month
 - **Total:** ~$63-101/month
@@ -449,7 +449,7 @@ const redis = new Redis(process.env.REDIS_URL);
 Backend:
 - index.ts (2,578 lines) - Main server, state machine
 - arexx.ts (1,905 lines) - Complete AREXX interpreter (Phases 1-4)
-- database.ts (1,503 lines) - PostgreSQL layer
+- database.ts (1,503 lines) - SQLite layer
 - nodes.ts (699 lines) - Multi-node + AREXX
 - qwk.ts (976 lines) - QWK/FTN support
 

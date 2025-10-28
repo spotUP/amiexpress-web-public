@@ -522,7 +522,7 @@ node -e "require('./dist/arexx').arexxEngine.executeScriptByName('welcome', {
 
 ### Prerequisites
 - Node.js 16+ with TypeScript support
-- PostgreSQL database with AREXX scripts table
+- SQLite database with AREXX scripts table
 - File system permissions for `data/files/` directory
 - Socket.io for real-time communication
 
@@ -614,7 +614,7 @@ The AREXX implementation for AmiExpress Web is **production-ready** with:
 
 **Language:** TypeScript 5.x
 **Runtime:** Node.js 16+
-**Database:** PostgreSQL 14+
+**Database:** SQLite 14+
 **Communication:** Socket.io 4.x
 **File Size:** 1,905 lines (71 KB)
 **Dependencies:** fs/promises, path (Node.js built-in)

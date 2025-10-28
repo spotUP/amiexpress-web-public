@@ -498,7 +498,7 @@ All documentation created during this session:
 - **State Machine Complexity:** Interactive commands need 3-7 substates typically
 - **Database Patterns:** Upsert (INSERT ON CONFLICT UPDATE) is essential for preferences
 - **Input Handling:** Standardized pattern across handlers improves maintainability
-- **Bit Masks:** PostgreSQL INTEGER works perfectly for flag storage
+- **Bit Masks:** SQLite INTEGER works perfectly for flag storage
 
 ---
 

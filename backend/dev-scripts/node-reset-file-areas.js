@@ -1,33 +1,31 @@
-const { Pool } = require('pg');
+const Database = require('better-sqlite3');
+const path = require('path');
 require('dotenv').config();
 
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-
-if (!connectionString) {
-  console.error('❌ No DATABASE_URL or POSTGRES_URL found');
-  process.exit(1);
-}
-
-const pool = new Pool({ connectionString });
+const dbPath = process.env.DATABASE_DIR 
+  ? path.join(process.env.DATABASE_DIR, process.env.DATABASE_FILE || 'amiexpress.db')
+  : path.join(__dirname, '..', 'data', 'amiexpress.db');
 
 async function resetFileAreas() {
-  const client = await pool.connect();
+  const db = new Database(dbPath);
+  
   try {
     console.log('📋 Current file areas:');
-    const before = await client.query('SELECT id, name, conferenceid FROM file_areas ORDER BY id');
-    console.log(`   Total: ${before.rows.length}`);
-    before.rows.forEach(row => {
+    const before = db.prepare('SELECT id, name, conferenceid FROM file_areas ORDER BY id').all();
+    console.log(`   Total: ${before.length}`);
+    before.forEach(row => {
       console.log(`   ${row.id}: ${row.name} (conf: ${row.conferenceid})`);
     });
 
     console.log('\n🗑️  Deleting file areas with ID > 5...');
-    const deleteResult = await client.query('DELETE FROM file_areas WHERE id > 5');
-    console.log(`   Deleted: ${deleteResult.rowCount} rows`);
+    const deleteStmt = db.prepare('DELETE FROM file_areas WHERE id > 5');
+    const deleteResult = deleteStmt.run();
+    console.log(`   Deleted: ${deleteResult.changes} rows`);
 
     console.log('\n✅ Remaining file areas:');
-    const after = await client.query('SELECT id, name, conferenceid FROM file_areas ORDER BY id');
-    console.log(`   Total: ${after.rows.length}`);
-    after.rows.forEach(row => {
+    const after = db.prepare('SELECT id, name, conferenceid FROM file_areas ORDER BY id').all();
+    console.log(`   Total: ${after.length}`);
+    after.forEach(row => {
       console.log(`   ${row.id}: ${row.name} (conf: ${row.conferenceid})`);
     });
 
@@ -35,8 +33,7 @@ async function resetFileAreas() {
   } catch (error) {
     console.error('❌ Error:', error.message);
   } finally {
-    client.release();
-    await pool.end();
+    db.close();
   }
 }
 

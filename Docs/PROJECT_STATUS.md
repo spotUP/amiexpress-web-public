@@ -66,7 +66,7 @@
 - ✅ Online Message (OLM) system
 
 ### Database (100%)
-- ✅ PostgreSQL schema with 17 tables
+- ✅ SQLite schema with 17 tables
 - ✅ 110+ user fields matching AmiExpress
 - ✅ Migration system
 - ✅ Indexing for performance
@@ -201,7 +201,7 @@
 - ✅ Completed security hardening (bcrypt, rate limiting, Redis sessions)
 - ✅ Completed QWK/FTN support
 - ✅ Implemented multi-node support
-- ✅ Fixed PostgreSQL initialization issues
+- ✅ Fixed SQLite initialization issues
 - ✅ Deployed to production (Vercel + Render.com)
 
 ---
@@ -295,18 +295,18 @@
 - URL: [Your Vercel URL]
 - Frontend: Static hosting with CDN
 - Backend: Serverless functions
-- Database: Vercel PostgreSQL
+- Database: Vercel SQLite
 
 **Render.com (WebSocket)**
 - Status: ✅ Live
 - URL: [Your Render URL]
 - Backend: Persistent Node.js service
 - WebSocket: Full Socket.io support
-- Database: PostgreSQL with persistent storage
+- Database: SQLite with persistent storage
 
 ### Environment Variables Required
-- `DATABASE_URL` - PostgreSQL connection string
-- `POSTGRES_URL` - Alternative PostgreSQL URL
+- `DATABASE_URL` - SQLite connection string
+- `POSTGRES_URL` - Alternative SQLite URL
 - `JWT_SECRET` - JWT signing secret
 - `NODE_ENV` - Environment (production/development)
 - `REDIS_URL` - Redis connection (planned)
@@ -331,7 +331,7 @@
 ### Resource Usage
 - **Memory:** ~200-400MB (backend)
 - **CPU:** <5% idle, <30% active
-- **Disk:** Minimal (PostgreSQL external)
+- **Disk:** Minimal (SQLite external)
 - **Bandwidth:** ~1-5GB/month
 
 ---

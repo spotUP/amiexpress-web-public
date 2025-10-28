@@ -75,7 +75,7 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', '  - Node.js/TypeScript backend\r\n');
   socket.emit('ansi-output', '  - React frontend\r\n');
-  socket.emit('ansi-output', '  - PostgreSQL database\r\n');
+  socket.emit('ansi-output', '  - SQLite database\r\n');
   socket.emit('ansi-output', '  - Socket.io real-time communication\r\n');
   socket.emit('ansi-output', '  - xterm.js terminal emulation\r\n');
   socket.emit('ansi-output', '\r\n');

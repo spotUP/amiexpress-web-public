@@ -74,7 +74,7 @@ This document outlines the implementation plan for real-time internode chat func
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                Database (PostgreSQL)                         │
+│                Database (SQLite)                         │
 │  - chat_sessions table (session metadata)                    │
 │  - chat_messages table (message history)                     │
 │  - users.availableforchat (existing)                         │

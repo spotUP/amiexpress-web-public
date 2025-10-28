@@ -19,14 +19,14 @@ this.pool.on('error', (err: Error) => {
 });
 ```
 
-Every time the PostgreSQL connection dropped, the entire server crashed with `process.exit(-1)`.
+Every time the SQLite connection dropped, the entire server crashed with `process.exit(-1)`.
 
 **Solution:**
 - Removed `process.exit(-1)` from error handler
 - Added automatic reconnection logic with exponential backoff
 - Added connection health monitoring (checks every 30 seconds)
 - Maximum 10 reconnection attempts with 5-second delays
-- Added `keepAlive` settings to PostgreSQL pool
+- Added `keepAlive` settings to SQLite pool
 
 **Result:** Server stays online even when database connection drops.
 
@@ -363,11 +363,11 @@ console.log(`Active connections: ${connectionCount}`);
 ### Database Connection Test
 
 ```bash
-# Kill PostgreSQL process to simulate connection drop
+# Kill SQLite process to simulate connection drop
 # Server should automatically reconnect
 
 # Check logs for:
-⚠️ PostgreSQL pool error (connection may have dropped)
+⚠️ SQLite pool error (connection may have dropped)
 🔄 Attempting database reconnection (1/10)...
 ✅ Database reconnection successful
 ```
@@ -457,7 +457,7 @@ reconnectionDelayMax: 3000 // 3 seconds
 
 ### Critical Fix
 
-**Removed `process.exit(-1)` from database error handler** - This single change prevents the server from crashing when PostgreSQL connection drops.
+**Removed `process.exit(-1)` from database error handler** - This single change prevents the server from crashing when SQLite connection drops.
 
 ### Major Improvements
 

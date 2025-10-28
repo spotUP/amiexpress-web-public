@@ -3,26 +3,26 @@
  * Tests Socket.io event handlers and BBS command processing
  */
 
-const { Pool } = require('pg');
+const Database = require('better-sqlite3');
+const path = require('path');
 
 // Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://spot@localhost:5432/amiexpress_db'
-});
+const dbPath = process.env.DATABASE_DIR 
+  ? path.join(process.env.DATABASE_DIR, process.env.DATABASE_FILE || 'amiexpress.db')
+  : path.join(__dirname, '..', 'data', 'amiexpress.db');
 
 async function testHandlers() {
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🧪 Testing Internode Chat Handlers');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-  try {
-    const client = await pool.connect();
+  const db = new Database(dbPath);
 
+  try {
     console.log('📋 Test 1: Verify Handler Files Exist');
     console.log('─────────────────────────────────────');
 
     const fs = require('fs');
-    const path = require('path');
 
     const handlerFiles = [
       'src/handlers/internode-chat.handler.ts',
@@ -32,7 +32,7 @@ async function testHandlers() {
     ];
 
     handlerFiles.forEach(file => {
-      const filePath = path.join(__dirname, file);
+      const filePath = path.join(__dirname, '..', file);
       if (fs.existsSync(filePath)) {
         const stats = fs.statSync(filePath);
         console.log('✓', file, '(' + stats.size + ' bytes)');
@@ -44,7 +44,7 @@ async function testHandlers() {
     console.log('\n📋 Test 2: Verify State Constants');
     console.log('─────────────────────────────────────');
 
-    const statesFile = path.join(__dirname, 'src/constants/bbs-states.ts');
+    const statesFile = path.join(__dirname, '..', 'src/constants/bbs-states.ts');
     const statesContent = fs.readFileSync(statesFile, 'utf8');
 
     if (statesContent.includes('CHAT = \'chat\'')) {
@@ -62,7 +62,7 @@ async function testHandlers() {
     console.log('\n📋 Test 3: Verify Command Handler Integration');
     console.log('─────────────────────────────────────');
 
-    const commandFile = path.join(__dirname, 'src/handlers/command.handler.ts');
+    const commandFile = path.join(__dirname, '..', 'src/handlers/command.handler.ts');
     const commandContent = fs.readFileSync(commandFile, 'utf8');
 
     if (commandContent.includes('case \'CHAT\':')) {
@@ -86,7 +86,7 @@ async function testHandlers() {
     console.log('\n📋 Test 4: Verify Socket.io Event Wiring');
     console.log('─────────────────────────────────────');
 
-    const indexFile = path.join(__dirname, 'src/index.ts');
+    const indexFile = path.join(__dirname, '..', 'src/index.ts');
     const indexContent = fs.readFileSync(indexFile, 'utf8');
 
     const requiredEvents = [
@@ -136,7 +136,7 @@ async function testHandlers() {
     console.log('\n📋 Test 6: Verify Database Methods');
     console.log('─────────────────────────────────────');
 
-    const dbFile = path.join(__dirname, 'src/database.ts');
+    const dbFile = path.join(__dirname, '..', 'src/database.ts');
     const dbContent = fs.readFileSync(dbFile, 'utf8');
 
     const requiredMethods = [
@@ -176,7 +176,7 @@ async function testHandlers() {
 
     let totalLines = 0;
     handlerFiles.forEach(file => {
-      const filePath = path.join(__dirname, file);
+      const filePath = path.join(__dirname, '..', file);
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf8');
         const lines = content.split('\n').length;
@@ -216,13 +216,11 @@ async function testHandlers() {
     console.log('  ✓ ' + totalLines + ' lines of handler code');
     console.log('\n✅ Internode Chat System: FULLY INTEGRATED\n');
 
-    client.release();
-
   } catch (error) {
     console.error('\n❌ Test failed:', error.message);
     console.error(error.stack);
   } finally {
-    await pool.end();
+    db.close();
   }
 }
 

@@ -1,26 +1,29 @@
-const { Pool } = require('pg');
+const Database = require('better-sqlite3');
+const path = require('path');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://spot@localhost/amiexpress_web',
-});
+const dbPath = process.env.DATABASE_DIR 
+  ? path.join(process.env.DATABASE_DIR, process.env.DATABASE_FILE || 'amiexpress.db')
+  : path.join(__dirname, '..', 'data', 'amiexpress.db');
 
 async function cleanupFileAreas() {
-  const client = await pool.connect();
+  const db = new Database(dbPath);
+  
   try {
     console.log('Checking file areas...');
-    const result = await client.query('SELECT id, name, conferenceid FROM file_areas ORDER BY id');
-    console.log(`Found ${result.rows.length} file areas:`);
-    result.rows.forEach(row => {
+    const result = db.prepare('SELECT id, name, conferenceid FROM file_areas ORDER BY id').all();
+    console.log(`Found ${result.length} file_areas:`);
+    result.forEach(row => {
       console.log(`  ID: ${row.id}, Name: ${row.name}, ConfID: ${row.conferenceid}`);
     });
 
     console.log('\nDeleting file areas with ID > 5...');
-    const deleteResult = await client.query('DELETE FROM file_areas WHERE id > 5');
-    console.log(`Deleted ${deleteResult.rowCount} rows`);
+    const deleteStmt = db.prepare('DELETE FROM file_areas WHERE id > 5');
+    const deleteResult = deleteStmt.run();
+    console.log(`Deleted ${deleteResult.changes} rows`);
 
     console.log('\nRemaining file areas:');
-    const finalResult = await client.query('SELECT id, name, conferenceid FROM file_areas ORDER BY id');
-    finalResult.rows.forEach(row => {
+    const finalResult = db.prepare('SELECT id, name, conferenceid FROM file_areas ORDER BY id').all();
+    finalResult.forEach(row => {
       console.log(`  ID: ${row.id}, Name: ${row.name}, ConfID: ${row.conferenceid}`);
     });
 
@@ -28,8 +31,7 @@ async function cleanupFileAreas() {
   } catch (error) {
     console.error('Error:', error);
   } finally {
-    client.release();
-    await pool.end();
+    db.close();
   }
 }
 

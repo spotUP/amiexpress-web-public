@@ -23,7 +23,7 @@ backend/backend/src/
 ├── utils/            - Reusable utility functions (9 files)
 ├── middleware/       - Express/Socket.IO middleware
 ├── handlers/         - Request/socket handlers (11 files)
-└── database.ts       - PostgreSQL database layer
+└── database.ts       - SQLite database layer
 ```
 
 ### Code Statistics
@@ -355,7 +355,7 @@ env-codes.ts               - Environment status codes
 ### Backend
 ✅ **Compiles:** No TypeScript errors
 ✅ **Starts:** Runs on port 3001
-✅ **Database:** PostgreSQL connected
+✅ **Database:** SQLite connected
 ✅ **Dependencies:** All handlers properly injected
 
 ### Systems

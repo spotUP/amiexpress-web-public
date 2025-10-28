@@ -1,74 +1,41 @@
-# Render Blueprint Configuration for AmiExpress Web
-# This file defines the complete infrastructure setup for Render.com
-# Run with: render deploy --blueprint render.yaml
-
 services:
-  # Backend API Service
+  # Frontend - Static Site
+  - type: web
+    name: amiexpress-frontend
+    env: static
+    buildCommand: cd client && npm install && npm run build
+    staticPublishPath: ./client/dist
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+  # Backend - Web Service
   - type: web
     name: amiexpress-backend
-    runtime: node
-    buildCommand: "npm ci && npm run build"
-    startCommand: "npm start"
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 10000
-      - key: DATABASE_URL
-        sync: false # Set manually in Render dashboard
+        value: 3001
+      - key: DATABASE_DIR
+        value: /opt/render/project/src/backend/data
+      - key: DATABASE_FILE
+        value: amiexpress.db
       - key: JWT_SECRET
         generateValue: true
-      - key: CORS_ORIGIN
-        fromService:
-          type: web
-          name: amiexpress-frontend
-          property: host
-    healthCheckPath: /health
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+    
+    # Disk for SQLite database persistence
     disk:
-      name: data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 10
-    autoDeploy: true
+      name: sqlite-data
+      mountPath: /opt/render/project/src/backend/data
+      sizeGB: 1
 
-  # Frontend Static Site
-  - type: web
-    name: amiexpress-frontend
-    runtime: static
-    buildCommand: "cd frontend && npm ci && npm run build"
-    staticPublishPath: ./frontend/dist
-    envVars:
-      - key: VITE_API_URL
-        fromService:
-          type: web
-          name: amiexpress-backend
-          property: host
-    routes:
-      - type: redirect
-        source: /api/*
-        destination: https://amiexpress-backend.onrender.com/api/:splat
-    autoDeploy: true
-
-  # Database (PostgreSQL)
-  - type: pserv
-    name: amiexpress-db
-    ipAllowList: [] # Only accessible from services in this blueprint
-
-# Environment groups for different deployment stages
-environments:
-  - name: staging
-    services:
-      - amiexpress-backend
-      - amiexpress-frontend
-      - amiexpress-db
-    envVars:
-      - key: NODE_ENV
-        value: staging
-
-  - name: production
-    services:
-      - amiexpress-backend
-      - amiexpress-frontend
-      - amiexpress-db
-    envVars:
-      - key: NODE_ENV
-        value: production
+    # Health check endpoint
+    healthCheckPath: /health

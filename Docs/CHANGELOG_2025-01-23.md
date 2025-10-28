@@ -374,7 +374,7 @@ setCommandExecutionDependencies(executeDoor, processBBSCommand);
 ### Integration Testing
 - ✅ Backend compilation (no TypeScript errors)
 - ✅ Backend startup (all dependencies injected)
-- ✅ Database connection (PostgreSQL)
+- ✅ Database connection (SQLite)
 - ✅ Command loading (1 command loaded successfully)
 
 ### End-to-End Testing

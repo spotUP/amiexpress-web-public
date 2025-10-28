@@ -214,7 +214,7 @@ backend/src/
 │   └── Session management
 │
 ├── database.ts (1,503 lines) ✅ Good
-│   ├── PostgreSQL connection pool
+│   ├── SQLite connection pool
 │   ├── 50+ CRUD methods
 │   ├── User, Message, File management
 │   └── QWK/FTN support
@@ -453,7 +453,7 @@ State Machine
     ↓ processBBSCommand()
 Command Processor
     ↓ Database queries, Door execution
-PostgreSQL Database
+SQLite Database
     ↓ Query results
 Response
     ↓ 'ansi-output', 'login-success' events
@@ -523,7 +523,7 @@ Node 1 → Session Pool → Database
 Node 2 → Session Pool → Database
 Node 3 → Session Pool → Database
     ↓
-Shared PostgreSQL Database
+Shared SQLite Database
 ```
 
 **Features:**

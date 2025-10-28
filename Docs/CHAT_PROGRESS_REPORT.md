@@ -409,8 +409,8 @@ ALL TESTS PASSED!
 
 ## Lessons Learned
 
-### 1. PostgreSQL Column Case Sensitivity
-PostgreSQL is case-sensitive for identifiers. Columns created without quotes become lowercase, but columns created with quotes preserve case. This project uses camelCase in the users table but snake_case in chat tables. **Solution:** Always use quotes in queries for mixed-case columns.
+### 1. SQLite Column Case Sensitivity
+SQLite is case-sensitive for identifiers. Columns created without quotes become lowercase, but columns created with quotes preserve case. This project uses camelCase in the users table but snake_case in chat tables. **Solution:** Always use quotes in queries for mixed-case columns.
 
 ### 2. TypeScript Cache Management
 tsx (TypeScript executor) caches compiled code aggressively. Code changes may not apply without cache clearing. **Solution:** Clear `node_modules/.tsx`, `node_modules/.cache`, and `.tsx-cache` when code changes don't apply.
@@ -552,7 +552,7 @@ Two fixes were required:
 ```markdown
 ## 🚨 CRITICAL: Database Column Names - ALWAYS USE LOWERCASE 🚨
 
-PostgreSQL column names are CASE-SENSITIVE when quoted!
+SQLite column names are CASE-SENSITIVE when quoted!
 
 1. ALL columns are lowercase (e.g., availableforchat, seclevel, quietnode)
 2. NEVER use camelCase in SQL queries
@@ -691,7 +691,7 @@ PostgreSQL column names are CASE-SENSITIVE when quoted!
 
 **Production URLs:**
 - Backend: https://amiexpress-backend.onrender.com (internal)
-- Database: PostgreSQL on Render
+- Database: SQLite on Render
 - Service Dashboard: https://dashboard.render.com/web/srv-d3naaffdiees73eebd0g
 
 ---

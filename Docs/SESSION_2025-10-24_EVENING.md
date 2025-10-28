@@ -36,7 +36,7 @@
   bulletins(filename, conferenceid)
   ```
 - **Migration order fixed**: Cleanup runs BEFORE constraint application
-- **PostgreSQL enforcement**: Database rejects duplicates at schema level
+- **SQLite enforcement**: Database rejects duplicates at schema level
 
 ### Deployment System - FIXED
 - **jq-based JSON encoding**: Handles newlines, quotes, special characters

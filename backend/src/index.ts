@@ -1627,7 +1627,7 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '- New web interface available\r\n');
   socket.emit('ansi-output', '- Enhanced security features\r\n');
   socket.emit('ansi-output', '- Real-time chat capabilities\r\n');
-  socket.emit('ansi-output', '- PostgreSQL database backend\r\n');
+  socket.emit('ansi-output', '- SQLite database backend\r\n');
   socket.emit('ansi-output', '- Full conference system\r\n');
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m\r\n');
 

@@ -28,7 +28,8 @@ fi
 cd "$(dirname "$0")/backend"
 
 # Set environment variables
-export DATABASE_URL="postgresql://localhost/amiexpress"
+export DATABASE_DIR="./data"
+export DATABASE_FILE="amiexpress.db"
 
 # Start the server
 echo "→ Starting backend server on port 3001..."

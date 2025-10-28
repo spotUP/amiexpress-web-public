@@ -124,7 +124,7 @@ This session focused on three major areas:
 - ❌ `xterm` v4 (duplicate, kept `@xterm/xterm` v5)
 - ❌ `xterm-addon-canvas` (duplicate, kept `@xterm/addon-canvas`)
 - ❌ `bcrypt` (kept `bcryptjs` only) - **Had to fix imports!**
-- ❌ `sqlite3` + `@types/sqlite3` (using PostgreSQL)
+- ❌ `sqlite3` + `@types/sqlite3` (using SQLite)
 - ❌ `crypto` (built into Node.js)
 - ✅ Moved `@types/*` to devDependencies (not needed at runtime)
 
