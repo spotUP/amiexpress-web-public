@@ -39,7 +39,7 @@ This guide covers deploying AmiExpress Web to Render.com using SQLite as the dat
 
 ## Deployment Steps
 
-### Option 1: Deploy from Dashboard (Recommended)
+### Manual Deployment (Free Method)
 
 1. **Connect Repository**
    - Go to https://dashboard.render.com
@@ -93,23 +93,6 @@ This guide covers deploying AmiExpress Web to Render.com using SQLite as the dat
    - Click "Create Static Site"
    - Wait for build to complete
    - Your frontend will be live at https://amiexpress-frontend.onrender.com
-
-### Option 2: Deploy with render.yaml (Infrastructure as Code)
-
-1. **Use the provided render.yaml**
-   - The `render.yaml` file in the root directory defines both services
-   - Update environment variables as needed
-
-2. **Deploy from Dashboard**
-   - Go to https://dashboard.render.com
-   - Click "New +" → "Blueprint"
-   - Connect your repository
-   - Render will automatically detect render.yaml
-   - Click "Apply" to deploy both services
-
-3. **Set Secret Environment Variables**
-   - JWT_SECRET and JWT_REFRESH_SECRET will be auto-generated
-   - You can override them in the dashboard if needed
 
 ## Database Management
 
