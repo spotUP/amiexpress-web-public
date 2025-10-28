@@ -39,6 +39,24 @@ This guide covers deploying AmiExpress Web to Render.com using SQLite as the dat
    - Code pushed to GitHub
    - SQLite migration complete
 
+## ⚠️ CRITICAL: Instance Type Requirement
+
+**SQLite requires persistent disk storage, which is NOT available on Free tier.**
+
+You MUST upgrade `amiexpress-backend` to **Starter ($7/month)** to get:
+- ✅ Persistent Disks (required for SQLite)
+- ✅ Zero downtime deploys
+- ✅ Web shell and SSH access
+- ✅ Always-on (no spin-down)
+
+### Upgrade Backend to Starter:
+
+1. **Go to:** Dashboard → AmiExpress-Web → amiexpress-backend
+2. **Click:** "Settings" tab
+3. **Find:** "Instance Type" section
+4. **Select:** "Starter" ($7/month)
+5. **Click:** "Save Changes"
+
 ## Reconfigure Existing Services for SQLite
 
 ### Step 1: Update Backend Service (amiexpress-backend)
@@ -67,13 +85,16 @@ This guide covers deploying AmiExpress Web to Render.com using SQLite as the dat
    JWT_REFRESH_SECRET=<your-existing-or-new-secret>
    ```
 
-5. **Add Persistent Disk** (CRITICAL for SQLite)
+5. **Add Persistent Disk** (CRITICAL - Only available on Starter+)
+   - ⚠️ **Requires Starter instance type ($7/month)**
    - Click "Disks" tab
    - Click "Add Disk"
    - Name: `sqlite-data`
    - Mount Path: `/opt/render/project/src/backend/data`
-   - Size: 1 GB
+   - Size: 1 GB (included with Starter)
    - Click "Save"
+   
+   **Without persistent disk, your database will be lost on every deployment!**
 
 6. **Verify Build Settings**
    - Settings tab → Build & Deploy
