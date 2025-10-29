@@ -1,0 +1,162 @@
+This ICON only represents a the definition to ACP, and required data
+for the BBS to operate and locate the other definition files.
+
+
+NODES=
+ICONIFIED
+ICONIFY.LEFTEDGE=
+ICONIFY.TOPEDGE=
+BACKUP.<num>=
+RESTRICT.<num>=
+BUTTON_NAME.<num>=
+BUTTON_COMMAND.<num>=
+NUTTON_NAME.<num>=
+NUTTON_COMMAND.<num>=
+PRIORITY=
+BBS_NAME=
+BBS_LOCATION=
+SYSOP_NAME=
+
+
+NODES= <num>
+
+         -Version 3.0
+         -REQUIRED
+         -tells ACP the number of nodes that are running on this BBS.
+         -Important that this is correct.
+
+     NODES= 3
+
+
+ICONIFIED
+
+         -Version 3.0
+         -OPTIONAL
+         -tells ACP that it should startup in ICONIFIED mode.
+
+     ICONIFIED
+
+
+ICONIFY.LEFTEDGE= <num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells ACP the number of pixels from the left edge of the screen
+          to place the iconify window.
+
+     ICONIFY.LEFTEDGE= 0
+
+
+ICONIFY.TOPEDGE= <num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells ACP the number of pixels from the top edge of the screen to 
+          place the iconify window.
+
+     ICONIFY.TOPEDGE= 10
+
+
+BACKUP.<num>= <filename>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells ACP to make a backup from the specified file. A HISTORY
+          of 5 Backups will made.
+         -<num> is the nth occurance of this tooltype.
+
+     BACKUP.1= BBS:User.Data
+
+
+RESTRICT.<num>= <filename>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells ACP to place a filenote on the specified file. This prevents
+          users from viewing or downloading the restricted files.
+
+     RESTRICT.1= BBS:User.Keys
+
+
+BUTTON_NAME.<num>= <name>
+
+         -Version 3.0
+         -OPTIONAL
+         -defines the name of the specified button, the <num> can range 
+          from 1-15.
+
+     BUTTON_NAME.1= AXVAL
+
+
+BUTTON_COMMAND.<num>= <command>
+
+         -Version 3.0
+         -OPTIONAL
+         -defines the command to be executed when this button is selected.
+         -the <num> can range from 1-15.
+
+     BUTTON_COMMAND.1= BBS:Utils/axval
+
+
+NUTTON_NAME.<num>= <name>
+
+         -Version 3.0
+         -OPTIONAL
+         -defines the name of the specified nutton, the <num> can range 
+          from 1-15.
+
+     NUTTON_NAME.1= AXVAL
+
+
+NUTTON_COMMAND.<num>= <command>
+
+         -Version 3.0
+         -OPTIONAL
+         -defines the command to be executed when this nutton is selected.
+         -the <num> can range from 1-15.
+         -All NUTTONS will be passed the selected NODE number as a command
+          line argument.
+
+     NUTTON_COMMAND.1= BBS:Utils/axval
+
+
+PRIORITY= <num>
+
+         -Version 3.0
+         -OPTIONAL
+         -Specifies the priority for ACP to run.
+
+     PRIORITY= 11
+
+
+BBS_NAME= <name>
+
+         -Version 3.0
+         -REQUIRED
+         -Specifies the name of your BBS.
+
+     BBS_NAME= ByteMaster's BBS
+
+
+BBS_LOCATION= <location>
+
+         -Version 3.0
+         -REQUIRED
+         -Specifies the location of all BBS main files. This directory will
+          be the directory where the Node(x) directories should be. Along
+          with all of the .DEF files.
+         -If the location is a directory, then the directory name must have a
+          trailing '/'. when specified in the tooltype.
+
+     BB_LOCATION= BBS:
+
+
+SYSOP_NAME= <name>
+
+         -Version 3.0
+         -REQUIRED
+         -Specifies your name.
+
+     SYSOP_NAME= ByteMaster
+
+

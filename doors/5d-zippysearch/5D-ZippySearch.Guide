@@ -1,0 +1,92 @@
+@DataBase 5D-ZippySearch Documentation
+@Author sTc/5D
+@Index Documentation
+
+Copyright © 1994 SvEN tHE CREAToR / 5tH DyNASTY
+
+@Remark $VER: 5D-ZippySearch v0.03 by sTc/5D
+@Remark AmigaGuide database
+
+@node MAIN "5D-ZippySearch Documentation © 1994 SvEN tHE CREAToR Of 5tH DyNASTY"
+                                                              :
+                                                       :      ¦             
+                   ________________  __________________¦      |
+            _______\_______       /  \             /   |      |______
+           |  __   _/     /______/____\  _     _  /    ¦      |  __  |
+           |  \/  _\________    \_\  / \/       \/     _      |  \/  |
+           |______\        /     / \/   |       |      /      |______|
+                   \___________ /       |_______|_____/       |Rpd!
+                              \/                     /________|
+                         :           :                                     :
+            ____   :     ¦     :     ¦      · 5 · T · H ·            :     ¦
+  __________\  /___¦    _|__/\ ¦     |_______ _______________________¦     |
+  \______   \\//   |    \____ \|     |   _   \\_____      /       /  |     |
+   /     \   \/    ¦     |   \ \     |   /    \/   /_____/    _  /   ¦     |
+ _/       \   \_____     |    \ \_   |   _     \_____   \_     \/_____     |
+ \       _/    /   /     |     \     |   /      /   /    /     |     /     |
+  \__________ /__________|     |\ ___|__/_____ /_______ /______|___________|
+            \/           |     ¦ \/          \/       \/
+                         ¦     :     · D · Y · N · A · S · T · Y ·
+                         :
+
+                              (×· PrESENTS ·×)
+
+                         Code: SvEN tHE CREAToR/5D
+
+               ----- --- -> 5D-ZippySearch v0.03 <- --- -----
+
+                  Coded by SvEN tHE CREAToR of 5th Dynasty
+
+                           @{" Normal Documentation " Link Documentation}
+@endnode
+@node Documentation "5D-ZippySearch Documentation"
+              _______________________________________________
+             |                                               |
+             | //                                            |
+             | /                                             |
+             |                                               |
+             |            @{" D e S C R I P T I O N " Link Description}           |
+             |                                               |
+             |           @{" I n S T A L L A T I O N " Link Installation}          |
+             |                                               |
+             |              @{" G r E E T I N G S " Link Greetings}             |
+             |                                               |
+             |                                             / |
+             |                                            // |
+             |_______________________________________________|
+
+@endnode
+@node Description "5D-ZippySearch Description"
+5D-ZippySearch has been coded by SvEN tHE CREAToR/5D!
+
+5D-ZippySearch is a replacement for the normal ZippySearch of /X!
+@endnode
+@node Installation "5D-ZippySearch Installation"
+Copy all files which are in the archive bbs directory
+to your bbs directory.
+
+Contents of archive:
+===================
+
+BBS/
+    Commands/
+        BBSCmd/
+            Z.info
+    Doors/
+        5D-ZippySearch/
+            5D-ZippySearch
+            5D-ZippySearch.info
+            5D-ZippySearch.Guide
+
+===================
+
+@endnode
+@node Greetings "5D-ZippySearch Greetings"
+Greetings go to:
+
+         . Celator ........... Thank you for helping me with /X! .
+         : ByteAndi ............ For helping me to learn coding! :
+         | Snow ...................... Sing mehr lieder, leader! |
+         `------( And all other persons I've forgotten!!! )------'
+
+@endnode

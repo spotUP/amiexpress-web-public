@@ -1,0 +1,380 @@
+@DATABASE Conftop.Guide
+@$VER: Guide for Conftop v2.3 (3rd May 1994)
+
+@REMARK Copyright (c) 1994 Mystic.
+@REMARK All Rights Reserved.
+@REMARK Main Program by Bobo/Mystic and Looby/Insane.
+@REMARK Document and Update files by Bobo/Mystic.
+
+@REMARK You need MultiView, Amigaguide or any other GUIDE viewer.
+
+@NODE MAIN "Conftop: Contents."
+
+--------------------------------------------------------------------------
+    Conference Top Uploaders (Version 2.3) [RELEASE 2] - 3rd May 1994
+--------------------------------------------------------------------------
+
+          @{"[ Background and Purpose ]" Link Background}      @{"[ Available Tooltypes ]" Link Config}
+          @{"[    Notable Features    ]" Link Features  }      @{"[   Program History   ]" Link Tooltypes}
+          @{"[  Install into Express  ]" Link Install   }      @{"[  Thanks and Greets  ]" Link Greets}
+          @{"[  Configurate Conftop   ]" Link History   }
+
+--------------------------------------------------------------------------
+            Copyright (c) 1994 by Bobo/Mystic and Looby/Insane
+--------------------------------------------------------------------------
+
+ Example Outputs/Scripts come in seperate files with the release archive.
+@ENDNODE
+@NODE Background "Conftop: Background and Purpose"
+[------------( Background and Purpose )-----------------------------------]
+
+Conftop was orginally written becouse it didn't exists any good Conftop
+utility when i needed one. I first tested Van Dammes Conftop utility, but
+it was slow and i didn't get it working correctly so i started coding my
+own. The first version was coded in arexx and was pretty slow, so i decided
+to recode it in C which is much faster.
+
+As the sysop you can specify the interval (number of days), how many rows,
+and if you want to write a message when reseting. You may also have a
+headerfile/tailerfile and a exclude-files for one or all conferences.
+All this functions are explained later in this document.
+
+Conftop can now be made resident. I really recommend you to do this, since
+it will speed this door up quite much, specially on 68000-68020 computers!
+@ENDNODE
+@NODE Features "Conftop: Notable Features"
+[------------( Notable Features )-----------------------------------------]
+
+Several reasons to use Conference Top Uploaders:
+
+* Written entirely in C for fast code.
+* Works without conference accounting.
+* Configable: Write message to optional user when reseting.
+* Can be made resident.
+* Can run other filecheck doors after.
+* Can display header/tailer files, different ones for each conference, 
+  as well as global ones for all conferences.
+* Checks for private uploads.
+* Special optimized versions for all CPU types.
+* Online updating.
+* 32-Node compatable. (Actually how many nodes you want)
+* Using Icons (/X3.x Standard Nowadays), but should work fine with /X2.x
+  and Sigma Express.
+* Can use a global datafile for all conferences and/or seperate ones for
+  individual conferences.
+* Allows skipping update if specific user is named (by username or slot)
+
+Conftop only allow one door to be started after. If this isn't enough,
+i recommend you to use S-Dupecheck by Pot-Noodle or Dupecheck by Byteandi.
+@ENDNODE
+@NODE Install "Conftop: Install into Express"
+[------------( Install into Express )-------------------------------------]
+
+This door should be installed as your standard FileCheck door.
+On /X3.x you have you have to edit (or create) the filecheck.info in
+your Syscmd directory. On /X2.x and SExpress you have to edit the
+SYS.Cmd in the usual way. Remember to give this door a low access level
+(Like "001") and make it multinode. The door is an XIM type ofcourse!
+
+Also, for added speed, you may make the door resident with your normal
+"resident" command (CLI: "Resident Conftop.x PURE"). But if you do, make
+sure that Express runs just the doorfilename, without its path. On /X3.x
+you also need the tooltype RESIDENT in the icon.
+
+You also need a icon in your bbscmd directory. Just copy your created
+filecheck icon into you bbscmd dir and name it CONFTOP.INFO.
+On /X2.x, just snap the line you just entered in sys.cmd and insert it
+into your bbs.cmd file and rename FILECHECK to CONFTOP.
+@ENDNODE
+@NODE Config "Conftop: How to configurate conftop"
+[------------( How to configurate conftop )-------------------------------]
+
+While you're reading this section it may be a good idea to view the example
+icons that came with the archive.
+
+The whole way to configurate conftop is totaly changed. I am now using
+icons since it is the standard nowadays. You have one icon for global
+data in doors: (eg all tooltypes you want to be available for all
+conferences) and you have one icon in each conference you want to run
+conftop in. Read the next chapter to see available tooltypes.
+
+The only thing you need to do to install conftop into a conference is to
+create a iconfile in the specific conference path and put the tooltype
+DAYS in it. (EG DAYS=7 or DAYS=WEEKLY)
+@ENDNODE
+@NODE Tooltypes "Conftop: Available Tooltypes"
+[------------( Available Tooltypes )--------------------------------------]
+
+Here are the available tooltypes.
+
+[*] - Can be used both in the global and the local icon.
+[-] - Can only be used in the global icon (Doors:Conftop.info)
+[!] - Can only be used in the local icon (<confpath>/Conftop.info)
+
+Tooltype-Name:                    Description:
+---------------------------------------------------------------------------
+DAYS=<days/weekly>            [!] This tooltype specifies the interval of
+                                  conftop. You can put it to WEEKLY if you
+                                  want to run conftop weekly (Monday->Sunday)
+                                  EG: DAYS=WEEKLY,DAYS=14
+
+ROWS=<# rows>                 [*] This tooltype specifies how many rows/lines
+                                  with users you want to display.
+                                  EG: ROWS=10
+
+MAILUSER=<username>           [*] This tooltype specifies which user you
+                                  want to write a message to when conftop is
+                                  reseting. If this tooltype is not specified
+                                  at all, no message will be written.
+                                  EG: MAILUSER=EALL
+
+BULLFILE=<bulletinefile>      [*] This tooltype specifies where you want to
+                                  write the bulletin file to when reseting.
+                                  If this tooltype is not specified at all,
+                                  no bulletine will be written.
+                                  EG: BULLFILE=BBS:Bulletins/Bull1.txt
+
+SHARE_DATA=<confpath>         [!] If this tooltype is specified, all other
+                                  tooltypes will be disabled. This allows
+                                  a conference to be run at another confs
+                                  datafile/icon. Eg: SHARE_DATA=BBS:Conf1/
+
+SHOW_RESETDATE                [*] This tooltype specifies if you want to
+                                  show the complete resetdate instaid of
+                                  showing eg: Day (1/7).
+
+NEXTDOOR=<doorname>           [*] This tooltype specifies which door that
+                                  should be started after conftop have run.
+                                  EG: NEXTDOOR=DUPECHECK
+
+CONFNAME=<cnfname>            [!] If this tooltype is specified, conftop
+                                  will use this conference name instaid of
+                                  using the one in Confconfig.info file.
+                                  EG: CONFNAME=Amiga Elite
+
+EXCLUDE_<num>=<user/slot>     [*] This tooltype specifies which users that
+                                  you want to exclude from conftop.
+                                  You can enter both username and slotnumber
+                                  EG: EXCLUDE_1=BOBO,EXCLUDE_2=165
+
+PLAYPEN_<node>=<dir>          [-] This tooltype is only needed if you don't
+                                  have your playpen directories located in
+                                  BBS:NodeX/Playpen/. If they don't, you
+                                  must type your external playpen dir here.
+                                  EG: PLAYPEN_1=HD2:PLAYPEN/
+
+MIN_LIMIT=<bytes>             [*] If this tooltype is specifed, only users
+                                  above the limit of <size> bytes will be
+                                  displayed.
+
+SKIP_EMPTY_LINES              [*] If this tooltype is specified, conftop will
+                                  not output any empty lines. Eg if ROWS=10
+                                  and only 1 user have uploaded, conftop
+                                  will not fill the other 9 lines up.
+
+FROMUSER                      [*] Here you can specify a own user the message
+                                  will be written from. Default is the SYSOP.
+
+SUBJECT                       [*] Here you can specify a own subject for the
+                                  message. Default is "Results from Conftop"
+@ENDNODE
+@NODE History "Conftop: Program History"
+[------------( Program History )------------------------------------------]
+
+{ + }-New feature(s)         { - }-Removed feature
+{ * }-changed feature        { ! }-fixed feature (Bug)
+{ # }-Information            { ? }-let me know if this work
+
+Conftop v1.0 (09-18-93 > 10-15-93) - [Private version for my board]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+First version, coded in Arexx by Bobo
+
+09-18-93 { + } I started coding this door.
+ - ^^ -  { + } Main source for updating uploads in datafiles.
+ - ^^ -  { + } Showing output in conference routine coded.
+09-19-93 { + } Now using a configfile.
+09-20-93 { + } Now showing total upload stats at the bottom.
+09-22-93 { # } Optimized the sourcecode :> Now: 6502 Before: 7523
+09-23-93 { * } Now using a own sort routine instaid of using WB's SORT.
+               Also abit useless code removed (Now size: 6229)
+ - ^^ -  { # } Optimized the sourcecode :> Now: 5687 Before: 6229
+10-01-93 { ! } You can now choose how many uploaders you want in a conference.
+10-02-93 { * } Now using a own showfile routine instaid of using amiexpress's
+               that is abit slow.
+ - ^^ -  { + } Now configuable playpen paths in configfile.
+ - ^^ -  { + } Now changing stat to 'Joining a conf' when running from
+               Bull20.txt, and 'Uploading' when running from Filecheck.
+ - ^^ -  { ? } Crashed sometimes on A4000/040. Changed some init codes. I
+               *think* it works now.
+10-03-93 { # } Optimized the sourcecode :> Now: 5439 Before: 6012
+               (Alot of useless code & routines removed)
+10-07-93 { + } Now you can launch a door after conftop in filecheck.
+         { # } ^ NOTE: All type of Doors without AREXX doors works ^
+10-10-93 { ! } Didnot give the launched door the right filename.
+10-11-93 { * } Changed the output design abit. Now some more chars for
+               username and location.
+ - ^^ -  { + } Recoded the source so i was able to compile it.
+
+Conftop v1.1 (10-16-93 > 11-02-93) - [Only Available for Betatesters]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Still coded in Arexx. First beta-version.
+
+10-16-93 { # } Since Nightshade didn't want to waste his time on coding
+               this door in C, i decided to update it abit.
+ - ^^ -  { * } Now 50% faster when joining a conference. Conftop are now
+               sorting & updating when you have uploaded a file.
+ - ^^ -  { ? } Fixed for multinode systems. Tell me if this works!?
+10-17-93 { ! } Didn't create a new datafile if it didn't exists one.
+10-23-93 { ! } ALOT of bugs found in the compiled version. Rewritten alot
+               of functions to make it work 100%!
+
+Conftop v2.0 (11-02-93 > 12-11-93) - [Only Available for Betatesters]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Talked abit with Looby, and we started to make conftop coded in C.
+
+11-02-93 { + } LOOBY: Coded the mainprogram.
+11-05-93 { + } BOBO : Coded the message structure to write messages.
+11-10-93 { * } LOOBY: Datafile now in binery.
+11-13-93 { + } BOBO : Now displaying total uploads and you can launch a
+                      door after.
+11-15-93 { + } BOBO : Coded a new object file, since the one we used was
+                      to old, and didnot support filechecking.
+                      Many thanx to Byteandi for all help!
+11-20-93 { + } LOOBY: New reset routine that shows ex. Day: (1/7).
+11-24-93 { + } BOBO : Now showing statistics.
+11-25-93 { + } BOBO : Displaying statistics is now configuable in the
+                      configfile.
+
+Conftop v2.1 (12-11-93 > 02-05-94) - [Only Available for Betatesters]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Recoded conftop. Now more optimized and faster. The code size is now
+about 20k less then old version.
+
+12-11-93 { * } BOBO : Started recoding and optimize conftop.
+ - ^^ -  { * } BOBO : Totaly new configuration program coded.
+12-15-93 { + } BOBO : Now using SAS/C 6.50. Coool..
+12-18-93 { ! } BOBO : Now an 100% working send message routine.
+12-25-93 { ! } LOOBY: Now an 100% working fixbytes routine.
+12-27-93 { ! } LOOBY: Now an 100% working sort routine.
+12-28-93 { ! } BOBO : Now locking msgbase correctly.
+01-13-94 { * } BOBO : Some new design improvments.
+01-17-94 { * } BOBO : Changed each line to 78 chars, since pc only support max
+                      79 chars / line.  Before: 80 chars / line.
+01-19-94 { ! } BOBO : Now starting filecheck when user is found in excludefile.
+01-29-94 { ! } LOOBY: New sort routine (again!). Optimized and a tiny bug fixed.
+01-31-94 { * } LOOBY: New fixbytes routine (again!). Optimized!
+02-05-94 { ! } LOOBY: Sort routine bugfixed (again!!)
+
+Conftop v2.2 (02-05-94) - [First Public Release Version]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+First Public release version!
+
+Conftop v2.3 (02-20-94 > 04-19-94) - [Public Release Version]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+02-20-94 { * } BOBO : New design used. Tell me what you think about it!
+ - ^^ -  { * } BOBO : Optimized abit. Some useless routines removed.
+02-24-94 { ! } BOBO : Conftop did not start the filechecking if a user was
+                      found in the excludefile. FIXED!
+ - ^^ -  { * } BOBO : The file: Conftop.Stats is no longer needed. It is
+                      saved in the Conftop.Data file.
+02-25-94 { * } BOBO : Now you can make Conftop resident.
+02-26-94 { * } BOBO : The files: Conftop.Playpen & Conftop.Exclude is no
+                      longer needed. It is saved in the iconfile.
+02-27-94 { * } BOBO : Saved 8 bytes to much for each user in the datafile - FIXED!
+03-01-94 { * } BOBO : Removed as much global data as possible from the code.
+                      Conftop now requires less memory then before.
+ - ^^ -  { ! } BOBO : Conftop was leaking memory at afew places. Most when
+                      a error occured. I think i found the most of them, but 
+                      please report if you found some more.
+ - ^^ -  { + } BOBO : A new option (tooltype) available. You can now have two
+                      or more conferences running on the same datafile. The
+                      tooltype in the infofile is called:
+                      SHARE_DATA_CNF<conf#>=<conftop datafile>
+
+                      EG: SHARE_DATA_CNF1=BBS:Elite/Conftop.Data
+                      - This would make so all uploads in conference one
+                        will be tranfered to the datafile in bbs:elite/
+ - ^^ -  { * } BOBO : Updated the config program. Now more simple, and not as
+                      big as the last one. No user-editor is available in this
+                      configprg, so i hope someone will code a external editor
+                      for conftop.
+03-02-94 { * } BOBO : Coded a convert program to convert the old datafiles to
+                      the new format.
+ - ^^ -  { + } BOBO : A new option (tooltype) available. You can now select
+                      what door you want to start after conftop.
+                      NEXTDOOR=<doorname>  EG: NEXTDOOR=FILECHK
+                      - This would try to start a door called FILECHK.
+                        You must have it in BBSCMD/
+03-05-94 { * } BOBO : Conftop is now totaly running on icons. The whole cfg-
+                      program is removed. You must now have a icon in each
+                      conference named: Conftop.info. The following tooltypes
+                      is available: DAYS,ROWS,MAILUSER,BULLFILE.
+ - ^^ -  { ! } BOBO : Conftop did bug sometimes when it was made resident.
+                      This problem is fixed!
+03-06-94 { + } BOBO : Now if a error occur, it will be written to the callerslog.
+03-07-94 { + ) BOBO : New tooltypes in conficon: SHARE_DATA,EXCLUDE_<num>
+ - ^^ -  { + } BOBO : New tooltypes in doorsicon: PLAYPEN_<node>,EXCLUDE_<num>
+                      NEXTDOOR. More will be available!
+03-08-94 { + } BOBO : New tooltype in conficon: CONFNAME=<name>. If this
+                      tooltype is specifed, it will use this conference name
+                      instaid of reading it from CONFCONFIG.INFO
+03-10-94 { + } BOBO : New tooltype in conficon: SHOW_RESETDATE. If this tooltype
+                      is specified the complete resetdate will be shows instaid
+                      of eg: Day (1/7).
+03-11-94 { ! } BOBO : Fixed quite many bugs in the convert program and maked it
+                      safer.
+03-13-94 { + } BOBO : New tooltype in conficon: MIN_LIMIT=<size>. If this
+                      tooltype is specifed, only users above the <size> will
+                      be displayed.  Thanx to DR. G/4WD for the idea!
+03-15-94 { + } BOBO : Coded a USEREDITOR so you can edit users in the datafiles.
+03-21-94 { ! } BOBO : Fixed the NONSTOP bug.  Thanx to REMO/MST for the report.
+03-22-94 { + } BOBO : You can now press CTRL+X in the usereditor to erase all
+                      the input.
+03-23-94 { * } BOBO : You can now have the tooltypes MIN_LIMIT, BULLFILE,
+                      and SHOW_RESETDATE in the global icon.
+03-24-94 { * } BOBO : If Conftop couldn't write the message/bulletine, a error
+                      will be written to the callerslog.
+03-26-94 { ! } BOBO : Now using the tooltypes CONFNAME and MIN_LIMIT when 
+                      writing message/bulletine.
+03-29-94 { * } BOBO : New Dataformat. You can now change the number of days
+                      whenever you want without to reset.  Thanx to RAJ-BAN
+                      for the idea/suggestion.
+ - ^^ -  { * } BOBO : Now writing: Day (1/7 - Final Results) when conftop
+                      is writing mail/bulletine.  Thanx to MOOCHER/FLT for
+                      the sugguestion.
+ - ^^ -  { ! } BOBO : Now using a own routine to display the header/tailer
+                      files. Max 300 chars/line.
+03-30-94 { ! } BOBO : Misspelling fixed (Availible->Available)
+ - ^^ -  { + } BOBO : Now you can use both the slot-number and the
+                      username at the tooltype EXCLUDE_<num>.
+03-31-94 { + } BOBO : You can now enter DAYS=WEEKLY and conftop will always
+                      run from Monday->Sunday.
+04-02-94 { + } BOBO : New tooltype available: SKIP_EMPTY_LINES. If this
+                      tooltype is specified, conftop will not output empty
+                      lines.
+04-05-94 { ! } BOBO : Forgot to send the carrage return in my displayfile
+                      routine.  Thanx to Dee/Delight for the bugreport!
+ - ^^ -  { + } BOBO : New tooltype: FROMUSER. Here you can specify a own
+                      user the message should be written from.
+ - ^^ -  { + } BOBO : New tooltype: SUBJECT. Here you can specify a own
+                      subject for the message.
+04-07-94 { ! } BOBO : Conftop read the config two times each time a user
+                      was joining a conference or uploading a file.
+04-12-94 { * } BOBO : Changed, fixed and updated the WEEKLY feature.
+                      Please report if this work correctly now!
+04-16-94 { + } BOBO : Conftop now checks if the upload is private. If it is
+                      conftop will skip the update.
+04-19-94 { - } BOBO : Registration routines removed.
+                      Final size: 25976 (Source: 33123 with comments)
+@ENDNODE
+@NODE Greets "Conftop: Thanks and Greets"
+[------------( Thanks and Greets )----------------------------------------]
+
+Greetings to: Pacific/2000 AD, Looby/Insane, Dee/Delight, Agressor/Anthrox,
+              Reactor/Mystic, Easy Rider/Mystic, Ufok/Mystic, Screwball!
+
+Many thanx to Byteandi/TRSI and Remo/Mystic for all help and support!
+
+And many many thanx to all my beta testers for bug-reports, suggestions and
+hints & tips to improve this door.
+@ENDNODE

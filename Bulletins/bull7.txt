@@ -1,0 +1,94 @@
+~f
+
+[22C[35mSANDMAN'S GLOBAL ELITE BBS-LIST
+[37m ===========================================================================
+[24C[36m   [37m   [36mJANUARY EDITION
+[37m[14C[36m  Copyright © 1995[37m [36mZcandalers Elite BBS-List
+[37m ===========================================================================
+  [36mBBS [37m[19C[35mGROUP NAME[37m[12C[31mSYSOP [37m[8C[32mFLAGS
+[37m ---------------------------------------------------------------------------
+ [36mABSINTHE BBS [37m[10C[35mIMPURE [37m[15C[31mANACHRONIST  [37m [32mAMIGA,C64,PC
+[37m TELNET: absinthebbs.net:1940
+    WWW: http://absinthebbs.net
+
+[30m [36mAMIGA UNDERGROUND[37m[6C[35mINDEPENDENT[37m[11C[31mDARKSTAR[37m[6C[32mAMIGA,SGI,TANDY
+ [37mTELNET: amigaunderground.com port:2300
+    WWW: http://amigaunderground.com
+
+ [36mCEMENT CITY[37m[12C[35mHELLFIRE/LFC[37m[10C[31mN/A[37m[11C[32mAMIGA,CON,PC
+ [37mTELNET: cement-city.bbs.io:4000
+
+ [36mDEATH ROW[37m[14C[35mARC/BK/DLM/HLM[37m[8C[31mSHADOWER[37m[6C[32mAMIGA
+ [37mTELNET: deathrow.servebbs.org:1001
+
+ [36mDIGITAL X[37m[14C[35mWANTED TEAM[37m[11C[31mDJ^BOBO[37m[7C[32mAMIGA,CON,PC
+ [37mTELNET: 77.163.20.156:7411
+
+ [36mFASTLINE[37m[15C[35mTRSi[37m[18C[31mFIX[37m[11C[32mAMIGA,C64,ATARI
+ [37mTELNET: fastline.nu:1541
+
+ [36mFIRST DIVISION[37m[9C[35mUP/DC/RYL/CRD/MDS/SX  [31mHAMLET[37m[8C[32mAMIGA
+ [37mTELNET: fdiv.ath.cx:1987
+
+ [36mINTERNAL DIMENSION[37m[5C[35mINDEPENDENT[37m[11C[31mNIGHT STALKER [32mAMIGA,PC
+ [37mTELNET: bbs.idbbs.ca:1581
+
+ [36mMASTURBATION STATION   [35mCRYSTAL,MYSTIC[37m[8C[31mBLACK BEARD   [32mAMIGA
+ [37mTELNET: mstation.servebbs.com:23
+
+ [36mMETAL IMPACT[37m[11C[35mQUARTEX/BK[37m[12C[31m-TCB!-[37m[8C[32mAMIGA,C64,CON,
+ [37mTELNET: telnet.mibbs.online:2020[27C[32mPC
+    [37mWWW: mibbs.online
+    FTP: FTP: ftp.mibbs.online:21210
+
+ [36mNIGHTBITE [37m[13C[35mINDEPENDENT [37m[10C[31mTHEJACKAL[37m[5C[32mAMIGA,C64,CON,
+[37m TELNET: nightbite.redirectme.net:2323[21C[32m ZX,PC
+
+[30m [36mPHANTASM[15C[35mQUARTEX[15C[31mREBEL[9C[32mAMIGA,C64,CON
+ [37mTELNET: phantasm.bbs.io:4489
+    FTP: phantasm.bbs.io:4490
+
+ [36mreference-board[14C[35mFAIRLIGHT/UP ROUGH    [31mSANDMAN[7C[32mAMIGA,C64
+ [37mTELNET: reference-board.zapto.org:1541
+    WWW: http://reference-board.brysk.se/
+    FTP: reference-board.zapto.org:1542
+
+ [36mSKARA BRAE[13C[35mINDEPENDENT[11C[31mJOHN DOE[6C[32mAMIGA,CON,PC
+ [37mTELNET: skarabrae.zapto.org:31337
+
+ [36mSUBHUMAN[15C[35mULTIMA[16C[31mGUYBRUSH[6C[32mAMIGA,CON
+ [37mTELNET: subhuman.ddns.net:1338
+
+ [36mTERMINAL OBSESSION[5C[35mGENESIS*PROJECT[7C[31mLA-STYLE[6C[32mAMIGA,C64,CON
+ [37mTELNET: terminal-obsession.hopto.org:1541
+
+ [36mTHE EDGE[15C[35mJORMAS[16C[31mORDYNE[8C[32mAMIGA,C64,CON
+ [37mTELNET: theedgebbs.dyndns.org:1541
+
+ [36mTHE NORTHERN PALACE    [35mTRSi/FLT/LFC/BK/M!    [31mZINKO[9C[32mAMIGA,C64,CON
+ [37mTELNET: TheNorthernPalace.com:2020
+
+ [36mTHE YARD[15C[35mUP ROUGH/dS![10C[31mZANER[9C[32mAMIGA
+ [37mSSH: SECRET
+
+ [36mUZI SUICIDE[12C[35mMST/DLT/SR/CRYSTAL    [31mDON27DOG[6C[32mAMIGA,C64,CON
+ [37mTELNET:uzisuicide.servebbs.org
+ =========================================================================
+[8C[36mGLOBAL ELITE BBS LIST UPDATED ON 2025-01-01 BY SANDMAN
+[14C* TOTAL 20 BOARDS * NEW SINCE LAST TIME 1 *
+ [37m=========================================================================
+
+[19C[36mREMOVED BOARDS, KEEPED FOR HISTORY
+
+ [37m=========================================================================
+ [36mBBS[20C[35mGROUP NAME[12C[31mSYSOP[9C[32mFLAGS
+ [37m-------------------------------------------------------------------------
+ [36mHIDDEN POWER[11C[35mNIGHTFALL[13C[31mX/\D[10C[32mAMIGA,CON
+ [37mbbs.nightfallcrew.com:9009
+
+ [36mMAMBA BBS[14C[35mMYSTIC[16C[31mEASY RIDER    [32mAMIGA,C64,PC
+ [37mTELNET: mambabbs.hopto.org:2020
+
+ [36mPUMA BBS[15C[35mINDEPENDENT[11C[31mTUFF BRAIN    [32mAMIGA
+ [37mTELNET: tuffy.dyndns.dk:1541
+ =========================================================================

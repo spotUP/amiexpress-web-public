@@ -1,0 +1,135 @@
+
+      .:::::::::::::::::::: .:::::::::::::::::::. ::::::::::::::::::.
+      `:::::::::..........  :::::::::: :::::::::: :::::::::: :::::::::.
+      .......... :::::::::: ::::::::::::::::::::: :::::::::: ::::::::::
+      ::::::::::.:::::::::: :::::::::: :::::::::: :::::::::: ::::::::::
+      `:::::::::::::::::::' :::::::::: :::::::::: ::::::::::::::::::::'
+                            ::::::::::
+                        .                            .
+                      .:::. sCEPTIC /X dESIGN 1996 .:::.
+
+                                  pRESENTERA
+
+        Callerslog Cutter v1.o by wIGWAM & fLI7e (sCEPTIC /X dESIGN)
+
+
+
+
+
+   Callerslog Cutter is a ......... © 1996 .............. wIGWAM & fLI7e/sAD
+   Cygnus Ed is a ................. ©87-93 ................. Cygnus Software
+
+                  WITH THE USAGE OF CLC vx.x yOU aGREE tHAT:
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  THERE IS NO LIABILITY TO THIS PROGRAM-PACKAGE, IN REFERENCE TO THE ASSERTED
+     LAWS. THE COPYRIGHT OWNERS, AND/OR A THIRD PARTY, PLACE THIS PROGRAM
+  PACKAGE AT YOUR DISPOSAL "AS IS" (EXCEPT WHERE THIS IS FIXED ANYWHERE ELSE
+    IN A WRITTEN WAY) WITHOUT ANY GUARANTEE IN ANY FORM (INDIRECT OR DIRECT
+    FORM). THE FULL RISK OF QUALITY AND FUNCTIONALITY OF THIS PROGRAM IS AT
+     YOUR OWN. IF THE PROGRAM HAS A BUG, YOU HAVE TO PAY ALL COSTS OF THE
+               NECESSARY SERVICE-WORKS AND REPAIRS FOR YOURSELF.
+
+  UNDER NO CIRCUMSTANCES, THE COPYRIGHT OWNERS OR A THIRD PARTY DISTRIBUTING
+  THIS PROGRAM PACKAGE, AS ALLOWED, JUST BEFORE, CAN NOT BE HELD RESPONSIBLE
+   FOR ANY DAMAGE CAUSED IN ANY USUAL, SPECIAL, OR ACCIDENTAL WAY OR BY THE
+  PROGRAM PACKAGE (SURROUNDING BUT NOT RESTRICTED ARE THE LOSS OF DATA OR NOT
+   CORRECTLY DISPLAYED DATA OR LOSSES CAUSED BY YOU OR A THIRD PARTY OR BY A
+  FAULTY WORK OF THIS PROGRAM PACKAGE WITH OTHER PROGRAMS), ALSO IF THE OWNER
+      OR A THIRD PARTY HAS BEEN POINTED AT SUCH POSSIBILITIES OF DAMAGE.
+
+                            sIGNED: fLI7e / sAD 1996
+
+     PS: If you want to become a DIST SITE / BETA SITE then get in Contact
+                              with me (the Author)
+
+
+
+
+
+  Callerslog Cutter (CLC) is a small, fast and VERY powerfull tool which is
+             able to keep your callerslog as small as you want!
+
+  Aquarius/Outlaws released a kind of this door some months ago but his one
+was slow (slower!) and sometimes fucked up some callerslog entrys by cutting
+              them in pieces even if it should not (doc said!).
+
+   CLC/SAD is the solution for all your LONG callerslog`s storing hundrets
+                                  of calls.
+
+ CLC is not working the way Aquarius do. We don`t take a BYTELENGTH, we take
+                          NUMBER OF CALLS to store!
+
+  IF you e.g. have an callerslog on NODE1 with a length of 400.000bytes and
+   it stores about 200 calls ... What would you like to have? A callerslog
+ which`s always around 100k or a callerslog where ALWAYS the last xx caller
+                                   are in?
+
+Guess this differs from person to person but some friends of mine and myself
+                 are prefering a constant number of callers.
+
+
+
+
+
+                         The commandline is SIMPLE!
+
+        SAD-CLC.exe <calleslog> [outfile=<destinationfile>] <amount>
+
+       Where callerslog is the PATH and NAME to your callerslog file1
+
+                         e.g.: BBS:node1/Callerslog
+
+    Wehere OUTFILE=xxx is the Destination callerslog file. This option is
+    not needed! If you leave it out the old callerslog will be cloned and
+    get get an extension ".old" and the stripped version will be directly
+                       written over the original file.
+
+       Where AMOUNT is the number of calls to store in the callersog.
+
+                     A full line may shpw the following
+
+        SAD-CLC.exe bbs:node1/callerslog outfile=ram:newcallerslog 50
+
+       This will make a callerslog of 50 entrys at "ram:newcallerslog"
+
+  If the old callerslog has less than 50 entrys CLC will interrupt the work
+                           and won`t do anything!
+
+
+
+
+
+THE PUB          [SAD WHQ]    +49-5551-gETiT  28k8(ISDN soon) Fli7e (me)
+EVIL MOON        [SAD EHQ]    +49-3322-gETiT  28k8            Clyde Radcliffe
+RAVELAND         [SAD GHQ]    +49-7128-gETiT  28k8            h2o!
+
+HIDDEN POWER     [SAD IHQ]    +39-SAD-gETiT   28k8            X/\D
+BUMBLE BEE LAND  [SAD NHQ]    +xx-SAD-gETiT   28k8            Baffle
+THE TRIP         [SAD DKHQ]   +45-SAD-gETiT   28k8            JAWLOG
+SILENT MOON      [SAD OZHQ]  +616-SAD-gETiT   28k8            Rudolf
+FORBIDDEN PLANET [SAD IRLHQ] +353-SAD-gETiT   28k8            Green Beret
+
+GOD`s HAREM      [DST]        +49-SAD         28k8/ISDN       LANCE
+PLANET LOVE      [DST]        +49-SAD         28k8            MEPHISTO
+TRADERS ASSAULT  [DST]        +49-SAD         28k8/ISDN       STARLIGHT
+
+                    We`re still searching boards supporting:
+                                     TELNET
+                                      ISDN
+                                   MULTINODE
+
+                                  and HQ`s in:
+                                      USA
+                                     FRANCE
+
+   If you want to become a HQ for your Country or a Dist Site then feel free
+                              to send an email to:
+
+                            Fli7e@Liteline.mcnet.de
+                                       or
+                                  fhau@aol.com
+
+                       Signed: Wigwam & Fli7e/SAD 1996
+
+PS: To contact wigwam write to one of the above emails and state a line
+    to the email saying: DEDICATED TO WIGWAM! ...

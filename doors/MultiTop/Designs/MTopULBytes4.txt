@@ -1,0 +1,23 @@
+
+[44;36m    Name             Group/Location          Upload-Bytes    Down-Bytes Rating [0m
+
+[36m 1. [0mSnuskis          [33m>>> GURU's DREAM <<<   [32m3.078.248.552 [35m    5.117.134 [34m[ [33m** [34m]
+[36m 2. [0mZANY             [33m -*- DEBRIS -*-        [32m2.053.392.723 [35m2.454.473.515 [34m[ [33m!! [34m]
+[36m 3. [0mBad Karma        [33mnuke kilrah            [32m  785.461.255 [35m  830.384.830 [34m[ [33m   [34m]
+[36m 4. [0mYPSiLON          [33m---> HCC / W^Z <---    [32m  617.943.471 [35m  171.871.730 [34m[ [33m** [34m]
+[36m 5. [0mSCREWBALL        [33mGryningstiden..        [32m  588.295.427 [35m  812.065.242 [34m[ [33m   [34m]
+[36m 6. [0mAERO             [33mDBR/SL/FTR/COTG/NSF    [32m  572.586.577 [35m  145.186.782 [34m[ [33m** [34m]
+[36m 7. [0mSNIPER           [33m#ð:. ¡NSANE'95 .:ð#    [32m  518.176.118 [35m  544.350.598 [34m[ [33m   [34m]
+[36m 8. [0mmoocher          [33m[:.rEBELs^fLt^iNTERNEt [32m  505.860.307 [35m  330.938.185 [34m[ [33m   [34m]
+[36m 9. [0mUFOk             [33m.-+-{ MsT/LsD }-+-.    [32m  492.548.386 [35m  252.132.731 [34m[ [33m   [34m]
+[36m10. [0mXavier           [33mÉ[tHaT'z RiGhT]»       [32m  468.371.208 [35m  118.593.444 [34m[ [33m** [34m]
+[36m11. [0mThe Gravedigger  [33mPoWeRFuL aS HeLL!      [32m  409.834.339 [35m  489.165.505 [34m[ [33m   [34m]
+[36m12. [0mSteel Pulse      [33m-*- DYNAMIC DUO -*-    [32m  406.123.105 [35m  255.068.930 [34m[ [33m   [34m]
+[36m13. [0mCURIOUS          [33m-*- DEBRIS/COTG -*-    [32m  405.513.326 [35m  277.806.445 [34m[ [33m   [34m]
+[36m14. [0mMr Gang          [33m Killroj was here      [32m  397.524.982 [35m   69.072.509 [34m[ [33m** [34m]
+[36m15. [0mPetrol Pedro     [33mPLANET ROCK            [32m  395.029.490 [35m  268.453.953 [34m[ [33m   [34m]
+
+   [32m[[33m**[32m][33m-[35mExcellent!    [32m[[33m*[32m][33m-[35mGood!    [32m[ ][33m-[35mAverage!    [32m[[33m![32m][33m-[35mPoor!    [32m[[33m!![32m][33m-[35mLeech!
+
+[44m  [33mMultiTop v2.1      [36mCalls: 12.076    Total MEGS UP : 28.875    DOWN : 40.526  [0m
+[44m  [33mby bObO/mYSTiC     [36mMsgs : 39.949    Total FILES UP: 47.601    DOWN : 70.952  [0m

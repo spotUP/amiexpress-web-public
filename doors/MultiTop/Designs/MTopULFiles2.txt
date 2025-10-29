@@ -1,0 +1,26 @@
+
+                       [34;3mThe Top [35m15 [34mBest Uploaders (Files)[0m
+                   - - --------------------------------- - -
+[35m N#  User                    Location                 UL'ed Files        Calls
+[34m-------------------------------------------------------------------------------[0m
+  1[34m. [33;1mSnuskis                 [0m>>> GURU's DREAM <<<          [36m 3.664  [0m        996
+  2[34m. [33mZANY                    [0m -*- DEBRIS -*-               [36m 2.702  [0m      2.251
+  3[34m. [33mUFOk                    [0m.-+-{ MsT/LsD }-+-.           [36m 1.388  [0m        892
+  4[34m. [33m[-DiPSWiTCH!-]          [0mO-( EQUINOX'95! )-O           [36m   997  [0m        700
+  5[34m. [33mSNIPER                  [0m#ð:. ¡NSANE'95 .:ð#           [36m   915  [0m        694
+  6[34m. [33mlOGiC/rBs!              [0m=( rEBELs pO$$e '95 )=        [36m   848  [0m        494
+  7[34m. [33mSteel Pulse             [0m-*- DYNAMIC DUO -*-           [36m   818  [0m      2.097
+  8[34m. [33mBad Karma               [0mnuke kilrah                   [36m   723  [0m      1.102
+  9[34m. [33mAERO                    [0mDBR/SL/FTR/COTG/NSF           [36m   723  [0m        464
+ 10[34m. [33mCURIOUS                 [0m-*- DEBRIS/COTG -*-           [36m   712  [0m        727
+ 11[34m. [33mPiLGRiM                 [0m[PENTAX/THE GHETTO]           [36m   669  [0m      1.263
+ 12[34m. [33mmoocher                 [0m[:.rEBELs^fLt^iNTERNEt.       [36m   617  [0m        826
+ 13[34m. [33m®eaÇtø®                 [0m!·mSt·mYStiC·mSt·!            [36m   616  [0m        713
+ 14[34m. [33mSCREWBALL               [0mGryningstiden..               [36m   580  [0m        418
+ 15[34m. [33m[Batman/Agile]          [0mGOTHAM CITY 39-564-2731       [36m   561  [0m        169
+[34m-------------------------------------------------------------------------------
+    [36mTotal Uploaded files: [33m[[0m47.601[33m] [35m<-=( )=-> [36mTotal System Calls : [33m[[0m312.076[33m]
+
+                 [36mLast updated on[33m: [35mDate [0m04-13-95 [35mTime [0m11:13:43
+[34m-------------------------------------------------------------------------------
+             [35mMultiTop v2.1  [33m© [34m1995 Bobo/Mystic [0m- [34mDesign by Sandman[0m

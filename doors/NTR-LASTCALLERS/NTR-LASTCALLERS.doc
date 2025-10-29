@@ -1,0 +1,194 @@
+                                _ __ ____
+       _______________________   __     /__   _____   ________   ______
+     __\___  \_   ___   /    /____    ____/___\__  \_/   ____/___\___  \_
+    /    /    /   \____/    /    /    /    /  __/ __/    /    /    /    /
+   /____/    / \________________/_________/___\    \_________/____/    /
+       /____/                                  \____\-jD!        /____/
+
+                   Documentation for Neutron-LastCallers
+                  ---------------------------------------
+
+Introduction:
+
+                This is a powerful Last-10-Callers (Door?) for
+                AmiExpress (/X) 4.x. It is faast, nice looking
+                and can handle a lot of errors that could ocur
+                during a user connect time. (carrier loss, sys
+                tem crash, and so on...)In the registered vers
+                ion you will be able to create your own design
+                for this great door. In this version are two d
+                esigns included: Number one is designed by my-
+                self and the second one was taken from Amfetam
+                in / © The Silencer.
+
+Requirements:   
+                Any Amiga Computer with installed/working /X.
+
+Features:       
+                Shows:  Handle
+                        Location
+                        Logindate
+                        Logintime
+                        Logofftime
+                        Download
+                        failed Download
+                        Upload
+                        failes Upload
+                        new User
+                        Bulletins Viewer (if supported)
+                        operator Paged (if supported)
+                        Operator Chat
+                        examine Restricted Files
+                        file scan
+                        conference scan
+                        pw failures / hack tries
+                        account edit
+                        carrier lost
+
+Installation:   
+                Just copy the drawer to your doors directory.
+                Add the following line to every logoffbatch
+                in your bbs:commands/syscmd drawer:
+
+                doors:ntr-lastcallers/ntr-lastcallers x
+
+                the x stands for each node number (off course)
+                the bulletin will be created as:
+
+                bbs:bulletins/lastc.txt
+
+                you have just to view it in /X with something like:
+
+                ~
+                ~SS_BBS:BULLETINS/LASTC.txt
+
+                Now you have to create the datafiles.
+
+                1) Open a cli window.
+                2) type "doors:ntr-lastcallers/ntr-lastcallers 0"
+                   (you have just created the datas for node 0)
+                3) repeat step 2 for each node you have, remember
+                   to replace the 0 with the nodenumber!
+
+Configuration:  
+                There is a CONFIG file in the drawer.
+
+                First Line / Sysop:
+
+                        Put here a "1" to show the sysop in the bull
+                     or put here a "0" to hide the sysop in the bull.
+
+                Secon Line / Design:
+
+                        1 : Gravedancers Design,     No ANSI-Header
+                        2 : Design from Amfetamin,   No ANSI-Header
+                        3 : Gravedancers Design,   With ANSI-Header
+                        4 : Design from Amfetamin, With ANSI-Header
+                        5 : Use your own design (registered Version only)
+
+                        The Ansi-Header is © by Tango/aC!
+
+                Example configuration is set to:
+
+                No Sysop in the bulletin
+                Gravedancer Design with Header
+
+Making your own design:
+
+First you have to create a file called "DESIGN.1". It includes the information
+you want to be shown in the bull. The followin keywords can be used:
+
+                             ND ... NODENUMBER
+                     =====HANDLE===== ... THE USERNAME
+                    ====!LOCATION!==== ... THE LOCATION
+                           BAUD ... CONNECT BAUD
+                            ==D== ... LOGONDATE
+                            XX:XX ... LOGONTIME
+                           YY:YY ... LOGOFFTIME
+                         ?U ... NUMBER OF UPLOADS
+                        ?D ... NUMBER OF DOWNLOADS
+                           =U!= ... UPLOADBYTES
+                          =D!= ... DOWNLOADBYTES
+                    STATS ... STATUSLINE #1 (SEE BELOW)
+                  STATS-TWO ... STATUSLINE #2 (SEE BELOW)
+                 % ... USERSTATUS (WHETHER NEWUSER OR NOT)
+
+STATUSLINE #1 INCLUDES INFORMATION ABOUT:
+                                          CARRIER LOST
+                                          NEWUSER
+                                          HACKEDPW
+                                          SYSOP PAGE
+                                          FILESCAN
+
+STATUSLINE #1 INCLUDES INFORMATION ABOUT: 
+                                          PWFAIL
+                                          UPLOAD
+                                          DOWNLOAD
+                                          SYSOP PAGE
+                                          FILESCAN
+                                          BULLETINS
+                                          CARRIER LOST
+                                          ACCOUNT EDITOR
+                                          RESTRICTED FILES
+
+EXAMPLE:
+
+[36mND [0m=====HANDLE===== ====!LOCATION!====  [33mXX:XX[35m-[33mYY:YY STATS ?U:=U!= ?D:=D!= [36mBAUD[0m
+
+(this looks like the included Amfetamin design, doesn't it?)
+
+Second step is to design the complete layout, called DESIGN.2.
+
+EXAMPLE: (again looking like the amfetamin design ...)
+
+ [0;1;35m ___[36m.[35m_ _______________________________________[36m.[35m_ _____[36m.[35m_ ___________________
+ [0;1;35m(  ¬[36m|[35m___[36m.[35m____  /  ____   [36m_[35m¬\   [36m.[35m___[36m.[35m____  /  ¬[36ml[35m___[36m.[35m  ¬[36ml[35m__[36m.[35m  _______  _/  ___)
+ [0;1;35m/   [36m|[35m  ¬[36m|[35m   [36m_[35m  \___ ¬\   [36m|[35m_/   [36m|[35m  ¬[36m|[35m   [36m_[35m  \   [36m|[35m  ¬[36m|[35m   [36m|[35m ¬[36m|[35m  ___)  [36m_[35m   \___ ¬\
+ [0;1;35m\____   [36ml[35m___[36m|[35m  ______/___[36m|[35m \____   [36m|[35m   [36m|[35m__/____   [36ml[35m____  [36ml[35m________[36m|[35m   ______/
+ [0;1;35m    `---[36m'[35m   [36m`[35m---'              `---[36m'[35m---'[36mtGø[35m   `---[36m'[35m   `--[36m'[35m       ¬[36m`[35m----'
+
+[36mNd User Name        Location            TimeOnBoard ACTVT U#/Byte D#/Byte Rate
+[34m-- ---------------- ------------------- ----------- ----- ------- ------- ----
+=LASTCALLERS=
+[34;1m-------------------------------------------------------------------------------[0m
+[33m([36mC[33m)[32marrier Lost, [33m([36mN[33m)[32mew User, [33m([36mH[33m)[32macked Passwords, [33m([36mP[33m)[32maged SysOp, [33m([36mS[33m)[32mcanned Files
+[34;1m-------------------------------------------------------------------------------[0m
+=TODAYSTATS=
+=YESTERDAYSTATS=
+=RECORDS=
+[34;1m-------------------------------------------------------------------------------[0m
+
+AGAIN YOU CAN USE SPECIAL KEYWORDS:
+
+       =LASTCALLERS= ... STARTING POSITION FOR THE LASTCALLERS LINES
+        =TODAYSTATS= ... TODAY STATISTICS (AS IN AMFETAMIN DESIGN)
+    =YESTERDAYSTATS= ... YESTERDAY STATISTICS (AS IN AMFETAMIN DESIGN)
+         =RECORDS= ... RECORD STATISTICS (AS IN AMFETAMIN DESIGN)
+
+The Future:
+                There will be soon a online-tool that views the bulletin
+                and that highlights the current user - if he is in the
+                bulletin.
+
+                Example:
+                         User Gravedancer called the bbs and left it.
+                         He calls back and the bull is shown to him !
+                         The last caller was he (which wonder!) and
+                         the line which includes the data of his call
+                         is highlighted !!! (special-nonsense-feature)
+
+          I KNOW THAT MY DOX ARE AS ALLWAYS SHIT! BUT IT IS HARD
+           TO WRITE A DOCUMENTATION FOR ONES OWN PROGRAM BECAUSE
+       THE CODER KNOWS HOW THE PROGRAM WORKS AND MUST BE INSTALLED!
+  IF THERE IS A MAN OUT THERE WHO WOULD DO ME AND MY USERS THE FAVOUR TO
+       DO THE DOCUMENTATIONS FOR ALL NEUTRON TOOLS THEN MAIL ME !!!
+
+Registration:
+
+                As allways this tool is for free but you have to register
+                it at cosmic circus bbs. Or write me a mail to:
+                
+                Gravedancer@Labyrinth.wwb.sub.de (i hope it works!)
+
+                You will get a personalized version including your name and
+                the ability to create your own output designs.

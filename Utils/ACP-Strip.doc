@@ -1,0 +1,76 @@
+
+      __
+     ///  ACP-Strip 1.0
+__  ///   (C)opyright by ACP-Developement 1/95
+\\\///  
+ \XX/     Public Domain
+
+1. Preface
+
+ACP-Strip is public domain, meaning that you can use and spread the
+program as long the archive contents stay unchanged. 
+Archive contents must be:
+
+ ACP-Strip                     10940 Bytes
+ ACP-Strip.c                    2088 Bytes
+ ACP-Strip.doc                  1873 Bytes
+
+Minimum archive size must be    9102 Bytes
+
+You are using ACP-Strip on your own risk. I cannot be held responsible
+for any damage caused by ACP-Strip. This includes system crashes, bugs
+in the program or this documentation.
+
+2. The purpose of this program...
+
+...is to strip logiles, or even other textfiles.
+
+ACP-Strip has one special feature: It won't cut the lines in the middle, so
+the stripped length will never reach the User-input exactly.
+
+3. Installation:
+
+Simply copy ACP-Strip to C:, or somewhere else you like.
+
+4. How to use:
+
+Start ACP-Strip without without any options, it's selfexplaining.
+
+--------------------------------------------------
+ACP-Strip V1.0  (C)1995 by ACP-Development
+
+Usage: ACP-Strip <filename> <length>
+--------------------------------------------------
+
+Further you can use ACP-Strip with Cron-Programs like Event! or TPTCron.
+
+5. Bugs
+
+None known.
+
+6. History
+
+ 0.1-0.9  Internal Revisions
+     1.0  First Public Release
+
+7. Authors
+
+ACP-Strip was written by Michael Gredenberg and the Docfile was written by
+Peter Augustin. Design & Betatestting also done by Peter Augustin.
+Thanx are going out to the readers of AMIGA.AUS ;)
+
+Contact the ACP-Developent at:
+
+P.O.Box 98
+1097 Vienna
+
+or send a netmail to:
+
+Michael Gredenberg       FaaastLane BBS
+2:310/72.13@fidonet      +43 1 876-1-678 
+39:23/5.1@amiganet       v32.bis 14400bps
+
+Peter Augustin           Amiga Crackpoint
+2:310/72.88@fidonet      +43 2252 46519 USR V.34
+39:23/5@amiganet         +43 2252 82615 ISDN 64k
+

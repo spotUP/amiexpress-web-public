@@ -1,0 +1,220 @@
+@DATABASE
+@Remark $VER: tURBO liStER v0.2 by CøRteX/tRSi (11.04.95)
+@Remark AmigaGuide DataBase for tURBO liStER v0.2
+
+@Node MAIN "tURBO liStER v0.2 - uNREGiStEREd vERiON"
+                       .   : _ __ _____   _____
+                    1 _j   :_ .    _  ¬\ /  _ ¬\__   1
+                    9 \.   ./_:_ _:/  _/ \   \\/\/   9
+                    9  j   l   / \/ ! \__/\   \¯¯¯)  9
+                    4  \      /   \_·   //Y   / . |  5
+                        \____/l___j \  /_____/l_: :
+                    <----------------\/ctx!-----| :-->
+                    (            CøRtEX! oF     \_/  (
+                    (   tRISTAr aNd rEd^sECTOr iNc!  (
+                    )         SiX/X · X¡M/aSm        )
+
+      iS pROUd tO pRESENt: tURBO liStER v0.2 (rElEASE vERSiON)
+
+                 @{"      ·*·    iNtRoDUCtiON!   ·*·      " LINK Introduction}
+                 @{"      ·*·    iNStALLATiON!   ·*·      " LINK Installation}
+                 @{"      ·*·     cONFiGfiLE!    ·*·      " LINK Configfile}
+                 @{"      ·*· tROUBlE-shOOtiNGs! ·*·      " LINK Troubles}
+                 @{"      ·*·  oTER dOORs/tOOlS! ·*·      " LINK Other}
+                 @{"      ·*·     GREETiNGS!     ·*·      " LINK Greetings}
+                 @{"      ·*·    REGiStER mE!    ·*·      " LINK Register}
+@ENDNODE
+@NODE Introduction "iNtRoDUCtiON"
+
+                           . [ iNtRoDUCtiON: ] .
+                            - --------------- -
+
+There are always some dir packers out!! But nobody do it faster like
+this door!! aT first i coded the door in pure ASM and included some
+nice options!! (which i will explain later!)
+Ive included lha, lzx, zip and none (merge it lha without compression)
+Config it by yourself!!!!
+
+I think its an important door for every BBS because it cost me a lots
+of time to make a capture of dirs!!! so just use TurboLister!!!
+
+
+All what you need is any Model of the great AMIGA, OS2.x or higher.
+
+Thats all... have phun with this this little piece of heaven!
+
+@{"  MAIN  " LINK MAIN}
+@ENDNODE
+@NODE Installation "iNStALLATiON!"
+
+                           . [ INSTALLATION ] .
+                            - -------------- -
+
+Copy the files in the archive to your directories, they are:
+
+LIBS:AEDoor.library ( © Sintax/WOT )  thx!!!
+
+for /X v2.x or SiX:
+
+add thiz line to ya cmds
+BBS:Commands/BBS.Cmd
+
+BBS:Doors/TURBOLISTER/TURBOLISTER.XiM
+BBS:Doors/TURBOLISTER/TURBOLISTER.CFG
+BBS:Doors/TURBOLISTER/TURBOLISTER.GUIDE
+
+for /X v3.x or higher:
+
+BBS:Commands/BBSCmd/DD.info
+
+BBS:Doors/TURBOLISTER/TURBOLISTER.XiM
+BBS:Doors/TURBOLISTER/TURBOLISTER.CFG
+BBS:Doors/TURBOLISTER/TURBOLISTER.GUIDE
+
+
+@{"  MAIN  " LINK MAIN}
+@ENDNODE
+@NODE Configfile "cONFiGfiLE!"
+
+                      . cONFiGfiLE fOr tURBO liStER! .
+                       - --------------------------- -
+
+TurboLister v0.2 by CøRteX/tRS¿!
+
+[-----20 Chars-----]
+#
+yes                                   ;Real Confname for squeezed Filename
+dARK_illUSiON                         ;Filename for squeezed dirs!!
+LHA                                   ;1. Option
+C:LHA -q a                            ;lha compression
+.LHA                                  ;add thiz to the Filename
+LZX                                   ;2. Option
+C:LZX -q a                            ;lzx compression
+.LZX                                  ;add this to the filename
+ZIP                                   ;2. Option
+C:ZIP -jkq                            ;zip compression
+.ZIP                                  ;add thiz to the Filename
+NONE                                  ;3. Option
+C:LHA -zq a                           ;lha merge without any compression
+.LHA                                  ;add thiz to the Filename
+##
+
+
+@{"  MAIN  " LINK MAIN}
+@ENDNODE
+@NODE Troubles "TROUBLE-SHOOTiNGs"
+
+                            . TROUBLE-SHOOTiNG .
+                             - -------------- -
+                                    call
+
+              28.8k!   ________    /\__ /\______/\__ _____   28.8k!
+          t            \_     ¬\  /   ¬\)      ¬\   |   ¬/
+          R   __/\__    :   :   \/  Y   \   :   /   :   /    __/\__   a
+          S   \    //   |   |    \  :    \  |  (:      (    \\    /   H
+          i   /_  _\\   |   l    /__|    /  |   \   :   \   //_  _\   q
+                \/     /:  _____/   l___/___l___/___j    \     \/     !
+                       \__/                         l____/
+          /\__ _/\__   _/\__     _      /\______/\__   _/\ _______      
+          )  ¬|\_  ¬|  \_  ¬|   /¬| |\ /   __  ¬)  ¬| /   \\_    ¬\
+          |   | |   |__ |   |__/  ( ) \___   \_/:   |/  :  \|  -+  \
+          :   | |   | ¬\|   | ¬\   |   \ ¬\    \|   |   |   \   :   \
+          |   | :   l   \   l   \  l    \  \    \   :   l    \  |    \
+          |   | l_______/_______/_______/_______/___l________/__j    /
+          l___j                    tRSi  aHQ              [ctx!]l___/
+
+               (  ( ((  + 4 3 -  5 1 2  -  3 6 5 - 3 0 2  )) )  )
+
+             SysOp: CøRteX/tRSi          Co´s: DjaX, D`Style and ya?
+          .----------------------------------------------------------.
+          | rUNNiNg oN a1200/33Mhz^-^720MB oNLINe StuFF^-^kEwL aNSIs |
+          |       [^Now with S!X-pReSs 0.X!^-^28.8k pOwER!!!^]       |
+          |         [^aMiGa^-^mUzAx^-^/X DooRs^-^cONSOlES!^]         |
+          `----------------------------------------------------------'
+                             [·nO nUp rEqUiReD!·]
+
+
+@{"  MAIN  " LINK MAIN}
+@ENDNODE
+@NODE Other "OTHER dOORs/TOOLS"
+
+                          . OTHER dOORs/TOOLS .
+                           - --------------- -
+
+                    XiM     Security Guide       v0.4
+                    XiM     Show Doors           v0.4
+                    XiM     ctx!CoMMeNt          v0.2
+                    XIM     Upload Detector      v0.5
+                    XIM     Front Guard          v1.0
+                    DOS     Offline Mover        v0.2b
+              now!  XIM     Turbo Lister         v0.2
+
+changes:
+Turbo Lister v0.1 - v0.2
+
+- some optimizing and new outlock!!
+- included a option to name packed file same as conference!!
+  try it out!!!
+
+
+IF YOU LIKE MY DOORS/UTILS AND WANT BE @{" REGISTERED " LINK Register} USER OF IT
+CALL MY BBS: Dark Illusion ++43-512-365-302!! no NUP! no SYSPASS!
+
+
+@{"  MAIN  " LINK MAIN}
+@ENDNODE
+@NODE Register "REGISTER ME!"
+
+                             . REGISTER ME! .
+                              - ---------- -
+
+THE REGISTRATION FEE IS 15$, SHURE YOU THINK PHUU! A LOTS OF MONEY, BUT READ
+WHAT YOU WILL GET FOR YOUR MONEY.
+
+1. THERE ARE A LOTS OF DOOR CODERS BUT ARE YOU SURE THAT YOU GET A DOOR
+   WITHOUT ANY BACKDOORS?? SO I HATE BACKDOORS AND VIRUSES ETC.
+   SO REMEMBER EVERY DOOR FROM ME IS 120% BACKDOOR FREE!!!
+   THE REGISTERED USER(S) ARE GETTING A PRIVATE VERSIONS, ALL PUBLIC
+   VERSIONS HAVE FROM NOW ON SOME OPTIONS REMOVED OR SOME NERVIOUS REGISTER ME
+   STRINGS WITH WAIT LOOPS heehe  ONLY! THE REGISTERED USER HAVE
+   THE FULL VERSION. REMEMBER THIS!!
+
+2. YOU FOUND A BUG ? -> REPORT HIM TO ME AND YOU GET SOON AS POSSIBLE A
+   FIXED VERSION, NO LONG NEED TO WAIT FOR A NEWER RELEASE VERSION.
+
+3. YOU HAVE SOME GOOD IMPROVEMENTS, TALK WITH ME, AND I WILL SEE IF I CAN
+   RELEASE IT.
+
+4. YOU NEED A PRIVATE DOOR ONLY FOR YOUR BBS, I WILL CODE THEM!!
+
+5. PRIVATE SUPPORT CONFERENCE IN MY BBS FOR ALL REGISTERED USERS.
+
+6. ALL DOORS/UTILS ARE INCLUDING YOUR REGISTER STRING.(CODED!)
+
+7. YOU`LL GET ALL LATER VERSIONS OR NEW DOORS FOR THIS PRICE.
+
+                  SIMPLY YOU GET THE BEST SUPPORT AROUND.
+          THINK ABOUT IT AND KEEP THE PROGRAMMERS PROGRAMMING !!!
+
+IF YOU ARE INTERESTED SO CONTACT ME AT ANY TRSI BOARD OR SIMPLY AT THE
+                     TRSI INC. AHQ - DARK ILLUSION!!
+
+@{"  MAIN  " LINK MAIN}
+@ENDNODE
+@NODE Greetings "GREETINGS"
+
+                          . SOME FAST GREETINGS .
+                           - ----------------- -
+                                  · TO ·
+
+           [*] MARIO,SIEGEL,BYTEANDI,DR.DRE,SPY,UYANIK!/TRSI [*]
+   [*] INSPECTOR,ICE TEA/CLS [*] AYATOLLAH [*] FELON/HLM [*] CALYPSO [*]
+ [*] EURONYMOUS [*] SAL-1/TRSI [*] DJAX,SAUZER,PRAYER/R^D [*] BLOODWOLF [*]
+    [*] SHADE/tRSI [*] KNACKOSOFT/TRSI [*] CONTROL/TRSI [*] FANFARE [*]
+  [*] DREAM WARRIOR [*] PSYCHO/2KAD [*] ENZO [*] METAL DEATH/LEPROSY [*]
+    [*] D`STYLE [*] KNIGHT FIGHTER [*] TURBO [*] BITART [*] PHANTOM [*]
+
+                      ... and all i have forgotten ...
+
+@{"  MAIN  " LINK MAIN}
+@ENDNODE

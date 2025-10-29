@@ -1,0 +1,23 @@
+/**/
+		PARSE ARG NODE
+		OPTIONS RESULTS
+		ADDRESS VALUE"AERexxControl"||NODE
+
+		IF ~SHOW('LIBRARIES','rexxtricks.library') THEN
+		call ADDLIB('rexxtricks.library',0,-30,0)
+
+Getuser 131
+BBSCOM		= word(UPPER(RESULT),1)
+
+		DOORNAME = GETTOOLTYPEVALUE("DOORS:SCEPTIC/F!-START",bbscom)
+
+		if DOORNAME=0 then call notfound
+		IF Doorname="" THEN CALL NOTFOUND
+
+		ADDRESS COMMAND DOORNAME||" "||NODE
+		EXIT
+
+NOTFOUND:	TRANSMIT "ERROR - ©REXXMASHED AREXX DOOR NOT FOUND."
+		remlib('rexxtricks.library')
+		SHUTDOWN
+		EXIT

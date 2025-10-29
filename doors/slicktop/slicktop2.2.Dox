@@ -1,0 +1,177 @@
+
+
+ PLEASE LOOK AT THE OUTPUT FILES INCLUDED IN THIS ARC FOR STYLE OF OUTPUT!
+ PLEASE LOOK AT THE OUTPUT FILES INCLUDED IN THIS ARC FOR STYLE OF OUTPUT!
+ PLEASE LOOK AT THE OUTPUT FILES INCLUDED IN THIS ARC FOR STYLE OF OUTPUT!
+ PLEASE LOOK AT THE OUTPUT FILES INCLUDED IN THIS ARC FOR STYLE OF OUTPUT!
+ PLEASE LOOK AT THE OUTPUT FILES INCLUDED IN THIS ARC FOR STYLE OF OUTPUT!
+ PLEASE LOOK AT THE OUTPUT FILES INCLUDED IN THIS ARC FOR STYLE OF OUTPUT!
+
+
+        PLEASE READ ALL OF THEASE DOX OTHERWISE TROUBLE MAY ACCOUR!
+        PLEASE READ ALL OF THEASE DOX OTHERWISE TROUBLE MAY ACCOUR!
+        PLEASE READ ALL OF THEASE DOX OTHERWISE TROUBLE MAY ACCOUR!
+        PLEASE READ ALL OF THEASE DOX OTHERWISE TROUBLE MAY ACCOUR!
+        PLEASE READ ALL OF THEASE DOX OTHERWISE TROUBLE MAY ACCOUR!
+        PLEASE READ ALL OF THEASE DOX OTHERWISE TROUBLE MAY ACCOUR!
+
+
+SLICK TOP V1.0
+
+Why ???
+
+coz i wanted a confrence and total top u/l list for my board so i wrote one!
+and after many weeks of beta testing on my board all my users say its the best!
+
+this door can be a seprate confrece top up or a total overall top u/l list or
+a mixture of 2 confs! READ ON!
+
+usage:
+
+its best for a board that has confrerence accounting turned ON to have a
+seprate top u/l list for each conf that way it makes it a lot fairer on users
+imagine you have a pc conf and an amiga conf the top u/l list could be pc
+users only as the pc files are genrallty bigger so you ve a top u/l list when
+entering each confrence that support warez!. 
+
+INSTALLATION:
+
+slicktop is run from your bbs loggoff script. 
+
+SYNTAX is:
+
+outputfile datafile (link datafile2) max style confrencename (append)
+
+EXAMPLE:
+
+slicktop bbs:bull50.txt.gr bbs:amiga/conf.db 20 1 "Amiga Warez"
+		  ^  		  ^	      ^ ^        ^	 	
+		  |		  |	      | |        |_ confrencename						
+		  |		  |	      |	|_outputstyle
+		  |		  |	      |_maxusers
+ 		  |		  |_datafile
+                  |_outputfile
+
+outputfile: textfile to be created
+
+datafile:   	path to a conf.db/user.data file
+	    	if you enter a conf.db file then the top u/l list will be for
+	    	that confrence only. 
+	    	If you enter user.data file then the top u/l will be a over all
+		top u/l list for all confs.
+
+maxusers:   	any number from 1-40 this will specify how many users to be 
+	    	shown in the list.
+
+outputstyle:    any number from 0-13 this specifys the look of the bull to 
+		be created please look at the output files in this arc.
+
+confrencename:  the name of the confrence you are making the top u/l list for
+		If confrece name is 2 words or more enter name inside " "
+		if you specify a user.data file for datafile then confrencename
+		will automaticly be changed to overall top uploaders.
+
+append		Will append 1 output to another so you can create a 
+		console list for snes and megadrive if you have seprate
+		confs for console warez 
+
+LINK		join 2 confs together! see below
+
+
+EXAMPLE: of the append command
+
+slicktop bbs:snes/bull50.txt.gr bbs:SNES/conf.db 10 1 "Snes Warez"
+slicktop bbs:snes/bull50.txt.gr bbs:SEGA/conf.db 10 1 "Sega Warez" append
+
+
+******LINK MODE!!!!******** (NEW)
+
+Although append mode is cool it only really adds a list to another list
+LINK mode is a combination of 2 confs combined.
+LINK mode will take 2 confrences that you specify take the stats from 1
+conf add them to the stats of another conf and add them then sort them.
+this means if you have a Snes conf and a Sega conf you can take both conf
+stats add them and make 1 upload list
+IE.
+
+USER BUGBYTE has 100000 Bytes uploded in Snes and 200000 in Sega
+LINK mode will take the 100000 and 200000 and make 300000
+and use this as the users byte uploads! and sort accordingly.
+Format is:
+
+outputfile datafile1 LINK datafile2 max style confrencename
+
+EXAMPLE:
+slicktop bbs:bull1 snes:conf.db LINK Sega:conf.db 10 1 "Sega & Snes"
+
+
+thanx goto LAVIATHON for this cooooooool idea! cheers m8! 
+	
+
+
+SOME EXAMPLES
+
+-----------------Create a Overall All Confrences Top u/l --------------------
+
+slicktop bbs:screens/bull50.txt.gr bbs:user.data 20 1 "Overall top uploaders."
+
+------------------Create Amiga Confrece Top U/l list-------------------------
+
+slicktop bbs:amiga/bull50.txt.gr bbs:amiga/conf.db 20 2 "Amiga Warez"
+
+------------Create a list for snes & sega and append the output--------------
+
+slicktop bbs:snes/bull50.txt.gr bbs:SNES/conf.db 10 3 "Snes Warez"
+slicktop bbs:snes/bull50.txt.gr bbs:SEGA/conf.db 10 3 "Sega Warez" append
+
+------------Create Combined Linked u/l for Sega and snes---------------------
+
+slicktop bbs:bull1 snes:conf.db LINK Sega:conf.db 10 6 "Sega & Snes"
+
+-----------------------------------------------------------------------------
+
+
+PLEASE LOOK AT THE OUTPUT FILES INCLUDED IN THIS ARC FOR STYLE OF OUTPUT!
+
+any probs contact me at : Dark Domain +1 305-989-0718 NUP=SPOCK
+
+BUGBYTE 1994 ....
+
+
+GREETS GOTO :
+
+BIG BOSS                            (Thanx For The Help Man 		 )
+INDIO/CSL                           (wibble wibble!			 )
+YSL/CSL                             (speak up! heheh			 )
+TIN MAN                             (ill get ya back you know what i mean)
+FLUX			 	    (thanx dewd for all you have done    )		
+SCOTT				    (stick em up!			 )
+IBM				    (LEECHING is your Way of life! :)    )
+HARMONICA			    (Learn to Speak English heheh        )
+ANIMAL                              (alrite calm down!			 )
+HOMER                               (nice ta have ya back		 )
+YEKO				    (things will work out!		 )
+REMIX                               (wish ya was still with us man!	 )
+JERKY                               (miss ya man!			 )
+SHOCK				    (glad ya with us man :)		 )	
+CARDINAL			    (Hi dewd				 )
+BLASTER                             (sysop x-factor cool board dewd	 )
+JACKNIFE                            (call DD soon for a chat		 ) 
+NAZGUL                              (been a long time! ill be seying ya  )
+SNAKE     			    (keep a eye on naz heh		 )	  
+DON DOG				    (cool board be ceying ya!		 )
+ZION                                (put my access back NOW! =) 	 )  
+NOXOUS (humm)                       (Hummmmm !!				 )
+LAVIATHON                           (thanx for the help dewd :) 	 )
+KEN D 				    (cya on DD				 )
+[-POLARIS-]                         (we need to chat call dd 		 )
+MARIO                               (COOL trader!			 )
+SLEDGE				    (i want more time!!! on ph!		 )	
+RAPTOR				    (nice to have ya with us homi!	 )	
+ROTOR                               (thanx for the spelling lessons :)   )
+Lector				    (Hi dewd!! didnt forget ya this time!)
+	
+
+ENd..
+
+

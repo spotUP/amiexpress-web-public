@@ -1,0 +1,94 @@
+@DataBase 5D-Edit Documentation
+@Author sTc/5D
+@Index Documentation
+
+Copyright © 1994 SvEN tHE CREAToR of 5tH DyNASTY
+
+@Remark $VER: 5D-Edit v1.21 by sTc/5D
+@Remark AmigaGuide DataBase
+
+@node MAIN "5D-Edit Documentation © 1994 SvEN tHE CREAToR of 5tH DyNASTY"
+                                                              :
+                                                       :      ¦             
+                   ________________  __________________¦      |
+            _______\_______       /  \             /   |      |______
+           |  __   _/     /______/____\  _     _  /    ¦      |  __  |
+           |  \/  _\________    \_\  / \/       \/     _      |  \/  |
+           |______\        /     / \/   |       |      /      |______|
+                   \___________ /       |_______|_____/       |Rpd!
+                              \/                     /________|
+                         :           :                                     :
+            ____   :     ¦     :     ¦      · 5 · T · H ·            :     ¦
+  __________\  /___¦    _|__/\ ¦     |_______ _______________________¦     |
+  \______   \\//   |    \____ \|     |   _   \\_____      /       /  |     |
+   /     \   \/    ¦     |   \ \     |   /    \/   /_____/    _  /   ¦     |
+ _/       \   \_____     |    \ \_   |   _     \_____   \_     \/_____     |
+ \       _/    /   /     |     \     |   /      /   /    /     |     /     |
+  \__________ /__________|     |\ ___|__/_____ /_______ /______|___________|
+            \/           |     ¦ \/          \/       \/
+                         ¦     :     · D · Y · N · A · S · T · Y ·
+                         :
+
+                              (×· PrESENTS ·×)
+
+                         Code: SvEN tHE CREAToR/5D
+
+                  ----- --- -> 5D-Edit v1.21 <- --- -----
+
+                  Coded by SvEN tHE CREAToR of 5th Dynasty
+
+                           @{" Normal Documentation " Link Documentation}
+@endnode
+@node Documentation "5D-Edit Documentation"
+              _______________________________________________
+             |                                               |
+             | //                                            |
+             | /                                             |
+             |                                               |
+             |            @{" D e S C R I P T I O N " Link Description}           |
+             |                                               |
+             |           @{" I n S T A L L A T I O N " Link Installation}          |
+             |                                               |
+             |              @{" G r E E T I N G S " Link Greetings}             |
+             |                                               |
+             |                                             / |
+             |                                            // |
+             |_______________________________________________|
+
+@endnode
+@node Description "5D-Edit Description"
+5D-Edit has been coded by SvEN tHE CREAToR/5D!
+
+You should know it... It's one of my first AmiExpress Doors I've
+made... I still like it, I hope, you too. For the one who don't know it:
+
+5D-Edit allows the users to edit the descriptions in a most
+comfortable way by using the cursor keys. Also, there is the
+possibility of defining custom lines which can be simply inserted.
+The group logo inserting is also a feature which may help the people!
+@endnode
+@node Installation "5D-Edit Installation"
+Copy all files which are in the 'BBS' directory of the archive
+into your bbs directory.
+
+Contents of archive:
+===================
+
+BBS/ Commands/ BBSCmd/  ED.info
+     Doors/    5D-Edit/ Custom/
+                        Logos/
+                        5D-Edit
+                        5D-Edit.info
+                        5D-Edit.Guide
+
+===================
+@endnode
+@node Greetings "5D-Edit Greetings"
+Greetings go to:
+
+         . Celator ........... Thank you for helping me with /X! .
+         : ByteAndi ............ For helping me to learn coding! :
+         | Snow ...................... Sing mehr lieder, leader! |
+         `------( And all other persons I've forgotten!!! )------'
+
+@endnode

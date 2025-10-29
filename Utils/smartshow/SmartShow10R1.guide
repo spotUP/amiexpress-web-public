@@ -1,0 +1,277 @@
+@database "NSDoor"
+
+@Node Main "Door"
+@Title "Manual By NiGHTSHADE/iNS^DpL          Dial Wastelands [+46(8)157472]"
+
+
+SmartShow V1.0 [RELEASE 1] Amiga-Guide manual
+Copyright (c) 1995 By NiGHTSHADE/InS^DpL
+
+ @{" What is this Door     " Link "What"}
+ @{" Archive Contents      " Link "Archive"}
+ @{" Door Usage            " Link "Usage"}
+ @{" Door Installations    " Link "Install"}
+ @{" Door Beta Crew        " Link "Beta"}
+ @{" Program History       " Link "History"}
+ @{" The Greetings         " Link "Greetings"}
+ @{" Contact NiGHTSHADE    " Link "ContactNS"}
+
+@EndNode
+
+@Node "What"
+@Title "What is SmartShow                     Dial Wastelands [+46(8)157472]"
+
+ SmartShow is a door developed to display a TXT file eg.
+ like a door list or a member list for a group.
+ it will bring the following to youre system :
+
+   * Simple configurator (Just use from CLI!).
+   * Request selector for the TXT file to show.
+   * Fast Statestics function (Displays No. of usages).
+   * Reliable & Fast.
+   * Works on ALL OS and CPU's (If not - Contact me).
+
+@EndNode
+
+@Node "Archive"
+@Title "The Archive Contents                  Dial Wastelands [+46(8)157472]"
+
+ This Archive should contain :
+
+- -- START -- -
+  SmartShow10R1.0x0             - The Main Door
+  SmartShowCfg10.0x0            - The CLI Cfg util.
+  SmartShow10R1.ContactMe       - My Addy (Please make eall :))
+  SmartShow10R1.DistSite        - Another one so you wount miss it :))
+- --  END  -- -
+
+@EndNode
+
+@Node "Usage"
+@Title "Usage                                 Dial Wastelands [+46(8)157472]"
+
+    How do i use the :
+
+ @{" The Door it self       " Link "DoorUsage"}
+ @{" The CLI configurator   " Link "CliUsage"}
+
+@EndNode
+
+@Node "CliUsage"
+@Title "CLI Usage                             Dial Wastelands [+46(8)157472]"
+
+SmartShow-CliConfig V1.0 [RELEASE 1] by NiGHTSHADE.
+All rights reserved. Not for commercial use.
+
+  Usage : SmartShowCfg10.0x0 <Command>
+
+  Where <Command> is one of:
+
+  File    Selects a file by ASL.
+  Reset   Resets the statestics.
+  Remove  Remove the data file.
+
+
+@EndNode
+@Node "DoorUsage"
+@Title "Door Usage                            Dial Wastelands [+46(8)157472]"
+
+ How to use it :
+
+   * To simple, just enters it and it will display the TXT file seclected
+     from the CLI configurator - If not it will displays a error message.
+   * At the bottom line to the right is the total no. of usages of the door.
+
+@EndNode
+
+
+@Node "History"
+@Title "History                               Dial Wastelands [+46(8)157472]"
+
+  Program History - Changes / New features
+
+   V1.0   [-BETA! 1-] - NiGHTSHADE (08-Dec-94)
+             * Beginned with it.
+             * Splited the program in 2 parts
+               - The CFG and the DOOR.
+             * Added FILE, REMOVE & the RESET arguments to Cfg.      [Cli!]
+             * Changed my msg.port routine                           [Door]
+
+   V1.0   [Release 1] - NiGHTSHADE (18-Jan-95)
+             * Changed some ansi                                     [Door]
+             * Speeded things up                                     [Door]
+             * Changed output routine                                [Cli!]
+             * No Buggs reported or found.
+@EndNode
+
+@Node "ContactNS"
+@Title "Contact NiGHTSHADE/InS^DpL            Dial Wastelands [+46(8)157472]"
+
+___/\  _______________________________________________________________ _
+  /  \/\
+ /   /  \        \\\\\\\                  [×] THE PLACE THAT ROCKS [*]
+ \ PARTY \       |^ ^  \\
+  ON DUDE/      _|_ ___  |          \          {+} WASTELANDS {-}
+   \/\  /      (o(.Y.)   o)         _\__
+      \/       /(__) ^  \\         (__'_)     [] STAFF ROOSTER! []
+              (______/   ))_      _|_cOl|
+              //\ `-'   //  \   _/ __)-(_)     NiGHTSHADE/DPL^iNS
+             ((  \  _  //    \ /\  |---(_)         cASE/dCS!
+             /\\  \___//      Y  \ `---(_)
+  ____ ____ /  \\   |// ___ . `   \/
+ / __ |    Y    \\__// |___||     /           FAST AMIGA & CONSOLE
+/ /(__|    ' .   (__)  |   ||\___/         [WHY NUP - LAMERS DEL'ED!]
+\_)   |______|      o  `---'|
+             |      ¦       |              NoDe #1 FiND iT 28k8!
+             |      °       |                   #2 cOMMINg sOOn!
+             |              |
+_ _______________________________________________________________/\  ___
+                                                               - --\/
+
+@EndNode
+
+@Node "Beta"
+@Title "The cool Beta crew!                   Dial Wastelands [+46(8)157472]"
+
+.---------------------------------------------------------------------------.
+|      OFFICIAL BETA SITES LIST FOR THE NIGHTSHADE /X DOORS/TOOLS           |
++---------------------------------------------------------------------------+
+| HALL OF FAME      +46-910-26665    DANSKEN/ACCESS          USR 28800 DS   |
+| NAPALM            +46-8-894595     BLAST/SSP               ACX 28800 VFC  |
+| TWISTED SOCIETY   +46-44-106144    TBB/iNFLECT             USR 21600 DS   |
+| UNDERGROUND       +46-16-424911    ViKiNG/iNDEPENDENT      USR 21600 DS   |
++---------------------------------------------------------------------------+
+|  PLEASE GIVE THOOSE DUDES A CALL - THEY ARE REALLY AWESOME IN MANY WAYS!  |
+`---------------------------------------------------------------------------'
+
+@EndNode
+
+@Node "Greetings"
+@Title "The good things...                    Dial Wastelands [+46(8)157472]"
+
+
+ MY GREETINGS MUST GO TO (A-Z ORDER) :
+
+  * ANTISOCIAL                  - HOPE INSPERATIONS ARE GAINING LEVELS!
+  * BOBO                        - RUNNING LOW ON IDEAS !?
+  * BLAST                       - KEEP CODING AND YOU WILL KILL US :))
+  * CENTURION/PREMIERE          - FASTEST IN EUROPE !?
+  * CLUSTER/INS                 - KEEPS INSANITUARY ROOLING.
+  * CASE/DCS!                   - MY KiLLING CO-RAVER!
+  * CYCLONE                     - KEEP LEECHING DUDE!
+  * DANSKEN/ACS                 - SKELLEFTEA'S MANIAC NO.1!
+  * DANZIG                      - YOURE ASCII ARE GOOD!
+  * DISTLER/ISDN                - AT THE DAMN MILITARY SERVICE.
+                                  HOPE THAT YOU WILL GET BACK IN ST!
+                                  DAMN LAME TO LOCK YOU OUT I THINK (AND
+                                  MANY ONES WITH ME - ST ON THE LOOSE!)
+  * EVERSLICK                   - NO TRADING NO MORE !?
+  * EZCO                        - WORKING HARD I GUESS !?
+  * GAZ                         - GOOD CONSOLE SUPPORT M8!
+  * ICON                        - NO CONSOLE SPEED!?
+  * JADE                        - HAVE YOU DIED !?
+  * LIGHTSPEED TECH.            - GUESS ? - FOR /X OFCOUSE.
+  * LINEBACKER                  - I WILL CALL 'THE MANSION' SOME DAY AGAIN!
+  * LOOBY/INS                   - PROGRAMING MANIAC.
+  * METAL/INS                   - CODES A LOT (NO RESULT ??)
+  * MR.COKE                     - KEEP CODING MY 'MINI-INTRO'. ZZZZZZ...
+  * NECROPHILIAC                - CHAT YOU AS ALWAYS!
+  * NECRONOMICON                - HOPFULLY WITH WORKING HD !
+  * PRINCIP/INS^CLS!?           - HELP WITH MODEMS AGAIN :)
+  * RAD                         - TO BAD YOU KILLED 'MEGA LO MANIA'!
+  * SAVAGE                      - GOOD SUPPORTER!
+  * SHAPECHANGER                - REAL GOOD ASCII...
+  * SHOCKER                     - ALWAYS MANY REQUESTS!
+  * SNIPER                      - THANX FOR THE SUPPORT!
+  * SPIDER                      - KILLES MY SPARE TIME!
+  * TBB/INFEKT                  - MY BEST BETA TESTER!
+  * WARHAMMES/iSDN              - NO SPEED FOR ME AT YOURE BOARD!
+  * WARLOCK                     - FOR BORROWING THIS COMPUTER.
+  * WESTBAM                     - KiLLING TRADER
+  * XCLUZIWE/DD·STYLE^XWR       - THANX FOR THE 'BETA' LOGGO!
+  * ZANOK                       - ONE DAY BACK I HOPE!
+
+ I know i have forgotten a dozzen or 2 and i'm terribe sorry for that.
+ ---------------------------------------------------------------------
+
+@EndNode
+
+@node "Install"
+@Title "The /X ToolTypes Information          Dial Wastelands [+46(8)157472]"
+
+  * Please install this command as 'DOORS' so ALL /X board will user DOORS
+    instead of things like DOORLIST, LIST, WHAT & DOOR... It is better for
+    all of us /X freaks if we have standards.
+
+  - THIS PART IS TAKEN FROM THE ORGiNAL /X AMIGA GUIDE AND ARE MODIFIED -
+  =======================================================================
+  <module>.INFO        - This ICON defines a MODULE for /X. The Name of
+                         the <module> should be the same as the executing
+                         in MainMenu prompt, and should be in one of the
+                         three Directories. This icon should be placed
+                         in the BBS:Commands/BBSCmd directory.
+
+     The following directorys are placed under the <BBS Path>:Commands/
+     path.
+
+     a> BBSCmd     - Modules in this directory are allowed to be
+                     executed from any menu prompt or MCI text file.
+
+     b> SYSCmd     - Modules in this directory are only accessible by
+                     MCI text files and internal BBS operations.
+
+     c> CONF(x)    - Modules in this directory are allowed to be
+                     executed from conference (x) menu prompt or from
+                     any MCI text file in conference (x).
+     d> Node(x)    - Modules in this directory are allowed to be
+                     executed from node (x) menu prompts or from any
+                     MCI text file in Node (x).
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  The ToolTypes of the <module(s)> :
+
+  ACCESS= <numb>       - tells /X the access level required to run this
+                         module. This option is ignored for internal
+                         Module options.
+
+  INTERNAL= <command>  - Specifies if you want to have this Module the
+                         same as a internal AmiExpress command. if you
+                         choose this option you don`t need the following
+                         tool types.
+
+  LOCATION= <string>   - Specifies the location of the Module.
+
+  MULTINODE=YES        - Tells /X if the module may be simultaneously
+                         accessed from other nodes, this door is multinode
+                         compatible. Options for this tool type
+                         are <YES/NO>.
+
+  PASSWORD= <string>   - Force the user to enter password before executing
+                         this module. This option is case sensetive wich
+                         means that "OK" and "Ok" is'nt the same.
+                         If you want the 'C' command to be protected then
+                         use this tooltype.
+
+  PRIORITY=SAME        - Let's you set the priority of the door. If you use
+                         PRIORITY=SAME, it will use the same Priority
+                         that express uses. For best result of the door use
+                         the 'SAME' option.
+
+  QUICKMODE            - This simply tells AmiExpress not to run the Module
+                         in question if the user has logged onto the BBS
+                         using the QUICK LOGON option.
+                         If you want all the users to be able to use this
+                         door then disable this option by removing the
+                         tooltype.
+
+  STACK=4096           - tells /X the stacksize to use when launching this
+                         module. Default is 4096. This door requires
+                         4096 bytes of stack.
+
+  TYPE=XIM               - tells /X which type of module it is to support:
+                         XIM = /X Standard Module, this door is a XIM door.
+
+  TRAPON               - This makes LOGON Output go to a Log for Error
+                         Checking, you don't need this option, just
+                         fragments youre hd a lot!
+  =======================================================================
+@EndNode

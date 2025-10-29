@@ -1,0 +1,331 @@
+     _________________________________  __________
+     \   __/_ ___/_ ___/_  __  /     /_/___/  ___/_
+.--- /\___  / /   /__/  /  ___/___/   /   /   /   / --------------------------.
+| A /______/_____/_____/___/    /____/___/_______/ /X Design Production 1995! |
+`-----------------------------------------------------------------------------'
+
+
+      .  .:.--¡!---------------------------------------¡:----.              .
+:  : :: :::|  !: SAD-Request v1.5 by FLI7e/SAD^HJB^NJY !¡    |::: :: :  :   :
+      ·  ·:`--:----------------------------------------:!----'              ·
+                                                        :
+
+
+-  - -- ---------------------> (c)opyright notes <------------------- -- -  -
+
+                  Permission is granted to freely distribute
+                this product for non-commercial purposes only,
+                    as long as all files remain unmodified.
+
+- -- ------------------------------------------------------------------- --- --
+
+
+
+.-----------------------------------------------------------------------------.
+| Introduction                                                                |
+`-----------------------------------------------------------------------------'
+
+- -- ------------------------------------------------------------------- --- --
+               !!! - THIS IS AN UPDATED & BUGFIXED VERSION - !!!
+- -- ------------------------------------------------------------------- --- --
+
+
+  SAD-Request  is  an so called REQUEST DOOR.  If anybody like to have an old
+  file or an special file that never appeared to your BBS or what the hell he
+  like, he can use this door.
+
+  Other  Request  doors  I  know  just do a TEXTFILE appending which you must
+  include  as  a  textfile  or  call  It  using MCI commands or put it to the
+  bulletins!  CRAP!  Why not send it to the Message base!?  This is waht this
+  door is doing!  With pure AREXX power ofcoz!
+
+  See FEATURES for the two or three features it has included!
+
+- -- ------------------------------------------------------------------- --- --
+               !!! - THIS IS AN UPDATED & BUGFIXED VERSION - !!!
+- -- ------------------------------------------------------------------- --- --
+
+
+
+.-----------------------------------------------------------------------------.
+| Requirements                                                                |
+`-----------------------------------------------------------------------------'
+
+  I  don`t  know If Mr.  J.  Hodge has changed the /X REXX PORT since /X $Ver
+  2.0!  But If he did so then you need at least /X 2.0+ to run this door!
+
+  Amiga  OS 2.04+ would also be very usefull because of the RexxMAST you need
+  to run this door!
+
+
+.-----------------------------------------------------------------------------.
+| Features                                                                    |
+`-----------------------------------------------------------------------------'
+
+  Just  a  simple  (less  or  more) REQUEST door with REQUEST -> MSGBASE send
+  option instead of Textfile output!
+
+
+.-----------------------------------------------------------------------------.
+| Installation                                                                |
+`-----------------------------------------------------------------------------'
+
+  Copy the Dir "BBS/DOORS/SCEPTIC/F!-Request" to your "DOORS:"
+
+  Copy  the given BBSCMD to your "BBSCMD" location or wherever you store your
+  BBS COMMANDS!
+
+  Now  load  the  config  file  and  edit  it to your needs:  Here`s a closer
+  information:
+
+ConfPath	= "<path to the conference in which MSGBASE are you like to
+                    send the REQUEST MAILS!>
+
+E.G. 		Confpath = "bbs:request"
+
+
+.-----------------------------------------------------------------------------.
+| Contact the Author(s)                                                       |
+`-----------------------------------------------------------------------------'
+
+       To get in contact with FLI7E (Hi, that`s me) for any reason call:
+
+                                --- The Pub ---
+
+                               +49(0)5551-65139
+                                28k8 v34. vfast
+                                  A4000/33MHz
+                                   1.2GB HD
+
+                                  Sysop: ME!
+
+
+
+
+.-----------------------------------------------------------------------------.
+| History                                                                     |
+`-----------------------------------------------------------------------------'
+
+                  v0.5	-	First BBS-INTERNAL release (Feb. 1994)
+ -----------------------------------------------------------------------------
+                  v1.0	-	First public release
+ -----------------------------------------------------------------------------
+                  v1.5	-	· Fixed some bugs!
+                                · Added HEADER
+                                · Improved outfit
+
+                                Second Public Release
+
+
+.-----------------------------------------------------------------------------.
+| Greetings                                                                   |
+`-----------------------------------------------------------------------------'
+
+Aquarius/Outlaws ................ -»> Still in Outlaws? Why don`t you come
+                                      over here!?
+
+FOX/AG!^REMEDY .................. -»> Hi Vince! Hope this one is running clean
+                                      and bugfree! Test it!
+
+STC/TASK ........................ -»> Where are the NEW doors? Are you dead
+                                      or just sleeping?
+
+THE PROPHET/NJY ................. -»> Hmmm! Same as above!
+
+PIWI GON/SAD .................... -»> Your /X CFG ED looks great! Letus work
+                                      fast to release it! MUI ROOLZ!
+
+COUGAR/HOODLUM .................. -»> Lousiest BETA TESTER ever! Why don`t you
+                                      install the updates i pump to your system
+                                      so often?
+
+HITPOWER/PRODIGY ................ -»> Erm, Modem damaged? Or quitted scene? Why
+                                      don`t ya call?
+
+CASIO/SAD ....................... -»> Hey my dear ITALIAN ONE MEN DIVISION! How
+                                      are you?
+
+       and all slaved SYSOPS and /X-DOOR CODER worldwide! Keep /X going!
+
+
+.-----------------------------------------------------------------------------.
+| Greetings & Messages                                                        |
+`-----------------------------------------------------------------------------'
+
+Aquarius/Outlaws ................ -»> Still in Outlaws? Why don`t you come
+                                      over here!?
+
+FOX/AG!^REMEDY .................. -»> Hi Vince! Hope this one is running clean
+                                      and bugfree! Test it!
+
+STC/TASK ........................ -»> Where are the NEW doors? Are you dead
+                                      or just sleeping?
+
+THE PROPHET/NJY ................. -»> Hmmm! Same as above!
+
+PIWI GON/SAD .................... -»> You`r /X CFG ED looks great! Letus work
+                                      fast to release it! MUI ROOLZ!
+
+COUGAR/HOODLUM .................. -»> Lousiest BETA TESTER ever! Why don`t you
+                                      install the updates i pump to your system
+                                      so often?
+
+HITPOWER/PRODIGY ................ -»> Erm, Modem damaged? Or quitted scene? Why
+                                      don`t ya call?
+
+CASIO/SAD ....................... -»> Hey my dear ITALIAN ONE MEN DIVISION! How
+                                      are you?
+
+       and all slaved SYSOPS and /X-DOOR CODER worldwide! Keep /X going!
+
+
+
+NO CARRIER
+
++++ATH
+
+
+.-----------------------------------------------------------------------------.
+| ABOUT SAD                                                                   |
+`-----------------------------------------------------------------------------'
+
+
+    We in SAD are searching some good /X-Door and Tool coder (AIM, XIM etc.)
+
+        If you`re searching a NICE and "WANT-TO-BE-ACTIVE" group then we
+                       might be the right choice for YOU!
+
+      You`ve NOT to leave your actual Group, you can join us just for /X!
+
+       So if you`re a C, E, ASM, AREXX coder or an ANSI artist or a SYSOP
+     who like to open a DST SITE (BETA SITE) then just get in contact with
+
+                                     FLI7e
+
+                         EMail: Fli7e@liteline.mcnet.de
+
+                                       or
+
+                           The Pub: +49(0)5551-65139
+
+
+                         Some closer Information on SAD
+                        +------------------------------+
+
+
+
+    SCEPTIC itself was founded in the early month of 1992! We released some
+             demos, intros, trainers, patches and ansi collections.
+
+      Our most famous production was CHIPMANIA (soon be released under the
+                 HAUJOBB label because I (fli7e) joined them!)
+
+      Then .. In summer 1994 I kicked all inactive members and decided to
+     change the way we go! DEMO-GROUP .. R.I.P .. /X + Toolgroup .. ALIVE!
+
+   From there on we worked a long time in the underground .. NO RELEASES ..!
+
+   But that should change NOW! With your help a famous group could be REBORN!
+
+                                Actual "MEMBERS"
+
+            FLi7e/HAUJOBB ^ N-JOY ^ SAD    (Leader, /X CODER, SYSOP)
+            H2o/SAD                                   (AZZKY Layout)
+            PIWI/SAD                                      (/X CODER)
+            SLY/SAD                              (TRADER & /X CODER)
+            CASIO/SAD                                        (CODER)
+            WIGWAM/SAD                                       (CODER)
+            SHADOWMASTER/IFT^SAD                          (/X CODER)
+            COUGAR/HOODLUM                             (BETA TESTER)
+
+  Well, not that much I think! And because of that we`ll try to strike again!
+
+                         ·W·I·T·H· ·Y·O·U·R· ·H·E·L·P·
+
+
+                             !KEEP THE CULT GOING!
+
+
+                               Fast greetings to
+
+            ZULU&GREY/REBELS, AEROSOUL/Ex. Shoot, ALL NJYs, ALL HJBs
+             FOX/AG!^RDY, STC/TASK, FASHION/STB, TOUCHSTONE/ESSENCE
+
+                    And all those bleeding noses out there!
+
+
+                 FUCK da Rotten Skunks called themselves NAZIS!
+
+
+.-----------------------------------------------------------------------------.
+| OUR PRODUCTIONS                                                             |
+`-----------------------------------------------------------------------------'
+
+
+Already Released SAD Doors
+--------------------------
+
+Bulletins           (AIM) -»> Great Bulletins Door with nice features
+------------------------------------------------------------------------------
+Request             (AIM) -»> A Request door with MSG BASE MAIL SEND
+------------------------------------------------------------------------------
+Wall                (AIM) -»> Two Walls in one! You can use PWs to switch
+                              between the PUBLIC and the "ELITE" wall!
+------------------------------------------------------------------------------
+Security            (AIM) -»> Protect Special Conferences of Lamers!
+------------------------------------------------------------------------------
+DLD                 (AIM) -»> Download Filedirs
+------------------------------------------------------------------------------
+Help                (AIM) -»> Multi Language Online Help for /X
+------------------------------------------------------------------------------
+DoorsMenu           (AIM) -»> Displays Different DOORS menus depending on
+                              Users-access.
+------------------------------------------------------------------------------
+CommentToSysop      (AIM) -»> As the Name states ... Another FINE Comment
+                              door!
+------------------------------------------------------------------------------
+Frontend            (AIM) -»> Including: LASTCALLERS, WHO, PW, PWMENU, COOKIE!
+------------------------------------------------------------------------------
+Status              (XIM) -»> Smashing FAST and sysop & user configurable
+                              status door!
+------------------------------------------------------------------------------
+LogOff Deluxe       (AIM) -»> Logoff Door with BBS ADD option, LAST CALLER MSG
+                              with REPLY option
+
+and some other small ones!
+
+
+Soon to come SAD Doors/Tools
+----------------------------
+
+· /X Config Ed with MUI application and lotsa great features to easy
+  config ALL the /X 3.x+ Info files! The Tool comes with ALL available
+  /X INTERNAL Tooltypes for maximum configuration Power! Any tooltype
+  available on one Mousclick for any Standard and ANY Self Configured
+  BBS CMD and that stuff!
+
+  (XIM)
+
+· Keyboard Controlled MENU door! No more typing! Choose your command
+  by moving a BAR around! User-Chooseable if MENU or PROMPT mode!
+
+  (AIM or XIM)
+
+· GREAT Operator Pager with integrated LINECHAT (the first for /X ever!!
+  like in FastCall!), WB GUI with lotsa features .. A Must for SYSOPS ..
+
+  (AIM)
+
+· Ansi Request with incredible, never seen features! You can specify the
+  STYLE, the Width, the hight, colors, perfect style etc....
+
+  (AIM)
+
+· DoorChecker! Will check all BBSCMDs and SYSCMDs if the needed door is
+  still installed. DeInstall option for sure!
+
+  (AIM or XIM)
+
+and some more Ideas still in mind!
+
+If you have any Idea .. just tell us!

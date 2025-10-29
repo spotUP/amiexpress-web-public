@@ -1,0 +1,23 @@
+[4;33m                                                                             [0m
+[4;33;44mMultiTop v2.1                              Design Created (c)1994 Bobo/Mystic[0m
+
+[35mNo# Username (Handle)            Files No# Username (Handle)            Files[0m
+[34m===-===========================-======-===-===========================-======[0m
+[33m 1.[0m Snuskis                      3.664 [33m16.[0m JBM                            506
+[33m 2.[0m ZANY                         2.702 [33m17.[0m GUS                            503
+[33m 3.[0m UFOk                         1.388 [33m18.[0m Xavier                         498
+[33m 4.[0m [-DiPSWiTCH!-]                 997 [33m19.[0m YPSiLON                        494
+[33m 5.[0m SNIPER                         915 [33m20.[0m Petrol Pedro                   447
+[33m 6.[0m lOGiC/rBs!                     848 [33m21.[0m Rasta Man                      429
+[33m 7.[0m Steel Pulse                    818 [33m22.[0m ICON                           421
+[33m 8.[0m Bad Karma                      723 [33m23.[0m LOOBY                          412
+[33m 9.[0m AERO                           723 [33m24.[0m iQUE                           408
+[33m10.[0m CURIOUS                        712 [33m25.[0m sAVAGe!                        404
+[33m11.[0m PiLGRiM                        669 [33m26.[0m TWISTER                        390
+[33m12.[0m moocher                        617 [33m27.[0m The Gravedigger                387
+[33m13.[0m ®eaÇtø®                        616 [33m28.[0m X-Citing                       372
+[33m14.[0m SCREWBALL                      580 [33m29.[0m FeVeR                          369
+[33m15.[0m [Batman/Agile]                 561 [33m30.[0m [whiplash/DEREK!]              360
+[34m===-===========================-======-===-===========================-======[0m
+[32mUploaded Bytes[33m: [0m28.875.703.393 [32mDownloaded Bytes[33m: [0m40.526.999.025 [32mMsgs [33m: [0m39.949
+[32mUploaded Files[33m: [0m        47.601 [32mDownloaded Files[33m: [0m        70.952 [32mUsers[33m: [0m   352

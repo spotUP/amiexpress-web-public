@@ -1,0 +1,338 @@
+
+
+
+
+                               .f.L.I.7.e. .o.F.
+
+
+
+
+   ______ _   ______ _   _______ _   _________  _____.      ______.  ______ _
+  _)  __///_ _)    ///_ _)     ///_ _)___    / _)   _|___ __)_____| _)    ///__
+ _\______  (_) ___/   (_) __  /   (_) __/   /__)    ____(_)       |_) ___/   _/
+|       ¦                 \__/        \____/         ¦                       ¦
+¦                                                                            :
+:         ·fLI7e· ·gRAVEDANCEr· ·cLYDe rADCLIFFe· ·bIRd· ·wIGWAm·            :
+.             ·lANCe!· ·h2o· ·gURGLe· ·gREEn bEREt· ·rUDOLf·                 .
+. _ _                       _                   _                        _ _ .
+`----\\-÷f!/cS!÷-----------)) aMIeXPRESS dESIGN ((---------------------//----'
+
+
+
+
+
+                               .p.R.E.S.E.N.T.s.
+
+
+
+
+
+                                 sAD-lAST v1.2
+
+
+
+
+
+
+
+
+                               __________________
+                           _ __\_              _/__ _
+
+                                  iNTRODUCTION
+                               _ ___        ___ _
+                                   \________/
+                       _ __ ___ ____ _    _ ____ ___ __ _
+                       \\\_\\__\\___\\\  ///___//__//_///
+                                      \\//
+                                       \/
+
+
+
+
+
+
+
+  Some  month  ago  (about  8 or more) I released an  FRONT END with included
+  lastcallers  ...   But that one was SOOOOO buggy, slow and lame allover!  I
+  put  the  idea  of  making  an  lastcallers  to  the big box under my table
+  fullfilled  with  ideas UNRELEASABLE in arexx ...  But after trying, coding
+  and imprroving my skill i grabbed it out again and it`s smashing!  I got an
+  Idea  to  find  out  the LAST CALLER without reading the callerslog line by
+  line  and  WITHOUT  taking  the same caller twice or more (most LASTCALLERS
+  don`t  care about the last caller still processed!  eg.  you call your last
+  callers  once  it`ll read out the data of the last caller and put it to the
+  bullfile!   if  you call it the second time same procedure ...  but why the
+  hell the same user should be put to the lastcallers bullfile?  I fixed this
+  neet bug by creating a 2nd datafile with the last callers dataline in it!)
+
+  I  also didn`t mind of the length of the callerslog ..  it`s always running
+  same speed ...  And it`s finding the LAST caller 100%
+
+  But  what do i`ve to say now ...  Just that you should install it and check
+  it  your  own!
+
+                       Signed : fLI7e oF sAD^HJB^KLF^CS!
+
+
+
+
+
+
+
+                               __________________
+                           _ __\_              _/__ _
+
+                                  rEQUIREMENTS
+                               _ ___        ___ _
+                                   \________/
+                       _ __ ___ ____ _    _ ____ ___ __ _
+                       \\\_\\__\\___\\\  ///___//__//_///
+                                      \\//
+                                       \/
+
+
+
+
+
+
+
+
+
+
+                               /X 3.xx+, OS2.04+
+
+                           !!! REXX SERVER ACTIVE !!!
+
+
+
+
+
+
+
+
+
+
+                               __________________
+                           _ __\_              _/__ _
+
+                                    fEATURES
+                               _ ___        ___ _
+                                   \________/
+                       _ __ ___ ____ _    _ ____ ___ __ _
+                       \\\_\\__\\___\\\  ///___//__//_///
+                                      \\//
+                                       \/
+
+
+
+
+
+
+
+
+
+       Recognices Last user In LASTCALLER BULLFILE to prevent of double
+                              entrys in Bullfile
+
+      Can handle Connects up to 128000 (hahaha) (64000 is ISDN i guess!)
+
+                     Recognices F2 or SYSOP local logins!
+
+                Count upload/download time >or< ONLINE time!
+
+                             User Definable header
+
+    Daily Status: New Users/Day, Uploads & kbytes, Downloads & kbytes
+                      Pw Hacks/Day, Pages/Day and more
+
+                                  Nice layout
+
+                 Real fast if you remember it`s an arexx door!
+
+  You can decide if you want to have the ACTIVITIES legend displayed or not!
+
+  Now the SAD-KEY routine has been included! So if you have the SAD-KEY this
+    door will automatically be registered and all soon coming doors, too!
+
+
+
+
+
+
+
+                               __________________
+                           _ __\_              _/__ _
+
+                                  iNSTALLATION
+                               _ ___        ___ _
+                                   \________/
+                       _ __ ___ ____ _    _ ____ ___ __ _
+                       \\\_\\__\\___\\\  ///___//__//_///
+                                      \\//
+                                       \/
+
+
+
+
+
+
+
+
+
+
+  mAKE  A  DIR  named:   "DOORS:SCEPTIC" and copy the dir "F!-LAST" to it.
+
+  FNISHED ...
+
+
+
+
+
+  SAD-LAST.cfg
+  ~~~~~~~~~~~~
+
+  BULLFILE	= Outputfile
+  HEADER	= Header (ascii???)
+  ENTRIES	= Number of last callers entrys in the bullfile
+  TIMEKIND	= WHICH TIME TO SHOW ... ONLINE or TRANSFER time used!
+  SHOWLEGEND    = Show ACTIVITIES description on(1)/off(0)
+  PAGERECOG	= "<key which your pager always print to callerslog>"
+  SCANRECOG	= "<key which your confscan always print to callerslog>"
+  ACCORECOG	= "<key /X writes to callerslog if account editing!>"
+                  Normaly it`s "Account Maintenance" but you may have
+                  a patched version? there are out some of them!
+
+  eg:	BULLFILE	= "doors:sceptic/F!-LAST/SAD-LAST.bull"
+  	HEADER		= "doors:Sceptic/F!-LAST/SAD-LAST.header"
+  	ENTRIES		= 10
+  	TIMEKIND	= T
+        SHOWLEGEND	= 1
+  	PAGERECOG	= "Operator Paged at"
+  	SCANRECOG	= "Directory Scan with AquaScan"
+  	ACCORECOG	= "Account Maintenance on"
+
+
+  Get your LOGOFF BATCH open and add the followng line:
+
+  -> cUT <-------------------------------------------------------------------
+
+  doors:sceptic/sad-last.exe <node>
+
+  -------------------------------------------------------------------> cUT <-
+
+  eg: doors:sceptic/sad-last.exe 1    for node 1
+
+
+
+
+   Now load the "SAD-LAST.header" file and edit your personal header beeing
+                       placed right above the outputfile!
+
+                                  THAT`S ALL!
+
+
+
+
+
+
+
+
+
+
+                               __________________
+                           _ __\_              _/__ _
+
+                                   cONTACT sAD
+                               _ ___        ___ _
+                                   \________/
+                       _ __ ___ ____ _    _ ____ ___ __ _
+                       \\\_\\__\\___\\\  ///___//__//_///
+                                      \\//
+                                       \/
+
+
+
+
+
+
+
+
+   -------------------------------------------------------------------------
+                          To Reach me FAST and DIRECT
+   -------------------------------------------------------------------------
+   BBS   : THE PUB <«»> sAD WHQ <«»> +49-5551-911080 28k8 <«»> sYSgOD: fLI7e
+   EMAIL : fLI7e@Liteline.mcnet.de .................. once a week i get them
+   INET  : fhau@aol.com ...................................... daily calling
+
+   -------------------------------------------------------------------------
+                                 To Contact SAD
+   -------------------------------------------------------------------------
+   EVIL MOON           [EHQ]         +49-SAD         28k8                fOX
+   RAVELAND            [GHQ]         +49-SAD         28k8               h2O!
+   SILENT MOON         [OZHQ]       +616-SAD         28k8             rUDOLF
+   FORBIDDEN PLANET    [IRLHQ]      +353-SAD         28k8        gREEN bERET
+   GREYHOUND           [IHQ]         +39-SAD         28k8             gURGLE
+   GOD`s HAREM         [DST]         +49-SAD         28k8/ISDN         lANCE
+   PLANET LOVE         [DST]         +49-SAD         28k8           mEPHISTO
+   TRADERS ASSAULT     [DST]         +49-SAD         28k8/ISDN     sTARLIGHT
+
+
+
+
+
+
+
+
+
+
+                               __________________
+                           _ __\_              _/__ _
+
+                                     hISTORY
+                               _ ___        ___ _
+                                   \________/
+                       _ __ ___ ____ _    _ ____ ___ __ _
+                       \\\_\\__\\___\\\  ///___//__//_///
+                                      \\//
+                                       \/
+
+
+
+
+
+
+
+
+
+
+ January 01st 1996        v1.0   > fIRST pUBLIC rELEASE
+
+
+ ... internal ...         v1.1   > My    Baudchecker    fucked   up   if   no
+                                   MNP5,LAPM,V42BIS   or   whatever   connect
+                                   occured!    If  there  just  was  a  plain
+                                   connect  a wrong baudraute was shown!  ...
+                                   Now Fixed!
+
+ January 21th 1996        v1.2   > sECOND pUBLIC rELEASE
+
+                                 > Added TIMECHOOSE . You can now decide what
+                                   time you want to have in the bullfile  for
+                                   each user! His time he needed to  TRANSFER
+                                   or the time he was ONLINE.
+
+                                 > Re-styled Outputfile
+                                 · Added many more DAILY stats to output.
+
+                                   See SAD-LAST.FEATURES for a complete  list
+                                   of FEATURES!
+
+                                 > Added ACTIVITIES DESCRIPTION on/off. So if
+                                   you don`t want the 2 lines  of  Activities
+                                   descriptions in the  output  bullfile  you
+                                   can switch them off!
+
+                                 > Added KEYFILE usage for automatic reg.!
+
+C YA ... Fli7e

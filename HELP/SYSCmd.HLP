@@ -1,0 +1,7 @@
+This ICON only represents a Directory. This Directory is required
+to be within the COMMANDS directory.
+
+ABOUT: This directory will contain Module definitions for Modules that
+       are allowed to be executed globally throughout the BBS.
+
+

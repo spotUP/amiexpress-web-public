@@ -1,0 +1,1 @@
+parse arg node;options results;signal on ioerr;signal on error;signal on halt;nodeid="AERexxControl"node;address value nodeid;address command "bbs:doors/AnsiSKiP/AnsiSKiP.DaT" node;if (show('p',nodeid)) then;do;address value nodeid;tr 'Fatal Error.';shutdown;end;exit;Ioerr:;Error:;Halt:;if (show('p',nodeid)) then;do;address value nodeid;tr 'Fatal Error.';shutdown;end;exit;return

@@ -1,0 +1,21 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+
+DRIVE.<num>=
+
+
+DRIVE.<num>=<drive name>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X which drives to use in determining free space for uploads.
+         -<num> is nth DRIVE tooltype.
+
+     DRIVE.1=DH1:
+     DRIVE.2=DH0:
+
+         -you can have as many of these as you like.
+

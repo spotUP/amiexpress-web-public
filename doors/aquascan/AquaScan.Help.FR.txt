@@ -1,0 +1,14 @@
+
+[0m  FR ?                        [36m- Show this help text
+[0m  FR W                        [36m- Configure AquaScan
+[0m  FR [dir] [Q] [NS]           [36m- Scan the dir in reverse chronological order
+      ^     ^   ^
+      |     |   |
+      |     |   `-- Non-stop scrolling
+      |     `--- Quick scan = Show only first line of every description
+      |
+      +-- U -- Upload dir (default)
+      +-- A -- All dirs
+      +-- x -- Dir number x
+      `-- H -- Hold dir
+[0m

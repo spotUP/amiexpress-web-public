@@ -1,0 +1,80 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+
+ABOUT: This ICON is required in all Parent Directories of a Conference.
+       The Name of this ICON should be <ConfLocation>.info ie:
+
+       BBS:PD.info
+
+       This ICON defines information pertaining to the conference in
+       question.
+
+
+NDIRS=
+DLPATH.<num>=
+ULPATH.<num>=
+FREEDOWNLOADS
+FORWARDMAIL=
+
+NDIRS=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -Required for all conferences which allow file transfers.
+         -Specifies the number of file catalogs for the conference.
+
+     NDIRS=3
+
+
+DLPATH.<num>=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -Required for all conferences which allow downloads and file
+          viewing.
+         -Specifies the directory of files available for downloading.
+         -<num> is the nth occurance of the DLPATH tooltype.
+         -If the download path is a directory then the directory name in
+          the tooltype must have a trailing '/'.
+
+     DLPATH.1=BBS:PD/Download/
+     DLPATH.2=BBS:GLOBAL/
+     DLPATH.3=RAM:
+
+
+ULPATH.<num>=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -Specifies an overflow directory for uploads to goto, this is
+          useful in instances where the default upload directory does not
+          room for anymore files.
+         -<num> is the nth occurance of the ULPATH tooltype.
+         -If the upload path is a directory then the directory name in the
+          tooltype must have a trailing '/'.
+
+     ULPATH.1=BBS:Overflow/
+     ULPATH.2=RAM:
+
+
+FREEDOWNLOADS
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X that the current conference allows free downloads.
+
+     FREEDOWNLOADS
+
+
+FORWARDMAIL=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -Redirects Comments to the sysop to another user.
+
+     FORWARDMAIL=ByteMaster
+
+

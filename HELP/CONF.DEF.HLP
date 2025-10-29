@@ -1,0 +1,57 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+
+ABOUT: This ICON is required to be in the BBS directory
+       This defines your conferences.
+
+
+NCONFS=
+NAME.X=
+LOCATION.X=
+RELATIVE_CONFERENCES
+
+
+NCONFS= <number of conferences>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X the number of conferences your BBS has.
+         -Current Limit is 9.
+
+     NCONFS=9
+
+
+NAME.X= <name of conference>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X the name of conference (X).
+
+     NAME.1=VALIDATION
+
+LOCATION.X= <location of conference>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X the location of conference (X).
+         -if the location is a directory, then the location must have a
+          '/' appended to the end of the directory name.
+
+     LOCATION.1=BBS:Validation/
+
+
+RELATIVE_CONFERENCES
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to only show user accessible conferences, vs. showing
+          all conferences on the system.
+         -ie: If a user elects to join conference #3, he will actually join
+              the 3rd conference he/she has access to.
+
+     RELATIVE_CONFERENCES
+
+

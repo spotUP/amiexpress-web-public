@@ -1,0 +1,66 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+ABOUT: This ICON may be any name you wish it to be. You should find some
+       pre-defined MODEM.DEFS in the STORAGE/MODEM directory.
+
+       This defines the commands your particular modem requires to perform
+       various functions.
+
+       This ICON must be in the NODE/MODEM directory for any node which is
+       tied to a modem.
+
+
+MODEM.INIT=
+MODEM.RESET=
+MODEM.RING=
+MODEM.ANSWER=
+MODEM.OFFHOOK=
+
+
+MODEM.INIT=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express how to initialize your modem.
+
+     MODEM.INIT=ATE0X7&A3
+
+
+MODEM.RESET=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express how to reset the modem for receiving another call.
+
+     MODEM.RESET=ATH0
+
+
+MODEM.RING=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express how to notice an incoming call from the modem.
+
+     MODEM.RING=RING
+
+
+MODEM.ANSWER=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express how to respond to an incoming call from a modem.
+
+     MODEM.ANSWER=ATA
+
+
+MODEM.OFFHOOK=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express how to take you modem off hook.
+
+     MODEM.OFFHOOK=ATM0H1
+

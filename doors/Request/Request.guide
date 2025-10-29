@@ -1,0 +1,278 @@
+@database Request guide
+@node MAIN "Main Menu"
+@toc MAIN
+
+                         @{bg fill} @{fg highlight}REQUEST v2.1b [RELEASE 3] @{fg text}@{bg background}
+                         @{bg fill} @{fg highlight}© 1995 NEPTUNE 'N ODYSSEY @{fg text}@{bg background}
+
+                       @{"[ ... Introduction / Features ]" LINK INTRO}
+                       @{"[ ... Contents of the archive ]" LINK CONTENTS}
+                       @{"[ .............. Requirements ]" LINK REQUIRE}
+                       @{"[ .............. Installation ]" LINK INSTALL}
+                       @{"[ ... Tooltype Congfiguration ]" LINK TOOL}
+                       @{"[ .......... Message Creation ]" LINK MESSAGE}
+                       @{"[ ................ Copyrights ]" LINK COPYRIGHTS}
+                       @{"[ Greetings / Personal hellos ]" LINK GREETINGS}
+
+                @{"[ Bug reports, Suggestions / How to contact ]" LINK REPORTS}
+
+@endnode
+
+@node INTRO "Introduction / Features"
+
+                          @{bg fill}@{fg highlight} INTRODUCTION / FEATURES @{fg text}@{bg background}
+
+  This requester is another production from outlaws^therion and it's fully
+  programmed in c to accomplish some speed.
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node CONTENTS "Contents of the archive"
+
+                           @{bg fill}@{fg highlight} CONTENTS OF THE ARCHIVE @{fg text}@{bg background}
+
+Request/
+   Install Request              5053 bytes - Installer utility.
+
+Request/Commands/BBSCmd/
+   Req.info                     1062 bytes - Provided command icon for /X 3+.
+
+Request/Doors/Request/
+   Request                     24488 bytes - The door for any cpu.
+   Request.info                 1232 bytes - Sample configuration icon.
+   Request.guide               10929 bytes - This guide.
+   Request.guide.info            965 bytes - Amigaguide icon.
+
+Request/Storage/Headers/
+   Header1.ansi                  448 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+   Header1.ascii                 398 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+   Header2.ansi                  715 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+   Header2.ascii                 317 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+   Header3.ansi                  387 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+   Header3.ascii                 367 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+   Header4.ansi                  724 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+   Header4.ascii                 603 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+   Header5.ascii                 518 bytes - Sample ansi header for creating
+                                             own messages/bulletins.
+
+Request/MessageDesign/
+   MessagePattern1.ansi          989 bytes - Sample message pattern.
+   MessagePattern1.ascii         825 bytes - Sample message pattern.
+   MessagePattern2.ansi         1135 bytes - Sample message pattern.
+   MessagePattern2.ascii         672 bytes - Sample message pattern.
+   MessagePattern3.ansi          368 bytes - Sample message pattern.
+   MessagePattern3.ascii         315 bytes - Sample message pattern.
+   MessagePattern4.ansi          952 bytes - Sample message pattern.
+   MessagePattern4.ascii         882 bytes - Sample message pattern.
+
+Request/Storage/BulletinDesign/
+   Header1.ansi                  676 bytes - Sample bulletin design.
+   Header1.ascii                 585 bytes - Sample bulletin design.
+   Header2.ansi                  634 bytes - Sample bulletin design.
+   Header2.ascii                 589 bytes - Sample bulletin design.
+   Header3.ansi                  589 bytes - Sample bulletin design.
+   Header3.ascii                 549 bytes - Sample bulletin design.
+   Header4.ansi                  872 bytes - Sample bulletin design.
+   Header4.ascii                 757 bytes - Sample bulletin design.
+   Header5.ansi                  938 bytes - Sample bulletin design.
+   Header5.ascii                 834 bytes - Sample bulletin design.
+   Tail1.ansi                    163 bytes - Sample bulletin design.
+   Tail1.ascii                   158 bytes - Sample bulletin design.
+   Tail2.ansi                    163 bytes - Sample bulletin design.
+   Tail2.ascii                   158 bytes - Sample bulletin design.
+   Tail3.ansi                     84 bytes - Sample bulletin design.
+   Tail3.ascii                    79 bytes - Sample bulletin design.
+   Tail4.ansi                    242 bytes - Sample bulletin design.
+   Tail4.ascii                   237 bytes - Sample bulletin design.
+   Tail5.ansi                     84 bytes - Sample bulletin design.
+   Tail5.ascii                    79 bytes - Sample bulletin design.
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node REQUIRE "Requirements"
+
+                                @{bg fill}@{fg highlight} REQUIREMENTS @{fg text}@{bg background}
+
+ - An amiga with os2.0 or higher.
+ - Amiexpress, S-Express or simular.
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node INSTALL "Installation"
+
+                                @{bg fill}@{fg highlight} INSTALLATION @{fg text}@{bg background}
+
+ Very easy since this version of the requester has an installer!. Just click
+ on it and follow the instruktions.
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node TOOL "Tooltype Configuration"
+
+                           @{bg fill}@{fg highlight} TOOLTYPE CONFIGURATION @{fg text}@{bg background}
+
+ This door configures by tooltypes, (Doors:Request/Request.info):
+
+ Template: BULL.OUTPUT=<path:filename>
+ Example.: BULL.OUTPUT=BBS:Conf.Requests/Bull.txt
+ Usage...: Destination path including textfile for creation of bulletin/list
+           of requested files.
+
+ Template: BULL.HEADER=<path:filename>
+ Example.: BULL.HEADER=Doors:Request/Header.txt
+ Usage...: Headertext to use in the bulletin created via "BULL.OUTPUT".
+
+ Template: BULL.TAIL=<path:filename>
+ Example.: BULL.TAIL=Doors:Request/Tailer.txt
+ Usage...: Tailtext to use in the bulletin created via "BULL.OUTPUT".
+
+ Template: MSG.BASE_PATH=<path>
+ Example.: MSG.BASE_PATH=BBS:Conf.Requests/Msgbase/
+ Usage...: Messagebase path for conference to post messages in, note that the
+           string MUST end with a "/" or an ":".
+
+ Template: MSG.MID_STRING=<string>
+ Example.: MSG.MID_STRING=esc[34m|esc[0m
+ Usage...: Separation string for bulletin created via "BULL.OUTPUT".
+ BTW.....: Use Leftamiga+Ctrl+Esc to get an escape character in a tooltype
+           editor.
+
+ Template: MSG.PATTERN=<path:filename>
+ Example.: MSG.PATTERN=Doors:Request/Message.dsg
+ Usage...: Location of the design for the message output. @{"Creating Design" LINK MESSAGE}
+
+ Template: MSG.SUBJECT=<string>
+ Example.: MSG.SUBJECT=MOST WANTED!!
+ Usage...: Simply the subject for the letters that will be created.
+
+ Template: MSG.POST_TO=<string>
+ Example.: MSG.POST_TO=EALL
+ Usage...: User to post the messages to, "EALL" or "ALL" is recommended.
+
+ Template: ACS.DELETE_ALL=<access>
+ Example.: ACS.DELETE_ALL=255
+ Usage...: Minimum of access to delete any request (not just your own!!).
+
+ Template: DATAFILE_PATH=<path:filename>
+ Example : DATAFILE_PATH=Doors:Request/Request.data
+ Usage...: Path to use when creating a datafile. Note that you CAN'T use this
+           new data with v1.0.
+
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node MESSAGE "Message Creation"
+
+                             @{bg fill}@{fg highlight} MESSAGE CREATION @{fg text}@{bg background}
+
+ These can be used anywhere in the text pattern:
+
+ %DT - Current Date
+ %UN - Username/Handle
+ %LT - Location/Group
+ %RQ - File Requested
+ %CM - Longer Description
+
+ If the user choose NOT to enter a longer comment the rows that starts with
+ an "°" character will be skipped. And if the user choose to enter a longer
+ comment these row's will be shown, but ofcourse does the "°" char not show!
+
+ --- cut --- cut --- cut --- cut --- cut --- cut --- cut --- cut ---
+
+    Current Date: %DT
+ Username/Handle: %UN
+  Location/Group: %LT
+
+  Requested file: %RQ
+
+ ° Longer description..
+ ° : %CM
+ °
+ --- cut --- cut --- cut --- cut --- cut --- cut --- cut --- cut ---
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node COPYRIGHTS "Copyrights"
+
+                                @{bg fill}@{fg highlight} COPYRIGHT © @{fg text}@{bg background}
+
+ Permission is granted to freely distribute this product for non-commercial
+ purposes only, as long as all files remain unmodified. I take *no* charge
+ for the door but you could leave us a mail and tell me that you use it and
+ perhaps call my board.
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node GREETINGS "Greetings / Personal hellos"
+
+                         @{bg fill}@{fg highlight} GREETINGS / PERSONAL HELLOS @{fg text}@{bg background}
+
+       aquarius/otl · dr.dre/trsi · hijacker/cls · juan/trsi · nike/dlt
+       phase/frs · ezco/dpl · b.b.king/atm · amigaspirit/idp · karma/al
+       twister/dcs · vegas/otl · nero/pdx · dalamar/led · kid curry/cls
+       splat/e^d · mogue/ac · yogi/itc · u-man/ac · blade/dd · zwinx/rg
+       sandman/flt · dexter/afl · whoosh/otl · mario/trsi · kandyman/it
+       and all beta testers, outlaws members and ofcourse the lost ones
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node REPORTS "Bug reports, Suggestions / How to contact"
+
+                 @{bg fill}@{fg highlight} BUG REPORTS, SUGGESTIONS / HOW TO CONTACT @{fg text}@{bg background}
+
+                       @{"[ ............ RealTime (BBS) ]" LINK BOARD}
+                       @{"[ .................. Internet ]" LINK INTERNET}
+                       @{"[ .............. Regular Mail ]" LINK MAIL}
+
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node BOARD "Everlasting doors"
+
+                                 @{bg fill}@{fg highlight} BOARDINFO @{fg text}@{bg background}
+
+  BoardName: Frozen Assets
+ BoardGroup: Looking for a good one!! (Right now therion whq)
+  #1 Number: +46-322-665225
+
+    General: No NUP or System Password, running with amiexpress 4.+.
+
+@{"[ Back to .... ]" LINK REPORTS}
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node INTERNET "Internet"
+
+                                 @{bg fill}@{fg highlight} INTERNET @{fg text}@{bg background}
+
+ Soon, www!
+
+@{"[ Back to .... ]" LINK REPORTS}
+@{"[ Back to main ]" LINK MAIN}
+@endnode
+
+@node MAIL "Regular Mail"
+
+                               @{bg fill}@{fg highlight} REGULAR MAIL @{fg text}@{bg background}
+
+ Sorry, i have second thoughts !!!
+
+@{"[ Back to .... ]" LINK REPORTS}
+@{"[ Back to main ]" LINK MAIN}
+@endnode

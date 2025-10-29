@@ -1,0 +1,142 @@
+                            __               ____
+ ._________. .____________ /_/\ _____________\   \ ____________. ._________.
+ |         | |             \_\/               \___\            | |         |
+ |.       /\_|__    __/\________  ____________/\  /    /\______|_|_       :|
+ ||    _ /  \   \___\/  \       \/\           \ \/____/  \         \ _    ||
+ |:    //   /\___\   \  /\_______\ \___________\/\    \  /\_________\\    O|
+ |o   . \  /.    /____\// \__   __\/   ________// \____\/. \________/ .   :|
+ |.      \//    /     /.    /    ///    /     /o       //   /_____\       .|
+ |        \_________ /\__________/\_________ /_______ /\_________ /        |
+ |         | |     \/                      \/   __  \/         |\/        .|
+ |_________| |________________________________ /\_\ ___________| |_________|
+ :         : :                                 \/_/_           : :    Sk!n :
+
+                                PRESENTS
+
+                   S!XInfo v1.0 coded by WHiZ/LOGiC !
+
+    PROFESSIONAL TOOLS FOR PROFESSIONAL SYSOPS - GET THE REAL QUALITY !
+
+
+WHAT'S THE USE OF THIS TOOL ?
+-----------------------------
+
+        It displays an important message (e.g. change of SYSPW) to every
+        user during logon sequence.
+
+        The user is forced to watch it a certain time.
+
+        It looks very funny, so check it out !
+
+
+WHY SHOULD I USE IT ?
+---------------------
+
+        If you love speed and beautiful outputs this is the tool
+        you have been waiting for ! Install it, and see for yourself.
+
+HOW TO INSTALL THIS TOOL :
+--------------------------
+
+        Copy these files :
+
+        BBS/Doors/S!XInfo/S!XInfo      --> DOORS:S!XInfo/S!XInfo
+        BBS/Doors/S!XInfo/S!XInfo.Txt  --> DOORS:S!XInfo/S!XInfo.Txt
+        BBS/Doors/S!XInfo/S!XInfo.Doc  --> DOORS:S!XInfo/S!XInfo.Doc
+        Libs/AEDoor.library            --> LIBS:
+
+
+        Append BBS/Commands/BBS.CMD to your BBS:Commands/BBS.CMD !
+
+
+        The S!XInfo.Txt is the text to be displayed... change it to
+        your needs !
+
+        Call it during logon sequence from any bull using MCI-Command :
+
+        ~CC_S!XINFO
+
+
+        That's all...
+
+
+LAST WORDS :
+------------
+
+        It has been tested for a long time from S!X developers, so you can be
+        sure this tool is 100% bug-free !
+
+        S!X running with official S!X tools NEVER crashes, like other
+        BBS software does, hehe...
+
+        See ya soon mates...
+                                                                 WHiZ/LOGiC !
+                                                                 ~~~~~~~~~~~~
+
+
+IMPORTANT :
+-----------
+
+
+        Read the included LOGIC.NFO text !
+                          ---------
+        It contains important information about S!X and LOGIC and how
+        to contact us ! Read it !
+                        ---------
+
+
+SOON TO BE RELEASED TOOLS - ALL CODED IN ASM! :
+-----------------------------------------------
+
+       Turbo Boost v2.0 - Another Text Adder/Checker/Stripper !
+       BullUp v2.0      - /X & S!X Online Bulletin Updater !
+       (ModSaM vx.x)    - The Ultimate Pager (Modules/Samples and more).
+                          Now coded in pure ASM !
+                          Update to the lame ARexx Release !
+       FrontInfo v1.0   - The Best Frontend you've ever seen!
+
+GREETINGS:
+----------
+
+	The Champ · Halfast · Mr Hyde · The Fly · Freddy Krueger · Franky
+	Joker/ZZC · Dalai Lama · SchwabenPoweR · Red Alert · Rioter · BBC
+	2-Cool · g.E.m. · Sid Vicious · Ccs & Eqx · Calypso · TerrorizeR
+	Dexter/aFL · Foxx'n'Lynxx · Ernesto · Jive · Sintax · Treach
+	The Addict · Cobra · Manta · Sce · Hot Kid · Rofoe · Don Dog
+        Cas(ch)tor · Warhawk · Dragon · Warlord · and all LOGiC Members !
+	
+
+      _______/\ __________________ /\_______/\______________ ___________/\
+     /     ___//   ____________   \\______  \________  \    |    /   ____/
+  Mb/  ___/___/   / \   \/   / \   \|    |\  \|   _|/ _/\__ | __/  __/___
+  _/   \_    /    \_/    \   \_/    \    |/   \   \__  \  /   \/   \_/   \
+  \    _/    \           /          /          \   |/   \/     \_         \
+   \___\  ___|\_________/\_________/|__________/________/_______/_________/
+        \/                                                                
+
+Click...
+
+··············································································
+                                                   ·
+    _ ______________________           ____________¦________________
+   ·   ________   /   _____/________  /· ______/   |   \______    o/  ·
+   ¦____/   _____/_____   /\    \   \//  /____/         \    /   //___¦
+   |   /____/   /________/  \______ /_______ /_____|_____\_______/Sk¡n|
+   |                         \ _______\    \/      ¦                  |
+   |                          \/                   ·                  |
+   |                                      ___        ·                |
+   |                                     /\__\ _     ¦_____    _ _____|
+___|________________  /\______/\ __ /\   \/__/  ____ |  _ /____ _    /|___
+\ _ o   _ /  __    /_/___  _ /  \\// o\________|    \|  //o    \/   /    /
+ \//    \/  ______/    |/  //    \/   \\       /___\ \  //     /_______ /
+ /_______\______ /_____/   /____\  /____\_____/     \  /_________\    \/
+   |           \/      \___\     \/                  \/               |
+   |__________________________________________________________________|
+     
+                       ·p·S·Y·C·H·O·  ·t·E·R·M·i·N·A·L·
+ 
+                        - lOGiC gERMAN hEADQUARTERS! -
+         
+       sYSOP tEAM: wHiZ/lOGiC - cALYPSO/gOD^lOGiC - [-tREACH!]/-aC !
+       
+      cLOSED pURE eLiTE sYSTEM kiCKiNG aSS wiTH uSR 28.8/v34 mODEMS !

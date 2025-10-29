@@ -1,0 +1,63 @@
+   .-----------------------------------------------------------------------.
+   |                                                                       |
+   |  REGISTRATION INFO :                                                  |
+   |  -------------------                                                  |
+   |                                                                       |
+   |  All my latest utils have no more nasty 'Unregistered' banners, so    |
+   |  it is your decision if you want to register them and to thank me     |
+   |  for me hard work ! You also get all the support you need !           |
+   |                                                                       |
+   |  For registration contact me :                                        |
+   |                                                                       |
+   |  INTERNET : zxmgr09@student.informatik.uni-tuebingen.de               |
+   |                                                                       |
+   |  BBS :      SYNERGY (Sysop : Sigma Seven) S-Express Home BBS          |
+   |                                                                       |
+   |             +49-5731-40074                                            |
+   |             +49-5731-40076                                            |
+   |                                                                       |
+   |  Ok, register, it's worth it ! See ya !                               |
+   |                                                            Calypso    |
+   `-----------------------------------------------------------------------'
+
+   .-----------------------------------------------------------------------.
+   |                                                                       |
+   |  LIST OF UTILS/DOORS AVAILABLE :                                      |
+   |  -------------------------------                                      |
+   |                                                                       |
+   |  BestUL V1.2    - Great Topuploaders XIM !                            |
+   |                                                                       |
+   |  BestDL V1.2    - Great Topdownloaders XIM !                          |
+   |                                                                       |
+   |  FrontEnd V1.0  - Very cool Frontend, shows User + Action + Baud !    |
+   |                   Executes a Logon-Batch !                            |
+   |                                                                       |
+   |  QuickNew V2.1  - Very wellknown util, gives ya bulletins showing     |
+   |                   filenames from today + stats (Files, Fakes, Megs) ! |
+   |                                                                       |
+   |  TheWall V1.4   - One of the Best Wall Doors !                        |
+   |                                                                       |
+   |  LHA-Check V2.1 - One of the Best LHA-Checker available !             |
+   |                                                                       |
+   |  ZIP-Check V1.0 - The only ZIP-Checker available !                    |
+   |                                                                       |
+   |  ConfComm V1.0  - The Best Multi-Comment Door ever !                  |
+   |                                                                       |
+   |  WeekTop V1.0   - A FUCKING GREAT Week-Top XIM !                      |
+   |                                                                       |
+   |  Best-Scan V1.5 - THE BEST NEWFILES DOOR EVER !                       |
+   |                   FASTER THAN EVERYTHING !                            |
+   |                                                                       |
+   |  WeekConfTop    - WeekTop XIM working per Conference !                |
+   |            V1.0   Lots of configuration possibilites ! Really great ! |
+   |                                                                       |
+   |  BestConf V1.0  - Topuploaders XIM working per Conference !           |
+   |                   Totally new and stunning design !                   |
+   |                                                                       |
+   |  PWCheck V1.3   - XIM which lets you use /X3.x+ User.Data with        |
+   |                   S-Express !!!                                       |
+   |                                                                       |
+   |  TagData V1.0   - CLI Util which lets the sysop configure the         |
+   |                   File_ID by Bobo for all users ! Really useful !     |
+   |                                                                       |
+   `-----------------------------------------------------------------------'

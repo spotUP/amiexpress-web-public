@@ -1,0 +1,293 @@
+@database Announce
+
+Copyright © 1994 Aquarius/Outlaws
+
+@Remark $VER: Announce v2.0 AmigaGuide doc
+
+@node MAIN "Announce v2.0 Documentation"
+
+       _ _ ___/\______/\__ ____/\___/\__ _ _/\____ _/\_ __ __/\______
+      __ ________   __   /   _   ___   / ______   \___/__/     _____/
+         bIS/   /   /   /   //   //   /___/ __¬   /  /  /  /\__   \
+           /   /   /   /   //   //   /   /  \    /  /  /  /   /   /
+    __  _ _\____  /\____  //_  //_____  /___/\  /\_____  /\ _/   /___
+     _  ___ _   \/  _  _\/_  \/____ __\/ ___ _\/_______\/____   /_ _/
+                                                            \  /
+                                  present                    \/
+                      a tool for AmiExpress 2.xx/3.xx:
+
+                 >>> Announce v2.0 by Aquarius/Outlaws <<<
+
+                      [- Contents of documentation -]
+
+                @{"   Copyright Note   " Link Copyright   }   @{" Miscellaneous Info " Link MiscInfo}
+                @{"  Archive Contents  " Link Archive     }   @{"  How to Reach Me   " Link ContactMe}
+                @{"    Introduction    " Link Introduction}   @{"      History       " Link History}
+                @{"    Requirements    " Link Requirements}   @{"     Greetings      " Link Greetings}
+                @{"    Installation    " Link Installation}
+@endnode
+
+@node Copyright "Announce v2.0 Documentation"
+
+                          Copyright ©1994 Aquarius
+
+                 Permission is granted to freely distribute
+               this product for non-commercial purposes only,
+                  as long as all files remain unmodified.
+
+@endnode
+
+@node Archive "Announce v2.0 Documentation"
+
+Archive (OTL-AN20.LHA) Contents
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Doors/Announce/
+   AnnLogon.10             9724 bytes  10-node version of the door.
+   AnnLogon.32             9812 bytes  32-node version (for /X 3.30+)..
+   AnnLogoff               7884 bytes  CLI util for logoff messages.
+   Announce.doc            6805 bytes  Ascii version of the doc.
+   Announce.guide         12578 bytes  This document file!
+
+Commands/SYSCmd/
+   AnnLogon.info           1249 bytes  Command icon for /X 3.xx.
+
+@endnode
+
+@node Introduction "Announce v2.0 Documentation"
+
+Introduction
+~~~~~~~~~~~~
+If you are running a multi-node board, you just HAVE to try this tool!
+It's a really pleasant thing to have installed, for you and your users.
+
+What is does? Well, when a user logs on, it notifies the users who are
+already online (on the other nodes) of the logon. You can also make it
+notify them of logoffs (and loss carriers). If a message can't be sent
+because the user is doing something (uploading, reading bulletins etc),
+the message is queued. When he becomes idle again, he instantly gets all
+his waiting logon/logoff messages. Here is an example of how that can
+look:
+
+>>> Announce v2.0 by Aquarius/OTL <<<
+     ( Current time: 17:14:00 )
+
+HardHack logged in on node 3 at 17:07:37.
+Erod logged off from node 1 at 17:09:13.
+
+>>>>
+@endnode
+
+@node Requirements "Announce v2.0 Documentation"
+
+Requirements
+~~~~~~~~~~~~
+An Amiga with OS 2.0 or higher.
+AmiExpress/SigmaExpress.
+(The door works for sure on /X v2.20-3.38 and possibly on other versions
+too.)
+
+@endnode
+
+@node Installation "Announce v2.0 Documentation"
+
+Installation
+~~~~~~~~~~~~
+First create the directory 'Doors:Announce', and copy the correct version
+of the door there. AnnLogon.10 is for AmiExpress versions below 3.30 and
+for SigmaExpress. AnnLogon.32 is for AmiExpress 3.30 or higher.
+
+/X 2.xx, SigmaExpress:
+
+Add the following line to your SYS.Cmd file:
+
+-----Cut-here-------------------------------
+*ANNLOGON XM005Doors:Announce/AnnLogon.10
+-------Cut-here-----------------------------
+
+/X 3.xx:
+
+Copy 'annlogon.info' to your SYSCmd directory and check that its tooltype
+LOCATION is correct.
+
+
+Run the door with MCI in the Logon.txt. Don't worry, the door is totally
+invisible to the on-logging users. Every Logon.txt should start with the
+following:
+
+-----Cut-here-------------
+~
+~CC_ANNLOGON|
+-------Cut-here-----------
+
+
+The logoff notifier is not necessary to install (in contrast to the logon
+notifier) but I really recommend that you do it (it's nice!). Then copy
+AnnLogoff to Doors:Announce/. Run it in the logoff scripts, preferably
+among the first commands. You must supply two arguments: the node number
+and the node location (defined in ACP.info for /X 3.xx) which for most
+sysops is the same as the bbs location (bbs:). For example, in the logoff
+script for node 2, write this line:
+
+-----Cut-here------------------------
+Doors:Announce/AnnLogoff 2 BBS:
+-------Cut-here----------------------
+
+(Provided that the location for the directory 'Node2' is 'BBS:'.)
+
+Perhaps you shouldn't put it in the script for your local node, since you
+probably always logon with F1 and therefore by-pass Logon.txt and the
+logon notifier. It would probably confuse your users if they only got the
+message that you logged off, and they hadn't even noticed that you were
+online.
+@endnode
+
+@node MiscInfo "Announce v2.0 Documentation"
+
+Miscellaneous Info
+~~~~~~~~~~~~~~~~~~
+The first time the door (AnnLogon.xx) is used, it stays in memory as a
+'host task' that will perform all the actual message sending to the nodes
+at the right times. Therefore, no logoff messages can be sent before the
+logon notifier has been used. But the logon notifier is normally started
+first so this shouldn't be any problem. If the logoff notifier is run
+first, nothing happens (no system crash if that's what you thought).
+
+If you want to change to another version of the door (from 10-node to
+32-node for example) or you want to reset Announce (clear all waiting
+messages), you will first need to remove the door from memory.
+
+That is accomplished by sending it a CTRL-C signal, for example by using
+the AmigaDOS 'break' command. If you don't know how to do that I can tell
+you... Open a shell and type 'status', which shows all loaded processes.
+One of them should be Doors:Announce/AnnLogon or something. Notice the
+process number for it. Then type 'break <process>', for example 'break 8'
+if the process number was 8. Type 'status' again and the process should be
+gone.
+@endnode
+
+@node ContactMe "Announce v2.0 Documentation"
+
+Contact Me!
+~~~~~~~~~~~
+If you have any cool ideas for improvement of this tool, bug reports,
+questions, or whatever, leave me a message on one of the following boards:
+
+@{"NIGHTFALL" Link Nightfall} ................ Prof Do Right ..... +46-90-120369
+@{"OVERLOAD" Link OverLoad} (OTL SHQ) ....... Vegas ............. +46-8-54063666
+HYSTERIA ................. JAC ............... +46-21-842939
+RAISING HELL ............. Psychopath ........ +46-23-26893
+INSIDE OUT ............... C/\TE¥E ........... +46-346-58697
+@{"SNAKE'S DEN" Link SnakesDen} (OTL WHQ) .... Snake ............. +1-513-683-2330
+THE HOLE ................. Oldman ............ +1-419-899-2754
+
+@endnode
+
+@node History "Announce v2.0 Documentation"
+
+History
+~~~~~~~
+1.0  (1993-08-04) First release. It was then called 'AnnounceLogon'.
+
+2.0  (1994-04-24) Release version. The tool name was changed to just
+     'Announce' because I added logoff notification.
+
+     Messages are queued until the user becomes idle.
+
+     Messages are now sent without going via ARexx.
+
+     There are more news but I'm too lazy to describe them all.
+
+@endnode
+
+@node Greetings "Announce v2.0 Documentation"
+
+Greetings
+~~~~~~~~~
+               Greetings must go to (in no special order):
+
+      - All Members of Outlaws!! - Prof Do Right/Classic - JAC/TDS -
+    - C/\TE¥E/Insane - Ace Caze/Obscene - Wilsom/Obscene - Kid Curry -
+   - Psychopath - Vinzi - Karma - Zin - Shapechanger - Rize - Seagull -
+    - Remix/Classic - RaJ-Ban - fanta/Therion - Static/Therion - CaT -
+     - Dansken - AXL/Attention - Rad!/LSD - Vileius! - Marwin/Duplo -
+      - Freddy Kreuger/GOD - Chig/TDS - The Silencer - Vampire/PDY -
+       - Crocodile/Obscene - Sal-One - Nojje - Zune/HCD - MadCap -
+           - Metalbasher - WarDancer/H&V - The Ones I Forgot! -
+
+@endnode
+
+@node Nightfall "Announce v2.0 Documentation"
++-------------------------------------------------------------------------+
+|         iNTO tOTAL dARKNESS, tHE uNKNOWN; cOME wALK wiTH mE...          |
+| a3ooo    ___/\       ___/\ ____/\__________/\ ___/   __/\ _________9ooMB|
++----------\__  \______\__  \____  __________  \  /   \__  \   _____/-----+
+|         tS/    __    \/      /  /_____   /     /     /        /         |
+·          /      /    /      /     /     /           /        /          ·
+ rEG. /X! /      /    /      /     /     /     /     /        /ClAsSiC SHQ
+         /______/    /______/___________/_____/     /________/
+  lOTs oF      /____/                        /     /      2ooo AD (PC) WHQ
+ /X uTiLS!          ·3 uSR nODES·aMiGa&pC!· /     /
+    ___/\ _________/\ _________/\ ___   ___/     / sTAFF : pROF dO riGHT,
+    \__  \ ________  \_________  \  /   \__     / aQUARiUS, riZE, rEMiX,
+·    /    _____/ /     __    /     /_____/     /_____ mASTERmAN, nEMESiS  ·
+:   /      /    /      /    /     /     /     /     /                     :
+|  /      /    /      /    /     /     /     /     /   eNJOY tHE sPEED!   |
++-/______/----/______/    /___________/___________/-----------------------+
+|                   /____/                                                |
+| node#1: +46-90-120369   node#2: +46-90-178169   node#3: +46-90-142969   |
+|      (14.4k DS)              (16.8k DS)              (14.4k HST)        |
++-------------------------------------------------------------------------+
+@endnode
+
+@node OverLoad "Announce v2.0 Documentation"
+                             .
+                             :
+                             |__       ___                   __
+        _____________________|  \_____/   \_________________/  \
+        \________     __     |     __      ________________     \_
+   .______/     U     \/     |     \/      __)____/      |/   ___/_____.
+   |:::::/ _ _         \     :      \_     |/     \      |       \:::::|
+   |:::  \___/_________/____   ______/_______      \_____A  _ _   \__::|
+   |:       / |            \___/       __   \______/      \/ _______/ :|
+   |  _____/  |   ____________________/  \________________/    \____  .|
+   |. \__     |___\__________      ________      _________       __/  :|
+   |:.  /     |    ___/     U      \/     |\     \/      |\      \   .:|
+   |::s/      :     \               \     _/      \_      /       \s.::|
+   |::c\_________    \______________/     A________/_________     /c:::|
+   °-----------\_____/-------\___________/------------------\____/-----°
+   ::::::                                                         ::::::
+   |::               »»»  O U T L A W S   S H Q  «««                 ::|
+   |:                                                                 :|
+   |SYSOPS: VEGAS/OTL, BiSCROK/OTL, PURE PAiN/DCS, CRUGER/SR, NATAS/HZ |
+   |:                 SUPPORTING: AMiGA & CONSOLE!                    :|
+   |::     CALL AND MAKE SOME TRANSFERS NOW AT: +46-8-540-63666      ::|
+   |::: CALL TO GET THE LATEST OUTLAWS RELEASES FOR FREEDOWNLOAD!   :::|
+   |:::::::.             .:::NO NUP NEEDED!:::.                .:::::::|
+   `-------------------------------------------------------------------'
+@endnode
+
+@node SnakesDen "Announce v2.0 Documentation"
+
+<----------------------------OUTLAWS--W-H-Q----------------------------->
+   ___________  ______    _______ _____  ______ _________   ___________
+   \     ____/__\  __ \  _\  ___ \     |/     /_\  ___   \_'\     ____/_
+   _\  ___     \_\/ /  \/  \/  /  \    /    _/   \/  /____/ _\  ___     \_
+  /  \/  /      /  /    \_   _     \_ _      \_    _____)__/  \/  /      /
+ /             /  /      /   /      /  \      /    \      /             /
+/_____________/__/______/___/______/____\    /___________/_____________/
+<----------------------------------------\__/SyK!------------------------>
+       Sysop`s: Snake & Nazgul          _________  _________   ______
+   cosys`s: Rofoe/LGC & SIGMA 909/OTL  _\  ___   \_\  ___   \__\  __ \
+   _   __  __ ___ ____ _____ ________ /  \/  /    \_\/  /____/  \/ /  \
+  //  / / / //  //   //    //       //      /      /  _____)__    /    \_
+ //  /_/ /_//__//___//____//_______//      /      /   \      /   /      /
+                                   /_____________/__________/___/______/
+
+<---------------wOrKiN` oN: A 4ooo/4o-1omb-54ombHD-2GigDat--------------->
+
+<--------DiAL:   + 1 - 5 1 3 - 6 8 3 - 2 3 3 0  -  3 NoDeZ RiNGdOwN!----->
+
+<----------------MoDeM`s: 21.6k & 16.8k DST`s + 14.4k HST---------------->
+@endnode
+
+[EOF]

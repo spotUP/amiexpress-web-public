@@ -1,0 +1,33 @@
+This small door allows a sysop/user to check out much is online in the
+currently joined conference.  They just type SIZE, and in a second or
+two, the information for each directory and the totals are displayed.
+
+The only config file this door requires is BBS:CONF_PATH/NDIRS which is
+to specify the # of dirs in the conference.  People running /X v2, and
+S!X should already have this file present in all the conferences, as well
+as the people who run Turbo NewScan (who doesn't!)...
+
+I use this door to track how much I have online so I know when it's time
+to press a CD.  All my co-sysops use this door cause they find it neat!
+
+Here is a sample:
+
+SizeCheck v1.1 by Eric The RED/bAD kARMA
+
+Checking Dirs 1-6...
+    Directory 1: Loading... Counting... 1402507136 Bytes in  1826 Files.
+    Directory 2: Loading... Counting...   42315396 Bytes in  3280 Files.
+    Directory 3: Loading... Counting...  533229032 Bytes in  4047 Files.
+    Directory 4: Loading... Counting...   11298737 Bytes in  4358 Files.
+    Directory 5: Loading... Counting...   54608857 Bytes in  5101 Files.
+    Directory 6: Loading... Counting...   61279563 Bytes in  6044 Files.
+
+Total Bytes: 2105238721 = 2055897K = 2007M (6044 Files)
+
+ WHO  CARES  [3:cONSOLE [aRCADIA wHQ]] Menu (1211 mins. left):
+
+
+
+...WOW! ;)
+
+Eric The RED

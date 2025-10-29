@@ -1,0 +1,1379 @@
+@database AquaWho
+
+Copyright © 1994 Aquarius/Outlaws
+
+@Remark $VER: AquaWho v2.0 AmigaGuide doc
+
+@node MAIN "AquaWho v2.0 Documentation"
+
+       _ _ ___/\______/\__ ____/\___/\__ _ _/\____ _/\_ __ __/\______
+      __ ________   __   /   _   ___   / ______   \___/__/     _____/
+         bIS/   /   /   /   //   //   /___/ __¬   /  /  /  /\__   \
+           /   /   /   /   //   //   /   /  \    /  /  /  /   /   /
+    __  _ _\____  /\____  //_  //_____  /___/\  /\_____  /\ _/   /___
+     _  ___ _   \/  _  _\/_  \/____ __\/ ___ _\/_______\/____   /_ _/
+                                                            \  /
+                                  present                    \/
+                      a door for AmiExpress 2.xx/3.xx:
+
+                  >>> AquaWho v2.0 by Aquarius/Outlaws <<<
+
+                      [- Contents of documentation -]
+
+                @{"   Copyright Note   " Link Copyright   }   @{"   Configuration    " Link Configuration}
+                @{"  Archive Contents  " Link Archive     }   @{"   Error Messages   " Link Errors}
+                @{"    Introduction    " Link Introduction}   @{"  How to Reach Me   " Link ContactMe}
+                @{"      Features      " Link Features    }   @{"      History       " Link History}
+                @{"    Requirements    " Link Requirements}   @{"     Greetings      " Link Greetings}
+                @{"    Installation    " Link Installation}
+@endnode
+
+@node Copyright "AquaWho v2.0 Documentation"
+
+                          Copyright ©1994 Aquarius
+
+                 Permission is granted to freely distribute
+               this product for non-commercial purposes only,
+                  as long as all files remain unmodified.
+
+@endnode
+
+@node Archive "AquaWho v2.0 Documentation"
+
+Archive (OTL-AW20.LHA) Contents
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   Filename:        Size:  Description:
+
+Doors/AquaWho/
+   AquaWho.10.000   27264  Version for 68000+ and older /X than 3.30.
+   AquaWho.10.020   26576  Version for 68020+ and older /X than 3.30.
+   AquaWho.32.000   27284  Version for 68000+ and /X 3.30+.
+   AquaWho.32.020   26596  Version for 68020+ and /X 3.30+.
+   AquaWho.doc      39013  Ascii version of the doc.
+   AquaWho.guide    55365  This document file!
+   CallsCounter      5728  CLI command which keeps track of # calls.
+   ULCounter         7480  Door which keeps track of uploads.
+   LookGenerator    31372  CLI command which generates look files
+   who.info          2339  Standard configuration icon.
+   who.look          1343  A sample look file (defines the output).
+   frontend.info     2199  Config icon for Shapechanger's frontend design.
+   frontend.look     1845  Look file by Shapechanger. Suits as frontend.
+
+Doors/AquaWho/MiscIcons/
+   intex.info        2159  Cfg icon for /X internal who + conf (LookGen.).
+   nstat.info        1256  Cfg icon for Biscrok's frontend look (LookGen).
+   vnz.info          2641  Cfg icon for Vinzi's designs (vnz.look* below).
+   zin!.info         2340  Config icon for Zin!'s design (in LookGen.).
+
+Doors/AquaWho/MiscLooks/
+   block.look.4ndz   1189  Look by Aquarius for 4 nodes (easy to extend).
+   flash.look.3ndz   1038  Look by Aquarius for 3 nodes. Edit phone #'s.
+   nfl.look.3ndz      964  Look by Aquarius for 3 nodes. Edit board name.
+   nfl.look.4ndz     1145  Same style but for 4 nodes.
+   vnz.look.2ndz      680  Look file by Vinzi! Really nice as frontend!
+   vnz.look.3ndz      800  Same but for 3 nodes.
+   vnz.look.4ndz      920  4-nd v. Use MiscIcons/vnz.info as config icon.
+
+Commands/BBSCmd/
+   who.info          1282  Command icon for AmiExpress 3.xx.
+   wh.info           1282  Command icon for AmiExpress 3.xx.
+
+Commands/SYSCmd/
+   filecheck.info    1043  Use this to install ULCounter.
+   frontend.info     1268  Use this to have AquaWho as frontend.
+
+Previews/
+   bis.iff           9808  Picture of Biscrok's design (LookGenerator).
+   col.iff           5824  A nice design by Aquarius (LookGen.).
+   fire.iff          7564  A hot (hehe) look by Aquarius (LookGen).
+   full.iff          7214  Another nice design by Aquarius (LookGen.).
+   sc1.iff           9334  Shapechanger's frontend style (LookGen).
+   vnz.iff           4916  Vinzi's funky design (in dir MiscLooks).
+   zin!.iff          7630  Zin!'s design (in LookGenerator).
+@endnode
+
+@node Introduction "AquaWho v2.0 Documentation"
+
+Introduction
+~~~~~~~~~~~~
+AquaWho is an AmiExpress door for multinode boards. Briefly you could say
+that it gives the user information about what's happening on the other
+nodes. There are lots of who doors out there, but this is simply the most
+powerful ever made! Just look at all the @{"features" Link Features}...
+
+@endnode
+
+@node Features "AquaWho v2.0 Documentation"
+
+Features
+~~~~~~~~
+Its output (design, look) is totally configurable!
+
+Several design examples are included, some by well-known ascii artists. I
+am sure that you will find one that you like! If not, just make your own
+design! You can have different designs on different commands (who, wh,
+node, frontend etc), so you don't need a separate frontend who door.
+
+All strings (action strings for example) can be reconfigured!
+
+It is able to display: name/handle, location, action, current conference,
+access level, multichat/OLM availability (for /X 3.37+), number of calls
+today (for every node or for all nodes together), number of uploaded files
+and bytes today, and current time and date! It can even make pauses of any
+length, which can be used to accomplish nice animation effects.
+
+Quiet nodes are supported. The default action string for a quiet node is
+"Secret action" but that can easily be reconfigured to whatever you like,
+"Node inactive" for example to give the impression that no-one is there.
+
+If a user has a certain access level (configurable of course), he can see
+who is on a quiet node. The user name will then have a "(Q)" appended.
+
+Of course, it can show file names, but it can also be configured not to
+show them when the UL/DL takes place in a conference which the user
+doesn't have access to. An access value required to see filenames can be
+set as well.
+
+The door command being used on another node can be shown! You can
+configure the access level required to see the command. Conference access
+checking is also available, meaning that the door command will only be
+shown if it is clear that the AquaWho user has access to the conference in
+which that door is being used. This is probably not a very needed feature
+(the conf checking), but it's there if you want it!
+
+The access level required to see the conference numbers can be configured.
+Also, the conference number can be hidden if the AquaWho user doesn't have
+access to that conference.
+
+If a new user is logging into the BBS for the first time, AquaWho displays
+"A new user!" (configurable of course) as user name when he is typing in
+answers to all the new-user questions. When he is done his name/handle is
+displayed, with the note "(NEW)" added. If he gets validated when he is
+online, the "(NEW)" thing will disappear.
+
+If a node is reserved for a user, that user's name is displayed in
+uppercase letters between parentheses. You can make it show a certain
+string instead if you want to ('Reserved' for example).
+
+AquaWho is written in highly optimized C code for best performance!
+@endnode
+
+@node Requirements "AquaWho v2.0 Documentation"
+
+Requirements
+~~~~~~~~~~~~
+An Amiga with OS 2.0 or higher.
+AmiExpress/SigmaExpress.
+(The door works for sure on /X v2.20-3.38 and possibly on other versions
+too.)
+
+@endnode
+
+@node Installation "AquaWho v2.0 Documentation"
+
+Installation
+~~~~~~~~~~~~
+You should read the entire installation text completely, since it contains
+lots of important information.
+
+
+First create the directory 'Doors:AquaWho', and copy the correct version
+of the door there.
+
+AquaWho.10.000 is for S-Express & earlier /X than 3.30, and 68000/010.
+AquaWho.10.020 is for S-Express & earlier /X than 3.30 and 68020/030/040.
+AquaWho.32.000 is for /X 3.30 or higher, and 68000/010.
+AquaWho.32.020 is for /X 3.30 or higher, and 68020/030/040.
+
+It could also be a good idea to copy the documentation to that directory,
+because you will probably need it in the future.
+
+Now you must decide what commands you want to have AquaWho on, probably
+'who', 'wh' and perhaps 'frontend' and some more.
+
+
+For every command, you need to fix THREE things.....
+
+
+1. The normal XIM door installation...
+
+   /X 3.xx:
+
+   Copy Commands/BBSCmd/who.info from the archive to your BBSCmd directory
+   as <command>.info (who.info, wh.info etc) and check that its tooltypes
+   LOCATION and ACCESS are correct.
+
+   If you will install it as frontend, copy the same icon to Frontend.info
+   in your SYSCmd directory.
+
+
+   /X 2.xx, SigmaExpress:
+
+   Add a line to your BBS.CMD, for example:
+
+   -----Cut-here-------------------------------
+   *WHO      XM020Doors:AquaWho/AquaWho.10.020
+   --------Cut-here----------------------------
+                  ^--- File name of the door with full path.
+               ^^^
+    ^          Access required to use the door.
+    |
+    ` The command that will invoke AquaWho.
+
+   For frontend installation, add this to your SYS.CMD file:
+   -----Cut-here-------------------------------
+   FRONTEND  XM020Doors:AquaWho/AquaWho.10.020
+   --------Cut-here----------------------------
+
+
+2. You must have a @{"look file" Link LookFile}, 'Doors:AquaWho/<command>.look'. It tells the
+   door what to display. For a quick installation, I recommend that you
+   use the LookGenerator utility to create the look file. Just open a
+   shell window and start it, and you'll see how to use it. It contains
+   many nice designs.
+
+
+3. You must also have a configuration icon for every command:
+   'Doors:AquaWho/<command>.info'. Use the supplied icon
+   'Doors/AquaWho/who.info' and check that its tooltypes are correct.
+   Especially all access values (ACS.*) should be thoroughly checked!!
+   That they are alright for ONE look file doesn't mean they're good for
+   another. If they are set wrong, too little or too much info could be
+   shown (security!), or the door could be slower than what is possible
+   (see @{"ACS.SEE_CONFS" Link ACS.SEE_CONFS} e.g.). All @{"tooltypes" Link Tooltypes} are described in detail in a
+   section below.
+
+
+The CallersLog must be turned on if you are going to use a who design that
+shows the current conference.
+
+If you are using relative conferences, the conference numbers AquaWho
+shows might not be the same for all users on your board. But if they all
+have access to the x first conferences, there's no problem. For example,
+it's not good if you're using relative conferences and some users' access
+looks like this: XX_X__X__ or X_XXX____. Better: XXX______ and XXXX_____,
+as examples. (AmiExpress 3.xx doesn't have these conference access
+strings, but you get the point anyway.) So if you have the "bad" case,
+either turn off relative conferences, or don't use a @{"look file" Link LookFile} with
+conference codes.
+
+The DoorLog must be turned on if you have /X 3.xx and you don't have the
+tooltype @{"DISABLE_EXTRA" Link DISABLE_EXTRA} in the config icon. The DoorLog is then used to
+determine if the logoff module is running.
+You also need to have it turned on if you want the door commands being
+used on other nodes to be shown (if @{"ACS.SEE_DOORS" Link ACS.SEE_DOORS} is 255 or lower).
+
+To turn on the DoorLog with /X 2.xx, put 'NODE* DOORLOG' in ACP.STARTUP.
+For /X 3.xx, put the tooltype 'DOOR_LOG' in the node icons.
+
+The DoorLog grows very large quickly I'm afraid... The best solution to
+this is to use my utility "Stripper" (released separately) about once a
+day. It rips off the beginning of the file, to a size of your choice. 1000
+bytes is appropriate I guess. Use it like this: "Strip BBS:Node(x)/DoorLog
+1000".
+
+If you are going to use a who design that shows number of calls, you must
+install the CallsCounter utility. Run it in your logoff scripts with the
+node number as its only argument. For example, in the logoff script for
+node 3, add "Doors:AquaWho/CallsCounter 3".
+
+To use a look file with uploaded files or bytes today, ULCounter must be
+installed as the FILECHECK door. It's possible that you already have
+another tool installed there. If it is Sigma Seven's DupeChecker, you can
+install ULCounter as the SERVER command (in SYSCmd) instead. But if your
+FILECHECK door doesn't offer such a possibility, you can use
+'5D-MultiStart' (by Sven the Creator/5D). Then you can have as many
+FILECHECKers as you want!
+@endnode
+
+@node Configuration "AquaWho v2.0 Documentation"
+
+Configuration
+~~~~~~~~~~~~~
+
+@{" The Config Icon Tooltypes " Link Tooltypes}
+
+@{" Look File Specification   " Link LookFile}
+
+@endnode
+
+@node Tooltypes "AquaWho v2.0 Documentation"
+
+The Tooltypes
+=============
+
+A tip: For you who didn't know this, ANSI codes can be used in tooltypes.
+To write the escape character, press lamiga+ctrl+esc...
+
+Here follows descriptions of all tooltypes possible to have in a
+configuration icon ('Doors:AquaWho/<command>.info'):
+
+"On/off" tooltypes:
+
+@{" RESET_LINES     " Link RESET_LINES      } @{" NONSTOP         " Link NONSTOP          } @{" FRONTEND        " Link FRONTEND         } @{" GET_BAUD        " Link GET_BAUD         }
+@{" DISABLE_EXTRA   " Link DISABLE_EXTRA    } @{" DOORCMD_UPCASE  " Link DOORCMD_UPCASE   } @{" DOORCMD_INITIAL " Link DOORCMD_INITIAL  }
+
+Access tooltypes:
+
+@{" ACS.SEE_FILES               " Link ACS.SEE_FILES                } @{" ACS.SEE_CONFS               " Link ACS.SEE_CONFS                }
+@{" ACS.SEE_ACCESS              " Link ACS.SEE_ACCESS               } @{" ACS.SEE_QUIET_NODES         " Link ACS.SEE_QUIET_NODES          }
+@{" ACS.SEE_NEW                 " Link ACS.SEE_NEW                  } @{" ACS.SEE_DOORS               " Link ACS.SEE_DOORS                }
+@{" ACS.NO_CONF_ACS_CHECK.FILES " Link ACS.NO_CONF_ACS_CHECK.FILES  } @{" ACS.NO_CONF_ACS_CHECK.CONFS " Link ACS.NO_CONF_ACS_CHECK.CONFS  }
+@{" ACS.NO_CONF_ACS_CHECK.DOORS " Link ACS.NO_CONF_ACS_CHECK.DOORS  }
+
+Character tooltypes:
+
+@{" METACHAR         " Link METACHAR        } @{" NOCONFCHAR       " Link NOCONFCHAR      } @{" SECRETCONFCHAR   " Link SECRETCONFCHAR  } @{" NOACCESSCHAR     " Link NOACCESSCHAR    }
+@{" SECRETACCESSCHAR " Link SECRETACCESSCHAR} @{" NOBAUDCHAR       " Link NOBAUDCHAR      } @{" SECRETBAUDCHAR   " Link SECRETBAUDCHAR  }
+
+Miscellaneous Strings:
+
+@{" ADD_TO_BAUD      " Link ADD_TO_BAUD     } @{" CHAT_NO          " Link CHAT_NO         } @{" CHAT_YES         " Link CHAT_YES        } @{" NOTACTIVENAME    " Link NOTACTIVENAME   }
+@{" AWAITCONNECTNAME " Link AWAITCONNECTNAME} @{" SHUTDOWNNAME     " Link SHUTDOWNNAME    } @{" SUSPENDNAME      " Link SUSPENDNAME     } @{" RESERVENAME      " Link RESERVENAME     }
+@{" NOWHERE          " Link NOWHERE         } @{" SOMEBODY         " Link SOMEBODY        } @{" SOMEWHERE        " Link SOMEWHERE       } @{" SECRETNAME       " Link SECRETNAME      }
+@{" SECRETLOC        " Link SECRETLOC       } @{" NEWUSER          " Link NEWUSER         } @{" USERNAME         " Link USERNAME        } @{" YOURNAME         " Link YOURNAME        }
+@{" YOURNAMEQ        " Link YOURNAMEQ       } @{" YOUFRONTLOC      " Link YOUFRONTLOC     }
+
+Tooltypes describing actions:
+
+@{" IDLE            " Link IDLE             } @{" DOWNLOADING     " Link DOWNLOADING      } @{" DLFILE          " Link DLFILE           } @{" UPLOADING       " Link UPLOADING        }
+@{" ULFILE          " Link ULFILE           } @{" DOORS           " Link DOORS            } @{" DOORCMD         " Link DOORCMD          } @{" MAIL            " Link MAIL             }
+@{" STATS           " Link STATS            } @{" ACCOUNT         " Link ACCOUNT          } @{" ZOOM            " Link ZOOM             } @{" FILES           " Link FILES            }
+@{" BULLETINS       " Link BULLETINS        } @{" VIEWING         " Link VIEWING          } @{" ACCOUNTSEQ      " Link ACCOUNTSEQ       } @{" LOGOFF          " Link LOGOFF           }
+@{" SYSOP           " Link SYSOP            } @{" SHELL           " Link SHELL            } @{" EMACS           " Link EMACS            } @{" JOIN            " Link JOIN             }
+@{" CHAT            " Link CHAT             } @{" NOTACTIVE       " Link NOTACTIVE        } @{" REQ_CHAT        " Link REQ_CHAT         } @{" CONNECT         " Link CONNECT          }
+@{" LOGGINGON       " Link LOGGINGON        } @{" AWAITCONNECT    " Link AWAITCONNECT     } @{" SCANNING        " Link SCANNING         } @{" SHUTDOWN        " Link SHUTDOWN         }
+@{" SHUTDOWN.<node> " Link SHUTDOWN.<node>  } @{" MULTICHAT       " Link MULTICHAT        } @{" SUSPEND         " Link SUSPEND          } @{" RESERVE         " Link RESERVE          }
+@{" OLM             " Link OLM              } @{" NUKE            " Link NUKE             } @{" SECRET          " Link SECRET           } @{" AQUAWHO         " Link AQUAWHO          }
+@{" UNKNOWN         " Link UNKNOWN          }
+@endnode
+
+@node RESET_LINES "AquaWho v2.0 Documentation"
+
+RESET_LINES                         optional
+
+If this tooltype is present in the config icon, the number of lines viewed
+is first set to zero, to prevent the pause prompt from appearing too soon.
+This can be useful when the door is used as frontend or is started with
+MCI, but it makes no difference when the door is started from the main
+prompt.
+@endnode
+
+@node NONSTOP "AquaWho v2.0 Documentation"
+
+NONSTOP                             optional
+
+If you never want any pause prompt in the who door, use this tooltype. It
+turns on non-stop scrolling when the door starts and turns it off when it
+quits.
+@endnode
+
+@node FRONTEND "AquaWho v2.0 Documentation"
+
+FRONTEND                            optional
+
+If you want to run the door before the logon prompt (handle/password), for
+example by using MCI in Private.txt or BBSTitle.txt, or as FRONTEND door,
+then put this tooltype in the config icon. Actually, it is not needed for
+true FRONTEND usage - the door can detect that. The effect is, among other
+things, that the door user's access level is considered to be 0.
+@endnode
+
+@node GET_BAUD "AquaWho v2.0 Documentation"
+
+GET_BAUD                            optional
+
+If the look file has baud codes in it, this tooltype must be in the icon.
+The door will complain if it finds a baud code but not this tooltype. If
+you don't want connect baud to be shown, you should not have this
+tooltype, because it would make the who door a bit slower (perhaps not
+noticably but still).
+@endnode
+
+@node DISABLE_EXTRA "AquaWho v2.0 Documentation"
+
+DISABLE_EXTRA                       optional
+
+If this is present in the icon, AquaWho will act more like every other who
+door in the sense that it will not show "(NEW)" for new users and not read
+the DoorLog to check if the logoff module is running (/X 3.xx).
+@endnode
+
+@node DOORCMD_UPCASE "AquaWho v2.0 Documentation"
+
+DOORCMD_UPCASE                      optional
+
+If this tooltype is present, door commands are shown in uppercase letters,
+otherwise in lowercase. See @{"DOORCMD_INITIAL" Link DOORCMD_INITIAL}.
+@endnode
+
+@node DOORCMD_INITIAL "AquaWho v2.0 Documentation"
+
+DOORCMD_INITIAL                     optional
+
+If this tooltype is present, the first letter in the door command is
+written in lowercase if the other letters are to be written in uppercase
+(determined by the tooltype @{"DOORCMD_UPCASE" Link DOORCMD_UPCASE}), and in uppercase if the other
+letters are to be written in lowercase.
+
+Example ('dis' command):
+
+DOORCMD_UPCASE  DOORCMD_INITIAL  : dIS
+-               DOORCMD_INITIAL  : Dis
+DOORCMD_UPCASE  -                : DIS
+-               -                : dis
+@endnode
+
+@node ACS.SEE_FILES "AquaWho v2.0 Documentation"
+
+ACS.SEE_FILES=<access level>        required
+
+This is the minimum access level required to see the names of the files
+being uploaded or downloaded.
+@endnode
+
+@node ACS.SEE_CONFS "AquaWho v2.0 Documentation"
+
+ACS.SEE_CONFS=<access level>        required
+
+This is the minimum access level required to see conference numbers. If
+the look file doesn't contain any conference codes, set this higher than
+255. That will possibly make the door faster beacause it won't read the
+CallersLogs then (unless it needs to check conference access, see
+@{"ACS.NO_CONF_ACS_CHECK.FILES" Link ACS.NO_CONF_ACS_CHECK.FILES} and company).
+@endnode
+
+@node ACS.SEE_ACCESS "AquaWho v2.0 Documentation"
+
+ACS.SEE_ACCESS=<access level>       required
+
+This is the minimum access level required to see other users' access
+level. If there are no access codes in the look file, set this higher than
+255. That will make the door a bit faster.
+@endnode
+
+@node ACS.SEE_QUIET_NODES "AquaWho v2.0 Documentation"
+
+ACS.SEE_QUIET_NODES=<access level>  required
+
+This is the minimum access level required to get all information about a
+node which is quiet. A "(Q)" will be appended to the handles on quiet
+nodes.
+@endnode
+
+@node ACS.SEE_NEW "AquaWho v2.0 Documentation"
+
+ACS.SEE_NEW=<access level>        required (unless @{"DISABLE_EXTRA" Link DISABLE_EXTRA} is used)
+
+This is the minimum access level required to see if a user is new (not
+validated and calling for the first time). "(NEW)" is appended to those
+users' names.
+@endnode
+
+@node ACS.SEE_DOORS "AquaWho v2.0 Documentation"
+
+ACS.SEE_DOORS=<access level>        required
+
+This is the minimum access level required to see what door commands are
+being used on the other nodes.
+@endnode
+
+@node ACS.NO_CONF_ACS_CHECK.FILES "AquaWho v2.0 Documentation"
+
+ACS.NO_CONF_ACS_CHECK.FILES=<access level> req. (if @{"ACS.SEE_FILES" Link ACS.SEE_FILES} <= 255)
+
+This is the minimum access level required to avoid conference access
+checking that could hide filenames. If a user has a lower access, he can
+ONLY see the filenames IF it is clear that he has access to the conference
+where the upload/download takes place.
+@endnode
+
+@node ACS.NO_CONF_ACS_CHECK.CONFS "AquaWho v2.0 Documentation"
+
+ACS.NO_CONF_ACS_CHECK.CONFS=<access level> req. (if @{"ACS.SEE_CONFS" Link ACS.SEE_CONFS} <= 255)
+
+This is the minimum access level required to avoid conference access
+checking that could hide conference numbers. If a user has a lower access,
+he can ONLY see the conference number of another user IF it is clear that
+he has access to that conference.
+@endnode
+
+@node ACS.NO_CONF_ACS_CHECK.DOORS "AquaWho v2.0 Documentation"
+
+ACS.NO_CONF_ACS_CHECK.DOORS=<access level>  required
+
+This is the minimum access level required to avoid conference access
+checking that could hide door commands. If a user has a lower access, he
+can ONLY see the door command being used by another user IF it is clear
+that he has access to that conference.
+@endnode
+
+@node METACHAR "AquaWho v2.0 Documentation"
+
+METACHAR=<character>                optional, default: '°'
+
+This is the character that is the beginning of the special codes in look
+files. See the section that describes the @{"look files" Link LookFile} in detail.
+@endnode
+
+@node NOCONFCHAR "AquaWho v2.0 Documentation"
+
+NOCONFCHAR=<character>              optional, default: '-'
+
+When there is no user on a node or he hasn't joined a conference yet, or
+the conference number couldn't be determined for some reason, this
+character is shown instead of the conference number.
+
+If padding with zeros is turned on, the space reserved will be filled with
+this character.
+@endnode
+
+@node SECRETCONFCHAR "AquaWho v2.0 Documentation"
+
+SECRETCONFCHAR=<character>          optional, default: 'x'
+
+If a node is quiet or the door user hasn't got access to see conference
+numbers (see @{"ACS.SEE_CONFS" Link ACS.SEE_CONFS}), this character will be shown instead.
+@endnode
+
+@node NOACCESSCHAR "AquaWho v2.0 Documentation"
+
+NOACCESSCHAR=<character>            optional, default: '-'
+
+If the access level can't be determined, for example when there is no user
+on the node, this character is shown instead.
+@endnode
+
+@node SECRETACCESSCHAR "AquaWho v2.0 Documentation"
+
+SECRETACCESSCHAR=<character>        optional, default: 'x'
+
+If the node is quiet or the door user hasn't the access set by
+@{"ACS.SEE_ACCESS" Link ACS.SEE_ACCESS}, this character is shown instead of the access level.
+@endnode
+
+@node NOBAUDCHAR "AquaWho v2.0 Documentation"
+
+NOBAUDCHAR=<character>              optional, default: ' '
+
+Whenever the connect bps can't be determined, for example when there is no
+user on the node, this character is shown instead.
+@endnode
+
+@node SECRETBAUDCHAR "AquaWho v2.0 Documentation"
+
+SECRETBAUDCHAR=<character>          optional, default: 'x'
+
+If a node is quiet, this character will be shown instead of the connect
+bps.
+@endnode
+
+@node ADD_TO_BAUD "AquaWho v2.0 Documentation"
+
+ADD_TO_BAUD=<string>                optional, default: ''
+
+This tooltype lets you specify a string which will be appended to the
+connect bps when that can be determined, or the node is quiet (and
+@{"SECRETBAUDCHAR" Link SECRETBAUDCHAR} isn't a space). For example, if you enter ' bps' here, this
+could be shown:
+
+14000 bps   Joining a conf   (' bps' was added)
+            Awaiting connect (could not determine baud -> no ' bps')
+    x bps   Secret action    (quiet node, ' bps' was added)
+@endnode
+
+@node CHAT_NO "AquaWho v2.0 Documentation"
+
+CHAT_NO=<string>                    optional, default: 'NO '
+
+This string is inserted as multichat/OLM availability when the user is NOT
+available. Its length should be the same as @{"CHAT_YES" Link CHAT_YES}.
+@endnode
+
+@node CHAT_YES "AquaWho v2.0 Documentation"
+
+CHAT_YES=<string>                   optional, default: 'YES'
+
+This string is inserted as multichat/OLM availability when the user IS
+available. Its length should be the same as @{"CHAT_NO" Link CHAT_NO}.
+@endnode
+
+@node NOTACTIVENAME "AquaWho v2.0 Documentation"
+
+NOTACTIVENAME=<string>              optional, default: 'Nobody'
+
+This is the string that is shown as user name when the node is resetting
+itself (when the action is @{"NOTACTIVE" Link NOTACTIVE}).
+@endnode
+
+@node AWAITCONNECTNAME "AquaWho v2.0 Documentation"
+
+AWAITCONNECTNAME=<string>           optional, default: 'Nobody'
+
+This is the string that is shown as user name when the node is ready to
+receive a call (when the action is @{"AWAITCONNECT" Link AWAITCONNECT}).
+@endnode
+
+@node SHUTDOWNNAME "AquaWho v2.0 Documentation"
+
+SHUTDOWNNAME=<string>               optional, default: 'Nobody'
+
+This is the string that is shown as user name when the node is shutdown,
+not active (when the action is @{"SHUTDOWN" Link SHUTDOWN}).
+@endnode
+
+@node SUSPENDNAME "AquaWho v2.0 Documentation"
+
+SUSPENDNAME=<string>                optional, default: 'Nobody'
+
+This is the string that is shown as user name when the node is suspended
+(when the action is @{"SUSPEND" Link SUSPEND}).
+@endnode
+
+@node RESERVENAME "AquaWho v2.0 Documentation"
+
+RESERVENAME=<string>                optional
+
+If you don't want the name of the user whom the node is reserved for to be
+shown (like this: "( USERNAME )"), then use this tooltype to determine
+what should be shown instead ('Reserved' for example).
+@endnode
+
+@node NOWHERE "AquaWho v2.0 Documentation"
+
+NOWHERE=<string>                    optional, default: 'Nowhere'
+
+This is the string that is shown as location when nobody is on the node.
+@endnode
+
+@node SOMEBODY "AquaWho v2.0 Documentation"
+
+SOMEBODY=<string>                   optional, default: 'Somebody'
+
+This string is shown as user name when somebody is connecting to the BBS
+(when the action is @{"CONNECT" Link CONNECT}), and at all other occasions when somebody is
+online but the name cannot be determined.
+@endnode
+
+@node SOMEWHERE "AquaWho v2.0 Documentation"
+
+SOMEWHERE=<string>                  optional, default: 'Somewhere'
+
+This string is shown as location when:
+ - a new user is logging on (action @{"ACCOUNTSEQ" Link ACCOUNTSEQ}).
+ - a user is connecting to the BBS (action @{"CONNECT" Link CONNECT}).
+ - the node is reserved for a user (action @{"RESERVE" Link RESERVE}).
+ - somebody is online but the name cannot be determined.
+@endnode
+
+@node SECRETNAME "AquaWho v2.0 Documentation"
+
+SECRETNAME=<string>                 optional, default: 'Somebody'
+
+This string is shown as user name when a node is quiet (and the AquaWho
+user hasn't got the access defined by @{"ACS.SEE_QUIET_NODES" Link ACS.SEE_QUIET_NODES}). The action
+string will then be what is defined by the tooltype @{"SECRET" Link SECRET}.
+@endnode
+
+@node SECRETLOC "AquaWho v2.0 Documentation"
+
+SECRETLOC=<string>                  optional, default: 'Somewhere'
+
+This string is shown as location when a node is quiet (and the AquaWho
+user hasn't got the access defined by @{"ACS.SEE_QUIET_NODES" Link ACS.SEE_QUIET_NODES}). The action
+string will then be what is defined by the tooltype @{"SECRET" Link SECRET}.
+@endnode
+
+@node NEWUSER "AquaWho v2.0 Documentation"
+
+NEWUSER=<string>                    optional, default: 'A new user!'
+
+This is the string that is shown as user name when a new user is logging
+on, answering new-user questions. The action is then @{"ACCOUNTSEQ" Link ACCOUNTSEQ}.
+@endnode
+
+@node USERNAME "AquaWho v2.0 Documentation"
+
+USERNAME=<string>                   optional
+
+If you don't want ANY of the users' names to be shown, then use this
+tooltype to set the replacement string. (The AquaWho user's name is not
+affected by this, see @{"YOURNAME" Link YOURNAME}.) This is primarily intended for frontend
+usage, where you can write 'USERNAME=**BUSY**' for example.
+@endnode
+
+@node YOURNAME "AquaWho v2.0 Documentation"
+
+YOURNAME=<string>                   optional, default for frontend: 'You!'
+
+If you don't want the AquaWho user's name to be shown, then use this
+tooltype to set the replacement string. When AquaWho is used as frontend
+door, this tooltype defines the user's name.
+@endnode
+
+@node YOURNAMEQ "AquaWho v2.0 Documentation"
+
+YOURNAMEQ=<string>                  optional, default: 'You! (Quiet)'
+
+This string is shown as name for the AquaWho user when the node is quiet
+and one of the following criteria holds:
+ - it is a frontend command
+ - @{"YOURNAME" Link YOURNAME} is present in the config icon
+ - the user doesn't have the access set by @{"ACS.SEE_QUIET_NODES" Link ACS.SEE_QUIET_NODES}
+@endnode
+
+@node YOUFRONTLOC "AquaWho v2.0 Documentation"
+
+YOUFRONTLOC=<string>                optional, default: ''
+
+This is the location string for the AquaWho user when the door is used as
+frontend.
+@endnode
+
+@node IDLE "AquaWho v2.0 Documentation"
+
+IDLE=<string>                       optional, default: 'Doing nothing'
+
+This is the string shown when the user is at the main prompt, perhaps
+typing a command.
+@endnode
+
+@node DOWNLOADING "AquaWho v2.0 Documentation"
+
+DOWNLOADING=<string>                optional, default: 'Downloading'
+
+The user is downloading but the filename is not shown. Possible reasons:
+ 1. The door user's access level is lower than what is specified in
+    @{"ACS.SEE_FILES" Link ACS.SEE_FILES}.
+ 2. @{"ACS.NO_CONF_ACS_CHECK.FILES" Link ACS.NO_CONF_ACS_CHECK.FILES} is set higher than the AquaWho user's
+    access level (therefore conf access checking is done), and he doesn't
+    have access to the conference in which the download takes place.
+ 3. He is typing file names to download and has not yet begun the
+    transfer.
+ 4. He chose 'goodbye after transfer' and is logging off.
+ 5. The AquaWho user doesn't have the access defined by
+    @{"ACS.NO_CONF_ACS_CHECK.FILES" Link ACS.NO_CONF_ACS_CHECK.FILES} and you are using relative conferences.
+    Then you must either remove conference access checking by setting
+    ACS.NO_CONF_ACS_CHECK.FILES to 0 (also @{"ACS.NO_CONF_ACS_CHECK.CONFS" Link ACS.NO_CONF_ACS_CHECK.CONFS} and
+    @{"ACS.NO_CONF_ACS_CHECK.DOORS" Link ACS.NO_CONF_ACS_CHECK.DOORS}) or stop using relative conferences,
+    because the conference access checking doesn't work with relative
+    conferences (unless the conference numbers for all users are the same
+    with, as without relative conferences)!
+@endnode
+
+@node DLFILE "AquaWho v2.0 Documentation"
+
+DLFILE=<string>                     optional, default: 'DL: '
+
+This string is shown as action with the filename appended, when a user is
+downloading. Note that no space is automatically inserted between this
+string and the filename (for more configuration freedom).
+@endnode
+
+@node UPLOADING "AquaWho v2.0 Documentation"
+
+UPLOADING=<string>                  optional, default: 'Uploading'
+
+The user is uploading, but the filename is not shown. Possible reasons:
+ 1. The door user's access level is lower than what is specified in
+    @{"ACS.SEE_FILES" Link ACS.SEE_FILES}.
+ 2. @{"ACS.NO_CONF_ACS_CHECK.FILES" Link ACS.NO_CONF_ACS_CHECK.FILES} is set higher than the AquaWho user's
+    access level (therefore conf access checking is done), and he doesn't
+    have access to the conference in which the upload takes place.
+ 3. The actual transfer has not yet begun.
+ 4. He chose 'goodbye after transfer' and is logging off.
+ 5. The AquaWho user doesn't have the access defined by
+    @{"ACS.NO_CONF_ACS_CHECK.FILES" Link ACS.NO_CONF_ACS_CHECK.FILES} and you are using relative conferences.
+    Then you must either remove conference access checking by setting
+    ACS.NO_CONF_ACS_CHECK.FILES to 0 (also @{"ACS.NO_CONF_ACS_CHECK.CONFS" Link ACS.NO_CONF_ACS_CHECK.CONFS} and
+    @{"ACS.NO_CONF_ACS_CHECK.DOORS" Link ACS.NO_CONF_ACS_CHECK.DOORS}) or stop using relative conferences,
+    because the conference access checking doesn't work with relative
+    conferences (unless the conference numbers for all users are the same
+    with, as without relative conferences)!
+@endnode
+
+@node ULFILE "AquaWho v2.0 Documentation"
+
+ULFILE=<string>                     optional, default: 'UL: '
+
+This string is shown as action with the filename appended, when a user is
+downloading. Note that no space is automatically inserted between this
+string and the filename (for more configuration freedom).
+@endnode
+
+@node DOORS "AquaWho v2.0 Documentation"
+
+DOORS=<string>                      optional, default: 'Using a door'
+
+The user is using a door, an external module, but the door command is not
+shown. Possible reasons:
+ 1. The door user's access level is lower than what is specified in
+    @{"ACS.SEE_DOORS" Link ACS.SEE_DOORS}.
+ 2. @{"ACS.NO_CONF_ACS_CHECK.DOORS" Link ACS.NO_CONF_ACS_CHECK.DOORS} is set higher than the AquaWho user's
+    access level (therefore conf access checking is done), and he doesn't
+    have access to the conference in which the door is being used.
+ 3. The last line in the DoorLog didn't contain a door command.
+ 4. There was an error reading the DoorLog. Make sure that the tooltype
+    DOOR_LOG is present in the BBS:Node(x).info icons (for /X 3.xx).
+ 5. The AquaWho user doesn't have the access defined by
+    @{"ACS.NO_CONF_ACS_CHECK.DOORS" Link ACS.NO_CONF_ACS_CHECK.DOORS} and you are using relative conferences.
+    Then you must either remove conference access checking by setting
+    ACS.NO_CONF_ACS_CHECK.DOORS to 0 (also @{"ACS.NO_CONF_ACS_CHECK.FILES" Link ACS.NO_CONF_ACS_CHECK.FILES}
+    and @{"ACS.NO_CONF_ACS_CHECK.CONFS" Link ACS.NO_CONF_ACS_CHECK.CONFS}) or stop using relative conferences,
+    because the conference access checking doesn't work with relative
+    conferences (unless the conference numbers for all users are the same
+    with, as without relative conferences)!
+@endnode
+
+@node DOORCMD "AquaWho v2.0 Documentation"
+
+DOORCMD=<string>                    optional, default: 'Using door: '
+
+This string is shown as action with the door command appended when a user
+is using a door. If the door command isn't shown, see the tooltype @{"DOORS" Link DOORS}
+for reasons. Note that no space is automatically inserted between this
+string and the door command (for more configuration freedom).
+@endnode
+
+@node MAIL "AquaWho v2.0 Documentation"
+
+MAIL=<string>                       optional, default: 'R/W mail'
+
+This is the action string shown when the user is reading or writing mail
+(not at logon, which is @{"SCANNING" Link SCANNING}).
+@endnode
+
+@node STATS "AquaWho v2.0 Documentation"
+
+STATS=<string>                      optional, default: 'Checking status'
+
+This is the action string shown when the user is using the 'w' or 's'
+standard AmiExpress command.
+@endnode
+
+@node ACCOUNT "AquaWho v2.0 Documentation"
+
+ACCOUNT=<string>                    optional, default: 'Account editing'
+
+This is the action string shown when the user is editing accounts, or at
+least it should be but I don't think that AmiExpress uses it at all. When
+the account editor is used (command '1') the action is @{"SYSOP" Link SYSOP}.
+@endnode
+
+@node ZOOM "AquaWho v2.0 Documentation"
+
+ZOOM=<string>                       optional, default: 'Zooming mail'
+
+This is the action string shown when the user is zooming mail (collecting
+for download).
+@endnode
+
+@node FILES "AquaWho v2.0 Documentation"
+
+FILES=<string>                      optional, default: 'Scanning files'
+
+This is the action string shown when the user is viewing a filelist.
+Internal /X commands resulting in this action: 'f', 'n', 'z' and 'a'.
+@endnode
+
+@node BULLETINS "AquaWho v2.0 Documentation"
+
+BULLETINS=<string>                  optional, default: 'Reading bulletins'
+
+This is the action string shown when the user is reading bulletins (the
+'b' command).
+@endnode
+
+@node VIEWING "AquaWho v2.0 Documentation"
+
+VIEWING=<string>                    optional, default: 'Viewing text file'
+
+This is the action string shown when the user is viewing a file, with the
+'v' or 'vs' command.
+@endnode
+
+@node ACCOUNTSEQ "AquaWho v2.0 Documentation"
+
+ACCOUNTSEQ=<string>                 optional, default: 'Logging on'
+
+This is the action string shown when the user is logging on the BBS for
+the first time (answering new-user questions etc).
+@endnode
+
+@node LOGOFF "AquaWho v2.0 Documentation"
+
+LOGOFF=<string>                     optional, default: 'Logging off'
+
+This is the action string shown when the user is logging off.
+@endnode
+
+@node SYSOP "AquaWho v2.0 Documentation"
+
+SYSOP=<string>                      optional, default: 'Sysop activities'
+
+This string is shown as action when the user is using a sysop command such
+as '1', '2' and '5'.
+@endnode
+
+@node SHELL "AquaWho v2.0 Documentation"
+
+SHELL=<string>                      optional, default: 'Using Shell'
+
+This is the action string shown when the user is in the Shell.
+@endnode
+
+@node EMACS "AquaWho v2.0 Documentation"
+
+EMACS=<string>                      optional, default: 'Using EMACS'
+
+This is the action string shown when the user is editing using EMACS.
+AmiExpress commands: '3' and '4'.
+@endnode
+
+@node JOIN "AquaWho v2.0 Documentation"
+
+JOIN=<string>                       optional, default: 'Joining a conf'
+
+This is the action string shown when the user is joining a conference.
+@endnode
+
+@node CHAT "AquaWho v2.0 Documentation"
+
+CHAT=<string>                       optional, default: 'Chatting'
+
+This is the action string shown when the user is chatting with the sysop.
+@endnode
+
+@node NOTACTIVE "AquaWho v2.0 Documentation"
+
+NOTACTIVE=<string>                  optional, default: 'Awaiting connect'
+
+This is the action string shown when someone just logged off and the node
+is being resetted.
+@endnode
+
+@node REQ_CHAT "AquaWho v2.0 Documentation"
+
+REQ_CHAT=<string>                   optional, default: 'Paging Sysop'
+
+This is the action string shown when the user is paging the sysop
+(requesting chat).
+@endnode
+
+@node CONNECT "AquaWho v2.0 Documentation"
+
+CONNECT=<string>                    optional, default: 'Connecting to BBS'
+
+This is the action string shown when someone is connecting to the BBS.
+@endnode
+
+@node LOGGINGON "AquaWho v2.0 Documentation"
+
+LOGGINGON=<string>                  optional, default: 'Logging on'
+
+This is the action string shown when the user is logging on the BBS.
+@endnode
+
+@node AWAITCONNECT "AquaWho v2.0 Documentation"
+
+AWAITCONNECT=<string>               optional, default: 'Awaiting connect'
+
+This is the action string shown when the node is free for call.
+@endnode
+
+@node SCANNING "AquaWho v2.0 Documentation"
+
+SCANNING=<string>                   optional, default: 'Scanning for mail'
+
+This is the action string shown when the user just logged on and is
+scanning for mail.
+@endnode
+
+@node SHUTDOWN "AquaWho v2.0 Documentation"
+
+SHUTDOWN=<string>                   optional, default: 'Node inactive'
+
+This is the action string shown when the node is not active. See also
+@{"SHUTDOWN.<node>" Link SHUTDOWN.<node>}.
+@endnode
+
+@node SHUTDOWN.<node> "AquaWho v2.0 Documentation"
+
+SHUTDOWN.<node>=<string>            optional
+
+With this tooltype you can define a string that will be shown only for the
+specified node when it is shutdown. The intended use was to have "Sysop
+calling out!" or something similar for the nodes that can be used for
+that. For example, if you always use node 3 for calling out, write
+"SHUTDOWN.3=Sysop calling out!". It can be used for any info on why that
+node is down.
+@endnode
+
+@node MULTICHAT "AquaWho v2.0 Documentation"
+
+MULTICHAT=<string>                  optional, default: 'MultiNd chatting'
+
+This is the action string shown when the user is using a multi-node chat
+door.
+@endnode
+
+@node SUSPEND "AquaWho v2.0 Documentation"
+
+SUSPEND=<string>                    optional, default: 'Node suspended'
+
+This is the action string shown when the node is suspended.
+@endnode
+
+@node RESERVE "AquaWho v2.0 Documentation"
+
+RESERVE=<string>                    optional, default: 'Node reserved'
+
+This is the action string shown when the node is reserved.
+@endnode
+
+@node OLM "AquaWho v2.0 Documentation"
+
+OLM=<string>                        optional, default: 'Writing OLM'
+
+This is the action string shown when the user is writing an online
+message. This far, it's probably only the internal OLM command in /X
+3.37+ that can cause this action.
+@endnode
+
+@node NUKE "AquaWho v2.0 Documentation"
+
+NUKE=<string>                       optional, default: 'Nuking files'
+
+This is the action string shown when the user is using a faker/nuker door.
+Not all nukers support this, so for some the action could be "Using door:
+nuke", "Using door: fake", or just "Using a door" (if @{"ACS.SEE_DOORS" Link ACS.SEE_DOORS} is too
+high). Information for door coders: The environment code for this is 99.
+@endnode
+
+@node SECRET "AquaWho v2.0 Documentation"
+
+SECRET=<string>                     optional, default: 'Secret action'
+
+This is the action string shown when the node is quiet and the AquaWho
+user hasn't got the access defined by @{"ACS.SEE_QUIET_NODES" Link ACS.SEE_QUIET_NODES}.
+@endnode
+
+@node AQUAWHO "AquaWho v2.0 Documentation"
+
+AQUAWHO=<string>                    optional, default: 'Using AquaWho!'
+
+This is the action always shown for the AquaWho user (unless the node is
+quiet and he hasn't got the access defined by @{"ACS.SEE_QUIET_NODES" Link ACS.SEE_QUIET_NODES}).
+@endnode
+
+@node UNKNOWN "AquaWho v2.0 Documentation"
+
+UNKNOWN=<string>                    optional, default: 'Unknown action!'
+
+This is the action string shown when the action couldn't be determined
+(AmiExpress' environment value was unknown).
+@endnode
+
+@node LookFile "AquaWho v2.0 Documentation"
+
+The Look File
+=============
+
+A look file is an ordinary ascii/ansi text file, but with special code
+sequences which AquaWho replaces with the item that they stand for.
+
+Every item specification starts with the metachar, which is defined in the
+configuration icon, tooltype @{"METACHAR" Link METACHAR}. The default is ° (alt-w). If that
+character is used in the look file for other purposes ("decoration"),
+change the metachar to another, unique, character.
+
+
+    °D   Door name ("AquaWho").
+
+    °V   Door version, for example "2.0".
+
+    °P   Programmer ("Aquarius/OTL").
+
+    °T   Current time (HH:MM:SS).
+
+    °E   Current date (MM-DD-YY).
+
+    °F   Full time and date string (DDD MMM dd hh:mm:ss YYYY),
+         for example "Wed Sep 04 15:13:22 1985".
+    ^
+    |
+    `-- Metachar
+
+
+    °W24    Wait for 24/50 (=0.48) seconds. This can be used to accomplish
+      ^^    nice animation effects.
+      ||
+      ``
+       There must always be TWO digits. Write °W08 to wait for 8/50 s.
+       If you need a longer delay than 99/50 s, use multiple wait codes.
+
+
+    °0N18L           The door will replace this with the name of the
+     ^^^ ^           user on node 0. 18 spaces will be reserved for it
+     ||| |           and it will be left justified.
+     ||| |
+     ||| |
+     ||| `-- Justification info: L - left justified
+     |||                         R - right justified
+     |||                         C - centered
+     |||
+     ||`-- Field width (the number of spaces to be reserved).
+     ||    For conf, baud, access, calls, uploads and uploaded bytes: If
+     ||    the field width starts with a zero, then zeros will be used for
+     ||    padding instead of spaces in front of the number, and if the
+     ||    field width is too small for the number to fit then it will be
+     ||    extended to whatever is needed. Look below to see what the
+     ||    field width limits are.
+     ||
+     |`-- Type of data: N - name
+     |                  L - location
+     |                  A - action
+     |                  C - conference
+     |                  B - connect bps
+     |                  X - access level
+     |                  S - calls (requires the CallsCounter util to be
+     |                             run in the logoff scripts)
+     |                  U - uploads (requires the ULCounter door to be run
+     |                               for every uploaded file, for example
+     |                               as FILECHECK)
+     |                  Y - uploaded bytes (requires the ULCounter door to
+     |                           be installed as FILECHECK, nothing else!)
+     |
+     |
+     `-- Node number (0-9 for the 10-node v., 0-31 for the 32-node v.)
+         NOTE! For calls, uploads and uploaded bytes you can leave this
+         out! Then the TOTAL count (the sum from all nodes) will be
+         inserted.
+
+
+    °0H  MultiChat/OLM availability. See @{"CHAT_YES" Link CHAT_YES} and @{"CHAT_NO" Link CHAT_NO}.
+     ^
+     |
+     `-- Node number
+
+
+ Here follows the field width limits:
+
+  9 <= Name       <= 38
+  1 <= Location   <= 30
+  1 <= Action     <= 50
+  1 <= Conf       <=  8
+  1 <= Baud       <= 30
+  1 <= Access     <=  4
+  1 <= ChatAvail  <= 40
+  1 <= Calls      <=  8
+  1 <= UL'd Files <=  8
+  1 <= UL'd Bytes <= 12
+
+
+
+Some examples:
+
+ Code     Explanation                                     Sample results
+ ¯¯¯¯¯¯¯¯ ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯ ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+ "°2S3R"  # calls today on node 2.                     "  8", " 13", "102"
+ "°2S03R" Same but padded with zeros.                  "008", "013", "102"
+ "°S3L"   # calls today on all nodes together.         "9  ", "35 ", "102"
+@endnode
+
+@node Errors "AquaWho v2.0 Documentation"
+
+Error Messages
+~~~~~~~~~~~~~~
+These are all the error messages that AquaWho can give you. An explanation
+of them is given, why they appear and what you can do about it.
+
+
+Couldn't find multicom port! Check ACP.info!
+
+   The tooltype MULTICOM_PORT must be in your ACP icon. (/X 3.xx)
+
+
+Couldn't open icon.library!
+
+   This will probably never occur...
+
+
+Out of memory!
+
+   You are really low on memory if this comes up. AquaWho doesn't consume
+   much.
+
+
+Couldn't load config icon!!
+
+   Doors:AquaWho/<command>.info couldn't be opened.
+
+
+Error in config icon! Access value missing or invalid!
+
+   Check the tooltypes @{"ACS.SEE_FILES" Link ACS.SEE_FILES}, @{"ACS.SEE_CONFS" Link ACS.SEE_CONFS},
+   @{"ACS.SEE_QUIET_NODES" Link ACS.SEE_QUIET_NODES}, @{"ACS.SEE_NEW" Link ACS.SEE_NEW}, @{"ACS.SEE_DOORS" Link ACS.SEE_DOORS}, @{"ACS.SEE_ACCESS" Link ACS.SEE_ACCESS},
+   @{"ACS.NO_CONF_ACS_CHECK.FILES" Link ACS.NO_CONF_ACS_CHECK.FILES}, @{"ACS.NO_CONF_ACS_CHECK.CONFS" Link ACS.NO_CONF_ACS_CHECK.CONFS} and
+   @{"ACS.NO_CONF_ACS_CHECK.DOORS" Link ACS.NO_CONF_ACS_CHECK.DOORS}.
+
+
+Error in look file, line <nr> column <nr>!
+
+   This tells you where the first error in Doors:AquaWho/<command>.look
+   was encountered. Load the @{"look file" Link LookFile} into an ordinary text editor and
+   locate the error.
+
+
+Couldn't open look file!
+
+   Doors:AquaWho/<command>.look couldn't be opened.
+
+
+Error reading look file!
+
+   An error occurred when AquaWho was reading
+   Doors:AquaWho/<command>.look. The file could be opened but there was a
+   read error.
+
+
+Error in config icon, tooltype <tooltype>!
+
+   The tooltype is one of @{"METACHAR" Link METACHAR}, @{"NOCONFCHAR" Link NOCONFCHAR}, @{"SECRETCONFCHAR" Link SECRETCONFCHAR},
+   @{"NOACCESSCHAR" Link NOACCESSCHAR}, @{"SECRETACCESSCHAR" Link SECRETACCESSCHAR}, @{"NOBAUDCHAR" Link NOBAUDCHAR} and @{"SECRETBAUDCHAR" Link SECRETBAUDCHAR}.
+   Check that there is exactly one character there. Note that the error
+   can NOT mean that the tooltype doesn't exist. There are default
+   characters for all of them.
+
+
+Error! Connect bps can't be shown unless the GET_BAUD tooltype
+is present in the config icon!
+
+   What this means should be obvious. Put @{"GET_BAUD" Link GET_BAUD} in the config icon.
+@endnode
+
+@node ContactMe "AquaWho v2.0 Documentation"
+
+Contact Me!
+~~~~~~~~~~~
+I want new nice look files (and their config icons if they are special)!
+Give them to me and I might include them in the next release of AquaWho or
+in a separate design collection. Of course I won't mind if you release
+your own collection...
+
+Also if you have any cool ideas for improvement of this tool, bug reports,
+questions, or whatever, leave me a message on one of the following boards:
+
+@{"NIGHTFALL" Link Nightfall} ................ Prof Do Right ..... +46-90-120369
+@{"OVERLOAD" Link OverLoad} (OTL SHQ) ....... Vegas ............. +46-8-54063666
+HYSTERIA ................. JAC ............... +46-21-842939
+RAISING HELL ............. Psychopath ........ +46-23-26893
+INSIDE OUT ............... C/\TE¥E ........... +46-346-58697
+@{"SNAKE'S DEN" Link SnakesDen} (OTL WHQ) .... Snake ............. +1-513-683-2330
+THE HOLE ................. Oldman ............ +1-419-899-2754
+
+@endnode
+
+@node History "AquaWho v2.0 Documentation"
+
+History
+~~~~~~~
+History restarted! There are so many news from v1.2 (the previous release)
+that I don't have the time to explain them all.
+
+2.0  (1994-04-24) Release version.
+
+@endnode
+
+@node Greetings "AquaWho v2.0 Documentation"
+
+Greetings
+~~~~~~~~~
+               Greetings must go to (in no special order):
+
+      - All Members of Outlaws!! - Prof Do Right/Classic - JAC/TDS -
+    - C/\TE¥E/Insane - Ace Caze/Obscene - Wilsom/Obscene - Kid Curry -
+   - Psychopath - Vinzi - Karma - Zin - Shapechanger - Rize - Seagull -
+    - Remix/Classic - RaJ-Ban - fanta/Therion - Static/Therion - CaT -
+     - Dansken - AXL/Attention - Rad!/LSD - Vileius! - Marwin/Duplo -
+      - Freddy Kreuger/GOD - Chig/TDS - The Silencer - Vampire/PDY -
+       - Crocodile/Obscene - Sal-One - Nojje - Zune/HCD - MadCap -
+           - Metalbasher - WarDancer/H&V - The Ones I Forgot! -
+
+@endnode
+
+@node Nightfall "AquaWho v2.0 Documentation"
++-------------------------------------------------------------------------+
+|         iNTO tOTAL dARKNESS, tHE uNKNOWN; cOME wALK wiTH mE...          |
+| a3ooo    ___/\       ___/\ ____/\__________/\ ___/   __/\ _________9ooMB|
++----------\__  \______\__  \____  __________  \  /   \__  \   _____/-----+
+|         tS/    __    \/      /  /_____   /     /     /        /         |
+·          /      /    /      /     /     /           /        /          ·
+ rEG. /X! /      /    /      /     /     /     /     /        /ClAsSiC SHQ
+         /______/    /______/___________/_____/     /________/
+  lOTs oF      /____/                        /     /      2ooo AD (PC) WHQ
+ /X uTiLS!          ·3 uSR nODES·aMiGa&pC!· /     /
+    ___/\ _________/\ _________/\ ___   ___/     / sTAFF : pROF dO riGHT,
+    \__  \ ________  \_________  \  /   \__     / aQUARiUS, riZE, rEMiX,
+·    /    _____/ /     __    /     /_____/     /_____ mASTERmAN, nEMESiS  ·
+:   /      /    /      /    /     /     /     /     /                     :
+|  /      /    /      /    /     /     /     /     /   eNJOY tHE sPEED!   |
++-/______/----/______/    /___________/___________/-----------------------+
+|                   /____/                                                |
+| node#1: +46-90-120369   node#2: +46-90-178169   node#3: +46-90-142969   |
+|      (14.4k DS)              (16.8k DS)              (14.4k HST)        |
++-------------------------------------------------------------------------+
+@endnode
+
+@node OverLoad "AquaWho v2.0 Documentation"
+                             .
+                             :
+                             |__       ___                   __
+        _____________________|  \_____/   \_________________/  \
+        \________     __     |     __      ________________     \_
+   .______/     U     \/     |     \/      __)____/      |/   ___/_____.
+   |:::::/ _ _         \     :      \_     |/     \      |       \:::::|
+   |:::  \___/_________/____   ______/_______      \_____A  _ _   \__::|
+   |:       / |            \___/       __   \______/      \/ _______/ :|
+   |  _____/  |   ____________________/  \________________/    \____  .|
+   |. \__     |___\__________      ________      _________       __/  :|
+   |:.  /     |    ___/     U      \/     |\     \/      |\      \   .:|
+   |::s/      :     \               \     _/      \_      /       \s.::|
+   |::c\_________    \______________/     A________/_________     /c:::|
+   °-----------\_____/-------\___________/------------------\____/-----°
+   ::::::                                                         ::::::
+   |::               »»»  O U T L A W S   S H Q  «««                 ::|
+   |:                                                                 :|
+   |SYSOPS: VEGAS/OTL, BiSCROK/OTL, PURE PAiN/DCS, CRUGER/SR, NATAS/HZ |
+   |:                 SUPPORTING: AMiGA & CONSOLE!                    :|
+   |::     CALL AND MAKE SOME TRANSFERS NOW AT: +46-8-540-63666      ::|
+   |::: CALL TO GET THE LATEST OUTLAWS RELEASES FOR FREEDOWNLOAD!   :::|
+   |:::::::.             .:::NO NUP NEEDED!:::.                .:::::::|
+   `-------------------------------------------------------------------'
+@endnode
+
+@node SnakesDen "AquaWho v2.0 Documentation"
+
+<----------------------------OUTLAWS--W-H-Q----------------------------->
+   ___________  ______    _______ _____  ______ _________   ___________
+   \     ____/__\  __ \  _\  ___ \     |/     /_\  ___   \_'\     ____/_
+   _\  ___     \_\/ /  \/  \/  /  \    /    _/   \/  /____/ _\  ___     \_
+  /  \/  /      /  /    \_   _     \_ _      \_    _____)__/  \/  /      /
+ /             /  /      /   /      /  \      /    \      /             /
+/_____________/__/______/___/______/____\    /___________/_____________/
+<----------------------------------------\__/SyK!------------------------>
+       Sysop`s: Snake & Nazgul          _________  _________   ______
+   cosys`s: Rofoe/LGC & SIGMA 909/OTL  _\  ___   \_\  ___   \__\  __ \
+   _   __  __ ___ ____ _____ ________ /  \/  /    \_\/  /____/  \/ /  \
+  //  / / / //  //   //    //       //      /      /  _____)__    /    \_
+ //  /_/ /_//__//___//____//_______//      /      /   \      /   /      /
+                                   /_____________/__________/___/______/
+
+<---------------wOrKiN` oN: A 4ooo/4o-1omb-54ombHD-2GigDat--------------->
+
+<--------DiAL:   + 1 - 5 1 3 - 6 8 3 - 2 3 3 0  -  3 NoDeZ RiNGdOwN!----->
+
+<----------------MoDeM`s: 21.6k & 16.8k DST`s + 14.4k HST---------------->
+@endnode
+
+[EOF]

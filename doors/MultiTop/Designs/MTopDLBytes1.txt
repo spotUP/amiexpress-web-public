@@ -1,0 +1,23 @@
+[4;33m                                                                             [0m
+[4;33;44mMultiTop v2.1                              Design Created (c)1994 Bobo/Mystic[0m
+
+[35mNo# Username (Handle)    Leeched Bytes No# Username (Handle)    Leeched Bytes[0m
+[34m===-===================-==============-===-===================-==============[0m
+[33m 1.[0m SMITH !              3.617.209.638 [33m16.[0m The Gravedigger        489.165.505
+[33m 2.[0m ZANY                 2.454.473.515 [33m17.[0m EXPECTED               482.628.127
+[33m 3.[0m PiLGRiM              1.306.336.464 [33m18.[0m Coq Rouge              464.824.136
+[33m 4.[0m blackwiz             1.195.273.136 [33m19.[0m LOOBY                  450.668.881
+[33m 5.[0m Korpen                 902.538.153 [33m20.[0m Stranger               400.781.687
+[33m 6.[0m Bad Karma              830.384.830 [33m21.[0m Master Key             383.751.416
+[33m 7.[0m SHAN                   819.637.344 [33m22.[0m GRENdEL                356.016.380
+[33m 8.[0m SCREWBALL              812.065.242 [33m23.[0m Beejay                 351.431.679
+[33m 9.[0m [ TRAiDOR! ]           799.032.642 [33m24.[0m moocher                330.938.185
+[33m10.[0m Trava                  757.542.362 [33m25.[0m SNAKE                  330.647.292
+[33m11.[0m Rasta Man              756.645.770 [33m26.[0m ICON                   322.265.297
+[33m12.[0m bon                    650.742.085 [33m27.[0m BoOmErAnG              320.763.086
+[33m13.[0m X-Citing               557.087.187 [33m28.[0m WiCKED DRiFT           319.341.951
+[33m14.[0m SNIPER                 544.350.598 [33m29.[0m MiSERY                 312.225.590
+[33m15.[0m VAFFEL KILLER          508.046.093 [33m30.[0m iQUE                   303.179.174
+[34m===-===================-==============-===-===================-==============[0m
+[32mUploaded Bytes[33m: [0m28.875.703.393 [32mDownloaded Bytes[33m: [0m40.526.999.025 [32mCalls[33m: [0m12.076
+[32mUploaded Files[33m: [0m        47.601 [32mDownloaded Files[33m: [0m        70.952 [32mUsers[33m: [0m   352

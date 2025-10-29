@@ -1,0 +1,354 @@
+@database FileID V2.0 unregistered Version by ByteAndi/tRSi
+
+@Remark $VER: English Guide for FileID V2.00 Unregistered (01-14-95)
+@author SieGeL/tRSi
+
+@INDEX Main
+
+@node Main "FileID V2.00 Unregistered Version"
+@toc Main
+
+@{b}         __________   ________     __________ ______                     
+      ___\\__      /___\\__     \\ ___\\__      //_____/   @{ub}   ByteAndi/tRSi@{b}
+____ /     /_____//     /     //     /_____/______ __________________________
+     \\_    \\_    /     /     /_\\____     \\ /     /                      
+ sYz  /     /   /   __/   __//     /     //     /    @{ub}(/X-iNNOVATiON) 1995@{b}
+____ /     /__ /    \\     \\ /    _/     //     /_____________________________
+    /_____/   /_____/_____//___________//_____/    
+@{ub}                                                  iS pROUD tO pRESENT :
+
+                         FileID V2.00 Unregistered
+
+                         CONTENTS OF DOCUMENTATION
+
+                       @{"New Features of FileID V2.00" LINK FEATURES}
+                       @{"Installation a. Requirements" LINK INSTALLATION}
+                       @{"         All ToolTypes      " LINK TOOLTYPES}
+                       @{"How to register FileID V2.00" LINK REGISTER}
+                       @{"   The famous Greetings :)  " LINK GREETS}
+
+         Another High Quality Production comin' from (tRSi/X-iNNOVATiON)
+
+@endnode
+
+@node FEATURES "Overview of all new Features included in FileID V2.00"
+
+@{u}Short Overview of all new Features@{uu}
+
+- Users are able to choose, if FileID should 'drop' the user after he has
+  completed his upload, so he don't have to wait before all files are 
+  checked.
+
+- FileID V2.00 is able to stay resident in memory (only in the Registered 
+  Version!)
+
+- The Size of the Descriptions is now selectable via @{"ToolTypes" LINK TOOLTYPES}
+
+- FileID now uses a Brainfile which allows to remember some strange Descr.
+  containing lame adverts or other shit. With this option, FileID is able
+  to cut such shit out of the Descriptions.
+
+- As second feature, FileID is able to cut ANSI- and CTRL-Codes out of the
+  description and replace them with Spaces, so your File-Listing won't be
+  destroyed with such nasty chars.
+
+- FileID now uses the FileID.library V2++ written by Bloodrock/SDC to 
+  determine the Filetyp, and therefor it's now impossible to confuse FileID
+  with Files which have not the right extension (i.e. DMS-Archive with .LHA)
+
+- Is able to manage two different Sent-By Lines, maybe different ones for 
+  each conference, if the desired ToolType is set.
+
+- New packers could be added simply by specifying the new ToolTypes for
+  the new packer.
+
+- From now on, FileID is able to check the FileName for a Group-Synonym,
+  i.e. the Filename is 'TRSI_SD1.LHA' or 'TRSI-SD1.LHA', and no File_ID.DIZ
+  is included in the archive, FileID looks in a special Directory for the
+  TRSI-Logos and if found, shows them to the user to allow him to choose
+  a group-logo for the uploaded file.
+  
+- FileID V2.00 is able to switch off his Outputs, so you got a faster 
+  checking.
+
+- The Autosent Program is now integrated in FileID, so you have only one
+  Program for both functions.
+
+...if you want to install it now (highly recommended ! :), take a look to
+the chapter @{"Installation" LINK INSTALLATION} before using FileID !
+@endnode
+
+@node INSTALLATION "Installation & Requirements needed for FileID"
+
+@{u}Requirements@{uu}
+
+- A500-A4000T with Kickstart V2.++ and a full installed Amiex V3/4++
+
+@{u}NOTE:@{uu} If you are upgrading from a previous version of FileID V2.00, please
+      make sure that you delete everything created by the old FileID, 
+      including the Sent.Dats !!!! If you don't do this, you may become
+      Problems using FileID!!!
+
+@{u}The Installation of FileID V2.00 to your BBS@{uu}
+
+@{b}1.@{ub} Copy the hole FileID/ drawer to your DOORS: drawer. This drawer also
+   include the Logos drawer for the File-Description-Grouplogos. Make sure
+   that you copy FileID only in this Drawer, otherwise FileID V2.00 won't
+   work !!!!!
+
+@{b}2.@{ub} Copy the Icons Stupid.info, Sent.info and U.info to your BBSCMD-drawer.
+
+The icons have the following functions:
+
+@{u}Stupid.info@{uu}: This is the 'Brain-File' of FileID. Enter Stupid in the Amiex,
+             and define the Lines FileID should strip out of descriptions,
+             i.e.: you define as Line : Uploaded
+             and FileID founds : Uploaded by Godfather of Soul, than this
+             Line will be stripped out of the Description.
+
+@{u}Sent.info@{uu}  : With this command the users could define their own Sentby-Lines.
+             Two different methods of using the Sentby-Line are included and
+             switchable via ToolTypes.
+             After entering your private sentbyline, FileID gives you the
+             ability to center your Sentby-Line.
+
+@{u}U.info@{uu}     : This Command works similar to the old method of starting FileID
+             before Uploading. In previous Versions, you have to start
+             FileID with a MCI-Command in your UPLOADMSG.TXT to ask the user
+             if he wants to use FileID for the descriptions. Now, if a user
+             enters U, he will be asked if he wants to use FileID. No need
+             of MCI-Commands anymore. Of course you don't have to use this
+             option, it's just another Feature...:)
+
+@{b}3.@{ub} Now copy the Icon Examine.info to your SYSCMD-Drawer. If you already have
+   an Examine-Tool installed, simply count them up in logical order, meaning
+   Examine.info (Dupecheck), Examine1.info (FileID) etc.
+
+   @{u}NOTE:@{uu} This Function is only available from Amiex V4.++ !!!!
+
+   If you using an older Version of amiex which don't allow to have more 
+   than one Examine.Info, kick it out and use FileID instead!
+
+That's all for installation....for an complete overview of all ToolType-
+Informations take a look to the Chapter @{"ToolTypes" LINK TOOLTYPES}.
+@endnode
+
+@node TOOLTYPES "All ToolType-Definitions for FileID V2.00"
+
+@{u}All Tooltypes used by FileID V2.00@{uu}
+
+NODE_SENT             - With this Tooltype you define a Sentby-Line which
+                        includes the Nodenummer and the Time the file was 
+                        uploaded. Between the Nodenr and the Time the User
+                        could insert his own handle. The Sentby-Line has the
+                        following format:
+
+                           [NODE 11] xxxxxxxxxxxxxxxxxxxxxx [20:21:23]
+
+                        This Sentby-Line is colored until you set the Tool-
+                        type NO_ANSI.
+
+AUTOSENT              - This is the standard Sentby-Line. Here you could all
+                        44 chars for your private Sentby. If a user has no
+                        defined Sentby-Line, a default Line will be used, 
+                        which is also colored. The Color could be disabled
+                        by setting the ToolType NO_ANSI.
+
+SENT_PER_CONF         - If this ToolType is set, all users could have 
+                        different Sentby-Lines for each conference.
+
+DEFAULT_SENT=<string> - Here you could define an alternate Default-Sentby-
+                        Line which will used by Users, which hasn't define
+                        their private Sentbyline. Make sure that you only
+                        enter max. 14 Chars for this Tooltype, all chars
+                        over 14 will be cutted ! 
+
+NO_ANSI               - Set this ToolType if you want no Colors used.
+
+NO_OUTPUT             - This Option disables the normal Output of FileID.
+                        If set, the user only see that FileID is searching
+                        for an description.
+
+SHOW_LOGOS            - When set, this Option let FileID first check out the
+                        Filename for a known Prefix, and if found, displays
+                        the related Group-Logo(s), i.e. if the filename is
+                        TRSI-BK.LHA, FileID search for TRSI -Logos in
+                        DOORS:FILEID/LOGOS/ ...
+
+DESCRIPTION_ONLY      - If a user chooses Logoff after Upload, and the ul'ed
+                        Files have no FileDescriptions, this Files will be
+                        normally moved to FileListing with a Filedescription
+                        called: UPLOAD WITHOUT FILEID
+
+                        But if you want to have only files online, which
+                        have a FileDescription, set this ToolType and if a
+                        file without Filedescription will be uploaded, this
+                        File will be moved to the Partupload-Directory and
+                        displayed to the user at his next Login !
+
+DEF_TAGLINE=<string>  - if you are bothered of my poor english :), here you
+                        could enter a new Top text, which will be displayed
+                        before showing the File-Description..if you don't
+                        specify this ToolType, the default String will be 
+                        displayed (Don't write your Tagline here....)
+
+TIME_TO_ASK_ID=<x>    - This Tooltype specifies the Time FileID will wait
+                        before automatically using the found description.
+                        This value is in seconds. If you don't specify this
+                        option, FileID won't ask the user and use the 
+                        description in every case.
+                        NOTE: This Tooltype overrides the NO_OUTPUT Option,
+                        meaning if you have this Tooltype set, FileID WILL
+                        display his full output!!! 
+
+TIME_TO_ASK_SENT=<x>  - This Tooltype specifies the Time FileID will wait
+                        before automatically using the SentBy-Line. This
+                        value is in seconds. If you don't specify this 
+                        option, FileID don't ask for using the Sentby-Line.
+                        If you specify the ToolType 'NODESENT', this option
+                        takes no effect !
+                        If you have NO_OUTPUT specified and this Tooltype
+                        set, too, the NO_OUTPUT-Option will be disabled !
+
+
+TXT_TYPE=TXT/DOC...   - Here you could define different Textfile-Extensions.
+                        In the actual Version, FileID.Library is unable to
+                        identify different Text-formats like ANSI,ASCII etc.
+                        To let FileID work correct with those files, specify
+                        here the extensions of the Textfiles (.ans, .nfo),
+                        and FileID takes the settings from the ToolTypes 
+                        after identifying the File as Text-File.
+
+
+     @{"For the packer-related Tooltypes press Play on tape please..:)" LINK TOOLTYPES2}
+@endnode
+
+@node TOOLTYPES2 "All packer-related ToolTypes"
+
+@{u}ToolTypes for the Packer-Support@{uu}
+
+To support the different Packer-/fileformats, there exists some Tooltypes,
+which define how FileID should handle those files...the tooltypes have the
+following Format:
+
+LHA_ADD=C:LHA a %P %WFILE_ID.DIZ  <-> For adding an File_ID.DIZ
+
+LHA_EX=C:LHA e %P FILE_ID.DIZ %W  <-> For extracting FILE_ID.DIZ
+
+The '%' commands have the following Meaning:
+
+%F = The FileName
+%P = Path for the Playpen and Filename
+%W = Path for the Workdir
+
+For every (currently) supported Packer, FileID looks for the following
+ToolTypes:
+
+                  @{u}PACKER@{uu}                     @{u}TOOLTYPES@{uu}
+
+                   DMS                    DMS_ADD / DMS_EX
+                   ARJ                    ARJ_ADD / ARJ_EX
+                 UNKNOWNEXE               EXE_ADD / EXE_EX
+                  EXELINK                 EXE_ADD / EXE_EX
+                   ZOO                    ZOO_ADD / ZOO_EX
+                   ZIP                    ZIP_ADD / ZIP_EX
+                   ZOOM                  ZOOM_ADD / ZOOM_EX
+                   LHWARP              LHWARP_ADD / LHWARP_EX
+                 GIFPICTURE               GIF_ADD / GIF_EX
+                   LHASFX                 LHA_ADD / LHA_EX
+                   LHA                    LHA_ADD / LHA_EX
+                   WARP                  WARP_ADD / WARP_EX
+                   ARC                    ARC_ADD / ARC_EX
+                  SHRINK                  SHR_ADD / SHR_EX
+                   TXT                    TXT_ADD / TXT_EX
+
+This Packertypes will be recognized automatically by FileID. If maybe in the
+Future comes new Packers which couldn't be handled by FileID, you always 
+have the possibility to add those filetypes by using the Tooltypes. The only
+changing is that you have to add the word 'EXTERN_' before the File-
+extension, i.e.
+
+The filename is "FIleID.ojx", than you have to enter the following tooltypes
+to allow FileID to handle this filetype correct:
+
+                  EXTERN_OJX_EX=C:OJX e %P FILE_ID.DIZ %W
+                 EXTERN_OJX_ADD=C:OJX a %P FILE_ID.DIZ %W
+
+Hope you understand how to install new packers....:)
+@endnode
+
+@node REGISTER "HOW TO REGISTER"
+       ____                                                                  
+    ___\\  /______________________________________________________________    
+   /   \\\//                                                              \\   
+  /     \\/ -[ THe BeST eQUiPPeD PuBLIC DoMAIN BoaRD IN BeRLIN ]-          \\  
+ /   -[ WiTH 4 GReaT U.S.ROBOTICS V.FAST CLASS MoDeMS WiTH FLaSH-RoMS ]-  \\ 
+/                                                                           \\
+\\                        -- -[ SYNDIC/\\TE WHQ ]- --                         /
+ \\   _____  _____    _____   _____  __      ___ __  _____   ___ _____      / 
+  \\ /  _  \\/  _  \\  /  _  \\ /  _  \\/  |___ /   |  \\/   __)_/ __|   __)_   /  
+   /   |   \\  _   \\/   |  //   _   \\  |   \\\\_____  \\___    \\¯  |___    \\ /   
+  /   _____/  |    \\_ __   \\_  |    \\ |    \\   |    \\|      \\  | |      \\    
+  \\____| \\____|    /___|    /__|    /___   / _______/___    /__|____    /    
+      \\       l___/    l___/   l___/  \\___/___/  [ViC!]\\___/       \\___/     
+       \\                                                             /       
+        \\SYSTeM CHieFS: SPY/TRSi,ARTHuR DeNT,PHaNToM,Cat,JTC,big-rat/        
+         \\                                                         /         
+          \\   1: +49(0) 30 721 6071 USR DuAL STaNDaRD V.34 28.8   /          
+           \\  2: +49(0) 30 721 6072 USR DuAL STaNDaRD V.34 28.8  /           
+            \\ 3: +49(0) 30 721 6073 USR DuAL STaNDaRD V.34 28.8 /            
+             \\4: +49(0) 30 722 6065 USR DuAL STaNDaRD V.34 28.8/             
+              \\                                   /\\          /              
+               \\_________________________________//\\\\________/               
+                                                 /__\\
+
+                           SUPPORTS ONLY PD-/SHAREWARE !
+
+                          @{"tRSi (/X-iNNOVATiON) MEMBAS" LINK TRSI}
+@endnode
+
+@node GREETS "LAST BUT NOT LEAST : DA GREETINGS......"
+
+@{u}Da famous Greetings@{uu}
+
+SieGeL/tRSi    - 101 :) (best Member in Town)
+~~~~~~~~~~~
+Spy/tRSi       - Haste tolle U-Bahnfahrt gehabt ???
+
+Cindy          - Wie war der Zug ?? ;)
+
+DX/tRSi        - Willkommen im Club...
+
+ByteAndi/tRSi  - Man ... deine Tools sind einfach geil !
+
+dEATH aNGEL    - SieGeL sacht ich muss...:)
+
+                and of coz to my Beta-Testers
+
+           Generation, Zoldan and Speedlocke...always remember :
+
+
+             ...testing is a honour, making Logos a must ! 
+@endnode
+
+
+@node TRSI "ALL MEMBERS FROM (TRSI /X-INNOVATION)"
+
+                   ._________________  ______
+                   l___       /      \\/    _/_______.:  
+                     /       /   /  _/\\___      /    :
+                    /_______/-rS!\\_____\\  _____/     |'95  
+                          /_______|     \\/   /_______|
+                       (/X-iNNOVATiON) Members are:
+                    ----------------------------------
+                       Dr.Dre!/tRSi (/X-iNNOVATiON)
+                       ByteAndi/tRSi (/X-iNNOVATiON)
+                        SieGeL/tRSi (/X-iNNOVATiON)
+                         Spy/tRSi (/X-iNNOVATiON)
+                       Delta-X/tRSi (/X-iNNOVATiON)
+                    ----------------------------------
+ 
+                           UND IMMER DARAN DENKEN:
+
+    NUR WO (/X-INNOVATION) DRAUF STEHT, IST AUCH (/X-INNOVATION) DRINNE !
+@endnode

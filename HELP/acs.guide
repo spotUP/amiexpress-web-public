@@ -1,0 +1,360 @@
+@database "ae"
+
+
+Copyright (c) 1992 Light Speed Technologies, Radford, VA
+All Rights Reserved
+
+@master "acs.guide"
+
+@Remark $VER: acs.guide 1.00 (18.12.92)
+@Remark AmigaGuide database for the /X ACS ToolTypes
+
+@Node Main "acs.guide"
+@{" ACS.ACCOUNT_EDITING        " Link "ACS.ACCOUNT_EDITING"}
+@{" ACS.COMMENT_TO_SYSOP       " Link "ACS.COMMENT_TO_SYSOP"}
+@{" ACS.DOWNLOAD               " Link "ACS.DOWNLOAD"}
+@{" ACS.ENTER_MESSAGE          " Link "ACS.ENTER_MESSAGE"}
+@{" ACS.FILE_LISTINGS          " Link "ACS.FILE_LISTINGS"}
+@{" ACS.JOIN_CONFERENCE        " Link "ACS.JOIN_CONFERENCE"}
+@{" ACS.NEW_FILES_SINCE        " Link "ACS.NEW_FILES_SINCE"}
+@{" ACS.PAGE_SYSOP             " Link "ACS.PAGE_SYSOP"}
+@{" ACS.READ_MESSAGE           " Link "ACS.READ_MESSAGE"}
+@{" ACS.DISPLAY_USER_STATS     " Link "ACS.DISPLAY_USER_STATS"}
+@{" ACS.UPLOAD                 " Link "ACS.UPLOAD"}
+@{" ACS.VIEW_A_FILE            " Link "ACS.VIEW_A_FILE"}
+@{" ACS.EDIT_USER_INFO         " Link "ACS.EDIT_USER_INFO"}
+@{" ACS.REMOTE_SHELL           " Link "ACS.REMOTE_SHELL"}
+@{" ACS.ZIPPY_TEXT_SEARCH      " Link "ACS.ZIPPY_TEXT_SEARCH"}
+@{" ACS.OVERIDE_CHAT           " Link "ACS.OVERIDE_CHAT"}
+@{" ACS.EDIT_USER_NAME         " Link "ACS.EDIT_USER_NAME"}
+@{" ACS.EDIT_USER_LOCATION     " Link "ACS.EDIT_USER_LOCATION"}
+@{" ACS.EDIT_PHONE_NUMBER      " Link "ACS.EDIT_PHONE_NUMBER"}
+@{" ACS.EDIT_PASSWORD          " Link "ACS.EDIT_PASSWORD"}
+@{" ACS.SYSOP_READ             " Link "ACS.SYSOP_READ"}
+@{" ACS.EALL_MESSAGES          " Link "ACS.EALL_MESSAGES"}
+@{" ACS.DUPE_FILECHECK         " Link "ACS.DUPE_FILECHECK"}
+@{" ACS.READ_BULLETINS         " Link "ACS.READ_BULLETINS"}
+@{" ACS.SYSOP_DOWNLOAD         " Link "ACS.SYSOP_DOWNLOAD"}
+@{" ACS.SYSOP_VIEW             " Link "ACS.SYSOP_VIEW"}
+@{" ACS.SYSOP_READ             " Link "ACS.SYSOP_READ"}
+@{" ACS.FREE_RESUMING          " Link "ACS.FREE_RESUMING"}
+@{" ACS.MESSAGE_EDIT           " Link "ACS.MESSAGE_EDIT"}
+@{" ACS.LIST_NODES             " Link "ACS.LIST_NODES"}
+@{" ACS.DELETE_MESSAGE         " Link "ACS.DELETE_MESSAGE"}
+@{" ACS.ATTACH_FILES           " Link "ACS.ATTACH_FILES"}
+@{" ACS.ZOOM_MAIL              " Link "ACS.ZOOM_MAIL"}
+@{" ACS.MCI_MESSAGE            " Link "ACS.MCI_MESSAGE"}
+@{" ACS.EDIT_DIRS              " Link "ACS.EDIT_DIRS"}
+@{" ACS.BREAK_CHAT             " Link "ACS.BREAK_CHAT"}
+@{" ACS.SYSOP_COMMANDS         " Link "ACS.SYSOP_COMMANDS"}
+@{" ACS.WHO_IS_ONLINE          " Link "ACS.WHO_IS_ONLINE"}
+@{" ACS.QUIET_NODE             " Link "ACS.QUIET_NODE"}
+@{" ACS.EDIT_FILES             " Link "ACS.EDIT_FILES"}
+@{" ACS.OVERRIDE_TIMES         " Link "ACS.OVERRIDE_TIMES"}
+@{" ACS.RELOGON                " Link "ACS.RELOGON"}
+@{" ACS.ULSTATS                " Link "ACS.ULSTATS"}
+@{" ACS.XPR_RECEIVE            " Link "ACS.XPR_RECEIVE"}
+@{" ACS.XPR_SEND               " Link "ACS.XPR_SEND"}
+@{" ACS.CONFERENCE_ACCOUNTING  " Link "ACS.CONFERENCE_ACCOUNTING"}
+@{" ACS.SYSOP_COMMANDS         " Link "ACS.SYSOP_COMMANDS"}
+@{" ACS.PRI_MSGFILES           " Link "ACS.PRI_MSGFILES"}
+@{" ACS.PUB_MSGFILES           " Link "ACS.PUB_MSGFILES"}
+@{" ACS.MAX_PAGES              " Link "ACS.MAX_PAGES"}
+@EndNode
+
+@Node "ACS.ACCOUNT_EDITING"
+ACS.ACCOUNT_EDITING
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will grant account editing to a user.
+@EndNode
+
+@Node "ACS.COMMENT_TO_SYSOP"
+ACS.COMMENT_TO_SYSOP
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to leave a comment directly to the sysop
+   via the msgbase editor.
+@EndNode
+
+@Node "ACS.DOWNLOAD"
+ACS.DOWNLOAD
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to download files from your BBS.
+@EndNode
+
+@Node "ACS.ENTER_MESSAGE"
+ACS.ENTER_MESSAGE
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to enter a message via the message base
+   editor.
+@EndNode
+
+@Node "ACS.FILE_LISTINGS"
+ACS.FILE_LISTINGS
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to view file catalogs that are in a 
+   conference.
+@EndNode
+
+@Node "ACS.JOIN_CONFERENCE"
+ACS.JOIN_CONFERENCE
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to join different conferences on the BBS.
+@EndNode
+
+@Node "ACS.NEW_FILES_SINCE"
+ACS.NEW_FILES_SINCE
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to view a list of files that were 
+   uploaded to the BBS since the last time the user was on the system.
+@EndNode
+
+@Node "ACS.PAGE_SYSOP"
+ACS.PAGE_SYSOP
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows the user to request a chat with the sysop.
+@EndNode
+
+@Node "ACS.READ_MESSAGE"
+ACS.READ_MESSAGE
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows the user to Read Messages.
+@EndNode
+
+@Node "ACS.DISPLAY_USER_STATS"
+ACS.DISPLAY_USER_STATS
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows a user to view his/her statistics via the 'S'
+   menu prompt command.
+@EndNode
+
+@Node "ACS.UPLOAD"
+ACS.UPLOAD
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows a user to upload files to your BBS.
+@EndNode
+
+@Node "ACS.VIEW_A_FILE"
+ACS.VIEW_A_FILE
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to view ASCII files that are available
+   for downloading on the system.
+@EndNode
+
+@Node "ACS.EDIT_USER_INFO"
+ACS.EDIT_USER_INFO
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will give the user access to the User Account Editing
+   menu. This menu allows the user to change specific indicitive data
+   concerning his/her account.
+@EndNode
+
+@Node "ACS.REMOTE_SHELL"
+ACS.REMOTE_SHELL
+
+         -Version 3.0
+         -OPTIONAL|RESERVED
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows a user to enter a AmigaDos SHELL. 
+
+   This tooltype currently is not recognized by /X, but future releases
+   may use it.
+@EndNode
+
+@Node "ACS.ZIPPY_TEXT_SEARCH"
+ACS.ZIPPY_TEXT_SEARCH
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to use the search features of /X to locate
+   files available for downloading based on some keywords that the user 
+   supplies.
+@EndNode
+
+@Node "ACS.OVERIDE_CHAT"
+ACS.OVERIDE_CHAT
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows a user page the sysop regardless of the state of the
+   sysop page flag.
+@EndNode
+
+@Node "ACS.EDIT_USER_NAME"
+ACS.EDIT_USER_NAME
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows the user to changes his/her handle on the BBS via
+   the User Account Editor.
+@EndNode
+
+@Node "ACS.EDIT_USER_LOCATION"
+ACS.EDIT_USER_LOCATION
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows the user to change his/her LOCATION on the BBS via
+   the User Account Editor.
+@EndNode
+
+@Node "ACS.EDIT_PHONE_NUMBER"
+ACS.EDIT_PHONE_NUMBER
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows the user to change his/her PHONENUMBER on the BBS
+   via the User Account Editor.
+@EndNode
+
+@Node "ACS.EDIT_PASSWORD"
+ACS.EDIT_PASSWORD
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to change his/her PASSWORD on the BBS
+   via the User Account Editor.
+@EndNode
+
+@Node "ACS.OVERIDE_TIMES"
+ACS.OVERIDE_TIMES
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows a user to bypass any time restrictions placed on the
+   connect rate.
+@EndNode
+
+@Node "ACS.SYSOP_READ"
+ACS.SYSOP_READ
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype will allow a user to read all mail on the system. This
+   includes mail that normally would not have been addressed to him/her.
+@EndNode
+
+@Node "ACS.EALL_MESSAGES"
+ACS.EALL_MESSAGES
+
+         -Version 3.0
+         -OPTIONAL
+         -ToolType for { Access.info or ACS.info icons }
+
+Description
+
+   This tooltype allows a user to enter messages that will alert all
+   USERS when they first logon during the message base mail scan.
+@EndNode

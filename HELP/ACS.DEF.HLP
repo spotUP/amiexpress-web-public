@@ -1,0 +1,285 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+ABOUT: This ICON specifies additional access permission or restrictions.
+       to be placed on an account based on user name or access level.
+
+       This ICON should be in the ACCESS directory and can be named as
+       follows:
+
+       ACS.<level> or <UserName>
+
+       ie:
+
+       ACS.010, ACS.200, ACS.255, BYTEMASTER, THIEF
+
+
+ACS.ACCOUNT_EDITING    
+ACS.COMMENT_TO_SYSOP   
+ACS.DOWNLOAD           
+ACS.ENTER_MESSAGE      
+ACS.FILE_LISTINGS      
+ACS.JOIN_CONFERENCE    
+ACS.NEW_FILES_SINCE    
+ACS.PAGE_SYSOP         
+ACS.READ_MESSAGE       
+ACS.DISPLAY_USER_STATS 
+ACS.UPLOAD             
+ACS.VIEW_A_FILE        
+ACS.EDIT_USER_INFO     
+ACS.REMOTE_SHELL       
+ACS.ZIPPY_TEXT_SEARCH  
+ACS.OVERIDE_CHAT       
+ACS.EDIT_USER_NAME     
+ACS.EDIT_USER_LOCATION 
+ACS.EDIT_PHONE_NUMBER  
+ACS.EDIT_PASSWORD      
+ACS.SYSOP_READ         
+ACS.EALL_MESSAGES      
+ACS.DUPE_FILECHECK     
+ACS.READ_BULLETINS     
+ACS.SYSOP_DOWNLOAD     
+ACS.SYSOP_VIEW         
+ACS.SYSOP_READ         
+ACS.FREE_RESUMING      
+ACS.MESSAGE_EDIT       
+ACS.LIST_NODES         
+ACS.DELETE_MESSAGE     
+ACS.ATTACH_FILES       
+ACS.ZOOM_MAIL          
+ACS.MCI_MESSAGE        
+ACS.EDIT_DIRS          
+ACS.BREAK_CHAT         
+ACS.SYSOP_COMMANDS     
+ACS.WHO_IS_ONLINE      
+ACS.QUIET_NODE         
+ACS.EDIT_FILES         
+ACS.SYSOP_COMMANDS     
+
+ACS.OVERIDE_DEFAULTS
+
+         -Version 3.0
+         -OPTIONAL
+         -Overides access defined in the ACCESS Icon tooltypes.
+
+     ACS.OVERIDE_DEFAULTS
+
+         %References: ACCESS.HLP
+
+
+ACS.ACCOUNT_EDITING
+
+         -Version 3.0
+         -OPTIONAL
+         -Gives Access to Account Editing
+
+     ACS.ACCOUNT_EDITING
+
+ACS.COMMENT_TO_SYSOP
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to leave a comment to the sysop
+
+     ACS.COMMENT_TO_SYSOP
+
+ACS.DOWNLOAD
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to download files.
+
+     ACS.DOWNLOAD
+
+ACS.ENTER_MESSAGE
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to enter a message.
+
+     ACS.ENTER_MESSAGE
+
+ACS.FILE_LISTINGS
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to view catalog of available files.
+
+     ACS.FILE_LISTINGS
+
+ACS.JOIN_CONFERENCE
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to Join a Conference.
+
+     ACS.JOIN_CONFERENCE
+
+ACS.NEW_FILES_SINCE
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to list recent catalog entries.
+
+ACS.PAGE_SYSOP
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to page the sysop.
+         -If the sysop page flag on express is turned off then the user will
+          be notified that you are not available.
+
+     ACS.PAGE_SYSOP
+
+
+ACS.READ_MESSAGE
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to read messages
+
+     ACS.READ_MESSAGE
+
+
+ACS.DISPLAY_USER_STATS
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to view his/her status on the system.
+
+     ACS.DISPLAY_USER_STATS
+
+
+ACS.UPLOAD
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to upload files.
+
+     ACS.UPLOAD
+
+
+ACS.VIEW_A_FILE
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to view downloadable text files.
+
+     ACS.VIEW_A_FILE
+
+
+ACS.EDIT_USER_INFO
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows a user to edit his/her account.
+
+     ACS.EDIT_USER_INFO
+
+
+ACS.REMOTE_SHELL
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to gain access to the Remote Shell.
+
+     ACS.REMOTE_SHELL
+
+         %References: NODE.HLP
+
+
+ACS.ZIPPY_TEXT_SEARCH
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to search the catalog for key items with the online
+          search features of /X.
+
+     ACS.ZIPPY_TEXT_SEARCH
+
+
+ACS.OVERIDE_CHAT
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to OverRide the /X chat flag and successfully page the
+          sysop.
+
+     ACS.OVERIDE_CHAT
+
+
+ACS.EDIT_USER_NAME
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to change his/her handle.
+
+     ACS.EDIT_USER_NAME
+
+         %References: ACS.EDIT_USER_INFO
+
+
+ACS.EDIT_USER_LOCATION
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to change his/her location
+
+     ACS.EDIT_USER_LOCATION
+
+         %References: ACS.EDIT_USER_INFO
+
+
+ACS.EDIT_PHONE_NUMBER
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to change his/her phone number
+
+     ACS.EDIT_PHONE_NUMBER
+
+         %References: ACS.EDIT_USER_INFO
+
+
+ACS.EDIT_PASSWORD
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to change his/her password.
+
+     ACS.EDIT_PASSWORD
+
+         %References: ACS.EDIT_USER_INFO
+
+
+ACS.OVERIDE_TIMES
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to bypass the time restrictions placed on a Node.
+
+     ACS.OVERIDE_TIMES
+
+         %References: TIMES.XXXX.DEF
+
+
+ACS.SYSOP_READ
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to read mail, regardless of whose it is ;)
+
+     ACS.SYSOP_READ
+
+
+ACS.EALL_MESSAGES
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows user to enter PRIVATE MAIL to ALL users of the current
+          conference at 1 time.
+
+     ACS.EALL_MESSAGES
+

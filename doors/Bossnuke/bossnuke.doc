@@ -1,0 +1,214 @@
+
+                              Boss-Nuke Docs 
+                         BoSS-NuKE v1.0 written by
+                                 Big Boss
+                                 
+Welcome to 'BossNuke' - the world's fastest nuker!  
+
+Features:
+ -Full CONFERENCE ACCOUNTING support for /X 3.x users!
+ -Finds uploaders in less than 2 seconds!
+ -Stackable command line options!
+ -Up to 20 filenames at once!
+ -'Speed' award and destroy modes for FAST hassle free operation!
+ -Create files to prevent them being uploaded!
+ -Configuration file to allow configurable set-up!
+ -Can be set up to RESTRICT files rather than DELETE them in config file.
+ -Password file can be set up for better security.
+ -Online detailed docs to help those 'slow-to-learn' cosysops ;-)
+ -Built for Speeeeed!
+ -Now Sigma Seven!'s Dupe File Checker code installed in the Ulog.x section!
+ 
+
+Installation:
+ 
+Installing this is somewhat simple.  Just copy the files to the paths suggested
+and all should go well.  
+The archive contains the following files:
+  BossNuke.x              
+  BossNuke.prefs
+  BossNuke.pw
+  Ulog.x      <----- /X 2.34 or higher /X needed to run this file.
+  BossNuke.doc
+Copy BossNuke.x to doors:nuke/ (or path to where you want nuker to go).
+Copy BossNuke.prefs to s:
+IF you want to have users enter a password BEFORE entering nuke door, copy
+  BossNuke.pw to s: - otherwise copy to doors:nuke/ for storage for future.
+Copy Ulog.x to doors:nuke/
+Copy BossNuke.doc to where ever you want!
+
+Make sure that you have the UDLOG options turned on in your AmiExpress 
+  configuration.  Without this it will not find downloaders.  May not find
+  uploaders either depending on if you have ulog.x installed or not!
+
+For AmiExpress 3.x:   2 icons are included in the archive.  One is nuke.info
+  and the other is FILECHECK.info.  Edit the nuke.info and set the correct
+  path to the BossNuke file.  Then copy this to 'doors:commands/bbscmd/'
+ 
+  The other icon is called FILECHECK.info.  This icon must be not be
+  renamed!  Move this to the 'bbs:commands/syscmd/' directory.  Edit the 
+  path to make sure it is to where you copied the ulog.x file to.
+
+For AmiExpress 2.x:  Edit the bbs:commands/bbs.cmd file and add to it:
+*nuke        XS200doors:nuke/BossNuke.x
+Next Edit bbs:commands/sys.cmd file and add to it:
+FILECHECK    XM001doors:nuke/ulog.x
+(name of the sys.cmd entry MUST be 'FILECHECK' or it will not be run at the
+ correct time!)
+
+Make sure you have the file 'paths' in each conference on your bbs that
+  contains the full download paths with no spaces after them a carriage
+  return after the last entry (standard set up of the paths file).
+
+Now it is time to edit the BossNuke.prefs file in the s: directory.
+  Included with the archive is a 'default' example of a prefs file.  Let's look
+  at this file:
+  
+Conference_Accounting=N
+File_Restriction=N
+Size=>LAME< 
+Size=>DUPE< 
+Size=>FAKE< 
+Size=RENAMED
+Size= >OLD< 
+Size=CORRUPT
+Size=OFFLINE
+Size=FOREIGN
+Size=>INTRO<
+Size=>MUSIC<
+Comment=2x Credits Given!
+Comment=3x Credits Given!
+Comment=User Deleted!
+Comment=Credits Taken!
+Comment=Comment5
+Comment=Comment6
+Comment=Comment7
+Comment=Comment8
+Comment=Comment9
+Comment=Comment10
+
+These must be in this same order. 
+Line 1: Conference_Accounting=N   
+	Conference_Accounting=Y
+ 	-Y turns on the conference accounting options.. to be used only with
+         amiexpress 3.0 or higher when the conference_accounting is turned
+    	 on inside the access icons.
+    	 
+Line 2: File_Restriction=N
+	File_Restriction=Y
+	-This turns on or off the File Deletion or File Restriction routine.
+	 If 'Y' is selected, then BossNuke will RESTRICT the nuked files from   	
+	 being downloaded, but will not delete them when the delete file
+	 option is selected in the nuke door.  If 'N' is selected, then the
+	 file will be deleted and replaced with a 40 byte file saying 
+	 'Nuked by BossNuke' or something like that..
+	 
+Line 3: Size=>LAME< 
+	This is the 7 character or less byte size comments to be used.
+Line 4-12 are same as line 3 and must be included!
+Line 13: First of 10 File Descriptions to be entered under the nuked files.
+         Only 54 Characters will be included.
+Lines 14-22 are rest of required file descriptions.
+Line 23: DupeCheck=Y
+	 DupeCheck=N
+         This turns on or off Sigma Seven!'s Dupefilechecker that checks for
+         duplicate files in the upload directory after each upload.  If a 
+         duplicate file is found then the upload is moved to the hold.
+         
+Once all this is done, the Installation is complete.  
+
+Note:  The Ulog.x file is optional but HIGHLY recommended!
+       This marks an upload each time it's sent up.  It will create a 
+       series of files with the format of 'ulog.[node#]' in each conference.
+       These files will NEVER exceed 3200 bytes each.  They will make the 
+       search for the uploaders become almost INSTANTANEOUS.  Without these,
+       'BossNuke' must search the UDLOGS which is not as fast.  However, even
+       using the UDLOG to search the uploader, it still is rather quick.
+       There will be one file per node per conference created.
+       
+       I have added Sigma Seven!'s Duplicate Filechecker routines to this
+       aswell!  You can turn it on or off in the BossNuke.prefs file as
+       shown above.  This will scan the file uploaded against all your dirx
+       files and if there exists a duplicate, then the upload is moved to 
+       the sysop's hold.  A great routine now that Bytemaster is not planning
+       to include this option in /X.  
+
+       
+PassWord File:
+ If you want a password to be required to enter the door you must copy the
+ file 'bossnuke.pw' to the s: directory.  The format of this file is like so:
+ Line1: Number of entries (users that will have passwords).
+ Line2: First entry  format: NAME,PASSWORD
+ If you have the file BOSSNUKE.PW in s: then no one not listed in this file
+ can enter BOSSNUKE.  So, if you do NOT want to enter pw's to use the door,
+ do NOT put this file in the s: directory!  You can use the example file
+ included in this archive to understand the exact format of this file.
+
+
+
+
+Operation:
+
+BossNuke has a thorough built in help screen.  Just type 'nuke -h' and you
+  will see the online docs.  They are pretty thorough but we shall explain
+  some of the features here aswell.
+
+Easiest way to use this is to type 'nuke' and to follow the instructions on
+  the screen.  It will allow you to enter up to 20 files at one time.
+ 
+Stackable Commands:
+  You can enter the filename(s) on the amiexpress command line aswell like:
+  'Nuke Filename'  or 'nuke filename1 filename2 filename3'
+  Doing this will bypass the prompt to enter files inside the door and 
+  immediately being the nuking process.
+
+Creating Files to prevent fakes uploaded:
+  Enter '-c' as your first filename.  'nuke -c' or type nuke, and when asked
+  for the first filename enter '-c'.  Then it will ask you the filenames to
+  create.  These files will be skipped when attempted to be uploaded.
+  
+Speed Destroy Mode:
+  Speed Mode is a great feature.  It allows you to nuke a series of files 
+  all automatically without any further interaction with the nuker.
+  Type 'nuke filename1 filename2 filename3 [times credits to take]' example:
+  'nuke dw-ship1.zip dw-ship2.zip 2' 
+  The above example will take 2x credits.  
+  Speed mode will do the following:
+  -Nuke files and delete them.
+  -Search uploader.
+  -Take credits stated on command line and save the user's account.
+  -Send Msg to user.
+  -Update File directory with BYTE comment #1.
+  -Go to next file.
+  Speed mode will NOT return credits to dlers or use an extended description.
+  
+Speed Award Mode:
+  This is identical to Speed Destroy Mode except it is award the uploader for
+  an excellent upload rather than nuke credits.  Speed Award Mode will do the 
+  same as destroy mode except it will not delete the file and it will not 
+  update the file directory.  Award mode is entered by specifying a negative
+  number for the [times credits].  Example:
+  'nuke filename1 filename2 -2' gives 2x additional credits to the user that
+  uploaded the file.
+  
+  Both speed modes can nuke up to 10 files in less than 1 minute including 
+  all msg's sent and all directories updated etc..  really handy if you are
+  in a hurry.
+  
+The rest of this should be pretty much self evident.  If you have any questions
+I can be reached on the AmiExpress support bbs or Mirage if you can manage an
+account there.  Remember to type 'nuke -h' for online help.  Good luck and
+suggestions are welcome to improve this utility!
+
+Big Boss
+
+PS:  Look to version 2.0 to be released soon with many more features
+     and ease options!
+
+***  -A very special THANX to Kidlat & /\kir/\ for their help and feedback!
+       Your input was invaluable!!!!
+     -Thanx also to RAZOR BLADE for the name 'BossNuke' ;-)
+     -Thanks to Sigma Seven! for his awesome Duplicate File Checker!
+
+
+

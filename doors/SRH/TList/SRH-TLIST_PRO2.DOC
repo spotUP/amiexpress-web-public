@@ -1,0 +1,182 @@
+         /\________________    /\___________       _________ ____
+      __/    _____________/   /     ___     \      \       //    \
+     /\___________       \   //    /     ___/      /      _ _    \\
+    /           _/        \ //    /_      \\____  /       //      \\
+iN7//                     //        \           \/       //         \/\
+   \________________ ____//__________\__ _______________//           \ \
+ .                  Y                   Y                \______________\
+                   Software Runners from Hell  /X dESIGN
+==========================================================================
+                           T-LiST - PRO V2.0 (XIM)
+                       by fLASHBACk ^ iNTRUdER of S.R.H
+                             Released 3/13/95
+==========================================================================
+                              C.O.N.T.E.N.T.S.
+
+                              1.  Purpose & Description
+                              2.  Functions of T-LIST
+                              3.  Installation
+                              4.  Tooltypes
+                              5.  Bullshit etc..
+==========================================================================
+                                  1.
+
+                 P.U.R.P.O.S.E.   &   D.E.S.C.R.I.P.T.I.O.N. 
+
+      The purpose of this tool is simple.   It is an online BBS lister.
+There have been a couple of similiar tools for /X for this purpose in the
+past but none to my knowledge supported many options besides viewing a
+specified country.  We thought this was nice but why not add some nice
+functions like online editing of the list so users could update the list
+themselves with thier own boards or other bbs's they may have knowledge of
+etc.  Of course this could be a drawback as well if a typical moron decided
+to add all his favorite local boards etc.. so of course this would be
+solved by a simple configurable access level needed to use the edit
+functions..  Of course we have thought of this as well as often as BBS's
+change status different groups/changed numbers, etc..  All these functions
+and more are included in > T-LiST PRo < by S.R.H /X Design.  Read on...
+============================================================================
+                                  2.
+                  F.U.N.C.T.I.O.N.S.  O.F.  T.-.L.I.S.T.
+
+  If you have not allready installed T-LIST please skip this for now and
+move down to section 3!!  :))    If you have read on..
+
+    Ok you have completed the simple install T-List Pro!  Now type TLIST
+and you will be presented with a nice looking ANSI of T-LIST :) and a menu
+with a list of countries you can select to view and a command line below
+the countries that looks a little like this line:
+
+Command (#,S,C,E,A,D,?)
+
+ The commands are as follows:
+
+ #:  Type a number that corresponds with the country you wish to view the
+bbs on and T-List Pro will show you a list of the country selected!  :)
+
+ S:  Search option.  T-List Pro will ask you for the string you wish to be
+searched for.  After you enter your string hit return and it will ask you
+if you would like it to search ALL countries.  Hit return or 'y' (default)
+and T-List Pro will start the search.  If you want a specific country to be
+searched type 'n' and T-List Pro will show you the country enu again and
+ask you which country numbers you wish to be searched.
+
+ C: Color On/Off
+
+ E: Edit list.  When this is entered T-List Pro will ask you to give it the
+string to search for that you wish to edit.  If it finds a matching text
+and the following command line: Edit (F,N,P,G,S,Q,?) [Continue]
+
+                                 F=Flag
+                                 N=Name
+                                 P=Phone
+                                 G=Group
+                                 S=Sysop
+                                 Q=Quit
+                                 ?=Expanded Help Line
+
+---------- F: FLAG
+    If the F function is selected from the edit menu as above it
+will come up with this prompt:  Edit Flag (C,E,B,O,?) [Continue]
+Just select the type of flag to assign to the specifed BBS.
+                              C: Clear Flag.
+                              E: Mark as a newly edited BBS
+                              B: Mark as a Busted BBS.
+                              O: Mark as an Offline BBS.
+
+      ---------- N: NAME
+          Edit the Name of the BBS.
+      ---------- P: PHONE
+          Edit the phone number of the BBS.
+
+  NOTE:  When inputing the PHONE NUMBER be sure to add the appropriate
+dashes.. ie.... USA would be as follows:  1-###-###-#### :))
+*****IMPORTANT*****  Here is an example of what can happen if you do not
+do this:   You add a new BBS in Finland and the number is something like
+this:  +35867495325 without the hiphens (358-) T-List would read the '35'
+before it could see the '8' afterwards and assume this is a Poland BBS
+because of the '35' country code of Poland.
+
+      ---------- G:
+          Edit the group of the BBS.
+      ---------- S:
+          Edit the sysop of the BBS.
+      ---------- Q:
+          Quit T-List Pro edit menu.
+      ---------- ?:
+          Expanded Help Prompt.
+
+                                    END OF EDIT FUNCTIONS
+
+A: Add a BBS to T-LIST.    T-List Pro will ask you for the needed
+information.   Simply follow online instructions.
+  NOTE:  When inputing the PHONE NUMBER be sure to add the appropriate
+dashes.. ie.... USA would be as follows:  1-###-###-#### :))
+*****IMPORTANT*****  Here is an example of what can happen if you do not
+do this:   You add a new BBS in Finland and the number is something like
+this:  +35867495325 without the hiphens (358-) T-List would read the '35'
+before it could see the '8' afterwards and assume this is a Poland BBS
+because of the '35' country code of Poland.
+
+D: Delete a BBS from T-LIST.  T-List Pro will ask you for the text to find.
+When it finds a given string T-List will verify whether or not you wish the
+entry to be deleted.
+==========================================================================
+                                  3.
+                       I.N.S.T.A.L.L.A.T.I.O.N.
+
+    Un-Arc the T-List Pro archive into the drive that you store your bbs
+on!  Or manually place the files where they need to go:
+
+         BBS:COMMANDS/BBSCMD/TLIST.INFO       (COMMAND ICON)
+         DOORS:SRH/TLIST/SRH-TLIST_PRO.INFO   (CONFIGURABLE ICON)
+         DOORS:SRH/TLIST/TLP2                 (T-LIST PRO 2 XIM MODULE)
+         DOORS:SRH/TLIST/SRH-TLIST_PRO2.DOC   (DOCS!!)
+         DOORS:SRH/TLIST/SRH-TLIST_PRO.GUIDE  (AMIGAGUIDE DOCS!!)
+
+             In addition to these files you will need an issue of S.R.H.'s
+T-LIST.TXT (SRH-TL#.TXT) which is released on a monthly basis.  This can
+be located anywhere, but will have all adds stripped, so you might want
+to use a copy of your original.
+
+****IMPORTANT****
+    Please only use issues 10 and higher of the T-List.txt for proper BBS
+highlight flagging operations!  
+****IMPORTANT****
+       The filename for the T-List txt is: SRH-TL#.TXT... the latest issue
+as of the release of this version of T-LIST PRO is SRH-TL8.TXT    If you 
+can not find a copy of T-LIST.TXT (doubtful) You can call these boards for 
+the latest issue:
+
+               Social Dizease  1-307-234-0580  T-LIST WHQ
+============================================================================
+                                  4.
+                          T.O.O.L.T.Y.P.E.S
+
+    The tooltypes of the icon
+
+
+                        LIST_PATH=<Path to TList.txt>
+                        COLUMNS=<Number of Columns>
+                        EDIT_AXS=<Access Level>
+                        ADD_AXS=<Access Level>
+                        KILL_AXS=<Access Level>
+
+    If the icon is not found or the tooltypes are commented ';' they
+defaults to 255.
+============================================================================
+                                  5.
+                           B.U.L.L.S.H.I.T.!.!
+ 
+      OK thaz all folks have fun with T-LIST PRO and please do not hesitate
+to send any bug reports on T-LIST or send in new infos you would like
+published in future issues of T-LIST.TXT's...  Greets to all our friends
+etc.   Contact me (iNTRUdER) or fLASHbACK on any of these BBS's:
+
+                             Social Dizease 
+                             Lithium
+                             Skull Buggery
+                             The Void
+                             Snarf's Pub
+
+NO CARRIER

@@ -1,0 +1,95 @@
+; $VER: mULTI-cHECK.iNSTALL 1.0 (06.02.96)
+; Script to install mULTI-cHECK written by Sascha "SieGeL" Pfalz
+; Set Tab to 2 if you want to read this script correct!
+; Installer Copyright © 1991-1993 Commodore-Amiga, Inc. All Rights Reserved
+; V1.0 (06.02.96) - Initial Release
+
+;=============================================================================
+;                       TEXTS USED IN THIS SCRIPT                            =
+;=============================================================================
+
+(set #introtext (cat				"\n\nThis script install mULTI-cHECK and the\n"
+                            "\ndocumentation to a place of your choice.\n\n"
+														"Also ZIP V2.0.1 and LZX V1.20 public are copied\n\n"
+														"if you need these programs."))
+
+(set #askforpackers (cat		"\n\nDo you also want to install LZX & ZIP for\n\n"
+														"usage with mULTI-cHECK ?\n\n"
+														"(not needed if you have them already installed!)"))
+
+;=============================================================================
+;                             INSTALL-START                                  =
+;=============================================================================
+
+
+(complete 0)
+
+(set @default-dest "C:")
+
+(if (< (/ (getversion) 65536) 37) ( (abort "You must have Kickstart V2.04 or higher !")))
+
+(welcome)
+
+(message #introtext)
+
+(complete 20)
+
+(set maindest
+	(askdir	(prompt "Select Destination for mULTI-cHECK:")
+					(help @askdir-help)
+					(default @default-dest)
+					(disk)))
+
+(set @default-dest maindest)
+(set prgloc (tackon maindest "mULTI-cHECK"))
+
+(complete 40)
+
+(copyfiles	(prompt "Now copying mULTI-cHECK...")
+					 	(source "bin/mULTI-cHECK")
+					 	(dest   @default-dest)
+					 	(help   @copyfiles-help)
+						(confirm))
+
+(set docdest
+	(askdir (prompt "Select Drawer for the documentation:")
+					(help @askdir-help)
+					(default maindest)
+					(disk)))
+
+(complete 60)
+
+(copyfiles	(prompt "Now copying documentation...")
+						(source "docs/")
+						(dest   docdest)
+						(help 	@copyfiles-help)
+						(choices 	"mULTI-cHECK.guide"
+											"mULTI-cHECK.history")
+						(infos)
+						(confirm))
+
+
+(set willstdu
+	(askbool	(prompt #askforpackers)
+						(choices 	"Yes"
+											"No")
+						(help @askbool-help)))
+
+(if (= willstdu 1)
+	(
+	(set packdir
+		(askdir	(prompt	"Choose directory for the packers:")
+						(help		@askdir-help)
+            (default	"C:")
+						(disk)))
+
+	(copyfiles 	(prompt "Now copying supported packers...")
+							(source "bin/")
+							(dest 	packdir)
+							(help		@copyfiles-help)
+							(choices	"LZX"
+	                      "ZIP")
+							(confirm))
+	))
+
+(exit "Another production of the real (tRSi/X/F/T-iNNOVATiON) tEAM !")

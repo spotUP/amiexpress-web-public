@@ -1,0 +1,26 @@
+
+                        [34;3mThe Top [35m15 [34mBest Message Writers![0m
+                    - - -------------------------------- - -
+[35m N#  User                    Location                    Messages        Calls
+[34m-------------------------------------------------------------------------------[0m
+  1[34m. [33;1mSteel Pulse             [0m-*- DYNAMIC DUO -*-           [36m 4.006  [0m      2.097
+  2[34m. [33mFiREMAN                 [0mLYING MOTHERFUCKER            [36m 2.499  [0m          7
+  3[34m. [33mMr.Terry                [0m>> EAST BBS <<                [36m 2.012  [0m      2.815
+  4[34m. [33mbObO/mYSTiC             [0m[%%] mYSTiC '95 [%%]          [36m 1.780  [0m      2.207
+  5[34m. [33momnibuz                 [0mSECT/R2/STILE                 [36m 1.246  [0m         60
+  6[34m. [33m[-DiPSWiTCH!-]          [0mO-( EQUINOX'95! )-O           [36m 1.232  [0m        700
+  7[34m. [33mEvil Genius & T.P.      [0mUSR 14.4 POWER                [36m 1.135  [0m        651
+  8[34m. [33mZODIAC                  [0m-                             [36m 1.081  [0m        428
+  9[34m. [33mSWAYZE                  [0m-/STiLE & SECT\-              [36m 1.004  [0m        427
+ 10[34m. [33mmoocher                 [0m[:.rEBELs^fLt^iNTERNEt.       [36m   749  [0m        826
+ 11[34m. [33mICON                    [0m_/DEBRIS/\MYSTIC\_            [36m   705  [0m        770
+ 12[34m. [33mEsox                    [0m[Swedish Farmers]             [36m   611  [0m        234
+ 13[34m. [33mPACIFIC                 [0mRiGHT TYPE 0F M00D!           [36m   580  [0m        760
+ 14[34m. [33mEzCo                    [0m-+ SERPENT HILL BBS +-        [36m   489  [0m        296
+ 15[34m. [33mAxel Foley              [0m### AnDroMeda StaFF ###       [36m   485  [0m        256
+[34m-------------------------------------------------------------------------------
+   [36mTotal Messages Posted: [33m[[0m39.949[33m] [35m<-=( )=-> [36mTotal System Calls  : [33m[[0m312.076[33m]
+
+                 [36mLast updated on[33m: [35mDate [0m04-13-95 [35mTime [0m11:13:36
+[34m-------------------------------------------------------------------------------
+             [35mMultiTop v2.1  [33m© [34m1995 Bobo/Mystic [0m- [34mDesign by Sandman[0m

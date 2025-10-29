@@ -1,0 +1,94 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+ABOUT: This ICON defines a MODULE for /X.
+
+       This ICON may be in the following directories:
+
+         a> BBSCmd     - Modules in this directory are allowed to be
+                         executed from any menu prompt or MCI text file.
+
+         b> SysCmd     - Modules in this directory are only accessible by
+                         MCI text files and internal BBS operations.
+
+         c> Conf(x)Cmd - Modules in this directory are allowed to be 
+                         executed from conference (x) menu prompt or from
+                         any MCI text file in conference (x).
+
+
+LOCATION=
+MULTINODE=
+ACCESS=
+TYPE=
+STACK=
+PASSWORD=
+
+
+LOCATION=<string>
+
+         -Version 3.0
+         -REQUIRED
+         -Specifies the location of the Module.
+         -If the location is a directory, then the directory name must have
+          a trailing '/'.
+
+     LOCATION=DOORS:Module/
+
+
+MULTINODE=<YES|NO>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X if the module may be simultaniously accessed from other nodes.
+
+     MULTINODE=YES
+     MULTINODE=NO
+
+
+ACCESS=<num>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X the access level required to run this module.
+         -This option is ignored for internal Module options.
+
+     ACCESS=200
+
+
+TYPE=<XIM | AIM | TIM | IIM>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X which type of module it is to support:
+
+          XIM =/X Standard Module.
+          AIM =Arexx Module (requires REXXDOOR in the BBS:Utils directory)
+          TIM =Traditional BBS Module (requires PARADOOR) in the BBS:Utils
+                directory)
+          IIM =NO INTERFACE - This type of Module will SPAWN the specified
+                MODULE and not wait on it to finish.
+
+     TYPE=XIM
+
+
+STACK=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X the stacksize to use when launching this module.
+         -Default is 4096.
+
+     STACK=60000
+
+
+PASSWORD=<string>
+
+         -Version 3.0 (reserved for future implementation)
+         -OPTIONAL
+         -makes the user enter a password before executing this module.
+
+     PASSWORD=PIGME
+
+

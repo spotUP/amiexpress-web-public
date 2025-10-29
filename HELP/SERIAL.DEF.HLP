@@ -1,0 +1,58 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+ABOUT: This ICON may be any name you wish it to be. You should find some
+       pre-defined SERIAL.DEFS in the STORAGE/SERIAL directory.
+
+       This defines how your serial.device should be configured per unit.
+
+       This ICON must be in the NODE/SERIAL directory for any node which is
+       tied to a modem.
+
+
+SERIAL.UNIT=
+SERIAL.BAUD=
+SERIAL.DRIVER=
+SERIAL.A2232_PATCH
+
+
+SERIAL.UNIT=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells which UNIT of the serial.device to use for a particular /X
+          NODE.
+
+     SERIAL.UNIT=2
+
+
+SERIAL.BAUD=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X which Baud to initialize the serial port to.
+
+     SERIAL.BAUD=19200
+
+
+SERIAL.DRIVER=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X which serial driver to use for a particular /X NODE.
+
+     SERIAL.DRIVER=serial.device
+
+
+SERIAL.A2232_PATCH
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to patch the internal /X serial routines to allow certain
+          version of the 2232 card to be compatible with /X.
+
+     SERIAL.A2232_PATCH
+
+

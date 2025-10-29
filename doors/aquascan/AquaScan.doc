@@ -1,0 +1,587 @@
+
+       _ _ ___/\______/\__ ____/\___/\__ _ _/\____ _/\_ __ __/\______
+      __ ________   __   /   _   ___   / ______   \___/__/     _____/
+         bIS/   /   /   /   //   //   /___/ __¬   /  /  /  /\__   \
+           /   /   /   /   //   //   /   /  \    /  /  /  /   /   /
+    __  _ _\____  /\____  //_  //_____  /___/\  /\_____  /\ _/   /___
+     _  ___ _   \/  _  _\/_  \/____ __\/ ___ _\/_______\/____   /_ _/
+                                                            \  /
+                                  present                    \/
+
+                the AmiExpress file scanner of your dreams:
+
+                 >>> AquaScan v1.0 by Aquarius/Outlaws <<<
+
+
+                          Copyright ©1994 Aquarius
+
+                 Permission is granted to freely distribute
+               this product for non-commercial purposes only,
+                  as long as all files remain unmodified.
+
+
+Archive (OTL-AS10.LHA) Contents
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Doors/AquaScan/
+   AquaScan.000             34856 bytes  The door (for any CPU.)
+   AquaScan.020             33164 bytes  020+ version of the door.
+   AquaScanConfig           26048 bytes  An executable that AquaScan uses.
+   AquaScan.info              473 bytes  Sample configuration icon.
+   AquaScan.doc             22339 bytes  This document file!
+   AquaScan.Date.1            120 bytes  Date divider
+   AquaScan.Date.2            187 bytes  Date divider
+   AquaScan.Div.1              77 bytes  File divider
+   AquaScan.Div.2              78 bytes  File divider
+   AquaScan.Div.3              77 bytes  File divider
+   AquaScan.Div.4              78 bytes  File divider
+   AquaScan.Div.5              77 bytes  File divider
+   AquaScan.Div.6              79 bytes  File divider
+   AquaScan.Help.CS.txt       947 bytes  Help text for the CS command.
+   AquaScan.Help.F.txt        685 bytes  Help text for the F command.
+   AquaScan.Help.FR.txt       479 bytes  Help text for the FR command.
+   AquaScan.Help.N.txt        944 bytes  Help text for the N command.
+   AquaScan.Help.NSU.txt      965 bytes  Help text for the NSU command.
+   AquaScan.Help.SCAN.txt     983 bytes  Help text for the SCAN command.
+
+Commands/BBSCmd/
+   f.info                    1274 bytes  Command icon for /X 3.x/4.x.
+   n.info                    1274 bytes  Command icon for /X 3.x/4.x.
+   fr.info                   1274 bytes  Command icon for /X 3.x/4.x.
+   cs.info                   1274 bytes  Command icon for /X 3.x/4.x.
+   nsu.info                  1274 bytes  Command icon for /X 3.x/4.x.
+   scan.info                 1274 bytes  Command icon for /X 3.x/4.x.
+
+Commands/SYSCmd/
+   n.info                    1274 bytes  Command icon for /X 3.37+.
+
+
+Introduction
+~~~~~~~~~~~~
+AquaScan is a very powerful, flexible and convenient file scanner for
+AmiExpress boards. It can be used as the normal F command, as a newscan
+door (the N command), files-reverse door (FR) and a confscan door (CS, NSU
+etc). All this in ONE door! Since a file scanner is one of the most used
+doors on a BBS, I have coded AquaScan so that it is 'pure' and can be made
+resident. It is written in highly optimized C code for great performance.
+I even had an assembler expert (hi Chig) take a look at the output code to
+see if the routines could be made any faster in assembler but he said I
+would gain almost nothing. You have to try this door, you won't be
+disappointed! Just take a look at all the features...
+
+
+Features
+~~~~~~~~
+* If you want to go back in the filelist, that's not a problem! Just press
+  the UpArrow key and it'll take you one page back.
+
+* Any command/door can be started from the pause prompt! For example, you
+  can view archives (if you have an archive viewer installed) directly
+  when you see the files in the filelist. If you spot a fake, just press a
+  key and your favourite nuker will be loaded and you can delete the file.
+  Afterwards, the last page of files will be rewritten and you can
+  continue scanning files. If you change the filelist with a pause prompt
+  command (like the nuker), you will not see those changes because the
+  whole filelisting is loaded in memory, but by pressing L it will be
+  re-loaded and you will see the changes you made.
+
+* You can flag files by numbers. AquaScan can also be made to ask for file
+  numbers to pass as argument to certain pause prompt commands/doors, for
+  example to a file viewer, a faker/nuker and Whof (by Spock). This is
+  very convenient! Try it!
+
+* As first filescan door ever, AquaScan has the ability to show "the x
+  newest files". For example 'N !12' shows the 12 newest files in the
+  current conference, 'CS !4' shows the 4 newest files in every
+  conference. This is very practical, especially for you, the sysop. When
+  you logon, AmiExpress might say "Conference [- Amiga Elite -] has 13 new
+  uploads." Then just type 'n !13' and those files will be listed...
+
+* Listing the files in reverse chronological order can not only be done
+  with FR but with all AquaScan commands. The R option does the trick. For
+  example, 'CS R' lists files reversely in all conferences. When you have
+  seen enough in a conference, press S = 'Skip conf'.
+
+* There is a quick-scan mode. The user will only see the first line of
+  every file description when that is used.
+
+* You can break the filelisting and abort AquaScan with CTRL-C.
+
+* It is fully user configurable! The following settings are available:
+
+    - The colour of every part of a file can be configured - name, test
+      char, size, date, description etc. Available colours are the usual
+      white, red, green, yellow, blue, violet and cyan, but also RANDOM
+      colour!
+
+    - Divider between files - none, empty line or any of the custom
+      dividers you make available to your users. You can make up to 8
+      custom separator styles.
+
+    - Date dividers - none or any of the custom date dividers you provide.
+      You can make up to 8 custom date divider styles.
+
+    - Full description with the C (Clear) command at the pause prompt?
+
+    - Full description with Enter/Y/Space? If YES, the file at the top
+      of the screen will always be complete, never broken.
+
+    - Clear screen with Enter/Y/Space?
+
+    - Clear screen when skipping dir/conf?
+
+    - Clear screen at door startup?
+
+    - Verify non-stop scrolling? AquaScan is the first scanner ever with
+      this feature! It could happen that you type N (for "No more") and
+      then change your mind about quitting and press S (for "Skip conf").
+      Then you will get a last chance to verify if you really want to
+      scroll non-stop. Of course you can break the file listing with
+      CTRL-C but sometimes with bad lines the CTRL-C doesn't seem to go
+      though.
+
+    - Non-stop scroll delay (in ticks). If you have problems breaking the
+      file listing you can set a delay so that the scrolling gets slower.
+      This only applies when you're scrolling non-stop, so you will only
+      get slower scrolling in non-stop mode. 1 tick is 1/50 seconds.
+
+    - Detect CTRL-C only in non-stop mode?
+
+    - Always show only first line of every description? If YES, the Q
+      option ("Quick scan") will always be enabled.
+
+    - Which conferences to scan with CS, SCAN etc is user configurable.
+      The users will of course only be able to scan the conferences that
+      they have access to and that aren't disabled for conference scanning
+      by the sysop.
+
+* The sysop configuration can be made in an icon, or in a textfile if you
+  prefer that! Among other things, you can configure the following:
+
+    - Conferences to disable for confscan. It would be possible that the
+      door detected mail-only conferences and just didn't display them,
+      but this way you get more SPEED! Strictly private conferences
+      could be written here too if you want the users with access to them
+      to be forced to join them (and enter a conference password perhaps)
+      in order to see the files there.
+
+    - You can define every command, if it is a filescan, newscan or
+      confscan command, or a reverse lister. AquaScan doesn't do any
+      automatic command detection (which would be a limitation).
+
+    - Access level required to scan HOLD directories can be configured.
+
+    - Default colours in the file listing, for users who don't bother
+      to configure the colours themselves.
+
+    - Default date and file divider, and if file numbers should be enabled
+      by default or not.
+
+
+Requirements
+~~~~~~~~~~~~
+AquaScan is written for AmiExpress 3.xx+ but it is possible to use it with
+earlier version and SigmaExpress. You just have to make sure that you have
+certain icons that AmiExpress 3.xx uses: Conference icons, AREA icons and
+ConfConfig.info. Ask any sysop with AmiExpress 3.xx+ if you want help with
+what they should contain.
+
+You need enough memory to hold your largest dir listing. So keep your dir
+listings small if you have little memory! Use my utility AquaMoveFiles if
+you need one that moves files + descriptions that are older than x days
+from one dir to another.
+
+
+Installation
+~~~~~~~~~~~~
+Just copy the AquaScan directory (the inner one) from the archive to
+Doors:.
+
+NOTE!!
+Make sure that the file comments of the divider/separator files are
+preserved! They are used in the configuration editor (when the user gives
+W as argument) as descriptions for the different dividers.
+
+Copy the provided command icons to your BBSCmd drawer and edit its
+tooltypes if they don't suit you. Note that AquaScan.020 is for
+68020/030/040/060 only. Set LOCATION=Doors:AquaScan/AquaScan.000 if you
+have a slower processor.
+
+As of AmiExpress 3.37 you can put N.info in SYSCmd/ as well, if you want
+AquaScan to be used for filescan at login (configurable via the AmiExpress
+CF command).
+
+AquaScan can be made resident. This means that ONLY ONE copy of the door
+is in memory AT ALL TIMES. You will get rid of the loading times and get
+less memory usage. To make it resident, do like this:
+
+1. Execute the following line and insert it in your 'S:User-Startup':
+   "resident AquaScan Doors:AquaScan/AquaScan.0X0 pure"
+
+     the version you want to use, 000 or 020 -^^^
+
+2. Add the tooltype RESIDENT to ALL command icons for AquaScan.
+
+3. Alter the tooltype LOCATION in the command icons so that it says
+   'LOCATION=AquaScan' instead of the full path.
+
+
+To sum up, the command icon tooltypes should look like this if you want to
+use the resident copy of AquaScan:
+
+ACCESS=20
+LOCATION=AquaScan
+RESIDENT
+MULTINODE=YES
+TYPE=XIM
+STACK=4096
+
+
+Now you should look through the configuration...
+
+
+Sysop Configuration
+~~~~~~~~~~~~~~~~~~~
+Some people like icons, some don't. The sysop configuration can be done
+either in an icon (Doors:AquaScan/AquaScan.info), or in a textfile if you
+prefer that (Doors:AquaScan/AquaScan.config). AquaScan first looks for the
+icon so if you want to use the textfile you have to delete the icon. The
+textfile should simply contain the tooltypes that would be in the icon
+otherwise.
+
+These are the various tooltypes in AquaScan.info or AquaScan.config:
+
+
+Template: DOORUSE.<cmd>=<keyword>
+Example : DOORUSE.N=NEWSCAN
+
+You must have one tooltype like this for every AquaScan command (F, N, FR,
+CS etc)! It tells the door how the command should behave. The possible
+keywords are: NEWSCAN, FILESCAN, REVSCAN and CONFSCAN. NEWSCAN means that
+the command should act like an N command. A FILESCAN command works like F.
+REVSCAN is used for reverse-listing commands (FR for example). CONFSCAN is
+used for commands that can scan all conferences globally (CS, NSU, SCAN
+for example).
+
+
+Template: NOSCAN_CONF.<conf number>
+Example : NOSCAN_CONF.2
+
+With these tooltypes you can disable certain conferences so that they
+won't be scanned by CONFSCAN commands. The conference numbers to use here
+is the same as in your BBS:ConfConfig.info. If you for example have
+NOSCAN_CONF.2 in the config icon, conference 2 from BBS:ConfConfig.info
+will be skipped by CS. You should disable all conferences that don't have
+a filebase. The scanning will go faster then and it will look better.
+
+
+Template: NOSCAN_FROMCONF=<conf number>
+Example : NOSCAN_FROMCONF=14
+
+If you have LOTS of conferences without a filebase, for example AmiXnet
+conferences, this tooltype could come in handy. If you use it, the
+conference number specified and all following conferences will be disabled
+for CONFSCAN commands. For example, if you set NOSCAN_FROMCONF=14,
+conference 14, 15, 16, 17 etc will won't be scanned by CS.
+
+
+Template: HOLD_LEVEL=<access level>
+Example : HOLD_LEVEL=200
+
+Here you specify the access level required for a user to scan the HOLD
+directories (the private sysop directories).
+
+
+Template: CALLERSLOG=(YES|NO)
+Example : CALLERSLOG=YES
+
+If CALLERSLOG=YES then it will be noted in the CallersLogs when users are
+scanning files with AquaScan. "Directory Scan with AquaScan by Aquarius"
+or "Conference Scan with AquaScan by Aquarius" (for CONFSCAN commands)
+will be written there.
+
+
+Template: WHITE_IS_ZERO=(YES|NO)
+Example : WHITE_IS_ZERO=YES
+
+AmiExpress has the ANSI codes for red and white mixed up. Esc[31m should
+be red but it is white locally. Esc[37m should be white but it is red
+locally. But Esc[0m is white BOTH locally and for remote users! If you set
+the tooltype WHITE_IS_ZERO=YES in the AquaScan config then Esc[0m will be
+used instead of Esc[37m for white.
+
+
+Template: LONG_NUKE=(YES|NO)
+Example : LONG_NUKE=NO
+
+If you are using a nuker/faker that overwrites the filecheck test
+character with its comment, then set LONG_NUKE=YES.
+
+EFXP161.LHA  P 131898  08-28-94  FIX PATCH FOR IMAGE F/X-EGS FROM NOVA -
+                                 FIXES THE STRING BUG PLUS OTHER SHIT!
+             ^
+             `------ This is the filecheck test character.
+
+EFXP161.LHA  OLD&GONE! 08-28-94  FIX PATCH FOR IMAGE F/X-EGS FROM NOVA -
+                                 FIXES THE STRING BUG PLUS OTHER SHIT!
+
+If your nuker overwrites that character, like above, set LONG_NUKE=YES.
+If it leaves it (or changes it), like below, set LONG_NUKE=NO.
+
+EFXP161.LHA  D DELETED 08-28-94  FIX PATCH FOR IMAGE F/X-EGS FROM NOVA -
+                                 FIXES THE STRING BUG PLUS OTHER SHIT!
+
+
+Template: COLOUR.FILE_NAME=<colour>
+Example : COLOUR.FILE_NAME=CYAN
+
+This tooltype specifies the default colour for file names.
+
+Available colours: WHITE, RED, GREEN, YELLOW, BLUE, VIOLET, CYAN, RANDOM.
+
+
+Template: COLOUR.FILE_TEST=<colour>
+Example : COLOUR.FILE_TEST=BLUE
+
+This tooltype specifies the default colour for filecheck test characters.
+(See LONG_NUKE.)
+
+Available colours: WHITE, RED, GREEN, YELLOW, BLUE, VIOLET, CYAN, RANDOM.
+
+
+Template: COLOUR.FILE_SIZE=<colour>
+Example : COLOUR.FILE_SIZE=GREEN
+
+This tooltype specifies the default colour for file sizes. If a file size
+if non-numerical, the nuke colour will be used instead.
+
+Available colours: WHITE, RED, GREEN, YELLOW, BLUE, VIOLET, CYAN, RANDOM.
+
+
+Template: COLOUR.FILE_DATE=<colour>
+Example : COLOUR.FILE_DATE=YELLOW
+
+This tooltype specifies the default colour for file dates.
+
+Available colours: WHITE, RED, GREEN, YELLOW, BLUE, VIOLET, CYAN, RANDOM.
+
+
+Template: COLOUR.FILE_DESC=<colour>
+Example : COLOUR.FILE_DESC=WHITE
+
+This tooltype specifies the default colour for description bodies.
+
+Available colours: WHITE, RED, GREEN, YELLOW, BLUE, VIOLET, CYAN, RANDOM.
+
+
+Template: COLOUR.SEPARATOR=<colour>
+Example : COLOUR.SEPARATOR=BLUE
+
+This tooltype specifies the default colour for file separators.
+
+Available colours: WHITE, RED, GREEN, YELLOW, BLUE, VIOLET, CYAN, RANDOM.
+
+
+Template: COLOUR.NUKE_SIZE=<colour>
+Example : COLOUR.NUKE_SIZE=WHITE
+
+This tooltype specifies the default colour for file sizes that are
+non-numerical (for nuked files).
+
+Available colours: WHITE, RED, GREEN, YELLOW, BLUE, VIOLET, CYAN, RANDOM.
+
+
+Template: COLOUR.FILE_NUMBER=<colour>
+Example : COLOUR.FILE_NUMBER=WHITE
+
+This tooltype specifies the default colour for the "File #x" strings.
+
+[ File #9 ]
+AEM103.LHA   P  35483  08-28-94  Amiga Entertainment Monthly - Sept 94
+                                 This is a monthly magazine that replaces
+                                 CD32 View magazine.
+
+Available colours: WHITE, RED, GREEN, YELLOW, BLUE, VIOLET, CYAN, RANDOM.
+
+
+Template: DATE_LINE=<number>
+Example : DATE_LINE=3
+
+This tooltype specifies the default date divider.
+
+0 = none, 1-8 are custom date dividers: Doors:AquaScan/AquaScan.Date.x
+
+
+Template: SEPARATOR=<number>
+Example : SEPARATOR=4
+
+This tooltype specifies the default file separator.
+
+0 = none, 1 = empty line, 2-9 are custom separators.
+
+If SEPARATOR=4, then 'Doors:AquaScan/AquaScan.Div.3' will be the default
+separator.
+
+
+Template: FILE_NUMBERS=(YES|NO)
+Example : FILE_NUMBERS=YES
+
+This tooltype specifies whether file numbers should be on or off as
+default.
+
+
+Template: PPC_CMD.<num>=<command>
+Example : PPC_CMD.1=FAKE
+
+You can define an unlimited number of commands (doors and internal
+AmiExpress commands) to be started directly from the pause prompt with a
+single keystroke. This tooltype defines the command itself. You can
+include arguments here if you want, for example 'B 1' (to view last ten
+callers maybe).
+
+
+Template: PPC_KEY.<num>=<key>
+Example : PPC_KEY.1=X
+
+This defines the key that will start the command.
+
+
+Template: PPC_ACS.<num>=<access level>
+Example : PPC_ACS.1=20
+
+Here you enter the access level required to use the command. The
+ACCESS=xxx tooltype in the command icon will not be used unfortunately.
+
+If a user hasn't got access to use it then it won't show up in the help
+when he presses H or ? at the pause prompt.
+
+
+Template: PPC_DSC.<num>=<description string>
+Example : PPC_DSC.1=Enter the faker
+
+The string you write here will be shown in the help (when the user presses
+H or ? at the pause prompt) as description for the command.
+
+
+Template: PPC_CNF.<num>=(YES|NO)
+Example : PPC_CNF.1=NO
+
+Can the command ONLY be used in your CURRENT conference (while you're
+using CS)?
+
+Unfortunately, AmiExpress (at least up to v4.6) has a serious bug: It
+makes all files in the current conference free download (or not free
+download if all files are supposed to be free). This happens when you're
+using a custom prompt command in another conference than the current.
+
+So, until this has been fixed in AmiExpress, set all PPC_CNF.x=YES !
+
+If the bug HADN'T been there, you should have followed these rules:
+
+ "Set this tooltype to YES for:
+
+  * the internal V command.
+
+  * doors using the internal V command to show text files. That won't work
+    in other conferences than the current. (But maybe you can live with
+    that because archive viewing will work.)
+
+  * doors using the conference NUMBER for something important. (It does
+    not matter if it uses the conference name or location.)
+
+  Set it to NO for every other command."
+
+I stress again: The above only holds when the bug in AmiExpress has been
+fixed!! Until then, set PPC_CNF.x=YES !
+
+
+Template: PPC_NUM.<num>=(YES|NO)
+Example : PPC_NUM.1=YES
+
+Can the command take file names as argument? If so, set this to YES and
+you will be prompted for file numbers when you use the command from the
+pause prompt (provided that you have file numbers turned on of course).
+
+
+Note!
+~~~~~
+I have not made any effort to make a download door that checks in which
+conferences the user has flagged files and then jumps between the confs. A
+door on the A command and one on G would also have been necessary then. I
+think that's too much for a filescanner. AmiExpress itself must be changed
+to allow batch downloads from different conferences. Another reason is,
+that in AmiExpress 4.x, HYDRA doesn't seem to work if a door is active
+(the D door).
+
+However, a clever way to make it possible to flag files in different
+conferences and then download them all at once is to enter every
+conference's download paths in every conference icon! Many thanks to Ace
+Caze for hinting this out to me!
+
+It could for example look like this in DH3:AEUTILS.info:
+
+NDIRS=1
+ULPATH.1=DH3:AEUTILS/UPLOAD/
+DLPATH.1=DH3:AEUTILS/UPLOAD/
+DLPATH.2=DH1:PUBLIC_DOMAIN/
+DLPATH.3=BBS:ASCII/UPLOAD/
+DLPATH.4=DH3:REQUESTS/UPLOAD/
+DLPATH.5=DH3:ELITE/UPLOAD
+DLPATH.6=DH3:ELITE/OLDUPLOAD/
+
+And in DH3:ELITE.info:
+
+NDIRS=2
+ULPATH.1=DH3:ELITE/UPLOAD/
+DLPATH.1=DH3:ELITE/UPLOAD/
+DLPATH.2=DH3:ELITE/OLDUPLOAD/
+DLPATH.3=DH3:AEUTILS/UPLOAD/
+DLPATH.4=DH1:PUBLIC_DOMAIN/
+DLPATH.5=BBS:ASCII/UPLOAD/
+DLPATH.6=DH3:REQUESTS/UPLOAD/
+
+This requires of course that it doesn't matter from which conference the
+user downloads. For example, it's not very smart to use this method
+together with conference accounting. Or if you have everything as free
+download in a conference and not the rest, figure out how that would
+work...
+
+
+Contact Me!
+~~~~~~~~~~~
+If you have any cool ideas for improvement of this door, questions, bug
+reports or whatever, leave me a message on one of the following boards:
+
+NIGHTFALL ................ Whoosh ............ +46-90-120369  <---  Safest
+HALL OF FAME ............. Dansken ........... +46-910-26665      place to
+HYSTERIA ................. JAC ............... +46-21-842939     reach me!
+MASTURBATION STATION ..... Black Beard ....... +1-305-552-1192
+ZION'S HIDEOUT ........... Zion .............. +1-614-876-0807
+DARK TOWER ............... Shadower .......... +1-801-476-9068
+MORTUARY ................. Bloodwolf ......... +1-312-284-7577
+BOONDOCKS ................ Sal-One! .......... +31-548-040-653
+
+
+History
+~~~~~~~
+1.0  (09-17-94) First release version.
+
+
+Greetings
+~~~~~~~~~
+                Greetings must go to (in no special order):
+
+           - Vegas/OTL - Biscrok/OTL - Toxic/OTL - AtomiX!/OTL -
+       - Whoosh/OTT^KRL^OTL^CLS - Snake/OTL - Nashua/OTL - SMS/OTL -
+    - Genghis Khan/OTL - The Other OTL Members! - Dansken - CornFlake -
+  - Ace Caze/Obscene - Firehawk! - fanta/THR - Static/THR - FAX! - Juan -
+ - Psychopath - Danzig - Foss - Karma - Seagull - Marwin - CaT - Sal-One -
+ - Metalbasher - No Limit - BoneIdle - Wilsom/Obscene - Stab - Kid Curry -
+ - Chig/TDS - HardHack - Rize - Frosty - JAC/TDS - C/\TE¥E - AXL - Norad -
+ - Crocodile - Freddy Kreuger/GOD - Doc Whoo - Zion! - Nocturne - Brutus -
+  - FireFlash/OTT - MDR/OTT - Neutralizer/OTT - Bytehunter/OTT - Remix! -
+    - WarDancer - Json/Kingdom - Slobo & Whale - [-HSR & MM-] - HiFly -
+      - Uffe - Gi Joe - Princip - The Silencer - Ezco - Vampire/PDY -
+          - Nero - Deltaforce! - Afterlife - The Ones I Forgot! -
+
+
+[EOF]

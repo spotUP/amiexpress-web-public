@@ -1,0 +1,112 @@
+@database WarKick'Em Documantation
+@Author Wardancer/Vanity
+@Index MAIN
+
+Copyright 1995 Wardancer/Vanity
+
+@node MAIN "WarKick'Em V1.0 Documentation."
+
+    THe PHuCKiNG /X DuDeS FRoM VANi7Y iS PRouD To BRiNG you aNoTHeR DooR
+                  ___                                  __
+                _/  |__________   __ __________________|¬\
+                |   |   _/  _ ¬\_/ ¬\|   _/_\__   __/  |: \_
+                |:  |   |  __   |    \  :|   ||  :|\__   __/
+                |_______|  :|___|   \____|___||  _|øo|_  |
+                 ---Y--\____|--\____|----Stz--|_/------\_|
+                ------------------(Presents)----------------
+                @{BG FILL}               WarKick'Em  V2.0             @{BG BACKGROUND}
+                --------------------------------------------
+
+                aND THiS TiMe iT iS MaDe By Wardancer/Vanity
+
+                             Table of contents :
+
+                           @{".....Whats This ?....." link 01}
+                           @{".....Installation....." link 02}
+                           @{"........Greets........" link 03}
+                           @{"...Bug report/ideas..." link 04}
+
+             Truth, Tell Me The Truth, The Truth, Motherfucker,
+          Tell Me The Truth, Tell Me The Truth, Tell Me The Truth,
+                           The Truth, You Sucker.
+
+
+@endnode
+
+@node 01 "Whats This ?..."
+
+  =========================[   Whats This ?   ]===========================
+
+  WarKick'Em is a tool that will allow selected users to kick users from
+  other nodes, that is naturally a VERY powerful weapon to put into a
+  users hand, an so some kind of security is needed, suffice to say that
+  the door asks the user of a reason why is about to kick another user,
+  and logs the data the user writes in the callerslog together with a
+  datestamp, handle of user about to be kicked and the node # of the user
+  about to be kicked. Also, if the user being kicked is idle then the door
+  will post a warning to him saying that he will be kicked of in 30 secs.,
+  which will aloow the user to log out normally.
+
+  *** Danger *** If the users being kicked is using a door that has a
+  poorly written emergency exit code, then it is possible that his node
+  will be locked up until the next reboot of the board.
+
+  So why should you install this door, well, just imagine this, some lame
+  14.4K user is bugging down your nice and shiny V.34 line, and one of
+  super ELI7E trader have just gotten hands on an 1 hour release, wouldn't
+  it be nice if the super ELI7E trader could kick the lamer so we would
+  be able to get hold of the V.34 line ???
+
+  =========================[   Whats This ?   ]===========================
+
+@endnode
+
+@node 02 "Installation..."
+
+  =========================[   Installation   ]===========================
+
+  Installing this program is really quite simple, the only things you have
+  to is to make sure the following is right :
+
+  Program      Location                      Description
+  -------      --------                      -----------
+  WarKick'Em   Doors:!!!War!!!/WarKick'Em/   Main Program.
+  SecList      Doors:!!!War!!!/WarKick'Em/   List Of Users Allowed To Use
+                                             The Door Seperated By Cr's.
+
+  Also make sure that kick.info is in the 'Commands/BBSCmd/' drawer.
+
+  =========================[   Installation   ]===========================
+
+@endnode
+
+@node 03 "Greets..."
+
+  =========================[      Greets      ]===========================
+
+  @{BG FILL}                 GReeTZ Go ouT To THe FoLLoWiNG DuDeS:                  @{BG BACKGROUND}
+
+  Dux, Kronion, Zeke, Mickey, Tactica, Mandrake, Nookman, Sorcerer,
+  The Freak, Melomaniac, Marty, Morph, Deature, Json, D-Tron, Webster,
+  Gilthanas, Striker, Hellhound, Devilstar, Zinko, Lector, Playmate,
+  Paranoid, Enzo, Menace, Ironman, Nashua, Ramirez, Omar, Nero, Janitor,
+  Conan, Newton, Relief, The Priest, Dizy, Darkwing
+
+  =========================[      Greets      ]===========================
+
+@endnode
+
+@node 04 "Bug Report/Ideas..."
+
+  =========================[ Bug Report/Ideas ]===========================
+
+  Send your bug reports or ideas to the following boards :
+
+  Susperia ............... +45  4343-4236   (VANi7Y SCHQ)
+  Warez Unlimited ........ +45  4494-6208   (VANi7Y DKHQ)
+
+  If you would like to betatest for me, then just contact me at Susperia.
+
+  =========================[ Bug Report/Ideas ]===========================
+
+@endnode

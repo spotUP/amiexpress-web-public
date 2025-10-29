@@ -1,0 +1,217 @@
+
+                WHO V1.0 Written by Spy (MySTiC /X DESiGN)
+                        GfX by Byteandi (MySTiC /X DESiGN)
+         NI (NodeIn) & NO (NodeOut) Written by Spy (MySTiC /X DESiGN)
+                 COUNT written by Spy (MySTiC /X DESiGN)
+
+
+
+*********************** Beschreibung der Tools : ****************************
+
+WHO   - WHO-DOOR auch als FrontWho zu verwenden.
+				Features :
+                   Zusaetzlich zu den normalen informationen wie
+                   Username, Location, Nodenummer und Action, werden
+                   noch Telefonnummer der Node und die Anzahl der Calls
+                   pro Node angezeigt. Es werden Filenamen angezeigt,
+                   wenn auf einer node geuppt oder gedownt wird.
+                   Das anzeigen der Filenamen kann abhaengig vom userlevel
+                   geschehen (einzustellen im WHO.INFO). Wenn das WHO
+                   als frontdoor aufgerufen wird, werden filenamen nicht
+                   angezeigt (SECURITY ;) ).
+                   Nodes, auf denen das Quietnode  angeschaltet ist,
+                   werden usern nicht angezeigt. Weiterhin werden user nicht
+                   angezeigt, wenn sie im NI-DOOR (s.u.) quiet angeschaltet
+                   haben. Man kann im WHO.INFO einstellen ab welchem
+                   Level man user mit quietnode dennoch sehen kann (WICHTIG
+                   FUER SYSOPS ;) )
+
+NI    - NodeIn-Door. Zeigt auf anderen nodes an, dass ein user die Box
+        betritt. Zusaetzlich kann man bestimmten usern im ni.info erlauben
+        das diese message nicht auf anderen nodes angezeigt wird. Sie bekommen
+        dann eine Abfrage ob sie gesehen werden wollen oder nicht. Wenn bei
+        einer Node Quietnode angeschaltet ist, kommt diese Abfrage nicht.
+
+NO    - NodeOut-Door. Zeigt auf anderen nodes an, dass ein user die Box
+        verlaesst. Wenn quietnode bei dieser node an gesetzt war wird
+        es durch no ausgeschaltet, ausser wenn man es in no.info anders
+        bestimmt (siehe no.info unten).
+
+Count - Zaehlt jeden call auf einer node. Dieses Tool wird im Logoff Script
+        aufgerufen.
+
+
+
+
+
+********************** Beschreibung der Installation : *************************
+
+Nach dem entpacken von WHO.LHA entstehen 2 Directorys : DOORS und BBS
+Der inhalt des directorys DOORS (Das Dir WHO) wird in das DOORS: Directory
+kopiert.
+Im Directory BBS sind 2 unterdirectorys und zwei Files :
+
+Das Directory Commands :
+  Hier gibt es wieder 2 Unterdirectorys :
+  BBSCMD und SYSCMD
+	der inhalt dieser Directorys kommt in die entsprechenden Directorys
+  im BBS:COMMANDS Directory.
+
+Das Directory NODE-0
+  In diesem Directory ist ein file : logoff10.txt
+  aus logoff10.txt wird beim logoff das Door NO aufgerufen. Aus diesem grund
+  muss der text aus dem file logoff10.txt entweder vor den schon existierenden
+  logoff text gehangen werden oder aber das file logoff10.txt wird in jede
+  Node directory copiert.
+
+Im Directory bbs sind dann noch folgende 2 files uebrig :
+  bull10.txt  - Dieses File wird entweder vorne an ein schon bestehendes
+                anfangsbulletin gehaengt, oder wenn dies nicht existiert,
+                muss es in das directory bbs: copiert werden. Aus diesem
+                Text heraus wird das Door NI aufgerufen.
+  logoffbatch - der inhalt dieses files muss im logoffbatch von jeder node
+                ausgefuehrt werden. In diesem logoffbatch wird das Tool
+                count aufgerufen. Es bekommt die nodenummer uebergeben.
+                Fuer Node 0 waere z.b. der aufruf : doors:who/count 0
+                Fuer Node 1                       : doors:who/count 1
+                Also copiert man die zeile aus dem logoffbatch file heraus
+                in jede einzelne logoffbatch-datei und aendert die node-
+                nummer entsprechend.
+
+Das wars dann auch schon zur installation.
+
+******************** Einstellen der .info Files ****************************
+
+WHO.INFO - Folgende Tooltypes sind moeglich :
+                                              Level_to_see_up/dl
+                                              Level_from_sysops
+                                              PhoneNumber.Number
+                                              Do_not_show_Node.Number
+
+           Level_to_see_up/dl : hier wird das Userlevel eingestellt, ab dem
+                                ein user Upload- oder Download Filenamen
+                                sehen kann.
+                                Level_to_see_up/dl=20 wuerde es ab Security-
+                                Level 20 erlauben, dass up und download filenamen
+                                gesehen werden.
+                                Wenn die Zahl groesser als 255 ist, dann kann kein
+                                User (auch nicht der Sysop) up oder download
+                                Filenamen sehen. Wenn die Zahl 0 ist, kann jeder
+                                User Up und Download Filenamen sehen.
+                                Allerdings wird im Frontwho niemals ein Filename
+                                angezeigt, egal wie niedrig man die zahl setzt.
+
+           Level_from_sysops  : Dieser Tooltype legt fest ab wann ein user
+                                auch user auf nodes sehen kann, die quiet sind.
+                                Level_from_sysops=255 wuerde nur usern mit
+                                Level 255 erlauben nodes zu sehen, die quiet sind.
+                                Wenn diese Zahl groesser als 255 ist, kann kein
+                                User eine quiet node sehen. Wenn diese Zahl 0
+                                ist, sieht jeder user auch nodes die quiet sind.
+
+           PhoneNumber.Number : Dieser Tooltype gibt an welche Telefonnummer
+                                auf einer Node angezeigt wird.
+                                PhoneNumber.0=+49 (0)30 745 20 93 wuerde auf
+                                Node 0 die Telefonnummer +49 (0)30 745 20 93
+                                anzeigen.
+                                PhoneNumber.1=+49 (0)30 745 20 94 wuerde auf
+                                Node 1 die Telefonnummer +49 (0)30 745 20 94
+                                anzeigen.
+
+           Do_not_show_Node.0 : Dieser ToolType veranlasst das WHO dass die
+                                betreffende Node ueberhaupt nicht angezeigt wird
+                                z.b. wuenschenswert bei einer local node.
+                                Bei Do_not_show_Node.3 wuerde WHO die 3. Node
+                                nicht anzeigen.
+
+NI.INFO - Hier gibt es nur einen moeglichen ToolType :
+
+          Name.1=Spy/MST -       Wuerde Spy/MST erlauben sich fuer andere user
+                                 unsichtbar zu machen. Er wuerde eine abfrage
+                                 bekommen ob seine node quiet sein soll.
+
+          Name.2=Cindarella/SR - Das gleiche fuer einen 2. User.
+
+          Hier koennen dann beliebig viele andere User angegeben werden.
+
+
+
+
+NO.INFO - Hier gibt es ebenfalls nur einen ToolType :
+
+          Do_not_change_quiet.4 - wuerde auf node 4 verhindern, dass nach dem
+                                  logoff quietnode ausgeschaltet wird.
+                                  Dies ist sinnvoll fuer local nodes, wo z.b.
+                                  quietnode immer an sein soll ;)
+
+
+
+Soweit zu den Tooltypen.
+
+*******************************************************************************
+
+
+                               -G-R-E-E-T-I-N-G-S-
+
+
+  Greetings To All
+                      ______  __________________
+               +-----/    \ \/ / __/_  __/ / __/----------+
+               |----/ / / /\  /\  /-/ /-/ / /----[ /X ]---|
+               |----\/ / /-/ /\  /-/ /-/ /\ \--[ DESiGN ]-|
+               +-----\/\/--\/--\/--\/--\/--\/-------------+
+               |                                          |
+               |   EMPiRE   -   BYTEANDi   -  CRACKDOWN   |
+               |   TYCOON   -   KiLLRAVEN  -   SiEGEL     |
+               |   FUZZY    -     SPY                     |
+               +------------------------------------------+
+
+  I hope we have a nice work and show the Developement Team what
+  to do with /X !
+
+  Special greetings to Van Damme... I hope you come Next Time
+  via C-Programming... Take a Look to Empire !
+
+  To Bytemaster, we hope for more Informations About Amiexpress
+
+  To CINDARELLA/SR for the fast translation :*
+
+  To Byteandi - Thx for the great ansis :)
+
+  To FAZWONGA!/PDY - THE UL/DL FILENAMES ARE ONLY FOR YOU ;)))))))
+
+  Many Many THX To All my Beta testers for BugReports, Hints and Tips
+  to install Options....in that Door...
+
+             //
+  Thanx to \X/ Amiga For Being The Best Computer Ever made ...
+
+
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+
+       THE   SECOND   BEST   THING   YOU   CAN   DO   BY   YOURSELF
+
+
+/¯¯¯¯¯¯ __/¯¯¯¯  _/¯¯¯¯¯¯ __/¯¯¯¯  _/¯¯ __/¯¯ __/¯¯ __/¯¯¯¯ _/¯¯ __/¯¯¯¯
+/¯¯¯¯¯¯ _/¯¯¯¯¯¯ _/¯¯¯¯¯¯ _/¯¯¯¯¯¯ _/¯¯ __/¯¯ __/¯¯ _/¯¯¯¯¯ _/¯¯ _/¯¯¯¯¯
+/¯¯  ¯¯ _/¯¯  ¯¯ _/¯¯  ¯¯ _/¯¯  ¯¯ _/¯¯ __/¯¯   /¯¯ _/¯¯  _ _/¯¯ _/¯¯
+/¯¯¯¯¯¯ _/¯¯¯¯¯¯ _/¯¯¯¯¯¯__/¯¯¯¯¯¯ _/¯¯ _____/¯¯ _____/¯¯  __/¯¯ __/¯¯
+/¯¯ _____/¯¯  ¯¯ _/¯¯ ¯¯  _/¯¯  ¯¯ _/¯¯     _/¯¯ ____  /¯¯ __/¯¯ _  /¯¯
+/¯¯ _____/¯¯  ¯¯ _/¯¯  ¯¯ _/¯¯  ¯¯ _/¯¯¯¯¯¯ _/¯¯ ___/¯¯¯¯¯___/¯¯ _/¯¯¯¯¯
+ ¯¯       ¯¯  ¯¯   ¯¯  ¯¯   ¯¯  ¯¯   ¯¯¯¯¯    ¯¯     ¯¯¯¯     ¯¯  ¯¯¯¯¯
+
+·------------> AMIEXPRESS V3.6 / AMIGA 3000 / 24 H ONLINE <-----------·
+|                                                                     |
+|      PORT             NUMBER   MODEM   SPEED      NODETYPE          |
+·---+-------------------------------------------------------------+---·
+  D | NODE 1: +49(0)30 745 2093 USR DUAL 14400 RINGDOWN NODE 1-3! | C
+  I | NODE 2: +49(0)30 745 2094 USR DUAL 16800 DIRECT LINE ACCESS | A
+  A | NODE 3: +49(0)30 745 2095 USR DUAL 16800 DIRECT LINE ACCESS | L
+  L | NODE 4: +49(0)30 746 7782 USR HST  16800 DIRECT LINE ACCESS | L
+·---+-------------------------------------------------------------+---·
+|                                                                     |
+|        G . I . V . E       I . T       A       R . I . N . G        |
+|                                                                     |
+·--> SUPPORTING !PD-SOFTWARE ONLY! FOR: AMIGA, ATARI, IBM-PC & MAC <--·
+
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-

@@ -1,0 +1,135 @@
+@database 5D-UserDoc
+
+Copyright (c) 1993 SvEN tHE CREAToR / 5th Dynasty
+
+@Remark $VER: (October 24 1993, 18:30:00)
+@Remark AmigaGuide database for the 5D-User Documentation
+
+@node MAIN "5D-User Documentation (c)1993 SvEN tHE CREAToR of 5th Dynasty (October 24 1993, 18:30:00)"
+          ______    ______    ______    ______    ______    ______
+          \   ¬/    \   ¬/    \   ¬/    \   ¬/    \   ¬/    \   ¬/
+ 5th ______\  /_ ____\  /______\  /______\  /______\  /______\  /_ ____
+    //     \\// |   \\\//     \\\//     \\\//     \\\//     \\\// |   \\
+   //       \/  |    \\/       \\/  |    \\/     ---\/       \\/  |    \\
+  /·         \___     ·\     |  ·\        ·\____    \\__      ·\___     ·\
+ /·         | \        ·\    |   ·\ |      ·\        ·\ |      ·\        ·\
+ \___________ /________ /____|___ /_|______ /________ / |______ /________ /
+            \/        \/        \/        \/        \/        \/    ·cj·\/
+
+                              >>> 5D-User <<<
+
+          Code: SvEN tHE CREAToR/5D  Design: sNoW/5D
+
+---------------------------------------------------------------------------- 
+
+         >>> C·O·N·T·E·N·T·S  O·F  D·O·C·U·M·E·N·T·A·T·I·O·N <<<
+
+
+                         @{"      Introduction      " Link Cap01}
+                         @{"      Requirements      " Link Cap02}
+                         @{"      Installation      " Link Cap03}
+                         @{"       Greetings!       " Link Cap05}
+                         @{"   How to Contact me?   " Link Cap06}
+
+         ---------------------------------------------------------
+              Complete Docs for 5D-User V1.00 [-5th Dynasty-]
+         ---------------------------------------------------------
+         The Documentation has been written by SvEN tHE CREAToR/5D.
+
+@endnode
+@node Cap01 "Introduction"
+  =======================================================================
+  5D-User is a command which allows the users to see the stats of all
+  people online at the bbs!
+  =======================================================================
+@endnode
+@node Cap02 "Requirements"
+  =======================================================================
+  To install 5D-User you must have the following things:
+
+    Programm     Location           Description
+    ----------   --------           -----------
+    5D-User Doors:5D-User Main program
+
+  - an  Amiga Model (500/600/1000/1200/2000/2500/3000/4000/CDTV/CD³²)
+  - the installed Version of OS\2, OS\3 or higher
+    (Soft- or Hardware Version)
+  - the installed .INFO Files in the directories.
+  - AmiExpress V2.xx , v3.xx or higher.
+
+  =======================================================================
+@endnode
+@node Cap03 "How to install 5D-User"
+  =======================================================================
+  To install 5D-User you must have all Requirement which were
+  mentioned below. You need the following things.
+
+  --------------------------
+    Doors:5D-User (dir)
+      ^^^ 5D-User
+    BBS:Commands/BBSCmd (dir)
+      ^^^ US.info
+  --------------------------
+
+  Decruch the 5D-User Archive. Go to your 'Doors:' Directory
+  and make a Directory called '5D-User'. Copy '5D-User'
+  into the Directory. Go to your 'BBS:Commands/BBSCmd/' Directory.
+  Copy 'US.info' into it.
+  =======================================================================
+@endnode
+@node Cap05 "Greetings go to..."
+  =======================================================================
+
+           ···­­­> ALL MEMBERS OF 5TH DYNASTY <­­­···
+
+      +-----------------------------------------------------+
+      : And all cool people who I know and all who know me! :
+      `-----------------------------------------------------'
+
+  =======================================================================
+@endnode
+@node Cap06 "How to contact me..."
+  =======================================================================
+    ___________________________   ___________   ___________________________
+   /\_______________________ _ \¡/           \¡/  _ ______________________/\
+   \/                            ·5TH DYNASTY·                            \/
+    ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯\_______________/¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+    CELTIC CROSS ............... Thunder ...... +49-Online Soon ....... WHQ
+    POWER BOX II NODE 0 ....... Wolfgang ...... +49-(0)30-3242112 ..... GHQ
+    POWER BOX II NODE 1 ....... Wolfgang ...... +49-(0)30-3242160 ..... GHQ
+    MIAMI HEAT ........ Sven The Creator ...... +49-(0)30-7424141 ..... GHQ
+    POWER BOX III ........ Frank Maxwell ...... +49-(0)30-4167884 ..... GHQ
+    5tH dYNASTY cLUB .............. sNoW ...... +49-(0)30-eLITE oNLY .. GHQ
+ 
+                 ___ ___    ___    _______    ___ ___    ___
+                /  ¬|  ¬\  /  ¬\  /      ¬\  /  ¬|  ¬\  /  ¬\
+               /         \/     \/         \/         \/     \
+              /           \      \          \          \      \
+            _/             \_     \_  |      \_         \_     \_
+            \      \ /      /      /          / \ /      /      /
+             \      |      /      /   |      /   |      /      /
+              \_____|____ /_____ /____|____ /____|____ /_____ /
+          /\            \/     \/         \/         \/     \/
+_________/  \  /\___________> 5TH DYNASTY GHQ <____________________ ___ __ _
+             \/    ___ ___    _______    _______    _______
+                  /  ¬|  ¬\  /      ¬\  /      ¬\  /      ¬\
+                 /    |    \/         \/         \/         \
+                /           \    |     \          \          \
+              _/             \_     ___/\_  |      \_____     \_
+              \               /    /     /          / |        /
+               \      |      /          /   |      /  |       /
+                \_____|____ /_________ /____|____ /   |_____ /·cj·
+                          \/         \/         \/         \/
+ 
+                        aMiGa aNd PC 0-1 dAy wArEz
+ 
+                         SYSOP: SvEN tHE CREAToR/5D
+                         COSYS: Mr.Return
+                                Cee Jay
+                                Airworx/5D
+
+                   -<>- CaLL: +49-(0)30-742-4141 -<>-
+
+  =======================================================================
+@endnode

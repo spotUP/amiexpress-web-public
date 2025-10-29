@@ -1,0 +1,624 @@
+@database AquaPWFail
+@author Aquarius/Outlaws
+@$VER: AquaPWFail.guide 1.0 (28.1.95)
+
+@node MAIN "AquaPWFail v1.0 Documentation"
+       _ _ ___/\______/\__ ____/\___/\__ _ _/\____ _/\_ __ __/\______
+      __ ________   __   /   _   ___   / ______   \___/__/     _____/
+         bIS/   /   /   /   //   //   /___/ __¬   /  /  /  /\__   \
+           /   /   /   /   //   //   /   /  \    /  /  /  /   /   /
+    __  _ _\____  /\____  //_  //_____  /___/\  /\_____  /\ _/   /___
+     _  ___ _   \/  _  _\/_  \/____ __\/ ___ _\/_______\/____   /_ _/
+                                                            \  /
+                                  present:                   \/
+
+                >>> AquaPWFail v1.0 by Aquarius/Outlaws <<<
+
+                      [- Contents of Documentation -]
+
+                @{"   Copyright Note   " Link Copyright   }   @{"   Configuration    " Link Configuration}
+                @{"  Archive Contents  " Link Archive     }   @{"      History       " Link History}
+                @{"    Introduction    " Link Introduction}   @{"  How to Reach Me   " Link ContactMe}
+                @{"      Features      " Link Features    }   @{"    Other Tools     " Link AquaTools}
+                @{"    Requirements    " Link Requirements}   @{"     Greetings      " Link Greetings}
+                @{"    Installation    " Link Installation}
+
+           @{" Comment on AQUA-FUQ.TXT " Link FuckText}   @{" Note about AquaSettings " Link AquaSettings}
+@endnode
+
+@node Copyright "AquaPWFail v1.0 Documentation"
+
+                          Copyright ©1995 Aquarius
+
+                 Permission is granted to freely distribute
+               this product for non-commercial purposes only,
+                  as long as all files remain unmodified.
+@endnode
+
+@node Archive "AquaPWFail v1.0 Documentation"
+
+Archive (OTL-PW10.LHA) Contents
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Doors/AquaPWFail/
+   AquaPWFail         13928 bytes  The door itself.
+   AquaPWFail.guide   26401 bytes  This AmigaGuide doc!
+   AquaPWFail.info      960 bytes  A sample configuration icon.
+   BullText.txt         137 bytes  Will be inserted in last-pwfail bull.
+   Comment.txt          394 bytes  Will be shown when user leaves comment.
+
+Commands/SYSCmd/
+   PWFAIL.info         1277 bytes  Command icon for /X 3.0+.
+@endnode
+
+@node Introduction "AquaPWFail v1.0 Documentation"
+
+Introduction
+~~~~~~~~~~~~
+AquaPWFail is a password failure door. You know, one that will be started
+when a user has failed 3 times in a row to enter his password correctly.
+It has lots of nice and useful @{"features" Link Features}...
+@endnode
+
+@node Features "AquaPWFail v1.0 Documentation"
+
+Features
+~~~~~~~~
+* Auto-messages to sysop(s). It can automatically post a message to any
+  number of users, informing about the password failure - who, when,
+  where and the connect string. Why show the connect string then? Well you
+  might be able to conclude from that if it was someone who tried to hack
+  the account. For example, if it was an HST connect and you know that the
+  user owning the account has a pure V.32bis modem, then you should be
+  very suspicious...
+
+* Auto-message to user (optional of course). If it wasn't the user owning
+  the account who made the password failure, it could be interesting for
+  him to be informed about it. You can configure what the 'from' field in
+  the message header should read. If you let it be your handle, the user
+  can reply and explain to you about his password failure or tell you that
+  it wasn't him...
+
+* Last-password-failures bulletin. The door can create a nice-looking
+  bulletin showing the last password failures (configurable number of
+  entries). Besides it being a funny thing to view, it is good for
+  users to check there now and then. If they are listed in the bulletin
+  but haven't received any message from AquaPWFail (presuming that you
+  have 'Auto-message to user' on) the hacker probably succeeded to hack
+  his account and deleted the message.
+
+* Special password failure log. If you want, the door can write to a log
+  (anywhere you like) about the password failure.
+
+* Page or leave comment. When the user has failed 3 times to enter his
+  password and then enters the door, he is given these options:
+
+        (1) Page Sysop
+        (2) Comment to Sysop
+        (Q) Hangup
+
+  This menu is shown repeatedly until Q is chosen.
+
+* Working comment function! Unlike in many other pwfail doors, the
+  'Comment to Sysop' function really works 100%. If you want several
+  users (for example yourself and some co-sysop) to receive the same
+  comments, that's no problem.
+
+* Special built-in pager! When the user selects 'Page Sysop' assuming
+  you're "available" or you have configured that pwfail-users can override
+  the chatflag, the paging starts: A font-sensitive operator window opens
+  on the default public screen (which usually is Workbench). It has a
+  graphical progress bar which goes from 0% to 100% during the paging.
+  There is a progress bar on the user side as well. The window has three
+  buttons: 'Go into Chat', 'Be Quiet' and 'Deny Chat'. Pressing <Escape>
+  or clicking in the close gadget has the same function as pressing 'Be
+  Quiet'. Pressing <Enter> means 'Go into Chat'. There are also ordinary
+  hotkeys for every button.
+@endnode
+
+@node Requirements "AquaPWFail v1.0 Documentation"
+
+Requirements
+~~~~~~~~~~~~
+- An Amiga with OS 2.04 or higher.
+
+- AmiExpress, SigmaExpress or any compatible program.
+@endnode
+
+@node Installation "AquaPWFail v1.0 Documentation"
+
+Installation
+~~~~~~~~~~~~
+Just copy the 'AquaPWFail' directory (the inner one) to 'Doors:', and
+(for /X 3.0+) put the provided command icon 'PWFAIL.info' in your 'SYSCmd'
+drawer.
+
+The door is "pure" and is therefore safe to make resident.
+
+The text 'Doors:AquaPWFail/Comment.txt' will be displayed when the user
+choses to leave a comment to the sysop. Edit it if you like.
+
+If 'Doors:AquaPWFail/BullText.txt' exists, it will be inserted in the
+last-password-failures bulletin.
+
+Now you must @{"configure" Link Configuration} the door...
+@endnode
+
+@node Configuration "AquaPWFail v1.0 Documentation"
+
+Tooltypes in 'Doors:AquaPWFail/AquaPWFail.info':
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       @{" SYSOP_MSGBASE   " Link SYSOP_MSGBASE}
+       @{" AUTOMAIL.x      " Link AUTOMAIL.x}
+       @{" COMMENT.x       " Link COMMENT.x}
+       @{" USER_MSGBASE    " Link USER_MSGBASE}
+       @{" TO_USER_FROM    " Link TO_USER_FROM}
+       @{" LOG_PATH        " Link LOG_PATH}
+       @{" BULL_PATH       " Link BULL_PATH}
+       @{" BULL_USERS      " Link BULL_USERS}
+       @{" CHATFLAG_IGNORE " Link CHATFLAG_IGNORE}
+       @{" PAGE_BEEP       " Link PAGE_BEEP}
+       @{" QUIETPOP        " Link QUIETPOP}
+       @{" PAGESTART_RUN   " Link PAGESTART_RUN}
+       @{" PAGESTOP_RUN    " Link PAGESTOP_RUN}
+
+@endnode
+
+@node SYSOP_MSGBASE "AquaPWFail v1.0 Documentation"
+
+Template: SYSOP_MSGBASE=<path>                                  [Required]
+Example : SYSOP_MSGBASE=BBS:CONF_Staff/MsgBase/
+
+This tooltype specifies the message base directory where messages to
+sysops will be written (see @{"AUTOMAIL.<num>" Link AUTOMAIL.x} and @{"COMMENT.<num>" Link COMMENT.x}). It MUST end
+with '/' or ':'.
+@endnode
+
+@node AUTOMAIL.x "AquaPWFail v1.0 Documentation"
+
+Template: AUTOMAIL.<num>=<name>                                 [Optional]
+Example : AUTOMAIL.1=Aquarius
+
+These tooltypes specify the users who will be notified of every password
+failure: a message will automatically be posted to them. No AUTOMAIL.<num>
+tooltypes means that no auto-messages will be posted.
+@endnode
+
+@node COMMENT.x "AquaPWFail v1.0 Documentation"
+
+Template: COMMENT.<num>=<name>                  [At least ONE is required]
+Example : COMMENT.1=Aquarius
+
+These tooltypes specify the users who will receive the comments written by
+users in the door (when they have chosen "Comment to Sysop").
+@endnode
+
+@node USER_MSGBASE "AquaPWFail v1.0 Documentation"
+
+Template: USER_MSGBASE=<path>                                   [Optional]
+Example : USER_MSGBASE=BBS:CONF_NewUsers/MsgBase/
+
+If this tooltype is present, the door will write a message to the user
+himself. The tooltype specifies the path to the message base where the
+message will be written. If it was someone who tried to hack his account
+it could be helpful for him to know that. The path MUST end with '/' or
+':'.
+@endnode
+
+@node TO_USER_FROM "AquaPWFail v1.0 Documentation"
+
+Template: TO_USER_FROM=<string>       [Optional, default: AquaPWFail vX.X]
+Example : TO_USER_FROM=Aquarius
+
+This tooltype specifies the user (or any other string) that will stand as
+sender in the auto-message to the user himself. If no @{"USER_MSGBASE" Link USER_MSGBASE}
+tooltype is present, that message won't be posted, and this tooltype will
+be ignored.
+@endnode
+
+@node LOG_PATH "AquaPWFail v1.0 Documentation"
+
+Template: LOG_PATH=<path>                                       [Optional]
+Example : LOG_PATH=Doors:AquaPWFail/AquaPWFail.Log
+
+This tooltype specifies the path (including filename) where password
+failures will be logged. If you leave this out, no log file will be
+maintained.
+@endnode
+
+@node BULL_PATH "AquaPWFail v1.0 Documentation"
+
+Template: BULL_PATH=<path>                                      [Optional]
+Example : BULL_PATH=Doors:AquaPWFail/AquaPWFail.Bull
+
+This tooltype specifies the path (including filename) where you want the
+last-password-failures bulletin to be created. If you leave this out, no
+bulletin will be made.
+@endnode
+
+@node BULL_USERS "AquaPWFail v1.0 Documentation"
+
+Template: BULL_USERS=<number>                      [Optional, default: 10]
+Example : BULL_USERS=12
+
+This tooltype specifies the number of users that will be displayed in the
+last-password-failures bulletin.
+@endnode
+
+@node CHATFLAG_IGNORE "AquaPWFail v1.0 Documentation"
+
+Template: CHATFLAG_IGNORE=<YES|NO>                 [Optional, default: NO]
+Example : CHATFLAG_IGNORE=YES
+
+If you set this to YES, the "available-for-chat flag" will be ignored and
+the user in the door will always be able to page you.
+@endnode
+
+@node PAGE_BEEP "AquaPWFail v1.0 Documentation"
+
+Template: PAGE_BEEP=<YES|NO>                       [Optional, default: NO]
+Example : PAGE_BEEP=YES
+
+This tooltype lets you decide if you want the door to make system beeps
+during paging.
+@endnode
+
+@node QUIETPOP "AquaPWFail v1.0 Documentation"
+
+Template: QUIETPOP=<YES|NO>                        [Optional, default: NO]
+Example : QUIETPOP=NO
+
+This tooltype determines what should happen when you press the 'Be Quiet'
+button in the operator window. If the AmiExpress screen should be popped
+to front, set the tooltype to YES. If it is NO then the previously
+frontmost screen will be brought to front and the previously active window
+will be activated.
+@endnode
+
+@node PAGESTART_RUN "AquaPWFail v1.0 Documentation"
+
+Template: PAGESTART_RUN=<CLI command>                           [Optional]
+Example : PAGESTART_RUN=C:Player mod.nice
+
+The command you write here will be executed when the paging starts. (It is
+run asyncronously so the door doesn't wait for it to return.)
+@endnode
+
+@node PAGESTOP_RUN "AquaPWFail v1.0 Documentation"
+
+Template: PAGESTOP_RUN=<CLI command>                            [Optional]
+Example : PAGESTOP_RUN=C:KillPlayer
+
+This command is executed when the operator window is closed (for any
+reason).
+@endnode
+
+@node History "AquaPWFail v1.0 Documentation"
+
+History
+~~~~~~~
+
+0.1 (12-26-94) First beta ready.
+
+
+0.2 (12-30-94) Built-in pager finished! Thanks to Sandman for inspiration.
+
+
+0.3 (12-30-94) It now works (can read connect string etc) if the
+               callerslog contains the attempted password instead of
+               "xxxx".
+
+               Added tooltypes PAGESTART_RUN and PAGESTOP_RUN.
+
+
+0.4 (01-09-95) If chat has been denied once, the user can't page again.
+               Thanks to Ace Caze for the suggestion!
+
+               Restructured the tooltypes somewhat:
+                 Removed:
+                   SYSOP.<num>=<...>
+                 Added:
+                   AUTOMAIL.<num>=<receiver of automsg>
+                   COMMENT.<num>=<receiver of user comment>
+                   TO_USER_FROM=<sender of msg to user>
+
+               Time and date are now written in the body of the automsg
+               to sysop(s) and msg to user.
+               (I find it easier than having to look in the msg header.
+               And if the user replies to the msg, the time & date will
+               still be there, if he quotes.)
+
+               Made a better-looking door title..
+
+               Last pw failures bulletin!! Thanks to Dansken for bugging
+               me about it. :)
+
+               New tooltypes:
+                 BULL_PATH=<bulletin filename>
+                 BULL_USERS=<max # users in bulletin>
+
+               "Doors:AquaPWFail/BullText.txt" is inserted in the
+               bulletin...
+
+               If there was error reading callerslog, time and date will
+               be set to current, so no more "??:??:?? ??-??-??".
+
+               It now writes "Please hold a second..." at the start while
+               posting all messages, writing to the log and creating the
+               bulletin.
+
+               If BULL_USERS=1 then the bulletin title will be
+               "LAST PASSWORD FAILURE" instead of "LAST 1 PASSWORD
+               FAILURES".
+
+
+1.0 (01-11-95) Removed unused code and fixed a few strings.
+
+    (01-25-95) Fixed a gfx bug: The progress bar would grow a few pixels
+               too wide.
+
+    (01-28-95) First release!
+@endnode
+
+@node ContactMe "AquaPWFail v1.0 Documentation"
+
+Contact Me!
+~~~~~~~~~~~
+If you have any cool ideas for improvement of this tool, questions, bug
+reports or whatever, contact me on one of the following boards:
+
+@{"NIGHTFALL" Link NIGHTFALL} ................ Whoosh ............ +46-90120369  <---  Safest
+HALL OF FAME ............. Dansken ........... +46-91026665      place to
+ACES HIGH ................ Norad ............. +46-41044886     reach me!
+INTERCHANGE .............. Princip ........... +46-86082339
+ZION'S HIDEOUT ........... Zion .............. +1-PRIVATE!!
+DEATH ROW ................ Shadower .......... +1-PRIVATE!!
+BOONDOCKS ................ Sal-One ........... +31-PRIVATE!!
+@endnode
+
+@node AquaTools "AquaPWFail v1.0 Documentation"
+
+The AquaTools Collection
+~~~~~~~~~~~~~~~~~~~~~~~~
+Here is the complete list of my released tools (the latest versions):
+
+Tool Name              File Name     Short Description
+---------------------- ------------- ------------------------------------------
+Disable v1.1           AQDSBL11.LHA  Payuser handling system.
+Displayer v1.0         AQDSPL10.LHA  Text displayer. Perfect for door menu e.g.
+NetEdit v1.0           AQNETE10.LHA  Editor for certain netmail systems.
+ConfReplace v1.0       OTL-CR10.LHA  Find and replace area names in User.Data.
+ListSpeeder v2.1       OTL-LS21.LHA  Filelist downloader.
+Announce v2.0          OTL-AN20.LHA  Notifies online users of logons/logoffs.
+AquaWho v2.0           OTL-AW20.LHA  Totally configurable WHO door!
+SpeedCheck v2.1        OTL-SC21.LHA  Disables download at too low connect rates.
+Stripper v1.2          OTL-ST12.LHA  Strips log files to desired file sizes.
+AquaScan v1.0          OTL-AS10.LHA  File scanner! (F, N, CS, FR.)
+AquaCreateAcc v1.0     OTL-CA10.LHA  Door to create new accounts with.
+AquaMoveFiles v1.0     OTL-MF10.LHA  File and description mover, by date.
+AquaSafety v1.0        OTL-SA10.LHA  Anti-BBS-downtime utility.
+AquaAdder v1.0         OTL-AA10.LHA  Text adder.
+AquaBulls v2.0         OTL-AB20.LHA  Bulletin viewer.
+AquaQuick v1.0         OTL-QK10.LHA  Quick-logon door.
+RestoreQuietness v1.0  OTL-RQ10.LHA  Restores the nodes' "quietness" at logoff.
+AquaSettings v1.0      OTL-SE10.LHA  'W' replacement. Menu of config commands.
+AquaQuiet v1.1         OTL-AQ11.LHA  'Q' replacement. Toggles quiet node.
+AquaPWFail v1.0        OTL-PW10.LHA  Password failure door.
+AquaTopChat v1.0       OTL-TC10.LHA  Top-chat door.
+
+(...and more are coming!)
+
+You can find them all on @{"Nightfall" Link NIGHTFALL} +46-90-120369 (free download)!
+@endnode
+
+@node BetaTesters "AquaPWFail v1.0 Documentation"
+
+Beta Testers
+~~~~~~~~~~~~
+These are my beta testers. My tools wouldn't have been as good as they
+are now if it hadn't been for them. Many thanks dudes!
+
+ACE CAZE ................. Dragon's Lair ........ +46-16147118
+EZCO ..................... Serpent Hill ......... +46-8800293
+DANSKEN .................. Hall of Fame ......... +46-91026665
+FIREHAWK ................. Hardware Tower ....... +46-OFFLINE!
+KID CURRY ................ Pet Sematary ......... +46-PRIVATE!
+LOCKJAMMER ............... Substate ............. +46-OFFLINE!
+MARKY & POWER ............ Spread Draft ......... +49-PRIVATE!
+NASHUA ................... MegaByte ............. +45-42881885
+PLAYMATE ................. Northern Empire ...... +45-39619420
+PRINCIP .................. Interchange .......... +46-PRIVATE!
+PSYCHOPATH ............... Raising Hell ......... +46-243227029
+RIZE & FROSTY ............ Another World ........ +46-48088100
+SANDMAN .................. reference-board ............ +46-31918587
+STATIC & FANTA ........... Frosen Assets ........ +46-322665225
+VEGAS & BISCROK .......... Overload ............. +46-OFFLINE!
+VITAL .................... Future Entrance ...... +46-60574467
+WHOOSH ................... @{"Nightfall" Link NIGHTFALL} ............ +46-90120369
+WIZE & HIFLY ............. Waterdeep ............ +46-PRIVATE!
+@endnode
+
+@node Greetings "AquaPWFail v1.0 Documentation"
+
+Greetings
+~~~~~~~~~
+                Greetings must go to (in no special order):
+
+           - Vegas/OTL - Biscrok/OTL - Toxic/OTL - Nashua/OTL -
+     - Snake/OTL - Whoosh/OTT^DVS^CLS^OTL^R2 - AtomiX!/OTL - SMS/OTL -
+   - Genghis Khan/OTL - The Other OTL Members - Ace Caze - Dansken/ACS -
+  - Princip! - Sandman - Rize & Frosty - Static & fanta - Marky & Power -
+  - Psychopath - Norad - Firehawk - Marwin - Danzig! - Lockjammer - MDR -
+  - HardHack - Chig - Kid Curry - Ezco - Enzo - Playmate - HiFly - Wize -
+   - Wild Thing - Juan! - Wilsom - Gi Joe - Sal-One - Zion! - Shadower -
+    - Doc Whoo - FAX - JAz - Bowen/OTT - Json - WarDancer - CornFlake -
+       - Bilbo Baggins - Sasha - Metalbasher - Psyche - CountZero! -
+               - Vital - Karma - Kain - Vileius - Nike/DLT -
+                       - And The Friends I Forgot! -
+
+
+                    Special thanks to my @{"beta testers" Link BetaTesters}!!
+
+
+                         A few personal messages:
+
+Whoosh         - Whooopssss... Nice chatting with you every day. :)
+
+Toxic/OTL      - Hard getting cards isn't it? If you can, call Nightfall
+                 (new pwfail door hehe)!
+
+Vegas/OTL      - Yeah let's get the Swedish section rocking! I mean, MORE!
+                 Btw, Norrland is such a nice place, don't you think? :)
+
+Biscrok/OTL    - The master of strange (tüffa) modules. ;)
+
+Dansken        - Great friend and beta tester! Learn C soon!! hehe
+
+Marky & Power  - Hope you can find a new way to call...
+
+Ezco           - Great Who designs!!
+
+Ace Caze       - Funny dude and great beta tester! Ok, nothing wrong with
+                 topaz 8! You just need a magnifying glass..
+
+Snowman/Ex.OTL - Where did you disappear??? Get in touch, mate..
+@endnode
+
+@node NIGHTFALL "AquaPWFail v1.0 Documentation"
++-------------------------------------------------------------------------+
+|         iNTO tOTAL dARKNESS, tHE uNKNOWN; cOME wALK wiTH mE...          |
+| a3ooo    ___/\       ___/\ ____/\__________/\ ___/   __/\ _________9ooMB|
++----------\__  \______\__  \____  __________  \  /   \__  \   _____/-----+
+|         tS/    __    \/      /  /_____   /     /     /        /         |
+· /X 4.xx  /      /    /      /     /     /           /        /    r2 sHQ·
+          /      /    /      /     /     /     /     /        /    dVS sHQ
+   eNJOY /______/    /______/___________/_____/     /________/    oTT  sHQ
+   tHE         /____/                        /     /         oTL diST siTE
+ sPEED!             ·3 uSR nODES riNGDOWN!· /     /
+    ___/\ _________/\ _________/\ ___   ___/     / sTAFF: wHOOSH, aQUARiUS,
+    \__  \ ________  \_________  \  /   \__     / riZE, mASTERmAN, nEMESiS
+·    /    _____/ /     __    /     /_____/     /_____                     ·
+:   /      /    /      /    /     /     /     /     /    mORE tHAN 1200   :
+|  /      /    /      /    /     /     /     /     / aMiX tOOLS oNLiNE!!  |
++-/______/----/______/    /___________/___________/-----------------------+
+|                   /____/                                                |
+| nODE#1: +46-90-120369   nODE#2: +46-riNGDOWN!!  nODE#3: +46-riNGDOWN!!  |
+|      (14.4k DS)              (16.8k DS)              (28.8k DS)         |
++-------------------------------------------------------------------------+
+@endnode
+
+@node FuckText "AquaPWFail v1.0 Documentation"
+
+Comment on AQUA-FUQ.TXT
+~~~~~~~~~~~~~~~~~~~~~~~
+
+--vv-vv----------------- START OF "AQUA-FUQ.TXT" ------------------vv-vv--
+
+@BEGIN_FILE_ID.DIZ
+--------------------------------------------
+Pot-Noodle speaks: All of AQUARIUS /X doors
+are MY sources that HE edited! This is fuqn
+LAME! I bet he put alot of BACKDOORS in them
+too! DONT USE THEM! There's PROOF in this
+text that shows that I made all the doors!
+-------------------------[ P0t-N00dle/atx ]-
+@END_FILE_ID.DIZ
+
+I'm UPSET! About 1 year ago, Aquarius were a active user of my bbs, and he
+told me he were an /X tool developer, so i gave him access to my /X tool/source
+conferance, and he leeched all of my unreleased utils in this conf.
+Now, 1 year later, i see more and more of them poppin up as 'quack-wa-scan'
+and whatever. I have no idea what he might have added more then just his
+name to my doors, but i would suggest you NOT to use them.
+
+                                                           >p0t-n00dle/anThrox<
+
+--^^-^^------------------ END OF "AQUA-FUQ.TXT" -------------------^^-^^--
+
+If you've had the bad luck to have seen this text, you have probably
+figured out that it is total bullshit. Then you're absolutely right! It is
+plain lies! I haven't even called P0T-NOoDLE's BBS, EVER! This text is
+just another attempt from some lame "wanna-be" to destroy for a guy
+working hard to supply the scene with backdoor-free, quality /X tools. It
+makes me sad, whoever it is being attacked with lies like that. Can't the
+pitiful lamers producing such crap do something positive, instead of just
+trying to destroy for others? I guess not... But then they should get the
+fuck out of the scene, at least until they've grown up!!
+
+The lamer who wrote AQUA-FUQ.TXT is also abusing the highly respected name
+P0T-NOoDLE (great tools man!). Of course it's not P0T-NOoDLE who wrote it.
+A few observations to make:
+
+* P0T-NOoDLE is English and I don't think he would write "Aquarius were a
+  active user"... I'm sure the real writer has done his best to get it
+  right.
+
+* As far as I know, P0T-NOoDLE codes his tools in assembler (and some in
+  ARexx). I write mine in C, so how could I have stolen and edited his
+  sources??
+
+* P0T-NOoDLE has never used icons as config. I do it in most of my tools.
+
+And so on... If you still (!) have any doubts, take a look at the doc for
+P0T-NOoDLE's excellent Super-DupeCheck v1.03 and the list of his
+unreleased tools. Then you'll see that I haven't made a single one like
+any of those.
+
+You can also ask any of my @{"beta testers" Link BetaTesters}. They can assure you that my tools
+have been DEVELOPED and weren't just suddenly finished. For example
+AquaScan - it was rather simple in the beginning; no scroll-back, no
+flagging by number, no date/file separators etc. In this doc, I have
+included the @{"history" Link History} for the early beta versions of this tool. I usually
+don't do that. But just so that you can see that it is MY work! (sigh)
+
+And about the "accusation" of backdoors... Do you think I would spend most
+of my spare time writing lame backdoors?! Of course not! I code /X tools
+for fun and for others to enjoy. And obviously people DO enjoy them. :)
+As an example, Sasha (Datalus BBS, UK) just told me about AquaScan:
+"every (and i mean every) bbs in the uk uses it!"... That's the only
+reward I want for my work; to hear that my tools are appreciated.
+
+So if you see AQUA-FUQ.TXT somewhere, or any other text like that, nuke it
+to hell!
+
+Ok, enough about this CRAP!
+@endnode
+
+@node AquaSettings "AquaPWFail v1.0 Documentation"
+
+Note about AquaSettings
+~~~~~~~~~~~~~~~~~~~~~~~
+First of all, I'm glad so many boards are using AquaSettings! Just a few
+days after release and suddenly it's installed on every other board! Cool!
+
+But it seems I made a little mistake in the AquaSettings v1.0 archive..
+In the provided configuration icon 'AquaSettings.info', the 'CMD.1'
+tooltype was set to 'W'. It SHOULD have been 'W_INTERNAL'. This only goes
+for AmiExpress 3.xx/4.xx. The icon was correct for SigmaExpress and
+AmiExpress 2.xx. I did write about that in the doc, but there I assumed
+'CMD.1' was 'W_INTERNAL' from the beginning.
+
+So what's the difference? Well, when you start AquaSettings you get a menu
+of different configuration stuff. The first entry is "Basic settings", or
+whatever you name it, i.e. it starts the internal W command. But if
+'CMD.1=W' then the door won't be able to return to the menu again. That's
+because of a limitation in AmiExpress/S-Express which doesn't let any door
+run an internal command (with the same name as a door), without quitting
+the door first. But the W_INTERNAL command is a way around this. If you
+use 'CMD.1=W_INTERNAL' with AmiExpress 3.xx/4.xx, then "Basic settings"
+will behave like all the other menu entries: you will be taken back to the
+AquaSettings menu afterwards.
+
+I haven't seen it changed on any board, so what I have learnt from this is
+that the contents of provided configuration files are very important, and
+that most sysops don't bother to read the doc entirely and check the
+configuration, which is a bit unfortunate.
+
+  .------------------------------------------------------------------.
+  | If you're running AmiExpress 3.xx/4.xx, change 'CMD.1=W' to      |
+  | 'CMD.1=W_INTERNAL' in 'Doors:AquaSettings/AquaSettings.info',    |
+  | and make sure you have copied 'W_INTERNAL.info' from the archive |
+  | (OTL-SE10.LHA) to your 'BBSCmd' drawer (NOT 'SYSCmd').           |
+  `------------------------------------------------------------------'
+@endnode
+
+[EOF]
