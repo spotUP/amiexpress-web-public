@@ -91,14 +91,14 @@ export class AmiExpressLibrary {
         console.log(`[AmiExpress Library] Offset 0xFF0002 - treating as NOP (return success)`);
         return true;  // Just return success
 
-      case -16655:      // 0xFFFFBEF1 - Maybe ReadChar (non-blocking)
-        console.log(`[AmiExpress Library] Offset -16655 - treating as ReadChar (return -1 = no input)`);
-        this.emulator.setRegister(CPURegister.D0, -1);  // No input available
-        return true;
+      case -16655:      // 0xFFFFBEF1 - ReadChar (non-blocking)
+        console.log(`[AmiExpress Library] Offset -16655 - calling aeGetCh()`);
+        return this.aeGetCh();
 
-      case -16657:      // 0xFFFFBEEF - Maybe CheckInput or similar
-        console.log(`[AmiExpress Library] Offset -16657 - treating as CheckInput (return 0 = no input)`);
-        this.emulator.setRegister(CPURegister.D0, 0);  // No input waiting
+      case -16657:      // 0xFFFFBEEF - CheckInput (returns chars available)
+        const charsAvailable = this.inputQueue.length > 0 ? 1 : 0;
+        console.log(`[AmiExpress Library] Offset -16657 - CheckInput returns ${charsAvailable}`);
+        this.emulator.setRegister(CPURegister.D0, charsAvailable);
         return true;
 
       default:
