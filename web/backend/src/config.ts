@@ -92,7 +92,8 @@ export class ConfigManager {
       port: 3001,
 
       // Path Settings
-      dataDir: process.env.BBS_DATA_DIR || process.cwd(),
+      // Project root contains BBS data (Commands/, Conf1/, Doors/, etc.)
+      dataDir: process.env.BBS_DATA_DIR || path.join(__dirname, '../../..'),
 
       // Time Settings
       timeZone: 'UTC',
