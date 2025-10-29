@@ -1150,8 +1150,9 @@ let managerInstance: AmigaDoorManager | null = null;
 export function getAmigaDoorManager(bbsRoot?: string): AmigaDoorManager {
   if (!managerInstance) {
     // BBS directory structure matches original Amiga AmiExpress
-    // Note: When running from backend/backend/src, we need to go up one level to reach backend/BBS
-    const root = bbsRoot || path.join(process.cwd(), '..', 'BBS');
+    // The project root contains Doors/, Commands/, and other BBS directories
+    // When running from web/backend (process.cwd()), go up two levels to reach project root
+    const root = bbsRoot || path.join(process.cwd(), '..', '..');
     managerInstance = new AmigaDoorManager(root);
   }
   return managerInstance;
