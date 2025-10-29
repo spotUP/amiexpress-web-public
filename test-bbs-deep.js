@@ -107,7 +107,12 @@ class DeepBBSTester {
         time: Date.now(),
         data: data
       });
-      
+
+      // Always show BBS output for debugging
+      console.log(`\n${colors.dim}=== BBS OUTPUT ===${colors.reset}`);
+      console.log(data);
+      console.log(`${colors.dim}=== END OUTPUT ===${colors.reset}\n`);
+
       if (process.env.VERBOSE) {
         process.stdout.write(data);
       }
