@@ -1,0 +1,13 @@
+ByteMaster's List of Doors
+--------------------------
+
+      UPDATE ................... Reg door for /X 2.20
+      BETA ..................... Reg door for /X 2.21 Beta
+      ACS ...................... System Access List
+      BUGRPT ................... Add to BugRpt List
+      SUGGEST .................. Add to Suggest List
+
+      MODEM .................... Add your Modem Settings
+      MASTER ................... MasterMind by /X\altese Falcon
+
+
