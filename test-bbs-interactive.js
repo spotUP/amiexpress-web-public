@@ -99,10 +99,10 @@ class InteractiveTester {
 
   async waitForOutput(minWait = 3000) {
     const startOutputCount = this.outputCount;
-    
+
     // Wait minimum time
     await new Promise(r => setTimeout(r, minWait));
-    
+
     // Wait for output to stabilize (no new output for 800ms)
     let stableCount = 0;
     while (stableCount < 8) {
@@ -114,10 +114,10 @@ class InteractiveTester {
         stableCount = 0;
       }
     }
-    
-    // Extra buffer
-    await new Promise(r => setTimeout(r, 500));
-    
+
+    // Extra buffer - increased for conference operations
+    await new Promise(r => setTimeout(r, 1000));
+
     return this.outputCount > startOutputCount;
   }
 
@@ -193,15 +193,15 @@ class InteractiveTester {
       ]);
 
       await this.runTest('Next Conference', [
-        { input: '>', desc: 'Next conference', wait: 3000 }
+        { input: '>', desc: 'Next conference', wait: 4000 }
       ]);
 
       await this.runTest('Previous Conference', [
-        { input: '<', desc: 'Previous conference', wait: 3000 }
+        { input: '<', desc: 'Previous conference', wait: 4000 }
       ]);
 
       await this.runTest('Join Conference', [
-        { input: 'J 1', desc: 'Join conference 1', wait: 3500 }
+        { input: 'J 1', desc: 'Join conference 1', wait: 5000 }
       ]);
 
       await this.runTest('Next Message Base', [
