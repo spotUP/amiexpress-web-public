@@ -71,6 +71,19 @@ class BBSClient {
     this.socket.on('ansi-output', (data) => {
       // Output ANSI data directly to console
       process.stdout.write(data);
+
+      // Check for BBSTITLE screen to send Enter
+      if (data.includes('The Classic Amiga BBS Experience') && !this.authenticated && !this.loginPrompted) {
+        console.log(`${colors.dim}[BBS CLI] Sending Enter for BBSTITLE screen${colors.reset}`);
+        this.socket.emit('command', '\r');
+      }
+
+      // Check for menu prompt to send login
+      if (data.includes('Menu (') && USERNAME && !this.authenticated && !this.loginPrompted) {
+        this.loginPrompted = true;
+        console.log(`${colors.dim}[BBS CLI] Detected menu, sending login${colors.reset}`);
+        this.socket.emit('check-username', { username: USERNAME });
+      }
     });
 
     this.socket.on('prompt-password', () => {
@@ -82,6 +95,15 @@ class BBSClient {
         this.rl.question('Password: ', (password) => {
           this.socket.emit('login', { username: USERNAME || 'guest', password });
         });
+      }
+    });
+
+    this.socket.on('prompt-login', () => {
+      console.log(`${colors.yellow}[BBS CLI] Server ready for login${colors.reset}`);
+      if (USERNAME && !this.loginPrompted) {
+        this.loginPrompted = true;
+        console.log(`${colors.dim}[BBS CLI] Auto-checking username: ${USERNAME}${colors.reset}`);
+        this.socket.emit('check-username', { username: USERNAME });
       }
     });
 
@@ -184,7 +206,38 @@ class BBSClient {
           return;
         }
       }
-      
+
+      // Handle ANSI prompt response
+      if (this.currentState === 'connected' && !this.authenticated) {
+        // Check if this is the ANSI prompt response
+        const upperLine = line.toUpperCase();
+        if (upperLine === 'A' || upperLine === 'R' || upperLine === 'N') {
+          console.log(`${colors.dim}[BBS CLI] Sending ANSI response: ${upperLine}${colors.reset}`);
+          this.socket.emit('command', upperLine);
+          // Also send Enter to complete the ANSI prompt
+          setTimeout(() => {
+            console.log(`${colors.dim}[BBS CLI] Sending Enter to complete ANSI prompt${colors.reset}`);
+            this.socket.emit('command', '\r');
+          }, 100);
+          return;
+        }
+      }
+
+      // Handle BBSTITLE screen - press Enter to continue
+      if (this.currentState === 'connected' && !this.authenticated && line.trim() === '') {
+        console.log(`${colors.dim}[BBS CLI] Sending Enter for BBSTITLE screen${colors.reset}`);
+        this.socket.emit('command', '\r');
+        // Auto-login if credentials provided - do it immediately after BBSTITLE
+        if (USERNAME && !this.loginPrompted) {
+          this.loginPrompted = true;
+          setTimeout(() => {
+            console.log(`${colors.dim}[BBS CLI] Auto-checking username: ${USERNAME}${colors.reset}`);
+            this.socket.emit('check-username', { username: USERNAME });
+          }, 200); // Faster timing
+        }
+        return;
+      }
+
       // Send command to server
       this.socket.emit('command', line);
     });

@@ -1660,8 +1660,8 @@ const SCREEN_JOINMSGBASE = 'JoinMsgBase';
 // Logs to database like express.e logs to BBS:Node{X}/CallersLog file
 async function callersLog(userId: string | null, username: string, action: string, details?: string, nodeId: number = 1) {
   try {
-    await db.pool.query(
-      'INSERT INTO caller_activity (node_id, user_id, username, action, details) VALUES ($1, $2, $3, $4, $5)',
+    await db.query(
+      'INSERT INTO caller_activity (node_id, user_id, username, action, details) VALUES (?, ?, ?, ?, ?)',
       [nodeId, userId, username, action, details || null]
     );
   } catch (error) {
@@ -2267,7 +2267,7 @@ async function loadFlagged(socket: any, session: BBSSession) {
     // Load user's flagged files from database
     // Format: array of {confNum: number, fileName: string}
     const result = await db.query(
-      'SELECT conf_num, file_name FROM flagged_files WHERE user_id = $1',
+      'SELECT conf_num, file_name FROM flagged_files WHERE user_id = ?',
       [session.user!.id]
     );
 
@@ -2306,7 +2306,7 @@ async function loadHistory(session: BBSSession) {
 
     // Load from database
     const result = await db.query(
-      'SELECT history_num, history_cycle, commands FROM command_history WHERE user_id = $1',
+      'SELECT history_num, history_cycle, commands FROM command_history WHERE user_id = ?',
       [session.user!.id]
     );
 
