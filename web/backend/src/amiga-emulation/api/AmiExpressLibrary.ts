@@ -58,7 +58,7 @@ export class AmiExpressLibrary {
    * Handle library call
    */
   handleCall(offset: number): boolean {
-    console.log(`[AmiExpress Library] Checking offset: 0x${offset.toString(16)}`);
+    console.log(`[AmiExpress Library] Checking offset: 0x${offset.toString(16)} (decimal: ${offset})`);
 
     switch (offset) {
       case this.FUNC_AEPUTS:
@@ -78,6 +78,15 @@ export class AmiExpressLibrary {
 
       case this.FUNC_AEGETUSER:
         return this.aeGetUser();
+
+      // DISCOVERED OFFSETS from AquaWho door testing (2025-10-30)
+      // These offsets were called repeatedly during execution
+      case 0xFF0000:    // 16711680 - Called frequently - likely WriteChar or WriteString
+      case 0xFF0002:    // 16711682 - Called frequently - likely WriteChar variant
+      case -16655:      // 0xFFFFBEF1 - Called frequently
+      case -16657:      // 0xFFFFBEEF - Called frequently
+        console.log(`[AmiExpress Library] Discovered offset ${offset} (0x${offset.toString(16)}) - treating as WriteChar`);
+        return this.aePutCh();
 
       default:
         return false;
