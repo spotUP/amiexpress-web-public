@@ -80,13 +80,26 @@ export class AmiExpressLibrary {
         return this.aeGetUser();
 
       // DISCOVERED OFFSETS from AquaWho door testing (2025-10-30)
-      // These offsets were called repeatedly during execution
-      case 0xFF0000:    // 16711680 - Called frequently - likely WriteChar or WriteString
-      case 0xFF0002:    // 16711682 - Called frequently - likely WriteChar variant
-      case -16655:      // 0xFFFFBEF1 - Called frequently
-      case -16657:      // 0xFFFFBEEF - Called frequently
-        console.log(`[AmiExpress Library] Discovered offset ${offset} (0x${offset.toString(16)}) - treating as WriteChar`);
-        return this.aePutCh();
+      // Pattern: -16657, -16655, 0xFF0000, 0xFF0002 repeating
+      // Door calls 4 different offsets in sequence - they're likely DIFFERENT functions
+
+      case 0xFF0000:    // 16711680 - Maybe WriteChar
+        console.log(`[AmiExpress Library] Offset 0xFF0000 - treating as NOP (return success)`);
+        return true;  // Just return success, don't output
+
+      case 0xFF0002:    // 16711682 - Maybe another function
+        console.log(`[AmiExpress Library] Offset 0xFF0002 - treating as NOP (return success)`);
+        return true;  // Just return success
+
+      case -16655:      // 0xFFFFBEF1 - Maybe ReadChar (non-blocking)
+        console.log(`[AmiExpress Library] Offset -16655 - treating as ReadChar (return -1 = no input)`);
+        this.emulator.setRegister(CPURegister.D0, -1);  // No input available
+        return true;
+
+      case -16657:      // 0xFFFFBEEF - Maybe CheckInput or similar
+        console.log(`[AmiExpress Library] Offset -16657 - treating as CheckInput (return 0 = no input)`);
+        this.emulator.setRegister(CPURegister.D0, 0);  // No input waiting
+        return true;
 
       default:
         return false;
@@ -230,7 +243,20 @@ export class AmiExpressLibrary {
    */
   private aePutCh(): boolean {
     const charCode = this.emulator.getRegister(CPURegister.D0) & 0xFF;
-    console.log(`[AmiExpress] aePutCh() called: 0x${charCode.toString(16)} ('${String.fromCharCode(charCode)}')`);
+
+    // Get ALL registers to understand calling convention
+    const d0 = this.emulator.getRegister(CPURegister.D0);
+    const d1 = this.emulator.getRegister(CPURegister.D1);
+    const a0 = this.emulator.getRegister(CPURegister.A0);
+    const a1 = this.emulator.getRegister(CPURegister.A1);
+    const a6 = this.emulator.getRegister(CPURegister.A6);
+    const pc = this.emulator.getRegister(CPURegister.PC);
+
+    console.log(`[AmiExpress] aePutCh() called:`);
+    console.log(`  Char: 0x${charCode.toString(16)} ('${String.fromCharCode(charCode)}')`);
+    console.log(`  D0=0x${d0.toString(16)}, D1=0x${d1.toString(16)}`);
+    console.log(`  A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, A6=0x${a6.toString(16)}`);
+    console.log(`  PC=0x${pc.toString(16)}`);
 
     if (this.outputCallback) {
       this.outputCallback(String.fromCharCode(charCode));
