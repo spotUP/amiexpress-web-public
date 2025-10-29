@@ -91,6 +91,7 @@ export class HunkLoader {
 
     for (let i = 0; i < header.numSegments; i++) {
       segmentAddresses.push(currentAddress);
+      console.log(`[HunkLoader] Segment ${i} will be placed at 0x${currentAddress.toString(16)} (size: ${header.segmentSizes[i] * 4} bytes)`);
       currentAddress += header.segmentSizes[i] * 4; // Sizes are in longwords
       currentAddress = (currentAddress + 0xFF) & ~0xFF; // Align to 256 bytes
     }
@@ -111,10 +112,14 @@ export class HunkLoader {
           const size = this.readLong() * 4; // Size in longwords -> bytes
           const data = this.readBytes(size);
 
+          // Use segments.length as the index (since we're about to push)
+          // NOT segmentIndex (which only increments at HUNK_END)
+          const currentSegmentIndex = segments.length;
+
           const segment: HunkSegment = {
             type: hunkType === HunkType.HUNK_CODE ? SegmentType.CODE : SegmentType.DATA,
             data: new Uint8Array(data),
-            address: segmentAddresses[segmentIndex],
+            address: segmentAddresses[currentSegmentIndex],
             size: size
           };
 
@@ -126,10 +131,13 @@ export class HunkLoader {
         case HunkType.HUNK_BSS: {
           const size = this.readLong() * 4; // Size in longwords -> bytes
 
+          // Use segments.length as the index (since we're about to push)
+          const currentSegmentIndex = segments.length;
+
           const segment: HunkSegment = {
             type: SegmentType.BSS,
             data: new Uint8Array(size), // Zero-filled
-            address: segmentAddresses[segmentIndex],
+            address: segmentAddresses[currentSegmentIndex],
             size: size
           };
 
