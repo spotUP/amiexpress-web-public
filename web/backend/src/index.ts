@@ -2537,7 +2537,7 @@ async function initializeData() {
 
     // Load Amiga command definitions (.info and .CMD files)
     // express.e loads commands at startup for SYSCMD and BBSCMD lookup
-    const bbsBaseDir = path.join(__dirname, '../BBS');
+    const bbsBaseDir = config.get('dataDir');
     loadCommands(bbsBaseDir, 1, 0); // Load for conference 1, node 0
 
     // Inject dependencies into chat handler
