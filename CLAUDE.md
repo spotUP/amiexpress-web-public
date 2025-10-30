@@ -1,5 +1,19 @@
 # AmiExpress-Web Project Guidelines
 
+## 🚨 CRITICAL: ALWAYS Reference vAmiga Sources for Amiga Emulation 🚨
+
+**BEFORE implementing ANY Amiga emulation or door functionality, READ `CRITICAL_RULES.md` and reference vAmiga sources!**
+
+Key rule: **Don't guess. Don't try random fixes. Check vAmiga sources first.**
+
+Location: `~/Code/amiexpress-web/Docs/vAmiga/`
+
+vAmiga is a complete, working Amiga emulator that has ALL the answers for correct implementation.
+
+**See `CRITICAL_RULES.md` for detailed guidelines on using vAmiga as reference.**
+
+---
+
 ## 🚨 CRITICAL: Task Completion Notifications 🚨
 
 **WHEN YOU COMPLETE NEW TASKS, ALWAYS NOTIFY THE COMMUNITY:**
