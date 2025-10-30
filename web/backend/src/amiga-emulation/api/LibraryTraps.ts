@@ -25,11 +25,12 @@ interface LibraryVector {
 
 /**
  * Exec.library function vectors
- * Reference: Amiga ROM Kernel Reference Manual
+ * Reference: Amiga ROM Kernel Reference Manual & exec.library FD file
+ * LVO = Library Vector Offset (in bytes from library base)
  */
 const EXEC_VECTORS: LibraryVector[] = [
   {
-    offset: -30,
+    offset: -552,  // LVO -552 (0xFDD8)
     name: 'OpenLibrary',
     handler: (emu, lib: ExecLibrary) => {
       const nameAddr = emu.getRegister(9);   // A1
@@ -38,7 +39,7 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
-    offset: -36,
+    offset: -414,  // LVO -414 (0xFE62)
     name: 'CloseLibrary',
     handler: (emu, lib: ExecLibrary) => {
       const libAddr = emu.getRegister(9);    // A1
@@ -47,7 +48,7 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
-    offset: -42,
+    offset: -132,  // LVO -132 (0xFF7C)
     name: 'Forbid',
     handler: (emu, lib: ExecLibrary) => {
       console.log('[ExecLibrary] Forbid() - stub (no-op)');
@@ -55,7 +56,7 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
-    offset: -48,
+    offset: -138,  // LVO -138 (0xFF76)
     name: 'Permit',
     handler: (emu, lib: ExecLibrary) => {
       console.log('[ExecLibrary] Permit() - stub (no-op)');
@@ -63,7 +64,7 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
-    offset: -54,
+    offset: -198,  // LVO -198 (0xFF3A)
     name: 'AllocMem',
     handler: (emu, lib: ExecLibrary) => {
       const size = emu.getRegister(0);       // D0
@@ -72,7 +73,7 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
-    offset: -60,
+    offset: -210,  // LVO -210 (0xFF2E)
     name: 'FreeMem',
     handler: (emu, lib: ExecLibrary) => {
       const memAddr = emu.getRegister(9);    // A1
@@ -82,7 +83,7 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
-    offset: -66,
+    offset: -294,  // LVO -294 (0xFED6)
     name: 'FindTask',
     handler: (emu, lib: ExecLibrary) => {
       const nameAddr = emu.getRegister(9);   // A1
