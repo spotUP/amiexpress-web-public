@@ -2,13 +2,14 @@ import { Server, Socket } from 'socket.io';
 import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { HunkLoader } from './loader/HunkLoader';
 import { ExecLibrary } from './api/ExecLibrary';
+import { LibraryTraps } from './api/LibraryTraps';
 import * as fs from 'fs';
 import * as path from 'path';
 
 /**
  * AmigaDoorSession - Manages a single user's door execution session
  * Uses library API emulation (Option C Hybrid) instead of ROM boot
- * Version: 2025-10-30 - ExecLibrary integration (Phase 1)
+ * Version: 2025-10-30 - Phase 2: Library call trapping
  */
 
 export interface DoorConfig {
@@ -20,6 +21,7 @@ export interface DoorConfig {
 export class AmigaDoorSession {
   private emulator: MoiraEmulator | null = null;
   private execLibrary: ExecLibrary | null = null;
+  private libraryTraps: LibraryTraps | null = null;
   private socket: Socket;
   private config: DoorConfig;
   private isRunning: boolean = false;
@@ -126,6 +128,11 @@ export class AmigaDoorSession {
     this.execLibrary = new ExecLibrary(this.emulator);
     this.execLibrary.initialize();
 
+    console.log('[AmigaDoorSession] Installing library call traps...');
+
+    this.libraryTraps = new LibraryTraps(this.emulator, this.execLibrary);
+    this.libraryTraps.installExecVectors();
+
     console.log('[AmigaDoorSession] Exec system ready');
   }
 
@@ -190,18 +197,30 @@ export class AmigaDoorSession {
       const exitSentinel = 0xDEADBEEF;
 
       while (this.isRunning) {
-        // Execute some cycles
-        this.emulator.execute(CYCLES_PER_ITERATION);
-        this.totalCycles += CYCLES_PER_ITERATION;
-        this.iterationCount++;
+        // Check for library trap BEFORE execution
+        const pc = this.emulator.getRegister(16);
+
+        // Handle library trap if PC is at a vector address
+        if (this.libraryTraps && this.libraryTraps.isTrapAddress(pc)) {
+          console.log(`[AmigaDoorSession] Library trap detected at PC=0x${pc.toString(16)}`);
+          if (!this.libraryTraps.handleTrap(pc)) {
+            console.error(`[AmigaDoorSession] Failed to handle trap at 0x${pc.toString(16)}`);
+          }
+          // Don't execute cycles this iteration - trap handler set new PC
+          continue;
+        }
 
         // Check if door has exited (PC == exit sentinel)
-        const pc = this.emulator.getRegister(16);
         if (pc === exitSentinel) {
           console.log('[AmigaDoorSession] Door executed RTS to exit sentinel - door completed');
           this.terminate();
           return;
         }
+
+        // Execute some cycles
+        this.emulator.execute(CYCLES_PER_ITERATION);
+        this.totalCycles += CYCLES_PER_ITERATION;
+        this.iterationCount++;
 
         // Log progress every 10k iterations (100M cycles)
         if (this.iterationCount % 10000 === 0) {
