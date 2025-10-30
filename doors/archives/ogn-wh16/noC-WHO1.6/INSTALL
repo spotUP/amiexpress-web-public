@@ -1,0 +1,40 @@
+failat 20
+echo 
+echo "[0m -----------------------------------------------------"
+echo "[1m noC-WHO Installation Script - (C)1994 nocTurne deSign"
+echo "[0m -----------------------------------------------------"
+ask " Are you sure you wish to install noC-WHO? ([1my[0m/[1mN[0m)...:"
+if WARN
+    echo " Installing files..."
+else
+    endcli
+endif
+
+makedir >NIL: doors:noC-WHO
+makedir >NIL: env:noC-WHO envarc:noC-WHO
+makedir >NIL: env:noC-WHO/data envarc:noC-WHO/data
+makedir >NIL: doors:noC-WHO/styles
+
+copy doors/noC-WHO/who.config doors:noC-WHO/
+copy doors/noC-WHO/who.config.info doors:noC-WHO/
+copy bbscmd/WHO.info bbs:commands/bbscmd/
+copy >NIL: doors/noC-WHO/noC-WHO.guide#? doors:noC-WHO/
+copy >NIL: doors/noC-WHO/noC-WHO.doc#? doors:noC-WHO/
+
+copy >NIL: doors/noC-WHO/styles doors:noC-WHO/styles/ ALL
+copy >NIL: doors/noC-WHO/styles.info doors:noC-WHO/
+
+ask " Install 030 version? ([1my[0m/[1mN[0m)...:"
+if WARN
+    copy doors/noC-WHO/noC-WHO.x.030 env:noC-WHO/noC-WHO.x
+    copy doors/noC-WHO/noC-WHO.x.030.info env:noC-WHO/noC-WHO.x.info
+    copy doors/noC-WHO/noC-WHO.x.030 envarc:noC-WHO/noC-WHO.x
+    copy doors/noC-WHO/noC-WHO.x.030.info envarc:noC-WHO/noC-WHO.x.info
+    echo " '030 Installation completed.  noC-WHO is ready for use..."
+else
+    copy doors/noC-WHO/noC-WHO.x env:noC-WHO/noC-WHO.x
+    copy doors/noC-WHO/noC-WHO.x.info env:noC-WHO/noC-WHO.x.info
+    copy doors/noC-WHO/noC-WHO.x envarc:noC-WHO/noC-WHO.x
+    copy doors/noC-WHO/noC-WHO.x.info envarc:noC-WHO/noC-WHO.x.info
+    echo " Installation completed.  noC-WHO is ready for use..."
+endif

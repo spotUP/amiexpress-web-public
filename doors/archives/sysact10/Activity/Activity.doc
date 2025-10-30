@@ -1,0 +1,27 @@
+installation:
+
+copy BULL1.TXT to BBS:BULLETINS/BULL?.TXT
+copy ACTIVITY to ?
+
+usage:
+
+you must start it every day
+Usage: activity <bulletin-nr (1-9)>
+
+the last caller from the day before must have logged off
+
+you can change the logo of BULL?.TXT - but never change the format and the
+number of lines of BULL?.txt
+
+also the chars in a line should never be more than 99 (not too much ansi)
+
+if you have a new node - copy the original BULL?.TXT with the right number
+of lines to BBS:BULLETINS
+
+please dont change the line "activity graph by qwert"
+
+do not delete the original BULL?.TXT's because if you have a crash and your
+BULL.TXT gets deleted the programm can't work any more
+
+ave
+qwert

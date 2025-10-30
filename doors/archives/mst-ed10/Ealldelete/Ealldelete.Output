@@ -1,0 +1,46 @@
+9.HD1:> Ealldelete
+
+EALL-Deleter! (Version 1.0) - Copyright (c) 1994 by Bobo/Mystic
+
+This utility will delete EALL messages written in a specific conference!
+Usage: EALLDELETE <confpath>  (EG: EALLDELETE BBS:Elite/)
+
+9.HD1:> Ealldelete BBS:Conf2/
+
+EALL-Deleter! (Version 1.0) - Copyright (c) 1994 by Bobo/Mystic
+
+Lowest message : 3
+Highest message: 2912
+Conference path: BBS:Conf2/
+
+Scanning conference for EALL messages (Please wait)..
+
+Type     From                           Subject               Msg
+-------  ------------------------------ --------------------  -------
+Public   BOBO                           TEST MESSAGE 1        0001511
+Public   BOBO                           TEST MESSAGE 2        0002856
+
+Do you want to read/delete this messages (Y/n)? y
+
+Date   : Sat Feb 12 16:27:25              Number: 1511
+To     : EALL                             Recv'd: No
+From   : BOBO                             Status: Public Message
+Subject: TEST MESSAGE 1
+
+TEST MESSAGE NUMBER ONE!
+
+Do you want to delete this message (y/N/q)? n
+
+Date   : Mon Apr 18 20:23:15              Number: 2856
+To     : EALL                             Recv'd: No
+From   : BOBO                             Status: Public Message
+Subject: TEST MESSAGE 2
+
+TEST MESSAGE NUMBER TWO!
+
+Do you want to delete this message (y/N/q)? y
+
+Deleting message number 2856...
+File: BBS:Conf2/Msgbase/2856 - Removed.
+
+9.HD1:>

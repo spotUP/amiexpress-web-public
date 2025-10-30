@@ -1,0 +1,13 @@
+
+                    Gives You Today : /X-Page V 0.1
+
+        A /X-Pager For The Ami-Express BBS Sytems V 2.xx and 3.xx
+                  It Should Work Fine On S-Express Too...
+
+To Install It Copy The Files X-Page.Rexx And X-page.Doc Into The Directory
+Doors:Sceptic/Page/... For /X 3.xx Copy The File O.Info Into Your BBS.CMD Dir...
+              For /X 2.xx Add This To Your BBS.CMD File...
+-- cut --
+*O        RM010Doors:Sceptic/X-Page.Rexx
+-- cut --
+

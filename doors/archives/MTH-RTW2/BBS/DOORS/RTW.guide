@@ -1,0 +1,324 @@
+@DATABASE REAL TIME WHO V2.0 Documentation © PLL Developments 1995
+@REM This is an AmigaGuide® - Document
+@REM Please use Multiview or any similar program to read this documentation
+@REM Otherwise ignore the @-Commands in this text.
+@NODE MAIN "REAL TIME WHO v2.0 © CREW ONE 1995"
+   .
+   |______________________          ._______.
+   ___________  ______.  /     .____|__     |______._________.
+   \_         \/      |_ ______|     _/  __________|__       |__
+    /         \/       /       |     \   \           /       . /________.
+   /___________\      /________.      \___          /________|          |
+             /_______/    \    |  .____\ /_________/nK       |__________|
+                           \______|     /________________________________.
+                                  ·                                      |
+
+                                 PRESENTS:
+@{b}
+                     Real Time Who V2.0 - 24 Jun 1995
+                        Copyright (c) 1995 Crew One
+                   Documentation Copyright (c) 1995 PLL
+                            All rights reserved
+                          A Myth Production <MTH>
+                                  @{ub}
+                            @{"   Introduction   " LINK INTRO}
+                            @{"   Installation   " LINK INSTALL}
+                            @{"      Usage       " LINK USAGE}
+                            @{" Revision History " LINK VERSION}
+                            @{" Acknowledgements " LINK GREETS}
+
+                            @{"     Releases     " LINK RELEASES}
+                            @{"   Myth boards    " LINK MYTH}
+                            @{" Mystical Places  " LINK MP}
+@ENDNODE
+
+@NODE INTRO "Introduction..."
+
+RTW (Real Time Who) from the Myth /X )-Sign Development team is a small,
+fast and no-nonsense replacement door for the built-in 'WHO' command in
+AmiExpress. With this door it is possible to spy on all the other nodes in
+real time, so there is no need to type WHO every second to see the actions
+of the other users who are logged on your bulletin board system.
+RTW requires OS2.04 (V37) and AmiExpress V3.xx or higher.
+
+    @{"BACK TO MAIN" link "Main" 0}
+@ENDNODE
+
+@NODE INSTALL "Installation..."
+
+To install RTW, just copy ALL files in the RTW/BBS drawer to your BBS:
+directory, that means that you need the logical assignment BBS:
+BBS: is an assignment to the root directory of AmiExpress. (configured in
+the ACP.info, for example, BBS_LOCATION=BBS:) Further you need the logical
+assignment DOORS: (DOORS: is an assignment to your BBS:Doors directory).
+
+
+TOOLTYPES IN BBS:Commands/BBSCmd/WHO.info
+-----------------------------------------
+
+============== CUT HERE =============
+LOCATION=BBS:Commands/BBSCmd/RTW     - Specifies the location of the door
+MULTINODE=YES                        - tells /X if the module may be
+                                       simultaneously accessed from other
+                                       nodes.
+ACCESS=10                            - tells /X the access level required
+                                       to run this door.
+TYPE=XIM                             - RTW is a XIM door.
+STACK=4096                           - Specifies the stack needed to
+                                       launch the door.
+============== CUT HERE =============
+
+If you have done all this then you have installed Real Time Who correctly,
+congratulations!
+
+    @{"BACK TO MAIN" link "Main" 0}
+@ENDNODE
+
+@NODE USAGE "Usage..."
+
+Usage is simple, by typing 'WHO' you can actually launch the door. The
+following text (for example) is displayed on screen:
+
+  Nd   Name                Location           Action            Misc Info
+.----+-------------------+------------------+-----------------+--------------.
+| 00 | Your Node         |                  | uSING rTW v2.00 |              |
+| 01 | cREW^oNE          | -*- M Y T H -*-  | uPLOADING       | MTH-RTW2.LHA |
+| 02 | eUROSOFT          | -*- M Y T H -*-  | iRC-CHAT-bOX    |              |
+| 03 | pLL               | -*- M Y T H -*-  | iRC-cHAT-bOX    |              |
+| 04 | dIABLO            | -*- M Y T H -*-  | iRC-cHAT-bOXL   |              |
+| 05 | dELITE            | -*- M Y T H -*-  | dOWNLOADING     | MTH-RTW2.LHA |
+| 06 | .oO NOBODY Oo.    | .oO NOWHERE Oo.  | aWAITING cALL   |              |
+|____|___________________|__________________|_________________|______________|
+ |___________ _____ ____ ___ ___ __ _            rTW v2.00 bY cREW^oNE!mYTH  |
+                                      - -- --- ---- -------------------------'
+
+    @{"BACK TO MAIN" link "Main" 0}
+@ENDNODE
+
+@NODE VERSION "Revision History..."
+
+ V1.0 - 09 Jun 1995
+      - First public release
+ V2.0 - 24 Jun 1995
+      - Now using multicom semaphores
+
+If you have any suggestions, bug reports or questions, please contact Crew
+One at one of the electronic mail addresses.
+
+When sending in bug reports, please state exactly under what circumstances
+the bug occurred, what equipment was used and what happened. If possible
+also try to give me enough information to reproduce the bug. It is very
+difficult to find bugs when you don't know exactly what happened. Please
+don't just send messages like "RTW doesn't work", that really doesn't help
+me. If possible, submit the offending 'error' to me so I can test it myself,
+or give me a pointer where I can find the error.
+
+    @{"BACK TO MAIN" link "Main" 0}
+@ENDNODE
+
+@NODE GREETS "Acknowledgements..."
+
+                gREETINGS tO tHEZE dUDEZ: (iN rANDOM oRDER!)
+
+     nIKE, iNCOGNITO, eMPiRE, bADSECTOR, tELEKINETIC, aIRCO, vECTOR, 
+    pINHEAD, bABYFACE, tDB, hOFFI, rAJ!, mUAD'dIB, vANGOLEN, mAD mAX, 
+                sCOPE, tORCH, jAKE, sIGH, mSW, nSC, hAWK, 
+                 
+
+         gREETINGS tO tHESE /X dOOR dUDEZ: (kEEP uP tHE gOOD wORK)
+
+          TRSi /X Innovation, MST /X Dezign, yODEL, oTT /X dESIGN,
+           WOA - /X - iNSPiRATiON, cALYPSO, /X Development Team.
+
+    @{"BACK TO MAIN" link "Main" 0}
+@ENDNODE
+
+@NODE RELEASES "Releases..."
+
+MTH-VIEW.LHA                               _ _______ _______     .......
+                                   ______  \\\      |   ___/_____:____ :
+                                  /      \____\____   __\____________/_:____
+                                 /________\     \/_____\  _ /    \___       \
+                                        /________\nK     ///______\./       /
+                                  (--------------------------------/_______/
+                                           mYTH! /X )-SIGN pRESENTS:
+                                    VIEW V1.0 THE ULTIMATE VIEW DOOR BY PLL
+                                    WILL DISPLAY THE CONTENTS OF *ANY* FILE
+                                       ONLY LIMITED TO YOUR IMAGINATION
+                                  (----------------------------------------)
+MTH-FLH3.LHA                      ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-----/_________\____/-------\____\nK|____|
+                                 ·                                         ·
+                                 »» pRESENTS: fUCKLHA V3.0 ** bY cREW oNE **
+                                   cAN sTRIPP aLL FILE, oN-LINE & oFF-LINE
+                                  vERSION iNCLUDED. wITH nEW aNALYTICAL wAY
+                                 tO sTRIP aDDS. 90-100% aDD-fREE lHA-fILES!!
+MTH-ST12.LHA                     ______  ______   .___ ____.  _______.
+                                 \_    \/    _/___|   \    |__\____  |
+                                  /    \_/   \    |    \   _______/  |____.
+                                 /      \     \___.    /   \    \    .    |
+                                 ________\     \  |   /______    \___|    |
+                                 -/X--/_________\____/-dESIGN\____\nK|____|
+                                 »»--------------------------------------««
+                                         pRESENTS: mYTH sTATUS v1.2
+                                   "S" rEPLACEMENT fOR /X 3.xx & /X 4.xx
+                                             cODED bY PLL/mYTH
+                                 »»--------------------------------------««
+MTH-RSH.LHA                       ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-----/_________\____/-------\____\nK|____|
+                                 >>>> REMOTE SHELL V1.00 BY CREW ONE <<<<<<<<
+                                          THE SAFEST REMOTE SHELL !
+                                 ANOTHER QUALITY DOOR BY: (M)yth /X )-Sign !!
+MTH-NU11.LHA                      ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-/X--/_________\____/-dESIGN\____\nK|____|-
+                                         pRESENTS : aBREV-nUP v1.1!
+                                 nO lOCAL lAMERS aNYMORE! tHIS dOOR rEPLACES
+                                 tHE iNTERNAL nUP! gIVES aN aBBREVATION, aSKS
+                                 fOR iTS mEANING! cONFIGABLE, rANDOMLY
+                                 cHOOSES tHE aBBREVATION! cODED bY wHIRLWIND!
+MTH-FA12.LHA                      ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-/X--/_________\____/-dESIGN\____\nK|____|
+                                           pRESENTS: fUCKADDER V1.2
+                                 [XIM] dOOR cODED bY wHIRLWIND/mYTH! tHIS nEW
+                                 uPDATE hAS sOME nEAT tHINGS, lIKE uSING a
+                                 fILE rEQUESTER fOR sELECTING aDVERT! cHECK
+                                 iT oUT! oNE oF tHE fASTEST aDDERS aROUND !
+MTH-BB12.LHA                      ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-/X--/_________\____/-dESIGN\____\nK|____|-
+                                       pRESENTS : bIBI aFTER uL V1.2
+                                   dISCONNECT aFTER tHE fIRST fILE_ID.DIZ
+                                  eXTRACT! nEW uPDATE! cOOL oPTIONS aDDED!
+                                     cODED bY wHIRLWIND/mYTH /X dESIGN!
+                                 --------------------------------------------
+MTH-ZSCH.LHA                      ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-----/_________\____/-------\____\nK|____|
+                                 >> BRINGS YA TODAY: Z-SEARCH V1.00 !!!!!! <<
+                                 CODED BY: -> CREW ONE / (M)yth /X )-Sign  <-
+                                 )> THIS IS A Z-SEARCHER FOR THE CLI !!!!! <(
+                                 +> THE ULTIMATE BBS-SEARCH UTILITY FOR CLI<+
+                                 ++++++++++++++++++++++++++++++++++++++++++++
+MTH-TC23.LHA                      ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-----/_________\____/-------\____\nK|____|
+                                 --------------------------------------------
+                                 --> THC-CHATTER V2.30 <> FINAL RELEASE <----
+                                 ->                                        <-
+                                 --> CODED BY: CREW ONE / (M)yth /X )-Sign <-
+                                 --------------------------------------------
+MTH-BIR1.LHA                      ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-----/_________\____/-------\____\nK|____|
+                                 ----- cREW^oNE's bIRC-cHATTER --------------
+                                 A fully IRC-alike chatter-door for /X. V1.00
+                                 --------------------------------------------
+MTH-RTW2.LHA                      ______  ______   .___ ____.  _______.
+                                  \_    \/    _/___|   \    |__\____  |
+                                   /    \_/   \    |    \   _______/  |____.
+                                  /      \     \___.    /   \    \    .    |
+                                 /________\     \  |   /______    \___|    |
+                                 ·-----/_________\____/-------\____\nK|____|
+                                  rELEASED tODAY: rEAL tIME wHO v2.0 UPDATE
+                                     cODED bY cREW^oNE / mYTH /X dESIGN                                 
+                                 ·-----------------------------------------·
+
+    @{"BACK TO MAIN" link "Main" 0}
+@ENDNODE
+
+@NODE MYTH "Myth Boards..."
+
+              _________________________________________________
+             |·                                               ·|
+             | M Y T H  -  T H E   M O R O N I C  D R U N K S! |
+             |         _________                           ____|__._
+     ________|_ /\_____\        \  ________________________\_     |______
+     \         /_       \        \/      _._______         /      |      |
+    /         \/_________\___    /      __|      /________/       _      |
+   /___________\           /_____________\l_______|      /________|      |
+             |                                                 |  l______|
+             |  mYSTICAL pLACES         WHQ   +31-104-779-507  |   MO!/AC
+             |  mASTURBATION sTATION   USHQ   +1- PRIVATE      |
+             |  cYCLONE                 EHQ   +31-358-384-00   |
+             |  hOMELESS                GHQ   +49-PRIVATE      |
+             |  bLACK hOLE              SHQ   +38-PRIVATE      |
+             |  sKY tOWER               DHQ   +45-PRIVATE      |
+             |  oFF lIMITS             DIST   +49-PRIVATE      |
+             |  tHE pAYOFF             DIST   +31-703-205-418  |
+             |  aTMOSPHERE             DIST   +31-340-889-039  |
+             |  bERMUDA hOLLAND        DIST   +31-365-341-347  |
+             |.                                               .|
+              ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+    @{"BACK TO MAIN" link "Main" 0}
+@ENDNODE
+
+@NODE MP "Mystical Places..."
+
+- ------- - -- - -- -- - - mORE aS 5 yEARS hISTORY - - -- -- - -- - -------- 
+ 
+___/\    ________:___________________________________________________:
+\___ \  /  \     ¦  __/  ________   _   /___/  _______/    .   _/    ¦ _
+ |  \ \/ /  \    |   \_______  \     \_/    \     /   \   _|___ \    |/ \
+ |   \  /    \____    \_   |    \_    \_     \_  /     \_ ____/  \_  |   \_
+ |____\/______/________/_________/_____/______/_________/__|______/_______/
+                                                                       .
+    \                         MYSTICAL PLACES!                        /
+     \/\ _ ___________:   ______________________________________ _ /\/
+        \ \\_  ____  \| _|    .   _/  ______/   ______/  ______/ //
+            |  \_____/|/ \   _|___ \    /   \  ___/  \______  \
+            |    |    |   \_ ____/  \_ /     \_ /     \_  |    \_
+        zACK|____|_________/__|______/________/________/________/
+                              ·
+            @@@@@@        NOW RUNNING ON 6 BLAZING NODEZ!!!
+           @@@¯¯@@@     _____  _____________  _________________
+  __ _____@@@__________/     \/     \_____  \/  _____/  ______/______ __
+  \:\\::::@@@@@@@@::::/   _  .\  |  .\   |  .\ ___)_\____  .\::::::://:/
+   \:\\:::@@@:::@@@::/    |   \\ |   \\  |   \\     \_      \\::::://:/
+    ¯¯ ¯¯¯@@@¯¯¯@@@¯¯\____|     \_____/_______/______/_______/¯¯¯¯¯ ¯¯
+           @@@@@@@        |______\zACK
+            ¯¯¯¯¯                Y
+                                 ·
+·  - - - - -- - - -- -- -- - - -  -- - -- - - - - --- -- -- - -- - -- --  - ·
+
+ eLITY oNLY  [ NODE #1: +31-(0)10-4779507 rINGDOWN 28k8 v.FAST ]  tHE sTAFF:
+  0/1 dAYZ   [ NODE #2: +31-(0)10-4779568  ,,  ,,  28k8 v.FAST ]   - tHC -
+68030/68882  [ NODE #3: +31-(0)10-4779633  ,,  ,,  28k8 v.FAST ] - eUROSOFT -
+   40 mHZ    [ NODE #4: +31-(0)10-4774218          21k6 dUAL   ]  - dELITE - 
+   pOWER!    [ NODE #5: +31-(0)10-4762711          21k6 dUAL   ] - cREW^ONE -
+  1,5 gIG!   [ NODE #6: +31-(0)10-4761459          21k6 dUAL   ]   - pLL! -
+
+·  - - - - -- - - -- -- -- - - -  -- - -- - - - - --- -- -- - -- - -- --  - ·
+        >>>>  M Y T H   W O R L D   H E A D Q U A R T E R S  <<<<
+·  - - - - -- - - -- -- -- - - -  -- - -- - - - - --- -- -- - -- - -- --  - ·
+
+    @{"BACK TO MAIN" link "Main" 0}
+@ENDNODE

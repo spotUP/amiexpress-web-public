@@ -1,0 +1,113 @@
+
+                 »» From The Worlds No.1 /X Door Makers ««
+
+         °        °        °   °      °    °       °   °   °    °
+      °    ° __°   __° __° ______ °_  __° __ °__° ______° __ °     °
+   °    °   /~~\° /~~\/~~\/~~ _~~\/~\/~~\/~~\/~~\/~~ _~~\/~~\ 93' °   °
+      °  ° /   / /   /   /  ¬\/  / _____/  _/\  /  /\/  /  _/ °   °
+     °    /\  /\/   /\  /   \  _/  _/  /   /   /      _/\  /_  ° °   °
+   °   °  \_ ¬ /   /  _/\  //  /  /  °/  _/   /   /\  /  _/  \°    °
+      °    \__  __/___/\__/ \_/\_/ °  \____/\/\__/___/_  ____/ © DLS
+   °  "  " """\/"""""""""" ° """" °  ° """"    """"""""\/"""""" "  "  °
+      °    °    °       °      °      °    °     °       ° °    °  °
+        °    °     °  °     °      °      °   °     °     °   °
+        V·i·r·t·u·a·l P·r·e·s·e·n·t·s S·y·s·C·o·m·m·e·n·t V·2·.·0·0
+
+                                 Starring
+
+                     Delusion of Virtual as Programmer
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Introduction, Preface
+
+	This lame door was actually written because I thought it was
+	so easy to write so why use one from another person on my board!?
+	So I used most of my energy on the design and I hope you like it :)
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	What will SysComment do for you?
+
+	It will simple let your users choose who they wan't to give the
+	comment then they've choosed the 'C' command inside /X!
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Instalation ..
+
+	Snap the following row to your BBS:Commands/BBS.Cmd file:
+
+	*C        Xm020Doors:SysCm
+
+	For 3.x users.. Duplicate any bbscmd icon, change the path to
+	the door in tooltypes and set it to an XIM Door.
+
+	You could just put this door in any directory you like it
+	doesn't matter, but you need the SysCm.CFG in the DOORS: path!
+
+	Now it's time to edit the SysCm.CFG file. Use any editr you like,
+	Cygnus Ed for example. Just change the names and comments to
+	your desired ones, it should be rather easy!
+
+	REMEMBER everything is position dependent, that means that you
+	         can't use more space than there is in the CFG file that
+		 I sent with this package between the | | characters.
+
+	Copy the AEDoor.library to your libs: directory!
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	History
+
+	05-09-93 V1.00
+
+	The first version created and I doubt that there will be further
+	versions :)
+
+	05-29-93 V1.01
+
+	How lucky you are, there came a new version.. I can only say that
+	this one is a bit faster for the user to execute and uses less
+	lines..
+
+	12-14-93 V2.00
+
+	Now the door is coded in C for even faster execution time.
+	Configuration file added.
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Greetins
+
+	My regards has to go to the folowing people in no order.
+
+	Chucky of Virtual		»» Like your board!
+	D-Zire of Doodles		»» Thanx all time m8
+	The Silencer of Doodles		»» Looking forward to your netmailprg
+	Ice of Doddles			»» When does you start to use LaC again?
+	Kid Curry of Classic		»» Could use your support again!
+	Norad of Unicorn		»» Who has hotter opinions than you :)
+	Fox & Philix of Quartex		»» For being my cool cosysops
+	Rioter of Equinox		»» Articles comming soon for your mag
+	It of Justice			»» Thanx for comments and calling me!
+	Micro Pal of Alcatraz		»» Hehe where did your slideshow go?
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Final words
+
+	These are some other doors that I've made, Account ED, Sysop Uploader,
+	File Comment, Virtual Vote, Connect, Node Activities, News mag,
+	Log Viewer, Config Ed (BBS:ConfigX), Virtual Chart, LastCallers Util
+	DirXCleaner, MailServer (DNET), Members and Password Fail!
+
+	This program is Copyright Delusion of Virtual and may not be sold in
+	any form or made profitable on without the permission of the author.
+
+	Yours, Delusion of Virtual, Tuesday 14 December 1993
+ 
+        Can be reached at, INSANiTY +46(0)TMP-DOWN!, DualStandard
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/                                                   A DLS Dezign Prod 93'

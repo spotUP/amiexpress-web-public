@@ -1,0 +1,18 @@
+                              LastCallers v1.0
+                              ~~~~~~~~~~~~~~~~
+
+                          By Agamemnon / Moment 22
+
+USAGE: LastCallers <node> <status[-status]> <datafile> <bullfile>
+
+where <datafile> is a unique file for different statuslevels. 
+For example, if you want a LastCallers-list that only shows
+PD-users with statuslevel 20-30 you can use:
+
+LastCallers <node> 20-30 s:lastcallers2030.dat bbs:nodex/bull.txt
+
+and a separate list for Elite-users with level 50:
+
+LastCallers <node> 50 s:lastcallers50.dat bbs:nodex/bull50.txt
+
+Call INFINITE POWER at +46-[0]171-67461, and -57868 for updates.

@@ -48,8 +48,7 @@ export function setupDoorHandlers(socket: Socket): void {
       // Create session
       const session = new AmigaDoorSession(socket, {
         executablePath,
-        timeout: 600,  // 10 minutes
-        memorySize: 1024 * 1024  // 1MB
+        timeout: 600  // 10 minutes
       });
 
       activeSessions.set(socket.id, session);
@@ -78,7 +77,7 @@ export function setupDoorHandlers(socket: Socket): void {
   socket.on('door:status-request', () => {
     const session = activeSessions.get(socket.id);
     socket.emit('door:status', {
-      status: session && session.isActive() ? 'running' : 'inactive'
+      status: session ? 'running' : 'inactive'
     });
   });
 

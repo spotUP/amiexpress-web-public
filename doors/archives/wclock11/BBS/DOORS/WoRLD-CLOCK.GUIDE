@@ -1,0 +1,184 @@
+@database World-Clock V1.1 by SieGeL/TRSi (/X-iNNoVaTioN) BeRLiN-GeRMaNY
+
+@Remark $VER: V1.1 (Friday 04-01-1994)
+
+@node Main "WoRLD-CLoCK V1.1 - /X uTiL WRiTTeN BY SieGeL/TRSi"
+
+                    ._________________  ______
+                    l___       /      \/    _/_______.:  
+                      /       /   /  _/\___      /    :
+                     /_______/-rS!\_____\  _____/     |'94  
+                           /_______|     \/   /_______|
+                               (/X-iNNoVATioN)
+ 
+                             iS PRouD To PReSeNT: 
+
+                               WoRLD-CLoCK V1.1
+ 
+ CoDiNG BY SieGeL/TRSi - GFX BY AMBLIN/DeZiGN, CouNT ZeR0/SCL aND aXe/MST
+--------------------------------------------------------------------------
+                             @{" INTRODUCTION " Link intro}
+                             @{" INSTALLATION " Link installation}
+                             @{"  TOOL-TYPES  " Link tooltypes}
+                             @{"  GREETINGS!  " Link greets}
+@endnode
+
+@node intro "iNTRoDuCTioN"
+
+                              iNTRoDuCTioN
+                              ~~~~~~~~~~~~
+Well after releasing V1.0 it's seems that nobody use S-Watch anymore. It's 
+nice to see so many boards using my Clock, so I decide to write an update.
+In this new version you could choose between three different Charsets for 
+the clock and all colors could be changed. Hope you like it...:)
+
+If you have any suggestions, bugreports, hints & tips for this or other tools
+coming from @{"TRSi(/X-iNNoVaTioN)" link trsimember}, feel free to contact us and we will change
+it to your needs.
+
+@endnode
+
+@node installation "iNSTaLLaTioN oF WoRLD-CLoCK V1.1"
+
+                       ReQuiReMeNTS & iNSTaLLaTioN
+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Of course you need any Amigamodel (500-4000T) with Kickstart V37++ and a full
+installed and working Amiex (Should work under /X V2.xx, too).
+
+Put WoRLD-CLoCK V1.1 and the icon wherever you want (Make sure that the icon
+is in the same drawer like WoRLD-CLoCK, otherwise the tool won't work!).
+
+Copy the icon `T.info' to your BBSCMD/ drawer and change the Location to the
+path where WoRLD-CLoCK V1.1 could be found. That's all. To configure the Clock
+to your needs take a look to the @{"Tooltypes" link tooltypes}.
+
+@endnode
+
+@node tooltypes "aLL TooLTYPeS uSeD BY WoRLD-CLoCK V1.1"
+
+                                TooLTYPeS
+                                ~~~~~~~~~
+
+ LOCATION=<string>       = Here you could enter the Location of your city,
+                           i.e. Berlin-Germany. If you don't want to enter
+                           a Location, put this Tooltype in Branches. The
+                           Clock writes then as Location the name of your BBS.
+                           
+ GMT=<GMT-Time>          = Here you must define your GMT-Time (GMT=Greenwich-
+                           MeanTime). For Germany, it's +1. If you don't define
+                           this Tooltype, the WoRLD-CLoCK wouldn't be shown,
+                           you only see the time from your board.
+
+ LINE_ART=<char>         = If you want to seperate the Clock from the cities,
+                           you could enter here *one* char (i.e. -, +, =) and
+                           this char will be used to create two lines between
+                           the clock and the cities. If you don't want to 
+                           seperate it, put this Tooltype in branches or don't 
+                           define a char for it.
+
+ CHARSET=<number>        = I've included three different styles for the clock.
+                           Here you could choose which one will be used to
+                           show the time. Only 0,1 and 2 are allowed as valid
+                           numbers. The numbers are defined as follow:
+
+                           0 = Digits from Amblin (Default!) 
+                           1 = Digits from Axe
+                           2 = Digits from Count Zero
+                     
+                           To check out the digits, take a look to @{"Digits" Link Digits}.
+
+All following ToolTypes are the defines for the colors. Valid colornumbers are
+30-37, which represents the ANSI-Colors in /X. I recommend not to use 30, as 
+this color is black and you won't see very much if you enter it...:)
+
+ MAIN_COLOR=<color>      = This is the color for the Title and the Lines between
+                           the clock and the cities. Default is 33 (yellow).
+
+ CITY_COLOR=<color>      = The color for "TIME SHOWING FROM.." and the cities.
+                           Default is 36 (light blue).
+
+ DIGITS_COLOR=<color>    = The color for the digits and the citytimes. Default
+                           is 35 (lila).
+
+ DATELINE_COLOR=<color>  = The Color for the Dateline (Sunday, March 27th...).
+                           Default is 34 (dark blue).
+
+
+
+@endnode
+
+@node Digits "SoMe eXaMPLeS FoR THe DiGiTS"
+
+--------------------------- aMBLiN/DeZiGN -----------------------------------
+
+  .######.  .####   .######. .######. ###   .  ######## .######. ########
+  ###  ###  #####   ##   ### ###  ### ###  .#  ###      ###  ###    .####
+  ###  ###   ####        ###      ### ### .##  ###      ###        .####
+  ### .###   ####   .######    #####  ### ###  #######. #######.   #### 
+  ### ####   ####   ###          .### ########     .### ### .###   ####
+  ### ####   ####   ### #### ### ####    ####  ### #### ### ####   ####
+  ### ####   ####   ### #### ### ####    ####  ### #### ### ####  .####.
+  `######' ######## ######## `######'   ###### `######' `######'  ######
+                                              
+------------------------------ aXe/MYSTiC -----------------------------------
+
+  .######.  .###### #######. #######. ###  ### ######## .####### #######.
+  ######## .####### ######## ######## ###  ### ######## ######## ########
+  ###  ### ###'####    .####      ### ###  ### ###      ###           ###
+  ### ####     ####  .#####'   ###### ######## #######. #######.   ######
+  **** ***     **** .*****'    ****** `******* ******** ********   ******
+  ***  ***     **** ****'         ***      ***      *** ***  ***      *** 
+  ***  ***     **** ******** ********      *** ******** ********      ***  
+  `******'     **** `******* *******'      *** *******' `******'      ***
+
+-------------------------- CouNT ZeRo/SCaNDaL! ------------------------------
+
+.:::::::. :::::.    :::::.    :::::. ::::      ::::::    .:::::    .::::::::
+:::: ....   ....      ....      .... :::: .... ::::      ::::      :::: ....
+:::: ::::   :::: .:::::::·     ::::· ·:::::::: ::::::::. ::::::::.      ::::
+:::: ::::   :::: :::: .... :::: ::::      :::: .... :::: :::: ::::      ::::
+·:::::::·   :::: ·:::::::: ·:::::::·      :::: ·:::::::· ·:::::::·      ::::
+
+@endnode
+
+@node Greets "GReeTiNGS FLY To THe FoLLoWiNG PeoPLe..."
+
+aMBLiN/DeZiGN  - THX for the fast work. Personally my favourite digits...:)
+
+aXe/MYSTiC     - CeWL digits Dude. But now @{"TRSI" link trsimember} roolez..it's the best group!
+
+Count Zero/SCL - Jo Man..lame party (Ramses&Paso) but nice digits..Big tHX!
+
+ByteAndi/TRSi  - Thx for helping and testing
+
+Spy/TRSi       - Next few days U get yar "BLUBLUB"...hehehe..c ya ..
+
+Dr.Dre/TRSi    - Keep on Codin' man...we beat them all!!! :)
+
+aRGoN/MST+2kAD - Fuckin' TKR...hope to get it back as fast as possible !
+
+and of course all TRSI-Member and our Betatesters....
+
+@endnode
+
+@node TRSIMEMBER "TRSI (/X-iNNoVATioN)"
+
+                   ._________________  ______
+                   l___       /      \/    _/_______.:  
+                     /       /   /  _/\___      /    :
+                    /_______/-rS!\_____\  _____/     |'94  
+                          /_______|     \/   /_______|
+                       (/X-iNNoVATioN) Members are:
+                    ----------------------------------
+                    Dr.Dre!/TRSI^ZenitH (/X-iNNoVATioN)
+                       ByteAndi/TRSI (/X-iNNoVATioN)
+                        SieGeL/TRSI (/X-iNNoVATioN)
+                         Spy/TRSI (/X-iNNoVATioN)
+                    ----------------------------------
+               if you wanna join us so get in touch with : 
+                   Dr.Dre!/TRSI^ZenitH or ByteAndi/TRSI
+                          in the following BBS`s 
+           Marleys Coffee Shop TRSI ^ ZenitH (/X-iNNoVATioN) GHQ
+                     Diabolo TRSI (/X-iNNoVATioN) GHQ
+
+@endnode

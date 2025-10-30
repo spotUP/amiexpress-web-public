@@ -1,0 +1,215 @@
+@database MDB-LastCallers 3.00
+
+Copyright (C) 1994 (MDB Productionc) 
+All Rights Reserved
+
+@Remark $VER: Version V3.00 (12-Jun-1994)
+@Remark AmigaGuide database for the LastCallers 3.00
+
+@node MAIN "MDB-LastCallers 3.00 AmigaGuide Document (C) 1994 (MDB Productions)"
+
+                         _____/\   ______/\  _____/\ 
+                        /  / \  \  \  ___  \ \  ___ \
+                       /  /\_/\  \ /\/| /  / /\/ /  /
+                       \  \   /  //   |/  / /  |/   \
+                        \__\ /  / \___   /  \__|_   /
+                             \_/      \_/        \_/ 
+
+                   MDB Productions  iS PRouD To PReSeNT :
+
+                        L A S T C A L L E R 3.00
+
+          ·:·C·O·N·T·E·N·T·S··O·F··D·O·C·U·M·E·N·T·A·T·I·O·N·:·
+
+                             @{"  INTRODUCTION  " LINK PART_01}
+                             @{"  REQUIREMENTS  " LINK PART_02}
+                             @{"  INSTALLATION  " LINK PART_03}
+                             @{"   TOOL-TYPES   " LINK PART_04}
+                             @{"    CHANGES!    " LINK PART_05}
+@endnode
+
+@node PART_01 "Introduction"
+
+A saw a lot of LastCaller doors and scripts, but I always though
+'huh, I could do this better!'. Thats why I wrote this door.Nowadays
+it is a SIM module, coz I had to scan the CallersLog in Node(1) and
+I had also running some statistics.
+
+@endnode
+
+@node PART_02 "Requirements"
+
+What U need to run it...
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+ - an Amigamodel (A500/A600/A1200/A2000/A3000/A4000) with Kickstart 2.04++
+
+ - the installed /X-Software (V3.20++)
+
+Now let's go on by explaining the @{"Installation" LINK PART_03}...
+
+@endnode
+
+@node PART_03 "Installation for MDB-LastCallers 3.00"
+
+How to install it to your /X-System...
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+First make a Drawer into Doors: called 'MDB-LastCallers' and copy the Files
+ - 'MDB-LASTCALLERS'
+ - 'MDB-LASTCALLERS.INFO'
+ - 'FOOTER.TXT'
+ - 'HEADER.TXT'
+into it.
+
+Second copy the Icon 'LOGOFF1.INFO' into the SYSCmd Drawer.
+
+@endnode
+
+@node PART_04 "ToolTypes for MDB-LastCallers 3.00"
+
+                                ToolTypes
+                                ~~~~~~~~~
+
+                    @{" TOOLTYPES FOR MDB-LASTCALLERS 3.00" LINK PART_04_LC}
+
+                    @{" TOOLTYPES FOR LOGOFF<n>           " LINK PART_04_LO}
+
+                    @{" THE LOGOFF SCRIPT                 " LINK PART_04_SC}
+
+@endnode
+
+@node PART_04_LC "ToolTypes for MDB-LastCallers 3.00
+
+                 ToolTypes for MDB-LastCallers 3.00
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+BULL=<filename>                 - This ToolType specifies the output-file.
+                                  /X calls this one a BULL. Include this
+                                  in your login-Bull so that every caller
+                                  sees the last 10 callers.
+                                  Eg. BULL=BBS:LastCallers.txt
+
+HEADER=<filename>               - The header tooltype specifies which file
+                                  will be joined before the LastCallers info.
+                                  Eg. FOOTER=Doors:MDB-LastCallers/Header.txt
+
+FOOTER=<filename>               - The footer tooltype specifies which file
+                                  will be joined behind the LastCallers info.
+                                  Eg. FOOTER=Doors:MDB-LastCallers/Footer.txt
+
+CALLERSLOG=<filename>           - This tooltypes indicates which log must be
+                                  be scanned.
+                                  Eg. CALLERSLOG=BBS:Node1/CallersLog
+
+DATA=<filename>                 - The data tooltype specifies where the
+                                  datafile is stored. This file is needed
+                                  everytime. If it doesn't exists, the door
+                                  will create this file itself.
+                                  Eg. FOOTER=Doors:MDB-LastCallers/Footer.txt
+
+
+@endnode
+
+@node PART_04_LO "ToolTypes For LogOff<x>"
+
+                       ToolTypes for LogOff<x>"
+                       ~~~~~~~~~~~~~~~~~~~~~~
+
+As noted in Chapter @{"Introduction" LINK PART_01}, this Door is a SIM
+module. The script must be called when a user is signing off, e.g. if
+he/she is running in node 1, then you must have 'LOGOFF1.INFO' in your
+SYSCmd Drawer.
+
+LOCATION=<filename>             - This tooltype specifies where the script
+                                  is located.
+                                  Eg. LOCATION=BBS:Node1/Logoff.script
+
+MULTINODE=<YES|NO>              - This tooltype specifies if the Door may
+                                  started in different nodes.
+                                  Eg. MULTINODE=YES
+
+PRIORITY=<n>                    - This tooltype specifies the AmigaDos
+                                  priority when the Door is executed.
+                                  Eg. PRIORITY=2
+
+STACK=<n>                       - This tooltype specifies the Door stack.
+                                  Eg. STACK=8096
+
+TYPE=<AIM|SIM|TIM|XIM>          - This tooltype specifies the Door-type.
+                                  This Door is a script so TYPE=SIM
+
+@endnode
+
+@node PART_04_SC "The LogOff script"
+
+The script file is needed, coz here you can tell which batch jobs you want
+to run. In this case you are only interested in the last callers, so you
+make in file LOGOFF.SCRIPT in your NODE<num> Drawer. It look likes the
+following example:
+
+^^^^^^^^^^^^^^^^^^^^CUT HERE ^^^^^^^^^^^^^^^^^^^^
+Doors:MDB-LastCallers/MDB-LastCallers
+^^^^^^^^^^^^^^^^^^^^CUT HERE ^^^^^^^^^^^^^^^^^^^^
+
+And then you have to change the attribute bytes of this script:
+ SET THE S BIT FOR SCRIPT with Dopus or with C:PROTECT
+DO NOT FORGET THIS ONE, ELSE IT WON'T WORK!!!!!!!!!!!!!!!!
+
+@endnode
+
+@node PART_05 "Changes"
+
+3.00 (12-Jun-1994)
+    - Totally changed!
+    - The bull that will be created, looks different; more info is shown.
+    - Only the actual lastcaller will be recorded in the bull, thats why
+      I added the DATA-TOOLTYPE.
+
+2.00 (11-Jun-1994(
+    - Never released! Ha Ha Ha
+
+1.7  (06-Jun-1994)
+  - Searcher improved, now scans for 60 '*' for the starting
+    of a user!
+
+1.6  (03-Jun-1994)
+  - Some coding enhanced.
+
+0.05 (05- Mrt-1994)
+ - SIM module instead of real XIM.
+
+0.04 (27-Feb-1994)
+ - Icon based.
+
+0.03 (??-????-1994)
+ - Should run on all processors now.
+
+@endnode
+
+@node ADVERT "Death Simple ... OTM The GraveDiggers"
+
+/X 3.3+    :+                   WELCOME TO                            /X 3.3+
+          .::.       ____________  ______________._          .+.
+         .:+.       |__  \  ____/ / _ \      _/  | \         .:.
+   AscII  +::+.     |  \  \  .)\_/     \/   | |  |  \       ::+.    AscII
+ \  B Y  /   :.     |  /   \ |  |   :   \   | |  _   \     :+:.  \   B Y   /
+ _\ MSW /_          |______/\___|\__|___/\__| |__|___/     .     _\  MSW  /_ 
+-=-=-=-=-=-=-=-         -=-            -=-=-=-=-             -=-=-=-=-=--=-=-
+.°*DEATH                                                             DEATH*°.
+   SIMPLE*°.                                                      .°*SIMPLE
+=-=-=-               -=-=-=-=-=-=-=-            -=-=-          -=-=-=   -=-=-
+                ___/\____/\  __ _/\  /\_____/\__      /\____
+-24 HoUrS      /     \____/ /  Y   \/___  _ \  |     /  .  |    ..::.
+-chataBle     /   ___/    \/   :    \  / ___/  |__  /   |__|     +::.+
+-SysOp        \___   \____ \___ ____ \/  |\  __|  \/_    __/   .+::+
+-CeWl Area's  /   \__/    \/   Y    \/\__| \/      \ \__/  \   .:
+              \  ___/\____/\___|__  /__  |  \______ \____  /
+               \/                 \/   \/          \/    \/ +31-(0)2152-68786
+
+    __/\__ __ ___ _ _ _   :-)   2 OPERATOR 2  (-:      ___ __ __ __/\__
+    \ Oo /__ ______ _ _       ~~~~~~~~~~~~~~~          __ __ __\ oO /
+    /_--_\__ ___ __ __       2-)  COSYSOP  (-2        __ ____ _ _/_--_\
+      \/                                                           \/
+
+@endnode

@@ -1,0 +1,149 @@
+
+                 »» From The Worlds No.1 /X Door Makers ««
+
+         °        °        °   °      °    °       °   °   °    °
+      °    ° __°   __° __° ______ °_  __° __ °__° ______° __ °     °
+   °    °   /~~\° /~~\/~~\/~~ _~~\/~\/~~\/~~\/~~\/~~ _~~\/~~\ 94' °   °
+      °  ° /   / /   /   /  ¬\/  / _____/  _/\  /  /\/  /  _/ °   °
+     °    /\  /\/   /\  /   \  _/  _/  /   /   /      _/\  /_  ° °   °
+   °   °  \_ ¬ /   /  _/\  //  /  /  °/  _/   /   /\  /  _/  \°    °
+      °    \__  __/___/\__/ \_/\_/ °  \____/\/\__/___/_  ____/ © DLS
+   °  "  " """\/"""""""""" ° """" °  ° """"    """"""""\/"""""" "  "  °
+      °    °    °       °      °      °    °     °       ° °    °  °
+        °    °     °  °     °      °      °   °     °     °   °
+	   V·i·r·t·u·a·l P·r·e·s·e·n·t·s D·i·r·W·o·r·x V·1·.·0·0
+
+                                 Starring
+
+                     Delusion of Virtual as Programmer
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Introduction, Preface
+
+	DirWorx will check your filelists and compare if the files in
+	the list are present on your harddrive. If not it will replace
+	the byte information about the file with DELETED. Simple ehh?
+
+	Are you one of these lazy sysops which thinks it really sucks
+	to go through your filelist and mark all files deleted? Well
+	this door written in C will both do it fast and cool..?
+
+	It will also save a log file which tells who runned the dir
+	command and how much files & bytes which was removed.
+
+	NOTE This door won't delete any of you files on your HD just
+	     put deleted in front of the files in your filelist IF
+	     they DO NOT EXIST on your harddrive :)
+
+	Ofcourse can you choose which directory and a startdate :)
+
+	NOTE! It is strongly recommended that you set this door to
+	      a low security level so most users are able to run it
+	      this way users could update your filelistnings incase
+	      you've forgotten it! (The door is completly harmless
+	      so their is no risc in letting them us it!)
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Thanks!
+
+	My thanks this time has to go to:
+
+	Nurgle and Ace Caze of Obscene for supporting and betatesting
+	this door!
+
+	Stage Dive	 +46(0)16-128047 Nurgle / Obscene
+	Dragons Lair	 +46(0)16-147118 Ace Caze / Obscene
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Instalation ..
+
+	Very easy this time hehe.. Just copy DirWorx + DirWorx.info +
+	this docfile! to any place on your harddrive..
+
+	Copy the BBSCmd/Dir.info to your BBSCmd directory and you
+	are ready to go..
+
+	Wait you say.. where can I configure? Hahaha, there is no
+	configuration! DirWorx reads everything it needs from your
+	AmiExpress Icons..
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	History
+
+	06-14-94 V1.00
+
+	First version... (Made for my own needs :)
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Greetings
+
+	My regards has to go to the folowing people in no order.
+
+	Chucky of Virtual		»» Like your board!
+	Kid Curry of Classic		»» Could use your support again!
+	Norad of Unicorn		»» Who has hotter opinions than you :)
+	Fox & Philix of Quartex		»» For being my cool cosysops
+	Rioter of Equinox		»» Busy lately or what? Call me up!
+	It of Justice			»» Thanx for comments and calling me!
+	Cre8or of X-Trade		»» Hope this version fixes your prob.!
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/
+	Final words
+
+	News! Right now I'm really busy making utils for you so hold on
+	      for these goodies, programmed in C! Available SOON :)
+
+		MasterStripper V1.00	<- The BEST LHA-Stripper available
+					   nukes over 800 adds from your
+					   archives (99% of the adds)
+		Sysop Comment V2.01	<- The ultimate comment door! :)
+		DataCollector V1.00	<- Grabs all data about your users
+					   it can get and stores it in a file
+		ConfMembers V1.00	<- Shows all users who has got access
+					   to a conf, optionaly asks for a
+					   conference password!
+		ChatTimeFix V1.00	<- Fixes the problem with the users
+					   chat time!
+		Caller Status V1.00	<- Displays extended userinformation
+					   with the DataCollectors Data File
+		LastCallers V2.00	<- Now in C and uses the DataCollectors
+					   data file! Available with 10 different
+					   designs and look! (Completly)
+		Quest V3.00		<- Now in C and icon configed
+		Access Watch V3.00	<- Now in C and with more features
+		Node Activities V3.00	<- The ultimate FrontEND door (& Who)
+		Account Editor V3.00	<- Soon comming, coding right now! :)
+					   replacement for the ARexx version!
+
+		^^^ These doors are almost finished ^^^
+
+	To come:
+
+		PassWordFail V3.00	<- C replacement of Arexx V2.00
+		QuestView V3.00		<- C replacement of Arexx V2.00
+		WeekTop Devotion V2.00	<- Update in C of the LAC Version
+		MonthTop Devotion V1.00	<- New door for the DataCollector
+		TopBoard V1.00		<- Show various info & records
+		Vote V2.00		<- Update of the very old DivVote!
+
+	This program is Copyright Delusion of Virtual and may not be sold in
+	any form or made profitable on without the permission of the author.
+
+	Yours, Delusion of Virtual, Tuesday 14 June 1994
+ 
+        Can be reached at, INSANiTY +46(0)589-10780!, DualStandard
+
+			^^^ Invited only ^^^
+
+	Post your regular calls at:
+
+	DRAGONS LAiR +46(0)016-147118, DualStandard, Sysop: Ace Caze / OBS
+
+  /\  __________________/\/\_________________/\___________ _  _  _   _    _
+ /  \/                                                   A DLS Dezign Prod 94'

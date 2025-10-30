@@ -3,8 +3,6 @@
 # AmiExpress Complete Startup Script
 # Starts both backend and frontend with proper cleanup
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
@@ -14,14 +12,24 @@ echo "╚═══════════════════════�
 echo ""
 
 # Start backend
-"$SCRIPT_DIR/start-backend.sh"
-
-echo ""
+if "$SCRIPT_DIR/start-backend.sh"; then
+    echo ""
+else
+    echo ""
+    echo "✗ Backend failed to start - aborting"
+    exit 1
+fi
 
 # Start frontend
-"$SCRIPT_DIR/start-frontend.sh"
+if "$SCRIPT_DIR/start-frontend.sh"; then
+    echo ""
+else
+    echo ""
+    echo "✗ Frontend failed to start - backend is still running"
+    echo "  Run ./dev/scripts/stop-all.sh to clean up"
+    exit 1
+fi
 
-echo ""
 echo "╔════════════════════════════════════════╗"
 echo "║           All Servers Ready            ║"
 echo "║                                        ║"

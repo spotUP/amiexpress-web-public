@@ -1,0 +1,98 @@
+
+
+
+
+
+               H-News V1.0 (C) 1994 Hydra/LSD/RDC/MNCS
+
+
+
+
+
+Aarrgghh, I hate writing this shit..  oh well, here goes..
+
+
+H-News is a part of the HydraTools series of /X utils,  watch out for more
+cool utils from me in the near future!
+
+H-News basically displays messages to all users when the door is run
+(i put it in the BBS:Screens/BULL50.TXT file so it gets run every time
+someone logs on, use the MCI command to run the door.)
+The messages can be programmed to only display on a certain date,
+between 2 dates and on and after a certain date.
+
+To install it copy all the files in the BBS dir to your BBS: dir
+and copy the DOORS dir to your doors: directory.
+
+
+
+H-News is hard coded to look for the following dirs, so if you have problems
+check the dirs exist.
+
+DOORS:HydraTools/
+DOORS:HydraTools/H-News/
+DOORS:HydraTools/H-News/Text/
+DOORS:HydraTools/H-News/Users/
+
+also it used AEDoor.Library so have this in LIBS: or else...
+
+The H-News program can be put anywhere, but don't forget to change the
+location tooltype on the BBS:Commands/BBSCMD/NEWS.INFO file...
+
+the News is stored in a file called "DOORS:HydraTools/H-News/Text/News.TXT"
+
+an example is provided so take a look at this so you can understand the next
+bit of this documentation...
+
+the file is made up of sections, at the end of the file you must have
+the line
+
+:FINISH
+
+the possible sections are defined like this..
+
+TODAY
+DD-MM-YY
+:START
+some boring text that will only get
+displayed on the above date and no other days..
+:END
+
+(replace DD-MM-YY with a date like 30-07-94 or sommat..)
+
+AFTER
+DD-MM-YY
+:START
+some text that will be displayed on and after the date above, this text
+will be displayed on all future logins until you remove this section
+from the news file
+:END
+
+BETWEEN
+DD-MM-YY
+DD-MM-YY
+:START
+this text will get displayed on the first date and all consucutive days
+until (and including) the second date.  usefull if the sysop goes on holiday
+:END
+
+those are the only possible sections to the news.txt file
+
+*IMPORTANT*  do NOT have any blank lines between the sections or the dates or
+at the top and bottom of the file or it WONT work, so after you edit the news
+check it by typing NEWS at the bbs prompt to make sure it works..
+
+the BBS:HydraTools/Users dir is used to store very small files for each of the
+users on your system.  at the moment it only stores the date the user
+last looked at the news, but in a future version it will contain some
+preferences for each users too..
+
+ok, thats it,  any problems with this proggie the give my bbs (Utopia!) a
+call on 0202 417191 and I'll sort you out..
+
+*IMPORTANT* Got any cool ideas for doors ?  got a door that you like but
+don't work properly ?  I'd be welcome to code a door that does the same
+but works..  Leave a message on my bbs and we'll talk!
+
+Hydra/LSD signing off!
+

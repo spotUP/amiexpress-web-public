@@ -1,0 +1,16 @@
+[37m1oo% T-Updater Help Menu
+-------------------------
+
+[34m'[33m#[34m' [36m= flag files (e.g. 1,2,3-5,9-1,2-,-3 or 1 2 3-5 9-1 2- -3)
+[34m'[33m<[34m' [36m= previous page
+[34m'[33m>[34m' [36m= next page
+[34m'[33ma[34m' [36m= flag all
+[34m'[33mc[34m' [36m= clear all flagged files
+[34m'[33mf[34m' [36m= flag files since date
+[34m'[33mp #[34m' or '[33mp#[34m' [36m= jump to page #
+[34m'[33mq[34m' [36m= quit
+[34m'[33ms[34m' or [33mCR [36m= start packing flagged files
+[34m'[33mt[34m' [36m= toggle all flags
+[34m'[33m?[34m' [36m= show this page
+
+[31mPress any key[0m

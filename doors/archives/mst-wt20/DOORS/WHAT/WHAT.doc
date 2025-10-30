@@ -1,0 +1,98 @@
+
+---------------------------------------------------------------------------
+        Transfer Acitivities [RELEASE 2] - Public Release Version!
+                   All Coding by Bobo (Mystic/X-Power)
+---------------------------------------------------------------------------
+
+Hi all sysops.  There have been  quite some time since  the last release
+from me, but here it is.  This is one of the  last doors i am ever going
+to release on the amiga, due to lack of time.
+
+Well, I guess the most of you sysops know  what this door is and what it
+does, but to the ones that  have been lost for some years, here's a fast
+introduction:
+
+This door is  intended for MULTINODE systems only and  cannot be used on
+single node systems. The main purpouse of this door is to show if a user
+on any other node is transfering something, and if so, it tells you  the
+current  file that  he is transfering  and what files in his batch  have
+already been finished.
+
+AS A BONUS, the sourcecode to this door is included in the archive.
+AS AN EXTRA BONUS, screenshots of the new Conftop 3.0!
+
+
+An example output may look like this:
+.----------------------------------------------------------------------------.
+| WHAT: Transfer Activities v2.0 [REL 2] - Copyright (c)1994-95 Bobo/Mystic! |
+|--v----------------------v----------------v--------------v-----------v------|
+|Nd| Username (Handle)    | Status/Action  | File(s)      | Filesize  | CPS  |
+|--+----------------------+----------------+--------------+-----------+------|
+| 1| UFOk                 | Uploaded - OK! | ADTOHT21.LHA |   100.142 |  -   |
+| 1| UFOk                 | Uploaded - OK! | ALGOMUS.LHA  |    72.810 |  -   |
+| 1| UFOk                 |*Uploading file | DELIT214.LHA |           | 1253 |
+|--+----------------------+----------------+--------------+-----------+------|
+| 2| FLATLINE             | Uploaded - OK! | FORDSIM1.ZIP | 1.464.904 |  -   |
+| 2| FLATLINE             |*Uploading file | FORDSIM2.ZIP |           | 3230 |
+|--+----------------------+----------------+--------------+-----------+------|
+| 3| sNOOpY!              |*DL'ing file... | 351RC110.ZIP | 1.998.541 |  -   |
+|--^----------------------^----------------^--------------^-----------^------|
+| Upload   Activities -> Total files: [   3 ]   Total bytes: [   1.637.856 ] |
+| Download Activities -> Total files: [   0 ]   Total bytes: [           0 ] |
+`----------------------------------------------------------------------------'
+
+If you run a  multinode bbs,  this door is almost a must and should be a
+standard on all boards.  This door also fully supports quiet nodes, so a
+user can exclude himself from WHAT easy - just to use the 'Q' command in
+amiexpress.
+
+Keep in mind that this door ONLY works on the new versions of amiexpress
+that supports 32 nodes. A version for the old amiexpress 2/3 series and
+SExpress may be done if requested.
+
+--------------------------------------------------------( Installation )---
+
+WHAT requires a fully installed and running amiexpress 3.x (32 node).
+It WON'T work on eairlier versions of amiexpress or S-Express.
+
+WHAT doesn't require any configuration.
++++++++++++++++++++++++++++++++++++++++
+
+All sysops should know how to install a standard XIM-door, but you'll
+never know, so here's a fast breif.
+
+To install WHAT, start with copying the included icon where it should be
+located.
+
+------------( Snap this lines )---------------------------
+Copy RAM:Doors/WHAT/WHAT.info BBS:Commands/BBSCmd/
+----------------------------------------------------------
+
+Continue  with making  a directory  in doors: called 'WHAT' and copy the
+main program, docs etc.
+
+------------( Snap this lines )---------------------------
+Makedir Doors:WHAT
+Copy RAM:Doors/What/#? Doors:What/ ALL
+----------------------------------------------------------
+
+That's it!  Please  feel free  to contact me  if you  are having trouble
+installing the tools.
+
+------------------------------------------------------( Final Comments )---
+
+                              CONTACT INFO
+                              ~~~~~~~~~~~~
+If you have been tring to reach me on internet, you'll probably noticed
+that my email address (bobo@everyday.se) doesn't work. TRUE, it doesn't
+work! However, try to reach me on IRC sometime. My nickname is: bobomst
+
+
+If YOU are interested to join one of the finest groups in the scene: MYSTiC
+- Make sure you call one of our headquarters in your nearest country and
+leave the sysop a message.
+
+---------------------------------------------------------------------------
+
+More quality doors/tools will be available very soon!
+Keep in touch with the best coders - MYSTiC!

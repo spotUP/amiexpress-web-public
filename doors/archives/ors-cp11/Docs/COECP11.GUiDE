@@ -1,0 +1,197 @@
+@DATABASE "COECP10.ENGLISH.GUIDE"
+@REMARK .------------------------------------------------------------------.
+@REMARK | This document is written in AmigaGUIDE format, so please read it |
+@REMARK | with AmigaGUIDE or your favourite guide reader.... ciao now...   |
+@REMARK `------------------------------------------------------------------'
+@REMARK $VER: COECP V1.0
+@WIDTH 80
+@NODE MAIN "Guide to Chat-Overide-Emergency-Credits-Page V1.1"
+                                   /\            /\            
+               ___________________/  \__________/  \__________ 
+               \_  _   _    _    /  __   _     /  __    _    / 
+               /   |   \    |___/\__/\  _|   _/\__/\    |___/_ 
+              /    |    \____     \   \  \      /   \____     \
+              \    |    /   /     /   /  |\    /    /   /     /
+               \_______/_________/___/___| \  /____/_________/ 
+                                            \/         ©JoKER
+                            ¿S pROUD tø pRESENT:
+
+                          >»»»»> COECP V1.1 <««««<
+
+                          @{"-*-   INTRODUCTION   -*-" LINK INTRODUCTION}
+                          @{"-*-     FEATURES     -*-" LINK FEATURES}
+                          @{"-*-   INSTALLATION   -*-" LINK INSTALLATION}
+                          @{"-*-   EDIT CONFIGS   -*-" LINK CONFIGFILES}
+                          @{"-*- TROUBLE-SHOOTING -*-" LINK PROBS}
+                          @{"-*-    WHO DID IT    -*-" LINK CREDITS}
+                          @{"-*-    GREETINGS!    -*-" LINK GREETINGS}
+@ENDNODE
+
+@NODE INTRODUCTION "INTRODUCTION OF COECP V1.1"
+
+COECP V1.1 IS NOT ONLY ANOTHER NEW SYSOP PAGER. IT HAS @{"FEATURES" LINK FEATURES} THAT OTHER 
+PAGERS DOESN'T HAVE. YOU SHOULD NOT REPLACE COECP V1.0 WITH YOUR OLD PAGER.
+LET IT RUN BESIDE YOUR OLD PAGER JUST WITH ANOTHER COMMAND TO START IT.
+SET THE CHAT-OVERRIDE-LEVEL TO AN AMMOUNT THAT EVERY USER IS ABLE TO PAGE
+YOU AT ANY TIME. 
+
+THE USER HAS TO PAY WITH HIS CREDITS IF HE WANTS TO PAGE THE SYSOP AND HE
+WILL DO THIS ONLY IF THERE IS SOMETHING REALLY IMPORTANT. SO, NEVER WILL
+PAGE THE SYSOP JUST FOR FUN AND THE SYSOP CAN BE PAGED AT EVERY TIME.  
+
+@ENDNODE
+
+@NODE FEATURES "FEATURES OF COECP V1.1"
+
+COECP V1.1 LOOKS HOW MANY UPLOAD BYTES THE USER WHO WANTS TO PAGE THE SYSOP
+HAS AND CALCULATES HOW MANY BEEPS THE USER CAN USE. IF THE USER HAS ACCESS
+TO THE FREE-MODE HE DOES NOT HAVE TO PAY FOR HIS BEEPS. THE AMMOUNT HOW MUCH
+A BEEP DOES COST, WHICH USERS HAVE ACCESS TO THE FREE-MODE AND HOW HIGH IS
+THE CHAT-OVERIDE-LEVEL ARE IN THE @{"CONFIGFILES" LINK CONFIGFILES}.
+
+AFTER THE USER PAGED THE SYSOP COECP V1.1 CALCULATES THE NEW AMMOUNT OF
+CREDITS THE USER HAS LEFT (IS SHOWN TO THE USER) AND STORES THIS TO HIS
+USERDATA.
+
+@ENDNODE
+
+@NODE INSTALLATION "INSTALLATION OF COECP V1.1"
+
+INSTALLATION TO @{"AMI EXPRESS V2.xx" LINK AMIEXPRESSV2.xx}.
+
+INSTALLATION TO @{"AMI EXPRESS V3.xx" LINK AMIEXPRESSV3.xx}.
+
+@ENDNODE
+
+@NODE AMIEXPRESSV2.xx "INSTALLATION TO AMI EXPRESS V2.xx"
+
+TO INSTALL THE DOOR LOAD UP THE CUSTOMCOMMANDS (/X V2.2x OR BELOW) OR
+BBS.CMD (/X V2.3x) AND ADD THE FOLLOWING LINE TO THE LIST.
+
+
+          11 SPACES IN         
+          |
+-----------------------------------------------          
+*PAGE     RM010MODULES:ABSTURZ/COECP/COECP.REXX
+-----------------------------------------------
+||        |||  |           
+||        |||  ` 'MODULES:ABSTURZ/COECP/COECP.REXX' IS THE LOCATION OF
+||        |||     THE FILE.
+||        |||
+||        ||` 020 THE MINIMUM ACCESS TO USE THIS DOOR. CHANGE IT TO WHAT
+||        ||      YOU LIKE.
+||        ||
+||        |` 'M' FOR A MULTINODE BBS ('S' FOR A SINGLE NODE BBS).
+||        |
+||        ` 'R' FOR A REXX DOOR WHICH WILL USE THE 'REXXDOOR'-UTIL.
+||
+|`COMMAND TO START THE DOOR.
+|
+`-RETARD OPTION. TO MAKE SURE THEY ONLY USE 'S' & ONLY  'S' TO GET THE
+  DOOR TO COME UP. IF NOT USED, THINGS SUCH AS 'START' AND 'SA' WOULD
+  STILL BRING UP THE DOOR.
+
+
+  USE THE LINE BETWEEN THE LINES ONLY. THE OTHER PARTS ARE JUST AN
+  EXPLANATION TO MAKE SURE YOU KNOW WHAT EACH PART IS DOING (SINCE
+  NOONE WOULD TELL ME BACK IN THE DAYS WHERE I DIDN'T KNOW WHAT WAS
+  GOING ON!)  
+
+  NOW COPY THE DIRECTORY 'MODULES' FROM THE LHA-ARCHIEV TO YOUR BBS.
+
+  AT LAST EDIT THE @{"CONFIGFILES" LINK CONFIGFILES}. YOU FIND WILL THEM IN
+ 
+  'BBS:MODULES/ABSTURZ/COECP'.
+
+@ENDNODE
+
+@NODE AMIEXPRESSV3.xx "INSTALLATION TO AMI EXPRESS V3.xx"
+
+YOU ONLY NEED TO COPY THE FILES FROM THE LHA-ARCHIEVE TO YOUR BBS. THEN
+EDIT THE @{"CONFIGFILES" LINK CONFIGFILES}. YOU WILL FIND THEM IN 'BBS:MODULES/ABSTURZ/COECP'.
+
+@ENDNODE
+
+@NODE CONFIGFILES "HOW TO EDIT THE CONFIGFILES?"
+
+1. CREDITSPAGE.NAMES
+ 
+   - THIS IS THE LIST OF USER'S NAMES WHO HAVE ACCESS TO THE FREE-MODE.
+     
+     E.G.:
+
+     - Line 1 = MuMu
+     - Line 2 = HELiON
+     - Line 3 = SPIDER
+
+
+     ALL USERS IN THIS LIST DO NOT HAVE TO PAY IF THEY WANT TO PAGE THE
+     SYSOP. 
+
+     CAN ADD AS MANY USERS AS YOU WANT TO.
+
+
+2. CREDITSPAGE.CFG
+
+   - Line 1 = 20      <- CHAT-OVERIDE-LEVEL
+   - Line 2 = 102400  <- AMMOUNT HOW MUCH A BEEP DOES COST
+   - Line 3 = 10      <- THE MAXIMUM NUMBER OF BEEPS THE COECP V1.0 WILL
+                         DO, IF THE USER HAS ENOUGH CREDITS  
+
+@ENDNODE       
+
+@NODE CREDITS "CREDITS FOR COECP V1.1"
+
+   IDEA          : MuMu øf OSiRiS
+   
+   AREXX-CODING  : MuMu & nEW uSER øf OSiRiS
+   
+   DOCUMENTATION : MuMu øf OSiRiS
+
+   BETA TESTING  : MuMu - KEY WEST - OSiRiS EHQ - SCANDAL DiST SiTE
+                   DOC ICE - HEADCRASH - TSB WHQ / KBP WHQ
+                   
+@ENDNODE
+
+@NODE GREETINGS "FRIENDSHIP RULEZ"
+
+               GREETINGS FROM MuMu TO THE FOLLOWING PEOPLE:
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CREEPY/TFP          - HOW iS iT GOiN'?
+GANDALF/SCL         - WELL, iT WAS A NiCE TiME IN FAiTH.
+RAPiD/SCL           - THANX FOR THE ANSiS.
+RAF/TFP             - THANX FOR THE KEY WEST LOGO. iT iS PRETTY NiCE.
+DiCE/TFP            - THANX FOR THE BBS-ADVERT YOU CODED FOR ME.
+MURDOC/NEON         - YOUR AT&T'S ARE 100% NO ViRGiN CARDS. BETTER TRY
+                      TO GET A BETTER CARD-SUPPLiER.
+ 
+
+                  AND A BiG HELLO TO ALL OSiRiS MEMBERS !
+
+@ENDNODE
+
+@NODE PROBS "DO YOU HAVE ANY PROBLEMS?"
+
+               FOR TROUBLE-SHOOTING OR LATEST UPDATES CALL:
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                 sYSOP: MuMu    «·»    1 nODE - 16.8k DHST       
+      - -- --- --------------------------------------------- --- -- -
+               ___                 \          /                      
+        ______/  /___  __  __    ___\        /____  _______________  
+        \_   /  /__  \/  \/  \   \   \      /___  \/  ____/\__    /  
+         | _/ _/ _/  /   /   /    \  /\    /  _/  /\____ \_   \__/   
+         | \  \  \__/\__    /  ·   \   \  /   \__/|    /  /     \    
+         |__\  \___________/        \/\  /________|______/|      \   
+             \__\                      \/              EaZ|_______\  
+                  OSiRiS EHQ & SCANDAL DiSTRiBUTiON SiTE             
+      - -- --- --------------------------------------------- --- -- -
+
+                    » aMIGA · /X · cONSOLE · mODULES «               
+
+               aMIXPRESS v3.XX   ø   nUP & sYSTEM pW nEEDED          
+
+                    -:) cALL nOW fOR a goOD rATIO (:-                
+
+@ENDNODE

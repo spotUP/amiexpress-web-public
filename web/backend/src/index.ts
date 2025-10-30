@@ -837,17 +837,19 @@ io.on('connection', async (socket) => {
       // Log successful login (express.e:9493 callersLog)
       await callersLog(user.id, user.username, 'Logged on');
 
-      // Trigger webhook for user login
-      try {
-        const { webhookService, WebhookTrigger } = await import('./services/webhook.service');
-        await webhookService.sendWebhook(WebhookTrigger.USER_LOGIN, {
-          username: user.username,
-          userId: user.id,
-          secLevel: user.secLevel,
-          calls: user.calls + 1
-        });
-      } catch (error) {
-        console.error('[Webhook] Error sending user login webhook:', error);
+      // Trigger webhook for user login (skip for sysops to reduce noise)
+      if (user.secLevel < 255) {
+        try {
+          const { webhookService, WebhookTrigger } = await import('./services/webhook.service');
+          await webhookService.sendWebhook(WebhookTrigger.USER_LOGIN, {
+            username: user.username,
+            userId: user.id,
+            secLevel: user.secLevel,
+            calls: user.calls + 1
+          });
+        } catch (error) {
+          console.error('[Webhook] Error sending user login webhook:', error);
+        }
       }
 
       // Set user preferences

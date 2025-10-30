@@ -1,0 +1,16 @@
+
+          Eall Deleter v1.0 by Bobo/Mystic
+==========================================================
+{ + }-New feature(s)         { - }-Removed feature
+{ * }-changed feature        { ! }-fixed feature (Bug)
+{ # }-Information            { ? }-let me know if this work
+
+Eall Deleter v1.0 (04-03-94 > 04-21-94) - [First public version]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+04-03-94 { + } I started coding this door.
+ - ^^ -  { + } Main routines to scan the messagebase.
+04-08-94 { ! } Fixed the design stuff.
+04-10-94 { * } Optimized and maked it safer.
+04-21-94 { + } Maked the final changes.
+ - ^^ -  { + } Removed the registration code.
+               Final size: 15124 (Sourcecode: 7339)

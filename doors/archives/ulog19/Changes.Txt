@@ -1,0 +1,43 @@
+****************************************************************************
+*                                                                          *
+*                    ULog V1.9 By Robert 'Bryce!' Eriksson                 *
+*                                                                          *
+*                      Changes since the last release...                   *
+*                                                                          *
+****************************************************************************
+
+                     Changes.txt for the ULog utility.
+
+ULog:
+
+Version 1.6     The First Release Version.
+
+Version 1.7     Added the posibility for the sysop to specify the
+                number of Uploaders to be shown in the Top Uploaders
+                list with the NumULs option. Added VersionTag to the
+                main programfile, so that you will now be able to
+                write: 'Version ULog' in CLI/Shell, and the computer
+                will reply with the current version number. This
+                function only works with KickStart 2.0 and has no
+                effect, what so ever, on the execution of the
+                program it self. No further changes has been made.
+
+Version 1.7b    In the 1.7 version I entered the name of ULog in
+                lowercase characters, by mistake. It should have
+                been written in uppercase characters. This ment that
+                the ULog message was never found. All fixed up now.
+
+Version 1.8     Fixed the phenomena which made ULog "forget" what
+                the User Message was. Added the ability to disinclude
+                the MsgBase info, since it takes up a lot of space,
+                and some people might not find it interesting. Also,
+                added the ability to import Environment Variables,
+                sent out by LogBook 1.6, and put that info in the
+                output file.
+
+Version 1.9     Changed the sorting routine so the sysop of the
+                board will never be included in the top uploaders
+                list.
+
+Look out for more stunning productions from Robert 'Bryce!' Eriksson.
+

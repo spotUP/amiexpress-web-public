@@ -8,6 +8,8 @@
 import { BBSSession } from '../index';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { validateFilename, checkForFile } from '../utils/file-upload.util';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // Import from other handlers
 import { displayScreen, doPause, hasKeysFile } from './screen.handler';
@@ -2550,6 +2552,46 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
         if (session.inDoorManager) {
           delete session.inDoorManager;
         }
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = false;
+      }
+      return;
+    }
+
+    case 'GA': { // GetAnswer - Test simple Amiga door (8KB XIM door)
+      try {
+        console.log('[GA] Starting GetAnswer door...');
+        const { AmigaDoorSession } = await import('../amiga-emulation/AmigaDoorSession');
+        // Door path is relative to project root, not backend directory
+        const doorPath = path.join(process.cwd(), '../../doors/GetAnswer/GetAnswer');
+
+        console.log(`[GA] Door path: ${doorPath}`);
+
+        if (!fs.existsSync(doorPath)) {
+          socket.emit('ansi-output', '\r\n\x1b[31mGetAnswer door not found!\x1b[0m\r\n');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.menuPause = false;
+          return;
+        }
+
+        socket.emit('ansi-output', '\r\n\x1b[36m🚀 Starting GetAnswer (8KB XIM door)...\x1b[0m\r\n\r\n');
+
+        const amigaSession = new AmigaDoorSession(socket, {
+          executablePath: doorPath,
+          timeout: 600,
+          memorySize: 1024 * 1024
+        });
+
+        await amigaSession.start();
+
+        socket.emit('ansi-output', '\r\n\x1b[32mGetAnswer door session completed.\x1b[0m\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = false;
+      } catch (error) {
+        console.error('[GA] Fatal error:', error);
+        socket.emit('ansi-output', '\r\n\x1b[31mError starting GetAnswer door:\x1b[0m\r\n');
+        socket.emit('ansi-output', `${(error as Error).message}\r\n`);
+        socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = false;
       }

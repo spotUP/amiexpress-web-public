@@ -1,0 +1,415 @@
+@database FileIDToolBoxDoc
+
+Copyright (C) 1993 TekLords/Mystic/X-DeSign, Belgium, LI
+All Rights Reserved
+
+@Remark $VER: Version V1.0 (Jan 13 1994, 14:24:21)
+@Remark AmigaGuide database for the FileIDToolBox Documentation
+
+@node MAIN "FileIDToolBox AmigaGuide Document (C) 1993 TekLords/Mystic/X-DeSign (Jan 13 1994, 14:24:21)"
+
+                                :                                          
+   ________               :     ¦                    /\\                    
+   \\       \\  ____________¦    _|_ ___________ _____/_ \\_ _ __________ __ _
+    \\______ \\/ __ _ _/    |    \\\\\\\\\\_       /\\\\\\_    /__/\\\\\\\\__      //_///
+     /     \\  /     \\     |    _/   /______/     _  /   \\    _/     /      
+   _/       \\/       \\_____   _\\______    \\_      \\/     \\_  \\_____/\\_     
+   \\        ||        /   /   \\      /     /      |       /          /     
+    \\ ______||______ /_________\\_________ /_______|_____ /_________ /      
+     \\/            \\/                   \\/             \\/     Rpd!\\/ 
+                              (MYSTiC/X-DeSiGN) 
+
+
+              .: C O N T E N T S  O F  D O C U M E N T A T I O N :.
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                         @{"        Introduction        " Link Part01}
+                         @{"        Requirements        " Link Part02}
+                         @{" How To Use This Great Util " Link Part03}
+                         @{"         ToolTypes          " Link ToolTypes}
+                         @{"         Greetings          " Link Part04}
+
+                Docs done by @{" Re/Y\o/TekLords/Mystic/X-DeSign " Link Diabolo}.
+                       Install And Enjoy The Program ...
+@endnode
+@node Part01 "Introduction To FileIDToolBox by Re/Y\o/TLS/MST "
+
+                              .: Introduction :.
+                              ~~~~~~~~~~~~~~~~~~
+
+Well it is very easy ... FileIDToolBox can be used to make life easier for
+the once that want to add the File_ID.Diz to every available archive you
+want to release ... It allows you to add, delete, view and change the 
+File_ID.Diz in any archive supported by FileIDToolBox ... It is the workbench-
+interface of FileIDCLIBox ... It works on itself ... So you don't need the
+FileIDCLIBox ...
+
+This release is only because of a few bug fixes ... It wouldn't take the
+file_id.diz always ... It had problems with the "Ram Disk:" from the
+reqtools-requester and CED ... So I hope that these problems are fixed
+now ... It now also deletes the old description if you select "Add" or
+"Change" becoz it is required for some Adders ...
+
+@endnode
+@node Part02 "Requirements"
+
+                              .: Requirements :.
+                              ~~~~~~~~~~~~~~~~~~
+
+All you need is an ©Amiga, OS2.x+, FileIDToolBox, a textviewer, a texteditor
+and some archivers ...
+If you find any BUGS or have some SUGGESTIONS please leave me a messy ... You
+will most certainly be able to find me at @{" Diabolo " Link Diabolo}.
+
+
+@endnode
+@node Part03 "How To Install FileIDToolBox by Re/Y\o/TLS/MST"
+
+                            .:Installation Guide:.
+                            ~~~~~~~~~~~~~~~~~~~~~~
+
+The Program runs on most amiga configurations ... there shouldn't be much
+limitations ... except not enough diskspace ... not enough ram ... but it
+doesn't consume much itself ... it's just the archives that might consume
+some space ...
+Just copy the program where you like it ...
+
+There are a few Safety requesters just before an operation takes place ...
+The
+
+                       "Add File_ID.Diz now?"
+                      "Change File_ID.Diz now?"
+
+requesters are only there if you use an editor that detaches from shell and 
+immediatly returns ... After changing the File_ID.Diz and saving it with your
+favourit editor just press yes if you want it to be added ... Doing this before
+you edited the File_ID.Diz will result in the same File_ID.Diz added again ...
+You can use multiselect to do different files in one time ... doesn't matter
+if they are from a different type ... but you have to handle them one by one ...
+becoz otherwise every File_ID.Diz will be overwritten by a newer one ... This
+means you have to answer the above two questions only after editing ... Then
+you the program will continue with the next one ...
+
+I used a lot of @{" ToolTypes " Link ToolTypes} in the FileIDToolBox.info becoz
+i think it makes it more configurable to your own needs ... You can use the
+same icon for FileIDCLIBox and FileIDToolBox and only have to change them once
+with The ToolTypeWindow or with the ToolType program by Michael J Barsoom
+© 1993. You just need to copy it from one to the other ...
+
+Just Click And Answer The Questions And You Are Adding, Deleting, Changing and
+Viewing Available File_ID.Diz files ...
+
+@endnode
+@node ToolTypes "The different ToolTypes"
+
+
+                          .:The different ToolTypes:.
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is how i build them ... First of all I get the extension of the archive,
+this is like DMS, LHA, LZH, EXE etc ... default is "" (nothing) for executables.
+For executables there is a program EXEDescript that hangs a description on the
+executable without destroying it ... It can also be removed ...
+Then i add something to this extension ...
+
+* '.A' : this allows you to specify the add line you want to use for this
+         extension ...
+         e.g. DMS.A=DMSDescript a %f %F
+              ZIP.A=ZIP -u %F %f
+
+Note: if you add the File_ID.Diz by requester it's name doesn't have to be
+File_ID.Diz ... it can be anything and it will be added as File_ID.Diz ...
+
+* '.E' : this allows you to specify the edit line you want to use for this
+         extension ...
+         e.g. DMS.E=CED %f
+              ZIP.E=CED %f
+
+* '.X' : this allows you to specify the extract line you want to use for this
+         extension ...
+         e.g. DMS.X=DMSDescript x %f %F
+              ZIP.X=UNZIP -o %F %f
+
+* '.D' : this allows you to specify the delete line you want to use for this
+         extension ...
+         e.g. DMS.D=DMSDescript d %f %F
+              ZIP.D=ZIP -d %F %f
+
+* '.V' : this allows you to specify the view line you want to use for this
+         extension ...
+         e.g. DMS.V=PPMore %f
+              ZIP.V=PPMore %f
+
+Then ... what does the %F and %f mean ... %F will be replaced by the archive
+name and path itself ... %f will always be replaced by FILE_ID.DIZ ... so they
+must be put there if you want something to happen ... and they have to be at
+the exact place for your archiver, editor, viewer ...
+
+There should be enough example ToolTypes in the Icon as is .. so there you can
+have a look at the possibilities ...
+
+@endnode
+@node Part04 "Greetings To EveryOne"
+
+
+
+               First Of All I Want To Greet Some Betatesters ...
+
+                               @{"     Andi/MST     " Link Diabolo}
+                               @{"     Spy/MST      " Link Paralysis}
+                               @{"    SieGel/MST    " Link Diabolo}
+                               @{" Genghis Khan/TLS " Link WOK}
+                               @{"       Uli        " Link FlyingSaucer}
+                               @{"     Scorpio      " Link LastDesire}
+                               @{"    Ken & Ryu     " Link ShotokanPalace}
+                               @{"      Pigeon      " Link Universe}
+
+               Yankee Rose           -=+=- /\\ltern/\\te Re/\\ality
+               ARGON/MST             -=+=- *||MATROSE ARGON||*
+               Foxx'n'Lynxx          -=+=- </\\/> ZigZag Corp <\\/\\>
+               - GALAXY -            -=+=- Call ULIXYS BBS (ISDN)
+               STB                   -=+=- NoWHeRe
+               RHYS/FAIRLIGHT        -=+=- > > F A I R L I G H T < <
+               Mike                  -=+=- GL0BAL CHA0S BBS
+               [-AmiCom/PDX]         -=+=- SKARA BRAE ISDN
+               SPEEDLOCK             -=+=- Lighthouse 6 NDS -THHG-
+               THE SiLENCER/TRSi     -=+=- »»»[ T R S i ]«««
+                THE CHAMP            -=+=- <*>RANDOM ACCESS<*>
+               dR.dRE!               -=+=- -=====Faith=====-
+               FuZzY/MsT             -=+=- (MySTiC /X-DeSiGN)
+               DELTAFORCE            -=+=- // MEN-TEL BBS //
+               SATAN                 -=+=- {SHINING 8}
+               EMPiRE                -=+=- -÷M÷Y÷S÷T÷i÷C÷-
+               [-bObO-]              -=+=- [» MYSTiC/X-DESiGN «]
+
+                               @{"      Amiga       " Link Amiga}
+
+               Secondly All The Members Of Mystic & TekLords ...
+
+                                 @{"    Mystic    " Link Mystic}
+                                 @{"   TekLords   " Link TekLords}
+
+                            And Last But Not Least ...
+
+        All Ex- And Still-Members Of AFL That I Have Met Over The Years...
+
+        Don't Shoot Me If I Forgot You ... There Are So Many People I Have
+        To Thank For Testing ... That I Probably Forgot To Mention Here ...
+
+@endnode
+@node Diabolo  "Diabolo -=- Mystic/X-DeSign WHQ -=-"
+
+
+                        ·  :                 .     :     :
+-============-   \\____ ¬V ¬V___ ¬V___ ¬V___ ¬V ¬|  |___ ¬|   MANAGEMENT
+ (Mystic/X-Design)| ¬|  |  | ¬|  | ¬|  | ¬|  |  |  | ¬|  |   -========-
+      WHQ         |  |  |  |  |  |  |  |  |  |  |  |  |  |   ANDi/MST
+-============-    |  |  |  |     |    _|  |  |  |__|  |  |   SPY/MST
+                  |  |  |  |  |  |  | ¬|  |  |  | ¬|  |  |   FELDMAN
+-ELiTE oNLY-      |  |  |  |  |  |  |  |  |  |  |  |  |  |   FuZzY/MsT
+                  |  |  |  |  |  |  |  |  |  |  |  |  |  |   Wolfmann/TRSI
+CALL US NoW FoR   |  |  |  |  |  |  |  |  |  |  |  |  |  |   (-FaZ! & tERMi-)
+THE NEWEST AMiGA/ |  |  |  |  |  |  |  |  |  |  |  |  |  |     -====-
+PCSTUFF           |  |  |  |  |  |  |  |  |  |  |  |  |  |   RUNS oN A3000
+AND ALL MST-      |  |  |  |  |  |  |  |  |  |  |  |  |  |   WITH 25MHZ AND
+RELEASES.         |  |  |  |  |  |  |  |  |  |  |  |  |  |   AMIEX (REG.)
+                __|_____A__A__A__A_____A_____A_____A_____|D! 
+WE oNLY ACCEPT    |     :  :     :     :     :     :     |   SUPPoRTET BY
+9600 - 16.800     :     ·  .     .           .     ·     :   -==========-
+BAUD CoNNECTS.    .        .                                 M Y S T I C
+
+
+@endnode
+@node Paralysis  "Best PD-BBS in Berlin ... Give it a RING"
+
+
+  _______)\\  ________ _____)\\  ________ _____________)\\ ____ _______)\\
+  \\  _____ \\ \\  ____ \\\\  ___ \\ \\  ___  \\\\\\ / //\\\\  ___  / \\\\\\  ___  /
+  _\\/____/ /__\\/___/ /_\\/__/ /__\\/__/  / \\  / \\ \\/ / \\/\\/  // \\/\\/
+  \\  _____/ \\  ___  / \\  ___/ \\  ___  /  / /\\ \\_/ /  \\ \\___\\  /  \\ \\___
+ /\\\\//\\\\/  / / /\\\\ \\/\\\\/  / //\\ \\//\\\\___/ /\\ \\___ \\ /\\\\/ /\\ \\___ \\
+// \\// \\  / / // \\\\ \\_// \\  / /// \\ __ // \\// \\ __/ /// \\ // \\ __/ /
+\\__/\\__/  \\/  \\__/ \\ /\\__/  \\/ \\__//__\\\\__/\\__//___/ \\__/ \\__//___/
+V
+         SYSOP : Spy/MST  !    COSYSOP : PHANTOM        SYSOP : Arthur Dent
+.
+AmIgA 3ooo / 25 MhZ / 24H 7DaYz / CoOl RaTiOs / USR DuAl RuLeZ
+
+
+ NoDe 1 : 745 2093     U.S.Robotics DUAL Standard 14400 (RINGDOWN FOR NODE 1-3)
+ NoDe 2 : 745 2094     U.S.Robotics DUAL Standard 16800
+ NoDe 3 : 745 2095     U.S.Robotics DUAL Standard 16800
+ NoDe 4 : 746 7782     U.S.Robotics COURIER HST   16800 (ZyXEL 19200 soon)
+
+
+@endnode
+@node WOK  "Wrath Of Khan -=- TekLords WHQ -=-"
+                  INVOKE IF YOU DARE THE... .|
+      __ _    _ _______ _   ____ ____ ____ /||\\   ___ ____      ______
+      \\ Y \\/\\/ Y __ ___Y \\ / ___Y___ Y___// || \\  \\__Y___ \\   /Y    _/
+       \\· / \\\\ ·// Y|_/·_//__|/ ·| / ·\\  /-*()*-\\  / · |/  \\ / · ___/
+        \\_\\__/_/// ·\\_  \\/ \\___ ||/   \\\\// _||  \\\\ \\\\  /  ////  __/
+         \\_||_/ \\__ |\\___\\__||___|\\____/\\___||___/  \\_ ___/ \\_ _|
+           ·|      Y .   Y   .|           . |·        Y       Y
+                 ___/|_ ____/||\\___ ____  |\\__   _|   ·      ·
+                 \\_/ |/Y /_/ || \\__Y___ \\ |_  \\/Y |
+                  /  / ·/ /-*()*-\\|· \\|__\\|    \\·_|
+                 //  \\  \\// _||  \\\\_  __/ \\  \\   _|
+                 \\__ |\\__\\_ _||___/___|| _/__/\\__ |
+                    Y    Y Y ·|   Y     Y |      \\| [Seven M]
+                    ·    · ·      ·     ·         ·
+
+                          -* TekLords WHQ *-
+
+  Sysops: SouLCatcher                        CoSysops:  Percy
+          SkY                                           DIO+CAT/AFL
+          Genghis Khan                                  Ghostrider
+@endnode
+@node FlyingSaucer "Flying Saucer -=- Independent -=-"
+
+
+       .::::::::: ::::       ::::  :::: :::::::::: ::::  :::: .:::::::::
+       ::::       ::::       ::::  ::::    ::::    ::::: :::: ::::
+       :::::::::: ::::       `:::::::::    ::::    :::::::::: :::: :::::
+       ::::       ::::             ::::    ::::    :::: ::::: ::::  ::::
+       ::::       `::::::::: :::::::::' :::::::::: ::::  :::: `::::::::'
+                                       .
+                           . . . . . . | . . . . . .
+                         /¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯\\
+             ______/¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯\\______
+                   \\_______________________________________/
+                                 \\___________/
+                                  |||||||||||
+                                  | || || | |
+                                    |     |
+       .::::::::: .::::::::. ::::  :::: .::::::::. .::::::::: :::::::::.
+       ::::       ::::  :::: ::::  :::: ::::  :::: ::::       ::::  ::::
+       `::::::::. :::::::::: ::::  :::: ::::       :::::::::: :::::::::'
+             :::: ::::  :::: ::::  :::: ::::  :::: ::::       ::::  ::::
+       :::::::::' ::::  :::: `::::::::' `::::::::' `::::::::: ::::  ::::
+
+                     -= INDEPENDENT FLYING SAUCER EHQ  =-
+                                                                     Spads
+
+
+@endnode
+@node Amiga "Amiga ... Just The Best"
+
+                               ___   ___                                   
+                              /  /  /  /     /\\                            
+                             /  /  /  /     /  \\                           
+                            /  /  /  /     /    \\                          
+                           /  /  /  /     /      \\                         
+                          /  /  /  /     /        \\                        
+                         /  /  /  /     /          \\                       
+                        /  /  /  /     /  /\\        \\                      
+                       /  /  /  /     /  /  \\        \\                     
+                      /  /  /  /     /  /    \\        \\                    
+       ___   ___     /  /  /  /     /  /      \\        \\                   
+       \\  \\  \\  \\   /  /  /  /     /  /________\\        \\                  
+        \\  \\  \\  \\ /  /  /  /     /  ____________        \\                 
+         \\  \\  \\  \\  /  /  /     /  /            \\        \\                
+          \\  \\  \\  \\/  /  /     /  /              \\        \\               
+           \\  \\ /\\  \\ /  /     /  /                \\        \\              
+            \\  \\  \\  \\  /    _/  (_                _)        \\__           
+             \\/_\\/ \\/_\\/    (______)              (_____________)          
+
+                                   Thanks To
+                 Amiga500/600/1000/1200/2000/2500/3000/4000
+                    For Being The Best Computers Ever!!!
+
+@endnode
+@node Mystic
+
+           /\\                                _____.      /\\
+      /\\  /  \\ ______    ______/\\___________/    ¬!_____/  \\  ______________
+     /  \\/    \\\\    ¬\\  /    ¬/                         |   \\/            ¬/
+    /          \\\\     \\/     /  ___________.      ._____!___/             /
+   /            \\\\     \\    /_____.     ¬\\ |      7    ¬\\  ¬\\       .____/_____
+  /    \\  /      \\\\        /      7       \\!      |      \\   \\      7        ¬/
+ /      \\/        \\/      /|      !        \\      !      /    \\     !        /
+/________\\         \\     / |               /            /      \\            /
+       /____________\\   /  !______        /!___        /_______/___        /
+             ·A×E·\\    /         \\_______/    \\_______/           \\_______/
+                   \\  /
+                    \\/
+
+@endnode
+@node TekLords
+
+
+                      From the ashes of the dieing giant...
+                      a small party arose....a party of    
+                      idealists and dreamers who dared     
+                      lay claim to the heavens and all     
+                      that lie beneath...and we are known  
+                      as the....
+ _ ______________________   _________   _______________________  ________ _ _ 
+ __ _        _ _ ___¬\\ ¬| /¯¬\\¯ _  /  _\\___ \\_______ ¬\\ .___ ¬\\/   ____ __ __
+     \\  /Y~  | ¯ ____/| |/ / / |/ /  / ~ |   \\___ _/  / !¯ / ) \\__. ¯¬\\      
+      \\/ | | | | __/___   /_/|   /__/\\ | !  \\ \\  Y  _/  . / /  /  |  \\ \\     
+         | | |  _! _  / \\ \\¬\\!  /~___ \\  :  / /  \\  ¬\\  ./ /  /   !  / /     
+         |___|\\__:___/__|\\ \\ \\________/______/___|\\ \\ \\______/____.___/      
+          ¯      .     ¬  \\___\\       ¯        ¯¬  \\___\\BC+  ~    .
+       
+
+
+@endnode
+@node ShotokanPalace
+                   ____                                                        
+     /\\___________/   _\\_____/\\________________/\\   _____  /\\     _______
+    /  _______    \\   \\____    \\        \\____    \\_/    / /  \\  __\\__    \\
+   /\\____ \\  /  __/   /   /    /_/  ____/   /    //    / / _  \\/    /    /
+  /     /  \\/  __    /  _/    / /    / /  _/    / \\    \\/  /   \\   /    /
+ /     /    \\_  /   /        / /    / /        /   \\    \\  \\    \\_/©ron/
+ \\___________/ /___/\\_______/ /____/  \\_______/\\____\\    \\__\\____/____/
+         /____/                                      \\____/
+
+          ___________/\\  _______   /\\  __________   _______
+          \\______    \\ \\ \\     /  /  \\ \\         \\_/      /
+          /     /    /_ \\/    /  /  _ \\/   /     /    ___/
+         /     _____//   \\  _/__/_ /   \\   \\____/   ___/___
+        /      / /   \\    \\_\\    / \\    \\_ /    \\         /
+        \\______\\ \\____\\____/____/___\\____/______/________/
+@endnode
+@node LastDesire
+
+   )\\_________ ____________ __ _____ ________ ______ ___________ _____/(   
+   |                                                                   |   
+   :          _______    ____________ ________________________         :   
+   |  °      _\\     /\\   \\_____     ~\\\\         \\            /\\ °      |   
+   |     ° \\\\\\     /_/___ /    __    /_\\\\     \\_/_//    /____\\///   °  |   
+   :       __/    /     //   // /   //  \\      \\ /     /\\_____\\        :   
+   |   °   \\____________\\___//_/   //___________\\______\\/        °     |   
+   |        \\____\\_______\\_/______/ \\_______\\____\\______\\    °         |   
+   :                       \\______\\/      _______                      :   
+   |___________ ___________  _____________\\     ~\\_________ ___________:   
+   _\\____     ¬\\\\      ___/\\ \\          /\\ __    /    _   ~\\\\      ___/\\   
+  \\\\    /      //   ___/__\\/ _\\\\     \\_/ // /   //   //____///  ___/__\\/   
+   //  /      ///  /       //  \\      \\\\//_/   ///  / \\____\\   /       /\\\\ 
+  /___________\\___/_______//___________\\_______\\____\\/-jT /___/_______/ /  
+  \\_______\\____\\__\\_______\\\\_______\\____\\_______\\____\\    \\___\\_______\\/   
+   :                                                                   :   
+   |              <+> skID roW euROPEAN heADQUARTERS! <+>              |   
+   |                    + 3 2  - 8 9 -  7 5 3 7 3 7                    :   
+   `------------ - -------- ------------- --------- - ---- ------------'   
+@endnode
+@node Universe
+
+
+                 _ __ __  __ __ __ ___  __________  _____________       
+                / |  |  \\|  |\\/|  |\\  \\/ ____/  _ \\/   ___/ ____/       
+               /  | !|!  \\  | ||  |/ //  _/ |. |/ /\\___  \\\\ __/         
+              //  |  |: \\   | .|  / /// \\\\/\\|: \\  \\/   | \\\\ \\ ¯\\        
+              \\______|__|\\__|__|____/\\_____/|__|\\__/______/____/i!      
+                                                                        
+                            ^ Skid Row German Hq ^                      
+                                                                        
+               ³ Nodes Dual Ringdown  ^  ² Nodes Isdn Ringdown          
+                                                                        
+            Sysops: Pigeon/Sr  ^  Ian/Sr  ^  Ronin/Scx  ^  Bomber       
+                                                                        
+
+
+
+@endnode

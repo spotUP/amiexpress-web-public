@@ -1,0 +1,32 @@
+ExecRexx
+--------
+
+  ExecRexx is a program that turns an ARexx script into an executable program
+that can be run from the CLI or WorkBench. This is handy if you don't wish to
+distribute the source code for the original script, or want to make an ARexx
+script that is easily run by a WorkBench user clicking on an icon for the
+executable.
+  The resulting executable still requires the rexxsyslib.library (ie the
+ARexx server by Bill Hawes) as well as the dissidents rexxapp.library (a PD
+library that allows programs to easily add ARexx implementations) to be in
+the LIBS: drawer of the user's boot disk. The ARexx server should be started
+via RexxMast (by Bill Hawes). If either of these libs is not present, the
+executable will post an appropriate message to the user.
+  The resulting executable is fully re-entrant and can be made resident for
+improved speed. Otherwise, there is no speed difference between the executable
+and the original script. The added size to the executable is minimal due to
+the dissidents rexxapp.library.
+  You should write (and test) the original ARexx script as you would normally.
+Once you have created the original script, you invoke ExecRexx to turn it into
+an executable. From the CLI:
+
+ExecRexx <scriptname>
+
+  This will produce an executable with ".exe" appended to the original script-
+name (as well as an icon for the new executable).
+  If you do not supply a scriptname, the dissidents' file requester will appear
+for you to choose the scriptname. (Note that this requires the dissidents
+requester.library. Haven't you used it yet?)
+  From WB, you can either start ExecRexx alone and use the file requester to
+select the scriptname, or change the script's icon TOOL to ExecRexx and select
+that icon (ie use WB's Info menu item).

@@ -1,0 +1,49 @@
+                        _             _
+              · ____/\_|¬\/\_______ _|¬\  ____________ _ __  ____/\ __ _
+              :/  ___/ |  \______  \ |  \/  _______   \ ___)/ ____//
+              /  __)_. |   \   ./  /_|   \  V  \  _\__/    |  V ¬\:
+        _ __ /   \   | :    \_ |__/ \_    \ :   \ \  ¬\    |  _   \
+            \\_______¦_______/ ¦ \___|____/_____/__\  _\___¦__|    \
+              ¦      :     `---'     :              \/     :  |____/
+              ¦pS!                                                
+              `--------- Brings You Today : DoorLister v1.0 beta
+
+
+Simply this door displays an list of all your available doors, and the
+commands to run them.
+
+## INSTALLATION #############################################################
+
+Getting the door to run:
+Simply run this door as an normal amiexpress door, as methods of running doors
+vary between different versions of amiexpress that part was chosen not to be 
+included. Just refer to your amiexpress documentation. The door is written 
+in c++ and has been tested on amiexpress versions 2.34,2.39,3.9,3.20 and 
+3.32 so there shouldn`t be any problem getting it to run. 
+
+The config file:
+There should be a config file named 'doors.data' that should be located
+in your s:. There`s a sample of the config file included in the pack,
+but just to make sure you`ll get the hang of it i`ll explain it in the 
+doc to.
+
+It could look something like this:
+*Sent                            ## The command to get it to run
+@Edit Your Private Sent-By Line  ## The description of the door!
+
+And you can have as many doors as you want in the file, just dont forget
+to place the config file in s:  (s:doors.data)
+
+## FILES INCLUDED IN THE ARCHIVE ############################################
+
+name						original filesize			description
+--------------------------------------------------------
+doorsv11.exe    		13180							The compiled file to run
+doorsv11.doc			2162							The documentation
+doors.data				224							The config file
+
+## LOG OF VERSIONS ##########################################################
+
+v1.0					 Only released to members & beta-testers!
+						 Log writing added
+v1.1					 First public release

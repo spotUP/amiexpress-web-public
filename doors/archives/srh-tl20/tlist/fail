@@ -1,0 +1,27 @@
+MODULE 'AEDoor','dos/dos'
+
+
+DEF d,str:LONG,cty[20]:STRING
+
+
+PROC main()
+
+   IF aedoorbase:=OpenLibrary('AEDoor.library',1)
+         d:=CreateComm(arg[])
+         str:= GetString(d)
+
+         IF (str:=Prompt(d,20,'\nWhich Country? '))<>NIL
+               StrCopy(cty,str,20)
+               IF cty:='usa' THEN ShowFile(d,'bbs:tlist/usa')
+               IF cty:='canada' THEN ShowFile(d,'bbs:tlist/canada')
+         ELSE
+          WriteStr(d,'LOST CARRIER',LF)
+         ENDIF      
+
+         DeleteComm(d)
+         CloseLibrary(aedoorbase)
+   ELSE
+      WriteF('Coule not open AEDoor.library V1!\n')
+   ENDIF
+   
+ENDPROC

@@ -1,0 +1,202 @@
+@database Sil-Wall v2.50 docs
+
+@remark $Ver: v2.50 (01-30-94)
+@remark published by TRSi
+@remark amigaguide transformation by d-Zire/doodles^shock
+
+@node "MAiN" "SiL-WALL v2.50 Documents"
+
+ =========================================================================
+                            - SiL-WALL v2.50 -
+ =========================================================================
+
+                  Written By THE SiLENCER of TRSi in 1994
+
+                          Release date: 01-30-94
+
+                             @{"[     ABoUT     ]"link "About"}
+                             @{"[   FEATURES!   ]"link "Features"}
+                             @{"[ iNSTALLATioN! ]"link "Installation"}
+                             @{"[    PACKAGE    ]"link "Package"}
+                             @{"[    CoNTACT    ]"link "Contact"}
+                             @{"[  ToP SECRET!  ]"link "TopSecret"}
+
+ =========================================================================
+                       (c)-94 by The Silencer / TRSi
+ =========================================================================
+       AMiGAGUiDE TRANSFoRMATioN AND DESiGN by d-Zire/doodles^shock
+
+
+@endnode
+
+@node "About" "About SiL-WALL v2.50"
+
+                               @{"[ MAiN MENU ]"link "MAiN"}
+                               @{"[ NEXT PART ]"link "Features"}
+
+                         - About SiL-WALL v2.50 -
+
+ This is a simple WALL door which should be run when a user logs in
+ using the MCI Launch Door command ~CC_ in for example in the BBS:Bull.txt
+
+ Ex:
+
+         ---------------/STARTCUT/------
+         ~
+         ~CC_SiLWALL
+         ---------------/ENDCUT/--------
+@endnode
+
+@node "Features" "Features in SiL-WALL v2.50"
+
+                               @{"[ MAiN MENU ]"link "MAiN"}
+                               @{"[ NEXT PART ]"link "Installation"}
+
+                        - Features in SiL-WALL v2.50 -
+
+ This version features Relative Viewing of Quoted lines!
+ That means that if a user has his NumLines set at 29 he will see
+ the 22 last lines of the 100 quoted lines in the datafile.
+ So if a user with Interlace or whatever and with his NumLines set
+ to 60 he will see the 53 last lines of the 100 lines in the datafile!
+ When the limit of 100 lines fills up it will be cut and truncated
+ from the top.
+
+ In the SilWALL.info there is a tooltype named CHEATMODE.
+ The current setting is OFF. That means that if a User doesn't want
+ to be anonymous his name will be printed after his quote in YELLOW
+ color. That way nobody can 'cheat' and using the Anonymous option
+ write another users handle in that place.
+ But with CHEATMODE=ON the handles will be written the same color as
+ the quotes which enables troublemakers to write shit and put another
+ dudes handle in their place, can be quite amusing but if they start
+ to write shit about the Sysop.. well :) you catch my drift!
+ Check the 2 last quoted lines in the SiLWALL.iff picture to see
+ what it looks like with or without CHEATMODE activated.
+ Anyway that won't be a problem either in v3.00 wich will write the
+ lines to the Callerslog, quite easy to fix but as I said, no time!!
+@endnode
+
+@node "Installation" "Installing Sil-WALL v2.50"
+
+                               @{"[ MAiN MENU ]"link "MAiN"}
+                               @{"[ NEXT PART ]"link "Package"}
+
+                       - Installing Sil-WALL v2.50 -
+
+ To install this put the BBSCmd icon into it's place, define
+ your desirable location of the door in here. Now the doorlocation
+ is DOORS:WALL/SiLWALL. But you may put it wherever you like. The
+ datafile for the door with all the quotes in will be named after
+ the name you give the door..
+
+ Ex.
+         DOORS:WALL/SiLWALL      <- door
+         DOORS:WALL/SiLWALL.dat  <- datafile
+
+ or..    DOORS:WALL.020          <- door
+         DOORS:WALL.020.dat      <- datafile
+
+ Don't forget to name the SiLWALL.info containing the config tooltypes
+ to whatever you name the door.. If you are gonna use the SiLWALL.020
+ file rename the DOORS/SiLWALL.info to DOORS/SiLWALL.020.info.
+ Due to lack of time I have only implemented One tooltype yet.
+ The next version, v3.00, will be Fully configurable.
+
+ In the SilWALL.info there is a tooltype named CHEATMODE.
+ The current setting is OFF. That means that if a User doesn't want
+ to be anonymous his name will be printed after his quote in YELLOW
+ color. That way nobody can 'cheat' and using the Anonymous option
+ write another users handle in that place.
+ But with CHEATMODE=ON the handles will be written the same color as
+ the quotes which enables troublemakers to write shit and put another
+ dudes handle in their place, can be quite amusing but if they start
+ to write shit about the Sysop.. well :) you catch my drift!
+ Check the 2 last quoted lines in the SiLWALL.iff picture to see
+ what it looks like with or without CHEATMODE activated.
+ Anyway that won't be a problem either in v3.00 wich will write the
+ lines to the Callerslog, quite easy to fix but as I said, no time!!
+
+ To launch this door from a bulletin file, ex BBS:Bull.txt then use
+ the MCI Launch Door command ~CC_ like this...
+
+  Ex:
+          ---------------/STARTCUT/------
+          ~
+          ~CC_WALL
+          ---------------/ENDCUT/--------
+@endnode
+
+@node "Package" "Contents of this package!"
+
+                               @{"[ MAiN MENU ]"link "Main"}
+                               @{"[ NEXT PART ]"link "Contact"}
+
+                       - Contents and Compability -
+
+        This door can be used from Ami Express 1.1x up to /X 3.32+
+     Though < 2.x users can't use the MCI command to launch the door!
+
+ Files in This Package:
+
+ BBS/Commands/BBSCmd/WALL.info    -CUSTOM COMMAND TOOLTYPES- 1068 bytes
+
+ DOC/FILE_ID.DIZ                  -DESCRIPTION-               475 bytes
+ DOC/SiLWALL.iff                  -WHAT IT LOOKS LIKE-       9088 bytes
+ DOC/SiLWALL.GUIDE                -WHAT YOU ARE READING-     1518 bytes
+
+ DOORS/SiLWALL.ANY                -680x0  VERSION-          20280 bytes
+ DOORS/SiLWALL.020                -68020+ VERSION-          20280 bytes
+ DOORS/SiLWALL.info               -CONFIG TOOLTYPES-         1068 bytes
+
+    NOTE. The 680x0 Version is for Any amiga, be it 68000/20/30/40.
+          The 68020 version is identical to the 030 compiled version
+          so if you have a 030 use the 020+ version...
+@endnode
+
+@node "Contact" "For technical support and/or other quality /X doors contact me at:"
+    µµµµµµµµµµ__
+    ØØØØØØØØØØØØ#w   » NødE(1): +46-270-12138 « » NødE(2): +46-270-PRiV8 «
+    ØØØØØM¶¶ÑØØØØØK
+    ØØØØØÞ   ¶ØØØØ#=> aMiGA_wARES_wARPsPEED <=----- - __-=> TRSi_REWLZ!<=-
+    ØØØØØÞ  _ÆØØØØ#                                 °0Ø#
+-^- ØØØØØMÑØØØØØØ@ ----^-----^-^-----------^----^--- ØØ´ --^-----^-^----^-
+    ØØØØØØØØØØ@°"       aø*µx +wæø_æÑm_ +gææ   æm   JØ#  _æ**æ#   _µ**m
+    TØØØØK#ØØØØK      _Ø@ _ØP  áØ@  ØØQ  ÆØF  ÆØF   ØØ   ÆØK ¬F  ÆØ´ JØ
+    RØØØØÞ ¶ØØØØÑ_   gØØww@"   ØØ   ØØ¹ JØØ  JØØ   áØF   ¬#ØN   ÆØKµW°
+    SØØØØÞ  ¶ØØØØØµ  ÆØ#   ,  áØF  ÆØK  ÆØF JØØF_  ØØ , a  ¶Ø# JØØÞ  _
+    iØØØØÞ   °ØØØØØÑ_¬#ØmµÆ´  ØØ__ÆÑ´   ØØw¤ ØØw° {Ø#w´ Øµ_JØ'  ¶Øæµø°
+                       ¯¯    áØF¯¯       ¯   ¯¯    ¯¯   ¯ ¯¯      ¯¯
+-^----^-^---- STAFF: -^----_µØØ_ --^------^-^----^---^- NUP: LAMEBRAiN -^-
+.
+  ..  ×       THE^SiLENCER - TRSi^EQUiNøX^SCHOP^FAAC^ARTWøRK^TDG .+.
+    + .  .    d-ZiRE       - THE^SiLENTS^DOODLES^SHOCK^SCHOP      . . :
+  +  ÷ .+     CASE         - THE^SiLENTS^(iTALiA)                  ÷ +
+    . .  +    X-STAZ       - COMBAT^18^LEGEND^PHANTASM^FiRE^&^ICE   . . ·
+     ÷. ×     EXCALiBUR    - ALPHA^FLiGHT                          +   ×
+          .   RASTAN       - FAiRLiGHT^LEGEND^(64)                    + ..
+@endnode
+
+@node "TopSecret" "Get your AT&T's here!"
+
+    WANNA CALL FoR FREE ALL oVER THE WoRLD ? AT&T, MCi or SPRiNT 4 YoU!
+   .-------------------------------------------------------------------.
+   |(\)  Abo's            SEK US$           Lists          SEK US$  (/)|
+   |     ================ === ===           ============== === ===     |
+   |     1 Month......... 600 70            1 Card........  60 7       |
+   |     2 Months........ 900 120           Minimum 10 Cards           |
+   |                                                                   |
+   |                                                                   |
+   |  [°] We Have Thousands Of AT&T, MCi, Sprint Cards For You.......  |
+   |  [¹] They Are 100% Virgin, System Hacked Calling Cards..........  |
+   |  [²] Nobody But You Will Get The Cards..........................  |
+   |  [³] If You Have An Abo' You Will Allways Get a Backup Card.....  |
+   |  [¢] If A Card Dies You Get A New One Within 24 Hours...........  |
+   |  [5] We Have An Unlimited Amount Of Cards, Never Outta' Stock...  |
+   |  [6] We Have All The World Wide Links To AT&T, Don't Worry......  |
+   |  [7] Lowest Price On The Scene..................................  |
+   |  [8] Deal With The No.1, Satisfaction Guaranteed................  |
+   |                                                                   |
+   |(/)  == RePulsE == +46-270-12138, NUP: LAMEBRAiN == RePulsE ==  (/)|
+   `---[ Call == RePuLsE == And Talk To Us Directly For More Info! ]---'
+@endnode

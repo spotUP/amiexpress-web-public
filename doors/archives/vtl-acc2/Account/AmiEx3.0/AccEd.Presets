@@ -1,0 +1,28 @@
+7--------------------------------------------------------------2.00-------------------
+| New User       | 20  | 1 | 2 | 1 | 500000   | Lamer     | 1200  | Amiga 500        |
+| PD User        | 20  | 1 | 3 | 2 | 1000000  | Party     | 3600  | Amiga 500+       |
+| Elite User     | 30  | 1 | 3 | 4 | 2500000  | AmiEx     | 3600  | Amiga 600        |
+| Elite Trader   | 40  | 1 | 3 | 7 | 5000000  | AmiEx     | 4800  | Amiga 1000       |
+| Virtual Member | 50  | 1 | 0 | 4 | 10000000 | Member    | 7200  | Amiga 1200       |
+| Virtual Member+| 50  | 1 | 0 | 7 | 10000000 | Member    | 7200  | Amiga 2000       |
+| Proud CoSysop  | 230 | 0 | 0 | 7 | 10000000 | Cosysop   | 14400 | Amiga 3000       |
+|                |     |   |   |   |          |           |       | Amiga 4000       |
+|                |     |   |   |   |          |           |       | PC Com 286       |
+2359-----------------------------------------------------------0730 PC Com 386       |
+| Delusion D-Zire Fox 'N' Philix                                  | PC Com 486       |
+------------------------------------------------------------------- PC Com 586       |
+| UserData Path    | BBS:User.Data      | Enable Seclevel  |  255 | Atari 1040       |
+| UserKeys Path    | BBS:User.Keys      | ChangeAcc Seclev |  255 | Other            |
+| Write Note Path  | BBS:Conf1/         | MsgBaseClean Sec |  255 |                  |
+| AccED Password   |                    | See Users Pass   |  255 |                  |
+| DeleteQuest Pass | Coin               | Show Users Pass  |  Off |                  |
+| Recieve App Mail | Delusion           | Print Account    |   On |                  |
+| AccountED Colour | [0m               | Edit own Account |   On |                  |
+| Members Conf     | Member             | Search New Users |    2 |                  |
+| Credit Account   | 255                | Log Status AccED |    4 |------------------|
+| Security Check   | 230                | Kickout After X  |    5 | Amiga Ansi       |
+| Set Security Lev | 30                 | Questionary      |    5 | IBM Ansi         |
+| Reserved 1       |                    | Auto UL Amount   |    2 | Macintosh Ansi   |
+| Path NewUserConf | BBS:Conf-1/        | AutoAccess Quest |  Yes |                  |
+| Rec PW Fail Mail | Delusion           | MustEnter No Ret |  Yes |                  |
+--------------------------------------------------------------------------------------

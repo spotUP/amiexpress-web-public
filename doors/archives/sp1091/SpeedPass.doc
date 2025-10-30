@@ -1,0 +1,105 @@
+
+        .
+        :    :
+        :   /|
+        |  / | t A N G o                  _______
+        ._/  |___ _ ____________ _______ |      /_____________________
+       _ _   ___/____________   \     _ \|     /___________________   \
+        :    |     \      ______ \     \ \    / \______    |      |  . \_
+        :    l      \_    \    /  \_    \ \  /       |     |      '     /
+      _ :_______     /_____\       /____|\  /______  `     |__________ /
+        |  -mNt\____/       \ ____/       \/      `--------'         \/
+        |                    \/                                      :
+        |                       o F   D U P L o                      |
+        |                                                            |
+        `---------------------- P R E S E N t S ----------------- - -'
+
+                                SpeedPass v1.1
+
+                              Idea by: Rille/SCX
+                         v1.1 ideas by: Rille/SCX & Me
+
+«-----------------------------------------------------------------------------»
+
+                                Important note!
+                               ~~~~~~~~~~~~~~~~~
+This util is released under the concept of tradeware. If you like it and use
+it, upload some on my board. I will not take any responsability for whatever
+this door does with your computer (It wont do anything but what it should, but
+you never know what those lamers do!).
+
+«-----------------------------------------------------------------------------»
+
+                                   History!
+                                  ~~~~~~~~~~
+v1.0 - First release. Let you set a NUP's for any connectspeeds. Supports
+       diffrent NUP's for all connect speeds, and unlimited speeds/pw's.
+v1.1 - The door didn't allways drop carrier if the user didn't know the
+       password. This is strange, since it does allways do it when I try it,
+       but now this is fixed, hopefully! The door will not hang up if run on a
+       local node though, however it will drop carrier on callers! I also added
+       some stars, so the user wont see what he's typing!
+
+«-----------------------------------------------------------------------------»
+
+                                 Installation!
+                                ~~~~~~~~~~~~~~~
+If you run /X 3.x, copy all files I've supplied and you're almost set.
+
+If you run /X 2.x or S-Express, insert the followin line to your
+"commands/sys.cmd" file.
+
+---( cut )---
+SPEEDPW   XM001DOORS:SpeedPass/SpeedPass.x
+---( cut )---
+
+The first thing you have to do is to edit the SpeedPass.x.info icon. There are
+one special keyword wich you can use.
+
+ATTEMPTS=3
+
+This let the user guess 3 times at the pw before he's kicked. Besides this you
+may put any baudrate in the icon.
+
+2400=PassWord
+
+This sets the 2400 password to "PassWord". The passwords are NOT case
+sensetive. You may add as many of these as you want.
+
+The last thing to do is to put the following in fex your "GuestLogon.txt" in
+order to have the door run at every newuser logon.
+
+---( cut )---
+~
+~CC_SPEEDPW|
+---( cut )---
+
+«-----------------------------------------------------------------------------»
+
+                 These are the ß-sites for all my doors/utils!
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       Asylum Altered State #1       Juan               ++46-317-759378
+       Asylum Altered State #2       Juan               ++46-317-759376
+       Disorder                      Marwin             ++46-456-27511
+       Imagine                       Rille              ++46-42-135505
+       Total Inferno                 Tango              ++46-42-234164
+       Twisted Society               The Big Byte       ++46-44-106144
+
+All my utils should be free dl, otherwise tell me and I'll kick that ß-tester.
+If you want to ß-test my doors/utils, contact me and we'll work something out.
+
+«-----------------------------------------------------------------------------»
+
+                                  Greetings!
+                                 ~~~~~~~~~~~~
+    Melone - Krusty - Hoot - Marwin - Manta - The Big Byte - Norad - Venger
+    Zendor - Mike - Luca - Abbe - Stuff - Broder - Zync - Zych - La Fayette
+     Axe - Nebraska - Eracore - Linus - Avalon - Nero - Dixy - Crux - Nuke
+   Fuze - Fix - Kain - Prospex - Canaima - Pripps - Hilbert - Mital - D-Zire
+        Jucke - Double - E-Go - Distler - Sy-Klone - Fazer - Zcandaler
+   Beavis & Butthead - Renko - Juan - Guardian - EaSy RiDeR - Wozzy - Suggs
+                 Rille - Fonus - Proctor - Nightshade - Borre
+
+Forgive me if I forgot someone. It's not easy to remember everybody you know!
+
+[EOF]

@@ -1,0 +1,227 @@
+
+                              Deletefiles 1.0
+                       by fanta of JoyRide ^ Therion
+
+
+
+                              This is another
+
+                                    :::::::::::::::::::::::::::::::::::::::::
+:::::::::: ::::   :::: :::::::: ::::     :::  :::          ::      ::::    ::
+:::::::::: ::::   :::: :::::::: ::::      :    :            :        ::    ::
+   ::::    ::::   :::: ::::     :::::::   :    :    ::::    :        ::    ::
+   ::::    ::::::::::: ::::::   ::::      :    :    ::::    :    :   ::    ::
+   ::::    ::::::::::: ::::::   ::::    :::    :    ::::    :    ::   :    ::
+   ::::    ::::   :::: ::::     :::: ::  ::    :    ::::    :    ::        ::
+   ::::    ::::   :::: :::::::: :::: :::  :    :            :    ::        ::
+   ::::    ::::   :::: :::::::: :::: :::  ::  :::          ::    ::::      ::
+                                    :::::::::::::::::::::::::::::::::::::::::
+
+                                 Production
+
+                              What does it do?
+
+This door deletes file from a directory and changes in dirn that you
+have deleted the file. You can choose between a semiautomatic mode where
+you answer questions (ex [D]elete [M]ove or [S]kip file?). Or an automatic
+mode where it deletes from one date to another.
+
+
+                                    Why?
+
+Coz I needed one and I couldn't find any door that came up to my special
+demands. Of course I made it in C to accomplish some speed.
+
+
+                                 Disclaimer
+
+I don't take any responsibility for any damage this door make on your
+computer hardware or software. It has been fully tested so it shouldn't
+give ya any problems. Remember that this door deletes files so test it
+with care until you now exactly how it works.
+
+
+                                Installation
+
+-Copy the file BBS/Doors/Deletefiles/Deletefiles to Doors:Deletefiles/ (or
+ wherever you keep your doors)
+
+
+                                  /X 2.xx
+
+-Modify your custom-commands and add the following line:
+
+*Delete   XM2550Doors:Deletefiles/Deletefiles
+
+^         ^     ^
+|         |     |_ Or wherever you put Deletefiles.
+|         |
+|         |___ Notice the "X" Deletefiles is an XIM door!
+|
+|______ The name to run.
+
+                                  /X 3.xx
+
+-Copy the icon BBS/Commands/BBsCmd/Delete.info to BBS/Commands/BBsCmd/ or
+ BBS/Commands/SysCmd/ if u don't want that "Deletefiles" can be chosen
+ from the prompt.
+
+
+                                 Tooltypes
+
+-----------------------------------------+
+DIR_PATH=bbs:conf1.elite/dir1            }----+
+-----------------------------------------+    |
+This tooltype must have the path to the       |
+file containing the filelist.              <--+
+
+-----------------------------------------+
+UPLOAD_PATH=bbs:conf1.elite/upload       }----+
+-----------------------------------------+    |
+This tooltype must have the path to the       |
+directory where the files in the filelist  <--+
+are defined.
+
+------------------------------------------+
+MOVE_PATH=work:temp                       }----+
+------------------------------------------+    |
+This tooltype must have the path to the        |
+directory where the files will be moved.    <--+
+
+It's very important that you get these Tooltypes right. Deletefiles 1.0 is
+dezigned to delete files!
+
+
+                        Take a walk on the wild side
+
+The first choice!
+-----------------
+
+-------------------( Deletefiles 1.0 produced by fanta of JoyRide ^ Therion )---
+
+Delete files [M]anually, [A]utomatic or [Q]uit:?>
+              ^           ^              ^
+              |           |              |
+              |           |              +--- Quit this door!
+              |           |
+              |           +--- Deletes files from date to date
+              |
+              +--- Choose this if ya want some control over the deletion
+
+
+
+Manually is chosen!
+--------------------
+
+Last Deletion date (MM-DD-YY):?> 05-15-94   <--- Last date to delete
+
+THR-LC10.LHA P  35677  05-15-94  +------------------------------------------+
+                                 |  LastCallers v1.0 developed by Therion   |
+                                 | This is a very configurable door that    |
+                                 | creates a lastcallerstextfile.           |
+                                 |- You decides how i should look.          |
+                                 |- Almost everything is configurable.      |
+                                 |- It's fast.                              |
+                                 |- Made by fanta^Static^Zorlac.            |
+                                 `------------------------------------------'
+Make your choice [D]elete, [M]ove, [S]kip file or [Q]uit:?>
+                  ^         ^       ^              ^
+                  |         |       |              |
+                  |         |       |              +--- Quits the door
+                  |         |       |
+                  |         |       +--- Skipps this file
+                  |         |
+                  |         +--- Move the file to specified directory
+                  |
+                  +--- Delete file!
+
+When you choose [D]elete or [M]ove the door will change dir file... and the
+output will look like this!
+
+THR-LC10.LHA D DELETED 05-15-94  +------------------------------------------+
+                                 |  LastCallers v1.0 developed by Therion   |
+                                 | This is a very configurable door that    |
+                                 | creates a lastcallerstextfile.           |
+                                 |- You decides how i should look.          |
+                                 |- Almost everything is configurable.      |
+                                 |- It's fast.                              |
+                                 |- Made by fanta^Static^Zorlac.            |
+                                 `------------------------------------------'
+
+Automatic is choosen!
+---------------------
+
+Delete files [M]anually, [A]utomatic or [Q]uit:?> Automatic!
+First Deletion date (MM-DD-YY):?> 01-01-94  <--- Delete from
+Last  Deletion date (MM-DD-YY):?> 05-15-94  <--- Delete to
+Do you want to continue  [y/N]:?> Yeah!     <--- Last chance to stop!
+
+Deleting: work:test/upload/THR-LC10.LHA
+Deleting: work:test/upload/THR-LHAP.LHA
+Deleting: work:test/upload/THR-LN11.LHA
+
+ ^
+ |
+ +--- All files from 01-01-94 to 05-15-94 is automaticly deleted
+
+
+                               Files included
+
+               Filename                             Org. Size
+
+       BBS/Commands/BBsCmd/Delete.info                 538
+
+       BBS/Doors/Deletefiles/Deletefiles             19164
+
+       BBS/Doors/Deletefiles/Deletefiles.Doc          8509
+
+
+                                 Greeting's
+
+Ju/\n     ---> When are your next Ascii coll comming?
+Damien    ---> I love your mercedes!
+Sandman   ---> Still going strong?
+Guardian  ---> Thanx for Betatesting! Hope ya like it finished!
+Aquarius  ---> Your doors are best!
+Kid Curry ---> When is your first door coming up?
+Cybertron ---> Sorry about your elitearea ;)
+
+
+
+                 AND OFCOZE ALL THE ONES I HAVE FORGOTTEN!
+
+                              Special Greeting
+
+Static    ---> Thanx for all your support.
+
+
+
+
+ To provent any backdoors d¡al...    ..to get the orginal & latest version.
+
+
+
+  __________  ___________ ____________
+  \_____  _/  \__  _  __/ \__  |    _/
+   ___|    \  /    |    \  /   ¦     \  +¢6(°)³²²/¹9°97
+  /   |     \/     |     \/    :      \_________________ _ _  _    _
+ /    ¦      \     ¦      \_______     \
+/     :       \    :       \/           \     Sysop¹:fanta
+\             /            /            /     Sysop²:Static
+ \___________/____________/    ________/      Sysop³:Mooney
+        |                 \_____|             Sysop4:Marshal Law
+        |        14400         _________  _______ _________ _____________
+        |     DualStandard     \___   _ \ \___   |\______  \\_____  ____/
+        ¦                        /    |  \/      |  /  |    \  /    ___|
+        :  Kicking with /X ³.X  /     ___/__     | /   |     \/     |
+        ·                      /            \_   |/    ¦      \     l____
+        .    ·¹·Dayz warez    /     \        /   |     :       \         |
+              Therion WHQ     \      \      /    |     ·       /         |
+        . Online Door Ordering \______\    /_____|____________/__________|
+                                       \__/j
+
+
+
+
+
+[EOF]

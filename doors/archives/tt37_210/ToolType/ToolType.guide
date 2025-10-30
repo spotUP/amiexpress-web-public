@@ -1,0 +1,375 @@
+@DATABASE "ToolType v38.210 Release 1.4 documentation"
+
+@NODE MAIN "ToolType v38.210 Release 1.4 documentation"
+
+                        ToolType v38.210
+                           Release 1.4
+
+ ToolType and this documentation are Copyright © 1993 by Michael Barsoom.
+
+@{" Copyright & Disclaimer " Link Copyright_&_Disclaimer}
+@{" Introduction " Link Introduction}              What is ToolType
+@{" GiftWare " Link GiftWare}
+@{" Requirements " Link Requirements}
+@{" Installation " Link Installation}
+@{" SetUp " Link SetUp}                     Configuring your editor
+@{" Using ToolType " Link Using_ToolType}
+@{" To Do (Maybe) " Link To_Do_(Maybe)}
+@{" Thanks " Link Thanks}
+@{" Bugs, Suggestions " Link Bugs,_Suggestions}
+@{" History " Link History}
+@ENDNODE
+
+@NODE Copyright_&_Disclaimer "Copyright & Disclaimer"
+ -+- License  -+-
+
+ ToolType may be freely distributed as long as no charge is made other
+ than to cover time and copying costs.  This should be no higher than what
+ Fred Fish charges from one of his freely redistributable disks.
+
+ You may not copy and/or distribute this program without the accompanying
+ documentation unless you get permission from the author to do so.
+
+ Fred Fish has permission to include this program on his FD disks/CDRoms.
+
+ If you write a freely redistributable program and would like to include
+ ToolType with it, feel free to do so only if you send me a fully
+ registered version of your program.
+
+ -+- Disclaimer -+-
+
+ This product is sold "as is" without representation or warranty of
+ any kind, either expressed or implied. The user assumes all risks and
+ responsibilities related to its use.
+
+@ENDNODE
+
+@NODE Introduction "Introduction"
+
+ -+- What does ToolType do?
+
+
+ ToolType will allow you to edit tooltypes in icons using your favorite
+ text editor, rather than the single line editor that WB gives you.
+
+ ToolType can sort the tooltypes alphabetically.
+
+ ToolType can be set up as an appicon for on the fly tooltype editing.
+
+ ToolType will automatically comment or uncomment tooltypes for you,
+ all you have to do is mark tooltypes to be commented with a '(' or
+ delete the '(' to uncomment them.
+
+@ENDNODE
+
+@NODE GiftWare "GiftWare"
+
+
+ Starting with v37.2xx ToolType is Giftware.  If you use ToolType regularly you
+ are invited to send what you feel it is worth.  Suggested is US $5.
+
+ If you cannot afford this donation, please just sent me a note saying that
+ you are using ToolType.
+
+@ENDNODE
+
+@NODE Requirements "Requirements"
+
+ The following are required for ToolType to work:
+
+ 1) Workbench 2.0+
+ 2) ReqTools library (© Nico Francois) not included
+ 3) A text editor
+ 4) some icons.
+
+@ENDNODE
+
+@NODE Installation "Installation"
+
+ If you have CBM installer, you can use the included installer script.  The
+ script will not only copy all the necessary files, but will allow you to
+ configure ToolType to your system/liking.  Just answer all the questions,
+ and all the options will automaticaly be saved for you.
+
+ Or just copy ToolType to the directory you want it in, and then configure
+ it to you liking.  See @{"SetUp" link SetUp}.
+
+@ENDNODE
+
+@NODE SetUp "SetUp"
+ You *MUST* specify what editor you wish ToolType to use.  There are several
+ ways to do this depending on how ToolType is started.
+
+ You may specify the editor you wish to use...
+
+ 1) with the tooltype @{"EDITOR" link Workbench_usage}=<name> if ToolType is started from WB.
+ 2) by specifying it with the argument @{"editor" link Shell_Usage}=<name> when started from shell
+ 3) with the ENV: variables ToolType or Editor
+ 4) by not specifying an editor as above, ToolType will default to using
+    C:ED %s because that is the one that comes with WB 2.1+.
+
+ When specifing the editor you may use %s to show where you want the file to be
+ edited should go. For example:
+     EDITOR=Sys:Utilities/az %s (from WB)
+  or EDITOR=Sys:Utilities/az "%s" if your text editor requires quoted file name
+
+
+ When running from the shell if your editor required the filename to be quoted,
+ use *" instead of "   For example:
+     editor="sys:utilities/az %s"
+  or editor="sys:utilities/az *"%s*""  if you want the file name quoted
+
+ NOTE: shell uses *" to mean a single quote.
+
+ Note: %s is not required if the filename is the last argument.  That is if
+ your editor is C:ed you do not need the %s, but if your editor is
+ C:ED <name> -sticky, the %s is required, in the latter case you would need
+ to specify the editor as C:ED %s -sticky.
+
+@ENDNODE
+
+@NODE Using_ToolType "Using ToolType"
+
+ How to Make ToolType work:
+
+@{" Workbench usage " Link Workbench_usage}
+@{" Appicon usage " Link Appicon_usage}
+@{" Shell Usage " Link Shell_Usage}
+@{" Notes " Link Notes}
+@ENDNODE
+
+@NODE Workbench_usage "Workbench usage"
+ WorkBench usage:  Double click on icon, you may pass one argument with
+ extend selecting, otherwise you will be presented with the ReqTools
+ file requester.  When run from WB, ToolType will read several tooltypes
+ from itsown icon:
+
+  EDITOR=<name of editor with complete path> (see above)
+  SORT=<ASK|TRUE|FALSE>  How you want to handle sorting.
+                         ASK - ask if you want to sort tooltypes
+                               this is the default if one is not specified
+                         TRUE - always sort, don't ask
+                         FALSE - never sort, don't ask
+  WAIT  set this tooltype if your editor detaches from the cli
+        When set, ToolType will give you requester to click on when
+        you are done editing the tooltypes and have saved the temp file.
+  CONFIRM set this tooltype if you would rather have ToolType ask you if it
+          is ok to save the changes (the default is to save the changes only
+          if you change the temp file)
+
+            NOTE: If you have both CONFIRM and WAIT you will get the confirm
+                  requester rather than the wait requester.  Remember to
+                  only answer the requester after you have saved the temp file
+
+  COMMENT set this tooltype if you would rather have the commented tooltypes
+          placed before the non commented ones.  This switch only works if
+          you sort the tooltypes.  ToolTypes are considered commented, only
+          if they are surrounded by "(" and ")", per style guide.
+  PUBSCREEN name of public screen requesters should appear on, if not specified
+            or the name is invalid, Workbench will be used.
+  QUIET suppress copyright notice when started from WorkBench.
+
+  APPICON see @{"Appicon usage" link Appicon_usage} for more info.
+
+@ENDNODE
+
+@NODE Appicon_usage "Appicon usage"
+ To set up ToolType as an appicon, you need to specify the tooltype 'APPICON'
+ or use the shell argument 'APPICON'
+
+ You can customize the appicon to your liking with the following tooltypes:
+     ICONX=<n>     lets you specify the horizontal position of the appicon
+     ICONY=<n>     lets you specify the vertical position of the appicon
+     ICONNAME=<name>  the name you wish attached to the appicon. If you do
+                     not specify a name 'ToolType' will be used
+
+ Quitting the appicon: double click on the appicon, to get the filerequesterer
+ then choose cancel from the filerequester you will then be asked if you wish
+ to quit.
+
+ You can also set up the appicon from Shell.  NOTE: Since ToolType does not
+ detach, if you want to put ToolType in your startup-sequence or user-startup
+ you need to run it.
+
+ For example:
+ run >nil: ToolType appicon ed=c:ed
+
+@ENDNODE
+
+@NODE Shell_Usage "Shell Usage"
+ When started from shell, you may specify the following arguments:
+
+ "Icon,Wait/S,Sort/S,NoSort=No/S,Confirm=Con/S,Comment/S,Editor=Ed/K,AppIcon/S,
+  IconX/K/N,IconY/K/N,IconName/K,PubScreen=PS/K"
+
+     Icon ------  name of icon to load, only one
+     Wait ------  set this if your editor detaches from the cli
+     Sort ------  sort without asking
+     NoSort ----  never sort, don't ask
+     Confirm ---  confirm changes (see above)
+     Comment ---  place commented tooltypes first, must sort the tooltypes for
+                  this option to work
+     Editor ----  name of editor to use (see above)
+     @{"AppIcon" link Appicon_usage} ---  Install appicon
+     IconX -----  position of appicon horizontally
+     IconY -----  position of appicon vertically
+     IconName --  name to use for appicon
+     PubScreen -  public screen to use for requesters
+     ??  print extended usage info
+
+@ENDNODE
+
+@NODE Notes "Notes"
+ The default options are to ask about sorting, to use a text editor that
+ does not detach from the cli, to not give you a confirmation requester,
+ to place the commented tooltypes last, and to use the editor C:ED "%s".
+
+ Regardless of how you start ToolType a temp file named T:TT_<name>.temp<x>
+ will be created. <x> is a number between 0 and 99.  This will allow you to
+ know which icon you are editing by the name of the temp file.  Your text
+ editor will be run, and the temp file loaded.  Make any changes that you
+ wish to the tooltypes. You  may add, or remove as many as you wish.  When
+ you are donesave the temp file, and the icon will be updated with the new
+ tooltypes.
+
+ When sorting ToolType will only ask you if you wish to sort the tooltypes
+ if there are at least two tooltypes.  If there are none or only one tooltype,
+ you will not be asked if you want to sort the tooltypes, as you cannot sort
+ one or less tooltypes
+
+ To cancel changes just quit the editor with out saving the temp file.
+ ToolType will recognize that you did not change the temp file, and the icon
+ will be left untouched.
+
+ NOTE: ToolType determines if the tempfile has been changed by examining the
+ file date stamp, if your text editor does not change the date stamp you
+ should specify either the confirm or wait options.
+
+ If you just want to sort the tooltypes you'll need to save the tempfile.
+
+ Blank lines will be filtered out, so only lines that contain a tooltype will
+ be used, no blank tooltypes will be placed in the icon to clutter it up.
+
+ WB has a limit of 128 chars per tooltype, ToolType will check the length of
+ the tooltypes in the tempfile, and if any are too long, they will be cut off
+ to 128 chars (no warning will be given).
+
+@ENDNODE
+
+@NODE To_Do_(Maybe) "To Do (Maybe)"
+ 1) GUI interface
+ 2) Add icons to files that don't have them
+ 3) anything else ...
+
+@ENDNODE
+
+@NODE Thanks "Thanks"
+ To my loving wife Barbara.
+ To Ian Gunn,Greg Gerke,and Klaus Seistrup for beta testing ToolType.
+ To Nico Francois for ReqTools.
+
+@ENDNODE
+
+@NODE Bugs,_Suggestions "Bugs, Suggestions, Donations"
+ you can reach me at:
+
+ 5524 Pine Street
+ Omaha NE 68106
+ USA
+
+ Internet:  mbars@creighton.edu
+ Fidonet:   Mike Barsoom @ 1:285/11.9
+ AmigaNet:  Mike Barsoom @ 40:200/10.9
+
+@ENDNODE
+
+@NODE History "History"
+ V37.181  Release 1.0
+
+ V37.182  Not released
+
+   - If there was a blank line at the end of the temp file, ToolType would
+     report an error reading the temp file. (fixed)
+   - Blank lines can be entered anywhere, they will just be ignored.
+   - Forgot to close the Icon Library (fixed)
+
+ V37.183  Release 1.1  First release to Fred Fish.
+
+   - Increased limit on number of tooltypes to 256.
+   - Cleaned up code a bit.
+
+ v37.190  Not released
+
+   - Now uses ReadArgs for cli interface
+   - If user did not have the %s in the editor name, tooltype would not
+     be able to load the tempfile.  Now if %s is missing it will be appended.
+   - Includes Installer script that allows automatic configuration.
+   - If one of the libraries failed to open, the others were not closed.
+     (fixed)
+
+ v37.194  Release 1.2
+
+   - Now the commented tooltypes can be placed after the active ones when
+     sorting.
+   - Optimized code making the executable smaller.
+
+ v37.195  Release 1.2a
+
+   - Did not realize the drawer icons had tooltypes, now you can edit those too
+     (Reported by Peter Augustin)
+   - Fixed the enforcer hit with icons that had no tooltypes.
+     (Thanks to Preben Nielsen for explaining how)
+   - Will now look for ENV:EDITOR before looking for ENV:TOOLTYPE.  That way if
+     you have EDITOR set for more, ToolType will also use it.
+     (Suggested by Preben Nielsen)
+
+ v37.196 Not released
+
+   - Tempfile has been renamed to T:TT_<iconname>.temp<x>, to make it easier to
+     know which icon your editing.
+   - ToolType would put the first tooltype at the begining and again at the end
+     when sorting if there were no commented tooltypes. (fixed)
+
+ v37.201 Not released
+
+   - Now has an optional appicon that can be started from WB or Shell.
+     (Suggested by Greg Gerke)
+   - If the filerequester was canceled, the allocated memory was not returned
+     (fixed).
+
+ v37.205  Release 1.3
+
+   - You can now specify the Public Screen the requesters will appear on, if
+     you do not specify one the requesters will appear on WorkBench.
+     (Suggested by Klaus Alexander Seistrup)
+   - Wait and Confirm requesters will now tell you the name of the icon they
+     belong to.
+
+ v37.206  Release 1.3a
+
+   - Sort now works properly reguardless of case.
+
+ v37.207  Release 1.3b
+
+   - When running more than once, tempfile was not being unlocked.
+     (Reported by Finn Kettner)
+
+ v37.208 Release 1.3c
+
+   - Was not freeing old tooltypes when using appicon, fixes problem of adding
+     tooltypes to icons after first one was edited.
+
+ v37.210 Release 1.4
+
+   - Swapped order of reading ENV variables, now ToolType will look for
+     ENV:tooltype before ENV:editor.  This allows you to use a different editor
+     for ToolType and more.
+   - Added automatic commenting feature.  To comment out a tooltype, just place
+     a ( at the begining and ToolType will automatically place the closing ). Or
+     to uncomment a tooltype, just delete the opening ( and the closing ) will
+     automatically be deleted.
+   - Compiled with SAS C v6.50
+   - ReqTools.library no longer included in archive, by now everyone has it.
+@ENDNODE
+
+

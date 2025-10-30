@@ -1,0 +1,946 @@
+@database MaPuSDoc
+
+Copyright (c) 1993-94 by Caton
+All Rights Reserved
+
+@Remark $VER: MaPuS Dox AmigaGuide format 1.5 (6.5.94) by Caton
+
+@node MAIN "MaPuS"
+
+Select language please:
+
+                    @{" ITALIANO " Link ITA}      -      @{" ENGLISH " Link ENG}
+            /\\
+           /  \\
+     ______\\__/___________  _______ _______  ____
+     \\_____/  \\________   \\/       \\\\_     \\|    |
+     .    /    \\|   _|/   /   _/\\   \\|           |<<----------------+
+     :   /      \\   \\_    \\   \\_/    \\           |                  |
+        /        \\   |\\    \\_        /    \\      |                  |
+     :  \\________/   | \\____/_______/|    |\\_____|                  |
+     |          |____|______   ______|____|________                 |
+     |                \\_    |  \\_        \\ \\__    / ______          |
+     |                 |    |Mb |  _/|    \\  /   /\\|    _/          |
+     |                 |    |___|  \\__     \\/   /  \\    |           |
+     |                 |    /   \\    |\\     \\_          |           |
+     |                 |________/    | \\_____/___/\\     |           |
+     `--------------------------|____|-------------\\____|-----------'
+
+                                 PRESENTS:
+
+               .------------------------------------------.
+               |  _____/\\  __________  ___  /\\____        |
+               |  \\____  \\/  _¬\\___ ¬\\/ |¬\\/  ___/--------|
+               |   |  ..  \\     \\  __/  |  \\___ ¬\\        |
+               |   |__||__/__|__/__| \\_____/_____/--------|
+               | <------( DMS checker By Eniac )--------> |
+               `--------------------------------------mk--'
+
+@endnode
+
+@node ITA "Istruzioni di 'MaPuS'."
+
+                             @{b}INDICE GENERALE:@{ub}
+
+@{" ATTENZIONE " Link Cap01}
+@{" INTRODUZIONE A MaPuS " Link Cap02}
+@{" PERCHE' USARE MaPuS E NON UN ALTRO CHECKER? " Link Cap03}
+@{" COME FUNZIONA " Link Cap04}
+@{" ESEMPI " Link Cap05}
+@{" USO DI MaPuS CON AMIEXPRESS o DLG " Link AXuso}
+@{" GLOSSARIO " Link Cap06}
+@{" UPDATES DEL MaPuS " Link Cap07}
+@{" FUTURI SVILUPPI " Link Cap08}
+@{" RINGRAZIAMENTI " Link Cap09}
+@{" COME CONTATTARCI " Link Cap10}
+
+@endnode
+
+@node Cap01 "ATTENZIONE:"
+
+
+E'  stato  deciso  di  immettere  questo  programma  nel  Pubblico Dominio,
+imponendo l'opzione dello Shareware qualora venisse usato regolarmente.
+
+Quindi se lo hai installato nella tua BBS o lo utilizzi di routine, faresti
+bene a registrarti per premiare il lavoro di chi lo sviluppa.
+
+La  cifra  di  registrazione  (simbolica) e` di 15$ o 15000 Lire da spedire
+inclusa  nella  busta  o  come cheque o come vaglia postale al seguente
+indirizzo:
+
+                             Antonino Pintaudi
+                                P.O. Box 11
+                         98125 Contesse (Messina)
+                                  ITALIA
+
+L'archivio originale MaPuS???.LHA (in cui ???  e` il numero della versione)
+non puo' essere modificato.  Non possono essere aggiunti o tolti file salvo
+le normali "pubblicita'" delle BBS.
+
+La lista dei file che contiene l'archivio originale e` la seguente:
+
+---
+bbs/fcheck/DMS                      ;Configurazione per @{"AmiExpress" Link AXuso}
+bbs/fcheck/DMS.Info                 ;Configurazione per @{"AmiExpress v3.+" Link AXuso}
+bin/MaPuS.???                       ;Eseguibile (??? sta per n. di ver.)
+DLGConfig/Batch/UPLOAD1.BATCH       ;/
+DLGConfig/Text/Banner.displayme     ;| Files necessari per @{"DLG" Link AXuso}
+DLGConfig/Text/PreDesc.txt          ;\\
+doc/MaPuS.GUIDE                     ;Istruzioni in formato AmigaGuide
+libs/arp.library                    ;arp.library V39.1
+IRONLAW.txt.Displayme               ;/ Pubblicita' di
+read.i                              ;\\ @{"IRON LAW BBS" Link Cap10}
+---
+
+In  caso  avessi  qualche  tua proposta per migliorare il programma (ad es.
+uno  script  per  il  tuo  programma  di BBS) DEVI contattare l'autore, che
+includera'  (con  i  dovuti ringraziamenti) il tuo lavoro in ogni revisione
+del programma.
+
+Nessuno  e` responsabile in alcun modo degli eventuali (e remoti) danni che
+MaPuS potrebbe arrecare al tuo sistema.
+
+MaPuS e` stato scritto totalmente in @{i}Assembly@{ui}!
+
+@endnode
+
+@node Cap02 "INTRODUZIONE A MaPuS:"
+
+
+Cos'e`  MaPuS?   MaPuS  e`  la soluzione ideale per il trattamento dei file
+DMS.    Puoi   manipolarli   come  piu'  ti  aggrada.   Puoi  controllarli,
+aggiungere,  rimuovere e creare @{"front, tail e track banner" Link Cap06}; tutto in un
+modo alquanto funzionale.
+
+@endnode
+
+@node Cap03 "PERCHE' USARE MaPuS E NON UN ALTRO CHECKER?"
+
+
+Semplice.   Alcuni  checker  non funzionano perfettamente su tutti i files,
+altri  non  ti  forniscono  le  informazioni in modo completo, e nessuno ti
+permette  di  creare  e aggiungere banner.  MaPuS puo' essere usato con una
+@{"BBS"  Link AXuso} o nei tuoi file @{"script" Link Cap05} o semplicemente per  @{"testare i file DMS" Link Cap04}.
+MaPuS e` garantito al 100% su queste funzioni.
+
+@endnode
+
+@node Cap04 "COME FUNZIONA:"
+
+Se invochi MaPuS con solo il suo nome ti fornira' la sintassi:
+
+MaPuS [-<options>] FileName[.DMS] [DestFile]
+
+Opzioni:
+
+@{" Operazioni sui front banner " Link FrontOpt}
+@{" Operazioni sui track banner " Link TrackOpt}
+@{" Operazioni sui tail banner " Link TailOpt}
+            @{" Varie " Link VarieOpt}
+
+Se invochi MaPuS con il solo nome file sorgente, questo sara' controllato e
+ti verranno mostrate alcune informazioni sullo stato.
+
+La specifica del file sorgente puo' contenere le wildcards * o ? o #?.
+
+@{b}NOTA: Ad ogni revisione di MaPuS ricordati di ricreare il MaPuS.cfg@{ub}
+
+@endnode
+
+@node FrontOpt "Operazioni sui front banner:"
+
+
+
+
+
+@{" a " Link Opta} aggiunge un front banner.
+@{" r " Link Optr} rimuove i front banner.
+@{" m " Link Optm} crea un front banner.
+
+
+
+
+
+@endnode
+
+@node TrackOpt "Operazioni sui track banner:"
+
+
+
+
+@{" t " Link Opta} aggiunge un track banner.
+@{" k " Link Optr} rimuove i track banner.
+@{" n " Link Optm} crea un track banner.
+
+
+
+
+
+@endnode
+
+@node TailOpt "Operazioni sui tail banner:"
+
+
+
+
+@{" A " Link Opta} aggiunge un tail banner.
+@{" R " Link Optr} rimuove i tail banner.
+@{" M " Link Optm} crea un tail banner.
+
+
+
+
+@endnode
+
+@node Opta "Aggiungi banner:"
+
+
+Devi  fornire  il  "FileName"  sorgente  (con o senza l'estenzione .DMS) ed
+opzionalmente un file destinazione "DestFile".
+
+MaPuS  testera'  il  file  ed  aggiungera'  il  banner al file destinazione
+(creando  quindi una copia del file sorgente) o direttamente al sorgente in
+caso mancasse il destinazione.
+
+Qualora  non  fornissi  alcun  nome  di  file  come parametro, apparira' un
+requester ARP, che ti permettera' di sceglierne uno.
+
+@{b}NOTA:@{ub} Se devi creare il file destinazione in RAM: usa l'opzione @{"s" Link VarieOpt}.
+
+Il  "FileName" puo' essere privo di estensione, ma e` indispensabile che la
+scriva tu per il file destinazione.
+
+
+@endnode
+
+@node Optr "Rimuovi i banner:"
+
+
+Specifica   come   parametri   il  nome  del  file  sorgente  e  di  quello
+destinazione.   MaPuS,  dopo aver testato il file sorgente, creera' un file
+destinazione privo dei banner.  Se non hai specificato il file destinazione
+i banner verranno "strippati" direttamente dal file sorgente.
+
+Qualora  mancasse  anche  quest'ultimo,  apparira'  un requester ARP che ti
+permettera' di sceglierlo.
+
+@{b}NOTA:@{ub} Se usi la RAM: specifica l'opzione @{"s" Link VarieOpt}.
+
+@endnode
+
+@node Optm "Crea i banner:"
+
+
+Specifica  il  nome  del  file  di  testo  da  usare come banner o se no ti
+apparira'  un  requester  che  ti permettera' di sceglierlo.  MaPuS creera'
+nella  S:   un  file  chiamato  "MaPuS.cfg", che ti permettera' di usare le
+opzioni di adding.
+
+Il formato del file testo e`:  64 colonne (return compreso) per 16 linee.
+
+
+@endnode
+
+@node VarieOpt "Opzioni varie:"
+
+@{b} s @{ub}  -  Non  controllare  lo  spazio disponibile.  Indispensabile se
+        lavori nella RAM:  che e` sempre piena al 100%.
+
+@{b} v @{ub}  -  Visualizza delle informazioni sul file DMS, ma non testarlo.
+
+@{b} d @{ub}  -  Metti la data di upload nel track banner da aggiungere.
+
+@{b} g @{ub}  -  Visualizza alcuni ringraziamenti.
+
+@{b} u @{ub}  -  Per scegliere, in ogni caso, il file DMS da un requester ARP.
+
+@{b} f @{ub}  -  Visualizza dettagliate informazioni su ogni traccia del file
+        DMS.
+
+@{b} c @{ub}  -  Restituisce un codice di ritorno di 15 in caso di fallito
+        checking.
+
+@endnode
+
+@node Cap05 "ESEMPI:"
+
+
+1) Controlla un file:
+ In questo esempio immaginiamo di avere un file nella tua directory DL:
+chiamato TEST.DMS e che tu voglia controllarlo.
+
+MaPuS dl:TEST.dms o MaPuS dl:TEST
+
+sara'  controllato  e  ti verranno mostrate alcune informazioni sullo stato
+dello stesso.
+
+2) Crea un @{"tail banner" Link TailOpt}:
+
+MaPuS -M 
+
+3) Aggiungi un @{"front banner" Link FrontOpt} e rimuovi i @{"tail" Link TailOpt} e @{"track banner" Link TrackOpt}:
+
+MaPuS -AskR dl:TEST[.dms] ram:newTEST.dms
+
+(Nota l'opzione @{"s" Link VarieOpt} per la ram:)
+
+4) Testa tutti i file di una directory:
+
+MaPuS dl:*.dms ovvero MaPuS dl:#?.dms
+
+@endnode
+
+@node AXuso "Uso con /X o DLG:"
+
+
+Se vuoi usare MaPuS con AmiExpress usa lo script incluso: @{b}bbs/fcheck/DMS@{ub}
+
+<----- CONTENUTO DEL FILE: ---------- CUT ------------------------------->
+MaPuS
+
+Error
+<------------------------------------ CUT ------------------------------->
+
+NOTA: La seconda linea contiene le opzioni per il MaPuS.
+
+@{b} RICORDA: @{ub} Il file deve contenere esclusivamente queste 3 linee!
+
+  Se  possiedi  una  versione  superiore  alla  3.0  di  AmiExpress  piazza
+semplicemente  il file incluso nell'archivio - "DMS.info" - nella directory
+BBS:FCheck.
+
+Inclusi nell'archivio i file necessari per l'uso di MaPuS con DLG:
+
+DLGConfig/Batch/UPLOAD1.BATCH
+DLGConfig/Text/Banner.displayme
+DLGConfig/Text/PreDesc.txt
+
+@endnode
+
+@node Cap06 "GLOSSARIO:"
+
+@{"Tail Banner" Link TailOpt}:  e` il testo che sara' aggiunto in coda al file DMS.
+              (e` l'ultimo che verra' mostrato nella scompattazione)
+
+@{"Front Banner" Link FrontOpt}: e` il testo che sara' aggiunto in fronte al file DMS.
+              (e` il primo che verra' mostrato nella scompattazione)
+
+@{"Track Banner" Link TrackOpt}: e` la traccia zero che sara' mostrata come se fosse un testo.
+
+@endnode
+
+@node Cap07 "UPDATES DEL MaPuS:"
+
+0.** Versioni sperimentali mai rilasciate.
+
+0.84 Prima versione pubblica. Per mia decisione tutte le versioni pubbliche
+     da ora in poi non implementeranno l'opzione @{"-k" Link TrackOpt}.
+ 
+0.85 Prima versione registrata, rilasciata a chi ne faceva richiesta
+     chiamando @{"IRON LAW BBS" Link Cap10}.
+ 
+0.86-0.91 Versioni private
+     Sistemati alcuni bug, fra cui l'opzione @{"-k" Link TrackOpt} che corrompeva l'archivio
+     se vi erano un track banner e subito dopo un front banner.
+
+0.92 Versione pubblica.
+     Implementata l'opzione @{"-f" Link VarieOpt}.  Se specificata mostra informazioni
+     dettagliate su ogni traccia del file DMS.
+
+0.93 Versione registrata.
+ 
+0.94 Versione mai rilasciata.
+ 
+0.95 Versione Shareware.
+     Sistemato un bug il quale non faceva funzionare l'opzione @{"-f" Link VarieOpt} se
+     il file era selezionato dal requester.
+ 
+0.96 Versione Shareware.
+     Su segnalazione di Felix rimosso un bug per il quale MaPuS non poteva
+     essere reso residente. Sistemate alcune piccolezze.
+
+0.97 Versione registrata.
+
+0.98-0.99 Versioni private.
+
+1.00 Versione Shareware, non completa a causa della MANCANZA totale di
+     registrazioni!
+     Chi desidera la versione completa deve versare la quota di
+     registrazione o contattare @{"IRON LAW BBS" Link Cap10}.
+     Aggiunta delle wildcards (*,?,#?).  Velocizzata la routine di
+     stripping,  in alcuni casi e` piu' veloce del 200%!!!  Creata la guide
+     che contiene sia le istruzioni in italiano che in inglese, modificata
+     la struttura dell'archivio.
+
+1.01 Versione registrata.
+
+1.02-1.09 Versioni private.
+
+1.10 Versione rilasciata allo SMAU 1993.  Aggiunta la possibilita' di
+     inserire la data di upload (utile per le BBS) nei track banner
+     (opzione @{"-d" Link VarieOpt}).  Ora l'esecuzione di MaPuS puo' essere bloccata con
+     CTRL-C (solo dopo il test).
+
+1.11 Versione registrata.
+
+1.12 Sistemata l'opzione @{"-t" Link Trackopt}. Per un bug nella 1.10 quest'opzione
+     non funzionava correttamente su 68000.
+
+1.13 Versione registrata.
+
+1.14 Sistemati due problemi:
+     1) Se il nome del file conteneva il carattere "-", MaPuS
+        non interpretava correttamente la linea di comando.
+     2) A volte l'add di un track banner corrompeva l'archivio.
+
+1.15 Versione registrata.
+
+1.16 Rimossi due bug:
+     1) Qualora durante il check di un file venisse premuto CTRL-C il
+        programma faceva bloccare il sistema.
+     2) Piccolo problema con la command line.
+     Ora le informazioni che da' MaPuS sono compatibili con il DMS V1.51+.
+     Modifiche alla guide, eliminati i doc in formato ASCII.
+
+1.17 Versione registrata.  (I_I)
+
+1.18-1.29 Versioni Private mai rilasciate.
+          Nota: ho visto girare una versione 1.20. Questa versione non e`
+          mai stata creata da me, percio' sconsiglio l'utilizzo.
+
+1.30 Sistemati alcuni bug: ora il checking di un file vuoto non produce
+     problemi.
+
+     Aggiunto il supporto delle virgolette: ora il nome del file
+     puo' contenere spazi, se fra virgolette.
+
+1.31 Versione registrata.
+
+1.32 Implementata l'opzione @{"-c" Link VarieOpt} per far restituire un codice di ritorno di 15
+     in caso di fallito checking (su segnalazione di Jay Ruyle).
+
+1.33 Versione registrata.
+
+
+@endnode
+
+@node Cap08 "FUTURI SVILUPPI:"
+
+- MaPuS potra' prendere da un file la lista dei file su cui operare.
+
+- Utilizzo di un migliore requester, mantenendo la compatibilita' con il SO
+  1.3.
+
+- View dei banner.
+
+- Script per fallimento o riuscita del test (utile per BBS).
+
+- Aggiunta della data al tail e al front banner.
+
+- Possibilita' di rendere random la scelta del banner da aggiungere (ottimo
+  per le BBS).
+
+
+@endnode
+
+@node Cap09 "RINGRAZIAMENTI:"
+
+
+
+Molte grazie a (in ordine alfabetico):
+
+Alex,  /\\rc, Atomos, Batblaster, Blulight, Caton, Crier, Deus, Doc, Doctor
+Revenge,  DR.Dream/FTH,  DR.G,  Exodus,  Fashion Light, Felix, Gandalf/FTH,
+Ghost,  GiapDJ,  Godfather,  Guile, Highlander, Høøk/FTH, Jay Ruyle, Joseph
+Hodge  (/X  author), Kenshiro, Kris, Laurent, Leo, LoneWolf, Mad Harlequin,
+Mad Lemming, MAUI BBS (2:335/602@fidonet), /\\/\\aster T/4WD, Metalbasher!,
+MF  the  Best,  Modem  Boy,  Mondrian,  MR.IRQ,  MR.Swapper,  /\\/ightmare,
+/\\/ikita/4WD,  Nosferatu, Pier, Pixie, Polaris, Pork, Pows, Randy, Sauzer,
+Seven  /\\/\\, Shady, Splatter, T-Rexx, The Outlaw, Top, Tron/RPK, Warrior,
+Woodelf, tutti i miei utenti, e tutti coloro che dimentico...
+
+
+@endnode
+
+@node Cap10 "CONTATTI:"
+
+Puoi contattarci (in Matrix) ai seguenti indirizzi:
+
+2:335/602.15@fidonet
+39:102/1.15@amiganet
+Stefano_Picciolo@maui.karunko.nervous.com
+Eniac@ITPH06
+
+o via posta "classica" a:
+
+                             Antonino Pintaudi
+                                P.O. Box 11
+                         98125 Contesse (Messina)
+                                  ITALIA
+
+
+OPPURE CHIAMA:
+            /\\
+           /  \\
+     ______\\__/___________  _______ _______  ____
+     \\_____/  \\________   \\/       \\\\_     \\|    |
+     .    /    \\|   _|/   /   _/\\   \\|           |<<----------------+
+     :   /      \\   \\_    \\   \\_/    \\           | ++39-(0)90-881378|
+        /        \\   |\\    \\_        /    \\      |                  |
+     :  \\________/   | \\____/_______/|    |\\_____|  SYSOP: Crier    |
+     |          |____|______   ______|____|________                 |
+     |                \\_    |  \\_        \\ \\__    / ______          |
+     | 16800 HST       |    |Mb |  _/|    \\  /   /\\|    _/          |
+     | AmiExpress      |    |___|  \\__     \\/   /  \\    |           |
+     |                 |    /   \\    |\\     \\_          |           |
+     |                 |________/    | \\_____/___/\\     |    24/24h |
+     `--------------------------|____|-------------\\____|-----------'
+
+
+ATTENZIONE: NUOVO NUMERO!! ++39-(0)90-881378.
+
+@endnode
+
+@node ENG "MaPuS dox:"
+
+                             @{b}GENERAL INDEX:@{ub}
+
+@{" WARNING " Link Cap01E}
+@{" INTRODUCING MaPuS " Link Cap02E}
+@{" WHY SHOULD YOU USE MaPuS AND NOT ANOTHER CHECKER? " Link Cap03E}
+@{" HOW DOES IT WORK " Link Cap04E}
+@{" EXAMPLES " Link Cap05E}
+@{" AMIEXPRESS OR DLG USING OF MaPuS" Link AXusoE}
+@{" GLOSSARY " Link Cap06E}
+@{" MaPuS' UPDATES " Link Cap07E}
+@{" FUTURE FEATURES " Link Cap08E}
+@{" GREETINGS " Link Cap09E}
+@{" CONTACTS " Link Cap10E}
+
+@endnode
+
+@node Cap01E "PAY ATTENTION:"
+
+
+MaPuS is Shareware, you must register yourself if you use it regularly.
+
+The registration charge is 15$. You can send it enclosed on the envelope
+or as cheque at the following address:
+
+
+                             Antonino Pintaudi
+                                P.O. Box 11
+                         98125 Contesse (Messina)
+                                  ITALY
+
+The  original  archive  MaPuS???.LHA  (???  is the version number) can't be
+modified.  You can't add or remove files except BBS advertisements.
+
+The archive files list is the following:
+
+---
+bbs/fcheck/DMS                       ;@{"AmiExpress" Link AXusoE} config
+bbs/fcheck/DMS.info                  ;@{"AmiExpress v3.+" Link AXusoE} config
+bin/MaPuS.???                        ;Executable program (??? =n. of version)
+DLGConfig/Batch/UPLOAD1.BATCH        ;/
+DLGConfig/Text/Banner.displayme      ;| @{"DLG" Link AXusoE} Config
+DLGConfig/Text/PreDesc.txt           ;\\
+doc/MaPuS.GUIDE                      ;AmigaGuide ITALIAN & ENGLISH dox.
+libs/arp.library                     ;arp.library V39.1
+IRONLAW.txt.Displayme                ;/ @{"IRON LAW BBS" Link Cap10E}
+read.i                               ;\\   addings
+---
+
+   If  you  want  to include any your proposition for MaPuS in the archive,
+you MUST contact the author; he'll include your work into the next versions
+and he will thank you.
+
+NO-ONE  is  responsable  of  (remote) damages that MaPuS can create to your
+system.
+
+MaPuS is written entirely in @{i}Assembly@{ui}!
+
+@endnode
+
+@node Cap02E "INTRODUCING MaPuS:"
+
+
+What  is  MaPuS?  MaPuS is the ultimate solution for DMS files.  You can do
+all  you  want  on  these  files.  You can check them, make, remove and add
+tail, track, front banners; all in a good and functional way.
+
+@endnode
+
+@node Cap03E "WHY SHOULD YOU USE MaPuS AND NOT ANOTHER CHECKER?"
+
+
+Simple.   Some  doesn't  work perfectly on all files, others don't give you
+all  informations  about the file, and no-one lets you add your text files.
+MaPuS can be used with a @{"BBS" Link AXusoE} or into your @{"script files"
+Link  Cap05E} or simply to @{"check" Link Cap04E}
+your DMS files.  MaPuS is 100% tested for these functions.
+
+@endnode
+
+@node Cap04E "HOW DOES IT WORK:"
+
+If you invoke MaPuS with only his name, you'll get the syntax:
+
+MaPuS [-<options>] FileName[.DMS] [DestFile]
+
+Options:
+
+@{" Operations on front banners " Link FrontOptE}
+@{" Operations on track banners " Link TrackOptE}
+@{" Operations on tail banners " Link TailOptE}
+        @{" Other options " Link VarieOptE}
+
+
+If you invoke MaPuS with the source file name only, the file will be tested
+and are printed on the screen many informations about it.
+
+You can also specify wildcards in source file name:  *, ?, #?.
+
+@{b}Please update your MaPuS.cfg on every revision of MaPuS.@{ub}
+
+@endnode
+
+@node FrontOptE "Operations on front banners:"
+
+
+
+
+
+@{" a " Link OptaE} add a front banner.
+@{" r " Link OptrE} remove front banners.
+@{" m " Link OptmE} make a front banner.
+
+
+
+
+
+@endnode
+
+@node TrackOptE "Operations on track banners:"
+
+
+
+
+@{" t " Link OptaE} add a track banner.
+@{" k " Link OptrE} remove track banners.
+@{" n " Link OptmE} make a track banner.
+
+
+
+
+
+@endnode
+
+@node TailOptE "Operations on tail banners:"
+
+
+
+
+@{" A " Link OptaE} add a tail banner.
+@{" R " Link OptrE} remove tail banners.
+@{" M " Link OptmE} make a tail banner.
+
+
+
+
+@endnode
+
+@node OptaE "Add a banner:"
+
+
+Specify  source  "FileName"  (with  or  without .DMS extention) and, if you
+want, a destination file "DestFile".
+
+MaPuS  will  test  that  file  and  add  the  banner to the destination one
+(making,  so,  a  copy  of  the  source  file) or if the destination is not
+specified to the source file directly.
+
+If the source file name were absent, an ARP requester would appear.
+
+@{b}NOTE:@{ub} If you want to create the destination file in RAM: use the @{"s" Link VarieOptE} option.
+
+"FileName"  can  be  without  extention,  but  you MUST write the extention
+yourself in the destination file name.
+
+@endnode
+
+@node OptrE "Remove banners:"
+
+Pass  source FileName and/or DestFile name and MaPuS will search and remove
+front  banners and report to you operation results.  If no destination file
+were specified, the banners would be stripped to the source file directly.
+
+If you don't specify FileName, an ARP requester will appear.
+
+@{b}NOTE:@{ub} If you use the RAM: specify the @{"s" Link VarieOpt} option.
+
+@endnode
+
+@node OptmE "Create banners:"
+
+
+Pass  the  text  file  name  or a requester will appear and it will let you
+select  a  filename  as  banner.   MaPuS  will  place in S:  a file, called
+"MaPuS.cfg".  Now you can add it to your DMS files.
+
+Text file format is:  64 colums (with linefeed) for 16 lines.
+
+
+@endnode
+
+@node VarieOptE "Other options:"
+
+@{b} s @{ub}  -  Don't check free space. You should use it if you work with RAM:
+
+@{b} v @{ub}  -  View DMS file informations only, and don't check it.
+
+@{b} d @{ub}  -  Add to track banners the uploading date.
+
+@{b} g @{ub}  -  Show some greetings.
+
+@{b} u @{ub}  -  Use an ARP requester to select the DMS file.
+
+@{b} f @{ub}  -  Show informations about every track of the DMS file.
+
+@{b} c @{ub}  -  Activate return codes. If the checking fails a return code of
+        15 will be returned.
+
+
+@endnode
+
+@node Cap05E "EXAMPLES:"
+
+1) Check a file:
+ In this example I will suppose that you've a file in your DL: directory
+called TEST.DMS and you want to test it.
+
+Type: MaPuS DL:TEST or MaPuS dl:TEST.dms
+
+it will be tested and you'll get some infos about the file.
+
+2) Make a @{"tail banner" Link TailOptE}:
+
+Type: MaPuS -M
+
+3) Add a @{"front banner" Link FrontOptE} and remove @{"tail" Link TailOptE} and @{"track banners" Link TrackOptE}:
+
+Type: MaPuS -AskR dl:TEST.dms ram:newTEST.dms
+
+(Note @{"s" Link VarieOptE} option for RAM:)
+
+4) Test all files of a directory:
+
+MaPuS dl:*.dms or MaPuS dl:#?.dms
+
+@endnode
+
+Ciao...
+
+@node AXusoE "/X or DLG using:"
+
+
+If you want to use MaPuS with AmiExpress have a look at: @{b}bbs/fcheck/DMS@{ub}
+
+<----- THERE's THE CONTENTS OF THE FILE ---------- CUT HERE ------------->
+MaPuS
+
+Error
+<------------------------------------------------- CUT HERE ------------->
+
+NOTE: the 2nd line contains the options for MaPuS.
+
+@{b} REMEMBER: @{ub} The file must contains these 3 lines only!
+
+If you've AmiExpress v3+ place file "DMS.info" into BBS:FCheck directory.
+
+The  scripts  to  use  MaPuS with DLG are included in the archive, and they
+are:
+
+DLGConfig/Batch/UPLOAD1.BATCH
+DLGConfig/Text/Banner.displayme
+DLGConfig/Text/PreDesc.txt
+
+@endnode
+
+@node Cap06E "GLOSSARY:"
+
+@{"Tail Banner" Link TailOptE}: it's a text file that will be appended to the end of file.
+             (it's the last text that will be displayed unpacking)
+
+@{"Front Banner" Link FrontOptE}: it's a text file that will be appended to the front of file.
+              (it's the first text that will be displayed unpacking)
+
+@{"Track Banner" Link TrackOptE}: it's the zero-track that will displayed as text file.
+
+@endnode
+
+@node Cap07E "MaPuS UPDATES:"
+
+0.** Sperimental versions never released.
+
+0.84 First public version.  For our decision, public versions don't
+     implement @{"-k" Link TrackOptE} command.
+
+0.85 First registered version, got if you've called @{"IRON LAW BBS" Link Cap10E}.
+
+0.86-0.91 Private versions.
+     Fixed some bugs: Before @{"-k" Link TrackOptE} command corrupted archives if there were
+     track and front banner.
+
+0.92 Public version.
+     New  option @{"-f" Link VarieOptE}.  If you specify it, MaPuS will show you informations
+     about every track.
+
+0.93 Registered version.
+
+0.94 Sperimental version never released.
+
+0.95 Shareware version.
+     Fixed a bug in @{"-f" Link VarieOptE} option (the infos were not displayed if the file
+     had been selected from requester).
+
+0.96 Shareware version.
+     Fixed a bug. Now MaPuS can be resident. Thanks to Felix for bug
+     reporting.
+
+0.97 Registered version.
+
+0.98-0.99 Private versions.
+
+1.00 Shareware version, not 100% beacause no one has registered his copy of
+     MaPuS! If you want the complete version you must pay the registration
+     fee or call @{"IRON LAW BBS" Link Cap10E}.
+     Wildcards added (*,?,#?).  Speeded up stripping routine.
+     Docs  are  now  also  in Amiga-Guide format, that contains english and
+     italian ones. Archive structure modified.
+
+1.01 Registered version.
+
+1.02-1.09 Private versions.
+
+1.10 Special version released at SMAU 1993.  Added the uploading date
+     (useful for BBS) on track banners (use @{"-d" Link VarieOptE} option).  Now you can stop
+     MaPuS with CTRL-C (after the test).
+
+1.11 Registered version.
+
+1.12 Fixed a problem in @{"-t" Link TrackoptE} option. A bug made 1.10 not working on 68000
+     systems.
+
+1.13 Registered version.
+
+1.14 Fixed two problems:
+     1) If the filename started with a minus character the command line
+        parsing didn't worked.
+     2) Sometimes the track banners adding did corrupt the archive.
+
+1.15 Registered version.
+
+1.16 Fixed two bugs:
+     1) If CTRL-C was pressed during a file check, the program crashed the
+        system.
+     2) Small command line bug.
+     Now MaPuS informations are compatible with DMS V1.51+.
+     Guide corrected, ASCII docs deleted.
+
+1.17 Registered version.
+
+1.18-1.29 Private, not released, versions.
+         Note: I saw a "1.20" version. This version hasn't been created by us,
+         you shouldn't use it..
+
+1.30 Fixed some bugs: now an empty file checking doesn't do problems.
+
+     Now supporting "": file name can contain spaces, if between "".
+
+1.31 Registered version.
+
+1.32 Added return codes with @{"-c" Link VarieOptE} option. It  returns a code of 15 if the
+     checking fails. Signaled by Jay Ruyle.
+
+1.33 Registered version.
+
+
+@endnode
+
+@node Cap08E "FUTURE FEATURES:"
+
+
+- MaPuS will take the file list to operate over from a text file.
+
+- Use of a better requester.
+
+- Banner display.
+
+- Scripts for failed or successful tests (useful for BBSes).
+
+- Date adding on tail and front banners.
+
+- MaPuS will select a random banner to add.
+
+
+@endnode
+
+@node Cap09E "GREETINGS:"
+
+Many thanks go to (alphabetic order):
+
+Alex,  /\\rc, Atomos, Batblaster, Blulight, Caton, Crier, Deus, Doc, Doctor
+Revenge,  DR.Dream/FTH,  DR.G,  Exodus,  Fashion Light, Felix, Gandalf/FTH,
+Ghost,  GiapDJ,  Godfather,  Guile, Highlander, Høøk/FTH, Jay Ruyle, Joseph
+Hodge  (/X  author), Kenshiro, Kris, Laurent, Leo, LoneWolf, Mad Harlequin,
+Mad Lemming, MAUI BBS (2:335/602@fidonet), /\\/\\aster T/4WD, Metalbasher!,
+MF  the  Best,  Modem  Boy,  Mondrian,  MR.IRQ,  MR.Swapper,  /\\/ightmare,
+/\\/ikita/4WD,  Nosferatu, Pier, Pixie, Polaris, Pork, Pows, Randy, Sauzer,
+Seven  /\\/\\, Shady, Splatter, T-Rexx, The Outlaw, Top, Tron/RPK, Warrior,
+Woodelf, all my users, all friends and all the ones I forget...
+
+@endnode
+
+@node Cap10E "CONTACTS:"
+
+
+You can contact us (via NetMail) at these addresses:
+
+2:335/602.15@fidonet
+39:102/1.15@amiganet
+Stefano_Picciolo@maui.karunko.nervous.com
+Eniac@ITPH06
+
+or via "old" mail at:
+
+                             Antonino Pintaudi
+                                P.O. Box 11
+                         98125 Contesse (Messina)
+                                  ITALIA
+
+OR CALL:
+            /\\
+           /  \\
+     ______\\__/___________  _______ _______  ____
+     \\_____/  \\________   \\/       \\\\_     \\|    |
+     .    /    \\|   _|/   /   _/\\   \\|           |<<----------------+
+     :   /      \\   \\_    \\   \\_/    \\           | ++39-(0)90-881378|
+        /        \\   |\\    \\_        /    \\      |                  |
+     :  \\________/   | \\____/_______/|    |\\_____|  SYSOP: Crier    |
+     |          |____|______   ______|____|________                 |
+     |                \\_    |  \\_        \\ \\__    / ______          |
+     | 16800 HST       |    |Mb |  _/|    \\  /   /\\|    _/          |
+     | AmiExpress      |    |___|  \\__     \\/   /  \\    |           |
+     |                 |    /   \\    |\\     \\_          |           |
+     |                 |________/    | \\_____/___/\\     |    24/24h |
+     `--------------------------|____|-------------\\____|-----------'
+
+
+WARNING: NEW NUMBER: ++39-(0)90-881378
+
+@endnode
+
+Where you're looking in????
+FINE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

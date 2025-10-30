@@ -1,0 +1,44 @@
+Upload Activities (Version 1.1) - Coded in 1994 by Bobo/Mystic
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{ + }-New feature(s)             { - }-Removed feature
+{ * }-changed feature            { ! }-fixed feature (Bug)
+{ # }-Information                { ? }-let me know if this work
+
+What v0.5 (10-12-93 > 11-01-93) - [Private version for my board]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+10-12-93 { + } I started coding this door.
+ - ^^ -  { + } Main source for listing a directory coded. (Using C:LIST)
+10-13-93 { * } Now using AREXXs inbuilt LIST command instaid of using C:LIST
+10-15-93 { * } Fixed a nicer design.
+10-17-93 { # } WHAT do not list the playpen directory in the correct order.
+               Hope i found away to do that in the future..
+
+What v1.0 (01-30-94 > 04-19-94) - [First public release version]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+01-30-94 { + } Recoded the AREXX version of WHAT into C
+02-02-94 { ! } Now sorting the files in correct order.
+02-04-94 { * } Now using comma-seperator at the filelengths
+02-10-94 { + } Now showing Total files and Total bytes.
+02-13-94 { ! } Now unlocking files, libs and free allocated memory when a
+               error occur.
+02-16-94 { * } Now more optimized routine when reading from icons.
+03-14-94 { ! } ** MAJOR BUG DETECTED ** "What" did not lock the playpen dir
+               in shared mode! This means it could bug and guru when it
+               was used on two nodes at the same time.
+ - ^^ -  { # } I would really need the routines to check if a node is quiet
+               or not! Tell me at once if you have any!
+ - ^^ -  { + } Now you can have a icon in doors: WHAT.INFO.
+               Available tooltypes: SKIP_NODE<node>,NODES=<nodes>
+                                    START_NODE=<node>,PLAYPEN<node>=<dir>
+04-19-94 { - } Registration routines removed.
+               Final size: 14672 (Source 11414 with comments)
+
+What v1.1a (07-02-94 > 07-29-94) - [Only available for Beta-Testers]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+07-02-94 { * } Now reading semaphores when getting node information.
+               This will speed this tool up quite much.
+ - ^^ -  { ! } WHAT will now skip quiet nodes.
+07-29-94 { * } WHAT will now automaticly scan the node icon and see if you
+               are using external playpen directorys or not.
+ - ^^ -  { - } Registration routines removed.
+               Final size: 11836 (Source 11254 with comments)

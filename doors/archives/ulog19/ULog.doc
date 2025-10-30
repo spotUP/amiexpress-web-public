@@ -1,0 +1,227 @@
+****************************************************************************
+*                                                                          *
+*               ULog V1.9 By Robert 'Bryce!' Eriksson 1991                 *
+*                                                                          *
+*     Top Uploaders util, MessageBase Stats, Message to the Next User.     *
+*                                                                          *
+****************************************************************************
+                                                                    91-11-26
+                    User's Manual for the ULog utility.
+
+
+1. Introduction
+
+   Have you ever wondered if there isn't way for AmiExpress Users to send
+   a message to the next user, like in many other BBS programs? Or have
+   ever wanted to know more about your MsgBase, like how many letters
+   are actually private? Or are you just tired of the look of your current
+   Top Uploaders Util? Well, then I can guarantee the my ULog Util will
+   satisfy you completely. To describe exactly what the ULog program
+   does I can say this; it checks for the ten best uploaders, writes
+   they're name, location, bytes uploaded, times called, and messages
+   written, in a straight row. It also lets you include a headfile, that
+   will be located at the top of the Outputfile. Then the Total megs
+   uploaded and downloaded are written down. As are the Total number of
+   users, the Total number of calls to the system, the total amount of
+   messages written, and the average computertype on your board. The next
+   thing written to the output file is the User Message. This is the
+   Message to the next user which I was talking about earlier. The
+   Utility checks your selected MsgBase for letters written to a user
+   called 'ULog', so you must therefore log a user with this name in.
+   Access is of no concern, it will never actually use the account.
+   Only look for that name in the MsgBase. If a message to 'ULog' is
+   found it centers it, and writes it down in the outputfile with the rest.
+   While checking for the ULog message it also remembers various data about
+   the MsgBase which it later writes down along with the time the program
+   was executed. I think that just about covers it, so let's get down to
+   business.
+
+   Features of ULog:
+
+   * Shows the top 10 uploaders, with this info for each uploader:
+       > Name
+       > Location
+       > Uploaded bytes
+       > Calls to the system
+       > Messages posted.
+   * Shows the total amount of users.
+   * Shows the total amount of calls to the system.
+   * Shows the total number of megs uploaded to the system.
+   * Shows the total number of megs downloaded from the system.
+   * Shows the total number of messages written in the system.
+   * Shows the average computer type of the users.
+   * Informs you what time it was executed at.
+   * Displays a user message. (Message to the next user)
+   * Shows various information about the MessageBase, such as;
+     total number of messages, total number of private messages,
+     total number of public messages, total number of deleted
+     messages.
+   * Posibility for the sysop to specify the number of uploaders
+     that are supposed to be shown. (New in this version)
+   * Ability to import Environment Variables from LogBook.
+   * All versions are tested on well know boards before release, to
+     prevent all bugs.
+   * All versions are fully compatible with all Amiga models and OS's.
+     (See below for a full description on the hardware and software
+     setups used when testing this product)
+
+
+   News in this version
+
+   Ability to disinclude the MsgBase info, and ability to import
+   Environment Variables from LogBook.
+
+2. How to get started
+
+   The usage of the ULog util looks like this:
+
+   ULog [UserData] [Output] [-g/-n] [IncludeFile/-n] [MsgBase/-n]
+   [-y/-n] [-y/-n] {NumULs}
+
+   The User.Data filename and complete path must be specified. The same
+   goes for the Outputfile. (This is were the util will write to.) You
+   may specify an '*' sign as the outputfilename and the util will write
+   to the current CLI/Shell window instead of a file. The -g/-n option
+   is for, whether you want ANSI graphics/codes in the outputfile or not.
+   Select '-g' for ANSI graphics, or '-n' for NO ANSI graphics. The
+   Includefile/-n option is put to enable you to include a textfile
+   before the actual top uploaders list. Enter the complete filename and
+   path, to use this function, or just -n to skip it. The next option is
+   the MsgBase Path/-n option. This is if you want ULog to search for
+   messages for the next user, written to 'ULog', and in that case, where
+   to look for it. Please note that you should NOT write the actual file
+   name of the MsgBase. Just path representing it. For example; let's
+   say you have a directory for the board on your harddrive called 'BBS'.
+   This directory is assigned, so you only need to write 'BBS:', and
+   you're in. Then let's say you have a conference directory in there,
+   which is called 'Elite'. Then, of course, you have a directory inside
+   the elite directory called 'MsgBase' which contains the actual
+   HeaderFile. The path entered to the ULog util would then be;
+
+   BBS:Elite/MsgBase/
+
+   Pretty neat and simple, eh? The first -y/-n option lets you choose
+   wether you want the MsgBase info or not. -y for info, and -n for
+   no info. The second -y/-n specifies wether ULog should try to find
+   Environment Variables left by LogBook or not. LogBook 1.6 always
+   leaves these variables so, make sure you run ULog after LogBook
+   in that case. If you choose -y, and the Environment Variables are
+   found you will see who the last caller was in the output file of
+   ULog. If you choose -n, nothing will appear. This function was
+   suggested to me by BamBam/Classic simple because he doesn't have
+   his LogBook as the first textfile when you log in. His LogBook
+   is in the Bulletins, and Ulog is the first thing that you see.
+   I therefor included this function, since there might be others
+   who would like to do the same thing.
+
+                       The 'NumULs' option does not have to be
+   entered, but if you do, you should enter a number between 1 and 50,
+   and the ULog will show the number of uploaders that you specified,
+   instead of the usual 10. If no number is entered here, ULog will
+   use the default of 10. Ok, then let's move along to a complete
+   example. Let's assume that the conditions for the MessageBase are the
+   same as above, and your User.Data file is placed in the BBS: directory.
+   The desired outputfile is in the Elite Directory, and is called;
+   'Bull20.txt'. You would also like to have the outputfile done with
+   ANSI. You have previously created a textfile which you also want
+   included before the actual Top Uploaders List, and this file is
+   placed in the S: directory and is called 'Head'. You would like
+   all the MsgBase info, and you would like ULog to search for LogBook's
+   Environment Variables. The number of uploaders you would like to
+   be displays is 15. The complete commandline would the look like this:
+
+   ULog BBS:User.Data BBS:Elite/Bull20.txt -g S:Head BBS:Elite/MsgBase/
+   -y -y 15
+
+   If you, on the other hand, would like to run the most simple version
+   of ULog output, the commandline might look something like this.
+
+   ULog BBS:User.Data BBS:Elite/Bull20.txt -n -n -n -n -n
+
+   This means; no ANSI graphics, no includefile, no user message, no
+   mailstats, no LogBook Environment Variable search and just 10 uploaders.
+   It all depends on what you like, when you choose you're commandline.
+
+
+3. Hints
+
+   The reason for which I put in the option to select the name and path
+   of the User.Data file, was so that you can copy it to RAM: and let
+   execute from there. This might give greater preformance depending on
+   what kind of HardDisk you use. You can also do the same thing with
+   the outputfile, although I doubt it will make any difference. Copying
+   the HeaderFile to RAM: won't work, since the program will also need
+   to access the actual files containing the letters, which are placed
+   in the same directory as the HeaderFile.
+
+   I strongly suggest that you execute this utility after every logoff,
+   since the 'Message to the next user' function would be pretty useless,
+   if it wasn't updated after every logoff.
+
+   Instead of executing the util once for ANSI graphics, and once for
+   no ANSI graphics, use the small util included in this archive called
+   'NoAnsi', which will work as a copy command, but the outputfile will
+   be stripped from all ANSI graphics. This will be much faster that
+   executing ULog twice.
+
+
+4. Versions
+
+   In this release I have included two version of my util:
+
+   ULog1.9     - Top Uploaders.
+   DLog1.9     - Top Downloaders.
+
+   DLog is the same thing as ULog, except DLog creates a list of
+   the Top Ten Downloaders, instead of uploaders, and you want
+   to be able to send user messages to DLog you must also
+   log in a user called 'DLog'.
+
+
+5. Aftertouch
+
+   First of all I want to thank a couple of people:
+
+   BamBam           - Let get the conference going!
+   Ted/Defjam       - Thanx for all the debugging help!
+   SpaZm/Fairlight  - A source of inspiration!
+   Mogwai/Defjam    - How's that new BBS program comming?
+   The Baron/Defjam - Hope you'll be able to take some time off soon.
+   Raistlin         - How are things in the KKK?
+   Judge Dredd      - You're booked, creep! Haha...
+
+6. Credits and other Information
+
+   Programmed in Manx Aztec 'C' for reliable and system-friendly code.
+
+   Programming:         Robert 'Bryce!' Eriksson
+   Ideas & Suggestions: Zike!  - Agile
+   Main Beta Tester:    Ted    - Defjam
+
+   This util has been tested, and works 100% on: KickStart 1.2, 1.3, 2.0.
+   It has also been tested on various RAM set-ups, such as; 1 Mb chip,
+   0.5 Mb chip, 0.5 Mb chip & 0.5 Mb fast, 0.5 Mb chip & 4 Mb fast, 1 Mb
+   chip and 2 Mb fast, 1 Mb chip & 1 Mb fast, 2 Mb chip & 4 Mb 32 bit fast,
+   and this worked 100%. Processors tested with this util includes: 68000
+   7.14 MHz, 68030 25 MHz, and 68882 25 MHz, and no problems occurred with
+   this either.
+
+   You can reach me (Bryce!), or check out my utils at my beta-testers:
+
+   The MainFrame   - +46-303-67301
+   DownTown        - +31-575029313
+   Marityrium      - 713-666-4093
+   The Graveyard   - +44-915160560
+   West BBS        - +46-31-311879
+   Total Eclipse   - +46-31-572545
+
+   Or try these util-making friends of mine's boards:
+
+   Streets of Fire - +46-755-61537
+   Spaztic BBS     - 407-639-9123
+
+   Ok, I think that's just about it, I guess... So, I'll just let you
+   carry on with installing this great util, and say goodbye. See you
+   in the next production.
+
+                                 ...Bryce! '91

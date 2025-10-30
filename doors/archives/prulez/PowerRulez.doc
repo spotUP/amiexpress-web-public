@@ -1,0 +1,34 @@
+
+                                POWER RULEZ
+				···········
+
+                                Version 1.0
+                         coded by : Kyle of ARÏSE
+
+Requirements:
+-Amiga
+-/X (I coded it for 3.9, but it should work on other versions,too.)
+
+Purpose:
+The purpose is Power Rulez is to display som lines it takes randomly out
+of a text file.
+It is just a small gag, which I coded for Pater Pink's Power Board to make
+the rulez even funnier...
+
+Installation:
+Just copy the following directories to you BBS directory:
+<commands> and <doors>.
+In doors you'll find the AREXX program, which you can adapt to your
+desires (choose the number of rulez and the textfile).
+Then enter <rulez> at the /X prompt.
+
+History:
+
+V1.0	developed on 15/01/94
+
+                              Contact me at:
+
+                Pater Pink's Power Board  +49-(0)7244-2199
+
+Greets to:
+All in ARÏSE and Slam/Essence

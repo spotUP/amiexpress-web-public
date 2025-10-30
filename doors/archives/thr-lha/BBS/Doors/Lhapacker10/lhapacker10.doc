@@ -1,0 +1,202 @@
+
+                               Lhapacker v1.0
+                              by fanta^Static
+
+» Another
+               ____/\_____/\___/\____/\_/\____/\____/\___
+               \___  \   /  /  ___/ _  \  \  _  \___  __/
+                  \   / _   /  __/  _  _/  /  /  /  /  /
+                  /  /  /  /  /  /  /  )  /  /  /  /  /
+                 /  /__/  /_____/__/  /  /_____/__/  /
+                /__/94/__/        /__/__/--------/__/>St
+                                                               Production «
+
+
+                                    Why?
+
+Kid Curry wanted this door so he could have an update made everytime
+a registered S-Express user wanted the newest version of S-Express.
+Of course we made it in C to accomplish some speed.
+
+                              What does i do?
+
+It packs n files with lha and put in to an archive defined by you. It then
+gives the user a chance to download it directly.
+
+                                 Disclaimer
+
+We don't take any responsibility for any damage this door make on your
+computer hardware or software. It has been fully tested so it shouldn't
+give ya any problems.
+
+
+                                Installation
+
+You must have C:Lha so the door can pack properly.
+
+                                  /X 2.xx
+
+-Modify your custom-commands and add the following line:
+
+*LHApack  XM010Doors:Lhapacker10/Lhapacker10
+
+^         ^    ^
+|         |    |_ Or wherever you put lhapacker
+|         |
+|         |___ Notice the "X" Lhapacker is an XIM door!
+|
+|______ name to be run from prompt.
+
+
+                                  /X 3.xx
+
+-Copy the icon BBS/Commands/BBsCmd/lhapacker.info to BBS/Commands/BBsCmd/
+ or BBS/Commands/SysCmd/ if u don't want that LHAPacker can be runned by
+ the prompt.
+
+
+                               Configuration
+
+There are som tooltypes to configurate this door with
+
+OUTPUTLHA=<path:filename>     <--- This is the path and filename to
+                                   archive that will be created
+                                   (ex ram:output.lha)
+                                   This archive will only be temporary
+                                   and will be deleted after it's dl:ed
+NAME0=<name>                  <--- Usernames allowed to use this door
+.
+.
+NAME99=<name>
+
+ALLNAMESALLOWED               <--- All users can use the door. This
+                                   disables NAMEn=<name>
+
+FILE0=<path:filename>         <--- Files that will be in lha-archive
+.
+.
+.
+FILE99=<path:filename>
+
+
+                            Main Files included
+
+            Filename                                  Org. Size
+
+            BBS/Doors/Lhapacker10/lhapacker10           13184
+            BBS/Doors/Lhapacker10/lhapacker10.030       13184
+            BBS/Doors/Lhapacker10/lhapacker10.040       13184
+            BBS/Doors/Lhapacker10/lhapacker10.doc        5268
+
+
+
+                               Exampel screenshots
+
+-==========->
+
+-(Joyride BBs)- [2:(-`*'-) Elite (-`*'-)] Menu (16630 mins. left): getanswers
+
+LhaPacker v1.0. by fanta/THR & Static/tHr
+
+Packing bbs:node0/answers ...ok!
+Packing bbs:node1/anwers ...ok!
+
+Do ya wish to download the packed file(s)?> Yeah!
+oK! let's download..
+
+-==========->
+
+-(Joyride BBs)- [2:(-`*'-) Elite (-`*'-)] Menu (16614 mins. left): getanswers
+
+LhaPacker v1.0. by fanta/THR & Static/tHr
+
+Namecheck ...couldn't find your name!
+Do ya wanna leave a mezz to the sysop?> Yeah!
+
+
+                       (------------------------------)
+     To: (Enter)='ALL'? fanta
+Subject: (Blank)=abort? Give me axx please!
+
+-==========->
+
+
+
+
+
+
+
+
+
+
+                                 Greating's
+
+                                   Ju/\n
+                                   Zorlac
+                                  Mr Beta
+                                    BoZ
+                                  Big Boss
+                                  Sandman
+                                  Aquarius
+                                   Dexter
+
+
+
+
+
+
+
+
+
+
+
+
+                            Special Greating to
+
+                     Kid Curry for idea and ßetatesting
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ To provent any backdoors d¡al...    ..to get the orginal & latest version.
+
+
+
+  __________  ___________ ____________
+  \_____  _/  \__  _  __/ \__  |    _/
+   ___|    \  /    |    \  /   ¦     \  +¢6(°)³²²/¹9°97
+  /   |     \/     |     \/    :      \_________________ _ _  _    _
+ /    ¦      \     ¦      \_______     \
+/     :       \    :       \/           \     Sysop¹:Static/aFL^Thr
+\             /            /            /
+ \___________/____________/    ________/      Sysop²:fanta/Thr
+        |                 \_____|
+        |        14400         _________  _______ _________ _____________
+        |     DualStandard     \___   _ \ \___   |\______  \\_____  ____/
+        ¦    DualSysopPower      /    |  \/      |  /  |    \  /    ___|
+        :  Kicking with /X 3.x  /     ___/__     | /   |     \/     |
+        ·                      /            \_   |/    ¦      \     l____
+        .    ·¹·Dayz warez    /     \        /   |     :       \         |
+              Therion WHQ     \      \      /    |     ·       /         |
+        . Online Door Ordering \______\    /_____|____________/__________|
+                                       \__/j
+
+
+
+
+
+[EOF]

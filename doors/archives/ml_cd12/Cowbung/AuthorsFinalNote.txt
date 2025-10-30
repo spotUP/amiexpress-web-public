@@ -1,0 +1,7 @@
+Sat Jan 29 14:30:27 1994
+
+If you would like this program to work on /X 3.xx, then you will need to add
+the /X 2.xx style NDIRS and PATHS files.
+
+I will make this program compatible with /X 3.xx at a later time.
+

@@ -1,0 +1,351 @@
+   ____ _________________   _______________________ _ _______________
+ --\__ Y ____ __________/---\_____ ___ ______ ____// \\__ ________  /----
+    / \ / \/_____\/   \  /X  /   Y \/  _)__/_____\/   \/  l_ \/  Y  \ 
+   /   Y   \    ! \    \    /    !  \      \    ! \    \      \  |   \
+ --\___|_  /____  /__  /----\_____  /____  /____  /__  /____  /__|_  /---
+         \/     \/   \/           \/     \/     \/   \/     \/   ML\/
+          W·E  P·R·O·D·U·C·E  F·O·R  Y·O·U·R  C·O·M·F·O·R·T !
+
+                    PRESENTS A NEW MAJOR PRODUCT >:
+
+   Conference Top Uploaders v2.2 (Door) for Amiexpress BBS (Release 1)
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         Authers: BOBO & LOOBY   Favourite Board: The East BBS
+          Door Requirements: AmigaDOS2.0 & Amiexpress 2.(33?)
+
+                 This documentation is written by BOBO!
+
+  Program history and example outputs/scripts come in seperate files with
+                          the release archive.
+
+
+           Notable features on Conference Top Uploaders...
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        * Built in Config Program (Easy to set up and modify)
+        * Works without conference accounting.
+        * Configable: Write message to EALL or other user when reseting.
+        * Configable: Write bulletine when reseting.
+        * AmiExpress compatible with all amiexpress versions above 2.33.
+        * Online Updating.
+        * Multi-node compatible.
+        * Very FAST!
+        * Special Optimized Versions for all CPU types (000/010/020/030/040)
+        * Lot's of secuirty checks. Nothing can go wrong!
+
+   Conference Top Uploaders have been tested on the following setups
+                  without any sort of problems.. :
+
+       A2000 (68030/50Mhz) OS 2.0 - Amiexpress v3.32 (BOBO/MYSTIC)
+       A3000 (68030/25Mhz) OS 3.0 - Amiexpress v3.12 (SLASH/MAGIC 12)
+       A3000 (68030/25Mhz) OS 2.0 - Amiexpress v3.32 (BYTEANDI/MYSTIC)
+       A3000 (68030/25Mhz) OS 2.0 - Amiexpress v3.12 (UFFE)
+       A4000 (68030/25Mhz) OS 3.0 - S-Express v0.33  (CEVIN KEY)
+       A4000 (68040/25Mhz) OS 3.0 - Amiexpress v3.18 (NIGHTSHADE)
+
+           More beta-testers wanted for future versions.
+
+     Suggestions, Ideas and bug reports are welcome and wanted!
+
+
+     The complete release Archive (MST-CT21.LHA) should contents
+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Conftop/Conftop.000           38332 bytes   All-processors version.
+Conftop/Conftop.020           38300 bytes   Optimized version for 020 or better.
+Conftop/Conftop.Doc           17508 bytes   This document file.
+Conftop/Conftop.Update         5097 bytes   Update file.
+Conftop/Conftop.Output         1820 bytes   Conftop Output Example.
+Commands/BBSCmd/Conftop.info    417 bytes   Command icon for /X 3.xx+.
+Commands/SYSCmd/FileCheck.info 1082 bytes   Command icon for /X 3.xx+.
+Commands/BBS.Cmd                516 bytes   Command file for /X 2.xx.
+Commands/SYS.Cmd                 50 bytes   Command file for /X 2.xx.
+Conf2/Bull20.txt                 50 bytes   Example Bullbatch file.
+Conftop.Playpen                  40 bytes   Example Playpen file.
+
+
+                         BackGround & Purpose
+                         ~~~~~~~~~~~~~~~~~~~~
+ConfTop was orginally written becouse it didn't exists any good door to count
+uploads in a optinal conference under a choosen number of days. I orginally
+got this idea from the WeekTop utility by AirWolf that counted the total uploads
+in all conferences under a week. But since users started to ask me to code
+something to count uploads in a special conference, i started coding this tool. 
+The first version was coded in Arexx, and was pretty slow.
+Now it's here, Coded in pure C and FAST!
+
+As the sysop you are able to choose the interval (number of days), how many
+rows (Uploaders) you want to show, and if you want to write any mail when
+reseting. You can also choose if you want to write a bulletine. You may also 
+have a headerfile/Tailerfile and a exclude-file for one or all conferences.
+This are explained later in this document.
+
+Since this door runs often, the computer of the board should be rather fast.
+A 68000 Amiga is probably too slow to have any use for this tool, but on 020+'s
+it should run fast enough.
+
+
+                  To install Conference Top Uploaders
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+To install conftop on your amiexpress system, copy all necessary files into
+an optional directory.
+
+NOTE: IF YOU HAVE EXTERNAL PLAYPEN DIRECTORIES, YOU MUST MAKE A SPECIAL FILE.
+      PLEASE READ LATER IN THIS DOCUMENT HOW TO DO IT!
+
+Installation for amiexpress 3.0+ sysops:
+
+Copy the included icon (Conftop.info) into the BBSCmd/ directory, and copy
+(Filecheck.info) into SYSCmd/ directory. If you already have a filecheck.info
+(for Bossnuke or whatever), copy it to BBSCmd/ and name it (Filechk.info) and
+it will be launched after conftop have run.
+
+NOTE: Remember to edit the path in Conftop.info and Filecheck.info, if you
+      DO NOT put conftop in Doors:Amiexpress/Conftop/Conftop.X
+
+------------------------------------- END OF AMIEXPRESS 3.0+ INSTALLATION
+
+Installation for amiexpress 2.xx sysops:
+
+Add this line to your BBS.CMD (or Customcommands).  (Use the included)
+
+----Cut Here-----------------------------------------
+*CONFTOP  XM010Doors:Amiexpress/Conftop/Conftop.x
+----Cut Here-----------------------------------------
+ ^^^^^^^    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |                 |> Filename of the door with full path.
+   |         |>Accesslevel required to use door.
+   |>The command that will invoke door.
+
+Add this line to your SYS.CMD (or Customcommands).  (Use the included)
+
+----Cut Here-----------------------------------------
+FILECHECK XM010Doors:Amiexpress/Conftop/Conftop.x
+----Cut Here-----------------------------------------
+
+If you want to launch a door after (on amiexpress 2.xx), you must do a fake-
+file named (BBS:Commands/BBSCmd/FileChk.info). You can just make it 0 bytes,
+it doesn't mather. If conftop founds that file, it will try to start a door
+called "FileChk" so you must enter this line in your BBS.Cmd (or Customcommands):
+
+----Cut Here-----------------------------------------
+FILECHK   XM010Doors:DUPECHECK.X
+----Cut Here-----------------------------------------
+
+------------------------------------- END OF AMIEXPRESS 2.xx INSTALLATION
+
+Now, logon your local node and simply type: (Conftop -CFG). This will let you
+into the configuration program where you can control everything.
+(NOTE: Secuirty level 255 required for accessing Configuration menu)
+
+When you have installed conftop into a conference with the config program,
+you must load your texteditor (CED), and edit your bullbatch file in that
+conference. (Ex BULL20.TXT or whatever)
+(Use the included)
+
+-------( Cut Here )----------------------------
+~
+Updating CONFTOP, please wait ~N ..
+~CC_Conftop
+-------( Cut Here )----------------------------
+
+
+                          Configuration
+                          ~~~~~~~~~~~~~
+When you have installed conftop in your board (as described above), you must
+join the conference you want to run conftop in. Enter "CONFTOP -CFG" and it
+will let you entering the configuration program......
+
+»thE EaSt BBS« [2:»CoMmOdOrE aMiGa«] Menu (60 mins. left): CONFTOP -CFG
+
+A big configuration screen will be shown...
+
+.----------------------------------------------------------------------------.
+| Conference Top Uploaders -- Configuration Editor -- Security 255 Required! |
+|--------------------------------------v-------------------------------------|
+| 1) Number of Days : (   7)           | S) Save config.                     |
+| 2) Number of Rows : (  10)           | L) Load config.                     |
+| 3) Show Statistics: ( Yes)           | R) Remove conftop from conference.  |
+| 4) Mail User      : (EALL          ) | A) About conference top uploaders.  |
+| 5) Bulletin file  : (BBS2:Bulletins) | E) Edit users in datafile.          |
+|                                      |                                     |
+| Next reset: Fri Jan 07 00:00:00 1994 | Date     : Thu Dec 30 22:26:55 1993 |
+|--------------------------------------^-------------------------------------|
+| Please select (1,2,3,4,S,L,R,A,E) ?                                        |
+|----------------------------------------------------------------------------|
+| Configuration File not found. Using defaults...                            |
+`----------------------------------------------------------------------------'
+
+Now make the changes you want to do in the config.
+
+( 1) - Change the interval (1-99). Conftop will always run continuos, which
+       means after the choosen interval, conftop will start over and run
+       again.
+( 2) - Change the number rows (1-99). This is how many uploaders you want to
+       show when a user is joining a conference.
+( 3) - Change if you want to show statistics after conftop have reseted.
+       It will show the top uploader last period and the record uploader.
+( 4) - Change who you want to send a message to, or if you don't want to send
+       any message at all. The message will be written public from user number
+       one (Often the sysop).
+( 5) - Change the name and path to the bulletine file that will be written each
+       time conftop resets. Write 'NONE' to not make any bulletine.
+( S) - Save the config.
+( L) - Loads the config.
+( R) - Removes (uninstall) conftop from this conference. All datafiles are
+       are removed.
+( A) - About conftop screen.
+( E) - Let's you go to the user editor. The following screen will be shown:
+
+.----------------------------------------------------------------------------.
+|     Conference Top Uploaders -- Configuration Editor -- User Editor!       |
+|--------------------------------------v-------------------------------------|
+| 1) Username:                         | A) Add a user to datafile.          |
+| 2) Location:                         | R) Remove a user from datafile.     |
+| 3) Bytes   :                         | E) Edit a user in datafile.         |
+| 4) Files   :                         | L) List all users in datafile.      |
+|                                      | Q) Quit back to menu.               |
+| S) Save datafile with all changes.   |                                     |
+|                                      | Users in datafile: (  0)            |
+|--------------------------------------^-------------------------------------|
+| Please select (A,R,E,L,Q,S) ?                                              |
+|----------------------------------------------------------------------------|
+| Awaiting Command...                                                        |
+`----------------------------------------------------------------------------'
+
+( A) - Add a user to datafile.
+( R) - Remove a user from datafile.
+( E) - Edit a user in datafile.
+( L) - List all users in datafile.
+( Q) - Quit back to the mainmenu.
+( S) - Save all your changes.
+
+NOTE: The commands 'R,E & L' are disabled when no users exists in datafile.
+
+
+     WE ARE VERY SORRY FOR HOLDING CONFTOP FROM RELEASE SOO LONG TIME,
+        BUT WE WANTED IT TO BE THE BEST CONFERENCE WEEKTOP UTILITY
+               AVAILIBLE FOR AMIEXPRESS BBS!  NOW USE IT!!
+
+
+     How to run conftop if you have external playpen directories
+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If you don't have your playpen directories located in your NodeX directory,
+you MUST make a file called "CONFTOP.PLAYPEN" and put it in BBS:
+
+In this file you should enter which nodes who have external playpen dirs >:
+
+-------( Cut Here )----------------------------
+NODE1 RAM:PLAYPEN1/
+NODE2 RAM:PLAYPEN2/
+NODE3 HD0:PLAYPEN3/
+-------( Cut Here )----------------------------
+
+This means that if a user is uploading at node 1, conftop will search in
+RAM:PLAYPEN1/ for the file. If the node is not listed, or the this file
+doesn't exists, conftop will search in the normal BBS:NodeX/Playpen/ dir.
+
+NOTE: DON'T REMEMBER TO ENTER THE SLASH OR COLON AT THE END!
+
+
+                   How to exclude users from conftop
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Conftop will always search for a exclude file..
+
+· Conftop.Exclude - with users to exclude from Conftop.
+
+That file are first searched for in the conference path (ex BBS:Elite/), and
+if it is not found, it will search in BBS:. If the user is found in exclude
+file, conftop will not update him in the datafile when he upload files.
+
+
+                          Use a Header/Tailer
+                          ~~~~~~~~~~~~~~~~~~~
+Conftop will always search for a headerfile/tailerfile ..
+
+· Conftop.Header - for display before the output, and
+· Conftop.Tailer - for display after the output.
+
+These files are first looked for in the conference path (ex BBS:Elite/), and
+if it is not found, it will search in BBS:. If no headerfile is found, a
+clear-screen (CTRL-L) is sent so it displays quicker/nicer.
+
+NOTE: When you are using a own headerfile, don't forget the clear-screen at
+      the top!
+
+
+                         In futher versions
+                         ~~~~~~~~~~~~~~~~~~
+In futher versions, Conftop will be run via icons. All information will be
+stored there, which means that the program size will be ALOT smaller! (Since
+the config prg can be removed). You will also be able to configable a start-
+date for use if you are going to use conftop in competions. Conftop will also
+be more optimized, and i have a new design that maybe will be used.
+
+More ideas wanted for future releases! Call my board today!
+
+
+                            Contact me
+                            ~~~~~~~~~~
+To contact me, or to contact Mystic/X-Design, or if you have any suggestions
+or bug reports or anything else, call my board or Mystic /X WHQ and leave me
+a message.
+
+Boardname             Phonenumber         Cputype        Sysop         Nodes
+==============================================================================
+The East BBS #1       +46-8940614         68030/50Mhz    BOBO/MYSTIC   3 Nodes
+The East BBS #2       +46-8940615         68030/50Mhz    BOBO/MYSTIC   3 Nodes
+The East BBS #3       +46-8940919         68030/50Mhz    BOBO/MYSTIC   3 Nodes
+Diabolo #1            +49-306218787       68030/25Mhz    ANDY/MYSTIC   3 Nodes
+Diabolo #2            +49-306221994       68030/25Mhz    ANDY/MYSTIC   3 Nodes
+Diabolo #3            +49-306212312       68030/25Mhz    ANDY/MYSTIC   3 Nodes
+
+                             Greetings
+                             ~~~~~~~~~
+Greetings to: Looby, Nightshade, Pacific/2000 AD, Cruger/Skidrow, Dee/Delight
+              Agressor, Reactor/MST, Rhys/FLT, Screwball, Distler
+
+Many thanx to Looby and Nightshade who helped me to learn C and spended many
+hours helping me. Without you guys this door wouldn't exists!
+
+Many thanx to Byteandi/Mystic and Remo/Mystic for all help and support.
+
+And many many thanx to all my beta testers for bug-reports, suggestions and
+hints & tips to improve this door.
+
+
+                    All members of (Mystic/X-Design)
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                        ______  __________________
+.----------------+-----/    \ \/ / __/_  __/ / __/----------+----------------.
+|                |----/ / / /\  /\  /-/ /-/ / /----[ /X ]---|                |
+|       /\    /\ |-EmP\/ / /-/ /\  /-/ /-/ /\ \--[ DESiGN ]-|       /\    /\ |
+|      /C \  /N/ +-----\/\/--\/--\/--\/--\/--\/-------------+      /C \  /N/ |
+|     /i/\ \/G/  |                                          |     /i/\ \/G/  |
+|    /T/  \ i/   |                                          |    /T/  \ i/   |
+|   /S/   /S \   |   EMPiRE   -   BYTEANDi   -  CRACKDOWN   |   /S/   /S \   |
+|  /Y/   /E/\ \  |   TYCOON   -   KiLLRAVEN  -   SiEGEL     |  /Y/   /E/\ \  |
+| /M/   /D/  \ \ |   FUZZY    -      SPY     -  INCOGNiTO   | /M/   /D/  \ \ |
+| \/    \/    \/ |   RE/Y\o   -     BOBO!    -   HARDBYTE   | \/    \/    \/ |
+|                |                                          |                |
+`----------------+----------[  MYSTiC /X DESiGN  ]----------+----------------'
+
+----------------------------------------------------------------------------
+
+  ____/\____/\ ______/\_____  ___/\_______/\_______/\_______/\_____
+ -\____ ____  Y  ____ _____/ML\__ ___________  ____ _________ ____/------
+    /    \/___|_  \/  __)___   /  __)___/___Y_  \/______ \/    \
+   /      \\____   \  |     \ /   |     \\____   \     |  \     \ B.B.S.
+   \      /   T    /  !     / \   !     /   T    /     !  /     /
+ ---\____/\___|___/\_______/   \_______/\___|___/\_______/\____/---------
+.---------v-----------------------------------------------v-------------.
+| NODE (1):+46-8-940614 - NODE (2) +46-8-940615 - NODE (3).+46-8-940919 |
+|         .                                               :             |
+|  ...:.:..:..  MyStIc: FuN & FriEnDshIp! - NoThInG ElSe! ..:..:.:...   |
+`-v-----------------------v-------------------------------------------v-'
+  :____ _________________ : _______________________ _ _______________ :
+ -.\__ Y ____ __________/-.-\_____ ___ ______ ____// \\__ ________  /-.--
+  . / \ / \/_____\/   \  /X  /   Y \/  _)__/_____\/   \/  l_ \/  Y  \ .
+   /   Y   \    ! \    \    /    !  \      \    ! \    \      \  |   \
+ --\___|_  /____  /__  /----\_____  /____  /____  /__  /____  /__|_  /---
+         \/     \/   \/           \/     \/     \/   \/     \/   ML\/
+          W·E  P·R·O·D·U·C·E  F·O·R  Y·O·U·R  C·O·M·F·O·R·T !
+

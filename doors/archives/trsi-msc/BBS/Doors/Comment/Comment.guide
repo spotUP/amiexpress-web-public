@@ -1,0 +1,180 @@
+@database MS-Comment v1.2 - by Dr.Dre!/TrSi
+
+Copyright (C) 1994 by Dr.Dre!/tRSi^zENITh Germany
+All Rights Reserved
+
+@Remark $VER: Version v1.2 (Saturday 06-Mar-94 19:27:08)
+Remark AmigaGuide DataBase for MS-Comment v1.2
+
+@Node MAIN "MS_Comment v1.2 (Sunday 06-Mar-94 19:27:08) Dcoument for /X"
+
+                   ._________________  ______
+                   l___       /      \/    _/_______.:  
+                     /       /   /  _/\___      /    :
+                    /_______/-rS!\_____\  _____/     |'94  
+                          /_______|     \/   /_______|
+
+                           is proud to present: 
+          Multi_Sysop_Comment v1.2, XiM Module for /X 2.xx - 3.xx
+
+                       English Doc     German Doc
+                     @{" Introduction  "Link no1} @{"  Einleitung   "Link nr1}
+                     @{" Requirements  "Link no2} @{" Anforderung   "Link nr2}
+                     @{" Installation  "Link no3} @{" Installation  "Link nr3}
+                     @{"   Copyright   "Link no4} @{"   Copyright   "Link no4}
+                     @{"   Greetings   "Link no5} @{"    Gruesse    "Link no5}
+                     @{"          TRSI Boards          "Link no6}
+@endnode
+@node no1 " Introduction"
+
+Multi Sysop Comment is may simply the Best C Replacment for /X.
+It is written in fast C as XiM Module.
+The MS-Comment v1.2 is usefull if you run a BBS with multiple Sysops.
+It have some nice features and is fuck easy to setup about ToolTypes!
+have phun with the Door.
+Dr.Dre!/tRSi                                         @{" Main Menu " Link main}
+@endnode
+@node nr1 " Einleitung"
+
+Multi Sysop Comment ist einfach der beste Ersatz fuer den Standart C 
+Command in /X, es ist in C geschrieben fuer pure Speed!
+Der MS-Comment v1.2 is sehr nuetlich wenn du eine BBS mit vielen Sysops hast.
+Es bietet einige gute features und ist sehr einfach über Tooltypes zu 
+configurieren...
+
+Dr.Dre!/tRSi                                         @{" Main Menu " Link main}
+@endnode
+@node no2 " Requirements"
+
+Only what you need is OS2.++ and any Version of AmiExpress (registered)
+and in Doors:Comment/ the Comment.Info Icon.
+Nothing more...
+                                                     @{" Main Menu " Link main}
+
+@endnode
+@node nr2 " Anforderungen"
+
+Das einzige was die Door benoetigt ist Kickstart 2.++
+und in Doors:Comment/ das Comment.Info Icon.
+                                                     @{" Main Menu " Link main}
+
+@endnode
+@node no3 " Installation "
+
+Create a Directory in you Doors: called Comment, there copy the Comment.x
+and the Comment.Info
+Then open the Comment.Info for settin up the ToolTypes.
+This ToolTypes are available.
+NAME.1=Sysop Name #1  (max. 31 Chrs)
+DESC.1=Description from the Sysop #1  (max. 37 Chrs)
+ANSWER.1=Some Bullshit which will displayed by choosin Sysop#1 (max 60 Chrs)
+NAME.2=Sysop Name #1
+DESC.2=Description from the Sysop #1
+ANSWER.2=Some Bullshit which will displayed by choosin Sysop #1
+and so on until SYSOP.??? how many you have...
+NOTE!: Start with NAME.1 !!! not NAME.0 this will ignored
+DEFAULT_SYSOP=<#> ;<- here enter the Number from the Default Sysop
+                   this Sysop will be choosed every Time by pressin
+		   Return or a higher Number as available Sysop`s
+		   if you want have NAME.3 as default so write
+                   DEFAULT_SYSOP=3
+                   Look into the included Icon.
+                                                     @{" Main Menu " Link main}
+@endnode
+@node nr3 " Installation"
+
+Kreiert eine Directory namens Comment in den DOORS:
+Kopiert das Comment.x und das Comment.Info nach DOORS:Comment/
+Oeffnet das Comment.Info um die Door zu configurieren.
+Moegliche ToolTypes sind:
+NAME.1=Name des ersten Sysops - (max 31 Zeichen)
+DESC.1=Funktion des ersten Sysops - (max. 37 Zeichen)
+ANSWER.1=Answer Zeile wenn der Sysop ausgewaehlt wird. (max 60 Zeichen)
+NAME.2=Name des zweiten Sysops - (max 31 Zeichen)
+DESC.2=Funktion des zweiten Sysops - (max. 37 Zeichen)
+ANSWER.2=Answer Zeile wenn der Sysop ausgewaehlt wird. (max 60 Zeichen)
+und soweiter immer hochcounten soviele Sysops ihr wollt btw: habt.
+NOTE!: Started mit NAME.1 !!! NAME.0 wird ignoriert
+DEFAULT_SYSOP=<#> ;hier schreibt die Nummer des Sysops rein der als
+                   Default genommen wird. Dieser Sysop wird immer 
+		   gewaehlt wenn return oder ein Sysop gewaehlt wird
+                   der nicht existiert!!! Wenn also NAME.3 als default
+                   genommen werden soll so schreibt DEFAULT_SYSOP=3 
+                   Seht in das beigefuegte Icon.
+                                                     @{" Main Menu " Link main}
+@endnode
+@node no4 " Copyright"
+
+
+           MS-Comment v1.2 is written by Dr.Dre! of TRSI^Zenith
+                         All Rights Reserved ©1994
+
+              Comment.x has a Original Size from : 9908 bytes
+
+          The AmigaGuide DataBase written by Dr.Dre!/tRSi^Zenith
+
+         If you have any Problems with the Door so contact me at 
+                         @{" Marleys Coffee Shop " Link Coffee}
+
+I`m still looking for some good BetaTesters, if you are interested and are
+running a Multinode System so contact me at @{" Marleys Coffee Shop " Link Coffee}
+
+                                                     @{" Main Menu " Link main}
+
+@endnode
+@node no5 " Greetings"
+
+     Many thnx to all my Beta Testers who helps me to fix all Bugs !!!
+
+                   The Greets are going to these Dudes...
+
+   ByteAndi/X-Design, Spy/X-Design, Remo/X-Design, X-Treme, Saito/TRSI
+    Fugitive/DLM, MetalbasheR!, McLoud/TRSI, Irata/TRSI, Triton/Pdy
+ Skylark/LSD, Nick, Metoner/TRSI, J.Walker/TRSI, Crazy/TRSI, Valshare/TRSI
+    Vicous/LSD, Richi/Flt, Steve/D&R, Amicom, -rS!/TRSi, Empire/Mst, 
+   BJoerN/Pdy, Scope, SkiN!,Mario/TRSI, TCM!/DLM, -runt/TRSI, Prayer/TRSI
+                         Samir/trz, Rotor/trz ...
+          and simply all tRSi Member an other Doodes I forgot...
+
+
+                                                     @{" Main Menu " Link main}
+@endnode
+@node no6 " TRSI Boards Worldwide"
+
+                 To Contact me Call any of this Boards...
+
+   biohazard......................Canadian HQ............+1-905-841-0965
+   cauldron.......................German   HQ............++49 Pure Elite
+   marleys coffee shop............German   HQ............++49 Pure Elite
+   MayDay.........................German   HQ............++49 Pure Elite
+   boondocks......................European HQ............+31-548-040-653
+   final impact...................Swedish  HQ............++46-54-113-486
+   flying spirits.................Swiss    HQ............+41-217-282-524
+   savage amusement...............Austria  HQ............+43-767-227-743
+   zEnlandia......................Finnish  HQ............+358-088-82-144
+
+
+                                                     @{" Main Menu " Link main}
+@endnode
+@node Coffee "Marleys Coffee Shop - TRZ german hQ"
+
+           * tRiStAR & RED sECtOR * zENITh * gERmAN hEADqUARtER
+                                           _______    ._____
+      _______  ____.______  ______________/   .  /____|    /_______
+      \      \/    |      \/   _  \      /   ___/_    l   /   __  /
+       \           |      \\   /  /_    /_________l____  /\__   \/
+        \    \/____l________\  \____|______|    |_______/________\
+         \____\         /______|                       _______
+                 ____          _______________________/   .  /
+                /  __l_. _____/     __/     __/   .  /   ___/_.
+               /   |   |/     \     _/\     _/   ___/_________|
+              /________|      \\____|  \____|_________|
+                       \_______/         _____    
+                      __________________/     \__________
+ Dr.Dre!/tRSi        /   __  /    /    //      \    .   /
+                    /\__   \/         /\_______/    ___/
+  J.Walker/tRSi    /________\   /____/-rS!/aRt/_____|
+                          /____/
+
+                                                     @{" Main Menu " Link main}
+@endnode

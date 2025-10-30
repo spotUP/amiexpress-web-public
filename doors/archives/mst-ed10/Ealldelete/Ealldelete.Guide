@@ -1,0 +1,85 @@
+@DATABASE EallDelete.Guide
+@$VER: Guide for Eall Deleter v1.0 (3rd May 1994)
+
+@REMARK Copyright (c) 1994 Mystic.
+@REMARK All Rights Reserved.
+@REMARK Main Program and Document by Bobo/Mystic.
+
+@REMARK You need MultiView, Amigaguide or any other GUIDE viewer.
+
+@NODE MAIN "EallDelete: Contents."
+
+--------------------------------------------------------------------------
+         EALL-Deleter (Version 1.0) [RELEASE 1] - 3rd May 1994
+--------------------------------------------------------------------------
+
+          @{"[ Background and Purpose ]" Link Background}      @{"[   Program History   ]" Link History}
+          @{"[    Notable Features    ]" Link Features  }      @{"[  Thanks and Greets  ]" Link Greets}
+          @{"[ How to use Eall Delete ]" Link Use       }
+
+--------------------------------------------------------------------------
+                  Copyright (c) 1994 by Bobo/Mystic
+--------------------------------------------------------------------------
+
+ Example Outputs/Scripts come in seperate files with the release archive.
+@ENDNODE
+@NODE Background "EealDelete: Background and Purpose"
+[------------( Background and Purpose )-----------------------------------]
+
+The reason i wrote Eall-Deleter was becouse i am sick and tired of all
+thoose old EALL messages that i no longer needed. Until this util was
+born, i used EALL by Sigma Seven, but it was coded in AREXX and was really
+slow and required alot of memory. (But the UTIL was really great!!)
+
+NOTE: Take a look at the output example (Ealldelete.Output)
+
+Greetings to SIGMA SEVEN!
+@ENDNODE
+@NODE Features "Ealldelete: Notable Features"
+[------------( Notable Features )-----------------------------------------]
+
+Several reasons to use EallDelete:
+
+* Written entirely in C for fast code.
+* Nice design.
+* Fast! (Scans 2000 messages in 6 seconds)
+* Scans the messagebase exactly the same way as amiexpress.
+  (Check the included output example.)
+* Special optimized versions for all CPU types.
+@ENDNODE
+@NODE Use "EallDelete: Install into Express"
+[------------( How to use Eall Delete )-----------------------------------]
+
+Eall Delete is really easy to use. It only requires one argument:
+
+EALLDELETE <confpath>  - eg: EALLDELETE BBS:Elite/
+                             EALLDELETE BBS:Conf1/  or whatever
+@ENDNODE
+@NODE History "EallDelete: Program History"
+[------------( Program History )------------------------------------------]
+
+{ + }-New feature(s)         { - }-Removed feature
+{ * }-changed feature        { ! }-fixed feature (Bug)
+{ # }-Information            { ? }-let me know if this work
+
+Eall Deleter v1.0 (04-03-94 > 04-21-94) - [First public version]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+04-03-94 { + } I started coding this door.
+ - ^^ -  { + } Main routines to scan the messagebase.
+04-08-94 { ! } Fixed the design stuff.
+04-10-94 { * } Optimized and maked it safer.
+04-21-94 { + } Maked the final changes.
+ - ^^ -  { + } Removed the registration code.
+               Final size: 15124 (Sourcecode: 7339)
+@ENDNODE
+@NODE Greets "EallDelete: Thanks and Greets"
+[------------( Thanks and Greets )----------------------------------------]
+
+Greetings to: Pacific/2000 AD, Looby/Insane, Dee/Delight, Agressor/Anthrox,
+              Reactor/Mystic, Easy Rider/Mystic, Ufok/Mystic, Screwball!
+
+Many thanx to Byteandi/TRSI and Remo/Mystic for all help and support!
+
+And many many thanx to all my beta testers for bug-reports, suggestions and
+hints & tips to improve this door.
+@ENDNODE

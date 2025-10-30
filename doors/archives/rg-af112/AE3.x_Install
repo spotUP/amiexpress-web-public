@@ -1,0 +1,32 @@
+FAILAT 65535
+ECHO "[0;33;1m1994 DOOR InTallAtoR v0.02ß by Zwinx/DagCentRAl 9o²1o"
+ECHO "[0;32mCall DagCenTraL at [1m+46-31-775-9390[0;32m [Nd0] or [1m+46-31-775-9391[0;32m [Nd1]!"
+ECHO "[0m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+ECHO 'INSTALLING "AUTOFlush V1.12ß"'
+ECHO ""
+ECHO "Making directories..."
+IF NOT EXISTS DOORS:SPACE
+ MAKEDIR >NIL: DOORS:SPACE
+ ECHO "No previous AUTOFlush installation found, installing..."
+ENDIF
+ECHO "Copying files..."
+COPY Space.info BBS:Commands/SYSCmd
+COPY Space.rexx BBS:SPACE
+COPY Space.doc BBS:SPACE
+COPY Space.cfg BBS:SPACE
+echo "File Space.cfg is set to default, must be updated."
+IF NOT EXISTS BBS:SPACE/Space.dirs
+ COPY Space.dirs BBS:SPACE
+ echo "File Space.dirs is set to default, must be updated."
+ENDIF
+IF NOT EXISTS BBS:SPACE/Space.log
+ COPY Space.log BBS:SPACE
+ echo "File Space.log is resetted."
+ENDIF
+ECHO ""
+ECHO "INSTALLATION/UPDATE Complete..."
+ECHO ""
+ECHO "Above standing file(s) MUST be updated to fit your purposes. Refer"
+ECHO "to BBS:DOORS/Space.doc for further information"
+ECHO ""
+WAIT 5

@@ -1,0 +1,136 @@
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+    _______    __________ ___________________ ______   ______________
+    || _  ø\   |! |__  |¬\||     ! /! |__  |¬\||  /|  /| ¬\ /|   ø |\\
+    |!  \/  \  |. :\¬\ !//|! ___ :/|. :\¬\ !//|! ø | / !  // !  /  : \\
+    |:  /\  .\ |\ .ø¬\\_/ |: /|¬\/t|\ .ø¬\\_/ |:/ \|/  : /____ / _____/
+    |. / |\  \\| \/__/ |_ |.ø!|__ O| \/__/ |_ |.   X   ./    //\ ||
+    |./  | \  \\ / \   /¬\|. :. / n| / \   /¬\|.  /_\  /\   //  \||
+    |ø   |_/  //ø   \ /   \  ._/  I|ø   \ /   \. ø |\\/  \_/ø    ||
+    |.___/____/| ____Y____/__ |   c| ____Y____/___ | \____\/_____ |
+    |/   ¬     |/    !    : ¬\|    |/    !    !   \|      ¬:     \|
+    :          !     :    .   !    !     :    :    !       .      !
+    .          :     .        :    :     .    .    :              .
+
+            Slam You In A Sideways Direction With VStats V1.OO
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+
+                             * General Idea *
+
+Nothing fancy, extremely simple - it's just a standard replacement for the
+original /X 'S' command except this version looks sexier & gives you more
+information than the old one.
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+
+                            * So Why Use It? *
+
+It's written in C so it's faster than all the Rexx replacements available.
+It works with /X 3.X [and maybe /X 2.X too, but not tested on it :) ].
+It looks prettier than all other stats doors around.
+It comes with the TANGo style approval [see IFF screenshot].
+It tastes nice [not checked yet....]
+Has absolutely NO backdoors!! If you don't belive us then don't install
+it [like it bothers us].
+Before you install it & regret it, just display the IFF screenshot we've
+included for you so you can see if you like the look of it or not before
+fucking up your copy of /X. Ahahah. This is a standard feature with ALL
+VTools from now on so you can see what you're letting yourself in for
+beforehand so there's no excuse....
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+
+                             * Installation *
+
+/X 3.X
+
+Copy the enclosed icon across to BBS:Commands/BBSCMD/
+Copy the VStats directory to Doors:
+Copy the supplied library to LIBS:
+Test it.
+Drink copious amounts of alchohol to celebrate the event.
+
+/X 2.X
+
+Make an entry in BBS:Commands/BBSCMD like the following
+
+---------------------->> Cut Here <<--------------------------
+*S            RM001DOORS:VStatus/VStatus
+---------------------->> Cut Here <<--------------------------
+
+Copy the VStats directory to Doors:
+Copy the supplied library to LIBS:
+Register for /X 3.X 'cause it's much nicer.
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+
+                                * Credits *
+
+         Idea, Graphics, Docs & Drinking.......... TANGo/dEfEkT
+         Coding, Pestering, Docs & Wibbling....... VENoM/dEfEkT
+         Doughnuts, Perviness & Computers......... aCE/dEFEKT
+         Superb ASCII Logo At The Top Of Docs..... ToNIC/cALIBRA
+         Bad Lip Sync & Beatles Haircut........... BRUCE LE/cHiNA
+         Bruce Le Impressions & Scouse Accent..... TANGo/dEfEkT
+         Silly Expressions & Useless Education.... VENoM/dEfEkT
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+
+                               * Problems *
+
+We don't think you'll have any problems with this because:
+
+a] It's extremely simple to use.
+b] You probably won't use it. Eheh.
+
+But if you do then leave mail to TANGo on one of these US boards.
+
+            1] DEEP FREEZE      - [DFT WHQ]   - +1 414-225-9333
+            2] WORLDS OF WONDER - [DFT USHQ]  - +1 410-969-1894
+            3] VULTURES NEST    - [DFT CHQ]   - +1 905-574-6856
+            4] OBITUARY         - [TEST SITE] - +1 310-652-5688
+
+Or to VENoM on
+
+            1] 13th HOUR        - [DFT UKHQ]  - +44 704 505845
+            2] 9 LIVES          - [TEST SITE] - +44 592 744821
+
+
+Also leave mail to TANGo if you have any suggestions for updates or an /X
+tool YOU would like to see released because there isn't one around that
+does the job.
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+
+                       * Future VTool Productions *
+
+THIS FUCKER>>>> [%] VSTATS   - User Stats Viewer.      [%]
+                [%] VPAGE    - Music Operator Pager.   [%]
+                [%] VSTRIP   - Lha Checker & Stripper. [%]
+                [%] VCHECK   - Cute Text Adder. Ahaha. [%]
+                [%] VMOVER   - File Conf Mover.        [%]
+                [%] VRATIO   - Auto Ratio & Abuse. :)  [%]
+                [%] VLOGOFF  - Quicker Logoff Scripts. [%]
+                [%] NODENOSE - Multinode Silly Who.    [%]
+                [%] NODECHAT - Multinode Silly Chat.   [%]
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+
+                               * Greetings *
+
+                       Shad/EP - Our fave scouser.
+                       Dr.Dre/TRSI - Our fave /X coder.
+                       Deathwish/DFT - #1 fave sysop.
+                       Bill/LNS - #2 fave sysop.
+                       Caveman/DLM - Our fave geordie.
+                       DEFEKT - Our fave group. :)
+                       Fave - Our fave word.
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)
+
+                                * The End *
+
+          Probably the simplest & best /X tool docs in the world.
+                                                          [C]Guinness '94
+
+ (-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-)

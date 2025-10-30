@@ -1,0 +1,23 @@
+[4;33m                                                                             [0m
+[4;33;44m  - Multi Top (Version 1.1b) - Coded in 1993/94 by Bobo (Mystic/X-Design) -  [0m
+
+[35mNo# Username (Handle)       Upload CPS No# Username (Handle)       Upload CPS
+[34m===-===================-==============-===-===================-==============
+[33m 1. [0mLOOBY                        3.841 [33m16. [0mSAVAGE/iNSANE                2.564
+[33m 2. [0mSNUSKBUSKE OF DUAL           3.213 [33m17. [0mAGRESSOR                     2.458
+[33m 3. [0mBLUELiGHT                    3.192 [33m18. [0m[-dEE/dELiGhT!-]             2.456
+[33m 4. [0m®eaÇtø®                      3.176 [33m19. [0mWARHAMMER                    2.371
+[33m 5. [0mNIGHTSHADE                   3.125 [33m20. [0mFireHaWk                     2.363
+[33m 6. [0mGUS                          2.942 [33m21. [0mCallis                       2.318
+[33m 7. [0mCase                         2.796 [33m22. [0mCruger                       2.276
+[33m 8. [0mFatal Power                  2.782 [33m23. [0mBooZeR                       2.269
+[33m 9. [0mDistler                      2.740 [33m24. [0mReverend D                   2.211
+[33m10. [0mPetrol Pedro                 2.740 [33m25. [0mTuborG                       2.211
+[33m11. [0mnECRoPHiLiAC                 2.716 [33m26. [0mEuphoria!                    2.168
+[33m12. [0mMiSERY                       2.686 [33m27. [0mJU/\N                        2.072
+[33m13. [0mMeTz                         2.659 [33m28. [0mbiscrok                      2.047
+[33m14. [0mMARBLE                       2.648 [33m29. [0mTWISTER                      2.046
+[33m15. [0mSandman                      2.622 [33m30. [0mSTOOKIE / DUAL CREW          2.006
+[34m===-===================-==============-===-===================-==============
+[32mTotal Uploaded Bytes [33m([0m11.850.511.049[33m) [32mTotal Downloaded Bytes ([0m14.192.002.371[33m)
+[32mTotal Uploaded Files [33m([0m20.786 [33m)        [32mTotal Downloaded Files ([0m28.474 [33m)[0m

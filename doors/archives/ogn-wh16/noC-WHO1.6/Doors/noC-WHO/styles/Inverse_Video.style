@@ -1,0 +1,19 @@
+HEAD=
+[0m
+[0;44m [0;40m [44m Node  User...       Location...   Doing...         LoginTime Baud   Conf [40m [44m [30m[0m
+[0m
+%
+
+BODY=
+[0m    [33m@#   [36m@NAME........ [35m@LOC.........[32m @ACTION......... [35m@WHEN.... [36m@BAUD  [33m @$
+%
+
+TAIL=
+[0m
+[0m[0;44m [40m [44m @VERSIONTEXT by nocTurne deSign/MST              [36mTime: [0;44m@TIME  [36mCalls: [0;44m@CL [30;40m [44m[37m [0m
+[0m
+%
+
+DIVIDER=
+[0m    [34m-[37m [34m------------------------------------------------------------------ -
+%

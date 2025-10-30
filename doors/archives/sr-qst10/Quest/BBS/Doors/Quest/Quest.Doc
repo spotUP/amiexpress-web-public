@@ -1,0 +1,571 @@
+
+
+   »» The Quest V1.0 - /X 1/2/3/4.x CoMpAtIbLe - NeEdS AEDoor.Library ««
+
+                     ¡ CoDeD bY dIoGeNeS fOr SkId RoW ¡
+
+   ______________________________________________________________________
+   |                                                                    |
+   | -> NeW nUmBeR ! <- nEw NuMbEr ! -> NeW nUmBeR ! <- nEw NuMbEr ! -> |
+   |                                                                    |
+   |    CaLl My BoArD nOw !  PeAcE cHaPeL bBs ->  +32-(0)2-331-38-09    |
+   |                                                                    |
+   | <- NeW nUmBeR ! -> nEw NuMbEr ! <- NeW nUmBeR ! -> nEw NuMbEr ! <- |
+   |____________________________________________________________________|
+   `                                                                    '
+
+
+
+                          .-----------------------.
+--------------------------|  Before you go on...  |--------------------------
+                          `-----------------------'
+
+
+
+ The doors needs:    AEDoor.Library in your LIBS:  (made by Sintax/WoT)
+                     Quest.info in Doors:Quest/
+                        ToolTypes explained below
+                     Answers drawer in Doors:Quest
+                     
+
+           !!! THE DOOR MUST BE BE CALLED IN THE JOIN.TXT !!!
+
+
+ You better read the doc or you will NEVER understand how powerful
+The Quest is and why it's the best :)
+ 
+ It's XIM - Fast assembler :)
+
+ You can reach me on these awesome boards for infos, contact, etc...:
+ 
+  Mirage          -  FLT WHQ   -  503-590-PRIVATE!
+
+  Unlawful Entry  -  SR  WHQ   -  612-755-PRIVATE!
+
+  Planet X        -  LSD USHQ  -  414-964-4977  -  3 Ndz Ringdown
+                     NUP: Lazardo
+                     My official ßeta-Tester ;)
+
+
+
+
+                          .-----------------------.
+--------------------------|  What is The Quest ?  |--------------------------
+                          `-----------------------'
+
+
+
+  The Quest is simply the best user questionnaire ever coded for /X :)
+
+ Seriously now...The Quest is the first fully interactive new user
+questionnaire based on an editable "dictionary" and a "super" super wildcards
+algorithm, with unbelievable new features never offered before and all
+existing features splitted in the other doors.
+
+
+
+
+                     .----------------------------------.
+---------------------|  Why should you use The Quest ?  |--------------------
+                     `----------------------------------'
+
+
+
+ The Quest is not as easy to configurate as other Quest doors, but that's
+the price for power. Power ? WHich power ? :)  Well, here is a summary:
+
+ - The Quest is fully interactive.
+ 
+ - The Quest is message based: messages will be sent to anyone you wish,
+   even EALL's to warn about the arrival of a new user, and when a
+   user has been kicked with the reason.
+   
+ - The Quest is fully configurable, brings new unbelievable features,
+   is fast & pure ASM, etc... etc... I'm getting bored hehe ;)
+
+ And all this is made possible via simple flags in the icon's tooltypes ! :)
+Tooltypes ? TOOLTYPES ? ICON ?? AAAAAARGHHHH ?!?!?!   Hehe no, I also
+provide in this archive a wonderful tool to edit icons tooltypes in your
+favourite text editor ;)
+
+
+
+                        .----------------------------.
+------------------------|  Tooltypes & installation  |-----------------------
+                        `----------------------------'
+
+
+ Aha, the interesting part ! :)  Make a directory QUEST in your DOORS:
+drawer (DOORS must be assigned) and copy the door in it + its icon. Put in
+your BBS:Commands/BBSCmd drawer the door icon like for all doors. Location
+will of course be: LOCATION=DOORS:QUEST/QUEST. Make a directory called
+ANSWERS in this directory. And again... if you don't have the AEDoor.Library
+by Sintax/WoT installed, don't expect the door to work !
+
+ Sysops using /X v1.x -> 2.x will know better than me how to configurate
+the whole thing.
+
+ I advice you to call the door from the JOIN.TXT text (normally located in
+BBS:Screens/Nodex/) like this: ~cc_Quest. It is not necessary to use an
+MCI clearscreen command as the door will do it anyway.
+
+         !!! I EVEN URGE YOU TO CALL THE DOOR FROM JOIN.TXT !!!
+         
+         Why ? Because if you call the door later, the user is previously
+         recorded in the user.data, and if he is kicked, next time he
+         calls The Quest WON'T be called as he IS member, and WON'T be
+         able to control new users anymore.
+
+ The characters xx and yy stand for any number from 0 to 4.294.967.295.
+No limitation here so, but leading zeroes are not allowed (eg: 01).
+
+ The following tooltypes must be edited in Quest.Info located in your Quest
+drawer. You can use the TOOLTYPE util provided in the package to edit
+them in your favourite text editor.
+
+
+
+                          .----------------------.
+                          |  Standard tooltypes  |
+                          `----------------------'
+
+
+  MUST_ANSWER=Yes/No
+
+    Little flag to tell the door that the user MUST give an answer or may
+    just press ENTER. Blanc lines are also detected.
+    
+    Default is YES.
+
+
+  LEAVE_MSG=Yes/No
+
+    If set to YES, the door prompts the ENTER MESSAGE command at the end
+    of the questions to let the user write a bit about himself, his
+    hobbies, etc... Kewl to see if the guy is nice or not, no ? :)
+    No message is sent, it is just additional infos in the answers.
+
+    Default is YES.
+
+
+  LEAVE_MSG.TXT= ...
+
+    This is a string or the full path to a text file to display just
+    before this ENTER MESSAGE command, to tell the user what he should
+    write. See the FLAG below. By default, the door will write this:
+    
+     "Please tell me about you, your hobbies, etc... now"
+
+
+  LEAVE_MSG.FLAG=Line/Path
+
+    Here you specify what the LEAVE_MSG.TXT is: a line to display or a
+    path to a textfile. Don't forget this !
+    
+    Default is LINE.
+
+
+  CHECK_ACCESS=xxx
+
+    That's the access a user will need to be able to read the answers of
+    new users. If you have this access level (or above) the door will ask
+    you wether you want to answer the questions or look at other users'
+    answers.
+    
+    Default is 240.
+
+
+  BEGIN_TXT=Path
+
+    Path to a text file to display instead of the default string at the
+    beginning of the door. This string is:
+    
+      "USERNAME, remember that your validation depends on your knowledge..."
+
+
+  END_TXT=Path
+
+    The same, but for the end of the door ("thank you..." etc !).
+
+
+  SYSOP.xx=Name
+
+    You can use this tooltype to send a message to anyone you wish.
+    If the name is EALL, the door sends an EALL message in any
+    conference you wish to collect infos about the new user user from
+    your users. Sysops will just receive a message telling them that
+    there is a new user awaiting validation and his name. SYSOP.xx requires
+    a path to a conference. Warning: EALL messages can be sent in several
+    conferences, and therefore I added another tooltype. See the two
+    tooltypes below.
+
+    If SYSOP.1 doesn't exist, no message will be sent. The same if the
+    paths given to the two tooltypes listed below are wrong.
+    
+
+  SYS_PATH.xx=Path
+
+    This the path for the private message to Sysop.xx
+    With or without terminating "/". The xx must be the same number as the
+    one used for Sysop.xx
+    
+    A wrong path results in no message sent in this conference ;)
+      
+
+  EALL_PATH.xx=Path
+
+    Here, you can give one or more path(s) to several conferences where
+    the EALL message must be sent. The xx number stand for one conference,
+    so if you wish to send an EALL message in 4 conferences, you will
+    have EALL_PATH.1 to EALL_PATH.4
+    
+    A wrong path results in no message sent in this conference ;)
+
+
+    e.g.: SYSOP.1=Diogenes
+          SYS_PATH.1=BBS:Amigaworld
+          SYSOP.2=Felix
+          SYS_PATH.2=BBS:LamerLand
+          SYSOP.3=EALL
+          EALL_PATH.1=BBS:Amiga
+          EALL_PATH.2=BBS:PC
+          EALL_PATH.3=BBS:Mac
+          EALL_PATH.4=BBS:Console
+  
+
+  KICK_NAME=Name
+
+    As stated above in this document, the door will kick the new user
+    under certain circumstances if you wish. These are:
+    
+     - The user has been previously member on the system (and so he was
+       deleted and you do not wish to see him again);
+
+     - The user gave an wrong answer to one of your questions. See
+       the tooltypes about interactive analyse for more about this.
+    
+    The door can send a message to you or someone else, if you wish, to
+    tell you about it, with the reason of the drop carrier procedure.
+    Just give the name of the user who must receive the messages here.
+    
+    If this tooltype or the following one does not exist, or if the
+    path given in the following tooltype is wrong, no message will be sent.
+  
+
+  KICK_PATH=Path
+
+    This is the path to the conference where the messages about the
+    drop carrier procedures must be sent. If wrong, no message is sent.
+  
+  
+  PREVIOUS=Kick/Warn/Dummy
+
+    Hehe, another cool one ;) If the user hasn't sysop access, the door will
+    check wether he already answered the questionnaire or not. If well, we
+    can assume he was deleted. If the flag is:
+    
+     - KICK, the door will drop a carrier on the user;
+
+     - WARN, the door will simply tell the user that there's few chances for
+       him to be validated;
+
+     - DUMMY, no action is taken. Peace & love he ! 8-)
+    
+    In the KICK and WARN cases, defaut sentences will be displayed to the
+    user, but you can of course use yours ;) See PREVIOUS.TXT and
+    PREVIOUS.FLAG.
+    
+    Default is KICK.
+
+
+  PREVIOUS.TXT= ...
+
+    Type here the sentence to display, or the full path to a textfile,
+    for the kick/warn previous user procedures. PREVIOUS.FLAG will tell the
+    door what it is.
+
+
+  PREVIOUS.FLAG=Line/Path
+
+    Type here what PREVIOUS.TXT is: a sentence or the path to a text
+    file.
+    
+    Default is LINE.
+
+
+  SHOW_BOARDS=Yes/No      
+
+    At the end of the quest, the door asks the user wether he wants to
+    see other BBS's numbers (those are mine and two other cool boards).
+    If you don't want the door to ask that, simply put NO.
+    
+    Default is YES.
+
+
+  QUESTION.xx= ...
+
+    This is where you type your questions ! You'll have to replace "xx" with
+    a number, as usual.
+
+
+  FLAG.xx=Comment/Question/Dummy
+  
+    Tells the door what QUESTION.xx is cause it can obviously be
+    something else too ;)
+
+     - QUESTION: means it is a... question ;-)  With the consequence
+       that an answer is awaited. Use the LINES.xx tooltype to tell the
+       door how many lines the user will have to answer.
+       
+     - COMMENT: means no answer will be awaited, the string will be
+       displayed as well and then the next question if there is one.
+       
+       It's useful in this case for example:
+       
+        QUESTION.1=What do the following abreviations mean ?
+        FLAG.1=Comment
+        QUESTION.2=FLT
+        QUESTION.2=SR
+    
+     - DUMMY: no action will be taken. This is useful if you want to display
+       a textfile and nothing else using the tooltype TEXT.xx=Path
+    
+    Default is QUESTION.
+
+
+  TEXT.xx=Path
+  
+    This an additional text file you can display just between the
+    question/comment and the answer line. If FLAG.xx=DUMMY, the door
+    only displays this text file and jumps to the next question.
+    
+    Just in case you wanted to have a lovely bear in the middle of the
+    questionnaire or pictures for those who can't read ;-)
+
+
+  LINES.xx=xx
+  
+    Tells the door how many lines to use for an answer.
+
+    e.g.: you ask the names of 3 boards the user calls for the question 4,
+          use LINES.4=3
+
+    Default is 1.
+
+
+
+                      .---------------------------------.
+                      |  Interactive analyse tooltypes  |
+                      `---------------------------------'
+
+
+  COMPARE.xx.yy= ...
+    
+    Here you type an answer you think you could get from the user.
+    Different procedures are possible when the user gives the awaited
+    answer. See REP.xx.yy
+    
+    xx refers to the question number and yy is the number of the awaited
+    answer for this question.
+    
+    A very important point to know is that the door will use YOUR
+    indications to analyse the answers. Therefore, think twice before
+    writing them, the door is limited by your mistakes ;-)
+    
+    The door uses a "Super" super wildcards algorithm in order to be able
+    to work on complete sentences and even paragraphs. It is of course not
+    case sensitive. If you know what super wildcards are, you've already
+    understood how it all works ;)
+    
+    If you think that the user could answer "trader" for example, write
+    *trad* to be sure, and it will not matter if he writes "TRadINg" or
+    whatever ! You can imagine complete sentences: *cod*but*not*good*
+    Or more interesting...:
+    
+      You ask the user wether he has an Amiga. If not, you'll kick him.
+     
+       *no*but*      could mean he will have one...
+    
+    Cut the words the most you can to be sure, there can be lotsa
+    possibilities: coder, coding, code - not, no, nope, nooo - etc.... :)
+    
+    When an answer corresponds to your COMPARE string, no further
+    comparisons are made after the REP procedure !
+    
+    Just "*" will mean... all answers are good.
+
+
+  REP.xx.yy=Comment/Kick/Question
+
+    That's what the door will do IF the corresponding COMPARE string
+    was found in the answer:
+    
+     - COMMENT:  just displays a string or a textfile to the user.
+                 See TEXT.xx.yy tooltype below.
+     
+     - KICK:     displays a string or a text file to the user and drops a
+                 carrier on him.
+                 See TEXT.xx.yy tooltype below. If not specified,
+                 default string is: "ACCESS DENIED."
+     
+     - QUESTION: displays a string or a text file and waits for an answer.
+                 See TEXT.xx.yy and LINES.xx.yy tooltypes below.
+                 It is NOT possible here to display a text file, so
+                 will be the usage of FLAG.xx.yy obsolete.
+     
+    There is no default. If none of these is given, no action will be taken.
+    
+
+  TEXT.xx.yy= ...
+
+    A string or a path to display for the corresponding REP.xx.yy
+    procedure. FLAG.xx.yy tells the door what it is.
+
+
+  FLAG.xx.yy=Line/Path
+
+    Used to tell the door wether TEXT.xx.yy is a string or a textfile
+    to display as usual.
+    
+    Default is LINE.
+
+
+  LINES.xx.yy=xx
+
+    As for LINES.xx, this tells the door how many lines you want for
+    the answer to REP.xx.yy. WARNING: This of course works ONLY if
+    REP.xx.yy=QUESTION (default).
+
+
+
+In practice it's very easy, look at this and get rid of your last
+questions ! ;-)
+
+
+MUST_ANSWER=Yes
+SYSOP.1=Diogenes
+SYS_PATH.1=BBS:Amigaworld
+SYSOP.2=eall
+EALL_PATH.1=BBS:Amigaworld
+KICK_NAME=Diogenes
+KICK_PATH=BBS:Amigaworld
+SHOW_BOARDS=No
+#
+QUESTION.1=What is your speciality ? (Coder/Gfx/Music/Trader)
+COMPARE.1.1=*cod*
+COMPARE.1.2=*gfx*
+COMPARE.1.3=*grap*
+COMPARE.1.4=*mus*
+COMPARE.1.5=*trad*
+REP.1.1=Question
+REP.1.2=Comment
+REP.1.3=Comment
+REP.1.4=Comment
+REP.1.5=Comment
+TEXT.1.1=In which language do you code ?
+TEXT.1.2=Kewl, I draw like a pig ;-)
+TEXT.1.3=Kewl, I draw like a pig ;-)
+TEXT.1.4=Send me your best mod when you get a chance !
+TEXT.1.5=Cool !
+#
+QUESTION.2=List the top 3 boards you call (3 lines)
+LINES.2=3
+#
+QUESTION.3=What do the following abreviations stand for ?
+FLAG.3=Comment
+#
+QUESTION.4=PDX
+COMPARE.4.1=*Paradox*
+COMPARE.4.2=*
+REP.4.1=Comment
+REP.4.2=Comment
+TEXT.4.1=Correct.
+TEXT.4.2=Wrong.
+FLAG.4.1=Line
+FLAG.4.2=Line
+#
+QUESTION.5=Do you have an Amiga ?
+COMPARE.5.3=*no*
+REP.5.1=Kick
+TEXT.5.1=Access DENIED.
+FLAG.5.1=Line
+#
+QUESTION.6=Can you EFFICIENTLY support this board ?
+COMPARE.6.1=*no*
+REP.6.1=Kick
+TEXT.6.1=BBS:Screens/Node1/Kick.Txt
+FLAG.6.1=Path
+
+
+
+                       .-----------------------------.
+-----------------------|  Last words about the door  |-----------------------
+                       `-----------------------------'
+
+
+
+ The door saves the questions, comments & answers only, your logos, ansis,
+etc... won't appear in the file. It would take to much disk space and time.
+
+ When a user looses carrier, the answer file is deleted, so the door
+won't detect he already called and won't kick him the call after. At the
+opposite, when the doors kicks someone, she DOESN'T delete the file ;-)
+
+ The door will normally save 2 files: UserName.ans & UserName.mes. The
+ANS file will contain the user's answers and the MES file will be the
+last message written by the user. I can't swear this file will exist
+since you can disable this option (!) and the Quest can be aborted at any
+moment.
+
+
+
+
+                             .----------------.
+-----------------------------|  Future plans  |------------------------------
+                             `----------------'
+
+
+
+ * Possibility to tell the door another directory to save the answers
+
+ * Users with EDIT_ACCESS enabled will have the possibility to edit the
+   questionaire too ! This means that ya won't have to edit the icon's
+   tooltypes anymore if you hate it ;)
+
+ * Users with EDIT_ACCESS enabled will have the possibility to delete
+   answers file too !
+
+ * Multi-Questionaire possible to offer several languages. I was just lazy
+   today ;)
+
+ * A POINTS system ! The sysop will be able to set points for each question
+   and the door will make a total of the points obtained by the user.
+   This way, the sysop won't even have to read the answers ! If you see
+   that the user got 0, then you can assume he's not good enuff ;)
+   Or even let the door make statistics and decide alone !
+
+ * Random questions... to avoid "hackers" and lamers who make an ascii
+   capture of your questions and come back later.
+
+ * Your suggestions ! ;)
+
+
+
+
+                               .-------------.
+-------------------------------|  Greetings  |-------------------------------
+                               `-------------'
+
+
+
+ And as usual, here follow my very short & fast personal greetings :)
+
+ In no fucking order ¡
+
+
+                           Big Boss/Fairlight
+                           John Yaya/LSD
+
+
+ The others won't even read this texfile ;-)
+

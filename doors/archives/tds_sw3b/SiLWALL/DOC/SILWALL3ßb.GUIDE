@@ -1,0 +1,208 @@
+@database Sil-Wall v3.ßb docs
+
+@remark $Ver: v3.ßb (06-07-94)
+@remark published by TDS
+@remark amigaguide transformation by d-Zire/doodles^shock
+
+@node "MAiN" "SiL-WALL v3.ßb Documents"
+
+ =========================================================================
+                            - SiL-WALL v3.ßb -
+ =========================================================================
+
+         Written By THE SiLENCER of doodles^shock^equinox in 1994
+
+                          Release date: 06-07-94
+
+                             @{"[     ABoUT     ]"link "About"}
+                             @{"[   FEATURES!   ]"link "Features"}
+                             @{"[ iNSTALLATioN! ]"link "Installation"}
+                             @{"[    CoNTACT    ]"link "Contact"}
+
+ =========================================================================
+                       (c)-94 by The Silencer / TRSi
+ =========================================================================
+       AMiGAGUiDE TRANSFoRMATioN AND DESiGN by d-Zire/doodles^shock
+
+
+@endnode
+
+@node "About" "About SiL-WALL v3.ßb"
+
+                               @{"[ MAiN MENU ]"link "MAiN"}
+                               @{"[ NEXT PART ]"link "Features"}
+
+                         - About SiL-WALL v3.ßb -
+
+ This is a simple WALL door which should be run when a user logs in
+ using the MCI Launch Door command ~CC_ in for example in the BBS:Bull.txt
+
+ Ex:
+
+         ---------------/STARTCUT/------
+         ~
+         ~CC_SiLWALL
+         ---------------/ENDCUT/--------
+
+ This version is a beta release.
+ The wall is out in version v2.50 but the v3.xx I'm working on
+ has many new features, most of them is ready now so I decided
+ to release this as the other stuff is gonna be a bit delayed
+ coded. Summertime !
+
+ And a BIIIIIIG, HUUUUUUUUGE, MAAAAAAAAAAAAAJOR FUCK OFF to the
+lame dude that used a text editor and changed the name of this door
+to BIG-WALL instead of SiL-WALL and put his name in my place.
+
+Also a fuck you to Arkadian/Infernal or was it Mel/Infernal  who got the
+source code to an ealry early version of this door and then coded in a
+backdoor in it and released it on some small boards.
+But it's wiped out now.
+
+So to be sure to get the the best and safest come to me directly
+and get an updated, maybe registred version of all my tools.
+
+Reachable at my board RePuLsE, addy at the end..          / The Silencer
+
+@endnode
+
+@node "Features" "Features in SiL-WALL v3.ßb"
+
+                               @{"[ MAiN MENU ]"link "MAiN"}
+                               @{"[ NEXT PART ]"link "Installation"}
+
+                        - Features in SiL-WALL v3.ßb -
+
+ This version features Relative Viewing of Quoted lines!
+ That means that if a user has his NumLines set at 29 he will see
+ the 22 last lines of the 100 quoted lines in the datafile.
+ So if a user with Interlace or whatever and with his NumLines set
+ to 60 he will see the 53 last lines of the 100 lines in the datafile!
+ When the limit of 100 lines fills up it will be cut and truncated
+ from the top.
+
+                         TOOLTYPES in SiLWALL.info
+
+                               @{"[ CHEATMODE   ]"link "Cheatmode"}
+                               @{"[ LAMER.x     ]"link "Lamer"}
+                               @{"[ Callerslog  ]"link "Callerslog"}
+                               @{"[ Force_Write ]"link "Force_Write"}
+
+@endnode
+
+@node "Cheatmode" "Tooltypes"
+
+ In the SilWALL.info there is a tooltype named CHEATMODE.
+ The current setting is OFF. That means that if a User doesn't want
+ to be anonymous his name will be printed after his quote in YELLOW
+ color. That way nobody can 'cheat' and using the Anonymous option
+ write another users handle in that place.
+ But with CHEATMODE=ON the handles will be written the same color as
+ the quotes which enables troublemakers to write shit and put another
+ dudes handle in their place, can be quite amusing but if they start
+ to write shit about the Sysop.. well :) you catch my drift!
+ Check the 2 last quoted lines in the SiLWALL.iff picture to see
+ what it looks like with CHEATMODE activated.
+@endnode
+
+@node "Lamer" "Tooltypes"
+
+If you a user writes shit on the wall that you don't like, may it
+be nazi or personal stuff you can easily get rid of him
+by not allowing him on the wall.
+
+LAMER.1=Borre
+LAMER.2=Macroman
+LAMER.3=Dracula Shark
+LAMER.x= etc..
+
+You can have as many LAMER.num as you like..
+If they try to write on the wall they will get the message:
+
+** Access Denied **
+@endnode
+@node "Sysop" "Tooltypes"
+
+SYSOP.1=The Silencer
+SYSOP.2=d-Zire
+
+If you are in this list then you can write a line on the wall
+in another color wich will get more attention.
+You can for example write stuff conserning your board here like.
+DO NOT UPLOAD BLABLA.DMS coz it's a fake or whatever.
+@endnode
+@node "Callerslog" "Tooltypes"
+
+If you write CALLERSLOG=ON, Silwall will write the lines in the
+Callerslog aswell. 
+
+@endnode
+@node "Force_Write" "Tooltypes"
+If you wanna start from scratch on you wall you can delete the datafile
+and put this feature ON.
+It will then force the user of the door to write SOMETHING. hehe
+There is a way out of it and that is to just press return on
+the editor line.
+@endnode
+
+
+
+
+
+@node "Installation" "Installing Sil-WALL v3.ßb"
+
+                               @{"[ MAiN MENU ]"link "MAiN"}
+                               @{"[ NEXT PART ]"link "Package"}
+
+                       - Installing Sil-WALL v3.ßb -
+
+ To install this put the BBSCmd icon into it's place, define
+ your desirable location of the door in here. Now the doorlocation
+ is DOORS:WALL/SiLWALL. But you may put it wherever you like. The
+ datafile for the door with all the quotes in will be named after
+ the name you give the door..
+
+ Ex.
+         DOORS:WALL/SiLWALL      <- door
+         DOORS:WALL/SiLWALL.dat  <- datafile
+
+ or..    DOORS:WALL.020          <- door
+         DOORS:WALL.020.dat      <- datafile
+
+ Don't forget to name the SiLWALL.info containing the config tooltypes
+ to whatever you name the door.. If you are gonna use the SiLWALL.020
+ file rename the DOORS/SiLWALL.info to DOORS/SiLWALL.020.info.
+
+
+ To launch this door from a bulletin file, ex BBS:Bull.txt then use
+ the MCI Launch Door command ~CC_ like this...
+
+  Ex:
+          ---------------/STARTCUT/------
+          ~
+          ~CC_WALL
+          ---------------/ENDCUT/--------
+@endnode
+
+@node "Contact" "For technical support and/or other quality /X doors contact me at:"
+
+                               ·° °     °
+                               : °     ° °·
+     TDS_WHQ                   ¦ REPULSE! :                     EQX_EHQ
+                               |   _____  ¦
+     GdH_______________________|__/    /__|_____    __________________g'S
+      _/   _____/   ___________  ¬\   /¬\      /___/   _____/   _____/
+     /    __  ¬\   ___)_/     /    \ /   \    /  ¬\____   ¬\   ___)__
+    /      /    \_ /    ¬\_ _______//     \_ /     \_ /     \_ /    ¬\_
+    \_____/      /__      /_/ _______      /__      /__      /__      /
+          \_____/  \_____/     |    \_____/  \_____/  \_____/  \_____/
+                               ¦          |
+                               :° °     ° ¦  + 4 6 - 2 7 0 - 1 2 1 3 8
+                               . °     ° °:
+                                          .  CøRE øF THE UNDERGRøUND !
+
+
+                          Current NUP: AMFETAMiN
+
+@endnode
+

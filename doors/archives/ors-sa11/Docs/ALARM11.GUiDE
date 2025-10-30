@@ -1,0 +1,331 @@
+@DATABASE "ALARM11.ENGLiSH.GUiDE"
+@REMARK .------------------------------------------------------------------.
+@REMARK | This document is written in AmigaGUiDE format, so please read it |
+@REMARK | with AmigaGUiDE or your favourite guide reader.... ciao now...   |
+@REMARK `------------------------------------------------------------------'
+@REMARK $VER: SYSOP-ALARMiNATOR V1.1
+@WiDTH 80
+@NODE MAiN "Guide to iCH SYSOP-ALARMiNATOR V1.1 WRiTTEN BY MuMu OF OSiRiS"
+                                   /\            /\            
+               ___________________/  \__________/  \__________
+               \_  _   _    _    /  __   _     /  __    _    /
+               /   |   \    |___/\__/\  _|   _/\__/\    |___/_
+              /    |    \____     \   \  \      /   \____     \
+              \    |    /   /     /   /  |\    /    /   /     /
+               \_______/_________/___/___| \  /____/_________/
+                                            \/         ©JoKER
+                            ¿S pROUD tø pRESENT:
+
+                 >»»»»> SYSOP-ALARMiNATOR VERSiON 1.10 <««««<
+
+                          @{"-*-   iNTRODUCTiON   -*-" LiNK iNTRODUCTiON}
+                          @{"-*-     FEATURES     -*-" LiNK FEATURES}
+                          @{"-*-   iNSTALLATiON   -*-" LiNK iNSTALLATiON}
+                          @{"-*-  EDiT TOOLTYPES  -*-" LiNK TOOLTYPES}
+                          @{"-*-  PRiVATE SCREEN  -*-" LiNK SCREENS}
+                          @{"-*- TROUBLE-SHOOTiNG -*-" LiNK PROBS}
+                          @{"-*-    WHO DiD iT    -*-" LiNK CREDiTS}
+                          @{"-*-     HiSTORY!     -*-" LiNK HiSTORY}
+                          @{"-*-    GREETiNGS!    -*-" LiNK GREETiNGS}
+                          @{"-*-    OUR SLOGAN    -*-" LiNK SLOGAN}
+@ENDNODE
+
+@NODE iNTRODUCTiON "iNTRODUCTiON OF SYSA VERSiON 1.1"
+
+SYSOP-ALARMiNATOR VERSiON 1.1 iS A TOOL WHO iNFORMS THE SYSOP ABOUT
+CERTAiN USERS WHEN THEY ARE LOGGiNG iNTO THE BBS.
+iT HAS @{"FEATURES" LiNK FEATURES} THAT OTHER TOOLS DOESN'T HAVE.
+
+@ENDNODE
+
+@NODE FEATURES "FEATURES OF SYSA VERSiON 1.1"
+
+i DECiDED TO CODE THiS TOOL BECAUSE i LiKED THE USER-ALARMiNATOR V1.0
+RELEASED BY ABSTURZ-DESiGN LONG TiME AGO. THE USER-ALARMiNATOR V1.0
+FROM ABSTURZ-DESiGN iS VERY NiCE, BUT iT HAS SOME FEATURES MiSSiNG.
+iT ONLY LOOKS iNTO A CONFiG-FiLE FOR THE USER-NAMES AND THEN WHEN iT
+FiNDS THE USER WHiCH iS LOGGiNG iNTO YOUR BBS SiMPLY PLAYS A SAMPLE
+TO iNFORM THE SYSOP.
+
+iT HAS NO CONFiG-FiLES AND WORKS FULLY WiTH TOOL-TYPES iN THE iCON.
+
+MY VERSiON HAS LOTSA MORE OPTiONS. iT LOOKS FOR THE FOLLOWiNG THiNGS:
+
+ 1. USER-NAME
+ 2. ACCESS-AREA
+ 3. ACCESS-LEVEL
+
+    OR ANY COMBiNATiON OF THOSE...
+
+
+iF YOU WANT TO SEND A PERSONAL MESSAGE ALSO TO THE USER EVEN WHEN YOU
+DON'T WANT TO ALERTED WHEN HE iS LOGGiNG ON... NO PROBLEM!
+
+SYSOP-ALARMiNATOR V1.1 LOOKS WHENEVER THE TOOL iS STARTED FOR A SPECiAL
+TEXTFiLE WHiCH iS ONLY FOR THE USER WHO iS LOGGiNG ON.
+
+LOOK iNTO @{"PRiVATE SCREEN" LiNK SCREENS} FOR MORE iNFORMATiON.
+
+AND NOW i THiNK i GAVE YOU ENOUGH REASONS TO iNSTALL SYSA V1.1 :)
+
+@ENDNODE
+
+@NODE iNSTALLATiON "iNSTALLATiON OF SYSA VERSiON 1.1"
+
+iNSTALLATiON TO @{"AMi EXPRESS V2.xx" LiNK AMiEXPRESSV2.xx}.
+
+iNSTALLATiON TO @{"AMi EXPRESS V3.xx" LiNK AMiEXPRESSV3.xx}.
+
+@ENDNODE
+
+@NODE AMiEXPRESSV2.xx "iNSTALLATiON TO AMi EXPRESS V2.xx"
+
+TO iNSTALL THE DOOR LOAD UP THE CUSTOMCOMMANDS (/X V2.2x OR BELOW) OR
+SYS.CMD (/X V2.3x) AND ADD THE FOLLOWiNG LiNE TO THE LiST.
+
+
+          11 SPACES iN         
+          |
+-------------------------------------------          
+*ALARM    RM010MODULES:MM_TOOLS/ALARM/ALARM
+-------------------------------------------
+||        |||  |           
+||        |||  ` 'MODULES:MM_TOOLS/ALARM/ALARM' iS THE LOCATiON OF
+||        |||     THE FiLE.
+||        |||
+||        ||` 001 THE MiNiMUM ACCESS TO USE THiS DOOR. CHANGE iT TO WHAT
+||        ||      YOU LiKE.
+||        ||
+||        |` 'M' FOR A MULTiNODE BBS ('S' FOR A SiNGLE NODE BBS).
+||        |
+||        ` 'R' FOR A REXX DOOR WHiCH WiLL USE THE 'REXXDOOR'-UTiL.
+||
+|`COMMAND TO START THE DOOR.
+|
+`-RETARD OPTiON. TO MAKE SURE THEY ONLY USE 'ALARM' & ONLY  'ALARM'
+  TO GET THE DOOR TO COME UP. iF NOT USED, THiNGS SUCH AS 'ALARMO'
+  AND 'ALARMATRON' WOULD STiLL BRiNG UP THE DOOR.
+
+
+  USE THE LiNE BETWEEN THE LiNES ONLY. THE OTHER PARTS ARE JUST AN
+  EXPLANATiON TO MAKE SURE YOU KNOW WHAT EACH PART iS DOiNG (SiNCE
+  NOONE WOULD TELL ME BACK iN THE DAYS WHERE i DiDN'T KNOW WHAT WAS
+  GOiNG ON!)  
+
+  NOW COPY THE DiRECTORY 'MODULES' FROM THE LHA-ARCHiEV TO YOUR BBS.
+
+  AT LAST EDiT THE @{"TOOLTYPES" LiNK TOOLTYPES} OF 'ALARM.iNFO'. YOU
+  WiLL FiND iT iN 'BBS:MODULES/MM_TOOLS/ALARM/'.
+
+
+  NOW ADD THE FOLLOWiNG TO YOUR LOGON.TXT AND LOGON.TXT.GR
+
+  --------------CUT HERE----------------
+  ~CC_ALARM
+  --------------CUT HERE----------------
+
+ 
+  THAT'S ALL...
+
+@ENDNODE
+
+@NODE AMiEXPRESSV3.xx "iNSTALLATiON TO AMi EXPRESS V3.xx"
+
+  COPY ALL THE FiLES FROM THE LHA-ARCHiEV TO YOUR BBS AND
+
+  ADD THE FOLLOWiNG TO YOUR LOGON.TXT AND LOGON.TXT.GR
+
+
+  --------------CUT HERE----------------
+  ~CC_ALARM
+  --------------CUT HERE----------------
+
+
+
+  AT LAST EDiT THE @{"TOOLTYPES" LiNK TOOLTYPES} OF 'ALARM.iNFO'. YOU
+  WiLL FiND iT iN 'BBS:MODULES/MM_TOOLS/ALARM/'.
+
+@ENDNODE
+
+@NODE TOOLTYPES "HOW TO EDiT THE TOOLTYPES?"
+
+  ACSTYPE=<number>                       THE <number> DEFiNES FOR WHAT THE
+                                         SYSOP WANTS TO BE ALERTED.
+                                         1 = NAMES ONLY
+                                         2 = ACCESS-AREA ONLY
+                                         3 = ACCESS-LEVEL ONLY
+                                         4 = NAMES & ACCESS-AREA
+                                         5 = NAMES & ACCESS-LEVEL
+                                         6 = ACCESS-AREA & ACCESS-LEVEL
+                                         7 = NAMES & ACCESS-AREA &
+                                             ACCESS-LEVEL
+
+                                         E.G.: ACSTYPE=1 <- iS LOOKiNG
+                                                            FOR USER-NAME
+                                                            ONLY !!!
+
+
+  ACSLEVEL=<number>                      THE <number> DEFiNES THE 
+                                         ACCESS-LEVEL OF THE USER BY WHiCH
+                                         THE SYSOP WANTS TO BE ALERTED WHEN
+                                         THiS OPTiON iS CHOSEN.
+
+                                         E.G.: ACSLEVEL=200
+
+
+  ACSAREA=<area>                         THE <area> DEFiNES THE ACCESS-AREA
+                                         OF THE USER BY WHiCH THE SYSOP
+                                         WANTS TO BE ALERTED WHEN THiS
+                                         OPTiON iS CHOSEN.
+
+                                         E.G.: ACSAREA=OSiRiS
+
+
+  USER.01=<user>                          THE <user> DEFiNES THE USER-NAME BY
+                                         WHiCH THE SYSOP WANTS TO BE ALERTED
+                                         WHEN THiS OPTiON iS CHOSEN.
+
+                                         E.G.: USER.01=MUMU
+                                               USER.02=SPiDER
+                                               USER.03=HELiON
+
+                                         !!! YOU CAN ADD AS MANY USERS AS
+                                             YOU WANT !!!
+
+
+  SAMPLECONFiG=<path&options>            THE <path&options> DEFiNES THE PATH
+                                         OF THE SAMPLE-PLAYER AND THE SAMPLE
+                                         WiTH iTS OPTiONS WHiCH WiLL BE
+                                         PLAYED WHEN THE SYSOP iS ALERTED.
+
+  E.G.:
+
+  SAMPLECONFiG=SYS:C/RAWPLAY 430 63 BBS:MODULES/MM_TOOLS/ALARM/ALARM.SAMPLE
+
+  THAT SHOULD BE ALL FOR NOW...
+
+
+@ENDNODE       
+
+@NODE SCREENS "HOW TO BUiLT iN THE PRiVATE SCREENS?"
+
+iF YOU WANT TO SEND A PERSONAL MESSAGE TO A USER EVEN WHEN YOU
+DON'T WANT TO ALERTED WHEN HE iS LOGGiNG ON... NO PROBLEM!
+
+SYSOP-ALARMiNATOR V1.1 LOOKS WHENEVER THE TOOL iS STARTED FOR A SPECiAL
+TEXTFiLE WHiCH iS ONLY FOR THE USER WHO iS LOGGiNG ON.
+
+MAKE A TEXTFiLE THAT SHOULD BE SHOWN TO THE SPECiAL USER AND NAME HiM
+'ALARM.USER.<number>'. THE <number> iS THE SLOTNUMBER OF THE USER WHO
+SHOULD GET THE TEXTFiLE.
+
+EXAMPLE: 'ALARM.USER.3'    <--- NOW THE USER WiTH THE SLOTNUMBER 3
+                                WiLL GET THE TEXTFiLE.
+
+ !!! ATTENTiON !!!
+
+MAYBE YOU JUST WANT TO ANNOY A USER WiTH A PERSONAL TEXTFiLE BEFORE
+DELETiNG HiM. AFTER YOU DELETED THE USER iT MAY BE HAPPEN THAT ANOTHER
+USER HAS NOW THE SAME SLOTNUMBER WHiCH THE DELETED USER HAD. NOW THE NEW
+USER WiLL GET THE PRiVATE TEXTFiLE. TAKE CARE OF THE PRiVATE TEXTFiLES
+SO NOBODY WiLL GET A TEXTFiLE WHO SHOULD NEVER GET ONE.
+
+NOW COPY THE 'ALARM.USER.<number>' iNTO 'BBS:MODULES/MM_TOOLS/ALARM/'.
+
+THAT SHOULD BE ALL...
+
+@ENDNODE
+
+@NODE CREDiTS "CREDiTS FOR SYSA V1.1"
+
+   iDEA          : MuMu øf OSiRiS
+   
+   AREXX-CODiNG  : MuMu øf OSiRiS
+   
+   DOCUMENTATiON : MuMu øf OSiRiS
+
+   ANSi-ARTiST   : JOKER øf TAURUS
+
+   BETA TESTiNG  : MuMu   - KEY WEST - OSiRiS EHQ - SCANDAL DiST SiTE
+                   
+
+@ENDNODE
+
+@NODE GREETiNGS "FRiENDSHiP RULEZ"
+
+               GREETiNGS FROM MuMu TO THE FOLLOWiNG PEOPLE:
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CREEPY/TFP          - HOW iS iT GOiN'?
+GANDALF/SCL         - ARE YOU DEAD?
+                      i'VE HEARD YOU HAVE A GiRL-FRiEND NOW
+JOKER/TAU           - THANX FOR THE ALARM-ANSi!
+RAF/TFP             - STiLL UPSET, DUDE?
+MURDOC/NEON         - i WiSH YA FUN WiTH YOUR GROUP.
+JESTER/POD          - THANX FOR YOUR HELP iN AREXX.
+ 
+
+                  AND A BiG HELLO TO ALL OSiRiS MEMBERS !
+
+@ENDNODE
+
+@NODE PROBS "DO YOU HAVE ANY PROBLEMS?"
+
+               FOR TROUBLE-SHOOTiNG OR LATEST UPDATES CALL:
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                 sYSOP: MuMu    «·»    1 nODE - 16.8k DHST       
+      - -- --- --------------------------------------------- --- -- -
+               ___                 \          /                      
+        ______/  /___  __  __    ___\        /____  _______________  
+        \_   /  /__  \/  \/  \   \   \      /___  \/  ____/\__    /  
+         | _/ _/ _/  /   /   /    \  /\    /  _/  /\____ \_   \__/   
+         | \  \  \__/\__    /  ·   \   \  /   \__/|    /  /     \    
+         |__\  \___________/        \/\  /________|______/|      \   
+             \__\                      \/              EaZ|_______\  
+                  OSiRiS EHQ & SCANDAL DiSTRiBUTiON SiTE             
+      - -- --- --------------------------------------------- --- -- -
+
+                    » aMiGA · /X · cONSOLE · mODULES «               
+
+               aMiXPRESS v3.XX   ø   nUP & sYSTEM pW nEEDED          
+
+                    -:) cALL nOW fOR a goOD rATiO (:-                
+
+@ENDNODE
+
+@NODE SLOGAN "OUR SLOGAN..."
+
+                                   /\            /\            
+               ___________________/  \__________/  \__________ 
+               \_  _   _    _    /  __   _     /  __    _    / 
+               /   |   \    |___/\__/\  _|   _/\__/\    |___/_ 
+              /    |    \____     \   \  \      /   \____     \
+              \    |    /   /     /   /  |\    /    /   /     /
+               \_______/_________/___/___| \  /____/_________/ 
+                                            \/         ©JoKER
+
+                        - WE DON'T WANNA BE THE BEST -
+ 
+                       - WE JUST WANNA HAVE MORE FUN! -
+
+@ENDNODE
+
+@NODE HiSTORY "THE HiSTORY OF 'SYSOP-ALARMiNATOR'"
+
+                     THE HiSTORY OF 'SYSOP-ALARMiNATOR'
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+VERSiON 0.1 - 0.9 : iNTERNAL BETA-RELEASES
+
+VERSiON 1.0       : FiRST PUBLiC RELEASE
+                    - NO BUGS KNOWN -
+
+VERSiON 1.1 -     : PUBLiC RELEASE
+                    - TOOLTYPE FUNCTiON REWRiTTEN - NOW TO 50% FASTER
+                    - NO EXTERNAL PROGRAMS NEEDED
+
+
+                     !!! FUTURE VERSiONS WiLL FOLLOW !!!
+
+@ENDNODE

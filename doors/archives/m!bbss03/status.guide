@@ -1,0 +1,160 @@
+@DATABASE "BB-Stats Documentation"
+@AUTHOR "BiLBo BaGGIns/Motion"
+@REMARK $VER: "BB-Stats v0.3 (09-08-94) by BiLBo BaGGIns/Motion"
+@HEIGHT 30
+@WIDTH 78
+@INDEX main
+@Node main "Guide to BB-Stats v0.3 by BiLBo BaGGIns/Motion"
+
+  .%%%................%%%....%%%..........%%/\%%.%%%......%%%....%..%....%%
+ .%%.%%%%%%%%%%%%%%%%%%.%%%%%%.%%%%%%%%%%%%/  \%%%.%%%%%%%%.%%%%%%%%%%%%%%.
+ %%/(_________________/(_____/(___________(____)%/(______%%|\___%.____.%%.%
+ %%\                 /      ~\\             /  |//      ~\%|.   \|   ~|%%%.
+ .%%\  /\           //   |:   \\  ..   .   /   |/    |    \||    \    |%%%%
+  .%%\/            //    |.    \_/||   |\_/|   |     |.    \|         |%%%.
+ ..%%|.  (\   /)   \\          /%%|:   |%%|:   |\          /:   \     |%%. 
+ ..%%||   \\_//     \____.    /%%%|_   |%%|.___|%\__.     /|.   |\    |%%%.
+ ====||    \==\\   /=====|_  /======\__|==|/========|__._/=|____|=\___|====
+ %%%%|______\..\\//%%%%%%%%)/%%%%%%%%%%%%%:%%%%%%%%%%%%Y%%%%%%%%%%%:%%%%%%%
+ %%%%%%%%%%\/%%%\/%%%%%%%%%°%%%%%%%%%%%%%%.%%%%%%%%%%%%:%%%%%%%%%%%.%%°Adi·
+   ·%%%%%%%%%%%%%%%°·····°%%%°··········°%%%°·········°%%°········°%°··
+        +-------------------» PRESENTS IN 1994 «-------------------+
+
+                               BB-Stats v0.3
+
+                        dONE bY BiLBo BaGGIns/MoTioN
+
+                     @{"          iNTRODUCTION          " link "Intro"}
+                     @{"          iNSTALLATION          " link "Install"}
+                     @{"          iNSTRUCTIONS          " link "Instr"}
+                     @{"          fUTURE pLANS          " link "Plans"}
+                     @{"              bUGS              " link "Bugs"}
+                     @{"             gREETS             " link "Greet"}
+                     @{"           lAST wORDS           " link "Last"}
+                     @{"            cALL nOW            " link "Call"}
+
+
+@endnode
+@Node Intro "---> Introduction <---"
+
+ Sigma Express from the newer versions on started an system-door called
+ status everytime a user loggs on after the mailscan. At the begining we
+ started there the who door coz we had no cewl status door in C. After
+ some days I was so happy with the who command, that I didn`t want to miss
+ it so I decided to code a combined who and status door.
+
+ Features:
+ - showing the Users status and a who
+ - nice designs (thx to Treach)
+ - C for more speed
+ - running on Sigma Express and /X 2.xx only
+ - no backdoors as usually from me
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+@Node Install "---> Installation <---"
+
+ Extract the whole Status archive to your SYSTEMS drawer in BBS:.
+ That`s all.
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+@Node Instr "---> Instruction <---"
+
+ The door will be started everytime a user loggs in and show his Status
+ and all the other Users that are already logged in.
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+
+@Node Plans "---> Future Plans <---"
+
+ - no future plans at the moment
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+
+@Node Bugs "---> Bugs <---"
+
+ No known Bugs at the moment. This version runned on Deep Space Nine
+ for 2 monthes.
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+
+@node Greet "---> Greetings <---"
+
+                              Greetings go to
+          Sisko/MoTioN....................trading all night&days
+          Spider/Osiris.................thx for help in coding C
+          Giants/TYT.................thx for ya sources and help
+          tHe aDDiCt..............................keep on coding
+
+          BBC/MTN...Andy/MTN...E.F.A./PDX...Eazy-E/ORS...jMS/MTN
+          Disque Bleu/MTN....Striker/ORS....Fnord/MTN......Q/MTN
+          Calypso/GOD^LGC.....\X/arhawk/LGC....Schwabenpower/MTN
+          Treach...Sagor/HLM...Tango/ORG...Jordan...............
+
+                       all MoTioN members worldwide
+                     and all the rest I have forgotten
+
+           Thanx for the help on releasing this door must go to
+          Treach..........................................dezign
+
+                            and my testboards
+   dEEP sPACE nINE       - MoTioN GHQ (busted)        S!X - Sysop: sISKO
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+
+@Node Last "---> Last Words <---"
+
+                      Other MoTioN /X tools avaible:
+
+ Multi-Diz....................New DIZ system for all files.............Andy
+ News In All Conferences......Showing `n s u` in all conferences.......Andy
+ On-Line-Message..............Sending online message...................Andy
+ OnLineBulletinsUpdater.......Updating bulls if ya wanna se it.........Andy
+ PlaY-PeN-PaRt-UpLoAD-MoVeR...Moves files after a system crash.........Andy
+ LHADo........................LHA-Checker/Stripper/Adder................BBC
+ Textstripper.................Text-Stripper/Adder.......................BBC
+ Dream Status.................Status door.....................BiLBo BaGGins
+ StarTrek.....................Star Trek comment door..........BiLBo BaGGins
+ Frontstatus..................Frontend door...................BiLBo BaGGins
+ Userlist.....................Creates userlist bulletin.......BiLBo BaGGins
+ FileIDAdd....................Add your line to FileID.........BiLBo BaGGins
+ User Answer Shower...........Shows the new user answers......BiLBo BaGGins
+ SendAnswer...................Sends User Answer to Sysop......BiLBo BaGGins
+ BB-Stats.....................System STATUS for S!X...........BiLBo BaGGins
+
+                      MoTioN -  The Force that moves
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+
+@Node Call "---> Call Now <---"
+
+                          MoTioN boards worldwide:
+
+ FASTWAY             WHQ  6 Ndz RD: +49-7-BUSTED!!!! DST 21.6  Andy
+                          2 Ndz RD: +49-7-BUSTED!!!! ISDN
+ DEEP SPACE NINE     WHQ        #1: +49-7-BUSTED!!!! V32.bis   Sisko
+                          2 Ndz RD: +49-7-BUSTED!!!! DST 21.6
+                          2 Ndz RD: +49-7-BUSTED!!!! ISDN
+ SANITARIUM          GHQ        #1: +49-8-BUSTED!!!! DST 28.8  jMS
+                                #2: +49-8-BUSTED!!!! DST
+                                #3: +49-8-BUSTED!!!! V32.bis
+ WILD MARIA          GHQ        #1: +49-7-Ask-For-IT V32.bis   Joe Cool
+                                #2: +49-7-Ask-For-IT V32.bis
+ PARANOID ILLUSION  USHQ        #1:  +1-203-859-0335 DST       Buzz
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode

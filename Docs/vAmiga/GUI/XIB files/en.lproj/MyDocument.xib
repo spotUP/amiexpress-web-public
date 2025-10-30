@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24128" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24128"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="MyController">
+            <connections>
+                <outlet property="activityBar" destination="212" id="Enu-fB-P92"/>
+                <outlet property="activityInfo" destination="oNV-mZ-JGc" id="HDY-Cq-tSN"/>
+                <outlet property="activityType" destination="0go-7K-IPf" id="caX-Zm-vUc"/>
+                <outlet property="cmdLeftIcon" destination="dpd-DV-6eT" id="Ixb-aG-SB3"/>
+                <outlet property="cmdRightIcon" destination="1Ke-5u-05P" id="G6a-dT-XWP"/>
+                <outlet property="cylSlot0" destination="f19-16-42W" id="qi6-Qi-Wnz"/>
+                <outlet property="cylSlot1" destination="f7g-mT-LE7" id="L3Z-kO-mNv"/>
+                <outlet property="cylSlot2" destination="P62-wC-T1P" id="CiL-FT-qxc"/>
+                <outlet property="cylSlot3" destination="8yk-0g-1sA" id="TYh-w7-4ZU"/>
+                <outlet property="haltIcon" destination="46l-A8-v8C" id="IN7-Hf-03C"/>
+                <outlet property="iconSlot0" destination="D1i-Ep-fTN" id="ltM-hh-lzG"/>
+                <outlet property="iconSlot1" destination="gkQ-Nr-aDz" id="vRa-jh-S2U"/>
+                <outlet property="iconSlot2" destination="BLY-CO-Zam" id="nXb-Q0-GPM"/>
+                <outlet property="iconSlot3" destination="Cg3-r8-KR5" id="66V-MN-kd5"/>
+                <outlet property="ledSlot0" destination="iKN-RM-vsV" id="Qa7-gd-iRi"/>
+                <outlet property="ledSlot1" destination="K68-Xr-JJH" id="Cif-l6-Km5"/>
+                <outlet property="ledSlot3" destination="wnl-Bi-Ego" id="1Bn-5L-EfU"/>
+                <outlet property="letSlot2" destination="Pjc-SJ-rsn" id="TXZ-da-aer"/>
+                <outlet property="metal" destination="DD4-5B-w9h" id="rGV-rL-MLo"/>
+                <outlet property="muteIcon" destination="9cr-37-7RV" id="AhN-q7-1qK"/>
+                <outlet property="powerLED" destination="1208" id="hey-Hi-zTq"/>
+                <outlet property="serverIcon" destination="cdG-NT-T3J" id="Oxi-mf-eZE"/>
+                <outlet property="speedStepper" destination="6l7-xP-CGV" id="81R-1K-SNm"/>
+                <outlet property="trackIcon" destination="iho-fa-H5O" id="esY-x7-awJ"/>
+                <outlet property="warpIcon" destination="1052" id="QGs-ln-NvN"/>
+                <outlet property="window" destination="5" id="2164"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <window title="Window" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" restorable="NO" releasedWhenClosed="NO" animationBehavior="default" tabbingMode="preferred" toolbarStyle="expanded" id="5" userLabel="Window">
+            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
+            <rect key="contentRect" x="0.0" y="0.0" width="800" height="626"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1496" height="933"/>
+            <value key="minSize" type="size" width="400" height="314"/>
+            <view key="contentView" id="6">
+                <rect key="frame" x="0.0" y="0.0" width="800" height="626"/>
+                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                <subviews>
+                    <button toolTip="Connect / Disconnect drive" tag="1" id="1208">
+                        <rect key="frame" x="8" y="4" width="24" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="ledGrey" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="1709">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                        <connections>
+                            <action selector="powerAction:" target="-2" id="GQ4-9n-2Ts"/>
+                        </connections>
+                    </button>
+                    <button toolTip="Drive LED" tag="2" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="iKN-RM-vsV">
+                        <rect key="frame" x="40" y="4" width="24" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="ledGrey" imagePosition="only" alignment="right" imageScaling="proportionallyDown" id="v9S-no-L5h">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <levelIndicator verticalHuggingPriority="750" id="212">
+                        <rect key="frame" x="729" y="3" width="64" height="18"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <levelIndicatorCell key="cell" alignment="left" maxValue="140" criticalValue="140" id="1702">
+                            <font key="font" metaFont="system"/>
+                        </levelIndicatorCell>
+                        <connections>
+                            <action selector="speedResetAction:" target="-2" id="Aca-tq-ZlF"/>
+                        </connections>
+                    </levelIndicator>
+                    <button hidden="YES" tag="1" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="D1i-Ep-fTN">
+                        <rect key="frame" x="98" y="4" width="16" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="diskTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="dWc-LE-E52">
+                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                            <font key="font" metaFont="menu" size="10"/>
+                        </buttonCell>
+                    </button>
+                    <button toolTip="Drive LED" tag="2" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="K68-Xr-JJH">
+                        <rect key="frame" x="140" y="4" width="24" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="ledGrey" imagePosition="only" alignment="right" imageScaling="proportionallyDown" id="Ws2-m0-rhM">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <button hidden="YES" tag="1" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="gkQ-Nr-aDz">
+                        <rect key="frame" x="198" y="4" width="16" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="diskTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="Gux-DH-DEb">
+                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                            <font key="font" metaFont="menu" size="10"/>
+                        </buttonCell>
+                    </button>
+                    <button toolTip="Drive LED" tag="2" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="Pjc-SJ-rsn">
+                        <rect key="frame" x="240" y="4" width="24" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="ledGrey" imagePosition="only" alignment="right" imageScaling="proportionallyDown" id="zmo-Ej-rmg">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <button hidden="YES" tag="1" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="BLY-CO-Zam">
+                        <rect key="frame" x="298" y="4" width="16" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="diskTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="V6v-tW-Pyx">
+                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                            <font key="font" metaFont="menu" size="10"/>
+                        </buttonCell>
+                    </button>
+                    <button toolTip="Drive LED" tag="2" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="wnl-Bi-Ego">
+                        <rect key="frame" x="340" y="4" width="24" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="ledGrey" imagePosition="only" alignment="right" imageScaling="proportionallyDown" id="bNe-ek-PzN">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <button hidden="YES" tag="1" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="Cg3-r8-KR5">
+                        <rect key="frame" x="398" y="4" width="16" height="16"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="diskTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="WyV-Pn-TKr">
+                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                            <font key="font" metaFont="menu" size="10"/>
+                        </buttonCell>
+                    </button>
+                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="f19-16-42W">
+                        <rect key="frame" x="63" y="5" width="32" height="14"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <textFieldCell key="cell" controlSize="small" lineBreakMode="clipping" alignment="center" title="0000" id="caT-w9-zJ9">
+                            <font key="font" metaFont="message" size="11"/>
+                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="f7g-mT-LE7">
+                        <rect key="frame" x="163" y="5" width="36" height="14"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <textFieldCell key="cell" controlSize="small" lineBreakMode="clipping" alignment="center" title="0000" id="smR-ZO-LAl">
+                            <font key="font" metaFont="message" size="11"/>
+                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="P62-wC-T1P">
+                        <rect key="frame" x="263" y="5" width="32" height="14"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <textFieldCell key="cell" controlSize="small" lineBreakMode="clipping" alignment="center" title="0000" id="ShU-59-vsV">
+                            <font key="font" metaFont="message" size="11"/>
+                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="8yk-0g-1sA">
+                        <rect key="frame" x="363" y="5" width="32" height="14"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                        <textFieldCell key="cell" controlSize="small" lineBreakMode="clipping" alignment="center" title="0000" id="5Zl-Dc-eev">
+                            <font key="font" metaFont="message" size="11"/>
+                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="DD4-5B-w9h" customClass="MetalView" customModule="vAmiga" customModuleProvider="target">
+                        <rect key="frame" x="0.0" y="26" width="800" height="600"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <connections>
+                            <outlet property="parent" destination="-2" id="DoA-Vt-vqv"/>
+                        </connections>
+                    </customView>
+                    <button tag="2" id="iho-fa-H5O" userLabel="Mute">
+                        <rect key="frame" x="543" y="-0.5" width="22.5" height="28"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="magnifyingglass" catalog="system" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="izA-UN-588">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                        <connections>
+                            <action selector="infoAction:" target="-2" id="RIV-Ab-G6I"/>
+                        </connections>
+                    </button>
+                    <button tag="2" id="cdG-NT-T3J" userLabel="Debug Mode">
+                        <rect key="frame" x="515" y="3" width="20" height="20"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="srvConnectTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="ePm-pT-sH6">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <button tag="2" id="46l-A8-v8C" userLabel="Halt">
+                        <rect key="frame" x="487" y="3" width="20" height="20"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="haltTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="Qoa-ac-fgt">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <button tag="2" id="1Ke-5u-05P" userLabel="Halt">
+                        <rect key="frame" x="459" y="3" width="20" height="20"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="cmdKeyTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="I2d-4O-y9r">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <button toolTip="Warp mode" id="1052">
+                        <rect key="frame" x="689" y="4" width="18" height="18"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="hourglass1Template" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="1707">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                        <connections>
+                            <action selector="warpAction:" target="-2" id="7h2-KE-103"/>
+                        </connections>
+                    </button>
+                    <popUpButton fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="0go-7K-IPf">
+                        <rect key="frame" x="662" y="2" width="26" height="22"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <popUpButtonCell key="cell" type="bevel" title="Amiga Frequency" bezelStyle="regularSquare" imagePosition="left" lineBreakMode="truncatingTail" state="on" transparent="YES" inset="2" preferredEdge="minX" selectedItem="ebX-Qd-V1U" id="fbh-jz-zm9">
+                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                            <font key="font" metaFont="message"/>
+                            <menu key="menu" id="VSY-08-JkF">
+                                <items>
+                                    <menuItem title="Amiga Frequency" state="on" id="ebX-Qd-V1U"/>
+                                    <menuItem title="Amiga Refresh Rate" tag="1" id="L02-L5-0ha"/>
+                                    <menuItem isSeparatorItem="YES" id="74s-Nk-IOb"/>
+                                    <menuItem title="Host CPU Load" tag="2" id="e2a-oz-kXg"/>
+                                    <menuItem title="Host GPU Refresh Rate" tag="3" id="LD4-F0-Zv0"/>
+                                    <menuItem isSeparatorItem="YES" id="mvn-7K-lnu"/>
+                                    <menuItem title="Audio Buffer Fill Level" tag="4" id="3nj-aJ-b3N"/>
+                                </items>
+                            </menu>
+                        </popUpButtonCell>
+                        <connections>
+                            <action selector="activityTypeAction:" target="-2" id="YGy-zQ-c4T"/>
+                        </connections>
+                    </popUpButton>
+                    <textField focusRingType="none" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="oNV-mZ-JGc">
+                        <rect key="frame" x="601" y="8" width="64" height="11"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <textFieldCell key="cell" controlSize="mini" sendsActionOnEndEditing="YES" alignment="right" title="00% CPU" id="GSz-Xi-cus">
+                            <font key="font" metaFont="label" size="9"/>
+                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <button tag="2" id="dpd-DV-6eT" userLabel="Halt">
+                        <rect key="frame" x="437" y="3" width="20" height="20"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="cmdKeyTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="R0x-fF-Es0">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <button tag="2" id="9cr-37-7RV" userLabel="Mute">
+                        <rect key="frame" x="571" y="2" width="20" height="20"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <buttonCell key="cell" type="bevel" bezelStyle="regularSquare" image="muteTemplate" imagePosition="only" alignment="right" imageScaling="proportionallyUpOrDown" id="WPR-BY-tr5">
+                            <behavior key="behavior" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <stepper horizontalHuggingPriority="750" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="6l7-xP-CGV">
+                        <rect key="frame" x="712" y="1" width="15" height="22"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxY="YES"/>
+                        <stepperCell key="cell" controlSize="small" continuous="YES" alignment="left" increment="5" minValue="50" maxValue="200" doubleValue="100" id="eq6-ld-ajJ"/>
+                        <connections>
+                            <action selector="speedAction:" target="-2" id="IhZ-xE-IbK"/>
+                        </connections>
+                    </stepper>
+                </subviews>
+            </view>
+            <connections>
+                <outlet property="delegate" destination="-2" id="2165"/>
+                <outlet property="initialFirstResponder" destination="DD4-5B-w9h" id="SkX-P7-Vr8"/>
+            </connections>
+            <point key="canvasLocation" x="-132" y="448"/>
+        </window>
+    </objects>
+    <resources>
+        <image name="cmdKeyTemplate" width="240" height="262"/>
+        <image name="diskTemplate" width="217" height="217"/>
+        <image name="haltTemplate" width="240" height="241"/>
+        <image name="hourglass1Template" width="240" height="241"/>
+        <image name="ledGrey" width="100" height="50"/>
+        <image name="magnifyingglass" catalog="system" width="16" height="15"/>
+        <image name="muteTemplate" width="240" height="241"/>
+        <image name="srvConnectTemplate" width="48" height="49"/>
+    </resources>
+</document>

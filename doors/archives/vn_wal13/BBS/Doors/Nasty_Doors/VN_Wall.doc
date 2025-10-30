@@ -1,0 +1,101 @@
+                     NastyWall v1.3 by )/ideo /\/asty LOONs
+Call the Nasty Doors Test site.  G.B.H.  +44(0)61 945 8603 3 Nodes *RiNGDoWN*
+
+OK!  i said no BBS pluging will be done in my doors, however as this version
+was bourght by the sysop on G.B.H.  he requested that as he paid for it he
+wanted his BBS pluging done on the bottom banner.
+
+If anyone else wants to buy 1 of my doors feel free to contact me.
+
+History :
+NastyWall 1.3 - Added optional anonymous option,anonymous entries will be
+                added to the callers log so the sysop can see who written
+                what.
+                Added optional colour cans
+                Removed the internal cans text and Added a new file
+                "VN_Wall.Cans" so you can draw your own cans if anyone can
+                do better spray cans than the ones i have done then please
+                call G.B.H. and upload them to me -Thanks-
+                Made the display area work ok for PC users with only 23 lines
+                now screens with ONLY 200 pixels will display ok.
+                PC's suck!  & ST's Suck even more.
+                Now Multinode Freindly.  Will not allow a user to start to
+                write on the wall if somebody else is writing.
+#---------------------------------------------------------------------------#
+NastyWall 1.3a- Test version, Pre-Release used on G.B.H. BBS only
+                No way is runner getting a grip of this one yet!
+
+NastyWall 1.2 - Whole new type of wall. Release version
+
+NastyWall 1.2a- Spread (While i was ill) and it wasnt finished, i had a few
+                things left to do, but Runner decided to spread it
+                unfinished! Without my permission.
+                to find if you had the wrong version check the users screen
+                lengths.  as this version had a bug, it sets the users screen
+                length to 200 lines.  Both version carry the 1.2 Version
+                string as i never planned to release it until it was
+                finished.
+
+NastyWall 1.1 - Never released, Was only used on G.B.H. BBS
+              - Was a complete re-write.
+
+NastyWall 1.0 - Looked like every other wall (Boring!)
+
+Future :
+I keep getting asked about adding other colours to the output text I think
+that type of look is scruffy, but as some of you want it I may add it as a
+toggle feature.
+
+Handles :
+I've been told that some users WONT write abuse or daft MSG's on the wall
+because of the handle being shown.  I may change this so u can blame another
+user (access dependant) or be anonymous.
+
+             -----------Docs for NastyWall---------------
+I'm a bit sick of the wall programs on boards at the mo they all seem to look
+and act the same way.  So I have added a few changes to Nastywall.
+
+ I have tried to gain interest in using the program you have all logged onto
+a BBs and been prompted to scribble something on a wall if the wall program
+looks messy and boring chances are your not gonna bother to write on it.
+This is where NastyWall comes in its different and so make the users
+interested in it.
+
+ALL users on G.B.H.  have studied it and most have scribbled on it where as
+before with a standard wall installed noone but the LoONs were using it, All
+LoONs use the wall to slag each other off, our way of having a bit of a
+laugh.
+
+Most hated walls have 1 or more of the following.
+1 - BackDoors (Why be a 16 sandwich eating fat fucking LAMER)
+2 - Random Colours for the text (VERY VERY scruffy)
+3 - BBS Plugs Before or After the Wall has shown (LAME)
+4 - NO Bricks. (Shit that wouldn't hold the house up)
+
+As I believe in user editability this wall will remain in Arexx format, it
+will have to anyway as I know nowt about C or ASM, if anyone wants to write
+this wall in C and send it to me along witha C compiler I would be very
+interested in learning it.  Arexx may be a little slow but at least even the
+stupidest sysop can check for backdoors.
+
+You can now use Number characters on the wall (0-9) in the previous version I
+decided that all (0-9) characters were a possible BBS PLUG and redirected
+from the wall to a definable BBS Adder.  This can still be done in this
+version but you get asked this time.
+
+All files needed are in the archive for this.  install it like any other
+AREXX door if you cant do that then get out of the BBS game as its lamers
+like you that give us a BAD name.
+
+Editable option in the Arexx program.
+
+Nastypath="DOORS:Arexx/"   <-Set this to the path you install Wall into
+RXCommand="SYS:RexxC/Rx"   <-where dos can find RX
+BBSPLUG="BBS Lister/Adder" <-The name of the BBS lister/adder
+BBSACC=200                 <-Access level needed to use BBS lister/adder
+BBSREXX="DOORS:ADDBBS/Addbbstologoff.Rexx" <location of BBSAdder
+
+VN_Wall.hdr <-this is for you to add your Brick effects or anything else you
+              may want to put in before the main wall is displayed.
+
+Format of VN_Hdr=21 Lines 80 Columns.

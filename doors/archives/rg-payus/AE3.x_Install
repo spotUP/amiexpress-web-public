@@ -1,0 +1,20 @@
+FAILAT 65535
+ECHO "[0;33;1m1994 DOOR InTallAtoR v0.02ß by Zwinx/DagCentRAl 9o²1o"
+ECHO "[0;32mCall DagCenTraL at [1m+46-31-775-9390[0;32m [Nd0] or [1m+46-31-775-9391[0;32m [Nd1]!"
+ECHO "[0m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+ECHO 'INSTALLING "PayUSER V1.01"'
+ECHO ""
+ECHO "Making directories..."
+IF NOT EXISTS DOORS:SPACE
+ MAKEDIR >NIL: DOORS:PayUser
+ MAKEDIR >NIL: DOORS:PayUser/Payers
+ ECHO "No previous PayUSER installation found, installing..."
+ENDIF
+ECHO "Copying files..."
+COPY PAY.info BBS:Commands/BBSCmd
+COPY Pay.rexx BBS:PayUser
+ECHO ""
+ECHO "INSTALLATION/UPDATE Complete..."
+ECHO ""
+ECHO ""
+WAIT 3

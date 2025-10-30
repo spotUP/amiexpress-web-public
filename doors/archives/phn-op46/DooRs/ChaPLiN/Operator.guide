@@ -1,0 +1,229 @@
+@database Operator Page V4.6
+@Author CHAPLIN / P.H.U.N.
+@Index MAIN
+
+Copyright © ChaPLiN / U.I.C. +32 2 270 04 07
+
+@Remark $VER: (January 16 1994, 03:00:00)
+@Remark AmigaGuide database for the Operator Page Documentation
+
+@node MAIN "Operator Page Documentation © ChaPLiN / P.H.U.N. / U.I.C.
+
+  ___________________________________________________________________________
+ |\                                                                         /|
+ | \_______________________________________________________________________/ |
+ |  |     _____________    _____   _____    ____   ____    _____    _____ |  |
+ |  |    /   ______   /\  /    /\ /    /\  /   /\ /   /\  /    /\  /    /\|  |
+ |  |   /   /\    /  /  \/    /  /    /  \/   /  /   /  \/     \ \/    /  \  |
+ |  |  /   /__\__/  /   /    /__/    /   /   /  /   /   /       \/    /   /  |
+ |  | /    ________/   /            /   /   /  /   /   /             /   /|  |
+ |  |/    /\       \  /    ___     /   /   /__/   /   /    /\       /   / |  |
+ |  /    /  \_______\/    /\ /    /   /          /   /    /  \     /   /  |  |
+ | /____/   /       /____/  /____/   /__________/   /____/   /____/   /   |  |
+ | \    \  /        \    \  \    \  /\          \  /\    \  /\    \  /    |  |
+ |  \____\/          \____\/ \____\/  \__________\/  \____\/  \____\/     |  |
+ |  |_____________________________________________________________________|  |
+ | /                                                                       \ |
+ |/________________________________________________________________ChaPLiN__\|
+
+                      W o R l D   H e a D Q u a R T e r S
+
+ 		     MySTiC /X DeSiGn BeLGiaN HeaDQuaRTeRS
+
+
+                         @{" Introduction & History " Link Cap01}
+                         @{"      Requirements      " Link Cap02}
+                         @{"       Greetings        " Link Cap05}
+                         @{"   How to Contact Us    " Link Cap06}
+
+
+         ---------------------------------------------------------
+                  Complete Docs for OpeRaTor Pager V4.6
+         ---------------------------------------------------------
+           The Documentation has been written by ChaPLiN/P.H.U.N.
+
+@endnode
+@node Cap01 "Introduction"
+  =======================================================================
+  V 4.1
+  ~~~~~
+  Again some people requested that i made the opposite of the Boring ba..
+  that are int the S:Operator.cfg. So know you can put the ones that can
+  ALWAYS page you, no mather how the CHATFLAG is (ON or OFF) they will 
+  override it, and well all is written in your callerslog...just check it
+  out. I forgot to mention that in the docs that there are 5 remarks in
+  you callerslog. 
+ 
+		1. No Reason, No Chat + Message
+                2. Chatflag On        + Message
+                3. Chatflag Off       + Message
+                4. Override Chatflag  + message  >operator.pw
+                5. Boring Bas...      + Message  >operator.cfg
+
+  V 4.2
+  ~~~~~
+  Little Beta release for the Beta testers..seems fine...but not much
+  different, except then for a CTRL-C aborts. :) Forgot about that ..oups
+
+  V 4.3
+  ~~~~~
+  Hmm here a lot has changed, some bugs that the pager kept paging untill
+  the User press CTRL-C, fixed now. Also the Operator.pw has been changed
+  into Operator.Always and the Operator.cfg into Operator.Never. Sorry
+  about this but otherwise it's getting confusing. :)
+  Don't see why i still should make Operator.pw since this is of no use
+  with the .Never and .Always :)
+  Also added ACP SUPPORT, this will show you when the module is activated
+  in the ACP. I suggest EVERYBODY does this coz then it is really nice 
+  when your windows are iconified. Now you can see what the user does, 
+  besides all the time "MODULE" into acp..
+
+  well that's it for now. If any more ideas, requests, whatever..give me
+  a buzz..also if you want personalized doors for you bbs only. :)
+
+ 					KeN/LoGiC
+  V 4.4
+  ~~~~~
+
+  Well for those who know already skip some lines now, for those who are
+  not aware of the change, read the PHN.KEN&RYU file on all bbs's spread.
+  I won't be typing the same thing twice :-)
+
+  What is new in 4.4. Simple, there was a request from "CENSORED" who 
+  asked me if i could include a "REAL LAME DUDE SOLUTION". Well first no-
+  body is lame (so that's clear now ain't it!) and secondly, if somebody
+  wants something he'll get's it. That's what PHUN is all about no ?
+  So 4.4 was born. There is a new file, called S:operator.goodbye
+  This ones scans for Handles that will automagically, whether the chat
+  is ON or OFF, be logged out. (Who ever wants a thing like this ?) I DO!
+  YeK YeK...well anyway, that's it for now folks, as I don't have a new
+  suggestion received for further improvements, I think this will be
+  enough... Of course, you are always welcome to get your Private Pager
+  and to exchange ideas about /X Tools of any kind.
+
+					ChaPLiN/P.H.U.N.
+
+  V 4.5
+  ~~~~~
+
+  Oups, Big Bug in there and I didn't notice that since /X versions are
+  different ...strange...well fixed now.
+  Thx to SnoW/LoGiC for pointing that out!
+
+					ChaPLiN/P.H.U.N.
+
+
+  V 4.6
+  ~~~~~
+  Another problem that was reported is that the callerslog missed a 
+  returnstring so Amilog couldn't find the logoff time. Didn't look good.
+  Thanx to Scorpio for pointing that out to me.
+  
+  Oki now just for some legal mumbo jumbo. All my tools released and pre-
+  released, are free of charge and can always be downloaded FREE at the
+  P.H.U.N. Whq...just give it a buzz...and one last thing, yes this is 
+  the last P.H.U.N /X Tool released, as future Tools will have the MsT
+  /X-DeSiGN Label on them. So next update will be /Y\ystic/X-DeSiGn...
+
+
+  				   ChaPLiN/P.H.U.N/MsT/X-DeSiGn.
+  -EoF-
+
+  =======================================================================
+@endnode
+@node Cap02 "Requirements"
+  =======================================================================
+  To install Operator Pager you must have the following things:
+
+    Programm         Location        Description
+    ----------       --------        -----------
+    Operator.exe     Wherever        Main program
+    Operator.always  S:              blacklist file
+    Operator.never   S:              Cosysops, friends, etc...
+    Operator.goodbye S:              Guess what...
+
+  - an  Amiga Model (500/600/1000/1200/2000/2500/3000/4000/CDTV/CD³²)
+  - the installed Version of OS\2, OS\3 or higher
+    (Soft- or Hardware Version)
+  - the installed .INFO Files in the directories.
+  - AmiExpress v2.xx & v3.xx.
+
+  =======================================================================
+@endnode
+@node Cap05 "Greetings go to..."
+  =======================================================================
+
+                        Greetingz to:
+
+    
+ Re/Y\o-/X-DeSiGN...................................Well now ya got it ;)
+ ByteAndi/MsT ...........................Your FileId V1.3b is Working! :)
+ SnoW.........................................::..MeGa SeGa BuG FiNDeR :)
+ ScoRPio................................................BuG JouRNaLiST :)
+ Bytemaster .........................................So read my mail ? :)
+ Mr.Solo (BuTTeR Cup)..............................Still EgoTripping ? :-()=
+
+
+  And everybody worldwide, who thinks he/she should be in it. Give
+  me a buzz and I'll put you in next time. (Soon coz more modules
+  coming up very soon) If you have a module that you want for your
+  bbs, feel free to call, made within 4 dayz, free of charge !
+                                      ^
+	 	 		      | due to TO popular demand 2 dayz
+					  has become impossible! :)
+
+  Btw, are there any female sysops around who need a "leave HER a mesage"
+  version ? Just call me up and i'll fix that. :) Don't wanna be a sexist.
+
+
+                       GreeTings OfCoZ To :
+
+                  >>> All MeMBeRs oF LoGiC <<<
+
+    !SNOW!, ASCENDER, AGNUS, !CALYPSO!, !CASTOR!, COSMIC, GHOSTRIDER,
+    !ROFOE!, SCAMPY, TRAVELLER, TRONIX, WARHAWK, XENTEC, !SNAKE/NAZGUL!,
+
+ 	       Let's noT forget OUR friendship mates !!
+
+
+                  >>> All MeMBeRs oF /X DeSiGn <<<
+
+	EmPiRe, ReMo, AnDi, AxE, SieGeL, .. i don't have a member list
+         				    yet...if any exists :)
+
+    
+  =======================================================================
+@endnode
+@node Cap06 "How to contact us..."
+  =======================================================================
+ 
+ .....' U.N.I.T.E.D. I.N.T.E.R.N.A.T.I.O.N.A.L. C.O.N.N.E.C.T.I.O.N. '.....
+ 
+     GoVeRNoRs: ChaPLiN & SToNy         Co-AmBaSSaDoRs: SPaCe FoR HiRe 
+ Workin'On: A5001/CuRY 'o80 8761.01Gb SeaCraTe 98Gb Rom DuAl Without PoWeR
+
+	 Node0.0: +32-2-270-04-07  Node0.1: +32-2-270-04-07
+	 Node0.2: +32-2-270-04-07  Node0.3: +32-2-270-04-07
+	 Node0.4: +32-2-270-04-07  Node0.5: +32-2-270-04-07
+	 Node0.5: +32-2-270-04-07  Node0.6: +32-2-270-04-07
+	 Node0.7: +32-2-270-04-07  Node0.8: +32-2-270-04-07
+	 Node0.9: +32-2-270-04-07  
+                              ...32...
+
+          AMIGA 0-3 YeaRS/Warez - BaSiC/AreXX, C-64 & VIC-20 /X Tools
+   
+         Ami-Express V5.0 - BuGGeD Chat System V933.442 - OlD Warez -
+    SloW Belgian BBS - UglY Design - OFFline 48Hourz A Day - CloSeD Since:
+ 01/01/1990 - LaMe Confs! - NO /X ToolS At ReQuesT - CoDeD WithIn 4 YeaRs -
+
+   ______         ______         __  __         ______
+  / __  /\       /  /  /\       / /\/ /\       /   / /\       WoRlD
+ /  ___/ /___   /     / /___   / /\/ / /___   /     / /___
+/__/\__\//__/\ /__/__/ //__/\ /_____/ //__/\ /__/__/ //__/\ HeaDQuaRTeRs
+\__\/    \__\/ \__\__\/ \__\/ \_____\/ \__\/ \__\__\/ \__\/
+
+
+		MySTiC /X DeSiGn BeLGiaN HeaDQuaRTeRS
+                                                                          
+  =======================================================================
+@endnode

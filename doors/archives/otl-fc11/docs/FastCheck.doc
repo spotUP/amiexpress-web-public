@@ -1,0 +1,144 @@
+
+       _ _ ___/\______/\__ ____/\___/\__ _ _/\____ _/\_ __ __/\______
+      __ ________   __   /   _   ___   / ______   \___/__/     _____/
+         bIS/   /   /   /   //   //   /___/ __¬   /  /  /  /\__   \
+           /   /   /   /   //   //   /   /  \    /  /  /  /   /   /
+    __  _ _\____  /\____  //_  //_____  /___/\  /\_____  /\ _/   /___
+     _  ___ _   \/  _  _\/_  \/____ __\/ ___ _\/_______\/____   /_ _/
+                                                            \  /
+                                    PRESENTS                 \/
+
+                        FastCheck V1.1 coded by AtomiX / Outlaws
+                        +Requester Version
+
+WHAT'S THE USE OF THIS TOOL ?
+-----------------------------
+
+        This is a nice LHA Checker for AmiExpress or 
+        S-Express or simply for the DoS on ThE Amiga
+
+        You are able to Strip and Add and Test LHA Archives
+        with Scripts . The Checker is fully Configurable
+
+        Dont forget the .info File MUST exists
+
+        OrginalFileLength:    FastCheck 5508bytes   [BBS & CommandLine]
+        OrginalFileLength:Req-FastCheck 6260bytes   [Requester version]
+
+
+HISTORY :
+---------
+
+	V1.0ß - Never Released just for fun ;))
+
+         - Added Icon Support it's now fully Icon Configurable.
+           
+         - New Tooltype added for Low Memory Systems.
+           Last bugs fixed..
+         
+   v1.0  - First official Release after 2 months beta testing.
+
+   v1.1  - Code Optimized (1.5KB shorter haha).
+           You can now Configure the Script Locations & Names.
+           Test Archives is changed to Default ON.
+           New Option Dont Show LHA Files (Optional)
+
+
+HOW TO INSTALL :
+----------------
+
+        Copy all Drawers to your Path where you ever Like it
+        it must not be Specify you can Copy FastCheck to C:
+        or S: ,it's not intresting where it is located
+
+        ToolTypes:
+        ---------
+        LHA_LOCATION=C:LHA        * Location for your LHA Packer   *
+                                  * if not ? C:LHA is Default      *
+
+        WORK_DIR=T:               * Path where you want to Check   *
+                                  * &add the Temponary LHA File    *
+                                  * for People with a lot of       *
+                                  * memory (gelle Rüdiger)         *
+
+        REMOVE=ON / OFF           * Write ON if you want to Strip  *
+                                  * BBS Adverts from Archives      *
+
+        ADVERTS=ON / OFF          * ON if you want to Add BBS Adds *
+
+        TEST=ON / OFF             * "  "  "    "   "  Check Files  *
+                                  * Default is ON                  *
+
+        STRIP_SCRIPT=<Path&Name>  * Set the Path and Name from the *
+                                  * Strip Script,Default Dir&Name  *
+                                  * is "S:FastCheck.Strip"         *
+
+        ADD_SCRIPT=<Path&Name>    * Set the Path and Name from the *
+                                  * Add Script,Default Dir&Name is *
+                                  * S:FastCheck.add                *
+ 
+        DONT_DISPLAY              * When this Tooltype is set then *
+                                  * the LHA Files will not shown   *
+
+        _____________________________________________________________________
+        ::Requester Version::::::::::::::::::::::::::::::::::::::::::::::::::
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+        The ReqTools.library is written and © by Niço Françes
+
+        You need the Library for the Requester Version of Fast-Lha-Check
+        no Extra docs needed because it have the same Functions as the
+        Normaly CLI & BBS Version.
+
+        You must start the Requester Version from the CLI (otherwise it
+        have no Output ;^)) i will change this little bug in one of the
+        Next Updates.
+
+        _____________________________________________________________________
+        :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+        future of Fast LHA Check (BBS Version ONLY)
+
+        will add Current Upload Time , Node , Uploader Name & Location.
+        Script Checker wich checking for Double FileNames in the strip
+        script (already Finished but with some bugs).
+        Random File Adverts , that mean that you are able to change in time
+        your AdvertNames Automaticle NO LAME .DOCS or so REALY RANDOM.
+
+        _____________________________________________________________________
+        :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+        So that's all i you have a Problem with my Door/s then leave me
+        a mail or call me.
+
+        _____________________________________________________________________
+        :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+        iF YoU FoUnD BuGS or have Suggestion's let me know on AmiXnet
+
+			@GR0001
+                        @305003
+
+        _____________________________________________________________________
+        ::AtomiX:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+____/\___                __/\____          __/\                 __/\_____
+\__  _  ¬\      __/\____ \  __  ¬\         \   \       __/\____ \   ____/\
+ \/. /___/\__/\ \  ___ ¬\/.  /   /\_____   /.  /\__/\_ \  __  ¬\/. __/__\/
+ // /       /  \/. \_   //  /      _____) //  /  \   ¬\/.  /   //     /\
+/_____ /.  _   //  /   /______ /.___ ¬\_\/______ /.   //  /   /_____ / /
+\____\//  /   /___/__ /\_____\//      /\ \_____\//   /___/__ /\____\/ /
+     /___/__ /\___\_\/ / ·N£·/______ / /       /___ /\___\_\/ /     \/
+     \___\_\/ /      \/      \_____\/ /        \__\/ /      \/
+            \/                      \/             \/
+                  TH¡§ l¡Ne b®eaK§ THe ®µle§ ..
+     We HaVe THe laTe§T V¡®µ§ K¡lle®§ ØNl¡Ne .. AM¡XNeT Wø®ld W¡de
+      THe AM¡GA øNly ZøNe . ØµTlaW§ GHQ , Ge®MaN AM¡E×P®eSS Ð¡ST.
+ 
+     da ç®eW ¡§ , ATøM¡X / ØT£ , Nø £¡M¡T / QTX & I£§ , FlaKe / TR§I
+ 
+                     .---------------------------.
+                     |  Nøde ¹ : +49-57²³ 74³40  |
+                     |  Nøde ² : +49-I§ÐN-§ØØN   |
+                     |  Nøde ³ : +49-I§ÐN-§ØØN   |
+                     `---------------------------'

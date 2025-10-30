@@ -1,0 +1,307 @@
+Releasedate: Tue Jun 14 00:00:00 1994
+
+_________  _________  _________ ___________  /\    ______________________
+______   \/     _   \/     _   \ _______   \/  \   \______    \____     /
+/    \    \_    \    \_    \    \_/    \    \_  \  __/_   \____\   \___/__
+\     \     \    \     \    \     \     \     \  \/    \   \__/_\_____    \
+ \     \     \    \     \    \     \     \     \  \     \   \     \   \    \
+  \     \     \    \     \    \     \     \     \  \     \   \     \   \    \
+   \__________/__________/__________/\__________/________/_________/_________\
+        ___________________       _________ ___________ ______  /\
+         _______     /     \  ___/     _   \ ______    \_     \/  \  =TDS=
+ ®EpULSe   /    \___/___    \/   \     \    \_/    \____/_     \   \ W H Q
+          /_______     \    /_    \     \     \     \     \      _ /___
+            /     \     \    \     \     \     \     \     \     \/    \
+      _____/       \     \    \     \     \     \     \_    \     \     \
+       __________________/    /\_____\__________/\__________/\____/\     \
+                          \  /                                      \-siL/
+                           \/                                        \  /
+                                                                      \/
+
+
+
+
+
+                            dOOdles^shOck presents
+
+
+
+
+
+                 °
+               : .  /\___  °
+               ¦: ./     \  °
+               |¦:/  (__  \°
+               ||/      \  \
+               |/        \_ \ · M · F · E · T · A · M · i · N
+           - --+\_________/ /================================
+                      \____/         Version 2.21, Release II
+
+
+
+
+                      [           COVER PAGE           ]
+                      [      FEATURES, PERFORMANCE     ]
+                      [   INSTALLATION, CONFiGURATiON  ]
+                      [  EXAMPLE OUTPUT (PLAiN ASCii)  ]
+                      [ ERRORMESSAGES, TROUBLESHOOTiNG ]
+                      [        ADDiTiONAL NOTES!       ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+ About, Copyright Notice.
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                                AMFETAMiN v2.21,
+
+                  Last Callers Util for AmiExpress BBS Clones
+                Written by The Silencer / doodles^shock in 1994
+
+                         Copyright ©1994 The Silencer
+                  Permission is granted to freely distribute
+                this product for non-commercial purposes only,
+                    as long as all files remain unmodified.
+
+     AMFETAMiN is written in highly optimized C code for best performance!
+
+·Why Did I Make a Last Caller Util ?
+
+ Well, to be honest I decided to make one when I saw a local BBS that had
+ Macromans PowerCaller installed that looked like shit and was written in
+ ARexx. BTW He ripped the fucking code from a dude in the US that a friend
+ of mine multichatted with on sum US board, he was quite pissed at macroman
+ for this! Don't remember the dudes name but I guess macroman do.
+
+ Ascii output aswell, stripped code, more configurable etc..
+
+
+
+
+
+
+
+
+
+
+
+
+ Features:
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+· Quick As A Flash,
+  Totally Independent of Callerslog FileSize! Scans a 5Mb Callerslog
+  as fast as a 1kb Callerslog.
+  The Only Thing Slowing It Down Is Harddrive Fragmentation :)
+
+· Supports More Than 10 Nodes (0-9) Since New /X Can Handle Up To 32 Nodes.
+  Amfetamin Can Handle Up To 99 Nodes So There Will Be No Conflict With
+  Future /X Upgrades.
+
+· Supports All Baudrates From 0(?) Up To 100.000 Baud (21.600, 28.800+ Etc.)
+  No Conflict With New(Higher/Lower?) Baudrates/Modemtypes.
+
+· Supports CPS Rates Over 10.000 (21.600+ TextFileTransfers? Etc.)
+  Up To 99.999 CPS Can Be Recorded.
+
+· Byte Values Shown In Kilobytes Or Megabytes Depending On The Filesizes.
+
+· No Temporary DataFiles Or So Needed, It Uses It's Own Output As Datafile.
+
+· Doesn't Crash & Burn, if it failures it exits safe with the apropriate
+  errormessage.
+
+· Are Able To Display As Many LastCallers As You Like, Say 100.000 ?
+
+· GREAT LOOKS!
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Installation:
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ AMFETAMiN.ANY is the version optimized for 68000+ systems
+ AMFETAMiN.023 is optimized for 68020/30+ systems
+
+ Just Add this To Your Logoff-Script:
+
+ AMFETAMiN.xxx <output> <node> <calls> <sysop/nosysop>
+
+        <output> Is The Textfile That Is Generated... Try RAM:Test.TXT
+          <node> The Node To Process
+         <calls> How Many Calls That Should Be Shown (Unlimited Amount!)
+ <sysop/nosysop> If Local_Sysop Logins Should Be Recorded
+
+ All <arguments> Are Ofcuz cASEiNSENSiTiVe.
+
+
+ Ex.
+ ~~~
+ AMFETAMiN BBS:Bull.TXT 1 12 NoSysop
+
+ This Line Generates a Last Callers List For Node 1 Displaying Only The
+ 12 Last Callers. Local Sysop Logins Will Not Show!
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Example Output:
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ ANSI Color Rules!, Check Out The Supplied iFF Image.
+
+
+Nd User Name        Location            TimeOnBoard ACTVT U#/Byte D#/Byte Rate
+-- ---------------- ------------------- ----------- ----- ------- ------- ----
+01 RAG              »¡mG HQ +46-381-304 20:37-20:38 --HP- --:---- --:---- 28.8
+01 Stain            (^)=-={2oooAd}=-=(^ 20:31-20:36 ----S --:---- --:---- 16.8
+10 SHAN             MANGA RULEZ!        20:13-20:22 ----S --:---- 01:519K 14.4
+00 MFM              = SKiD ROW ^ iPL =  20:01-20:07 ----S --:---- --:---- LOCL
+01 Aquarius         >> THE OUTLAWS <<   19:47-19:57 ---PS 03:017K --:---- 12.0
+01 LoXLeY           ·:..ÊqûÎñÔx..:·     19:26-19:30 C-H-S --:---- --:---- 19.2
+06 MFM              = SKiD ROW ^ iPL =  18:56-18:57 ---PS --:---- --:---- 9600
+99 PeTe             iNFiNiTE LiNK STAFF 18:42-18:45 ----S --:---- --:---- 14.4
+03 sUBZERø^&^Gø®0!  [B^A - THULERINGEN] 18:29-18:34 -N--- --:---- 02:053K 21.6
+04 [-BUTCH/TdS-]    -*[=DooDLEsHoCK=]*- 18:21-18:27 ----S --:---- 01:194K 21.6
+05 AldriN           +-+©>CyberdynE<©+-+ 18:06-18:20 ---PS 01:459K 01:628K 0300
+21 RAG              »¡mG HQ +46-381-304 17:59-18:03 C-H-- 01:012K 01:025K 12.0
+21 MR.AT&T          AT&T WORLD CONNECT  17:16-17:19 ---PS 02:004K --:---- 14.4
+32 MFM              = SKiD ROW ^ iPL =  17:11-17:13 C---- --:---- --:---- 9600
+------------------------------------------------------------------------------
+(C)arrier Lost, (N)ew User, (H)acked Passwords, (P)aged SysOp, (S)canned Files
+------------------------------------------------------------------------------
+Calls 04-25-94 [ 37 ] Time Online [08:37:23] HiCPS [03006] UL/DL [10.1M/02.3M]
+Calls 04-24-94 [0192] Time Online [14:17:41] HiCPS [13373] UL/DL [17.3M/22.5M]
+
+
+
+
+
+
+
+
+
+
+
+ Error Messages (And What To Do About Them)
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ This Util Is So Simple So I'm Sure There Won't Be Any Trouble With It
+ But If You Ever Get One Of These Errors (Non Fatal) And You Wonderen What
+ They Are All About...
+
+
+
+
+·Load Error #1 (ENViroment Statistix)
+ ------------------------------------
+ It Didn't Find The ENV:STATS<node> File That Is Allways Present When A User
+ Has Logged Of The System.
+
+ Cause: · You Have Run The Util Before The BBS Even Has Started Or
+          Before You Got A Call.
+
+
+
+
+·Load Error #2 (ENViroment Statistix)
+ ------------------------------------
+ The ENV:STATS<node> file was empty!
+
+ Cause: · You Probably Have Shutdown The BBS Before You Run The Util.
+
+
+
+·Load Error (Callerslog)
+ ------------------------------------
+ Couldn't Process Callerslog For That Node.
+
+ Cause: The Callerslog File Didn't Exist Or Can't Be Opened.
+
+
+
+·**Skipping; Local Sysop Login Entry!
+ ------------------------------------
+ Not An Error, You Have Specified NOSYSOP As An Argument And It Just
+ Skip To Record The Last Call If It Was A SYSOP_LOCAL.
+
+
+
+
+
+
+
+
+
+
+
+ Additional Stuff.
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        >> For Fun, Call the Ruling US Partyline +1-515-945-6700 <<
+       To reach me call my board or scream for me at the partyline!
+                           REPULSE! +46-(0)270-12138
+                            Current NUP: AMFETAMiN
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Additional notes:
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ Borre, fuck off, your mother is a pig shit farmer.
+ You BBS-Ad textfile was the lamest We've ever seen!
+ Highest ranked ? In what ? Triads Lamerchart ?! Mohahah
+ Hitman, for him and his car, driving me the raeggerrund.
+ I still have a cold.
+ Studenten var 0000sfeeeeest....
+ Thnx d-Zire For Doing The AmigaGuide Transformation.
+ Excalibur for his nightchats! You are sooo sexy!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   bibi

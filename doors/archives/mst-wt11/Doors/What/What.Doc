@@ -1,0 +1,108 @@
+
+             Upload Acitivities (Version 1.1) [RELEASE 2]
+                 All Coding by Bobo (Mystic/X-Power)
+                 -----------------------------------
+                        Release date 07-31-94
+
+Hello again, and welcome to another fine product.  This door is intended
+for MULTINODE systems only and can't be used on single node systems. The
+main purpouse  of this door  is to show  if a user on any other  node is
+uploading something, and if so,  it tells you what's in his batch  queue
+and  what  files in his  batch have  already been   finished  uploading.
+
+Please note  that this door ONLY works  on the 32 node version of amiex!
+A version  for the old /X 2.x/3.x and SExpress  will be done on request!
+
+Notable Features:
+~~~~~~~~~~~~~~~~~
+* WHAT is written entirely in C for fast code.
+* WHAT is the fist kind of this door for amiexpress.
+* WHAT have been tested and works 100% on multinode systems.
+* WHAT comes in 000/020+ version to get the maximum speed on your
+  system.
+
+
+                              INSTALLATION
+                              ~~~~~~~~~~~~
+WHAT requires a fully installed and running amiexpress 3.x (32 node).
+It will NOT work on eairlier versions of amiexpress or S-Express.
+
+To install WHAT, start with copying the included icon where it should be
+located.
+
+------------( Snap this lines )---------------------------
+Copy RAM:Commands/BBSCmd/WHAT.info BBS:Commands/BBSCmd/
+----------------------------------------------------------
+
+Continue  with making  a directory  in doors: called 'WHAT' and copy the
+main program, docs etc.
+
+------------( Snap this lines )---------------------------
+Makedir Doors:WHAT
+Copy RAM:Doors/What/What.#? Doors:What/
+----------------------------------------------------------
+
+Now  copy  the executable  file 'What.<cpu>'  (depending on what CPU you
+may have) to 'What.x'
+
+(THIS IS JUST TO MAKE SURE YOU HAVE EVERYTHING INCASE YOU  LOOSE THE LHA
+PACKAGE)
+
+EG: Copy What020.x What.x
+(If you have 68020+ cpu)
+
+That's it!  Please  feel free  to contact me  if you  are having trouble
+installing the tools.  My numbers  are at the  bottom of this  document.
+
+
+                                GREETINGS
+                                ~~~~~~~~~
+I personally want to thank all my beta-testers at THE EAST BBS.
+In no particular order, they are (two columns):
+
+L.A.Style  [GER]  (Terminal Obs.)  Demax      [SWE]  (UnderCover)
+Boozer     [SWE]  (Shadow Zone)    FireHawk   [SWE]  (Hardware Tower)
+Uffe       [SWE]  (TNT)            Distler    [SWE]  (The Slammer)
+JLM&Snoopy [SWE]  (Eagles Nest)    BlueLight  [ITA]  (Asylum)
+Danzig     [SWE]  (Kyron Dome)     FCKW       [GER]  (Second World)
+Reverend D [SWE]  (Trespass)       Natas      [ITA]  (Temple of dest.)
+Rhys       [SWE]  (Neurobashing)   Double     [NOR]  (Fatal Chaos)
+Ezco       [SWE]  (Serpent Hill)   Zcandaler  [SWE]  (Total Eclipse)
+[StN]      [FIN]  (MNC)
+
+Also greetings to the following people:
+-- LOOBY/iNSANE, KiLLRAVEN/MYSTiC, EMPiRE/MYSTiC, BYTEANDI/TRSI,
+   UFOK/MYSTIC, REMO/MYSTIC, REACTOR/MYSTIC, PACIFIC/2000 AD
+
+Anyone can become a beta-tester, simply make a call to THE EAST BBS.
+You'll find the number at the bottom of this document.
+
+
+                             FINAL COMMENTS
+                             ~~~~~~~~~~~~~~
+This program is Copyright (C)1994 by Bobo/Mystic.  If you are  intrested
+to join MYSTIC/X-POWER,  simply make a  call to your  nearest MYSTIC HQ!
+
+If your hard-drive or  anything else goes wrong  when you are using this
+door, i  am not responsible.  This tool has been  thouroughly  tested on
+many  boards all  around  the world,  but "there is always one more bug"
+
+That's it for now, i hope you enjoy this door.
+
+-Bobo (Mystic/X-Power)
+
+
+                              CONTACT INFO
+                              ~~~~~~~~~~~~
+If you have any questions, bug reports, suggestions,  you can contact me
+at the following boards:
+
+The East BBS: +46(8)940614  [16.8DS]   SYSOP: BOBO/MYSTIC
+              +46(8)940615  [16.8DS]   SYSOP: BOBO/MYSTIC
+              +46(8)940919  [14.4HST]  SYSOP: BOBO/MYSTIC
+              Username: GUEST, Password: PASSWORD
+Lost Outpost: +31-72157682  [16.8DS]   SYSOP: EMPIRE/MYSTIC
+              +31-72201182  [16.8DS]   SYSOP: EMPIRE/MYSTIC
+Channel-X   : +31-229062244 [16.8DS]
+
+or write me a mail on internet: bobo@cyberspace.net

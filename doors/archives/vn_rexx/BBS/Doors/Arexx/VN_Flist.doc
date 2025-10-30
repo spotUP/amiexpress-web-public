@@ -1,0 +1,39 @@
+              Another NO SHIT (F)ucking Replacement Door.
+
+Forget Flist and ALL other Flist style doors they are to complex for what
+should be a simple door.
+
+all this neat util does is Look good while offering the same basic
+options as the normal F command in /X u can simply replace the F
+command with this as they are exactly the same Xcept u get the option
+to download the listing with this util.
+
+-------( Bad Boys )------- write silly doors that will try to send you
+the Flist filelisting without ever changing its name, this is especialy
+bad when u attempt to flist a listing from 2 seperate boards and get
+sent the same filename, all that moving files about just cos somone
+cant be arsed to write a numberbased filename changing system for the
+door.
+ NastyFlist encodes the date,time usernumber and filelist number into
+the filename to avoid this ever happening, if you manage it it will be
+a near imposibility.
+
+Add this door in the usual way, DONT write to me asking how to do this
+as if you dont know you shouldnt be running a BBS.
+
+there are a Few variables to edit modify in the rexx all have real
+variable names so u will know what to change.
+
+TEXTACCESS={access level allowed to view online}
+ Dont u hate assholes viewing all the filelistings while online, this
+will set an access level for that to work,
+
+ZOOMDIR={directory to create the filelisting in}
+ Best Set to RAM: but any device path allowed
+
+BBSPLUG={path & filname of a text file to add to the lists}
+ if you dont want a list simply comment out or point this to a Non
+existant file.
+
+i think this is all u will need to know......
+

@@ -1,0 +1,555 @@
+@DATABASE "C-SpyV10.ENGLiSH.GUiDE"
+@REMARK .------------------------------------------------------------------.
+@REMARK | This document is written in AmigaGUiDE format, so please read it |
+@REMARK | with AmigaGUiDE or your favourite guide reader.... ciao now...   |
+@REMARK `------------------------------------------------------------------'
+@REMARK $VER: C-Spy V1.0
+@WiDTH 80
+@NODE MAiN "Guide to CALLER-SPY V1.0 WRiTTEN BY SPiDeR OF OSiRiS"
+
+                                    /\            /\            
+                ___________________/  \__________/  \__________
+                \_  _   _    _    /  __   _     /  __    _    /
+                /   |   \    |___/\__/\  _|   _/\__/\    |___/_
+               /    |    \____     \   \  \      /   \____     \
+               \    |    /   /     /   /  |\    /    /   /     /
+                \_______/_________/___/___| \  /____/_________/
+                                             \/         ©JoKER
+                             ¿S pROUD tø pRESENT:
+
+                 >»»»»> the ultimate Last-Callers-Util <««««<
+
+                 >»»»»»»»»»»»> CALLER-SPY V1.0 <««««««««««««<
+                 >»»»»»»> (c) 1994 by SPiDeR/oSi®iS <«««««««<
+
+
+
+                         @{"-*-    iNTRODUCTiON    -*-" LiNK iNTRODUCTiON}
+                         @{"-*-      FEATURES      -*-" LiNK FEATURES}
+                         @{"-*-    iNSTALLATiON    -*-" LiNK iNSTALLATiON}
+                         @{"-*- EDiT GLOBAL CONFiG -*-" LiNK CONFiGFiLES}
+                         @{"-*- EDIT  USER  CONFiG -*-" LiNK USER-CONFiG}
+                         @{"-*-   WAY OF WORKiNG   -*-" LiNK WayOfWork}
+                         @{"-*-  TROUBLE-SHOOTiNG  -*-" LiNK PROBS}
+                         @{"-*-     WHO DiD iT     -*-" LiNK CREDiTS}
+                         @{"-*-      HiSTORY!      -*-" LiNK HiSTORY}
+                         @{"-*-     GREETiNGS!     -*-" LiNK GREETiNGS}
+                         @{"-*-     OUR SLOGAN     -*-" LiNK SLOGAN}
+@ENDNODE
+
+@NODE iNTRODUCTiON "iNTRODUCTiON OF CALLER-SPY V1.0"
+
+Caller-Spy is a Last-Caller-Util for Ami-/X 2.x and 3.x.
+
+Sounds boring, eh? ........ Right!
+
+
+So, what about this:
+
+Caller-Spy is THE Last-Caller-Util for Ami-/X with NON-BELIEVABLE FEATURES!
+
+Hm, sounds better, doen`t it? ..... OK, let`s check if that`s true:
+
+
+First, Caller-Spy is implemented as a DOOR! Yeah, right, as a Door, so
+
+EVERY USER CAN START IT EVERYTIME HE WANTS !!
+
+And that`s only one of the great @{"Features" LiNK FEATURES} of CALLER-SPY.
+
+Another advantage is, that Caller-Spy does REAL-TIME-UPDATING! That means,
+
+every time it is started, it scans the Callerslog and shows all actual
+
+informations out of it, including the ones from THE USERS STILL ONLINE !
+
+So, Caller-Spy is not only an Last-Callers-Util, furthermore it is also
+
+kind of a WHO-DOOR!
+
+Just think of that possibility: You are logged in a bbs, and you can watch
+
+all the user-activities by calling several times Caller-Spy, all the infos
+
+of the Online-Users are steadily updated, including KB-Up, KB-Dn, Paging, 
+
+Sysop-Activities, and so on and so on!
+
+
+
+Ok, enough with that self-glorifying, just @{"install" LiNK iNSTALLATiON} CALLER-SPY and have a
+
+look for yourself - I bet, you`ll never de-install it, hehehe!!
+
+@ENDNODE
+
+@NODE FEATURES "FEATURES OF CALLER-SPY V1.0"
+
+
+     JUST HAVE A LOOK AT THE UNBELIEVABLE FEATURES OF CALLER-SPY V1.0:
+     =================================================================
+
+
+  - written in "pure" `C`  (Hi to all ASM-Coders out there :^)
+
+  - VERY STABLE, shows correct datas even if the BBS was down for a 
+    longer time
+
+  - gets updated even AT RE-LOGINS!
+
+  - shows AVERAGE CPS-RATE every user had
+
+  - optimized extra program for file-output only
+
+  - shows a front-ansi on top, with RANDOM-SELECTION, no matter how big
+
+  - SELECTABLE Ascii, Amiga-Ansi or IBM-Ansi - Output
+
+  - implemented as a DOOR, so EVERY USER CAN START IT EVERYTIME HE LIKES
+
+  - REAL-TIME-UPDATING: Data is updated every time when started
+
+  - EVERY USER can set up his OWN OPTIONS AND LOOK, EVEN TURN C-SPY OFF
+
+  - you can watch AS MANY LAST-USERS AS you like
+      (ever watched the last 100 users ? :^) )
+
+
+    AND NOW I GUESS I GAVE YOU ENOUGH REASONS TO @{"INSTALL" LiNK iNSTALLATiON} CALLER-SPY V1.0
+
+@ENDNODE
+
+@NODE iNSTALLATiON "iNSTALLATiON OF CALLER-SPY V1.0"
+
+iNSTALLATiON TO @{"AMi EXPRESS V2.xx" LiNK AMiEXPRESSV2.xx}.
+
+iNSTALLATiON TO @{"AMi EXPRESS V3.xx" LiNK AMiEXPRESSV3.xx}.
+
+@ENDNODE
+
+@NODE AMiEXPRESSV2.xx "iNSTALLATiON TO AMi EXPRESS V2.xx"
+
+TO iNSTALL THE DOOR LOAD UP THE CUSTOMCOMMANDS (/X V2.2x OR BELOW) OR
+BBS.CMD (/X V2.3x) AND ADD THE FOLLOWiNG LiNE TO THE LiST.
+
+
+          11 SPACES iN         
+          |
+--------------------------------------------------          
+*cspy     XM10DOORS:CALLER-SPY/CALLER-SPY
+--------------------------------------------------
+||        ||| |           
+||        ||| ` 'DOORS:CALLER-SPY/CALLER-SPY' iS THE LOCATiON OF
+||        |||    THE FiLE.
+||        |||
+||        ||` 10 THE MiNiMUM ACCESS TO USE THiS DOOR. CHANGE iT TO WHAT
+||        ||     YOU GUESS iS ACCEPTABLE FOR YOUR BOARD.
+||        ||
+||        |` 'M' FOR A MULTiNODE BBS ('S' FOR A SiNGLE NODE BBS).
+||        |
+||        ` 'X' FOR A XIM - DOOR.
+||
+|`COMMAND TO START THE DOOR.
+|
+`-RETARD OPTiON. TO MAKE SURE THEY ONLY USE 'cspy' & ONLY  'cspy'
+  TO GET THE DOOR TO COME UP. iF NOT USED, THiNGS SUCH AS 'cspyder' AND
+  'cspy%$§%$§&' WOULD STiLL BRiNG UP THE DOOR.
+
+
+  USE THE LiNE BETWEEN THE LiNES ONLY. THE OTHER PARTS ARE JUST AN
+  EXPLANATiON TO MAKE SURE YOU KNOW WHAT EACH PART iS DOiNG (SiNCE
+  NOONE WOULD TELL ME BACK iN THE DAYS WHERE i DiDN'T KNOW WHAT WAS
+  GOiNG ON!)  
+
+  NOW COPY THE DiRECTORY 'CALLER-SPY' FROM THE LHA-ARCHiVE INTO THE DOORS:
+  -DIR OF YOUR BBS.
+
+  BE SURE TO COPY ALSO THE USERS-SUBDiRECTORY INSIDE THE CALLER-SPY-DIR!!
+  iT`S iMPORTANT COZ THE USERS OWN SETTiNGS WILL BE STORED iNTO iT!
+
+
+  AT LAST EDiT THE @{"CONFiGFiLE" LiNK CONFiGFiLES}. YOU`LL FiND iT iN 'DOORS:CALLER-SPY/',
+  NAMED AS `ASGLOBAL.CFG`.
+
+  FOR SLiGHT (OR MORE?!?) SPEED iMPROVEMENT BE SURE TO HAVE A DiRECTORY
+  NAMED `T` LOCATED iN RAM !!!
+
+@ENDNODE
+
+@NODE AMiEXPRESSV3.xx "iNSTALLATiON TO AMi EXPRESS V3.xx"
+
+
+THE FiRST THiNG TO DO iS TO COPY THE FiLES FROM THE LHA-ARCHiVE TO YOUR BBS.
+BE SURE TO CORRECTLY CREATE THE DIR `DOORS:CALLER-SPY/` AND(!) iT`S SUBDiR
+`USERS/`.
+
+THE ICON `CSPY.iNFO` HAS TO BE PLACED iNTO `BBS:COMMANDS/`.
+JUST ADJUST THE TOOLTYPE `ACCESS=10` TO THE MiNiMUM-VALUE OF THE ACCESS-LEVEL
+A USER MUST HAVE TO START THE DOOR!
+
+
+FiNALLY EDiT THE @{"CONFiGFiLE" LiNK CONFiGFiLES}. YOU`LL FiND iT iN 'DOORS:CALLER-SPY/',
+NAMED AS `ASGLOBAL.CFG`.
+
+FOR SLiGHT (OR MORE?!?) SPEED iMPROVEMENT BE SURE TO HAVE A DiRECTORY NAMED
+`T` LOCATED iN RAM !!!
+
+@ENDNODE
+
+@NODE CONFiGFiLES "HOW TO EDiT THE CONFiGFiLE `ASGLOBAL.CFG`"
+
+=====================[Example Config-file]===========================
+
+NumUser 10
+NumAnsis 7
+FrontNo -1
+Display 1
+CheckNodes 0 1
+AnsiFormat 1
+RowColors 35 31 32 33 35 36 31 32 33 36
+AmigaFile ram:bull1.txt.gr
+AsciiFile ram:bull1.txt
+IBMFile NO
+
+==========================[  cut here again   ]======================
+
+What does that mean?
+
+NumUser 10  <--- Number of Users that are displayed! (here: last 10 users)
+                 Just enter the number you like, but be sure, that the
+                 callerslog is long enough! (give it a try and enter `100`,
+                 cool, eh?)
+
+NumAnsis 7  <--- Number of Ansis located in `fronts.txt`! In the Archive,
+                 there are 7 ansis, so if you add or delete some, just
+                 enter the correct number here!
+                 It`s important, to enter the correct amount, coz the user`s
+                 input on his configuration-screen is affected by that value
+
+FrontNo -1  <--- Select Front-Ansi with number `FrontNo`. if you wanna see
+                 ansi number 2 every time, just enter `2`.
+                 Enter `0` for random-selection, that means, every time
+                 Caller-Spy is started you`ll see another ansi.
+                 Enter `-1` to disable the ansi, so no ansi is shown!
+
+Display 1   <--- Display-Flag. `1` means: show last-users on screen,
+                 `0` means: don`t show them! So you can turn on/off C-Spy
+                 without having to remove the ~CC_CSPY everytime out of
+                 your login-bulletin
+
+CheckNodes 0 1 < Just enter here the Nodes you like to be watched! In this
+                 case, only nodes 0 and 1 are looked for, no matter how 
+                 many other nodes are installed. With this option, you`re
+                 able to keep your local sysop-node hidden from the users!
+
+AnsiFormat 1 <-- Set Type of Output: 0 means pure Ascii-Output, 1 means
+                 Amiga-Ansi and 2 means IBM-Ansi-Output
+
+RowColors 35 <-- these are the standard-ansi-colors for the 10 rows of the
+                 last-users-output! Every user can change these to fit his
+                 own needs, but these are the default-values every user is
+                 prompted with till he configures them!
+
+AmigaFile <----- Only necessary, if you wish an output into a bull-file!
+                 Just specify here the filename and path of the bull-file,
+                 and add the command-line `DOORS:Caller-Spy/C-SpyOff` to
+                 your logoff-batch.
+                 enter `NO` as filename to disable the file-output, or just
+                 delete this line!
+                 Behind `AmigaFile` just enter the filename for the Amiga-
+                 Ansi-Output!!
+
+AsciiFile <----- same as above, this one is for pure ascii-output
+
+IBMFile   <----- same as above, this one is for IBM-Ansi-Output
+                 as always, enter NO (or just delete the whole line) if u
+                 don`t want to have one of the mentioned outputs!
+
+
+                      ==============================
+                       iMPORTANT THiNGS TO MENTiON:
+                      ==============================
+
+The @{"USER-CONFiGFiLES" LiNK USER-CONFiG} in the `Users/`-Subdirectory have the same entries apart
+from the entries `NumAnsis` and `CheckNodes`, which CAN ONLY BE CHANGED IN
+THE MAIN-CONFIG-FILE (`asglobal.cfg`)!
+
+`AmigaFile`, `AsciiFile` and `IBMFile` are also ONLY usefull in `asglobal.cfg`.
+Second, they are only usefull, if you add a line in your logoff-batch like:
+DOORS:Caller-Spy/C-SpyOff
+That one is the executable ONLY for file-output!!!
+
+@ENDNODE       
+
+@NODE USER-CONFiG "HOW TO EDIT THE USER-CONFiGFiLES"
+
+CALLER-SPY can be started from the mainline with the `w` option:
+
+EXAMPLE:	cspy w
+
+
+with that option, the user-configuration-screen of Caller-Spy is shown,
+with the following options:
+
+
+		(1) Number of users to show:	10
+
+		(2) Display Caller-Spy:		ON
+
+		(3) Show Front-Ansi:	    RANDOM
+
+		(4) Ansi-Format:	Amiga-Ansi
+
+		(5) Create your OWN STYLE
+
+
+with the first option, the user can change the number of users, that will
+be displayed as the last users. Possible values range from 1 to 999 :^)
+
+the second option turns Caller-Spy on or off! So if a user doesn`t want to
+see the last-calles every time he logs into your system, he just sets the
+value to `off` and he won`t notice the start of Caller-Spy anymore!
+The only way back is to turn the option to `on` again!
+
+with the next option, the user can select, which front-ansi he likes to be
+shown on the top of the screen, random-selection brings up another ansi
+every time Caller-Spy is started! He can even turn the ansi off, if he only
+likes to see the `pure` information!
+
+the fourth-option determines the Ansi-Look of Caller-Spy. The three possible
+values are: Amiga-Ansi, IBM-Ansi and ASCII. So every user has the possibility
+to get Caller-Spy looking best on his terminal-screen!
+
+Finally, by pressing `5`, the user gets into the Color-Configuration-Screen!
+Here, he can change every row-color the way he likes, so the look of
+Caller-Spy never gets boring (hopefully!).
+
+
+@ENDNODE       
+
+@NODE WayOfWork "THAT`S THE WAY CALLER-SPY WORKS"
+
+               CALLER-SPY does the following steps when started:
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+ - it searches for the global-config-file in the Dir `DOORS:CALLER-SPY/`
+   and sets the configuration according to the values inside if found
+
+
+ - next, it searches for the user-config-file of the current user in the
+   `DOORS:CALLER-SPY/USERS/`-Dir
+
+
+ - if found, the configuration is read in as the current configuration
+
+
+ - if both config-files weren`t found, the standard values are used as
+   current configuration
+  
+   they are:	NumUser 10	show the last 10 users
+		NumAnsis 7	use 7 ansis, as in the standard-archive
+		FrontNo 0	use random-selection of ansi
+		Display 1	display the output
+
+
+ - after that, Caller-Spy checks for the value of the DISPLAY-OPTION:
+   if it`s 0, Caller-Spy is terminated without any output
+
+
+ - otherwise, Caller-Spy checks, which nodes to look for, searches for the
+   needed callerslogs and displays the found users in a time-sorted order.
+   it scans through the WHOLE callerslog, not only the LAST CALLER, to be
+   sure, that the data is really up-to-date!
+
+
+@ENDNODE       
+
+@NODE CREDiTS "CREDiTS FOR CALLER-SPY V1.0"
+
+   iDEA          : Shadow Man/AFL AND SPiDeR/ORS
+   
+   CODiNG        : SPiDeR øf OSiRiS
+   
+   DOCUMENTATiON : SPiDeR øf OSiRiS
+
+   BETA TESTiNG  : Shadow Man - Carrier In Space - Alpha-Flight GHQ
+                   MuMu       -      Key West    - OSiRiS EHQ
+                   Sisko      -   Deep Space 9   - Motion GHQ
+                   Bilbo      - Motion Member
+                   AMO        - Toon Town        - OSiRiS GHQ
+
+@ENDNODE
+
+@NODE GREETiNGS "FRiENDSHiP RULEZ"
+
+              GREETiNGS FROM SPiDeR TO THE FOLLOWiNG PEOPLE:
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MuMu/ORS         - I knew you`ld be back some day!! Thanks for beta-testing!
+                   how d`ya like the style NOW?
+Crackdown/MST&ORS- fuck the police man, hehe! And i`ll get you DOOMED !!
+Helion/ORS       - watch out for cows on the streets :^)
+AMO/ORS          - Biking ruuuuuuuuuulez forever!!
+Trinity/ORS      - thanx for the Ansi, perhaps you find some time for more? :)
+Raider/RZR       - Shit, i totally forgot to call you! Hope you`re still
+                   alive out there?
+Sisko/MTN        - mega-thanks for beta-testing, and keep on enlarging yar bbs
+Bilbo/MTN        - `C` rulez! Or just show me a really FAST Arexx-Tool!
+                   and thanks for your suggestions!
+Shadow Man/AFL   - seems you got `C` now, don`t you?
+Terrorist/AFL    - always tradin` like hell?
+Gandalf/SCL      - Hey, i`ll call you soon.
+Arch Magi/RDC    - i hope i`ll catch a card soon to give ya the sources! 
+Mad Hexroom      - what about your hair-cut? i guess i would love it!!
+                   and waiting for the Zyxel-ISDN-Update, hehe
+Joker/TAU        - thanx for the ansi, man!!!
+Scrap/MST        - just play Mad Dog Mc Cree!
+Sneaber/MST      - don`t leave the scene!! i hope you`ll be online again!
+
+
+
+                  AND A BiG HELLO TO ALL OSiRiS MEMBERS !
+                  =======================================
+@ENDNODE
+
+@NODE PROBS "DO YOU HAVE ANY PROBLEMS?"
+
+
+			MAIN-PROBLEMS AND THEIR SOLUTION:
+			=================================
+
+- THE OUTPUT OF CALLER-SPY IS FULL OF RUBBISH, SEEMS TO BE TOTALLY CONFUSED
+
+->Just delete the two files `astoday.cfg` and `asyester.cfg` located in the
+  Dir `DOORS:Caller-Spy/`! After that start Caller-Spy ONCE with the number
+  of Users set to an value, that guarantees that all users from TODAY AND
+  YESTERDAY are shown.
+
+  (if you`re not sure how to change the user`s-shown-value check the
+   description of the @{"CONFiGFiLE" LiNK CONFiGFiLES} in this doc-file!)
+
+  If that didn`t correct the problem, have a look into your callerslog and
+  check if it look`s normal! If it doesn`t look normal, just delete it or
+  change the corrupt data inside manually! Then start Caller-Spy again with
+  the above mentioned settings!
+
+  If all that didn`t solve your problem, just contact me on the BBS` below!
+  Else set the value of users shown back to the normal value and be happy!
+
+
+
+               FOR TROUBLE-SHOOTiNG OR LATEST UPDATES CALL:
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                               ¡___________¡
+    ___   <--------------------!          o|------------------->
+   /__/      __________________!___  ____  |___________
+   \__\   ¡__\_______  /______/ _  \/ _  \/__/ ___/ _  \____¡
+   /__/   |   \_/  /__/ \_   /    \/    \/  / ___/    \/\  o|
+   \__\   |____/_____/___/__/__/__/__/__/__/____/__/__/\/___|
+          !    \_____\___\__\__\__\__\__\__\____\__\__\/    !
+                               T           T
+       ___________ ¡__¡ _______|_______  __|___________________
+       \______/   \|  | \_______  / __ \/__________  / ________\ 
+        \_/  /  /\ \  |  \_/\__ \/  ___/ \_   /  /__/ ___/\_____\
+         /__/__/ /\___|   /_____/__/\_/___/__/_____/____/\/   ___
+         \__\__\/  \__|   \_____\__\/ \___\__\_____\____\/S M \__\
+                      !        |:          |                  /__/
+          <--------------------|o          !------------------\__\
+     nEW uSERS aLWAYS wELCOME! |!          !  +49-eLITE-oNLY  /__/
+       sYSPW & nUP rEQUIRED!   |___________| aLPHA-fLIGHT gHQ
+                               !           !
+
+      rUNNING: aMIGA 2ooo/o3o/4o mHZ / 87o mB / uSR 16.8oo dUAL !
+  cONFERENCES: aMIGA-sQUARE / pC-pLAGUE / cONSOLE-sCOPE / sEXY-sTONES
+  tHE cREW:  -  sHADOW mAN/aFL  -  tERRORIST/aFL  -  uLTRA/aFL  -
+
+
+===============================   OR CALL   ================================
+
+                                                   _/\_
+            _______________________/\___________   \\ /_____
+      \-----\_____  ____  \___  \____  \__  ___/---|\/|___  \-------|
+      |\:::::::|  || _|/ _/ _|\  \_ |\  \  ___|::::|  |  |\  \::::::|
+      |:\::::::|  || \_  \_ \__   / |/  /  \|  \:::|  |  |/  /::::::|
+      |::\:::::|  ||  |\__/  |\__/_____/|______/::/|__|  |\_/\::::::|
+      |:::\::::|__||__|:::|__|:::\:::::::::::/\::/::::|__|::::\:::::|
+      |::::\::::::::/:::::::::::::\:::::::::/::\/::::::::::::::\::::|
+      |:::::\:::::_______________________________________:::::::\:::|
+      |::::::\::::\____   \_  ___/___  \_  __  ________  \:::::::\::|
+      |:::::::\::/_/  |\__/  ___||  |\  \  |  ___|| _|/ _/::::::::\:|
+      |::::::::\/:\   |/  \  \|  \  |/  /  |  \|  \ \_  \_:::::::::\|
+      |::::::::::::\______/______/  |\_/|  |______/  |\__/::::::::::\
+      |::::::::::::::::::::::::::|__|:::|__|::::::|__|:::::::::[CD]:|
+      |:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::|
+      `-------------------------------------------------------------'
+              MYSTIC AMiGA GHQ - /X-DESiGN GHQ - CONSOLES GHQ
+                            OSiRiS AMiGA GHQ - PC EHQ
+
+   NODE1 +49[0]xxxxxxxx  NODE2 +49[0]xxxxxxxxxx  NODE3 +49[0]xxxxxxxxxx
+
+               aMiXPRESS v3.XX   ø   nUP & sYSTEM pW nEEDED
+
+@ENDNODE
+
+@NODE SLOGAN "OUR SLOGAN..."
+
+
+                   ____     ____   ___ ______   ___   ____
+                 .::::::. .::::::. :::|:::::::. :::|.::::::.
+                 :::| :::|:::| :::|:::|:::| :::|:::|:::| :::|
+                 :::| :::|`:::.    :::|:::|_:::':::|`:::.
+                 :::| :::|  `:::.  :::|:::::::. :::|  `:::.
+                 :::| :::|___ `:::|:::|:::| :::|:::|___ `:::|
+                 :::|_:::|:::|_:::|:::|:::| :::|:::|:::|_:::|
+                  `:::::' `:::::::':::|:::| :::|:::|`:::::::'
+                                            :::|       ©JoKER
+                                            :::|
+                                            :::|
+                                            `::|
+                                              `|
+
+
+
+                        - WE DON'T WANNA BE THE BEST -
+ 
+                       - WE JUST WANNA HAVE MORE FUN! -
+
+
+@ENDNODE
+
+@NODE HiSTORY "THE HiSTORY OF 'CALLER-SPY' BY SPiDeR/OSiRiS"
+
+
+                         THE HiSTORY OF 'CALLER-SPY'
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+VERSiON 0.1 : FiRST iNTERNAL RELEASE, MADE AS `CLI-ONLY`-TOOL
+
+VERSiON 0.2 : iNTERNAL RELEASE, A FEW BUGS FiXED
+
+VERSiON 0.3 : BETA-RELEASE
+
+VERSiON 0.4 : iNTERNAL RELEASE, SOME BUGS REMOVED
+
+VERSiON 0.5 : BETA RELEASE, SOME BUGS FiXED
+
+VERSiON 0.6 : BETA RELEASE, SEEMS TO RUN STABLE
+
+VERSiON 0.7 : TOTALLY REWRITTEN TO A DOOR-UTIL, SOME MINOR BUGS KILLED
+
+VERSiON 0.8 : ADDED USER-CONFIGURATION-SCREEN, ADDED MULTi-NODE-COMPATiBiLiTY,
+              SPEEDED THE WHOLE THING UP (UP TO TWO TIMES FASTER!!)
+
+VERSiON 0.9 : DESIGNED THE STYLE TOTALLY NEW
+              ADDED ASCII,AMIGA-ANSI,IBM-ANSI - SELECTION
+              ADDED COLOR-CONFIGURATION-SCREEN  (Cool, eh?)
+              NOW THE FRONT-ANSI CAN HAVE AN UNLIMITED NUMBER OF LINES
+
+VERSiON 1.0 : FIRST PUBLiC VERSiON
+              NOW LOCAL-UPLOADS ARE COUNTED, TOO
+              ADDED EXTRA-PROGRAM FOR BULLETiN-FiLE-OUTPUT
+
+@ENDNODE

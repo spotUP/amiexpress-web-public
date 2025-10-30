@@ -1,0 +1,186 @@
+Sorry M8s.. No "real" Documentation Is Available Yet.. This Is
+Only An 4-Hour-Production And I Don`t Want To Write A Big Doc
+For This Tool.. It`s A Simple-To-Install XiM-Door.. You Can
+Use The Following Tooltypes In LastAvail.info...
+
+
+==[ Example Configration For LastAvail.Info ]===============[ WD/MtS^SCX ]==
+
+DEFAULT_NUMBER=+49-PRI-VAT-E!
+NUMBER.1=+49-471-718-54
+NUMBER.2=+49-RING-DOWN!
+
+NODESTATUS.0=HIDDEN
+NODESTATUS.1=NONE
+NODESTATUS.2=SILENT
+
+FAKE_NODE_NUMBERS.0=NO
+FAKE_NODE_NUMBERS.1=NO
+FAKE_NODE_NUMBERS.2=NO
+
+FRONTEND_START.0=FRONTEND
+FRONTEND_CLEAR.0=NO
+FRONTEND_WAIT.0=NO
+FRONTEND_WHO.0=NO
+SYSOP_NAME.0=NO
+
+FRONTEND_START.1=WHO
+FRONTEND_CLEAR.1=NO
+FRONTEND_WAIT.1=NO
+FRONTEND_WHO.1=YES
+SYSOP_NAME.1=YES
+
+MESSAGE_START.0=MESSAGE1
+MESSAGE_CLEAR.0=YES
+MESSAGE_WAIT.0=NO
+MESSAGE.0=Der Sysop ist der einzig wahre Held!
+MAXMESSAGES=1
+
+============================================================================
+
+DEFAULT_NUMBER={string}
+
+LastAvail Will Use {string} As A Default-Phonenumber For Your Nodes
+
+============================================================================
+
+NUMBER.{x}={string}
+
+LastAvail Will Use {string} As The Phonenumber For Node {x}
+
+============================================================================
+
+NODESTATUS.{x}={string}
+
+{string}=SILENT - LastAvail Will Set The "Action" and "User"-Fields For
+                  Node {x} To "-Silent Mode!-" if It Was Started On Another
+                  Node Than {x}.
+
+{string}=HIDDEN - LastAvail Will Not Display The Node-Informations For
+                  Node {x} if It Was Started On Another Node Than {x}
+
+============================================================================
+
+FAKE_NODE_NUMBERS.{x}={yes/no}
+
+LastAvail Will Use "Fake"-Nodenumbers For The Frontend-Mode {x} If You
+Set {yes/no} to "YES".. f.ex.:
+
+{yes/no}="NO" (Node 0 Is Set To "HIDDEN" Using The NODESTATUS-Tooltype)
+--[ LastAvail v0.4 ]--- -- ---- ------- ----- ---- ---- -- --[ WD/MtS^SCX ]--
+
+ [ Node ]-----[ User ]------v---------[ Action ]---------v----[ Number ]---.
+ ¦  01  ¦ No User Online    ¦ Waiting For A Call         ¦ +49-471-718-54  ¦
+ ¦  02  ¦ -Silent Mode!-    ¦ -Silent Mode!-             ¦ +49-RING-DOWN!  ¦
+ `------^-------------------^----------------------------^-----------------'
+
+             the sysop wicked dream is not around to chat with you
+
+------ - ------ -- ----- ---- ---------- ----- ---- ------- --------- -------
+
+{yes/no}="YES" (Node 0 Is Set To "HIDDEN" Using The NODESTATUS-Tooltype)
+--[ LastAvail v0.4 ]--- -- ---- ------- ----- ---- ---- -- --[ WD/MtS^SCX ]--
+
+ [ Node ]-----[ User ]------v---------[ Action ]---------v----[ Number ]---.
+ ¦  00  ¦ No User Online    ¦ Waiting For A Call         ¦ +49-471-718-54  ¦
+ ¦  01  ¦ -Silent Mode!-    ¦ -Silent Mode!-             ¦ +49-RING-DOWN!  ¦
+ `------^-------------------^----------------------------^-----------------'
+
+             the sysop wicked dream is not around to chat with you
+
+------ - ------ -- ----- ---- ---------- ----- ---- ------- --------- -------
+
+============================================================================
+
+FRONTEND_START.{x}={command}
+
+{x}			=	0-10
+{command}	=	The Command LastAvail Was Started With (f.ex. ANSI, WHO, ..)
+
+============================================================================
+
+FRONTEND_CLEAR.{x}={yes/no}
+
+{x}			=	0-10
+{yes/no}	=	If You Set This Value To "YES", LastAvail Will Clear The
+				Screen If It Was Started Using The FRONTEND_START.{x}
+				Command. (Review The Example Configuration In The
+				Distribution-Archive)
+
+============================================================================
+
+FRONTEND_WAIT.{x}={yes/no}
+
+{x}			=	0-10
+{yes/no}	=	If You Set This Value To "YES", LastAvail Will Wait For
+				Any Key Entered By The Online User Before It Exits..
+
+============================================================================
+
+FRONTEND_WHO.{x}={yes/no}
+
+{x}			=	0-10
+{yes/no}	=	If You Set This Value To "YES", LastAvail Will Display
+				The Online Users Too (Handle/Name), If It Is Set To
+				"NO" It Will Display NodeNumba, Action And Phone-# Only.
+
+============================================================================
+
+SYSOP_NAME.{x}={yes/no}
+
+{x}			=	0-10
+{yes/no}	=	If You Set This Value To "YES", LastAvail Will Display
+				The Sysop`s Name In The "The Sysop Is.. For Chat" Message.
+
+f.ex.:
+If {yes/no} is set to "NO", LastAvail Will Display The Following Message
+After The Node-Information:
+
+the sysop is (not) available for chat
+
+If {yes/no} is set to "YES", LastAvail Will Display The Following Message
+After The Node-Information:
+
+the sysop {sysopname} is (not) available for chat
+
+============================================================================
+
+MESSAGE_START.{x}={command}
+
+{x}		=	0-{value set in MAXMESSAGES-Tooltype}
+{command}	=	The Command LastAvail Was Started With
+
+If You Start LastAvail With {command}, It Will Display The Message
+Given In Tooltype "MESSAGE.{x}"... It Will Wait For Any Entered Key
+If You Set The "MESSAGE_WAIT.{x}" Tooltype To "YES" And Will Clear The
+Screen If You Set The "MESSAGE_CLEAR.{x}" Tooltype To "YES"..
+
+============================================================================
+
+MAXMESSAGES={x}
+
+{x}		=	Max. Numba Of Message-Commands You Want Install In LastAvail
+
+============================================================================
+
+If You Have Any Problems With The Installation Of My Tool - Simply Don`t
+Use It Or Call My Bbs To Get In Contact With Me.. You Can Get Sum
+Informations About LastAvail When U Start LastAvail With The Parameter
+"?".. (sorry.. my english is not as good as my coding ;))... 
+
+Have Fun
+
+WiCKeD DReaM
+
+
+
+Bugfix/Update LastAvail v0.5
+============================
+
+ ø Removed the "[31m"-Color Bug which appears when you log on..
+   (Sysop will see WHiTE Text, User will see RED - Fucking Lame Serial.Device!)
+ ø The MAXMESSAGES Tooltype works now properly.
+ ø Changed the Multinode-Support from 9 to max. 32 Nodes
+   (If You Want An 32+ Node Version, Just Ask Me ;=) )
+ ø Now the 68000-Version works properly.. (v0.4 was 68020 only!?)
+

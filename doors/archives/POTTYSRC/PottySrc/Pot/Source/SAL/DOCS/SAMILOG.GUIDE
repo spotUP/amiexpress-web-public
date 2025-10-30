@@ -1,0 +1,612 @@
+@database "SAmiLog_DOCS"
+@REMARK .-------------------------------------------------------------------.
+@REMARK | SuperAmilog, HyperText document written by P0T-NOoDLE of ANTHROX. |
+@REMARK `-------------------------------------------------------------------'
+@NODE MAIN
+@TITLE "Super-AmiLog: Contents"
+
+Super-AmiLog Version 2.00, ©1992-1993 P0T-NOoDLE/ANTHROX
+Last Callers Utility for the AmiExpress BBS Software
+Programmed 100% in 680x0 ASSEMBLER for Gods'Gift Utilities.
+
+Program history and example outputs/scripts come in seperate files with
+the release archive.
+
+@{" Command Line     " LINK CMDLINE} How to talk to SAmiLog
+@{" Data Files       " LINK FILES} Files used by SAmiLog
+@{" Installation     " LINK INSTALL} How to install it into your system
+@{" Hints & Tips     " LINK HINTS} Some hints! READ THEM
+
+@{" Credits & Greets " LINK CREDITS} Who to thank
+
+
+@ENDNODE
+@NODE CREDITS "Super-AmiLog: Credits"
+Call my BBS in England: The 7th Church of the Apocalyptic Lawnmower
+                        [C.A.L.] (Anthrox UK HQ) +44 (0)81 346 6842
+Or call USS Enterprise, or Mirage in the USA.
+
+Bug reports in a text file, attached to a message!
+
+
+Super-Amilog was created in 1992/3 by...
+P0T-NOoDLE of Anthrox: Documents, Programming, Output Design
+Retaliator of Anthrox: Additional Design, The Name "AmiLog"
+    Thrash of Anthrox: Technical Assistance and Bits of Code
+
+The base idea behind the Record and Weekly Stats was stolen, due to popular
+demand, from NosCaller by Nosferatu.
+
+
+The original AmiLog was created in 1990/1 by...
+Retaliator of Anthrox: Cool Programming, Additional Design
+P0T-NOoDLE of Anthrox: Output Design, Documents
+
+Super-AmiLog is a complete re-code and shares no code with the original.
+
+
+
+P0T-NOoDLE wishes to thank the following people for bug reports, beta
+testing, and support in general...
+
+Wintermute, Thargoid, Dream Warrior, Sigma Seven, Razor Blade, Hydro,
+Rasta Catcha, Fay, Big Boss, Picard, The Legend, Fashion Light,
+Metalbasher, Dr.G., Bluelight, Ice D, Silent, Nameless, Shadlok.
+
+P0T-NOoDLE wishes *NOT* to thank THRASH for beating his ass at Goal, and
+for being a boshing-kernt.
+@ENDNODE
+@NODE CMDLINE "Super-AmiLog: Command Line"
+
+@{" Intro to Commands " LINK CMDINTRO}
+@{" Command: D-ocs    " LINK CMD_DOCS}
+@{" Command: C-lear   " LINK CMD_CLR}
+@{" Command: U-pdate  " LINK CMD_UPD8}
+@{" Command: O-utput  " LINK CMD_OUT}
+@{" Command: S-trip   " LINK CMD_STR}
+@{" Command: W-eekly  " LINK CMD_WEEK}
+@{" Command: R-ecords " LINK CMD_RECORDS}
+@{" Command Stacking  " LINK CMDSTACK}
+
+
+@ENDNODE
+@NODE CMDINTRO "Super-AmiLog: Command Line, Introduction"
+
+ Super-AmiLog has a very flexible command line. You may have it do many
+operations in just one run by using @{" command stacking " LINK CMDSTACK}.
+ Each command is always preceeded with a "-", eg "-C" is command "C". Most
+of the commands also have extra options and requirements.
+	* The CommandLine is **NOT** case-sensitive.
+	* Output filenames may not contain either "-" or "ÿ".
+	* Entering filenames as "*" or "CONSOLE:" will output to your CLI.
+
+ With the Templates, you do NOT type things like `<FILE>'. You should
+replace anything within "<" and ">" with the name you wish to use.
+ You *DO* type the ` " 's (quotation marks)...
+
+For example...
+
+Template:
+SAmiLog -D"<FILE>"                                Create [D]ocs as <FILE>.
+
+You type:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -D"RAM:SAmiLog.Doc"
+-------------------------------- Cut Here --------------------------------
+Exactly as shown above, to output to `RAM:SAmiLog.Doc"
+
+
+ When there are letters in `[' and `]', with `|' in between, you do NOT
+type the `[', `]', or `|'. You just type any, none, or all of the letters
+to switch on options!
+
+Eg: `[A|B|C|D]': You can type `C', `DAC', `AD', `ABCD', etc, or nothing.
+--- Order is not important.
+
+
+ Have a look at the Command-Template-Help in your CLI by typing: `SAmiLog'
+It is much easier to see what to type, because everything is colour-coded!
+@ENDNODE
+@NODE CMD_DOCS "Super-AmiLog: Command Line, D-ocs"
+
+Template:
+SAmiLog -D"<FILE>"                                Create [D]ocs as <FILE>.
+
+ This command creates this doc file by uncrunching it from the SuperAmiLog
+code and outputing it to the specified filename.
+
+Write the docs to `DH2:DOCS/SAmiLog.Guide':
+-------------------------------- Cut Here --------------------------------
+SAmiLog -D"DH2:DOCS/SAmiLog.Guide"
+-------------------------------- Cut Here --------------------------------
+
+ This is done to ensure that the util is never spread without the docs.
+It makes the main file about two-thirds larger, but it's still smaller
+than it would be if SAmiLog were programmed in C.
+@ENDNODE
+@NODE CMD_CLR "Super-AmiLog: Command Line, C-lear"
+
+Template:
+SAmiLog -C                                           [C]lear Storage File.
+
+ This will create a new and blank @{" storage file." LINK STORE_FILE} If a storage file is
+already on your harddisk it will be written over.
+-------------------------------- Cut Here --------------------------------
+SAmiLog -C
+-------------------------------- Cut Here --------------------------------
+ You must run this command before most of the other commands will work.
+@ENDNODE
+@NODE CMD_UPD8 "Super-AmiLog: Command Line, U-pdate"
+
+Template:
+SAmiLog -U[S|C]"<NODE>"                               [U]pdate for <NODE>.
+
+@{" Main Info                        " LINK CMD_U_MAIN}
+@{" Option S: Ignore Sysop Calls     " LINK CMD_U_S}
+@{" Option C: Create Mini-Callerslog " LINK CMD_U_C}
+
+@ENDNODE
+@NODE CMD_U_MAIN "Super-AmiLog: Command Line, U-pdate, Main Info"
+
+ This command loads the Callerslog of the specified node gets information
+about the last person to call. It then updates the information contained
+in the @{" storage file." LINK STORE_FILE} You *MUST* run this command in the logoff script
+of every one of your nodes! (Except local or secret nodes.)
+ Valid node numbers range from 0 to 9.
+
+This would be placed in the logoff-script to update Node-1:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -U"1"
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_U_S "Super-AmiLog: Command Line, U-pdate, Option S"
+ This tells the Update command to ignore and calls made by the Sysop
+(user #1). In other words, if you call your own BBS, you will not be shown
+in the last callers list.
+
+This would be placed in the logoff-script to Update Node-3:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -US"3"
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_U_C "Super-AmiLog: Command Line, U-pdate, Option C"
+ This option will create/update the @{" Mini-Callerslog " LINK MINI_CLOG} file.
+	Example1 would update for Node0 and also add to the Mini_Clog.
+
+Update Node-0 and update the mini-callerslog:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -UC"0"
+-------------------------------- Cut Here --------------------------------
+
+Update Node-1, skipping sysop calls, and update the mini-callerslog:
+-------------------------------- Cut Here --------------------------------
+Example2: SAmiLog -USC"1"
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_WEEK "Super-AmiLog: Command Line, W-eekly"
+
+Template:
+SAmiLog -W[N]"<FILE>"                       Output Weekly Stats to <FILE>.
+ 
+@{" Main Info              " LINK CMD_W_MAIN}
+@{" Option N: NoANSI       " LINK CMD_W_N}
+@ENDNODE
+@NODE CMD_W_MAIN "Super-AmiLog: Command Line, W-eekly, Main Info"
+ This command outputs statistics about the previous seven days. For each
+of the days, information about the number of calls, uploads etc is shown,
+as well as a total for all seven days.
+ All that you need to tell the command is the output-filename.
+
+Output Weekly Stats to `BBS:CONF1/Bulletins/Bull1.Txt.Gr':
+-------------------------------- Cut Here --------------------------------
+SAmiLog -W"BBS:CONF1/Bulletins/Bull1.Txt.Gr"
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_W_N "Super-AmiLog: Command Line, W-eekly, Option N"
+ This option removes all ANSI codes from the text and slightly alters the
+output so that it will look better without the ANSI. It will replace the
+`|'s in the stats line with `-'s to make the bar look better.
+
+Output Weekly Stats to `BBS:CONF1/Bulletins/Bull1.Txt', without ANSI:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -WN"BBS:CONF1/Bulletins/Bull1.Txt.Gr"
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_OUT "Super-AmiLog: Command Line, O-utput"
+
+Template:
+SAmiLog -O[N|L|F|S|T|R]"<FILE>"<#USERS>
+                                     [O]utput Callers: <#USERS> to <FILE>.
+ 
+@{" Main Info              " LINK CMD_O_MAIN}
+@{" Header & Tailer Texts  " LINK CMD_O_HEAD}
+@{" Action Codes           " LINK CMD_O_CODES}
+@{" Random One-Line Msgs   " LINK CMD_O_RND}
+@{" Option N: NoANSI       " LINK CMD_O_N}
+@{" Option L: Logoff Times " LINK CMD_O_L}
+@{" Option F: Full Nodes   " LINK CMD_O_F}
+@{" Option S: Show Files   " LINK CMD_O_S}
+@{" Option T: No Texts     " LINK CMD_O_T}
+@{" Option R: No Records   " LINK CMD_O_R}
+@ENDNODE
+@NODE CMD_O_R "Super-AmiLog: Command Line, O-utput, Option R"
+ Normally there are two bars at the bottom of SAmiLog's output. The first
+shows today's statistics, and the second shows the record statistics.
+ If you use this option, the second bar will not be shown.
+
+Output the last 20 callers to `BBS:AmiLog.ANSI' without records:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -OR"BBS:AmiLog.ANSI"20
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_O_MAIN "Super-AmiLog: Command Line, O-utput, Main Info"
+
+ This command outputs the list of last callers and stats using the info in
+@{" storage file." LINK STORE_FILE}
+ You must specify an output file-path and the number of callers to be
+displayed (between 0 and 20).
+
+Output the last 15 callers to `BBS:Node0/Bull100.Txt.Gr':
+-------------------------------- Cut Here --------------------------------
+Example2: SAmiLog -O"BBS:Node0/Bull100.Txt.Gr"15
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_O_HEAD "Super-AmiLog: Command Line, O-utput, Header/Tailer File Information"
+
+ If you output a Non-ANSI (see @{" Option N " LINK CMD_O_N}) file the util will search for
+`SAmiLog.Header.Txt' for adding before the output, and
+`SAmiLog.Tailer.Txt' for adding after the otutput.
+ If you output an ANSI (see @{" Option N " LINK CMD_O_N}) file the util will search for
+`SAmiLog.Header.Txt.Gr' for adding before the output, and
+`SAmiLog.Tailer.Txt.Gr' for adding after the otutput.
+
+ These files are normally looked for in `S:', but you can change the path
+using the @{" Path Env." LINK PATH_ENV}
+
+ In both cases, if no Header is found, a clear-screen (CTRL-L) is added to
+the top of the output so that it displays quicker/nicer.
+@ENDNODE
+@NODE CMD_O_CODES "Super-AmiLog: Command Line, O-utput, Action Codes"
+ These are what the letters in the Actions column stand for. It is left up
+to you to decide where, how and whether or not to have these included in
+your output. Most people put them in their @{" Header/Tailer." LINK CMD_O_HEAD}
+
+ [H] Hacking * [C] LostCarrier * [D] Dnload(s) * [d] Dnload(s) failed
+ [P] SysPage * [S] SysCommands * [U] Upload(s) * [u] Upload(s) failed
+@ENDNODE
+@NODE CMD_O_RND "Super-AmiLog: Command Line, O-utput, Random Lines Info"
+ If you wish to have random one line messages in your output, put all your
+one liners into the file `SAmiLog.Lines' and a random one will be selected
+for each output.
+ You can have upto 255 lines. The lines are automatically centred, however
+if they contain ANSI codes they will NOT centre correctly! Lines over 75
+chars long will be truncated.
+
+ This file is normally looked for in `S:', but you can change the path
+using the @{" Path Env." LINK PATH_ENV}
+@ENDNODE
+@NODE CMD_O_N "Super-AmiLog: Command Line, O-utput, Option N"
+ This option removes all ANSI codes from the text and slightly alters the
+output so that it will look better without the ANSI. It will replace the
+`|'s in the stats line with `-'s to make the bar look better.
+ This option also effects which @{" Header/Tailer text " LINK CMD_O_HEAD} is used.
+
+Output last 20 calls to `RAM:BULL', without ANSI, and use
+`SAmiLog.Header.Txt' and `SAmiLog.Tailer.Txt' if either or both exist:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -ON"RAM:Bull"20
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_O_L "Super-AmiLog: Command Line, O-utput, Option L"
+ This makes the util show the LogOFF-Times of the last callers instead of
+showing their LogON-Times. Their is no option to show both, because it
+would be a waste of time, seeing as Time-Online is also displayed.
+
+Output the last caller to `RAM:TEST.Txt' without ANSI, with logoff times:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -OTN"RAM:TEST.Txt"1
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_O_F "Super-AmiLog: Command Line, O-utput, Option F"
+ Normally the first column of the output is taken up showing the callers'
+baud rates, and the second column lists just the node number on its own.
+If you add this option, the baud rate will be removed and the node number
+column will be extended so that it says "Node x" instead of simply "x".
+ Obviously most people will sacrifice the word "Node" for the inclusion of
+Baud Rates, but just in case you're different...
+
+Output the last 5 callers, WITH ANSI, logoff-times, and full-nodes:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -OFT"DH0:CRAP"5
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_O_S "Super-AmiLog: Command Line, O-utput, Option S"
+ Normally the last two columns show the number of KBytes (or MBytes for
+larger numbers) uploaded and downloaded by the callers. If you use this
+option the util will show the number of FILES uploaded and downloaded
+instead.
+
+Output the last 10 callers to `TEMP:ERP', WITH ANSI, showing files:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -OS"TEMP:ERP"10
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_O_T "Super-AmiLog: Command Line, O-utput, Option T"
+ This makes the util act as if it cannot find the @{" Header/Tailer " LINK CMD_O_HEAD} texts.
+Remember: If the @{" Header " LINK CMD_O_HEAD} is not found, a clear-screen is added to the
+top of the output.
+
+Output the last 3 callers to `BBS:MTFKR', without ANSI or Header/Tailer:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -ONT"BBS:MTFKR"3
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_STR "Super-AmiLog: Command Line, S-trip"
+
+Template:
+SAmiLog -S"<#DAYS>"                      [S]trip MiniCallerslog to <#DAYS>
+
+ This command is used to keep the @{" MiniCallerslog " LINK MINI_CLOG} from growing bigger
+and bigger forever. All you need to tell it is how many days you wish to
+keep in the file (0 to a-very-large-number).
+
+Remove all info older than 5 days:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -S"5"
+-------------------------------- Cut Here --------------------------------
+
+ It is best that you only run this command once a day with some kind of
+Daily-Script (EG from my DirDate utility, a CRon task, etc), as running it
+after every call is a waste of time. ('Though it takes less than a second)
+@ENDNODE
+@NODE CMDSTACK "Super-AmiLog: Command Line, Command Stacking"
+ A user has just logged off node 1. You want to add them to the
+@{" storage file " LINK STORE_FILE} & the @{" Mini-Callerslog," LINK MINI_CLOG} and you want to update the ANSI
+and non-ANSI last callers lists for node 1. You don't have to run the util
+three or four times, just once.
+
+No problem:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -UC"1" -O"BBS:NODE1/BULL50.TXT.GR" -ON"BBS:NODE1/BULL50.TXT"
+-------------------------------- Cut Here --------------------------------
+ Should be pretty clear to the non-stupid among you.
+
+NOTE: The @{" U-pdate command " LINK CMD_UPD8} is protected against being used more
+----- than once per run.
+@ENDNODE
+@NODE STORE_FILE "Super-AmiLog: Storage File Information"
+
+ The storage file is called `SAmiLog.Store' and is where SAmiLog keeps all
+its information about the last 20 callers, the week's statistics, and the
+record statistics.
+
+ Before most of the commands will work, you must create a new, initilized
+Storage File, use the @{" C-lear Command." LINK CMD_CLR}
+
+ This file is normally looked for in `S:', but you can change the path
+using the @{" Path Env." LINK PATH_ENV}
+
+ Information about the internal format of the file is included as a
+seperate file in the release archive.
+@ENDNODE
+@NODE MINI_CLOG "Super-AmiLog: Mini-Callerslog File Information"
+
+ The Mini-Callerslog is a file called `BBS:Mini_Callerslog' and contains
+an output similar to SAmiLog's Non-ANSI output.
+ The Mini-Callerslog does not have as much information as the real
+callerslog, but because all the info is condensed into one line per user,
+and there are daily-statistics, it is good for browsing though to see
+what's been going on in the last few days.
+	At the start of each day a date bar is added, and a status bar
+shows the number of callers, uploads, etc for the previous day.
+
+ The Mini-Callerslog is created and maintained by the @{" U-pdate Command " LINK CMD_UPD8}
+when @{" option C " LINK CMD_U_C} is used.
+ You may limit the size of the Mini-Callerslog with the @{" S-trip." LINK CMD_STR}
+
+NOTE: The path of this file is *NOT* changed by the @{" Path Env." LINK PATH_ENV}
+@ENDNODE
+@NODE INSTALL "Super-AmiLog: Installation Guide"
+
+ This installation guide assumes that you have had at least a quick read
+read through the Command-Line section of this document.
+
+
+Step 1:
+------- Copy Super-AmiLog to your utils directory. It doesn't matter where
+it goes, but for future reference, let's pretend we've copied it into
+`BBS:UTILS/'.
+-------------------------------- Cut Here --------------------------------
+COPY SAmiLog BBS:Utils/
+-------------------------------- Cut Here --------------------------------
+
+
+Step 2:
+------- You have to create a new, blank @{" storage file " LINK STORE_FILE} with @{" C-lear." LINK CMD_CLR}
+-------------------------------- Cut Here --------------------------------
+BBS:Utils/SAmiLog -C
+-------------------------------- Cut Here --------------------------------
+
+
+Step 3:
+------- The @{" O-utput Command " LINK CMD_OUT} now works, so play around with the
+different options to see how you want your output to look.
+(Using `*' or `CONSOLE:' sends the text to your CLI. Use an AmiExpress
+local CLI opened on the AmiExpress screen to view it all in the correct
+colours, or send the output to a file and use the `VS' command from
+AmiExpress.)
+-------------------------------- Cut Here --------------------------------
+BBS:Utils/SAmiLog -O"*"10
+BBS:Utils/SAmiLog -OT"*"15
+-------------------------------- Cut Here --------------------------------
+
+
+Step 4:
+------- Create any @{" Header/Tailer texts," LINK CMD_O_HEAD} if you want them...
+-------------------------------- Cut Here --------------------------------
+CED S:SAmiLog.Header.Txt.Gr
+-------------------------------- Cut Here --------------------------------
+
+
+Step 5:
+------- Edit your logoff-script(s). For EVERY node (unless you want them
+to be secret) you MUST @{" U-pdate " LINK CMD_UPD8} the @{" Storage File " LINK STORE_FILE} after
+EVERY call. To update your Node-1, put this in it's logoff script:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -U"1"
+-------------------------------- Cut Here --------------------------------
+        If you want to make the last-callers bulletins for that node,
+@{" stack " LINK CMDSTACK} the @{" O-utput Command," LINK CMD_OUT} onto the Command Line,
+like this:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -U"1" -O"BBS:Node1/Bull100.Txt.Gr" -ON"BBS:Node1/Bull100.Txt"
+-------------------------------- Cut Here --------------------------------
+
+
+Step 6:
+------- Call P0T-NOoDLE's BBS and upload some files to make his hard work
+worthwhile.
+
+	That's the QUICK and SIMPLE installation over. For more advanced
+guys who want to do some better stuff, have a read through the @{" Hints " LINK HINTS}
+part of this doc, as well as a good (re-)read of the entire documentation!
+
+@ENDNODE
+@NODE HINTS "Super-AmiLog: Hints & Tips"
+][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][
+
+ Multi-Node Boards can use one logoff script for all of their nodes by
+putting `.k node' at the start of the logoff script, and having `<NODE>'
+in place of the node number.
+Example: (EXACTLY as shown between the lines, with your own output names)
+-------------------------------- Cut Here --------------------------------
+.k NODE
+SAmiLog -U"<NODE>" -O"BBS:Node<NODE>/LC.Txt.Gr" -ON"BBS:Node<NODE>/LC.Txt"
+-------------------------------- Cut Here --------------------------------
+NOTE: It does not matter where the second line is, but the first line MUST
+----- be the FIRST line in the file!
+
+][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][
+
+ To create a smoother, faster, and better looking output, put a screen
+clear (Control-L) at the top of your @{" Header File." LINK CMD_O_HEAD} It'll be much
+better than having the output scroll on in a jerky manner.
+
+][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][
+
+ SAmiLog has been programmed to enable it to be made resident. This means
+that you can load it into memory and every time it is run, it will already
+be in memory and thus will not have to be loaded from disk. If you make it
+resident, do *NOT* crunch the util!
+ To make it resident, add this to your Startup-Sequence (or User-Startup):
+-------------------------------- Cut Here --------------------------------
+RESIDENT BBS:Utils/SAmiLog PURE
+-------------------------------- Cut Here --------------------------------
+(If you set the `p' flag with protect, you can leave off `PURE')
+ Now, it is important than whenever you use SAL from a script you only
+specify its filename, and NOT its filepath. If you use the filepath, it
+will still be loaded from disk. For example, in the logoff script use:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -U"1"
+-------------------------------- Cut Here --------------------------------
+...and *NOT*:
+-------------------------------- Cut Here --------------------------------
+BBS:Utils/SAmiLog -U"1"
+-------------------------------- Cut Here --------------------------------
+
+][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][
+
+ On a MultiNode BBS, if you create seperate last-caller bulletins for each
+nodes in the logoff script(s), and then one node does not have any callers
+for a while but the others do, the less-active node's bulletin will be out
+of date by the time someone calls it. (SHIT WHAT A SENTENCE)
+ In order to get around this problem, you can have every node output to
+the SAME file (or files if you also do a Non-ANSI output) during logoff,
+and use an MCI bulletin to show this file no matter what node the user
+logs on.
+ Let's say you output to BBS:SAmiLog_Output.Txt after every call. In each
+of your bulletins on every node, you should place this:
+-------------------------------- Cut Here --------------------------------
+~
+~SS_BBS:SAmiLog_Output.Txt
+-------------------------------- Cut Here --------------------------------
+ The first line tells /X that this is an MCI script, and the second tells
+it to show the file. Simple as shit.
+
+][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][
+
+ Some people may like to keep the S: directory clear of hundreds of files.
+If you are one of those people, remember that you can tell SAmiLog to look
+elsewhere for it's files by using the @{" Path Env." LINK PATH_ENV}
+
+][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][*][
+@ENDNODE
+@NODE PATH_ENV "Super-AmiLog: Path Environment Variable"
+
+ The Path Environment Variable determins the directory that SAmiLog will
+look in to find the @{" Storage File " LINK STORE_FILE}, the @{" Header/Tailer " LINK CMD_O_HEAD} files, and the
+@{" Random Lines " LINK CMD_O_RND} file.
+ If the Path-Env is NOT found, the default directory (`S:') is used. Thus,
+if you are happy having the files in S:, you need not worry about this
+section.
+
+ I'm assuming that if you want to use this, you know a little more about
+your Amiga than the average stupid-sysop, so let's cut to the chase:
+
+ Say you want to have all the files in `BBS:Utils/SAL/'... Make the
+directory and then:
+-------------------------------- Cut Here --------------------------------
+SETENV SAmiLog_Path BBS:UTILS/SAL/
+-------------------------------- Cut Here --------------------------------
+Now it'll use that directory! (If you use a text editor to create the ENV
+file, remember not to put a return after the path).
+
+ Remember that ENV: is usually assigned in RAM:, and you will lose its
+contents next reset unless you either
+-------------------------------- Cut Here --------------------------------
+Copy ENV:SAmiLog_Path ENVARC:
+-------------------------------- Cut Here --------------------------------
+or add to your startup-sequence (or user-startup):
+-------------------------------- Cut Here --------------------------------
+SETENV SAmiLog_Path BBS:UTILS/SAL/
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE FILES "Super-AmiLog: The Files"
+
+@{" Path Env        " LINK PATH_ENV}
+@{" Storage File    " LINK STORE_FILE}
+@{" Header/Tailer   " LINK CMD_O_HEAD}
+@{" Random Lines    " LINK CMD_O_RND}
+@{" Mini-Callerslog " LINK MINI_CLOG}
+@ENDNODE
+
+
+
+@NODE CMD_RECORDS "Super-AmiLog: Command Line, R-ecords"
+
+Template:
+SAmiLog -R[N]"<FILE>"                       Output Record Stats to <FILE>.
+ 
+@{" Main Info              " LINK CMD_R_MAIN}
+@{" Option N: NoANSI       " LINK CMD_R_N}
+@ENDNODE
+@NODE CMD_R_MAIN "Super-AmiLog: Command Line, R-ecords, Main Info"
+ This command outputs statistics about the highest ever number of calls,
+uploads, etc, as well as the date that the record happened.
+ All that you need to tell the command is the output-filename.
+
+Output Record Stats to `BBS:CONF1/Bulletins/Bull1.Txt.Gr':
+-------------------------------- Cut Here --------------------------------
+SAmiLog -R"BBS:CONF1/Bulletins/Bull1.Txt.Gr"
+-------------------------------- Cut Here --------------------------------
+@ENDNODE
+@NODE CMD_R_N "Super-AmiLog: Command Line, R-ecords, Option N"
+ This option removes all ANSI codes from the text and slightly alters the
+output so that it will look better without the ANSI. It will replace the
+`|'s in the stats line with `-'s to make the bar look better.
+
+Output Record Stats to `BBS:CONF1/Bulletins/Bull1.Txt', without ANSI:
+-------------------------------- Cut Here --------------------------------
+SAmiLog -RN"BBS:CONF1/Bulletins/Bull1.Txt.Gr"
+-------------------------------- Cut Here --------------------------------
+@ENDNODE

@@ -1,0 +1,47 @@
+                   NASTYEDIT V1.1 by )/ideo /\/asty
+
+Installing:- 
+ Stick one finger in left ear (any finger on right arm) and shout i'm
+nasty and i'm going to eat your cat.
+
+ after spitting out all the fur, look at the file VN_EDIT.rexx, check
+it out fully once you are sure there are no hacked bits install it and
+have mega loads of fun, well your users with access will.. i know i do
+on the boards i have got using it...
+
+Rite install it and use it.........
+ EDit the main .rexx file and modify the variables to suit your needs.
+
+KeepBackup="YES" if this is on then an origanal of the msg will be kept
+SHOWUSER="YES"   if on the editor will be shown
+BLAME=access     set this to a access level so that users can blame
+                 someone else for there edit, if you dont want this set 
+                 it to OFF.
+
+
+-----( BLAME )-----
+To activate the BLAME option just press the * key u will be prompted for
+the rest of the stuff, however if you dont enter a name and showuser is
+on then showuser will be turned off.
+
+-----( CALL FOR FUN )-----
+anyways if you want a BUG FREE unedited version of this then call my
+bbs Low-Life II (where LoONs hangout!) +44(0)61 499 3786
+
+Rite im off now so pull that finger out and install this mother,.
+
+other info. this util is much better to use when the full screen editor
+is in use. so use any full screen editor.
+
+Setup for use with /X 3.x but should work on any /X version i think?
+
+...........
+
+PUT VN_Edit.rexx in DOORS:AREXX/
+AND MED.info in     BBS:commands/BBSCmd/
+
+. SYSOPS DONT EDIT BIG FILES WITH THE ALL OPTION . i included that
+option so that i can edit my logoff scripts from freinds houses, ever
+been away from your bbs and needed to edit your bbs scripts, then this
+is how to do it..
+

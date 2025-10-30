@@ -1,0 +1,23 @@
+[4;33m                                                                             [0m
+[4;33;44m  - Multi Top (Version 1.1b) - Coded in 1993/94 by Bobo (Mystic/X-Design) -  [0m
+
+[35mNo# Username (Handle)     Download CPS No# Username (Handle)     Download CPS
+[34m===-===================-==============-===-===================-==============
+[33m 1. [0mBeejay                       4.863 [33m16. [0mNIGHTSHADE                   3.009
+[33m 2. [0mCEViN KeY                    3.827 [33m17. [0m[-dEE/dELiGhT!-]             2.993
+[33m 3. [0mLOOBY                        3.703 [33m18. [0mAGRESSOR                     2.921
+[33m 4. [0mTWISTER                      3.644 [33m19. [0mFatal Power                  2.895
+[33m 5. [0mCallis                       3.621 [33m20. [0mJLM                          2.873
+[33m 6. [0mSL/\SH!                      3.612 [33m21. [0mCAPTAiN oKTEN                2.859
+[33m 7. [0mMetal                        3.500 [33m22. [0mCrion                        2.817
+[33m 8. [0mDog Gurka                    3.490 [33m23. [0mWARHAMMER                    2.772
+[33m 9. [0m®eaÇtø®                      3.302 [33m24. [0mSTOOKIE / DUAL CREW          2.709
+[33m10. [0mFireHaWk                     3.297 [33m25. [0mnECRoPHiLiAC                 2.660
+[33m11. [0mRon Birk                     3.288 [33m26. [0mBoOmErAnG                    2.660
+[33m12. [0mbiscrok                      3.176 [33m27. [0mDistler                      2.643
+[33m13. [0mindigo cc                    3.167 [33m28. [0mMARBLE                       2.622
+[33m14. [0mCase                         3.063 [33m29. [0mWiNSTON                      2.619
+[33m15. [0mSAVAGE/iNSANE                3.036 [33m30. [0mVAFFEL KILLER                2.551
+[34m===-===================-==============-===-===================-==============
+[32mTotal Uploaded Bytes [33m([0m11.850.511.049[33m) [32mTotal Downloaded Bytes ([0m14.192.002.371[33m)
+[32mTotal Uploaded Files [33m([0m20.786 [33m)        [32mTotal Downloaded Files ([0m28.474 [33m)[0m

@@ -1,0 +1,456 @@
+        _____  __  ____ ___          __
+________\___ \/  \/ __/ \_ \/\/\/\/\/  \ _____________________________________
+       / / / / / / / /__ / / / / / / / //
+      / / / / / / / //_// / / /   / / //    (C) 1994 nocTurne deSign/MySTic
+:    / / / / / / / /   / / / / / / / //  V1.5 Public Release Date: 05/25/94  :
+l___/  \/\/\__/\__/    \____/\/\/\__//   _ __ _______________________________j
+                                    /  
+_ _:_______________________________/
+   ¦
+   |  P·R·O·G·R·A·M   D·E·S·C·R·I·P·T·I·O·N
+_ _¦__________________________________________________ __ _
+   :
+ noC-WHO is the one of most full-featured and flexible WHO doors available,
+ from  both  the standpoint of the SYSOP and the USER.  Following is a list
+ of the available features of this release:
+ 
+   · SIMPLE TO INSTALL: Just drag the drawer into "DOORS:".
+   · Compatible with Ami-Express V3.3X+ (32 node version),
+     3.2X- (10 node version), and Sigma Express.
+   · 9 DESIGN STYLES are included for the user to choose from.
+   · All styles are fully EDITABLE/CREATABLE.
+   · Sysops may appoint PRIVILEGED users who can:
+        · Set their action string.
+        · See ALL nodes/fields.
+        · Constantly monitor nodes using the update option.
+   · noC-WHO may serve MULTIPLE purposes, (frontdoor, etc...)
+   · No more 'IN A DOOR' texts.  All doors may be recognized/named.
+   · A miscellaneous field may be configured by the sysop.
+   · All action texts are configurable.
+   · noC-WHO knows when OTHERS are using it.
+   · Calls per day are known WITHOUT any additional doors, and are
+     reset at midnight automatically.
+   · Given the Blitter 'Lick of Approval'
+                                                                           :
+_ _:_______________________________________________________________________|__
+   ¦                                                                       ¦
+   |  I·N·S·T·A·L·L·A·T·I·O·N                                              :
+_ _¦________________________________________________ __ _
+   :
+
+ noC-WHO  is  compatible with Ami-Express versions 2.xx thru 3.xx and Sigma
+ Express.    Follow  the  conventional  door  installation methods for your
+ version.    Then, simply  copy the "noC-WHO" directory, (found in the path
+ "noC-WHO1.5/doors/" when  you  dearchived this package), into "DOORS:" and
+ the door is ready to be used.
+
+ To  define  the  available  settings  for  noC-WHO,  edit  the   text file
+ "DOORS:noC-WHO/who.config".    All  of  the  OPTIONS and DESIGN-STYLES are
+ located  in  this  file.    The following parameters may be set within the
+ configuration file:
+
+_ __ __________________________________________________________________ __ _
+
+ Template: FILENAMES_DISABLED=[YES/NO]
+  Example: FILENAMES_DISABLED=YES 
+
+ If  you  want  that  filenames  NOT be listed with all upload and download
+ operations, set this to YES.
+_ __ __________________________________________________________________ __ _
+
+ Template: DIVIDERS_DISABLED=[YES/NO]
+  Example: DIVIDERS_DISABLED=YES
+
+ If  you have more than 6 nodes or so, you may want to DISABLE the DIVIDING
+ LINES between node texts to make the display more COMPACT.  If this is the
+ case, set this parameter to YES.
+_ __ __________________________________________________________________ __ _
+
+ Template: PUBLIC_UPDATE=[YES/NO]
+  Example: PUBLIC_UPDATE=NO
+
+ Some  sysops may not want the general public to be able to use the 'WHO U'
+ option  to  CONSTANTLY  MONITOR  other  nodes,  and can use this option to
+ DISABLE it.
+_ __ __________________________________________________________________ __ _
+
+ Template: DOOR_NAMES=[YES/NO]
+  Example: DOOR_NAMES=YES
+
+ If  this option is set to YES, noC-WHO will replace the "IN A DOOR" action
+ text  with  the  name of the door a user is in.  In order for this to work
+ you must have the door-log turned on for each node.
+
+ If you want that full names be used, (ie "NewFiles V1.5" rather than "N"),
+ use the "[DOOR].NAME" option.
+_ __ __________________________________________________________________ __ _
+
+ Template: CLEAR_SCREEN=[YES/NO]
+  Example: CLEAR_SCREEN=YES
+
+ If  this  is  set  to  YES,  noC-WHO  will  simply clear the screen before
+ displaying the node information.
+_ __ __________________________________________________________________ __ _
+
+ Template: COOLUSER.[NUM]=[USERNAME]
+  Example: COOLUSER.1=nocTurne
+           COOLUSER.2=/\donis
+
+ Trusted  users should be listed with this parameter.  They will be able to
+ see  EVERYTHING  and  have privileged access to the door.  As each user is
+ added you must increment [NUM].  Up to 20 users may be listed.
+_ __ __________________________________________________________________ __ _
+
+ Template: MISC.TITLE=[TEXT]
+  Example: MISC.TITLE=Phone #
+
+ noC-WHO  features  a  configurable column which you may use as you please.
+ (Ideas: Phone numbers, modem types, node info, etc..) To define this field
+ for your OWN purposes you must first create a title. 
+_ __ __________________________________________________________________ __ _
+
+ Template: MISC.[NUM]=[TEXT]
+  Example: MISC.0=LOCAL
+           MISC.1=555-1212
+           MISC.2=555-1213
+
+ You may define what is printed in the configurable field of EACH NODE.  If
+ you want any of them to display the BAUD, set those to '@'.
+_ __ __________________________________________________________________ __ _
+
+ Template: SYSOP_ACTION=[TEXT]
+  Example: SYSOP_ACTION=Hanging in the John. 
+
+ Some  sysops  like  to  have  themselves  listed  on  a  local node.  This
+ parameter  allows them to customize exactly what their ACTION field says. 
+_ __ __________________________________________________________________ __ _
+
+ Template: YOURNODE.TEXT=[TEXT]
+  Example: YOURNODE.TEXT=>> Your Node <<
+
+ The  text  listed  here will be used in place of the user's name, when HIS
+ node is being shown to him.
+_ __ __________________________________________________________________ __ _
+
+ Template: SOMEONE.TEXT=[TEXT]
+  Example: SOMEONE.TEXT=New Caller
+
+ This  text  will be used as the name of a person just logging in or who is
+ registering with the system.
+_ __ __________________________________________________________________ __ _
+
+ Template: [DOOR].NAME=[TEXT]
+  Example: COUP.NAME=noC-Coupon V1.0
+           N.NAME=NewFiles V2.0
+          
+ If the DOOR_NAMES option is on and the door logs are active, you may give
+ specific  names  to  each of your doors.  Normally if the user is in, say,
+ noC-Coupon,  only the CALLED name will be shown in the action field: COUP.
+ If  you want a more  SPECIFIC representation, use the first example shown. 
+ Then the action field would read "noC-Coupon V1.0".
+_ __ __________________________________________________________________ __ _
+
+ Template: [CALL].STYLE=[NUM]
+  Example: FRONTEND.STYLE=6
+
+ If  you  want  a  specific  style  to be used when the door is called by a
+ particular  name,  such  as in the case of a login who display (FRONTEND),
+ you may select the style to be used with this option.  (In the example, if
+ noC-WHO  is  called  by  the name FRONTEND, it will use the 6th design, [A
+ compact node display]).  If you want that the user NOT have the ability to
+ select  a  design,  you  can  SET  the style by using this command.  (eg. 
+ WHO.STYLE=1)
+_ __ __________________________________________________________________ __ _
+
+ If  you  want  to  customize  the  action  texts  you  can  edit the texts
+ proceeding the "@BEGIN_ACTIONS" string in the included config file.  These
+ are  the  default  texts  for  every action, (Awaiting call, Beginning UL,
+ etc...).    When  you  EDIT  these  texts,  be sure to keep them around 18
+ characters  long  and  KEEP  THEM  IN THE ORDER THEY CAME.  Any additional
+ carriage  returns or alterations to the arrangement of the file may result
+ in incorrect action displays.  "@END_ACTIONS" terminates the action list.
+_ __ __________________________________________________________________ __ _
+
+ Template: TITLE.[NUM]=[TEXT]
+  Example: TITLE.1=Simple Design
+
+ Use  this  string  to designate a NAME for a particular who design.  [NUM]
+ may be a number from 1 to 9, as you may have up to 9 screen-styles for the
+ user  to  select  from.   The title will be shown during the CONFIGURATION
+ session  and  should  convey  the  'MOOD'  of its respective design, while
+ remaining under 18 characters.
+_ __ __________________________________________________________________ __ _
+
+ Template: HEAD.[NUM]=[TEXT]%
+  Example: 
+-----------------------8< Cut Here -------------------------------
+ HEAD.1=
+ =========================================================
+ NODE      NAME                      @MISC..........  CONF
+ =========================================================
+ %
+ -----------------------8< Cut Here -------------------------------
+
+ This  defines  the  HEADER  for  the  design number [NUM].  This text will
+ comprise  the  top  part  of  the  who screen and may be used to title the
+ fields you  will define in the BODY.[NUM] section,  or it may simply be an
+ interesting  looking  design to preceed the node texts.  ANSI codes may be
+ used  anywhere.  Look at one of the 9 examples included for more examples.
+ Note that the text may have as many carriage returns as you like, but must
+ be TERMINATED by a '%' sign.
+
+ See "Header/Tail Commands" for the '@' commands available.
+_ __ __________________________________________________________________ __ _
+
+ Template: BODY.[NUM]=[TEXT]%
+  Example: 
+ -----------------------8< Cut Here -------------------------------
+ BODY.1=
+  @#       @NAME.................... @MISC..........   @$
+ %
+ -----------------------8< Cut Here -------------------------------
+
+ The  text  written  after  this  argument will compose the BODY of the who
+ display  [NUM].   This text will repeatedly be displayed for each node and
+ information  will be filled in accordingly.  As with all design texts, the
+ body-text  must  be terminated by a '%', and may be composed of any number
+ of ANSI codes.
+
+ See "Body Commands" for the '@' commands available.
+_ __ __________________________________________________________________ __ _
+
+ Template: DIVIDER.[NUM]=[TEXT]%
+  Example: 
+ -----------------------8< Cut Here -------------------------------
+ DIVIDER.1=
+ (======================================================)
+ %
+ -----------------------8< Cut Here -------------------------------
+
+ If  you  have  node  dividers enabled, the text written here will separate
+ each  of  the  body(node)  texts.    You  may  use as many rows of text to
+ separate the node informations; however, one row is suggested.  Again, the
+ text must end with a '%' and may be composed of ANSI sequences.
+_ __ __________________________________________________________________ __ _
+
+ Template: TAIL.[NUM]=[TEXT]%
+  Example: 
+ -----------------------8< Cut Here -------------------------------
+ TAIL.1=
+ (======================================================)
+  @VERSIONTEXT - (C)1994 nocTurne deSign - Time: @TIME
+ %
+ -----------------------8< Cut Here -------------------------------
+
+ This  text  will  be  the last string emitted.  You may use it to show the
+ time,  the number of calls for the day, or to give yourself credit for the
+ design  you  created.  Any number of lines may be used, ANSI sequences are
+ allowed, and the text must be terminated with a '%'.
+
+ See "Header/Tail Commands" for the '@' commands available.
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  P·R·O·G·R·A·M   L·O·G·I·C                                              :
+_ _¦__________________________________________________ __ _
+   :
+
+ Information  on  program usage may be obtained with "WHO ?".  To CONFIGURE
+ noC-WHO  to  one of the nine styles available, the user may enter "WHO E",
+ which  will prompt him to select his preference.  A DATA FILE with all the
+ users'  preferences will be kept named "DOORS:noC-WHO/data/who-users.dat".
+
+ If  the UPDATE option has been made available to all users, or the user is
+ privileged,  he may use this door to actively monitor the actions of those
+ online.    "WHO  U"  will cause noC-WHO to update its display every second
+ until  a  key  is pressed.  If the "PUBLIC_UPDATE" config option is set to
+ "NO",  only  privileged users will be able to have display updates.  Those
+ with  privileged  access  may  also  set their ACTION text.  Setting it to
+ NOTHING will cause all actions to be displayed normally.
+
+ Nodes  that   are   QUIETED   are   EXEMPT   from   being   displayed   to
+ 'underpriviledged'  users.  Nodes that are disabled or unavailable will be
+ shown as such.  At midnight, a task spawned by the door upon its first run
+ will AUTOMATICALLY RESET the call counter to 0.
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  C·O·M·M·A·N·D  S·E·T  E·X·P·L·A·N·A·T·I·O·N                            :
+_ _¦__________________________________________________ __ _
+   :
+
+ noC-WHO  features  an  '@'  command set, (each command begins with the '@'
+ character),  which  may  be  used  to  call  up particular strings in your
+ header, body, and tail texts.  This is best explained with examples:
+
+ Take  the  '@TIME' command.  When noC-WHO finds this text in the header or
+ tail texts, it will replace it with the current system time.
+
+ If your tail text in the config file reads:
+ ----------------------------------------------8< Cut Here -----------
+ ===============================================================
+  @VERSIONTEXT - This WHO-Door Smells - The Time: @TIME
+ ----------------------------------------------8< Cut Here -----------
+
+ When displayed it would read:
+ ----------------------------------------------8< Cut Here -----------
+ ===============================================================
+  noC-WHO V1.50 - This WHO-Door Smells - The Time: 01:20
+ ----------------------------------------------8< Cut Here -----------
+
+ You  may  use  periods  to extend the length of the text.  For example, to
+ display the system time WITH seconds:
+
+ "The Time: @TIME..."-----=would yield=----->"The Time: 01:20:12"
+
+ An example from the body-text command set; if this were your body string:
+
+ ----------------------------------------------8< Cut Here -----------
+  @# | @NAME............... | @LOC................... | @ACTION.......
+ ----------------------------------------------8< Cut Here -----------
+
+ The output text (body only, for three nodes) would then be:
+
+ ----------------------------------------------8< Cut Here -----------
+  01 | nocTurne             | ·-÷« MST^CoDeR »÷-·     | NUN'A'YOR'BIZ!
+  02 |                      |                         | Awaiting Call 
+  03 | Jake Steinfeld       | From body-building heav | Viewing Dirs  
+ ----------------------------------------------8< Cut Here -----------
+
+ As  you  can  see from node 3, where there are no periods the text will be
+ cut  off.    If  you  only used "@NAME", without any of the periods, names
+ would extend no longer than 5 characters.
+
+ This concludes your lesson of the noC-WHO command-set.
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  H·E·A·D·E·R / T·A·I·L   C·O·M·M·A·N·D·S                                :
+_ _¦__________________________________________________ __ _
+   :
+
+  Command: @CL
+   Result: Number of calls today
+
+ If  you  expect more than a thousand calls in one day (!), you may want to
+ extend the field to 4 characters, ("@CL.").
+_ __ __________________________________________________________________ __ _
+
+  Command: @MISC
+   Result: Text defined in MISC.TITLE config parameter
+
+ This  string  will  be  replaced with the title of the miscellaneous field
+ you've  defined.  ie,  whatever has  been defined in the MISC.TITLE config
+ argument will be displayed here.
+_ __ __________________________________________________________________ __ _
+
+  Command: @TIME
+   Result: System time
+
+ By  default,  a five character time display will replace the command text,
+ ("@TIME"  is  five characters long).  Thus only the hours and seconds will
+ be  shown.  Extending the field to eight characters will show the complete
+ system time, (ie "@TIME..."--->"01:12:20").
+_ __ __________________________________________________________________ __ _
+
+  Command: @VERSIONTEXT
+   Result: "noC-WHO V1.5" string
+
+ This  command  text  will  be replaced with the version string of noC-WHO.
+ THIS  COMMAND  MUST  BE  SOMEWHERE  IN  YOUR  HEADER/TAIL  TEXT or else an
+ annoying  version string will be appended to the who display.  Be warned.   :
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  B·O·D·Y   C·O·M·M·A·N·D·S                                              :
+_ _¦__________________________________________________ __ _
+   :
+
+  Command: @#
+   Result: Current node number being showed
+
+ This is simply a two character field that will be replaced with the number
+ of  the  NODE  that  is currently being displayed.  As each node is shown,
+ this number will be incremented respectively.
+_ __ __________________________________________________________________ __ _
+
+  Command: @$
+   Result: User's current conference
+
+ This command will show the current node's user CONFERENCE NUMBER.   Please
+ note,  in  order  for this to function correctly you MUST HAVE THE CALLERS
+ LOG for each node TURNED ON.
+_ __ __________________________________________________________________ __ _
+
+  Command: @ACTION
+   Result: What the user is doing
+
+ This  string  will reflect what ACTION the user of the node being shown is
+ taking.    It  is  suggested  you extend the field to around 18 characters
+ length, (ie "@ACTION...........").
+_ __ __________________________________________________________________ __ _
+
+  Command: @BAUD
+   Result: Users connect rate
+
+ This  string  will  be  replaced with the BAUD of the user currently being
+ shown.
+_ __ __________________________________________________________________ __ _
+
+  Command: @LOC
+   Result: User's Location/Group
+
+ This  field  should be extended to around 16 characters to fit the average
+ user's location line, (ie, "@LOC............")
+_ __ __________________________________________________________________ __ _
+
+  Command: @MISC
+   Result: Misc field definition for current node
+
+ This command will show what is defined in the MISC field for each node.
+_ __ __________________________________________________________________ __ _
+
+  Command: @NAME
+   Result: The user's name/handle
+
+ To  show  most user's full names/handles, this field should be extended to
+ around 14 characters, (ie, "@NAME.........").
+_ __ __________________________________________________________________ __ _
+
+  Command: @WHEN
+   Result: User's time of login
+
+ This  will  show  the  time,  (hours  and minutes), of the currently shown
+ user's  login.  If you wish seconds to be shown as well, this field should
+ be  extended to 8 characters, (ie, "@WHEN...").  YOU MUST HAVE THE CALLERS
+ LOG ON FOR THIS COMMAND TO FUNCTION.                                        :
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  C·R·E·D·I·T·S                                                          :
+_ _¦__________________________________________________ __ _
+   :
+
+ noC-WHO  is  created  by  nocTurne  deSign/MST  in  1994.    Any questions
+ regarding  the  use  of  this  program  should be addressed to nocTurne on
+ Sarcophagus BBS (+1.503.548.0532) or any other board you see me on.
+
+   * This utility is BACKDOOR and VIRUS FREE.  All nocTurne deSign products
+     are created with a dedication to quality and stability.
+
+ Greetings:  Arch-Magi: My MAN! Tanks, and tell YOGI and BEAR I said hi.
+            The Wraith: Things should PICK UP!  Tnx for the help.
+              Doc Whoo: Test - whats a pointer?
+             BloodWolf: Thanks, and tremendous luck in your ventures.
+               Mr.Vain: Need the logo collection... NOW!
+                 Samir: Let me join... C'mon. I'll supply the pot.
+            Dierberger: You suck.
+         ASCII gfxians: I need nocTurne deSign logos/noC-WHO designs!
+                   All: Soon coming - DIZ-Ed v2.0, Zippy Multiple v1.0       :
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  T·H·E  E·N·D                                                           :
+_ _¦__________________________________________________ __ _
+   :
+    

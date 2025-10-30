@@ -1,0 +1,424 @@
+@database Task-NewScan Instructions by aIRwORX
+
+©1994 by SvEN tHE CREAToR [Coder] - aIRwORX [Doc-Writer]
+All Rights Reserved
+
+@Remark $VER: V0.01 Released at the Friday, the 12th of August 1994
+@Remark AmigaGuide database for the Task-NewScan Instructions
+@node MAIN "Task-NewScan ©1994 by SvEN tHE CREAToR [Coder] - aIRwORX [Doc-Writer]"
+                               /\                 
+            __________________/  \_____________________  _____
+            \                /    \                /   \/    /
+             \   ___        /      \      ____    /         /
+              \    /       /   |    \         \  /         /
+               \  /       /    |     \____.    \/    /    /
+                \/       /     |      \   ¦     \    \    \ 
+                /       /              \  `-     \         \
+               /       /       _        \         \         \ 
+              /_______/________|         \_________\____/\___\
+                               |          \       
+                               |___________\             nEWsCAN V0.01
+                 Code: SvEN tHE CREAToR   Doc: aIRwORX   
+--==========================================================================--
+           .: Contents of documentation for the TASK-NEWSCAN  :.
+    @{"  SYSTEM-REQUIREMENTS " Link Requirements} @{"     INSTALLATION     " Link Installation} @{"      TOOLTYPES       " Link Tooltypes}
+    @{" WHAT IS TASK-NEWSCAN " Link WhatisT-NS} @{"       GREETINGS      " Link Greetings} @{"  HOW TO CONTACT US   " Link Howtocontact}
+                            @{"  HOW TO REGISTER ME  " Link Register} 
+  ¦---------------------------------------------------------------------¦
+  | NOTICE: I`ll will speak the TASK-NEWSCAN as T-NS,`cause i`ve no fun |
+  |                  to write everytime TASK-NEWSCAN.                   |
+  ¦---------------------------------------------------------------------¦
+@endnode
+@node Requirements " System-requirements of Task-NewScan"
+                               
+                           What do you need is:
+
+                              an Amiga Model 
+       [ 500 600 1000 1200 2000 2500 3000 4030 4040 5000 CDTV CD³² ]
+               Kickstart 2.xx / 3.xx   Workbench 2.xx / 3.xx
+                        AmiExpress V3.xx / V4.xx
+                             User and uploads
+
+                            @{" Go back to main " Link MAIN}
+
+@endnode                                                                                 
+@node Installation " Installation of Task-NewScan"
+
+Extract the archive [TK-NS001.LHA] and copy them to the right places...
+
+The Arcive include:  BBS:DOORS/Task-NewScan/Task-NewScan
+                     BBS:COMMANDS/BBSCMD/N.INFO
+                     BBS:COMMANDS/BBSCMD/F.INFO
+                     BBS:COMMANDS/SYSCMD/N.INFO
+
+
+                     @{" Go on to the tooltypes " Link tooltypes}
+@endnode
+@node Tooltypes " Tooltypes of the Task-NewScan"
+
+             Only the N.INFO and the F.INFO needs TOOLTYPES...
+                       Both icons need the same ....
+
+                 LOCATION=Doors:Task-NewScan/Task-NewScan
+                 MULTINODE=YES                           
+                 ACCESS=1                             
+                 TYPE=XIM
+                 NAME=Task-NewScan
+
+               - Be sure, that your DOOR-DIR is assigned ! -
+
+
+                    @{" How to make this door resident ?? " Link resident}
+                            @{" Go back to main " Link MAIN}
+@endnode
+@node resident " How to make task-NewScan RESIDENT ?? "
+
+               You can also make this Task-Scan resident...
+          If you want to make this door resident, then insert the
+              following tooltypes in all icons of this scan:
+   [ BBS:COMMANDS/BBSCMD/N.INFO ,  F.INFO ; BBS:COMMANDS/SYSCMD/N.INFO ]
+
+                 LOCATION=Task-NewScan
+                 RESIDENT
+                 MULTINODE=YES
+                 ACCESS=1
+                 TYPE=XIM
+                 NAME=Task-NewScan
+
+  Protect the TASK-NEWSCAN in our doors with --P-RWED to make it residentable
+         Then go to our user-startup and add the following string:
+
+                 Resident Doors:TASK-NEWSCAN/TASK-NEWSCAN
+
+   Reboot your mashine or just enter the shell and just type in the same
+                          to make it resident !!
+
+                            @{" Go back to main " Link MAIN}
+@endnode
+@node WhatisT-NS " What Is Task-NewScan ??? "
+
+                      Task-NewScan is a product from 
+                         @{" SvEN tHE CREAToR " Link ich}
+   it`s a replacement for any NEWFILES...it`s not only a replacement...
+                         this is a NEWFILES...hehe
+
+                  @{" What can I and the users do ??? " Link Usercando}
+@endnode
+@node Usercando " What can the sysop and the users do ??? "
+
+  The extraordinary of this tool is the BACKSCROLLING of the FILELIST...
+  ALL newfiles are able to scroll from the begining to the end...but the 
+    Task-NewScan is able to scroll up and down...to jump up and down...
+
+                       @{" How can i test it ??? " Link Howcanitestit}
+@endnode
+@node Howcanitestit " How can i test Task-NewScan ??? "
+
+                           How can i test it ???
+
+hehehe...sipmly question...heavy answer....first...be sure , that you have
+   the right lines of your screen...if you are not sure...check them...
+( Press `W` and then the `5`...and just type the Number , you see at the top)
+
+Now you must log in into our BBS...and start the Task-NewScan ( Start it with
+ `N`...if you DON`T KNOW IT )...you see...it`s working..now Task-NewScan 
+ (I`ll will short it with T-NS) ask for the date...now you can type in the
+                        date for begin scanning....
+
+Ex.:                    08-07-94 [ MONTH-DAY-YEAR ]
+
+  OR..you can type in the day to scan back...like -2 for two days back !
+
+  Now T-NS asks for the dir....type in one of our dir...or simply `U` for
+   Upload-Dir....User with a security-Level higher than 200 are allowed
+                     to scan the Hold-Dir with `H` !!
+
+For the expert User, you can start the T-NS with N -2 or how do you like...
+      You can write the options of the T-NS WITHOUT any direction...
+                  Do you understand ??? No ???? Look....
+______________________________________________________________________________
+fACElESS wORLD #1 [5:/X-tOOLS] Menu (14367 mins. left): N  A   NS      -2
+¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+     You see...T-NS isn`t specified of the order of the options....you
+       can also put SPACES between the options...the T-NS will scan
+      the uploads to days back in all dirs with nonstop....try it...
+
+Now T-NS starts Scanning...and HOW FAST..gelle ?? now...the first Files will
+     be displayed...now..look at the end of this screen..you see this:
+
+Enter command: C,F,N,S,Q,UP,DN,LF,RG,BS,1-3,7-9,?,CR :      [000%] Flags: None
+
+                     This are the commands of the T-NS
+
+                    @{" T-NS - COMMANDS WHILE FILESCANNING " Link Command-?}
+                    @{" T-NS - OPTIONS WITH THE COMMAND N  " Link Command-N}
+                    @{" T-NS - OPTIONS WITH THE COMMAND F  " Link Command-F}
+
+    IF you or the users need help of the T-NS, then try these Commands:
+
+fACElESS wORLD #1 [5:/X-tOOLS] Menu (14367 mins. left): N HELP
+                   @{" Type this, and you will get THIS help " Link N-HELP}
+
+fACElESS wORLD #1 [5:/X-tOOLS] Menu (14367 mins. left): N ?
+                   @{" Type this, and you will get THAT help " Link N-?}
+¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+                            Hmmm nice...but...
+                      @{" How can the user flag files ??? " Link Howtoflag}
+@endnode
+@node Howtoflag " How can the user flag files ???  "
+
+               You have asked me...here you get an answer...
+
+They must press the @{" F " Link ich}[Flag-modus] in the NewScan and then the user see
+white-in-blue colored filenames....now they can choose the files with 
+the cursor-keys [up/down]...they can flag the files, if there press SPACE
+at the marked filename. Now the bytes of the files will change into FLAGGED.
+Now the file(s) are flagged.
+
+              With the key `V` you can view into the file....
+
+           @{" Hmmm that`s all ?? hmmm easy..bring me to the main menu " Link Main}
+@{" STOP! One question! I didn`t understand...bring me back to the previous page! " Link Howcanitestit}
+@endnode
+@node Greetings " And here some greetings from us... "
+
+                    And here some greetings from us... 
+
+            @{" SvEN tHE CREAToR greets: "Link sTcgreets}       @{" aIRwORX greets: " Link awgreets}
+
+                         @{" Bring me back babe !! " Link Main}
+@endnode
+@node howtocontact " How can you contact us ???? "
+    If you founds some bugs...or if you have new ideas for the T-NS or
+                 an other /X-Tool, then contact me here :
+------------------------------------------------------------------------------
+                            @{" fACElESS wORLD " Link FacelessWorld}
+                          @{" oR cONTACT mE hERE " Link sTccONTACT}
+------------------------------------------------------------------------------
+                     @{" Uaaahhh i won`t contact you !! " Link Main}
+------------------------------------------------------------------------------
+@endnode
+@node Command-N " T-NSCAN OPTIONS WITH THE COMMAND N "
+
+      N................Start T-NS                            
+      N -(x)...........Scans x-days back in the upload-dir          
+      N -(x) A.........Like n -(x)  in all dirs                     
+      N mm-dd-yy U.....Scans from the date-x in the upload-dir      
+      N mm-dd-yy A.....Scans from the date-x in all dir             
+      N S U............Scans uploads since last logon in upload-dir 
+      N S A............Scans uploads since last logon in all dirs   
+      N S U NS.........Like N S U with nonstop output [Break with Q]
+      N S A NS.........Like N S A with nonstop output [Break with Q]
+      N T U............Scans today uploads in upload-dir            
+      N T A............Scans today uploads in all dirs              
+      N T U NS.........Like N T U with nonstop output [Break with Q]
+      N T A NS.........Like N T A with nonstop output [Break with Q]
+
+      @{"  That looks good...bring me back...  " Link Howcanitestit}
+@endnode      
+@node Command-F " T-NSCAN OPTIONS WITH THE COMMAND F "
+
+      F................Scans in filelist                            
+      F A..............Scans all filelists                          
+      F A NS...........Like F A with nonstop output [Break with Q]  
+      F U..............Scans in upload-filelist                     
+      F U NS...........Like F U with nonstop output [Break with Q]  
+      F (x)............Scans in filelist x                          
+      F (x) NS.........Like F (x) with nonstop output [Break with Q]
+
+ @{"  Hmmm..ok...i`ve understand...now back, please  " Link Howcanitestit}
+@endnode
+@node Command-? " COMMANDS WHILE FILESCANNING AND DESCRIPTION "
+
+ C: Clears the screen and scroll forwards
+ F: Switch flag-modus on
+ N: Output nonstop
+ S: Skip current dir
+ Q: Quit T-NS
+UP: CURSOR-KEY UP    - Scroll one line up
+DN: CURSOR-KEY DOWN  - Scroll one line down
+LF: CURSOR-KEY LEFT  - clears the screen and goes up...short,
+                       the screen will jump up
+RG: CURSOR-KEY RIGHT - clears the screen and goes down ...short, 
+                       the screen will jump down
+BS: BACKSPACE       - the screen will scroll backward....
+ 1: Will go to the end of the shown dir
+ 2: Scroll one line forward
+ 3: clears the screen and goes down
+ 7: Will go to the top of the shown dir
+ 8: Scroll one line back
+ 9: clears the screen and goes up
+ ?: short description of the commands
+CR: RETURN/ENTER    - the screen will scroll down....
+
+(004%)       - This tells you, how many percent of the dir was shown !!!
+
+Flags: None  - This tells you, how many files are Flagged !!!
+
+          @{"  yEAH...Bring me back sir...  " Link Howcanitestit}
+@endnode
+@node N-? "fACElESS wORLD #1 [5:/X-tOOLS] Menu (14367 mins. left): N ? "
+--==========================================================================--
+                       sCAN-oPTIONS wITH cOMMAND N:                           
+                                                                              
+      N................sTART nEWsCAN                                          
+      N -(x)...........sCANS x-dAYS bACK iN tHE uPLOAD-dIR                    
+      N -(x) A.........lIKE N -(x)  iN aLL dIRS                               
+      N mm-dd-yy U.....sCANS fROM tHE dATE-x iN tHE uPLOAD-dIR                
+      N mm-dd-yy A.....sCANS fROM tHE dATE-x iN aLL dIRS                      
+      N S U............sCANS uPLOADS sINCE lAST lOGON iN uPLOAD-dIR           
+      N S A............sCANS uPLOADS sINCE lAST lOGON iN aLL dIRS             
+      N S U NS.........lIKE N S U wITH nONSTOP oUTPUT [bREAK wITH Q]          
+      N S A NS.........lIKE N S A wITH nONSTOP oUTPUT [bREAK wITH Q]          
+      N T U............sCANS tODAY uPLOADS iN uPLOAD-dIR                      
+      N T A............sCANS tODAY uPLOADS iN aLL dIRS                        
+      N T U NS.........lIKE N T U wITH nONSTOP oUTPUT [bREAK wITH Q]          
+      N T A NS.........lIKE N T A wITH nONSTOP oUTPUT [bREAK wITH Q]          
+                                                                              
+--==========================================================================--
+                       sCAN-oPTIONS wITH cOMMAND F:                           
+                                                                              
+      F................sCANS iN fILElIST                                      
+      F A..............sCANS aLL fILElISTS                                    
+      F A NS...........lIKE F A wITH nONSTOP oUTPUT [bREAK wITH Q]            
+      F U..............sCANS iN uPLOAD-fILElIST                               
+      F U NS...........lIKE F U wITH nONSTOP oUTPUT [bREAK wITH Q]            
+      F (x)............sCANS iN fILElIST x                                    
+      F (x) NS.........lIKE F (x) wITH nONSTOP oUTPUT [bREAK wITH Q]          
+                                                                              
+         [- N HELP aND F HELP wILL vIEW a mORE dETAILED hELP pAGE -]          
+                                                                              
+--==========================================================================--
+
+                             @{" Back sir " Link Howcanitestit}
+@endnode
+@node N-HELP "fACElESS wORLD #1 [5:/X-tOOLS] Menu (14367 mins. left): N HELP "
+--==========================================================================--
+hOW tO uSE tHIS nEWsCAN:                                                      
+                                                                              
+U cAn tYPE N iN tHE cOMMAND-LINE, tHEN tASK-nEWsCAN aSKS fOR tHE sCAN-dATE !  
+U cAN tYPE tHE dATE [eX. 07-07-94], tHE dAYS tO gO bACK [eX. -2 fOR sCAN      
+uP tO 2 dAYS bACK] oR jUST pRESS rETURN fOR lASTcALL-sCAN !                   
+nOW tASK-nEWsCAN aSKS fOR tHE sCAN-dIR...tYPE hERE 1 fOR dIR 1, 2 fOR dIR 2   
+aND sO oN oR sIMPLY U fOR tHE lAST/uPLOAD dIR ! uSERS wITH aN hIGHER lEVEL    
+tHAN 200 aRE aLLOWED tO uSE tHE hOLD-dIR wITH H !                             
+                                                                              
+--==========================================================================--
+hOW tO sTART tASK-nEWsCAN fROM tHE cOMMAND-lINE:                              
+                                                                              
+jUST wRITE N [oUR dIR, sCANdATE..oR wHAT dO yOU lIKE]                         
+yOU cAN aLL cOMMANDS wRITE hOW dO yA lIKE:                                    
+                                                                              
+--==========================================================================--
+eXAMPLE:                                                                      
+                                                                              
+fACElESS wORLD #2 [5:/X-tOOLS] Menu (14399 mins. left): N U -5                
+                                                                              
+--==========================================================================--
+                                                                              
+tASK-nEWsCAN sCANS 5 dAYS bACK iN tHE uPLOAD-dIR...                           
+tHE sPECIAL eFFECT iS...yOU mUST wRITE iN tHE mOST nEWfILES/sCANS tHE oPTIONS 
+iN oRDER...lIKE N -3 U ! iN tASK-nEWsCAN, U cAn wRITE , hOW dO yA lIKE...     
+U cAN aLSO pUT mORE tHAN oNE sPACE bETWEEN tHE oPTIONS...lIKE                 
+                                                                              
+fACElESS wORLD #2 [5:/X-tOOLS] Menu (14399 mins. left): N  u  07-07-94   ns   
+                                                                              
+tHIS iS eASY iSN`T iT ???
+--==========================================================================--
+                             @{" That`s it " Link Howcanitestit}
+@endnode
+@node Register " Why must i and how can i register ??? "
+
+                   Why must i and how can i register ???
+
+      Yep...if you like the Task-NewScan, than you MUST register it,
+ because the @{" flag " Link ich} option will works Works till 1st Oct. 94 !
+      If you register, you can use ALL options so long as you want !
+         And only YOU can use our registered version...hehehehe...
+   You don`t think it ??? hehe OK register this tool, you get them, and
+                          then try it....hehehehe
+
+                   @{" OK..i will...where can i get it ?? " Link FacelessWorld}
+                             @{" Nope Thanxx !!! " Link Main}
+@endnode
+@node FacelessWorld " cALL oR yOU gET bUSTED !!! hEHEHEHE "
+                                                             /\      /
+  fUCKIN`oN    /¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯\ ____/__\____/___
+ /X 3.38 rEG. /   [·F·A·C·E·L·E·S·S·]  [·W·O·R·L·D·]   \¯¯¯/¯¯¯¯\¯¯/¯¯¯¯
+_____________________________________________________   \ /      \/__
+\_ __________/___.      __/_ ._________/_ __________/_________.   _\/_
+ / _________| / ¬|      ¬\ / |       ¬\ / ---------\          |  \\/\//
+/         ¬| /  |         \  |         \            \cJ!      |aTOMIC zONE
+\_         | \___|        /___         /__          /______________________
+  \________|     |_______/  ¬|________/__|_________/_________/_ __________/
+                       /        ¬\_ /  --------\ /---------¬\ /---------¬\
+ sYScOP:              /           \\            \            \            \
+        aIRwORX       \___         /___         /___         /___         /
+                         |________/   |________/   |________/   |________/
+_____ ____________________________________________________________
+\__ ¬|     __/___.      __/__________ _/__       __/\_________. _/ fUCKING
+ /  / \    ¬\ / ¬|      ¬\ /       _/ \ /        ¬\_ /       ¬| \  ¯¯¯¯¯¯¯
+/    ¡       \   !        \        \   \           \\         !  \   oN
+\____|       /____        /_________\  /__          /__          /   ¯¯
+     |______/    |_______/           \/  |_________/  |_________/  A-4000
+_  ___  _________ ___________ ____ __ ________ __ ______ _____!    ¯¯¯¯¯¯
+___________________________________________________________________________
+|- cOOL uSER - cOOL sYScREW - cOOL rATIO - cOOL fAKES - cOOL cONFERENCES -|
+¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+   ×××        ×××        ×××        ×××        ×××        ×××        ×××
+  (°ª°)      (°º°)      (°ª°)      (°º°)      (°ª°)      (°º°)      (°ª°)
+  /¯¯¯\      /¯¯¯\      /¯¯¯\      /¯¯¯\      /¯¯¯\      /¯¯¯\      /¯¯¯\
+ /\-A-/\    /\-I-/\    /\-R-/\    /\-W-/\    /\-O-/\    /\-R-/\    /\-X-/\
+¤ /¯¯¯\ ¤  ¤ /¯¯¯\ ¤  ¤ /¯¯¯\ ¤  ¤ /¯¯¯\ ¤  ¤ /¯¯¯\ ¤  ¤ /¯¯¯\ ¤  ¤ /¯¯¯\ ¤
+ ¯     ¯    ¯     ¯    ¯     ¯    ¯     ¯    ¯     ¯    ¯     ¯    ¯     ¯
+                    @{" Ahhhhha...Thanxx...i`ll call you " Link Main}
+@endnode
+@node awgreets " aIRwORX sMASHED sOME gREETINGS tO : "
+
+                          Some greetings goes to:
+
+  SvEN tHE CREAToR.............tHANXX fOR tHIS gREAT nEWsCAN !!!
+  dEATH aNGEL..................uPSA...hEHEHE...
+  sNOW.........................dER sCHWEBENE....hEHEHEHE
+  dRAGONhUNT...................dON`T lET hACK yOUR bOARD...tSE tSE tSE
+  dELTA-X/nEON.................jAM jAM...hEHEHE...wHAT`S wRONG ???
+  dREAMdANCER..................hEY dUDE...aRE yOU dEATH ???
+  cELATOR/aFL..................i`M wORKIN` aT yOUR mOD !!!lALALALA..hEHE
+  cEE jAY/pURe aZKee aRT!......wELL...cALL...aND wE tALK 2 hOURS..hEHE
+  [-tHE aDDICT!]...............jAM jAM qWK rULEZZZZZZZZ ?!
+  tHUNDER......................wHEN dO yA gET yOUR lINE ??? 1998 ?? hEHE
+  cOATL........................jAM...sOMEtHING wRONG ??? hEHE
+  vANGUARD.....................aRE yOU bUSTED oR nOT ??
+  pROPHET......................tEQUILA rOOOLEEEEZZZZ  uRGS
+
+                   @{" Ouhhh...no greets to me ??? snief... " Link main}
+@endnode
+@node sTcgreets " SvEN tHE CREAToR sMASHED sOME gREETINGS tO : "
+
+                  Here are some greetings to:
+
+    aIRWORX..................mUCH tHX fOR tHE iDEAS, gUIDE, hELPING a.S.O.
+    dEATH aNGEL..................................aLLE mACHT dEN kLOBÜRSTEN
+    sNOW.............................................................dUNNO
+    dELTA-X..........................................wHAT'S bEEN wITH YOU?
+    cELATOR...................................................aMIGAe-r0oLZ
+    [-tHE aDDICT-].................................tHX fOR sTAYING wITH US
+    lEALAND gOUNT....................................dID rOFOE cALL aGAIN?
+    tHUNDER......................................tHX fOR dUPEcHECK rEPORTS
+    pROPHET......................................pROPHECY wILL bECOME rEAL
+
+                   @{" Ouhhh...no greets to me ??? snief... " Link main}
+@endnode
+@node stccontact " Contact SvEN tHE CREAToR hERE : "
+
+      Do you want to contact me, because you want a regisered version
+       of this favourite NewScan...then call one of this boards....
+                   Sorry....but find out the numbers....
+
+                              @{"   Crash BBS  " Link ich}
+                              @{"    Kingdom   " Link ich}
+                              @{"   Evil Moon  " Link ich}
+                              @{" Broadway BBS " Link ich}
+
+                        @{" Yep...all right master ! " Link Main}
+@endnode

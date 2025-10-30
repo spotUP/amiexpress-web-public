@@ -1,0 +1,106 @@
+
+SLICK TOP V1.0
+
+Why ???
+
+coz i wanted a confrence and total top u/l list for my board so i wrote one!
+and after many weeks of beta testing on my board all my users say its the best!
+
+this door can be a seprate confrece top up or a total overall top u/l list
+
+usage:
+
+its best for a board that has confrerence accounting turned ON to have a
+seprate top u/l list for each conf that way it makes it a lot fairer on users
+imagine you have a pc conf and an amiga conf the top u/l list could be pc
+users only as the pc files are genrallty bigger so you ve a top u/l list when
+entering each confrence that support warez!. 
+
+INSTALLATION:
+
+slicktop is run from your bbs loggoff script. 
+
+SYNTAX is:
+
+slicktop outputfile datafile maxusers outputstyle confrencename
+
+EXAMPLE:
+
+slicktop bbs:bull50.txt.gr bbs:amiga/conf.db 20 1 "Amiga Warez"
+		  ^  		  ^	      ^ ^        ^		
+		  |		  |	      | |        |_ confrencename						
+		  |		  |	      |	|_outputstyle
+		  |		  |	      |_maxusers
+ 		  |		  |_datafile
+                  |_outputfile
+
+outputfile: textfile to be created
+
+datafile:   	path to a conf.db/user.data file
+	    	if you enter a conf.db file then the top u/l list will be for
+	    	that confrence only. 
+	    	If you enter user.data file then the top u/l will be a over all
+		top u/l list for all confs.
+
+maxusers:   	any number from 1-40 this will specify how many users to be 
+	    	shown in the list.
+
+outputstyle:    any number from 1-8 this specifys the look of the bull to 
+		be created please look at the output files in this arc.
+
+confrencename:  the name of the confrence you are making the top u/l list for
+		If confrece name is 2 words or more enter name inside " "
+		if you specify a user.data file for datafile then confrencename
+		will automaticly be changed to overall top uploaders.
+
+EXAMPLE LOGGOFF SCRIPT
+--------------------------------------------------------------------------
+
+slicktop bbs:screens/bull50.txt.gr bbs:user.data 20 1 "Overall top uploaders."
+slicktop bbs:amiga/bull50.txt.gr bbs:amiga/conf.db 20 2 "Amiga Warez"
+slicktop bbs:ibmpc/bull50.txt.gr bbs:ibmpc/conf.db 15 8 "Ibm Pc Warez"
+slicktop bbs:snes/bull50.txt.gr bbs:snes/conf.db 22 3 "Snes Warez"
+
+--------------------------------------------------------------------------
+
+
+PLEASE LOOK AT THE OUTPUT FILES INCLUDED IN THIS ARC FOR STYLE OF OUTPUT!
+
+any probs contact me at : Dark Domain +1 305-989-0718 NUP=SPOCK
+
+BUGBYTE 1994 ....
+
+
+GREETS GOTO :
+
+BIG BOSS                            (Thanx For The Help Man)
+INDIO/CSL                           (wibble wibble!)
+YSL/CSL                             
+TIN MAN                             (ill get ya back you know what i mean)
+FLUX
+SCOTT
+IBM
+HARMONICA
+ANIMAL                              (alrite calm down!)
+HOMER                               (nice ta have ya back)
+YEKO
+REMIX                               (ok for a classic member hehe)
+JERKY                               (miss ya man!)
+SHOCK
+CARDINAL
+BLASTER                             (sysop x-factor cool board dewd)
+JACKNIFE                            (call DD soon for a chat) 
+NAZGUL                              (been a long time! ill be seying ya)
+SNAKE       
+DON DOG
+ZION                                (put my access back NOW! =) )  
+NOXOUS (humm)                       
+LEVITATION                          (thanx for the help dewd :) )
+KEN D 
+[-POLARIS-]                         (we need to chat call dd )
+MARIO                               (COOL trader!)
+SLEDGE
+RAPTOR
+ROTOX                               (cool Board Man)
+
+ENd..

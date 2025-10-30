@@ -1,0 +1,50 @@
+#LOGO=1 ; 0=no 1=yes
+#PAGELINE=1
+#TOP=1
+[37m.-------[36m-[37m---[36m-[37m-[36m-------------------------÷---------{ [34mPage    [34mof [36m@PAGES=%2d; [36m}--[34m-[36m---[34m--[36m-[34m---.
+#MIDDLE=1
+[36m>--÷-[34m-[36m--[34m----------------÷-----------{ [36mInfo [34m}-------------------÷--------------<
+#BOTTOM=1
+`--÷-----÷-----. [36m1oo% [34mT-Join v2.0  (c) [36mAnti-g[34m/[36m1oo%[34m/[36mBad Brothers [34m.-----÷-------'[37m
+
+#INFO
+[36m|[77C[34m|
+
+#DOUBLEAREA
+[37m| [32m@AREA_L=%2d;  [33m@NAME_L=%-33.33s;[@XPOS=%d;;40H[0;34m| [32m@AREA_R=%2d;  [33m@NAME_R=%-33.33s;[@XPOS=%d;;79H[0;34m|
+
+#SINGLEAREA
+[37m| [32m@AREA_L=%2d;  [33m@NAME_L=%-33.33s;[@XPOS=%d;;40H[0;34m|[38C|
+
+#PAGENR
+[@XPOS=%d;;57H[36m@PAGE=%2d;
+
+#HI_LEFT_BAR
+[@XPOS=%d;;2H[34;44m>[36m@AREA_L=%2d;[34m< [37m@NAME_L=%-33.33s;[0m
+
+#HI_RIGHT_BAR
+[@XPOS=%d;;41H[34;44m>[36m@AREA_R=%2d;[34m< [37m@NAME_R=%-33.33s;[0m
+
+#CLR_LEFT_BAR
+[@XPOS=%d;;2H[0;32m @AREA_L=%2d;  [33m@NAME_L=%-33.33s;
+
+#CLR_RIGHT_BAR
+[@XPOS=%d;;41H[0;32m @AREA_R=%2d;  [33m@NAME_R=%-33.33s;
+
+#HI_LEFT_NOBAR
+[@XPOS=%d;;2H[0m>[2C<
+
+#HI_RIGHT_NOBAR
+[@XPOS=%d;;41H[0m>[2C<
+
+#CLR_LEFT_NOBAR
+[@XPOS=%d;;2H[0m [2C 
+
+#CLR_RIGHT_NOBAR
+[@XPOS=%d;;41H[0m [2C 
+
+#NUM_INPUT
+[@XPOS=%d;;2H[37m@AREA=%-2d;[34m|
+
+#INFOSTRING
+[@XPOS=%d;;5H[K[@CENTER=%d;C[37m@INFOSTR=%.72s;[@XPOS=%d;;79H[0;34m|[37m

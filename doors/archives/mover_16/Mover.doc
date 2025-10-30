@@ -1,0 +1,347 @@
+                                  Mover v1.6
+                                  ----------
+
+                       Copyright © 1992,93 - Roy Sutton
+                            a.k.a. The Distributor
+
+                                What is Mover?
+                                --------------
+
+   Mover is a door which allows an AmiExpress sysop to maintain his or her
+file areas.  Are you sick and tired of having to cut and paste file
+descriptions by hand?  Upset about having to go to the shell and move the new
+uploads into the correct directory?  Angry about having to delete some lame
+upload and then going in to remove the loser's credit with the user editor?
+Mover makes all these tasks simpler.  Mover allows a sysop to delete a file
+description or to move a file descriptions between directories.  Mover also
+allows the sysop to do local uploads from a directory or to add descriptions
+for "off-line" programs.  Mover also allows for description editing and for
+moving files from the hold directory.  Mover is SHAREWARE!
+
+
+                                  Disclaimer
+                                  ----------
+
+   Mover reads and writes several of the files used by AmiExpress.  Although
+every effort was made to ensure that Mover works correctly, there is always
+the possibility that Mover could corrupt your files.  Neither the author nor
+those acting as his agents accept responsibility for the use or mis-use of
+Mover.  The user accepts full responsibility once Mover is installed.  A
+special note of warning:  As Mover must access files which user's on the BBS
+can access, care must be taken when user's are logged in to other nodes.
+Mover will attempt to handle all file conflicts by displaying a message
+telling you the file that is in use and letting you press a key to allow Mover
+to try the file again.  Mover was written to work with AmiExpress 2.0+, to
+make Mover work with AmiExpress 3.0, please read the section "Making Mover
+Work With AmiExpress 3.0."
+
+
+                               Installing Mover
+                               ----------------
+
+   Mover is meant to integrate easily into the AmiExpress environment.  To
+install Mover, simply copy it to your DOORS: directory and make the neccessary
+changes to your CustomCommands file in your BBS:Commands directory.  For
+example, after you have copied Mover to your DOORS: directory, add the
+following line to your CustomCommands file:
+
+*MOVER    XS240DOORS:Mover
+
+Please refer to the AmiExpress documentation for setting the security level of
+Mover.  As Mover is a Sysop utility, you do not generally want any user to
+have access to it.
+
+To take full advantage of Mover's abilities, you should use the Sent by: option
+in your file areas.
+
+   This is all that is required to get Mover up and running.  There are some
+additional options, so please read on.
+
+
+                                 Using Mover
+                                 -----------
+
+   To use Mover, you must first login in to AmiExpress.  Once logged in, join
+the conference you wish to maintain.  Type in the command you have chosen to
+activate Mover (If you chose the default configuration, you would type
+"Mover").  Once Mover is started, it will tell you which conference you are
+in, how many directories are in this conference, and whether or not you have
+registered Mover.  If you have not registered Mover, you will only be able to
+move or delete one file.  If you have not created a MOVER.CFG file (described
+below) you will be given the opportunity to create one.  If you have created
+one, you will be given a list of the directories in the current conference.
+You may then choose a directory number to maintain, 'S' to perform a sysop
+upload, or 'R' to reconfigure your MOVER.CFG file.  Choose a directory number,
+'S', or 'R' to continue.
+
+                            File Area Maintainance
+                            ----------------------
+
+   Once you have chosen the file area to act upon, Mover will display a list
+of up to 26 files, each associated with a letter (A-Z).  The list may look
+like:
+
+                  Directory 5
+                  New Uploads
+
+A.  assignx.lha                 G.  betrspch.lha
+B.  MOD-Chi.lha                 H.  samplez.lzh
+C.  Dragon.dms                  I.  modulez.lzh
+D.  undim.dms                   J.  qmouse.lha
+E.  mod.chi.lha                 K.  runback.lzh
+F.  bBaseII.lha
+
+
+Press <ENTER> to quit, Press (1-6) to choose new directory (0 Quits), or
+Choose a file (A-M) :
+
+To perform one of Mover's operations on a file, type the letter associated
+with that file and press <ENTER>.  If you want to select a new directory, type
+the number of that directory and press <ENTER>.  If you want to quit Mover,
+press 0.  The files are always listed in the same order in which they appear
+in your directory listings (oldest file at the top, youngest file at the
+bottom).  If you have set up a MOVER.CFG file (described below), you will also
+see that certain files will show up in red, yellow, or white, depending upon
+their age.  If there are more than 26 files in this directory, you can press
+<ENTER> to continue listing the files.  If there are no more files in the
+current directory, pressing <ENTER> will allow you to choose a new directory.
+
+   Once you have selected a file, Mover will display the full description of
+the file and a menu of operations to perform upon the file.  For example:
+
+GTOOLSBX.LHA P 318848  07-14-92  The complete archive of GadToolsBox. Include
+                                 s source for the program.  This program
+                                 allows the generation of C or assembly code
+                                 for WB2.0 Screens, Windows, and Gadgets.
+                                 Sent by: Roy Sutton
+
+1> Delete this listing from this directory
+2> Move this listing to another directory
+3> Edit this description
+4> Choose new directory
+5> Re-list files
+
+Anything else quits :/>
+
+                            Deleting A Description
+                            ----------------------
+
+   If you choose 1, Delete, Mover will delete the description of the file from
+the directory listing.  If you have turned on the "Sent by:" option and you
+have registered Mover, you will be given the opportunity to take away the
+uploader's credit.  If you choose to take away the uploader's credit, both their
+files uploaded and bytes uploaded will be altered.  After this choice, another
+menu will be displayed.  This menu allows you to do something with the file
+associated with the description.  Mover will assume you wish to delete the
+file, and place a "1" in the input buffer for you.  If this is what you want
+to do, press <ENTER>.  If you wish to move the file to some other directory,
+choose 2.  You will then be asked to enter a path (and optionally a new name)
+for the file.  If you want to leave the file where it is, press backspace, 3,
+then <ENTER>.  Mover will search for the file do be deleted or moved by first
+checking the file ULPATH, if it exists.  If you do not have a ULPATH or the
+file is not found in one of those paths, Mover will search through your PATHS
+file.  If Mover still cannot find the file, an error message will be
+displayed.  If the file is in the HOLD directory, Mover will find it there.
+
+                             Moving A Description
+                             --------------------
+
+   If you choose 2, Move, Mover will allow you to move the description to
+another directory.  If you have set up a MOVER.CFG file, Mover will display a
+list of the directories available.  Choose the destination directory.  Mover
+will always make sure that the file is inserted in the correct order so that
+new scans will work.  After the description has been moved, Mover allows you
+to move the file associated with the description.  If you have set up a
+MOVER.CFG file, Mover will fill in the input with the path specified in the
+MOVER.CFG file.  You can override this choice by backspacing over the input.
+If you wish to prevent the move, clear the entire line and press <ENTER>.  If
+you have not set up a MOVER.CFG file, type in the destination path at the
+prompt.  Mover will search for the file to move in the same manner as
+described in the "Deleting A Description" section.
+
+   If you are moving a file from the Hold (Private uploads) directory and you
+have registered Mover, Mover will ask you if you wish to credit the uploader
+for the upload.  AmiExpress does not credit the user for private uploads,
+therefore, you may want to give the user credit for the file when you move it
+into a normal file area.  Mover automatically removes the '/' from the
+description when moving it to another conference.
+
+                            Editing a Description
+                            ---------------------
+
+   If you choose 3, Edit this description, Mover will use your default editor
+to edit the file.  Once you have completed modifying the description, Mover
+will paste the description back into the directory.  It is important to
+remember that file descriptions cannot be more than 44 characters long.
+
+                           Choosing A New Directory
+                           ------------------------
+
+   If you choose 4, Choose new directory, Mover will allow you to enter a new
+directory number.  If you have set up a MOVER.CFG file, Mover will display a
+list of the directories.  Choose a directory and press <ENTER>.
+
+                            Re-Listing A Directory
+                            ----------------------
+
+   If you have passed the file you wanted to work on, choose 4, and your
+current directory will be listed again from the oldest file.
+
+
+                                Sysop Uploads
+                                -------------
+
+   To perform a sysop upload, choose 'S' from the startup menu.  If you are
+maintaining a directory, press '0' and return to return to the startup menu.
+Once you have selected 'S', Mover will prompt you to enter the directory from
+which it will upload files.  This allows the sysop to place the files to be
+uploaded into a hold directory and then select them one by one to be uploaded
+to the board and placed in the correct directories.  If you have already placed
+the files in the correct directories or you want to do an off-line upload (a
+description, but no file attached) press <ENTER> leaving the answer blank.  If
+you entered a directory name, Mover will prompt you to enter the file name or
+file pattern to be used to search the directory.  Mover will suggest '#?'.
+Mover uses the standard AmigaDOS wildcard characters (mainly because they are
+more flexible than the ones which AmiExpress allows).  If you know the name of
+the file you want to upload, erase the '#?' and type in the name of the file.
+Mover will search the directory specified.  If it finds a match, it will ask if
+you want to upload the file.  At this point you may answer 'Y'es, 'N'o, or
+'A'bort.  If you choose 'Y'es, Mover will extract the information about the file
+size from AmigaDOS.  Mover will then ask for a description of the File.  You
+may enter as many lines of description as you would like.  To stop entering the
+description, press <ENTER> on a blank line.  Mover will then present a list of
+destination directories and ask for you to choose one.  Once you have chosen
+the destination directory, Mover will prompt for the directory in which to place
+the file.  If you would rather not have Mover move the file, clear the response
+field and press <ENTER>.  If there are more files that match the search pattern,
+they will be displayed.
+
+   If you are performing an off-line upload, Mover will prompt you for the
+name of the file you would like to upload.  After you have entered the filename,
+Mover will ask for the file size.  Once you have entered this information, Mover
+will ask for the destination directory.  Once you have entered this, the file
+will be added to the file listings.
+
+   Files uploaded will automatically be placed at the end of the target
+directory's file listing.  Mover puts the current date into the date field for
+you.  This is a good thing as it allows people to do a new scan off all
+directories and see the new files you have added.
+
+
+                            Setting Up A MOVER.CFG
+                            ----------------------
+
+   Beginning with Mover v1.4, Mover has the ability to help you set up a
+MOVER.CFG file for each one of your conferences.  If you start Mover and you
+have not created a MOVER.CFG file, Mover will ask you if you would like to
+create one.  Answer 'Y'es to the prompt.  Mover has the ability to color-code
+files based on their age.  Mover will ask you for the maximum number of days
+old a file should be before it will be displayed in yellow (files younger than
+this number will be displayed in white).  Mover will then ask for the maximum
+number of days old a file can get before it is displayed in red.  Files older
+than the first number, but younger than the second number will be displayed in
+yellow.  If the first number is the same as or greater than the second number,
+files will only be displayed as white or red.  Mover will now display the
+number of directories in the current conference.  Mover will prompt you for a
+name and a default directory for each directory in the conference.  The name of
+the directory should probably be the same as the name given in your FileHelp.txt
+file.  The default path is simply the path in which you would like Mover to
+place files moved from other directories.  If you have an off-line directory,
+you may want to set the default path of that directory to NIL: so that files
+are automatically deleted when their description is moved to the off-line
+directory.
+
+   Mover needs a MOVER.CFG file for each conference.  Mover will create the
+MOVER.CFG file and place it in the CONF_LOCAL directory of the current
+conference, as specified in your ACP.Startup.  If you decide to change your
+MOVER.CFG file in the future, choose the 'R'econfigure option from the startup
+menu.
+
+                    Making Mover Work With AmiExpress 3.0
+                    -------------------------------------
+
+   Currently, Mover only understands the ULPATHS and PATHS files that Ami-
+Express 2.0 uses.  AmiExpress 3.0 has this information stored in an icon's
+tooltypes.  For Mover to work effectively with 3.0, you should either not
+delete these files when upgrading or create these files with the information
+stored in the corresponding icons.
+
+   Current Beta versions of AmiExpress 3.0 have an altered user data file
+that is incompatible with Mover.  You should not use the features that modify
+a users upload bytes with 3.0.
+
+                              Registering Mover
+                              -----------------
+
+   If you have not registered Mover, you will only be able to perform one file
+operation before Mover exits back to AmiExpress.  Additionally, you will not
+be able to take advantage of the feature which allows modification of the
+user's byte and file counts when deleteing or moving a file.  To register
+Mover, send $10 to:
+
+         By Mail:                      Electronically:
+
+         Roy Sutton                    R.SUTTON6 on GEnie
+         60 SW 91st Ave. #304          rsutton on BIX
+         Plantation, FL                rsutton@bix.com on Internet
+                    33324-2545         Roy Sutton on (305)475-7785
+
+   When you register Mover, you will need to include the Sysop name and BBS
+name EXACTLY as they appear in your ACP.Startup.  You do not have to include
+the ANSI escape sequences.  Also include your BBS number, name, Mover version
+number, and return mailing address.  If you include this information on disk,
+I will use that disk for your key file.  You may also include your favorite
+PD software on disk.  European users should include an extra dollar to cover
+return shipping costs.
+
+   The preferred method of registration is through a BBS.  Call The Last! Amiga
+BBS or The 4 Am Club! and log in.  Once you have been validated, type "reg" at
+the main prompt.  On LAB!, you must be in the AmiExpress support conference.
+You will be presented with a questionaire asking for the same information I have
+listed above.  After you have completed the information and mailed in your
+donation, a file will be attached to a message for you.  This file will contain
+the key file for Mover, instructions for installing the key file, and any
+updates which have occurred to Mover since the version you received.
+
+   By registering Mover, you ensure that there will be updates and other
+AmiExpress utilities.  I am always open to suggestions for new features and
+programs.  Please see the section at the end for future enhancements.
+
+   Mover updates are routinely posted to LAB! and The 4 Am Club!(see below).  The
+latest version of Mover can always be found on these BBSs.
+
+
+                                Amiga Columns
+                                -------------
+
+   I can't resist this opportunity to plug my Shareware game, Amiga Columns.
+This exciting game is about to be updated with the release of Amiga Columns
+II.  All those who register for Mover can get a discount on Amiga Columns II
+when it is released.  Look for Amiga Columns II on your favorite BBS soon!
+
+                                    Thanks
+                                    ------
+
+Many thanks go out to:
+
+Paul Day     - Beta Tester, Sysop - Last! Amiga BBS (PD)    (305)456-0126
+The Outlaw   - Beta Tester, Sysop - The 4 Am Club! (ELITE)  (305)966-0154
+Joseph Hodge - Author: AmiExpress - LightSpeed BBS          (703)639-6114
+
+      I can be reached on all of the above, as The Distributor on The 4 Am Club! &
+                    Lightspeed, and as Roy Sutton on LAB)
+
+
+                             Future Enhancements
+                             -------------------
+
+   There are several enhancements planned for Mover.  These include:
+
+   o The ability to move files between conferences
+   o FULL AmiExpress 3.0 support
+
+   There are also some other doors in the works.  Unfortunately, if this
+Shareware experiment doesn't work, I'll be forced to cease development of
+Mover.  If you want to see more AmiExpress doors and utilities, REGISTER!
+If there is something about Mover which keeps you from registering, let me
+know!  I'm always willing to improve a product I've developed.   - Roy

@@ -1,0 +1,16 @@
+
+                            E X A M P L E :
+
+               [OPEN] This Menu!......................10
+               [ED]   Edit File List.................255
+               [WALL] Write The Wall..................10
+               [WHO]  Who Is OnLine!?.................10
+               [NUKE] NuKer..........................255
+               [CHAT] Multinode Chat..................40
+               [SENT] Edit Your 'Sent by' Line........10
+               [UL]   User List.......................10
+               [OLM]  Send OnLine Message.............40
+               [VOTE] Our Referendum!.................10
+               [DLST] Download File List..............10
+               [BBS]  World BBS lister................40
+

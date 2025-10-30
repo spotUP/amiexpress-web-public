@@ -1,0 +1,232 @@
+@database WiLDVote.doc 
+
+@node MAIN "WiLDVote v0.10 DoX (c) 07/94  WiLD THiNG/Mannassas"
+
+                           [---> Mannassas <---]
+                               presents the
+      ____  ____  ___ __ _______ _____________________   _____________
+     /    /\    \/   \  :       \        /     :      : /    /       /
+    //           \___/  :___     \   ___/ ____ : ____ :/    /___    /____
+    \            /   \      \ /  /    /:       :      :        /   /    /
+     \____/\____/\___/______/___/____/ :_______:______:_______/________/
+                                  SeRieS
+     ====================================================================
+                               WiLD VoTe v0.10
+                  written 01 - 07/94 by WiLD THiNG/Mannassas
+     ====================================================================
+
+                              C O N T E N T S
+              @{" Features            " link "overview"}    @{" Preface           " link "preface"}
+              @{" Installation        " link "installation"}    @{" Greetings         " link "greets"}
+              @{" Future improvements " link "improvements"}    @{" Contact           " link "contact"}
+              @{" other WiLDTooLS     " link "tools"}    @{" History           " link "history"}
+                                
+                                 
+
+@endnode
+@node preface
+This is a multi-purpose vote door, you can use it for your mag, just for
+fun or anything else. I wrote this door 6 month ago in ARexx and am still
+fighting with myself to rewrite it in E for a better speed, but somehow I
+can't get my ass up... so I did sum really necessary bug fixes...
+After a long time /X got it's own built-in voting booth (VO) but it's quite
+shitty if you have seen it...
+
+             Sø HâVë â Hø®N¥ Ğâ¥ âNĞ Mâ¥ Ğâ Wâ®ëZ Bë W¡TH ¥øµ
+
+                         ¥øµ®S   WiLD THiNG/TauruS
+
+
+
+@endnode
+
+@node overview
+                          --- F E A T U R E S ---
+
+· scans for new topics at login and lists them
+· everyone can add/delete topics and items to vote on (access level
+  depending, differs on every topic if a user can add items or not)
+· creates complete result list for free download at wish
+· users votes will be stored, so he can look where he voted on and change
+  his vote - everyone can vote only once
+· results are shown sorted with percentage and graph bars
+· info who and when somebody created a topic and optional long description
+· optional logs to callerslog
+· show list of users
+
+
+              *** THIS DOOR DOESN'T CONTAIN ANY BACKDOORS ***
+
+The  only  'hidden'  function  is  the  command 'q' which will exit without
+saving(for access higher than 250)
+
+@endnode
+
+@node installation
+                      --- I N S T A L L A T I O N --
+
+Execute  the  SETUP  script,  it  will copy the files where they belong and
+create  some  needed  files  and dirctories, it won't do any harm to yer HD
+then edit the following files TO yer needs:
+
+doors:wildtools/wildvote/tems/1         <- change Name of item to anything
+                                           you want
+
+doors:wildtools/wildvote/tems.wv        <- change it according to this
+
+                     first line  - number of topics
+                     second line - name of the topics
+                     third line  - access level needed to add item
+
+
+
+If  you  want  WiLDVote  to  be started automatically at every logon and to
+check  if  a  user hasn't voted on a topic yet you'll have to use two names
+for  it,  for  the auto-start it MUST be 'WVC' for the other anything else.
+Now put the ~CC_WVC command to your bull.txt.
+The  problem  is  that  WiLDVote shouldn't be used at more than one node at
+once  but  as  WiLDVote has two different names there might be some problem
+with the stats files.
+WV is an AIM type door, MULTINODE=NO
+
+Have a look at the WiLDVote.cfg file, here the access levels for the
+different actions are defined.
+
+@endnode
+
+@node improvements
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                    The complete version will contain:
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    - item deletion
+    - installation routine
+    - list of voters
+    - conversion to Amiga E for speed improvement
+
+@endnode
+
+@node history
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                 History:
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- v0.3          completely rewrote it after the old version was gone after
+                a HD crash
+- v0.4          added review with sorting
+- v0.5          first public beta release
+                Review improved with graph bars, access checking for
+                delete/add
+- v0.6          access checking for each topic
+- v0.7          improved vote scanning: now topics are shown at login,
+                topic menu  shown in two rows
+
+---------------------------------------------------------------------------
+                         v0.8 - released 08-Jan-94
+grafical  output  improvements,  made  scan  routine look nicer, added save
+progress  indicator,  searches  for  duplicate  items,  checks  now if item
+already  exists,  removed  some  minor  bugs,  now  info  option  with long
+description possibility, configurable callerslog option
+---------------------------------------------------------------------------
+                         v0.9 
+again improved the design a bit and made it more compact, updated helpfile,
+result download  option as ANSI file
+---------------------------------------------------------------------------
+- v0.10 06/07/94        some bug fixes and little improvements like
+                        list of voters and minor improvements in operation
+---------------------------------------------------------------------------
+
+
+If you want beta - test my tools @{"call me" link "contact"}.
+@endnode
+
+@node greets "Greetings & Fuckings"
+                 -======================================-
+                       Greetings go to(in no order)
+                 -======================================-
+
+all   Ex-Mannassas   &  FeaR  members,  Tic.,  R19,  Dragon/Motion,  Vince,
+Andy/Motion,  Sunset, Donald/Motion, Vince, The Generat, Wild Child/Taurus,
+EaZy-E/Taurus,  Zielu/Mad  Elks, uNReaL/Surprise Prod., Easy Rider/Mystic &
+TRSi,  EMPiRE/Mystic,  ByteAndi/TRSi,  Selz/Nova Acies(?), The Trader/FeaR,
+Chipsi/Taurus,   Crazy  Squaw,  Calypso/GOD,  KC,  C/\Te¥e/Insane,  all  my
+Beta-Testers, and all others I forgot ....
+                                    ____
+ ___________________________________\  /________________________________
+(__________________________________ \\// _______________________________)     
+ \_________________________________\ \/ /______________________________/
+                                   \\  //
+                                    \\//
+                                     \/
+
+                     aND  LaZT  BuT  OF CoZ N°T LeaST
+              a BiG, FaT & HaiR¥ GReeT¥ T° a££ M¥ HoRNeD BRoS
+
+                  
+
+Franklin/Termos : YO, (I hate this RAP & similar shit), keep smilin' & thx
+                  for da fonts
+uFoK/MySTiC     : thx FøR äLL THøZë µPPZ
+Dune/FeaR       : YeP that's ¥ouR ASCii STuFF, ThX aN¥Wa¥
+      /\      Artie/Taurus : hi hope to chat to ye as soon as possible,
+ ____/  \____                what about that new stuff ??
+ \   /\/\   / Bionic/Yodel : w8in' for another all-thru-the-night chat
+  \  \/\/  /  Fazer/Razor 1911: I'll call as soon as I can, promised
+  /        \  Vinzi/Yodel     : Nice  txt in that intro (YC3+4)
+ /___ () ___\ SiNTAX/WøT      : ...your examples in E and your AEDoor.library
+     \  /  Wouter van Oortmerssen : ... Amiga E compiler, it's the BEST
+      \/  Big C & Amiga   : ... the best toy for bored programmers ;-)
+
+Rage against ZK : Go on like this
+Logic           : hey yer checkers  are da best 
+Mystic PL       : Czesc maluchy
+Yodel           : hello to all of you, nice intro
+
+                 -======================================-
+                              Fuckings go to
+                 -======================================-
+Polish telecom (TPSA): fucked up assholes
+all you stupid lamers here that even can't do a simple file description
+Zonder Lamando       : fuck yerself
+McDonald's           : this McChampion is BuLLSHiT
+
+@endnode
+
+@node contact
+                *** For any improvement or bug reports ***
+             *** write to WiLD THiNG at one of these boards ***
+
+@endnode
+
+@node tools
+                          LooK ouT FoR THe oTHeR 
+      ____  ____  ___ __ _______ _____________________   _____________
+     /    /\    \/   \  :       \        /     :      : /    /       /
+    //           \___/  :___     \   ___/ ____ : ____ :/    /___    /____
+    \            /   \      \ /  /    /:       :      :        /   /    /
+     \____/\____/\___/______/___/____/ :_______:______:_______/________/
+
+
+[----- NAME ------|------ DESCRIPTION -------|------- FEATURES ---------------]
+ WiLDRead v0.13   | file/archive/log viewer  | text search
+                  |                          | file/arc info
+                  |                          | next/prev. page
+                  |                          | page selection
+[-----------------|--------------------------|--------------------------------]
+ WiLDNeW v0.4     | new user questionaire    | multilanguage
+                  |                          | baud checking for questions
+                  |                          | multiple answers
+                  |                          | text comments (internal ed)
+                  |                          | sysop review of new users
+[-----------------|--------------------------|--------------------------------]
+ WiLDBull v0.2    | global bulletins         | scroll bar selection
+                  |                          | all bulls in one dir
+[-----------------|--------------------------|--------------------------------]
+ WiLDMenu v0.1    | multi level menus        | all menus in one file
+[-----------------|--------------------------|--------------------------------]
+ WiLDKick v0.1    | unwanted users kick out  | show  msg to user & hang up
+[-----------------|--------------------------|--------------------------------]
+ WiLDList v0.7    | global filelist dl       | packs filelists from all confs
+[-----------------|--------------------------|--------------------------------]
+ WiLDStat v0.1    | Stats door               | replacement the syscmd/s door
+[-----------------|--------------------------|--------------------------------]
+@endnode

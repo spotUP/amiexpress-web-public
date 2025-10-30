@@ -1,0 +1,281 @@
+@database MDB-ConferenceUpdater 1.9
+
+Copyright (C) 1994 (MDB Productions)
+All Rights Reserved
+
+@Remark $VER: Version V1.9 (05 Jun 1994)
+@Remark AmigaGuide database for the ConferenceUpdater 1.9
+
+@node MAIN "MDB-ConferenceUpdater 1.9 AmigaGuide Document (C) 1994 (MDB Productions)"
+
+                         _____/\   ______/\  _____/\ 
+                        /  / \  \  \  ___  \ \  ___ \
+                       /  /\_/\  \ /\/| /  / /\/ /  /
+                       \  \   /  //   |/  / /  |/   \
+                        \__\ /  / \___   /  \__|_   /
+                             \_/      \_/        \_/ 
+
+                   MDB Productions  iS PRouD To PReSeNT :
+
+                  C O N F E R E N C E - U P D A T E R 1.9
+
+          ·:·C·O·N·T·E·N·T·S··O·F··D·O·C·U·M·E·N·T·A·T·I·O·N·:·
+
+                             @{"  INTRODUCTION  " LINK PART_01}
+                             @{"  REQUIREMENTS  " LINK PART_02}
+                             @{"  INSTALLATION  " LINK PART_03}
+                             @{"   TOOL-TYPES   " LINK PART_04}
+                             @{"    COMMANDS    " LINK PART_05}
+                             @{"    CHANGES!    " LINK PART_06}
+                             @{"     ADVERT     " LINK PART_07}
+                             @{"      HELP      " LINK PART_08}
+@endnode
+
+@node PART_01 "Introduction"
+
+For sysops it's hard to keep their conferences up to date. This door
+checks if the files stated in the catalogs still exist. If they don't
+exists anymore, the filesize in the catalog will be changed to a text
+like 'OFFLINE', 'DELETED' or something simular.
+
+The door is very smart, so the less installation you have to do. It
+checks the following icons BBS:CONFCONFIG and CONF<num>. Lets enjoy
+this one.
+
+@endnode
+
+@node PART_02 "Requirements"
+
+What U need to run it...
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+ - an Amigamodel (A500/A600/A1200/A2000/A3000/A4000) with Kickstart 2.04++
+
+ - the installed /X-Software (V3.20+) in the drawer BBS:
+
+Now let's go on by explaining the @{"Installation" LINK PART_03}...
+
+@endnode
+
+@node PART_03 "Installation for ConfUpdater 1.9"
+
+How to install it to your /X-System...
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+First make a Drawer into Doors: called 'MDB-ConfUpdater' and copy the Files
+ - 'MDB-ConfUpdater'
+ - 'MDB-ConfUpdater.INFO'
+into it.
+
+Second copy the Icon 'CU.INFO' into the BBSCmd Drawer.
+
+Last bu not least you have to copy some tools into the C Drawer, coz
+the insert-option need them to extract the FILE_ID.DIZ. These files are:
+ - 'DMSDescript'
+ - 'EXEDescript'
+ - 'TxtExtract'
+
+Thats all there is. Simple he!
+
+@endnode
+
+@node PART_04 "ToolTypes for ConfUpdater 1.9"
+
+                                ToolTypes
+                                ~~~~~~~~~
+
+                    @{" TOOLTYPES FOR MDB-ConfUpdater 1.9" LINK PART_04_LC}
+
+                    @{" TOOLTYPES FOR CU                 " LINK PART_04_LO}
+
+@endnode
+
+@node PART_04_LC "ToolTypes for MDB-ConfUpdater 1.9
+
+                 ToolTypes for MDB-ConfUpdater 1.9
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+DELETE.num=<string>             - The DELETE.num tooltype specifies the text
+                                  that will be passed to your catalogs. The
+                                  maximum string length is 8 characters. Do
+                                  not overide this one. The maximum of
+                                  DELETE.num is 9.
+                                  Eg. DELETE.1=OFFLINE
+
+DESTINATION=<path>              - This tooltype specifies where the DIR<num>
+                                  catalogs will be stored. It is a backup-
+                                  mechanism, so you have to move them your
+                                  self to active them. The catalogs will be
+                                  be stored as CONF<num>_DIR<num>. The path
+                                  must end with a ':' or a '/' like:
+                                  DESTINATION=RAM: or
+                                  DESTINATION=Work:Tmp/
+@endnode
+
+@node PART_04_LO "ToolTypes For CU"
+
+                       ToolTypes for CU
+                       ~~~~~~~~~~~~~~~~
+
+ACCESS=<acs.level>              - This tooltype specifies the access level
+                                  that the user must have to run the door.
+                                  Eg. ACCESS=200
+
+LOCATION=<filename>             - This tooltype specifies where the Door
+                                  is located.
+                                  LOCATION=Doors:MDB-ConfUpdater/MDB-ConfUpdater
+                                  !!! DO NOT CHANGE THIS ONE !!!
+
+MULTINODE=<YES|NO>              - This tooltype specifies if the Door may
+                                  started in different nodes.
+                                  Eg. MULTINODE=YES
+
+PRIORITY=<num>                  - This tooltype specifies the AmigaDos
+                                  priority when the Door is executed.
+                                  Eg. PRIORITY=2
+
+STACK=<size>                    - This tooltype specifies the Door stack.
+                                  Eg. STACK=8096
+
+TYPE=<AIM|SIM|TIM|XIM>          - This tooltype specifies the Door-type.
+                                  This Door is written in 100% pure
+                                  Assembly so TYPE=XIM
+
+@endnode
+
+@node PART_05 "Commands"
+
+Start the door by useing the CU-command, and will get the main menu.
+
+@{" A "} Shows some litte information about the authors.
+
+@{" D "} In a conference you can use different DIRs. The maximum is
+    stated in the CONF<num> icon in the tooltype NDIRS. By 
+    startup this value will be used as working DIR. This option
+    allows you to change the dirnumber you are working with.
+
+@{" U "} THE CONFERENCE UPDATE. This one scans your current dir (as
+    mentions with option D). If a entry in your dir doesn't
+    exists anymore, a action will take place:
+       1. change the filesize in a message like 'DELETED'
+       2. delete the entry.
+    Which one will depant of your option (1-0).
+
+@{" Q "} Don't try.
+
+@{" I "} This one scans all your update dirs. If there is a file 
+    which is not present in the current dir, the file will
+    be added to this dir.
+
+@{" V "} A previously processed dir can be viewed with this option.
+
+@{" B "} We always say, safety first. Therefore an updated dir is
+    placed in a directory according the DESTINATION tooltype.
+    But if you want, you can the bring the processed dir only.
+    Safety first, so a backup will be made of your actual dir
+    in the bbs.
+
+@{" S "} Sorts the dir by date, filename.
+
+@endnode
+
+@node PART_06 "Changes"
+
+1.9 (05 Jun May 1994)
+    - The dir can now be sorted! It's even possible to make all
+      files with current date; nice for the 'N S U' command.
+      Be aware for look a likes, I just saw one from noCtyre/Mystic!!!
+    - Dir viewer works remote now!
+
+1.8 (02 Jun May 1994)
+    - All functions recognise the Exorcist commands! Nice he!
+      Thanxs to RubiX from TFA for mentioning.
+
+1.7 (02 Jun May 1994)
+    - Viewer changed, now it uses de DT_LINELENGTH function and
+      correctly displays the text options in stead of the filesize
+      (the last char wasn't displayed).
+
+1.6 (29 May 1994)
+    - Some maincoding changes, faster and better!
+    - The DIRs will be re-read after each DLPATH is scanned by
+      the Insert-option. No duplicate entries any more!
+    - Now the door uses the online BBS dir by the Insert-option
+      if you answer is NO to the question if you like to use the
+      previously processed dir.
+    - Handles empty dirs (0 bytes or doesn't exist) correcty by
+      the Insert-option.
+
+1.5 (20 May 1994)
+    - Scans download directories 1 to 9 and insert new files to
+      the DIR.
+    - View the processed dir.
+    - Brings the processed dir online.
+    - Default startup for directory changed from DIR1 to NDIRS as
+      stated in CONF<num>.INFO
+    - Delete an entry in the dir if the file doesn't exists.
+    - A lot more, I already forgot them.
+
+1.4 (16 May 1994) Never released
+    
+1.3 (16 Mar 1994)
+    - Faster screenhandling.
+    - New action available, directory occurences will be deleted when
+      the file is not available.
+
+1.2 (14 Mar 1994)
+    - Returncode $a removed. This value meant LINE DOWN in stead
+      of NEW LINE in ANSI-codes.
+
+1.1 (13 Mar 1994) 
+    - The term 'catalog' changed to 'dir' for better understanding
+      for some persons.
+    - Using ANSI-codes instead of CSI-codes. The screens must work
+      remote now!
+
+@endnode
+
+@node PART_07 "Death Simple ... OTM The GraveDiggers"
+
+/X 3.3+    :+                   WELCOME TO                            /X 3.3+
+          .::.       ____________  ______________._          .+.
+         .:+.       |__  \  ____/ / _ \      _/  | \         .:.
+   AscII  +::+.     |  \  \  .)\_/     \/   | |  |  \       ::+.    AscII
+ \  B Y  /   :.     |  /   \ |  |   :   \   | |  _   \     :+:.  \   B Y   /
+ _\ MSW /_          |______/\___|\__|___/\__| |__|___/     .     _\  MSW  /_ 
+-=-=-=-=-=-=-=-         -=-            -=-=-=-=-             -=-=-=-=-=--=-=-
+.°*DEATH                                                             DEATH*°.
+   SIMPLE*°.                                                      .°*SIMPLE
+=-=-=-               -=-=-=-=-=-=-=-            -=-=-          -=-=-=   -=-=-
+                ___/\____/\  __ _/\  /\_____/\__      /\____
+-24 HoUrS      /     \____/ /  Y   \/___  _ \  |     /  .  |    ..::.
+-chataBle     /   ___/    \/   :    \  / ___/  |__  /   |__|     +::.+
+-SysOp        \___   \____ \___ ____ \/  |\  __|  \/_    __/   .+::+
+-CeWl Area's  /   \__/    \/   Y    \/\__| \/      \ \__/  \   .:
+              \  ___/\____/\___|__  /__  |  \______ \____  /
+               \/                 \/   \/          \/    \/ +31-(0)2152-68786
+
+    __/\__ __ ___ _ _ _   :-)   2 OPERATOR 2  (-:      ___ __ __ __/\__
+    \ Oo /__ ______ _ _       ~~~~~~~~~~~~~~~          __ __ __\ oO /
+    /_--_\__ ___ __ __       2-)  COSYSOP  (-2        __ ____ _ _/_--_\
+      \/                                                           \/
+
+@endnode
+
+@node PART_08 "Help me please"
+Can somebody help me with the following feature:
+I like to implent a break-option useing CTRL-C keys. But how can I prog
+this feature in assembler??? If you now how, please contact me and tell
+me how to do it, or better give me a some source coding?
+
+Contact me directy:
+   MDB Productions
+   PWA-park 93
+   3905 CC  Veenendaal
+   The Netherlands
+   +31-(0)8385-29239
+
+Or leave a messy at our board
+   Death Simple
+   +31-(0)2152-68786
+@endnode

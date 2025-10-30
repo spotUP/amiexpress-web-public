@@ -1,0 +1,106 @@
+           ___________  _______________     ___________  ___________
+     :::::/  __   /  /\/  /__   ___/  /\:::/  __   /  /\/  /   ____/\:
+     ::::/  / /  /  / /  /\_/  /\_/  / /::/  / /  /  /\/  /   /\___\/:
+     :::/  / /  /  / /  / //  / //  / /::/  /\/  /  /  \ /__  \ \:::::
+     ::/   \/  /   \/  / //  / //  /_/__/  /\/  /  /    /\_/   \ \::::
+     :/_______/_______/ //__/ //_______/__/ /__/_______/_______/ /::::
+     :\______ \______ \/:\_ \/:\______ \_ \/\_ \______ \______ \/:::::
+     ::::::::\/::::::\/::::\/:::::::::\/:\/:::\/::::::\/::::::\/::ToX:
+                               PRESENTS                     
+
+                  JoyComment V1.3 coded by AtomiX/OTL
+
+
+WHAT'S THE USE OF THIS TOOL ?
+-----------------------------
+
+        This is a nice Comment-Door (hard to guess, eyh) !
+
+        You can specify Sysops and Comments via tooltypes,
+        you also can specify what access-level the cosysops
+        will be shown (so new users only see main-sysop)
+        you can select a Default Sysop when the User press only
+        Return the Comment will be written to the Default Sysop !
+
+
+        OrginalFileLength:  JoyComment/JoyComment.xim=13944 bytes
+
+HISTORY :
+---------
+
+        V1.0 -   First Release
+        V1.1 -   Optimized and writen a new Turbo Routine for faster
+                 Screen Output
+        V1.2 -   Turbo Routine rewritten ... Internal changes
+        V1.3ß-   New Tooltypes Added and little gramatic bug fixed
+                 New Design bar Added with current Time , Conference
+                 and Default Sysop.
+                 Code Optimized.
+
+
+*  =  New Options in this Version
+
+
+HOW TO INSTALL :
+----------------
+
+        This is a XIM Door !
+
+        Copy just all to the BBS i prepared it so that it is working
+        automatically ;^)) !
+
+
+        Configure the "DOORS:JOYCOMENNT/JoyComment.xim.info"
+
+        ToolTypes:
+        ---------
+
+        SYSOPS=               <Add the MAX Number of Sysops you want>
+
+        SYSOP.x=              <Here the Name of the Sys/CoSysop>
+
+        COMMENT.x=            <  "   " Comment of the " ">
+
+        MENU_LEVEL=           <  "   " Access Level which is allowed
+                              < to view the Sysop Menu (Default is 20)>
+
+*       SKIP_SYSOP_PRV        <To skip the Private Question by the    >
+                              <main Sysop                             >
+
+*       DEF_SYSOP=            <Number for Default Sysop (when pressing>
+                              <Return at the Prompt Line) must be     >
+                              <Configured with SYSOP.x                >
+
+        So that's all i you have a Problem with my Door/s then leave me
+        a mail or call me.
+
+        iF YoU FoUnD BuGS or have Suggestion's let me know on AmiXnet
+
+	@GR0003
+	@GR0004
+
+        ____________________________________________________________________
+        ::AtomiX::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+
+     _____  _____  _____  _____  _____       __     ___  _____  _____
+    /\    \/\   \\/\    \/\    \/\    \     /\ \   /\  \/\    \/\    \
+.__/  \____\ \___\\ \____\ \____\ \____\   /  \_\ /  \__\ \____\ \____\
+| /   /¯   ¬\/   /¬\/ __ ¬\/ __ ¬\/    ¬\ /   / ¬\   /  ¬\/  _ ¬\/    ¬\
+|/   /o /___/o  /  /o/_/  /o  /  / _____//   /o  /  /o   /o  /  /o ----/
+|\  // /   //     //     //  /  /____  / \  //  /_\//   //  /  // ____/
+| \/___   /___/  /___/  /___   /___   /   \/___   /__  /___/  /___   /
+|    \/__/  \/__/  \/__/NL\/__/  \/__/       \/__/ \/_/   /__/  \/__/
+|                             |
+|  da cRew: AtomiX & No LiMit |    .__________________________________.
+|           Flake , KiWi      |    |                                  |
+|_____________________________|    |  NoDe0: +49-(sE)-cReT!!! <- DHST |
+·                             ·    |  NoDe1: +49-(sE)-cReT!!! <- SOON |
+                                   |  NoDe2: +49-(Pr)-iVAt!!! <-- LOC |
+                                   !__________________________________!
+                                   ·                                  ·
+                                                                      ·
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+

@@ -1,0 +1,74 @@
+.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.
+o                                                                           o
+.                              Quick Logon v1.1                             .
+o                                                                           o
+.                               by Dux/Vanity                               .
+o                                                                           o
+.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.o.
+
+
+
+                                 Introduction
+                                 ~~~~~~~~~~~~
+Have you ever wanted to give your users a choice between viewing a lot of
+bulls(hit) at login or just loggin in fast? If yes, then this is the door
+you've been looking for.
+
+
+                                 Installation
+                                 ~~~~~~~~~~~~
+Just copy the contents of the archive to your BBS: directory or install the
+door manually as an XIM.
+
+Then you need to modify your BBS:Bull.txt to look something like this:
+
+--CUT--
+~
+~CC_QLOGON
+--CUT--
+
+Now you just need to configure the QuickLogon with these tooltypes:
+"QUICK" this is the path of the loginscript used when choosing a quicklogon.
+
+"NOQUICK" this is the path when choosing a normal logon.
+
+"SHOW_ALL" this is the path of the loginscript that will be showed to
+everyone. Use this for stuff that should otherwise have been in both the
+QUICK-text and the NOQUICK-text. Leave out this tooltype if you don't want to
+use it.
+
+"FORCE.{baud}" this is the path of the loginscripts that will be forced upon a
+certain baudrate, so you can eg. have large ansi-logins for your 14400+ users
+and a normal ascii-login for your 2400 users. Leave out this tooltype if you
+don't want to use it.
+
+
+And that's about it for the installation. Look at the supplied files if you
+need more info.
+
+
+                                   History
+                                   ~~~~~~~
+v1.0
+First release - no known bugs
+
+v1.1
+Second public release - still no known bugs
+Added SHOW_ALL tooltype
+Added FORCE.{baud} tooltype
+
+
+                                How to contact
+                                ~~~~~~~~~~~~~~
+You can reach me on my own board Mainline; +45-9815 3062/+45-9815 3562 or
+through /Xnet at Dux@DK0001 or on any major board in Denmark.
+
+If you use this tool please contact me, as I'd like to know who's using it.
+
+
+                                    Greets
+                                    ~~~~~~
+Wardancer - Tarzan - Ramirez - Devilstar - Lector - Scratch - Van Damme - JSon
+Empire
+
+

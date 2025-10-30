@@ -1,0 +1,181 @@
+     :   :  __/\___________________________________/\_____________ :   :
+     ¦   ¦  \__ \   \__  \    ___  _____/   ___  _/  \   \_____  / ¦ d ¦
+     !   !  /  \ \  /  \  \  /  /  \   /   / \   \  \ \  /  __/\/  ! e !
+     | 1 | /____\  /_______\___/   /\_____/___\___\__\  /_______\  | s |
+     | 9 |       \/            \  /                   \/      noC  | i |
+     | 9 |                      \/                                 | g |
+     | 4 |  FR (Files-Reverse) - The /X Reverse File Lister V1.3   | n |
+     l___j               (C)1994 nocTurne deSign/MST               l___j
+
+         (Users of V1.0-1.2 need only to read the 'Changes' section)
+
+----------------------------------------------------------------------------
+ OVERVIEW
+----------------------------------------------------------------------------
+ FR  allows users to view a file listing in its reverse order, ie the newer
+ descriptions  are  outputted  first.    It  should be of value to users of
+ relatively  competitive  boards, where the newest uploads of the day are a
+ priority.  This door works under AmiExpress 2.x-3.x and Sigma Express.
+
+----------------------------------------------------------------------------
+ INSTALLATION
+----------------------------------------------------------------------------
+ This program is an XIM and should be installed as such.  Knowledge of door
+ installation is assumed.  Icons have been provided for 3.x owners.
+
+ The  'FR.x'  info  file  has  several  options  available.  If you want to
+ disable  the dividers between each filename, simply replace the yes in the
+ tooltype  "Dividers=YES"  with a no.  If you want to disable the colors in
+ the  listing, toggle the yes in "Colors=YES".  To disable the date-divider
+ graphic,  ie  what  appears  when  there  is a date change in the listing,
+ change  the  "ShowNewDate" tooltype.  If you want file-numbers to be shown
+ by  default,  set  the  "FileNumbers" tooltype to YES.
+   
+ (All  above options with the exception of "NocWhoCompat" may be overridden
+ by  the  user.    You  are  only  setting  the DEFAULTS for the user.  The
+ following options are set.)
+
+ If  you are using a nocTurne deSign who door (noC-WHO), set "NocWhoCompat"
+ to YES.  FR usage will be then recognized from the door
+ 
+ Files-Reverse  also has the ability to call a nuker anytime during the use
+ of  the program.  The default door-name called is 'NUKE'.  To change this,
+ set  the  'Nuker=' tooltype in the 'FR.x' icon.  To set the security level
+ needed  to  have  access  to this feature, set the 'NukeAccess=' tooltype.
+ The default is 255.
+
+ A  Low-Memory  mode  is available in FR, which is usually activated in low
+ memory  situations.   However to turn this feature on permanently, set the
+ "LowMemory"  tooltype to YES.  Benefits to this include 10K of memory used
+ at  any  one time (as opposed to memory the size of the directory itself),
+ and  faster  startup,  (as FR does not have to load the whole directory). 
+ Side effects include disk accessing during the usage of the program, and a
+ subtle  slow  down.  This option has proven a bit flaky on some multi-node
+ systems and should be used with discretion.  If you HAVE the memory, it is
+ suggested you set this option to NO.
+
+ If  you  would  like a different divider graphic than the default, you may
+ design   your   own.      FR   will   utilize   the   text   in   the file
+ "Doors:noC-FR/FR-Div.txt"  if  it  exists.   Please keep the file ONE line
+ long, with NO RETURN at the end.  You may use ansi colors in the file.
+ 
+ If  you  want  a different date-divider graphic, edit/make a new text file
+ called "Doors:noC-FR/FR-Date.txt".  The file should again be ONE line long
+ with  no  tail  return.   To denote where (if anyplace) the date should be
+ placed, write "@THEDATE".
+
+----------------------------------------------------------------------------
+ USAGE
+----------------------------------------------------------------------------
+ After  typing 'FR' without any arguments from the command line, files from
+ the  upload  directory  of  the current conference are displayed newest to
+ oldest.    (Please  note:  The  door  name  'FR' should never be altered).
+ Several  options are available to the user.  Some of the fundamental usage
+ arguments are:
+
+
+ 'FR ?' will bring up information on the program and its usage.
+
+ 'FR O'  will  run the door with configurable parameters.  The user will be
+ prompted  for  the  date  from  which  the  listing  should  start and the
+ directory  to  list.    If  there is more than one directory, the user may
+ select from the alternatives.
+     
+ 'FR E'  will  allow  the  user  to  configure  FR   to   his   own  taste.
+ Configuration data will be stored in the file "DOORS:noC-FR/fr-users.dat".
+     
+
+ When  the  listing  is paused, the user may flag files, abort the listing,
+ set the listing to nonstop mode, nuke files, (if he has proper access), or
+ continue.   CTRL-C aborts are supported.  Usage is very intuitive, I don't
+ think any more detail is neccessary.
+
+----------------------------------------------------------------------------
+ THANK YOU'S AND GREETINGS
+----------------------------------------------------------------------------
+ Files-Reverse  is  created  by nocTurne deSign/MST in 1994.  Any questions
+ regarding  the  use  of  this  program  should be addressed to nocTurne on
+ Sarcophagus BBS (+1.503.548.0532) or any other board you see me on.
+         
+ *  This  utility is BACKDOOR and VIRUS FREE.  All nocTurne deSign products
+    are created with a dedication to quality and stability.
+
+        Uhhh, hey thanks for the help on this one...: 
+        
+        * Wraith/GeistHaus, 
+        * SaL-1/BoonDocks (Nice Ascii),
+        * Zion/Zion's Hideout,
+        * Arch-Magi/Tower of Sorcery, 
+        * Gu/\/\by/Double Vision,
+        * Rotor/Gates of Asgard        
+
+ nocTurne deSign is looking to be adopted by a *COOL* group so direct any
+ offers to my account on Sarcophagus or another board you may find me on.
+ ASCII logos are needed as well...
+
+----------------------------------------------------------------------------
+ CHANGES
+----------------------------------------------------------------------------
+-----------------
+Version 1.2->1.3:
+-----------------
+-  "LowMemory" tooltype may be set to permanently engage Low-Memory mode.
+(ie, a 10K memory buffer and incremental directory reading).  PLEASE read
+the section describing this option. 
+
+-  A  Nuke  program  may  be  called from within FR, using the "X" command
+during listing pause.  The nuker name may be set with the "Nuker" tooltype
+and access required may be set with the "NukeAccess" tooltype.
+
+-  A  file  numbering system has been integrated.  Files may be flagged by
+their  filename as well as by their number.  To adopt this as default, set
+the  "FileNumbers"  tooltype to YES.  The user may turn this option on/off
+with  config  option  7.    (The  side  effects of using file numbers: the
+file-check byte will not be shown in the listing, and the year will be cut
+off from the date.)
+
+-  I  have taken  the popular registration approach.  How do you register? 
+Well,  disableds are nice.  Personal Checks are GREAT.  Source code to ACP
+3.XX  is  spectacular.  Calling cards are keen.  A nocTurne deSign logo is
+fucking EXCELLENT.  Or you can tear out the old hex editor, I suppose. 
+
+- I made a GUIDE, dammit.  Why aren't you READING it??
+
+-----------------
+Version 1.1->1.2:
+-----------------
+-  Incremental  directory  reading is now available.  Versions prior to this
+one  required  an amount of memory equal to the size of the file listings to
+be  available.    Now,  if  that  memory  is  unavailable, FR will engage in
+low-memory  mode,  and use a buffer of 10K.  Of course the program will slow
+down  a  bit  for  intermittant  disk accessing.  DATE-SCANS ARE DISABLED in
+Low-Memory Mode.  (Does anybody USE them anyway??)
+
+-  All  information  is now stored in the drawer 'noC-FR' which should be in
+'DOORS:'.
+
+-  Bug-Fixes:  Last entry in a file listing is now displayed,  nuke messages
+are now  handled properly,  file-flag  field may now be cleared with CTRL-X,
+and other internal changes...
+
+-----------------
+Version 1.0->1.1:
+-----------------
+-  File-flagging  has  a new look, and no longer shifts the list up when you
+hit enter.
+
+-  Now no longer PAUSES 2 TIMES with newer /X versions.
+
+-  Other various design changes and bug-fixes.
+
+----------------------------------------------------------------------------
+ FINAL NOTES
+----------------------------------------------------------------------------
+ Please  note that I have not plugged any BBS's in this program, nor will I
+ in  any  future doors.  The code has been bug-tested on multi-node systems
+ of  varying  configurations  and  has  no known backdoors.  Support may be
+ obtained by calling Sarcophagus (+1.503.548.0532), or leaving me a message
+ on  a  board  you see me on.  Therefore I see no reason NOT to use FR.  It
+ should prove to be a great asset to the users of your board.
+
+----------------------------------------------------------------------------

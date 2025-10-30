@@ -1,0 +1,91 @@
+              BOHEMiaN OF FaTAL UNiTY Presents UsEr StAtS v1.0
+             ---------------------------------------------------
+
+--------------------------< ABOUT UsEr StAtS >-------------------------------
+
+This is a user status door made for /X and should work on /X version
+3.xx..I dont know if this door works on /X 2.xx but if you have /X 
+2.xx why not try?...If it works on 2.xx please tell me...
+This door is tested on A500/A4000 and works just fine...But if you
+find any bugs please report it to me...
+My BBS number will be printed below...
+
+Baahh maybe ya think, not another status door for da /X....
+Okey there is a lot of them out there but maybe ya like this door better
+then the others?...
+Many of the stats doors is coded in slow arexx...This door is coded
+100% in C...
+
+------------------------------------------------------------------------------
+
+-----------------------------< INSTALLATION >---------------------------------
+
+Contents of this little package.
+----------------------------------------------------
+NAME                       SIZE     DESCRIPTION
+----------------------------------------------------
+USTATS/STATS               8388     MAIN FILE
+USTATS/USTATS.DOC          3938     THIS FILE
+BBSCMD/S.INFO               537     /X v3.xx ICON
+----------------------------------------------------
+
+If ya run an /X board you'll should know how to install an /X door but if
+ya don't well well shame on you, but i'll be so nice that i show you...
+
+/X 2.xx Installation.
+---------------------
+
+Don't know if this door works on 2.xx...
+Try it...
+
+/X 3.xx Installation.
+---------------------
+
+Simply copy the USTATS directory to doors:
+Copy S.info to BBS:COMMANDS/BBSCMD/
+
+This is it...Simply or what??..
+
+------------------------------------------------------------------------------
+
+------------------------------< GREETINGS TO >--------------------------------
+
+ZunE/HCD - For testing this little door and for gr8 support...
+
+NoJJe/HCD - For testing this little door and for gr8 support...
+
+The Real One - For being a good friend and user...
+
+And to all other folks out there...Have a g00d 1994...
+
+------------------------------------------------------------------------------
+
+------------------------------< FOR CONTACT >---------------------------------
+
+    Simply Call My BBS...
+
+ |                                                                  |
+ : _________  __________  _________                                 :
+-O/_       ¬\/_    \   ¬\/_   _____\--S¥$øP - BøHEM¡aN/FTU - - -- --O---
+ /\\    \____\\          \\    ___/__                               :
+ \ \\    \___/\\          \\   \    ¬\ -CøS¥SøPs - ZunE/HCD    - -- :
+ :\ \\    \  \ \_____\_____\__________\            BlIstEr/RNG      :
+-O-\ \_____\--\/_____/_____/__________/----- -- -- ---- --  ---- -- O---
+ :  \/______________  _______   _________  ________  _________      :
+ |    HS9³/_       ¬\/_____ ¬\ /_____   ¬\/_____  ¬\/_   _____\     |
+ :       /\\    \____\    ¬\  \\    ¬\    \    ¬\   \\    ___/__    :
+-O----- -\ \\    \___/\        ¬\          \     \   \\   \    ¬\- -O--
+ :        \ \\    \  \ \_____\___\_____\____\_________\__________\  :
+ |         \ \_____\  \/_________/__________/_________/__________/  |
+ :          \/_____/ __________  __________  ____________  _________:
+-O-- --------     --/         ¬\/________ ¬\/_    ______/_/_   _____\--
+ : /X 3.19         /\_____/  ___\    ¬\     \\    \ \    ¬\\    ___/__
+ |                 \ \      /    \     \     \\    \ \     \\   \    ¬\
+ : 14.4 H$T         \ \___________\___________\_____\ \_____\__________\
+-O--- -   ---- ---  -\/___________/___________/_____/\/_____/__________/
+ :                                                                  :
+ | <*> SpEEDy WaREz <*>  <*> FaaSt VaLiDatioN <*>  <*> /X UTilS <*> |
+
+                 JUST D¡AL -> +46(0)498-241602 <- NOW!
+
+------------------------------------------------------------------------------

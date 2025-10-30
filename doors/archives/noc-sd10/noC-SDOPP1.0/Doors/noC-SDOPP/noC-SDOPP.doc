@@ -1,0 +1,68 @@
+.                                     _ __:__ _                  _ __ _____:__
+: _______  __  ____________  __  ______   ¦                                :
+: \_____ \/  \/ __/ __/ /  \/  \/ ____/ d       noC-SDOPP Version 1.0      ¦
+¦___ / / / / / / / / / / / / / / __/  : e :  (C)1994 nocTurne deSign/MST   ¦
+\  // / / / / / / / / / /\/ / / / //\ ¦ s ¦      - --------------- -       |
+|\/ \/\/\__/\__/\/\__/\/  \/\/\__//__\| i |    Cool Looking Wall Door      |
+|___________________________ _ _ __ __j g l_ _ __ _________________________j
+¦                                     \ n /
+:                                      \ /
+                                        Y
+_ _:____________________________________j
+   ¦
+   |  P·R·O·G·R·A·M   D·E·S·C·R·I·P·T·I·O·N
+_ _¦__________________________________________________ __ _
+   :
+
+    noC-SDOPP, (Senseless Destruction of Public Property), is a simple wall
+    door  with  a  great  looking  display.    Possibly one of the simplest
+    products  of nocTurne deSign to date, it is still well-tested and looks
+    cool.                                                                    :
+                                                                             ¦
+                                                                             |
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  I·N·S·T·A·L·L·A·T·I·O·N                                                :
+_ _¦__________________________________________________ __ _
+   :
+
+    This program requires OS2.0 or greater.
+
+    Simply  copy the 'noC-SDOPP' drawer into 'DOORS:' and mount the door as
+    is  convention  with  your particular version of Ami/Sigma Express.  (A
+    BBSCMD icon is provided for 3.xx users).
+
+    Most sysops choose to install walls as a part of their login procedure.
+    noC-SDOPP may be run from an MCI command, or from the main menu.  It is  ·
+    up to you how to use it.                                                 :
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  P·R·O·G·R·A·M   L·O·G·I·C                                              :
+_ _¦__________________________________________________ __ _
+   :
+
+    Usage  is  very  intuitive.   The user, after being shown an attractive
+    wall decorated with phrases of grandeur, may choose to enter his own 76
+    character  contribution.    All  text  data   is   kept   in   the file
+    "DOORS:noC-SDOPP/noC-SDOPP.data".   To clear the wall, this file should  .
+    be deleted.                                                              :
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  C·R·E·D·I·T·S                                                          :
+_ _¦__________________________________________________ __ _
+   :
+
+    noC-SDOPP  is  created  by  nocTurne  (deSign)  in 1994.  Any questions
+    regarding  the  use  of this program should be addressed to nocTurne on
+    Sarcophagus BBS (+1.503.548.0532) or any other board you see me on.
+
+   * This utility is BACKDOOR and VIRUS FREE.  All nocTurne deSign products
+     are created with a dedication to quality and stability.                 :
+                                                                             ¦
+_ _:_________________________________________________________________________|__
+   ¦                                                                         ¦
+   |  T·H·E  E·N·D                                                           :
+_ _¦__________________________________________________ __ _
+   :

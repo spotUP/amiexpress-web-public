@@ -1,0 +1,157 @@
+                              Turbo Newscan
+                            by Mack Lifeguard
+                            68000 code by NZO
+
+                         ** Dual Crew-Shining **
+
+Hello, and welcome to the fastest newscan replacement door you've ever
+seen on Amiexpress.  There has never been anything like this before.  You
+just watch, this tool will revolutionize the Newscan Door industry.
+
+If you are familiar with Turbo Zippy, then you will love this adaptation
+of it into the newscan "n" command of /X.
+
+Only, Turbo Newscan (TN) is roughly 2.3 times faster than Turbo Zippy!
+
+I won't go into details and make charts and stuff like I did last time for
+Turbo Zippy, but lets just say that TN can do a newscan of a 2 MEG
+directory listing in about 2 (two) seconds on my 7Mhz A500.  Amiexpress
+does it in about 82 seconds.  So TN is about 40 times faster.
+
+If you have an accelerated Amiga, you will notice the results
+instantaneously.  You have to see it to believe me!
+
+The only catch is that you have enough memory. If you have a multi-node
+board with large directory listings, I recommend at least 10 Megs of free
+ram. This tool is for elites only. You want the ultimate speed and power?
+Then it will cost you ram chips. But hey, look at the IBM world, they need
+16 Megs just to run their new OS!
+
+
+                            FEATURES OVERVIEW
+                            -----------------
+Turbo Newscan:
+*40 times faster than Amiexpress and Byteandi/Mystic Newscan.
+*Doesn't choke when it encounters colors in the listings (Byteandi's does).
+*Doesn't choke when it encounters non-standard NUKE banners and such. ^^^^
+*Choose from 9 different date modes, (today, yesterday, -x, weekly, etc.)
+*Compatible with all /X releases from /X 2.39 and up. And of course the
+ cool new Sigma Express!
+*Coded in super-fast assembler for best XIM performance.
+*True arrow key selecting of files. Unlike other newscan doors, you can use
+ both the keypad AND your arrow keys to highlight files. Plus the cursor
+ wraps around to the next file. None of these features are available in the
+ other newscanner doors.
+
+
+
+                               INSTALLATION
+                               ------------
+The TN executable is an XIM door, so simply add it to your CustomCommands
+file. Something like this:
+
+Step 1.
+
+n        XM010BBS:Doors/TurboN
+                   ^
+                   |
+                   |__ or wherever you keep your doors.
+
+Notice there is no '*' before the 'n'. Don't put one there, or Turbo
+Newscan will not work properly. If you are one of the unfortunate few to
+be running the appalling 3.x version of Amiexpress, then you will have to
+fumble about with those nasty icons and other tedious files. Turbo Newscan
+will work perfectly on 3.x, but it's a bitch to install it.  Don't blame
+me!  I think the new icon method sucks!
+
+
+Step 2.
+
+Copy the included TN.HELP file to your S: directory.
+
+If you are using a version of Amiexpress *below* 2.39, then the [s]
+last-logon date will be incorrect. This is a bug that was fixed in the
+later versions of /X.
+
+                                That's it!
+
+                   Important Note About Cursor Flagging
+                   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+        (It's a good idea to capture this section and send an EALL)
+
+The new [f]lag mode of Turbo Newscan makes an ANSI bitmap of the display
+screen.  In order for this to work properly you will need to check 2
+things:
+
+1. You are in ansi mode.
+2. You have selected the correct /X screen length.
+
+If you are getting weird results when using the [f]lag mode of TN, then
+chances are that you have not set your screen length properly. Simply go to
+the /X prompt and hit 'w' followed by '5'.
+
+Sysops:  If you are watching a user while he is flagging files, your end
+will look like a mess if you have a different screen setting. This is
+because location #0,1 on your screen may be different than the remote.  But
+don't be alarmed!  The user's end looks just fine.  Or adjust your settings
+and resolution to match the average length of 23 lines.
+
+
+                              FINAL COMMENTS
+                              =-=-=-=-=-=-=-
+
+This program is Copyright (C) 1994 by J. Chahin.  Turbo Newscan, Turbo
+Zippy, and Turbo Tools, are all registered trademarks and may not be used
+without written permission of the author.
+
+If your hard-drive or anything else in your house chokes while using this
+door, I am not responsible.  This tool has been thouroughly tested on many
+boards all around the world, but "there is always one more bug."
+
+Many thanks go to Flyboy at Hangar-18 BBS (713) 488-3055 and Shatterstar
+at International Chaos (713) 999-3640 for letting me use their systems to
+recklessly test this and other doors.  If you like this tool, please give
+them a call and support their boards, they really are excellent sysops.
+
+That's about it for now, I hope you like this new update.
+
+-Mack Lifeguard/Dual Crew-Shining
+
+
+                               CONTACT INFO
+                               =-=-=-=-=-=-
+
+If you have any questions, bug reports, suggestions, you can contact me at
+the following:
+
+Hangar 18: (713) 488-3055
+International Chaos: (713) 999-3640
+Complex Corrosion: (612) 773-0522    [4 nodes]
+Danse Macabre: (713) 324-1165
+
+On the Internet, you can reach me at:
+
+CSCI224B@uh.cl.edu
+
+or on IRC look for me in "#amiga!". (hi Groo/ATX!)
+
+These are the *ONLY* BBSs that I call!  If someone under my handle calls
+your BBS, please do yourself a favor and kick him off.  Otherwise, don't
+hold me responsible.
+
+
+                             CALL OUR BOARDS!
+                             ================
+
+COMPLEX CORROSION (USHQ)  +1-612-7730522   (4 NODES)   SYS: WHITE IC
+GURU'S DREAM (WHQ)        +46-8-282760     (9 NODES)   SYS: DIRTYBUSH
+ULTIMATE DREAM (UKHQ)     +44-222-ELITE!   (2 NODES)   SYS: HYBRID
+SECRET WORLD (GHQ)        +49-30-8854598   (1 NODE)    SYS: EXE & PHR
+EASTERN FRONT (SFHQ)      +358-28-22915    (2 NODES)   SYS: HAKA & TRUXTON
+
+
+        %-   This has been a Dual Crew-Shining 1994 production.  -%
+
+                            --== The End ==--
+

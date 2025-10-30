@@ -1,0 +1,87 @@
+
+       _ _ ___/\______/\__ ____/\___/\__ _ _/\____ _/\_ __ __/\______
+      __ ________   __   /   _   ___   / ______   \___/__/     _____/
+         bIS/   /   /   /   //   //   /___/ __¬   /  /  /  /\__   \
+           /   /   /   /   //   //   /   /  \    /  /  /  /   /   /
+    __  _ _\____  /\____  //_  //_____  /___/\  /\_____  /\ _/   /___
+     _  ___ _   \/  _  _\/_  \/____ __\/ ___ _\/_______\/____   /_ _/
+                                                            \  /
+                                     PRESENTS                \/
+
+                     JoyComment V1.2 coded by AtomiX/OTL
+
+
+WHAT'S THE USE OF THIS TOOL ?
+-----------------------------
+
+        This is a nice Comment-Door (hard to guess, eyh) !
+
+        You can specify Sysops and Comments via tooltypes,
+        you also can specify what access-level the cosysops
+        will be shown (so new users only see main-sysop) !
+
+
+        OrginalFileLength:  JoyComment/JoyComment.xim=16212 bytes
+
+HISTORY :
+---------
+
+        V1.0 -   First Release
+        V1.1 -   Optimized and writen a new Turbo Routine for faster
+                 Screen Output
+        V1.2 -   Turbo Routine rewritten ... Internal changes
+
+
+HOW TO INSTALL :
+----------------
+
+        This is a XIM Door !
+
+        Copy just all to the BBS i prepared it so that it is working
+        automatically ;^)) !
+
+
+        Configure the "DOORS:JOYCOMENNT/JoyComment.xim.info"
+
+        ToolTypes:
+        ---------
+
+        SYSOPS=               <Add the MAX Number of Sysops you want>
+        SYSOP.x=              <Here the Name of the Sys/CoSysop>
+        COMMENT.x=            <  "   " Comment of the " ">
+        MENU_LEVEL=           <  "   " Access Level which is allowed
+                                to view the Sysop Menu (Default is 20)>
+
+        So that's all i you have a Problem with my Door/s then leave me
+        a mail or call me.
+
+        iF YoU FoUnD BuGS or have Suggestion's let me know on AmiXnet
+
+	@GR0003
+	@GR0004
+
+        ____________________________________________________________________
+        ::AtomiX::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+        ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+
+     _____  _____  _____  _____  _____       __     ___  _____  _____
+    /\    \/\   \\/\    \/\    \/\    \     /\ \   /\  \/\    \/\    \
+.__/  \____\ \___\\ \____\ \____\ \____\   /  \_\ /  \__\ \____\ \____\
+| /   /¯   ¬\/   /¬\/ __ ¬\/ __ ¬\/    ¬\ /   / ¬\   /  ¬\/  _ ¬\/    ¬\
+|/   /o /___/o  /  /o/_/  /o  /  / _____//   /o  /  /o   /o  /  /o ----/
+|\  // /   //     //     //  /  /____  / \  //  /_\//   //  /  // ____/
+| \/___   /___/  /___/  /___   /___   /   \/___   /__  /___/  /___   /
+|    \/__/  \/__/  \/__/NL\/__/  \/__/       \/__/ \/_/   /__/  \/__/
+|                             |
+|  da cRew: AtomiX & No LiMit |    .__________________________________.
+|           Flake , KiWi      |    |                                  |
+|_____________________________|    |  NoDe0: +49-(sE)-cReT!!! <- DHST |
+·                             ·    |  NoDe1: +49-(sE)-cReT!!! <- SOON |
+                                   |  NoDe2: +49-(Pr)-iVAt!!! <-- LOC |
+                                   !__________________________________!
+                                   ·                                  ·
+                                                                      ·
+¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬¬
+

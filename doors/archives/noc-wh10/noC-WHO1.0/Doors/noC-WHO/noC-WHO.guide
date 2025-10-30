@@ -1,0 +1,159 @@
+@database noC-WHO Documentation
+******************************************************************************
+@NODE MAIN "noC-WHO Version 1.00 Complete Guide - by nocTurne deSign/MST in '94"
+
+               noC-WHO Version 1.0 - (C)1994 nocTurne deSign/MST
+               -------------------------------------------------
+               @{" Overview       " LINK OVER } General Description of Features
+               @{" Installation   " LINK INSTALL } Installing/Configuring noC-WHO
+               @{" Usage          " LINK USAGE } Door Usage/Theory
+               @{" The Future     " LINK FUTURE } Plans for next release
+               @{" Credits/Greets " LINK CREDS  } Where to reach me/Messages
+               -------------------------------------------------
+
+@ENDNODE
+*******************************************************************************
+@NODE OVER "noC-WHO Overview..."
+
+noC-WHO  is  the most full-featured and flexible WHO door available, from both
+the  standpoint  of  the  SYSOP  and the USER.  Following is a list of what is
+available in this version:
+
+   * SIMPLE TO INSTALL - ONE DOOR...
+   * Compatible with V3.3x+ (32 node version) and pre-v3.3 /X (10 node version)
+     and Sigma Express.
+   * Users may choose & SAVE their design preference.
+   * Sysops can appoint PRIVILEGED users who can:
+       * Change their action field.
+       * See EVERYTHING.
+       * Constantly monitor nodes using the update option.
+   * A miscellaneous field is available for the sysop to configure as he likes.
+   * All action texts are configurable.
+   * Several sysop options.
+   * This door, unlike many others, knows when OTHER people are using it.
+   * Calls per day are known WITHOUT any additional doors, and are
+     reset at midnight automatically.
+   * noC-WHO is compatible with all future nocTurne deSign products.
+   * Much more.  And the future is even better.  READ ON...
+
+@ENDNODE
+*******************************************************************************
+@NODE INSTALL "noC-WHO Installation..."
+
+noC-WHO  is  compatible  with  Ami-Express  versions  2.xx thru 3.xx and Sigma
+Express.   Follow the conventional door installation methods for your version.
+Throw the "noC-WHO" directory into "Doors:" and you are set.  To customize the
+door continue reading.
+
+To  define  the  available  settings   for   noC-WHO,   edit   the   text file
+"Doors:noC-WHO/who.config".    The  following parameters may be set within the
+configuration file:
+
+SYSOP_ACTION=[TEXT]  :  Some  sysops like to have themselves listed on a local
+                        node.  This parameter allows them to customize exactly 
+                        what their ACTION field says.  
+                        (Example: "SYSOP_ACTION=Hanging in the John.")
+
+FILENAMES_DISABLED=[YES/NO] : If you want that filenames be listed with Upload
+                              and Download actions, set this to YES.
+
+DIVIDERS_DISABLED=[YES/NO] : If you have more than 6 nodes or so, you may want
+                             to DISABLE  the DIVIDING LINES between node texts
+                             to make the display more COMPACT.
+
+PUBLIC_UPDATE=[YES/NO] : Some sysops  may not want  the  general  public to be
+                         able to  use the 'WHO U' option to CONSTANTLY MONITOR
+                         other nodes, and can use this option to DISABLE it.
+                            
+COOLUSER.[NUM] : Trusted users should be listed with this parameter. They will
+                 be able to see EVERYTHING  and have  privileged access to the
+                 door.  (Example: "COOLUSER.1=nocTurne COOLUSER.2=john")
+                 
+MISC.TITLE=[TEXT] : noC-WHO  features  a  configurable column of  8 characters
+                    width on the far right  of the  display.   To define  this
+                    field for your OWN purposes you must first create a title.
+                    (Example: "MISC.TITLE=Fone Num")
+                    
+MISC.[NUM] : You may  define what is printed in the configurable field of EACH
+             node  using  this option.   You may  list ringdown numbers, modem
+             types, or whatever you WANT,  But remember: 8 characters MAX.  If
+             you want any of them to display the BAUD, set them to '@'.
+             (Example: "MISC.0=LOCAL MISC.1=555-1212 MISC.2=555-1213" )
+             
+If  you  want  to  customize  the  action  texts  you  must can edit the texts
+proceeding  the  "@BEGIN_ACTIONS"  string  in  the config file.  These are the
+default  texts  for every action, (Awaiting call, Beginning UL, etc...).  When
+you EDIT these texts, be sure to keep them under around 18 characters and KEEP
+THEM  IN  THE ORDER THEY CAME.  Any additional carriage returns or alterations
+to the arrangement of the file may result in incorrect action displays.
+
+If you are using Files-Reverse (V1.0+), set the "NocWhoCompat=" in the door's
+icon to "YES".  FR will then be recognized by noC-WHO when it is in use. This
+feature will be available in all FUTURE doors by nocTurne deSign.
+
+The  DEFAULT  SETTINGS  for  noC-WHO  if  they  are  not explicitly set in the
+configuration file are as follows:
+
+            FILENAMES_DISABLED = NO
+            DIVIDERS_DISABLED  = YES
+            PUBLIC_UPDATE      = YES
+            MISC.TITLE         = Baud
+            MISC.[NUM's]       = [Each users' connect rate]
+    
+@ENDNODE
+*******************************************************************************
+@NODE USAGE "noC-WHO Usage..."
+
+Information  on  program  usage  may  be  obtained with "WHO ?".  To CONFIGURE
+noC-WHO to one of the five styles available, the user may enter "WHO E", which
+will  prompt  him  to  select his preference.  A DATA FILE with all the users'
+preferences  will  be maintained named "DOORS:noC-WHO/data/who-users.dat".  If
+the  UPDATE  option  has  been  made  available  to  all users, or the user is
+privileged,  he  may  use  this  door to actively monitor the actions of those
+online.  "WHO U" will cause noC-WHO to update its display every second until a
+key  is  pressed.    If the "PUBLIC_UPDATE" config option is set to "NO", only
+privileged  users will be able to have display updates.  Those with privileged
+access  may  also set their ACTION text.  Setting it to NOTHING will cause all
+actions to be displayed normally.
+
+Nodes  that  are  QUIETED will be EXEMPT from being displayed.  Nodes that are
+disabled or unavailable will be shown as such.  At midnight, a task spawned by
+the door upon its first run will automatically reset the call counter to 0.
+
+@ENDNODE
+*******************************************************************************
+@NODE FUTURE "The Future of noC-WHO..."
+
+* noC-WHO's displays may be CREATED by YOU.  The user may pick from the 5
+  internal defaults OR one of YOUR masterpieces...
+
+* More customization for users and sysops......
+
+@ENDNODE
+*******************************************************************************
+@NODE CREDS "noC-WHO Credits and Greetings..."
+
+NO FUCKING BACKDOORS!!!
+
+This XIM was coded in full by nocTurne deSign/MST. It has been tested on multi
+node boards  of varying  configs  with positive results.  Praise and DISABLEDS
+should  be addressed  to "nocTurne" on  Sarcophagus, (+1.503.548.0532), or any
+other board you may see me on.  I'm looking for SUGGESTIONS and BUG-REPORTS.
+
+Greetings:  Mko! - How FAR can I take a fucking WHO door??
+            Doc Whoo - Great testing.  CALL ZONE ONE NOW! :)
+            Terrorizer/RLX - What the HELL were you talking about?
+            /\donis/RLX - Be it forever written: My date routine is BETTER.
+            Minstrel/RLX - Did they call you Menstrual back in school? :)
+            DeathKnight/HCC - Nuke my ASS!
+            Dierberger - You suck.
+            M.Bison - You started this all, man...  Thanks....
+
+I am looking to join another COOL group so please direct any OFFERS my way.
+
+Watch  for  OTHER  PRODUCTIONS  from the nocTurne deSign /X collection.  Until
+another doc, noC!  (DIZ-Ed V2.00 is coming.......Just wait!)
+
+@ENDNODE
+*******************************************************************************
+whoa, whats this I found in my ear?.......

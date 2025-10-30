@@ -1,0 +1,203 @@
+@database Lha`Chekko v1.o - by Dr.Dre!/TrSi
+
+Copyright (C) 1994 by Dr.Dre!/tRSi Germany
+All Rights Reserved
+
+@Remark $VER: Version v1.o (Monday 31-Jan-94 14:13:31)
+Remark AmigaGuide DataBase for Lha`Chekko 1.o
+
+@Node MAIN "Lha`Chekko v1.o (Monday 31-Jan-94 14:13:31) Dcoument for /X"
+
+                   ._________________  ______
+                   l___       /      \/    _/_______.:  
+                     /       /   /  _/\___      /    :
+                    /_______/-rS!\_____\  _____/     |'94  
+                          /_______|     \/   /_______|
+
+  is proud to present: Lha`Chekko 1.o, fastest Lha Checker/Adder/Stripper
+
+                     @{" Introduction  "Link no1} @{"  Einleitung   "Link nr1}
+                     @{" Requirements  "Link no2} @{" Anforderung   "Link nr2}
+                     @{" Installation  "Link no3} @{" Installation  "Link nr3}
+                     @{"   Copyright   "Link no4} @{"   Copyright   "Link no4}
+                     @{"   Greetings   "Link no5} @{"    Gruesse    "Link no5}
+                     @{"          TRSI Boards          "Link no6}
+@endnode
+@node no1 " Introduction"
+
+Lha`Chekko is the fastest Lha/Lzh/Lza Checker/Adder/Stripper around at
+the moment...
+He removes all Adverts from every Lha/Lzh/Lza archive, it is possible to 
+add so many Adverts you like...
+Lha`Chekko need to strip/add/check an Lha File with 300kb and 100 Files
+in it only 5 Seconds...
+
+Also Lha`Chekko works from the CLI/Shell...
+
+Have Phun with it...
+Dr.Dre!/tRSi                                         @{" Main Menu " Link main}
+@endnode
+@node nr1 " Einleitung"
+
+Lha`Chekko ist wohl der schnellste Lha/Lzh/Lza Checker/Adder/Stripper der
+im moment für AmiExpress erhaltbar ist...
+Lha`Chekko removed alle Adverts die vorher in einem cfg File eingegeben 
+werden, er macht es moeglich soviele BBS Adverts zu adden wie man will.
+Er arbeitet auch aus dem CLI/Shell und braucht fuer ein 300kb mit 100 Files
+etwa 5 sekunden...
+
+Viel Spass damit...
+Dr.Dre!/tRSi                                         @{" Main Menu " Link main}
+@endnode
+@node no2 " Requirements"
+
+U need to run Lha`Chekko successfull Any Version of AmiExpress.
+Kickstart 2.o or higher...
+An Lha1.5+ in your C: Directory
+And thats all...
+
+                                                     @{" Main Menu " Link main}
+
+@endnode
+@node nr2 " Anforderungen"
+
+Damit Lha`Chekko vernuenftig arbeiten kann brauchst irgendeine Version
+von AmiExpress (2.xx-3.xx)
+Kickstart 2.o oder hoeher
+Lha 1.5+ in deinem C: Directory
+Mehr wird nicht benoetigt...
+
+                                                     @{" Main Menu " Link main}
+
+@endnode
+@node no3 " Installation "
+
+Copy the File Lha`Chekko in your C: Directory
+Copy the Files Lha.Strip and Lha.Add in your s: Directory
+Copy the Lha.Info, Lzh.Info, Lza.Info, Run.info, Sfx.Info to your 
+BBS:Fcheck/ Directory
+After this edit the File s:Lha.Add there write down your Adverts with the
+full path to it...
+
+-------------Cut here---------------
+dh0:Adverts/Add1.txt
+dh1:MyAdd
+ansi:Addme.now
+-------------Cut here---------------
+
+and so on, all files are addet to the Archive...
+Then edit the s:Lha.Strip File, here you can write all Files you like to
+Strip from the Archive
+
+-------------Cut here---------------
+*.TXT.DISPLAYME
+#?.TXT.DISPLAYME
+*.DISPLAYME
+#?.DISPLAYME
+-------------Cut here---------------
+and so on Wildcards allowed...
+I have a big Stripfile includet
+If you running /X 2.xx then build the Checker in as the oldone but
+!!! NOTE !!! The checker needs NO OPTIONS !!!
+Thats all..                                          @{" Main Menu " Link main}
+@endnode
+@node nr3 " Installation"
+Kopirre das File Lha`Chekko in dein C: Directory
+Kopiere die Files Lha.Add, Lha.Strip in dein S: Directory
+Kopiere die Icons Lha.Info, Lzh.Info, Lza.Info, Run.info, Sfx.Info
+in dein bbs:fcheck/ Directory...
+Danach lade das File S:Lha.Add in einen Editor, schreibe hier jetzt deine
+Adverts rein mit dem vollen Pfad zu dem Advert.
+-------------Cut here---------------
+dh0:Adverts/Add1.txt
+dh1:MyAdd
+ansi:Addme.now
+-------------Cut here---------------
+jetzt werden alle File die in dem Lha.Add stehen zu jedem Archive das von
+meinem Checker gecheckt wird zugeaddet...
+Danach editier das S:Lha.Strip File, hier kannst du alle Advert Namen ein-
+geben die aus jedem Archive removed werden sollen...
+-------------Cut here---------------
+*.TXT.DISPLAYME
+#?.TXT.DISPLAYME
+*.DISPLAYME
+#?.DISPLAYME
+-------------Cut here---------------
+Wildcards sind erlaubt...
+Ein grosses Stripfile mit allen gaengigen Advert namen habe ich dem Archive
+beigelegt...
+Wenn du nur /X 2.xx installed hast dann baue den Checker so ein wie die
+anderen auch... aber beachte Lha`Chekko benoetigt KEINE CHECKEROPTIONS !!!
+Also nur Checker=C:Lha`Chekko usw...
+Das ist alles ...                                    @{" Main Menu " Link main}
+@endnode
+@node no4 " Copyright"
+
+
+                 Lha`Chekko is written by Dr.Dre! of TRSI
+                         All Rights Reserved ©1994
+
+              The AmigaGuide DataBase written by Dr.Dre!/tRSi
+              Lha is Copyright (c) 1991,92 by Stefan Boberg.
+                   AmiEpress is written by Joseph Hodge 
+
+        If you have any Problems with the Checker so contact me at
+                            @{" Marleys Coffee Shop " Link Coffee}
+
+                                                     @{" Main Menu " Link main}
+
+@endnode
+@node no5 " Greetings"
+
+                   The Greets are going to these Dudes...
+
+   ByteAndi/X-Design, Spy/X-Design, Remo/X-Design, X-Treme, Saito/TRSI
+    Gandalf/Faith, Silver/Faith, McLoud/TRSI, Irata/TRSI, Triton/Fth
+ Skylark/LSD, Nick, Metoner/TRSI, J.Walker/TRSI, Crazy/TRSI, Valshare/TRSI
+    Vicous/LSD, Richi/Flt, Steve/D&R, Amicom, -rS!/TRSi, Empire/Mst, 
+      Mr.VAiN, APOLLO, BJoerN/Pdy, Jive/TRSi, Scope, SkiN!,Mario/TRSI
+          and simply all tRSi Member an other Doodes I forgot...
+
+
+                                                     @{" Main Menu " Link main}
+@endnode
+@node no6 " TRSI Boards Worldwide"
+
+                 To Contact me Call any of this Boards...
+
+   obituary.......................World    HQ............+1-310-652-5688
+   biohazard......................Canadian HQ............+1-905-841-0965
+   cauldron.......................German   HQ............++49 Pure Elite
+   marlEys coffEE shop............German   HQ............++49 Pure Elite
+   MayDay.........................German   HQ............++49 Pure Elite
+   boondocks......................European HQ............+31-548-040-653
+   final impact...................Swedish  HQ............++46-54-113-486
+   flying spirits.................Swiss    HQ............+41-217-282-524
+   savage amusEmEnt...............Austria  HQ............+43-767-227-743
+   zEnlandia......................Finnish  HQ............+358-088-82-144
+
+
+                                                     @{" Main Menu " Link main}
+@endnode
+@node Coffee "Marleys Coffee Shop - TRSI german hQ"
+
+              * tRiStAR & RED sECtOR * gERmAN hEADqUARtER
+                                           _______    ._____
+      _______  ____.______  ______________/   .  /____|    /_______
+      \      \/    |      \/   _  \      /   ___/_    l   /   __  /
+       \           |      \\   /  /_    /_________l____  /\__   \/
+        \    \/____l________\  \____|______|    |_______/________\
+         \____\         /______|                       _______
+                 ____          _______________________/   .  /
+                /  __l_. _____/     __/     __/   .  /   ___/_.
+               /   |   |/     \     _/\     _/   ___/_________|
+              /________|      \\____|  \____|_________|
+                       \_______/         _____    
+                      __________________/     \__________
+ Dr.Dre!/tRSi        /   __  /    /    //      \    .   /
+                    /\__   \/         /\_______/    ___/
+  J.Walker/tRSi    /________\   /____/-rS!/aRt/_____|
+                          /____/
+
+                                                     @{" Main Menu " Link main}
+@endnode

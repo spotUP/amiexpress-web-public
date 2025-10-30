@@ -1,0 +1,344 @@
+@database AquaBulls
+
+Copyright © 1994 Aquarius/Outlaws
+
+@Remark $VER: AquaBulls v1.0 AmigaGuide doc
+
+@node MAIN "AquaBulls v1.0 Documentation"
+
+       _ _ ___/\______/\__ ____/\___/\__ _ _/\____ _/\_ __ __/\______
+      __ ________   __   /   _   ___   / ______   \___/__/     _____/
+         bIS/   /   /   /   //   //   /___/ __¬   /  /  /  /\__   \
+           /   /   /   /   //   //   /   /  \    /  /  /  /   /   /
+    __  _ _\____  /\____  //_  //_____  /___/\  /\_____  /\ _/   /___
+     _  ___ _   \/  _  _\/_  \/____ __\/ ___ _\/_______\/____   /_ _/
+                                                            \  /
+                                  present                    \/
+                      a door for AmiExpress 2.xx/3.xx:
+
+                 >>> AquaBulls v1.0 by Aquarius/Outlaws <<<
+
+                      [- Contents of documentation -]
+
+                 @{"  Copyright Note  " Link Copyright   }    @{"   Installation   " Link Installation}
+                 @{" Archive Contents " Link Archive     }    @{"    Algorithms    " Link Algorithms}
+                 @{"   Introduction   " Link Introduction}    @{" How to Reach Me  " Link ContactMe}
+                 @{"     Features     " Link Features    }    @{"     History      " Link History}
+                 @{"   Requirements   " Link Requirements}    @{"    Greetings     " Link Greetings}
+@endnode
+
+@node Copyright "AquaBulls v1.0 Documentation"
+
+                          Copyright ©1994 Aquarius
+
+                 Permission is granted to freely distribute
+               this product for non-commercial purposes only,
+                  as long as all files remain unmodified.
+
+@endnode
+
+@node Archive "AquaBulls v1.0 Documentation"
+
+Archive (OTL-AB10.LHA) Contents
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Doors/AquaBulls/
+   AquaBulls                  11064 bytes  The door!
+   AquaBulls.info               473 bytes  Config icon.
+   AquaBulls.doc               8807 bytes  Ascii version of the doc.
+   AquaBulls.guide            14710 bytes  This document file!
+
+Commands/BBSCmd/
+   b.info                      1263 bytes  Command icon for /X 3.xx.
+
+@endnode
+
+@node Introduction "AquaBulls v1.0 Documentation"
+
+Introduction
+~~~~~~~~~~~~
+AquaBulls is a replacement for the AmiExpress 'b' command (for viewing the
+normal bulletins). It is written in highly optimized C code for great
+performance.
+
+@endnode
+
+@node Features "AquaBulls v1.0 Documentation"
+
+Features
+~~~~~~~~
+- You can have both global bulletins (for all conferences) and conference
+  specific ones! If AquaBulls can't find a bulletin in the current
+  conference, then it looks for it in the global directory 'Bulletins:'.
+  But you can also have conferences where the global bulletins can't be
+  accessed.
+
+- Just like the built-in command, a bulletin can be specified on the
+  command line. Then only that bulletin will be shown, after which
+  AquaBulls exits.
+
+- Two kinds of online updating are supported!
+
+   1. Updating of all/many bulletins: When the user starts the door
+      without giving a bulletin number on the command line, it checks for
+      a particular script file (both in the conference and globally) and
+      if that exists, the user gets the question whether he wants the
+      bulletins to be updated or not, that is if the script(s) should be
+      executed. But this can be access protected. In the config icon you
+      specify the access level that is required for starting this script.
+
+   2. Updating of specific bulletins: When a bulletin has been selected,
+      the door checks if the update script for that bulletin exists and if
+      it does, it is automatically executed.
+
+  Note that if you don't want to use online updating you don't have to!
+
+- The screen types (different text formats or languages) in AmiExpress
+  3.xx (configurable in BBS:ScreenTypes.info) are supported. The door
+  first looks for the bulletin of the screen type selected by the user and
+  if it doesn't  exist it then tries the bulletin ending with ".TXT".
+
+- With AmiExpress 2.xx, bulletins ending with ".TXT.GR" are first looked
+  for (but only if ANSI is on), and if it can't be found the ".TXT"
+  bulletin is shown.
+
+- The screen is automatically cleared before each bulletin is shown.
+
+- 'Who' doors show that the user is viewing bulletins when he's using
+  AquaBulls. In fact, this was the thing that made me write this door. I
+  was going to install a bulletin viewer on Nightfall and I tested several
+  doors but all of them showed up in the who door as MODULE and not
+  VIEWING BULLETINS! Very annoying... :-)
+
+- Whether a user has access to read bulletins or not is determined from
+  the access icons (/X 3.xx) or the CONFIG(x) file (/X 2.xx). But the door
+  doesn't read those files. It still knows... So it doesn't matter if you
+  set the door access too low. 10 is reasonable I guess...
+
+- It allows you to write your own output (the BullHelp.txt)...
+@endnode
+
+@node Requirements "AquaBulls v1.0 Documentation"
+
+Requirements
+~~~~~~~~~~~~
+- Any Amiga model with AmiExpress installed (v2.20-v3.38, possibly other
+  versions too).
+
+@endnode
+
+@node Installation "AquaBulls v1.0 Documentation"
+
+Installation
+~~~~~~~~~~~~
+Make a directory in 'Doors:' called 'AquaBulls' and copy the door there,
+and perhaps this document as well.
+
+
+For AmiExpress 2.xx, add this to your BBS.CMD:
+
+----Cut here------------------------------------
+*B        XM010Doors:AquaBulls/AquaBulls
+----Cut here------------------------------------
+               ^^^^^^^^^^^^^^^^^^^^- File name of the door with full path.
+            ^^^
+            Access required to use the door.
+
+For AmiExpress 3.x, just copy 'b.info' to your 'Commands/BBSCmd' drawer
+and edit its tooltypes if they don't suit you.
+
+
+AquaBulls requires 'Bulletins:' to be assigned to the directory where you
+will keep your global bulletins. So add this to 'S:User-Startup' or
+wherever you want to keep your assigns:
+
+  assign Bulletins: <path to global bulletins>
+
+
+The conference specific bulletins are stored in
+'<path to conf>Bulletins/'.
+
+If you don't want it to be possible to access the global bulletins from a
+conference, then create the file '<conf path>Bulletins/NoGlobalBulls'. The
+contents don't matter. An empty file will do fine.
+
+
+A script for online updating of all/many bulletins (the first kind in the
+@{"Features" Link Features} section) is called 'BullBatch.script' and is located in
+'<conf path>Bulletins/' or in 'Bulletins:'. If the NoGlobalBulls file
+exists, then the script in 'Bulletins:' won't be executed, but otherwise,
+BOTH scripts will be executed (if they both exist). The scripts must have
+the (s)cript flag to work. To set it, type in shell: 'protect <script
+file> +s'.
+
+If you want to use this kind of updating then you must specify an access
+level with the ACS.UPDATE tooltype in the configuration icon,
+'Doors:AquaBulls/AquaBulls.info'. If that icon contains ACS.UPDATE=200
+then only users with access 200 or higher will be able to run the update
+script.
+
+
+A script that updates a _specific_ bulletin every time it is shown is
+called 'BULL<nr>.script' and is located in the same directory as the
+bulletin which it is supposed to create. The script file must have the
+(s)cript flag to work.
+@endnode
+
+@node Algorithms "AquaBulls v1.0 Documentation"
+
+Algorithms
+~~~~~~~~~~
+When the door is started without any bulletin number as argument, it works
+like this (presuming that a BullHelp file could be found):
+
+  If '<conf path>Bulletins/BullBatch.script' exists,
+     or
+     '<conf path>Bulletins/NoGlobalBulls' doesn't exist and
+      'Bulletins:BullBatch.script' exists, THEN
+
+    Ask the user if the bulletins should be updated.
+    If YES then
+       Execute '<conf path>Bulletins/BullBatch.script' if it exists.
+       If '<conf path>Bulletins/NoGlobalBulls' doesn't exist then
+          Try to execute 'Bulletins:BullBatch.script'.
+
+  Show the BullHelp (plus screen type suffix or '.TXT').
+  Wait for the user to select a bulletin number.
+
+
+The door works like this when the user has selected a bulletin to view:
+
+  If '<conf path>Bulletins/BULL<nr>.script' exists then execute it.
+
+  Try to show '<conf path>Bulletins/BULL<nr>.<screen type suffix>' (/X 3).
+  If it failed, try to show '<conf path>Bulletins/BULL<nr>.TXT'.
+
+  If that failed too, and if '<conf path>Bulletins/NoGlobalBulls' doesn't
+  exist then continue with:
+
+     If 'Bulletins:BULL<nr>.script' exists then execute it.
+
+     Try to show 'Bulletins:BULL<nr>.<screen type suffix>'.
+     If it failed, try to show 'Bulletins:BULL<nr>.TXT'.
+
+
+The BullHelp is searched for in a corresponding way (no script files for
+that).
+@endnode
+
+@node ContactMe "AquaBulls v1.0 Documentation"
+
+Contact Me!
+~~~~~~~~~~~
+If you have any cool ideas for improvement of this door, bug reports,
+questions, or whatever, leave me a message on one of the following boards:
+
+@{"NIGHTFALL" Link Nightfall} ................ Prof Do Right ..... +46-90-120369
+@{"OVERLOAD" Link OverLoad} (OTL SHQ) ....... Vegas ............. +46-8-54063666
+HYSTERIA ................. JAC ............... +46-21-842939
+RAISING HELL ............. Psychopath ........ +46-23-26893
+INSIDE OUT ............... C/\TE¥E ........... +46-346-58697
+@{"SNAKE'S DEN" Link SnakesDen} (OTL WHQ) .... Snake ............. +1-513-683-2330
+THE HOLE ................. Oldman ............ +1-419-899-2754
+
+@endnode
+
+@node History "AquaBulls v1.0 Documentation"
+
+History
+~~~~~~~
+1.0  (1994-04-24) First release version.
+
+@endnode
+
+@node Greetings "AquaBulls v1.0 Documentation"
+
+Greetings
+~~~~~~~~~
+               Greetings must go to (in no special order):
+
+      - All Members of Outlaws!! - Prof Do Right/Classic - JAC/TDS -
+    - C/\TE¥E/Insane - Ace Caze/Obscene - Wilsom/Obscene - Kid Curry -
+   - Psychopath - Vinzi - Karma - Zin - Shapechanger - Rize - Seagull -
+    - Remix/Classic - RaJ-Ban - fanta/Therion - Static/Therion - CaT -
+     - Dansken - AXL/Attention - Rad!/LSD - Vileius! - Marwin/Duplo -
+      - Freddy Kreuger/GOD - Chig/TDS - The Silencer - Vampire/PDY -
+       - Crocodile/Obscene - Sal-One - Nojje - Zune/HCD - MadCap -
+           - Metalbasher - WarDancer/H&V - The Ones I Forgot! -
+
+@endnode
+
+@node Nightfall "AquaBulls v1.0 Documentation"
++-------------------------------------------------------------------------+
+|         iNTO tOTAL dARKNESS, tHE uNKNOWN; cOME wALK wiTH mE...          |
+| a3ooo    ___/\       ___/\ ____/\__________/\ ___/   __/\ _________9ooMB|
++----------\__  \______\__  \____  __________  \  /   \__  \   _____/-----+
+|         tS/    __    \/      /  /_____   /     /     /        /         |
+·          /      /    /      /     /     /           /        /          ·
+ rEG. /X! /      /    /      /     /     /     /     /        /ClAsSiC SHQ
+         /______/    /______/___________/_____/     /________/
+  lOTs oF      /____/                        /     /      2ooo AD (PC) WHQ
+ /X uTiLS!          ·3 uSR nODES·aMiGa&pC!· /     /
+    ___/\ _________/\ _________/\ ___   ___/     / sTAFF : pROF dO riGHT,
+    \__  \ ________  \_________  \  /   \__     / aQUARiUS, riZE, rEMiX,
+·    /    _____/ /     __    /     /_____/     /_____ mASTERmAN, nEMESiS  ·
+:   /      /    /      /    /     /     /     /     /                     :
+|  /      /    /      /    /     /     /     /     /   eNJOY tHE sPEED!   |
++-/______/----/______/    /___________/___________/-----------------------+
+|                   /____/                                                |
+| node#1: +46-90-120369   node#2: +46-90-178169   node#3: +46-90-142969   |
+|      (14.4k DS)              (16.8k DS)              (14.4k HST)        |
++-------------------------------------------------------------------------+
+@endnode
+
+@node OverLoad "AquaBulls v1.0 Documentation"
+                             .
+                             :
+                             |__       ___                   __
+        _____________________|  \_____/   \_________________/  \
+        \________     __     |     __      ________________     \_
+   .______/     U     \/     |     \/      __)____/      |/   ___/_____.
+   |:::::/ _ _         \     :      \_     |/     \      |       \:::::|
+   |:::  \___/_________/____   ______/_______      \_____A  _ _   \__::|
+   |:       / |            \___/       __   \______/      \/ _______/ :|
+   |  _____/  |   ____________________/  \________________/    \____  .|
+   |. \__     |___\__________      ________      _________       __/  :|
+   |:.  /     |    ___/     U      \/     |\     \/      |\      \   .:|
+   |::s/      :     \               \     _/      \_      /       \s.::|
+   |::c\_________    \______________/     A________/_________     /c:::|
+   °-----------\_____/-------\___________/------------------\____/-----°
+   ::::::                                                         ::::::
+   |::               »»»  O U T L A W S   S H Q  «««                 ::|
+   |:                                                                 :|
+   |SYSOPS: VEGAS/OTL, BiSCROK/OTL, PURE PAiN/DCS, CRUGER/SR, NATAS/HZ |
+   |:                 SUPPORTING: AMiGA & CONSOLE!                    :|
+   |::     CALL AND MAKE SOME TRANSFERS NOW AT: +46-8-540-63666      ::|
+   |::: CALL TO GET THE LATEST OUTLAWS RELEASES FOR FREEDOWNLOAD!   :::|
+   |:::::::.             .:::NO NUP NEEDED!:::.                .:::::::|
+   `-------------------------------------------------------------------'
+@endnode
+
+@node SnakesDen "AquaBulls v1.0 Documentation"
+
+<----------------------------OUTLAWS--W-H-Q----------------------------->
+   ___________  ______    _______ _____  ______ _________   ___________
+   \     ____/__\  __ \  _\  ___ \     |/     /_\  ___   \_'\     ____/_
+   _\  ___     \_\/ /  \/  \/  /  \    /    _/   \/  /____/ _\  ___     \_
+  /  \/  /      /  /    \_   _     \_ _      \_    _____)__/  \/  /      /
+ /             /  /      /   /      /  \      /    \      /             /
+/_____________/__/______/___/______/____\    /___________/_____________/
+<----------------------------------------\__/SyK!------------------------>
+       Sysop`s: Snake & Nazgul          _________  _________   ______
+   cosys`s: Rofoe/LGC & SIGMA 909/OTL  _\  ___   \_\  ___   \__\  __ \
+   _   __  __ ___ ____ _____ ________ /  \/  /    \_\/  /____/  \/ /  \
+  //  / / / //  //   //    //       //      /      /  _____)__    /    \_
+ //  /_/ /_//__//___//____//_______//      /      /   \      /   /      /
+                                   /_____________/__________/___/______/
+
+<---------------wOrKiN` oN: A 4ooo/4o-1omb-54ombHD-2GigDat--------------->
+
+<--------DiAL:   + 1 - 5 1 3 - 6 8 3 - 2 3 3 0  -  3 NoDeZ RiNGdOwN!----->
+
+<----------------MoDeM`s: 21.6k & 16.8k DST`s + 14.4k HST---------------->
+@endnode
+
+[EOF]

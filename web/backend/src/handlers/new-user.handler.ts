@@ -376,6 +376,7 @@ async function createAccount(socket: Socket, session: any) {
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     // Create user in database
+    const now = new Date();
     const newUserId = await db.createUser({
       username: data.username,
       passwordHash: passwordHash,
@@ -393,7 +394,32 @@ async function createAccount(socket: Socket, session: any) {
       quietNode: false, // Show chat notifications
       autoRejoin: 1, // Auto-rejoin conference on login
       confAccess: 'XXX', // Access to all 3 default conferences
-      newUser: true // Mark as new user
+      newUser: true, // Mark as new user
+      firstLogin: now,
+      lastLogin: now,
+      // Required fields with defaults
+      uploads: 0,
+      downloads: 0,
+      bytesUpload: 0,
+      bytesDownload: 0,
+      ratio: 0,
+      ratioType: 0,
+      timeTotal: 0,
+      timeLimit: 60, // 60 minutes default
+      timeUsed: 0,
+      chatLimit: 30,
+      chatUsed: 0,
+      calls: 1, // First call
+      callsToday: 1,
+      screenType: 'ANSI',
+      protocol: 'ZMODEM',
+      editor: 'FULL',
+      zoomType: 'NONE',
+      areaName: '',
+      uuCP: false,
+      topUploadCPS: 0,
+      topDownloadCPS: 0,
+      byteLimit: 0
     });
 
     if (!newUserId) {

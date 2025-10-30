@@ -1,0 +1,18 @@
+  [33m===========================================================================
+            [35mDOORS MENU [31m- 1994 - DaRk IllUsIoN  B B S - 1994 - [35mDOORS
+  [33m===========================================================================
+ 
+            [31m[Account].............................. Account Editing
+            [System].................... Button Menu Editing (PASS)
+            [ID].................... Yuelden Security-System (PASS)
+            [Move].................... Move files to OFFLINE (PASS)
+            [1].............................. AccountEditing (PASS)
+            [2].............................. CallerslogView (PASS)
+            [3].............................. Edit File Dirs (PASS)
+            [4]............................... Edit TextFile (PASS)
+            [5].............................. View Directory (PASS)
+            [VS]................................. SYSOP View (PASS)
+            [DS]............................. SYSOP download (PASS)
+            [ED]................................. edit Descriptions
+            [CU].......................... conference updater (SYS)
+

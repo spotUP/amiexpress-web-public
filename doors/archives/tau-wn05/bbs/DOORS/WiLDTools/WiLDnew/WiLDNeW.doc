@@ -1,0 +1,187 @@
+                            [---> Taurus <---]
+
+                             presents from da
+     ____  ____  ___ __ _______ _____________________   _____________
+    /    /\    \/   \  :       \        /     :      : /    /       /
+   //           \___/  :___     \   ___/ ____ : ____ :/    /___    /____
+   \            /   \      \ /  /    /:       :      :        /   /    /
+    \____/\____/\___/______/___/____/ :_______:______:_______/________/
+                                 SeRieS
+ 
+===========================================================================
+                               WiLDNeW v0.5
+                          written by WiLD THiNG
+===========================================================================
+This  is a new questionaire door for new users, it can give some answers or
+comments on the questions and you can have your questinairs in ANSI and you
+can have different questions for different baud-rates.  Furthermore you can
+ask  new  questions on specified answers (you should now say WOW, no ?  na,
+maybe   next   time). 
+
+ Now  you  can  have  your  questions in whatever language you want, i have
+supplied  with  this  release  an English, Polish and German one, but don't
+forget that the user will probably answer in the language he has been asked
+if you don't tell him otherwise.
+
+The  filled in questionaires will be saved in the WiLDTools/WiLDNew/answers
+directory with the user name as filename.
+
+use  the  BBS  command  'NEW' to enter sysop mode and review new user apps,
+don't forget to set up the security level for the command.  With a security
+level higher than 2oo you will be also able to delete the apps.
+
+Config file:
+~~~~~~~~~~~~
+(doors:WiLDTools//WiLDNeW/WiLDNew.cfg)
+Yes here you must declare which languages you want to have, and the names
+of the quest files 
+eg.: 
+==== cut here ====
+English quest.eng
+Polski quest.pol
+Deutsch quest.ger 
+==== cut here ====
+and whatever you want...
+
+WiLDNew will ask which language the user prefers.
+
+here  are the recognition chars for the quest file, they have to be at the
+beginning of every line:
+
+- print out line
+? Ask question
+§ Ask question which user MUST Answer 
+^ Check answer 
++ Call the editor and let the user write you a comment, that 
+        comment will be saved in .../answers/username.ext
+=xxxxx ask user with specified baud rate where xxxxx is the rate
+%xxxxx show line only to user calling at xxxxx baud
+
+You can combine the answer checking with a new question:
+
+?Have you ever heard of WiLDTools ?             - ask question
+^yes                                            - if entered "yes" then
+§Why not ?                                      - user must answer why
+?Is there anything you want to tell me ?
+^yes
++ext                                            - if the answer is
+                                                  yes - start the
+                                                  editor
+
+Look at the example config file to see some possibilities :)
+
+
+Installation:
+~~~~~~~~~~~~~
+Execute  the  WNINST script, it'll copy the stuff where it belongs and edit
+the config files to yer needs
+
+HaVe PHµN aNĞ Ma¥ Ğa Wa®eZ Be WiTH ¥øµ
+
+For  any  bug reports, improvements or if you'd like me to write a door for
+you  contact  me  at my board Dixie ++48-71-575825.
+
+THiNGS LeFT Tø Dø:
+~~~~~~~~~~~~~~~~~~
+
+- Finally Do a Amiga E version of it for speed improvement
+
+
+History:
+~~~~~~~~
+v0.1            First Version
+v0.2            added Multilanguage option
+v0.3            some fixes and edit option
+v0.4            sysop mode was added
+v0.4b 25-06-94  fixed sysop mode option, 'NEW' command works now,  
+                uses now custom 'V' command TO view apps FOR more 
+                convenience
+v0.5  10-07-94  Bugfixes over bugfixes , added 'View By Name' TO sysop mode,
+                new look
+
+
+                          LooK ouT FoR THe oTHeR 
+      ____  ____  ___ __ _______ _____________________   _____________
+     /    /\    \/   \  :       \        /     :      : /    /       /
+    //           \___/  :___     \   ___/ ____ : ____ :/    /___    /____
+    \            /   \      \ /  /    /:       :      :        /   /    /
+     \____/\____/\___/______/___/____/ :_______:______:_______/________/
+
+
+[----- NAME ------|------ DESCRIPTION -------|------- FEATURES ---------------]
+ WiLDRead v0.13   | file/archive/log viewer  | text search
+                  | AIM door                 | file/arc info
+                  |                          | next/prev. page
+                  |                          | page selection
+[-----------------|--------------------------|--------------------------------]
+ WiLDNeW v0.5     | new user questionaire    | multilanguage
+                  | AIM door                 | baud checking for questions
+                  |                          | multiple answers
+                  |                          | text comments (internal ed)
+                  |                          | sysop review of new users
+[-----------------|--------------------------|--------------------------------]
+ WiLDBull v0.2    | global bulletins         | scroll bar selection
+                  | AIM door                 | all bulls in one dir
+[-----------------|--------------------------|--------------------------------]
+ WiLDMenu v0.1    | multi level menus        | all menus in one file
+                  | AIM door                 |
+[-----------------|--------------------------|--------------------------------]
+ WiLDKick v0.1    | unwanted users kick out  | show  msg to user & hang up
+                  | AIM door                 |
+[-----------------|--------------------------|--------------------------------]
+ WiLDVote v0.9    | vote door                | configurable user add/delete
+                  | AIM door                 | of topics and itemz
+                  |                          | download of result file
+                  |                          | result output with graph bars
+[-----------------|--------------------------|--------------------------------]
+ WiLDLiST v0.7    | file LIST dl             | download all filelists from
+                  | XIM door                 | conferences the user has 
+                  |                          |  access TO in one file
+[-----------------|--------------------------|--------------------------------]
+ Global Zippy     | Zippy command FOR all    | searches all confs for search
+                  | confs                    | string
+[-----------------|--------------------------|--------------------------------]
+
+
+                 -======================================-
+                           Special thanx for ...
+                 -======================================-
+
+Empire/Mystic   : well you see, finally got away from that arexx stuff, and
+                  removed the old config and you can select the confs you
+                  want
+ByteAndi/MST    : for da kewl stuff, ich hab ne liste mit einigen vielen
+                  bugs und Vorschlaegenn fuer Dich :-)
+Gollum          : Thx for da reeeeeaall fast text converison proc
+ZiPPER/Yodel    : THX for all
+Zielu/Mad Elks  : thx for yer loooooooooong bug reports
+uNReaL/FeaR     : ...all the KeWL ASCII's
+Easy Rider/MST  : ...beta-testing & fast 'distribution'
+                  and yer beta-testing
+Wouter van Oortmerssen : ... Amiga E compiler, it's the BEST
+SiNTAX/WøT      : ...your examples in E and your AEDoor.library
+Big C & Amiga   : ... the best toy for bored programmers ;-)
+
+                  
+
+
+                 -======================================-
+                       Greetings go to(in no order)
+                 -======================================-
+
+                      all Ex-Mannassas & FeaR members
+Tic.,   R19,  Dragon/Motion,  Vince,  Andy/Motion,  Sunset,  Donald/Motion,
+Vince,The  Generat, Wild Child/Taurus,EaZy-E/Taurus(ruf mal an, hab was mit
+Dir zu schwätze), CatEye/Taurus, Artie/Taurus and all others who want to be
+greeted...
+
+Logic           : hey yer checkers  are da best 
+Rage against ZK : Go on like this
+
+                 -======================================-
+                              Fuckings go to
+                 -======================================-
+Polish telecom (TPSA): fucked up assholes
+all you stupid lamers here that even can't do a simple file description
+Zonder Lamando       : fuck yerself ye bloody nazis
+

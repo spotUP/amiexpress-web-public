@@ -1,0 +1,172 @@
+
+                  __/\_____  _____ ____  )\_____/\
+ RUNNING ON:      \°      °\ \°   V   °\ \°      °\        S N E S
+ ----------        \_____   \ \___¡___  \ \_____   \      A M I G A
+ /X V3.37           ____//  /  ___:__//  \ __ _ \\  \
+ A1200 / 12MEG RAM /° ___   \ /°  V__     \\°V°\//   \
+ 850 HD           //  \_//   \\\  ¡\ \\   ///¡       / 
+                  \_______   / \\ ./  \\ //_ : _____/  
+        _        _        \ /   \ /    \/_  )¡(           _
+_______/( _______)\ __ _   V   _ V _   _ )\___  _____   _ )\_ ____    _
+\°      °\\°     °//° V°\  ¡   \)¡(°\ /°V    °\ \°  °\ /°V  °\\° °\  /°\
+ \_____   \\\ ___///  ¡ /  :   //:  /// ¡ ____/ //   /// ¡_   \\\  \ \  \
+  ____//  /// \___\\  :/(F)¡  // ¡ ///  :/ ___ //   ///  / \\  \\\  \//  \
+ /° ___   \\\ /____\\ ;\_ __/\\\ . \\\  ¡\/° °\\\   \\\  \ //  /// /\\    \
+//  \ //   \\\    °\\\   V   °\\\   \\\ .      \\\   \\\  V   ///  \ \\   /
+\\  / \____//_____  \\___¡ ___/// __/ \____/\  ///_ _/ \__   / \_ _/  \  /
+ \ /              \ /    \/    \ /           \/ \/ V      \ /    V     \/
+  V                V            V                  ¡       V     ¡
+  ¡ SYSOP: Z/\<Ke / $CEPTIC     !                  ;       ¡     :
+       CO: MR.VAIN / $CEPTIC    .  +49-4638-8306                 .
+       CO: WOTAN / INDEPENDENT
+
+
+
+
+                                DISCLAIMER
+                               ------------
+
+Ok Guys, let's start.
+
+
+Purpose:
+--------
+
+ -First Door:
+ ------------
+
+First of all i would like to say that this Door was written because there are
+so many Status-Doors out there which dont show the right kind of thing.The
+first shows only a few things, which could be important, but not all of those
+kind of Doors have this things.The second thing i dont like is the rating
+which is choosen by someone who could be really mad.This Door makes it poss-
+ible to show the User which is using this Door which Commands are available
+for him.He will shown a Text-File wich shows him all available Commands.The 
+only thng is that the Sysop have to Edit it.Further Explaination follows at
+the Installation
+This Time i changed the Door from AIM to XIM Door because its much faster than
+Arexx. Ok try it out.
+
+ -Second Door:
+ -------------
+
+Yes! There is a second Door!! Do you see the shit Status which is shown by
+/X 2.xx and /X 3.xx. I saw a Status in the fine S-Express so i decided to 
+write a similar one for /X-Users. So try it and enjoy it!
+
+Installation:
+-------------
+
+First of all it is an XIM-Door which could be used in /X2.xx & /X3.xx
+
+ - Installation on /X 2.xx:
+ --------------------------
+
+The Installation on /X2.xx is to be like the following:
+First of all copy all files of the Door-Directory in this Archive to Yours
+and then add the following lines to your BBSCMD:
+
+-------^Cut here^-----------------------
+S         XM010DOORS:PIWI/STATUSBBS
+-------^and here^-----------------------
+
+The Installation of the second Door is only to add a Command to your SYSCMD
+because the File which is needed is in the Door-Directory too. So just add
+following Lines to Your SYSCMD:
+
+-------^Cut here^-----------------------
+S         XM010DOORS:PIWI/STATUSSYS
+-------^and here^-----------------------
+
+Ok the next thing you have to do is to edit a Textfile which contains all
+the Commands to the Security-Level someone has
+I.e.:Edit the File Access(Access-Level) --> Access200
+     This File must contain all available Commands for Security-Level
+Thats all Folks.
+
+ - Installation on /X 3.xx:
+ --------------------------
+
+The Installation for /X3.xx-Users is much easier to handle. Just copy the
+complete Door-irectory to yours and copy all the Commands to yours. Be sure
+that BOTH, either the bbscmd- AND the syscmd-Command-Infos are copied.
+Ok the next thing you have to do is to edit a Textfile which contains all
+the Commands to the Security-Level someone has
+I.e.:Edit the File Access(Access-Level) --> Access200
+     This File must contain all available Commands for Security-Level
+
+Thats all for doing  under /X3.xx
+
+
+History:
+--------
+
+
+V0.1 First only Internal Release, Bugs in Formatting the Output
+     Never released
+
+V0.2 Bugs in Formatting removed, added some Kind of Color-Formatting
+     Never released too
+
+V0.5 All Kind of Formatting corrected and building some colors in output.
+     Released: 15-04-94
+
+V0.6 Some Bugs Fixed; Sorry you cant use any Other BBS-Name than 'BAD RELIGION' - Bug fixed ;
+     Some cosmetical Changes made
+     Released: 18-04-94
+V1.0 Some Additional work done, compiled in C-Language, able to show all 
+     available Commands at Security-Level which someone has
+	 Released: 05-05-94
+
+Future Planings:
+----------------
+
+I planned to do some more Modules for /X 2.xx and of course /X 3.xx.But they
+all would be XIM-Modules.
+There Would be:
+               - A new Time Door
+               - A new Wall
+               - A cool Calling-Card-Registrater
+               - and some more Tools
+
+Enjoy the waiting!!!!
+
+Greetings:
+---------
+
+OK Greetings are going to Zacke/Sceptic Wotan/Sceptic and Mr.Vain/Sceptic.
+
+Suggestions:
+------------
+
+Ok If you have any Suggestions to do please leave me a Messy on a Board of
+the folowing ones:
+
+                            BAD RELIOGION +49-4638-8306
+                            DEAD LINE     +40-461-ELITE
+
+     Leave a Messy for Zacke or Mr.Vain or Wotan which are my Partners
+
+
+
+
+                  __/\_____  _____ ____  )\_____/\
+ RUNNING ON:      \°      °\ \°   V   °\ \°      °\        S N E S
+ ----------        \_____   \ \___¡___  \ \_____   \      A M I G A
+ /X V3.37           ____//  /  ___:__//  \ __ _ \\  \
+ A1200 / 12MEG RAM /° ___   \ /°  V__     \\°V°\//   \
+ 850 HD           //  \_//   \\\  ¡\ \\   ///¡       / 
+                  \_______   / \\ ./  \\ //_ : _____/  
+        _        _        \ /   \ /    \/_  )¡(           _
+_______/( _______)\ __ _   V   _ V _   _ )\___  _____   _ )\_ ____    _
+\°      °\\°     °//° V°\  ¡   \)¡(°\ /°V    °\ \°  °\ /°V  °\\° °\  /°\
+ \_____   \\\ ___///  ¡ /  :   //:  /// ¡ ____/ //   /// ¡_   \\\  \ \  \
+  ____//  /// \___\\  :/(F)¡  // ¡ ///  :/ ___ //   ///  / \\  \\\  \//  \
+ /° ___   \\\ /____\\ ;\_ __/\\\ . \\\  ¡\/° °\\\   \\\  \ //  /// /\\    \
+//  \ //   \\\    °\\\   V   °\\\   \\\ .      \\\   \\\  V   ///  \ \\   /
+\\  / \____//_____  \\___¡ ___/// __/ \____/\  ///_ _/ \__   / \_ _/  \  /
+ \ /              \ /    \/    \ /           \/ \/ V      \ /    V     \/
+  V                V            V                  ¡       V     ¡
+  ¡ SYSOP: Z/\<Ke / $CEPTIC     !                  ;       ¡     :
+       CO: MR.VAIN / $CEPTIC    .  +49-4638-8306                 .
+       CO: WOTAN / INDEPENDENT

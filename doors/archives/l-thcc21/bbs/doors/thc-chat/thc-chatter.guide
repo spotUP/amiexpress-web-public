@@ -1,0 +1,99 @@
+@database "tHC-cHAT 2.1 gUIDE"
+@Node MAIN tHC-cHAT 2.1 dOCS"
+                                                                          
+                         [L}EGEND /X )-sIGN rELEASED
+
+                        »»·»»» tHC-cHAT v2.1 «««·««
+         »»·»» cODED bY: cREW-oNE   iDEA & dESIGNED bY: tHC ««·««
+
+
+                           @{" »· iNTRODUCTION ·« " link "intro"}
+
+                           @{" »· iNSTALATION! ·« " link "install"}
+
+                           @{" »·  gREETINGS!! ·« " link "greetings"}
+
+                     @{" »· cONTACT uS!, bUG rEPORTS ·« " link "contact"}
+                        
+@endnode
+
+@node "intro" "iNTRODUCTION"
+
+        Thiz is the ultimate multi-chat door NOW on the /X-scene...
+                           thIZ aRE tHE oPTIONS:
+
+  - fULL sCREEN cHAT
+  - tYPE wHEN tHE oTHER iS tYPING
+  - hIGHSCORE (lONGEST cHATS)
+  - lAST cHATTERS
+  - jOIN cHAT'S
+  - fAAST aSM cODING  
+
+            nO tIME fOR lONG aND bORING dOC'S, gET tO tHE poINT.
+        inSTALL thIZ oNE oN yoUR mULTI NODE sYSTEM iT'S tHE FUTURE
+
+@endnode
+
+@node "install" "iNSTALLATION"
+
+- Directory:
+
+ cOPY tHEZE fILEZ iN tHE dIRECTORY: BBS:DOORS/THC-CHAT/
+
+      > THC-CHATTER          
+      > THC-CHATTER.HIGHSCORE
+      > THC-CHATTER.LASTUSERS
+      >	THC-CHATTER.LENGHT
+      >	THC-CAHTTER.gUIDE
+
+ cOPY tHIS iCON iN tHE dIRECTORY: BBS:COMMANDS/BBSCMD/
+
+      > CHAT.INFO
+
+
+ tHaTS aLL.. iNSTALL iT aND uSE iT!!!!!
+
+@endnode
+
+@node "gREETINGS" "iNSTALLATION"
+
+            gREETINGS mUST GO tO THEZE REGISTRATED bETA tESTERS
+          »-----------------------------------------------------«
+                tHC/lEGEND     - mYSTICAL pLACES  [ 4 NODEZ ]   
+                eMPIRE/mYSTIC  - lAST oUTPOST     [ 2 nODEZ ]
+                oVERLORD/SR    - dOOMBASE]        [ 2 nODEZ ]
+                pHANTOM        - cOOL cORNIA      [ 2 nODEZ ]
+                tAZ dEVIL/CF   - rUINS oF wISDOM  [ 3 nODEZ ]
+                mINDEX         -                  [ 2 noDEZ ]
+          »-----------------------------------------------------«
+
+                oTHER gREETINGS gO tO: aLL lEGEND mEMBERS,             
+                     anD aLL uSERS oF mYSTICAL pLACES 
+
+@toc "menu"
+@endnode
+
+@node "cONTACT" "cONTACT uS!!!!"
+                   ___
+    .  /\  /\  ____|  \_____________________  _______________ ________
+   _:_// \/  \/~  ||   \_   _______   .__/__)/~        /~    \|.    _/__:_
+    |/        \__ `' ___/_____  \/   .||~  .|    /____/   |   \|    |___|
+   _/    \/   \\|    |_/     |  \\_  |||   ||   / ~  \    _   \\    |   \_
+   \_____||     \____|\      _____/___||____|___     \\___|     \________/
+   -|-----|______/-----\_____/----Stz!---------\_______/--|______/------|-
+    |     _________________    _____  __________________/\___________  .|
+    |     \_______  \    _/   /~    \/~         /~ ____   /~   _____/  ||
+   _|______|.  __/   \   |___/   |   \    /____/  __/_\ //______   \____|
+    :      ||  \______)  |~  \_  _   \\_ / ~  \_       \/\_    /   \\_  .
+    .      |     | |__________/  |_____/_______/__________/__________/
+ -:--------|_____|--------\______|---------------------------------------:-
+ ___________________________________________________________________________
+             nODE 1.......   +31-(0)10-477-9507  (dUAL 21k6)
+             nODE 2.......   +31-(0)10-477-4218  (dUAL 14k4)
+             nODE 3.......   +31-(0)10-477-2519  (dUAL 21k6)
+             nODE 4.......   +31-(0)10-477-2985  (dUAL 21k6)
+ ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+     »» cONTACT thIZ bBS tO gET tHE lATEST vERSION oF tHE tHC-CHAT ««
+  »»  aND/oR rEPORT bUG rEPORTS oR iF yOU wANT to bE a bETA tESTER !! ««
+@toc "menu"
+@endnode

@@ -1,0 +1,192 @@
+                 ____________.____________________________
+              .__\_  ______  |   __  _   __  _   __  _   /__.
+              |::Y____   Y   |   Y   !   Y   ____Y   |   Y::|
+              |::|   !   |   !   |   ____|   !   |   |   |sT|
+              ¯¯¯l_______l_______l___|   l_______l___|¯¯¯¯¯¯¯
+                    .__.                         .__.
+                 ___|  |____________.____________|  |____
+              .__\___   __  _   __  |   __  _   __  _   /___.
+              |::::Y    Y   |   Y   |   Y   |___Y   |   Y:::|
+              |::::|    |   !   |   !   |   !   |   |   |:::|
+              ¯¯¯¯¯l____l_______l_______l_______l___|___|¯¯¯¯
+
+               bringin' it down with another /X bit for you!
+
+           this time it is called (for want of a better name..)
+
+                          ! sUPER-fREE-LEECH !
+
+
+What?
+
+Simple... (as are most of my ideas). All it does is make files
+freely downloadable if they fit the criteria.. ie if they are either
+a special group release (eg QTX-#?) or if it has been uploaded into a
+conference that you can designate as a "FREE DOWNLOAD" conference.
+Supports up to 100 free-leech conferences and 100 group prefixes. (Should
+be enough, right?)
+
+Why?
+
+I wanted one and couldnt find one. Sorry if I've stepped in on your turf
+if you have made one already!
+
+Where?
+
+My underground dungeon that I call `home'. No place like it (probably just
+as well!)
+
+When?
+
+Started on the 25th of August 1994. It's now the 25th of August 1994 (still).
+Alright, so I've been adding bits in since then, but the bulk of the code is
+still the stuff that took a couple of hours!
+
+How?
+
+Install the files that you have unpacked from the archive into their proper
+directories. It should be easy enough to work that out. If you've installed
+a few /X utils before, then you should have no problem doing the same with
+this one!
+
+Personal Configuration?
+
+Yes! There's a few (very easy) things you will have to do to in order
+to get it working properly on your set-up.
+So load up CED (why use anything else?) and load in the file "FREE.CFG"
+that came with the archive - you should've put it in DOORS:SUPERTOUCH/
+
+Alright..lets get to work! In the example FREE.CFG file, the first 3 lines
+are taken up by file prefixes. Any file that has this prefix will be made
+a free-download for anyone else. You may have up to 100 different file
+prefixes in your config file. This option is obviously (?) for boards that
+want their group releases as free-downloads.
+
+The line after your last file prefix must have the first 4 characters as
+****
+else this utility wont work properly.
+
+The next line(s) are the names of the conferences that allow free-downloads
+(These names are the ones used in the BBS:ConfConfig.info icon)
+
+You may have up to 100 different conference names here.. (yes, pointless
+having that many, I know! But who cares?)
+
+The line after your last canference same must have the first 4 characters as
+****
+else this utility wont work properly. (Deja Vu?)
+
+
+The following 5 lines are to do with text configuration.
+You can change the language or whatever, its up to you! Neato!
+All text must be between |'s, this is so you can have trailing & preceeding
+spaces in the text lines.
+
+
+  1) Text that is displayed to show what conference the user is in.
+
+  2) Text that is displayed when the file does not fit the criteria
+     of being made a free-leech file.
+
+  3) Text that is displayed when the file is released by a certain
+& 4) group (with a certain filename prefix.. eg QTX-   )
+     The included example would output..
+
+     < qUARTEX rELEASE! - mAKING xxxxxxxxx a fREE-LEECH! >
+
+     where xxxxxxxxx is the name of the uploaded file.
+
+  5) Text that is displayed when the file is uploaded into a free-leech
+     conference (all uploads into it are made free-downloads)
+
+
+
+Okay...that's it.. if all is going well, then when someone uploads a file,
+it will go into sUPER-fREE-LEECH, and do its stuff.
+s.F.L has only been tested on /X 4.3, so I cant guarentee it'll work on
+anything else...
+I dont expect you'll have any problems with this since it is all very basic.
+If however you do experience that it isnt working properly, and you think
+you've followed the instructions properly, then track me down and get me to
+check it out.
+
+NOTE2: If you use a filechecker/stripper such as MasterStripper from
+       Delusion that adds a comment to the checked file, after
+       sUPER-fREE-LEECH has run through and added one, it will
+       not work. IE.. it WONT give the user free-downloads.
+       All I can suggest is you change strippers (you know the sort I mean) :)
+       A pity since MasterStripper is nice.
+
+NOTE2: sUPER-fREE-LEECH will not add a comment into DIRx.. like some other
+       utils. I cannot see any way to do this...yet. :)
+
+END BITS:
+
+If anyone has any suggestions to improve this small, versatile, courageous,
+yet kind-hearted little AREXX-MUTHA-FUCKA, then get in touch with me somehow!
+I shouldnt be too hard to track down.. just ask your local QTX member!
+
+Anyone want a GUI configurator for sUPER-fREE-LEECH? :)
+
+
+
+
+            THANKS AND GREETZ Gø øUT Tø ALL QUARTEX MEMBERS!
+                                             .___.
+        ______________.______________________|   l______________.____
+  ._____\_  __  ___   |  ___  __  ___  __  ___   ___  _______   l  _/______.
+  |:::::Y    |   Y    |   Y   ___  Y    |   Y     Y    ____Y   __   Y::::::|
+  |:::::|__  !   .__  !   .__  |   .__  |___.__   .__  !   .__  |   |::::::|
+  |:::::::\__.   |:\______|:\__|   |:\__|:::::\___|:\______|:\__|   |sT::::|
+  `----------;   `-------------;   `----------------------------;   `------'
+
+              ADDITIøNAL GREETZ Gø Tø THESE AMIGA SCENE GUYZ:
+
+      ^ kID aFRIKA ^ pUZZLER ^ sLIME ^ tHE wHITE kNIGHT ^ nO lIMIT ^
+
+         ^ aBRASAX ^ mARKSMAN ^ pARANOID ^ gAZZER ^ gREEN bERET ^
+
+             ^ jORDAN ^ sAL-ONE ^ sKEPTICAL ^ jESTER ^ G.E.M ^
+              
+                    ^ sTUSSY ^ sHOCK-G ^ mAZ ^ eARWAX ^
+
+                  ^ aLL vEGANS / vEGETARIANS oUT tHERE! ^
+
+            ^ aND nO dOUBT aNOTHER 50+ tHAT I hAVE fORGOTTEN! ^
+
+
+
+End of that crap.. now for some karaoke...
+
+
+DEAD WRONG  - INTEGRITY
+¯¯¯¯¯¯¯¯¯¯    ¯¯¯¯¯¯¯¯¯
+
+WHAT APPEARED TO BE SO INNOCENT
+JUST A FRONT TO COVER YOUR LIES
+YOU HAD IT ALL PLANNED FROM THE START
+THEIR LOSS TO YOUR GAIN
+YOU DIDNT THINK IT OVER TOO CLEARLY
+BECAUSE YOU WERE...
+DEAD WRONG
+¯¯¯¯¯¯¯¯¯¯
+NO AVOIDING WHAT MUST BE DONE
+FIGHT TO WIN FIGHT TO OVERCOME
+YOU HAVE NO CHOICE OF WHAT YOU CAN DO
+ENJOY THE PAIN AS IT SEERS THROUGH YOU
+THERE WILL BE NO SECOND CHANCES
+NO ESCAPE THIS TIME
+GO AHEAD AND RUN
+THERE'S NO PLACE YOU CAN HIDE
+WE'LL HUNT YOU DOWN
+TRACK YOU DOWN
+SO YOU KNOW EXACTLY
+HOW YOUR PREY FELT
+THOUGHT IT WAS JUST A SIMPLE SPORT
+IN MY EYES YOU'RE JUST A MURDERER
+YOU DONT KILL FOR SURVIVAL
+YOU KILL FOR CRUELTY
+YOU WENT FROM BEING THE HUNTER TO BEING THE HUNTED
+YOU ARE DEAD...
+
+Just for you G.E.M :)

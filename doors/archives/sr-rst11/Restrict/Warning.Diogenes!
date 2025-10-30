@@ -1,0 +1,21 @@
+Provided within the archive, the nice tool TOOLTYPE will help you to
+edit the tooltypes in the doors's icon. I know that editing tooltypes
+can be *very* boring, and a bit tricky when you want to insert ansi
+codes, cut/paste, etc...
+ 
+A warning though... this tool doesn't recognize the .INFO, you must
+give the program name and not the icon name ! I am not the coder, don't
+blame me for this non-sense ;)   Coders know why it is so, but I think
+that a small test routine would have solved the problem. Anyway, you must
+for example give DOOR and not DOOR.INFO
+ 
+I wish to thank the author of TOOLTYPE for his nice contribution to the
+Amiga community !
+ 
+As you can see, Diogenes loves his users... Thanx Diogenes ;-)
+ 
+ 
+ 
+ 
+                                                    Diogenes
+ 

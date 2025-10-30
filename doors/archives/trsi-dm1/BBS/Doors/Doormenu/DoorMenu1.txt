@@ -1,0 +1,17 @@
+    Command           [33mDescription                          [35mAuthor[0m/[35mCoder[0m
+  [34m-----------------------------------------------------------------------[0m
+
+    Wall [36m............ [33mWrite some Shit to the Wall [36m........ [32m5tH DyNASTY![0m
+    Want [36m............ [33mMake an valid File Request [36m......... [32mDr.Dre![0m/[32mtRSi[0m
+    Sent [36m............ [33mEnter your private Sent By Line [36m.... [32mByteAndi[0m/[32mMST[0m
+    Snap [36m............ [33mSnap Group Logo for Description [36m.... [32mDr.Dre![0m/[32mtRSi[0m
+  [36m*[0m Test [36m............ [33mTest Archive / View File_Id.Diz [36m.... [32mSieGeL[0m/[32mMsT[0m
+    Olm [36m............. [33mSend Message to other Nodes [36m........ [32mRe/Y\o[0m/[32mTLS[0m/[32mMST[0m
+    Who [36m............. [33mView other Node Activities [36m......... [32mDr.Dre![0m/[32mtRSi[0m
+    Dirdl [36m........... [33mDownload Dirlisting`s [36m.............. [32mDr.Dre![0m/[32mtRSi[0m
+    BAdd [36m............ [33mEnter/View/Download BBS Adds [36m....... [32mDr.Dre![0m/[32mtRSi[0m
+    Chat [36m............ [33mMultiUserChat [36m...................... [32mByteMaster[0m
+    Bug [36m............. [33mWrite Bug Report for the BBS [36m....... [32mByteMaster[0m
+    Sug [36m............. [33mWrite Suggestions for the BBS [36m...... [32mByteMaster[0m
+
+  [34m-----------------------------------------------------------------------[0m

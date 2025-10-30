@@ -1,0 +1,57 @@
+    _______                   __________         ______  ________
+____¡     ø\__________________¡ø       / ________|ø    \_\     ø¡_______
+\     ____   /   _____   /  ___       /_ \       _____   /\     |_     /
+ \____¡ _/  /____¡  _/  /___¡ø¡      / ø| \______¡  _/  /  \___ !/____/
+   /   ____/_  /   ____/_  /  |     /   |____  /   ____/_  __/  __ \__
+  /   __    ø\/    ¡    ø\/   l____/    ¡   ø\/    ¡    ø\/ø    ¡    ø\
+ /     ¡      \    |      \ ____¡/      |     \    |      \     |      \
+/      |       \  _!       \   ¡/       !      \  _!       \    |       \
+\______!        \___        \__!\_______        \___        \___|        \
+       |         \ l__       \         /_________\ ¡         \  l______Crt\
+       l__________\   l______/                     l_________/
+
+                    Gives You Today : Simple Page V 1.5
+============================================================================
+ 
+      A Simple Pager For The Ami-Express BBS Sytems V 2.xx and 3.xx
+                  It Should Work Fine On S-Express Too...
+ 
+To Install It Copy The Files SPage.Rexx And Spage.Doc Into The Directory
+ 
+Doors:SPage/ ... For /X 3.xx Copy The File O.Info Into Your BBS.CMD Dir...
+                 For /X 2.xx Add This To Your BBS.CMD File...
+ 
+ 
+-- cut --
+*O        RM010Doors:Spage/Spage.Rexx
+-- cut --
+  
+ 
+In this version you need to do a little bit of configuration...
+In the .Rexx file you'll see a line
+ 
+
+-- cut --
+Okre = 200
+-- cut --
+ 
+ 
+Change the value of okre to your override chat level... I've found
+no way yet to retrieve this from /X so you'll have to do it.. Sorry
+for this inconveniance..
+(Fans of 'Reginald' aka 'Geert Hoste' will recognize this "yell" from his
+song "Heyenoeist!" (om effe hallo aan de vlamingen te zeggen !)
+ 
+Oki That's It.. Quick Hy's To My Bud's EveryWhere...
+ 
+===========================================================================
+ 
+Program History :
+ 
+   V 1.0  First release
+   V 1.1  Removed some leftovers from the beta
+   V 1.2  Added callerslog writing
+   V 1.3  Removed it again cuz it completely would fuck up your BBS
+   V 1.4  Altered the screen layout a bit
+   V 1.5  Added an override-chat level           -- Release --
+ 

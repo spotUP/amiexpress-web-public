@@ -1,0 +1,109 @@
+@database "TFA-SKIP.guide"
+
+@node Main "TFA-FILESKIPPER v1.0 Documentation"
+
+
+
+
+                     TLK & RBX OF TF/X-DeSiGN PRESENT
+
+                        FILE SKIPPER XIM DOOR V1.0
+
+                            @{" I N F O R M A T I O N S " link INFO}
+                            @{"      H I S T O R Y      " link HISTORY}
+                            @{" R E Q U I R E M E N T S " link REQUIRE} 
+                            @{" I N S T A L L A T I O N " link INSTALL}
+                            @{"    G R E E T I N G S    " link GREETS}
+                            @{" H O W  2  C O N T A C T " link CONTACT}
+
+
+               THE FLAME ARROWS... NOW YOU'RE PLAYING WITH FIRE!
+
+
+
+@endnode
+
+@node INFO "INFORMATION"
+
+   WITH THIS DOOR YOU CAN MAKE A DIR ENTRY FOR A 'ALLREADY KNOWN' FAKE.
+   IT ALSO MAKES A DUMMY FILE IN YOUR UPLOAD DIR, SO IF ANYBODY WANTS TO
+   UPLOAD IT, IT WILL BE SKIPPED AFTER ALL! THIS PREVENTS LAME UPLOADS!
+                                 
+@endnode
+
+
+
+@node history "HISTORY"
+
+NONE YET, BUT IF YOU HAVE A COMMENT OR A BUG REPORT, FEEL FREE TO CONTACT
+ME AT THE PLACES MENTIONED LATER!
+
+                       @{" BACK " LINK INFO}                  @{" NEXT " LINK REQUIRE}
+@endnode
+
+@node REQUIRE "REQUIREMENTS"
+
+Well...
+
+                   1) YOU NEED THE GUTS TO INSTALL THIS..
+                   2) A GIRLFRIEND TO ADMIRE MY WORK
+                   3) A USER TO LOGIN (PREFERABLY A LOCAL LAMER)
+          
+                   AND WHAT ABOUT AN AMIGA AND /X 3.x ?
+ 
+                   THIS IS ALWAYS THE STUPID CHAPTER... 8(
+
+                    @{" BACK " LINK HISTORY}                  @{" NEXT " LINK INSTALL}
+
+@endnode
+
+
+@node INSTALL "INSTALLATION"
+
+            INSTALL IT LIKE THE WAY IT IS DONE IN THE ARCHIVE. 
+CREATE (IF YOU DOESN'T HAVE IT YET..) A DIRECTORY DOORS:TFADOORS/ AND COPY
+THE TfaSKIP.x INTO THIS DIRECTORY. COPY THE ICON IN BBS:COMMANDS/BBSCMD TO
+YOUR OWN BBS:COMMANDS/BBSCMD AND FEEL FREE TO EDIT THE ACCESS LEVEL OF IT!
+
+@endnode
+
+
+@node GREETS "GREETINGS"
+
+                    GREETINGS TO THE FOLLOWING PERSONS:
+
+EMPiRE/MYSTIC : THANX FOR RELEASING THE AEKIT AND YOUR HELP WITH 'C'
+PRICE/TFA     : THANX FOR BEING THE LEADER OF TFA HOPE U LIKE THIS PIECE!
+TUS/TFA       : TNX FOR TAKING OVER STALLION. WELCOME TO TF/X-DESIGN BTW!
+TARGET/TFA    : THE MEGA-GIGA-KLAPPER-TOP-UPLOADER !!
+REMOTE CTRL   : YOU CAN'T BEAT ME! (HAHAHAHAHAHA)
+RHINO/TEAMHOI : THANX FOR USING THE TEAMHOI-MYSTERIOUS PROGHOL.. NOT!
+MR. PARTYMAN  : BLIJ DAT IK NIET MEER NAAR GRONINGEN KAN KOMEN... *NOT!*
+THC/LEGEND    : THANX FOR TESTING THE USERINFO LOGON XIM
+SCAN          : THANX FOR TESTING THE USERINFO LOGON XIM
+HELLCAT       : THANX FOR TESTING THE LHA-CHECK!
+
+           AND TO ALL MEMBERS OF T.F.A. / GROUND-ZERO OUT THERE!
+
+@endnode
+
+
+@node CONTACT "HOW TO CONTACT ME"
+
+YOU CAN ALWAYS GET A 100% BACKDOOR FREE DOOR BY CALLING THE DUTCH T.F.A.
+BOARDS:     
+
+
+                           TOTAL CONFUSION (WHQ)
+                              STALLION (EHQ)
+                          MORBID VIOLENCE (FUNHQ)
+                             SAMSPLACE (PCHQ)
+
+        OR LEAVE ME A MESSAGE ON ANY BIG BOARD HERE IN HOLLAND TO:
+
+                                  RUBYX*
+                                    OR
+                               TELEKINETIC*
+
+
+@endnode

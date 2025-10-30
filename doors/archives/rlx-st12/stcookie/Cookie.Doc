@@ -1,0 +1,62 @@
+             ___________  _   _ __ _____________     _  __ ______ ____/\
+            /           \__________     _____/ /   __________    |     /
+            \    /ø)     \    ____/    /__    |    \    ____/    :    /
+            /         ___/    __)__    __/    | /\ /    __)__         \
+           /    /\    \__     |    \   \      :/  \     |    \   .     \
+          /_____\ \______\_________/____\__________\_________/   :______\
+                                                          /______|LPy
+
+                   Presents : Star Trek Cookie Door V 1.2
+
+      A small door for Ami-Express 2.xx and 3.xx that shows a tagline
+   with a funny saying about Star Trek and Star Trek The Next Generation
+         If you like it, please include it into you logon sequence
+
+   To install it just put all the files in the archive in Doors:STCookie/
+                   (Cookie.Rexx , Biscuit , Cookie.Doc)
+       The dirs are already made in the archive but just in case =-)
+
+                            Ami-Express V 2.xx
+                         ------------------------
+
+     Add to your BBS.CMD : "*COOKIE   RM010DOORS:STCookie/Cookie.Rexx"
+                          (Ofcourse without the "")
+
+                            Ami-Express V 3.xx
+                         ------------------------
+              Drag the icon (Cookie.Info) to your BBS.CMD dir
+
+                             Show It At Logon
+                         ------------------------
+
+                        Add to your NodeX/bull.txt
+                                --- CUT ---
+                                ~CC_COOKIE
+                                --- CUT ---
+
+                               ** NOTICE **
+
+  STCookie V 1.2 is PostCardWare.. If you use it, you MUST send a postcard
+      of the area/country/city you are living in to the adress below...
+                            Smets P.
+                            Weldadigheidsstraat 45
+                            B-3000 Leuven
+                            Belgium
+
+                               ** NOTICE **
+
+
+                             Program History
+                         ------------------------
+             V 0.9  Beta Version - No Release (Thank God !)
+             V 1.0  First Release
+             v 1.1  Bug Fixed : When the time returned over 60 you
+                                always got the same sentence
+                                (you have reached.....)
+                                should be fixed now...
+                    Optimized Source a weeny bit
+                    Changed a little bit to the screen output
+                    Added 40 more Cookies (burps)
+             V 1.2  Changed screen output (again)
+                    Tag line is now centered on the screen
+                    STCookie is now PostCardWare

@@ -1,0 +1,158 @@
+/*------------------------------------------------*/
+/*                 THe ReaL WaLL                  */
+/*                                                */
+/*              Coding by RhAPSOdy                */
+/*                                                */
+/*          v1.0  1/8/94  Arexx version           */
+/*------------------------------------------------*/
+
+ parse arg node;options results;nodeid = "AERexxControl"node;address value nodeid
+ bufferflush;tr=transmit;hk=getchar;pm=prompt;sendstring=sendmessage;ss=sendstring
+ gu=getuser;pu=putuser
+
+/*--------------------------------- Error ----------------------------------*/
+signal on error;signal on syntax;signal on ioerr
+
+a    = 1
+NameUser = "OFF"
+CTRL     = X2C(00)
+flag     = 0
+line     = ""
+
+DT_NAME = 100
+gu DT_NAME
+USER=result
+LenUser=length(USER)+2
+
+if exists("Doors:RLWall.info") ~= 0 then do
+open(file,"Doors:RLWall.info",'R')
+Icona=readch(file,5000)
+close(file)
+
+if index(Icona,"USER=") ~= 0 then do
+pos.fake=index(Icona,"USER=")
+pos.fake.end=index(Icona,CTRL,pos.fake)
+NAMEUSER=upper(substr(Icona,pos.fake+5,pos.fake.end-pos.fake-5))
+end
+end
+
+tr ''
+tr '[0m[1J[22C[35m_____  _____ ___  __[5C__ '
+tr '[22C\    /\    // . \/  |__ /  |__ '
+tr '[6C[36mTHe oNLY ReaL    [35m\  .  \  //[5C\_ |  |   |  |  [33mReleased on: 1/8/94 '
+tr '[24C[35m\__/\__//___|___/____|______| '
+tr '[44m [1;37mReaL WaLL V1.0  By: RhAPSOdy   [0;35mY[1;37;44m(1994c)[0;35mY[44m  [1;37mKaLL Me FoR oTHeR /X TooLS & DooRS! '
+tr '[0;36m___|_____|_____|_____|_____|____[35m.[36m|_____|[35m:[36m____|_____|_____|_____|_____|_____|___ '
+tr '|_____|_____|_____|_____|_____|_[35mO[36m___|___[35m.[36m_|_____|_____|_____|_____|_____|_____| '
+tr '___|_____|_____|_____|_____|_____|_____|[35mo[36m____|_____|_____|_____|_____|_____|___ '
+tr ''
+ShowFile 'Doors:RLWall/wall.data' 
+tr '[44m    [1;37mKaLL:  Land Of Deathless BBS   (14:00 > 24:00)   +39-331-621724   ITaLY    '      
+tr '[0;36m___|_____|_____|_____|_____|_____|_____|_____|_____|_____|_____|_____|_____|___[0m '
+tr ''
+
+ss '[34mWouLD You L¡Ke To WR¡Te MY WaLL ([33my[34m/[33mN[34m)?[0m'
+hk
+type = upper(result)
+if type ~= 'Y' then do
+/*  tr " No?...I'm sad!"*/
+    tr " NoOo!?...FuCk OfF!! "
+    Call Fine
+end
+
+if type = 'Y' then do
+    tr ' Yes!'
+if NameUser = "OFF" then do
+ss '[34mWouLD You LiKe To aDD YouR NaMe ([33my[34m/[33mN[34m)?[0m'
+hk
+type1 = upper(result)
+if type1 = 'Y' then do
+    tr " ...WoW!!!"
+    flag    = 1
+end
+if type1 ~= 'Y' then do
+    tr " Ok...You aRe aNoNYMouS!"
+    LenUser = 1
+ end
+end
+
+lenline = 80-LenUser
+do ll = 1 to lenline
+ line=line || "_"
+end
+
+if flag = 1 then tr line || "[" || User || "]"
+if flag = 0 then tr line
+
+NewLine=prompt("[A",lenline)
+IF NewLine = "" then call fine
+
+if NameUser = "ON" | flag = 1 then do
+LenNewLine=length(NewLine)
+if LenNewLine < lenline then do
+ii=0
+ do ii = 1 to lenline-LenNewLine
+    NewLine=NewLine || " "
+ end
+end
+NewLine=NewLine || "[" || User || "]"
+end
+
+color=RANDOM(1,7,TIME('S'))
+NewLine="[3"||color||"m"||NewLine
+
+WriteWall:
+tr "[3"||color||"m"||'THaNKS FoR uSiNG My WaLL!!!'
+a=0
+if exists("Doors:RLWall/Wall.data") ~=0 then Do
+    Open(rea,"Doors:RLWall/Wall.data",R)
+    do forever
+    if eof(rea) then break
+    a=a+1
+    line.a=readln(rea)
+    end
+    Close(rea)
+end
+
+start=1
+a=a-1
+if a > 15 then start = 2
+s=0
+    Open(file,"Doors:RLWall/Wall.data",W)
+    do s = start to a
+    Writeln(file,line.s)
+    end
+    Writeln(file,NewLine)
+    Close(file)
+end
+
+Fine:
+tr ' '
+Shutdown
+exit
+
+prompt: procedure
+parse arg message,length
+ RECEIVE length
+ QUERY message
+return result
+
+/*----------------------------- Error control ------------------------------*/
+ ERROR:
+ tr;transmit 'An error in Line.. #'sigl' Exiting..'
+ tr errortext(sigl)
+ SHUTDOWN
+ exit
+
+ SYNTAX:
+ tr;transmit 'An error in Line.. #'sigl' Exiting..'
+ tr errortext(sigl)
+ SHUTDOWN
+ exit
+
+ IOERR:
+ tr;transmit 'An error in Line.. #'sigl' Exiting..'
+ tr errortext(sigl)
+ SHUTDOWN
+ exit
+

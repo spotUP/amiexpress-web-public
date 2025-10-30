@@ -1,0 +1,68 @@
+
+                          Security Checker v1.01
+
+                 by The Silencer of DoOdLeS^ShoCK^EQUiNøX
+
+
+
+
+
+
+
+If a user logs on your board with a security level over XXX and is not
+listed in your config he will be set to a standard harmless security
+level of YYY.
+
+For instance if you give a user 255 in security for a Sysop DL or something
+and forget to set the securitylevel back, next time that user calls his
+sec.level will drop to a harmless level.
+
+This way your board can not be intruded by lamers zooming private mail,
+account editing, checking private areas or SysopDL'ing.....
+
+
+To enable the door to be run EACH time a user logs on you have
+to launch it as an MCI command like this in for instance your Bull.txt
+
+---------------------/cut/-------
+~
+~CC_doorname|
+---------------------/cut/-------
+
+..and watch out for supress quick logons etc in your /X setup :)
+
+
+No stupid configfiles needed just these tooltypes:
+
+   SYSOP_LEVEL = 250            <- Securitylevel to check Sysop.x names
+STANDARD_LEVEL = 20             <- Sec.level to be set if user not in Sysop.x
+       SYSOP.1 = The Silencer   <- Name of The Sysop's and CoSysop's
+       SYSOP.2 = d-Zire         <- that is allowed to have SYSOP_LEVEL
+
+
+
+ Small message to Delusion / Virtual - Lame to rip other peoples doors.
+
+
+
+
+                              ·° °     °
+                              : °     ° °·
+                              ¦ REPULSE! :
+                              |   _____  ¦
+    GdH_______________________|__/    /__|_____    __________________g'S
+     _/   _____/   ___________  ¬\   /¬\      /___/   _____/   _____/
+    /    __  ¬\   ___)_/     /    \ /   \    /  ¬\____   ¬\   ___)__
+   /      /    \_ /    ¬\_ _______//     \_ /     \_ /     \_ /    ¬\_
+   \_____/      /__      /_/ _______      /__      /__      /__      /
+         \_____/  \_____/     |    \_____/  \_____/  \_____/  \_____/
+                              ¦          |
+                              :° °     ° ¦ Core of the Underground
+                              . °     ° °:
+                                         .
+
+
+                          CURRENT NUP: AMFETAMiN
+                               +46-270-12138
+
+

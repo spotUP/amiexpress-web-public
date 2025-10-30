@@ -1,0 +1,127 @@
+AutoFLUSH "Space" util V1.12ß by Zwinx/RAGE
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+This neat little util is written to be used with /X 2.xx and 3.xx. It's easy
+to use and install.
+
+FEATURES
+~~~~~~~~
+× This util makes sure that there's ALWAYS some bytes free for uploading!
+
+INSTALLATION NOTICE
+~~~~~~~~~~~~~~~~~~~
+IF YOU USE /X VERSION 2.x THEN YOU CAN'T USE THE SUPPLIED SCRIPTFILE TO
+INSTALL/UPDATE THIS DOOR!
+
+/X 2.x INSTALLATION
+~~~~~~~~~~~~~~~~~~~
+× Make a directory called "Space" in DOORS:
+
+ex.
+HD:> makedir DOORS:Space
+
+× Unpack the Space.LHA archive in DOORS:Space.
+
+ex.
+HD:> cd DOCS:Space
+HD:BBS/DOORS/TOPchat> lha x RAM:Space.lha
+
+× Move, rename or copy the "SPACE" command to C:
+
+× Insert the following line in your SYS.CMD file. Read /X documentation for
+  further information.
+
+---CUT---
+SPACE     RM010DOORS:Space/Space.rexx
+---CUT---
+
+× Edit BBS:<conf>/UploadMsg.txt, where <conf> is the name of the conference
+  that you would like to flush files from.
+
+ex.
+---CUT---
+~
+~CC_SPACE
+
+Uploading is fun! Najs....
+---CUT---
+
+/X 3.x INSTALLATION
+~~~~~~~~~~~~~~~~~~~
+× Unpack the Space.LHA archive to RAM:
+ 
+ex.
+HD:> cd RAM:
+Ram Disk:> lha x RAM:Space.lha
+
+× Execute the AE3.x_Install-script.
+
+ex.
+Ram Disk:> AE3.x_Install
+
+CONFIGURATION
+~~~~~~~~~~~~~
+× Edit DOORS:Space/Space.cfg like this:
+
+ex.
+---CUT---
+BBS:ELITE/DIR2
+BBS:ELITE/DIR1
+4000000
+7000000
+dh2:
+dh3:
+dh4:
+---CUT---
+
+Line1: Filename (and correct path!) to the fillisting file that you want to
+       flush files from.
+Line2: Filename (and correct path!) to the filelist were you want to put the
+       deleted files wich will be marked "OFFLINE" instead of the fillength.
+Line3: Minimum free space on disk. The AutoFLUSH command will NEVER delete
+       anything if there is MORE system bytes free than this.
+Line4: Minimum free space after delete session. When the AutoFLUSH util is
+       trigged it will continue to delete files until there's AT LEAST this
+       amount of free space.
+Line5: This can be MULTIPLE LINES! This is the path(s) to ALL DEVICES (NOT
+       ALL UPLOAD-DIRECTORYS) that are used for uploading.
+
+× Put all upload dirs in DOORS:Space/Space.dirs.
+
+ex.
+---CUT---
+BBS:ELITE/Upload/
+dh3:Upload/
+dh4:Upload/
+---CUT---
+
+IMPORTANT!
+~~~~~~~~~~
+× T: MUST be assigned!
+× "SPACE" must be in C:
+
+IMPROVEMENT
+~~~~~~~~~~~
+×V1.01ß Now puts the destination files in another dir. (released)
+×V1.12ß Icons for /X 3.x added. Installscript3.x added to archive.
+
+CONTACT
+~~~~~~~
+For contact, bugreports, suggestions or fun, contact me at:
+_ _ ______  __/\  _______ ________________ :_______________ __/\  ___.
+ \\\\_    \ \_  \ \_  __/ \_ __/\_ ___/\_ \¦ _/\     _  _  \\_  \ \_ |
+     |  \  \/    \/  /__  /  l/\/  _)__/   \  \ \_/  | _/  //    \/  |/\
+     |  l\  \ /\  \  l  \/   /  \  l   \ \     \ /   | \   \_ /\  \  /  \ _
+     ¦______///____\_____\_______\___  /_/\____//____| /\____|/____\_____\\
+     :   / _/                        \/              \/  / _/
+         \/               ____: ___  ______  /|  ___ _ _ \/
+                         /    \/   \ \___  \/ | /   \\\\
+  ^ RuNNinG o3o/33MHz ^ /   o  \ o  \/  ___/| |/  o  \   ^ sySoP: zWiN× ^
+                     _ _\___    \    \  l  \| |       \
+       ^ rAgE WHq ^  ////_______/____/______\_|_______/     ^ ¹6k8 Ðs ^
+                                              :
+    Node0  16k8DS              Node1 14k4HST            Node2 14k4HST
+   +46-31-775-9390            +46-31-775-9391          +46-31-PRI-VATE
+
+-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-
+This is Zwinx, Signing off,
+the last survivor of the Nostromo.

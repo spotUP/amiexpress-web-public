@@ -1,0 +1,37 @@
+------------------------------------------------------. .--------------------.
+ noC-PEN VERSiON 1.0 - (C)1994 nocTurne deSign/ORiGiN | | Playpen file mover |
+------------------------------------------------------' | Ami-Express 3.xx+  |
+-------------.                                          `--------------------'
+ DESCRIPTION |
+-------------'
+ When  put  in  your  startup-sequence,  noC-PEN will search for files in each
+ node's  playpen  directory after each crash/reboot.  If it comes upon one, it
+ will  scan  the  node's  callerslog  and  move  the  file  to the appropriate
+ conference.   If the file was not completely uploaded, it will be sent to the
+ "PARTUPLOAD"  directory  of the conference to which it was uploaded, with the
+ appropriate  user-slot tag (so that he may resume when he calls back.) If the
+ file  is  complete  it  will  be  sent  to  the  "LCFILES"  directory  of the
+ appropriate conference.
+
+ The  intention  of  this  program is relieve users of the annoyance of losing
+ files they were sending when the system suffers a crash or reboot.
+
+--------------.
+ INSTALLATION |
+--------------'
+ Simply add the command "PEN.EXE" somewhere in your startup-sequence AFTER the
+ bbs  assigns  have  been made.  noC-PEN has no external requirements.  As PEN
+ makes text output you may want to direct it to "NIL:" or to a file (for later
+ review if neccessary).
+
+--------------.
+ CREDZ/GREETS |
+--------------'
+ This  small  utility  is  brought  to you by nocTurne (design) of ORiGiN.  To
+ contact, write to "nocturne@cyberspace.net" or call MORTUARY BBS.
+
+ BLooDWoLF/MORTUARY: Where do you come up with this shit?  Thwppt...
+ RAD!/LSD: HEY RAD, HEY RAD, DO YOU LOVE ME RAD? HEY RAD? I KNOW YOU
+           DREAM OF ME IN LEOTARDS, RAD!
+ OGN MEMBERS: Uhhh, apparantly I'm the only one without a summer job?
+              where the fuck are you people?  TANGO! ICON! NERO! ZERO!

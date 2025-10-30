@@ -1,0 +1,179 @@
+@database "MoTiOn - User Answer Shower V1.1"
+@AUTHOR "The aDDiCt"                 
+@(C) "BiLBo BaGGIns/Motion"                  
+@Ver$ "User Answer Shower V1.1 (10-03-94)"
+@HEIGHT 30
+@Node MAIN "--> Main Menu <--"
+
+  .%%%................%%%....%%%..........%%/\%%.%%%......%%%....%..%....%%
+ .%%.%%%%%%%%%%%%%%%%%%.%%%%%%.%%%%%%%%%%%%/  \%%%.%%%%%%%%.%%%%%%%%%%%%%%.
+ %%/(_________________/(_____/(___________(____)%/(______%%|\___%.____.%%.%
+ %%\                 /      ~\\             /  |//      ~\%|.   \|   ~|%%%.
+ .%%\  /\           //   |:   \\  ..   .   /   |/    |    \||    \    |%%%%
+  .%%\/            //    |.    \_/||   |\_/|   |     |.    \|         |%%%.
+ ..%%|.  (\   /)   \\          /%%|:   |%%|:   |\          /:   \     |%%. 
+ ..%%||   \\_//     \____.    /%%%|_   |%%|.___|%\__.     /|.   |\    |%%%.
+ ====||    \==\\   /=====|_  /======\__|==|/========|__._/=|____|=\___|====
+ %%%%|______\..\\//%%%%%%%%)/%%%%%%%%%%%%%:%%%%%%%%%%%%Y%%%%%%%%%%%:%%%%%%%
+ %%%%%%%%%%\/%%%\/%%%%%%%%%°%%%%%%%%%%%%%%.%%%%%%%%%%%%:%%%%%%%%%%%.%%°Adi·
+   ·%%%%%%%%%%%%%%%°·····°%%%°··········°%%%°·········°%%°········°%°··
+        +-------------------» PRESENTS IN 1994 «-------------------+
+
+
+                          User Answer Shower V1.1
+
+                         done by  @{"BiLBo BaGGIns/MoTioN" link "coder"}
+
+                            guide by @{"tHe aDDiCt" link "guider"} 
+
+                           +-------------------+
+                           |  @{"   Features   " link "Intro"}  |              
+                           |  @{" Installation " link "Install"}  |              
+                           |  @{" Instructions " link "Instr"}  |             
+                           |  @{"   Greetings  " link "Greet"}  |
+                           |  @{"  Last Words  " link "Last"}  |            
+                           |  @{"   CaLL NoW   " link "Call"}  |
+                           +-------------------+
+
+@endnode
+@Node coder "--> BiLBo BaGGIns/MoTioN <--"
+
+ That`s me, the coder of that util. If you found any bugs or know any
+ improvements please contact me. Also contact me if you wanna have a special
+ version for your BBS.
+ I changed my handle from Bilbo to BiLBo BaGGins. But not on all BBS, so
+ if you wanna contact me better mail to Bilbo*.
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+@Node guider "--> tHe aDDiCt <--"
+
+ Yeahhh that`s me, tHe aDDiCt. The machine who made this guide.
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+@Node Intro "--> Features <--"
+
+ Some days ago other members meant that we should release something now, so
+ I wrote the docs to this util now. I coded the util over a month ago but
+ never released it coz I was to busy to write the docs. I invested all my
+ time in learning C, so all my new doors/utils will be in C now.
+
+ * enter users handle and the doors searches for his New User Answers
+   and display them
+ * displays TempAnswers on a node you want
+ * running on all /X Systems I think
+ * no backdoors
+ * compiled AREXX (if you have no CoProz contact me and you get a running
+   version for your system)
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+@Node Install "--> Installation <--"
+
+ Extract the whole User Answer Shower archive to your assigned doors dir.
+
+ /X2.x: Append the following Line to your
+        BBS:Commands/BBS.CMD File:
+        ---------------------->> Cut Here <<--------------------------
+        answer        RM200DOORS:Answer/Answer.exe
+        ---------------------->> Cut Here <<--------------------------
+
+ /X3.x: For installing on that systems make your own Icon and place it
+        in your BBS:Commands/BBS.CMD drawer.
+
+ Copy the rexxsupport.library to your Libs directory.
+
+ Be sure, that you have the following files: (otherwise the door won`t work)
+
+ * TempAns in the BBS:NodeX dirs
+ * Answers in the BBS:NodeX dirs
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+@Node Instr "--> Instruction <--"
+
+ When you started the door, you will be asked if you wanna see a Tempans
+ file of a node or search for a User in the Answer files(s).
+ If you choosed `t` for the TempAns file, the door will ask for the node.
+ When you entered it it will display it.
+ If you choosed `a` for, the door will ask for the users handle. When you
+ entered it, it will ask from which node he should start to search. Enter
+ the node and the door will search and display the answers if found.
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+
+@Node Plans "--> Future Plans <--"
+
+ * maybe convert it to C when I have time
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+@node Greet "---> Greetings <---"
+
+                              Greetings go to
+          Andy/MoTioN...........thx for the great help in coding
+          Sisko/MoTioN..........greatest account killing leecher
+          Spider/Osiris.................thx for help in coding C
+          Incubus/GOD.......................keep on trading dude
+          \X/arhawk/Logic................Strip`n Add is the best
+          Eazy-e/Taurus...........................PC user now !?
+          Schwabenpower/MoTioN............cewl long chats hehehe
+          tHe aDDiCt.....................................machine
+                     and all the rest I have forgotten
+
+           Thanx for the help on releasing this door must go to
+          Andy/MoTioN.............................help in coding
+          tHe aDDiCt..................................guide file
+          Sisko/MOTioN...............................betatesting
+
+
+                                 @{" WOW ! " link "MAIN"}
+@endnode
+
+@Node Last "---> Last Words <---"
+
+                      Other MoTioN /X tools avaible:
+
+ Multi-Diz....................New DIZ system for all files.............Andy
+ News In All Conferences......Showing `n s u` in all conferences.......Andy
+ On-Line-Message..............Sending online message...................Andy
+ OnLineBulletinsUpdater.......Updating bulls if ya wanna se it.........Andy
+ PlaY-PeN-PaRt-UpLoAD-MoVeR...Moves files after a system crash.........Andy
+ LHADo........................LHA-Checker/Stripper/Adder................BBC
+ Textstripper.................Text-Stripper/Adder.......................BBC
+ Dream Status.................Status door.............................Bilbo
+ StarTrek.....................Star Trek comment door..................Bilbo
+ Frontstatus..................Frontend door...........................Bilbo
+ Userlist.....................Creates userlist bulletin...............Bilbo
+ FileIDAdd....................Add your line to FileID.........BiLBo BaGGins
+ User Answer Shower...........Shows the new user answers......BiLBo BaGGins
+
+                      MoTioN -  The Force that moves
+
+
+                           @{" Back to main menu " link "MAIN"}
+@endnode
+
+@Node Call "---> Call Now <---"
+
+                          MoTioN boards worldwide:
+
+ DEEP SPACE NINE     WHQ        #1: +49-7-Ask-For-IT V32.bis   Sisko
+                          2 Ndz RD: +49-7-Ask-For-IT DST 21.6
+                          2 Ndz RD: +49-7-Ask-For-IT ISDN
+ SANITARIUM          GHQ        #1: +49-8-Ask-For-IT DST       jMS
+                                #2: +49-8-Ask-For-IT V32.bis
+ WILD MARIA          GHQ        #1: +49-7-Ask-For-IT V32.bis   Joe Cool
+                                #2: +49-7-Ask-For-IT V32.bis
+ PARANOID ILLUSION  USHQ        #1:  +1-203-859-0335 DST       Buzz
+
+
+                                  @{" ATDT !" link "MAIN"}
+@endnode

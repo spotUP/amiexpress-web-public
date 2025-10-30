@@ -1,0 +1,5 @@
+~
+~SP
+~f
+~SS_BBS:Screens/UserMsg.txt.gr
+~CC_LOTTERY

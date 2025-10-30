@@ -1,0 +1,153 @@
+
+   _____ ____   _____ ___    _______________  /\____________  _____________
+  _\___ ¥ _ ¬\_/¯    ¥  ¬\__/  ________/____\/_______/______)_\ ___     __/ 
+_/     \_/    ¬\______    ¬\______     ¬\/        ¬\_       ¬\_\/ |_____/__ 
+\       |       \_   !      \_   !       \_         ¬\_       /   !       ¬\_
+ \ _____|        /____       /____        /___        /_____ /_____         /
+  \/¯  ¯l______ /   ¯\_____ /   ¯\______ /  ¯\______ /    ¯\/    ¯\_______ / 
+-c0!         ¯\/         ¯\/          ¯\/         ¯\/                   ¯\/
+
+================================pReSeNts====================================
+
+                              GifDesc V1.2
+
+============================================================================
+Ok... after the betatester-release(1.0a) and the quick-release(1.1) here is
+GifDesc v1.2..
+
+USAGE:
+======
+The usage is so simple..
+
+-gifdesc e <source> <destination-description>
+
+Lets assume that we have a file_id'ed gifnamed a.gif. To extract file_id 
+to a file named b.diz type
+
+        gifdesc e a.gif b.diz
+
+-gifdesc a <source> <description>
+Lets assume that we are going to add a file_id to a gif named a.gif. The 
+file_id name is b.diz.So you must type
+
+        gifdesc a a.gif b.diz
+
+*NOTE:You can add more then one file_id's to a file. But only first file_id
+will be used as a file_id. So if you want to strip all, use d parameter
+of GifDesc.(will be explaned later.)
+
+-gifdesc r <source/destination> <description>
+
+Still we have same files.. But i would like to replace the description
+with c.diz.. So type..
+
+        gifdesc r a.gif c.diz
+
+*NOTE:Two trunking techniques used in this part.. If the one that Commodore
+put in V37 didn't work, GifDesc will open a temp file in t: So if you don't
+have enough memory assign t: to harddisk.
+
+-gifdesc d <source/destination>
+
+To remove all file_is's only give name of the file & use parameted d.
+
+        gifdesc d a.gif
+
+*NOTE:Two trunking techniques used in this part.. If the one that Commodore
+put in V37 didn't work, GifDesc will open a temp file in t: So if you don't
+have enough memory assign t: to harddisk.
+
+BUGS:
+=====
+
+-Problem:Why we cannot change the description ? 
+         [Reported by Master/Clique-Clinique BBS]
+
+ *FIXED*... now you can change the description.
+
+-Problem:Why GifDesc puts file_id.diz in non gif files too?
+         [Reported by Mit/Mystic-tEcHnIqUe BBs]
+
+ *FIXED*... a quick .gif checking added.
+
+-Problem:GifDesc didn't work.
+         [Reported by FisherKing-Rocka Rolla BBS]
+
+ *FIXED*... now you can make it work. Only kick yar other sysop. :-)
+
+-Problem:Some probs with allocation of memory.
+         [Reported by Mit/Mystic-tEcHnIqUe BBs]
+
+ *FIXED*... Ok.. no more malloc() errors! Because no more malloc() used!
+
+-Problem:Couldn't find any version information.
+         [Reported by Master/Clique-Clinique BBS]
+
+ *FIXED*... now the version string added.
+
+-Problem:If you try to replace decription of a non descripted file, the
+         file became ~500 byte shorter.
+         [Reported by Mit/Mystic-tEcHnIqUe BBs]
+
+ *FIXED*.. Nnnn.. kOOl!.. In fact,i was compressing gifs and ...then...
+           ok.. ok. It was my bug... ok.. I fixed it!..
+
+EXTRAS:
+=======
+
+-Added own description extract routine.
+-Now you can remove file_id.diz from the file.
+-Added a small checksum in key-file.Because some *LAME* guy had access
+to one of our betatesters site.So he has got some keys too.But don't worry!
+GifDesc 1.2 still works %100 without keyfile.
+
+IMPORTANT:
+==========
+
+If you have an old file, you must replace it with the new one. I gave keys
+only to betatesters, but donno. Maybe someone have keyfiles too. If you use 
+the old keyfile,GifDecs's task will be suspended forever. !!AGAIN!! Don't 
+try to remove checksum! Because this utility works %100 without keyfile 
+too. !!
+
+QUICK & ALL INFO! [:-)]:
+========================
+
+add these tooltypes to your DOORS:FILEID/FILEID.info
+
+GIF_EX=c:GifDesc e %P %WFILE_ID.DIZ
+GIF_AD=c:GifDesc r %P %WFILE_ID.DIZ
+
+that's all! If you want to be registered user, mail me your systems phone
+number,bbsname,sysop name. I'll send you the key file & lastest version of
+this utility a.s.a.p.!! Please note that=>" The key file isn't for blocking
+illegal use! "<= Because.. there's nothing to be illegal.
+This utility is freeware! You can still use it %100 without keyfile. But i 
+would like to know how many persons are using this utility. So i can inform 
+you about new versions of this utility and my other utilities easily&faster.
+Thank you! If you have acces to Internet, send me your address too.. I'll
+include a newest version to my reply.
+
+signed Mit/Mystic
+   23.7.94
+
+=My Beta-Sites=
+* Clinique BBS    : Clique wHq           : Master/Clique : 90-216-349-9519 
+* Rocka Rolla BBS : ??????????           : FisherKing    : 90-216-363-8601
+                                                         : 90-216-363-5742
+* tEcHnIqUe BBS   : Mystic hQ            : Mit/Mystic    : 90-216-347-5892
+                    Clique Technical wHq 
+
+==Thanx===== [not longer than docs!]
+* Fisherking      : Ok.. hard-life.. but let's kick some user!(incl.sysops)
+* Master/Clique   : Why don't we code a Chunky-2-Planer / XWin game?
+* Vigo/Mystic     : pArTy of Da CenTuRy I is comin.. huh?
+* Matt Dillon     : for his Dice C !
+* All others not mentioned here...
+
+==Sorry=====
+*Spy/Mystic       : we waited your code.. but our sysops requested soooo much,
+                    so i coded.
+==Dicks to==
+* Dr.Know         : I understand you.. It's hard to be a lamer, but it wasn't
+                    a good idea spreading our betatester files..so fuck u!

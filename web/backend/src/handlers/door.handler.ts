@@ -151,8 +151,8 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
   });
 
   socket.emit('ansi-output', '\x1b[32mSelect door (1-\x1b[33m' + allDoors.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.FILE_AREA_SELECT; // Reuse for door selection
-  session.tempData = { doorMode: true, availableDoors: allDoors };
+  session.subState = LoggedOnSubState.DOOR_SELECT;
+  session.tempData = { availableDoors: allDoors };
 }
 
 /**
@@ -240,7 +240,8 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     const doorConfig = {
       executablePath: doorPath,
       timeout: 300, // 5 minutes
-      memorySize: 1024 * 1024 // 1MB
+      memorySize: 1024 * 1024, // 1MB
+      bbsSession: session  // Pass BBS session for user/system/node data
     };
 
     // Create AmigaDoorSession to run the native Amiga executable

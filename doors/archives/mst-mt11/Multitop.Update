@@ -1,0 +1,36 @@
+
+       Multitop (Version 1.1) Coded in 1993/94 by Bobo (Mystic/X-Design)
+       =================================================================
+           { + }-New feature(s)         { - }-Removed feature
+           { * }-changed feature        { ! }-fixed feature (Bug)
+           { # }-Information            { ? }-let me know if this work
+
+Multitop v1.0 (12-22-93 > 01-15-94) - [Private version for my board]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+               First version, Private for my own board!
+
+12-22-93 { + } I started coding this door.
+12-23-93 { + } Coded the routine for reading all accounts in the user.data
+               into memory.
+12-24-93 { + } Inserted a sort routine (Coded by Looby!)
+ - ^^ -  { + } Top Uploaders (Bytes) and Top Downloaders (Bytes) coded.
+12-25-93 { + } Fixed the design.
+
+Multitop v1.1 (01-15-94 > 02-25-94) - [First public release version]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+01-15-94 { + } Recoded Multitop, now much more faster.
+01-16-94 { + } Added Top Uploaders (Files), Top Downloaders (Files), 
+               Top Calls, Top Msg, Top Upload CPS, Top Download CPS.
+01-17-94 { * } Now geting the right username when using Top UL CPS, Top DL CPS
+01-18-94 { ! } Multitop would bug if there wasn't enough users in userdata.
+               Multitop will now display empty places.
+02-10-94 { * } Now Multitop is skipping the first user in userdata/userkeys.
+               This maybe will be an option in the future, tell me if you need it!
+02-12-94 { + } Optimized the source. Before: 14309 Now: 13245.
+               Abit faster too, since i have removed abit unused code etc etc.
+ - ^^ -  { ? } If any one have some more design ideas, tell me! I am planing on
+               making so you can choose what design mode you want. Etc, you can
+               choice if you want to have two colums or one colum etc.
+02-21-94 { + } Now you can have a header/tailer. They should be named
+               S:Multitop.Header and S:Multitop.Tailer.
+02-25-94 { * } All debug and registration routines removed from code.

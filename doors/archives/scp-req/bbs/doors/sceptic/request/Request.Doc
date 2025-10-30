@@ -1,0 +1,13 @@
+
+                    Gives You Today : Request-Door V 1.1
+
+        A Request-Door For The Ami-Express BBS Sytems V 2.xx and 3.xx
+                  It Should Work Fine On S-Express Too...
+
+To Install It Copy The Files Request.Rexx And Request.Doc Into The Directory
+Doors:Sceptic/Request/... For /X 3.xx Copy The File Request.Info Into Your BBS.CMD Dir...
+              For /X 2.xx Add This To Your BBS.CMD File...
+-- cut --
+*Request        RM010Doors:Sceptic/Request/Request.Rexx
+-- cut --
+

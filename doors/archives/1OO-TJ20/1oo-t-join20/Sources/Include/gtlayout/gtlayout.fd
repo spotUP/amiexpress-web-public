@@ -1,0 +1,50 @@
+##base _GTLayoutBase
+##bias 30
+##public
+LT_LevelWidth(handle,levelFormat,dispFunc,min,max,maxWidth,maxLen,fullCheck)(a0,a1,a2,d0,d1,a3,a5,d2)
+LT_DeleteHandle(Handle)(a0)
+LT_CreateHandle(Screen,Font)(a0,a1)
+LT_CreateHandleTagList(Screen,TagList)(a0,a1)
+LT_Rebuild(handle,bounds,extraWidth,extraHeight,clear)(a0,a1,a2,d0,d1)
+LT_HandleInput(Handle,MsgQualifier,MsgClass,MsgCode,MsgGadget)(a0,d0,a1,a2,a3)
+LT_BeginRefresh(handle)(a0)
+LT_EndRefresh(handle,complete)(a0,d0)
+LT_GetAttributesA(Handle,ID,TagList)(a0,d0,a1)
+LT_SetAttributesA(handle,id,TagList)(a0,d0,a1)
+LT_AddA(Handle,Type,Label,ID,TagList)(a0,d0,d1,d2,a1)
+LT_NewA(handle,tagList)(a0,a1)
+LT_EndGroup(handle)(a0)
+LT_LayoutA(handle, title,bounds,extraWidth, extraHeight,IDCMP, align, TagParams)(a0,a1,a2,d0,d1,d2,d3,a3)
+LT_LayoutMenusA(handle,menuTemplate,TagParams)(a0,a1,a2)
+LT_Fixed2String(fixed,buffer)(d0,d1)
+LT_String2Fixed(buffer)(a0)
+LT_FixedMult(fixed,factor)(d0,d1)
+LT_LabelWidth(handle,label)(a0,a1)
+LT_LabelChars(handle,label)(a0,a1)
+LT_LockWindow(window)(a0)
+LT_UnlockWindow(window)(a0)
+LT_DeleteWindowLock(window)(a0)
+LT_ShowWindow(handle,activate)(a0,a1)
+LT_Activate(handle,id)(a0,d0)
+LT_PressButton(handle,id)(a0,d0)
+LT_GetCode(MsgQualifier,MsgClass,MsgCode,MsgGadget)(d0,d1,d2,a0)
+*--- Added in v1.78 --------------------------------------------------
+LT_GetIMsg(Handle)(a0)
+LT_ReplyIMsg(Msg)(a0)
+*--- Added in v3.0 ---------------------------------------------------
+LT_BuildA(Handle,Tags)(a0,a1)
+LT_RebuildTagList(Handle,Clear,Tags)(a0,d0,a1)
+*--- Added in v9.0 ---------------------------------------------------
+LT_UpdateStrings(Handle)(a0)
+*--- Added in v11.0 ---------------------------------------------------
+LT_DisposeMenu(Menu)(a0)
+LT_NewMenuTemplate(Screen,TextAttr,AmigaGlyph,CheckmarkGlyph,Error,Template)(a0,a1,a2,a3,d0,d1)
+LT_NewMenuTagList(TagList)(a0)
+LT_MenuControlTagList(Window,Menu,TagList)(a0,a1,a2)
+LT_GetMenuItem(Menu,ID)(a0,d0)
+LT_FindMenuCommand(Menu,MsgCode,MsgQualifier,MsgGadget)(a0,d0,d1,a1)
+*--- Added in v14.0 ---------------------------------------------------
+LT_NewLevelWidth(handle,levelFormat,dispFunc,min,max,maxWidth,maxLen,fullCheck)(a0,a1,a2,d0,d1,a3,d3,d2)
+*--- Added in v31.0 ---------------------------------------------------
+LT_Refresh(Handle)(a0)
+##end

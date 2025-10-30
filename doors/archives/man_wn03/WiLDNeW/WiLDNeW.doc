@@ -1,0 +1,146 @@
+
+                |
+              --+--
+                |                    /\       /\
+      /\     __      /\        _    /  \_    /  \/\                     /\
+     /  \   /  \    /  \      / \  /   / \  /   /  \  /\______ /\_____ /  \  /\______
+    /    \ /    |  /    \    /   \/   /   \/   /    \/       //      //    \/       /
+   /      /     | /   _  \  /        /        /   _ /   ____//   ___//   _ /   ____/
+  /              /   / \  \/        /        /   / \\   \    \   \  /   / \\   \
+ /    /\  /\    /   _____ /   /\   /   /\   /   ____ \   \    \   \/    ___ \   \
+/    /  \/  \  /   /     /   /  \_/   /  \_/   /  _   \   \_   \   \   / _   \   \
+\___/        \_\__/      \__/     \__/     \__/  / \__/   / \__/   /__/ / \__/   /
+  ______________________________________________/        /        /    /        /
+  \_____________________________________________________/\_______/     \_______/
+ 
+                                 presents:
+
+===========================================================================
+                        WiLDNeW v0.3 Multilanguage
+                          written by WiLD THiNG
+===========================================================================
+This  is a new questionaire door for new users, it can give some answers or
+comments on the questions and you can have your questinairs in ANSI and you
+can have different questions for different baud-rates.  Furthermore you can
+ask  new  questions on specified answers (you should now say WOW, no ?  na,
+maybe   next   time). 
+
+ Now  you  can  have  your  questions in whatever language you want, i have
+supplied  with  this  release  an English, Polish and German one, but don't
+forget that the user will probably answer in the language he has been asked
+if you don't tell him otherwise.
+
+The  filled in questionaires will be saved in the WiLDTools/WiLDNew/answers
+directory with the user name as filename.
+
+
+Config file:
+~~~~~~~~~~~~
+(doors:WiLDTools//WiLDNeW/WiLDNew.cfg)
+Yes here you must declare which languages you want to have, and the names
+of the quest files 
+eg.: 
+==== cut here ====
+English quest.eng
+Polski quest.pol
+Deutsch quest.ger 
+==== cut here ====
+and whatever you want...
+
+WiLDNew will ask which language the user prefers.
+
+here  are the recognition chars for the quest file, they have to be at the
+beginning of every line:
+
+- print out line
+? Ask question
+§ Ask question which user MUST Answer 
+^ Check answer 
++ Call the editor and let the user write you a comment, that 
+        comment will be saved in .../answers/username.com
+=xxxxx ask user with specified baud rate where xxxxx is the rate
+%xxxxx show line only to user calling at xxxxx baud
+
+You can combine the answer checking with a new question:
+
+?Have you ever heard of WiLDTools ?             - ask question
+^yes                                            - if entered "yes" then
+§Why not ?                                      - user must answer why
+?Is there anything you want to tell me ?
+^yes
++                                               - if the answer is
+                                                  yes - start the
+                                                  editor
+
+Look at the example config file to see some possibilities :)
+
+
+Installation:
+~~~~~~~~~~~~~
+To  install  on  /X 3.x just run the WNinst script.  Don't forget to assign
+doors:    properly. Now add to yer joined.txt ~CC_WNew, and in da first
+line only ~ . That's it...
+
+have phun...
+
+For  any  bug reports, improvements or if you'd like me to write a door for
+you  contact  me  at my board Dixie ++49-71-575825 or write me a message at
+Tatooine    (Taurus    WHQ   ++49-711-456672)   or   Mamba   (Mystic   PHQ
+++48-22-367443).
+
+
+History:
+~~~~~~~~
+v0.1    First Version
+v0.2    added Multilanguage option
+
+
+
+Other available WiLDTools:
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+WiLDDoors       Select your Door via Scrollbar (beta release)
+WiLDBull        Select bulletins via scrollbar
+WiLDMenu        Helps to keep your menus all in one file for all axxlevels
+WiLDRead        great file/archive/callerslog viewer with many features
+WiLDcompress    Arexx compression tool
+WiLDtxtadd      Adds your logos to uploaded text files
+WiLDCheck       Upload checker, checks for file_id.diz files in archives
+                and uses them as description (beta release)
+
+planned WiLDTools:
+~~~~~~~~~~~~~~~~~~
+WiLDWheel       Whell of fortune - small game 
+
+                Anything YOU want me to write for you (almost)
+
+
++-------------------------------------------------------------------------+
+|                      CaLL NoW oNe oF ouR BoaRDS                         |
++-------------------------------------------------------------------------+
+|Dixie WHQ      Sysop: WiLD THiNG   ++48-71-575825  24oo-168oo v42b       |
+|LiFE  PHQ      Sysop: Rabocost     ++48-22-118628  24oo-144oo DUAL  22-8h|
++-------------------------------------------------------------------------+
+                        
+
+Finally I can't hold back to send out sum greetz:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Eazy-E            : Will we meet again som' time ?
+R19/ex-Mannassas  : cum back ye traitor :-), and get yer board workin'
+Easy Rider/Mystic : Thx for yer ideas. I'm workin' on that upload door...
+Schlegi           : Man, what's yer HD doin' ?
+Empire/Mystic     : Thx for yer help, I'm hard workin' on that C stuff
+ZiPPER/Yodel      : How is it goin' up there in Sweden ?
+Andy/Motion       : Sorry, can't call your board now
+Wild Child/Taurus : Com' on tell yer sex-hungry lovers to write their
+                    letters to you and not to me, I HATE it
+ViNCE             : Call me anytime, BUT CALL
+TIC.              : You were the best at Havanna,
+                    leave me a mail at Tatooine
+Donald/Motion     : Thx for all yer help at my beginning
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+and some more simple greetz go to:
+
+AXE/Mystic,  Giants/tYt,  Mc  Boe,  Incubus/Motion, Justice, Dragon/Motion,
+FLASHLiGHT,  Fnord,  Scotty,  Neuromancer,  Jarri,  Jabo,  SiR Jack and all
+others who know uz...

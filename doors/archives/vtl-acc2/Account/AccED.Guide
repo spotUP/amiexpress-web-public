@@ -1,0 +1,2407 @@
+@database AccountED.Guide
+@font "topaz.font" 8
+
+@node Main "Main Menu, Account ED AmigaGuide Doc V1.01"
+
+                 »» From The Worlds No.1 /X Door Makers ««
+@{b}
+
+             :::      :::          ::.                    :::
+             :::  ::: ... :.::::. .:::: :::  ::. .:::.::: :::
+             :::  ::: ::: :::  ::  :::  :::  ::: ::'  ::: :::
+             :::.:::' ::: :::      :::  :::  ::: ::.  ::: :::
+             `::::'   `:: :::      `::: `::::`:' `:::'::: `::::
+@{ub}
+
+  Account ED V2.00 AmigaGuide Documentation By Delusion And Jens Eriksson!
+                 Spelling And Error Correction By Ace Caze.
+
+
+   @{" 1. Disclaimer, Copyrights      " LINK "Disclaimer, Copyrights"}    @{" 6. Hints To Gain High Security " LINK "Hints To Gain Higher Security"}
+   @{" 2. Introduction, Preface       " LINK "Introduction, Preface"}    @{" 7. Other Delusion Productions  " LINK "Other Delusion Productions"}
+   @{" 3. Features                    " LINK "Features"}    @{" 8. Greetings                   " LINK "Greetings"}
+   @{" 4. Installation on /X 2.10+    " LINK "Installation 2.10+ .."}    @{" 9. Final Words ..              " LINK "Final words .."}
+   @{" 5. Installation on /X 3.00+    " LINK "Installation 3.00+ .."}    @{"10. History                     " LINK "Account ED Package Histories"}
+
+
+@{b}   © Copyright Delusion of Virtual 1992, 1993, 1994. All rights reserved.@{ub}
+@endnode
+
+@node "Disclaimer, Copyrights"
+
+	@{b}Disclaimer, Copyrights@{ub}
+
+	The author, Delusion takes no responsibilities what so ever for
+	the functionality of this program and the purpose for which
+	it should be used. Delusion takes no responsibilities for damage
+	that this program may cause and it's your responsibility to make
+	a backup of your critical files before testing that this program
+	fully works in your environment.
+
+	This program and it's accompanying files may only be spread in
+	it's original form. It may not be spread without all files
+	included because it could then do damage to your system. You may
+	not sell this program or take a fee to copy it. It may not be
+	included in any PD Package without written permission from the
+	author. It may however be included in Joseph Hodge's @{"AmiExpress" LINK "AmiExpress"}
+	package without written permission. The source may not be changed
+	and spread and you may definitely not rip routines from it.
+
+	@{b}This piece of software is shareware. If you use it, then you should
+	send some money to "Postgiro" PG-620 89 92-5. @{ub}You should write
+	your Handle/Group/Board Name/Phone Number on the form.
+
+	@{b}You could also send it by mail to:@{ub} Delusion of Virtual
+				           Vretv.4
+				           73232 Arboga
+				           Sweden
+
+	I would also like to recieve a postcard from your town if you use
+	this software, or something that you've made by yourself (like music,
+	graphics or your own coding) :)
+
+	@{i}This entire package is © Copyright Delusion of Virtual
+	1992, 1993, 1994. All rights are reserved. This agreement may
+	be changed without notification.@{ui}
+
+	Finally I hope you really will enjoy this program which will help
+	you a lot as a hardworking sysop, count on that! :)
+
+	Delusion, Sweden 8 April 1994
+
+	@{" Thanks to my Beta Testers " LINK "Beta Testers"}
+@endnode
+
+@node "About Account ED"
+
+	@{b}About the Account ED Package@{ub}
+
+        Account ED V2.00 is © Copyright Delusion of Virtual 1992, 1993, 1994.
+        All rights are reserved. These programs may not be sold by any person,
+        living or dead. A program worth using is worth spreading.
+
+        For new updates call: GANG BANG +46(0)554-12133 Virtual WHQ
+
+        Remember that these programs are not Public Domain, for more info
+        read the complete @{"Disclaimer" LINK "Disclaimer, Copyrights"} Text.
+
+	Account ED has been developed on an Amiga 3000. It has then been
+	running on an A500 BBS. It has been very optimized to run fast
+	even on an A500, but runs extremely fast on any A3000.
+@endnode
+
+@node "AmiExpress"
+
+	@{b}/X AmiExpress@{ub}
+
+        AmiExpress and it's accompanying files are copyright Joseph Hodge
+        and LightSpeed Technologies. © Copyright 1992-1994.
+
+	AmiExpress was released for the first time 1988 by Mike Thomas!
+
+        Version 2.35 and 3.0 are freeware, but may not be modified in
+        anyway without renaming the software.
+
+	I hope that Mr Hodge will take more time for designing /X in
+	the feature and lower the registration fee which is atronomical!
+@endnode
+
+@node "About ARexx"
+
+	@{b}About ARexx@{ub}
+
+	ARexx is the Amiga version of the Rexx script language.
+
+	ARexx is a commercial product and NOT Public Domain or Shareware.
+	It is a part of the AmigaOS Release 2 Upgrade Kit (and also
+	included in all newer AmigaOS Releases) but can also be purchased
+	from an Amiga dealer.
+
+	ARexx © Copyright 1987 William S. Hawes, Wishful Thinking
+	Development Corp. All rights reserved.
+@endnode
+
+@node "Introduction, Preface"
+
+	@{b}Introduction, Preface@{ub}
+    
+	Finally I've rewritten this 6 months old documentation and given
+	it a new look that should be far more easier to read and get some
+	hints from. This is revision V2.00 of the Account ED Package and
+	you might have to take a closer look at some upgraded facilities
+	that is not compatible with V1.05 - V1.03, but here we go from
+	the beginning so hang on ..
+
+	@{"Account Editor" LINK "About Account ED"} (Short name AccED) is a so called @{"ARexx" LINK "About ARexx"} Door for
+	the /X 2.35+ and /X 3.00+ package and will interfere as an AIM
+	(Arexx Interface Module). It will automatically detect which
+	version you are running on and make the appropriate changes!
+
+	If you use this door you can make the security on your board
+	even higher with the high security features of this editor and
+	accompanying doors. All these door is made out of a need which
+	I got when I've been running my board! I hope they will fit yours.
+
+	It's basically a replacement account editor for the old built in
+	and it is really a big difference using this editor compared to
+	the built in. Your life as a sysop will be much easier and looking
+	at users accounts will be more fun. You will also get more control
+	over your users and your system.
+
+	The source is not compiled and should be rather easy for an ARexx
+	programmer to take a look at, which you also should do if you
+	want to be sure there is no backdoors provided with the source
+	from one in the row of people who got it before you. To be sure
+	wether there is a backdoor or not you should call my friend, Chucky's
+        board called GANG BANG which is the official distribution site for
+	my doors and my /X Echo Mail package which is soon available for a
+	nominal fee. His board will serve as distribution site until I open
+	my board again for the public! I'm right now doing a major update
+	on the Echo Mail program so it can approximately be delivered first
+	in late spring 1994. ßeta versions will be available sooner.
+
+@endnode
+
+@node "Features"
+
+	@{b}Features of the Account Ed Package Doors@{ub}
+
+	@{i}The Main Program@{ui}	@{i}The Accessory Doors@{ui}
+
+	@{" Account ED    " LINK "Features of Account ED"}		@{" F6 Editor        " LINK "Features of F6 Account Editor"}
+				@{" Quest            " LINK "Features of Quest"}
+				@{" Quest View       " LINK "Features of Quest View"}
+				@{" Password Fail    " LINK "Features of Password Fail"}
+				@{" Security Checker " LINK "Features of Security Checker"}
+
+	Note that these features are the most important, there exists
+	many more than these features!
+
+	To get MOST out of this package you should install ALL the above
+	doors, however a minimum installation is possible with only
+	Account ED and Quest. This will of course not give you all benefits!
+
+@endnode
+
+@node "Features of Security Checker"
+
+	@{b}Security Level Checker@{ub}
+
+	A litle tool which will help you against lamers who you by mistacke
+	and/or has given a too high security level to sysop download something
+	and then that lamer logs on and try to hack your board with 255 in
+	security level.
+
+	This tool will check all users who logs on and if they have a higher
+	security level than the one you have specified in the AccEd.Presets
+	file and they are not in the list of sysops you have in the AccEd.Preset
+	file their security level will drop to the security level you have
+	specified in the AccEd.Preset file.
+
+	Their activity will also be logged in the AccEd.Log file, so you
+	later on can see how tries to hack your board!
+
+	This is an example from the log file output:
+
+	04-08-94 Hack  Kalle Hackson         Too high security level (255) (15:06:19)
+
+@endnode
+
+@node "Features of F6 Account Editor"
+
+	@{b}Features of F6 Account Editor@{ub}
+
+	This @{"Account Editor" LINK "About Account ED"} replaces the built in which appears when
+	you press the F6 key inside AmiExpress. However it will for
+	some reason not replace the account editor which appears when
+	you are not logged on and presses F6. This is not the editors
+	fault, it is caused by @{"AmiExpress" LINK "AmiExpress"}.
+
+	In the SYSCmd directory or file I name the door Accounts, but
+	if there is a name which lets you replace the editor which
+	appears when you're not logged on just enter F6 Edit as the
+	door there too, it should work fine in both cases.
+
+	F6 @{"Account Editor" LINK "About Account ED"} is exactly the same as Account ED, but VERY
+	simplified with only the most common functions which you will
+	need when a user is on-line. If you need more powerful functions
+	use the real Account ED door instead! This door is only useful
+	for upgrading users access and fix creds for them while they're
+	on-line!
+
+@endnode
+
+@node "Features of Quest View"
+
+	@{b}Features of Quest View@{ub}
+
+	Quest View is simple a program for your users to peek at each
+	others questionnaires. The sysop can decide which questions the
+	user won't be shown and the user himself can decide if he should
+	let the other users see this or not show his quest at all:
+
+	Name
+	Address
+	Phonenumber
+
+	These three items will of course only be available if the sysop
+	has put these three questions in the questionary sheet.
+
+	If the user wanted his personal info Public, Private or Secret
+	will be	stored in the Account/QuestApp/X.Dat file where X is
+	the users slot number.
+
+	After displaying the users questionary, Quest View will also
+	display some status about the user:
+
+	Uploads/Downloads Bytes & Files
+	UL/DL Ratio
+	Number of Calls
+	Number of written Messages
+	BaudRate
+	Last Time On-line
+	Overall user performance ratio (Account ED Package Specific)
+
+	This will give a clear picture of the user and could be useful
+	for other sysops checking up a user who gave references to your
+	board!!!
+
+@endnode
+
+@node "Features of Quest"
+
+	@{b}Features of Quest@{ub}
+
+	Quest lets you skip your Script14400 files and the Answers file
+	which gives many sysops a hard headache.. I think you know
+	what I mean when you've got 4 new users and then you should
+	update them, phew what a boring job.. Load your answers file
+	into CED and then go to the bottom of a 200kb large file!
+
+	@{" In conjunction with Account ED " LINK "QuestED"}
+	@{" Questionary Sheet              " LINK "Sheet"}
+	@{" Letter                         " LINK "QuestLetter"}
+	@{" Questioning old users          " LINK "OldQuest"}
+	@{" Force answers                  " LINK "Force"}
+	@{" Automatic Access               " LINK "Auto Access"}
+	@{" Space saving                   " LINK "Space"}
+	@{" Safety backups                 " LINK "Backups"}
+
+@endnode
+
+@node "QuestED"
+
+	When running Account ED & Quest, which are the perfect couple..
+	You get access to some notable features.
+
+	Quest lets your users answer to all questions you prefer and
+	then stores their answers separately in the Account/QuestApp
+	directory. If you then want to look at any applications you just
+	search for that user in the @{"Account Editor" LINK "About Account ED"} and then press the / key
+	and you will then immediately have that users application on your
+	screen. If it concerns new user you just use the Scan for New Users
+	function in the Account Editor and you will both see the users
+	account and the questionary!! That's what I call powerful!
+	You can even print the users questionary if you like to!
+
+	All questions are of course configurable and you will in the
+	future be able to both look at the users account and then
+	also see some information displayed from the questionary!
+
+@endnode
+
+@node "Sheet"
+
+	Quest has a questionary sheet in which you almost can program
+	which sort of actions that should be taken.
+
+	You could for instance tell that this question asks for the
+	name of the user and then Account ED and Quest View could make
+	use of it! You can enter lines that won't be asked if you have
+	long questions and much more!
+
+	For more information take a look in the installation chapter
+	for the @{"Questionary Sheet" LINK "ConfigQuest"}!
+
+@endnode
+
+@node "QuestLetter"
+
+	After the user has answered all the questions he will be forced
+	to enter a presentation letter to the sysop or cosysop. The
+	person who will receive the letter is configurable.
+
+@endnode
+
+@node "OldQuest"
+
+	Suppose that you have installed quest and haven't been running
+	it before, you now regret it and thinks that it would have
+	been nice to view all your users questionnaires within the
+	Account Editor, as you can do with Quest!
+
+	The solution is to setup Quest as an MCI command in one of
+	your login bulletins which all users can view.
+
+	Just add this to the top of the bulletin: ~CC_QUEST
+
+	This will invoke Quest every time this bulletin is shown, Quest
+	then knows if a user has answered his questionary and Quest
+	will only be started the first time the user gets the bulletin.
+
+@endnode
+
+@node "Force"
+
+	Quest has a built in feature which forces the user to not leave
+	any line blank. It could also be configured to kickout the user
+	if he just presses return 5 times!
+
+	All this features is of course configurable.
+
+@endnode
+
+@node "Auto Access"
+
+	If you are a busy sysop you know that it's not much use of you
+	looking for the users questionary and then giving them some lame
+	access until you see that the user uploads. It would be much easier
+	if the questionary program automatically gave the user lamer access
+	if he just answers all questions!
+
+	Quest checks if the user is neglecting the questions and if he don't
+	the user will the access specified in the first preset! All presets
+	are located in the AccEd.Presets file (together will all configs)
+
+@endnode
+
+@node "Space"
+
+	Using Quest will save space on your harddrive because it only
+	saves the answers and not the questions, which you already have
+	in your questionary sheet.
+
+	Quest takes the questions from your sheet and the answers from
+	the users application and then displays it on your screen. This
+	method gives you some extra features said in @{"Questionary Sheet" LINK "Sheet"}
+	feature!
+
+@endnode
+
+@node "Backups"
+
+	Once I got a virus on my Harddrive which wrote FUCK all over my
+	harddrives block, so almost every file got a fuck within it!
+
+	My user datas got totally (litterarily) FUCKED UP and my users
+	wanted their credits back, they didn't have an account and so on!
+	I didn't know their password (strange ehh?) and therefor it was
+	impossible for me to do anything, but to delete the data files!
+
+	The phone number and name and such thing however was left in my
+	300 applications files, but without passwords...
+
+	I therefor have put in a feature which posts the new users password
+	in his questionary for use if an emergency situation would occur.
+
+	But it would be a rather hardtime login on 300 users manually
+	so Quest ALSO save the new users DATA and KEYS into one file
+	which is called Slotnumber.DAT, for example 1.DAT. The *.Dat file
+	also has got some flags for the user, if he want's to show his
+	address and name to other users and such things.
+
+	Account ED is then capable of loading in a backup of a users
+	account anytime inside the @{"Account Editor" LINK "About Account ED"}, by pressing the SHIFT-B
+	key! Every time you save a users account this .DAT file is also
+	updated to keep it as fresh as possible for you!
+
+	Could also be useful if you manage to fuckup a users account
+	and wants the old account back!
+
+@endnode
+
+@node "Features of Password Fail"
+
+	@{b}Features of Password Fail@{ub}
+
+	Password Fail is a simple util which lets your users answers some
+	short questions, write a letter to sysop and operate the sysop if
+	the users fails to enter the correct password when logging on
+	your system.
+
+	@{" Questioning " LINK "Questioning"}
+	@{" Letter      " LINK "Letter"}
+	@{" Operate     " LINK "Operate"}
+	@{" Log Files   " LINK "Logging"}
+
+@endnode
+
+@node "Questioning"
+
+	When a user fails to enter his password three times, Pw Fail will
+	be envoked and let your user answer some basic questions.
+
+	Name
+	Address
+	Security Code
+	Phone Number
+
+	The password the user thought he had
+	The new desired password
+@endnode
+
+@node "Letter"
+
+	After filling out the basic questions, the user will have to write
+	a letter to the sysop, with some presentation and tell something
+	that makes the sysop certain that this is the real user.
+
+	Together with the letter, PW Fail will post the questionary
+	and the three password which the user tried to log on with.
+	There will also be some additional information posted with the
+	letter which PW Fail could find out.
+
+	The letter will be posted to you or one of your cosysops, depending
+	on which name you have written as the receiver in the config file.
+@endnode
+
+@node "Operate"
+
+	After the user has filled out the letter, PW Fail gives him a chance
+	to operate the sysop before dropping the carrier!
+@endnode
+
+@node "Logging"
+
+	PW Fail will log all persons who fails with their passwords in
+	a log file which is called PFail.log and is located in the Account/
+	directory..
+
+	If you have some users who frequently forget their passwords it's
+	easy to see in the log file, and it only gives a clear picture if
+	someone is trying to hack your board. A hacker who tries to cover
+	his tracks, may also not be aware of this log file, which could
+	give you some hint of who hacked your board, if someone does it!
+
+
+	Example:
+
+	Delusion       05-08-93 17:52:15 PW: (vf44kllk) (vf43fdfg) (vd£2fggg)
+	Delusion       05-08-93 17:55:47 PW: (v7dj32kl) (vfs3w456) (vd113454)
+
+
+	Here it's easy to see what users have tried, even if you have a
+	callerslog cutter, all users mistyped passwords will be preserved
+	and you can easy see a pattern if someone tries to hack your board!
+
+	Maybe I'll make a TOP PASSWORD forgetters util which can be used
+	together with this logfile later on :)
+
+@endnode
+
+@node "Features of Account ED"
+
+	@{b}Features of Account ED@{ub}
+
+	Account ED is designed with high security in mind and I think my
+	door is the first one that can lock out a user at a specific time
+	period, ie between 24.00 and 08.00 in the morning if you think
+	that no one should access the @{"Account Editor" LINK "About Account ED"} then. Below this text
+	follows most of the features available in Account ED. Enjoy!
+
+
+            @{" New features            " LINK "NewFeatures"}   @{" Print account           " LINK "PrintAccount"}
+            @{" Name checking           " LINK "NameCheck"}   @{" Print questionnaires     " LINK "PrintQuest"}
+            @{" Password checking       " LINK "PasswordCheck"}   @{" Quest compatibillity    " LINK "QuestCompatible"}
+            @{" Restrict commands       " LINK "RestrictCommands"}   @{" Messagebase cleaner     " LINK "MsgBaseCleaner"}
+            @{" Conference Access       " LINK "ConferenceAccess"}   @{" Lock users passwords    " LINK "LockPassword"}
+            @{" Userlist tool           " LINK "UserlistTool"}   @{" Security conference     " LINK "SecurityConference"}
+            @{" Write warning note      " LINK "WarningNote"}   @{" Built in calculator     " LINK "Calculator"}
+            @{" Credit Maintenance      " LINK "Credit"}   @{" Compatibility!!         " LINK "Compatibility"}
+            @{" Credited Users List     " LINK "CreditList"}   @{" Activity reports        " LINK "LogFiles"}
+
+
+	These are more features than many doors together can't provide you
+	with, so you'd better consider to take a closer look or you'll
+	have to regret it! :)
+
+	Note! AccountED will autodetect which /X version you are running
+	      and reconfigure itself for your version! (2 programs in 1)
+@endnode
+
+@node "CreditList"
+
+	@{b}Credit UserList Creator@{ub}
+
+	For AmiExpress users 3.37 and over you can use the built in Credit
+	UserList Creator. This will enable you to see the total amount of
+	money paid to your BBS and the total amount of money paid the last
+	time to your board.
+
+	This is how the output could look:
+
+	1 Delusion    oo Virtual oo 255 240338912 567 31 Mar 94 06 Nov 94 1234
+
+	Slot            Security Level  Downloads  |    Start      End    Total
+                                                   |                      Paid
+                                           Paid Last
+
+	This will give you a pretty clear overview of your credited users!
+
+@endnode
+
+@node "Credit"
+
+	@{b}Credit Maintenance Editor@{ub}
+
+	From version 3.37 of AmiExpress there is a Credit Maintenance Editor
+	included in the internal Account Editor. This one is 100% compatible,
+	but has the same advantages as the AccountED like calculator and
+	wordprocessor-like editing capabilities!
+
+	For you with older versions of AmiExpress this feature will disappear
+	because crediting will only be useful if your system supports it!
+
+	What is crediting? Crediting keeps track on how much a user has paid
+	for Free Download in a certain period and also removes the Free DL
+	after that period. It also keep track on the total amount of money
+	that user has paid to the system!
+
+	NOTE! Account ED's credit util will create a CreditLog file which
+	      is NOT compatible with the built in (which doesn't affect
+	      anything), but it's MUCH MORE easier to read and doesn't
+	      look like shit when you want to look at it (like the built in)!
+@endnode
+
+@node "Compatibility"
+
+	@{b}Account ED's enormous Compatibility@{ub}
+
+	This is the most compatible door of this class I know. It will work
+	on the following configurations:
+
+	AmiExpress 2.0 and higher
+	AmiExpress 3.0 and higher
+
+	and even AmiExpress 3.37 and higher
+
+	These versions really differs in the way of handling the user data.
+	Version 2.0 to 3.0 does only have 9 conferences and you mark them
+	with a X or _ depending on what access you give them.
+
+	Version 3.0 to 3.36 has a scrambled password for each user and also
+	uses unlimited conferences and therefore has got a name instead
+	of X and _:s, these show what conferences the user got access to.
+
+	Somewhere between version 3.20 and 3.37 Chat limit time and Chat
+	used time was added to the user data. Of course this has been added
+	to Account ED too, and it only works from 3.20 and higher!
+
+	Credit Maintenance util was introduced in AmiExpress 3.37 and
+	to keep compatibility I included one in Account ED too. This
+	utility can't be used by other /X versions.
+
+	NOTE! If you have an older /X you won't notice all new features
+	      because they are hidden for you. If you upgrade your /X
+	      you can immediately take advantage of them :)
+
+@endnode
+
+@node "NameCheck"
+
+	@{b}User Name Checking@{ub}
+
+	It checks if a person got the right name from a list of
+	persons allowed to use the @{"Account Editor" LINK "About Account ED"}. This works in the same
+	way as Maltese Falcons Remote Shell and Sysop Download utils.
+@endnode
+
+@node "PasswordCheck"
+
+	@{b}User Password Checking@{ub}
+
+	This function is configurable so if you don't want it, it won't
+	ask for a password. Some want it so it's the only reason why it
+	exists. If you enter a password instead of the blanks in the
+	AccED.Preset file it will ask for the password. The letters you
+	type will be replaced with *'s!
+@endnode
+
+@node "LogFiles"
+
+	@{b}Activity Reports@{ub}
+
+	Every entry in the user data that someone who is in Account ED
+	look at will be reported and logged in a special Account ED log
+	file. It will also add comments if someone read or wrote an account
+	and if you print an account.
+@endnode
+
+@node "PrintAccount"
+
+	@{b}Print User Account@{ub}
+
+	Yes, you could actually print an account to your printer using the
+	printer settings from your Amiga DOS.
+	This feature is really my favorite, if you are going to delete a
+	user you could easily print the users account before selecting
+	delete and store it somewhere for no special reason ..
+@endnode
+
+@node "PrintQuest"
+
+	@{b}Print User Questionary@{ub}
+
+	Printing a questionary works exactly the same as printing an
+	account, thus you got to have the Quest Package too (available
+	at INSANiTY, if your local boards can't provide you)
+@endnode
+
+@node "RestrictCommands"
+
+	@{b}Restrict Certain Commands@{ub}
+
+	You can lock certain functions in the @{"Account Editor" LINK "About Account ED"} for your
+	cosysops so they only could use the 6 pre defined presets, no
+	I'm joking .. 6 presets, NO! the 9 pre defined presets with a
+	comment which you can write so the cosysop knows what each preset
+	stands for and for which users they are meant. Nice ehh!?
+@endnode
+
+@node "ConferenceAccess"
+
+	@{b}Give/Remove Conference Accesses@{ub}
+
+	Like the MCP (Master Control Program) by Bryce, you can give and
+	take access for a conference for all your users, so if you close
+	a conference you easily can delete all users access to it or if
+	you simply have started a new area. But.. wouldn't it be nice to
+	go a little bit further and include one more nice feature into that
+	powerful command? Yes! You can define between which two access
+	levels a user must be so you could give/take access from users who
+	only has got the security level 30 to 40 i.e..
+@endnode
+
+@node "UserlistTool"
+
+	@{b}Full UserList Tool@{ub}
+
+	The need for a powerful and fast userlist creator has now been
+	fulfilled. This userlist creator can create any userlist you
+	want and also save it as a file.
+
+	- Do you want a plain userlist with all user who has security level
+	  200 to 255, no problem.
+
+	- Do you want a userlist with all users who has uploaded 2 megabytes
+	  and downloaded maximum 30 megabytes and has got access to
+	  conference 4 ??? NO PROBLEM
+
+	- What about a look over the ul/dl stats for all users with disabled?
+
+	- Perhaps all members to a certain area..
+
+	- Or what about.. All users that has security level 50 to 80, has
+	  uploaded minimum 10 mb and maximum 50 mb, has downloaded min 30 mb
+	  and max 100 mb and also has got access to area 6! Can your userlist
+	  maker do THAT? Well I doubt that anyway..
+
+	There are no limits in this *VERY* sophisticated userlist tool
+	which handles all of the above and more with just one routine!
+
+	All this comes with a very nice ANSI output and some stats about
+	how many percent of the users you've listed and so on..
+@endnode
+
+@node "NewFeatures"
+
+	@{b}The New Features@{ub}
+
+	Back to the main @{"Account Editor" LINK "About Account ED"} there are some major line ups if
+	you compare to the built in editor. First of all the design is
+	made to be easy to overview and fast to get some particular
+	information about one user. The built in one was so messy that I
+	had a hard time to understand my own account with the download /
+	upload cps and location put like a joke on the screen. This is
+	should be easy to read and each function has got new letters
+	because the old ones was worn out and not well placed. I hope
+	you'll soon learn the new keys!
+@endnode
+
+@node "HelpPage"
+
+	@{b}Help Page@{ub}
+
+	The help page inside the @{"Account Editor" LINK "About Account ED"} is for easy access to
+	the most common functions inside the editor. You simple press
+	a key and you can view it at the same time as the account is on
+	the same page so you easily could compare and so on.
+@endnode
+
+@node "QuestCompatible"
+
+	@{b}Quest Comatibillity@{ub}
+
+	If you have used my Questionary Door called Quest (last version
+	V1.09) this program is fully compatible with Quest. Anytime when
+	you are reading a persons account you could press a key and get
+	that users questionary on your screen. Very useful if you upgrade
+	first time users.. I think you remember yourself loading a text-
+	editor with your Answers file and trying to upgrade that poor
+	users account, but how did your cosysops manage!? I guess that
+	they didn't and the security with new users failed on your board!
+@endnode
+
+@node "WarningNote"
+
+	@{b}Give User a Warning Note@{ub}
+
+	Ever wanted a function that writes a letter very fast to your
+	users and saying that they should upload and shows the users
+	stats with uploaded/download bytes & file, calls and messages?
+	Well it's built in into Account ED!
+
+	You don't have to write a single line, just press a key..
+@endnode
+
+@node "MsgBaseCleaner"
+
+	@{b}Message Base Cleaner Tool@{ub}
+
+	A thing that can make your nerves pop up is when you have
+	to delete old received messages from users who has not choosen
+	delete then they've replied letters and all those EALL messages
+	that your new users hate.. Account ED has a built in function
+	which scans your msgbase and deletes old mail and asks what
+	you want to do with the EALL messages!!
+@endnode
+
+@node "LockPassword"
+
+	@{b}Show/Remove User Password@{ub}
+
+	You can give a special access level for viewing the passwords
+	of all accounts, if you do not have this security level Account ED
+	will prompt Not Displayed as a password. You can choose if the
+	password default should be shown to the ones with the security
+	level or they have to press a special key combination for the
+	password to appear. Useful if you have some friends beside you!
+@endnode
+
+@node "SecurityConference"
+
+	@{b}High Security Conference@{ub}
+
+	What about security for your groups conference then? Well as this
+	program has been around a while I've thought of that too, so you
+	could specify a conference to which no one could give access!
+	This means that your cosysop can not give himself access to your
+	groups member area!!
+@endnode
+
+@node "Calculator"
+
+	@{b}Full Built-in Calculator@{ub}
+
+	Ok I see that you are beginning to understand why I developed
+	this new @{"Account Editor" LINK "About Account ED"}, so I will now give you only one more
+	reason to use it. If you sometimes have an upload competition on
+	your board you know how annoying it is to give that poor winner
+	his rewarded upload credits, it usually means that you have
+	to run down the stairs to get a pocket calculator and then
+	enter his new upload bytes. But you could stop doing that
+	already today if you use this account editor with built in
+	calculator which can add and sub from a users account. You just
+	choose the field you want to change and use the upper case of
+	the letter instead and you will be asked if you want to sub or
+	add and how many bytes. This works for all fields that has got
+	to do with upload, download and limits.
+@endnode
+
+@node "FieldEditor"
+
+	@{b}The New Field Editor@{ub}
+
+	Oh, sorry I forgot to tell you one thing. In the /X account editor
+	when you choose i.e. to change the users uploaded creds it clears
+	that field and you have to try to remember what there was standing.
+	My @{"Account Editor" LINK "About Account ED"} will not remove anything it works just like
+	any professional editor like Cygnus ED. You write something and
+	the text before your cursor will move to the right. If you use
+	backspace the text to the light of the cursor will move to the left!
+	The field that you may use for that specific item in the editor
+	is also highlighted in blue, to give you a better overview!
+
+	Of course the text that stood there before will be there until you
+	use your DEL or BACKSPACE key to remove it.
+@endnode
+
+@node "Installation 2.10+ .."
+
+	@{b}Installation on a based /X 2.10+ System ..@{ub}
+
+	@{" File installation          " LINK "Install2.10+"}
+	@{" Info about the Preset file " LINK "Preset Info!"}
+	@{" Preset file configuration  " LINK "Presets2.10+"}
+	@{" Questionary configuration  " LINK "ConfigQuest"}
+	@{" Upgrade notes              " LINK "Upgrade"}
+
+	It's recommended to make a backup of you critical files before
+	running this door if you want to be 100% sure so it doesn't damage
+	anything. The door has worked in most environments, but the
+	developers of @{"AmiExpress" LINK "AmiExpress"} rapidly changes their data file
+	structures and that may cause failure on your system.
+
+	Backup this:
+
+	BBS:User.Data
+	BBS:User.Keys
+
+	BBS:Conf{x}/MsgBase/HeadFile
+	BBS:Conf{x}/MsgBase/MailStats
+
+	These are the only files that the Account ED Package touches!
+@endnode
+
+@node "Installation 3.00+ .."
+
+	@{b}Installation on a based /X 3.00+ System ..@{ub}
+
+	@{" File installation          " LINK "Install3.00+"}
+	@{" Info about the Preset file " LINK "Preset Info!"}
+	@{" Preset file configuration  " LINK "Presets3.00+"}
+	@{" Questionary configuration  " LINK "ConfigQuest"}
+	@{" Upgrade notes              " LINK "Upgrade"}
+
+	It's recommended to make a backup of you critical files before
+	running this door if you want to be 100% sure so it doesn't damage
+	anything. The door has worked in most environments, but the
+	developers of @{"AmiExpress" LINK "AmiExpress"} rapidly changes their data file
+	structures and that may cause failure on your system.
+
+	Backup this:
+
+	BBS:User.Data
+	BBS:User.Keys
+
+	BBS:Conf{x}/MsgBase/HeadFile
+	BBS:Conf{x}/MsgBase/MailStats
+
+	These are the only files that the Account ED Package touches!
+@endnode
+
+@node "Preset Info!"
+
+	@{b}Information About The Preset File@{ub}
+
+	The preset file is the most important file for Account ED.
+	Without it shouldn't work. It's also important that
+	you update your preset file at the same time as you update
+	your Account ED Version.
+
+	The preset file consist of many configurations for:
+
+	Account ED	- The Account Editor
+	F6 Editor	- Same as Account ED, but for online use
+	Quest		- New User Questionary Program
+	Quest View	- Questionary Viewer for Users
+	Password Fail	- If a user has forgotten the password
+
+	You do only have to configure the settings for the programs
+	you have installed. All other data will be ignored by AccED.
+
+	For a hacker the AccEd.Preset file should be of high priority
+	so should restrict that file in every door you have and in
+	your Acp.StartUp file.
+@endnode
+
+@node "Upgrade"
+
+	@{b}Upgrading from older versions of Account ED@{ub}
+
+	You have to completely rewrite you AccED.Preset file if you
+	are upgrading from < V1.03. Upgrading from V1.04-1.05 will only
+	require slightly adjustments.
+
+	Previous user must note that there should be 3 new directories inside
+	the Account/ directory called: QuestApp, QuestDel and QuestQst.
+	if you are previous running Quest and has got it in the
+	Doors:Arexx/Quest/ dir you should move your questions from the answers
+	dir to the QuestApp dir in the Account directory. Otherwise Account ED
+	can't read the questionaries! (More info in the Quest doc file)
+
+	The questionary files for Quest has been changed!! You now has to add
+	one more item before every question. Before it stood ~NQuestion, now
+	it should stand ~N!Question the ! character marks if the question
+	should be showed, when a user uses the Quest View program to look
+	up a user, in this way a sysop can protect some of the secret info
+	that he doesn't want the other users to know about each others!
+
+	In previous preset files (V1.03) the computer list was in this form:
+	Amiga 500¬Amiga 1000¬ and so on, now it should stand in descending
+	order in the column which says computers.
+
+	Under the names with the persons who has got access to Account
+	(Delusion Fox 'N' Philix D-Zire) is all the configuration datas for
+        both Quest and Account ED, all values who has got to do with Quest is
+	explained separately in the Quest Doc.
+@endnode
+
+@node "ConfigQuest"
+
+	@{b}Configuration of the Questionary Sheet@{ub}
+
+	Old users of Quest should also read this, it's completely different!
+
+	As you may be familiar to the MCI commands inside /X I've created
+	something that looks the same, but in a reverse mode if you could
+	say so. Before every question you can give these command:
+
+	~	- Just question that question
+	        - Nothing, means it's a comment and will only be displayed
+	~N	- It tells Account ED that the users real name is asked
+	~A	- Tells that it's the users address being asked, note that
+		  you can use this command unlimited times in your quest
+	~C	- Tells that you are asking for the users country
+	~V	- Tells that you are asking for the users Voice Phone Number
+	~D	- Tells that you are asking for the users Data  Phone Number
+	~S	- Tells that you are asking for the users Sex & Age
+	~P	- Tells that you are asking for the users Social Security Code
+	~U	- Tells that you are asking for what the users does with his
+		  computer and such things.
+	~W	- Tells that you are asking for from where he got you phone #
+	~R	- Tells that this is a question with the reasons why you should
+		  let that user in. You can use this command unlimited times
+		  to give the users more than one line to answer on!
+	~E	- Just like the ~A and ~R command, but this is for the users
+		  presentation.
+
+	~ !	- The ! command means that this question won't be displayed
+		  then a user is looking at another users questionary with
+		  the Quest View program. This is useful if the sysop doesn't
+		  want to share all information in the questionnaires with
+		  the users!!
+
+	Example:
+
+	~N!What is your name ? :
+
+	This asks the user of his name, and other users can not look at his
+	name through the Quest View program, of course is it viewable for the
+	sysop and cosysops!
+
+	~  What do you think about Coca Cola ? :
+
+	This just asks the question!
+
+	   --------- Personal Info -----------
+
+	This will just display this text! Note the 3 Spaces before the actual
+	text starts! This is the command for displaying a text!
+
+	For your comfort n example questionary has been included. The quest
+	is originally designed by The Silencer / TRSI, but slightly remade
+	by Delusion and of course improved!
+
+	Anyway you now might wonder why you should tell the Questionary program
+	what you intend to ask and such things, well it's very simple!
+	In coming versions of Account ED it should be possible to both get
+	the users Account and the most essential information from the questionary
+	on the screen at the same time, like the users name and social security
+	code. I have NOT coded that feature in Account ED yet, but it will
+	very soon come. So here is your chance to be one step ahead :) so you
+	will have it working as soon as the new Account ED arrives.
+
+	However Quest View make use of these letter combinations to keep track
+	on what to display or not. A user could choose to not show his addy
+	and phone number to other users, and therefor Quest View need to know
+	what is the name and so on.
+
+	In older versions of Quest you could choose to save the users answers
+	with questions and answers or answers alone. Because of the above said
+	new features the questions and answers format doesn't work so therefor
+	that function has been removed and you can only save the answers alone.
+
+	Account ED still supports both formats so you can view older
+	questionaries, but you have to the ~X commands to your old questionaries
+	if you have some in your Doors:Arexx/Quest/Questions directory and copy
+	them into the Doors:Arexx/Account/QuestQST dir. As you may have guessed
+	the function with displaying info in Account Ed will not work on old
+	questionnaires which is in the form Questions - Answers. I will maybe
+	fix a converter util for that.
+
+	Note that all commands has to be three chars, if you only have a ~ on
+	a question it should look like "~  " and if you have a two chars command
+	it should look like "~N " and for the three character command you should
+	write "~N!".
+
+	In otherwords this means that all questions should start on column 4
+	and in column 1, 2 and 3 there should be the commands!
+@endnode
+
+@node "Presets2.10+"
+
+  @{"Comment" LINK "Comment"}         @{"SecL" LINK "SecL"} @{"RaT" LINK "RaT"}@{"RaF" LINK "RaF"} @{"Aut" LINK "Aut"} @{"Bytelimit" LINK "Bytelimit"} @{"ConfAccess" LINK "ConfAccess2.10+"} @{"TimeLim" LINK "TimeLim"}  @{"Computers" LINK "Computer List"}
+@{"7" LINK "NumberofPresets"}-------------------------------------------------------------@{"2.00" LINK "VersionNumber"}-------------------
+| Lamer          | 5   | 1 | 2 | 1 | 100000   | X________ | 1200  | Amiga 500        |
+| PD User        | 20  | 1 | 3 | 2 | 500000   | X_X__X_X_ | 3600  | Amiga 500+       |
+| Elite User     | 30  | 1 | 3 | 4 | 2500000  | X_XX_X_X_ | 3600  | Amiga 600        |
+| Elite Trader   | 40  | 1 | 3 | 7 | 5000000  | X_X__XXX_ | 4800  | Amiga 1000       |
+| Virtual Member | 50  | 1 | 0 | 4 | 10000000 | X_XXXX_X_ | 7200  | Amiga 1200       |
+| Virtual Member | 50  | 1 | 0 | 7 | 10000000 | X_X_XXXX_ | 7200  | Amiga 2000       |
+| Proud CoSysop  | 230 | 0 | 0 | 7 | 10000000 | X_XX_XXXX | 14400 | Amiga 3000       |
+|                |     |   |   |   |          |           |       | Amiga 4000       |
+|                |     |   |   |   |          |           |       | PC Com 286       |
+@{"2359" LINK "Time Zones"}----------------------------------------------------------@{"0730" LINK "Time Zones"} PC Com 386       |
+| @{"Delusion Fox N Philix D-Zire                                   " LINK "Users Allowed"} | PC Com 486       |
+------------------------------------------------------------------- PC Com 586       |
+| @{"UserData Path   " LINK "UserData Path"} | BBS:User.Data     | @{"Enable Seclevel " LINK "Enable Seclevel"} |  255 | Atari 1040       |
+| @{"UserKeys Path   " LINK "UserKeys Path"} | BBS:User.Keys     | @{"ChangeAcc Seclev" LINK "ChangeAcc Seclev"} |  255 | Other            |
+| @{"Write Note Path " LINK "Write Note Path"} | BBS:Conf-7/       | @{"MsgBaseClean Sec" LINK "MsgBaseClean Sec"} |  255 |                  |
+| @{"AccED Password  " LINK "AccED Password"} | Transworld        | @{"See Users Pass  " LINK "See Users Pass"} |  255 |                  |
+| @{"DeleteQuest Pass" LINK "DeleteQuest Pass"} | Bobolink          | @{"Show Users Pass " LINK "Show Users Pass"} |  Off |                  |
+| @{"Recieve App Mail" LINK "NewUser Letter"} | Delusion          | @{"Print Account   " LINK "Print Account"} |   On |                  |
+| @{"AccountED Colour" LINK "AccountED Colour"} | [0m              | @{"Edit own Account" LINK "Edit own Account"} |   On |                  |
+| @{"Members Conf    " LINK "Members Conf 2.10+"} | 5                 | @{"Search New Users" LINK "Search New Users"} |  300 |                  |
+| @{"Credit Account  " LINK "Credit Account"} |                   | @{"Log Status AccED" LINK "Log Status AccED"} |    4 |------------------|
+| @{"Security Check  " LINK "Security Check"} | 230               | @{"Kickout After X " LINK "Kickout After X"} |    5 | @{"Amiga Ansi      " LINK "Ansi Types"} |
+| @{"Set Security Lev" LINK "Set Security"} | 30                | @{"Questionary     " LINK "Questionary"} |    4 | @{"IBM Ansi        " LINK "Ansi Types"} |
+| @{"Reserved 1      " LINK "Reserved"} |                   | @{"Auto UL Amount  " LINK "Auto UL Amount"} |    4 | @{"Macintosh Ansi  " LINK "Ansi Types"} |
+| @{"Path NewUserConf" LINK "Path NewUserConf"} | BBS:Conf-1/       | @{"AutoAccess Quest" LINK "AutoAccess Quest"} |   No | @{"                " LINK "Ansi Types"} |
+| @{"Rec PW Fail Mail" LINK "Password Fail"} | Fox 'N' Philix    | @{"MustEnter No Ret" LINK "Must Enter No Return"} |  Yes | @{"                " LINK "Ansi Types"} |
+--------------------------------------------------------------------------------------
+
+This is how it could look. Do not snap this one, use the supplied
+one in this archive called AmiEx2.0/AccED.Presets. Please note that everything
+is position dependant, all configuration parameters must stand between
+a | and a | so it could look like this |         BBS:User.Data | or
+| BBS:User.Data.          | it doesn't matter.
+
+@endnode
+
+@node "Presets3.00+"
+
+  @{"Comment" LINK "Comment"}         @{"SecL" LINK "SecL"} @{"RaT" LINK "RaT"}@{"RaF" LINK "RaF"} @{"Aut" LINK "Aut"} @{"Bytelimit" LINK "Bytelimit"} @{"ConfAccess" LINK "ConfAccess3.00+"} @{"TimeLim" LINK "TimeLim"}  @{"Computers" LINK "Computer List"}
+@{"7" LINK "NumberofPresets"}-------------------------------------------------------------@{"2.00" LINK "VersionNumber"}-------------------
+| Lamer          | 5   | 1 | 2 | 1 | 100000   | Lamer     | 1200  | Amiga 500        |
+| PD User        | 20  | 1 | 3 | 2 | 500000   | Party     | 3600  | Amiga 500+       |
+| Elite User     | 30  | 1 | 3 | 4 | 2500000  | AmiEx     | 3600  | Amiga 600        |
+| Elite Trader   | 40  | 1 | 3 | 7 | 5000000  | AmiEx     | 4800  | Amiga 1000       |
+| Virtual Member | 50  | 1 | 0 | 4 | 10000000 | Member    | 7200  | Amiga 1200       |
+| Virtual Member | 50  | 1 | 0 | 7 | 10000000 | Member    | 7200  | Amiga 2000       |
+| Proud CoSysop  | 230 | 0 | 0 | 7 | 10000000 | Cosysop   | 14400 | Amiga 3000       |
+|                |     |   |   |   |          |           |       | Amiga 4000       |
+|                |     |   |   |   |          |           |       | PC Com 286       |
+@{"2359" LINK "Time Zones"}----------------------------------------------------------@{"0730" LINK "Time Zones"} PC Com 386       |
+| @{"Delusion Fox N Philix D-Zire                                   " LINK "Users Allowed"} | PC Com 486       |
+------------------------------------------------------------------- PC Com 586       |
+| @{"UserData Path   " LINK "UserData Path"} | BBS:User.Data     | @{"Enable Seclevel " LINK "Enable Seclevel"} |  255 | Atari 1040       |
+| @{"UserKeys Path   " LINK "UserKeys Path"} | BBS:User.Keys     | @{"ChangeAcc Seclev" LINK "ChangeAcc Seclev"} |  255 | Other            |
+| @{"Write Note Path " LINK "Write Note Path"} | BBS:Conf-7/       | @{"MsgBaseClean Sec" LINK "MsgBaseClean Sec"} |  255 |                  |
+| @{"AccED Password  " LINK "AccED Password"} | Transworld        | @{"See Users Pass  " LINK "See Users Pass"} |  255 |                  |
+| @{"DeleteQuest Pass" LINK "DeleteQuest Pass"} | Bobolink          | @{"Show Users Pass " LINK "Show Users Pass"} |  Off |                  |
+| @{"Recieve App Mail" LINK "NewUser Letter"} | Delusion          | @{"Print Account   " LINK "Print Account"} |   On |                  |
+| @{"AccountED Colour" LINK "AccountED Colour"} | [0m              | @{"Edit own Account" LINK "Edit own Account"} |   On |                  |
+| @{"Members Conf    " LINK "Members Conf 3.00+"} | Member            | @{"Search New Users" LINK "Search New Users"} |  300 |                  |
+| @{"Credit Account  " LINK "Credit Account"} | 255               | @{"Log Status AccED" LINK "Log Status AccED"} |    4 |------------------|
+| @{"Security Check  " LINK "Security Check"} | 230               | @{"Kickout After X " LINK "Kickout After X"} |    5 | @{"Amiga Ansi      " LINK "Ansi Types"} |
+| @{"Set Security Lev" LINK "Set Security"} | 30                | @{"Questionary     " LINK "Questionary"} |    4 | @{"IBM Ansi        " LINK "Ansi Types"} |
+| @{"Reserved 1      " LINK "Reserved"} |                   | @{"Auto UL Amount  " LINK "Auto UL Amount"} |    4 | @{"Macintosh Ansi  " LINK "Ansi Types"} |
+| @{"Path NewUserConf" LINK "Path NewUserConf"} | BBS:Conf-1/       | @{"AutoAccess Quest" LINK "AutoAccess Quest"} |   No | @{"                " LINK "Ansi Types"} |
+| @{"Rec PW Fail Mail" LINK "Password Fail"} | Fox 'N' Philix    | @{"MustEnter No Ret" LINK "Must Enter No Return"} |  Yes | @{"                " LINK "Ansi Types"} |
+--------------------------------------------------------------------------------------
+
+This is how it could look. Do not snap this one, use the supplied
+one in this archive called AmiEx3.0/AccED.Presets. Please note that everything
+is position dependant, all configuration parameters must stand between
+a | and a | so it could look like this |         BBS:User.Data | or
+| BBS:User.Data.          | it doesn't matter.
+@endnode
+
+@node "Install2.10+"
+
+	@{b}File installation@{ub}
+
+	Add the AmiEx2.0/BBS.Cmd file and AmiEx2.0/SYS.Cmd file to your
+	Cmd files in your BBS:Commands directory
+
+	@{b}OR:@{ub}
+
+	Snap the following row to your BBS:Commands/BBS.Cmd file:
+
+	@{b}*1        Rm230Doors:Arexx/Account/AccED.rexx@{ub}
+	@{b}QUEST     Rm005Doors:Arexx/Account/Quest.Rexx@{ub}
+	@{b}QV        Rm005Doors:Arexx/Account/QView.rexx@{ub}
+	@{b}SECHK     Rm005Doors:Arexx/Account/SeChk.rexx@{ub}
+
+	Snap the following row to your BBS:Commands/SYS.Cmd file:
+
+	@{b}*PWFAIL   Rm005Doors:Arexx/Account/PFail.rexx@{ub}
+	@{b}*ACCOUNTS Rm255Doors:Arexx/Account/F6-Ed.rexx@{ub}
+
+	This will let all users with security level 230 and higher access
+	use the @{"Account Editor" LINK "About Account ED"} if their names are in the allowed user list.
+
+	You should now copy the AccEd.Presets file from the Account/AmiEx2.0
+	directory to your Account/ directory.
+
+	When you have managed to do that it would be time to move the
+	Account ED package to your Doors:Arexx/ path, which is the path
+	all my doors requires so you better not put it elsewhere.
+
+	After doing that you should edit the AccED.Presets file which
+	shall contain your personal presets and comments for all these doors.
+
+	@{b}** Note for QUEST **@{ub}
+
+	If you are going to use Quest for your new users you should then
+	use the MCI commands to envoke Quest and I recommend that you first
+	in your BBS:Node(x)/Joined.txt file adds this line:
+
+	~CC_QUEST
+
+	Which will automatically start quest when a user has given his
+	phone number and so on!
+
+	NOTE! If you already have a MCI command installed you can add as
+	      many you want if you stack them like this:
+
+	      ~CC_QUEST ~CC_WALL ~CC_SENT 
+
+	      You only have to leave a blank space at the end!
+
+	@{b}** Note for SECURITY CHECKER **@{ub}
+
+	Like Quest this door should be launched as a MCI command and if
+	you're gonna use quest I suggest that you put these two in the
+	same bulletin.
+
+	~CC_SECHK ~CC_SECHK 
+
+	This will launch both doors! Security checker should be placed
+	in the first bulletin which appear after the user has logged on
+	so this util can check if that user got to high security level
+	and isn't a sysop and then drop the users access, before viewing
+	any other bulletins, which may be sysop only bulletins!
+@endnode
+
+@node "Install3.00+"
+
+	@{b}File installation@{ub}
+
+	Copy Account/AmiEx3.0/1.info		to BBS:Commands/BBScmd/
+	Copy Account/AmiEx3.0/Quest.info	to BBS:Commands/BBScmd/
+	Copy Account/AmiEx3.0/Qv.info		to BBS:Commands/BBScmd/
+	Copy Account/AmiEx3.0/SeChk.info	to BBS:Commands/BBScmd/
+
+	Copy Account/AmiEx3.0/PwFail.info	to BBS:Commands/SYScmd/
+	Copy Account/AmiEx3.0/Accounts.info	to BBS:Commands/SYScmd/
+
+	@{b}OR:@{ub}
+
+	Change any .info to the appropriate "ICON ToolType Info", example:
+
+	@{b}ACCESS=230
+	LOCATION=DOORS:ARexx/Account/AccED.rexx
+	MULTINODE=YES
+	PRIORITY=0
+	STACK=50000
+	TYPE=AIM@{ub}
+
+	This will let all users with security level 230 and higher access
+	use the @{"Account Editor" LINK "About Account ED"} if their names are in the allowed user list.
+
+	You should now copy the AccEd.Presets file from the Account/AmiEx3.0
+	directory to your Account/ directory.
+
+	When you have managed to do that it would be time to move the
+	Account ED package to your Doors:Arexx/ path, which is the path
+	all my doors requires so you better not put it elsewhere.
+
+	After doing that you should edit the AccED.Presets file which
+	shall contain your personal presets and comments for all these doors.
+
+	@{b}** Note for QUEST **@{ub}
+
+	If you are going to use Quest for your new users you should then
+	use the MCI commands to invoke Quest and I recommend that you first
+	in your BBS:Node(x)/Joined.txt file adds this line:
+
+	~CC_QUEST
+
+	Which will automatically start quest when a user has given his
+	phone number and so on!
+
+	NOTE! If you already have a MCI command installed you can add as
+	      many you want if you stack them like this:
+
+	      ~CC_QUEST ~CC_WALL ~CC_SENT 
+
+	      You only have to leave a blank space at the end!
+
+	@{b}** Note for SECURITY CHECKER **@{ub}
+
+	Like Quest this door should be launched as a MCI command and if
+	you're gonna use quest I suggest that you put these two in the
+	same bulletin.
+
+	~CC_SECHK ~CC_SECHK 
+
+	This will launch both doors! Security checker should be placed
+	in the first bulletin which appear after the user has logged on
+	so this util can check if that user got to high security level
+	and isn't a sysop and then drop the users access, before viewing
+	any other bulletins, which may be sysop only bulletins!
+@endnode
+
+@node "Security Check"
+
+	@{b}Security Checker Access Level@{ub}
+
+	This is only for you who has decided to install Security Checker.
+
+	The level asked here is the access level you have for you and
+	your cosysops and that you don't wan't a normal user to have.
+
+	If a user got this security level, then will Security Checker
+	see if that user is in the @{"list of your sysops" LINK "Users Allowed"} which you have
+	specified in the AccEd.Preset file. If not the users security
+	level will be dropped to @{"Set Security Level" LINK "Set Security"}!
+
+	This will protect user who by mistacke has got a too high security
+	level, for example when downloading with DS and when you forget
+	to change back the security level of that user!
+@endnode
+
+@node "Set Security"
+
+	@{b}Set Security Level@{ub}
+
+	This is only for you who has decided to install Security Checker.
+
+	This is the level a user with a @{"too high security level" LINK "Security Check"} will
+	get when he/she logs on and are not listed in the @{"sysop names" LINK "Users Allowed"} 
+	list in AccEd.Presets!
+@endnode
+
+@node "Credit Account"
+
+	@{b}Credit Maintenance Access Level@{ub}
+
+	This is for AmiExpress V3.37 and higher, otherwise leave it blank!
+
+	Here you can specify which security level that is required for 
+	using the Credit Maintenance Util.
+
+	If you don't want your cosysops changing your pay users credits
+	I would suggest setting this level at 255!
+@endnode
+
+@node "Reserved"
+
+	@{b}Reserved 1@{ub}
+
+	This field is for future enhanchements made to the package
+	and should be left with just spaces for future compatibility
+@endnode
+
+@node "Auto UL Amount"
+
+	@{b}Automatic Upload Amount@{ub}
+
+	This is a feature which is for Quest only, you can decide how
+	much your new users must upload and this value will be printed
+	in a message right after the user has filled out the questionary.
+@endnode
+
+@node "Edit own Account"
+
+	@{b}Edit your own Account@{ub}
+
+	This option lets you specify if you should be able to edit your
+	own account, while you're using the Account Editor.
+
+	If this option is on for instance your cosysops could change their
+	own accounts. If it's OFF no one can edit their own accounts and
+	makes it a bit more tricky for hackers.
+
+	NOTE! This means that you either couldn't change your account to
+	      prevent hackers who call your board from changing the sysops
+	      account. If you then want to change your account you have
+	      to use the online F6 account editor.
+@endnode
+
+@node "NumberofPresets"
+
+	@{b}Number of Presets@{ub}
+
+        This is the number of presets you have filled out. Do not set this
+        to a higher value than you've actually entered. That will result
+        in strange behavior in the @{"Account Editor" LINK "About Account ED"}.
+@endnode
+
+@node "VersionNumber"
+
+	@{b}Preset file Version Number@{ub}
+
+	V2.00 is the version number of the Preset File,
+	that means that it will not work with older versions of Account ED
+@endnode
+
+@node "UserData Path"
+
+	@{b}UserData Path@{ub}
+
+	The path on your harddrive where your userdata is located
+@endnode
+
+@node "UserKeys Path"
+
+	@{b}UserKeys Path@{ub}
+
+	The path on your harddrive where your userkeys is located
+@endnode
+
+@node "Write Note Path"
+
+	@{b}Write Warning Note Path@{ub}
+
+	This is the path to the conference where you want the warning
+	notes made in Account ED to come. This should be a path to any
+	of your conferences
+
+	NOTE! If it's a path to a directory it has to end with a /
+	      this is so you could specify an assign instead like Conf1:
+
+	A correct path could look like this:
+
+	BBS:Conf-1/
+
+	or
+
+	Conf1:
+@endnode
+
+@node "AccED Password"
+
+	@{b}AccountED System Password@{ub}
+
+	If you want to enter a password to use Account ED you should
+	enter a password here, if this line is empty Account ED won't
+	ask you for a password
+@endnode
+
+@node "DeleteQuest Pass"
+
+	@{b}Delete Questionary Password@{ub}
+
+	This is the password a user has to enter if he want to delete
+	a users questionary (application)
+@endnode
+
+@node "AccountED Colour
+
+	@{b}AccountED Editor Colour@{ub}
+
+	This is the colour in which all data in the AccED will be
+	displayed in
+@endnode
+
+@node "Log Status AccED"
+
+	@{b}Log Status AccED@{ub}
+
+	Maybe you don't want to log every action taken in Account ED,
+	then you should change the Log variable. Here is what the
+	different numbers means:
+
+	1, Log only when an account is read
+	2, Log only when an account is saved
+	3, Log both read and save
+	4, Log both read and save, but not then sysop does it!
+	0, Log nothing
+@endnode
+
+@node "Enable Seclevel"
+
+	@{b}Enable Full Account Editing Security Level@{ub}
+
+	This is the security level a user has got to have to change
+	anything in a users account than the name, location and
+	autorejoin conference. A user with lower status than the
+	enable status can however use the nine presets, which is the
+	meaning that the user should use instead. I recommend that you
+	lower your cosysops security level to 230 and keep yours at 255.
+	They can not logon your password because a user can not look at
+	the slot number 1 and they can not give anyone higher security
+	level than they self got, so a cosysop with 230 can not give
+	himself security level 255 and play sysop which is the case with
+	the built in @{"Account Editor" LINK "About Account ED"}!
+@endnode
+
+@node "ChangeAcc Seclev"
+
+	@{b}Change Conference Access Security Level@{ub}
+
+	This is the access level a user has got to have if he want to
+	give or take access from all users for a certain conference.
+	I explained that command in the features so read more about it there!
+@endnode
+
+@node "MsgBaseClean Sec"
+
+	@{b}MessageBase Cleaner Security Level@{ub}
+
+	The access level required to use the built in message base
+	cleaner, to delete old received mail
+@endnode
+
+@node "See Users Pass"
+
+	@{b}See Users Passwords@{ub}
+
+	If you do not have this access level or higher you won't be able
+	to see different users passwords when using the @{"Account Editor" LINK "About Account ED"}.
+	Have you sometime asked yourself the question, why should my
+	cosysop see other users passwords, then he just should upgrade
+	users accounts!?
+@endnode
+
+@node "Show Users Pass"
+
+	@{b}Show Users Passwords@{ub}
+
+	This option works like this.. If a user has got the requested
+	security level entered at SeePass the user will then be able to
+	see another users password, but if this option is turned Off your
+	user has to push Shift+C to see the password and edit it. If he
+	doesn't there will only stand Not Displayed. If you have choosed
+	to let your cosysops view the users passwords, buchoosent don't want
+	them to see them by default you should choose Off, if you always
+	want to see the password you should choose On and the passwords
+	will be displayed if you have SeePass security level.
+@endnode
+
+@node "Print Account"
+
+	@{b}Print Account@{ub}
+
+	If you do not own a printer you should definitely chose Off as
+	a printer option, or if you don't want anyone to print an account.
+@endnode
+
+@node "Search New Users"
+
+	@{b}Search Start For New Users@{ub}
+
+	This one is made to increase the speed when searching for new users.
+	If you know that you will never get a new user with the slot number
+	under 300, then choose 300 and the @{"Account Editor" LINK "About Account ED"} will start to
+	search for new users beginning at the slot number 300!
+@endnode
+
+@node "Members Conf 2.10+"
+
+	@{b}Members Conference Lock (Secret conf)@{ub}
+
+	As my board is Virtual European HeadQuarter and main board for
+	all our coming productions and so on in our special member area,
+	I found it very annoying with cosysops giving them selves access
+	to that conference just of curiosity. That problem has now been
+	eliminated with this feature letting the sysop specify a
+	conference where no one can give themselves access too. The only
+	way to give a user access to conference is to use the built in
+	/X editor on the F6 key when someone is currently online!
+@endnode
+
+@node "Members Conf 3.00+"
+
+	@{b}Members Conference Lock (Secret conf)@{ub}
+
+	As my board is Virtual European HeadQuarter and main board for
+	all our coming productions and so on in our special member area,
+	I found it very annoying with cosysops giving them selves access
+	to that conference just of curiosity. That problem has now been
+	eliminated with this feature letting the sysop specify an
+	access level (like Member) which no one can give themselves access
+	too. The only way to give a user access to that access level is
+	to use the built in /X editor on the F6 key when someone is
+	currently online!
+@endnode
+
+@node "Questionary"
+
+	@{b}Questionary@{ub}
+
+        Questionary determines which questionary your new users actually
+        have to answer, so you could have multiple old questionaries.
+        Every time you make a new questionary you have to give it a new number
+        and enter the new number here.
+@endnode
+
+@node "Kickout After X"
+
+	@{b}Kick Out After X@{ub}
+
+	Kickout is a very nice functions which nicely drops the modem carrier
+	when a users presses return one or several times, which you actually
+	can change with this function. The higher number you enter the more
+	times your new user can press return.
+
+	NOTE! If you are gonna use this function you have to turn off the
+	@{"Must-Enter-No-Ret" LINK "Must Enter No Return"} function which disables the users ability to
+	press return.
+@endnode
+
+@node "NewUser Letter"
+
+	@{b}Reciever of Newuser Mail@{ub}
+
+        When a user has entered all questions properly he has got to write a
+        letter to a responsible person on your board. That person's name is
+        what you enter here. If you want all new user mail addressed to
+        yourself you simple enter your name there.
+@endnode
+
+@node "Password Fail"
+
+	@{b}Reciever of Password Failure Mail@{ub}
+
+	If a user fails to enter the password correct after 3 retries
+	the PWFail door will be invoked and the user will be forced
+	to write a letter to the persons described here.
+@endnode
+
+@node "Must Enter No Return"
+
+	@{b}Must Enter No Return@{ub}
+
+	Must Enter Not Return disables the users ability to press return
+	on a specific question in the questionary. This means in practice that
+	user can't just enter blanks on any answers, then there will pop up
+	a little text which says that the user must reenter the question.
+@endnode
+
+@node "Users Allowed"
+
+	@{b}Users Allowed To Use Account ED@{ub}
+
+	The names must be enter in one row and between the pipes at each
+	end of the row i.e. | Delusion |. The characters entered here must
+	be exactly equal to the users real name. Remember that both capital
+	and small letters are counted as two different characters!
+@endnode
+
+@node "Computer List"
+
+	@{b}Computer List@{ub}
+
+	These computer should be equal to the list which you have in
+	BBS:Node(X)/ComputerList, to match your users choice of computer.
+@endnode
+
+@node "Time Zones"
+
+	@{b}Time Zones@{ub}
+
+	2359 and 0730 are the time zones when no one is allowed to enter
+	the @{"Account Editor" LINK "About Account ED"}. 2359 (23:59:00) is the time from when it's not
+	permitted to use the Account ED and 0730 (07:30:00) is the time at
+	the day then you may start to use Account ED again! This is a
+	unique functions which I think Account ED was first with..
+@endnode
+
+
+@node "Path NewUserConf"
+
+	@{b}Path to your Newuser Conference@{ub}
+
+	Here you should enter the full path to your newusers conference.
+	You should / at the end of path if it's to a directory like:
+
+	BBS:Conf-4/
+
+	If it's to an assign or device you just enter Conf4: or DH1:
+
+	Password Fail and Quest uses this path for their messages.
+
+@endnode
+
+@node "AutoAccess Quest"
+
+	@{b}Automatically Give User Access@{ub}
+
+	If this functions is turn on (YES) then Quest will automatically
+	give every user the access of Preset 1. This means that if a
+	user has entered all the questions quest could automatically
+	do the new user upgrading for you.
+
+	However it is adviceable that you then turn the @{"Kickout After X " LINK "Kickout After X"}
+	function on so a user just can't enter crap. Also turn of the
+	@{"MustEnter No Ret" LINK "Must Enter No Return"} function.
+@endnode
+
+@node "Comment"
+
+	@{b}Sysop defined comment of Preset@{ub}
+
+        Comment is the description which will be shown to your cosysop
+        when he presses one of the preset buttons (1-9). This won't affect
+        any of the users status. It's only a help for you cosysops.
+@endnode
+
+@node "SecL"
+
+	@{b}Security Level@{ub}
+
+        SecL is the security level a user will get if he gets that preset
+@endnode
+
+@node "RaT"
+
+	@{b}Type of Ratio@{ub}
+
+        RaT is the type of ratio a user will get!
+
+        0 = Disabled         (Unlimited downloads)
+        1 = Bytes & Files    (Are counted)
+        2 = Files Only       (Are counted)
+@endnode
+
+@node "RaF"
+
+	@{b}File/Byte ratio@{ub}
+
+        Rat is the upload to download ratio. 2 means that a user gotta
+        upload one file to download two files.
+@endnode
+
+@node "Aut"
+
+	@{b}Autorejoin Conference@{ub}
+
+        Aut is the conference in which the user will autorejoin
+@endnode
+
+@node "ByteLimit"
+
+	@{b}Download Byte Limit@{ub}
+
+        ByteLimit is the maximum bytes a user may download/a day
+@endnode
+
+@node "ConfAccess2.10+"
+
+	@{b}Conference Access@{ub}
+
+        ConfAccess (/X 2.39) is a pair of X:s and which tells to which
+        conferences a user has got access. X means access and _ means
+        not access. You only have nine conferences so you can only have
+        nine X or _:s.
+@endnode
+
+@node "ConfAccess3.00+"
+
+	@{b}Conference Access@{ub}
+
+        ConfAccess (/X 3.00) is a name of a status which you have configured
+        with you Icons. For example it could be NewUser or Elite, any name
+        that is configured in your icons file is OK. This will then give
+        that user access to all conferences described within that access
+        level. For further info consult your @{"AmiExpress" LINK "AmiExpress"} Documentation.
+@endnode
+
+@node "TimeLim"
+
+	@{Daily Time Limit@{ub}
+
+        TimeLim is the number of seconds a user may be online/a day.
+@endnode
+
+@node "ANSI Types"
+
+	In AmiExpress 3.0 and higher there is a possibility to choose
+	a different type of ANSI than the normal Amiga ANSI, therefor
+	this function is implemented.
+
+	In tooltypes in /X 3.0 you can configure what your different
+	kind of ANSI should be called. Enter the same name here as
+	you have there. I have given you only 2 spaces for this
+	because I thought that it will do and therefor I don't have
+	to redo my config file.. :)
+
+	For AmiExpress 2.0 users just let the default names stand
+	there as in the AmiEx2.0/AccEd.Presets file! All your users
+	has got Amiga ANSI choosen!
+@endnode
+
+@node "Hints To Gain Higher Security"
+
+	@{b}Hints To Gain Higher Security@{ub}
+
+	To gain the full achievement in security improvement of this door
+	you should take the following steps.
+
+	@{b}1.@{ub} Restrict all files related to this package in your Acp.Startup.
+	   Of course not the log files, but all other files.
+	   If you use Maltes'es Remote shell you should restrict them there
+	   on all subjects.
+
+	@{b}2.@{ub} Newer give your cosysop or any other user on the board the same
+	   security level as you. Preferable is 255 for the sysop and 230
+	   for your cosysops. If you then lock some vital functions inside
+	   Account ED for persons with lower security level than 255 they
+	   could newer gain access to them by any means. This means in
+	   practise that no one could give themselves higher access than
+	   they got which is one important feature of Account ED
+
+	@{b}3.@{ub} You should lock one conference or conference name (AmiEx 3.1)
+	   with the supplied option in the Preset File if you perhaps has
+	   got a secret area to which you only want to give access. It
+	   could perhaps be your groups member areas. If you have a cosysop
+	   from another group it wouldn't be nice if he gave himself access!
+
+	@{b}4.@{ub} If you do not want people editing account then you are asleep
+	   you should enter the Time Zones on which it is allowed to use
+	   the @{"Account Editor" LINK "About Account ED"}. I've set them to 2359 to 0730 which means
+	   you could only enter the account editor between 07:31 to 23:58
+
+	@{b}5.@{ub} Isn't that enough? Well then you could define a password that
+	   must be entered each time you start the Account Editor. You
+	   can find this in the Preset File!
+
+	@{b}6.@{ub} Do you feel insecure about what your sysop does to your
+	   users accounts? Then you should use the feature which logs
+	   every action that is taken. If an account is read or written
+	   who's account and so on. There are 4 levels of login option
+	   which of course is configurable in the Preset File..
+
+	@{b}7.@{ub} Your cosysops doesn't need to see other users passwords so why
+	   don't you just turn off that function for all users with lower
+	   security level than 255. This will cause the Account Editor
+	   to display "Not Displayed" in the account instead of the users
+	   real password. This goes for the questionaries that it showed
+	   with the / key (then you're editing the users account)
+
+	@{b}8.@{ub} Problem with your friends looking over your shoulder when you
+	   edit your users accounts (yes the passwords are displayed, when
+	   you the master uses it) so what could you do? You could disable
+	   the feature which automatically displays a users password if
+	   you have the view password status so you have to press a key to
+	   toggle the users password. Configure this in the Preset File.
+
+	@{b}9.@{ub} If you just want to disable some of the tools that comes with
+	   the Account Editor you could just set the security level for
+	   those function high. You can give passwords for deleting users
+	   questionaries and so on.
+
+       @{b}10.@{ub} You should put your User.Data and Keys in another path than BBS:
+
+	   Account ED could read it from any path you desire. Just enter
+	   your path in the Preset File. This is to prevent you from lame
+	   programmers BBS viruses. You can change the location in the
+	   @{"AmiExpress" LINK "AmiExpress"} Acp.Startup too.
+
+	   I hope this will help you some and I can only which you luck! :)
+
+@endnode
+
+@node "Greetings"
+
+	@{b}Greetings@{ub}
+
+	@{i}My regards has to go to the following people in no order.@{ui}
+
+	Norad of Unicorn		»» You're the best man
+	D-Zire of Doodles		»» Thanx for all things m8
+	Empire of Submission		»» Rip my routines !? :)
+	Ice of Doodles			»» Get your board running again, please
+	Kid Curry of Classic		»» The beta tester of AccED for /X 3.0
+	Fox 'N' Philix of Quartex	»» For being my cool cosysops
+	Pennywise of Quartex		»» When do you call me again !?
+	Jac of Doodles			»» You finaly found a group :)
+	Arvid Tuba of Hardcore Design	»» Hope to see ya at a party (SÄPO !?)
+	AmigaSpirit			»» This man is the coolest party dude!
+	Chucky of Virtual		»» Trouble with the Police lately?
+	It of Justice			»» Thanx for comments and calling me!
+	Ace Caze of Obscene		»» You are the laziest person I know!
+
+	A little request to the @{"/X Development Team" LINK "AmiExpress"}.. Could you possibly
+	make a routine so you could define a door that should be used instead
+	of the built in Name, Password, Phone number routines in the Sys.Cmd?
+
+	Note to all.. I've closed my board for a while, while I'm finishing
+	the last year of my studies. My board will probably be up and running
+	for the public this summer. For now it's only open for my friends!
+        More info will follow. I will NOT stop developing doors so hopefully
+	there will come some new later on!
+@endnode
+
+@node "Final words .."
+
+	@{b}Final words ..@{ub}
+
+	This util has been developed and updated under a very long period.
+	The first version was made for /X 1.1x so you could imagine.
+	During this time period since July 1992 I've coded more and more
+	utilities for this package and even integrated several doors like
+	Quest, which was a stand-alone door before. This has given the sysop
+	more and more power with these tools and today it covers a wide
+	range of sysop applications. I'm therefore very proud to give you
+	this package which is the result of many hours of hard work.
+
+	Later in 1994 I will start with the hard work to translate these
+	doors to the C language, to improve the speed some. However
+	because these doors are extremely well coded in ARexx, there won't
+	be such a big speed improvement. I will start with the smaller doors
+	of this package and finally take the most complex door, Account ED.
+
+	I hope you will get very much use of these utils and that they
+	will give you some more spare time!
+
+	If I get the chance I hope to have a chat with you at a party,
+	maybe at the Party IV !? (In Denmark) !!!
+
+	I would be grateful if you called GANG BANG and came with complaints,
+	ideas or whatever you may come up with, on all my doors!
+
+	This program is @{"Copyright" LINK "Disclaimer, Copyrights"} Delusion of Virtual and may not be sold in
+	any form or made profitable on without the permission of the author.
+
+	May the force be with you,
+
+	Yours, Delusion of Virtual, Friday 8 April 1994
+
+	@{" Thanks to my Beta Testers " LINK "Beta Testers"}
+ 
+                                                        @{b}A DLS Dezign Prod 94'@{ub}
+@endnode
+
+@node "Beta Testers"
+
+	@{b}Can be reached at my beta testers boards:@{ub}
+
+	Gang Bang	+46(0)554-12133    Chucky of Virtual    DS 21.6k
+			+46(0)554-Private  Chucky of Virtual    DS 16.8k
+
+	Dragons Lair	+46(0)16-147118    Ace Caze of Obscene  DS 16.8k
+
+	Stage Dive	+46(0)16-128047    Nurgle of Obscene	DS 16.8k
+
+	Aces High	+46(0)410-44886    Norad of Unicorn	DS 16.8k
+			+46(0)410-46577    Norad of Unicorn	DS 21.6k
+			+46(0)410-46358    Norad of Unicorn	DS 21.6k
+
+	I want to thank my beta testers Ace Caze, Norad, Chucky, Nurgle and
+	Kid Curry who has done a great job so please call their boards!
+
+	Without their patience and their support & ideas this door wouldn't
+	have reached you, and if it had you probably would have thrown it
+	away becouse of all bugs!
+
+	Special thanks to Ace Case who spelled checked this entire document
+	and let me use the account editor by myself on his board!
+
+	If you wan't to become a beta tester, call one of the above boards
+	and write a message to me! :)
+@endnode
+
+@node "Other Delusion Productions"
+
+	@{b}These are some other doors that I've made ..@{ub}
+
+	MailServer (DNET) ....... Complete Echo Mail Program better than FIDO
+	MailScan (DNET) ......... Scans for new mail on logons
+	Quest ................... New user questionary door
+	Quest View .............. Lets users view the Quest Questionaries
+	Password Fail ........... Let's user write a msg at password failure
+	Security Checker ........ Checks if a user got to high security
+	Sysop Uploader .......... More advanced /X built in
+	File Comment ............ Like a faker utility
+	Virtual Vote ............ Very versatile voting door
+	Connect ................. Emulates another /X board on your board
+	Node Activities ......... A fast and tiny who door
+	News mag ................ Let's you have a magazine online
+	Log Viewer .............. Let's you view all logfiles from my doors
+	Config Ed ............... Config file editor for remote usage
+	Virtual Chart ........... Complement door to Vote for charts
+	LastCallers Util ........ A stunning lastcallers util with cool design
+	WeekTop Util ............ A WeekTop Chart util, the best available
+	DirXShifter ............. Makes your filelists more interesting
+	DirXCleaner ............. Cleans up your old files both on hd and dir
+	ECC Book ................ Booking door for our ECC Party this summer
+	Members ................. A register program for your group members
+@endnode
+
+@node "Account ED Package Histories"
+
+	History for all programs included in the Account ED Package
+
+	@{" Account ED       History " LINK "Account ED History"}
+	@{" F6 Editor        History " LINK "F6 Editor History"}
+	@{" Quest            History " LINK "Quest History"}
+	@{" Quest View       History " LINK "Quest View History"}
+	@{" Password Fail    History " LINK "Password Fail History"}
+	@{" Security Checker History " LINK "Security Checker History"}
+@endnode
+
+@node "Account ED History"
+
+	@{b}@{u}Account ED © Delusion of Virtual 1992, 1993, 1994@{ub}@{uu}
+
+	@{i}Virtual Account ED, History@{ui}
+
+ @{b}08-28-92 V1.00@{ub}
+
+      ° First version & Release version. Everything is new features
+	so I won't tell you them again, just take a closer look at the doc
+
+ @{b}09-04-92 V1.01@{ub}
+
+      ° VERY NASTY BUG found, when you saved an account where you had
+	changed the users name, the user couldn't log in to the BBS because
+	AmiEx couldn't find the name! Fixed!! Puuh, sorry guys! I forgot to
+	save the new name in the user.keys file! The new routine also cleans
+	up the user keys file :)
+      ° Bug fixed with the New Users Scan... I changed some things just
+	before I released the first version and a bug slipped thru, but it
+	now even works greater!!
+      ° You can now specify a conf that no one can give access to i.e. a conf
+	for only the members in your group or so!
+      ° It now writes a line in the CallersLog file:
+	Account Editing... SecLevel: 255 (AccED) Where seclevel is the
+	security level of the person who account edited!
+      ° You can view the log file within the program with the command LOG
+      ° Many opening and closing with the user data file was removed to
+	increase speed while accessing the hard drive, therefor Do not
+	read/write the user data with another program when using Account ED!
+      ° Finally: Take a look at the doc file for more info how to set the NEW
+	CONFIG PARAMETERS provided in this new version! All external files
+	are STILL compatible backwards :)
+
+ @{b}03-27-93 V1.03@{ub} @{i}Major Update for /X 2.35+@{ui}
+
+      ° The program is now fixed for @{"AmiExpress" LINK "AmiExpress"} 2.30+
+      ° Fixed bug then a board had more than 255 users my util freaked out
+      ° Added in extra security checks so you now must have all users who
+        should have access to account ed in a list
+      ° Added in so the sysop can specify a time period when no one is
+        allowed to use account ed, like between 24.00 and 08.00 for instance
+      ° Added in compatibility with Virtual Quest (Questionary Door Helper)
+        so you now only have to push a button to get the users answers while
+        you are account editing that particular user!
+      ° Added in an extra help page inside the @{"Account Editor" LINK "About Account ED"} for all commands
+      ° Added in the new functions like users baud rate, top cps ul/dl i.e.
+      ° Added in so you can give each preset a description so your cosysop
+        knows which preset to give to different users!
+      ° Code optimized and the preset file is NOT compatible backwards!
+
+ @{b}04-05-93 V1.04@{ub} @{i}DeZign@{ui}
+
+      ° The layout of the account editor improved a redesigned
+      ° Due to the sillyness of the /X standard of keys for different
+	functions inside the account editor I have remapped the keyboard
+	functions to be more easy to overview and so on
+      ° Added the computerlist to the preset file for faster program start
+      ° Added in one more option to each preset, Autorejoin conference!
+	this functions is placed in the 5:th row from the left. Please
+	look in the manual for more information.
+      ° Documentation rewritten and freshened up a bit, hope you'll like it!
+      ° Added in built in calculator which will help you adding bytes or
+	subtracting bytes from a users account. It works on everything
+	that has got with the users upload, downloads to do. These are
+	the mathematic chars it can handle, +, -, * and / .. Try it!
+      ° Finally I've managed to retain the information with the last on date
+	so now you can see then a user was last on
+      ° Adding a new feature giving a rating on all users you browse through
+	I'm not really sure yet if this rating is a fair one, haven't tested
+	it yet on so much users, but as far as I can see I think it's pretty
+	fair. It gives a user a rating number depending on how much he
+	has uploaded, downloaded, written and called. If a user has a negative
+	number I really think you should talk with that user!
+      ° You can now press TAB when you have searched for a user and want
+	to continue searching. This goes for the New Users commands as well!
+      ° You can now press SPACE to reload a users account if you have
+	changed something wrong in the account!
+      ° Added in so you could choose a security level for seeing users
+	passwords when browsing through the accounts. If you sets this to 255
+	it means that only the sysop will see different users passwords, but
+	the cosysops could see all other information about a users!
+      ° Added in so you have to push a special button for showing a users
+	password so no one beside you will see it by mistake! This function
+	is toogled, so you can set the default, on / off. Press SHIFT+C
+	to toggle a password. You can't edit a password when not displayed!
+	This idea originally came from Excelsior of Virtual! Thanx m8!
+      ° Password option added to access AccED, wanted by It of Cryptoburners
+
+ @{b}05-01-93 V1.05@{ub} @{i}OptimiZe made at the Gathering II in Norway@{ui}
+
+      ° Search for name routine fastened up around 500% I think,
+	it should now be equal to the built in or even faster!
+      ° Built in message writer to inactive users with a little warning
+	note which says that the user shall upload if he don't want to
+	get deleted. Just press W and the @{"Account Editor" LINK "About Account ED"} will write a msg
+	to the user you are account editing!
+      ° Printer output routine improved and is now faster
+      ° Whole new routine installed, Messagebase cleaner which deletes all
+	your old mail which users have received. Finally there is a util that
+	does that and this one also remembers which the last message you
+	deleted was!
+      ° You can now define in which colour the info in the account editor
+	will be printed with, in the preset file.
+      ° You can now delete a users questionary when you are editing the
+	users account. It has password support so your cosysops don't
+	mess up anything :) Inside the editor is the command D
+      ° Rebuilt the Presets file again, but this time I've included all
+	parameters for both Quest & Account ED which has been inside the
+	source before and made it a lot easier to change in! Please
+	consult the doc file to see how to upgrade your old Preset file
+      ° Help page significantly improved, this time with all commands
+      ° Built in the last command that now makes this door 100% Quest
+	compatible, so from now on all sysop commands in Quest has been
+	removed. Quest will from now on be shipped with Account ED in a new
+	special Account ED Edition.
+      ° A little bug has been reported in version 1.04 of Account ED, then
+	you saved a new users account several times. It has been fixed
+	without my knowledge due to the new Search for User routines
+      ° Give/Take conference access routine partly rewritten
+      ° And as always code optimized, this versions source length is even
+	shorter than the previous one and has got much more powerful commands
+	that's what I call an update!
+
+ @{b}09-01-93 V1.06@{ub} @{i}My dreams come true@{ui} Never released!
+
+      ° Made it 100% /X 3.1 Compatible so it now works on both /X 2.39
+	and /X 3.1. The programs can decide your version and redesign
+	the program functions to work on your version. Many functions
+	remade to suit the new 2.39/3.1 system. You have to change some
+	things in your AccED.Preset file if you have changed to /X 3.1
+	since you last used Account ED. They are well explained in the
+	doc file for this program
+      ° The manual is now rewritten into the AmigaGuide Format which
+	allows you to fast gather the required information. The master
+	behind this stunning conversion is Jens Eriksson
+      ° Redesigned and improved the status window, every action is now
+	displayed and commented
+      ° Remade the UserInfo Tool so it now has got a new style (TBar),
+	has more flexibility and more feature than before. You can now
+	get whatever information you want. (Top uploaders etc)
+      ° Remade the Give Conference Access Tool so it now works faster
+	and has more features
+      ° Optimized the date calculation routine to only 2 lines (8 before)
+      ° Added in the ability to edit user total calls
+      ° Added in the ability to edit user total messages written
+      ° Fixed a new input routine for the @{"Account Editor" LINK "About Account ED"} which is faster
+	and easier to use.
+      ° Implemented the new feature from Quest which lets you load the
+	backup of the users account and save it as the old.
+      ° Account ED always makes a backup when it saves an account, which
+	you later on can load into the old account slot if something goes
+	wrong (the new function above)
+      ° The Last Date On bug fixed, it will now never stand Unknown, sorry
+	should have fixed this bug before!
+      ° The routines to load an account optimized and slightly fastened
+      ° New, Newuser search routine, which should work.. Please let me
+	know if it doesn't work again.. Phew!
+      ° Bug with the built in Calculator if you just pressed return or
+	entered a wrong value, before it would not give you the old upload
+	credits back, it now does
+      ° Fixed bug with the security level option inside the @{"Account Editor" LINK "About Account ED"}
+      ° Remade the load account routine so it works faster
+      ° Remade the save account routine so it works faster
+      ° Fixed bug in the search for a user routine so it now works 100%
+	and you can search on a user's last name too
+      ° The program was so optimized so I saved 100 lines of 630 so the
+	program only takes 529 lines now!!!
+
+ @{b}04-08-94 V2.00@{ub} @{i}Touch Down!@{ui}
+
+      ° Finally this program has landed, every single bug which occurred on
+	AmiExpress 3.9 and later has been fixed. I got the opportunity to
+	install /X 3.9 and fully test the program!
+      ° Cygnus ED like edit function in the Account Editor implemented,
+	however I could have made it even better if I only could have read
+	if a arrow key has been pressed. I would be very happy if someone
+	who knows how to do it could tell me and the editor will be even
+	better than today.
+      ° The editor now tells how long field you may edit with replacing
+	the background colour with blue!
+      ° Compatibility with the new Quest, questionary format implemented
+      ° Check for users upload/download ratio implemented in the userlist
+	which now gives you every possible way of getting the information
+	you could possible want.
+      ° The users language / ASCII choice is now displayed in the editor
+      ° Last date on routine optimized again..
+      ° Bug in the delete routine for Questionaries was fixed!
+      ° Bug in the search routine, due to a new feature fixed!
+      ° Bug in the access tool fixed, which didn't affect the last user
+      ° Added in new functions in the editor for Chat Limit and Used Chat Time
+      ° Added in so you could see what status the user has decided for his
+	questionary (when using / in Account ED)
+      ° Fixed a great bug in the text editor inside Account ED which
+	didn't work when you did pressed a certain key combination
+      ° You now can enjoy all the new pause functions in the Account ED
+	package, they are added everywhere you could find more than one
+	page of text and it uses your default Number of Lines / Screen
+      ° Credit Maintenance Util added, which give almost a second editor
+	to the package. This editor has been added to match the new
+	AmiExpress 3.37 and lets you keep track of your pay users!
+      ° Credit UserList Util added to give you a quick overview of all your
+	credited users and the total amount of money they've paid to your
+	board. Works only on /X3.37 and over!
+      ° Amiga guide and distribution files of the package enhanced and
+	all documentation for the other doors in this package stuffed
+	together with the Account ED Docs, this will hopefully make
+	your installation procedure faster!
+
+	Please note that this release is both for V1.06 and V2.00
+	because the new design in V1.06 was never released!
+@endnode
+
+@node "F6 Editor History"
+
+	@{b}@{u}F6 Editor © Delusion of Virtual 1992, 1993, 1994@{ub}@{uu}
+
+	@{i}F6 Account Editor, History@{ui}
+
+ @{b}04-07-94 V1.01@{ub} @{i}First released in Account ED Package V2.00@{ui}
+
+      ° First released version. This door is a stripped down version of
+	Account ED, so any updates made their will sooner or later come
+	into this door too! This version is 100% the same as AccED V2.0
+      ° If run when someone is not currently online it will launch the
+	normal '1' account editor instead!
+
+	NOTE! Many of the security functions has been removed and password
+	      checks, and such things too. I thought that there wasn't any
+	      need for the sysop to protect him from himself.. By doing this
+	      I've decreased the execution time for the door, now it's only
+	      180 lines (compared to 700 in Account ED) !!
+@endnode
+
+@node "Security Checker History"
+
+	@{b}@{u}Security Checker © Delusion of Virtual 1994@{ub}@{uu}
+
+	@{i}Security Checker, History@{ui}
+
+ @{b}04-08-94 V1.00@{ub}
+
+      ° First released version. Got the idee from The Silencer Door, but
+	thought it would be smart if such a util followed with the
+	Account ED Package, without extra configuration!
+@endnode
+
+@node "Quest History"
+
+	@{b}@{u}Quest, Questionary Helper © Delusion of Virtual 1992, 1993, 1994@{ub}@{uu}
+
+	@{i}Virtual Quest, History@{ui}
+
+ @{b}06-07-92 V1.00@{ub}
+
+      ° Were never officially released due to the lack of functions
+
+ @{b}06-08-92 V1.02@{ub}
+
+      ° The first released version! The most of the functions I had planned
+	were Implemented but I will add some more in the next version!
+
+ @{b}06-09-92 V1.03@{ub}
+
+      ° A User can now read his old application, a separate security status
+	for that was added in the config file, a bug was fixed! When a user
+	had chosen that his answers was NOT correct he was added as a new
+	user for every time he took No.. And it was the same with the log
+	file but it's fixed now! A bug found then a user was in Quest and
+	of some reason got loss off carrier he would be among the new users
+	but his answer file would not exist and the program would then crash!
+	The program now checks if the file exists before trying to open it!
+
+ @{b}06-19-92 V1.06@{ub}
+
+      ° Fixed the bug with the questionary! It now works as it was explained
+	in the manual.. Fixed bug when the program showed an application.
+
+      ° Fixed bug when a user took ? in the sysop menus 2.. It wouldn't dir
+	all users only about half of them..
+
+      ° Added an extra option in the config file from which the sysop now can
+	terrorize the user if the user don't answer all the questions.. The prg
+	will whenever a user just presses return and doesn't write anything
+	write a text that says that the user must enter the questions and then
+	will the program ask the questions again! Very useful against lazy
+	users.. hehe
+
+      ° Added & Fixed so then the user had answered all the questions he/she
+	must either press Y or N to continue, before if you pressed return
+	it only meant the same as a N and some of my users didn't like that..
+
+      ° Added in a new sysop command! You can now DELETE a users applications
+	i.e. if you think the users hasn't answered it seriously or something
+	like that! You also must enter a password to do so which you can
+	change in the config file!
+
+ @{b}04-07-92 V1.07@{ub}
+
+      ° The users name is now fully displayed even if it consists of spaces
+	this has been a nasty bug all the time but I didn't know how to fix
+	it until now..
+
+      ° If you list all the applications it will know display it two & two
+	it was a bit hard to read before, it took all day..
+
+      ° File note will now append the whole name but if it consists of spaces
+	it will replace each space with a '-'..
+
+      ° The routine to read applications who was saved with the answers only
+	was optimized and works much faster!
+
+      ° All menus and texts has been optimized and you will see a large
+	speed improvement in the program!!!
+
+      ° Some minor bugs was fixed but you will probably not notice any
+	difference at all.
+
+      ° Different questionarys at the same time added! I.e. if you have used
+	the function save answers only and you want to change your questionary
+	you will doubtless get into some serious trouble.. You either have to
+	change all your application by yourself (huu) or use this new version
+	of Quest which keeps track on from which questionary the answers came!
+	If you have old applications quest will simple enough take it for
+	granted that they where questioned by questions.1! If you now want
+	a new questionary just create a new one and name it questions.2 and
+	put it in the same dir as questions.1, then you only has got to change
+	the default questionary in the config file to 2! (The variable
+	Questionary in the file Quest.CFG)
+
+ @{b}07-10-92 V1.08@{ub}
+
+      ° The delete password is now not displayed on the screen when you
+	write it in, there will only be * displayed instead of each char!
+
+      ° A bunch of bugs fixed & the list all applications routine was
+	optimized again and is now even faster...
+
+      ° Added in so Quest will write a line in the callerslog if anyone
+	deletes the new users log or a users application and of course in
+	colour!
+
+ @{b}08-11-92 V1.09@{ub}
+
+      ° You can now search for an application with the users name instead
+	of only the slot number.
+
+      ° The listening routine for all users has been redone and is now
+	much faster. It gets it's info from the log file nowadays.
+
+      ° All external Dos commands where changed to use internal functions
+	that are built in the Rexxsyslib.library, thus the FileNote command
+	are still loaded from CLI so please have patience with that.
+
+      ° Many bugs where changed and some unnecessary crap was removed from
+	the source! This time it shall WORK!
+
+      ° This version is only an appetizer for version V1.10 with built in
+	account ed! So please hold on..
+
+ @{b}05-01-93 V1.10@{ub} @{i}Major Update for /X 2.35+@{ui}
+
+      ° Finally the time for an update has come and it has been worth waiting
+	for. What have happened is that all sysop commands has been built in
+	to Account ED instead for more efficient and faster user updates.
+	Therefor has that code been removed from Quest, and the remaining
+	code has been optimized and sometime rewritten. Here are the new
+	features!
+      ° Added in MCI like commands that will show certain info from the
+	questionary in the users account (using Account ED) in coming versions
+	of Account ED, this feature is only built in Quest today, but soon
+	in Account ED too more info in the Doc file.
+      ° All configuration values now are loaded from Account Ed's preset file
+	AccEd.Presets
+      ° Built in automatic user upgrader so your user can automatically gain
+	access after answering the questions. They will get the first preset
+	into the AccEd.Presets file if this function is turned on.
+      ° Forces all new users to write a letter to sysop about themselves thru
+	a built in mail program
+      ° Automatically hangs up after the user answered all questions and
+	written the letter to sysop if not AutoAccess is on
+      ° Gives the user a opportunity to operate sysop before it hangs up
+      ° Drops carrier if a user press a defined number of returns
+      ° Prompts that the user must answer all questions if a user press return
+	and ask the question again (it's configurable)
+      ° Automatically deletes the questionary which may exists on the new
+	users slot number and moves the one deleted questionary to the QuestDel
+	directory and renames it to the users name who answered it so there
+	will never be a problem if you forgets to delete a users questionary
+	you've deleted!
+      ° Old users who answers the questions will not be thrown out and
+	doesn't have to write a letter to sysop. Useful if you want all
+	your old users to answer you questions with quest instead
+      ° Code optimized and almost rewritten
+
+	V1.10 Fix (Released separately)
+
+      ° Bug with the message from new user to sysop fixed, I didn't find it
+	then I tested the program because it only shows then someone actually
+	is calling as a new user. But now it works great! (You have to change
+	in your AccEd.Preset file, more info on that in preset config text)
+
+ @{b}04-08-94 V1.12@{ub} @{i}Made for Account ED Package V2.00@{ui}
+
+      ° With the release of Quest View I needed to do some changes to this
+	door as well. First of all it now reads the questionary in the new
+	standard and it asks if a user wants his questionary private or not
+      ° The *.DAT files has been 20 bytes larger to cover some of the extra
+	bits needed to indicate if a user wants his questionary private or
+	not, it has also 19 free bytes for future enhancements!
+      ° Error in the letter handling fixed to work also on /X 3.0+
+      ° There were a little bug which didn't save the last line of the users
+	questionary.. It has now been corrected!
+      ° Bug fix in the routine for removing old questionaries, when a new
+	user logs into an old users slot number
+      ° Quest is now able to detect the difference between a deleted
+	account and a new user who logs in, so if you already has answered
+	the questions and runs quest again, you won't have to answer the
+	questions again. This is useful if you have Quest as a MCI command
+	in a login bulletin which all users sees, this will force all users
+	who hasn't answered the questionary to do so!
+      ° Quest is now fixed to work with the new Preset file for V2.00
+      ° You now can choose if your questionary should be secret for other
+	users on the board!
+@endnode
+
+@node "Quest View History"
+
+	@{b}@{u}Quest View © Delusion of Virtual 1993, 1994@{ub}@{uu}
+
+	@{i}Quest View, History@{ui}
+
+ @{b}04-08-93 V1.00@{ub}
+
+      ° First version made. I got the idea when I called a PC Board, where
+	you could look up other users information and I thought, hey maybe
+	I should use the information stored in the questionaries for this
+	and here the util is. I hope your users will like it!
+
+      ° Added in the feature to also display some info from the user data
+	about the users (Asked by Chucky of Virtual)
+@endnode
+
+@node "Password Fail History"
+
+	@{b}@{u}PW Fail, Password Fail © Delusion of Virtual 1992, 1993, 1994@{ub}@{uu}
+
+	@{i}PW Fail, History@{ui}
+
+ @{b}05-08-93 V1.00@{ub}
+
+      ° First version created due to the lack of good PW Fail doors in
+	my /X conference.. There maybe is some that's better than my
+	out there, but never mind! :)
+
+ @{b}11-25-93 V1.01@{ub} @{i}First released in Account ED Package V2.00@{ui}
+
+      ° Some smaller bugs corrected
+      ° Error in the letter handling fixed to work also on /X 3.0+
+@endnode

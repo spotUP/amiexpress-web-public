@@ -1,0 +1,92 @@
+
+Conference Top Uploaders v2.1 by Bobo (Mystic/X-Design) & Looby (Insane/X Dev)
+==============================================================================
+           { + }-New feature(s)         { - }-Removed feature
+           { * }-changed feature        { ! }-fixed feature (Bug)
+           { # }-Information            { ? }-let me know if this work
+
+Conftop v1.0 (09-18-93 > 10-15-93) - [Private version for my board]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+               First version, coded in Arexx by Bobo
+                 Private version for my own board!
+
+09-18-93 { + } I started coding this door.
+ - ^^ -  { + } Main source for updating uploads in datafiles.
+ - ^^ -  { + } Showing output in conference routine coded.
+09-19-93 { + } Now using a configfile.
+09-20-93 { + } Now showing total upload stats at the bottom.
+09-22-93 { # } Optimized the sourcecode :> Now: 6502 Before: 7523
+09-23-93 { * } Now using a own sort routine instaid of using WB's SORT.
+               Also abit useless code removed (Now size: 6229)
+ - ^^ -  { # } Optimized the sourcecode :> Now: 5687 Before: 6229
+10-01-93 { ! } You can now choose how many uploaders you want in a conference.
+10-02-93 { * } Now using a own showfile routine instaid of using amiexpress's
+               that is abit slow.
+ - ^^ -  { + } Now configuable playpen paths in configfile.
+ - ^^ -  { + } Now changing stat to 'Joining a conf' when running from
+               Bull20.txt, and 'Uploading' when running from Filecheck.
+ - ^^ -  { ? } Crashed sometimes on A4000/040. Changed some init codes. I
+               *think* it works now.
+10-03-93 { # } Optimized the sourcecode :> Now: 5439 Before: 6012
+               (Alot of useless code & routines removed)
+10-07-93 { + } Now you can launch a door after conftop in filecheck.
+         { # } ^ NOTE: All type of Doors without AREXX doors works ^
+10-10-93 { ! } Didnot give the launched door the right filename.
+10-11-93 { * } Changed the output design abit. Now some more chars for
+               username and location.
+ - ^^ -  { + } Recoded the source so i was able to compile it.
+
+Conftop v1.1 (10-16-93 > 11-02-93) - [Only Availible for Betatesters]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+              Still coded in Arexx. First beta-version.
+
+10-16-93 { # } Since Nightshade didn't want to waste his time on coding
+               this door in C, i decided to update it abit.
+ - ^^ -  { * } Now 50% faster when joining a conference. Conftop are now
+               sorting & updating when you have uploaded a file.
+10-16-93 { ? } Fixed for multinode systems. Tell me if this works!?
+10-17-93 { ! } Didn't create a new datafile if it didn't exists one.
+10-23-93 { ! } ALOT of bugs found in the compiled version. Rewritten alot
+               of functions to make it work 100%!
+
+Conftop v2.0 (11-02-93 > 12-11-93) - [Only Availible for Betatesters]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Talked abit with Looby, and we started to make conftop coded in C.
+                      Totaly new version...
+
+11-02-93 { + } LOOBY: Coded the mainprogram.
+11-05-93 { + } BOBO : Coded the message structure to write messages.
+11-10-93 { * } LOOBY: Datafile now in binery.
+11-13-93 { + } BOBO : Now displaying total uploads and you can launch a
+                      door after.
+11-15-93 { + } BOBO : Coded a new object file, since the one we used was
+                      to old, and didnot support filechecking.
+                      Many thanx to Byteandi for all help!
+11-20-93 { + } LOOBY: New reset routine that shows ex. Day: (1/7).
+11-24-93 { + } BOBO : Now showing statistics.
+11-25-93 { + } BOBO : Displaying statistics is now configuable in the
+                      configfile.
+
+Conftop v2.1 (12-11-93 > 02-05-94) - [Only Availible for Betatesters]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ Recoded conftop. Now more optimized and faster. The code size is now
+                  about 20k less then old version.
+
+12-11-93 { * } BOBO : Started recoding and optimize conftop.
+ - ^^ -  { * } BOBO : Totaly new configuration program coded.
+12-15-93 { + } BOBO : Now using SAS/C 6.50. Coool..
+12-18-93 { ! } BOBO : Now an 100% working send message routine.
+12-25-93 { ! } LOOBY: Now an 100% working fixbytes routine.
+12-27-93 { ! } LOOBY: Now an 100% working sort routine.
+12-28-93 { ! } BOBO : Now locking msgbase correctly.
+01-13-94 { * } BOBO : Some new design improvments.
+01-17-94 { * } BOBO : Changed each line to 78 chars, since pc only support max
+                      79 chars / line.  Before: 80 chars / line.
+01-19-94 { ! } BOBO : Now starting filecheck when user is found in excludefile.
+01-29-94 { ! } LOOBY: New sort routine (again!). Optimized and a tiny bug fixed.
+01-31-94 { * } LOOBY: New fixbytes routine (again!). Optimized!
+02-05-94 { ! } LOOBY: Sort routine bugfixed (again!!)
+
+Conftop v2.2 (02-05-94) - [First Public Release Version]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+           First Public release version!
