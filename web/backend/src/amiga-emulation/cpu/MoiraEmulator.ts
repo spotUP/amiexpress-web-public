@@ -8,11 +8,12 @@ export interface MoiraCPU {
   setMemoryByte(addr: number, value: number): void;
   getMemoryByte(addr: number): number;
   loadProgram(program: Uint8Array, address: number): void;
+  loadROM(romData: Uint8Array): void;
   resetCPU(): void;
   executeCycles(cycles: number): number;
   getRegister(reg: number): number;
   setRegister(reg: number, value: number): void;
-  setTrapHandler(handler: (offset: number) => void): void;
+  getCycles(): number;
   delete(): void;
 }
 
@@ -29,16 +30,32 @@ export enum CPURegister {
 export class MoiraEmulator {
   private module: MoiraModule | null = null;
   private cpu: MoiraCPU | null = null;
-  private trapHandler: ((offset: number) => void) | null = null;
 
-  constructor(private memorySize: number = 1024 * 1024) {} // Default 1MB
+  constructor(private memorySize: number = 16 * 1024 * 1024) {} // 16MB for full 24-bit address space
 
   async initialize(): Promise<void> {
     // Load the WASM module
     const createMoiraModule = require('./build/moira.js');
     this.module = await createMoiraModule();
     this.cpu = new this.module.MoiraCPU(this.memorySize);
-    this.cpu.resetCPU();
+    // Don't reset yet - wait until ROM is loaded
+  }
+
+  loadROM(romData: Uint8Array): void {
+    if (!this.cpu || !this.module) throw new Error('Emulator not initialized');
+
+    // Convert Uint8Array to Emscripten vector
+    const vec = new (this.module as any).VectorUint8();
+    for (let i = 0; i < romData.length; i++) {
+      vec.push_back(romData[i]);
+    }
+
+    this.cpu.loadROM(vec);
+    vec.delete();
+
+    console.log(`[MoiraEmulator] ROM loaded (${romData.length} bytes)`);
+    console.log(`[MoiraEmulator] ROM mapped to 0xF80000-0xFFFFFF`);
+    console.log(`[MoiraEmulator] Exception vectors copied to 0x000000`);
   }
 
   loadProgram(binary: Uint8Array, address: number = 0x1000): void {
@@ -84,10 +101,60 @@ export class MoiraEmulator {
     this.cpu.setMemoryByte(address, value);
   }
 
-  setTrapHandler(handler: (offset: number) => void): void {
+  getCycles(): number {
     if (!this.cpu) throw new Error('Emulator not initialized');
-    this.trapHandler = handler;
-    this.cpu.setTrapHandler(handler);
+    return this.cpu.getCycles();
+  }
+
+  // Helper methods for 16-bit and 32-bit memory access
+  readMemory16(address: number): number {
+    const high = this.readMemory(address);
+    const low = this.readMemory(address + 1);
+    return (high << 8) | low;
+  }
+
+  readMemory32(address: number): number {
+    const high = this.readMemory16(address);
+    const low = this.readMemory16(address + 2);
+    return ((high << 16) | low) >>> 0;  // Unsigned 32-bit
+  }
+
+  writeMemory16(address: number, value: number): void {
+    this.writeMemory(address, (value >> 8) & 0xFF);
+    this.writeMemory(address + 1, value & 0xFF);
+  }
+
+  writeMemory32(address: number, value: number): void {
+    this.writeMemory16(address, (value >> 16) & 0xFFFF);
+    this.writeMemory16(address + 2, value & 0xFFFF);
+  }
+
+  /**
+   * Read a null-terminated string from memory
+   * @param address Starting address
+   * @param maxLength Maximum length to read (default 256)
+   * @returns The string read from memory
+   */
+  readString(address: number, maxLength: number = 256): string {
+    const bytes: number[] = [];
+    for (let i = 0; i < maxLength; i++) {
+      const byte = this.readMemory(address + i);
+      if (byte === 0) break; // Null terminator
+      bytes.push(byte);
+    }
+    return String.fromCharCode(...bytes);
+  }
+
+  /**
+   * Write a null-terminated string to memory
+   * @param address Starting address
+   * @param str String to write
+   */
+  writeString(address: number, str: string): void {
+    for (let i = 0; i < str.length; i++) {
+      this.writeMemory(address + i, str.charCodeAt(i));
+    }
+    this.writeMemory(address + str.length, 0); // Null terminator
   }
 
   cleanup(): void {
