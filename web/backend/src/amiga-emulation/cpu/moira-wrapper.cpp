@@ -134,6 +134,18 @@ public:
         // Mask to 24-bit address space
         addr &= 0xFFFFFF;
 
+        // DEBUG: Log ALL writes at PC near 0x10ee with register state
+        int pc = this->reg.pc;
+        if (pc >= 0x10e0 && pc <= 0x1100) {
+            int d0 = this->reg.d[0];
+            int a4 = this->reg.a[4];
+            int sp = this->reg.a[7];
+            EM_ASM({
+                console.log('[MOIRA write16] PC=0x' + $0.toString(16) + ': Writing 0x' + $1.toString(16).padStart(4, '0') + ' to address 0x' + $2.toString(16));
+                console.log('[MOIRA write16]   D0=0x' + $3.toString(16) + ', A4=0x' + $4.toString(16) + ', SP=0x' + $5.toString(16));
+            }, pc, val, addr, d0, a4, sp);
+        }
+
         // Handle memory-mapped I/O regions
         if (addr >= CIA_START && addr <= CIA_END) {
             writeCustom16(addr, val);
@@ -395,6 +407,13 @@ public:
 
     // Set registers
     void setRegister(int reg, uint32_t value) {
+        // DEBUG: Log when D0 is being set
+        if (reg == 0) {
+            EM_ASM({
+                console.log('[MOIRA setRegister] Setting D0 to 0x' + $0.toString(16));
+            }, value);
+        }
+
         if (reg < 8) this->reg.d[reg] = value;
         else if (reg < 16) this->reg.a[reg - 8] = value;
         else if (reg == 16) {
@@ -403,11 +422,48 @@ public:
             this->reg.pc0 = value;
         }
         else if (reg == 17) setSR(value);
+
+        // DEBUG: Verify D0 was actually set
+        if (reg == 0) {
+            uint32_t verify = this->reg.d[0];
+            EM_ASM({
+                console.log('[MOIRA setRegister] Verified D0 is now: 0x' + $0.toString(16));
+            }, verify);
+        }
     }
 
     // Get total cycles executed
     int64_t getCycles() {
         return getClock();
+    }
+
+    // Prefetch queue access (critical for proper PC changes!)
+    uint16_t getIRC() {
+        return Moira::getIRC();
+    }
+
+    void setIRC(uint16_t val) {
+        Moira::setIRC(val);
+    }
+
+    uint16_t getIRD() {
+        return Moira::getIRD();
+    }
+
+    void setIRD(uint16_t val) {
+        Moira::setIRD(val);
+    }
+
+    // Refill prefetch queue after changing PC
+    void refillPrefetch() {
+        // Read instruction at current PC
+        u16 opcode = read16(this->reg.pc);
+        // Set both IRC and IRD to the new instruction
+        setIRC(opcode);
+        setIRD(opcode);
+        EM_ASM({
+            console.log('[MOIRA] Prefetch queue refilled at PC=0x' + $0.toString(16) + ', opcode=0x' + $1.toString(16).padStart(4, '0'));
+        }, this->reg.pc, opcode);
     }
 };
 
@@ -424,6 +480,7 @@ EMSCRIPTEN_BINDINGS(moira_module) {
         .function("getRegister", &MoiraCPU::getRegister)
         .function("setRegister", &MoiraCPU::setRegister)
         .function("getCycles", &MoiraCPU::getCycles)
+        .function("refillPrefetch", &MoiraCPU::refillPrefetch)
         ;
 
     register_vector<uint8_t>("VectorUint8");

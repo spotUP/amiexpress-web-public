@@ -73,8 +73,18 @@ export class MoiraEmulator {
 
   execute(cycles: number = 1000): number {
     if (!this.cpu) throw new Error('Emulator not initialized');
+    // Log first 5 execute calls to debug
+    if (!this.executeCallCount) this.executeCallCount = 0;
+    this.executeCallCount++;
+    if (this.executeCallCount <= 5) {
+      const pc = this.cpu.getRegister(16);
+      const sp = this.cpu.getRegister(15);
+      console.log(`[MoiraEmulator] execute() call #${this.executeCallCount}: PC=0x${pc.toString(16)}, SP=0x${sp.toString(16)}, cycles=${cycles}`);
+    }
     return this.cpu.executeCycles(cycles);
   }
+
+  private executeCallCount?: number;
 
   reset(): void {
     if (!this.cpu) throw new Error('Emulator not initialized');
@@ -83,12 +93,28 @@ export class MoiraEmulator {
 
   getRegister(reg: CPURegister): number {
     if (!this.cpu) throw new Error('Emulator not initialized');
-    return this.cpu.getRegister(reg);
+    const value = this.cpu.getRegister(reg);
+
+    // CRITICAL: Mask PC to 24-bit address space (0x000000 - 0xFFFFFF)
+    // Moira can return values outside this range during batch execution
+    if (reg === CPURegister.PC) {
+      return value & 0xFFFFFF;
+    }
+
+    return value;
   }
 
   setRegister(reg: CPURegister, value: number): void {
     if (!this.cpu) throw new Error('Emulator not initialized');
+    // DEBUG: Log D0 sets
+    if (reg === 0 && value === 0x20000) {
+      console.log(`[MoiraEmulator.ts] setRegister(D0, 0x${value.toString(16)}) called`);
+    }
     this.cpu.setRegister(reg, value);
+    if (reg === 0 && value === 0x20000) {
+      const verify = this.cpu.getRegister(0);
+      console.log(`[MoiraEmulator.ts] After setRegister, getRegister(D0) returns: 0x${verify.toString(16)}`);
+    }
   }
 
   readMemory(address: number): number {
@@ -155,6 +181,15 @@ export class MoiraEmulator {
       this.writeMemory(address + i, str.charCodeAt(i));
     }
     this.writeMemory(address + str.length, 0); // Null terminator
+  }
+
+  /**
+   * Refill the instruction prefetch queue
+   * CRITICAL: Must be called after changing PC to ensure Moira executes the correct instruction!
+   */
+  refillPrefetch(): void {
+    if (!this.cpu) throw new Error('Emulator not initialized');
+    this.cpu.refillPrefetch();
   }
 
   cleanup(): void {

@@ -2598,6 +2598,84 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
     }
 
+    case 'MULTITOP': { // MultiTop - Top users door from reference-board
+      try {
+        console.log('[MULTITOP] Starting MultiTop door...');
+        const { AmigaDoorSession } = await import('../amiga-emulation/AmigaDoorSession');
+        const doorPath = path.join(process.cwd(), '../../doors/MultiTopDoor');
+
+        console.log(`[MULTITOP] Door path: ${doorPath}`);
+
+        if (!fs.existsSync(doorPath)) {
+          socket.emit('ansi-output', '\r\n\x1b[31mMultiTop door not found!\x1b[0m\r\n');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.menuPause = false;
+          return;
+        }
+
+        socket.emit('ansi-output', '\r\n\x1b[36mStarting MultiTop (37KB)...\x1b[0m\r\n\r\n');
+
+        const amigaSession = new AmigaDoorSession(socket, {
+          executablePath: doorPath,
+          timeout: 600,
+          bbsSession: { nodeId: 0, user: session.user }
+        });
+
+        await amigaSession.start();
+
+        socket.emit('ansi-output', '\r\n\x1b[32mMultiTop door session completed.\x1b[0m\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = false;
+      } catch (error) {
+        console.error('[MULTITOP] Fatal error:', error);
+        socket.emit('ansi-output', '\r\n\x1b[31mError starting MultiTop door:\x1b[0m\r\n');
+        socket.emit('ansi-output', `${(error as Error).message}\r\n`);
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = false;
+      }
+      return;
+    }
+
+    case 'WH': { // What - Test door with message ports
+      try {
+        console.log('[WH] Starting What door...');
+        const { AmigaDoorSession } = await import('../amiga-emulation/AmigaDoorSession');
+        // Door path
+        const doorPath = path.join(process.cwd(), '../../Doors/What/WHAT');
+
+        console.log(`[WH] Door path: ${doorPath}`);
+
+        if (!fs.existsSync(doorPath)) {
+          socket.emit('ansi-output', '\r\n\x1b[31mWhat door not found!\x1b[0m\r\n');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.menuPause = false;
+          return;
+        }
+
+        socket.emit('ansi-output', '\r\n\x1b[36mStarting What door (AEDoorPort test)...\x1b[0m\r\n\r\n');
+
+        const amigaSession = new AmigaDoorSession(socket, {
+          executablePath: doorPath,
+          timeout: 600,
+          memorySize: 1024 * 1024
+        });
+
+        await amigaSession.start();
+
+        socket.emit('ansi-output', '\r\n\x1b[32mWhat door session completed.\x1b[0m\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = false;
+      } catch (error) {
+        console.error('[WH] Fatal error:', error);
+        socket.emit('ansi-output', '\r\n\x1b[31mError starting What door:\x1b[0m\r\n');
+        socket.emit('ansi-output', `${(error as Error).message}\r\n`);
+        socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = false;
+      }
+      return;
+    }
+
     default:
       socket.emit('ansi-output', `\r\nUnknown command: ${command}\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');

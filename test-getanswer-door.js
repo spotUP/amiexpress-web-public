@@ -97,34 +97,40 @@ async function testGetAnswerDoor() {
     await page.goto(BBS_URL, { waitUntil: 'networkidle2' });
 
     console.log('Waiting for terminal to connect...');
-    await sleep(3000);
+    await sleep(1500);
 
     // Check if we see login prompt
     const bodyText = await page.evaluate(() => document.body.innerText);
     console.log('\nCurrent screen:', bodyText.substring(0, 200));
 
+    // CRITICAL: Answer ANSI prompt first!
+    console.log('\nAnswering ANSI prompt with A');
+    await page.keyboard.type('A');
+    await page.keyboard.press('Enter');
+    await sleep(750);
+
     // Type sysop username
-    console.log('\nTyping username: sysop');
+    console.log('Typing username: sysop');
     await page.keyboard.type('sysop');
     await page.keyboard.press('Enter');
-    await sleep(1500);
+    await sleep(750);
 
     // Type password
     console.log('Typing password: sysop');
     await page.keyboard.type('sysop');
     await page.keyboard.press('Enter');
-    await sleep(3000);
+    await sleep(1500);
 
     // Should be at main menu now
     console.log('\n--- Should be at main menu ---');
-    await sleep(1000);
+    await sleep(500);
 
     // Press Enter a few times to get past any screens
     console.log('Pressing Enter to get past screens...');
     await page.keyboard.press('Enter');
-    await sleep(1000);
+    await sleep(500);
     await page.keyboard.press('Enter');
-    await sleep(1000);
+    await sleep(500);
 
     // Execute GA command (GetAnswer door)
     console.log('\n=== EXECUTING GA COMMAND (GetAnswer Door) ===');
@@ -133,7 +139,7 @@ async function testGetAnswerDoor() {
 
     // Wait for door to execute and library traps to fire
     console.log('Waiting for door to execute and library traps to fire...');
-    await sleep(5000);
+    await sleep(2500);
 
     // Check screen content
     const finalText = await page.evaluate(() => document.body.innerText);
@@ -142,7 +148,7 @@ async function testGetAnswerDoor() {
 
     // Give more time for logs to appear
     console.log('\nWaiting for final log messages...');
-    await sleep(3000);
+    await sleep(1500);
 
   } catch (error) {
     console.error('Error during test:', error);
