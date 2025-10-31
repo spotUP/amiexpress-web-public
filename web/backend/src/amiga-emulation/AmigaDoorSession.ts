@@ -376,6 +376,100 @@ export class AmigaDoorSession {
     const verifyFinalPC = this.emulator.getRegister(16);
     const verifyFinalA0 = this.emulator.getRegister(8);
     console.log(`[AmigaDoorSession] END OF loadDoor(): SP=0x${verifyFinalSP.toString(16)}, PC=0x${verifyFinalPC.toString(16)}, A0=0x${verifyFinalA0.toString(16)}`);
+
+    // CRITICAL FIX: Write AEDoorPort0 address to memory location 0xac
+    // Discovery from A0 monitoring: Door reads port address from 0xac at iteration 168
+    // The door loads A0 from this memory location instead of using FindPort()
+    console.log(`[AmigaDoorSession] ===============================================`);
+    console.log(`[AmigaDoorSession] CRITICAL FIX: Writing port address to memory[0xac]`);
+    console.log(`[AmigaDoorSession] ===============================================`);
+    this.emulator.writeMemory32(0xac, this.doorPortAddress);
+    const verifyMemory = this.emulator.readMemory32(0xac);
+    console.log(`  Memory[0xac] = 0x${verifyMemory.toString(16)} (AEDoorPort0 address)`);
+    console.log(`[AmigaDoorSession] Door will now read correct port address from memory!`);
+    console.log(`[AmigaDoorSession] ===============================================\n`);
+
+    // Initialize A0 monitoring to track when it gets overwritten
+    this.lastA0Value = verifyFinalA0;
+    console.log(`[AmigaDoorSession] Starting A0 monitoring - will detect when door overwrites 0x${verifyFinalA0.toString(16)}`);
+  }
+
+  /**
+   * Monitor A0 register changes during door execution to find where port address gets overwritten
+   * This helps us identify where the door reads the garbage 0x7500002f value
+   */
+  private lastA0Value: number = 0;
+  private a0ChangeDetected: boolean = false;
+
+  private checkA0RegisterChange(): void {
+    if (this.a0ChangeDetected || !this.emulator) return;
+
+    const currentA0 = this.emulator.getRegister(8);
+
+    // Check if A0 changed from our initialized value (0xa0000)
+    if (this.lastA0Value === 0xa0000 && currentA0 !== 0xa0000) {
+      this.a0ChangeDetected = true;
+
+      console.log('\n[AmigaDoorSession] ===============================================');
+      console.log('[AmigaDoorSession] *** A0 REGISTER CHANGED! ***');
+      console.log('[AmigaDoorSession] ===============================================');
+      console.log(`[AmigaDoorSession] Old A0: 0x${this.lastA0Value.toString(16)}`);
+      console.log(`[AmigaDoorSession] New A0: 0x${currentA0.toString(16)}`);
+      console.log(`[AmigaDoorSession] PC: 0x${this.emulator.getRegister(16).toString(16)}`);
+      console.log(`[AmigaDoorSession] SP: 0x${this.emulator.getRegister(15).toString(16)}`);
+      console.log(`[AmigaDoorSession] Iteration: ${this.iterationCount}`);
+      console.log('[AmigaDoorSession]');
+      console.log('[AmigaDoorSession] Reading memory around current PC:');
+
+      const pc = this.emulator.getRegister(16);
+      const bytes: string[] = [];
+      for (let i = -8; i <= 16; i++) {
+        bytes.push(this.emulator.readMemory(pc + i).toString(16).padStart(2, '0'));
+      }
+      console.log(`[AmigaDoorSession] Memory at PC-8 to PC+16: ${bytes.join(' ')}`);
+
+      console.log('[AmigaDoorSession]');
+      console.log('[AmigaDoorSession] Checking if A0 value was loaded from memory:');
+
+      // Check common patterns:
+      // 1. Direct load from absolute address
+      // 2. Load from offset off A4, A5, A6 (base registers)
+      // 3. Load from stack
+
+      // Try to find memory location containing the new A0 value
+      const searchValue = currentA0;
+      const foundLocations: number[] = [];
+
+      // Search in common areas
+      const searchAreas = [
+        { start: 0x0, end: 0x1000, name: 'Low memory (vectors/globals)' },
+        { start: 0x8000, end: 0x9000, name: 'AllocMem area' },
+        { start: 0xfdf00, end: 0xfe100, name: 'Stack area' }
+      ];
+
+      for (const area of searchAreas) {
+        for (let addr = area.start; addr <= area.end - 4; addr += 2) {
+          const value = this.emulator.readMemory32(addr);
+          if (value === searchValue) {
+            foundLocations.push(addr);
+          }
+        }
+      }
+
+      if (foundLocations.length > 0) {
+        console.log(`[AmigaDoorSession] Found A0 value (0x${searchValue.toString(16)}) in memory at:`);
+        foundLocations.forEach(addr => {
+          console.log(`[AmigaDoorSession]   - 0x${addr.toString(16)}`);
+        });
+      } else {
+        console.log(`[AmigaDoorSession] Value 0x${searchValue.toString(16)} not found in searched memory areas`);
+        console.log(`[AmigaDoorSession] Might be computed or loaded from unmapped area`);
+      }
+
+      console.log('[AmigaDoorSession] ===============================================\n');
+    }
+
+    this.lastA0Value = currentA0;
   }
 
   /**
@@ -759,6 +853,9 @@ export class AmigaDoorSession {
             }
           }
 
+          // Check if A0 register changed (to detect port address overwrite)
+          this.checkA0RegisterChange();
+
           this.iterationCount++;
           totalInstructions++;
           this.totalCycles += 4;
@@ -942,6 +1039,9 @@ export class AmigaDoorSession {
         // Execute some cycles
         this.emulator.execute(CYCLES_PER_ITERATION);
         this.totalCycles += CYCLES_PER_ITERATION;
+        // Check if A0 register changed (to detect port address overwrite)
+        this.checkA0RegisterChange();
+
         this.iterationCount++;
 
         // DISABLED: Don't poll for messages - this steals messages the door is sending!
