@@ -69,13 +69,19 @@ export class AmigaDoorSession {
    * Set up Socket.io event handlers for user input
    */
   private setupSocketHandlers(): void {
+    console.log('[AmigaDoorSession] Setting up socket handlers for door:input');
+
     // Handle user input (keystrokes)
     this.socket.on('door:input', (data: string) => {
+      console.log(`[AmigaDoorSession] 🎹 door:input event received: "${data}" isRunning=${this.isRunning} hasXIM=${!!this.ximProtocol}`);
+
       if (this.isRunning && this.ximProtocol) {
         console.log(`[AmigaDoorSession] Received input from user: "${data}"`);
 
         // Queue input for door to read via XIM GETKEY command
         this.ximProtocol.queueInput(data);
+      } else {
+        console.log(`[AmigaDoorSession] ❌ Input ignored: isRunning=${this.isRunning} hasXIM=${!!this.ximProtocol}`);
       }
     });
 
@@ -1066,11 +1072,11 @@ export class AmigaDoorSession {
           const totalSeconds = this.totalCycles / (this.CYCLES_PER_MICROSECOND * 1000000);
           console.log(`[AmigaDoorSession] Iteration ${this.iterationCount}: ${(this.totalCycles / 1000000).toFixed(1)}M cycles, ${totalSeconds.toFixed(2)}s virtual time, PC=0x${pc.toString(16)}`);
 
-          // With XIM protocol working, allow VERY long execution for line input
-          if (this.iterationCount > 5000000) {
-            console.log(`[AmigaDoorSession] Door running for 5M iterations - checking if making progress...`);
-            console.log(`[AmigaDoorSession] PC=0x${pc.toString(16)}, still in polling loop`);
-            console.log(`[AmigaDoorSession] Terminating to prevent infinite loop`);
+          // Allow long execution but not infinite (for testing, keep it reasonable)
+          if (this.iterationCount > 100000) {
+            console.log(`[AmigaDoorSession] Door running for 100k iterations - likely stuck in polling loop`);
+            console.log(`[AmigaDoorSession] PC=0x${pc.toString(16)}`);
+            console.log(`[AmigaDoorSession] Terminating for testing purposes`);
             this.terminate();
             return;
           }
@@ -1089,12 +1095,10 @@ export class AmigaDoorSession {
             await new Promise(resolve => setImmediate(resolve));
           }
         } else {
-          // Normal execution: yield every 1000 iterations with small delay
-          // This prevents max-speed execution while still being fast
-          if (this.iterationCount % 1000 === 0) {
-            // Small delay to match real Amiga timing (vAmiga uses 50ms per frame)
-            // We'll use 1ms per 1000 instructions as a rough approximation
-            await new Promise(resolve => setTimeout(resolve, 1));
+          // Normal execution: yield every 10000 iterations
+          // TEMPORARILY removed delay for faster testing - doors were running too slow
+          if (this.iterationCount % 10000 === 0) {
+            await new Promise(resolve => setImmediate(resolve));
           }
         }
       }
