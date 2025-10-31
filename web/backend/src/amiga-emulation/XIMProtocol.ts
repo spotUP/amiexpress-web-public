@@ -7,6 +7,7 @@
 
 import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { ExecLibrary } from './api/ExecLibrary';
+import { Socket } from 'socket.io';
 
 // XIM Protocol Command Codes (from aedoor.h)
 export enum XIMCommand {
@@ -71,16 +72,34 @@ export interface XIMMessage {
 export class XIMProtocol {
   private emulator: MoiraEmulator;
   private execLibrary: ExecLibrary;
+  private socket: Socket;
   private doorPort: number;          // AEDoorPort address (0xa0000)
   private doorReplyPort: number = 0; // Door's reply port (will be discovered)
+  private inputQueue: string[] = []; // Queue for keyboard input from terminal
 
-  constructor(emulator: MoiraEmulator, execLibrary: ExecLibrary, doorPort: number) {
+  constructor(emulator: MoiraEmulator, execLibrary: ExecLibrary, socket: Socket, doorPort: number) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
+    this.socket = socket;
     this.doorPort = doorPort;
 
     console.log('[XIMProtocol] Initialized');
     console.log(`  Door Port: 0x${doorPort.toString(16)}`);
+  }
+
+  /**
+   * Queue input from terminal for door to read via GETKEY
+   * Called from AmigaDoorSession when 'door:input' event received
+   */
+  queueInput(data: string): void {
+    console.log(`[XIMProtocol] Queuing input: "${data}"`);
+
+    // Split input into individual characters and queue them
+    for (const char of data) {
+      this.inputQueue.push(char);
+    }
+
+    console.log(`[XIMProtocol] Input queue size: ${this.inputQueue.length}`);
   }
 
   /**
@@ -130,9 +149,12 @@ export class XIMProtocol {
     console.log(`[XIMProtocol] Handling command: ${this.getCommandName(msg.command)}`);
 
     switch (msg.command) {
-      case XIMCommand.JH_LI:
       case XIMCommand.JH_REGISTER:
         this.handleRegister(msg);
+        break;
+
+      case XIMCommand.JH_LI:
+        this.handleLineInput(msg);
         break;
 
       case XIMCommand.JH_WRITE:
@@ -162,46 +184,148 @@ export class XIMProtocol {
   }
 
   /**
-   * Handle door registration / login info request
+   * Handle door registration
+   *
+   * From E sources (express.e:3379):
+   * - CASE JH_REGISTER
+   * - msg.command:=IF loggedOnUser<>NIL THEN userLineLen ELSE 29
+   * - nodesPtr[]:=nodesPtr[]+1
+   *
+   * Door expects: Line length in response (80 columns for us)
    */
   private handleRegister(msg: XIMMessage): void {
     console.log('[XIMProtocol] Door registering with BBS');
 
-    // Door is requesting initialization
-    // Send back success to acknowledge registration
-    this.sendReply(msg, 1); // 1 = success
+    // Reply with terminal line length (80 columns)
+    // Following E sources: msg.command gets the line length
+    this.sendReply(msg, 80);
 
-    console.log('[XIMProtocol] Registration acknowledged');
+    console.log('[XIMProtocol] Registration acknowledged, line length=80');
+  }
+
+  /**
+   * Handle line input request (JH_LI)
+   *
+   * From E sources (express.e:3425):
+   * - CASE JH_LI
+   * - IF(lineInput('',msg.string,msg.data,doorTimeout,tempstring)<>RESULT_SUCCESS)
+   * -   msg.data:=-1
+   * - ELSE
+   * -   msg.data:=1
+   * -   AstrCopy(msg.string,tempstring,200)
+   *
+   * Protocol:
+   * - msg.string = prompt to display (if any)
+   * - msg.data = max length
+   * - Response: msg.data=1 (success) or -1 (timeout/failure)
+   * - Response: msg.string = the input line
+   */
+  private handleLineInput(msg: XIMMessage): void {
+    const promptAddr = msg.data;
+    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 22 + 4); // Get string pointer
+
+    console.log('[XIMProtocol] Door requesting line input');
+
+    // Display prompt if provided
+    if (promptAddr !== 0) {
+      const prompt = this.readString(promptAddr);
+      if (prompt.length > 0) {
+        console.log(`[XIMProtocol] Prompt: "${prompt}"`);
+        this.socket.emit('ansi-output', prompt);
+      }
+    }
+
+    // Check if we have queued input ending with Enter
+    // For now, just return empty line as success
+    // TODO: Wait for actual line input from terminal
+    console.log('[XIMProtocol] Returning empty line (TODO: implement line input queue)');
+
+    if (stringAddr !== 0) {
+      // Write empty string
+      this.emulator.writeMemory(stringAddr, 0);
+    }
+
+    // Reply with success (1)
+    this.sendReply(msg, 1);
   }
 
   /**
    * Handle door write request (door wants to display text)
+   *
+   * From E sources (express.e:1085):
+   * - CASE JH_WRITE
+   * - aePuts(servermsg.string)
+   * - servermsg.command:=currentStat
+   * - ReplyMsg(servermsg)
    */
   private handleWrite(msg: XIMMessage): void {
     // msg.data contains pointer to string
     const stringAddr = msg.data;
     let text = '';
+    let bytesWritten = 0;
 
     if (stringAddr !== 0) {
       text = this.readString(stringAddr);
-      console.log('[XIMProtocol] Door writing to terminal:', text);
+      console.log('[XIMProtocol] Door writing to terminal:', JSON.stringify(text));
 
-      // TODO: Send to terminal via socket
-      // socket.emit('ansi-output', text);
+      // Send to terminal - Following E sources: aePuts(servermsg.string)
+      this.socket.emit('ansi-output', text);
+      bytesWritten = text.length;
+
+      console.log(`[XIMProtocol] Sent ${bytesWritten} bytes to terminal`);
     }
 
-    this.sendReply(msg, text.length);
+    // Reply with bytes written count (following E sources: servermsg.command:=currentStat)
+    this.sendReply(msg, bytesWritten);
   }
 
   /**
    * Handle keyboard input request
+   *
+   * From E sources (express.e:3811):
+   * - CASE GETKEY
+   * - IF checkInput() THEN msg.string[0]:="1" ELSE msg.string[0]:="0"
+   * - msg.string[1]:=0
+   * - ReplyMsg(msg)
+   *
+   * Protocol:
+   * - msg.data points to string buffer
+   * - If key available: write "1<key>\0" (e.g., "1A\0")
+   * - If no key: write "0\0"
    */
   private handleGetKey(msg: XIMMessage): void {
-    console.log('[XIMProtocol] Door requesting keyboard input');
+    const stringAddr = msg.data;
 
-    // TODO: Queue this request, wait for terminal input
-    // For now, reply with 0 (no key available)
-    this.sendReply(msg, 0);
+    if (stringAddr === 0) {
+      console.log('[XIMProtocol] GETKEY: No string buffer provided');
+      this.sendReply(msg, 0);
+      return;
+    }
+
+    // Check if we have queued input
+    if (this.inputQueue.length > 0) {
+      const char = this.inputQueue.shift()!;
+      const charCode = char.charCodeAt(0);
+
+      console.log(`[XIMProtocol] GETKEY: Returning key '${char}' (0x${charCode.toString(16)})`);
+
+      // Write "1<char>\0" to string buffer (E sources format)
+      this.emulator.writeMemory(stringAddr, 0x31);      // '1' - key available
+      this.emulator.writeMemory(stringAddr + 1, charCode); // the key character
+      this.emulator.writeMemory(stringAddr + 2, 0);     // null terminator
+
+      // Reply with 1 (key available)
+      this.sendReply(msg, 1);
+    } else {
+      console.log('[XIMProtocol] GETKEY: No input queued');
+
+      // Write "0\0" to string buffer
+      this.emulator.writeMemory(stringAddr, 0x30);      // '0' - no key
+      this.emulator.writeMemory(stringAddr + 1, 0);     // null terminator
+
+      // Reply with 0 (no key available)
+      this.sendReply(msg, 0);
+    }
   }
 
   /**

@@ -71,9 +71,11 @@ export class AmigaDoorSession {
   private setupSocketHandlers(): void {
     // Handle user input (keystrokes)
     this.socket.on('door:input', (data: string) => {
-      if (this.isRunning) {
+      if (this.isRunning && this.ximProtocol) {
         console.log(`[AmigaDoorSession] Received input from user: "${data}"`);
-        // TODO: Queue input for door to read via aeGetCh()
+
+        // Queue input for door to read via XIM GETKEY command
+        this.ximProtocol.queueInput(data);
       }
     });
 
@@ -195,7 +197,7 @@ export class AmigaDoorSession {
     console.log('[AmigaDoorSession] Creating XIM Protocol handler...');
 
     // Create XIM protocol handler for door communication
-    this.ximProtocol = new XIMProtocol(this.emulator, this.execLibrary, portAddr);
+    this.ximProtocol = new XIMProtocol(this.emulator, this.execLibrary, this.socket, portAddr);
 
     console.log('[AmigaDoorSession] Creating DOS.library...');
 
@@ -1063,11 +1065,11 @@ export class AmigaDoorSession {
           const totalSeconds = this.totalCycles / (this.CYCLES_PER_MICROSECOND * 1000000);
           console.log(`[AmigaDoorSession] Iteration ${this.iterationCount}: ${(this.totalCycles / 1000000).toFixed(1)}M cycles, ${totalSeconds.toFixed(2)}s virtual time, PC=0x${pc.toString(16)}`);
 
-          // If stuck at same PC for too long, it's likely waiting for something
-          if (this.iterationCount > 50000) {
-            console.log(`[AmigaDoorSession] Door appears stuck in loop - likely waiting for message port I/O`);
-            console.log(`[AmigaDoorSession] This is expected: door needs AEDoor FindPort/GetMsg/PutMsg to work`);
-            console.log(`[AmigaDoorSession] Terminating early to avoid infinite loop`);
+          // With XIM protocol working, allow much longer execution
+          if (this.iterationCount > 500000) {
+            console.log(`[AmigaDoorSession] Door running for 500k iterations - checking if making progress...`);
+            console.log(`[AmigaDoorSession] PC=0x${pc.toString(16)}, still in polling loop`);
+            console.log(`[AmigaDoorSession] Terminating to prevent infinite loop`);
             this.terminate();
             return;
           }
