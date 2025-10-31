@@ -370,6 +370,15 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
+    offset: -378,  // LVO -378 (0xFFFFFE86)
+    name: 'ReplyMsg',
+    handler: (emu, lib: ExecLibrary) => {
+      const msgAddr = emu.getRegister(9);   // A1
+      lib.replyMsg(msgAddr);
+      return 0;
+    }
+  },
+  {
     offset: -384,  // LVO -384 (0xFFFFFE80)
     name: 'WaitPort',
     handler: (emu, lib: ExecLibrary) => {

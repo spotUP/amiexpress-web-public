@@ -944,6 +944,37 @@ export class ExecLibrary {
   }
 
   /**
+   * ReplyMsg() - LVO -378 (0xFFFFFE86)
+   *
+   * Reply a message back to its sender via the ReplyPort
+   *
+   * From E sources (express.e:1096, 4368, 4379):
+   * - BBS calls ReplyMsg(doormsg) to respond to door
+   * - Message is sent back to mn_ReplyPort
+   * - Door receives via GetMsg() on its reply port
+   *
+   * Parameters:
+   *   A1 = Message address
+   */
+  replyMsg(msgAddr: number): void {
+    // Read reply port from message header
+    const replyPortAddr = this.emulator.readMemory32(msgAddr + 14);
+
+    if (replyPortAddr === 0) {
+      console.log(`[ExecLibrary] ReplyMsg: No reply port in message 0x${msgAddr.toString(16)}`);
+      return;
+    }
+
+    console.log(`[ExecLibrary] ReplyMsg(msg=0x${msgAddr.toString(16)})`);
+    console.log(`[ExecLibrary]   Reply Port: 0x${replyPortAddr.toString(16)}`);
+
+    // Send message back to reply port via PutMsg
+    this.putMsg(replyPortAddr, msgAddr);
+
+    console.log(`[ExecLibrary] Reply sent`);
+  }
+
+  /**
    * Helper: Dump AEDoor message structure for debugging
    */
   private dumpAEDoorMessage(msgAddr: number): void {
