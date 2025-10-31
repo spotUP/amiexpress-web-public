@@ -1,5 +1,61 @@
 # AmiExpress-Web Project Guidelines
 
+## 🚨 CRITICAL: ALWAYS Use Puppeteer for BBS Testing 🚨
+
+**NEVER use socket.io-client for testing the BBS - ALWAYS use Puppeteer!**
+
+### Why Puppeteer?
+
+- Properly simulates user interaction through browser
+- Handles terminal rendering correctly
+- Waits for screen updates naturally
+- Allows visual inspection of test execution
+- All existing tests use this pattern
+
+### Reference Implementation
+
+See `test-getanswer-door.js` for the correct pattern:
+
+```javascript
+const puppeteer = require('puppeteer');
+
+async function testBBS() {
+  const browser = await puppeteer.launch({
+    headless: false, // Show browser for debugging
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.goto('http://localhost:5173', { waitUntil: 'networkidle2' });
+
+  // Wait for connection
+  await sleep(1500);
+
+  // Answer ANSI prompt
+  await page.keyboard.type('A');
+  await page.keyboard.press('Enter');
+  await sleep(750);
+
+  // Login
+  await page.keyboard.type('sysop');
+  await page.keyboard.press('Enter');
+  await sleep(750);
+
+  await page.keyboard.type('sysop');
+  await page.keyboard.press('Enter');
+  await sleep(1500);
+
+  // Execute command
+  await page.keyboard.type('COMMAND');
+  await page.keyboard.press('Enter');
+}
+```
+
+**Never try to use socket.io-client - it doesn't work correctly!**
+
+---
+
 ## 🚨 CRITICAL: ALWAYS Reference vAmiga Sources for Amiga Emulation 🚨
 
 **BEFORE implementing ANY Amiga emulation or door functionality, READ `CRITICAL_RULES.md` and reference vAmiga sources!**

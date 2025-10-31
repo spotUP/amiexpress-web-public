@@ -45,6 +45,13 @@ export class AmigaDoorSession {
   private skipNextExecute: boolean = false;
   private startupMessageSent: boolean = false; // Flag to send startup message only once
 
+  // Memory change detection (for investigating what door expects)
+  private lastMemoryValue: number = 0; // Last value at 0x2001
+  private memoryChangeCount: number = 0; // How many times memory changed
+
+  // Library call monitoring
+  private libraryCallsInLoop: number = 0; // Count of library calls during polling loop
+
   constructor(socket: Socket, config: DoorConfig) {
     this.socket = socket;
     this.config = {
@@ -224,6 +231,19 @@ export class AmigaDoorSession {
     // This replaces polling GetMsg() with trap-based interception
     this.execLibrary.setDoorMessageCallback((portAddr: number, msgAddr: number) => {
       this.handleDoorMessage(portAddr, msgAddr);
+    });
+
+    // Set up library call monitoring to track what door is doing during polling loop
+    this.libraryTraps.setLibraryCallMonitor((functionName: string, pc: number) => {
+      // Track library calls during polling loop
+      if (this.startupMessageSent && this.iterationCount >= 1000) {
+        this.libraryCallsInLoop++;
+        console.log(`[AmigaDoorSession] *** LIBRARY CALL IN POLLING LOOP ***`);
+        console.log(`[AmigaDoorSession]   Function: ${functionName}`);
+        console.log(`[AmigaDoorSession]   PC: 0x${pc.toString(16)}`);
+        console.log(`[AmigaDoorSession]   Iteration: ${this.iterationCount}`);
+        console.log(`[AmigaDoorSession]   Total calls in loop: ${this.libraryCallsInLoop}`);
+      }
     });
 
     console.log('[AmigaDoorSession] Exec system ready');
@@ -788,28 +808,44 @@ export class AmigaDoorSession {
             console.log(`[AmigaDoorSession]   Sending startup message to unblock door...`);
             this.sendStartupMessage();
 
-            // CRITICAL FIX: The polling loop at PC=0x1156 is a TIMEOUT mechanism
-            // It decrements D2 until D2.W==0xFFFF, then jumps to error handler at 0x10226
-            // The loop does:
-            //   MOVE.B ($2000,A1),D0  ; Read byte (pointless, gets overwritten)
-            //   MOVE.L D1,D0          ; D0 = D1
-            //   DBRA D2,-8            ; Loop until D2.W == 0xFFFF
+            // INVESTIGATION: Let the timeout loop run naturally
+            // Monitor what changes during the loop to understand what door expects
+            // The loop reads memory[0x2001] but immediately overwrites the value
+            // We need to find what event should trigger natural exit
             //
-            // Solution: Set D2.W to 0xFFFF to immediately exit loop
-            console.log(`[AmigaDoorSession]   Setting D2=0xFFFF to exit polling loop...`);
-            this.emulator.setRegister(2, 0xFFFF);  // D2.W = 0xFFFF triggers DBRA exit
-            console.log(`[AmigaDoorSession]   D2 set - door will exit loop on next iteration`);
+            // Possible triggers:
+            // 1. Memory[0x2001] change (even though it gets overwritten)
+            // 2. Library call response setting a flag
+            // 3. Signal delivery changing task state
+            // 4. Message port check succeeding
 
             this.startupMessageSent = true;
           }
 
-          // Periodic logging
-          if (tracePc === 0x1156 && this.iterationCount % 50 === 0) {
+          // Monitor memory changes and periodic logging
+          if (tracePc === 0x1156) {
             // The instruction is: MOVE.B ($2000,A1),D0
             // Effective address = A1 + 0x2000
             const effectiveAddr = a1 + 0x2000;
             const byteRead = this.emulator.readMemory(effectiveAddr);
-            console.log(`[AmigaDoorSession]   Polling: A1=0x${a1.toString(16)}, EA=0x${effectiveAddr.toString(16)}, byte=0x${byteRead.toString(16)}`);
+
+            // Detect memory changes at 0x2001
+            if (byteRead !== this.lastMemoryValue) {
+              this.memoryChangeCount++;
+              console.log(`[AmigaDoorSession] *** MEMORY CHANGE DETECTED ***`);
+              console.log(`[AmigaDoorSession]   Address: 0x${effectiveAddr.toString(16)}`);
+              console.log(`[AmigaDoorSession]   Old value: 0x${this.lastMemoryValue.toString(16)}`);
+              console.log(`[AmigaDoorSession]   New value: 0x${byteRead.toString(16)}`);
+              console.log(`[AmigaDoorSession]   Change count: ${this.memoryChangeCount}`);
+              console.log(`[AmigaDoorSession]   Iteration: ${this.iterationCount}`);
+              this.lastMemoryValue = byteRead;
+            }
+
+            // Periodic status
+            if (this.iterationCount % 50 === 0) {
+              console.log(`[AmigaDoorSession]   Polling: A1=0x${a1.toString(16)}, EA=0x${effectiveAddr.toString(16)}, ` +
+                          `byte=0x${byteRead.toString(16)}, D2=0x${d2.toString(16)}`);
+            }
           }
 
           // If PC is outside code range, log error

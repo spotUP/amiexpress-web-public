@@ -422,9 +422,19 @@ export class LibraryTraps {
   // Map of trap address -> library instance
   private libraryMap: Map<number, any> = new Map();
 
+  // Optional callback for monitoring library calls
+  private onLibraryCall?: (functionName: string, pc: number) => void;
+
   constructor(emulator: MoiraEmulator, execLibrary: ExecLibrary) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
+  }
+
+  /**
+   * Set callback for monitoring library calls
+   */
+  setLibraryCallMonitor(callback: (functionName: string, pc: number) => void): void {
+    this.onLibraryCall = callback;
   }
 
   /**
@@ -575,6 +585,11 @@ export class LibraryTraps {
     }
 
     console.log(`[LibraryTraps] Intercepted: ${vector.name}() at PC=0x${pc.toString(16)}`);
+
+    // Notify monitor if callback is set
+    if (this.onLibraryCall) {
+      this.onLibraryCall(vector.name, pc);
+    }
 
     // CRITICAL: Save return address AND pop stack BEFORE calling handler!
     // Some handlers (like StackSwap) modify the stack pointer. We must read
