@@ -8,6 +8,7 @@ function App() {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const socket = useRef<Socket | null>(null);
+  const doorActive = useRef<boolean>(false); // Track if door is currently running
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -307,12 +308,25 @@ function App() {
       ws.emit('file-uploaded', data);
     });
 
+    // Handle door status changes
+    ws.on('door:status', (data: { status: string }) => {
+      console.log('🚪 Door status changed:', data.status);
+      doorActive.current = (data.status === 'running');
+      console.log('🚪 Door active:', doorActive.current);
+    });
+
     // Handle terminal input
     term.onData((data: string) => {
       if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'new-user-prompt') {
         // Handle login input (has its own echo logic)
         handleLoginInput(data, ws, term);
+      } else if (doorActive.current) {
+        // DOOR MODE: Send input directly to door without local echo
+        // Door will handle its own display via JH_WRITE
+        console.log('🚪 Sending input to door:', JSON.stringify(data));
+        ws.emit('door:input', data);
       } else {
+        // NORMAL BBS MODE: Local echo + send as command
         // LOCAL ECHO: Display character immediately for instant feedback
         // Only echo printable characters and backspace, not control sequences
         if (data.length === 1) {

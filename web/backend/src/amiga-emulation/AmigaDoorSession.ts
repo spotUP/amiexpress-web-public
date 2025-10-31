@@ -126,6 +126,7 @@ export class AmigaDoorSession {
 
       // Start door execution
       this.isRunning = true;
+      console.log('[AmigaDoorSession] 🚪 Emitting door:status = running');
       this.socket.emit('door:status', { status: 'running' });
 
       console.log('[AmigaDoorSession] Starting door execution...');
@@ -1076,12 +1077,25 @@ export class AmigaDoorSession {
         }
 
         // Yield to event loop FREQUENTLY to allow input events to be processed
-        // When waiting for line input, yield every 10 iterations to be responsive
-        // Otherwise yield every 100 iterations
-        const yieldInterval = (this.ximProtocol && this.ximProtocol.isWaitingForLineInput()) ? 10 : 100;
+        // Following vAmiga pattern: sleep between execution chunks to match real Amiga timing
+        // When waiting for line input, yield VERY frequently (every 10 iterations)
+        // Otherwise yield less often (every 1000 iterations) but with timing delay
 
-        if (this.iterationCount % yieldInterval === 0) {
-          await new Promise(resolve => setImmediate(resolve));
+        const isWaitingForInput = (this.ximProtocol && this.ximProtocol.isWaitingForLineInput());
+
+        if (isWaitingForInput) {
+          // When waiting for input, yield every 10 iterations for responsiveness
+          if (this.iterationCount % 10 === 0) {
+            await new Promise(resolve => setImmediate(resolve));
+          }
+        } else {
+          // Normal execution: yield every 1000 iterations with small delay
+          // This prevents max-speed execution while still being fast
+          if (this.iterationCount % 1000 === 0) {
+            // Small delay to match real Amiga timing (vAmiga uses 50ms per frame)
+            // We'll use 1ms per 1000 instructions as a rough approximation
+            await new Promise(resolve => setTimeout(resolve, 1));
+          }
         }
       }
 
@@ -1628,6 +1642,7 @@ export class AmigaDoorSession {
       this.emulator = null;
     }
 
+    console.log('[AmigaDoorSession] 🚪 Emitting door:status = terminated');
     this.socket.emit('door:status', { status: 'terminated' });
     console.log('[AmigaDoorSession] Door session terminated');
   }
