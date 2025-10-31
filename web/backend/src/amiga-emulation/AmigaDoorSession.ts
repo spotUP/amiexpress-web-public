@@ -5,6 +5,7 @@ import { ExecLibrary } from './api/ExecLibrary';
 import { AEDoorLibrary } from './api/AEDoorLibrary';
 import { DosLibrary } from './api/DOSLibrary';
 import { LibraryTraps } from './api/LibraryTraps';
+import { XIMProtocol } from './XIMProtocol';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -26,6 +27,7 @@ export class AmigaDoorSession {
   private aedoorLibrary: AEDoorLibrary | null = null;
   private dosLibrary: DosLibrary | null = null;
   private libraryTraps: LibraryTraps | null = null;
+  private ximProtocol: XIMProtocol | null = null;
   private socket: Socket;
   private config: DoorConfig;
   private isRunning: boolean = false;
@@ -189,6 +191,11 @@ export class AmigaDoorSession {
 
     // Store for message handling
     this.doorPortAddress = portAddr;
+
+    console.log('[AmigaDoorSession] Creating XIM Protocol handler...');
+
+    // Create XIM protocol handler for door communication
+    this.ximProtocol = new XIMProtocol(this.emulator, this.execLibrary, portAddr);
 
     console.log('[AmigaDoorSession] Creating DOS.library...');
 
@@ -1378,8 +1385,15 @@ export class AmigaDoorSession {
     console.log(`[AmigaDoorSession]   String: "${str}"`);
     console.log(`[AmigaDoorSession]   Reply port: 0x${mn_ReplyPort.toString(16)}`);
 
-    // Process command and reply
-    this.processCommand(command, data, str, msgAddr, mn_ReplyPort);
+    // Use XIM Protocol handler to process and respond
+    if (this.ximProtocol) {
+      const ximMessage = this.ximProtocol.parseMessage(msgAddr);
+      this.ximProtocol.handleMessage(ximMessage);
+    } else {
+      console.log(`[AmigaDoorSession] WARNING: XIM Protocol not initialized!`);
+      // Fall back to old handler
+      this.processCommand(command, data, str, msgAddr, mn_ReplyPort);
+    }
 
     console.log(`[AmigaDoorSession] ===============================================`);
   }

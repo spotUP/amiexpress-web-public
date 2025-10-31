@@ -180,9 +180,10 @@ export class XIMProtocol {
   private handleWrite(msg: XIMMessage): void {
     // msg.data contains pointer to string
     const stringAddr = msg.data;
+    let text = '';
 
     if (stringAddr !== 0) {
-      const text = this.readString(stringAddr);
+      text = this.readString(stringAddr);
       console.log('[XIMProtocol] Door writing to terminal:', text);
 
       // TODO: Send to terminal via socket
@@ -247,26 +248,22 @@ export class XIMProtocol {
   }
 
   /**
-   * Send reply to door via PutMsg
+   * Send reply to door via ReplyMsg
+   * Following E sources (express.e:1096, 4368) - BBS uses ReplyMsg()
    */
   private sendReply(msg: XIMMessage, data: number): void {
-    if (this.doorReplyPort === 0) {
-      console.log('[XIMProtocol] No door reply port yet, cannot send reply');
-      return;
-    }
-
     console.log('[XIMProtocol] Sending reply to door:');
-    console.log(`  Reply Port: 0x${this.doorReplyPort.toString(16)}`);
     console.log(`  Message: 0x${msg.msgAddr.toString(16)}`);
     console.log(`  Data: ${data}`);
 
     // Update message data field with response
     this.emulator.writeMemory32(msg.msgAddr + 22, data);
 
-    // Send message back to door via PutMsg
-    this.execLibrary.putMsg(this.doorReplyPort, msg.msgAddr);
+    // Send message back to door via ReplyMsg (not PutMsg!)
+    // ReplyMsg reads mn_ReplyPort from message and sends it there
+    this.execLibrary.replyMsg(msg.msgAddr);
 
-    console.log('[XIMProtocol] Reply sent');
+    console.log('[XIMProtocol] Reply sent via ReplyMsg');
   }
 
   /**
