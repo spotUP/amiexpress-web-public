@@ -77,6 +77,11 @@ export class XIMProtocol {
   private doorReplyPort: number = 0; // Door's reply port (will be discovered)
   private inputQueue: string[] = []; // Queue for keyboard input from terminal
 
+  // Line input state (for JH_LI command)
+  private waitingForLineInput: boolean = false;
+  private lineInputMessage: XIMMessage | null = null;
+  private lineInputBuffer: string = '';
+
   constructor(emulator: MoiraEmulator, execLibrary: ExecLibrary, socket: Socket, doorPort: number) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
@@ -88,18 +93,46 @@ export class XIMProtocol {
   }
 
   /**
-   * Queue input from terminal for door to read via GETKEY
+   * Queue input from terminal for door to read via GETKEY or JH_LI
    * Called from AmigaDoorSession when 'door:input' event received
    */
+  /**
+   * Check if waiting for line input from user
+   */
+  isWaitingForLineInput(): boolean {
+    return this.waitingForLineInput;
+  }
+
   queueInput(data: string): void {
     console.log(`[XIMProtocol] Queuing input: "${data}"`);
 
-    // Split input into individual characters and queue them
-    for (const char of data) {
-      this.inputQueue.push(char);
+    // If waiting for line input, handle specially
+    if (this.waitingForLineInput) {
+      for (const char of data) {
+        if (char === '\r' || char === '\n') {
+          // User pressed Enter - complete the line input
+          console.log(`[XIMProtocol] Enter pressed, completing line input: "${this.lineInputBuffer}"`);
+          this.completeLineInput();
+          return;
+        } else if (char === '\b' || char === '\x7f') {
+          // Backspace - remove last character
+          if (this.lineInputBuffer.length > 0) {
+            this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
+            console.log(`[XIMProtocol] Backspace, buffer now: "${this.lineInputBuffer}"`);
+          }
+        } else {
+          // Normal character - add to buffer
+          this.lineInputBuffer += char;
+          console.log(`[XIMProtocol] Character added, buffer now: "${this.lineInputBuffer}"`);
+        }
+      }
+    } else {
+      // Not waiting for line input - queue for GETKEY
+      for (const char of data) {
+        this.inputQueue.push(char);
+      }
+      console.log(`[XIMProtocol] Input queue size: ${this.inputQueue.length}`);
     }
-
-    console.log(`[XIMProtocol] Input queue size: ${this.inputQueue.length}`);
   }
 
   /**
@@ -222,7 +255,6 @@ export class XIMProtocol {
    */
   private handleLineInput(msg: XIMMessage): void {
     const promptAddr = msg.data;
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 22 + 4); // Get string pointer
 
     console.log('[XIMProtocol] Door requesting line input');
 
@@ -235,18 +267,50 @@ export class XIMProtocol {
       }
     }
 
-    // Check if we have queued input ending with Enter
-    // For now, just return empty line as success
-    // TODO: Wait for actual line input from terminal
-    console.log('[XIMProtocol] Returning empty line (TODO: implement line input queue)');
+    // Don't reply immediately - wait for user to type line and press Enter
+    console.log('[XIMProtocol] Waiting for user to type line and press Enter...');
+    this.waitingForLineInput = true;
+    this.lineInputMessage = msg;
+    this.lineInputBuffer = '';
+
+    // Reply will be sent when user presses Enter (via completeLineInput)
+  }
+
+  /**
+   * Complete line input and send reply to door
+   * Called when user presses Enter while waiting for line input
+   */
+  private completeLineInput(): void {
+    if (!this.lineInputMessage) {
+      console.log('[XIMProtocol] ERROR: completeLineInput called but no pending message!');
+      return;
+    }
+
+    const msg = this.lineInputMessage;
+    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 22 + 4); // Get string pointer
+
+    console.log(`[XIMProtocol] Completing line input with: "${this.lineInputBuffer}"`);
 
     if (stringAddr !== 0) {
-      // Write empty string
-      this.emulator.writeMemory(stringAddr, 0);
+      // Write the buffered line to memory
+      for (let i = 0; i < this.lineInputBuffer.length; i++) {
+        this.emulator.writeMemory(stringAddr + i, this.lineInputBuffer.charCodeAt(i));
+      }
+      // Null terminate
+      this.emulator.writeMemory(stringAddr + this.lineInputBuffer.length, 0);
+
+      console.log(`[XIMProtocol] Wrote ${this.lineInputBuffer.length} characters to memory at 0x${stringAddr.toString(16)}`);
     }
 
     // Reply with success (1)
     this.sendReply(msg, 1);
+
+    // Reset state
+    this.waitingForLineInput = false;
+    this.lineInputMessage = null;
+    this.lineInputBuffer = '';
+
+    console.log('[XIMProtocol] Line input completed, waiting for next command');
   }
 
   /**

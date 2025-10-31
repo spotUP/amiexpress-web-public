@@ -1065,9 +1065,9 @@ export class AmigaDoorSession {
           const totalSeconds = this.totalCycles / (this.CYCLES_PER_MICROSECOND * 1000000);
           console.log(`[AmigaDoorSession] Iteration ${this.iterationCount}: ${(this.totalCycles / 1000000).toFixed(1)}M cycles, ${totalSeconds.toFixed(2)}s virtual time, PC=0x${pc.toString(16)}`);
 
-          // With XIM protocol working, allow much longer execution
-          if (this.iterationCount > 500000) {
-            console.log(`[AmigaDoorSession] Door running for 500k iterations - checking if making progress...`);
+          // With XIM protocol working, allow VERY long execution for line input
+          if (this.iterationCount > 5000000) {
+            console.log(`[AmigaDoorSession] Door running for 5M iterations - checking if making progress...`);
             console.log(`[AmigaDoorSession] PC=0x${pc.toString(16)}, still in polling loop`);
             console.log(`[AmigaDoorSession] Terminating to prevent infinite loop`);
             this.terminate();
@@ -1075,8 +1075,12 @@ export class AmigaDoorSession {
           }
         }
 
-        // Yield to event loop every 100 iterations
-        if (this.iterationCount % 100 === 0) {
+        // Yield to event loop FREQUENTLY to allow input events to be processed
+        // When waiting for line input, yield every 10 iterations to be responsive
+        // Otherwise yield every 100 iterations
+        const yieldInterval = (this.ximProtocol && this.ximProtocol.isWaitingForLineInput()) ? 10 : 100;
+
+        if (this.iterationCount % yieldInterval === 0) {
           await new Promise(resolve => setImmediate(resolve));
         }
       }
