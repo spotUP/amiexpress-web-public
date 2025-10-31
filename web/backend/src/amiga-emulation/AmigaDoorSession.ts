@@ -357,6 +357,16 @@ export class AmigaDoorSession {
     this.emulator.setRegister(15, finalSP);  // A7 (SP)
     console.log(`  SP: 0x${finalSP.toString(16)}`);
 
+    // CRITICAL FIX: Set A0 to AEDoorPort0 address
+    // Door expects this in A0 and doesn't call FindPort()!
+    // Discovery: Door uses A0 value directly for GetMsg/WaitPort calls
+    console.log(`[AmigaDoorSession] ===============================================`);
+    console.log(`[AmigaDoorSession] CRITICAL FIX: Setting A0 to AEDoorPort0 address`);
+    console.log(`[AmigaDoorSession] ===============================================`);
+    this.emulator.setRegister(8, this.doorPortAddress);  // A0 = AEDoorPort0
+    console.log(`  A0: 0x${this.doorPortAddress.toString(16)} (AEDoorPort0)`);
+    console.log(`[AmigaDoorSession] Door will now use correct port address!`);
+
     console.log(`[AmigaDoorSession] CPU configured for door execution`);
 
     console.log('[AmigaDoorSession] Door ready to execute!');
@@ -364,7 +374,8 @@ export class AmigaDoorSession {
     // READ BACK REGISTERS ONE MORE TIME AT END OF loadDoor()
     const verifyFinalSP = this.emulator.getRegister(15);
     const verifyFinalPC = this.emulator.getRegister(16);
-    console.log(`[AmigaDoorSession] END OF loadDoor(): SP=0x${verifyFinalSP.toString(16)}, PC=0x${verifyFinalPC.toString(16)}`);
+    const verifyFinalA0 = this.emulator.getRegister(8);
+    console.log(`[AmigaDoorSession] END OF loadDoor(): SP=0x${verifyFinalSP.toString(16)}, PC=0x${verifyFinalPC.toString(16)}, A0=0x${verifyFinalA0.toString(16)}`);
   }
 
   /**
