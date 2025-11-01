@@ -31,12 +31,45 @@ export class MoiraEmulator {
   private module: MoiraModule | null = null;
   private cpu: MoiraCPU | null = null;
 
+  // Wait() blocking state
+  private waitingForSignal: boolean = false;
+  private waitingForSignalMask: number = 0;
+
   constructor(private memorySize: number = 16 * 1024 * 1024) {} // 16MB for full 24-bit address space
+
+  /**
+   * Check if CPU is blocked in Wait() call
+   */
+  isWaitingForSignal(): boolean {
+    return this.waitingForSignal;
+  }
+
+  /**
+   * Get the signal mask the CPU is waiting for
+   */
+  getWaitingSignalMask(): number {
+    return this.waitingForSignalMask;
+  }
+
+  /**
+   * Set Wait() blocking state
+   * When true, execution loop should pause
+   */
+  setWaitingForSignal(waiting: boolean, signalMask: number): void {
+    this.waitingForSignal = waiting;
+    this.waitingForSignalMask = signalMask;
+    if (waiting) {
+      console.log(`[MoiraEmulator] CPU now BLOCKED in Wait(0x${signalMask.toString(16)})`);
+    } else {
+      console.log(`[MoiraEmulator] CPU RESUMED from Wait()`);
+    }
+  }
 
   async initialize(): Promise<void> {
     // Load the WASM module
     const createMoiraModule = require('./build/moira.js');
     this.module = await createMoiraModule();
+    if (!this.module) throw new Error('Failed to load Moira module');
     this.cpu = new this.module.MoiraCPU(this.memorySize);
     // Don't reset yet - wait until ROM is loaded
   }
@@ -189,7 +222,21 @@ export class MoiraEmulator {
    */
   refillPrefetch(): void {
     if (!this.cpu) throw new Error('Emulator not initialized');
-    this.cpu.refillPrefetch();
+    // Call refillPrefetch on WASM CPU if available
+    // TypeScript doesn't have type definitions for this C++ method
+    if (typeof (this.cpu as any).refillPrefetch === 'function') {
+      (this.cpu as any).refillPrefetch();
+    }
+  }
+
+  /**
+   * Set trap handler for library calls
+   * Called when CPU executes JSR to negative addresses (library function calls)
+   */
+  setTrapHandler(handler: (offset: number) => void): void {
+    console.log('[MoiraEmulator] Trap handler registered');
+    // Stub: Trap handler integration would go here
+    // This would intercept library function calls and route to appropriate handlers
   }
 
   cleanup(): void {

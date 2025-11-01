@@ -19,15 +19,7 @@ import { ParamsUtil } from '../utils/params.util';
 import path from 'path';
 import fs from 'fs';
 
-// Types
-interface BBSSession {
-  user?: any;
-  subState: string;
-  menuPause?: boolean;
-  tempData?: any;
-  relogon?: boolean;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 // Dependencies injected from index.ts
 let _handleGoodbyeCommand: (socket: any, session: BBSSession, params?: string) => void;

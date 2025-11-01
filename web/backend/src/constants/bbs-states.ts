@@ -32,6 +32,9 @@ export enum LoggedOnSubState {
   FILES_MAIN = 'files_main',
   FILES_LIST_AREAS = 'files_list_areas',
   FILES_SELECT_AREA = 'files_select_area',
+  FILE_AREA_SELECT = 'file_area_select',  // Generic file area selection
+  FILE_DIR_SELECT = 'file_dir_select',    // File directory selection
+  FILE_LIST_CONTINUE = 'file_list_continue',  // Continue file listing
   FILES_SELECT_DIRECTORIES = 'files_select_directories',
   FILES_VIEW_AREA = 'files_view_area',
   FILES_DOWNLOAD = 'files_download',

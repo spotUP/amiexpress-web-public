@@ -6,6 +6,7 @@ import { AEDoorLibrary } from './api/AEDoorLibrary';
 import { DosLibrary } from './api/DOSLibrary';
 import { LibraryTraps } from './api/LibraryTraps';
 import { XIMProtocol } from './XIMProtocol';
+import { KickstartRom } from './KickstartRom';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -109,6 +110,13 @@ export class AmigaDoorSession {
       // Initialize emulator (16MB for full 24-bit address space)
       this.emulator = new MoiraEmulator(16 * 1024 * 1024);
       await this.emulator.initialize();
+
+      // Load Kickstart ROM to provide real library code at trap addresses
+      console.log('[AmigaDoorSession] Loading Kickstart ROM at 0xF80000...');
+      const kickstart = new KickstartRom();
+      const romData = kickstart.getRomData();
+      this.emulator.loadROM(romData);
+      console.log(`[AmigaDoorSession] Kickstart ROM loaded (${romData.length} bytes)`);
 
       // Initialize Exec system (NO ROM BOOT - Option C Hybrid)
       console.log('[AmigaDoorSession] Initializing Exec system (Option C Hybrid - no ROM boot)...');
@@ -500,7 +508,7 @@ export class AmigaDoorSession {
     console.log(`[AmigaDoorSession] START OF runExecutionLoop(): SP=0x${loopStartSP.toString(16)}, PC=0x${loopStartPC.toString(16)}`);
 
     try {
-      const CYCLES_PER_ITERATION = 10000;  // Execute 10k cycles per iteration
+      const CYCLES_PER_ITERATION = 1;  // Execute 1 cycle per iteration for detailed debugging
       const exitSentinel = 0xDEADBEEF;
 
       // Log initial state BEFORE any execution
@@ -528,6 +536,12 @@ export class AmigaDoorSession {
       let totalInstructions = 0;
 
       while (this.isRunning) {
+        // DEBUG: Check PC at very start of loop iteration
+        if (this.iterationCount >= 2153 && this.iterationCount <= 2155) {
+          const pcTopOfLoop = this.emulator.getRegister(16);
+          console.log(`[AmigaDoorSession] [${this.iterationCount}] PC at top of loop: 0x${pcTopOfLoop.toString(16)}`);
+        }
+
         // Check for library trap BEFORE execution
         const pc = this.emulator.getRegister(16);
 
@@ -587,17 +601,54 @@ export class AmigaDoorSession {
           // The door needs to run this naturally to complete initialization
 
           // Check for library trap BEFORE executing
-          if (this.libraryTraps && this.libraryTraps.isTrapAddress(tracePc)) {
-            console.log(`[AmigaDoorSession] *** LIBRARY TRAP at PC=0x${tracePc.toString(16)} ***`);
-            if (this.libraryTraps.handleTrap(tracePc)) {
-              console.log(`[AmigaDoorSession] *** Trap handled successfully ***`);
-            } else {
-              console.error(`[AmigaDoorSession] *** Trap handler FAILED ***`);
+          // CRITICAL FIX: Check based on OFFSET from A6, not absolute address
+          // This handles cases where A6 is corrupted (e.g., A6=0x0)
+
+          if (this.libraryTraps) {
+            const traceA6 = this.emulator.getRegister(14);
+
+            // Calculate offset - library vectors are 16-bit signed offsets
+            // When A6 is very small (e.g., 0) and PC is in ROM/upper memory,
+            // extract low 16 bits and sign-extend
+            let offset = tracePc - traceA6;
+
+            // If result looks like it might be a 16-bit signed offset in upper address space
+            // (0xFFE2 = -30 as 16-bit, but 16777186 as 24-bit address)
+            if (traceA6 < 0x10000 && offset > 0x8000 && offset < 0x1000000) {
+              // Extract low 16 bits and sign-extend
+              const low16 = offset & 0xFFFF;
+              if (low16 >= 0x8000) {
+                // Sign-extend from 16-bit to 32-bit
+                offset = low16 - 0x10000;
+              } else {
+                offset = low16;
+              }
+            } else if (offset > 0x7FFFFFFF) {
+              // Normal 32-bit sign extension
+              offset = offset - 0x100000000;
             }
-            // Trap handler set new PC, continue to next iteration
-            this.iterationCount++;
-            await new Promise(resolve => setImmediate(resolve));
-            continue;
+
+            // Check if this PC could be a library call (offset matches a known vector)
+            if (this.libraryTraps.isTrapAddress(tracePc) ||
+                (offset < 0 && offset >= -2000 && this.libraryTraps.isTrapOffset(offset))) {
+              console.log(`[AmigaDoorSession] *** LIBRARY TRAP at PC=0x${tracePc.toString(16)} (A6=0x${traceA6.toString(16)}, offset=${offset}) ***`);
+
+              // CRITICAL: Prefer address-based handler if PC is in trapMap (normal case)
+              // Only use offset-based handler as fallback for corrupted A6 cases
+              const handled = this.libraryTraps.isTrapAddress(tracePc)
+                ? this.libraryTraps.handleTrap(tracePc)
+                : this.libraryTraps.handleTrapByOffset(offset, traceA6);
+
+              if (handled) {
+                console.log(`[AmigaDoorSession] *** Trap handled successfully ***`);
+              } else {
+                console.error(`[AmigaDoorSession] *** Trap handler FAILED ***`);
+              }
+              // Trap handler set new PC, continue to next iteration
+              this.iterationCount++;
+              await new Promise(resolve => setImmediate(resolve));
+              continue;
+            }
           }
 
           // Read instruction bytes
@@ -885,18 +936,46 @@ export class AmigaDoorSession {
         }
 
         // DEBUG: ALWAYS log at certain iterations
+        if (this.iterationCount === 1000) {
+          const pc1000 = this.emulator.getRegister(16);
+          const sp1000 = this.emulator.getRegister(15);
+          const a0 = this.emulator.getRegister(8);
+          const a5 = this.emulator.getRegister(13);
+          const a6 = this.emulator.getRegister(14);
+          const op0 = this.emulator.readMemory(pc1000);
+          const op1 = this.emulator.readMemory(pc1000 + 1);
+          const opcode = (op0 << 8) | op1;
+          console.log(`[AmigaDoorSession] *** DEBUG 1000: PC=0x${pc1000.toString(16)}, SP=0x${sp1000.toString(16)}, A0=0x${a0.toString(16)}, A5=0x${a5.toString(16)}, A6=0x${a6.toString(16)}, opcode=0x${opcode.toString(16)}`);
+        }
         if (this.iterationCount === 1001) {
-          console.log(`[AmigaDoorSession] *** DEBUG 1001: PC=0x${pc.toString(16)}`);
+          const pc1001 = this.emulator.getRegister(16);
+          const op0 = this.emulator.readMemory(pc1001);
+          const op1 = this.emulator.readMemory(pc1001 + 1);
+          const opcode = (op0 << 8) | op1;
+          console.log(`[AmigaDoorSession] *** DEBUG 1001: PC=0x${pc1001.toString(16)}, opcode=0x${opcode.toString(16)}`);
+
+          // Check a few more addresses to see the pattern
+          for (let i = 0; i < 10; i++) {
+            const addr = pc1001 + (i * 2);
+            const b0 = this.emulator.readMemory(addr);
+            const b1 = this.emulator.readMemory(addr + 1);
+            const opc = (b0 << 8) | b1;
+            console.log(`[AmigaDoorSession]   0x${addr.toString(16)}: 0x${opc.toString(16)}`);
+          }
         }
         if (this.iterationCount === 10001) {
           console.log(`[AmigaDoorSession] *** DEBUG 10001: PC=0x${pc.toString(16)}`);
         }
 
-        // CRITICAL: Detailed logging to find when door leaves valid code range
-        // Door is at PC=0x115c at iteration 1001 (valid)
-        // Door is at PC=0x2d483f at iteration 10001 (invalid - way beyond code!)
-        // Need to find the jump between iterations 1001 and 10001
-        if (this.iterationCount >= 1000 && this.iterationCount <= 1200) {
+        // CRITICAL: Minimal logging to avoid timing issues
+        // Only log when approaching crash or in supervisor/low memory
+        // Full logging causes timing changes that affect execution
+        const tracePc = this.emulator.getRegister(16);
+        const isLowPC = (tracePc < 0x1000);
+        const isHighPC = (tracePc >= 0xfe000);
+        const needsLogging = isLowPC || isHighPC || (this.iterationCount >= 995 && this.iterationCount <= 1010);
+
+        if (needsLogging) {
           const tracePc = this.emulator.getRegister(16);
           const traceSp = this.emulator.getRegister(15);
           const traceA6 = this.emulator.getRegister(14);
@@ -911,11 +990,24 @@ export class AmigaDoorSession {
           const op1 = this.emulator.readMemory(tracePc + 1);
           const opcode = (op0 << 8) | op1;
 
-          console.log(`[AmigaDoorSession] [${this.iterationCount}] PC=0x${tracePc.toString(16)}, ` +
-                      `SP=0x${traceSp.toString(16)}, A6=0x${traceA6.toString(16)}, ` +
-                      `D0=0x${d0.toString(16)}, D1=0x${d1.toString(16)}, D2=0x${d2.toString(16)}, ` +
-                      `A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, ` +
-                      `opcode=0x${opcode.toString(16).padStart(4, '0')}`);
+          // Show opcode for low PC (crash detection) and high PC (supervisor space)
+          const isLowPC = (tracePc < 0x1000);
+          const isHighPC = (tracePc >= 0xfe000);
+          const showOpcode = isLowPC || isHighPC || (this.iterationCount >= 1730 && this.iterationCount <= 1750);
+
+          if (showOpcode) {
+            console.log(`[AmigaDoorSession] [${this.iterationCount}] PC=0x${tracePc.toString(16)}, ` +
+                        `SP=0x${traceSp.toString(16)}, A6=0x${traceA6.toString(16)}, ` +
+                        `D0=0x${d0.toString(16)}, D1=0x${d1.toString(16)}, D2=0x${d2.toString(16)}, ` +
+                        `A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, ` +
+                        `opcode=0x${opcode.toString(16).padStart(4, '0')}`);
+            if (isLowPC) {
+              console.log(`[AmigaDoorSession] *** WARNING: PC in low memory (0x${tracePc.toString(16)}) - likely crash! ***`);
+            }
+          } else {
+            console.log(`[AmigaDoorSession] [${this.iterationCount}] PC=0x${tracePc.toString(16)}, ` +
+                        `SP=0x${traceSp.toString(16)}, A6=0x${traceA6.toString(16)}`);
+          }
 
           // At PC=0x1156, opcode 0x11b1 is MOVE.B (A1),D0
           // This is a polling loop where door reads memory[0x1] and uses DBRA
@@ -976,12 +1068,14 @@ export class AmigaDoorSession {
           // Segment 0: 0x1000-0x2ba4 (CODE)
           // Segment 1: 0x2c00-0x2e54 (DATA)
           // Also allow ROM/library space: 0xf00000-0xffffff
+          // Also allow high memory: 0xfe000-0xfffff (supervisor functions, stack)
           const inCodeSeg = (tracePc >= 0x1000 && tracePc <= 0x2ba4);
           const inDataSeg = (tracePc >= 0x2c00 && tracePc <= 0x2e54);
           const inRomSpace = (tracePc >= 0xf00000 && tracePc <= 0xffffff);
           const inLibSpace = (tracePc >= 0x10000 && tracePc <= 0xa0000); // ExecBase, libraries, ports
+          const inHighMem = (tracePc >= 0xfe000 && tracePc <= 0xfffff); // Supervisor functions
 
-          if (!inCodeSeg && !inDataSeg && !inRomSpace && !inLibSpace) {
+          if (!inCodeSeg && !inDataSeg && !inRomSpace && !inLibSpace && !inHighMem) {
             console.log(`[AmigaDoorSession] *** INVALID PC DETECTED! ***`);
             console.log(`[AmigaDoorSession]   PC=0x${tracePc.toString(16)} is outside code range (0x1000-0x3000)`);
             console.log(`[AmigaDoorSession]   This likely indicates a crash or bad jump`);
@@ -1001,14 +1095,57 @@ export class AmigaDoorSession {
           }
         }
 
-        // Handle library trap if PC is at a vector address
-        if (this.libraryTraps && this.libraryTraps.isTrapAddress(pc)) {
-          console.log(`[AmigaDoorSession] Library trap detected at PC=0x${pc.toString(16)}`);
-          if (!this.libraryTraps.handleTrap(pc)) {
-            console.error(`[AmigaDoorSession] Failed to handle trap at 0x${pc.toString(16)}`);
+        // Handle library trap if PC is at a vector address OR offset matches
+        // CRITICAL: Also check offset-based traps for corrupted A6 cases
+        if (this.libraryTraps) {
+          const traceA6 = this.emulator.getRegister(14);
+
+          // Calculate offset - library vectors are 16-bit signed offsets
+          // When A6 is very small (e.g., 0) and PC is in ROM/upper memory,
+          // extract low 16 bits and sign-extend
+          let offset = pc - traceA6;
+
+          // If result looks like it might be a 16-bit signed offset in upper address space
+          // (0xFFE2 = -30 as 16-bit, but 16777186 as 24-bit address)
+          if (traceA6 < 0x10000 && offset > 0x8000 && offset < 0x1000000) {
+            // Extract low 16 bits and sign-extend
+            const low16 = offset & 0xFFFF;
+            if (low16 >= 0x8000) {
+              // Sign-extend from 16-bit to 32-bit
+              offset = low16 - 0x10000;
+            } else {
+              offset = low16;
+            }
+          } else if (offset > 0x7FFFFFFF) {
+            // Normal 32-bit sign extension
+            offset = offset - 0x100000000;
           }
-          // Don't execute cycles this iteration - trap handler set new PC
-          continue;
+
+          if (this.libraryTraps.isTrapAddress(pc) ||
+              (offset < 0 && offset >= -2000 && this.libraryTraps.isTrapOffset(offset))) {
+            console.log(`[AmigaDoorSession] Library trap detected at PC=0x${pc.toString(16)} (offset=${offset}, A6=0x${traceA6.toString(16)})`);
+
+            // CRITICAL: Prefer address-based handler if PC is in trapMap (normal case)
+            // Only use offset-based handler as fallback for corrupted A6 cases
+            const handled = this.libraryTraps.isTrapAddress(pc)
+              ? this.libraryTraps.handleTrap(pc)
+              : this.libraryTraps.handleTrapByOffset(offset, traceA6);
+
+            if (!handled) {
+              console.error(`[AmigaDoorSession] Failed to handle trap at 0x${pc.toString(16)}`);
+            }
+
+            // Check PC immediately after trap handler
+            const pcAfterTrap = this.emulator.getRegister(16);
+            const spAfterTrap = this.emulator.getRegister(15);
+            console.log(`[AmigaDoorSession] *** AFTER TRAP HANDLER: PC=0x${pcAfterTrap.toString(16)}, SP=0x${spAfterTrap.toString(16)}`);
+            // Don't execute cycles this iteration - trap handler set new PC
+            // INSTEAD of continue, skip execute by jumping to iteration increment
+            // This prevents the WASM module from executing instructions during async control flow
+            this.iterationCount++;
+            await new Promise(resolve => setImmediate(resolve));
+            continue;
+          }
         }
 
         // Check if door has exited (PC == exit sentinel)
@@ -1053,6 +1190,11 @@ export class AmigaDoorSession {
         }
 
         // Execute some cycles
+        // DEBUG: Check PC right before execute
+        const pcBeforeExecute = this.emulator.getRegister(16);
+        if (this.iterationCount >= 2153 && this.iterationCount <= 2155) {
+          console.log(`[AmigaDoorSession] [${this.iterationCount}] PC before execute(): 0x${pcBeforeExecute.toString(16)}`);
+        }
         this.emulator.execute(CYCLES_PER_ITERATION);
         this.totalCycles += CYCLES_PER_ITERATION;
         // Check if A0 register changed (to detect port address overwrite)

@@ -9,13 +9,8 @@
 import { Socket } from 'socket.io';
 import { LoggedOnSubState } from '../constants/bbs-states';
 
+import type { BBSSession } from '../index';
 // Session type
-interface BBSSession {
-  user?: any;
-  subState?: string;
-  socketId?: string;
-  [key: string]: any;
-}
 
 // Dependencies (injected)
 let db: any;

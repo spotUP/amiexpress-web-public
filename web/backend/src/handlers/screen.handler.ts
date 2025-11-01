@@ -8,13 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Import types (will be provided by index.ts)
-interface BBSSession {
-  currentConf?: number;
-  currentConfName?: string;
-  timeRemaining: number;
-  user?: { username: string };
-}
+import type { BBSSession } from '../index';
 
 interface Conference {
   id: number;
@@ -48,23 +42,18 @@ export function parseMciCodes(
 ): string {
   let parsed = content;
 
-  // %B - BBS Name
-  parsed = parsed.replace(/%B/g, bbsName);
+  // Get user data safely
+  const user = session.user || {};
+  const username = user.username || 'Guest';
+  const secLevel = user.secLevel || 0;
+  const timesCalled = user.timesCalled || 0;
+  const messagesPosted = user.messagesPosted || 0;
+  const uploads = user.uploads || 0;
+  const downloads = user.downloads || 0;
+  const uploadBytes = user.uploadBytes || 0;
+  const downloadBytes = user.downloadBytes || 0;
 
-  // %S - Sysop Name
-  parsed = parsed.replace(/%S/g, sysopName);
-
-  // %L - Location
-  parsed = parsed.replace(/%L/g, location);
-
-  // %CF - Current Conference Name
-  parsed = parsed.replace(/%CF/g, session.currentConfName || 'Unknown');
-
-  // %R - Baud Rate (for connection screens) / Time Remaining (for logged-in screens)
-  // Use "38400" as default baud rate for web connections
-  parsed = parsed.replace(/%R/g, session.user ? Math.floor(session.timeRemaining / 60).toString() : '38400');
-
-  // %D and %T - Date/Time in reference-board BBS format: "Fri 17-Oct-2025 08:33:58"
+  // Date/Time setup
   const now = new Date();
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -75,46 +64,155 @@ export function parseMciCodes(
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const seconds = String(now.getSeconds()).padStart(2, '0');
-
-  // %D - Full date/time: "Fri 17-Oct-2025 08:33:58"
   const fullDateTime = `${dayName} ${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
-  parsed = parsed.replace(/%D/g, fullDateTime);
-
-  // %T - Time only: "08:33:58"
   const timeStr = `${hours}:${minutes}:${seconds}`;
-  parsed = parsed.replace(/%T/g, timeStr);
 
-  // %U - Username
-  parsed = parsed.replace(/%U/g, session.user?.username || 'Guest');
+  // Process multi-character MCI codes FIRST to avoid collisions
+  // Conference/Message Board Lists (express.e:5588-5620)
+  if (parsed.includes('~CL.')) {
+    let confList = '';
+    let num = 0;
+    for (let i = 0; i < conferences.length; i++) {
+      num++;
+      const confName = conferences[i].name.padEnd(30, ' ');
+      confList += `                     \x1b[32m${num}\x1b[33m) \x1b[35m${confName}\x1b[36m\x1b[0m\r\n`;
+    }
+    parsed = parsed.replace(/~CL\./g, confList);
+  }
 
-  // %NODELIST - Display all nodes with their status (like reference-board BBS)
-  // IMPORTANT: Process multi-character MCI codes BEFORE single-character ones to avoid collisions
+  if (parsed.includes('~CD.')) {
+    // ~CD. - Conference Description (express.e:5606-5620)
+    const confDesc = conferences[session.currentConf || 0]?.name || 'Unknown';
+    parsed = parsed.replace(/~CD\./g, confDesc);
+  }
+
+  if (parsed.includes('~ML.')) {
+    // ~ML. - Message Base List (express.e:5621-5635)
+    // TODO: Implement when message bases are accessible
+    parsed = parsed.replace(/~ML\./g, 'Message bases not yet implemented');
+  }
+
+  if (parsed.includes('~MD.')) {
+    // ~MD. - Message Base Description (express.e:5636-5650)
+    // TODO: Implement when message bases are accessible
+    parsed = parsed.replace(/~MD\./g, '');
+  }
+
+  // Process %NODELIST before %N to avoid collision
   if (parsed.includes('%NODELIST')) {
     let nodeList = '';
-    const totalNodes = 8; // Total number of nodes in the system
-    const currentNode = 1; // Current node (we're always on node 1 in web version)
-
+    const totalNodes = 8;
+    const currentNode = 1;
     for (let i = 0; i < totalNodes; i++) {
       let status = 'Waiting';
-      if (i === currentNode) {
-        status = 'You';
-      } else if (i === 0) {
-        status = 'Sysop';  // Node 0 reserved for sysop
-      } else if (i === 7) {
-        status = 'Shutdown';  // Node 7 shutdown like reference-board
-      }
-
+      if (i === currentNode) status = 'You';
+      else if (i === 0) status = 'Sysop';
+      else if (i === 7) status = 'Shutdown';
       nodeList += `Node ${i}:  ${status}\r\n`;
     }
-
     parsed = parsed.replace(/%NODELIST/g, nodeList);
   }
 
-  // %N - Node Number (always 1 in web version)
-  // Process AFTER %NODELIST to avoid turning %NODELIST into 1ODELIST
-  parsed = parsed.replace(/%N/g, '1');
+  // User Information Codes (express.e:5291-5400)
+  parsed = parsed.replace(/~N\|/g, username);           // N - Username
+  parsed = parsed.replace(/~UL\|/g, user.location || '');  // UL - User Location
+  parsed = parsed.replace(/~#\|/g, user.phoneNumber || '');  // # - Phone Number
+  parsed = parsed.replace(/~TC\|/g, timesCalled.toString());  // TC - Times Called
+  parsed = parsed.replace(/~TT\|/g, '0');  // TT - Today's Calls (TODO: implement)
+  parsed = parsed.replace(/~LC\|/g, user.lastLoginDate || 'Never');  // LC - Last Call
+  parsed = parsed.replace(/~M\|/g, messagesPosted.toString());  // M - Messages Posted
+  parsed = parsed.replace(/~A\|/g, secLevel.toString());  // A - Access/Security Level
+  parsed = parsed.replace(/~S\|/g, user.id?.toString() || '0');  // S - Slot Number (user ID)
+  parsed = parsed.replace(/~CA\|/g, '');  // CA - Conference Access (TODO)
+  parsed = parsed.replace(/~BR\|/g, '38400');  // BR - Baud Rate
+  parsed = parsed.replace(/~HW\|/g, 'Web Browser');  // HW - Hardware/Computer Type
+  parsed = parsed.replace(/~TL\|/g, Math.floor((user.dailyTimeLimit || 120) / 60).toString());  // TL - Time Limit
+  parsed = parsed.replace(/~TR\|/g, Math.floor(session.timeRemaining / 60).toString());  // TR - Time Remaining
+  parsed = parsed.replace(/~UB\|/g, uploadBytes.toString());  // UB - Upload Bytes
+  parsed = parsed.replace(/~DB\|/g, downloadBytes.toString());  // DB - Download Bytes
+  parsed = parsed.replace(/~SU\|/g, (uploadBytes / 1024).toFixed(0) + 'K');  // SU - Upload Size
+  parsed = parsed.replace(/~SD\|/g, (downloadBytes / 1024).toFixed(0) + 'K');  // SD - Download Size
+  parsed = parsed.replace(/~FU\|/g, uploads.toString());  // FU - Files Uploaded
+  parsed = parsed.replace(/~FD\|/g, downloads.toString());  // FD - Files Downloaded
+  parsed = parsed.replace(/~BD\|/g, '0');  // BD - Today's Bytes Limit (TODO)
+  parsed = parsed.replace(/~ON\|/g, '1');  // ON/LG - Node Number
+  parsed = parsed.replace(/~LG\|/g, '1');
+  parsed = parsed.replace(/~IN\|/g, user.email || '');  // IN - Internet Name (email)
+  parsed = parsed.replace(/~RN\|/g, user.realName || username);  // RN - Real Name
 
-  // %C - Number of conferences
+  // Conference Information (express.e:5440-5490)
+  parsed = parsed.replace(/~CF\|/g, session.currentConfName || 'Main');  // CF - Current Conference
+  parsed = parsed.replace(/~CN\|/g, (session.currentConf + 1).toString());  // CN - Conference Number
+  parsed = parsed.replace(/~MB\|/g, '');  // MB - Current Message Base (TODO)
+  parsed = parsed.replace(/~MN\|/g, '0');  // MN - Message Base Number (TODO)
+  parsed = parsed.replace(/~CT\|/g, conferences.length.toString());  // CT - Total Conferences
+  parsed = parsed.replace(/~VD\|/g, '2.00');  // VD - Version Number (display)
+  parsed = parsed.replace(/~VE\|/g, 'AmiExpress-Web 2.0');  // VE - Version (full)
+
+  // System Information
+  parsed = parsed.replace(/~ND\|/g, fullDateTime);  // ND - Node Date/Time
+  parsed = parsed.replace(/~DT\|/g, fullDateTime);  // DT - Date/Time
+  parsed = parsed.replace(/~OT\|/g, timeStr);  // OT - Time Only
+  parsed = parsed.replace(/~OD\|/g, `${day}-${month}-${year}`);  // OD - Date Only
+  parsed = parsed.replace(/~SC\|/g, '0');  // SC - System Calls Today (TODO)
+  parsed = parsed.replace(/~FC\|/g, '0');  // FC - Files in Current Area (TODO)
+  parsed = parsed.replace(/~FL\|/g, '');  // FL - File List (TODO)
+  parsed = parsed.replace(/~FF\|/g, '0');  // FF - Free Files (TODO)
+  parsed = parsed.replace(/~AK\|/g, user.alias || username);  // AK - Alias/Handle
+  parsed = parsed.replace(/~SP\|/g, ' ');  // SP - Space
+  parsed = parsed.replace(/~CR\|/g, '\r\n');  // CR - Carriage Return
+  parsed = parsed.replace(/~NS\|/g, '');  // NS - No Space (nothing)
+
+  // Color codes (c0-c7, b0-b7/z0-z7, n1-n9) (express.e:5651-5735)
+  // Foreground colors (c0-c7)
+  parsed = parsed.replace(/~c0\|/g, '\x1b[30m');  // Black
+  parsed = parsed.replace(/~c1\|/g, '\x1b[34m');  // Blue
+  parsed = parsed.replace(/~c2\|/g, '\x1b[32m');  // Green
+  parsed = parsed.replace(/~c3\|/g, '\x1b[36m');  // Cyan
+  parsed = parsed.replace(/~c4\|/g, '\x1b[31m');  // Red
+  parsed = parsed.replace(/~c5\|/g, '\x1b[35m');  // Magenta
+  parsed = parsed.replace(/~c6\|/g, '\x1b[33m');  // Yellow/Brown
+  parsed = parsed.replace(/~c7\|/g, '\x1b[37m');  // White
+
+  // Background colors (b0-b7, z0-z7)
+  parsed = parsed.replace(/~b0\|/g, '\x1b[40m');  // Black bg
+  parsed = parsed.replace(/~b1\|/g, '\x1b[44m');  // Blue bg
+  parsed = parsed.replace(/~b2\|/g, '\x1b[42m');  // Green bg
+  parsed = parsed.replace(/~b3\|/g, '\x1b[46m');  // Cyan bg
+  parsed = parsed.replace(/~b4\|/g, '\x1b[41m');  // Red bg
+  parsed = parsed.replace(/~b5\|/g, '\x1b[45m');  // Magenta bg
+  parsed = parsed.replace(/~b6\|/g, '\x1b[43m');  // Yellow bg
+  parsed = parsed.replace(/~b7\|/g, '\x1b[47m');  // White bg
+  parsed = parsed.replace(/~z0\|/g, '\x1b[40m');  // z0-z7 same as b0-b7
+  parsed = parsed.replace(/~z1\|/g, '\x1b[44m');
+  parsed = parsed.replace(/~z2\|/g, '\x1b[42m');
+  parsed = parsed.replace(/~z3\|/g, '\x1b[46m');
+  parsed = parsed.replace(/~z4\|/g, '\x1b[41m');
+  parsed = parsed.replace(/~z5\|/g, '\x1b[45m');
+  parsed = parsed.replace(/~z6\|/g, '\x1b[43m');
+  parsed = parsed.replace(/~z7\|/g, '\x1b[47m');
+
+  // Text styles (n1-n9)
+  parsed = parsed.replace(/~n1\|/g, '\x1b[1m');   // Bold
+  parsed = parsed.replace(/~n2\|/g, '\x1b[2m');   // Dim
+  parsed = parsed.replace(/~n3\|/g, '\x1b[3m');   // Italic
+  parsed = parsed.replace(/~n4\|/g, '\x1b[4m');   // Underline
+  parsed = parsed.replace(/~n5\|/g, '\x1b[5m');   // Blink
+  parsed = parsed.replace(/~n6\|/g, '\x1b[7m');   // Reverse
+  parsed = parsed.replace(/~n7\|/g, '\x1b[8m');   // Hidden
+  parsed = parsed.replace(/~n8\|/g, '\x1b[0m');   // Reset
+  parsed = parsed.replace(/~n9\|/g, '\x1b[0m');   // Normal (reset)
+
+  // Legacy % codes (for compatibility)
+  parsed = parsed.replace(/%B/g, bbsName);
+  parsed = parsed.replace(/%S/g, sysopName);
+  parsed = parsed.replace(/%L/g, location);
+  parsed = parsed.replace(/%CF/g, session.currentConfName || 'Main');
+  parsed = parsed.replace(/%R/g, session.user ? Math.floor(session.timeRemaining / 60).toString() : '38400');
+  parsed = parsed.replace(/%D/g, fullDateTime);
+  parsed = parsed.replace(/%T/g, timeStr);
+  parsed = parsed.replace(/%U/g, username);
+  parsed = parsed.replace(/%N/g, '1');
   parsed = parsed.replace(/%C/g, conferences.length.toString());
 
   return parsed;
@@ -132,11 +230,13 @@ export function parseMciCodes(
  */
 export function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0): string | null {
   // BBS directory structure matches original Amiga AmiExpress
-  // From backend/src/handlers, go up to backend/, then into BBS/
-  const baseDir = path.join(__dirname, '../../BBS');
+  // Use dataDir from config which points to project root
+  const { config } = require('../config');
+  const baseDir = config.getConfig().dataDir;
   const paths = [];
 
   // Try conference-specific screen first (if provided)
+  // express.e uses confScreenDir which points to Conf directory
   if (conferenceId) {
     // Find the relative conference number (1-based position in conferences array)
     const confIndex = conferences.findIndex(c => c.id === conferenceId);
@@ -147,9 +247,13 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
     }
   }
 
-  // Then try node-specific screen
-  const nodePath = path.join(baseDir, `Node${nodeId}`, 'Screens', `${screenName}.TXT`);
-  paths.push(nodePath);
+  // Try node-specific screens - express.e:6580 uses nodeScreenDir which is Node0/ itself
+  // Screens can be directly in Node0/ OR in Node0/Screens/ subdirectory
+  const nodeDir = path.join(baseDir, `Node${nodeId}`);
+  paths.push(path.join(nodeDir, `${screenName}.TXT`));        // Node0/BBSTITLE.TXT
+  paths.push(path.join(nodeDir, `${screenName}.txt`));        // Node0/bbstitle.txt
+  paths.push(path.join(nodeDir, 'Screens', `${screenName}.TXT`));  // Node0/Screens/BBSTITLE.TXT
+  paths.push(path.join(nodeDir, 'Screens', `${screenName}.txt`));  // Node0/Screens/bbstitle.txt
 
   // Then try default BBS screens
   const bbsPath = path.join(baseDir, 'Screens', `${screenName}.TXT`);
@@ -240,7 +344,8 @@ export function displayScreen(socket: any, session: BBSSession, screenName: stri
  * @returns true if .keys file exists, false otherwise
  */
 export function hasKeysFile(screenName: string, conferenceId?: number, nodeId: number = 0): boolean {
-  const baseDir = path.join(__dirname, '../../BBS');
+  const { config } = require('../config');
+  const baseDir = config.getConfig().dataDir;
   const paths = [];
 
   // Try conference-specific .keys file first (if provided)

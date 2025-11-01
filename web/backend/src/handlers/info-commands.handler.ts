@@ -16,18 +16,7 @@ import { ErrorHandler } from '../utils/error-handling.util';
 import { db } from '../database';
 import bcrypt from 'bcryptjs';
 
-// Types
-interface BBSSession {
-  user?: any;
-  state: string;
-  subState: string;
-  currentConfName?: string;
-  lastActivity: number;
-  quietNode?: boolean;
-  menuPause?: boolean;
-  tempData?: any;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 // Dependencies injected from index.ts
 let _sessions: Map<string, BBSSession>;

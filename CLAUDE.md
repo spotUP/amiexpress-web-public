@@ -4,6 +4,8 @@
 
 **NEVER use socket.io-client for testing the BBS - ALWAYS use Puppeteer!**
 
+**NEVER manually test in browser when debugging - ALWAYS use the test script!**
+
 ### Why Puppeteer?
 
 - Properly simulates user interaction through browser
@@ -11,10 +13,58 @@
 - Waits for screen updates naturally
 - Allows visual inspection of test execution
 - All existing tests use this pattern
+- **Consistent and reproducible** - same sequence every time
+- **Fast iteration** - no manual typing required
+
+### Master Test Script
+
+**Location**: `/test-ga-command.js` (root of project)
+
+**This is the STANDARD template for ALL BBS testing.**
+
+When testing ANY feature:
+1. Copy `test-ga-command.js` to `test-[feature].js`
+2. Modify the command being tested
+3. Run: `node test-[feature].js`
+4. Monitor logs: `tail -f /tmp/backend.log`
+
+**See `/Docs/TESTING_WITH_PUPPETEER.md` for complete guide.**
+
+### Correct Login Sequence (DO NOT MODIFY)
+
+```javascript
+// ANSI
+await page.keyboard.type('A');
+await page.keyboard.press('Enter');
+await sleep(1000);
+
+// Username
+await page.keyboard.type('sysop');
+await page.keyboard.press('Enter');
+await sleep(1000);
+
+// Password
+await page.keyboard.type('sysop');
+await page.keyboard.press('Enter');
+await sleep(3000);
+
+// First prompt
+await page.keyboard.press('Enter');
+await sleep(2000);
+
+// Second prompt
+await page.keyboard.press('Enter');
+await sleep(2000);
+
+// Wait for command prompt
+await sleep(2000);
+
+// NOW type commands
+```
 
 ### Reference Implementation
 
-See `test-getanswer-door.js` for the correct pattern:
+See `test-ga-command.js` for the correct pattern:
 
 ```javascript
 const puppeteer = require('puppeteer');

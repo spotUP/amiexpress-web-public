@@ -15,17 +15,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
-
-// Types
-interface BBSSession {
-  user?: any;
-  state: string;
-  subState: string;
-  quietMode?: boolean;
-  flaggedFiles?: any[];
-  commandHistory?: string[];
-  socket?: any;
-}
+import type { BBSSession } from '../index';
 
 // Injected dependencies
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;

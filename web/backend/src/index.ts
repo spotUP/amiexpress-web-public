@@ -9,6 +9,7 @@ import { config } from './config';
 import { qwkManager, ftnManager } from './qwk';
 import { nodeManager, arexxEngine, protocolManager } from './nodes';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
+export { LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
 import { testFile, TestResult } from './utils/file-test.util';
 import { moveUploadedFile, getConferenceDir } from './utils/file-hold.util';
@@ -193,7 +194,7 @@ import {
   updateScanPointer
 } from './utils/message-pointers.util';
 
-interface BBSSession {
+export interface BBSSession {
   state: BBSState;
   subState?: LoggedOnSubState;
   user?: any; // Will be User from database
@@ -215,6 +216,10 @@ interface BBSSession {
   cmdShortcuts: boolean; // Like AmiExpress cmdShortcuts - controls hotkey vs line input mode
   doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
   tempData?: any; // Temporary data storage for complex operations (like file listing)
+  flagManager?: any; // File flagging manager for batch downloads
+  inDoorManager?: boolean; // Whether user is currently in door manager
+  ansiEnabled?: boolean; // Whether ANSI is enabled for this session
+  currentRoomId?: string; // Current chat room ID for group chat
 
   // Phase 9: Security/ACS System (express.e:165-167, 306-308)
   acsLevel: number; // Current ACS level (0-255, or -1 if invalid) - express.e:165
@@ -1662,7 +1667,7 @@ const SCREEN_JOINMSGBASE = 'JoinMsgBase';
 // Logs to database like express.e logs to BBS:Node{X}/CallersLog file
 async function callersLog(userId: string | null, username: string, action: string, details?: string, nodeId: number = 1) {
   try {
-    await db.query(
+    await db.run(
       'INSERT INTO caller_activity (node_id, user_id, username, action, details) VALUES (?, ?, ?, ?, ?)',
       [nodeId, userId, username, action, details || null]
     );

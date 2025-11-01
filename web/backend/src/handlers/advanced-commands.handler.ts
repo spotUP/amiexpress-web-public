@@ -13,13 +13,7 @@ import { checkSecurity } from '../utils/acs.util';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 
-// Types
-interface BBSSession {
-  user?: any;
-  subState?: string;
-  menuPause?: boolean;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 interface Conference {
   id: number;

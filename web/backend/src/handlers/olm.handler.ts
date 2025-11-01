@@ -17,18 +17,8 @@ import { ACSPermission } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import { checkSecurity } from '../utils/acs.util';
 
+import type { BBSSession } from '../index';
 // Session type
-interface BBSSession {
-  user?: any;
-  state?: string;
-  subState?: string;
-  socketId?: string;
-  lastOlmNode?: number;  // express.e: lastOlmNode - for R reply
-  blockOLM?: boolean;     // express.e: blockOLM / quietFlag
-  olmQueue?: string[];    // express.e: olmQueue - queued messages
-  olmBuffer?: string[];   // express.e: olmBuf - message being composed
-  [key: string]: any;
-}
 
 // Dependencies (injected)
 let db: any;

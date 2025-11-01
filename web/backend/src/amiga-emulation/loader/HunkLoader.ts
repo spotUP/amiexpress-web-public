@@ -68,7 +68,7 @@ export interface HunkFile {
 }
 
 export class HunkLoader {
-  private buffer: Buffer;
+  private buffer!: Buffer;  // Initialized in load() method
   private position: number = 0;
 
   /**
@@ -150,21 +150,31 @@ export class HunkLoader {
 
         case HunkType.HUNK_RELOC32: {
           const relocs: Relocation[] = [];
+          let groupNum = 0;
 
           while (true) {
             const numOffsets = this.readLong();
+            console.log(`[HunkLoader] HUNK_RELOC32 group ${groupNum}: numOffsets = ${numOffsets} (0x${numOffsets.toString(16)})`);
             if (numOffsets === 0) break; // End of relocations
 
             const targetSegment = this.readLong();
+            console.log(`[HunkLoader]   targetSegment = ${targetSegment}`);
 
             for (let i = 0; i < numOffsets; i++) {
               const offset = this.readLong();
               relocs.push({ offset, targetSegment });
+              if (i < 10 || offset === 0x248) {
+                console.log(`[HunkLoader]     reloc[${i}] = 0x${offset.toString(16)}`);
+              }
             }
+            groupNum++;
           }
 
-          relocations.set(segmentIndex, relocs);
-          console.log(`[HunkLoader] Found ${relocs.length} relocations for segment ${segmentIndex}`);
+          // CRITICAL FIX: Use the last pushed segment index, not segmentIndex
+          // segmentIndex only increments at HUNK_END, so it's still pointing to previous segment
+          const actualSegmentIndex = segments.length - 1;
+          relocations.set(actualSegmentIndex, relocs);
+          console.log(`[HunkLoader] Found ${relocs.length} relocations for segment ${actualSegmentIndex} (segmentIndex=${segmentIndex}) in ${groupNum} groups`);
           break;
         }
 
@@ -209,25 +219,25 @@ export class HunkLoader {
     for (const segment of hunkFile.segments) {
       console.log(`[HunkLoader] Loading ${segment.type} segment at 0x${segment.address.toString(16)}, data.length=${segment.data.length}`);
 
-      // DEBUG: Check if this segment contains the critical address 0x10f2
+      // DEBUG: Check if this segment contains the critical address 0x1248
       const segmentEnd = segment.address + segment.data.length;
-      const contains10f2 = (segment.address <= 0x10f2) && (segmentEnd > 0x10f2);
-      console.log(`[HunkLoader]   Segment range: 0x${segment.address.toString(16)} - 0x${segmentEnd.toString(16)}, contains 0x10f2? ${contains10f2}`);
+      const contains1248 = (segment.address <= 0x1248) && (segmentEnd > 0x1248);
+      console.log(`[HunkLoader]   Segment range: 0x${segment.address.toString(16)} - 0x${segmentEnd.toString(16)}, contains 0x1248? ${contains1248}`);
 
-      if (contains10f2) {
-        const offset = 0x10f2 - segment.address;
+      if (contains1248) {
+        const offset = 0x1248 - segment.address;
         const byte0 = segment.data[offset];
         const byte1 = segment.data[offset + 1];
-        console.log(`[HunkLoader] *** This segment contains 0x10f2! ***`);
+        console.log(`[HunkLoader] *** This segment contains 0x1248! ***`);
         console.log(`[HunkLoader]   Segment type: ${segment.type}`);
         console.log(`[HunkLoader]   Segment base: 0x${segment.address.toString(16)}`);
         console.log(`[HunkLoader]   Segment size: ${segment.data.length} bytes`);
         console.log(`[HunkLoader]   Offset in segment data: 0x${offset.toString(16)}`);
         console.log(`[HunkLoader]   Bytes in segment.data[${offset}/${offset+1}]: 0x${byte0.toString(16).padStart(2, '0')} 0x${byte1.toString(16).padStart(2, '0')}`);
         console.log(`[HunkLoader]   As word: 0x${((byte0 << 8) | byte1).toString(16).padStart(4, '0')}`);
-        console.log(`[HunkLoader]   Expected: 0x670c (BEQ.S +12)`);
-        if (((byte0 << 8) | byte1) !== 0x670c) {
-          console.log(`[HunkLoader]   *** SEGMENT DATA IS ALREADY CORRUPTED! ***`);
+        console.log(`[HunkLoader]   Expected: 0x4eae (JSR (A6,d16))`);
+        if (((byte0 << 8) | byte1) !== 0x4eae) {
+          console.log(`[HunkLoader]   *** SEGMENT DATA IS ALREADY CORRUPTED IN BUFFER! ***`);
         }
       }
 
@@ -235,14 +245,28 @@ export class HunkLoader {
       for (let i = 0; i < segment.data.length; i++) {
         emulator.writeMemory(segment.address + i, segment.data[i]);
       }
+
+      // VERIFY: Check if 0x1248 was written correctly
+      if (contains1248) {
+        const offset = 0x1248 - segment.address;
+        const verify0 = emulator.readMemory(0x1248);
+        const verify1 = emulator.readMemory(0x1249);
+        const verifyWord = (verify0 << 8) | verify1;
+        console.log(`[HunkLoader] *** VERIFY AFTER WRITE ***`);
+        console.log(`[HunkLoader]   Source buffer had: 0x${segment.data[offset].toString(16).padStart(2, '0')}${segment.data[offset+1].toString(16).padStart(2, '0')}`);
+        console.log(`[HunkLoader]   Memory now has:    0x${verifyWord.toString(16).padStart(4, '0')}`);
+        if (verifyWord !== ((segment.data[offset] << 8) | segment.data[offset+1])) {
+          console.log(`[HunkLoader]   *** WRITE TO MEMORY CORRUPTED DATA! ***`);
+        }
+      }
     }
 
     // DEBUG: Check memory at critical address BEFORE relocations
     console.log('[HunkLoader] === MEMORY CHECK BEFORE RELOCATIONS ===');
-    const check10f2_before = (emulator.readMemory(0x10f2) << 8) | emulator.readMemory(0x10f3);
-    console.log(`[HunkLoader] Memory at 0x10f2 BEFORE relocations: 0x${check10f2_before.toString(16).padStart(4, '0')}`);
-    console.log(`[HunkLoader] Expected: 0x670c (BEQ.S +12)`);
-    if (check10f2_before !== 0x670c) {
+    const check1248_before = (emulator.readMemory(0x1248) << 8) | emulator.readMemory(0x1249);
+    console.log(`[HunkLoader] Memory at 0x1248 BEFORE relocations: 0x${check1248_before.toString(16).padStart(4, '0')}`);
+    console.log(`[HunkLoader] Expected: 0x4eae (JSR (A6,d16))`);
+    if (check1248_before !== 0x4eae) {
       console.log(`[HunkLoader] *** ALREADY CORRUPTED BEFORE RELOCATIONS! ***`);
     }
 
@@ -262,8 +286,9 @@ export class HunkLoader {
         const targetSegment = hunkFile.segments[reloc.targetSegment];
         const relocAddress = segment.address + reloc.offset;
 
-        // CRITICAL: Check if this relocation affects the corrupted instruction at 0x10f2
-        const isCriticalRange = relocAddress >= 0x10f0 && relocAddress <= 0x10f4;
+        // CRITICAL: Check if this relocation affects 0x1248
+        const isCriticalRange = (relocAddress >= 0x1246 && relocAddress <= 0x124a) ||
+                                 (relocAddress >= 0x2b38 && relocAddress <= 0x2b3e);
 
         if (isCriticalRange) {
           console.log(`[HunkLoader] *** CRITICAL RELOCATION DETECTED ***`);
@@ -291,7 +316,7 @@ export class HunkLoader {
 
         if (isCriticalRange) {
           console.log(`[HunkLoader]   AFTER:  New value = 0x${newValue.toString(16).padStart(8, '0')}`);
-          console.log(`[HunkLoader]   This will OVERWRITE the BEQ instruction at 0x10f2!`);
+          console.log(`[HunkLoader]   This will OVERWRITE memory at 0x${relocAddress.toString(16)}!`);
         }
 
         // Write back the relocated address (big-endian)

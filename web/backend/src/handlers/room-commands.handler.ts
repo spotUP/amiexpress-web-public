@@ -23,20 +23,8 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
 
+import type { BBSSession } from '../index';
 // Session type
-interface BBSSession {
-  user?: any;
-  userId?: string;
-  username?: string;
-  state?: string;
-  subState?: string;
-  socketId?: string;
-  currentRoomId?: string;
-  currentRoomName?: string;
-  previousState?: string;
-  previousSubState?: string;
-  [key: string]: any;
-}
 
 // Dependencies (injected via setter)
 let db: any;

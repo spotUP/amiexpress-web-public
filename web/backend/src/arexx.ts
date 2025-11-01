@@ -1789,8 +1789,8 @@ export class EnhancedAREXXEngine {
     for (const [id, script] of this.scripts) {
       if (!script.enabled) continue;
 
-      // Check if script trigger matches event
-      if (script.trigger === event) {
+      // Check if script triggers match event
+      if (script.triggers && script.triggers.some(t => t.event === event)) {
         const result = await this.executeScript(script, context);
         results.push(result);
       }
@@ -1837,12 +1837,12 @@ export class EnhancedAREXXEngine {
       });
 
       // Execute script code
-      const result = await interpreter.execute(script.script);
+      const result = await interpreter.execute(script.script || '');
 
       // Log execution
       await db.executeAREXXScript(script.id, {
         user: context.user,
-        session: context.session,
+        session: context.sessionId,
         command: undefined,
         parameters: context.parameters || [],
         variables: Object.fromEntries(interpreter.getVariables())
@@ -1896,7 +1896,7 @@ export class EnhancedAREXXEngine {
    */
   getScriptsByTrigger(event: string): AREXXScript[] {
     return Array.from(this.scripts.values()).filter(script =>
-      script.trigger === event
+      script.triggers && script.triggers.some(t => t.event === event)
     );
   }
 }

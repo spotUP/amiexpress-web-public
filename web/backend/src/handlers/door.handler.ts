@@ -10,18 +10,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 
-// Types (will be provided by index.ts)
-interface BBSSession {
-  currentConf?: number;
-  user?: {
-    id: string;
-    username: string;
-    secLevel?: number;
-  };
-  menuPause: boolean;
-  subState: string;
-  tempData?: any;
-}
+import type { BBSSession } from '../index';
 
 interface Door {
   id: string;
@@ -34,6 +23,7 @@ interface Door {
   type: string;
   conferenceId?: number;
   parameters?: string[];
+  mciText?: string;  // For MCI type doors (express.e:4293-4297)
 }
 
 interface DoorSession {
@@ -177,6 +167,9 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
 
   // Execute based on door type
   switch (door.type) {
+    case 'MCI': // MCI door - process MCI codes and display (express.e:4293-4297)
+      await executeMciDoor(socket, session, door, doorSession);
+      break;
     case 'web':
       await executeWebDoor(socket, session, door, doorSession);
       break;
@@ -256,6 +249,47 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   }
+}
+
+/**
+ * Execute MCI door - displays text with MCI codes processed
+ * Based on express.e:4293-4297
+ *
+ * MCI doors don't execute a program - they just display text with MCI codes.
+ * The MCI_TEXT tooltype contains the text to display with codes like ~CL., ~N|, etc.
+ */
+async function executeMciDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
+  console.log(`[executeMciDoor] Processing MCI door: ${door.name}`);
+
+  if (!door.mciText) {
+    console.error(`[executeMciDoor] No MCI_TEXT found for door: ${door.name}`);
+    socket.emit('ansi-output', '\r\n\x1b[31mMCI door has no text to display.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // Import parseMciCodes function
+  const { parseMciCodes, addAnsiEscapes } = require('./screen.handler');
+
+  // Process MCI codes (express.e:4297 calls processMci())
+  let processedText = parseMciCodes(door.mciText, session);
+
+  // Add ESC prefix to ANSI codes if needed
+  processedText = addAnsiEscapes(processedText);
+
+  // Normalize line endings
+  processedText = processedText.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
+  // Display the processed text
+  socket.emit('ansi-output', processedText);
+
+  // Pause after display
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+  console.log(`[executeMciDoor] MCI door completed: ${door.name}`);
 }
 
 /**

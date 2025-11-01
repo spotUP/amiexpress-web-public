@@ -59,6 +59,7 @@ export interface CommandDefinition {
   quickMode?: boolean;      // Quick mode (express.e:4739)
   internal?: string;        // Internal command (express.e:4711)
   passParameters?: number;  // Pass parameters mode (express.e:4712)
+  mciText?: string;         // MCI text for MCI type doors (express.e:4295)
 }
 
 /**
@@ -292,6 +293,12 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     if (passParams) {
       cmd.passParameters = parseInt(passParams, 10);
     }
+  }
+
+  // MCI_TEXT for MCI type doors (express.e:4295)
+  const mciText = tooltypes.get('MCI_TEXT');
+  if (mciText && type === DoorType.MCI) {
+    cmd.mciText = mciText;
   }
 
   return cmd;

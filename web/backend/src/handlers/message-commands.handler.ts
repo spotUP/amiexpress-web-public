@@ -14,18 +14,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
 
-// Types
-interface BBSSession {
-  user?: any;
-  currentConf?: number;
-  currentMsgBase?: number;
-  confRJoin?: number;
-  msgBaseRJoin?: number;
-  subState: string;
-  menuPause?: boolean;
-  expertMode?: boolean;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 interface MessageBase {
   id: number;

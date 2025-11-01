@@ -1,0 +1,4 @@
+TYPE=MCI
+ACCESS=1
+LOCATION=Commands/BBSCmd/CONFLIST
+MCI_TEXT=~\r\n                    [36mAmiexpress's CONFERENCE LIST[0m\r\n\r\n~CL.\r\n\r\n[32mPress any key to return to menu...[0m

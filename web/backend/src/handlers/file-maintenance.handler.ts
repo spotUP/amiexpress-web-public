@@ -25,15 +25,7 @@ import { FileFlagManager } from '../utils/file-flag.util';
 import * as path from 'path';
 import * as fs from 'fs';
 
-// Types
-interface BBSSession {
-  user?: any;
-  currentConf?: number;
-  subState?: string;
-  menuPause?: boolean;
-  tempData?: any;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 interface FileEntry {
   id: number;

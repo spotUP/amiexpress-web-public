@@ -64,6 +64,7 @@ export interface User {
   topUploadCPS: number;
   topDownloadCPS: number;
   byteLimit: number;
+  bytesAvailableForDownload?: number;  // Calculated available download bytes
   securityFlags?: string;
   secOverride?: string;
   userFlags: number;
@@ -110,6 +111,8 @@ export interface FileEntry {
   uploadDate: Date;
   downloads: number;
   areaId: number;
+  conferenceId?: number;  // Conference ID for the file area
+  filePath?: string;      // Full file path on disk
   fileIdDiz?: string;
   rating?: number;
   votes?: number;
@@ -222,7 +225,7 @@ function fieldToColumn(field: string): string {
 }
 
 export class Database {
-  private db?: BetterSqlite3.Database;
+  private db?: any;  // BetterSqlite3.Database type not available
   private isConnected: boolean = false;
   private dbPath: string;
 
@@ -294,6 +297,20 @@ export class Database {
       return { rows };
     } catch (error) {
       console.error('Database query error:', error);
+      throw error;
+    }
+  }
+
+  public async run(sql: string, params: any[] = []): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const stmt = this.db.prepare(sql);
+      stmt.run(...params);
+    } catch (error) {
+      console.error('Database run error:', error);
       throw error;
     }
   }
@@ -1780,17 +1797,15 @@ export class Database {
     if (!row) return null;
 
     return {
-      sessionId: row.session_id,
-      initiatorId: row.initiator_id,
-      initiatorUsername: row.initiator_username,
-      initiatorSocket: row.initiator_socket,
-      recipientId: row.recipient_id,
-      recipientUsername: row.recipient_username,
-      recipientSocket: row.recipient_socket,
-      status: row.status,
-      startedAt: new Date(row.started_at * 1000),
-      createdAt: new Date(row.created_at * 1000),
-      endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined
+      id: row.session_id,
+      nodeId: row.initiator_id || 0,
+      userId: row.initiator_username,
+      targetNodeId: row.recipient_id || 0,
+      targetUserId: row.recipient_username,
+      status: row.status as 'inviting' | 'active' | 'ended' | 'declined',
+      startTime: new Date(row.started_at * 1000),
+      endTime: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
+      lastActivity: new Date(row.created_at * 1000)
     };
   }
 
@@ -1806,17 +1821,15 @@ export class Database {
     if (!row) return null;
 
     return {
-      sessionId: row.session_id,
-      initiatorId: row.initiator_id,
-      initiatorUsername: row.initiator_username,
-      initiatorSocket: row.initiator_socket,
-      recipientId: row.recipient_id,
-      recipientUsername: row.recipient_username,
-      recipientSocket: row.recipient_socket,
-      status: row.status,
-      startedAt: new Date(row.started_at * 1000),
-      createdAt: new Date(row.created_at * 1000),
-      endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined
+      id: row.session_id,
+      nodeId: row.initiator_id || 0,
+      userId: row.initiator_username,
+      targetNodeId: row.recipient_id || 0,
+      targetUserId: row.recipient_username,
+      status: row.status as 'inviting' | 'active' | 'ended' | 'declined',
+      startTime: new Date(row.started_at * 1000),
+      endTime: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
+      lastActivity: new Date(row.created_at * 1000)
     };
   }
 
@@ -1867,17 +1880,15 @@ export class Database {
     const rows = stmt.all() as any[];
 
     return rows.map(row => ({
-      sessionId: row.session_id,
-      initiatorId: row.initiator_id,
-      initiatorUsername: row.initiator_username,
-      initiatorSocket: row.initiator_socket,
-      recipientId: row.recipient_id,
-      recipientUsername: row.recipient_username,
-      recipientSocket: row.recipient_socket,
-      status: row.status,
-      startedAt: new Date(row.started_at * 1000),
-      createdAt: new Date(row.created_at * 1000),
-      endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined
+      id: row.session_id,
+      nodeId: row.initiator_id || 0,
+      userId: row.initiator_username,
+      targetNodeId: row.recipient_id || 0,
+      targetUserId: row.recipient_username,
+      status: row.status as 'inviting' | 'active' | 'ended' | 'declined',
+      startTime: new Date(row.started_at * 1000),
+      endTime: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
+      lastActivity: new Date(row.created_at * 1000)
     }));
   }
 
@@ -1914,10 +1925,12 @@ export class Database {
     return rows.reverse().map(row => ({
       id: row.id,
       sessionId: row.session_id,
-      senderId: row.sender_id,
-      senderUsername: row.sender_username,
-      message: row.message,
-      sentAt: new Date(row.created_at * 1000)
+      fromNodeId: 0,  // Not stored in DB currently
+      fromUserId: row.sender_id,
+      toNodeId: 0,  // Not stored in DB currently
+      toUserId: '',  // Not stored in DB currently
+      content: row.message,
+      timestamp: new Date(row.created_at * 1000)
     }));
   }
 

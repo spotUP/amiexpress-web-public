@@ -9,22 +9,8 @@
 import { Socket } from 'socket.io';
 import { LoggedOnSubState, BBSState } from '../constants/bbs-states';
 
+import type { BBSSession } from '../index';
 // Session type
-interface BBSSession {
-  user?: any;
-  state?: string;
-  subState?: string;
-  socketId?: string;
-  chatSessionId?: string;
-  chatWithUserId?: string;
-  chatWithUsername?: string;
-  previousState?: string;
-  previousSubState?: string;
-  partnerTypingBuffer?: string; // Buffer showing what the chat partner is currently typing
-  typingBlinkTimer?: NodeJS.Timeout; // Timer for blinking cursor when idle
-  lastTypingTime?: number; // Last time a keystroke was received
-  [key: string]: any;
-}
 
 // Dependencies (injected)
 let db: any;

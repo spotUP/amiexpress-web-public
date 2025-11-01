@@ -16,13 +16,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 
-// Types
-interface BBSSession {
-  user?: any;
-  currentConf?: number;
-  currentMsgBase?: number;
-  subState: string;
-}
+import type { BBSSession } from '../index';
 
 interface Conference {
   id: number;

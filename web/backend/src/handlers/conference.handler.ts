@@ -7,22 +7,7 @@
 
 import { displayScreen, doPause } from './screen.handler';
 
-// Types (will be provided by index.ts)
-interface BBSSession {
-  currentConf?: number;
-  currentMsgBase?: number;
-  currentConfName?: string;
-  confRJoin: number;
-  msgBaseRJoin: number;
-  relConfNum?: number;
-  user?: {
-    id: string;
-    username: string;
-    lastScanTime?: Date;
-    lastLogin?: Date;
-  };
-  subState: string;
-}
+import type { BBSSession } from '../index';
 
 interface Conference {
   id: number;
@@ -108,7 +93,7 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
   const newMessagesQuery = await db.query(
     `SELECT c.id, c.name, COUNT(m.id) as new_count
      FROM conferences c
-     LEFT JOIN messages m ON m.conferenceid = c.id AND m.timestamp > $1
+     LEFT JOIN messages m ON m.conferenceid = c.id AND m.timestamp > ?
      GROUP BY c.id, c.name
      HAVING COUNT(m.id) > 0
      ORDER BY c.id`,

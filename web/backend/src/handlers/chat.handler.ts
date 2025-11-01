@@ -5,16 +5,7 @@
  * Based on express.e chat system (ccom() function and chat mode).
  */
 
-// Types (will be provided by index.ts)
-interface BBSSession {
-  user?: {
-    id: string;
-    username: string;
-    secLevel?: number;
-  };
-  subState: string;
-  [key: string]: any; // For dynamic properties like inChat, chatSession, pagingInterval
-}
+import type { BBSSession } from '../index';
 
 interface ChatSession {
   id: string;
@@ -97,6 +88,7 @@ export function startSysopPage(socket: any, session: BBSSession) {
   (async () => {
     try {
       const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+
       await webhookService.sendWebhook(WebhookTrigger.SYSOP_PAGED, {
         username: session.user?.username || 'Unknown',
         userId: session.user?.id,

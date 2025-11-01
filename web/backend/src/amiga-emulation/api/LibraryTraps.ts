@@ -14,7 +14,7 @@
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { ExecLibrary } from './ExecLibrary';
 import { AEDoorLibrary } from './AEDoorLibrary';
-import { DosLibrary } from './DOSLibrary';
+import { DosLibrary } from './DosLibrary';
 
 /**
  * Library function vector entry
@@ -370,6 +370,53 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
+    offset: -30,  // LVO -30 (0xFFFFFFE2)
+    name: 'Supervisor',
+    handler: (emu, lib: ExecLibrary, returnAddr: number) => {
+      // Supervisor() - Execute a function in supervisor mode
+      // Input: A5 = function pointer to execute
+      // The function is called with return address on stack
+      // Returns: D0 = result from supervisor function
+
+      const a5 = emu.getRegister(13);  // A5 - supervisor function pointer
+      console.log(`[LibraryTraps] Supervisor: calling function at 0x${a5.toString(16)}, returnAddr=0x${returnAddr.toString(16)}`);
+
+      // Set PC to the supervisor function address
+      // The function will execute and eventually RTS back to returnAddr
+      emu.setRegister(16, a5);  // PC = supervisor function
+
+      // CRITICAL: Do NOT push return address - it's already on stack from JSR to Supervisor
+      // The supervisor function will RTS to returnAddr (which handleTrap already popped)
+      // So we need to push returnAddr back for the supervisor function to RTS to
+      const sp = emu.getRegister(15);
+      emu.writeMemory32(sp - 4, returnAddr);
+      emu.setRegister(15, sp - 4);
+
+      console.log(`[LibraryTraps] Supervisor: PC set to 0x${a5.toString(16)}, return will go to 0x${returnAddr.toString(16)}`);
+
+      // Return 0 - actual return value will come from supervisor function via D0
+      return 0;
+    }
+  },
+  {
+    offset: -330,  // LVO -330 (0xFFFFFEB6)
+    name: 'AllocSignal',
+    handler: (emu, lib: ExecLibrary) => {
+      const signalNum = emu.getRegister(0);  // D0 (signed byte, -1 = any free signal)
+      const result = lib.AllocSignal(signalNum);
+      return result;  // Return signal number or -1 in D0
+    }
+  },
+  {
+    offset: -354,  // LVO -354 (0xFFFFFE9E)
+    name: 'AddPort',
+    handler: (emu, lib: ExecLibrary) => {
+      const portAddr = emu.getRegister(9);  // A1 - port pointer
+      lib.addPort(portAddr);
+      return 0;  // AddPort has no return value
+    }
+  },
+  {
     offset: -378,  // LVO -378 (0xFFFFFE86)
     name: 'ReplyMsg',
     handler: (emu, lib: ExecLibrary) => {
@@ -431,6 +478,13 @@ export class LibraryTraps {
   // Map of trap address -> library instance
   private libraryMap: Map<number, any> = new Map();
 
+  // NEW: Map of offset -> array of vector entries (for offset-based trap detection)
+  // Multiple libraries can use the same offset (e.g., -30 for Supervisor in Exec, Open in DOS)
+  private offsetMap: Map<number, LibraryVector[]> = new Map();
+
+  // NEW: Map of offset -> array of library instances (parallel to offsetMap)
+  private offsetLibraryMap: Map<number, any[]> = new Map();
+
   // Optional callback for monitoring library calls
   private onLibraryCall?: (functionName: string, pc: number) => void;
 
@@ -477,6 +531,14 @@ export class LibraryTraps {
       this.trapMap.set(trapAddr, vector);
       this.libraryMap.set(trapAddr, this.execLibrary);
 
+      // NEW: Also store mapping by offset (array-based to handle collisions)
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.execLibrary);
+
       console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
     }
 
@@ -507,6 +569,14 @@ export class LibraryTraps {
       this.trapMap.set(trapAddr, vector);
       this.libraryMap.set(trapAddr, this.dosLibrary);
 
+      // NEW: Also store mapping by offset (array-based to handle collisions)
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.dosLibrary);
+
       console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
     }
 
@@ -536,6 +606,14 @@ export class LibraryTraps {
       // Store mapping of address to handler
       this.trapMap.set(trapAddr, vector);
       this.libraryMap.set(trapAddr, this.aedoorLibrary);
+
+      // NEW: Also store mapping by offset (array-based to handle collisions)
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.aedoorLibrary);
 
       console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
     }
@@ -604,15 +682,36 @@ export class LibraryTraps {
     // Some handlers (like StackSwap) modify the stack pointer. We must read
     // and pop the return address from the ORIGINAL stack before the handler runs.
     const sp = this.emulator.getRegister(15);  // A7 (stack pointer)
+    const a6 = this.emulator.getRegister(14);  // A6 (library base)
+    console.log(`[LibraryTraps]   SP before pop: 0x${sp.toString(16)}, A6: 0x${a6.toString(16)}`);
     const returnAddr = this.emulator.readMemory32(sp);
+    console.log(`[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`);
     this.emulator.setRegister(15, sp + 4);     // Pop return address from ORIGINAL stack
+    const spAfter = this.emulator.getRegister(15);
+    console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
+
+    // DEBUG: Dump stack contents where A6 should be saved
+    // MOVEM.L (SP)+,D0-D7/A0-A6 reads A6 from SP+56
+    // (D0-D7 = 8 regs = 32 bytes, A0-A5 = 6 regs = 24 bytes, total offset = 56)
+    const a6OnStack = this.emulator.readMemory32(spAfter + 56);
+    console.log(`[LibraryTraps]   A6 value saved on stack at SP+56 (0x${(spAfter + 56).toString(16)}): 0x${a6OnStack.toString(16)}`);
+
+    // Also dump the surrounding stack to see the pattern
+    console.log(`[LibraryTraps]   Stack dump (after return address pop):`);
+    for (let i = 0; i < 15; i++) {
+      const regValue = this.emulator.readMemory32(spAfter + (i * 4));
+      const regName = i < 8 ? `D${i}` : `A${i - 8}`;
+      console.log(`[LibraryTraps]     SP+${i * 4} (${regName}): 0x${regValue.toString(16)}`);
+    }
+
 
     // Get the library instance for this trap
     const library = this.libraryMap.get(pc);
 
     // Call the handler with the correct library instance
     // Note: Handler may now modify SP (e.g., StackSwap), but we've already popped the return address
-    const result = vector.handler(this.emulator, library);
+    // Pass returnAddr to handler for functions like Supervisor() that need it
+    const result = vector.handler(this.emulator, library, returnAddr);
 
     // Set return value in D0
     this.emulator.setRegister(0, result);
@@ -646,14 +745,37 @@ export class LibraryTraps {
     console.log(`[LibraryTraps]   Verified SR: 0x${verifySr.toString(16).padStart(4, '0')} (Z=${(verifySr & 0x04) ? 1 : 0})`);
 
     // Set PC to return address
-    this.emulator.setRegister(16, returnAddr);
+    // EXCEPTION: Supervisor() sets PC itself, so check if it was changed
+    const currentPC = this.emulator.getRegister(16);
+    if (vector.name === 'Supervisor') {
+      // Supervisor already set PC to the supervisor function, don't overwrite it
+      console.log(`[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(16)}, not setting return address`);
+    } else {
+      console.log(`[LibraryTraps] Setting PC to return address 0x${returnAddr.toString(16)}`);
+      this.emulator.setRegister(16, returnAddr);
+      const verifyPC = this.emulator.getRegister(16);
+      console.log(`[LibraryTraps] Verified PC is now: 0x${verifyPC.toString(16)}`);
+
+      // Also check what instruction is at return address
+      const op0 = this.emulator.readMemory(returnAddr);
+      const op1 = this.emulator.readMemory(returnAddr + 1);
+      const opcode = (op0 << 8) | op1;
+      console.log(`[LibraryTraps] Instruction at return address: 0x${opcode.toString(16).padStart(4, '0')}`);
+    }
 
     // CRITICAL FIX: Refill instruction prefetch queue!
-    // After changing PC, Moira's IRC/IRD registers still contain the old JSR instruction.
-    // We must refill them with the instruction at the new PC.
-    this.emulator.refillPrefetch();
+    // CRITICAL: DO NOT call refillPrefetch() here!
+    // The refillPrefetch() call causes Moira to execute one instruction at the return address,
+    // which corrupts registers when the instruction is MOVEM.L (SP)+,... that restores
+    // registers from stack. The emulator will naturally refill the prefetch queue when
+    // it executes cycles in the next iteration.
+    // this.emulator.refillPrefetch();  // REMOVED - causes register corruption
 
+    // Verify final register state
+    const finalSp = this.emulator.getRegister(15);
+    const finalA6 = this.emulator.getRegister(14);
     console.log(`[LibraryTraps] Returning to 0x${returnAddr.toString(16)}`);
+    console.log(`[LibraryTraps]   Final SP: 0x${finalSp.toString(16)}, Final A6: 0x${finalA6.toString(16)}`);
 
     return true;  // Trap handled
   }
@@ -663,5 +785,86 @@ export class LibraryTraps {
    */
   isTrapAddress(addr: number): boolean {
     return this.trapMap.has(addr);
+  }
+
+  /**
+   * NEW: Check if an offset matches a known library vector
+   */
+  isTrapOffset(offset: number): boolean {
+    return this.offsetMap.has(offset);
+  }
+
+  /**
+   * NEW: Handle a trap by offset (when A6 is corrupted)
+   * @param offset - Library vector offset (e.g., -30 for Supervisor)
+   * @param baseAddr - The A6 value (library base address, may be corrupted)
+   */
+  handleTrapByOffset(offset: number, baseAddr: number): boolean {
+    const vectors = this.offsetMap.get(offset);
+    const libraries = this.offsetLibraryMap.get(offset);
+
+    if (!vectors || vectors.length === 0) {
+      console.error(`[LibraryTraps] *** NO HANDLER for offset ${offset} ***`);
+      return false;
+    }
+
+    // Multiple vectors can share the same offset (collision)
+    // For now, use the first one (Exec.library functions installed first)
+    // TODO: More sophisticated collision resolution if needed
+    const vector = vectors[0];
+    const library = libraries![0];
+
+    console.log(`[LibraryTraps] Intercepted: ${vector.name}() at offset ${offset} (A6=0x${baseAddr.toString(16)})`);
+
+    // Notify monitor if callback is set
+    if (this.onLibraryCall) {
+      this.onLibraryCall(vector.name, baseAddr + offset);
+    }
+
+    // Pop return address from stack (same as handleTrap)
+    const sp = this.emulator.getRegister(15);  // A7 (stack pointer)
+    const a6 = this.emulator.getRegister(14);  // A6 (library base)
+    console.log(`[LibraryTraps]   SP before pop: 0x${sp.toString(16)}, A6: 0x${a6.toString(16)}`);
+    const returnAddr = this.emulator.readMemory32(sp);
+    console.log(`[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`);
+    this.emulator.setRegister(15, sp + 4);     // Pop return address
+    const spAfter = this.emulator.getRegister(15);
+    console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
+
+    // Call the handler
+    const result = vector.handler(this.emulator, library, returnAddr);
+
+    // Set return value in D0
+    this.emulator.setRegister(0, result);
+
+    // Update Status Register condition codes
+    const sr = this.emulator.getRegister(17);
+    let newSr = sr & 0xFFF0;  // Clear N, Z, V, C flags
+
+    // Set Z flag if result is zero
+    if (result === 0) {
+      newSr |= 0x04;  // Set Z flag (bit 2)
+    }
+
+    // Set N flag if result is negative (bit 31 set)
+    if (result & 0x80000000) {
+      newSr |= 0x08;  // Set N flag (bit 3)
+    }
+
+    this.emulator.setRegister(17, newSr);
+
+    console.log(`[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`);
+    console.log(`[LibraryTraps]   Set SR to: 0x${newSr.toString(16).padStart(4, '0')} (Z=${(newSr & 0x04) ? 1 : 0} N=${(newSr & 0x08) ? 1 : 0})`);
+
+    // Set PC to return address
+    // EXCEPTION: Supervisor() sets PC itself
+    const currentPC = this.emulator.getRegister(16);
+    if (vector.name === 'Supervisor') {
+      console.log(`[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(16)}, not setting return address`);
+    } else {
+      this.emulator.setRegister(16, returnAddr);
+    }
+
+    return true;
   }
 }

@@ -13,16 +13,7 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 
-// Types
-interface BBSSession {
-  user?: any;
-  currentConf?: number;
-  currentMsgBase?: number;
-  confRJoin?: number;
-  msgBaseRJoin?: number;
-  subState: string;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 // Dependencies injected from index.ts
 let _joinConference: (socket: any, session: BBSSession, confId: number, msgBaseId: number) => Promise<boolean>;

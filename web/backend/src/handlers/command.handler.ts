@@ -810,7 +810,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
        }
 
        // Start file download
-       handleFileDownload(socket, session, fileNumber);
+       // TODO: Implement handleFileDownload function
+       // handleFileDownload(socket, session, fileNumber);
+       socket.emit('ansi-output', '\r\n\x1b[33mFile download not yet implemented.\x1b[0m\r\n');
+       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
        return;
      }
 
@@ -841,10 +844,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       startFileUpload(socket, session, selectedArea);
     } else if (session.tempData?.downloadMode) {
       // Start download process for selected area
-      startFileDownload(socket, session, selectedArea);
+      // TODO: Implement startFileDownload function
+      // startFileDownload(socket, session, selectedArea);
+      socket.emit('ansi-output', '\r\n\x1b[33mFile download not yet implemented.\x1b[0m\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     } else {
       // Display files in selected area (like displayIt in AmiExpress)
-      displayFileAreaContents(socket, session, selectedArea);
+      // TODO: Implement displayFileAreaContents function
+      // displayFileAreaContents(socket, session, selectedArea);
+      socket.emit('ansi-output', '\r\n\x1b[33mFile listing not yet implemented.\x1b[0m\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     }
     return;
   }
@@ -1160,48 +1169,84 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle file maintenance operations
   if (session.tempData?.operation === 'delete_files') {
-    await handleFileDeleteConfirmation(socket, session, input);
+    // TODO: Implement handleFileDeleteConfirmation function
+    // await handleFileDeleteConfirmation(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mFile delete confirmation not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 
   if (session.tempData?.operation === 'move_files') {
-    await handleFileMoveConfirmation(socket, session, input);
+    // TODO: Implement handleFileMoveConfirmation function
+    // await handleFileMoveConfirmation(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mFile move confirmation not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 
   // Handle account editing operations
   if (session.tempData?.accountEditingMenu) {
-    handleAccountEditing(socket, session, input);
+    // TODO: Implement handleAccountEditing function
+    // handleAccountEditing(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mAccount editing not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 
   if (session.tempData?.editUserAccount) {
-    handleEditUserAccount(socket, session, input);
+    // TODO: Implement handleEditUserAccount function
+    // handleEditUserAccount(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mEdit user account not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 
   if (session.tempData?.viewUserStats) {
-    handleViewUserStats(socket, session, input);
+    // TODO: Implement handleViewUserStats function
+    // handleViewUserStats(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mView user stats not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 
   if (session.tempData?.changeSecLevel) {
-    handleChangeSecLevel(socket, session, input);
+    // TODO: Implement handleChangeSecLevel function
+    // handleChangeSecLevel(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mChange sec level not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 
   if (session.tempData?.toggleUserFlags) {
-    handleToggleUserFlags(socket, session, input);
+    // TODO: Implement handleToggleUserFlags function
+    // handleToggleUserFlags(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mToggle user flags not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 
   if (session.tempData?.deleteUserAccount) {
-    handleDeleteUserAccount(socket, session, input);
+    // TODO: Implement handleDeleteUserAccount function
+    // handleDeleteUserAccount(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mDelete user account not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 
   if (session.tempData?.searchUsers) {
-    handleSearchUsers(socket, session, input);
+    // TODO: Implement handleSearchUsers function
+    // handleSearchUsers(socket, session, data.trim());
+    socket.emit('ansi-output', '\r\n\x1b[33mSearch users not yet implemented.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
     return;
   }
 

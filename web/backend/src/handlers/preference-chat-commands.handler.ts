@@ -16,14 +16,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
 
-// Types
-interface BBSSession {
-  user?: any;
-  subState?: string;
-  expertMode?: boolean;
-  ansiMode?: boolean;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 // Dependencies injected from index.ts
 let _startSysopPage: (socket: any, session: BBSSession) => void;

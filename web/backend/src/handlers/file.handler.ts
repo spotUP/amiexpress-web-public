@@ -6,16 +6,7 @@
 
 import { LoggedOnSubState } from '../constants/bbs-states';
 
-// Types
-interface BBSSession {
-  user?: any;
-  subState?: string;
-  currentConf?: number;
-  currentConfName?: string;
-  currentMsgBase?: number;
-  menuPause?: boolean;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];

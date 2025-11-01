@@ -19,14 +19,7 @@ import { ParamsUtil } from '../utils/params.util';
 import path from 'path';
 import fs from 'fs';
 
-// Types
-interface BBSSession {
-  user?: any;
-  subState?: string;
-  expertMode?: boolean;
-  bulletinContext?: any;
-  [key: string]: any;
-}
+import type { BBSSession } from '../index';
 
 // Dependencies injected from index.ts
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => void;

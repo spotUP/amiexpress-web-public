@@ -2359,9 +2359,9 @@ function print_insn_arg(d: string, buffer: Uint8Array, p0: number, addr: number)
 	
 	case 'J':
 		val = FETCH_ARG(12);
-		if(reg_names_J[val])
-			text = reg_names_J[val] as string;
-		else 
+		if((reg_names_J as any)[val])
+			text = (reg_names_J as any)[val] as string;
+		else
 			text = `0x${val.toString(16)}`;
 		break;
 

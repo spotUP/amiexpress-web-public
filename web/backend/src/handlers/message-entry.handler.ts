@@ -6,15 +6,6 @@
 import { AnsiUtil } from '../utils/ansi.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 
-// Types
-interface BBSSession {
-  user?: any;
-  state: string;
-  subState: string;
-  currentConf?: number;
-  currentMsgBase?: number;
-  tempData?: any;
-}
 
 // Dependencies (injected from index.ts)
 let _db: any;
@@ -201,6 +192,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     console.log('[Message] About to trigger NEW_MESSAGE webhook');
     try {
       const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+
       const conference = await _db.getConferenceById(session.currentConf);
       const messageBase = await _db.getMessageBaseById(session.currentMsgBase);
 

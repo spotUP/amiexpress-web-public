@@ -34,8 +34,8 @@ export interface DoorSession {
   startTime: Date;
   endTime?: Date;
   status: 'running' | 'completed' | 'error';
-  output?: string[];
-  input?: string[];
+  output?: string[];      // Output lines from door
+  input?: string[];       // Input lines to door
 }
 
 // Chat system interfaces - mirrors AmiExpress chat implementation
@@ -66,6 +66,30 @@ export interface ChatState {
   activeSessions: ChatSession[];
   pagingUsers: string[]; // User IDs currently paging
   chatToggle: boolean; // F7 chat toggle state
+}
+
+// Internode chat interfaces - for user-to-user chat across nodes
+export interface InternodeChatSession {
+  id: string;
+  nodeId: number;
+  userId: string;
+  targetNodeId: number;
+  targetUserId: string;
+  startTime: Date;
+  endTime?: Date;
+  status: 'inviting' | 'active' | 'ended' | 'declined';
+  lastActivity: Date;
+}
+
+export interface InternodeChatMessage {
+  id: string;
+  sessionId: string;
+  fromNodeId: number;
+  fromUserId: string;
+  toNodeId: number;
+  toUserId: string;
+  content: string;
+  timestamp: Date;
 }
 
 // Network message interfaces - QWK/FTN offline mail support
@@ -125,6 +149,8 @@ export interface NodeSession {
   status: 'active' | 'idle' | 'away' | 'disconnected';
   ipAddress?: string;
   location?: string;
+  loadLevel?: number;      // Load level/priority for node
+  currentUser?: string;    // Current username on this node
 }
 
 export interface NodeInfo {
@@ -143,6 +169,7 @@ export interface AREXXScript {
   description: string;
   filename: string;
   path: string;
+  script?: string;        // Script source code content
   accessLevel: number;
   enabled: boolean;
   parameters?: AREXXParameter[];
@@ -167,6 +194,7 @@ export interface AREXXContext {
   scriptId: string;
   userId?: string;
   sessionId?: string;
+  user?: any;             // User object for script context
   parameters: Record<string, any>;
   environment: Record<string, any>;
   output: string[];
