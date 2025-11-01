@@ -508,7 +508,7 @@ export class AmigaDoorSession {
     console.log(`[AmigaDoorSession] START OF runExecutionLoop(): SP=0x${loopStartSP.toString(16)}, PC=0x${loopStartPC.toString(16)}`);
 
     try {
-      const CYCLES_PER_ITERATION = 1;  // Execute 1 cycle per iteration for detailed debugging
+      const CYCLES_PER_ITERATION = 1;  // Execute 1 cycle - works best for now (reaches iteration 2156)
       const exitSentinel = 0xDEADBEEF;
 
       // Log initial state BEFORE any execution
@@ -974,8 +974,9 @@ export class AmigaDoorSession {
           console.log(`[AmigaDoorSession] *** DEBUG 10001: PC=0x${pc.toString(16)}`);
         }
 
-        // CRITICAL: Unconditional logging for iterations 1008-1025 to debug the jump to 0xf00160
-        const forceLog = (this.iterationCount >= 1008 && this.iterationCount <= 1025);
+        // CRITICAL: Unconditional logging for iterations 1008-1025 and 2154-2160 (MOVEM.L/RTS debug)
+        const forceLog = (this.iterationCount >= 1008 && this.iterationCount <= 1025) ||
+                         (this.iterationCount >= 2154 && this.iterationCount <= 2160);
 
         // Minimal logging to avoid timing issues for other iterations
         const tracePc = this.emulator.getRegister(16);
@@ -1147,6 +1148,37 @@ export class AmigaDoorSession {
             const pcAfterTrap = this.emulator.getRegister(16);
             const spAfterTrap = this.emulator.getRegister(15);
             console.log(`[AmigaDoorSession] *** AFTER TRAP HANDLER: PC=0x${pcAfterTrap.toString(16)}, SP=0x${spAfterTrap.toString(16)}`);
+
+            // DEBUG: If PC=0x1744 (MOVEM.L/RTS sequence), dump stack to see what RTS will pop
+            if (pcAfterTrap === 0x1744) {
+              console.log(`[AmigaDoorSession] *** MOVEM.L/RTS SEQUENCE DETECTED ***`);
+              console.log(`[AmigaDoorSession]   MOVEM.L will restore 15 registers (60 bytes) from stack`);
+              console.log(`[AmigaDoorSession]   Current SP: 0x${spAfterTrap.toString(16)}`);
+              console.log(`[AmigaDoorSession]   After MOVEM.L, SP will be: 0x${(spAfterTrap + 60).toString(16)}`);
+              console.log(`[AmigaDoorSession]   RTS will then pop return address from: 0x${(spAfterTrap + 60).toString(16)}`);
+
+              // Read what's at SP+60 (what RTS will pop)
+              const rtsReturnAddr = this.emulator.readMemory32(spAfterTrap + 60);
+              console.log(`[AmigaDoorSession]   Value at SP+60: 0x${rtsReturnAddr.toString(16)} (what RTS will pop)`);
+
+              // Show stack contents from SP to SP+64
+              console.log(`[AmigaDoorSession]   Stack contents (SP to SP+64):`);
+              for (let offset = 0; offset < 68; offset += 4) {
+                const addr = spAfterTrap + offset;
+                const value = this.emulator.readMemory32(addr);
+                const marker = (offset === 60) ? ' <-- RTS will pop this' : '';
+                console.log(`[AmigaDoorSession]     SP+${offset}: 0x${addr.toString(16)} = 0x${value.toString(16)}${marker}`);
+              }
+
+              // Check instruction encoding
+              const op0 = this.emulator.readMemory(0x1744);
+              const op1 = this.emulator.readMemory(0x1745);
+              const op2 = this.emulator.readMemory(0x1746);
+              const op3 = this.emulator.readMemory(0x1747);
+              console.log(`[AmigaDoorSession]   Instruction bytes at 0x1744: ${op0.toString(16)} ${op1.toString(16)} ${op2.toString(16)} ${op3.toString(16)}`);
+              console.log(`[AmigaDoorSession]   Opcode: 0x${((op0 << 8) | op1).toString(16)} ${((op2 << 8) | op3).toString(16)}`);
+            }
+
             // Don't execute cycles this iteration - trap handler set new PC
             // INSTEAD of continue, skip execute by jumping to iteration increment
             // This prevents the WASM module from executing instructions during async control flow
