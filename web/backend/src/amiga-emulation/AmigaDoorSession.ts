@@ -1256,6 +1256,49 @@ export class AmigaDoorSession {
           console.log(`[AmigaDoorSession] [${this.iterationCount}] BEFORE execute(): PC=0x${pcBeforeExecute.toString(16)}`);
         }
 
+        // Check for JSR to library function BEFORE execution
+        const op0Pre = this.emulator.readMemory(pcBeforeExecute);
+        const op1Pre = this.emulator.readMemory(pcBeforeExecute + 1);
+        const opcodePre = (op0Pre << 8) | op1Pre;
+
+        // JSR (d16,A6) - opcode 0x4eae - calls library function at offset from A6
+        if (opcodePre === 0x4eae) {
+          const a6 = this.emulator.getRegister(14); // A6 register
+          const offset16 = this.emulator.readMemory16(pcBeforeExecute + 2);
+          // Sign extend 16-bit offset to 32-bit
+          const offset = (offset16 & 0x8000) ? (offset16 - 0x10000) : offset16;
+          const targetAddr = (a6 + offset) & 0xFFFFFF;
+
+          console.log(`[AmigaDoorSession] [${this.iterationCount}] JSR (d16,A6) detected at PC=0x${pcBeforeExecute.toString(16)}`);
+          console.log(`[AmigaDoorSession]   A6=0x${a6.toString(16)}, offset=${offset}, target=0x${targetAddr.toString(16)}`);
+
+          // Check if this is a library trap
+          if (this.libraryTraps.isTrapOffset(offset)) {
+            console.log(`[AmigaDoorSession]   This is a library trap! Intercepting...`);
+
+            // CRITICAL: JSR pushes return address (PC+4) onto stack
+            // We intercepted BEFORE JSR executed, so manually push return address
+            const returnAddr = pcBeforeExecute + 4; // JSR (d16,A6) is 4 bytes
+            const sp = this.emulator.getRegister(15);
+            this.emulator.writeMemory32(sp - 4, returnAddr);
+            this.emulator.setRegister(15, sp - 4);
+            console.log(`[AmigaDoorSession]   Manually pushed return address 0x${returnAddr.toString(16)} to stack`);
+
+            // Handle the trap
+            const handled = this.libraryTraps.handleTrapByOffset(offset, a6);
+
+            if (handled) {
+              console.log(`[AmigaDoorSession]   Trap handled successfully, PC now: 0x${this.emulator.getRegister(16).toString(16)}`);
+              // Skip execution, continue to next iteration
+              this.iterationCount++;
+              await new Promise(resolve => setImmediate(resolve));
+              continue;
+            } else {
+              console.error(`[AmigaDoorSession]   Trap handler FAILED for offset ${offset}`);
+            }
+          }
+        }
+
         // Execute cycles normally
         this.emulator.execute(CYCLES_PER_ITERATION);
         this.totalCycles += CYCLES_PER_ITERATION;
