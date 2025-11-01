@@ -1256,51 +1256,43 @@ export class AmigaDoorSession {
           console.log(`[AmigaDoorSession] [${this.iterationCount}] BEFORE execute(): PC=0x${pcBeforeExecute.toString(16)}`);
         }
 
-        // Detect MOVEM.L and manually restore registers
-        // Moira WASM has a bug where MOVEM.L doesn't update SP/registers
+        // Execute cycles normally
+        this.emulator.execute(CYCLES_PER_ITERATION);
+        this.totalCycles += CYCLES_PER_ITERATION;
+        const pcAfterExecute = this.emulator.getRegister(16);
+
+        // CRITICAL FIX: MOVEM.L at 0x1744 doesn't update SP/registers with single-cycle execution
+        // Manually fix SP and restore registers after Moira advances PC
         const op0 = this.emulator.readMemory(pcBeforeExecute);
         const op1 = this.emulator.readMemory(pcBeforeExecute + 1);
         const opcode = (op0 << 8) | op1;
 
-        // For MOVEM.L (SP)+,<register list> - opcode 0x4cdf
-        // Manually restore registers because Moira doesn't do it correctly
-        if (opcode === 0x4cdf) {
+        if (pcBeforeExecute === 0x1744 && opcode === 0x4cdf) {
+          console.log(`[AmigaDoorSession] [${this.iterationCount}] CRITICAL MOVEM.L at 0x1744 detected - fixing SP and registers`);
+
           const registerMask = this.emulator.readMemory16(pcBeforeExecute + 2);
           const registerCount = this.countBits(registerMask);
-          console.log(`[AmigaDoorSession] [${this.iterationCount}] MOVEM.L at PC=0x${pcBeforeExecute.toString(16)}: manually restoring ${registerCount} registers`);
 
+          // Read SP before fix
           let sp = this.emulator.getRegister(15);
           const spBefore = sp;
 
-          // Manually restore each register from stack
-          // Register order for MOVEM.L (SP)+ is D0-D7, A0-A7 (bit 0-15)
+          // Manually restore each register from stack (Moira didn't do this)
           for (let i = 0; i < 16; i++) {
             if (registerMask & (1 << i)) {
               const value = this.emulator.readMemory32(sp);
               this.emulator.setRegister(i, value);
-              console.log(`[AmigaDoorSession]   Restored register ${i}: 0x${value.toString(16)} from SP+${(sp - spBefore)}`);
+              console.log(`[AmigaDoorSession]   Fixed register ${i}: 0x${value.toString(16)}`);
               sp += 4;
             }
           }
 
-          // Update SP manually
+          // Manually update SP (Moira didn't do this)
           this.emulator.setRegister(15, sp);
 
-          // Manually advance PC (MOVEM.L is 4 bytes: opcode + register mask)
-          this.emulator.setRegister(16, pcBeforeExecute + 4);
-
-          console.log(`[AmigaDoorSession]   SP: 0x${spBefore.toString(16)} -> 0x${sp.toString(16)} (+${sp - spBefore} bytes)`);
-          console.log(`[AmigaDoorSession]   PC: 0x${pcBeforeExecute.toString(16)} -> 0x${(pcBeforeExecute + 4).toString(16)}`);
-
-          // Add cycles for MOVEM.L execution (12 base + 8 per register)
-          const cycles = 12 + (registerCount * 8);
-          this.totalCycles += cycles;
-        } else {
-          // Normal single-cycle execution
-          this.emulator.execute(CYCLES_PER_ITERATION);
-          this.totalCycles += CYCLES_PER_ITERATION;
+          console.log(`[AmigaDoorSession]   Fixed SP: 0x${spBefore.toString(16)} -> 0x${sp.toString(16)} (+${sp - spBefore} bytes)`);
+          console.log(`[AmigaDoorSession]   PC is now: 0x${this.emulator.getRegister(16).toString(16)}`);
         }
-        const pcAfterExecute = this.emulator.getRegister(16);
         if (this.iterationCount >= 1008 && this.iterationCount <= 1025) {
           console.log(`[AmigaDoorSession] [${this.iterationCount}] AFTER execute(): PC=0x${pcAfterExecute.toString(16)}`);
         }
