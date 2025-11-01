@@ -536,10 +536,10 @@ export class AmigaDoorSession {
       let totalInstructions = 0;
 
       while (this.isRunning) {
-        // DEBUG: Check PC at very start of loop iteration
-        if (this.iterationCount >= 2153 && this.iterationCount <= 2155) {
+        // DEBUG: UNCONDITIONAL log to verify code changes
+        if (this.iterationCount === 1010 || this.iterationCount === 1015 || this.iterationCount === 1020) {
           const pcTopOfLoop = this.emulator.getRegister(16);
-          console.log(`[AmigaDoorSession] [${this.iterationCount}] PC at top of loop: 0x${pcTopOfLoop.toString(16)}`);
+          console.log(`[AmigaDoorSession] *** UNCONDITIONAL LOG [${this.iterationCount}] PC=0x${pcTopOfLoop.toString(16)} ***`);
         }
 
         // Check for library trap BEFORE execution
@@ -646,6 +646,13 @@ export class AmigaDoorSession {
               }
               // Trap handler set new PC, continue to next iteration
               this.iterationCount++;
+
+              // DEBUG: Log iteration number for traps in range 1010-1020
+              if (this.iterationCount >= 1010 && this.iterationCount <= 1020) {
+                const newPc = this.emulator.getRegister(16);
+                console.log(`[AmigaDoorSession] [${this.iterationCount}] After trap: PC=0x${newPc.toString(16)}`);
+              }
+
               await new Promise(resolve => setImmediate(resolve));
               continue;
             }
@@ -967,13 +974,14 @@ export class AmigaDoorSession {
           console.log(`[AmigaDoorSession] *** DEBUG 10001: PC=0x${pc.toString(16)}`);
         }
 
-        // CRITICAL: Minimal logging to avoid timing issues
-        // Only log when approaching crash or in supervisor/low memory
-        // Full logging causes timing changes that affect execution
+        // CRITICAL: Unconditional logging for iterations 1008-1025 to debug the jump to 0xf00160
+        const forceLog = (this.iterationCount >= 1008 && this.iterationCount <= 1025);
+
+        // Minimal logging to avoid timing issues for other iterations
         const tracePc = this.emulator.getRegister(16);
         const isLowPC = (tracePc < 0x1000);
         const isHighPC = (tracePc >= 0xfe000);
-        const needsLogging = isLowPC || isHighPC || (this.iterationCount >= 995 && this.iterationCount <= 1010);
+        const needsLogging = forceLog || isLowPC || isHighPC;
 
         if (needsLogging) {
           const tracePc = this.emulator.getRegister(16);
@@ -993,7 +1001,7 @@ export class AmigaDoorSession {
           // Show opcode for low PC (crash detection) and high PC (supervisor space)
           const isLowPC = (tracePc < 0x1000);
           const isHighPC = (tracePc >= 0xfe000);
-          const showOpcode = isLowPC || isHighPC || (this.iterationCount >= 1730 && this.iterationCount <= 1750);
+          const showOpcode = forceLog || isLowPC || isHighPC || (this.iterationCount >= 1730 && this.iterationCount <= 1750);
 
           if (showOpcode) {
             console.log(`[AmigaDoorSession] [${this.iterationCount}] PC=0x${tracePc.toString(16)}, ` +
@@ -1143,6 +1151,12 @@ export class AmigaDoorSession {
             // INSTEAD of continue, skip execute by jumping to iteration increment
             // This prevents the WASM module from executing instructions during async control flow
             this.iterationCount++;
+
+            // DEBUG: Log iteration number for traps in range 1010-1020
+            if (this.iterationCount >= 1010 && this.iterationCount <= 1020) {
+              console.log(`[AmigaDoorSession] [${this.iterationCount}] Post-1000 trap: PC=0x${pcAfterTrap.toString(16)}`);
+            }
+
             await new Promise(resolve => setImmediate(resolve));
             continue;
           }
@@ -1190,13 +1204,17 @@ export class AmigaDoorSession {
         }
 
         // Execute some cycles
-        // DEBUG: Check PC right before execute
+        // DEBUG: Check PC right before and after execute
         const pcBeforeExecute = this.emulator.getRegister(16);
-        if (this.iterationCount >= 2153 && this.iterationCount <= 2155) {
-          console.log(`[AmigaDoorSession] [${this.iterationCount}] PC before execute(): 0x${pcBeforeExecute.toString(16)}`);
+        if (this.iterationCount >= 1008 && this.iterationCount <= 1025) {
+          console.log(`[AmigaDoorSession] [${this.iterationCount}] BEFORE execute(): PC=0x${pcBeforeExecute.toString(16)}`);
         }
         this.emulator.execute(CYCLES_PER_ITERATION);
         this.totalCycles += CYCLES_PER_ITERATION;
+        const pcAfterExecute = this.emulator.getRegister(16);
+        if (this.iterationCount >= 1008 && this.iterationCount <= 1025) {
+          console.log(`[AmigaDoorSession] [${this.iterationCount}] AFTER execute(): PC=0x${pcAfterExecute.toString(16)}`);
+        }
         // Check if A0 register changed (to detect port address overwrite)
         this.checkA0RegisterChange();
 
