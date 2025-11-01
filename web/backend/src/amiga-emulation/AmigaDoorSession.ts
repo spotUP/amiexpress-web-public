@@ -988,9 +988,10 @@ export class AmigaDoorSession {
           console.log(`[AmigaDoorSession] *** DEBUG 10001: PC=0x${pc.toString(16)}`);
         }
 
-        // CRITICAL: Unconditional logging for iterations 1008-1025 and 2154-2160 (MOVEM.L/RTS debug)
+        // CRITICAL: Unconditional logging for specific ranges
         const forceLog = (this.iterationCount >= 1008 && this.iterationCount <= 1025) ||
-                         (this.iterationCount >= 2154 && this.iterationCount <= 2160);
+                         (this.iterationCount >= 2154 && this.iterationCount <= 2160) ||
+                         (this.iterationCount >= 48850 && this.iterationCount <= 48875);
 
         // Minimal logging to avoid timing issues for other iterations
         const tracePc = this.emulator.getRegister(16);
