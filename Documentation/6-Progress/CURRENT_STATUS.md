@@ -21,7 +21,9 @@
 - **NI/NO Tools**: Crash with ROM write errors in AllocMem() - memory allocation bug
 
 ### Not Started ❌
-- **~XC MCI Code**: Execute commands from screen files (needed for NI/NO integration)
+- **~XC MCI Code**: Execute commands from screen files (CRITICAL BLOCKER for NI/NO integration)
+- **8+ Missing MCI Codes**: ~f, ~w, ~x, ~y, ~q, ~h, ~SS_, ~SX_, ~SR_, ~CC_, ~CR_, ~SM_, etc.
+  (See Docs/MCI_CODES_TODO.md for complete list - 52/60+ implemented)
 
 ---
 
