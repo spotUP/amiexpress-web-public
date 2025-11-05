@@ -488,7 +488,7 @@ export function addAnsiEscapes(content: string): string {
  * @param screenName - Name of screen to display
  * @returns true if screen was displayed successfully, false otherwise
  */
-export async function await displayScreen(socket: any, session: BBSSession, screenName: string): Promise<boolean> {
+export async function displayScreen(socket: any, session: BBSSession, screenName: string): Promise<boolean> {
   const content = loadScreenFile(screenName, session.currentConf);
 
   if (content) {

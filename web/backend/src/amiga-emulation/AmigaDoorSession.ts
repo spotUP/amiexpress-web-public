@@ -3,7 +3,7 @@ import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { HunkLoader } from './loader/HunkLoader';
 import { ExecLibrary } from './api/ExecLibrary';
 import { AEDoorLibrary } from './api/AEDoorLibrary';
-import { DosLibrary } from './api/DOSLibrary';
+import { DosLibrary } from './api/DosLibrary';
 import { LibraryTraps } from './api/LibraryTraps';
 import { XIMProtocol } from './XIMProtocol';
 import { KickstartRom } from './KickstartRom';

@@ -33,25 +33,36 @@ export interface User {
   username: string;
   passwordHash: string;
   realname: string;
+  realName?: string;  // Alias for realname
   location: string;
   phone: string;
+  phoneNumber?: string;  // Alias for phone
   email?: string;
   secLevel: number;
   uploads: number;
   downloads: number;
   bytesUpload: number;
+  uploadBytes?: number;  // Alias for bytesUpload
   bytesDownload: number;
+  downloadBytes?: number;  // Alias for bytesDownload
   ratio: number;
   ratioType: number;
+  downloadRatio?: number;  // Alias for ratio
   timeTotal: number;
   timeLimit: number;
+  dailyTimeLimit?: number;  // Alias for timeLimit
   timeUsed: number;
   chatLimit: number;
   chatUsed: number;
   lastLogin?: Date;
+  timeLastOn?: Date;  // Alias for lastLogin
   firstLogin: Date;
+  accountDate?: Date;  // Alias for firstLogin
   calls: number;
+  timesCalled?: number;  // Alias for calls
   callsToday: number;
+  timesOnToday?: number;  // Alias for callsToday
+  messagesPosted?: number;  // Number of messages posted
   newUser: boolean;
   expert: boolean;
   ansi: boolean;
@@ -64,13 +75,20 @@ export interface User {
   availableForChat: boolean;
   quietNode: boolean;
   autoRejoin: number;
+  confRJoin?: number;  // Alias for autoRejoin
   confAccess: string;
   areaName: string;
   uuCP: boolean;
   topUploadCPS: number;
   topDownloadCPS: number;
   byteLimit: number;
+  dailyBytesLimit?: number;  // Alias for byteLimit
+  dailyBytesDld?: number;  // Daily bytes downloaded
   bytesAvailableForDownload?: number;  // Calculated available download bytes
+  lastDownloadTime?: Date;  // Last download timestamp
+  newSinceDate?: Date;  // Date for "new files since" marker
+  baud?: number;  // Connection baud rate (for web = 38400)
+  alias?: string;  // User alias/handle
   securityFlags?: string;
   secOverride?: string;
   userFlags: number;
