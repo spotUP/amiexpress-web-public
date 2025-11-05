@@ -129,6 +129,7 @@ class AmiExpressDocsServer {
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
       const resources = [];
 
+      // Add documentation resources
       for (const [key, doc] of Object.entries(DOCS)) {
         try {
           await fs.access(doc.path);
@@ -143,37 +144,77 @@ class AmiExpressDocsServer {
         }
       }
 
+      // Add source file resources (on-demand only)
+      for (const [key, src] of Object.entries(SOURCES)) {
+        try {
+          await fs.access(src.path);
+          resources.push({
+            uri: `amiexpress://sources/${key}`,
+            mimeType: src.mimeType,
+            name: key,
+            description: src.description
+          });
+        } catch (error) {
+          console.error(`[MCP] Source not found: ${src.path}`);
+        }
+      }
+
       return { resources };
     });
 
     // Read a specific resource
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const uri = request.params.uri;
-      const match = uri.match(/^amiexpress:\/\/docs\/(.+)$/);
 
-      if (!match) {
-        throw new Error(`Invalid URI: ${uri}`);
+      // Check for source files first
+      const sourceMatch = uri.match(/^amiexpress:\/\/sources\/(.+)$/);
+      if (sourceMatch) {
+        const sourceKey = sourceMatch[1];
+        const source = SOURCES[sourceKey];
+
+        if (!source) {
+          throw new Error(`Unknown source: ${sourceKey}`);
+        }
+
+        try {
+          const content = await fs.readFile(source.path, 'utf-8');
+          return {
+            contents: [{
+              uri,
+              mimeType: source.mimeType,
+              text: content
+            }]
+          };
+        } catch (error) {
+          throw new Error(`Failed to read ${sourceKey}: ${error.message}`);
+        }
       }
 
-      const docKey = match[1];
-      const doc = DOCS[docKey];
+      // Check for documentation files
+      const docMatch = uri.match(/^amiexpress:\/\/docs\/(.+)$/);
+      if (docMatch) {
+        const docKey = docMatch[1];
+        const doc = DOCS[docKey];
 
-      if (!doc) {
-        throw new Error(`Unknown document: ${docKey}`);
+        if (!doc) {
+          throw new Error(`Unknown document: ${docKey}`);
+        }
+
+        try {
+          const content = await fs.readFile(doc.path, 'utf-8');
+          return {
+            contents: [{
+              uri,
+              mimeType: doc.mimeType,
+              text: content
+            }]
+          };
+        } catch (error) {
+          throw new Error(`Failed to read ${docKey}: ${error.message}`);
+        }
       }
 
-      try {
-        const content = await fs.readFile(doc.path, 'utf-8');
-        return {
-          contents: [{
-            uri,
-            mimeType: doc.mimeType,
-            text: content
-          }]
-        };
-      } catch (error) {
-        throw new Error(`Failed to read ${docKey}: ${error.message}`);
-      }
+      throw new Error(`Invalid URI: ${uri}`);
     });
 
     // List available tools
@@ -206,6 +247,67 @@ class AmiExpressDocsServer {
               type: 'object',
               properties: {}
             }
+          },
+          {
+            name: 'search_ndk_autodocs',
+            description: 'Search NDK 3.2R4 Autodocs (30MB) for AmigaOS function specifications',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Function name or keyword to search for'
+                },
+                library: {
+                  type: 'string',
+                  description: 'Optional: specific library to search (dos, exec, graphics, intuition, etc.)',
+                  default: null
+                }
+              },
+              required: ['query']
+            }
+          },
+          {
+            name: 'read_source_range',
+            description: 'Read specific line range from express.e source file (98% token savings vs full read)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                source: {
+                  type: 'string',
+                  description: 'Source file to read (express-e, hydra-e, acp-e)',
+                  enum: ['express-e', 'hydra-e', 'acp-e']
+                },
+                startLine: {
+                  type: 'number',
+                  description: 'Starting line number (1-indexed)'
+                },
+                endLine: {
+                  type: 'number',
+                  description: 'Ending line number (inclusive)'
+                }
+              },
+              required: ['source', 'startLine', 'endLine']
+            }
+          },
+          {
+            name: 'search_express_source',
+            description: 'Search express.e source code for commands, functions, or keywords',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Keyword or pattern to search for'
+                },
+                context: {
+                  type: 'number',
+                  description: 'Number of context lines to show around matches',
+                  default: 3
+                }
+              },
+              required: ['query']
+            }
           }
         ]
       };
@@ -219,6 +321,12 @@ class AmiExpressDocsServer {
         return await this.searchDocs(args.query, args.caseSensitive ?? false);
       } else if (name === 'get_all_docs') {
         return await this.getAllDocs();
+      } else if (name === 'search_ndk_autodocs') {
+        return await this.searchNDKAutodocs(args.query, args.library ?? null);
+      } else if (name === 'read_source_range') {
+        return await this.readSourceRange(args.source, args.startLine, args.endLine);
+      } else if (name === 'search_express_source') {
+        return await this.searchExpressSource(args.query, args.context ?? 3);
       } else {
         throw new Error(`Unknown tool: ${name}`);
       }
@@ -293,6 +401,167 @@ class AmiExpressDocsServer {
         text: combined
       }]
     };
+  }
+
+  async searchNDKAutodocs(query, library = null) {
+    const autodocsPath = path.join(PROJECT_ROOT, 'NDK3.2R4', 'Autodocs');
+    const results = [];
+
+    try {
+      // Determine which files to search
+      let filesToSearch = [];
+      if (library) {
+        const libraryFile = path.join(autodocsPath, library);
+        try {
+          await fs.access(libraryFile);
+          filesToSearch.push({ name: library, path: libraryFile });
+        } catch {
+          throw new Error(`Library not found: ${library}`);
+        }
+      } else {
+        // Search all autodoc files
+        const files = await fs.readdir(autodocsPath);
+        filesToSearch = files
+          .filter(f => !f.startsWith('.'))
+          .map(f => ({ name: f, path: path.join(autodocsPath, f) }));
+      }
+
+      // Search each file
+      for (const file of filesToSearch) {
+        try {
+          const content = await fs.readFile(file.path, 'utf-8');
+          const lines = content.split('\n');
+
+          // Search for @Node entries matching the query
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+
+            // Check if this is a function node matching our query
+            if (line.includes('@Node') && line.toLowerCase().includes(query.toLowerCase())) {
+              // Extract function name
+              const match = line.match(/@Node\s+"([^"]+)"/);
+              const functionName = match ? match[1] : 'Unknown';
+
+              // Collect the full function documentation (next ~50 lines or until next @Node)
+              let docLines = [line];
+              for (let j = i + 1; j < Math.min(i + 100, lines.length); j++) {
+                if (lines[j].includes('@Node')) break;
+                docLines.push(lines[j]);
+              }
+
+              results.push({
+                library: file.name,
+                function: functionName,
+                documentation: docLines.join('\n'),
+                lineNumber: i + 1
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`[MCP] Failed to search ${file.name}: ${error.message}`);
+        }
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            query,
+            library: library || 'all',
+            totalMatches: results.length,
+            results: results.slice(0, 5) // Limit to 5 results to avoid huge responses
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to search NDK autodocs: ${error.message}`);
+    }
+  }
+
+  async readSourceRange(sourceKey, startLine, endLine) {
+    const source = SOURCES[sourceKey];
+    if (!source) {
+      throw new Error(`Unknown source: ${sourceKey}`);
+    }
+
+    try {
+      const content = await fs.readFile(source.path, 'utf-8');
+      const lines = content.split('\n');
+
+      // Validate line numbers
+      if (startLine < 1 || startLine > lines.length) {
+        throw new Error(`Invalid start line: ${startLine} (file has ${lines.length} lines)`);
+      }
+      if (endLine < startLine || endLine > lines.length) {
+        throw new Error(`Invalid end line: ${endLine} (must be between ${startLine} and ${lines.length})`);
+      }
+
+      // Extract the requested range (convert to 0-indexed)
+      const extractedLines = lines.slice(startLine - 1, endLine);
+
+      // Format with line numbers
+      const formatted = extractedLines.map((line, idx) =>
+        `${String(startLine + idx).padStart(5, ' ')}: ${line}`
+      ).join('\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Source: ${sourceKey}\nLines: ${startLine}-${endLine}\nTotal lines in file: ${lines.length}\n\n${formatted}`
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to read source range: ${error.message}`);
+    }
+  }
+
+  async searchExpressSource(query, contextLines = 3) {
+    const source = SOURCES['express-e'];
+
+    try {
+      const content = await fs.readFile(source.path, 'utf-8');
+      const lines = content.split('\n');
+      const matches = [];
+
+      // Search for matches
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].toLowerCase().includes(query.toLowerCase())) {
+          // Calculate context range
+          const startCtx = Math.max(0, i - contextLines);
+          const endCtx = Math.min(lines.length - 1, i + contextLines);
+
+          // Extract context
+          const contextBlock = [];
+          for (let j = startCtx; j <= endCtx; j++) {
+            const prefix = j === i ? '>>> ' : '    ';
+            contextBlock.push(`${prefix}${String(j + 1).padStart(5, ' ')}: ${lines[j]}`);
+          }
+
+          matches.push({
+            line: i + 1,
+            text: lines[i].trim(),
+            context: contextBlock.join('\n')
+          });
+        }
+      }
+
+      // Limit results to prevent huge responses
+      const limitedMatches = matches.slice(0, 20);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            query,
+            totalMatches: matches.length,
+            showing: limitedMatches.length,
+            matches: limitedMatches
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to search express.e: ${error.message}`);
+    }
   }
 
   async run() {
