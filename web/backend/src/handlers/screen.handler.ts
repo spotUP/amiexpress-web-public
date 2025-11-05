@@ -331,6 +331,66 @@ export async function parseMciCodes(
     return '';
   });
 
+  // ~q - Query/Prompt reset (express.e:5571-5573)
+  // Sends ANSI reset code [0m
+  parsed = parsed.replace(/~q\|/g, '\x1b[0m');
+
+  // ~h - Hotkey/Backspace (express.e:5574-5576)
+  // Sends backspace character
+  parsed = parsed.replace(/~h\|/g, '\x08');
+
+  // Advanced File Display Codes (express.e:5490-5560)
+  // ~SS_ - Show String / Display File (express.e:5490-5500)
+  // Format: ~SS_<filename>|| - displays another screen file
+  // Note: This is complex and requires async file loading, so we'll skip embedded display for now
+  // Just remove the code to prevent display issues
+  parsed = parsed.replace(/~SS_[^|]+\|\|/g, '');
+
+  // ~SX_ - String Exact / Sequential File Display (express.e:5501-5530)
+  // Format: ~SX_<filename>|| - displays files sequentially with counter
+  // Note: Complex feature requiring state tracking, skip for now
+  parsed = parsed.replace(/~SX_[^|]+\|\|/g, '');
+
+  // ~SR_ - String Replace / Random File Display (express.e:5531-5560)
+  // Format: ~SR_<count>_<filename>|| - displays random file from numbered set
+  // Note: Complex feature, skip for now
+  parsed = parsed.replace(/~SR_[^|]+\|\|/g, '');
+
+  // ~CC_ - Custom Command Execution (express.e:5561-5570)
+  // Format: ~CC_<command>|| - executes a system command
+  // Note: Similar to ~XC but for system commands, we already have ~XC
+  // Store for async execution like ~XC
+  const ccRegex = /~CC_([^|]+)\|\|/g;
+  let ccMatch;
+  while ((ccMatch = ccRegex.exec(parsed)) !== null) {
+    const commandStr = ccMatch[1];
+    commandsToExecute.push(commandStr.trim());
+    parsed = parsed.replace(ccMatch[0], '');
+  }
+
+  // ~CR_ - Custom Reset / Prompted Keypress (express.e:5571-5580)
+  // Format: ~CR_<prompt>|| - displays prompt and waits for keypress
+  // Note: This is interactive and doesn't work in static screen files
+  // Just display the prompt text and remove the wait
+  const crRegex = /~CR_([^|]+)\|\|/g;
+  parsed = parsed.replace(crRegex, (match, promptText) => {
+    return promptText; // Just show the prompt, no wait
+  });
+
+  // ~SM_ - Set Mode / Menu Name (express.e:5581-5590)
+  // Format: ~SM_<menuname>|| - sets current menu name
+  // Note: Menu name tracking would need session state, skip for now
+  parsed = parsed.replace(/~SM_[^|]+\|\|/g, '');
+
+  // ~SMO - Screen Mode On / Slow Mode On (express.e:5726-5736)
+  // Format: ~SMO<speed>| where speed is 1-5
+  // Note: Slow mode is a display effect, not applicable to web
+  parsed = parsed.replace(/~SMO\d*\|/g, '');
+
+  // ~SMC - Screen Mode Clear / Slow Mode Clear (express.e:5737-5739)
+  // Disables slow mode
+  parsed = parsed.replace(/~SMC\|/g, '');
+
   // Legacy % codes (for compatibility)
   parsed = parsed.replace(/%B/g, bbsName);
   parsed = parsed.replace(/%S/g, sysopName);
