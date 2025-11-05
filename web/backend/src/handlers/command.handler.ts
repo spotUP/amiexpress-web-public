@@ -280,8 +280,8 @@ export function displayMainMenu(socket: any, session: BBSSession) {
 
     if ((session.user?.expert === false && !session.doorExpertMode) /* TODO: || FORCE_MENUS check */) {
       console.log('Displaying menu screen file');
-      // Phase 8: Use authentic screen file system (express.e:28586 - displayScreen(SCREEN_MENU))
-      const screenDisplayed = displayScreen(socket, session, SCREEN_MENU);
+      // Phase 8: Use authentic screen file system (express.e:28586 - await displayScreen(SCREEN_MENU))
+      const screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
 
       // Like express.e:6572-6573 - check for .keys file and set cmdShortcuts accordingly
       if (screenDisplayed && hasKeysFile(SCREEN_MENU, session.currentConf)) {
@@ -410,7 +410,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // express.e:29551 - Display BBSTITLE screen and immediately show login prompt
         session.tempData.inputBuffer = ''; // Clear buffer
         const { displayScreen } = require('./screen.handler');
-        displayScreen(socket, session, 'BBSTITLE');
+        await displayScreen(socket, session, 'BBSTITLE');
 
         // Immediately transition to login state (no key press required)
         session.state = BBSState.LOGON;
@@ -1510,7 +1510,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const confNum = parseInt(input);
       if (isNaN(confNum) || confNum < 1 || confNum > conferences.length) {
         // express.e:25142-25150 - Redisplay JOINCONF and prompt again (no error message)
-        displayScreen(socket, session, 'JOINCONF');
+        await displayScreen(socket, session, 'JOINCONF');
         socket.emit('ansi-output', '\r\n');
         socket.emit('ansi-output', AnsiUtil.complexPrompt([
           { text: 'Conference Number ', color: 'white' },

@@ -2,13 +2,14 @@
  * Screen Handler - Display BBS screen files with MCI code parsing
  *
  * Handles loading and displaying screen files (.TXT) from the BBS directory structure.
- * Based on express.e displayScreen() functions.
+ * Based on express.e await displayScreen() functions.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 
 import type { BBSSession } from '../index';
+import { db } from '../database';
 
 interface Conference {
   id: number;
@@ -36,14 +37,15 @@ export function setConferences(confs: Conference[]) {
 /**
  * Parse MCI codes and return both parsed content and commands to execute
  * Returns tuple: [parsedContent, commandsToExecute]
+ * NOTE: This is async to fetch message base and file area data from database
  */
-export function parseMciCodes(
+export async function parseMciCodes(
   content: string,
   session: BBSSession,
   bbsName: string = 'AmiExpress-Web',
   sysopName: string = 'Sysop',
   location: string = 'The Internet'
-): { parsed: string; commands: string[] } {
+): Promise<{ parsed: string; commands: string[] }> {
   let parsed = content;
   const commandsToExecute: string[] = [];
 
@@ -107,14 +109,49 @@ export function parseMciCodes(
 
   if (parsed.includes('~ML.')) {
     // ~ML. - Message Base List (express.e:5621-5635)
-    // TODO: Implement when message bases are accessible
-    parsed = parsed.replace(/~ML\./g, 'Message bases not yet implemented');
+    let msgBaseList = '';
+    try {
+      const messageBases = await db.getMessageBases(session.currentConf);
+      if (messageBases.length > 0) {
+        for (let i = 0; i < messageBases.length; i++) {
+          const num = i + 1;
+          const name = messageBases[i].name || 'Default';
+          const namePadded = name.padEnd(30, ' ');
+          msgBaseList += `                     \x1b[32m${num}\x1b[33m) \x1b[35m${namePadded}\x1b[36m\x1b[0m\r\n`;
+        }
+      } else {
+        // If no message bases, show default
+        msgBaseList = '                     \x1b[32m1\x1b[33m) \x1b[35mDefault                       \x1b[36m\x1b[0m\r\n';
+      }
+    } catch (error) {
+      console.error('[parseMciCodes] Error getting message base list:', error);
+      msgBaseList = '                     \x1b[32m1\x1b[33m) \x1b[35mDefault                       \x1b[36m\x1b[0m\r\n';
+    }
+    parsed = parsed.replace(/~ML\./g, msgBaseList);
   }
 
   if (parsed.includes('~MD.')) {
     // ~MD. - Message Base Description (express.e:5636-5650)
-    // TODO: Implement when message bases are accessible
-    parsed = parsed.replace(/~MD\./g, '');
+    let msgBaseDesc = '';
+    try {
+      const messageBases = await db.getMessageBases(session.currentConf);
+      if (messageBases.length > 0) {
+        for (let i = 0; i < messageBases.length; i++) {
+          const num = i + 1;
+          const name = messageBases[i].name || 'Default';
+          msgBaseDesc += `   \x1b[34m[\x1b[0m${num}\x1b[34m] \x1b[0m${name.padEnd(30, ' ')}`;
+          if (num % 2 === 0) msgBaseDesc += '\r\n'; // Two per line
+        }
+        // Add final newline if odd number
+        if (messageBases.length % 2 !== 0) msgBaseDesc += '\r\n';
+      } else {
+        msgBaseDesc = '   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0mDefault                       \r\n';
+      }
+    } catch (error) {
+      console.error('[parseMciCodes] Error getting message base descriptions:', error);
+      msgBaseDesc = '   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0mDefault                       \r\n';
+    }
+    parsed = parsed.replace(/~MD\./g, msgBaseDesc);
   }
 
   // Process %NODELIST before %N to avoid collision
@@ -162,8 +199,23 @@ export function parseMciCodes(
   // Conference Information (express.e:5440-5490)
   parsed = parsed.replace(/~CF\|/g, session.currentConfName || 'Main');  // CF - Current Conference
   parsed = parsed.replace(/~CN\|/g, (session.currentConf + 1).toString());  // CN - Conference Number
-  parsed = parsed.replace(/~MB\|/g, '');  // MB - Current Message Base (TODO)
-  parsed = parsed.replace(/~MN\|/g, '0');  // MN - Message Base Number (TODO)
+
+  // ~MB - Current Message Base Number (express.e:5442)
+  const currentMsgBase = session.currentMsgBase || 1;
+  parsed = parsed.replace(/~MB\|/g, currentMsgBase.toString());
+
+  // ~MN - Message Base Name (express.e:5443)
+  let msgBaseName = 'Default';
+  try {
+    const messageBases = await db.getMessageBases(session.currentConf);
+    if (messageBases.length > 0 && currentMsgBase <= messageBases.length) {
+      msgBaseName = messageBases[currentMsgBase - 1]?.name || 'Default';
+    }
+  } catch (error) {
+    console.error('[parseMciCodes] Error getting message base name:', error);
+  }
+  parsed = parsed.replace(/~MN\|/g, msgBaseName);
+
   parsed = parsed.replace(/~CT\|/g, conferences.length.toString());  // CT - Total Conferences
   parsed = parsed.replace(/~VD\|/g, '2.00');  // VD - Version Number (display)
   parsed = parsed.replace(/~VE\|/g, 'AmiExpress-Web 2.0');  // VE - Version (full)
@@ -173,10 +225,31 @@ export function parseMciCodes(
   parsed = parsed.replace(/~DT\|/g, fullDateTime);  // DT - Date/Time
   parsed = parsed.replace(/~OT\|/g, timeStr);  // OT - Time Only
   parsed = parsed.replace(/~OD\|/g, `${day}-${month}-${year}`);  // OD - Date Only
-  parsed = parsed.replace(/~SC\|/g, '0');  // SC - System Calls Today (TODO)
-  parsed = parsed.replace(/~FC\|/g, '0');  // FC - Files in Current Area (TODO)
-  parsed = parsed.replace(/~FL\|/g, '');  // FL - File List (TODO)
-  parsed = parsed.replace(/~FF\|/g, '0');  // FF - Free Files (TODO)
+
+  // ~SC - System Calls Today (express.e:5407)
+  // Note: This should track daily call statistics - for now return 0
+  parsed = parsed.replace(/~SC\|/g, '0');
+
+  // File Area Codes (express.e:5408-5410)
+  // ~FC - Files Count (flagged/marked files count)
+  // ~FL - Files List (flagged files list display)
+  // ~FF - Free Files (show flagged files)
+  // Note: Original AmiExpress uses "flagged files" (user's download queue)
+  // For now, we'll show total files in current conference
+  let totalFiles = 0;
+  try {
+    const fileAreas = await db.getFileAreas(session.currentConf);
+    for (const area of fileAreas) {
+      const files = await db.getFilesByArea(area.id);
+      totalFiles += files.length;
+    }
+  } catch (error) {
+    console.error('[parseMciCodes] Error getting file count:', error);
+  }
+  parsed = parsed.replace(/~FC\|/g, totalFiles.toString());
+  parsed = parsed.replace(/~FL\|/g, '');  // FL - File list display (complex, skip for now)
+  parsed = parsed.replace(/~FF\|/g, totalFiles.toString());  // FF - Same as FC for now
+
   parsed = parsed.replace(/~AK\|/g, user.alias || username);  // AK - Alias/Handle
   parsed = parsed.replace(/~SP\|/g, ' ');  // SP - Space
   parsed = parsed.replace(/~CR\|/g, '\r\n');  // CR - Carriage Return
@@ -275,7 +348,7 @@ export function parseMciCodes(
 /**
  * Load screen file from disk
  * Searches in priority order: Conference → Node → Global BBS screens
- * Like express.e displayScreen() - loads from BBS:Node{X}/Screens/ or BBS:Conf{X}/Screens/
+ * Like express.e await displayScreen() - loads from BBS:Node{X}/Screens/ or BBS:Conf{X}/Screens/
  *
  * @param screenName - Name of screen file (without .TXT extension)
  * @param conferenceId - Optional conference ID for conference-specific screens
@@ -347,19 +420,19 @@ export function addAnsiEscapes(content: string): string {
 
 /**
  * Display a screen file to the user
- * Like express.e displayScreen(screenName) - express.e:28566, 28571, 28586
+ * Like express.e await displayScreen(screenName) - express.e:28566, 28571, 28586
  *
  * @param socket - Socket.io socket for sending output
  * @param session - Current BBS session
  * @param screenName - Name of screen to display
  * @returns true if screen was displayed successfully, false otherwise
  */
-export function displayScreen(socket: any, session: BBSSession, screenName: string): boolean {
+export async function await displayScreen(socket: any, session: BBSSession, screenName: string): Promise<boolean> {
   const content = loadScreenFile(screenName, session.currentConf);
 
   if (content) {
     // Parse MCI codes (now returns parsed content + commands to execute)
-    const { parsed: mciParsed, commands } = parseMciCodes(content, session);
+    const { parsed: mciParsed, commands } = await parseMciCodes(content, session);
     let parsed = mciParsed;
 
     // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)

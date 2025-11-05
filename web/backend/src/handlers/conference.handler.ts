@@ -75,12 +75,12 @@ export function setConstants(constants: {
  */
 export async function displayConferenceBulletins(socket: any, session: BBSSession) {
   // Phase 8: Use authentic screen file system
-  // Express.e:28566 - displayScreen(SCREEN_BULL)
-  displayScreen(socket, session, SCREEN_BULL);
+  // Express.e:28566 - await displayScreen(SCREEN_BULL)
+  await displayScreen(socket, session, SCREEN_BULL);
   doPause(socket, session);
 
-  // Express.e:28571 - displayScreen(SCREEN_NODE_BULL)
-  displayScreen(socket, session, SCREEN_NODE_BULL);
+  // Express.e:28571 - await displayScreen(SCREEN_NODE_BULL)
+  await displayScreen(socket, session, SCREEN_NODE_BULL);
   doPause(socket, session);
 
   // Conference scan (confScan equivalent - express.e:28066)

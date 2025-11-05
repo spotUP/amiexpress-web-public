@@ -132,7 +132,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   // express.e:28071 - setEnvStat(ENV_SCANNING)
   console.log('[ENV] Scanning conferences for mail');
 
-  // express.e:28073 - displayScreen(SCREEN_MAILSCAN)
+  // express.e:28073 - await displayScreen(SCREEN_MAILSCAN)
   // But don't display yet - we'll build a custom scan report
 
   // express.e:28076-28079 - Check MAILSCAN_PROMPT tooltype
@@ -216,7 +216,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
  * @param session - BBS session
  */
 export async function displayMailScanScreen(socket: any, session: any): Promise<void> {
-  // express.e:28073 - displayScreen(SCREEN_MAILSCAN)
+  // express.e:28073 - await displayScreen(SCREEN_MAILSCAN)
   if (_loadScreenFile) {
     const content = _loadScreenFile('MailScan', session.currentConf);
 

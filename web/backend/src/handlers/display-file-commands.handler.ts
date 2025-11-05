@@ -49,7 +49,7 @@ export function setDisplayFileCommandsDependencies(deps: {
  * PROC internalCommandQuestionMark()
  *   IF (loggedOnUser.expert="X")
  *     checkScreenClear()
- *     displayScreen(SCREEN_MENU)
+ *     await displayScreen(SCREEN_MENU)
  *   ENDIF
  * ENDPROC RESULT_SUCCESS
  *

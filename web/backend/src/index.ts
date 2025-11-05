@@ -711,7 +711,7 @@ io.on('connection', async (socket) => {
   // Display complete connection screen via AWAITSCREEN.TXT
   // reference-board BBS layout: everything shown via screen file with MCI codes
   // All messages, node list, etc. are in AWAITSCREEN.TXT
-  displayScreen(socket, session, 'AWAITSCREEN');
+  await displayScreen(socket, session, 'AWAITSCREEN');
 
   // Show ANSI prompt immediately (reference-board style - no key wait)
   socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
@@ -1655,7 +1655,7 @@ io.on('connection', async (socket) => {
 
 // Display system bulletins (SCREEN_BULL equivalent)
 function displaySystemBulletins(socket: any, session: BBSSession) {
-  // In AmiExpress, displayScreen(SCREEN_BULL) shows system bulletins
+  // In AmiExpress, await displayScreen(SCREEN_BULL) shows system bulletins
   socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
   socket.emit('ansi-output', '\r\n\x1b[36m-= AmiExpress Web BBS System Bulletins =-\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[33mWelcome to AmiExpress Web!\x1b[0m\r\n');
@@ -1675,7 +1675,7 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
 
 // ===== SCREEN FILE SYSTEM (Phase 8) =====
 // AmiExpress screen file system for authentic BBS display
-// express.e uses displayScreen() throughout - lines 28566, 28571, 28586, etc.
+// express.e uses await displayScreen() throughout - lines 28566, 28571, 28586, etc.
 
 // Screen name constants (like express.e SCREEN_* constants)
 const SCREEN_BBSTITLE = 'BBSTITLE';
