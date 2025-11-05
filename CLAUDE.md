@@ -22,6 +22,51 @@
 3. **Archive aggressively** - Move old docs to Documentation/6-Progress/archive/
 4. **Compact summaries** - No code blocks in continuation summaries unless essential
 
+### MCP Workflow (Model Context Protocol) - 98% Token Savings!
+
+**This project has an MCP server that provides on-demand access to large sources.**
+
+**BEFORE reading express.e or NDK autodocs, use MCP tools:**
+
+1. **Search express.e** (instead of reading full 400k token file):
+   ```
+   Use MCP tool: search_express_source
+   - query: "internalCommandWHO" or "PROC displayWho"
+   - Returns: Line numbers + context (7k tokens vs 400k!)
+   ```
+
+2. **Read specific express.e ranges** (after finding line numbers):
+   ```
+   Use MCP tool: read_source_range
+   - source: "express-e"
+   - startLine: 5290
+   - endLine: 5850
+   - Returns: Only those lines (98% token savings!)
+   ```
+
+3. **Search NDK autodocs** (instead of grepping 30MB files):
+   ```
+   Use MCP tool: search_ndk_autodocs
+   - query: "Close" or "AllocMem"
+   - library: "dos" or "exec" (optional)
+   - Returns: Complete function spec on-demand
+   ```
+
+**MCP Server Location**: `mcp-server/index.js`
+
+**Available MCP Resources**:
+- `amiexpress://sources/express-e` - express.e (35k lines)
+- `amiexpress://sources/hydra-e` - hydra.e
+- `amiexpress://sources/acp-e` - ACP.e
+- `amiexpress://docs/*` - All documentation
+
+**Token Savings**:
+- Full express.e: ~400k tokens
+- Line range search: ~7k tokens
+- Reduction: 98%!
+
+**This is the PREFERRED way to access sources in Claude Code sessions.**
+
 ---
 
 ## 🚨 CRITICAL RULES - READ FIRST 🚨
