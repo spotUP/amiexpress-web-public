@@ -9,6 +9,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { runExamineCommandsForTesting } from './examine-runner.util';
 
 const execAsync = promisify(exec);
 
@@ -226,34 +227,8 @@ export async function runExamineCommands(
     return TestResult.NOT_TESTED;
   }
 
-  let lastResult = TestResult.NOT_TESTED;
-
-  // Express.e runs EXAMINE, then EXAMINE1, EXAMINE2, etc.
-  for (const examineCmd of examineCommands) {
-    if (!examineCmd || examineCmd.trim().length === 0) {
-      continue;
-    }
-
-    try {
-      // Replace placeholders
-      const command = examineCmd
-        .replace('%f', filepath)
-        .replace('%p', path.dirname(filepath))
-        .replace('%n', path.basename(filepath));
-
-      console.log(`[EXAMINE] Running: ${command}`);
-      await execAsync(command, { timeout: 60000 }); // 60 second timeout for virus scans
-
-      lastResult = TestResult.SUCCESS;
-    } catch (error: any) {
-      console.error(`[EXAMINE] Command failed: ${examineCmd}, error: ${error.message}`);
-      lastResult = TestResult.FAILURE;
-      // Express.e stops on first failure
-      break;
-    }
-  }
-
-  return lastResult;
+  const success = await runExamineCommandsForTesting(filepath, examineCommands);
+  return success ? TestResult.SUCCESS : TestResult.FAILURE;
 }
 
 /**

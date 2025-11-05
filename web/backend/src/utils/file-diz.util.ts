@@ -7,15 +7,12 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { extractFileDizFromLha } from './lha-extractor';
 import { extractFileDizFromZip } from './zip-extractor';
 import { extractFileDizFromTarAuto } from './tar-extractor';
 import { extractFileDizFromDms } from './dms-extractor';
 import { extractFileDizFromLzx } from './lzx-extractor';
-
-const execAsync = promisify(exec); // Only used for user-configured EXAMINE commands
+import { runExamineCommandsForDiz } from './examine-runner.util';
 
 // Express.e uses nodeWorkDir for temp file extraction
 // We'll use Node#/WorkDir for extracted DIZ files
@@ -45,42 +42,7 @@ export async function runExamineCommands(
   nodeWorkDir: string,
   examineCommands: string[]
 ): Promise<boolean> {
-  // Ensure work directory exists
-  await fs.mkdir(nodeWorkDir, { recursive: true });
-
-  // Express.e runs EXAMINE, then EXAMINE1, EXAMINE2, etc.
-  // Loop through commands until one succeeds or all fail
-  for (const examineCmd of examineCommands) {
-    if (!examineCmd || examineCmd.trim().length === 0) {
-      continue;
-    }
-
-    try {
-      // Replace placeholders in command
-      // %f = filename, %p = path, %w = work directory
-      const command = examineCmd
-        .replace('%f', uploadedFilePath)
-        .replace('%p', path.dirname(uploadedFilePath))
-        .replace('%w', nodeWorkDir);
-
-      console.log(`[FILE_ID.DIZ] Running EXAMINE command: ${command}`);
-      await execAsync(command, { timeout: 30000 }); // 30 second timeout
-
-      // Check if FILE_ID.DIZ was extracted
-      const dizPath = path.join(nodeWorkDir, 'FILE_ID.DIZ');
-      const dizExists = await fileExists(dizPath);
-
-      if (dizExists) {
-        console.log(`[FILE_ID.DIZ] Successfully extracted to ${dizPath}`);
-        return true;
-      }
-    } catch (error: any) {
-      console.log(`[FILE_ID.DIZ] Command failed: ${examineCmd}, error: ${error.message}`);
-      // Continue to next command
-    }
-  }
-
-  return false;
+  return runExamineCommandsForDiz(uploadedFilePath, nodeWorkDir, examineCommands);
 }
 
 /**
