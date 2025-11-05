@@ -31,7 +31,7 @@ export async function getMailStatFile(
   conferenceId: number,
   messageBaseId: number
 ): Promise<MailStat> {
-  const client = await db.pool.connect();
+  const client = await (db as any).pool.connect();
   try {
     const result = await client.query(
       `SELECT lowest_key, high_msg_num, lowest_not_del
@@ -75,7 +75,7 @@ export async function updateHighMsgNum(
   messageBaseId: number,
   newHighMsgNum: number
 ): Promise<void> {
-  await db.pool.query(
+  await (db as any).pool.query(
     `UPDATE mail_stats
      SET high_msg_num = $3
      WHERE conference_id = $1 AND message_base_id = $2`,
@@ -102,7 +102,7 @@ export async function loadMsgPointers(
   conferenceId: number,
   messageBaseId: number
 ): Promise<ConfBase> {
-  const client = await db.pool.connect();
+  const client = await (db as any).pool.connect();
   try {
     const result = await client.query(
       `SELECT * FROM conf_base
@@ -187,7 +187,7 @@ export async function saveMsgPointers(confBase: ConfBase): Promise<void> {
     console.warn(`saveMsgPointers: lastNewReadConf is 0 for conf ${confBase.conferenceId}`);
   }
 
-  await db.pool.query(
+  await (db as any).pool.query(
     `UPDATE conf_base SET
       last_new_read_conf = $4,
       last_msg_read_conf = $5,
@@ -296,7 +296,7 @@ export async function updateReadPointer(
   messageBaseId: number,
   msgNum: number
 ): Promise<void> {
-  await db.pool.query(
+  await (db as any).pool.query(
     `UPDATE conf_base
      SET last_msg_read_conf = $4
      WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3
@@ -320,7 +320,7 @@ export async function updateScanPointer(
   messageBaseId: number,
   msgNum: number
 ): Promise<void> {
-  await db.pool.query(
+  await (db as any).pool.query(
     `UPDATE conf_base
      SET last_new_read_conf = $4
      WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3`,

@@ -255,7 +255,7 @@ export class NodeFileManager {
     offset += 13;
 
     // slotNumber: INT
-    buffer.writeInt16BE(user.id || 0, offset);
+    buffer.writeInt16BE(parseInt(user.id as string) || 0, offset);
     offset += 2;
 
     // secStatus: INT
@@ -289,7 +289,7 @@ export class NodeFileManager {
     offset += 4;
 
     // screenType, editorType (2 INTs)
-    buffer.writeInt16BE(user.screenType || 0, offset);
+    buffer.writeInt16BE((user.screenType as any) || 0, offset);
     offset += 2;
     buffer.writeInt16BE(0, offset);
     offset += 2;
@@ -329,7 +329,7 @@ export class NodeFileManager {
     offset += 4;
 
     // expert: CHAR
-    buffer.writeUInt8((user.expert === 'X' ? 1 : 0), offset);
+    buffer.writeUInt8(((user.expert as any) === 'X' ? 1 : 0), offset);
     offset += 1;
 
     // chatRemain through creditTotalDate (7 LONGs)
@@ -380,7 +380,7 @@ export class NodeFileManager {
     offset += 31;
 
     // number: LONG
-    buffer.writeInt32BE(user.id || 0, offset);
+    buffer.writeInt32BE(parseInt(user.id as string) || 0, offset);
     offset += 4;
 
     // newUser: CHAR
