@@ -289,7 +289,7 @@ export function handleDownloadCommand(socket: any, session: BBSSession, params: 
  * Handle user stats menu input (F=Font, Q=Quit)
  * Web-specific extension to S command
  */
-export function handleUserStatsMenuInput(socket: any, session: BBBSession, input: string): void {
+export function handleUserStatsMenuInput(socket: any, session: BBSSession, input: string): void {
   const choice = input.trim().toUpperCase();
 
   if (choice === 'F') {
