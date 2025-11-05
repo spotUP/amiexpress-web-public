@@ -87,7 +87,7 @@ export class AmigaDosEnvironment {
     this.libraryLoader = new LibraryLoader(emulator, options?.libraryPaths);
 
     // Pass library loader to exec.library for OpenLibrary hybrid support
-    this.execLibrary.setLibraryLoader(this.libraryLoader, this.useNativeLibraries);
+    (this.execLibrary as any).setLibraryLoader(this.libraryLoader, this.useNativeLibraries);
 
     // Create AEDoorPort for door communication (if we have session data)
     if (bbsSession?.user) {
@@ -110,7 +110,7 @@ export class AmigaDosEnvironment {
     console.log(`[AmigaDosEnvironment] Creating AEDoorPort for user: ${session.user.username}`);
 
     // Create the port through ExecLibrary
-    const portAddr = this.execLibrary.createSystemPort(portName, 0);
+    const portAddr = (this.execLibrary as any).createSystemPort(portName, 0);
 
     if (portAddr === 0) {
       console.error(`[AmigaDosEnvironment] Failed to create ${portName}!`);
@@ -227,7 +227,7 @@ export class AmigaDosEnvironment {
       // exec.library - System executive functions
       // NOTE: Some doors also call BBS functions from ExecBase (non-standard)
       console.log(`[AmigaDOS] Routing to exec.library (base=0xFF8000)`);
-      handled = this.execLibrary.handleCall(normalizedOffset);
+      handled = (this.execLibrary as any).handleCall(normalizedOffset);
       if (handled) {
         console.log(`[AmigaDOS] Handled by exec.library`);
       }
@@ -280,7 +280,7 @@ export class AmigaDosEnvironment {
       }
 
       if (!handled) {
-        handled = this.execLibrary.handleCall(normalizedOffset);
+        handled = (this.execLibrary as any).handleCall(normalizedOffset);
         if (handled) {
           console.log(`[AmigaDOS] Handled by exec.library (fallback)`);
         }

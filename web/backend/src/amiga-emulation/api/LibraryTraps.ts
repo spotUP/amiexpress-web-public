@@ -384,7 +384,7 @@ const EXEC_VECTORS: LibraryVector[] = [
   {
     offset: -30,  // LVO -30 (0xFFFFFFE2)
     name: 'Supervisor',
-    handler: (emu, lib: ExecLibrary, returnAddr: number) => {
+    handler: (emu: any, lib: any, returnAddr: any) => {
       // Supervisor() - Execute a function in supervisor mode
       // Input: A5 = function pointer to execute
       // The function is called with return address on stack
@@ -729,7 +729,7 @@ export class LibraryTraps {
     // Call the handler with the correct library instance
     // Note: Handler may now modify SP (e.g., StackSwap), but we've already popped the return address
     // Pass returnAddr to handler for functions like Supervisor() that need it
-    const result = vector.handler(this.emulator, library, returnAddr);
+    const result = (vector.handler as any)(this.emulator, library, returnAddr);
 
     // Set return value in D0
     this.emulator.setRegister(0, result);
@@ -888,7 +888,7 @@ export class LibraryTraps {
     console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
 
     // Call the handler
-    const result = vector.handler(this.emulator, library, returnAddr);
+    const result = (vector.handler as any)(this.emulator, library, returnAddr);
 
     // Set return value in D0
     this.emulator.setRegister(0, result);

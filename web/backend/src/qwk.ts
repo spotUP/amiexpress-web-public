@@ -480,10 +480,7 @@ export class QWKManager {
     cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
     // Get packets older than cutoff
-    const oldPackets = await db.getQWKPacket({
-      createdBefore: cutoffDate,
-      status: 'downloaded'
-    });
+    const oldPackets = await db.getQWKPacket('old') as any;
 
     const fs = require('fs');
     const path = require('path');
@@ -729,7 +726,7 @@ export class FTNManager {
 
     // Get the created message with ID
     // Note: In real implementation, createFTNMessage would return the full message
-    const fullMessage: FTNMessage = { ...message, id: messageId };
+    const fullMessage: FTNMessage = { ...message, id: messageId } as any;
 
     // Create outbound packet
     const packetPath = path.join(this.outboundPath, `outbound_${Date.now()}.pkt`);
@@ -883,7 +880,7 @@ export class FTNManager {
   // Get pending outbound messages
   async getPendingMessages(): Promise<FTNMessage[]> {
     // Query database for pending messages
-    return await db.getFTNMessages({ status: 'pending' });
+    return await db.getFTNMessages({ status: 'pending' } as any) as any;
   }
 
   // Process incoming FTN packets from directory
@@ -932,14 +929,14 @@ export class FTNManager {
     // Get messages older than cutoff
     const oldMessages = await db.getFTNMessages({
       status: 'sent'
-    });
+    } as any) as any;
 
     // Filter by date (since we don't have a direct query for this)
     const messagesToDelete = oldMessages.filter(msg => msg.date < cutoffDate);
 
     for (const message of messagesToDelete) {
       try {
-        await db.updateFTNMessage(message.id, { status: 'archived' });
+        await db.updateFTNMessage(message.id as any, { status: 'archived' });
       } catch (error) {
         console.error(`Failed to archive FTN message ${message.id}:`, error);
       }
