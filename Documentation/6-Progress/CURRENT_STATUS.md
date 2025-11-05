@@ -12,6 +12,9 @@
 - **Exit Handling**: Extended sentinel range handles MOVEM.L operations correctly
 - **Double Output Bug**: FIXED - eliminated duplicate trap interception
 - **Door Completion**: Proper "Press ENTER" prompt and menu return
+- **Test Framework**: Reusable testing utilities (Scripts/test-framework.ts)
+- **Reference Checker**: Automates "check E sources first" (Scripts/reference-checker.ts)
+- **Library Spec Generator**: Type-safe specs from NDK docs (Scripts/generate-library-specs.ts)
 
 ### In Progress 🔨
 - **WHO Door User List**: Door works but needs user tracking data from NI/NO tools
@@ -19,8 +22,6 @@
 
 ### Not Started ❌
 - **~XC MCI Code**: Execute commands from screen files (needed for NI/NO integration)
-- **Automated Testing**: Reusable door test framework
-- **Reference Checker**: Tool to automate "check E sources first" workflow
 
 ---
 

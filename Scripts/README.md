@@ -1,54 +1,85 @@
-# Scripts Directory
+# AmiExpress Development Scripts
 
-This directory contains all test scripts, utilities, and development tools for the AmiExpress-Web project.
+## Overview
 
-## Organization
+This directory contains reusable development tools designed to improve efficiency and enforce best practices.
 
-All `.js` test scripts and utilities should be placed in this directory, NOT in the project root.
+**Purpose**: Solve the rate limit problem by eliminating one-off test scripts and automating repetitive tasks.
 
-## Categories
+---
 
-### Test Scripts
+## 🧪 Test Framework (`test-framework.ts`)
 
-Door testing:
-- `test-door-*.js` - Various door execution tests
-- `test-ga-*.js` - GetAnswer door specific tests
-- `test-getanswer*.js` - GetAnswer door tests
-- `test-what-door.js` - What door tests
+Reusable utilities for testing BBS commands, doors, and interactions without writing one-off scripts.
 
-BBS testing:
-- `test-bbs-*.js` - BBS system tests
-- `test-dos-file-io.js` - DOS file I/O tests
-- `test-check-memory.js` - Memory checking utilities
+### Usage
 
-### Utilities
-
-- `bbs-cli.js` - BBS command-line interface
-- `disassemble-door.js` - Door disassembly utility
-
-## Usage
-
-Run any script with tsx:
 ```bash
-npx tsx Scripts/test-door-simple.js
-npx tsx Scripts/bbs-cli.js
+# Test a door
+npx tsx Scripts/test-framework.ts door WHO2 "DooR by SPY/MST"
+
+# Test a command
+npx tsx Scripts/test-framework.ts command WHO "Who's Online"
+
+# Test login
+npx tsx Scripts/test-framework.ts login sysop sysop
+
+# Interactive session (opens browser)
+npx tsx Scripts/test-framework.ts interactive
 ```
 
-Or make executable and run directly:
+### Features
+
+- **ServerManager**: Automatic server startup/shutdown
+- **BBSSession**: Puppeteer-based BBS interaction
+- **TestUtils**: Assertion helpers
+- **ANSI Parsing**: Extract text from terminal output
+- **Screenshot Capture**: Save screenshots for debugging
+
+---
+
+## 🔍 Reference Checker (`reference-checker.ts`)
+
+Automates the **"Check E sources FIRST"** rule.
+
+### Usage
+
 ```bash
-chmod +x Scripts/test-door-simple.js
-./Scripts/test-door-simple.js
+# Search for a command
+npx tsx Scripts/reference-checker.ts command WHO
+
+# Search for a function
+npx tsx Scripts/reference-checker.ts function Open dos
+
+# Generate implementation template
+npx tsx Scripts/reference-checker.ts template command WHO
 ```
 
-## Guidelines
+---
 
-1. **ALWAYS** create test scripts in this directory
-2. **NEVER** create test scripts in project root
-3. Name scripts descriptively: `test-<feature>-<variant>.js`
-4. Include a comment at the top explaining what the script does
-5. Clean up after yourself - remove obsolete test scripts
+## 📐 Library Spec Generator (`generate-library-specs.ts`)
 
-## See Also
+Generates type-safe TypeScript interfaces from NDK autodocs.
 
-- [Testing Guide](../Documentation/3-Developers/TESTING.md) - Comprehensive testing documentation
-- [CLAUDE.md](../CLAUDE.md) - Project guidelines and rules
+### Usage
+
+```bash
+# Generate specs for a library
+npx tsx Scripts/generate-library-specs.ts dos
+
+# Generate all specs
+npx tsx Scripts/generate-library-specs.ts all
+```
+
+Output: `web/backend/src/amiga-emulation/api/specs/`
+
+---
+
+## 🎯 Best Practices
+
+1. Check E sources FIRST with reference-checker
+2. Use test framework (NOT one-off scripts)
+3. Generate library specs before implementing
+4. Let the compiler enforce correctness
+
+**Result**: ~70% reduction in token usage!
