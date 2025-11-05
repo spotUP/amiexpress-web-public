@@ -1,16 +1,69 @@
 export interface User {
   id: string;
   username: string;
-  useRealName: boolean;
+  passwordHash: string;
   realname: string;
-  expert?: string; // "Y" or "N" - mirrors AmiExpress expert mode
-  lastLogin?: Date; // For "N" command - new files since last login
-  uploads?: number; // Number of files uploaded
-  bytesUpload?: number; // Total bytes uploaded
-  downloads?: number; // Number of files downloaded
-  bytesDownload?: number; // Total bytes downloaded
-  secLevel?: number; // Security level (mirrors AmiExpress secStatus)
-  // Add other properties as needed based on the project
+  realName?: string;  // Alias for realname
+  location: string;
+  phone: string;
+  phoneNumber?: string;  // Alias for phone
+  email?: string;
+  secLevel: number;
+  uploads: number;
+  downloads: number;
+  bytesUpload: number;
+  uploadBytes?: number;  // Alias for bytesUpload
+  bytesDownload: number;
+  downloadBytes?: number;  // Alias for bytesDownload
+  ratio: number;
+  ratioType: number;
+  downloadRatio?: number;  // Alias for ratio
+  timeTotal: number;
+  timeLimit: number;
+  dailyTimeLimit?: number;  // Alias for timeLimit
+  timeUsed: number;
+  chatLimit: number;
+  chatUsed: number;
+  lastLogin?: Date;
+  timeLastOn?: Date;  // Alias for lastLogin
+  firstLogin: Date;
+  accountDate?: Date;  // Alias for firstLogin
+  calls: number;
+  timesCalled?: number;  // Alias for calls
+  callsToday: number;
+  timesOnToday?: number;  // Alias for callsToday
+  messagesPosted?: number;  // Number of messages posted
+  newUser: boolean;
+  expert: boolean;
+  ansi: boolean;
+  linesPerScreen: number;
+  computer: string;
+  screenType: string;
+  protocol: string;
+  editor: string;
+  zoomType: string;
+  availableForChat: boolean;
+  quietNode: boolean;
+  autoRejoin: number;
+  confRJoin?: number;  // Alias for autoRejoin
+  confAccess: string;
+  areaName: string;
+  uuCP: boolean;
+  topUploadCPS: number;
+  topDownloadCPS: number;
+  byteLimit: number;
+  dailyBytesLimit?: number;  // Alias for byteLimit
+  dailyBytesDld?: number;  // Daily bytes downloaded
+  bytesAvailableForDownload?: number;  // Calculated available download bytes
+  lastDownloadTime?: Date;  // Last download timestamp
+  newSinceDate?: Date;  // Date for "new files since" marker
+  baud?: number;  // Connection baud rate (for web = 38400)
+  alias?: string;  // User alias/handle
+  securityFlags?: string;
+  secOverride?: string;
+  userFlags: number;
+  created: Date;
+  updated: Date;
 }
 
 // Door game interface - mirrors AmiExpress door execution

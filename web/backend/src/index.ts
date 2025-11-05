@@ -135,7 +135,6 @@ import {
   setFileMaintenanceDependencies
 } from './handlers/file.handler';
 import { setMessageEntryDependencies } from './handlers/message-entry.handler';
-import { setMessagingDependencies } from './handlers/messaging.handler';
 import {
   displayAccountEditingMenu,
   handleAccountEditing,
@@ -246,10 +245,16 @@ export interface BBSSession {
   livechatUserList?: any[]; // List of users for live chat selection
   livechatSelectedIndex?: number; // Selected user index in live chat
   chatWithUsername?: string; // Username currently chatting with
+  chatWithUserId?: string; // User ID currently chatting with (internode chat)
   pendingChatSessionId?: string; // Pending chat session ID
+  chatSessionId?: string; // Active chat session ID (internode chat)
   pagingInterval?: NodeJS.Timeout; // Interval for paging notifications
   inChat?: boolean; // Whether user is currently in chat
   chatSession?: any; // Active chat session object
+  socketId?: string; // Socket.IO socket ID for this session
+  lastTypingTime?: number; // Last time user was typing (for typing indicator)
+  partnerTypingBuffer?: string; // Buffer for partner's typing indicator
+  typingBlinkTimer?: NodeJS.Timeout; // Timer for typing indicator blinking
 
   // Group chat properties
   userId?: string; // User ID for chat system
@@ -264,6 +269,11 @@ export interface BBSSession {
 
   // Bulletin system properties
   bulletinContext?: any; // Context for bulletin display navigation
+
+  // OLM (Online Messages) properties
+  lastOlmNode?: number; // Last node number used for OLM
+  olmMessageLines?: string[]; // Lines of current OLM message being composed
+  olmNodeTarget?: number; // Target node number for OLM message
 }
 
 // Conference and Message Base data structures (simplified)
@@ -438,17 +448,14 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // Authentication endpoints
-app.post('/auth/login', (req, res) => authHandler.login(req, res));
-app.post('/auth/register', (req, res) => authHandler.register(req, res));
-app.post('/auth/refresh', (req, res) => authHandler.refresh(req, res));
+app.post('/auth/login', (req: Request, res: Response) => authHandler.login(req, res));
+app.post('/auth/register', (req: Request, res: Response) => authHandler.register(req, res));
+app.post('/auth/refresh', (req: Request, res: Response) => authHandler.refresh(req, res));
 
 // File upload configuration
 // Express.e uses Node#/Playpen for uploaded files (express.e:19573-19584)
-import * as path from 'path';
-import * as fs from 'fs';
-
 const playpenStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (req: any, file: any, cb: (error: Error | null, destination: string) => void) => {
     try {
       // Use Node0/Playpen for uploads (express.e uses ramPen or Node#/Playpen)
       const playpenDir = path.join(config.get('dataDir'), 'Node0', 'Playpen');
@@ -469,7 +476,7 @@ const playpenStorage = multer.diskStorage({
       cb(error as Error, '');
     }
   },
-  filename: (req, file, cb) => {
+  filename: (req: any, file: any, cb: (error: Error | null, filename: string) => void) => {
     try {
       // Use original filename (already validated in UPLOAD_FILENAME_INPUT handler)
       console.log('[Upload] Storing file as:', file.originalname);
@@ -493,7 +500,7 @@ app.post('/api/upload', (req: Request, res: Response) => {
   console.log('[Upload] Upload request received from:', req.headers.origin);
 
   // Use multer middleware with error handling
-  upload.single('file')(req, res, (err) => {
+  upload.single('file')(req, res, (err: any) => {
     if (err) {
       console.error('[Upload] Multer error:', err);
       return res.status(500).json({ error: `Upload failed: ${err.message}` });
@@ -526,7 +533,7 @@ app.post('/api/upload/door', (req: Request, res: Response) => {
   console.log('[Door Upload] Upload request received from:', req.headers.origin);
 
   // Use multer middleware with 'door' field name
-  upload.single('door')(req, res, (err) => {
+  upload.single('door')(req, res, (err: any) => {
     if (err) {
       console.error('[Door Upload] Multer error:', err);
       return res.status(500).json({ error: `Upload failed: ${err.message}` });

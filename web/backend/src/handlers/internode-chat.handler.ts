@@ -466,7 +466,7 @@ export async function handleChatDecline(socket: Socket, session: BBSSession, dat
  * Handle real-time keystroke transmission - transmit each character immediately to partner
  * Displays partner's typing in the scroll region (line 22) instead of input line (line 24)
  */
-export async function handleChatKeystroke(socket: Socket, session: BBBSession, data: { keystroke: string }) {
+export async function handleChatKeystroke(socket: Socket, session: BBSSession, data: { keystroke: string }) {
   try {
     const { keystroke } = data;
 
@@ -490,7 +490,7 @@ export async function handleChatKeystroke(socket: Socket, session: BBBSession, d
 
     // Find partner's socket and session
     let partnerSocketId: string | null = null;
-    let partnerSession: BBBSession | null = null;
+    let partnerSession: BBSSession | null = null;
     for (const [socketId, sess] of Array.from(sessions.entries())) {
       if (sess.user?.id === partnerId) {
         partnerSocketId = socketId;
