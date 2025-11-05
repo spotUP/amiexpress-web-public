@@ -81,7 +81,7 @@ export function handleRelogonCommand(socket: any, session: BBSSession, params: s
   ]));
 
   // Wait for confirmation
-  session.subState = 'RL_CONFIRM';
+  session.subState = LoggedOnSubState.RL_CONFIRM;
   session.tempData = { relogonCommand: true, params };
 }
 
@@ -147,7 +147,7 @@ export function handleViewFileCommand(socket: any, session: BBSSession, params: 
     { text: ': ', color: 'white' }
   ]));
 
-  session.subState = 'VIEW_FILE_INPUT';
+  session.subState = LoggedOnSubState.VIEW_FILE_INPUT;
   session.tempData = { viewFileCommand: true };
 }
 
@@ -296,7 +296,7 @@ export async function handleZippySearchCommand(socket: any, session: BBSSession,
     { text: ': ', color: 'white' }
   ]));
 
-  session.subState = 'ZIPPY_SEARCH_INPUT';
+  session.subState = LoggedOnSubState.ZIPPY_SEARCH_INPUT;
   session.tempData = { zippySearchCommand: true };
 }
 

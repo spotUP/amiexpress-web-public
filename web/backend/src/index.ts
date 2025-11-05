@@ -282,6 +282,7 @@ export interface BBSSession {
   ansiMode?: boolean; // ANSI mode preference
   pagesAllowed?: number; // Number of pages allowed (-1 = unlimited, 0 = none)
   quietMode?: boolean; // Quiet mode preference
+  relogon?: boolean; // Flag for relogon after goodbye
 }
 
 // Conference and Message Base data structures (simplified)
