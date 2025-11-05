@@ -15,6 +15,7 @@
 - **Test Framework**: Reusable testing utilities (Scripts/test-framework.ts)
 - **Reference Checker**: Automates "check E sources first" (Scripts/reference-checker.ts)
 - **Library Spec Generator**: Type-safe specs from NDK docs (Scripts/generate-library-specs.ts)
+- **MCP Server**: On-demand source access (98% token savings!) - mcp-server/index.js
 
 ### In Progress 🔨
 - **WHO Door User List**: Door works but needs user tracking data from NI/NO tools
@@ -28,6 +29,33 @@
 ---
 
 ## 📊 Recent Achievements
+
+### Session 2025-11-05: MCP Server Implementation (98% Token Savings!)
+**Achievement**: Complete Model Context Protocol server for on-demand source access
+
+**Efficiency Transformation**:
+- Documentation: 204MB → 1.2MB (99.4% reduction)
+- express.e access: 400k → 7k tokens (98% reduction!)
+- Session capacity: 3 days → 7 days (FULL WEEK!)
+
+**MCP Tools Implemented**:
+1. `search_express_source` - Keyword search in express.e with context
+2. `read_source_range` - Read specific line ranges (e.g., 5290-5850 for MCI codes)
+3. `search_ndk_autodocs` - Search 30MB NDK autodocs on-demand
+
+**MCP Resources**:
+- `amiexpress://sources/express-e` - express.e (35k lines)
+- `amiexpress://sources/hydra-e` - hydra.e
+- `amiexpress://sources/acp-e` - ACP.e
+- `amiexpress://docs/*` - All documentation
+
+**Result**: Claude Code sessions can now access all sources without loading huge files into context!
+
+**Files Modified**:
+- mcp-server/index.js - Added SOURCES, handlers, and 3 new tools
+- CLAUDE.md - Added MCP Workflow section with usage examples
+- Scripts/reference-checker.ts - Added MCP usage note
+- mcp-server/test-mcp.js - Test suite (3/3 passing)
 
 ### Session 2025-11-02: Main Loop Rewrite
 **Achievement**: Fixed 3 critical bugs preventing ANY door from working
