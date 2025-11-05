@@ -279,7 +279,7 @@ export interface BBSSession {
 
   // Preference settings
   ansiMode?: boolean; // ANSI mode preference
-  pagesAllowed?: boolean; // Whether user allows pages
+  pagesAllowed?: number; // Number of pages allowed (-1 = unlimited, 0 = none)
   quietMode?: boolean; // Quiet mode preference
 }
 

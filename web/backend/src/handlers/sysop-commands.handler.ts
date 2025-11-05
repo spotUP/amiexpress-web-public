@@ -6,7 +6,7 @@
 
 import { BBSSession, LoggedOnSubState } from '../index';
 import { checkSecurity } from '../utils/acs.util';
-import { ACSCode } from '../constants/acs-codes';
+import { ACSPermission } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
@@ -39,7 +39,7 @@ export function setSysopCommandsDependencies(deps: {
  */
 export function handleRemoteShellCommand(socket: any, session: BBSSession): void {
   // Check security - express.e:24428
-  if (!checkSecurity(session.user, ACSCode.REMOTE_SHELL)) {
+  if (!checkSecurity(session.user, ACSPermission.REMOTE_SHELL)) {
     ErrorHandler.permissionDenied(socket, 'access remote shell', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -87,7 +87,7 @@ export function handleRemoteShellCommand(socket: any, session: BBSSession): void
  */
 export function handleAccountEditingCommand(socket: any, session: BBSSession): void {
   // Check security - express.e:24454
-  if (!checkSecurity(session.user, ACSCode.ACCOUNT_EDITING)) {
+  if (!checkSecurity(session.user, ACSPermission.ACCOUNT_EDITING)) {
     ErrorHandler.permissionDenied(socket, 'edit accounts', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -113,7 +113,7 @@ export function handleAccountEditingCommand(socket: any, session: BBSSession): v
  */
 export async function handleCallersLogCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // Check security - express.e:24464
-  if (!checkSecurity(session.user, ACSCode.LIST_NODES)) {
+  if (!checkSecurity(session.user, ACSPermission.LIST_NODES)) {
     ErrorHandler.permissionDenied(socket, 'view callers log', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -191,7 +191,7 @@ export function handleEditDirectoryFilesCommand(socket: any, session: BBSSession
   _setEnvStat(session, EnvStat.EMACS);
 
   // Check security - express.e:24513
-  if (!checkSecurity(session.user, ACSCode.EDIT_DIRS)) {
+  if (!checkSecurity(session.user, ACSPermission.EDIT_DIRS)) {
     ErrorHandler.permissionDenied(socket, 'edit directory files', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -245,7 +245,7 @@ export function handleEditAnyFileCommand(socket: any, session: BBSSession, param
   _setEnvStat(session, EnvStat.EMACS);
 
   // Check security - express.e:24519
-  if (!checkSecurity(session.user, ACSCode.EDIT_FILES)) {
+  if (!checkSecurity(session.user, ACSPermission.EDIT_FILES)) {
     ErrorHandler.permissionDenied(socket, 'edit files', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -299,7 +299,7 @@ export function handleChangeDirectoryCommand(socket: any, session: BBSSession, p
   _setEnvStat(session, EnvStat.SYSOP);
 
   // Check security - express.e:24525
-  if (!checkSecurity(session.user, ACSCode.SYSOP_COMMANDS)) {
+  if (!checkSecurity(session.user, ACSPermission.SYSOP_COMMANDS)) {
     ErrorHandler.permissionDenied(socket, 'navigate filesystem', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });

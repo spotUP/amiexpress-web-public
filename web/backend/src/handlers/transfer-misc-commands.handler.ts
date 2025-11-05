@@ -6,7 +6,7 @@
 
 import { BBSSession, LoggedOnSubState } from '../index';
 import { checkSecurity } from '../utils/acs.util';
-import { ACSCode } from '../constants/acs-codes';
+import { ACSPermission } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
@@ -78,7 +78,7 @@ export function setTransferMiscCommandsDependencies(deps: {
  */
 export function handleZmodemUploadCommand(socket: any, session: BBSSession): void {
   // Check security - express.e:25609
-  if (!checkSecurity(session.user, ACSCode.UPLOAD)) {
+  if (!checkSecurity(session.user, ACSPermission.UPLOAD)) {
     ErrorHandler.permissionDenied(socket, 'upload files', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -139,7 +139,7 @@ export function handleZmodemUploadCommand(socket: any, session: BBSSession): voi
  */
 export function handleSysopUploadCommand(socket: any, session: BBSSession, params: string = ''): void {
   // Check security - express.e:25661
-  if (!checkSecurity(session.user, ACSCode.SYSOP_COMMANDS)) {
+  if (!checkSecurity(session.user, ACSPermission.SYSOP_COMMANDS)) {
     ErrorHandler.permissionDenied(socket, 'use sysop upload', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -221,7 +221,7 @@ export function handleNodeUptimeCommand(socket: any, session: BBSSession): void 
  */
 export async function handleVotingBoothCommand(socket: any, session: BBSSession): Promise<void> {
   // Check security - express.e:25701
-  if (!checkSecurity(session.user, ACSCode.VOTE)) {
+  if (!checkSecurity(session.user, ACSPermission.VOTE)) {
     ErrorHandler.permissionDenied(socket, 'access voting booth', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -234,7 +234,7 @@ export async function handleVotingBoothCommand(socket: any, session: BBSSession)
   console.log('[ENV] Doors');
 
   // Check if user has modify vote permission (express.e:25704-25709)
-  const canModify = checkSecurity(session.user, ACSCode.MODIFY_VOTE);
+  const canModify = checkSecurity(session.user, ACSPermission.MODIFY_VOTE);
 
   if (canModify) {
     // Sysop: Show vote maintenance menu
@@ -300,7 +300,7 @@ async function displayVoteTopics(socket: any, session: BBSSession): Promise<void
 
   session.tempData = session.tempData || {};
   session.tempData.voteTopics = topics;
-  session.subState = 'VO_TOPIC_SELECT';
+  session.subState = LoggedOnSubState.VO_TOPIC_SELECT;
 }
 
 /**
@@ -465,7 +465,7 @@ async function displayNextQuestion(socket: any, session: BBSSession): Promise<vo
 
   session.tempData.currentQuestion = question;
   session.tempData.currentAnswers = answers;
-  session.subState = 'VO_ANSWER_INPUT';
+  session.subState = LoggedOnSubState.VO_ANSWER_INPUT;
 }
 
 /**
@@ -571,7 +571,7 @@ async function displayVoteMenu(socket: any, session: BBSSession): Promise<void> 
 
   socket.emit('ansi-output', '\r\n>');
 
-  session.subState = 'VO_MENU_CHOICE';
+  session.subState = LoggedOnSubState.VO_MENU_CHOICE;
 }
 
 /**
