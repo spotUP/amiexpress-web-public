@@ -151,6 +151,20 @@ const AEDOOR_VECTORS: LibraryVector[] = [
       return lib.hotKey();
     }
   },
+  {
+    offset: -132,  // LVO -132 (0xFF7C)
+    name: 'PreCreateComm',
+    handler: (emu, lib: AEDoorLibrary) => {
+      return lib.preCreateComm();
+    }
+  },
+  {
+    offset: -138,  // LVO -138 (0xFF76)
+    name: 'PostDeleteComm',
+    handler: (emu, lib: AEDoorLibrary) => {
+      return lib.postDeleteComm();
+    }
+  },
 ];
 
 /**
@@ -163,72 +177,63 @@ const DOS_VECTORS: LibraryVector[] = [
     offset: -30,
     name: 'Open',
     handler: (emu, lib: DosLibrary) => {
-      lib.Open();
-      return emu.getRegister(0);  // D0 already set by Open()
+      return lib.Open();
     }
   },
   {
     offset: -36,
     name: 'Close',
     handler: (emu, lib: DosLibrary) => {
-      lib.Close();
-      return 0;
+      return lib.Close();
     }
   },
   {
     offset: -42,
     name: 'Read',
     handler: (emu, lib: DosLibrary) => {
-      lib.Read();
-      return emu.getRegister(0);  // D0 already set by Read()
+      return lib.Read();
     }
   },
   {
     offset: -48,
     name: 'Write',
     handler: (emu, lib: DosLibrary) => {
-      lib.Write();
-      return emu.getRegister(0);  // D0 already set by Write()
+      return lib.Write();
     }
   },
   {
     offset: -54,
     name: 'Input',
     handler: (emu, lib: DosLibrary) => {
-      lib.Input();
-      return emu.getRegister(0);
+      return lib.Input();
     }
   },
   {
     offset: -60,
     name: 'Output',
     handler: (emu, lib: DosLibrary) => {
-      lib.Output();
-      return emu.getRegister(0);
+      return lib.Output();
     }
   },
   {
     offset: -66,
     name: 'Seek',
     handler: (emu, lib: DosLibrary) => {
-      lib.Seek();
-      return emu.getRegister(0);
+      return lib.Seek();
     }
   },
   {
     offset: -132,
     name: 'IoErr',
     handler: (emu, lib: DosLibrary) => {
-      lib.IoErr();
-      return emu.getRegister(0);
+      return lib.IoErr();
     }
   },
   {
     offset: -192,
     name: 'DateStamp',
     handler: (emu, lib: DosLibrary) => {
-      lib.DateStamp();
-      return emu.getRegister(0);
+      return lib.DateStamp();
     }
   },
   {
@@ -243,8 +248,15 @@ const DOS_VECTORS: LibraryVector[] = [
     offset: -204,
     name: 'WaitForChar',
     handler: (emu, lib: DosLibrary) => {
-      lib.WaitForChar();
-      return emu.getRegister(0);
+      return lib.WaitForChar();
+    }
+  },
+  {
+    offset: -144,
+    name: 'Exit',
+    handler: (emu, lib: DosLibrary) => {
+      lib.Exit();
+      return 0;  // Exit doesn't return in the normal sense
     }
   },
 ];
@@ -671,7 +683,12 @@ export class LibraryTraps {
       return false;  // Not a library trap
     }
 
-    console.log(`[LibraryTraps] Intercepted: ${vector.name}() at PC=0x${pc.toString(16)}`);
+    console.log(`[LibraryTraps] *** INTERCEPTED: ${vector.name}() at PC=0x${pc.toString(16)} ***`);
+
+    // Highlight output-related AEDoor functions
+    if (vector.name === 'WriteStr' || vector.name === 'Prompt' || vector.name === 'SendCmd') {
+      console.log(`[LibraryTraps] ⚠️  OUTPUT FUNCTION: ${vector.name}() - THIS SHOULD PRODUCE TERMINAL OUTPUT`);
+    }
 
     // Notify monitor if callback is set
     if (this.onLibraryCall) {
@@ -683,6 +700,7 @@ export class LibraryTraps {
     // and pop the return address from the ORIGINAL stack before the handler runs.
     const sp = this.emulator.getRegister(15);  // A7 (stack pointer)
     const a6 = this.emulator.getRegister(14);  // A6 (library base)
+    const a6Before = a6;  // CRITICAL: Save A6 before trap handler
     console.log(`[LibraryTraps]   SP before pop: 0x${sp.toString(16)}, A6: 0x${a6.toString(16)}`);
     const returnAddr = this.emulator.readMemory32(sp);
     console.log(`[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`);
@@ -716,6 +734,29 @@ export class LibraryTraps {
     // Set return value in D0
     this.emulator.setRegister(0, result);
 
+    // CRITICAL FIX: Restore A6 register after trap handler
+    // M68K calling convention requires A6 to be preserved across function calls
+    // For library calls, A6 MUST contain the library base address
+    // Determine which library this offset belongs to and restore A6 to that library's base
+    // This fixes crash at iteration 35,444 where A6=0x0 caused jump to 0xffffd6
+    let properA6 = a6Before;  // Default: restore to original value
+
+    // Determine library base from the library instance
+    if (library === this.execLibrary) {
+      properA6 = this.execLibrary.getLibraryBase('exec.library') || 0x10000;
+    } else if (library === this.dosLibrary) {
+      properA6 = this.execLibrary.getLibraryBase('dos.library') || 0x20000;
+    } else if (library === this.aedoorLibrary) {
+      properA6 = this.execLibrary.getLibraryBase('AEDoor.library') || 0x30000;
+    }
+
+    this.emulator.setRegister(14, properA6);
+    const a6AfterRestore = this.emulator.getRegister(14);
+    console.log(`[LibraryTraps]   A6 restored: 0x${a6Before.toString(16)} -> 0x${properA6.toString(16)} (${vector.name} library base)`);
+    if (a6AfterRestore !== properA6) {
+      console.log(`[LibraryTraps]   *** WARNING: A6 restoration failed! Expected: 0x${properA6.toString(16)}, Got: 0x${a6AfterRestore.toString(16)}`);
+    }
+
     // CRITICAL FIX: Update Status Register condition codes after setting D0
     // Library functions return values in D0, and the calling code expects
     // the Z and N flags to be set based on the return value (like TST.L D0 would do)
@@ -745,11 +786,14 @@ export class LibraryTraps {
     console.log(`[LibraryTraps]   Verified SR: 0x${verifySr.toString(16).padStart(4, '0')} (Z=${(verifySr & 0x04) ? 1 : 0})`);
 
     // Set PC to return address
-    // EXCEPTION: Supervisor() sets PC itself, so check if it was changed
+    // EXCEPTIONS: Supervisor() and Exit() set PC themselves, so check if it was changed
     const currentPC = this.emulator.getRegister(16);
     if (vector.name === 'Supervisor') {
       // Supervisor already set PC to the supervisor function, don't overwrite it
       console.log(`[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(16)}, not setting return address`);
+    } else if (vector.name === 'Exit') {
+      // Exit() already set PC to exit trap address (0xFFFF00), don't overwrite it
+      console.log(`[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(16)} (exit trap), not setting return address`);
     } else {
       console.log(`[LibraryTraps] Setting PC to return address 0x${returnAddr.toString(16)}`);
       this.emulator.setRegister(16, returnAddr);
@@ -764,16 +808,27 @@ export class LibraryTraps {
     }
 
     // CRITICAL FIX: Refill instruction prefetch queue!
-    // CRITICAL: DO NOT call refillPrefetch() here!
-    // The refillPrefetch() call causes Moira to execute one instruction at the return address,
-    // which corrupts registers when the instruction is MOVEM.L (SP)+,... that restores
-    // registers from stack. The emulator will naturally refill the prefetch queue when
-    // it executes cycles in the next iteration.
-    // this.emulator.refillPrefetch();  // REMOVED - causes register corruption
+    // After setting PC, we MUST refill the prefetch queue to synchronize
+    // queue.ird and queue.irc with the new PC location.
+    // The fixed refillPrefetch() now properly sets IRD and IRC without executing.
+    this.emulator.refillPrefetch();
 
-    // Verify final register state
-    const finalSp = this.emulator.getRegister(15);
+    // Verify final register state and ENFORCE 4-byte SP alignment
+    let finalSp = this.emulator.getRegister(15);
     const finalA6 = this.emulator.getRegister(14);
+
+    // CRITICAL FIX: Ensure SP is 4-byte aligned (M68K requirement)
+    // If SP is misaligned, round DOWN to nearest 4-byte boundary
+    const misalignment = finalSp % 4;
+    if (misalignment !== 0) {
+      const originalSp = finalSp;
+      finalSp = finalSp - misalignment;  // Round down to 4-byte boundary
+      this.emulator.setRegister(15, finalSp);
+      console.log(`[LibraryTraps] *** SP MISALIGNMENT DETECTED AND CORRECTED ***`);
+      console.log(`[LibraryTraps]   Original SP: 0x${originalSp.toString(16)} (misaligned by ${misalignment} bytes)`);
+      console.log(`[LibraryTraps]   Corrected SP: 0x${finalSp.toString(16)} (4-byte aligned)`);
+    }
+
     console.log(`[LibraryTraps] Returning to 0x${returnAddr.toString(16)}`);
     console.log(`[LibraryTraps]   Final SP: 0x${finalSp.toString(16)}, Final A6: 0x${finalA6.toString(16)}`);
 
@@ -824,6 +879,7 @@ export class LibraryTraps {
     // Pop return address from stack (same as handleTrap)
     const sp = this.emulator.getRegister(15);  // A7 (stack pointer)
     const a6 = this.emulator.getRegister(14);  // A6 (library base)
+    const a6Before = a6;  // CRITICAL: Save A6 before trap handler
     console.log(`[LibraryTraps]   SP before pop: 0x${sp.toString(16)}, A6: 0x${a6.toString(16)}`);
     const returnAddr = this.emulator.readMemory32(sp);
     console.log(`[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`);
@@ -836,6 +892,29 @@ export class LibraryTraps {
 
     // Set return value in D0
     this.emulator.setRegister(0, result);
+
+    // CRITICAL FIX: Restore A6 register after trap handler
+    // M68K calling convention requires A6 to be preserved across function calls
+    // For library calls, A6 MUST contain the library base address
+    // Determine which library this offset belongs to and restore A6 to that library's base
+    // This fixes crash at iteration 35,444 where A6=0x0 caused jump to 0xffffd6
+    let properA6 = a6Before;  // Default: restore to original value
+
+    // Determine library base from the library instance
+    if (library === this.execLibrary) {
+      properA6 = this.execLibrary.getLibraryBase('exec.library') || 0x10000;
+    } else if (library === this.dosLibrary) {
+      properA6 = this.execLibrary.getLibraryBase('dos.library') || 0x20000;
+    } else if (library === this.aedoorLibrary) {
+      properA6 = this.execLibrary.getLibraryBase('AEDoor.library') || 0x30000;
+    }
+
+    this.emulator.setRegister(14, properA6);
+    const a6After = this.emulator.getRegister(14);
+    console.log(`[LibraryTraps]   A6 restored: 0x${a6Before.toString(16)} -> 0x${properA6.toString(16)} (${vector.name} library base)`);
+    if (a6After !== properA6) {
+      console.log(`[LibraryTraps]   *** WARNING: A6 restoration failed! Expected: 0x${properA6.toString(16)}, Got: 0x${a6After.toString(16)}`);
+    }
 
     // Update Status Register condition codes
     const sr = this.emulator.getRegister(17);
@@ -857,10 +936,12 @@ export class LibraryTraps {
     console.log(`[LibraryTraps]   Set SR to: 0x${newSr.toString(16).padStart(4, '0')} (Z=${(newSr & 0x04) ? 1 : 0} N=${(newSr & 0x08) ? 1 : 0})`);
 
     // Set PC to return address
-    // EXCEPTION: Supervisor() sets PC itself
+    // EXCEPTIONS: Supervisor() and Exit() set PC themselves
     const currentPC = this.emulator.getRegister(16);
     if (vector.name === 'Supervisor') {
       console.log(`[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(16)}, not setting return address`);
+    } else if (vector.name === 'Exit') {
+      console.log(`[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(16)} (exit trap), not setting return address`);
     } else {
       this.emulator.setRegister(16, returnAddr);
     }

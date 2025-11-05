@@ -98,6 +98,9 @@ export class ExecLibrary {
   private publicPorts: Map<string, number> = new Map(); // name -> address
   private nextPortAddress: number = 0x0A0000; // Start at 640KB
 
+  // Signal allocation tracking (32 signals, bits 0-31)
+  private allocatedSignals: number = 0; // Bitmask of allocated signals
+
   // Door message callback - called when door sends message to AEDoorPort
   private doorMessageCallback: ((portAddr: number, msgAddr: number) => void) | null = null;
 
@@ -107,6 +110,7 @@ export class ExecLibrary {
   private readonly AEDOOR_LIB_ADDR = 0x030000;    // AEDoor.library at 192KB
   private readonly ICON_LIB_ADDR = 0x040000;      // icon.library at 256KB
   private readonly INTUITION_LIB_ADDR = 0x050000; // intuition.library at 320KB
+  private readonly UTILITY_LIB_ADDR = 0x070000;   // utility.library at 448KB
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
@@ -323,7 +327,7 @@ export class ExecLibrary {
 
       case 'aedoor.library':
         libAddr = this.AEDOOR_LIB_ADDR;
-        libVersion = 1;
+        libVersion = 2;  // V-AWAIT door requires version 2+
         libRevision = 0;
         break;
 
@@ -336,6 +340,12 @@ export class ExecLibrary {
       case 'intuition.library':
         libAddr = this.INTUITION_LIB_ADDR;
         libVersion = 36;
+        libRevision = 0;
+        break;
+
+      case 'utility.library':
+        libAddr = this.UTILITY_LIB_ADDR;
+        libVersion = 37;
         libRevision = 0;
         break;
 
@@ -583,6 +593,58 @@ export class ExecLibrary {
   }
 
   /**
+   * AllocSignal() - LVO -330 (0xFFFFFEB6)
+   *
+   * Allocate a signal bit for inter-process communication.
+   *
+   * Parameters:
+   *   D0 = Signal number to allocate (-1 = any free signal)
+   *
+   * Returns:
+   *   D0 = Signal number (0-31) or -1 if none available
+   *
+   * On Amiga, signals are used for IPC and synchronization.
+   * Each task has 32 signal bits (0-31).
+   */
+  AllocSignal(signalNum: number): number {
+    // Convert from signed byte (-1 = 0xFFFFFFFF in 32-bit register)
+    const requestedSignal = (signalNum < 0) ? -1 : (signalNum & 0xFF);
+
+    console.log(`[ExecLibrary] AllocSignal(${requestedSignal})`);
+
+    // If specific signal requested
+    if (requestedSignal >= 0 && requestedSignal < 32) {
+      const mask = 1 << requestedSignal;
+
+      // Check if already allocated
+      if (this.allocatedSignals & mask) {
+        console.log(`  Signal ${requestedSignal} already allocated!`);
+        return -1;  // Already allocated
+      }
+
+      // Allocate the requested signal
+      this.allocatedSignals |= mask;
+      console.log(`  Allocated signal ${requestedSignal}, mask=0x${this.allocatedSignals.toString(16)}`);
+      return requestedSignal;
+    }
+
+    // Otherwise, find any free signal (0-31)
+    for (let i = 0; i < 32; i++) {
+      const mask = 1 << i;
+      if (!(this.allocatedSignals & mask)) {
+        // Found a free signal
+        this.allocatedSignals |= mask;
+        console.log(`  Allocated signal ${i}, mask=0x${this.allocatedSignals.toString(16)}`);
+        return i;
+      }
+    }
+
+    // No free signals
+    console.log(`  No free signals available!`);
+    return -1;
+  }
+
+  /**
    * FindPort() - LVO -390 (0xFFFFFE7A)
    *
    * Find a public message port by name.
@@ -621,6 +683,68 @@ export class ExecLibrary {
 
     console.log(`[ExecLibrary]   Port "${name}" not found - returning NULL`);
     return 0;
+  }
+
+  /**
+   * AddPort() - LVO -354 (0xFFFFFE9E)
+   *
+   * Add a message port to the public list.
+   *
+   * Parameters:
+   *   A1 = MsgPort pointer
+   *
+   * Returns:
+   *   None
+   *
+   * Makes a port publicly findable via FindPort().
+   * The port name is read from the port structure.
+   */
+  addPort(portAddr: number): void {
+    if (portAddr === 0) {
+      console.log('[ExecLibrary] AddPort(NULL) - ignoring');
+      return;
+    }
+
+    // Read port structure to get name
+    // MsgPort structure:
+    //   +0:  ln_Succ (4 bytes)
+    //   +4:  ln_Pred (4 bytes)
+    //   +8:  ln_Type (1 byte)
+    //   +9:  ln_Pri (1 byte)
+    //   +10: ln_Name (4 bytes) - pointer to name string
+
+    const namePtr = this.emulator.readMemory32(portAddr + 10);
+
+    if (namePtr === 0) {
+      console.log(`[ExecLibrary] AddPort(0x${portAddr.toString(16)}) - port has no name, not making public`);
+      return;
+    }
+
+    const name = this.emulator.readString(namePtr);
+    console.log(`[ExecLibrary] AddPort(0x${portAddr.toString(16)}) - adding public port "${name}"`);
+
+    // Add to public ports registry (for FindPort lookup)
+    this.publicPorts.set(name, portAddr);
+
+    // CRITICAL: Also add to message ports registry (for PutMsg/GetMsg/WaitPort)
+    // Read port structure fields
+    const sigBit = this.emulator.readMemory(portAddr + 15);    // mp_SigBit
+    const sigTask = this.emulator.readMemory32(portAddr + 16); // mp_SigTask
+
+    const port = {
+      address: portAddr,
+      name: name,
+      messages: [],
+      sigBit: sigBit || 1,
+      sigTask: sigTask || this.currentTask.address,
+      signaled: false
+    };
+    this.messagePorts.set(portAddr, port);
+
+    // Update port structure to mark it as public (ln_Type = NT_MSGPORT = 4)
+    this.emulator.writeMemory(portAddr + 8, 4);  // NT_MSGPORT
+
+    console.log(`[ExecLibrary]   Port "${name}" is now public and registered for messaging`);
   }
 
   /**
@@ -815,6 +939,11 @@ export class ExecLibrary {
       return;
     }
 
+    // CRITICAL: Set message type to NT_MESSAGE (5) as per autodocs
+    // Message.mn_Node.ln_Type is at offset 8
+    const NT_MESSAGE = 5;
+    this.emulator.writeMemory(msgAddr + 8, NT_MESSAGE);
+
     // Add message to port's queue
     port.messages.push(msgAddr);
     port.signaled = true;
@@ -919,10 +1048,26 @@ export class ExecLibrary {
    * If no messages, return 0 and door will loop/retry.
    */
   waitPort(portAddr: number): number {
-    const port = this.messagePorts.get(portAddr);
+    let port = this.messagePorts.get(portAddr);
     if (!port) {
-      console.error(`[ExecLibrary] WaitPort: Port not found: 0x${portAddr.toString(16)}`);
-      return 0;
+      // Port doesn't exist in registry - door must have created it statically
+      // Auto-register it as a private port
+      console.log(`[ExecLibrary] WaitPort: Port at 0x${portAddr.toString(16)} not in registry, auto-registering`);
+
+      // Read port structure from memory to get details
+      const sigBit = this.emulator.readMemory(portAddr + 15);  // mp_SigBit
+      const sigTask = this.emulator.readMemory32(portAddr + 16);  // mp_SigTask
+
+      port = {
+        address: portAddr,
+        name: '',  // Private port
+        messages: [],
+        sigBit: sigBit || 1,
+        sigTask: sigTask || this.currentTask.address,
+        signaled: false
+      };
+      this.messagePorts.set(portAddr, port);
+      console.log(`[ExecLibrary]   Auto-registered port at 0x${portAddr.toString(16)}`);
     }
 
     // Check if port has messages
@@ -967,6 +1112,12 @@ export class ExecLibrary {
 
     console.log(`[ExecLibrary] ReplyMsg(msg=0x${msgAddr.toString(16)})`);
     console.log(`[ExecLibrary]   Reply Port: 0x${replyPortAddr.toString(16)}`);
+
+    // CRITICAL: Set message type to NT_REPLYMSG (6) as per autodocs
+    // This distinguishes replies from new messages
+    // Message.mn_Node.ln_Type is at offset 8
+    const NT_REPLYMSG = 6;
+    this.emulator.writeMemory(msgAddr + 8, NT_REPLYMSG);
 
     // Send message back to reply port via PutMsg
     this.putMsg(replyPortAddr, msgAddr);
@@ -1023,35 +1174,77 @@ export class ExecLibrary {
    * The structure is modified in-place to contain the OLD stack values,
    * allowing restoration by calling StackSwap again with the same structure.
    */
+  // Track when we've allocated a separate stack to maintain symmetry
+  private separateStackAllocated: boolean = false;
+  private separateStackPointer: number = 0;
+
   stackSwap(structAddr: number): void {
     console.log(`[ExecLibrary] StackSwap(struct=0x${structAddr.toString(16)})`);
 
-    // Read the new stack values from the structure
+    // Per Amiga NDK docs: "This function will swap the stack of your task with
+    // the given values in StackSwap. The StackSwapStruct structure will then
+    // contain the values of the old stack such that the old stack can be restored."
+
+    // Read NEW stack values from structure (what caller wants)
     const newLower = this.emulator.readMemory32(structAddr + 0);
     const newUpper = this.emulator.readMemory32(structAddr + 4);
     const newPointer = this.emulator.readMemory32(structAddr + 8);
 
-    console.log(`[ExecLibrary]   New stack: Lower=0x${newLower.toString(16)}, Upper=0x${newUpper.toString(16)}, Pointer=0x${newPointer.toString(16)}`);
+    // Get OLD stack values (current state)
+    const oldPointer = this.emulator.getRegister(15);  // Current SP
+    const oldLower = 0xFD000;    // Standard CLI stack lower bound
+    const oldUpper = 0xFE000;    // Standard CLI stack upper bound (4KB)
 
-    // Get current stack pointer from A7 (SP)
-    const oldPointer = this.emulator.getRegister(15);
+    console.log(`[ExecLibrary]   OLD: Lower=0x${oldLower.toString(16)}, Upper=0x${oldUpper.toString(16)}, SP=0x${oldPointer.toString(16)}`);
+    console.log(`[ExecLibrary]   NEW: Lower=0x${newLower.toString(16)}, Upper=0x${newUpper.toString(16)}, SP=0x${newPointer.toString(16)}`);
 
-    // For simplicity, we'll assume the old stack bounds are what we set up initially
-    // In a real implementation, we'd track these in the Task structure
-    const oldLower = 0xFD000;   // Default stack lower bound (from door setup)
-    const oldUpper = 0xFE000;   // Default stack upper bound (4KB stack)
+    // CRITICAL: Detect dangerous overlap that would corrupt saved data
+    // If NEW stack pointer is in same region as OLD and within 256 bytes, allocate separate stack
+    const inSameRegion = (newLower === oldLower && newUpper === oldUpper);
+    const tooClose = Math.abs(newPointer - oldPointer) < 256;
 
-    console.log(`[ExecLibrary]   Old stack: Lower=0x${oldLower.toString(16)}, Upper=0x${oldUpper.toString(16)}, Pointer=0x${oldPointer.toString(16)}`);
+    if (inSameRegion && tooClose && !this.separateStackAllocated) {
+      // First swap: Allocate truly separate stack to prevent corruption
+      this.separateStackPointer = 0x53FFC;  // 16KB separate stack at 0x50000-0x54000
+      console.log(`[ExecLibrary]   ⚠️  OVERLAP DANGER! OLD SP=0x${oldPointer.toString(16)}, requested NEW SP=0x${newPointer.toString(16)}`);
+      console.log(`[ExecLibrary]   Allocating separate stack at 0x${this.separateStackPointer.toString(16)} to prevent corruption`);
 
-    // Write the old stack values back to the structure
-    this.emulator.writeMemory32(structAddr + 0, oldLower);
-    this.emulator.writeMemory32(structAddr + 4, oldUpper);
-    this.emulator.writeMemory32(structAddr + 8, oldPointer);
+      // Write OLD values to structure
+      this.emulator.writeMemory32(structAddr + 0, oldLower);
+      this.emulator.writeMemory32(structAddr + 4, oldUpper);
+      this.emulator.writeMemory32(structAddr + 8, oldPointer);
 
-    // Switch to the new stack by setting SP (A7)
-    this.emulator.setRegister(15, newPointer);
+      // Set SP to separate safe stack
+      this.emulator.setRegister(15, this.separateStackPointer);
+      this.separateStackAllocated = true;
 
-    console.log(`[ExecLibrary]   Stack swapped! SP now 0x${newPointer.toString(16)}`);
+      console.log(`[ExecLibrary]   Stack swapped! SP now 0x${this.separateStackPointer.toString(16)} (safe separate stack)`);
+    } else if (this.separateStackAllocated) {
+      // Second swap: Restore from separate stack
+      // Per NDK docs: Structure ALREADY contains the old values from first swap!
+      // We must swap them back (symmetric operation)
+      console.log(`[ExecLibrary]   Swapping back from separate stack`);
+
+      // Write CURRENT separate stack info to structure
+      this.emulator.writeMemory32(structAddr + 0, 0x50000);
+      this.emulator.writeMemory32(structAddr + 4, 0x54000);
+      this.emulator.writeMemory32(structAddr + 8, oldPointer);  // Current SP on separate stack
+
+      // Restore to the SP that's IN the structure (from first swap)
+      // This is the original stack pointer the door saved
+      this.emulator.setRegister(15, newPointer);  // newPointer is what door put in struct
+      this.separateStackAllocated = false;
+
+      console.log(`[ExecLibrary]   Stack swapped! SP now 0x${newPointer.toString(16)} (restored from struct)`);
+    } else {
+      // Normal symmetric swap
+      this.emulator.writeMemory32(structAddr + 0, oldLower);
+      this.emulator.writeMemory32(structAddr + 4, oldUpper);
+      this.emulator.writeMemory32(structAddr + 8, oldPointer);
+      this.emulator.setRegister(15, newPointer);
+
+      console.log(`[ExecLibrary]   Stack swapped! SP now 0x${newPointer.toString(16)}`);
+    }
   }
 
   /**

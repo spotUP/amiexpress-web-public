@@ -13,13 +13,36 @@ using namespace moira;
 // Custom CPU implementation following vAmiga's architecture
 class MoiraCPU : public Moira {
 private:
-    // Memory layout (24-bit address space = 16MB)
-    static const uint32_t MEMORY_SIZE = 16 * 1024 * 1024;  // 16MB
-    std::vector<uint8_t> memory;
+    // ========== vAmiga-Style Memory Architecture ==========
+    // Separate memory buffers for each region (like vAmiga)
+    std::vector<uint8_t> chipRam;   // Chip RAM (typically 512KB-2MB)
+    std::vector<uint8_t> slowRam;   // Slow RAM (optional)
+    std::vector<uint8_t> fastRam;   // Fast RAM (optional)
+    std::vector<uint8_t> rom;       // Kickstart ROM (512KB)
 
-    // Memory region boundaries
-    static const uint32_t ROM_START = 0xF80000;     // ROM at 0xF80000-0xFFFFFF (512KB)
-    static const uint32_t ROM_END = 0xFFFFFF;
+    // Memory masks (size - 1, for wrapping addresses)
+    uint32_t chipMask;
+    uint32_t slowMask;
+    uint32_t fastMask;
+    uint32_t romMask;
+
+    // Memory source identifiers (following vAmiga's MemSrc enum)
+    enum class MemSrc : uint8_t {
+        NONE = 0,
+        CHIP,
+        SLOW,
+        FAST,
+        CIA,
+        CUSTOM,
+        ROM,
+        UNMAPPED
+    };
+
+    // Page table: maps 256 pages (64KB each) to memory sources
+    // Following vAmiga's cpuMemSrc[] architecture
+    MemSrc cpuMemSrc[256];
+
+    // Memory region boundaries (for I/O detection)
     static const uint32_t CIA_START = 0xA00000;     // CIA chips
     static const uint32_t CIA_END = 0xBFFFFF;
     static const uint32_t CUSTOM_START = 0xDFF000;  // Custom chips
@@ -36,14 +59,64 @@ private:
     static const uint32_t PAL_LINES = 312;
     static const uint32_t LINE_CYCLES = 227;
 
-public:
-    MoiraCPU(size_t memSize) : memory(MEMORY_SIZE, 0),
-                                scanlineCounter(0), hposCounter(0),
-                                ciaTimerA(0), ciaTimerB(0) {
-        cpuModel = Model::M68000;
+    // Helper: Update memory source page table (following vAmiga's updateCpuMemSrcTable)
+    void updateMemSrcTable() {
+        // Initialize all pages to NONE
+        for (int i = 0; i < 256; i++) {
+            cpuMemSrc[i] = MemSrc::NONE;
+        }
+
+        // Chip RAM: pages 0x00-0x1F (2MB max)
+        if (!chipRam.empty()) {
+            uint32_t chipPages = (chipRam.size() + 0xFFFF) / 0x10000;  // Round up to pages
+            for (uint32_t i = 0; i < chipPages && i < 0x20; i++) {
+                cpuMemSrc[i] = MemSrc::CHIP;
+            }
+        }
+
+        // ROM: pages 0xF8-0xFF (512KB)
+        if (!rom.empty()) {
+            for (int i = 0xF8; i <= 0xFF; i++) {
+                cpuMemSrc[i] = MemSrc::ROM;
+            }
+        }
+
+        // I/O regions (handled specially in read8/write8)
+        // CIA: 0xA0-0xBF
+        // CUSTOM: 0xDF
+
         EM_ASM({
-            console.log('[MOIRA WASM] MoiraCPU initialized with DYNAMIC hardware emulation!');
-        });
+            console.log('[MOIRA WASM] Memory page table updated');
+            console.log('[MOIRA WASM]   Chip RAM pages: 0x00-0x' + ($0).toString(16));
+            console.log('[MOIRA WASM]   ROM pages: 0xF8-0xFF');
+        }, chipRam.empty() ? 0 : ((chipRam.size() + 0xFFFF) / 0x10000) - 1);
+    }
+
+public:
+    MoiraCPU(size_t memSize) : chipRam(2 * 1024 * 1024, 0),  // 2MB chip RAM
+                                rom(512 * 1024, 0),            // 512KB ROM
+                                chipMask(0),
+                                slowMask(0),
+                                fastMask(0),
+                                romMask(0),
+                                scanlineCounter(0),
+                                hposCounter(0),
+                                ciaTimerA(0),
+                                ciaTimerB(0) {
+        cpuModel = Model::M68000;
+
+        // Calculate memory masks (size - 1)
+        chipMask = chipRam.size() - 1;
+        romMask = rom.size() - 1;
+
+        // Initialize page table
+        updateMemSrcTable();
+
+        EM_ASM({
+            console.log('[MOIRA WASM] MoiraCPU initialized with vAmiga-style memory architecture!');
+            console.log('[MOIRA WASM]   Chip RAM: ' + ($0 / 1024) + ' KB (mask: 0x' + ($1).toString(16) + ')');
+            console.log('[MOIRA WASM]   ROM: ' + ($2 / 1024) + ' KB (mask: 0x' + ($3).toString(16) + ')');
+        }, chipRam.size(), chipMask, rom.size(), romMask);
     }
 
     // Update hardware state based on cycles executed
@@ -67,105 +140,116 @@ public:
     }
 
     // Implement pure virtual memory access methods
-    // Following vAmiga's approach: just read from memory, no trap mechanism
+    // Following vAmiga's page table architecture
 
     u8 read8(u32 addr) const override {
         // Mask to 24-bit address space
         addr &= 0xFFFFFF;
 
-        // Handle memory-mapped I/O regions
-        if (addr >= CIA_START && addr <= CIA_END) {
-            return readCIA(addr);
-        }
-        if (addr >= CUSTOM_START && addr <= CUSTOM_END) {
-            return readCustom(addr);
-        }
+        // Get page number (each page = 64KB)
+        uint8_t page = (addr >> 16) & 0xFF;
 
-        // Normal memory read
-        return (addr < memory.size()) ? memory[addr] : 0;
+        // Page table lookup (following vAmiga's peek8 implementation)
+        switch (cpuMemSrc[page]) {
+            case MemSrc::CHIP:
+                // Read from chip RAM with mask
+                return chipRam[addr & chipMask];
+
+            case MemSrc::ROM:
+                // Read from ROM with mask
+                return rom[addr & romMask];
+
+            case MemSrc::SLOW:
+                if (!slowRam.empty()) {
+                    return slowRam[addr & slowMask];
+                }
+                return 0;
+
+            case MemSrc::FAST:
+                if (!fastRam.empty()) {
+                    return fastRam[addr & fastMask];
+                }
+                return 0;
+
+            case MemSrc::CIA:
+                return readCIA(addr);
+
+            case MemSrc::CUSTOM:
+                return readCustom(addr);
+
+            case MemSrc::NONE:
+            case MemSrc::UNMAPPED:
+            default:
+                // Unmapped memory returns 0
+                return 0;
+        }
     }
 
     u16 read16(u32 addr) const override {
-        // Mask to 24-bit address space
-        addr &= 0xFFFFFF;
-
-        // Handle memory-mapped I/O regions
-        if (addr >= CIA_START && addr <= CIA_END) {
-            return readCIA16(addr);
-        }
-        if (addr >= CUSTOM_START && addr <= CUSTOM_END) {
-            return readCustom16(addr);
-        }
-
-        // Normal memory read (big-endian)
-        if (addr + 1 < memory.size()) {
-            return (memory[addr] << 8) | memory[addr + 1];
-        }
-
-        return 0;
+        // Use read8 for page table logic, combine bytes big-endian
+        u8 high = read8(addr);
+        u8 low = read8(addr + 1);
+        return (high << 8) | low;
     }
 
     void write8(u32 addr, u8 val) const override {
         // Mask to 24-bit address space
         addr &= 0xFFFFFF;
 
-        // Handle memory-mapped I/O regions
-        if (addr >= CIA_START && addr <= CIA_END) {
-            writeCustom(addr, val);
-            return;
-        }
-        if (addr >= CUSTOM_START && addr <= CUSTOM_END) {
-            writeCustom(addr, val);
-            return;
-        }
-
-        // ROM is read-only, ignore writes
-        if (addr >= ROM_START && addr <= ROM_END) {
-            return;
+        // WATCHPOINT: Detect writes to corruption range 0x1250-0x125F
+        if (addr >= 0x1250 && addr <= 0x125F) {
+            u32 pc = this->getPC();
+            fprintf(stderr, "\n*** WATCHPOINT: Write to 0x%X ***\n", addr);
+            fprintf(stderr, "  Value: 0x%02X ('%c')\n", val, (val >= 32 && val < 127) ? val : '.');
+            fprintf(stderr, "  PC at time of write: 0x%X\n", pc);
+            fprintf(stderr, "  This address should contain JSR instruction!\n\n");
+            fflush(stderr);
         }
 
-        // Normal memory write
-        if (addr < memory.size()) {
-            const_cast<MoiraCPU*>(this)->memory[addr] = val;
+        // Get page number
+        uint8_t page = (addr >> 16) & 0xFF;
+
+        // Page table lookup for writes
+        switch (cpuMemSrc[page]) {
+            case MemSrc::CHIP:
+                // Write to chip RAM with mask
+                const_cast<MoiraCPU*>(this)->chipRam[addr & chipMask] = val;
+                return;
+
+            case MemSrc::SLOW:
+                if (!slowRam.empty()) {
+                    const_cast<MoiraCPU*>(this)->slowRam[addr & slowMask] = val;
+                }
+                return;
+
+            case MemSrc::FAST:
+                if (!fastRam.empty()) {
+                    const_cast<MoiraCPU*>(this)->fastRam[addr & fastMask] = val;
+                }
+                return;
+
+            case MemSrc::ROM:
+                // ROM is read-only, ignore writes
+                return;
+
+            case MemSrc::CIA:
+            case MemSrc::CUSTOM:
+                // I/O writes (mostly ignored for door execution)
+                writeCustom(addr, val);
+                return;
+
+            case MemSrc::NONE:
+            case MemSrc::UNMAPPED:
+            default:
+                // Ignore writes to unmapped memory
+                return;
         }
     }
 
     void write16(u32 addr, u16 val) const override {
-        // Mask to 24-bit address space
-        addr &= 0xFFFFFF;
-
-        // DEBUG: Log ALL writes at PC near 0x10ee with register state
-        int pc = this->reg.pc;
-        if (pc >= 0x10e0 && pc <= 0x1100) {
-            int d0 = this->reg.d[0];
-            int a4 = this->reg.a[4];
-            int sp = this->reg.a[7];
-            EM_ASM({
-                console.log('[MOIRA write16] PC=0x' + $0.toString(16) + ': Writing 0x' + $1.toString(16).padStart(4, '0') + ' to address 0x' + $2.toString(16));
-                console.log('[MOIRA write16]   D0=0x' + $3.toString(16) + ', A4=0x' + $4.toString(16) + ', SP=0x' + $5.toString(16));
-            }, pc, val, addr, d0, a4, sp);
-        }
-
-        // Handle memory-mapped I/O regions
-        if (addr >= CIA_START && addr <= CIA_END) {
-            writeCustom16(addr, val);
-            return;
-        }
-        if (addr >= CUSTOM_START && addr <= CUSTOM_END) {
-            writeCustom16(addr, val);
-            return;
-        }
-
-        // ROM is read-only, ignore writes
-        if (addr >= ROM_START && addr <= ROM_END) {
-            return;
-        }
-
-        // Normal memory write (big-endian)
-        if (addr + 1 < memory.size()) {
-            const_cast<MoiraCPU*>(this)->memory[addr] = (val >> 8) & 0xFF;
-            const_cast<MoiraCPU*>(this)->memory[addr + 1] = val & 0xFF;
-        }
+        // Use write8 for page table logic, split bytes big-endian
+        write8(addr, (val >> 8) & 0xFF);
+        write8(addr + 1, val & 0xFF);
     }
 
     // Memory-mapped I/O stubs following vAmiga's approach
@@ -334,39 +418,58 @@ public:
     }
 
     // Set memory byte (from JavaScript)
+    // CRITICAL FIX: Route through write8() to respect memory mapping
     void setMemoryByte(uint32_t addr, uint8_t value) {
-        addr &= 0xFFFFFF;
-        if (addr < memory.size()) {
-            memory[addr] = value;
-        }
+        write8(addr, value);
     }
 
+    // Get memory byte (from JavaScript)
+    // CRITICAL FIX: Route through read8() to respect memory mapping
+    // This ensures ROM, I/O, and other memory regions are accessed correctly
     uint8_t getMemoryByte(uint32_t addr) {
-        addr &= 0xFFFFFF;
-        return (addr < memory.size()) ? memory[addr] : 0;
+        return read8(addr);
     }
 
-    // Load ROM into memory (0xF80000-0xFFFFFF)
+    // Load ROM into ROM buffer (following vAmiga architecture)
     void loadROM(const std::vector<uint8_t>& romData) {
-        uint32_t romSize = romData.size();
-        if (romSize > (ROM_END - ROM_START + 1)) {
-            romSize = ROM_END - ROM_START + 1;
-        }
+        // Resize ROM buffer to match ROM size (typically 512KB)
+        rom.resize(romData.size());
 
-        // Copy ROM to 0xF80000-0xFFFFFF
-        memcpy(&memory[ROM_START], romData.data(), romSize);
+        // Copy ROM data to ROM buffer
+        memcpy(rom.data(), romData.data(), romData.size());
 
-        // Copy exception vectors (first 1KB) to 0x000000
-        // ROM vectors are at start of ROM during boot
-        uint32_t vectorSize = (romSize < 1024) ? romSize : 1024;
-        memcpy(&memory[0], romData.data(), vectorSize);
+        // Update ROM mask
+        romMask = rom.size() - 1;
+
+        // Copy exception vectors (first 1KB) to chip RAM at 0x000000
+        // This is how real Amiga boots - ROM vectors copied to low memory
+        uint32_t vectorSize = (romData.size() < 1024) ? romData.size() : 1024;
+        memcpy(chipRam.data(), romData.data(), vectorSize);
+
+        // Update page table with new ROM configuration
+        updateMemSrcTable();
+
+        EM_ASM({
+            console.log('[MOIRA WASM] ROM loaded: ' + $0 + ' bytes');
+            console.log('[MOIRA WASM]   ROM buffer size: ' + $1 + ' bytes');
+            console.log('[MOIRA WASM]   ROM mask: 0x' + $2.toString(16));
+            console.log('[MOIRA WASM]   Exception vectors copied to chip RAM: ' + $3 + ' bytes');
+        }, (int)romData.size(), (int)rom.size(), romMask, vectorSize);
     }
 
-    // Load program into memory
+    // Load program into chip RAM (door code goes here)
     void loadProgram(const std::vector<uint8_t>& program, uint32_t address) {
         address &= 0xFFFFFF;
-        for (size_t i = 0; i < program.size() && (address + i) < memory.size(); i++) {
-            memory[address + i] = program[i];
+
+        // Programs load into chip RAM (address < 2MB)
+        if (address < chipRam.size()) {
+            uint32_t copySize = std::min((uint32_t)program.size(),
+                                        (uint32_t)(chipRam.size() - address));
+            memcpy(&chipRam[address], program.data(), copySize);
+
+            EM_ASM({
+                console.log('[MOIRA WASM] Program loaded: ' + $0 + ' bytes at address 0x' + $1.toString(16));
+            }, copySize, address);
         }
     }
 
@@ -455,15 +558,21 @@ public:
     }
 
     // Refill prefetch queue after changing PC
+    // CRITICAL FIX: Properly emulate M68K prefetch behavior
     void refillPrefetch() {
-        // Read instruction at current PC
-        u16 opcode = read16(this->reg.pc);
-        // Set both IRC and IRD to the new instruction
-        setIRC(opcode);
-        setIRD(opcode);
+        // IRD = instruction at PC (will be executed next)
+        u16 ird_val = read16(this->reg.pc);
+        setIRD(ird_val);
+
+        // IRC = instruction at PC+2 (will be executed after IRD)
+        u16 irc_val = read16(this->reg.pc + 2);
+        setIRC(irc_val);
+
         EM_ASM({
-            console.log('[MOIRA] Prefetch queue refilled at PC=0x' + $0.toString(16) + ', opcode=0x' + $1.toString(16).padStart(4, '0'));
-        }, this->reg.pc, opcode);
+            console.log('[MOIRA] Prefetch queue refilled at PC=0x' + $0.toString(16));
+            console.log('  IRD (current) = 0x' + $1.toString(16).padStart(4, '0'));
+            console.log('  IRC (next) = 0x' + $2.toString(16).padStart(4, '0'));
+        }, this->reg.pc, ird_val, irc_val);
     }
 };
 

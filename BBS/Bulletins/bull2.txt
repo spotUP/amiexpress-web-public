@@ -1,0 +1,23 @@
+[4;33m                                                                             [0m
+[4;33;44m  MultiTop-II                              Design Created (c)1994 Bobo/Mystic[0m
+
+[35mNo# Username (Handle)    Leeched Bytes No# Username (Handle)    Leeched Bytes[0m
+[34m===-===================-==============-===-===================-==============[0m
+[33m 1.[0m Sandancer           274,487,543,36 [33m16.[0m Tom-Cat              2,994,375,830
+[33m 2.[0m cyclus_01           31,380,195,573 [33m17.[0m dabb                 2,992,161,697
+[33m 3.[0m MaRWic              23,918,772,116 [33m18.[0m DeaTure              2,101,824,740
+[33m 4.[0m RaGe                 8,724,985,163 [33m19.[0m The Paladin          1,997,825,386
+[33m 5.[0m Viceroy              8,586,591,121 [33m20.[0m nasa/ibb             1,423,218,659
+[33m 6.[0m strawa               7,361,630,820 [33m21.[0m Derrow                 878,056,795
+[33m 7.[0m TRiNiTY              6,443,333,653 [33m22.[0m Shocker                620,821,019
+[33m 8.[0m Ransom1122           6,361,878,446 [33m23.[0m spot                   592,678,331
+[33m 9.[0m jOhN dOe             5,666,782,911 [33m24.[0m GuYBRuSH               545,964,839
+[33m10.[0m STRiKER              5,625,183,331 [33m25.[0m sante                  458,747,822
+[33m11.[0m diNO                 5,146,822,214 [33m26.[0m pHANTOM                431,940,859
+[33m12.[0m KayPirinha           4,700,051,090 [33m27.[0m kokkiklhs              423,741,291
+[33m13.[0m JACKTORY             4,481,997,976 [33m28.[0m R/\DIOSITY             406,222,689
+[33m14.[0m HARALD KRISCHNA      3,470,833,315 [33m29.[0m EALL/HT                321,251,793
+[33m15.[0m Easy_Rider           3,396,348,643 [33m30.[0m cyc                    278,884,565
+[34m===-===================-==============-===-===================-==============[0m
+[32mUploaded Bytes[33m: [0m865,702,545,04 [32mDownloaded Bytes[33m: [0m418,295,533,01 [32mCalls[33m: [0m 9,892
+[32mUploaded Files[33m: [0m        29,455 [32mDownloaded Files[33m: [0m        32,655 [32mUsers[33m: [0m   543

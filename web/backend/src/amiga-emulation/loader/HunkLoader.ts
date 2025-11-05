@@ -111,22 +111,42 @@ export class HunkLoader {
       switch (hunkType) {
         case HunkType.HUNK_CODE:
         case HunkType.HUNK_DATA: {
-          const size = this.readLong() * 4; // Size in longwords -> bytes
-          const data = this.readBytes(size);
+          const hunkDataSize = this.readLong() * 4; // Size of data IN FILE (longwords -> bytes)
+          console.log(`[HunkLoader] Reading ${hunkType === HunkType.HUNK_CODE ? 'CODE' : 'DATA'} segment:`);
+          console.log(`[HunkLoader]   Hunk data size: ${hunkDataSize} bytes`);
+          console.log(`[HunkLoader]   File position BEFORE readBytes: 0x${this.position.toString(16)}`);
+          const data = this.readBytes(hunkDataSize);
+          console.log(`[HunkLoader]   File position AFTER readBytes: 0x${this.position.toString(16)}`);
 
           // Use segments.length as the index (since we're about to push)
           // NOT segmentIndex (which only increments at HUNK_END)
           const currentSegmentIndex = segments.length;
 
+          // CRITICAL: The segment's TOTAL size comes from the header, not the hunk!
+          // The header size includes BSS (uninitialized data).
+          // We allocate the full header size and zero-fill the BSS portion.
+          const totalSegmentSize = header.segmentSizes[currentSegmentIndex] * 4;
+          const bssSize = totalSegmentSize - hunkDataSize;
+
+          console.log(`[HunkLoader]   Header total size: ${totalSegmentSize} bytes`);
+          if (bssSize > 0) {
+            console.log(`[HunkLoader]   BSS size (implicit): ${bssSize} bytes`);
+          }
+
+          // Create segment data array with full size (data + BSS)
+          const fullData = new Uint8Array(totalSegmentSize);
+          fullData.set(data, 0); // Copy hunk data to start
+          // Rest is already zero-filled by Uint8Array constructor
+
           const segment: HunkSegment = {
             type: hunkType === HunkType.HUNK_CODE ? SegmentType.CODE : SegmentType.DATA,
-            data: new Uint8Array(data),
+            data: fullData,
             address: segmentAddresses[currentSegmentIndex],
-            size: size
+            size: totalSegmentSize
           };
 
           segments.push(segment);
-          console.log(`[HunkLoader] ${segment.type.toUpperCase()} segment: ${size} bytes at 0x${segment.address.toString(16)}`);
+          console.log(`[HunkLoader] ${segment.type.toUpperCase()} segment: ${totalSegmentSize} bytes at 0x${segment.address.toString(16)}`);
           break;
         }
 
@@ -238,6 +258,28 @@ export class HunkLoader {
         console.log(`[HunkLoader]   Expected: 0x4eae (JSR (A6,d16))`);
         if (((byte0 << 8) | byte1) !== 0x4eae) {
           console.log(`[HunkLoader]   *** SEGMENT DATA IS ALREADY CORRUPTED IN BUFFER! ***`);
+        }
+
+        // CHECK CORRUPTION LOCATION at offset 0x250 (memory 0x1250)
+        const offset1250 = 0x1250 - segment.address;
+        if (offset1250 >= 0 && offset1250 < segment.data.length - 16) {
+          console.log(`\n[HunkLoader] *** CHECKING CORRUPTION LOCATION 0x1250 ***`);
+          console.log(`[HunkLoader]   Offset in segment.data: 0x${offset1250.toString(16)}`);
+          console.log(`[HunkLoader]   segment.data bytes at offset ${offset1250}:`);
+          let hexStr = '  ';
+          for (let i = 0; i < 16; i++) {
+            hexStr += segment.data[offset1250 + i].toString(16).padStart(2, '0') + ' ';
+          }
+          console.log(hexStr);
+          console.log(`[HunkLoader]   Expected: 4e ae fe 86 60 12 2c 78 00 04 2e 88 67 08 20 79`);
+
+          // Check if it matches the expected JSR instruction
+          if (segment.data[offset1250] !== 0x4E || segment.data[offset1250 + 1] !== 0xAE) {
+            console.log(`[HunkLoader]   *** CORRUPTION CONFIRMED IN segment.data BUFFER! ***`);
+            console.log(`[HunkLoader]   The hunk file parsing read wrong bytes from file!`);
+          } else {
+            console.log(`[HunkLoader]   segment.data buffer is CORRECT at 0x1250`);
+          }
         }
       }
 

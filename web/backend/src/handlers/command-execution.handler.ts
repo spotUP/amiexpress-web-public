@@ -37,7 +37,7 @@ export function setCommandExecutionDependencies(
 }
 
 // Command cache - loaded once at startup
-const commandCache: {
+export const commandCache: {
   syscmd: Map<string, CommandDefinition>;
   bbscmd: Map<string, CommandDefinition>;
 } = {
@@ -221,7 +221,9 @@ async function runCommand(
       priority: commandDef.priority || 'SAME',
       stack: commandDef.stack || 20000,
       resident: commandDef.resident || false,
-      expertMode: commandDef.expertMode || false
+      expertMode: commandDef.expertMode || false,
+      // express.e:4295 - MCI_TEXT for MCI type doors
+      mciText: commandDef.mciText
     };
 
     try {

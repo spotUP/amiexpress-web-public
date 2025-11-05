@@ -35,7 +35,11 @@ export class MoiraEmulator {
   private waitingForSignal: boolean = false;
   private waitingForSignalMask: number = 0;
 
-  constructor(private memorySize: number = 16 * 1024 * 1024) {} // 16MB for full 24-bit address space
+  // Prompt() pause/resume state
+  private paused: boolean = false;
+  private resumeCallback: (() => void) | null = null;
+
+  constructor(private memorySize: number = 16 * 1024 * 1024) {} // 16MB for full 24-bit address space (Amiga standard)
 
   /**
    * Check if CPU is blocked in Wait() call
@@ -62,6 +66,36 @@ export class MoiraEmulator {
       console.log(`[MoiraEmulator] CPU now BLOCKED in Wait(0x${signalMask.toString(16)})`);
     } else {
       console.log(`[MoiraEmulator] CPU RESUMED from Wait()`);
+    }
+  }
+
+  /**
+   * Check if emulator is paused waiting for async input
+   */
+  isPaused(): boolean {
+    return this.paused;
+  }
+
+  /**
+   * Pause emulator execution (for async input handling)
+   * @param resumeCallback Called when resume() is invoked
+   */
+  pause(resumeCallback?: () => void): void {
+    this.paused = true;
+    this.resumeCallback = resumeCallback || null;
+    console.log('[MoiraEmulator] Emulator PAUSED (waiting for async input)');
+  }
+
+  /**
+   * Resume emulator execution after pause
+   */
+  resume(): void {
+    console.log('[MoiraEmulator] Emulator RESUMING from pause');
+    this.paused = false;
+    if (this.resumeCallback) {
+      const callback = this.resumeCallback;
+      this.resumeCallback = null;
+      callback();
     }
   }
 
@@ -157,6 +191,18 @@ export class MoiraEmulator {
 
   writeMemory(address: number, value: number): void {
     if (!this.cpu) throw new Error('Emulator not initialized');
+
+    // ULTRATHINK: Detect writes to ROM region (0xF80000-0xFFFFFF)
+    // ROM should be READ-ONLY! Any writes indicate a bug
+    if (address >= 0xF80000 && address <= 0xFFFFFF) {
+      console.error(`!!! ROM WRITE DETECTED !!!`);
+      console.error(`  Address: 0x${address.toString(16)}`);
+      console.error(`  Value: 0x${value.toString(16)}`);
+      console.error(`  Stack trace:`);
+      console.trace();
+      // Allow write for now to see what happens, but log it
+    }
+
     this.cpu.setMemoryByte(address, value);
   }
 

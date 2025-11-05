@@ -9,6 +9,8 @@ import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
+import { callersLogManager } from '../services/CallersLogManager';
+import { doorDropFileManager } from '../services/DoorDropFileManager';
 
 import type { BBSSession } from '../index';
 
@@ -84,11 +86,60 @@ export function setConstants(constants: {
 }
 
 /**
+ * Launch an Amiga door using AmigaDoorSession
+ */
+async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) {
+  try {
+    console.log(`[launchAmigaDoor] Starting door: ${doorInfo.command}`);
+    console.log(`[launchAmigaDoor] Location: ${doorInfo.location}`);
+    console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
+
+    // Check if door executable exists
+    if (!fs.existsSync(doorInfo.resolvedPath)) {
+      socket.emit('ansi-output', `\r\n\x1b[31mDoor executable not found: ${doorInfo.resolvedPath}\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    socket.emit('ansi-output', `\r\n\x1b[36mStarting ${doorInfo.name || doorInfo.command}...\x1b[0m\r\n\r\n`);
+
+    // Create AmigaDoorSession
+    const amigaSession = new AmigaDoorSession(socket, {
+      executablePath: doorInfo.resolvedPath,
+      timeout: 600,
+      memorySize: 1024 * 1024, // 1MB
+      sessionData: {
+        user: session.user,
+        nodeNumber: session.nodeId || 0,
+        bbsName: 'AmiExpress-Web BBS',
+        sysopName: 'Sysop',
+        timeRemaining: 60
+      }
+    });
+
+    await amigaSession.start();
+
+    console.log(`[launchAmigaDoor] Door session completed: ${doorInfo.command}`);
+
+    // Return to menu
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = false;
+
+  } catch (error) {
+    console.error(`[launchAmigaDoor] Error executing door:`, error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
+}
+
+/**
  * Display door games menu (DOORS command)
  */
 export async function displayDoorMenu(socket: any, session: BBSSession, params: string) {
-  socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
-
   // Get TypeScript doors for current user
   const availableDoors = doors.filter(door =>
     door.enabled &&
@@ -118,11 +169,48 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
     enabled: true,
     conferenceId: null,
     isAmigaDoor: true,
-    command: door.command
+    command: door.command,
+    doorInfo: door  // Keep original door info for execution
   }));
 
   // Combine both lists
   const allDoors = [...availableDoors, ...amigaDoorsList];
+
+  // If a door name was specified, try to launch it directly
+  if (params && params.trim()) {
+    const doorName = params.trim().toLowerCase();
+    console.log(`[DOOR Command] Looking for door: ${doorName}`);
+
+    const matchedDoor = allDoors.find(d =>
+      d.id.toLowerCase() === doorName ||
+      d.name.toLowerCase() === doorName ||
+      (d.command && d.command.toLowerCase() === doorName)
+    );
+
+    if (matchedDoor) {
+      console.log(`[DOOR Command] Found matching door: ${matchedDoor.name}`);
+
+      // Check if it's an Amiga door
+      if (matchedDoor.isAmigaDoor && matchedDoor.doorInfo) {
+        console.log(`[DOOR Command] Launching Amiga door: ${matchedDoor.name}`);
+        await launchAmigaDoor(socket, session, matchedDoor.doorInfo);
+        return;
+      } else {
+        // TypeScript door
+        await executeDoor(socket, session, matchedDoor);
+        return;
+      }
+    } else {
+      socket.emit('ansi-output', `\r\n\x1b[31mDoor "${params}" not found.\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+  }
+
+  // No door specified, show menu
+  socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
 
   if (allDoors.length === 0) {
     socket.emit('ansi-output', 'No doors are currently available.\r\n');
@@ -151,6 +239,12 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
 export async function executeDoor(socket: any, session: BBSSession, door: Door) {
   console.log('Executing door:', door.name);
 
+  const nodeId = session.nodeId || 0;
+
+  // Create drop files (DOOR.SYS, DORINFOx.DEF) before door execution
+  const timeRemaining = session.timeRemaining || 3600; // Default 1 hour
+  doorDropFileManager.createAllDropFiles(nodeId, session.user!, timeRemaining);
+
   // Create door session
   const doorSession: DoorSession = {
     doorId: door.id,
@@ -162,8 +256,9 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
 
   socket.emit('ansi-output', `\r\n\x1b[32mStarting ${door.name}...\x1b[0m\r\n`);
 
-  // Log door execution (express.e:9493 callersLog)
+  // Log door execution
   callersLog(session.user!.id, session.user!.username, 'Executed door', door.name);
+  callersLogManager.logDoor(nodeId, door.name);
 
   // Execute based on door type
   switch (door.type) {
@@ -193,9 +288,18 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
       console.error(`Unknown door type: ${door.type}`);
   }
 
+  // Clean up drop files after door exit
+  doorDropFileManager.cleanupDropFiles(nodeId);
+  callersLogManager.logDoorExit(nodeId, door.name);
+
   // Mark session as completed
   doorSession.endTime = new Date();
   doorSession.status = 'completed';
+
+  // After door completes, return to menu (express.e behavior after doors)
+  // Set subState so PROCESS_COMMAND handler knows door is done
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
@@ -214,17 +318,93 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
 
     // Build the full path to the door executable
     // door.location is already converted from Amiga paths (e.g., "Doors/AquaBulls/AquaBulls")
-    const doorPath = path.join(bbsRoot, door.location);
+    let doorPath = path.join(bbsRoot, door.location);
 
     console.log(`[executeAmigaDoor] BBS root: ${bbsRoot}`);
-    console.log(`[executeAmigaDoor] Full door path: ${doorPath}`);
+    console.log(`[executeAmigaDoor] Initial door path: ${doorPath}`);
 
-    // Check if door executable exists
+    // Check if door executable exists - if not, try alternate paths
     if (!fs.existsSync(doorPath)) {
-      console.error(`[executeAmigaDoor] Door executable not found: ${doorPath}`);
-      socket.emit('ansi-output', '\r\n\x1b[31mDoor executable not found.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      return;
+      console.log(`[executeAmigaDoor] Door not found at ${doorPath}, trying alternate paths...`);
+
+      // Try alternate path resolutions for common issues:
+      const location = door.location;
+      const alternatePaths = [];
+
+      // 1. Try with capital D in Doors/ (doors/ → Doors/)
+      if (location.startsWith('doors/')) {
+        alternatePaths.push(path.join(bbsRoot, location.replace(/^doors\//, 'Doors/')));
+      }
+
+      // 2. Try removing BBS/ prefix (BBS/Doors → Doors)
+      if (location.includes('BBS/Doors/')) {
+        alternatePaths.push(path.join(bbsRoot, location.replace('BBS/Doors/', 'Doors/')));
+      }
+
+      // 3. Try adding Doors/ prefix if missing
+      if (!location.startsWith('Doors/') && !location.startsWith('doors/')) {
+        alternatePaths.push(path.join(bbsRoot, 'Doors', location));
+      }
+
+      // 4. Try case-insensitive matching in Doors/ directory
+      // This handles: glc/glcviewer vs glcviewer/glcviewer, Bossnuke vs BossNuke/BossNuke
+      const basename = path.basename(location);
+      const dirname = path.dirname(location);
+
+      // Try variations: exact name, lowercase, first char uppercase
+      const nameVariations = [
+        basename,
+        basename.toLowerCase(),
+        basename.charAt(0).toUpperCase() + basename.slice(1).toLowerCase()
+      ];
+
+      // Search in Doors/ directory
+      const doorsDir = path.join(bbsRoot, 'Doors');
+      if (fs.existsSync(doorsDir)) {
+        try {
+          const entries = fs.readdirSync(doorsDir);
+          for (const entry of entries) {
+            const entryPath = path.join(doorsDir, entry);
+            const stat = fs.statSync(entryPath);
+
+            if (stat.isDirectory()) {
+              // Check if this directory name matches any variation of the door name
+              const entryLower = entry.toLowerCase();
+              const basenameLower = basename.toLowerCase();
+
+              if (entryLower === basenameLower || entryLower.includes(basenameLower)) {
+                // Try the executable inside this directory
+                for (const nameVar of nameVariations) {
+                  const execPath = path.join(entryPath, nameVar);
+                  if (fs.existsSync(execPath)) {
+                    alternatePaths.push(execPath);
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`[executeAmigaDoor] Error scanning Doors directory:`, e);
+        }
+      }
+
+      // Search for the file in alternate locations
+      for (const altPath of alternatePaths) {
+        if (fs.existsSync(altPath)) {
+          console.log(`[executeAmigaDoor] Found door at alternate path: ${altPath}`);
+          doorPath = altPath;
+          break;
+        }
+      }
+
+      // If still not found, error out
+      if (!fs.existsSync(doorPath)) {
+        console.error(`[executeAmigaDoor] Door executable not found: ${doorPath}`);
+        console.error(`[executeAmigaDoor] Tried alternate paths:`, alternatePaths);
+        socket.emit('ansi-output', '\r\n\x1b[31mDoor executable not found.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        return;
+      }
     }
 
     console.log(`[executeAmigaDoor] Starting 68k emulation for: ${doorPath}`);
@@ -244,10 +424,16 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     await amigaSession.start();
 
     console.log(`[executeAmigaDoor] Door execution completed`);
+
+    // Emit completion message and return to menu
+    socket.emit('ansi-output', '\r\n\x1b[32mPress ENTER to continue...\x1b[0m');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+
   } catch (error) {
     console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
     socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress ENTER to continue...\x1b[0m');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 }
 
@@ -272,8 +458,15 @@ async function executeMciDoor(socket: any, session: BBSSession, door: Door, door
   // Import parseMciCodes function
   const { parseMciCodes, addAnsiEscapes } = require('./screen.handler');
 
+  // Convert escape sequences in MCI_TEXT to actual characters
+  // Replace literal \r\n, \r, \n with actual CRLF
+  let mciText = door.mciText
+    .replace(/\\r\\n/g, '\r\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r');
+
   // Process MCI codes (express.e:4297 calls processMci())
-  let processedText = parseMciCodes(door.mciText, session);
+  let processedText = parseMciCodes(mciText, session);
 
   // Add ESC prefix to ANSI codes if needed
   processedText = addAnsiEscapes(processedText);
@@ -634,9 +827,38 @@ async function executeScriptDoor(socket: any, session: BBSSession, door: Door, d
 
 /**
  * Initialize door collection
+ * Converts CommandDefinition objects from BBSCMD into Door objects
+ *
+ * express.e:28228 - Command priority: SYSCMD > BBSCMD > InternalCommand
+ * BBSCMD doors are loaded from .info files in Commands/BBSCmd/
  */
 export async function initializeDoors() {
-  doors = [
+  // Import commandCache to access loaded BBSCMD commands
+  const { commandCache } = await import('./command-execution.handler');
+
+  // Convert CommandDefinition objects from BBSCMD to Door objects
+  const bbsCmdDoors: Door[] = [];
+
+  for (const [cmdName, cmdDef] of commandCache.bbscmd) {
+    // Convert CommandDefinition to Door interface
+    const door: Door = {
+      id: cmdDef.name.toLowerCase(),
+      name: cmdDef.name,
+      description: `${cmdDef.type} door`,
+      command: cmdDef.name.toUpperCase(),  // Door command (e.g., "TESTRESTRICT")
+      path: cmdDef.location,                // Path from LOCATION= field
+      accessLevel: cmdDef.access || 0,      // ACCESS= level
+      enabled: true,
+      type: cmdDef.type,                    // TYPE= (XIM, AIM, etc.)
+      parameters: []
+    };
+
+    bbsCmdDoors.push(door);
+    console.log(`[initializeDoors] Registered door: ${door.command} → ${door.path}`);
+  }
+
+  // Hardcoded web doors (these don't have .info files)
+  const webDoors: Door[] = [
     {
       id: 'sal',
       name: 'Super AmiLog',
@@ -660,6 +882,11 @@ export async function initializeDoors() {
       parameters: []
     }
   ];
+
+  // Merge BBSCMD doors with hardcoded web doors
+  doors = [...bbsCmdDoors, ...webDoors];
+
+  console.log(`[initializeDoors] Total doors registered: ${doors.length}`);
 }
 
 /**

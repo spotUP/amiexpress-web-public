@@ -139,6 +139,7 @@ export interface XIMMessage {
   data: number;         // Data value
   replyPort: number;    // Door's reply port address
   stringAddr?: number;  // Address of string data (if any)
+  string?: string;      // String content (jhMessage.string field)
 }
 
 export class XIMProtocol {
@@ -217,27 +218,31 @@ export class XIMProtocol {
    * Parse XIM message from memory
    */
   parseMessage(msgAddr: number): XIMMessage {
-    // Amiga Message structure:
-    // struct Message {
-    //   struct Node mn_Node;        // 14 bytes
-    //   struct MsgPort *mn_ReplyPort; // 4 bytes (offset 14)
-    //   UWORD mn_Length;            // 2 bytes (offset 18)
-    // }
-    // Total: 20 bytes for standard message header
-
-    // XIM message adds:
-    // UWORD command;  // offset 20
-    // ULONG data;     // offset 22
+    // jhMessage structure from axcommon.e (express.e:543-557):
+    // OBJECT jhMessage
+    //   <mn_Node + mn_ReplyPort + mn_Length>  // 20 bytes (standard Message header)
+    //   string[200]: ARRAY OF CHAR            // 200 bytes (offset 20-219)
+    //   data: LONG                            // 4 bytes (offset 220-223)
+    //   command: LONG                         // 4 bytes (offset 224-227)
+    // ENDOBJECT
+    //
+    // CRITICAL: Command is at offset 224, NOT offset 20!
+    // The string field comes FIRST after the message header.
 
     const replyPort = this.emulator.readMemory32(msgAddr + 14);
-    const command = this.emulator.readMemory16(msgAddr + 20);
-    const data = this.emulator.readMemory32(msgAddr + 22);
+    const command = this.emulator.readMemory32(msgAddr + 224);  // LONG at offset 224
+    const data = this.emulator.readMemory32(msgAddr + 220);     // LONG at offset 220
+    const stringPtr = msgAddr + 20;  // String starts at offset 20
 
-    console.log('[XIMProtocol] Parsed message:');
+    // Read the string (200 bytes starting at offset 20)
+    const messageString = this.emulator.readString(stringPtr, 200);
+
+    console.log('[XIMProtocol] Parsed jhMessage:');
     console.log(`  Address: 0x${msgAddr.toString(16)}`);
     console.log(`  Reply Port: 0x${replyPort.toString(16)}`);
     console.log(`  Command: ${command} (${this.getCommandName(command)})`);
-    console.log(`  Data: 0x${data.toString(16)}`);
+    console.log(`  Data: ${data} (0x${data.toString(16)})`);
+    console.log(`  String: "${messageString}"`);
 
     // Save door's reply port for future responses
     if (replyPort !== 0 && this.doorReplyPort === 0) {
@@ -250,6 +255,7 @@ export class XIMProtocol {
       command,
       data,
       replyPort,
+      string: messageString,
     };
   }
 
@@ -708,19 +714,16 @@ export class XIMProtocol {
    * - msg.data = if non-zero, add newline and check for pause
    */
   private handleSendMessage(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
+    // jhMessage structure has string embedded at offset 20-219
+    // We already parsed it in parseMessage() and stored in msg.string
+    const text = msg.string || '';
 
-    if (stringAddr === 0) {
-      console.log('[XIMProtocol] JH_SM: No string address provided');
-      this.sendReply(msg, 0);
-      return;
-    }
-
-    const text = this.readString(stringAddr);
     console.log(`[XIMProtocol] JH_SM: "${text}"`);
 
     // Send text to terminal
-    this.socket.emit('ansi-output', text);
+    if (text) {
+      this.socket.emit('ansi-output', text);
+    }
 
     // If msg.data is non-zero, add newline and check for pause
     if (msg.data !== 0) {
@@ -884,7 +887,6 @@ export class XIMProtocol {
     }
 
     const text = this.readString(stringAddr);
-    console.log(`[XIMProtocol] JH_CO (Console): "${text}"`);
 
     // Send to terminal (console output)
     this.socket.emit('ansi-output', text);
@@ -989,7 +991,11 @@ export class XIMProtocol {
    */
   private handleExpressVersion(msg: XIMMessage): void {
     const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
-    const version = 'AmiExpress-Web v1.0';
+    // Return version in format from express.e:4599 getExpressMajorVer()
+    // Format: "v<major>.<minor>" (e.g., "v5.6")
+    // RTW requires "AmiExpress V3.xx or higher"
+    // We are porting AmiExpress v5.6.1
+    const version = 'v5.6';
 
     console.log(`[XIMProtocol] EXPRESS_VERSION: "${version}"`);
 
@@ -1530,10 +1536,15 @@ export class XIMProtocol {
       case XIMCommand.ACTIVE_NODES:
         if (isRead) {
           // Return list of active nodes (32 chars, 'X' = active, ' ' = inactive)
-          const nodes = '                                '; // 32 spaces
-          // TODO: Query actual active nodes
-          this.writeString(stringAddr, nodes, 32);
-          console.log('  [READ] ACTIVE_NODES: (all inactive)');
+          // Check which nodes have node{n}.user files
+          const { nodeFileManager } = require('../../../services/NodeFileManager');
+          let nodesStatus = '';
+          for (let i = 0; i < 32; i++) {
+            const isActive = nodeFileManager.nodeUserFilesExist(i);
+            nodesStatus += isActive ? 'X' : ' ';
+          }
+          this.writeString(stringAddr, nodesStatus, 32);
+          console.log(`  [READ] ACTIVE_NODES: ${nodesStatus.replace(/ /g, '_')}`);
         }
         break;
 

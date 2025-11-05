@@ -89,6 +89,9 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
   // Get user's last scan time (use last login if no scan time stored)
   const lastScanTime = session.user!.lastScanTime || session.user!.lastLogin || new Date(0);
 
+  // Convert Date to ISO string for SQLite compatibility
+  const lastScanTimeStr = lastScanTime.toISOString();
+
   // Query for new messages per conference since last scan
   const newMessagesQuery = await db.query(
     `SELECT c.id, c.name, COUNT(m.id) as new_count
@@ -97,7 +100,7 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
      GROUP BY c.id, c.name
      HAVING COUNT(m.id) > 0
      ORDER BY c.id`,
-    [lastScanTime]
+    [lastScanTimeStr]
   );
 
   if (newMessagesQuery.rows.length > 0) {

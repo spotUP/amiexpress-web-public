@@ -7,6 +7,12 @@ import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import * as path from 'path';
 import * as fs from 'fs';
+import { userFileManager } from './services/UserFileManager';
+import { messageFileManager } from './services/MessageFileManager';
+import { conferenceFileManager } from './services/ConferenceFileManager';
+import { fileAreaManager } from './services/FileAreaManager';
+import { messageIndexManager, MsgStatus } from './services/MessageIndexManager';
+import { userDatabaseManager } from './services/UserDatabaseManager';
 
 // Import types from types.ts
 import type {
@@ -327,6 +333,34 @@ export class Database {
 
       await this.initializeDefaultData();
       console.log('Default data initialized');
+
+      // CRITICAL: Initialize disk files for Amiga door compatibility
+      console.log('Initializing user disk files...');
+      userFileManager.initializeUserFiles();
+      console.log('User disk files initialized');
+
+      console.log('Initializing message directories...');
+      messageFileManager.initializeMessageDirs();
+      console.log('Message directories initialized');
+
+      console.log('Initializing conference database...');
+      conferenceFileManager.initializeConfDB();
+      console.log('Conference database initialized');
+
+      console.log('Initializing file area directories...');
+      fileAreaManager.initializeFileAreaDirs();
+      console.log('File area directories initialized');
+
+      console.log('Initializing message index files (HeaderFile, MailStats, MailLock)...');
+      // Initialize for conferences 1-10
+      for (let i = 1; i <= 10; i++) {
+        messageIndexManager.initializeMessageIndex(i);
+      }
+      console.log('Message index files initialized');
+
+      console.log('Initializing user database files (user.data, user.keys, user.misc)...');
+      userDatabaseManager.initializeUserDatabase();
+      console.log('User database files initialized');
     } catch (error) {
       console.error('Failed to initialize database:', error);
       console.log('Continuing with server startup despite database initialization error');
@@ -916,6 +950,32 @@ export class Database {
       userData.topDownloadCPS, userData.byteLimit
     );
 
+    // CRITICAL: Write to disk files for Amiga door compatibility
+    // Get the full user object we just created
+    const newUser = await this.getUserById(id);
+    if (newUser) {
+      // Count existing users to assign slot number
+      const userCount = userDatabaseManager.getUserCount();
+      const slotNumber = userCount; // Next available slot
+      try {
+        // Write to node files (active session)
+        userFileManager.writeUserFiles(newUser, slotNumber);
+        console.log(`[Database] Synced new user ${newUser.username} to node files (slot ${slotNumber})`);
+
+        // Write to main user database (user.data, user.keys, user.misc)
+        const userStruct = userDatabaseManager.userToStruct(newUser);
+        userStruct.slotNumber = slotNumber; // Set slot number
+        const keysStruct = userDatabaseManager.userToKeys(newUser, slotNumber);
+        const miscStruct = userDatabaseManager.userToMisc(newUser);
+
+        userDatabaseManager.appendUser(userStruct, keysStruct, miscStruct);
+        console.log(`[Database] Synced new user ${newUser.username} to user.data/keys/misc`);
+      } catch (error) {
+        console.error(`[Database] Failed to sync user to disk:`, error);
+        // Don't throw - DB insert succeeded, file write is best-effort
+      }
+    }
+
     return id;
   }
 
@@ -1012,6 +1072,23 @@ export class Database {
     const sql = `UPDATE users SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
     const stmt = this.db.prepare(sql);
     stmt.run(...values, id);
+
+    // CRITICAL: Sync to disk files for Amiga door compatibility
+    const updatedUser = await this.getUserById(id);
+    if (updatedUser) {
+      // Find user's slot number (would need to track this better in production)
+      const allUsers = await this.getUsers({});
+      const slotNumber = allUsers.findIndex(u => u.id === id);
+      if (slotNumber >= 0) {
+        try {
+          userFileManager.updateUserDataFile(updatedUser, slotNumber);
+          console.log(`[Database] Synced updated user ${updatedUser.username} to disk files (slot ${slotNumber})`);
+        } catch (error) {
+          console.error(`[Database] Failed to sync user update to disk:`, error);
+          // Don't throw - DB update succeeded, file write is best-effort
+        }
+      }
+    }
   }
 
   async getUsers(filter?: { secLevel?: number; newUser?: boolean; limit?: number }): Promise<User[]> {
@@ -1048,7 +1125,26 @@ export class Database {
 
     const stmt = this.db.prepare('INSERT INTO conferences (name, description) VALUES (?, ?)');
     const result = stmt.run(conf.name, conf.description);
-    return result.lastInsertRowid as number;
+    const confId = result.lastInsertRowid as number;
+
+    // CRITICAL: Write to Conf.DB for Amiga door compatibility
+    try {
+      const allConfs = await this.getConferences();
+      const slotNumber = allConfs.length - 1;  // 0-indexed
+      const fullConf: Conference = {
+        ...conf,
+        id: confId,
+        created: new Date(),
+        updated: new Date()
+      };
+      conferenceFileManager.writeConferenceFile(fullConf, slotNumber);
+      console.log(`[Database] Synced conference "${conf.name}" to Conf.DB (slot ${slotNumber})`);
+    } catch (error) {
+      console.error(`[Database] Failed to sync conference to disk:`, error);
+      // Don't throw - DB insert succeeded
+    }
+
+    return confId;
   }
 
   async getConferences(): Promise<Conference[]> {
@@ -1081,12 +1177,62 @@ export class Database {
     };
   }
 
+  async updateConference(id: number, updates: Partial<Conference>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created' && key !== 'updated');
+    if (fields.length === 0) return;
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => updates[f as keyof Conference]);
+
+    const sql = `UPDATE conferences SET ${setClause} WHERE id = ?`;
+    const stmt = this.db.prepare(sql);
+    stmt.run(...values, id);
+
+    // CRITICAL: Sync to Conf.DB for Amiga door compatibility
+    try {
+      const selectStmt = this.db.prepare('SELECT * FROM conferences WHERE id = ?');
+      const row = selectStmt.get(id) as any;
+
+      if (row) {
+        const fullConf: Conference = {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          created: new Date(row.created * 1000),
+          updated: new Date(row.updated * 1000)
+        };
+
+        const allConfs = await this.getConferences();
+        const slotNumber = allConfs.findIndex(c => c.id === id);
+
+        if (slotNumber >= 0) {
+          conferenceFileManager.updateConferenceFile(fullConf, slotNumber);
+          console.log(`[Database] Synced updated conference "${row.name}" to Conf.DB (slot ${slotNumber})`);
+        }
+      }
+    } catch (error) {
+      console.error(`[Database] Failed to sync updated conference to disk:`, error);
+    }
+  }
+
   async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
     if (!this.db) throw new Error('Database not initialized');
 
     const stmt = this.db.prepare('INSERT INTO message_bases (name, conferenceid) VALUES (?, ?)');
     const result = stmt.run(mb.name, mb.conferenceId);
-    return result.lastInsertRowid as number;
+    const mbId = result.lastInsertRowid as number;
+
+    // CRITICAL: Ensure Messages directory exists for Amiga door compatibility
+    try {
+      messageFileManager.initializeMessageDirs();  // Creates Conf{n}/Messages/ if needed
+      console.log(`[Database] Ensured Messages directory for conference ${mb.conferenceId}`);
+    } catch (error) {
+      console.error(`[Database] Failed to create Messages directory:`, error);
+    }
+
+    return mbId;
   }
 
   async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
@@ -1140,7 +1286,41 @@ export class Database {
       message.editedAt ? Math.floor(message.editedAt.getTime() / 1000) : null
     );
 
-    return result.lastInsertRowid as number;
+    const messageId = result.lastInsertRowid as number;
+
+    // CRITICAL: Write to disk files for Amiga door compatibility
+    try {
+      // Get next message number from message index manager
+      const msgNumber = messageIndexManager.getNextMessageNumber(message.conferenceId);
+
+      const fullMessage: Message = {
+        ...message,
+        id: messageId
+      };
+
+      // Write .msg file (message text)
+      messageFileManager.writeMessageFile(fullMessage, message.conferenceId, msgNumber);
+      console.log(`[Database] Synced message ${messageId} to ${msgNumber}.msg (conf ${message.conferenceId})`);
+
+      // Write to HeaderFile (message index) and update MailStats
+      const timestamp = Math.floor(message.timestamp.getTime() / 1000);
+      messageIndexManager.appendMessageHeader(message.conferenceId, {
+        status: message.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
+        msgNumb: msgNumber,
+        toName: message.toUser || 'ALL',
+        fromName: message.author,
+        subject: message.subject,
+        msgDate: timestamp,
+        recv: 0,  // Not received yet
+        extMsgNum: msgNumber
+      });
+      console.log(`[Database] Synced message ${messageId} to HeaderFile and MailStats (conf ${message.conferenceId})`);
+    } catch (error) {
+      console.error(`[Database] Failed to sync message to disk:`, error);
+      // Don't throw - DB insert succeeded, file write is best-effort
+    }
+
+    return messageId;
   }
 
   async getMessages(conferenceId: number, messageBaseId: number, options?: {
@@ -1226,13 +1406,78 @@ export class Database {
     const sql = `UPDATE messages SET ${setClause} WHERE id = ?`;
     const stmt = this.db.prepare(sql);
     stmt.run(...values, id);
+
+    // CRITICAL: Sync to disk file for Amiga door compatibility
+    try {
+      const selectStmt = this.db.prepare('SELECT * FROM messages WHERE id = ?');
+      const row = selectStmt.get(id) as any;
+
+      if (row) {
+        const fullMessage: Message = {
+          id: row.id,
+          subject: row.subject,
+          body: row.body,
+          author: row.author,
+          timestamp: new Date(row.timestamp * 1000),
+          conferenceId: row.conferenceid,
+          messageBaseId: row.messagebaseid,
+          isPrivate: row.isprivate === 1,
+          toUser: row.touser,
+          parentId: row.parentid,
+          attachments: JSON.parse(row.attachments || '[]'),
+          edited: row.edited === 1,
+          editedBy: row.editedby,
+          editedAt: row.editedat ? new Date(row.editedat * 1000) : undefined
+        };
+
+        const msgNumber = row.id;
+
+        // Update .msg file
+        messageFileManager.updateMessageFile(fullMessage, fullMessage.conferenceId, msgNumber);
+
+        // Update HeaderFile entry
+        const timestamp = Math.floor(fullMessage.timestamp.getTime() / 1000);
+        messageIndexManager.updateMessageHeader(fullMessage.conferenceId, msgNumber, {
+          status: fullMessage.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
+          toName: fullMessage.toUser || 'ALL',
+          fromName: fullMessage.author,
+          subject: fullMessage.subject,
+          msgDate: timestamp
+        });
+
+        console.log(`[Database] Synced updated message ${id} to .msg and HeaderFile`);
+      }
+    } catch (error) {
+      console.error(`[Database] Failed to sync updated message to disk:`, error);
+    }
   }
 
   async deleteMessage(id: number): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
+    // Get message info before deleting for file cleanup
+    const selectStmt = this.db.prepare('SELECT conferenceid, id FROM messages WHERE id = ?');
+    const row = selectStmt.get(id) as any;
+
     const stmt = this.db.prepare('DELETE FROM messages WHERE id = ?');
     stmt.run(id);
+
+    // CRITICAL: Delete from disk files for Amiga door compatibility
+    if (row) {
+      try {
+        const msgNumber = row.id;
+
+        // Delete .msg file
+        messageFileManager.deleteMessageFile(row.conferenceid, msgNumber);
+
+        // Mark as deleted in HeaderFile (don't remove, just mark status)
+        messageIndexManager.deleteMessageHeader(row.conferenceid, msgNumber);
+
+        console.log(`[Database] Deleted message ${id} from .msg and marked in HeaderFile`);
+      } catch (error) {
+        console.error(`[Database] Failed to delete message file from disk:`, error);
+      }
+    }
   }
 
   async updateReadPointer(userId: number, conferenceId: number, messageBaseId: number, lastRead: number): Promise<void> {
@@ -1263,7 +1508,26 @@ export class Database {
       file.status, file.checked, file.comment
     );
 
-    return result.lastInsertRowid as number;
+    const fileId = result.lastInsertRowid as number;
+
+    // CRITICAL: Write to .dir file for Amiga door compatibility
+    try {
+      // Get file area info
+      const area = await this.getFileAreaById(file.areaId);
+      if (area) {
+        const fullEntry: FileEntry = {
+          ...file,
+          id: fileId
+        };
+        fileAreaManager.addFileEntry(fullEntry, area);
+        console.log(`[Database] Synced file entry "${file.filename}" to ${area.name}.dir`);
+      }
+    } catch (error) {
+      console.error(`[Database] Failed to sync file entry to disk:`, error);
+      // Don't throw - DB insert succeeded
+    }
+
+    return fileId;
   }
 
   async getFileEntries(areaId: number, options?: {
@@ -1339,6 +1603,38 @@ export class Database {
     const sql = `UPDATE file_entries SET ${setClause} WHERE id = ?`;
     const stmt = this.db.prepare(sql);
     stmt.run(...values, id);
+
+    // CRITICAL: Sync to .dir file for Amiga door compatibility
+    try {
+      const selectStmt = this.db.prepare('SELECT * FROM file_entries WHERE id = ?');
+      const row = selectStmt.get(id) as any;
+
+      if (row) {
+        const area = await this.getFileAreaById(row.areaid);
+        if (area) {
+          const fullEntry: FileEntry = {
+            id: row.id,
+            filename: row.filename,
+            description: row.description,
+            size: row.size,
+            uploader: row.uploader,
+            uploadDate: new Date(row.uploaddate * 1000),
+            downloads: row.downloads,
+            areaId: row.areaid,
+            fileIdDiz: row.fileiddiz,
+            rating: row.rating,
+            votes: row.votes,
+            status: row.status as 'active' | 'held' | 'deleted',
+            checked: row.checked as 'N' | 'P' | 'F',
+            comment: row.comment
+          };
+          fileAreaManager.updateFileEntry(fullEntry, area);
+          console.log(`[Database] Synced updated file entry "${row.filename}" to ${area.name}.dir`);
+        }
+      }
+    } catch (error) {
+      console.error(`[Database] Failed to sync updated file entry to disk:`, error);
+    }
   }
 
   async getFileEntry(id: number): Promise<FileEntry | null> {
@@ -1371,6 +1667,30 @@ export class Database {
     };
   }
 
+  async deleteFileEntry(id: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Get file info before deleting for disk cleanup
+    const selectStmt = this.db.prepare('SELECT filename, areaid FROM file_entries WHERE id = ?');
+    const row = selectStmt.get(id) as any;
+
+    const stmt = this.db.prepare('DELETE FROM file_entries WHERE id = ?');
+    stmt.run(id);
+
+    // CRITICAL: Delete from .dir file for Amiga door compatibility
+    if (row) {
+      try {
+        const area = await this.getFileAreaById(row.areaid);
+        if (area) {
+          fileAreaManager.deleteFileEntry(row.filename, area);
+          console.log(`[Database] Deleted file entry "${row.filename}" from ${area.name}.dir`);
+        }
+      } catch (error) {
+        console.error(`[Database] Failed to delete file entry from disk:`, error);
+      }
+    }
+  }
+
   async incrementDownloadCount(id: number): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
@@ -1393,7 +1713,23 @@ export class Database {
       area.maxFiles, area.uploadAccess, area.downloadAccess
     );
 
-    return result.lastInsertRowid as number;
+    const areaId = result.lastInsertRowid as number;
+
+    // CRITICAL: Create .dir file for Amiga door compatibility
+    try {
+      const fullArea: FileArea = {
+        ...area,
+        id: areaId,
+        created: new Date(),
+        updated: new Date()
+      };
+      fileAreaManager.createAreaDirFile(fullArea);
+      console.log(`[Database] Created .dir file for area "${area.name}" in conference ${area.conferenceId}`);
+    } catch (error) {
+      console.error(`[Database] Failed to create .dir file:`, error);
+    }
+
+    return areaId;
   }
 
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
@@ -1414,6 +1750,28 @@ export class Database {
       created: new Date(row.created * 1000),
       updated: new Date(row.updated * 1000)
     }));
+  }
+
+  async getFileAreaById(id: number): Promise<FileArea | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare('SELECT * FROM file_areas WHERE id = ?');
+    const row = stmt.get(id) as any;
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      path: row.path,
+      conferenceId: row.conferenceid,
+      maxFiles: row.maxfiles,
+      uploadAccess: row.uploadaccess,
+      downloadAccess: row.downloadaccess,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    };
   }
 
   async getFilesByArea(areaId: number): Promise<FileEntry[]> {

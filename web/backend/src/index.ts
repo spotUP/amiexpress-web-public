@@ -8,6 +8,9 @@ import { db } from './database';
 import { config } from './config';
 import { qwkManager, ftnManager } from './qwk';
 import { nodeManager, arexxEngine, protocolManager } from './nodes';
+import { nodeFileManager } from './services/NodeFileManager';
+import { callersLogManager } from './services/CallersLogManager';
+import { doorDropFileManager } from './services/DoorDropFileManager';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 export { LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
@@ -836,6 +839,20 @@ io.on('connection', async (socket) => {
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
 
+      // CRITICAL: Write node{n}.user and node{n}.userkeys files for WHO door compatibility
+      // express.e:2935-2950 createNodeUserFiles()
+      const nodeId = session.nodeId || 0;
+      try {
+        nodeFileManager.writeNodeUserFile(nodeId, user);
+        nodeFileManager.writeNodeUserKeysFile(nodeId, user);
+        console.log(`[LOGIN] Node files created for node ${nodeId}: ${user.username}`);
+
+        // Write to CallersLog
+        callersLogManager.logLogin(nodeId, user.username);
+      } catch (error) {
+        console.error(`[LOGIN] Error writing node files:`, error);
+      }
+
       // Phase 9: Initialize security system (express.e:447-455)
       initializeSecurity(session);
 
@@ -1613,6 +1630,19 @@ io.on('connection', async (socket) => {
     // Log user logout if they were logged in (express.e:9493 callersLog)
     if (session?.user) {
       await callersLog(session.user.id, session.user.username, 'Logged off');
+
+      // CRITICAL: Delete node{n}.user files on logoff
+      // express.e deletes these when user logs off so WHO doesn't show logged-off users
+      const nodeId = session.nodeId || 0;
+      try {
+        // Write to CallersLog before cleanup
+        callersLogManager.logLogoff(nodeId, session.user.username);
+
+        nodeFileManager.deleteNodeFiles(nodeId);
+        console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
+      } catch (error) {
+        console.error(`[LOGOFF] Error deleting node files:`, error);
+      }
     }
 
     // Release node back to available pool
@@ -2532,7 +2562,13 @@ async function initializeData() {
     // Load some recent messages
     messages = await db.getMessages(1, 1, { limit: 50 });
 
-    // Initialize doors
+    // Load Amiga command definitions (.info and .CMD files) FIRST
+    // express.e loads commands at startup for SYSCMD and BBSCMD lookup
+    // CRITICAL: Must be called before initializeDoors() so BBSCMD commands are available
+    const bbsBaseDir = config.get('dataDir');
+    loadCommands(bbsBaseDir, 1, 0); // Load for conference 1, node 0
+
+    // Initialize doors (converts CommandDefinition from BBSCMD to Door objects)
     await initializeDoors();
 
     // Inject dependencies into door handler
@@ -2541,11 +2577,6 @@ async function initializeData() {
     setDatabaseForDoorHandler(db);
     setHelpersForDoorHandler({ callersLog, getRecentCallerActivity });
     setConstantsForDoorHandler({ LoggedOnSubState });
-
-    // Load Amiga command definitions (.info and .CMD files)
-    // express.e loads commands at startup for SYSCMD and BBSCMD lookup
-    const bbsBaseDir = config.get('dataDir');
-    loadCommands(bbsBaseDir, 1, 0); // Load for conference 1, node 0
 
     // Inject dependencies into chat handler
     setChatState(chatState);

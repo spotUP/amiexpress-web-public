@@ -2722,6 +2722,31 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
     }
 
     default:
+      // express.e:28228 - Command priority:
+      // 1. SysCommand (SYSCMD) - system-level commands
+      // 2. BbsCommand (BBSCMD) - door commands
+      // 3. InternalCommand - built-in commands (already handled above)
+      //
+      // Check if command matches a door (BBSCMD)
+      console.log(`[Command Handler] Checking for door match: "${command}"`);
+      console.log(`[Command Handler] Available doors: ${doors.length}`);
+      if (doors.length > 0) {
+        console.log(`[Command Handler] Sample door commands: ${doors.slice(0, 5).map(d => d.command).join(', ')}`);
+      }
+
+      const matchingDoor = doors.find(door =>
+        door.command.toLowerCase() === command.toLowerCase()
+      );
+
+      if (matchingDoor) {
+        // Execute the door
+        console.log(`[Command Handler] Found matching door: ${matchingDoor.name}`);
+        await executeDoor(socket, session, matchingDoor);
+        return;
+      }
+
+      // No matching door - unknown command
+      console.log(`[Command Handler] No matching door found for: ${command}`);
       socket.emit('ansi-output', `\r\nUnknown command: ${command}\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;

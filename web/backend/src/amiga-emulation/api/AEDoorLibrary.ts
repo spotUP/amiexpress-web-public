@@ -106,9 +106,11 @@ export class AEDoorLibrary {
    * Set up input handler to receive user input for Prompt() function
    */
   private setupInputHandler(): void {
-    this.socket.on('input', (data: string) => {
+    this.socket.on('door:input', (data: string) => {
+      console.log(`[AEDoorLibrary] 🎹 door:input event received: "${data}" hasActivePrompt=${!!this.activePrompt}`);
+
       if (this.activePrompt) {
-        console.log(`[AEDoorLibrary] Received input for prompt: "${data}"`);
+        console.log(`[AEDoorLibrary] Processing input for active prompt`);
 
         // Truncate to maxlen if needed
         let input = data;
@@ -119,14 +121,22 @@ export class AEDoorLibrary {
         // Write to input buffer
         this.writeStringToMemory(AEDOOR_INPUT_BUFFER, input);
 
+        console.log(`[AEDoorLibrary] Written "${input}" to buffer at 0x${AEDOOR_INPUT_BUFFER.toString(16)}`);
+
+        // Resume emulator execution
+        console.log(`[AEDoorLibrary] Resuming emulator after input received`);
+        this.emulator.resume();
+
         // Resolve the promise
         const resolve = this.activePrompt.resolve;
         this.activePrompt = null;
         resolve(input);
+      } else {
+        console.log(`[AEDoorLibrary] ❌ No active prompt, input ignored`);
       }
     });
 
-    console.log('[AEDoorLibrary] Input handler registered');
+    console.log('[AEDoorLibrary] Input handler registered for door:input events');
   }
 
   /**
@@ -153,8 +163,10 @@ export class AEDoorLibrary {
     // Convert ASCII character to node number (e.g., '0' = 48 -> 0)
     const nodeNum = nodeChar >= 48 && nodeChar <= 57 ? nodeChar - 48 : nodeChar;
 
-    console.log(`[AEDoorLibrary] CreateComm(node=${nodeNum}, D0=0x${nodeChar.toString(16)})`);
-    console.log(`  - Returning diface pointer: 0x${AEDOOR_DIFACE_ADDR.toString(16)}`);
+    console.log(`[AEDoorLibrary] *** CreateComm() CALLED ***`);
+    console.log(`[AEDoorLibrary]   Node: ${nodeNum} (D0=0x${nodeChar.toString(16)})`);
+    console.log(`[AEDoorLibrary]   Returning diface pointer: 0x${AEDOOR_DIFACE_ADDR.toString(16)}`);
+    console.log(`[AEDoorLibrary]   Door can now use AEDoor.library functions`);
 
     // Return fake diface pointer
     return AEDOOR_DIFACE_ADDR;
@@ -174,8 +186,9 @@ export class AEDoorLibrary {
   deleteComm(): void {
     const difaceAddr = this.emulator.getRegister(9);  // A1
 
-    console.log(`[AEDoorLibrary] DeleteComm(diface=0x${difaceAddr.toString(16)})`);
-    console.log('  - Cleanup (no-op)');
+    console.log(`[AEDoorLibrary] *** DeleteComm() CALLED ***`);
+    console.log(`[AEDoorLibrary]   Diface: 0x${difaceAddr.toString(16)}`);
+    console.log(`[AEDoorLibrary]   Door is terminating/cleaning up`);
 
     // No cleanup needed in our implementation
   }
@@ -209,8 +222,8 @@ export class AEDoorLibrary {
    *
    * Parameters:
    *   A1 = diface pointer
-   *   A2 = string address
-   *   D0 = mode (0 = NOLF, 1 = LF)
+   *   A0 = string address (CORRECT per Example.s line 37)
+   *   D1 = mode (0 = NOLF, 1 = LF) (CORRECT per Example.s line 38)
    *
    * Returns:
    *   D0 = 0 (success)
@@ -219,21 +232,45 @@ export class AEDoorLibrary {
    *   IF (transfering=FALSE) AND (doorSilent=FALSE)
    *     aePuts(msg.string)
    *   ENDIF
+   *
+   * Assembly calling convention (from Example.s lines 37-40):
+   *   lea MyString(PC),a0      ; A0 = string pointer
+   *   moveq #NOLF,d1           ; D1 = mode (0 or 1)
+   *   move.l _DIF(PC),a1       ; A1 = diface pointer
+   *   jsr _LVOWriteStr(a6)     ; Call WriteStr
    */
   writeStr(): number {
-    const difaceAddr = this.emulator.getRegister(9);   // A1
-    const stringAddr = this.emulator.getRegister(10);  // A2
-    const mode = this.emulator.getRegister(0);         // D0
+    const difaceAddr = this.emulator.getRegister(9);   // A1 = diface
+    const stringAddr = this.emulator.getRegister(8);   // A0 = string (FIXED!)
+    const mode = this.emulator.getRegister(1);         // D1 = mode (FIXED!)
+
+    console.log(`[AEDoorLibrary] *** WriteStr() CALLED ***`);
+    console.log(`  - Register A1 (diface): 0x${difaceAddr.toString(16)}`);
+    console.log(`  - Register A0 (string addr): 0x${stringAddr.toString(16)}`);
+    console.log(`  - Register D1 (mode): ${mode}`);
+
+    // Validate string address
+    if (stringAddr === 0) {
+      console.log(`  - ❌ ERROR: String address is NULL!`);
+      return 0;
+    }
 
     const str = this.emulator.readString(stringAddr);
 
-    console.log(`[AEDoorLibrary] WriteStr(diface=0x${difaceAddr.toString(16)}, str="${str}", mode=${mode})`);
+    console.log(`  - String read from 0x${stringAddr.toString(16)}: "${str}"`);
+    console.log(`  - String length: ${str.length} bytes`);
+    console.log(`  - Mode: ${mode ? 'LF (add newline)' : 'NOLF (no newline)'}`);
 
     // Send to terminal
     const output = mode ? str + '\r\n' : str;
+
+    console.log(`  - Final output to emit: "${output}"`);
+    console.log(`  - Output length: ${output.length} bytes`);
+    console.log(`  - Emitting to socket: ansi-output`);
+
     this.socket.emit('ansi-output', output);
 
-    console.log(`  - Sent to terminal: "${output}"`);
+    console.log(`  - ✅ WriteStr() completed successfully`);
 
     return 0;  // Success
   }
@@ -274,11 +311,8 @@ export class AEDoorLibrary {
     // Send prompt to terminal
     this.socket.emit('ansi-output', promptStr);
 
-    // CRITICAL: This is blocking in the original - door waits for input
-    // We need to pause the emulator and wait for user input
-    // For now, return input buffer address (we'll handle async later)
-    console.log(`  - Waiting for user input (maxlen=${maxlen})`);
-    console.log(`  - Will return buffer at 0x${AEDOOR_INPUT_BUFFER.toString(16)}`);
+    // CRITICAL: Pause emulator execution and wait for user input
+    console.log(`[AEDoorLibrary] Pausing emulator (waiting for user input, maxlen=${maxlen})`);
 
     // Store active prompt state
     this.activePrompt = {
@@ -288,8 +322,11 @@ export class AEDoorLibrary {
       }
     };
 
+    // Pause emulator - will resume when input handler receives 'door:input' event
+    this.emulator.pause();
+
     // Return input buffer address
-    // The actual input will be written when 'input' event fires
+    // The actual input will be written when 'door:input' event fires
     return AEDOOR_INPUT_BUFFER;
   }
 
@@ -313,7 +350,9 @@ export class AEDoorLibrary {
     const dtCommand = this.emulator.getRegister(0);    // D0
     const paramAddr = this.emulator.getRegister(10);   // A2
 
-    console.log(`[AEDoorLibrary] GetDT(diface=0x${difaceAddr.toString(16)}, dt=${dtCommand})`);
+    console.log(`[AEDoorLibrary] *** GetDT() CALLED ***`);
+    console.log(`[AEDoorLibrary]   Diface: 0x${difaceAddr.toString(16)}`);
+    console.log(`[AEDoorLibrary]   DT command: ${dtCommand}`);
 
     let result: string | number = 0;
 
@@ -397,17 +436,122 @@ export class AEDoorLibrary {
    *
    * Parameters:
    *   A1 = diface pointer
-   *   D0 = command code
+   *   D0 = command code (JH_* constants from aedoor.h)
    *
    * Returns:
-   *   D0 = result
+   *   D0 = result (0 = success, -1 = failure)
+   *
+   * From Example.s lines 42-46:
+   *   move.l #JH_SYSOP,d0      ; Get sysop name
+   *   jsr _LVOSendCmd(a6)      ; Result written to string buffer
+   *   move.l #JH_WRITE,d0      ; Write buffer to terminal
+   *   jsr _LVOSendCmd(a6)      ; Display the sysop name
+   *
+   * JH_* Commands (from aedoor.h lines 58-77):
+   *   JH_WRITE = 3      - Write string buffer to terminal
+   *   JH_SM = 4         - Show message
+   *   JH_PM = 5         - Prompt for message
+   *   JH_HK = 6         - Hot key
+   *   JH_SYSOP = 12     - Get sysop name (writes to string buffer)
+   *   JH_BBSName = 11   - Get BBS name (writes to string buffer)
    */
   sendCmd(): number {
     const difaceAddr = this.emulator.getRegister(9);   // A1
     const command = this.emulator.getRegister(0);      // D0
 
     console.log(`[AEDoorLibrary] SendCmd(diface=0x${difaceAddr.toString(16)}, cmd=${command})`);
-    console.log('  - Stub (no-op)');
+
+    // Handle command (from aedoor.h lines 58-76)
+    switch (command) {
+      case 0:  // JH_LI - Line Input
+        console.log(`  - JH_LI: Line Input (stub - use Prompt() instead)`);
+        break;
+
+      case 1:  // JH_REGISTER - Register door with BBS
+        console.log(`  - JH_REGISTER: Door registration (no-op)`);
+        break;
+
+      case 2:  // JH_SHUTDOWN - Shutdown door
+        console.log(`  - JH_SHUTDOWN: Door shutdown (no-op)`);
+        break;
+
+      case 3:  // JH_WRITE - Write string buffer to terminal
+        {
+          const str = this.emulator.readString(AEDOOR_STRING_BUFFER);
+          console.log(`  - JH_WRITE: sending "${str}" to terminal`);
+          this.socket.emit('ansi-output', str + '\r\n');
+        }
+        break;
+
+      case 4:  // JH_SM - Show Message
+        console.log(`  - JH_SM: Show Message (stub)`);
+        break;
+
+      case 5:  // JH_PM - Prompt for Message
+        console.log(`  - JH_PM: Prompt for Message (stub - use Prompt() instead)`);
+        break;
+
+      case 6:  // JH_HK - Hot Key
+        console.log(`  - JH_HK: Hot Key (stub - use HotKey() instead)`);
+        break;
+
+      case 7:  // JH_SG - Show Graphics file
+        console.log(`  - JH_SG: Show Graphics file (stub)`);
+        break;
+
+      case 8:  // JH_SF - Show File
+        console.log(`  - JH_SF: Show File (stub)`);
+        break;
+
+      case 9:  // JH_EF - Edit File
+        console.log(`  - JH_EF: Edit File (stub)`);
+        break;
+
+      case 10:  // JH_CO - Carrier Online check
+        console.log(`  - JH_CO: Carrier Online check (always online)`);
+        // Could write 1 to data buffer to indicate online
+        break;
+
+      case 11:  // JH_BBSName - Get BBS name
+        {
+          const bbsName = 'AmiExpress-Web BBS';
+          console.log(`  - JH_BBSName: writing "${bbsName}" to string buffer`);
+          this.writeStringToMemory(AEDOOR_STRING_BUFFER, bbsName);
+        }
+        break;
+
+      case 12:  // JH_SYSOP - Get sysop name
+        {
+          const sysopName = this.sessionData.user?.username || 'Sysop';
+          console.log(`  - JH_SYSOP: writing "${sysopName}" to string buffer`);
+          this.writeStringToMemory(AEDOOR_STRING_BUFFER, sysopName);
+        }
+        break;
+
+      case 13:  // JH_FLAGFILE - Flag file
+        console.log(`  - JH_FLAGFILE: Flag file (stub)`);
+        break;
+
+      case 14:  // JH_SHOWFLAGS - Show flags
+        console.log(`  - JH_SHOWFLAGS: Show flags (stub)`);
+        break;
+
+      case 15:  // JH_DL / JH_ExtHK - Download or Extended Hot Key
+        console.log(`  - JH_DL/JH_ExtHK: Download/Extended HotKey (stub)`);
+        break;
+
+      case 16:  // JH_SIGBIT - Get signal bit
+        console.log(`  - JH_SIGBIT: Get signal bit (stub)`);
+        break;
+
+      case 17:  // JH_FetchKey - Fetch key
+        console.log(`  - JH_FetchKey: Fetch key (stub)`);
+        break;
+
+      default:
+        console.log(`  - Unknown command: ${command}`);
+        break;
+    }
 
     return 0;  // Success
   }
@@ -688,6 +832,46 @@ export class AEDoorLibrary {
 
     // TODO: Implement actual hotkey input
     return -1;  // Timeout
+  }
+
+  /**
+   * PreCreateComm() - LVO -132 (0xFF7C)
+   *
+   * Pre-initialization before CreateComm().
+   *
+   * Parameters:
+   *   D0 = node number
+   *
+   * Returns:
+   *   D0 = result
+   *
+   * This is called before CreateComm() for doors that need early setup.
+   */
+  preCreateComm(): number {
+    const nodeNum = this.emulator.getRegister(0);  // D0
+    console.log(`[AEDoorLibrary] PreCreateComm(node=${nodeNum})`);
+    console.log('  - Pre-initialization (no-op)');
+    return 0;
+  }
+
+  /**
+   * PostDeleteComm() - LVO -138 (0xFF76)
+   *
+   * Post-cleanup after DeleteComm().
+   *
+   * Parameters:
+   *   D0 = node number
+   *
+   * Returns:
+   *   D0 = result
+   *
+   * This is called after DeleteComm() for doors that need late cleanup.
+   */
+  postDeleteComm(): number {
+    const nodeNum = this.emulator.getRegister(0);  // D0
+    console.log(`[AEDoorLibrary] PostDeleteComm(node=${nodeNum})`);
+    console.log('  - Post-cleanup (no-op)');
+    return 0;
   }
 
   /**

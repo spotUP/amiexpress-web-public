@@ -7,6 +7,7 @@ import { DosLibrary } from './api/DOSLibrary';
 import { LibraryTraps } from './api/LibraryTraps';
 import { XIMProtocol } from './XIMProtocol';
 import { KickstartRom } from './KickstartRom';
+import { nodeStatusManager, NodeStatus } from '../nodes/NodeStatusManager';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -47,6 +48,8 @@ export class AmigaDoorSession {
   private inSecondLoop: boolean = false;
   private skipNextExecute: boolean = false;
   private startupMessageSent: boolean = false; // Flag to send startup message only once
+  private lastPCs: number[] = []; // Track last 20 PC values for debugging
+  private hitUnmapped: boolean = false; // Track if we've already logged unmapped PC
 
   // Memory change detection (for investigating what door expects)
   private lastMemoryValue: number = 0; // Last value at 0x2001
@@ -54,6 +57,107 @@ export class AmigaDoorSession {
 
   // Library call monitoring
   private libraryCallsInLoop: number = 0; // Count of library calls during polling loop
+
+  // CRITICAL FIX: Track last intercepted trap to prevent double interception
+  // When JSR handler intercepts a call, store the target address. If the next
+  // iteration tries to intercept the same address, skip it (we already handled it).
+  private lastInterceptedTrap: number = 0; // Last library trap address we intercepted
+  private lastInterceptedIteration: number = 0; // Iteration when we intercepted it
+
+  /**
+   * UNIFIED TRAP DETECTION AND HANDLING
+   *
+   * This is the SINGLE canonical method for detecting and handling library traps.
+   * It consolidates all the scattered trap detection logic into one place.
+   *
+   * Returns: true if trap was handled (caller should continue to next iteration)
+   *          false if no trap detected (caller should execute instruction normally)
+   */
+  private checkAndHandleLibraryTrap(pc: number): Promise<boolean> {
+    if (!this.libraryTraps) {
+      return Promise.resolve(false);
+    }
+
+    // Read instruction at PC to check if it's JSR (d16,A6)
+    const op0 = this.emulator.readMemory(pc);
+    const op1 = this.emulator.readMemory(pc + 1);
+    const opcode = (op0 << 8) | op1;
+    const isJSR_A6 = (opcode === 0x4eae);
+
+    const a6 = this.emulator.getRegister(14);
+
+    // Calculate offset from A6
+    let offset = pc - a6;
+
+    // Handle 16-bit signed offset wrapping
+    if (a6 < 0x10000 && offset > 0x8000 && offset < 0x1000000) {
+      const low16 = offset & 0xFFFF;
+      offset = (low16 >= 0x8000) ? (low16 - 0x10000) : low16;
+    } else if (offset > 0x7FFFFFFF) {
+      offset = offset - 0x100000000;
+    }
+
+    // Determine if this is a library trap
+    const isTrapAddress = this.libraryTraps.isTrapAddress(pc);
+    const isTrapOffset = (offset < 0 && offset >= -2000 && this.libraryTraps.isTrapOffset(offset));
+    const isLibraryTrap = isTrapAddress || isTrapOffset;
+
+    if (!isLibraryTrap) {
+      return Promise.resolve(false);
+    }
+
+    // Check if we just handled this exact trap (prevent double interception)
+    if (pc === this.lastInterceptedTrap &&
+        this.iterationCount - this.lastInterceptedIteration <= 2) {
+      console.log(`[AmigaDoorSession] *** SKIPPING DUPLICATE TRAP at PC=0x${pc.toString(16)} (already handled at iteration ${this.lastInterceptedIteration}) ***`);
+      this.lastInterceptedTrap = 0;
+      this.lastInterceptedIteration = 0;
+      return Promise.resolve(true); // Skip but return true to continue iteration
+    }
+
+    // Handle JSR (d16,A6) specially - intercept BEFORE execution
+    if (isJSR_A6) {
+      const offset16 = this.emulator.readMemory16(pc + 2);
+      const jsrOffset = (offset16 & 0x8000) ? (offset16 - 0x10000) : offset16;
+      const targetAddr = (a6 + jsrOffset) & 0xFFFFFF;
+
+      console.log(`[AmigaDoorSession] *** JSR (d16,A6) TRAP at PC=0x${pc.toString(16)} -> target=0x${targetAddr.toString(16)} ***`);
+
+      // Manually push return address (JSR is 4 bytes)
+      const returnAddr = pc + 4;
+      const sp = this.emulator.getRegister(15);
+      this.emulator.writeMemory32(sp - 4, returnAddr);
+      this.emulator.setRegister(15, sp - 4);
+
+      // Handle the trap
+      const handled = this.libraryTraps.handleTrapByOffset(jsrOffset, a6);
+
+      if (handled) {
+        // Mark as intercepted to prevent duplicate handling
+        this.lastInterceptedTrap = targetAddr;
+        this.lastInterceptedIteration = this.iterationCount;
+        return Promise.resolve(true);
+      }
+
+      return Promise.resolve(false);
+    }
+
+    // Handle trap at current PC (PC is already at library vector)
+    console.log(`[AmigaDoorSession] *** DIRECT TRAP at PC=0x${pc.toString(16)} (offset=${offset}, A6=0x${a6.toString(16)}) ***`);
+
+    const handled = isTrapAddress
+      ? this.libraryTraps.handleTrap(pc)
+      : this.libraryTraps.handleTrapByOffset(offset, a6);
+
+    if (handled) {
+      // Mark as intercepted
+      this.lastInterceptedTrap = pc;
+      this.lastInterceptedIteration = this.iterationCount;
+      return Promise.resolve(true);
+    }
+
+    return Promise.resolve(false);
+  }
 
   constructor(socket: Socket, config: DoorConfig) {
     this.socket = socket;
@@ -129,6 +233,13 @@ export class AmigaDoorSession {
       console.log('[AmigaDoorSession] Loading door executable...');
       await this.loadDoor();
 
+      // Set door directory for PROGDIR: device
+      const doorDir = path.dirname(this.config.executablePath);
+      if (this.dosLibrary) {
+        this.dosLibrary.setDoorDirectory(doorDir);
+        console.log(`[AmigaDoorSession] Set door directory: ${doorDir}`);
+      }
+
       // Set up timeout
       if (this.config.timeout) {
         this.executionTimer = setTimeout(() => {
@@ -161,7 +272,8 @@ export class AmigaDoorSession {
       this.emulator.writeMemory(0x2001, 0);
       console.log('[AmigaDoorSession] Set memory[0x2001] = 0 (polling flag)');
 
-      this.runExecutionLoop();
+      // CRITICAL: Must await the execution loop so start() doesn't return until door completes
+      await this.runExecutionLoop();
 
     } catch (error) {
       console.error('[AmigaDoorSession] Error starting door:', error);
@@ -199,8 +311,11 @@ export class AmigaDoorSession {
     // This handles both fresh start (port doesn't exist) and door already running (port exists)
     console.log('[AmigaDoorSession] Creating AEDoorPort for door communication...');
 
+    // RTW and other doors search for "AEDoorPort%d" where %d is the node number
+    // From RTW binary strings: "AEDoorPort%d", "Couldn't create reply port"
+    // Each node needs its own numbered port
     const nodeId = this.config.bbsSession?.nodeId || 0;
-    const portName = `AEDoorPort${nodeId}`;
+    const portName = `AEDoorPort${nodeId}`;  // e.g., "AEDoorPort0"
 
     // Create the port that door will use to communicate with BBS
     const portAddr = this.execLibrary.createPublicPort(portName);
@@ -218,6 +333,44 @@ export class AmigaDoorSession {
 
     // Create DosLibrary for file I/O and console operations
     this.dosLibrary = new DosLibrary(this.emulator);
+
+    // CRITICAL FIX: Set output callback so DOS Write() sends to terminal
+    // WHO door and other DOS-based doors use Write() instead of AEDoor WriteStr()
+    this.dosLibrary.setOutputCallback((text: string) => {
+      this.socket.emit('ansi-output', text);
+    });
+    console.log('[AmigaDoorSession] DOS.library output callback configured');
+
+    console.log('[AmigaDoorSession] Initializing node status semaphores for WHO doors...');
+
+    // Initialize multiPort/singlePort semaphore structures for WHO door access
+    // WHO doors (like RTW) search for node information via FindPort()
+    nodeStatusManager.initializeInEmulator(this.emulator, 0xB0000);
+
+    // Update current node status (reuse nodeId from above)
+    const userName = this.config.bbsSession?.user?.username || 'Unknown';
+    const userLocation = this.config.bbsSession?.user?.location || '';
+
+    nodeStatusManager.updateNode(this.emulator, nodeId, {
+      status: NodeStatus.ENV_DOORS,
+      handle: userName,
+      location: userLocation,
+      misc1: path.basename(this.config.executablePath),  // Door name
+      misc2: 1,  // Available for chat
+      baud: '28800'  // Default baud rate
+    });
+
+    console.log(`[AmigaDoorSession] Node ${nodeId} status: ${userName} running ${path.basename(this.config.executablePath)}`);
+
+    // RTW and other WHO doors search for "AEServer.%d" ports to detect active nodes
+    // Create AEServer ports for all nodes (WHO doors check which exist via FindPort)
+    console.log('[AmigaDoorSession] Creating AEServer ports for node detection...');
+    for (let i = 0; i < 8; i++) {
+      const serverPortName = `AEServer.${i}`;
+      const serverPortAddr = this.execLibrary.createPublicPort(serverPortName);
+      console.log(`[AmigaDoorSession] Created ${serverPortName} at 0x${serverPortAddr.toString(16)}`);
+    }
+    console.log('[AmigaDoorSession] AEServer ports created for WHO door node detection');
 
     console.log('[AmigaDoorSession] Creating AEDoor.library...');
 
@@ -317,11 +470,14 @@ export class AmigaDoorSession {
     // Doors need to know which node they're running on via argv[1]
     const ARGV_BASE = 0x0F0000;
     const ARGV_ARRAY = ARGV_BASE;         // Array of pointers
-    const ARG0_STRING = ARGV_BASE + 0x100; // "GetAnswer" string
-    const ARG1_STRING = ARGV_BASE + 0x200; // "0" string (node number)
+    const ARG0_STRING = ARGV_BASE + 0x100; // Program name string
+    const ARG1_STRING = ARGV_BASE + 0x200; // Node number string
 
-    // Write argv[0] = "GetAnswer"
-    const progName = "GetAnswer";
+    // Extract door name from executable path (e.g., "/path/to/RTW" -> "RTW")
+    const progName = path.basename(this.config.executablePath);
+    console.log(`[AmigaDoorSession] Door program name: "${progName}"`);
+
+    // Write argv[0] = door program name
     for (let i = 0; i < progName.length; i++) {
       this.emulator.writeMemory(ARG0_STRING + i, progName.charCodeAt(i));
     }
@@ -353,14 +509,29 @@ export class AmigaDoorSession {
     this.emulator.setRegister(16, hunkFile.entryPoint);  // PC
     console.log(`  PC: 0x${hunkFile.entryPoint.toString(16)}`);
 
-    // Set SP and push exit sentinel LAST
-    const initialSP = 0xFE000;  // Stack near top of first MB
-    const exitSentinel = 0xDEADBEEF;
-    const finalSP = initialSP - 4;
+    // Set SP and push exit address LAST
+    // CRITICAL: Stack must be where door's StackSwapStruct expects it
+    // Doors have compiled-in stack addresses, typically around 0xFE000
+    // This matches what the WHO door's StackSwapStruct contains (0xFD000-0xFE000)
+    // Allocate at standard Amiga location used by CLI programs
+    const initialSP = 0xFE000;   // Standard CLI stack location
+    const finalSP = 0xFDFFC;     // 4-byte aligned (0xFDFFC % 4 = 0)
 
-    // Push exit sentinel to stack (for when door does RTS)
-    this.emulator.writeMemory32(finalSP, exitSentinel);
-    console.log(`  Exit sentinel: 0x${exitSentinel.toString(16)} at 0x${finalSP.toString(16)}`);
+    // Push exit address to stack (for when door does RTS)
+    // According to AmigaDOS docs: "Assembly programs should place a return code in D0,
+    // and execute an RTS instruction with their original stack ptr."
+    // We provide an address that will be detected as program exit
+    const exitTrapAddress = 0xFFFF00;  // Special address to detect program exit
+
+    // CRITICAL FIX: Push exit sentinel at multiple stack locations
+    // Door may push/pop values during initialization, changing SP
+    // WHO door exit sequence: MOVE.L (A7)+,D0; MOVEM.L (A7)+,D1-D7/A0-A6; RTS
+    // This pops 1 + 13 registers = 56 bytes before RTS
+    // Cover wider range: finalSP-16 to finalSP+64 to handle all variations
+    for (let offset = -16; offset <= 64; offset += 4) {
+      this.emulator.writeMemory32(finalSP + offset, exitTrapAddress);
+    }
+    console.log(`  Exit trap address: 0x${exitTrapAddress.toString(16)} at 0x${(finalSP-16).toString(16)}-0x${(finalSP+64).toString(16)}`);
 
     // CRITICAL: Initialize stack-based code that door expects
     // Door executes JSR (3682,A7) at PC=0x1248 (instruction 198)
@@ -511,853 +682,180 @@ export class AmigaDoorSession {
   }
 
   /**
-   * Main execution loop - run door code until completion
+   * Decode M68K instruction for debugging (basic decoder)
+   */
+  private decodeInstruction(pc: number, opcode: number): string {
+    // Basic M68K instruction decoder for common opcodes
+    const hi = (opcode >> 8) & 0xFF;
+    const lo = opcode & 0xFF;
+
+    // MOVE.L
+    if ((hi & 0xC0) === 0x00 && (hi & 0x30) === 0x20) {
+      return `MOVE.L (opcode: 0x${opcode.toString(16)})`;
+    }
+    // MOVEM
+    if ((hi & 0xFB) === 0x48 && (lo & 0xC0) === 0xC0) {
+      return `MOVEM (opcode: 0x${opcode.toString(16)})`;
+    }
+    // JSR
+    if (opcode === 0x4EB9 || (hi === 0x4E && (lo & 0xC0) === 0x80)) {
+      const target = this.emulator.readMemory32(pc + 2);
+      return `JSR 0x${target.toString(16)}`;
+    }
+    // RTS
+    if (opcode === 0x4E75) {
+      return 'RTS';
+    }
+    // RTE
+    if (opcode === 0x4E73) {
+      return 'RTE';
+    }
+    // TRAP
+    if ((opcode & 0xFFF0) === 0x4E40) {
+      const trapNum = opcode & 0x0F;
+      return `TRAP #${trapNum}`;
+    }
+    // MOVE to/from SR
+    if ((opcode & 0xFFC0) === 0x46C0) {
+      return `MOVE to SR (opcode: 0x${opcode.toString(16)})`;
+    }
+    if ((opcode & 0xFFC0) === 0x40C0) {
+      return `MOVE from SR (opcode: 0x${opcode.toString(16)})`;
+    }
+    // LEA
+    if ((hi & 0xF1) === 0x41 && (lo & 0xC0) === 0xC0) {
+      return `LEA (opcode: 0x${opcode.toString(16)})`;
+    }
+    // TST
+    if ((hi & 0xFF) === 0x4A) {
+      return `TST (opcode: 0x${opcode.toString(16)})`;
+    }
+    // BRA/Bcc
+    if ((hi & 0xF0) === 0x60) {
+      const cond = (hi & 0x0F);
+      const condNames = ['BRA', 'BSR', 'BHI', 'BLS', 'BCC', 'BCS', 'BNE', 'BEQ',
+                         'BVC', 'BVS', 'BPL', 'BMI', 'BGE', 'BLT', 'BGT', 'BLE'];
+      return `${condNames[cond] || 'Bxx'} (opcode: 0x${opcode.toString(16)})`;
+    }
+    // DBcc
+    if ((hi & 0xF0) === 0x50 && (lo & 0xC8) === 0xC8) {
+      return `DBcc (opcode: 0x${opcode.toString(16)})`;
+    }
+    // ADD/SUB
+    if ((hi & 0xF0) === 0xD0) {
+      return `ADD (opcode: 0x${opcode.toString(16)})`;
+    }
+    if ((hi & 0xF0) === 0x90) {
+      return `SUB (opcode: 0x${opcode.toString(16)})`;
+    }
+    // CMP
+    if ((hi & 0xF0) === 0xB0) {
+      return `CMP (opcode: 0x${opcode.toString(16)})`;
+    }
+    // AND/OR
+    if ((hi & 0xF0) === 0xC0) {
+      return `AND (opcode: 0x${opcode.toString(16)})`;
+    }
+    if ((hi & 0xF0) === 0x80) {
+      return `OR (opcode: 0x${opcode.toString(16)})`;
+    }
+
+    return `Unknown (opcode: 0x${opcode.toString(16)})`;
+  }
+
+  /**
+   * Main execution loop - CLEAN REWRITE (2025-11-02)
+   *
+   * Simple architecture:
+   *   1. Check if paused (async input)
+   *   2. Get current PC
+   *   3. Check exit conditions
+   *   4. UNIFIED trap detection (single check, no duplicates)
+   *   5. Execute one instruction
+   *   6. Yield to event loop
+   *
+   * This eliminates:
+   *   - Multiple scattered trap detection blocks
+   *   - Iteration-based conditional logic (< 1000 vs >= 1000)
+   *   - Duplicate logging and complex nesting
    */
   private async runExecutionLoop(): Promise<void> {
     if (!this.emulator || !this.isRunning) return;
 
-    // CHECK REGISTERS AT START OF runExecutionLoop()
-    const loopStartSP = this.emulator.getRegister(15);
-    const loopStartPC = this.emulator.getRegister(16);
-    console.log(`[AmigaDoorSession] START OF runExecutionLoop(): SP=0x${loopStartSP.toString(16)}, PC=0x${loopStartPC.toString(16)}`);
-
     try {
-      const CYCLES_PER_ITERATION = 1;  // Execute 1 cycle - works best for now (reaches iteration 2156)
-      const exitSentinel = 0xDEADBEEF;
-
-      // Log initial state BEFORE any execution
+      // Log initial state
       console.log('[AmigaDoorSession] === EXECUTION LOOP STARTING ===');
       console.log(`[AmigaDoorSession] Initial PC: 0x${this.emulator.getRegister(16).toString(16)}`);
       console.log(`[AmigaDoorSession] Initial SP: 0x${this.emulator.getRegister(15).toString(16)}`);
       console.log(`[AmigaDoorSession] Initial A6: 0x${this.emulator.getRegister(14).toString(16)}`);
-      console.log(`[AmigaDoorSession] Initial SR: 0x${this.emulator.getRegister(17).toString(16)}`);
 
-      // Read first 16 bytes at entry point to verify code is loaded
+      // Verify code is loaded at entry point
       const entryPoint = 0x1000;
       const bytes: string[] = [];
       for (let i = 0; i < 16; i++) {
-        const byte = this.emulator.readMemory(entryPoint + i);
-        bytes.push(byte.toString(16).padStart(2, '0'));
+        bytes.push(this.emulator.readMemory(entryPoint + i).toString(16).padStart(2, '0'));
       }
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
-      // Check exception vectors at 0x0000-0x0007 (initial SP and PC from ROM)
-      const vec0 = this.emulator.readMemory32(0x0000);  // Initial SP
-      const vec1 = this.emulator.readMemory32(0x0004);  // Initial PC
-      console.log(`[AmigaDoorSession] ROM vectors: SP=0x${vec0.toString(16)}, PC=0x${vec1.toString(16)}`);
-
-      // Track total instructions executed for detailed logging
-      let totalInstructions = 0;
 
       while (this.isRunning) {
-        // DEBUG: UNCONDITIONAL log to verify code changes
-        if (this.iterationCount === 1010 || this.iterationCount === 1015 || this.iterationCount === 1020) {
-          const pcTopOfLoop = this.emulator.getRegister(16);
-          console.log(`[AmigaDoorSession] *** UNCONDITIONAL LOG [${this.iterationCount}] PC=0x${pcTopOfLoop.toString(16)} ***`);
-        }
-
-        // Check for library trap BEFORE execution
-        const pc = this.emulator.getRegister(16);
-
-        // ULTRA DEBUG: Log every 10000th iteration to trace control flow
-        if (this.iterationCount % 10000 === 0 && this.iterationCount >= 1000) {
-          console.log(`[AmigaDoorSession] *** WHILE LOOP START - Iteration ${this.iterationCount}, PC=0x${pc.toString(16)}`);
-        }
-
-        // Log first 10 iterations to see what happens
-        if (this.iterationCount < 10) {
-          console.log(`[AmigaDoorSession] Iteration ${this.iterationCount}: PC=0x${pc.toString(16)}`);
-        }
-
-        // For first iterations, execute ONE instruction at a time to trace
-        if (this.iterationCount < 1000) {
-          const tracePc = this.emulator.getRegister(16);
-          const traceSp = this.emulator.getRegister(15);
-          const traceA6 = this.emulator.getRegister(14);
-
-          // Check for exit conditions FIRST (low memory PC = door trying to exit)
-          if (tracePc < 0x100 && this.iterationCount > 100) {
-            console.log(`[AmigaDoorSession] Door PC in low memory (0x${tracePc.toString(16)}) - treating as exit`);
-            console.log(`[AmigaDoorSession] Total instructions executed: ${this.iterationCount}`);
-            this.terminate();
-            return;
-          }
-
-          // Detect delay loop - door stuck in DBRA countdown at PC=0x113c-0x1144
-          // BETTER APPROACH: Let the loop run but limit iterations by reducing D0
-          if (tracePc >= 0x113c && tracePc <= 0x1144 && !this.inIOLoop) {
-            const d0 = this.emulator.getRegister(0);
-
-            // If D0 is huge (delay loop with 3.7 billion iterations), reduce it
-            if (d0 > 1000) {
-              console.log(`[AmigaDoorSession] ===============================================`);
-              console.log(`[AmigaDoorSession] *** DETECTED FIRST DELAY LOOP ***`);
-              console.log(`[AmigaDoorSession] ===============================================`);
-              console.log(`[AmigaDoorSession]   Door at PC: 0x${tracePc.toString(16)}, iteration ${this.iterationCount}`);
-              console.log(`[AmigaDoorSession]   D0 (loop counter): 0x${d0.toString(16)} (${d0} iterations)`);
-              console.log(`[AmigaDoorSession]   This is the DBRA delay loop!`);
-              console.log(`[AmigaDoorSession]   *** REDUCING LOOP ITERATIONS ***`);
-
-              // Reduce loop counter to something reasonable (100 iterations)
-              // This lets the loop run naturally (preserving any initialization)
-              // but completes quickly instead of running billions of times
-              this.emulator.setRegister(0, 100);
-              console.log(`[AmigaDoorSession]   Reduced D0 to 100 iterations`);
-              console.log(`[AmigaDoorSession]   Loop will complete naturally, preserving all state`);
-
-              this.inIOLoop = true;
-              console.log(`[AmigaDoorSession] ===============================================`);
-            }
-          }
-
-          // NOTE: Removed second loop detection at PC=0x1156
-          // This was NOT a delay loop but rather a polling/retry loop
-          // The door needs to run this naturally to complete initialization
-
-          // Check for library trap BEFORE executing
-          // CRITICAL FIX: Check based on OFFSET from A6, not absolute address
-          // This handles cases where A6 is corrupted (e.g., A6=0x0)
-
-          if (this.libraryTraps) {
-            const traceA6 = this.emulator.getRegister(14);
-
-            // Calculate offset - library vectors are 16-bit signed offsets
-            // When A6 is very small (e.g., 0) and PC is in ROM/upper memory,
-            // extract low 16 bits and sign-extend
-            let offset = tracePc - traceA6;
-
-            // If result looks like it might be a 16-bit signed offset in upper address space
-            // (0xFFE2 = -30 as 16-bit, but 16777186 as 24-bit address)
-            if (traceA6 < 0x10000 && offset > 0x8000 && offset < 0x1000000) {
-              // Extract low 16 bits and sign-extend
-              const low16 = offset & 0xFFFF;
-              if (low16 >= 0x8000) {
-                // Sign-extend from 16-bit to 32-bit
-                offset = low16 - 0x10000;
-              } else {
-                offset = low16;
-              }
-            } else if (offset > 0x7FFFFFFF) {
-              // Normal 32-bit sign extension
-              offset = offset - 0x100000000;
-            }
-
-            // Check if this PC could be a library call (offset matches a known vector)
-            if (this.libraryTraps.isTrapAddress(tracePc) ||
-                (offset < 0 && offset >= -2000 && this.libraryTraps.isTrapOffset(offset))) {
-              console.log(`[AmigaDoorSession] *** LIBRARY TRAP at PC=0x${tracePc.toString(16)} (A6=0x${traceA6.toString(16)}, offset=${offset}) ***`);
-
-              // CRITICAL: Prefer address-based handler if PC is in trapMap (normal case)
-              // Only use offset-based handler as fallback for corrupted A6 cases
-              const handled = this.libraryTraps.isTrapAddress(tracePc)
-                ? this.libraryTraps.handleTrap(tracePc)
-                : this.libraryTraps.handleTrapByOffset(offset, traceA6);
-
-              if (handled) {
-                console.log(`[AmigaDoorSession] *** Trap handled successfully ***`);
-              } else {
-                console.error(`[AmigaDoorSession] *** Trap handler FAILED ***`);
-              }
-              // Trap handler set new PC, continue to next iteration
-              this.iterationCount++;
-
-              // DEBUG: Log iteration number for traps in range 1010-1020
-              if (this.iterationCount >= 1010 && this.iterationCount <= 1020) {
-                const newPc = this.emulator.getRegister(16);
-                console.log(`[AmigaDoorSession] [${this.iterationCount}] After trap: PC=0x${newPc.toString(16)}`);
-              }
-
-              await new Promise(resolve => setImmediate(resolve));
-              continue;
-            }
-          }
-
-          // Read instruction bytes
-          const op0 = this.emulator.readMemory(tracePc);
-          const op1 = this.emulator.readMemory(tracePc + 1);
-          const opcode = (op0 << 8) | op1;
-
-          // DEBUG: Check memory vs file at critical address
-          if (this.iterationCount === 418) {
-            console.log(`[AmigaDoorSession] *** MEMORY CHECK at PC=0x${tracePc.toString(16)} ***`);
-            console.log(`[AmigaDoorSession]   Memory word: 0x${opcode.toString(16).padStart(4, '0')}`);
-            console.log(`[AmigaDoorSession]   File should have: 0x670c (BEQ.S +12)`);
-            console.log(`[AmigaDoorSession]   Memory has:       0x${opcode.toString(16).padStart(4, '0')}`);
-            if (opcode === 0x670c) {
-              console.log(`[AmigaDoorSession]   ✓ MATCH - Memory matches file`);
-            } else {
-              console.log(`[AmigaDoorSession]   ✗ MISMATCH - Memory corrupted or wrong loading!`);
-            }
-          }
-
-          // OPTION 2: DEEP TRACE - Log EVERY instruction from 408-436 (DoorStart complete window)
-          const isDoorStartWindow = this.iterationCount >= 408 && this.iterationCount <= 436;
-
-          if (this.iterationCount % 10 === 0 || isDoorStartWindow) {
-            console.log(`[AmigaDoorSession] Inst ${this.iterationCount}: PC=0x${tracePc.toString(16)}, SP=0x${traceSp.toString(16)}, A6=0x${traceA6.toString(16)}, opcode=0x${opcode.toString(16).padStart(4, '0')}`);
-
-            // During DoorStart window, log EVERYTHING
-            if (isDoorStartWindow) {
-              const d0 = this.emulator.getRegister(0);
-              const d1 = this.emulator.getRegister(1);
-              const a0 = this.emulator.getRegister(8);
-              const a1 = this.emulator.getRegister(9);
-              const sr = this.emulator.getRegister(17);  // Status Register
-
-              // Decode instruction
-              let instruction = 'UNKNOWN';
-
-              // MOVEQ #imm,Dn (0x7000-0x7FFF)
-              if ((opcode & 0xFF00) === 0x7000) {
-                const dn = (opcode >> 9) & 0x07;
-                const imm = opcode & 0xFF;
-                instruction = `MOVEQ #${imm > 127 ? imm - 256 : imm},D${dn}`;
-              }
-              // BRA (0x6000-0x60FF for short, 0x6000 for word)
-              else if ((opcode & 0xFF00) === 0x6000) {
-                let displacement = opcode & 0xFF;
-                if (displacement === 0) {
-                  const word = this.emulator.readMemory16(tracePc + 2);
-                  displacement = word > 0x7FFF ? word - 0x10000 : word;
-                  const target = tracePc + 2 + displacement;
-                  instruction = `BRA 0x${target.toString(16)} (displacement ${displacement})`;
-                } else {
-                  displacement = displacement > 127 ? displacement - 256 : displacement;
-                  const target = tracePc + 2 + displacement;
-                  instruction = `BRA.S 0x${target.toString(16)} (displacement ${displacement})`;
-                }
-              }
-              // BNE (0x6600-0x66FF)
-              else if ((opcode & 0xFF00) === 0x6600) {
-                let displacement = opcode & 0xFF;
-                if (displacement === 0) {
-                  const word = this.emulator.readMemory16(tracePc + 2);
-                  displacement = word > 0x7FFF ? word - 0x10000 : word;
-                  const target = tracePc + 2 + displacement;
-                  instruction = `BNE 0x${target.toString(16)} (displacement ${displacement})`;
-                } else {
-                  displacement = displacement > 127 ? displacement - 256 : displacement;
-                  const target = tracePc + 2 + displacement;
-                  instruction = `BNE.S 0x${target.toString(16)}`;
-                }
-              }
-              // JSR
-              else if ((opcode & 0xFFC0) === 0x4E80) {
-                instruction = 'JSR (see detailed JSR logging below)';
-              }
-              // LEA
-              else if ((opcode & 0xF1C0) === 0x41C0) {
-                const an = (opcode >> 9) & 0x07;
-                instruction = `LEA (xxx),A${an}`;
-              }
-              // MOVE.L
-              else if ((opcode & 0xF000) === 0x2000) {
-                // Decode MOVE.L more precisely to understand what's happening
-                // MOVE.L has format: 00SSDDDEEEAAAAAA
-                // SS = size (10 = long), DDD = dest reg, EEE = dest mode, AAAAAA = source
-                const destReg = (opcode >> 9) & 0x07;
-                const destMode = (opcode >> 6) & 0x07;
-                const srcMode = (opcode >> 3) & 0x07;
-                const srcReg = opcode & 0x07;
-
-                let srcStr = 'unknown';
-                let destStr = 'unknown';
-
-                // Source: Dn register
-                if (srcMode === 0) {
-                  srcStr = `D${srcReg}`;
-                }
-
-                // Destination: (d16,An) addressing mode
-                if (destMode === 5) {
-                  const displacement = this.emulator.readMemory16(tracePc + 2);
-                  const signedDisp = displacement > 0x7FFF ? displacement - 0x10000 : displacement;
-                  destStr = `(0x${displacement.toString(16)},A${destReg})`;
-
-                  // Calculate the actual destination address
-                  const anReg = this.emulator.getRegister(8 + destReg);  // A0-A7 are registers 8-15
-                  const destAddr = (anReg + signedDisp) >>> 0;  // Ensure 32-bit unsigned
-
-                  instruction = `MOVE.L ${srcStr},${destStr} [dest_addr=0x${destAddr.toString(16)}]`;
-                } else {
-                  instruction = 'MOVE.L (complex)';
-                }
-              }
-
-              // Decode SR flags (M68K Status Register format)
-              // Bits: 15-8 = System byte, 7-0 = CCR (Condition Code Register)
-              // CCR bits: X(4) N(3) Z(2) V(1) C(0)
-              const zFlag = (sr >> 2) & 1;  // Zero flag
-              const nFlag = (sr >> 3) & 1;  // Negative flag
-              const vFlag = (sr >> 1) & 1;  // Overflow flag
-              const cFlag = sr & 1;          // Carry flag
-
-              console.log(`[AmigaDoorSession]   D0=0x${d0.toString(16)}, D1=0x${d1.toString(16)}, A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}`);
-              console.log(`[AmigaDoorSession]   SR=0x${sr.toString(16).padStart(4, '0')} (Z=${zFlag} N=${nFlag} V=${vFlag} C=${cFlag})`);
-              console.log(`[AmigaDoorSession]   Decoded: ${instruction}`);
-
-              // CRITICAL: Before the MOVE.L at instruction 417, check all registers
-              if (this.iterationCount === 417) {
-                console.log(`[AmigaDoorSession] *** PRE-MOVE.L REGISTER DUMP ***`);
-                console.log(`[AmigaDoorSession]   About to execute: MOVE.L D0,(0x8ac,A4)`);
-
-                // Read ALL address registers
-                for (let i = 0; i < 8; i++) {
-                  const aReg = this.emulator.getRegister(8 + i);
-                  console.log(`[AmigaDoorSession]   A${i} = 0x${aReg.toString(16)}`);
-                }
-
-                // Read ALL data registers
-                for (let i = 0; i < 8; i++) {
-                  const dReg = this.emulator.getRegister(i);
-                  console.log(`[AmigaDoorSession]   D${i} = 0x${dReg.toString(16)}`);
-                }
-
-                // Calculate where it SHOULD write
-                const a4 = this.emulator.getRegister(8 + 4);  // A4 is register 12
-                const destAddr = (a4 + 0x08ac) >>> 0;
-                console.log(`[AmigaDoorSession]   Destination: A4 + 0x8ac = 0x${a4.toString(16)} + 0x8ac = 0x${destAddr.toString(16)}`);
-                console.log(`[AmigaDoorSession]   Will write D0 (0x${d0.toString(16)}) to address 0x${destAddr.toString(16)}`);
-
-                // DOUBLE CHECK: What's already at the destination address?
-                const currentValue = this.emulator.readMemory32(destAddr);
-                console.log(`[AmigaDoorSession]   Current value at destination: 0x${currentValue.toString(16)}`);
-
-                // TRIPLE CHECK: Read D0 again directly from CPU
-                const d0Direct = this.emulator.getRegister(0);
-                console.log(`[AmigaDoorSession]   D0 direct from CPU: 0x${d0Direct.toString(16)}`);
-                if (d0Direct !== d0) {
-                  console.log(`[AmigaDoorSession]   *** WARNING: D0 mismatch! Local var: 0x${d0.toString(16)}, Direct read: 0x${d0Direct.toString(16)} ***`);
-                }
-              }
-
-              // CRITICAL: After the MOVE.L at instruction 417, check what was written to memory
-              if (this.iterationCount === 418) {
-                console.log(`[AmigaDoorSession] *** POST-MOVE.L MEMORY CHECK ***`);
-                console.log(`[AmigaDoorSession]   Previous instruction was: MOVE.L D0,(0x8ac,A4)`);
-
-                const a4 = this.emulator.getRegister(8 + 4);  // A4 is register 12
-                const destAddr = (a4 + 0x08ac) >>> 0;
-                console.log(`[AmigaDoorSession]   D0 value: 0x${d0.toString(16)} (should be 0x20000 from OpenLibrary)`);
-                console.log(`[AmigaDoorSession]   A4 value: 0x${a4.toString(16)}`);
-                console.log(`[AmigaDoorSession]   Destination address: 0x${a4.toString(16)} + 0x8ac = 0x${destAddr.toString(16)}`);
-
-                // Read what was written to memory
-                const written = this.emulator.readMemory32(destAddr);
-                console.log(`[AmigaDoorSession]   Value at destination: 0x${written.toString(16)}`);
-
-                if (written === d0) {
-                  console.log(`[AmigaDoorSession]   ✓ MATCH - D0 value was correctly written to memory`);
-                } else {
-                  console.log(`[AmigaDoorSession]   ✗ MISMATCH - Memory has 0x${written.toString(16)} but D0 is 0x${d0.toString(16)}!`);
-                  console.log(`[AmigaDoorSession]   *** THIS IS THE ROOT CAUSE - MOVE.L WROTE WRONG VALUE! ***`);
-                }
-
-                console.log(`[AmigaDoorSession]   SR after MOVE.L: 0x${sr.toString(16).padStart(4, '0')} (Z=${zFlag})`);
-                if (zFlag === 1) {
-                  console.log(`[AmigaDoorSession]   Z=1 because ${written === 0 ? 'ZERO was written (CCR is correct!)' : 'of unknown reason'}`);
-                  console.log(`[AmigaDoorSession]   This prevents BNE from branching!`);
-                }
-              }
-            }
-          }
-
-          // Check if this is a JSR instruction (0x4E80-0x4EBF range)
-          if ((opcode & 0xFFC0) === 0x4E80) {
-            const mode = (opcode >> 3) & 0x07;
-            const reg = opcode & 0x07;
-            let details = '';
-
-            if (opcode === 0x4EAE || opcode === 0x4EAF) {  // JSR (d16,An)
-              const offset = this.emulator.readMemory16(tracePc + 2);
-              const signedOffset = offset > 0x7FFF ? offset - 0x10000 : offset;
-              details = `JSR (${signedOffset},A${reg})`;
-            } else if (opcode === 0x4EB9) {  // JSR (xxx).L
-              const addr = this.emulator.readMemory32(tracePc + 2);
-              details = `JSR (0x${addr.toString(16)}).L`;
-            } else if (opcode === 0x4EBA) {  // JSR (d16,PC)
-              const offset = this.emulator.readMemory16(tracePc + 2);
-              details = `JSR (${offset},PC)`;
-            } else {
-              details = `JSR opcode=0x${opcode.toString(16)}`;
-            }
-
-            console.log(`[AmigaDoorSession] *** ${details} at PC=0x${tracePc.toString(16)}, SP=0x${traceSp.toString(16)} ***`);
-          }
-
-          // CRITICAL: Log IMMEDIATELY after execute for instruction 417 (MOVE.L)
-          if (this.iterationCount === 417) {
-            console.log(`[AmigaDoorSession] *** ABOUT TO EXECUTE INSTRUCTION 417 (MOVE.L D0,(0x8ac,A4)) ***`);
-            const d0Before = this.emulator.getRegister(0);
-            const a4Before = this.emulator.getRegister(8 + 4);
-            const destAddrBefore = (a4Before + 0x8ac) >>> 0;
-            const memBefore = this.emulator.readMemory32(destAddrBefore);
-            console.log(`[AmigaDoorSession]   BEFORE: D0=0x${d0Before.toString(16)}, mem[0x${destAddrBefore.toString(16)}]=0x${memBefore.toString(16)}`);
-
-            // TEST: Try writing directly via TypeScript wrapper to verify write path works
-            console.log(`[AmigaDoorSession]   TEST: Writing 0xDEADBEEF to 0x${destAddrBefore.toString(16)} via TypeScript...`);
-            this.emulator.writeMemory32(destAddrBefore, 0xDEADBEEF);
-            const testRead = this.emulator.readMemory32(destAddrBefore);
-            console.log(`[AmigaDoorSession]   TEST: Read back 0x${testRead.toString(16)} (should be 0xdeadbeef)`);
-            if (testRead === 0xDEADBEEF) {
-              console.log(`[AmigaDoorSession]   ✓ TypeScript write path works!`);
-            } else {
-              console.log(`[AmigaDoorSession]   ✗ TypeScript write path BROKEN!`);
-            }
-
-            // Restore to 0 for the test
-            this.emulator.writeMemory32(destAddrBefore, 0);
-          }
-
-          // CRITICAL DEBUG: Check PC before and after execute
-          if (this.iterationCount === 417) {
-            const pcBefore = this.emulator.getRegister(16);
-            console.log(`[AmigaDoorSession]   PC BEFORE execute: 0x${pcBefore.toString(16)}`);
-          }
-
-          const cyclesExecuted = this.emulator.execute(4);
-
-          if (this.iterationCount === 417) {
-            const pcAfter = this.emulator.getRegister(16);
-            console.log(`[AmigaDoorSession]   PC AFTER execute: 0x${pcAfter.toString(16)}`);
-            console.log(`[AmigaDoorSession]   execute(4) returned: ${cyclesExecuted} cycles`);
-            if (cyclesExecuted === 0) {
-              console.log(`[AmigaDoorSession]   *** MOIRA DIDN'T EXECUTE ANYTHING! CPU might be stopped or in exception ***`);
-            }
-          }
-
-          // CRITICAL: Check IMMEDIATELY after execute for instruction 417
-          if (this.iterationCount === 417) {
-            const d0After = this.emulator.getRegister(0);
-            const a4After = this.emulator.getRegister(8 + 4);
-            const destAddrAfter = (a4After + 0x8ac) >>> 0;
-            const memAfter = this.emulator.readMemory32(destAddrAfter);
-            console.log(`[AmigaDoorSession]   AFTER:  D0=0x${d0After.toString(16)}, mem[0x${destAddrAfter.toString(16)}]=0x${memAfter.toString(16)}`);
-
-            if (memAfter === d0After) {
-              console.log(`[AmigaDoorSession]   ✓ MOVE.L executed correctly - D0 value written to memory!`);
-            } else {
-              console.log(`[AmigaDoorSession]   ✗ MOVE.L BUG - Memory has 0x${memAfter.toString(16)} but D0 is 0x${d0After.toString(16)}!`);
-            }
-          }
-
-          // Check if A0 register changed (to detect port address overwrite)
-          this.checkA0RegisterChange();
-
-          this.iterationCount++;
-          totalInstructions++;
-          this.totalCycles += 4;
+        // === STEP 1: Check if paused (async input) ===
+        if (this.emulator.isPaused()) {
           await new Promise(resolve => setImmediate(resolve));
           continue;
         }
 
-        // ULTRA DEBUG: If we reach here, we're at iteration >= 1000
-        if (this.iterationCount % 10000 === 0 && this.iterationCount >= 1000) {
-          console.log(`[AmigaDoorSession] *** AFTER < 1000 BLOCK - Iteration ${this.iterationCount}, PC=0x${pc.toString(16)}`);
-        }
+        // === STEP 2: Get current PC ===
+        const pc = this.emulator.getRegister(16);
 
-        // DEBUG: ALWAYS log at certain iterations
-        if (this.iterationCount === 1000) {
-          const pc1000 = this.emulator.getRegister(16);
-          const sp1000 = this.emulator.getRegister(15);
-          const a0 = this.emulator.getRegister(8);
-          const a5 = this.emulator.getRegister(13);
-          const a6 = this.emulator.getRegister(14);
-          const op0 = this.emulator.readMemory(pc1000);
-          const op1 = this.emulator.readMemory(pc1000 + 1);
-          const opcode = (op0 << 8) | op1;
-          console.log(`[AmigaDoorSession] *** DEBUG 1000: PC=0x${pc1000.toString(16)}, SP=0x${sp1000.toString(16)}, A0=0x${a0.toString(16)}, A5=0x${a5.toString(16)}, A6=0x${a6.toString(16)}, opcode=0x${opcode.toString(16)}`);
-        }
-        if (this.iterationCount === 1001) {
-          const pc1001 = this.emulator.getRegister(16);
-          const op0 = this.emulator.readMemory(pc1001);
-          const op1 = this.emulator.readMemory(pc1001 + 1);
-          const opcode = (op0 << 8) | op1;
-          console.log(`[AmigaDoorSession] *** DEBUG 1001: PC=0x${pc1001.toString(16)}, opcode=0x${opcode.toString(16)}`);
+        // === STEP 3: Check exit conditions ===
 
-          // Check a few more addresses to see the pattern
-          for (let i = 0; i < 10; i++) {
-            const addr = pc1001 + (i * 2);
-            const b0 = this.emulator.readMemory(addr);
-            const b1 = this.emulator.readMemory(addr + 1);
-            const opc = (b0 << 8) | b1;
-            console.log(`[AmigaDoorSession]   0x${addr.toString(16)}: 0x${opc.toString(16)}`);
-          }
-        }
-        if (this.iterationCount === 10001) {
-          console.log(`[AmigaDoorSession] *** DEBUG 10001: PC=0x${pc.toString(16)}`);
-        }
-
-        // CRITICAL: Unconditional logging for specific ranges
-        const forceLog = (this.iterationCount >= 1008 && this.iterationCount <= 1025) ||
-                         (this.iterationCount >= 2154 && this.iterationCount <= 2160) ||
-                         (this.iterationCount >= 48850 && this.iterationCount <= 48875);
-
-        // Minimal logging to avoid timing issues for other iterations
-        const tracePc = this.emulator.getRegister(16);
-        const isLowPC = (tracePc < 0x1000);
-        const isHighPC = (tracePc >= 0xfe000);
-        const needsLogging = forceLog || isLowPC || isHighPC;
-
-        if (needsLogging) {
-          const tracePc = this.emulator.getRegister(16);
-          const traceSp = this.emulator.getRegister(15);
-          const traceA6 = this.emulator.getRegister(14);
-          const d0 = this.emulator.getRegister(0);
-          const d1 = this.emulator.getRegister(1);
-          const d2 = this.emulator.getRegister(2);
-          const a0 = this.emulator.getRegister(8);
-          const a1 = this.emulator.getRegister(9);
-
-          // Read opcode
-          const op0 = this.emulator.readMemory(tracePc);
-          const op1 = this.emulator.readMemory(tracePc + 1);
-          const opcode = (op0 << 8) | op1;
-
-          // Show opcode for low PC (crash detection) and high PC (supervisor space)
-          const isLowPC = (tracePc < 0x1000);
-          const isHighPC = (tracePc >= 0xfe000);
-          const showOpcode = forceLog || isLowPC || isHighPC || (this.iterationCount >= 1730 && this.iterationCount <= 1750);
-
-          if (showOpcode) {
-            console.log(`[AmigaDoorSession] [${this.iterationCount}] PC=0x${tracePc.toString(16)}, ` +
-                        `SP=0x${traceSp.toString(16)}, A6=0x${traceA6.toString(16)}, ` +
-                        `D0=0x${d0.toString(16)}, D1=0x${d1.toString(16)}, D2=0x${d2.toString(16)}, ` +
-                        `A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, ` +
-                        `opcode=0x${opcode.toString(16).padStart(4, '0')}`);
-            if (isLowPC) {
-              console.log(`[AmigaDoorSession] *** WARNING: PC in low memory (0x${tracePc.toString(16)}) - likely crash! ***`);
-            }
-          } else {
-            console.log(`[AmigaDoorSession] [${this.iterationCount}] PC=0x${tracePc.toString(16)}, ` +
-                        `SP=0x${traceSp.toString(16)}, A6=0x${traceA6.toString(16)}`);
-          }
-
-          // At PC=0x1156, opcode 0x11b1 is MOVE.B (A1),D0
-          // This is a polling loop where door reads memory[0x1] and uses DBRA
-          // Door expects memory[0x1]=0xFF initially, loops until it becomes 0
-          if (!this.startupMessageSent && tracePc === 0x1156 && this.iterationCount >= 1000 && this.iterationCount <= 1010) {
-            console.log(`[AmigaDoorSession] ===============================================`);
-            console.log(`[AmigaDoorSession] *** POLLING LOOP DETECTED ***`);
-            console.log(`[AmigaDoorSession]   Door polling for startup message at PC=0x1156`);
-            console.log(`[AmigaDoorSession]   D0=0x${d0.toString(16)} (loop counter)`);
-            console.log(`[AmigaDoorSession]   Door is calling GetMsg() waiting for initial message`);
-            console.log(`[AmigaDoorSession] ===============================================`);
-
-            // Send startup message to unblock door from polling loop
-            console.log(`[AmigaDoorSession]   Sending startup message to unblock door...`);
-            this.sendStartupMessage();
-
-            // INVESTIGATION: Let the timeout loop run naturally
-            // Monitor what changes during the loop to understand what door expects
-            // The loop reads memory[0x2001] but immediately overwrites the value
-            // We need to find what event should trigger natural exit
-            //
-            // Possible triggers:
-            // 1. Memory[0x2001] change (even though it gets overwritten)
-            // 2. Library call response setting a flag
-            // 3. Signal delivery changing task state
-            // 4. Message port check succeeding
-
-            this.startupMessageSent = true;
-          }
-
-          // Monitor memory changes and periodic logging
-          if (tracePc === 0x1156) {
-            // The instruction is: MOVE.B ($2000,A1),D0
-            // Effective address = A1 + 0x2000
-            const effectiveAddr = a1 + 0x2000;
-            const byteRead = this.emulator.readMemory(effectiveAddr);
-
-            // Detect memory changes at 0x2001
-            if (byteRead !== this.lastMemoryValue) {
-              this.memoryChangeCount++;
-              console.log(`[AmigaDoorSession] *** MEMORY CHANGE DETECTED ***`);
-              console.log(`[AmigaDoorSession]   Address: 0x${effectiveAddr.toString(16)}`);
-              console.log(`[AmigaDoorSession]   Old value: 0x${this.lastMemoryValue.toString(16)}`);
-              console.log(`[AmigaDoorSession]   New value: 0x${byteRead.toString(16)}`);
-              console.log(`[AmigaDoorSession]   Change count: ${this.memoryChangeCount}`);
-              console.log(`[AmigaDoorSession]   Iteration: ${this.iterationCount}`);
-              this.lastMemoryValue = byteRead;
-            }
-
-            // Periodic status
-            if (this.iterationCount % 50 === 0) {
-              console.log(`[AmigaDoorSession]   Polling: A1=0x${a1.toString(16)}, EA=0x${effectiveAddr.toString(16)}, ` +
-                          `byte=0x${byteRead.toString(16)}, D2=0x${d2.toString(16)}`);
-            }
-          }
-
-          // If PC is outside code range, log error
-          // Segment 0: 0x1000-0x2ba4 (CODE)
-          // Segment 1: 0x2c00-0x2e54 (DATA)
-          // Also allow ROM/library space: 0xf00000-0xffffff
-          // Also allow high memory: 0xfe000-0xfffff (supervisor functions, stack)
-          const inCodeSeg = (tracePc >= 0x1000 && tracePc <= 0x2ba4);
-          const inDataSeg = (tracePc >= 0x2c00 && tracePc <= 0x2e54);
-          const inRomSpace = (tracePc >= 0xf00000 && tracePc <= 0xffffff);
-          const inLibSpace = (tracePc >= 0x10000 && tracePc <= 0xa0000); // ExecBase, libraries, ports
-          const inHighMem = (tracePc >= 0xfe000 && tracePc <= 0xfffff); // Supervisor functions
-
-          if (!inCodeSeg && !inDataSeg && !inRomSpace && !inLibSpace && !inHighMem) {
-            console.log(`[AmigaDoorSession] *** INVALID PC DETECTED! ***`);
-            console.log(`[AmigaDoorSession]   PC=0x${tracePc.toString(16)} is outside code range (0x1000-0x3000)`);
-            console.log(`[AmigaDoorSession]   This likely indicates a crash or bad jump`);
-
-            // Log stack contents to see return addresses
-            console.log(`[AmigaDoorSession]   Stack dump (top 8 longwords):`);
-            for (let i = 0; i < 8; i++) {
-              const addr = traceSp + (i * 4);
-              const value = this.emulator.readMemory32(addr);
-              console.log(`[AmigaDoorSession]     SP+${i*4}: 0x${addr.toString(16)} = 0x${value.toString(16)}`);
-            }
-
-            // Stop execution
-            console.log(`[AmigaDoorSession] Terminating due to invalid PC`);
-            this.terminate();
-            return;
-          }
-        }
-
-        // Handle library trap if PC is at a vector address OR offset matches
-        // CRITICAL: Also check offset-based traps for corrupted A6 cases
-        if (this.libraryTraps) {
-          const traceA6 = this.emulator.getRegister(14);
-
-          // Calculate offset - library vectors are 16-bit signed offsets
-          // When A6 is very small (e.g., 0) and PC is in ROM/upper memory,
-          // extract low 16 bits and sign-extend
-          let offset = pc - traceA6;
-
-          // If result looks like it might be a 16-bit signed offset in upper address space
-          // (0xFFE2 = -30 as 16-bit, but 16777186 as 24-bit address)
-          if (traceA6 < 0x10000 && offset > 0x8000 && offset < 0x1000000) {
-            // Extract low 16 bits and sign-extend
-            const low16 = offset & 0xFFFF;
-            if (low16 >= 0x8000) {
-              // Sign-extend from 16-bit to 32-bit
-              offset = low16 - 0x10000;
-            } else {
-              offset = low16;
-            }
-          } else if (offset > 0x7FFFFFFF) {
-            // Normal 32-bit sign extension
-            offset = offset - 0x100000000;
-          }
-
-          if (this.libraryTraps.isTrapAddress(pc) ||
-              (offset < 0 && offset >= -2000 && this.libraryTraps.isTrapOffset(offset))) {
-            console.log(`[AmigaDoorSession] Library trap detected at PC=0x${pc.toString(16)} (offset=${offset}, A6=0x${traceA6.toString(16)})`);
-
-            // CRITICAL: Prefer address-based handler if PC is in trapMap (normal case)
-            // Only use offset-based handler as fallback for corrupted A6 cases
-            const handled = this.libraryTraps.isTrapAddress(pc)
-              ? this.libraryTraps.handleTrap(pc)
-              : this.libraryTraps.handleTrapByOffset(offset, traceA6);
-
-            if (!handled) {
-              console.error(`[AmigaDoorSession] Failed to handle trap at 0x${pc.toString(16)}`);
-            }
-
-            // Check PC immediately after trap handler
-            const pcAfterTrap = this.emulator.getRegister(16);
-            const spAfterTrap = this.emulator.getRegister(15);
-            console.log(`[AmigaDoorSession] *** AFTER TRAP HANDLER: PC=0x${pcAfterTrap.toString(16)}, SP=0x${spAfterTrap.toString(16)}`);
-
-            // DEBUG: If PC=0x1744 (MOVEM.L/RTS sequence), dump stack to see what RTS will pop
-            if (pcAfterTrap === 0x1744) {
-              console.log(`[AmigaDoorSession] *** MOVEM.L/RTS SEQUENCE DETECTED ***`);
-              console.log(`[AmigaDoorSession]   MOVEM.L will restore 15 registers (60 bytes) from stack`);
-              console.log(`[AmigaDoorSession]   Current SP: 0x${spAfterTrap.toString(16)}`);
-              console.log(`[AmigaDoorSession]   After MOVEM.L, SP will be: 0x${(spAfterTrap + 60).toString(16)}`);
-              console.log(`[AmigaDoorSession]   RTS will then pop return address from: 0x${(spAfterTrap + 60).toString(16)}`);
-
-              // Read what's at SP+60 (what RTS will pop)
-              const rtsReturnAddr = this.emulator.readMemory32(spAfterTrap + 60);
-              console.log(`[AmigaDoorSession]   Value at SP+60: 0x${rtsReturnAddr.toString(16)} (what RTS will pop)`);
-
-              // Show stack contents from SP to SP+64
-              console.log(`[AmigaDoorSession]   Stack contents (SP to SP+64):`);
-              for (let offset = 0; offset < 68; offset += 4) {
-                const addr = spAfterTrap + offset;
-                const value = this.emulator.readMemory32(addr);
-                const marker = (offset === 60) ? ' <-- RTS will pop this' : '';
-                console.log(`[AmigaDoorSession]     SP+${offset}: 0x${addr.toString(16)} = 0x${value.toString(16)}${marker}`);
-              }
-
-              // Check instruction encoding
-              const op0 = this.emulator.readMemory(0x1744);
-              const op1 = this.emulator.readMemory(0x1745);
-              const op2 = this.emulator.readMemory(0x1746);
-              const op3 = this.emulator.readMemory(0x1747);
-              console.log(`[AmigaDoorSession]   Instruction bytes at 0x1744: ${op0.toString(16)} ${op1.toString(16)} ${op2.toString(16)} ${op3.toString(16)}`);
-              console.log(`[AmigaDoorSession]   Opcode: 0x${((op0 << 8) | op1).toString(16)} ${((op2 << 8) | op3).toString(16)}`);
-            }
-
-            // Don't execute cycles this iteration - trap handler set new PC
-            // INSTEAD of continue, skip execute by jumping to iteration increment
-            // This prevents the WASM module from executing instructions during async control flow
-            this.iterationCount++;
-
-            // DEBUG: Log iteration number for traps in range 1010-1020
-            if (this.iterationCount >= 1010 && this.iterationCount <= 1020) {
-              console.log(`[AmigaDoorSession] [${this.iterationCount}] Post-1000 trap: PC=0x${pcAfterTrap.toString(16)}`);
-            }
-
-            await new Promise(resolve => setImmediate(resolve));
-            continue;
-          }
-        }
-
-        // Check if door has exited (PC == exit sentinel)
-        if (pc === exitSentinel) {
-          console.log('[AmigaDoorSession] Door executed RTS to exit sentinel - door completed');
+        // Exit trap: Door returned to our sentinel address
+        if (pc === 0xFFFF00) {
+          const returnCode = this.emulator.getRegister(0);
+          console.log(`[AmigaDoorSession] === DOOR EXITED CLEANLY ===`);
+          console.log(`[AmigaDoorSession] Return code (D0): ${returnCode}`);
+          console.log(`[AmigaDoorSession] Total iterations: ${this.iterationCount}`);
           this.terminate();
           return;
         }
 
-        // Check if PC is in dangerous low memory (exception vectors 0x0-0xFF)
-        // This happens when stack corruption causes RTS to return to 0x0
+        // Low memory PC (crash/corruption)
         if (pc < 0x100 && this.iterationCount > 100) {
-          console.log(`[AmigaDoorSession] Door PC in low memory (0x${pc.toString(16)}) - likely stack corruption, treating as exit`);
-          console.log(`[AmigaDoorSession] This suggests the door tried to return but stack had invalid return address`);
-          console.log(`[AmigaDoorSession] Total instructions executed: ${this.iterationCount}`);
+          console.log(`[AmigaDoorSession] PC in low memory (0x${pc.toString(16)}) - likely stack corruption`);
+          console.log(`[AmigaDoorSession] Total iterations: ${this.iterationCount}`);
           this.terminate();
           return;
         }
 
-        // Detect I/O loop - door stuck in a small loop waiting for WaitPort to return
-        // This happens when door is cycling through a few instructions (like 0x113c -> 0x1142 -> 0x1144)
-        // If we've been in single-step mode for > 100 iterations, door is likely waiting
-        if (this.iterationCount >= 100 && this.iterationCount <= 110) {
-          console.log(`[AmigaDoorSession] DEBUG: Iteration ${this.iterationCount}, inIOLoop=${this.inIOLoop}`);
+        // Unmapped memory region (bug in address calculation)
+        if (pc >= 0xF00000 && pc < 0xF80000) {
+          console.log(`[AmigaDoorSession] PC in unmapped memory (0x${pc.toString(16)}) - memory mapping bug`);
+          this.terminate();
+          return;
         }
 
-        if (this.iterationCount === 101 && !this.inIOLoop) {
-          console.log(`[AmigaDoorSession] ===============================================`);
-          console.log(`[AmigaDoorSession] *** DETECTED I/O LOOP ***`);
-          console.log(`[AmigaDoorSession] ===============================================`);
-          console.log(`[AmigaDoorSession]   Door has executed ${this.iterationCount} single-step iterations`);
-          console.log(`[AmigaDoorSession]   PC cycling in small loop (current: 0x${pc.toString(16)})`);
-          console.log(`[AmigaDoorSession]   Door is likely waiting for message port I/O (WaitPort)`);
-          console.log(`[AmigaDoorSession]   Sending test message to door...`);
-          this.inIOLoop = true;
-
-          // Send a test message to the door
-          this.sendTestMessage();
-
-          console.log('[AmigaDoorSession] Message sent! WaitPort trap will return it when door calls again.');
-          console.log(`[AmigaDoorSession] ===============================================`);
+        // === STEP 4: UNIFIED trap detection (single canonical check) ===
+        const trapHandled = await this.checkAndHandleLibraryTrap(pc);
+        if (trapHandled) {
+          this.iterationCount++;
+          await new Promise(resolve => setImmediate(resolve));
+          continue;
         }
 
-        // Execute some cycles
-        // DEBUG: Check PC right before and after execute
-        const pcBeforeExecute = this.emulator.getRegister(16);
-        if (this.iterationCount >= 1008 && this.iterationCount <= 1025) {
-          console.log(`[AmigaDoorSession] [${this.iterationCount}] BEFORE execute(): PC=0x${pcBeforeExecute.toString(16)}`);
-        }
+        // === STEP 5: Execute one instruction ===
+        this.emulator.execute(1);
+        this.totalCycles += 1;
 
-        // Check for JSR to library function BEFORE execution
-        const op0Pre = this.emulator.readMemory(pcBeforeExecute);
-        const op1Pre = this.emulator.readMemory(pcBeforeExecute + 1);
-        const opcodePre = (op0Pre << 8) | op1Pre;
-
-        // JSR (d16,A6) - opcode 0x4eae - calls library function at offset from A6
-        if (opcodePre === 0x4eae) {
-          const a6 = this.emulator.getRegister(14); // A6 register
-          const offset16 = this.emulator.readMemory16(pcBeforeExecute + 2);
-          // Sign extend 16-bit offset to 32-bit
-          const offset = (offset16 & 0x8000) ? (offset16 - 0x10000) : offset16;
-          const targetAddr = (a6 + offset) & 0xFFFFFF;
-
-          console.log(`[AmigaDoorSession] [${this.iterationCount}] JSR (d16,A6) detected at PC=0x${pcBeforeExecute.toString(16)}`);
-          console.log(`[AmigaDoorSession]   A6=0x${a6.toString(16)}, offset=${offset}, target=0x${targetAddr.toString(16)}`);
-
-          // Check if this is a library trap
-          if (this.libraryTraps.isTrapOffset(offset)) {
-            console.log(`[AmigaDoorSession]   This is a library trap! Intercepting...`);
-
-            // CRITICAL: JSR pushes return address (PC+4) onto stack
-            // We intercepted BEFORE JSR executed, so manually push return address
-            const returnAddr = pcBeforeExecute + 4; // JSR (d16,A6) is 4 bytes
-            const sp = this.emulator.getRegister(15);
-            this.emulator.writeMemory32(sp - 4, returnAddr);
-            this.emulator.setRegister(15, sp - 4);
-            console.log(`[AmigaDoorSession]   Manually pushed return address 0x${returnAddr.toString(16)} to stack`);
-
-            // Handle the trap
-            const handled = this.libraryTraps.handleTrapByOffset(offset, a6);
-
-            if (handled) {
-              console.log(`[AmigaDoorSession]   Trap handled successfully, PC now: 0x${this.emulator.getRegister(16).toString(16)}`);
-              // Skip execution, continue to next iteration
-              this.iterationCount++;
-              await new Promise(resolve => setImmediate(resolve));
-              continue;
-            } else {
-              console.error(`[AmigaDoorSession]   Trap handler FAILED for offset ${offset}`);
-            }
-          }
-        }
-
-        // Execute cycles normally
-        this.emulator.execute(CYCLES_PER_ITERATION);
-        this.totalCycles += CYCLES_PER_ITERATION;
-        const pcAfterExecute = this.emulator.getRegister(16);
-
-        // CRITICAL FIX: MOVEM.L at 0x1744 doesn't update SP/registers with single-cycle execution
-        // Manually fix SP and restore registers after Moira advances PC
-        const op0 = this.emulator.readMemory(pcBeforeExecute);
-        const op1 = this.emulator.readMemory(pcBeforeExecute + 1);
-        const opcode = (op0 << 8) | op1;
-
-        if (pcBeforeExecute === 0x1744 && opcode === 0x4cdf) {
-          console.log(`[AmigaDoorSession] [${this.iterationCount}] CRITICAL MOVEM.L at 0x1744 detected - fixing SP and registers`);
-
-          const registerMask = this.emulator.readMemory16(pcBeforeExecute + 2);
-          const registerCount = this.countBits(registerMask);
-
-          // Read SP before fix
-          let sp = this.emulator.getRegister(15);
-          const spBefore = sp;
-
-          // Manually restore each register from stack (Moira didn't do this)
-          for (let i = 0; i < 16; i++) {
-            if (registerMask & (1 << i)) {
-              const value = this.emulator.readMemory32(sp);
-              this.emulator.setRegister(i, value);
-              console.log(`[AmigaDoorSession]   Fixed register ${i}: 0x${value.toString(16)}`);
-              sp += 4;
-            }
-          }
-
-          // Manually update SP (Moira didn't do this)
-          this.emulator.setRegister(15, sp);
-
-          console.log(`[AmigaDoorSession]   Fixed SP: 0x${spBefore.toString(16)} -> 0x${sp.toString(16)} (+${sp - spBefore} bytes)`);
-          console.log(`[AmigaDoorSession]   PC is now: 0x${this.emulator.getRegister(16).toString(16)}`);
-        }
-        if (this.iterationCount >= 1008 && this.iterationCount <= 1025) {
-          console.log(`[AmigaDoorSession] [${this.iterationCount}] AFTER execute(): PC=0x${pcAfterExecute.toString(16)}`);
-        }
-        // Check if A0 register changed (to detect port address overwrite)
-        this.checkA0RegisterChange();
-
+        // === STEP 6: Track progress and yield ===
         this.iterationCount++;
 
-        // DISABLED: Don't poll for messages - this steals messages the door is sending!
-        // XIM protocol: Door sends FIRST to AEDoorPort, BBS receives via PutMsg trap
-        // We should process messages when PutMsg() trap fires, not by polling GetMsg()
-        // if (this.iterationCount % 10 === 0) {
-        //   this.processDoorMessages();
-        // }
-
-        // Log progress every 10k iterations (100M cycles)
+        // Log progress every 10k iterations
         if (this.iterationCount % 10000 === 0) {
           const totalSeconds = this.totalCycles / (this.CYCLES_PER_MICROSECOND * 1000000);
           console.log(`[AmigaDoorSession] Iteration ${this.iterationCount}: ${(this.totalCycles / 1000000).toFixed(1)}M cycles, ${totalSeconds.toFixed(2)}s virtual time, PC=0x${pc.toString(16)}`);
 
-          // Allow long execution but not infinite (for testing, keep it reasonable)
+          // Prevent infinite loops (safety limit)
           if (this.iterationCount > 100000) {
             console.log(`[AmigaDoorSession] Door running for 100k iterations - likely stuck in polling loop`);
             console.log(`[AmigaDoorSession] PC=0x${pc.toString(16)}`);
@@ -1367,21 +865,15 @@ export class AmigaDoorSession {
           }
         }
 
-        // Yield to event loop FREQUENTLY to allow input events to be processed
-        // Following vAmiga pattern: sleep between execution chunks to match real Amiga timing
-        // When waiting for line input, yield VERY frequently (every 10 iterations)
-        // Otherwise yield less often (every 1000 iterations) but with timing delay
-
+        // Yield to event loop frequently when waiting for input
         const isWaitingForInput = (this.ximProtocol && this.ximProtocol.isWaitingForLineInput());
-
         if (isWaitingForInput) {
-          // When waiting for input, yield every 10 iterations for responsiveness
+          // Yield every 10 iterations for responsiveness
           if (this.iterationCount % 10 === 0) {
             await new Promise(resolve => setImmediate(resolve));
           }
         } else {
           // Normal execution: yield every 10000 iterations
-          // TEMPORARILY removed delay for faster testing - doors were running too slow
           if (this.iterationCount % 10000 === 0) {
             await new Promise(resolve => setImmediate(resolve));
           }
@@ -1396,7 +888,6 @@ export class AmigaDoorSession {
       this.terminate();
     }
   }
-
   /**
    * Send a test message to the door to verify message port communication
    */

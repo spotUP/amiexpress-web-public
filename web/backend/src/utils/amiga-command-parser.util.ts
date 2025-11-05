@@ -96,9 +96,9 @@ export function parseInfoFile(filePath: string): Map<string, string> {
         }
 
         // Parse KEY=VALUE format
-        // Remove leading '+' or '#' if present (express.e uses +LOCATION, Amiga .info files use #LOCATION)
+        // Remove leading '+', '#', or '\'' if present (express.e uses +LOCATION, Amiga .info files use #LOCATION or 'LOCATION)
         let cleanLine = trimmed;
-        if (cleanLine.startsWith('+') || cleanLine.startsWith('#')) {
+        if (cleanLine.startsWith('+') || cleanLine.startsWith('#') || cleanLine.startsWith("'")) {
           cleanLine = cleanLine.substring(1);
         }
 

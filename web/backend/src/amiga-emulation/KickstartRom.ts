@@ -25,17 +25,29 @@ export class KickstartRom {
    * Load Kickstart 3.1 ROM from disk
    */
   private loadRom(): void {
-    // Use Kickstart 3.1 for A500/A600/A2000 (most compatible)
-    const romPath = path.join(
-      process.cwd(),
-      'data/amiga-roms/Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom'
-    );
+    // Try multiple paths for ROM (supports running from different directories)
+    const romFilename = 'Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom';
+    const possiblePaths = [
+      path.join(process.cwd(), 'data/amiga-roms', romFilename),                    // From web/backend/
+      path.join(process.cwd(), 'web/backend/data/amiga-roms', romFilename),        // From project root
+      path.join(__dirname, '../../data/amiga-roms', romFilename),                  // Relative to source
+    ];
+
+    let romPath: string | null = null;
+    for (const testPath of possiblePaths) {
+      if (fs.existsSync(testPath)) {
+        romPath = testPath;
+        break;
+      }
+    }
+
+    if (!romPath) {
+      console.error('[ROM] Tried paths:');
+      possiblePaths.forEach(p => console.error(`  - ${p}`));
+      throw new Error(`Kickstart ROM not found in any known location`);
+    }
 
     console.log(`[ROM] Loading Kickstart ROM from: ${romPath}`);
-
-    if (!fs.existsSync(romPath)) {
-      throw new Error(`Kickstart ROM not found at: ${romPath}`);
-    }
 
     // Read ROM file
     const romBuffer = fs.readFileSync(romPath);
