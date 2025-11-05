@@ -171,15 +171,16 @@ export async function parseMciCodes(
 
   // User Information Codes (express.e:5291-5400)
   parsed = parsed.replace(/~N\|/g, username);           // N - Username
+  parsed = parsed.replace(/~P\|/g, '');  // P - Password (security - intentionally blank)
   parsed = parsed.replace(/~UL\|/g, user.location || '');  // UL - User Location
   parsed = parsed.replace(/~#\|/g, user.phoneNumber || '');  // # - Phone Number
   parsed = parsed.replace(/~TC\|/g, timesCalled.toString());  // TC - Times Called
-  parsed = parsed.replace(/~TT\|/g, '0');  // TT - Today's Calls (TODO: implement)
+  parsed = parsed.replace(/~TT\|/g, (user.callsToday || 0).toString());  // TT - Today's Calls
   parsed = parsed.replace(/~LC\|/g, user.lastLoginDate || 'Never');  // LC - Last Call
   parsed = parsed.replace(/~M\|/g, messagesPosted.toString());  // M - Messages Posted
   parsed = parsed.replace(/~A\|/g, secLevel.toString());  // A - Access/Security Level
   parsed = parsed.replace(/~S\|/g, user.id?.toString() || '0');  // S - Slot Number (user ID)
-  parsed = parsed.replace(/~CA\|/g, '');  // CA - Conference Access (TODO)
+  parsed = parsed.replace(/~CA\|/g, user.confAccess || 'XXX');  // CA - Conference Access String
   parsed = parsed.replace(/~BR\|/g, '38400');  // BR - Baud Rate
   parsed = parsed.replace(/~HW\|/g, 'Web Browser');  // HW - Hardware/Computer Type
   parsed = parsed.replace(/~TL\|/g, Math.floor((user.dailyTimeLimit || 120) / 60).toString());  // TL - Time Limit
@@ -190,7 +191,7 @@ export async function parseMciCodes(
   parsed = parsed.replace(/~SD\|/g, (downloadBytes / 1024).toFixed(0) + 'K');  // SD - Download Size
   parsed = parsed.replace(/~FU\|/g, uploads.toString());  // FU - Files Uploaded
   parsed = parsed.replace(/~FD\|/g, downloads.toString());  // FD - Files Downloaded
-  parsed = parsed.replace(/~BD\|/g, '0');  // BD - Today's Bytes Limit (TODO)
+  parsed = parsed.replace(/~BD\|/g, (user.byteLimit || 0).toString());  // BD - Today's Byte Limit
   parsed = parsed.replace(/~ON\|/g, '1');  // ON/LG - Node Number
   parsed = parsed.replace(/~LG\|/g, '1');
   parsed = parsed.replace(/~IN\|/g, user.email || '');  // IN - Internet Name (email)
