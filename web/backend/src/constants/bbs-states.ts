@@ -72,12 +72,15 @@ export enum LoggedOnSubState {
 
   // Message operations
   READ_MESSAGES = 'read_messages',
+  MSG_READER_NAV = 'msg_reader_nav',                    // Message reader navigation
   POST_MESSAGE = 'post_message',
   POST_MESSAGE_TO = 'post_message_to',
   POST_MESSAGE_SUBJECT = 'post_message_subject',
   POST_MESSAGE_PRIVATE = 'post_message_private',
   POST_MESSAGE_BODY = 'post_message_body',
   POST_MESSAGE_SAVE = 'post_message_save',
+  JM_INPUT = 'jm_input',                                // Jump to message number input
+  RL_CONFIRM = 'rl_confirm',                            // Read last message confirmation
 
   // Door operations
   DOOR_SELECT = 'door_select',
@@ -118,6 +121,10 @@ export enum LoggedOnSubState {
   // Conference operations
   CONFERENCE_SELECT = 'conference_select',
   CONFERENCE_JOIN = 'conference_join',
+  JOIN_CONF_INPUT = 'join_conf_input',                  // Conference join input
+  CM_DISPLAY_MENU = 'cm_display_menu',                  // Conference mail display menu
+  CM_INPUT_HIGH_MSG = 'cm_input_high_msg',              // Conference mail high message input
+  CM_INPUT_LOW_MSG = 'cm_input_low_msg',                // Conference mail low message input
 
   // Conference Flags (CF command) - express.e:24672-24841
   CF_FLAG_SELECT_INPUT = 'cf_flag_select_input',      // M/A/F/Z flag type selection
@@ -142,6 +149,11 @@ export enum LoggedOnSubState {
   // User Stats (S command) - Web-specific font selection
   USER_STATS_MENU = 'user_stats_menu',                // User stats menu with font option
   FONT_SELECTION = 'font_selection',                  // Font selection menu
+
+  // Voting Booth operations
+  VO_TOPIC_SELECT = 'vo_topic_select',                // Vote topic selection
+  VO_ANSWER_INPUT = 'vo_answer_input',                // Vote answer input
+  VO_MENU_CHOICE = 'vo_menu_choice',                  // Vote menu choice
 }
 
 export enum SessionStatus {

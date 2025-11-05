@@ -274,6 +274,8 @@ export interface BBSSession {
   lastOlmNode?: number; // Last node number used for OLM
   olmMessageLines?: string[]; // Lines of current OLM message being composed
   olmNodeTarget?: number; // Target node number for OLM message
+  olmBuffer?: string[]; // Buffer for incoming OLM message lines
+  olmQueue?: string[]; // Queue of pending OLM messages to send
 }
 
 // Conference and Message Base data structures (simplified)

@@ -34,6 +34,7 @@ interface DoorSession {
   startTime: Date;
   endTime?: Date;
   status: string;
+  output?: string[]; // Array of output strings from door execution
 }
 
 interface ChatSession {
@@ -109,15 +110,14 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     const amigaSession = new AmigaDoorSession(socket, {
       executablePath: doorInfo.resolvedPath,
       timeout: 600,
-      memorySize: 1024 * 1024, // 1MB
-      sessionData: {
+      bbsSession: {
         user: session.user,
         nodeNumber: session.nodeId || 0,
         bbsName: 'AmiExpress-Web BBS',
         sysopName: 'Sysop',
         timeRemaining: 60
       }
-    });
+    } as any);
 
     await amigaSession.start();
 
@@ -153,7 +153,7 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
   const amigaDoors = await amigaDoorMgr.scanInstalledDoors();
 
   // Filter Amiga doors by access level
-  const availableAmigaDoors = amigaDoors.filter(door =>
+  const availableAmigaDoors = amigaDoors.filter((door: any) =>
     door.installed &&
     (session.user?.secLevel || 0) >= (door.access || 0)
   );
@@ -161,7 +161,7 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
   console.log(`[DOOR Command] Found ${availableDoors.length} TypeScript doors, ${availableAmigaDoors.length} Amiga doors`);
 
   // Convert Amiga doors to the format expected by this function
-  const amigaDoorsList = availableAmigaDoors.map(door => ({
+  const amigaDoorsList = availableAmigaDoors.map((door: any) => ({
     id: door.command,
     name: door.name || door.command,
     description: `${door.location} (${door.type})`,
@@ -413,7 +413,6 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     const doorConfig = {
       executablePath: doorPath,
       timeout: 300, // 5 minutes
-      memorySize: 1024 * 1024, // 1MB
       bbsSession: session  // Pass BBS session for user/system/node data
     };
 
@@ -615,7 +614,6 @@ async function executeNativeDoor(socket: any, session: BBSSession, door: Door, d
       const amigaSession = new AmigaDoorSession(socket, {
         executablePath: doorPath,
         timeout: 600,  // 10 minutes
-        memorySize: 1024 * 1024  // 1MB
       });
 
       await amigaSession.start();

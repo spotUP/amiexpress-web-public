@@ -1098,14 +1098,14 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   // Handle return to webhook menu
-  if (session.tempData?.returnToWebhookMenu && session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
+  if (session.tempData?.returnToWebhookMenu && (session.subState as any) === LoggedOnSubState.DISPLAY_CONF_BULL) {
     delete session.tempData;
     await WebhookCommandsHandler.handleWebhookCommand(socket, session);
     return;
   }
 
   // Handle return to webhook action menu
-  if (session.tempData?.returnToWebhookActionMenu && session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
+  if (session.tempData?.returnToWebhookActionMenu && (session.subState as any) === LoggedOnSubState.DISPLAY_CONF_BULL) {
     const menuData = session.tempData.returnToWebhookActionMenu;
     await WebhookCommandsHandler.showWebhookActions(socket, session, menuData.webhookId);
     return;
@@ -1468,7 +1468,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle message reader navigation (R command)
   // Like express.e:11046 - uses lineInput (line-based input, not single char)
-  if (session.subState === 'MSG_READER_NAV') {
+  if (session.subState === LoggedOnSubState.MSG_READER_NAV) {
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
       session.inputBuffer = '';
@@ -1492,14 +1492,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  // Handle file flagging input (A command)
-  if (session.subState === 'FLAG_INPUT') {
-    await handleFlagInput(socket, session, data);
-    return;
-  }
-
   // Handle J (Join Conference) input
-  if (session.subState === 'JOIN_CONF_INPUT') {
+  if (session.subState === LoggedOnSubState.JOIN_CONF_INPUT) {
     console.log('📡 In JOIN_CONF_INPUT state');
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
@@ -1558,82 +1552,61 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   // Handle JM (Join Message Base) input
-  if (session.subState === 'JM_INPUT') {
+  if (session.subState === LoggedOnSubState.JM_INPUT) {
     console.log('📬 In JM input state');
     handleJMInput(socket, session, data.trim());
     return;
   }
 
   // Handle RL (Relogon) confirmation
-  if (session.subState === 'RL_CONFIRM') {
+  if (session.subState === LoggedOnSubState.RL_CONFIRM) {
     console.log('🔄 In RL confirmation state');
     handleRelogonConfirm(socket, session, data.trim());
     return;
   }
 
-  // Handle V (View File) input
-  if (session.subState === 'VIEW_FILE_INPUT') {
-    console.log('📄 In View File input state');
-    handleViewFileInput(socket, session, data.trim());
-    return;
-  }
-
-  // Handle Z (Zippy Search) input
-  if (session.subState === 'ZIPPY_SEARCH_INPUT') {
-    console.log('🔍 In Zippy Search input state');
-    handleZippySearchInput(socket, session, data.trim());
-    return;
-  }
-
   // Handle CM (Conference Maintenance) menu input
-  if (session.subState === 'CM_DISPLAY_MENU') {
+  if (session.subState === LoggedOnSubState.CM_DISPLAY_MENU) {
     console.log('⚙️  In CM menu state');
     await handleCMInput(socket, session, data.trim());
     return;
   }
 
   // Handle CM numeric inputs (B and C options)
-  if (session.subState === 'CM_INPUT_HIGH_MSG') {
+  if (session.subState === LoggedOnSubState.CM_INPUT_HIGH_MSG) {
     console.log('⚙️  In CM high message input state');
     await handleCMNumericInput(socket, session, data.trim(), 'HIGH_MSG');
     return;
   }
 
-  if (session.subState === 'CM_INPUT_LOW_MSG') {
+  if (session.subState === LoggedOnSubState.CM_INPUT_LOW_MSG) {
     console.log('⚙️  In CM low message input state');
     await handleCMNumericInput(socket, session, data.trim(), 'LOW_MSG');
     return;
   }
 
-  // Handle message reader navigation
-  if (session.subState === 'MSG_READER_NAV') {
-    console.log('📖 In message reader navigation state');
-    await handleMessageReaderNav(socket, session, data.trim());
-    return;
-  }
-
   // Handle voting booth states
-  if (session.subState === 'VO_TOPIC_SELECT') {
+  if (session.subState === LoggedOnSubState.VO_TOPIC_SELECT) {
     console.log('🗳️  In vote topic selection state');
     await handleVoteTopicSelect(socket, session, data.trim());
     return;
   }
 
-  if (session.subState === 'VO_ANSWER_INPUT') {
+  if (session.subState === LoggedOnSubState.VO_ANSWER_INPUT) {
     console.log('🗳️  In vote answer input state');
     await handleVoteAnswerInput(socket, session, data.trim());
     return;
   }
 
-  if (session.subState === 'VO_MENU_CHOICE') {
+  if (session.subState === LoggedOnSubState.VO_MENU_CHOICE) {
     console.log('🗳️  In vote menu choice state');
     await handleVoteMenuChoice(socket, session, data.trim());
     return;
   }
 
   // Handle message posting workflow (line-based input like login system)
-  console.log('📝 Checking if in POST_MESSAGE_SUBJECT state:', session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT);
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
+  console.log('📝 Checking if in POST_MESSAGE_SUBJECT state:', (session.subState as any) === LoggedOnSubState.POST_MESSAGE_SUBJECT);
+  if ((session.subState as any) === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
     console.log('📝 ENTERED message subject input handler');
     console.log('📝 Data received:', JSON.stringify(data), 'type:', typeof data);
     console.log('📝 Data === "\\r":', data === '\r');
@@ -1708,7 +1681,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_BODY) {
+  if ((session.subState as any) === LoggedOnSubState.POST_MESSAGE_BODY) {
     console.log('📝 In message body input state, received:', JSON.stringify(data));
 
     // Handle line-based input for message body
@@ -2630,8 +2603,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,
-          timeout: 600,
-          memorySize: 1024 * 1024
+          timeout: 600
         });
 
         await amigaSession.start();
@@ -2708,8 +2680,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,
-          timeout: 600,
-          memorySize: 1024 * 1024
+          timeout: 600
         });
 
         await amigaSession.start();
