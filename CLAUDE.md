@@ -15,6 +15,10 @@
 3. **Fix once, fix right** - Reference NDK docs for correct implementation upfront
 4. **Test with existing tools** - Don't create one-off test scripts (archive them after use)
 5. **Pre-implementation checklist** - Read express.e + NDK docs before ANY code
+6. **ZERO TypeScript errors before commit** - ALWAYS run `npx tsc --noEmit` before committing
+   - If errors exist, fix them before committing
+   - Never commit code with TypeScript compilation errors
+   - This prevents error accumulation and maintains code quality
 
 ### Context Rules
 1. **Read minimal files** - Only read what's needed for current task
@@ -218,6 +222,38 @@ Close(): number {  // ✅ Correct return type per spec
 3. **If something seems wrong, check YOUR implementation first** - 99.9% of the time it's your bug
 
 **MOIRA is used in production Amiga emulators and is thoroughly tested. If you think you found a MOIRA bug, you're wrong - check your code again.**
+
+### TypeScript Compilation - ZERO ERRORS Policy
+
+**🚨 CRITICAL: Never commit code with TypeScript errors! 🚨**
+
+**Pre-commit Hook Installed:**
+- Automatically checks TypeScript compilation before every commit
+- Prevents commits with TypeScript errors
+- Location: `.git/hooks/pre-commit`
+
+**Manual Check Before Committing:**
+```bash
+cd web/backend
+npx tsc --noEmit
+```
+
+**If you see errors:**
+1. Fix all TypeScript errors before committing
+2. Run `npx tsc --noEmit` again to verify
+3. Only commit when you get zero errors
+
+**Emergency Override (NOT RECOMMENDED):**
+```bash
+SKIP_TS_CHECK=1 git commit -m "message"
+```
+Only use this when fixing accumulated errors in a dedicated error-fixing session.
+
+**Why This Rule Exists:**
+- Prevents error accumulation (we had 330+ errors!)
+- Maintains code quality and type safety
+- Catches bugs at compile time, not runtime
+- Makes codebase easier to maintain
 
 ### Server Management - ALWAYS Use Startup Scripts
 
