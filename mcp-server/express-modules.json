@@ -1,0 +1,184 @@
+{
+  "description": "Modularized view of express.e for efficient MCP access",
+  "totalLines": 32248,
+  "modules": {
+    "init": {
+      "name": "Initialization & Startup",
+      "startLine": 1,
+      "endLine": 420,
+      "description": "Module imports, global definitions, startup initialization",
+      "keywords": ["MODULE", "OPT", "DEF", "CONST", "global variables"]
+    },
+    "core": {
+      "name": "Core Utility Functions",
+      "startLine": 421,
+      "endLine": 1500,
+      "description": "Configuration, file checking, serial port, modem control",
+      "keywords": ["configFileExists", "openSerial", "setBaud", "closeSerial", "dropDTR"]
+    },
+    "security": {
+      "name": "Security & Authentication",
+      "startLine": 908,
+      "endLine": 1500,
+      "description": "Password validation, strength checking, user authentication",
+      "keywords": ["checkPasswordStrength", "setNewPassword", "checkUserPassword"]
+    },
+    "io": {
+      "name": "Input/Output Operations",
+      "startLine": 1501,
+      "endLine": 2100,
+      "description": "Serial/console I/O, telnet handling, line buffering",
+      "keywords": ["aePuts", "serPuts", "conPuts", "telnetSend", "getSigs"]
+    },
+    "messaging": {
+      "name": "Message Processing",
+      "startLine": 1995,
+      "endLine": 4230,
+      "description": "XIM messages, door messages, process messages",
+      "keywords": ["processMessages", "processXimMsg", "checkDoorMsg"]
+    },
+    "doors": {
+      "name": "Door Execution",
+      "startLine": 4231,
+      "endLine": 4613,
+      "description": "Door launching, door message handling, door traps",
+      "keywords": ["runDoor", "doorMsgLoadAccount", "doorMsgSaveAccount"]
+    },
+    "commands": {
+      "name": "Command Execution",
+      "startLine": 4614,
+      "endLine": 5257,
+      "description": "Command routing (BBS, SYS, internal commands)",
+      "keywords": ["runCommand", "runBbsCommand", "runSysCommand"]
+    },
+    "mci": {
+      "name": "MCI Code Processing",
+      "startLine": 5258,
+      "endLine": 5850,
+      "description": "MCI code parsing and execution (~N, ~CF, ~XC, etc.)",
+      "keywords": ["processMciCmd", "processMci", "~N", "~CF", "~XC", "~DT"],
+      "critical": true,
+      "note": "This is THE critical section for MCI implementation"
+    },
+    "display": {
+      "name": "Display & Screen Files",
+      "startLine": 6539,
+      "endLine": 6850,
+      "description": "Screen file loading and display with MCI processing",
+      "keywords": ["displayScreen", "displayFile", "displayBulkScreen"]
+    },
+    "rexx": {
+      "name": "REXX Integration",
+      "startLine": 6851,
+      "endLine": 7000,
+      "description": "REXX message processing and integration",
+      "keywords": ["processRexxMessage"]
+    },
+    "windows": {
+      "name": "Window Message Handling",
+      "startLine": 6985,
+      "endLine": 7400,
+      "description": "Window messages, input processing",
+      "keywords": ["processWinMessage2", "processWindowMessage", "processInputMessage"]
+    },
+    "logging": {
+      "name": "Logging & Statistics",
+      "startLine": 8091,
+      "endLine": 9000,
+      "description": "Logoff logs, statistics, user tracking",
+      "keywords": ["writeLogoffLog", "logoffLog", "logUDFile"]
+    },
+    "mail": {
+      "name": "Mail System",
+      "startLine": 8672,
+      "endLine": 12000,
+      "description": "Message display, editing, attachments",
+      "keywords": ["displayMessage", "editEMessage", "attachMsgFiles", "deleteMsgFiles"]
+    },
+    "files": {
+      "name": "File Operations",
+      "startLine": 12000,
+      "endLine": 18000,
+      "description": "File uploads, downloads, file area management",
+      "keywords": ["uploadFile", "downloadFile", "fileList"]
+    },
+    "conference": {
+      "name": "Conference System",
+      "startLine": 18000,
+      "endLine": 24410,
+      "description": "Conference management, joining, scanning",
+      "keywords": ["joinConference", "scanConference"]
+    },
+    "internal-commands": {
+      "name": "Internal Commands (A-Z)",
+      "startLine": 24411,
+      "endLine": 28227,
+      "description": "All built-in BBS commands (internalCommandA through internalCommandZ)",
+      "keywords": [
+        "internalCommandA", "internalCommandB", "internalCommandC",
+        "internalCommandD", "internalCommandE", "internalCommandF",
+        "internalCommandG", "internalCommandH", "internalCommandI",
+        "internalCommandJ", "internalCommandK", "internalCommandL",
+        "internalCommandM", "internalCommandN", "internalCommandO",
+        "internalCommandP", "internalCommandQ", "internalCommandR",
+        "internalCommandS", "internalCommandT", "internalCommandU",
+        "internalCommandV", "internalCommandW", "internalCommandX",
+        "internalCommandY", "internalCommandZ"
+      ],
+      "critical": true,
+      "note": "This is THE section for all BBS command implementations"
+    },
+    "command-priority": {
+      "name": "Command Priority System",
+      "startLine": 28228,
+      "endLine": 28500,
+      "description": "Command execution order: SYSCMD -> BBSCMD -> Internal",
+      "keywords": ["command priority", "SYSCMD", "BBSCMD", "internalCommand"],
+      "critical": true,
+      "note": "Defines how commands are resolved (see CLAUDE.md)"
+    },
+    "mainloop": {
+      "name": "Main BBS Loop",
+      "startLine": 28500,
+      "endLine": 30500,
+      "description": "Main session loop, state machine, screen flow",
+      "keywords": ["main loop", "session state", "BBSTITLE", "LOGON", "MENU"],
+      "critical": true
+    },
+    "startup": {
+      "name": "Program Startup",
+      "startLine": 30500,
+      "endLine": 32248,
+      "description": "Main program entry point, initialization sequence",
+      "keywords": ["PROC main", "initialization", "startup"]
+    }
+  },
+  "usage": {
+    "mcp_tool": "read_source_range",
+    "example_mci": {
+      "description": "Read MCI code processing section",
+      "tool": "read_source_range",
+      "params": {
+        "source": "express-e",
+        "startLine": 5258,
+        "endLine": 5850
+      }
+    },
+    "example_commands": {
+      "description": "Read all internal commands",
+      "tool": "read_source_range",
+      "params": {
+        "source": "express-e",
+        "startLine": 24411,
+        "endLine": 28227
+      }
+    },
+    "example_search": {
+      "description": "Search for specific command",
+      "tool": "search_express_source",
+      "params": {
+        "query": "internalCommandWHO"
+      }
+    }
+  }
+}

@@ -28,14 +28,27 @@
 
 **BEFORE reading express.e or NDK autodocs, use MCP tools:**
 
-1. **Search express.e** (instead of reading full 400k token file):
+1. **Read express.e by MODULE** (BEST - most efficient!):
+   ```
+   Use MCP tool: list_express_modules
+   - Shows all 19 modules with line ranges
+
+   Use MCP tool: read_express_module
+   - module: "mci" - MCI code processing (lines 5258-5850)
+   - module: "internal-commands" - All A-Z commands (lines 24411-28227)
+   - module: "doors" - Door execution (lines 4231-4613)
+   - module: "commands" - Command routing (lines 4614-5257)
+   - Returns: Just that module (99% token savings!)
+   ```
+
+2. **Search express.e** (when you don't know the module):
    ```
    Use MCP tool: search_express_source
    - query: "internalCommandWHO" or "PROC displayWho"
    - Returns: Line numbers + context (7k tokens vs 400k!)
    ```
 
-2. **Read specific express.e ranges** (after finding line numbers):
+3. **Read specific express.e ranges** (when you know exact lines):
    ```
    Use MCP tool: read_source_range
    - source: "express-e"
@@ -44,7 +57,7 @@
    - Returns: Only those lines (98% token savings!)
    ```
 
-3. **Search NDK autodocs** (instead of grepping 30MB files):
+4. **Search NDK autodocs** (instead of grepping 30MB files):
    ```
    Use MCP tool: search_ndk_autodocs
    - query: "Close" or "AllocMem"
@@ -55,15 +68,32 @@
 **MCP Server Location**: `mcp-server/index.js`
 
 **Available MCP Resources**:
-- `amiexpress://sources/express-e` - express.e (35k lines)
-- `amiexpress://sources/hydra-e` - hydra.e
-- `amiexpress://sources/acp-e` - ACP.e
+- `amiexpress://sources/express-e` - express.e (32,248 lines, modularized!)
+- `amiexpress://sources/hydra-e` - hydra.e (file transfer protocol)
+- `amiexpress://sources/acp-e` - ACP.e (control panel)
+- `amiexpress://sources/zmodem-e` - zmodem.e (ZModem protocol)
+- `amiexpress://sources/ftpd-e` - ftpd.e (FTP daemon)
 - `amiexpress://docs/*` - All documentation
+
+**express.e Modules** (19 total):
+- `init` - Initialization & imports
+- `core` - Utility functions
+- `security` - Password/auth
+- `io` - Serial/console I/O
+- `messaging` - XIM/door messages
+- `doors` - Door execution
+- `commands` - Command routing
+- `mci` - **MCI code processing** (CRITICAL!)
+- `display` - Screen file display
+- `internal-commands` - **All A-Z commands** (CRITICAL!)
+- `command-priority` - **Command resolution order** (CRITICAL!)
+- `mainloop` - **Main BBS loop** (CRITICAL!)
+- Plus: rexx, windows, logging, mail, files, conference, startup
 
 **Token Savings**:
 - Full express.e: ~400k tokens
-- Line range search: ~7k tokens
-- Reduction: 98%!
+- Module read: ~2-10k tokens (depends on module)
+- Reduction: 95-99%!
 
 **This is the PREFERRED way to access sources in Claude Code sessions.**
 

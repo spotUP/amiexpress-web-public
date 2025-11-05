@@ -80,16 +80,27 @@ const SOURCES = {
   'express-e': {
     path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'express.e'),
     description: 'Original AmiExpress BBS source code in E language (35,000+ lines) - PRIMARY REFERENCE',
-    mimeType: 'text/plain'
+    mimeType: 'text/plain',
+    moduleMap: path.join(__dirname, 'express-modules.json')
   },
   'hydra-e': {
     path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'hydra.e'),
-    description: 'Hydra protocol implementation in E language',
+    description: 'Hydra protocol implementation in E language (file transfer)',
     mimeType: 'text/plain'
   },
   'acp-e': {
     path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'ACP.e'),
-    description: 'AmiExpress Control Panel source code',
+    description: 'AmiExpress Control Panel source code (configuration tool)',
+    mimeType: 'text/plain'
+  },
+  'zmodem-e': {
+    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'zmodem.e'),
+    description: 'ZModem protocol implementation in E language (file transfer)',
+    mimeType: 'text/plain'
+  },
+  'ftpd-e': {
+    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'ftpd.e'),
+    description: 'FTP daemon implementation in E language',
     mimeType: 'text/plain'
   }
 };
@@ -308,6 +319,34 @@ class AmiExpressDocsServer {
               },
               required: ['query']
             }
+          },
+          {
+            name: 'read_express_module',
+            description: 'Read express.e by logical module (mci, commands, doors, etc.) - more efficient than line ranges',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                module: {
+                  type: 'string',
+                  description: 'Module name',
+                  enum: [
+                    'init', 'core', 'security', 'io', 'messaging', 'doors',
+                    'commands', 'mci', 'display', 'rexx', 'windows', 'logging',
+                    'mail', 'files', 'conference', 'internal-commands',
+                    'command-priority', 'mainloop', 'startup'
+                  ]
+                }
+              },
+              required: ['module']
+            }
+          },
+          {
+            name: 'list_express_modules',
+            description: 'List all available express.e modules with descriptions and line ranges',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
           }
         ]
       };
@@ -327,6 +366,10 @@ class AmiExpressDocsServer {
         return await this.readSourceRange(args.source, args.startLine, args.endLine);
       } else if (name === 'search_express_source') {
         return await this.searchExpressSource(args.query, args.context ?? 3);
+      } else if (name === 'read_express_module') {
+        return await this.readExpressModule(args.module);
+      } else if (name === 'list_express_modules') {
+        return await this.listExpressModules();
       } else {
         throw new Error(`Unknown tool: ${name}`);
       }
@@ -561,6 +604,84 @@ class AmiExpressDocsServer {
       };
     } catch (error) {
       throw new Error(`Failed to search express.e: ${error.message}`);
+    }
+  }
+
+  async listExpressModules() {
+    const source = SOURCES['express-e'];
+
+    try {
+      const moduleMapContent = await fs.readFile(source.moduleMap, 'utf-8');
+      const moduleMap = JSON.parse(moduleMapContent);
+
+      const moduleList = Object.entries(moduleMap.modules).map(([key, module]) => ({
+        key,
+        name: module.name,
+        lines: `${module.startLine}-${module.endLine}`,
+        lineCount: module.endLine - module.startLine + 1,
+        description: module.description,
+        critical: module.critical || false
+      }));
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            totalModules: moduleList.length,
+            totalLines: moduleMap.totalLines,
+            modules: moduleList
+          }, null, 2)
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to list express.e modules: ${error.message}`);
+    }
+  }
+
+  async readExpressModule(moduleName) {
+    const source = SOURCES['express-e'];
+
+    try {
+      // Load module map
+      const moduleMapContent = await fs.readFile(source.moduleMap, 'utf-8');
+      const moduleMap = JSON.parse(moduleMapContent);
+
+      const module = moduleMap.modules[moduleName];
+      if (!module) {
+        const available = Object.keys(moduleMap.modules).join(', ');
+        throw new Error(`Unknown module: ${moduleName}. Available: ${available}`);
+      }
+
+      // Read the source file
+      const content = await fs.readFile(source.path, 'utf-8');
+      const lines = content.split('\n');
+
+      // Extract the module's lines
+      const startIdx = module.startLine - 1;
+      const endIdx = module.endLine;
+      const moduleLines = lines.slice(startIdx, endIdx);
+
+      // Format with line numbers
+      const formatted = moduleLines.map((line, idx) =>
+        `${String(module.startLine + idx).padStart(5, ' ')}: ${line}`
+      ).join('\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Module: ${module.name}
+Lines: ${module.startLine}-${module.endLine} (${module.endLine - module.startLine + 1} lines)
+Description: ${module.description}
+${module.critical ? 'CRITICAL MODULE ⚠️' : ''}
+${module.note ? `\nNote: ${module.note}` : ''}
+
+Keywords: ${module.keywords.join(', ')}
+
+${formatted}`
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to read express.e module: ${error.message}`);
     }
   }
 
