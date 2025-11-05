@@ -430,8 +430,8 @@ async function flagFiles(socket: any, session: BBSSession, pattern: string): Pro
     }
 
     // Filter out files already flagged
-    const alreadyFlagged = new Set((session.flaggedFiles || []).map(f => f.id));
-    const newFiles = files.filter(f => !alreadyFlagged.has(f.id));
+    const alreadyFlagged = new Set((session.flaggedFiles || []).map((f: any) => f.id));
+    const newFiles = files.filter((f: any) => !alreadyFlagged.has(f.id));
 
     if (newFiles.length === 0) {
       socket.emit('ansi-output', AnsiUtil.warningLine('All matching files already flagged'));
@@ -444,7 +444,7 @@ async function flagFiles(socket: any, session: BBSSession, pattern: string): Pro
     socket.emit('ansi-output', AnsiUtil.successLine(`Flagged ${newFiles.length} file(s)`));
 
     // Show flagged files
-    newFiles.forEach(file => {
+    newFiles.forEach((file: any) => {
       socket.emit('ansi-output',
         `  ${AnsiUtil.colorize(file.filename.padEnd(20), 'white')} ` +
         `${AnsiUtil.colorize(formatFileSize(file.size).padStart(10), 'cyan')}\r\n`

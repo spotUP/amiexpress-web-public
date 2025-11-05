@@ -107,8 +107,8 @@ export class AmigaGuideParser {
             linkIndex = 0;
 
             // Set main node if this is the first node or named "main"
-            if (!this.document.nodes.size || currentNode.name.toLowerCase() === 'main') {
-              this.document.mainNode = currentNode.name;
+            if (!this.document.nodes.size || (currentNode.name && currentNode.name.toLowerCase() === 'main')) {
+              this.document.mainNode = currentNode.name || '';
             }
             break;
 
