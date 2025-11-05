@@ -11,6 +11,7 @@ export interface AuthRequest extends Request {
     username: string;
     secLevel: number;
   };
+  params: any; // Route parameters
 }
 
 /**

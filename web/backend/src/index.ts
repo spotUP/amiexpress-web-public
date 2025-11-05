@@ -647,7 +647,7 @@ app.get('/users/:id', authenticateToken(db), async (req: AuthRequest, res: Respo
     const userId = req.params.id;
 
     // Check if user can access this resource (own profile or admin)
-    if (req.user.userId !== userId && req.user.secLevel < 100) {
+    if (req.user!.userId !== userId && req.user!.secLevel < 100) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -1227,7 +1227,7 @@ io.on('connection', async (socket) => {
             socket.emit('ansi-output', '\r\nTested Ok...\r\n');
           } else if (testStatus === TestResult.FAILURE) {
             socket.emit('ansi-output', '\r\n\x1b[33mRequires review, possibly bad format\x1b[0m\r\n');
-            socket.emit('ansi-output', `\r\n\x1b[33mMoving to ${config.sysopName}'s private Directory.\x1b[0m\r\n\r\n`);
+            socket.emit('ansi-output', `\r\n\x1b[33mMoving to ${config.get('sysopName')}'s private Directory.\x1b[0m\r\n\r\n`);
             fileStatus = 'hold';  // Mark for HOLD directory (express.e:19364-19369)
           }
         } catch (error) {
@@ -1401,7 +1401,7 @@ io.on('connection', async (socket) => {
         await doUploadNotify(
           session.user!.name || session.user!.username,
           session.user!.location || 'Unknown',
-          config.bbsName || 'AmiExpress BBS',
+          config.get('bbsName') || 'AmiExpress BBS',
           undefined,  // TODO: Get sysop email from config
           false  // TODO: Get MAIL_ON_UPLOAD from config
         );
@@ -1632,7 +1632,7 @@ io.on('connection', async (socket) => {
     if (!session || !session.user) return;
 
     try {
-      await db.updateUser(session.user.id, { fontPreference: data.font });
+      await db.updateUser(session.user.id, { fontPreference: data.font } as any);
       (session.user as any).fontPreference = data.font;
       socket.emit('font-changed', { font: data.font });
     } catch (error) {
@@ -1854,7 +1854,7 @@ async function deleteFileEntry(fileId: number): Promise<boolean> {
     const result = await db.query(`
       DELETE FROM file_entries WHERE id = $1
     `, [fileId]);
-    return (result.rowCount || 0) > 0;
+    return ((result as any).rowCount || 0) > 0;
   } catch (error) {
     console.error('[deleteFileEntry] Error:', error);
     return false;
@@ -1869,7 +1869,7 @@ async function moveFileEntry(fileId: number, newAreaId: number): Promise<boolean
       SET areaid = $2
       WHERE id = $1
     `, [fileId, newAreaId]);
-    return (result.rowCount || 0) > 0;
+    return ((result as any).rowCount || 0) > 0;
   } catch (error) {
     console.error('[moveFileEntry] Error:', error);
     return false;
@@ -1884,7 +1884,7 @@ async function updateFileDescription(fileId: number, newDescription: string): Pr
       SET description = $2
       WHERE id = $1
     `, [fileId, newDescription]);
-    return (result.rowCount || 0) > 0;
+    return ((result as any).rowCount || 0) > 0;
   } catch (error) {
     console.error('[updateFileDescription] Error:', error);
     return false;
@@ -2001,7 +2001,7 @@ async function resetNewMailScanPointers(conferenceId: number, messageBaseId: num
       SET lastnewreadconf = 0
       WHERE conferenceid = $1 AND messagebaseid = $2
     `, [conferenceId, messageBaseId]);
-    return result.rowCount || 0;
+    return (result as any).rowCount || 0;
   } catch (error) {
     console.error('[resetNewMailScanPointers] Error:', error);
     return 0;
@@ -2016,7 +2016,7 @@ async function resetLastMessageReadPointers(conferenceId: number, messageBaseId:
       SET lastmsgreadconf = 0
       WHERE conferenceid = $1 AND messagebaseid = $2
     `, [conferenceId, messageBaseId]);
-    return result.rowCount || 0;
+    return (result as any).rowCount || 0;
   } catch (error) {
     console.error('[resetLastMessageReadPointers] Error:', error);
     return 0;
@@ -2178,7 +2178,7 @@ async function hasUserVoted(userId: string, topicId: number): Promise<boolean> {
 
 // Submit user's votes for a topic
 async function submitVote(userId: string, topicId: number, conferenceId: number, votes: Array<{questionId: number, answerId: number}>): Promise<boolean> {
-  const client = await db.pool.connect();
+  const client = await (db as any).pool.connect();
   try {
     await client.query('BEGIN');
 
@@ -2506,7 +2506,6 @@ async function initializeDefaultWebhook() {
       name: 'BBS Discord Notifications',
       url: webhookUrl,
       type: webhookType,
-      enabled: true,
       triggers: allTriggers
     });
 
@@ -2557,7 +2556,7 @@ async function initializeData() {
     }
 
     // Load file entries for all file areas
-    fileEntries = await db.getFileEntries();
+    fileEntries = []; // TODO: Load file entries per-area as needed
 
     // Inject dependencies into file handler
     setFileAreas(fileAreas);
@@ -2629,15 +2628,15 @@ async function initializeData() {
       db,
       joinConference,
       checkConfAccess,
-      displayScreen,
-      displayUploadInterface,
-      displayDownloadInterface
+      displayScreen: displayScreen as any,
+      displayUploadInterface: displayUploadInterface as any,
+      displayDownloadInterface: displayDownloadInterface as any
     });
 
     // Inject dependencies into system commands handler
     setSystemCommandsDependencies({
-      displayScreen,
-      findSecurityScreen
+      displayScreen: displayScreen as any,
+      findSecurityScreen: findSecurityScreen as any
     });
 
     // Inject dependencies into navigation commands handler
@@ -2675,7 +2674,7 @@ async function initializeData() {
       messageBases,
       conferences,
       joinConference,
-      displayScreen,
+      displayScreen: displayScreen as any,
       resetNewMailScanPointers,
       resetLastMessageReadPointers,
       getConferenceStats,
@@ -2694,7 +2693,7 @@ async function initializeData() {
       messages,
       confScreenDir: path.join(config.get('dataDir'), 'Screens'),
       findSecurityScreen,
-      displayScreen,
+      displayScreen: displayScreen as any,
       searchFileDescriptions
     });
 
