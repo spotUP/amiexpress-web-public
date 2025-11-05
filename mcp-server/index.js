@@ -28,6 +28,11 @@ const DOCS = {
     description: 'Complete documentation index organized by role (Users/Sysops/Developers/Door-Developers)',
     mimeType: 'text/markdown'
   },
+  'current-status': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'CURRENT_STATUS.md'),
+    description: 'Current project status: what works, what\'s in progress, known issues',
+    mimeType: 'text/markdown'
+  },
   'user-guide': {
     path: path.join(PROJECT_ROOT, 'Documentation', '1-Users', 'USER_GUIDE.md'),
     description: 'Complete user guide for using the BBS (500+ lines)',
@@ -62,6 +67,30 @@ const DOCS = {
     path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'AMIGA_EMULATION.md'),
     description: 'AmigaOS documentation, vAmiga sources, and Amiga emulation details',
     mimeType: 'text/markdown'
+  },
+  'mci-codes': {
+    path: path.join(PROJECT_ROOT, 'Docs', 'MCI_CODES_TODO.md'),
+    description: 'Complete MCI codes implementation status (52/60+ codes, priorities, reference)',
+    mimeType: 'text/markdown'
+  }
+};
+
+// Large reference source files (loaded on-demand only)
+const SOURCES = {
+  'express-e': {
+    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'express.e'),
+    description: 'Original AmiExpress BBS source code in E language (35,000+ lines) - PRIMARY REFERENCE',
+    mimeType: 'text/plain'
+  },
+  'hydra-e': {
+    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'hydra.e'),
+    description: 'Hydra protocol implementation in E language',
+    mimeType: 'text/plain'
+  },
+  'acp-e': {
+    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'ACP.e'),
+    description: 'AmiExpress Control Panel source code',
+    mimeType: 'text/plain'
   }
 };
 
