@@ -205,14 +205,14 @@ export class DoorManager {
           name: amigaDoor.name || amigaDoor.command,
           filename: `${amigaDoor.command}.info`,
           type: 'amiga' as any,
-          command: amigaDoor.command } as any; const fixed2 = { ...temp2,
+          command: amigaDoor.command,
           location: amigaDoor.location,
           doorType: amigaDoor.type,
           size: doorSize,
           uploadDate: new Date(),
           installed: amigaDoor.installed,
           access: amigaDoor.access
-        });
+        } as any);
         console.log(`[Door Manager]   - ${amigaDoor.command}: ${amigaDoor.name || amigaDoor.location} (${doorSize} bytes)`);
       }
     } catch (error) {

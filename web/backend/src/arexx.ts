@@ -1843,10 +1843,10 @@ export class EnhancedAREXXEngine {
       await db.executeAREXXScript(script.id, {
         user: context.user,
         sessionId: context.sessionId,
-        command: undefined } as any; const fixed = { ...temp,
+        command: undefined,
         parameters: context.parameters || [],
         variables: Object.fromEntries(interpreter.getVariables())
-      });
+      } as any);
 
       return {
         success: result.success,

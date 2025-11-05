@@ -199,7 +199,7 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
       quiet: sess.user!.quietNode || false,
       subState: sess.subState || 'UNKNOWN',
       // Determine activity based on substate
-      activity: _getActivityFromSubState(sess.subState)
+      activity: _getActivityFromSubState(sess.subState as any)
     }));
 
   if (detailedOnlineUsers.length === 0) {

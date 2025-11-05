@@ -347,7 +347,7 @@ export class AREXXEngine {
       const result = await this.simulateScriptExecution(script, arexxContext);
 
       // Log execution
-      await db.executeAREXXScript(arexxContext as any);
+      await db.executeAREXXScript(arexxContext as any, {} as any);
 
       return result;
     } catch (error) {

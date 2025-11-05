@@ -880,7 +880,7 @@ export class FTNManager {
   // Get pending outbound messages
   async getPendingMessages(): Promise<FTNMessage[]> {
     // Query database for pending messages
-    return (await db.getFTNMessages('pending' as any)) as any;
+    return (await db.getFTNMessages('pending' as any, {} as any)) as any;
   }
 
   // Process incoming FTN packets from directory
@@ -927,10 +927,10 @@ export class FTNManager {
     cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
     // Get messages older than cutoff
-    const oldMessages = (await db.getFTNMessages('sent' as any)) as any;
+    const oldMessages = (await db.getFTNMessages('sent' as any, {} as any)) as any;
 
     // Filter by date (since we don't have a direct query for this)
-    const messagesToDelete = oldMessages.filter(msg => msg.date < cutoffDate);
+    const messagesToDelete = oldMessages.filter((msg: any) => msg.date < cutoffDate);
 
     for (const message of messagesToDelete) {
       try {

@@ -82,7 +82,7 @@ export class WebhookCommandsHandler {
     } else if (result.action?.startsWith('hotkey:')) {
       // Hotkey pressed - find matching item
       const hotkey = result.action.split(':')[1];
-      const item = menuData.items.find(i => i.label[0].toUpperCase() === hotkey);
+      const item = menuData.items.find((i: any) => i.label[0].toUpperCase() === hotkey);
       if (item) {
         await this.executeMenuAction(socket, session, item.action);
       } else {

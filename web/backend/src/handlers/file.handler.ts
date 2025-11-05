@@ -684,7 +684,7 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
         socket.emit('ansi-output', '\r\n');
 
         // Display each new file
-        newFiles.forEach(file => {
+        newFiles.forEach((file: any) => {
           const sizeKB = Math.ceil(file.size / 1024);
           const uploadDate = new Date(file.uploaddate).toLocaleDateString();
 
