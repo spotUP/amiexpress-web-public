@@ -60,7 +60,7 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
       ]));
 
       // Set state to wait for flagged download confirmation
-      session.subState = 'FLAGGED_DOWNLOAD_CONFIRM';
+      session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
       return;
     }
   }
@@ -85,7 +85,7 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
 
   // Set session state to logoff
   session.state = BBSState.AWAIT;
-  session.subState = 'LOGOFF';
+  session.subState = 'logoff' as any;
 
   // Emit disconnect event to close connection
   setTimeout(() => {

@@ -276,6 +276,11 @@ export interface BBSSession {
   olmNodeTarget?: number; // Target node number for OLM message
   olmBuffer?: string[]; // Buffer for incoming OLM message lines
   olmQueue?: string[]; // Queue of pending OLM messages to send
+
+  // Preference settings
+  ansiMode?: boolean; // ANSI mode preference
+  pagesAllowed?: boolean; // Whether user allows pages
+  quietMode?: boolean; // Quiet mode preference
 }
 
 // Conference and Message Base data structures (simplified)

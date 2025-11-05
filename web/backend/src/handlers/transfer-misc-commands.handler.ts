@@ -78,7 +78,7 @@ export function setTransferMiscCommandsDependencies(deps: {
  */
 export function handleZmodemUploadCommand(socket: any, session: BBSSession): void {
   // Check security - express.e:25609
-  if (!checkSecurity(session, ACSCode.UPLOAD)) {
+  if (!checkSecurity(session.user, ACSCode.UPLOAD)) {
     ErrorHandler.permissionDenied(socket, 'upload files', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -139,7 +139,7 @@ export function handleZmodemUploadCommand(socket: any, session: BBSSession): voi
  */
 export function handleSysopUploadCommand(socket: any, session: BBSSession, params: string = ''): void {
   // Check security - express.e:25661
-  if (!checkSecurity(session, ACSCode.SYSOP_COMMANDS)) {
+  if (!checkSecurity(session.user, ACSCode.SYSOP_COMMANDS)) {
     ErrorHandler.permissionDenied(socket, 'use sysop upload', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -221,7 +221,7 @@ export function handleNodeUptimeCommand(socket: any, session: BBSSession): void 
  */
 export async function handleVotingBoothCommand(socket: any, session: BBSSession): Promise<void> {
   // Check security - express.e:25701
-  if (!checkSecurity(session, ACSCode.VOTE)) {
+  if (!checkSecurity(session.user, ACSCode.VOTE)) {
     ErrorHandler.permissionDenied(socket, 'access voting booth', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -234,7 +234,7 @@ export async function handleVotingBoothCommand(socket: any, session: BBSSession)
   console.log('[ENV] Doors');
 
   // Check if user has modify vote permission (express.e:25704-25709)
-  const canModify = checkSecurity(session, ACSCode.MODIFY_VOTE);
+  const canModify = checkSecurity(session.user, ACSCode.MODIFY_VOTE);
 
   if (canModify) {
     // Sysop: Show vote maintenance menu
