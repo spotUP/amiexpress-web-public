@@ -144,7 +144,7 @@ export function handleJoinMessageBaseCommand(socket: any, session: BBSSession, p
     ]));
 
     // Wait for input
-    session.subState = 'JM_INPUT';
+    session.subState = LoggedOnSubState.JM_INPUT;
     session.tempData = { messageBaseSelect: true, currentConfBases };
     return;
   }
@@ -301,7 +301,7 @@ export async function handleConferenceMaintenanceCommand(socket: any, session: B
   session.tempData.cmMsgBase = session.currentMsgBase || 1;
 
   // Enter the conference maintenance menu loop
-  session.subState = 'CM_DISPLAY_MENU';
+  session.subState = LoggedOnSubState.CM_DISPLAY_MENU;
   await displayConferenceMaintenanceMenu(socket, session);
 }
 
@@ -395,12 +395,12 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
   switch (choice) {
     case '1': // Ratio
       socket.emit('ansi-output', '\x1b[0mRatio > ');
-      session.subState = 'CM_INPUT_RATIO';
+      session.subState = LoggedOnSubState.CM_INPUT_RATIO;
       return;
 
     case '2': // Ratio Type
       socket.emit('ansi-output', '\x1b[0mRatio Type > ');
-      session.subState = 'CM_INPUT_RATIO_TYPE';
+      session.subState = LoggedOnSubState.CM_INPUT_RATIO_TYPE;
       return;
 
     case '3': // Reset New Mail Scan Pointers - express.e:22797-22799
@@ -443,17 +443,17 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
 
     case 'B': // Modify next message number - express.e:22839-22844
       socket.emit('ansi-output', '\x1b[0mNext Message > ');
-      session.subState = 'CM_INPUT_HIGH_MSG';
+      session.subState = LoggedOnSubState.CM_INPUT_HIGH_MSG;
       return;
 
     case 'C': // Modify lowest message number - express.e:22845-22850
       socket.emit('ansi-output', '\x1b[0mLow Message  > ');
-      session.subState = 'CM_INPUT_LOW_MSG';
+      session.subState = LoggedOnSubState.CM_INPUT_LOW_MSG;
       return;
 
     case 'D': // Set conference capacity - express.e:22851-22859
       socket.emit('ansi-output', '\x1b[0mSize in records > ');
-      session.subState = 'CM_INPUT_CAPACITY';
+      session.subState = LoggedOnSubState.CM_INPUT_CAPACITY;
       return;
 
     case '\t': // TAB - exit - express.e:22924-22925
@@ -518,6 +518,6 @@ export async function handleCMNumericInput(socket: any, session: BBSSession, inp
     }
   }
 
-  session.subState = 'CM_DISPLAY_MENU';
+  session.subState = LoggedOnSubState.CM_DISPLAY_MENU;
   await displayConferenceMaintenanceMenu(socket, session);
 }

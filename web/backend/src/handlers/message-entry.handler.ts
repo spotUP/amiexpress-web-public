@@ -3,6 +3,7 @@
  * 1:1 port from express.e:10749+ enterMSG()
  */
 
+import { BBSSession } from '../index';
 import { AnsiUtil } from '../utils/ansi.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 

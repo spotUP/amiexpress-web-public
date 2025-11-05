@@ -332,7 +332,7 @@ function promptForFlagInput(socket: any, session: BBSSession): void {
     AnsiUtil.colorize('=none? ', 'cyan')
   );
 
-  session.subState = 'FLAG_INPUT';
+  session.subState = LoggedOnSubState.FLAG_INPUT;
   session.tempData = { flagOperation: 'prompt' };
 }
 
@@ -594,7 +594,7 @@ export function handleReadBulletinCommand(socket: any, session: BBSSession, para
     if (bulletinNum !== null) {
       _displayBulletin(socket, session, bulletinNum, nonStopDisplay);
       // Enter interactive loop
-      session.subState = 'BULLETIN_INPUT';
+      session.subState = LoggedOnSubState.BULLETIN_INPUT;
       session.bulletinContext = { nonStopDisplay };
       return;
     }
@@ -624,7 +624,7 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
     { text: '? ', color: 'white' }
   ]));
 
-  session.subState = 'BULLETIN_INPUT';
+  session.subState = LoggedOnSubState.BULLETIN_INPUT;
   session.bulletinContext = { showedHelp: true, nonStopDisplay: false };
 }
 

@@ -74,6 +74,7 @@ export enum LoggedOnSubState {
   READ_MESSAGES = 'read_messages',
   MSG_READER_NAV = 'msg_reader_nav',                    // Message reader navigation
   POST_MESSAGE = 'post_message',
+  BULLETIN_INPUT = 'bulletin_input',                    // Bulletin reading input
   POST_MESSAGE_TO = 'post_message_to',
   POST_MESSAGE_SUBJECT = 'post_message_subject',
   POST_MESSAGE_PRIVATE = 'post_message_private',
@@ -125,6 +126,9 @@ export enum LoggedOnSubState {
   CM_DISPLAY_MENU = 'cm_display_menu',                  // Conference mail display menu
   CM_INPUT_HIGH_MSG = 'cm_input_high_msg',              // Conference mail high message input
   CM_INPUT_LOW_MSG = 'cm_input_low_msg',                // Conference mail low message input
+  CM_INPUT_RATIO = 'cm_input_ratio',                    // Conference mail ratio input
+  CM_INPUT_RATIO_TYPE = 'cm_input_ratio_type',          // Conference mail ratio type input
+  CM_INPUT_CAPACITY = 'cm_input_capacity',              // Conference mail capacity input
 
   // Conference Flags (CF command) - express.e:24672-24841
   CF_FLAG_SELECT_INPUT = 'cf_flag_select_input',      // M/A/F/Z flag type selection

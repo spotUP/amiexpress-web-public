@@ -11,6 +11,7 @@ import { Socket } from 'socket.io';
 // Session type - using any for now since BBSSession is defined in index.ts
 type Session = any;
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { displayScreen } from './screen.handler';
 import { readDirFile, getDirFilePath, getHoldDirFilePath, DirFileEntry } from '../utils/dir-file-reader.util';
 import { parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../utils/dir-span.util';
 import { FileFlagManager } from '../utils/file-flag.util';
