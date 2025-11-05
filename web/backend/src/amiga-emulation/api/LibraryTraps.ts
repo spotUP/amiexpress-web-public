@@ -384,7 +384,7 @@ const EXEC_VECTORS: LibraryVector[] = [
   {
     offset: -30,  // LVO -30 (0xFFFFFFE2)
     name: 'Supervisor',
-    handler: (emu: any, lib: any, returnAddr: any) => {
+    handler: ((emu: any, lib: any, returnAddr: any) => {
       // Supervisor() - Execute a function in supervisor mode
       // Input: A5 = function pointer to execute
       // The function is called with return address on stack
@@ -397,7 +397,7 @@ const EXEC_VECTORS: LibraryVector[] = [
       // The function will execute and eventually RTS back to returnAddr
       emu.setRegister(16, a5);  // PC = supervisor function
 
-      // CRITICAL: Do NOT push return address - it's already on stack from JSR to Supervisor
+      // CRITICAL: DO NOT push return address - it's already on stack from JSR to Supervisor
       // The supervisor function will RTS to returnAddr (which handleTrap already popped)
       // So we need to push returnAddr back for the supervisor function to RTS to
       const sp = emu.getRegister(15);
@@ -408,7 +408,7 @@ const EXEC_VECTORS: LibraryVector[] = [
 
       // Return 0 - actual return value will come from supervisor function via D0
       return 0;
-    }
+    }) as any
   },
   {
     offset: -330,  // LVO -330 (0xFFFFFEB6)

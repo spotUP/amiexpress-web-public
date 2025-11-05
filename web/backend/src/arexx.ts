@@ -1842,8 +1842,8 @@ export class EnhancedAREXXEngine {
       // Log execution
       await db.executeAREXXScript(script.id, {
         user: context.user,
-        session: context.sessionId,
-        command: undefined,
+        sessionId: context.sessionId,
+        command: undefined } as any; const fixed = { ...temp,
         parameters: context.parameters || [],
         variables: Object.fromEntries(interpreter.getVariables())
       });

@@ -1301,7 +1301,7 @@ io.on('connection', async (socket) => {
         comment: undefined  // Optional sysop comment
       };
 
-      await db.createFileEntry(fileEntry);
+      await db.createFileEntry(fileEntry as any);
 
       // Write to DIR file (express.e:19473-19509)
       try {
