@@ -116,8 +116,8 @@ export class FileMaintenanceHandler {
     }
 
     // express.e:24927-24944 - Check if user has flagged files
-    const flagManager = new FileFlagManager();
-    const userFlags = flagManager.getFlags(session);
+    const flagManager = new FileFlagManager('', 0, 0);
+    const userFlags = flagManager.getAll();
 
     if (userFlags.length > 0) {
       socket.emit('ansi-output', 'You have flagged files, do you wish to work with these files ');
@@ -197,8 +197,8 @@ export class FileMaintenanceHandler {
 
     // express.e:24937-24943 - If yes, use flagged files
     if (response === 'Y' || response === 'YES' || response === '') {
-      const flagManager = new FileFlagManager();
-      const userFlags = flagManager.getFlags(session);
+      const flagManager = new FileFlagManager('', 0, 0);
+      const userFlags = flagManager.getAll();
       const flagFileList = userFlags.map(f => f.filename);
 
       session.tempData.fmUseFlagged = true;
@@ -479,8 +479,8 @@ export class FileMaintenanceHandler {
     socket.emit('ansi-output', '\r\n');
 
     if (response === 'Y' || response === 'YES' || response === '') {
-      const flagManager = new FileFlagManager();
-      flagManager.removeFlag(session, currentFile.filename);
+      const flagManager = new FileFlagManager('', 0, 0);
+      flagManager.removeFlag(currentFile.filename, session.currentConf);
       socket.emit('ansi-output', AnsiUtil.successLine(`Removed ${currentFile.filename} from flagged list`));
     }
 
