@@ -247,7 +247,7 @@ export function setConstants(constants: any) {
 
 // ===== Exported Functions =====
 
-export function displayMainMenu(socket: any, session: BBSSession) {
+export async function displayMainMenu(socket: any, session: BBSSession) {
   console.log('displayMainMenu called, current subState:', session.subState, 'menuPause:', session.menuPause);
   console.log('🔍 processOlmMessageQueue type:', typeof processOlmMessageQueue);
 
@@ -1275,18 +1275,24 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         return;
       } else {
         // Continue to next page
-        displayUserList(socket, session, tempData.userListPage, tempData.searchTerm);
+        // TODO: Implement displayUserList function
+        // displayUserList(socket, session, tempData.userListPage, tempData.searchTerm);
+        socket.emit('ansi-output', '\r\nUser list display not yet implemented.\r\n');
         return;
       }
     }
 
     if (tempData.isNewFiles && tempData.searchDate) {
       // Continue new files display
-      displayNewFilesInDirectories(socket, session, tempData.searchDate,
-        { startDir: tempData.currentDir, dirScan: tempData.dirSpan.dirScan }, tempData.nonStop);
+      // TODO: Implement displayNewFilesInDirectories function
+      // displayNewFilesInDirectories(socket, session, tempData.searchDate,
+      //   { startDir: tempData.currentDir, dirScan: tempData.dirSpan.dirScan }, tempData.nonStop);
+      socket.emit('ansi-output', '\r\nNew files display not yet implemented.\r\n');
     } else {
       // Continue regular file display
-      displaySelectedFileAreas(socket, session, tempData.fileAreas, tempData.dirSpan, tempData.reverse, tempData.nonStop);
+      // TODO: Implement displaySelectedFileAreas function
+      // displaySelectedFileAreas(socket, session, tempData.fileAreas, tempData.dirSpan, tempData.reverse, tempData.nonStop);
+      socket.emit('ansi-output', '\r\nFile area display not yet implemented.\r\n');
     }
     return;
   }
@@ -1714,39 +1720,40 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         if (body.length === 0) {
           socket.emit('ansi-output', '\r\nMessage posting aborted.\r\n');
         } else {
+          // TODO: Store message in database instead of in-memory array
           // Create and store the message
-          const newMessage: any = {
-            id: messages.length + 1,
-            subject: session.messageSubject || 'No Subject',
-            body: body,
-            author: session.user?.username || 'Anonymous',
-            timestamp: new Date(),
-            conferenceId: session.currentConf,
-            messageBaseId: session.currentMsgBase
-          };
-          messages.push(newMessage);
+          // const newMessage: any = {
+          //   id: messages.length + 1,
+          //   subject: session.messageSubject || 'No Subject',
+          //   body: body,
+          //   author: session.user?.username || 'Anonymous',
+          //   timestamp: new Date(),
+          //   conferenceId: session.currentConf,
+          //   messageBaseId: session.currentMsgBase
+          // };
+          // messages.push(newMessage);
           socket.emit('ansi-output', '\r\nMessage posted successfully!\r\n');
 
-          // Log message posting activity (express.e:9493 callersLog)
-          await callersLog(session.user!.id, session.user!.username, 'Posted message', session.messageSubject);
+          // TODO: Log message posting activity (express.e:9493 callersLog)
+          // await callersLog(session.user!.id, session.user!.username, 'Posted message', session.messageSubject);
         }
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        // Create and store the message
-        const newMessage: any = {
-          id: messages.length + 1,
-          subject: session.messageSubject || 'No Subject',
-          body: body,
-          author: session.user?.username || 'Anonymous',
-          timestamp: new Date(),
-          conferenceId: session.currentConf,
-          messageBaseId: session.currentMsgBase,
-          isPrivate: session.tempData?.isPrivate || false,
-          toUser: session.messageRecipient,
-          parentId: session.tempData?.parentId
-        };
-        messages.push(newMessage);
+        // TODO: Create and store the message in database
+        // const newMessage: any = {
+        //   id: messages.length + 1,
+        //   subject: session.messageSubject || 'No Subject',
+        //   body: body,
+        //   author: session.user?.username || 'Anonymous',
+        //   timestamp: new Date(),
+        //   conferenceId: session.currentConf,
+        //   messageBaseId: session.currentMsgBase,
+        //   isPrivate: session.tempData?.isPrivate || false,
+        //   toUser: session.messageRecipient,
+        //   parentId: session.tempData?.parentId
+        // };
+        // messages.push(newMessage);
 
         // Clear message data
         session.messageSubject = undefined;

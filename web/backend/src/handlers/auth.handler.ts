@@ -126,7 +126,8 @@ export class AuthHandler {
         uuCP: false,
         topUploadCPS: 0,
         topDownloadCPS: 0,
-        byteLimit: 0
+        byteLimit: 0,
+        userFlags: 0 // Default user flags
       });
 
       // Get the created user

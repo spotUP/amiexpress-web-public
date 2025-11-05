@@ -241,6 +241,29 @@ export interface BBSSession {
   // Phase 10: Message Pointer System (express.e:199-200, 4882-4973)
   lastMsgReadConf: number; // Last message manually read (confBase.confYM) - express.e:199
   lastNewReadConf: number; // Last message auto-scanned (confBase.confRead) - express.e:200
+
+  // Chat system properties
+  livechatUserList?: any[]; // List of users for live chat selection
+  livechatSelectedIndex?: number; // Selected user index in live chat
+  chatWithUsername?: string; // Username currently chatting with
+  pendingChatSessionId?: string; // Pending chat session ID
+  pagingInterval?: NodeJS.Timeout; // Interval for paging notifications
+  inChat?: boolean; // Whether user is currently in chat
+  chatSession?: any; // Active chat session object
+
+  // Group chat properties
+  userId?: string; // User ID for chat system
+  username?: string; // Username for chat system
+  previousState?: BBSState; // Previous state before entering chat
+  previousSubState?: LoggedOnSubState; // Previous substate before entering chat
+  currentRoomName?: string; // Current group chat room name
+
+  // File system properties
+  flaggedFiles?: any[]; // List of flagged files for batch download
+  expertMode?: boolean; // Expert mode flag for file display
+
+  // Bulletin system properties
+  bulletinContext?: any; // Context for bulletin display navigation
 }
 
 // Conference and Message Base data structures (simplified)
