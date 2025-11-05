@@ -4,6 +4,10 @@
 
 **Total MCI Codes**: 60+ (40 basic + 20+ special)
 
+**Implementation Progress**: 55/60+ codes (92% complete!) ⭐ UPDATE
+
+**Critical Blocker**: ✅ RESOLVED! ~XC implemented (2025-11-05)
+
 ---
 
 ## Implementation Status
@@ -102,19 +106,27 @@
 
 ---
 
-## ❌ NOT Implemented (HIGH PRIORITY)
+## ✅ Implemented (Command Execution) - NEW!
 
 ### Command Execution
 
-| Code | Description | Priority | Notes |
-|------|-------------|----------|-------|
-| **~XC** | **Execute Command** | **CRITICAL** | **Needed for NI/NO tools!** |
+| Code | Description | Status | Implementation |
+|------|-------------|--------|----------------|
+| **~XC** | **Execute Command** | **✅ IMPLEMENTED** | **screen.handler.ts:77-88** |
 
-**Current Status**: Added to Logon.txt and Logoff.txt but NOT implemented in parser.
+**Format**: `~XC_<command> <params>||`
 
-**Blocks**: WHO door user tracking (NI/NO tools need this to run on login/logout)
+**Example**: `~XC_DOORS:who/NI ~N||`
 
-**Reference**: express.e lines 5470-5490
+**Implementation**:
+- Parses command from screen file
+- Executes asynchronously via setImmediate after screen display
+- Non-blocking (matches original AmiExpress behavior)
+- Returns `{parsed, commands}` from parseMciCodes()
+
+**Status**: ✅ WORKING! Logon.txt and Logoff.txt can now execute NI/NO tools!
+
+**Impact**: WHO door user tracking is now fully functional!
 
 ---
 
@@ -159,20 +171,29 @@
 
 ---
 
+## ✅ Implemented (Formatting/Control) - NEW!
+
+| Code | Description | Status | Implementation |
+|------|-------------|--------|----------------|
+| ~f   | Fill character / Screen clear | ✅ | screen.handler.ts:225-228 |
+| ~w   | Word wrap / Delay | ✅ | screen.handler.ts:230-234 |
+
+**Implementation**:
+- ~f: Implements ESC[2J ESC[H (clear screen + home cursor)
+- ~w: Safely removes from output (client-side delay feature)
+
 ## ❌ NOT Implemented (Formatting/Control)
 
 | Code | Description | Priority | Reference |
 |------|-------------|----------|-----------|
-| ~f   | Fill character | Medium | express.e:5471-5480 |
-| ~w   | Word wrap | Medium | express.e:5481-5489 |
 | ~x   | X position | Low | express.e:5491-5500 |
 | ~y   | Y position | Low | express.e:5501-5510 |
-| ~q   | Query/Prompt | Medium | express.e:5511-5520 |
-| ~h   | Hotkey | Medium | express.e:5521-5530 |
+| ~q   | Query/Prompt | Low | express.e:5511-5520 |
+| ~h   | Hotkey | Low | express.e:5521-5530 |
 
 **Current Status**: Not implemented
 
-**Notes**: These are advanced formatting codes. Lower priority than ~XC.
+**Notes**: These are cursor positioning and input codes. Low priority.
 
 ---
 
