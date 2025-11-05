@@ -233,6 +233,30 @@ export function parseMciCodes(
   // We'll just remove it from output (delay would be client-side)
   parsed = parsed.replace(/~w\d*\|/g, '');
 
+  // ~x - X position (cursor column) (express.e:5491-5500)
+  // Format: ~x<number>| - moves cursor to column <number>
+  // ANSI: ESC[<col>G (move to column)
+  const xRegex = /~x(\d+)\|/g;
+  parsed = parsed.replace(xRegex, (match, col) => {
+    const colNum = parseInt(col, 10);
+    if (colNum >= 0) {
+      return `\x1b[${colNum}G`;  // ANSI: Move to column
+    }
+    return '';
+  });
+
+  // ~y - Y position (cursor row) (express.e:5501-5510)
+  // Format: ~y<number>| - moves cursor to row <number>
+  // ANSI: ESC[<row>;H (move to row, column 1)
+  const yRegex = /~y(\d+)\|/g;
+  parsed = parsed.replace(yRegex, (match, row) => {
+    const rowNum = parseInt(row, 10);
+    if (rowNum >= 0) {
+      return `\x1b[${rowNum};H`;  // ANSI: Move to row
+    }
+    return '';
+  });
+
   // Legacy % codes (for compatibility)
   parsed = parsed.replace(/%B/g, bbsName);
   parsed = parsed.replace(/%S/g, sysopName);
