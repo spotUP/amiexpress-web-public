@@ -8,7 +8,7 @@
  * WITHOUT full hardware emulation or ROM boot.
  */
 
-import { MoiraEmulator } from './MoiraEmulator';
+import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import * as fs from 'fs';
 import * as path from 'path';
 

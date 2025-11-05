@@ -61,7 +61,7 @@ export class FileListingHandler {
     } else {
       // Prompt user for directory (express.e:27646-27647)
       // Display FILEHELP screen if available
-      await displayScreen(socket, session, 'FILEHELP', false); // Don't pause for file help
+      await displayScreen(socket, session, 'FILEHELP'); // Don't pause for file help
 
       const prompt = getDirSpanPrompt(maxDirs, this.canAccessHold(session));
       socket.emit('ansi-output', prompt);
@@ -201,8 +201,8 @@ export class FileListingHandler {
 
       if (entries.length === 0) {
         socket.emit('ansi-output', '\x1b[33mNo files in this directory.\x1b[0m\r\n');
-        const shouldContinue = await flagPause(socket, session, 1);
-        if (!shouldContinue) {
+        const shouldContinue2 = await flagPause(socket, session, 1);
+        if (!shouldContinue2) {
           session.subState = LoggedOnSubState.DISPLAY_MENU;
           return;
         }
@@ -215,8 +215,8 @@ export class FileListingHandler {
           await this.displayFileEntry(socket, session, entry, hasNonStop);
 
           // Check for pause after each entry (express.e:27613)
-          const shouldContinue = await flagPause(socket, session, entry.rawLines.length);
-          if (!shouldContinue) {
+          const shouldContinue3 = await flagPause(socket, session, entry.rawLines.length);
+          if (!shouldContinue3) {
             session.subState = LoggedOnSubState.DISPLAY_MENU;
             return;
           }
@@ -224,8 +224,8 @@ export class FileListingHandler {
       }
 
       socket.emit('ansi-output', '\r\n');
-      const shouldContinue = await flagPause(socket, session, 1);
-      if (!shouldContinue) {
+      const shouldContinue4 = await flagPause(socket, session, 1);
+      if (!shouldContinue4) {
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         return;
       }

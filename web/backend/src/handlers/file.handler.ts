@@ -631,7 +631,7 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
 
   // Get file areas for current conference from database
   const conferenceId = session.currentConf || 1;
-  const areas = await _db.getFileAreas(conferenceId);
+  const areas = await db.getFileAreas(conferenceId);
 
   if (areas.length === 0) {
     socket.emit('ansi-output', '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
@@ -669,7 +669,7 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
         ORDER BY uploaddate DESC
       `;
 
-      const result = await _db.query(query, [area.id, searchDate]);
+      const result = await db.query(query, [area.id, searchDate]);
       const newFiles = result.rows;
 
       if (newFiles.length > 0) {

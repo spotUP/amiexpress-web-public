@@ -14,7 +14,7 @@
  */
 
 import { Socket } from 'socket.io';
-import { BBSSession, LoggedOnSubState } from '../bbs/session';
+import { BBSSession, LoggedOnSubState } from '../index';
 import { Door, DoorSession } from '../types';
 
 // Game state interface

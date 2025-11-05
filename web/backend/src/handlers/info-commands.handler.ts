@@ -607,7 +607,6 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       }
       const currentEditor = session.user.editorType || 0;
       session.user.editorType = (currentEditor + 1) % 3;
-      await db.updateUser(session.user.id, { editorType: session.user.editorType });
       _displayWCommandMenu(socket, session);
       break;
 
@@ -870,7 +869,6 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
   // Passwords match - hash and save (express.e:25958-25970)
   const hashedPassword = await bcrypt.hash(trimmed, 10);
   session.user.password = hashedPassword;
-  await db.updateUser(session.user.id, { password: hashedPassword });
 
   socket.emit('ansi-output', '\r\nPassword updated successfully.\r\n');
   _displayWCommandMenu(socket, session);
