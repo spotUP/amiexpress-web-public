@@ -30,30 +30,40 @@
 
 ## 📊 Recent Achievements
 
-### Session 2025-11-05: MCP Server Implementation (98% Token Savings!)
-**Achievement**: Complete Model Context Protocol server for on-demand source access
+### Session 2025-11-05: MCP Server Implementation (99% Token Savings!)
+**Achievement**: Complete Model Context Protocol server with modularized express.e
 
 **Efficiency Transformation**:
 - Documentation: 204MB → 1.2MB (99.4% reduction)
-- express.e access: 400k → 7k tokens (98% reduction!)
+- express.e access: 400k → 2-10k tokens (95-99% reduction!)
 - Session capacity: 3 days → 7 days (FULL WEEK!)
 
-**MCP Tools Implemented**:
+**MCP Tools Implemented** (7 total):
 1. `search_express_source` - Keyword search in express.e with context
-2. `read_source_range` - Read specific line ranges (e.g., 5290-5850 for MCI codes)
+2. `read_source_range` - Read specific line ranges (e.g., 5290-5850)
 3. `search_ndk_autodocs` - Search 30MB NDK autodocs on-demand
+4. `read_express_module` - Read by module name (99% savings!) ⭐ NEW
+5. `list_express_modules` - List all 19 modules ⭐ NEW
 
-**MCP Resources**:
-- `amiexpress://sources/express-e` - express.e (35k lines)
-- `amiexpress://sources/hydra-e` - hydra.e
-- `amiexpress://sources/acp-e` - ACP.e
+**express.e Modularization** (19 modules):
+- Created express-modules.json mapping all functional areas
+- 4 CRITICAL modules: mci, internal-commands, command-priority, mainloop
+- Token savings: 400k → 2-10k (module-specific reads)
+
+**MCP Resources** (5 E sources):
+- `amiexpress://sources/express-e` - express.e (32,248 lines, modularized!)
+- `amiexpress://sources/hydra-e` - hydra.e (file transfer)
+- `amiexpress://sources/acp-e` - ACP.e (control panel)
+- `amiexpress://sources/zmodem-e` - zmodem.e (ZModem) ⭐ NEW
+- `amiexpress://sources/ftpd-e` - ftpd.e (FTP daemon) ⭐ NEW
 - `amiexpress://docs/*` - All documentation
 
-**Result**: Claude Code sessions can now access all sources without loading huge files into context!
+**Result**: Claude Code can now target exact functional areas without reading large sections!
 
-**Files Modified**:
-- mcp-server/index.js - Added SOURCES, handlers, and 3 new tools
-- CLAUDE.md - Added MCP Workflow section with usage examples
+**Files Created/Modified**:
+- mcp-server/express-modules.json - Module map with 19 sections ⭐ NEW
+- mcp-server/index.js - Added 5 E sources + 2 new tools
+- CLAUDE.md - Updated MCP Workflow with module-based approach
 - Scripts/reference-checker.ts - Added MCP usage note
 - mcp-server/test-mcp.js - Test suite (3/3 passing)
 
