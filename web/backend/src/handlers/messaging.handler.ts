@@ -7,7 +7,7 @@
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
-import { ACSCode } from '../constants/acs-codes';
+import { ACSPermission } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
@@ -58,7 +58,7 @@ export async function handleReadMessagesFullCommand(
   params: string = ''
 ): Promise<void> {
   // Check security permission - express.e:25519
-  if (!checkSecurity(session.user, ACSCode.READ_MESSAGE)) {
+  if (!checkSecurity(session.user, ACSPermission.READ_MESSAGE)) {
     ErrorHandler.permissionDenied(socket, 'read messages', {
       nextState: LoggedOnSubState.DISPLAY_CONF_BULL
     });
@@ -159,7 +159,7 @@ function displayShortHelp(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize('gain', 'cyan'));
   socket.emit('ansi-output', '\r\n');
 
-  if (checkSecurity(session.user, ACSCode.DELETE_MESSAGE)) {
+  if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
     socket.emit('ansi-output', AnsiUtil.colorize('D', 'yellow'));
     socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
     socket.emit('ansi-output', AnsiUtil.colorize('elete Message', 'cyan'));
@@ -194,7 +194,7 @@ function displayShortHelp(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize(' )', 'green'));
   socket.emit('ansi-output', ' >: ');
 
-  session.subState = 'MSG_READER_NAV';
+  session.subState = LoggedOnSubState.MSG_READER_NAV;
 }
 
 /**
@@ -211,7 +211,7 @@ function displayFullHelp(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize('gain', 'cyan'));
   socket.emit('ansi-output', '\r\n');
 
-  if (checkSecurity(session.user, ACSCode.DELETE_MESSAGE)) {
+  if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
     socket.emit('ansi-output', AnsiUtil.colorize('D', 'yellow'));
     socket.emit('ansi-output', AnsiUtil.colorize('>', 'green'));
     socket.emit('ansi-output', AnsiUtil.colorize('elete Message', 'cyan'));
@@ -256,7 +256,7 @@ function displayFullHelp(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize(' )', 'green'));
   socket.emit('ansi-output', ' >: ');
 
-  session.subState = 'MSG_READER_NAV';
+  session.subState = LoggedOnSubState.MSG_READER_NAV;
 }
 
 /**
@@ -275,7 +275,7 @@ function displayMessageNavigationPrompt(socket: any, session: BBSSession): void 
   socket.emit('ansi-output', AnsiUtil.colorize('Msg. Options: ', 'green'));
   socket.emit('ansi-output', AnsiUtil.colorize('A', 'yellow'));
 
-  if (checkSecurity(session.user, ACSCode.DELETE_MESSAGE)) {
+  if (checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
     socket.emit('ansi-output', AnsiUtil.colorize(',', 'cyan'));
     socket.emit('ansi-output', AnsiUtil.colorize('D', 'yellow'));
   }
@@ -304,7 +304,7 @@ function displayMessageNavigationPrompt(socket: any, session: BBSSession): void 
   socket.emit('ansi-output', ' >: ');
 
   // Set state for input
-  session.subState = 'MSG_READER_NAV';
+  session.subState = LoggedOnSubState.MSG_READER_NAV;
 }
 
 /**
@@ -399,7 +399,7 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
   }
 
   // D - Delete message - express.e:11113-11121
-  if (command === 'D' && checkSecurity(session.user, ACSCode.DELETE_MESSAGE)) {
+  if (command === 'D' && checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)) {
     const msg = messages[currentIndex];
 
     // Check if user can delete: public message OR message addressed to user
@@ -505,7 +505,7 @@ export function handleEnterMessageFullCommand(
   params: string = ''
 ): void {
   // Check security permission - express.e:24861
-  if (!checkSecurity(session.user, ACSCode.ENTER_MESSAGE)) {
+  if (!checkSecurity(session.user, ACSPermission.ENTER_MESSAGE)) {
     ErrorHandler.permissionDenied(socket, 'post messages', {
       nextState: LoggedOnSubState.DISPLAY_CONF_BULL
     });
