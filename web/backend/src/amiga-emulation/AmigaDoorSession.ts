@@ -78,6 +78,11 @@ export class AmigaDoorSession {
       return Promise.resolve(false);
     }
 
+    // Null check for emulator
+    if (!this.emulator) {
+      return Promise.resolve(false);
+    }
+
     // Read instruction at PC to check if it's JSR (d16,A6)
     const op0 = this.emulator.readMemory(pc);
     const op1 = this.emulator.readMemory(pc + 1);
@@ -699,7 +704,7 @@ export class AmigaDoorSession {
     }
     // JSR
     if (opcode === 0x4EB9 || (hi === 0x4E && (lo & 0xC0) === 0x80)) {
-      const target = this.emulator.readMemory32(pc + 2);
+      const target = this.emulator?.readMemory32(pc + 2) || 0;
       return `JSR 0x${target.toString(16)}`;
     }
     // RTS

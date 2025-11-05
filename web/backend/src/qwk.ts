@@ -43,7 +43,7 @@ export class QWKManager {
 
       // Store messages in database
       for (const message of messages) {
-        await db.createQWKMessage({ ...message, packetId });
+        await db.createQWKMessage({ ...message, packetId } as any);
       }
 
       // Update packet status
@@ -432,8 +432,8 @@ export class QWKManager {
   async getAvailablePackets(userId: string): Promise<QWKPacket[]> {
     // Query database for completed packets ready for download
     // In a real implementation, this would filter by user permissions
-    const packets = await db.getQWKPacket({ status: 'completed' });
-    return packets;
+    const packets = await db.getQWKPacket('completed') as any;
+    return (packets || []) as any;
   }
 
   // Mark packet as downloaded
@@ -488,7 +488,7 @@ export class QWKManager {
     const fs = require('fs');
     const path = require('path');
 
-    for (const packet of oldPackets) {
+    for (const packet of (oldPackets || []) as any) {
       try {
         // Delete file if it exists
         const filePath = path.join(this.qwkPath, packet.filename);
