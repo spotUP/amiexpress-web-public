@@ -33,14 +33,19 @@ export function setConferences(confs: Conference[]) {
  * @param location - BBS location for %L variable
  * @returns Parsed content with MCI codes replaced
  */
+/**
+ * Parse MCI codes and return both parsed content and commands to execute
+ * Returns tuple: [parsedContent, commandsToExecute]
+ */
 export function parseMciCodes(
   content: string,
   session: BBSSession,
   bbsName: string = 'AmiExpress-Web',
   sysopName: string = 'Sysop',
   location: string = 'The Internet'
-): string {
+): { parsed: string; commands: string[] } {
   let parsed = content;
+  const commandsToExecute: string[] = [];
 
   // Get user data safely
   const user = session.user || {};
@@ -68,6 +73,20 @@ export function parseMciCodes(
   const timeStr = `${hours}:${minutes}:${seconds}`;
 
   // Process multi-character MCI codes FIRST to avoid collisions
+
+  // ~XC - Execute Command (CRITICAL for NI/NO tools)
+  // Format: ~XC_<command> <params>||
+  // Example: ~XC_DOORS:who/NI ~N||
+  const xcRegex = /~XC_([^\|]+)\|\|/g;
+  let xcMatch;
+  while ((xcMatch = xcRegex.exec(parsed)) !== null) {
+    const commandStr = xcMatch[1];
+    // Store command for async execution after screen display
+    commandsToExecute.push(commandStr.trim());
+    // Remove the ~XC code from output (silent execution)
+    parsed = parsed.replace(xcMatch[0], '');
+  }
+
   // Conference/Message Board Lists (express.e:5588-5620)
   if (parsed.includes('~CL.')) {
     let confList = '';
@@ -203,6 +222,17 @@ export function parseMciCodes(
   parsed = parsed.replace(/~n8\|/g, '\x1b[0m');   // Reset
   parsed = parsed.replace(/~n9\|/g, '\x1b[0m');   // Normal (reset)
 
+  // ~f - Fill character (express.e:5471-5480)
+  // Format: ~f or ~f<char> - clears screen or fills with character
+  // For now, implement ~f as screen clear
+  parsed = parsed.replace(/~f\|/g, '\x1b[2J\x1b[H');  // Clear screen + home cursor
+
+  // ~w - Word wrap / Delay (express.e:5481-5489)
+  // Format: ~w or ~w<ms> - delay/pause
+  // In screen files, this is typically ignored or minimal delay
+  // We'll just remove it from output (delay would be client-side)
+  parsed = parsed.replace(/~w\d*\|/g, '');
+
   // Legacy % codes (for compatibility)
   parsed = parsed.replace(/%B/g, bbsName);
   parsed = parsed.replace(/%S/g, sysopName);
@@ -215,7 +245,7 @@ export function parseMciCodes(
   parsed = parsed.replace(/%N/g, '1');
   parsed = parsed.replace(/%C/g, conferences.length.toString());
 
-  return parsed;
+  return { parsed, commands: commandsToExecute };
 }
 
 /**
@@ -304,8 +334,9 @@ export function displayScreen(socket: any, session: BBSSession, screenName: stri
   const content = loadScreenFile(screenName, session.currentConf);
 
   if (content) {
-    // Parse MCI codes
-    let parsed = parseMciCodes(content, session);
+    // Parse MCI codes (now returns parsed content + commands to execute)
+    const { parsed: mciParsed, commands } = parseMciCodes(content, session);
+    let parsed = mciParsed;
 
     // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
     parsed = addAnsiEscapes(parsed);
@@ -316,6 +347,26 @@ export function displayScreen(socket: any, session: BBSSession, screenName: stri
 
     // Send to client
     socket.emit('ansi-output', parsed);
+
+    // Execute any ~XC commands found in screen file (async, non-blocking)
+    if (commands.length > 0) {
+      console.log(`[displayScreen] Scheduling ${commands.length} commands from screen file ${screenName}`);
+      const { handleCommand } = require('./command.handler');
+
+      // Execute commands asynchronously after screen display (non-blocking)
+      // This matches original AmiExpress behavior - screen shows THEN commands run
+      setImmediate(async () => {
+        for (const commandStr of commands) {
+          console.log(`[displayScreen] Executing: ${commandStr}`);
+          // Parse command string (e.g., "DOORS:who/NI ~N" with params)
+          try {
+            await handleCommand(socket, session, commandStr);
+          } catch (error) {
+            console.error(`[displayScreen] Error executing command ${commandStr}:`, error);
+          }
+        }
+      });
+    }
 
     // If displaying MENU and user is sysop, append sysop commands
     if (screenName.toUpperCase() === 'MENU' && session.user && session.user.secLevel >= 255) {
