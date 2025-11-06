@@ -670,14 +670,19 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       const { handleOlmNodeInput } = require('./olm.handler');
       await handleOlmNodeInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
+    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
+      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
+        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
+        // This moves cursor back, overwrites char with space, moves cursor back again
+        socket.emit('ansi-output', '\b \b');
       }
+      // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Client handles character echo
+      // Echo character back to terminal (express.e:2342)
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -699,14 +704,19 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       const { handleOlmComposeInput } = require('./olm.handler');
       await handleOlmComposeInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
+    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
+      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
+        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
+        // This moves cursor back, overwrites char with space, moves cursor back again
+        socket.emit('ansi-output', '\b \b');
       }
+      // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Client handles character echo
+      // Echo character back to terminal (express.e:2342)
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -1501,14 +1511,19 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       session.inputBuffer = '';
       socket.emit('ansi-output', '\r\n'); // Move to next line
       await handleMessageBodyInput(socket, session, line);
-    } else if (data === '\x7f') { // Backspace
+    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
+      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
+        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
+        // This moves cursor back, overwrites char with space, moves cursor back again
+        socket.emit('ansi-output', '\b \b');
       }
+      // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Client handles character echo
+      // Echo character back to terminal (express.e:2342)
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -2321,14 +2336,19 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         displayMainMenu(socket, session);
       }
-    } else if (data === '\x7f') { // Backspace
+    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
+      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
+        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
+        // This moves cursor back, overwrites char with space, moves cursor back again
+        socket.emit('ansi-output', '\b \b');
       }
+      // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Client handles character echo
+      // Echo character back to terminal (express.e:2342)
+      socket.emit('ansi-output', data);
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {

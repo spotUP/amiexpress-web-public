@@ -833,7 +833,7 @@ io.on('connection', async (socket) => {
         // User exists, authenticate with password
         user = await db.authenticateUser(data.username, data.password);
         if (!user) {
-          // express.e:29670+ - Invalid password counts as retry
+          // express.e:29209 & 29343 - Invalid password message with linebreak
           session.loginRetryCount++;
           console.log(`Login retry count: ${session.loginRetryCount}/5 (invalid password)`);
 
@@ -845,7 +845,8 @@ io.on('connection', async (socket) => {
             return;
           }
 
-          socket.emit('login-failed', 'Invalid password');
+          // express.e:29209 - aePuts('Invalid PassWord\b\n')
+          socket.emit('login-failed', 'Invalid PassWord\r\n');
           return;
         }
 

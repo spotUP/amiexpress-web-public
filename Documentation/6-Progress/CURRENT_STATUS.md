@@ -1,9 +1,21 @@
 # AmiExpress-Web Current Status
-**Last Updated**: 2025-11-06
+**Last Updated**: 2025-11-06 (Session: UX Fixes)
 
 ---
 
 ## 🎯 Current State
+
+### Latest Session (2025-11-06): UX Improvements ✅
+- **Server Management**: Replaced broken scripts with reliable startup system
+  - New: `dev/scripts/kill-servers.sh` (port-based killer with verification)
+  - New: `dev/scripts/start-servers.sh` (sequential startup, absolute paths)
+  - Removed: 5 broken scripts that spawned duplicate instances
+- **Backspace Fix**: Implemented 1:1 with express.e:2304-2320
+  - Backend checks `inputBuffer.length > 0` before allowing backspace
+  - Sends proper `\b \b` sequence (backspace-space-backspace)
+  - Prevents prompt erasure by ignoring backspace when buffer empty
+- **Login Error Fix**: Added linebreak to "Invalid PassWord" message (express.e:29209)
+  - Message now includes `\r\n` so next prompt appears on new line
 
 ### What's Working ✅
 - **Amiga Door Execution**: Complete architectural rewrite - doors load, execute, and exit cleanly

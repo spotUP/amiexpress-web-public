@@ -813,6 +813,10 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   socket.emit('ansi-output', '\x1b[32mAvailable Upload Space:\x1b[0m\r\n');
   socket.emit('ansi-output', '1,000,000 bytes available\r\n\r\n');
 
+  // express.e:19016 - "Filename lengths above 12 are not allowed."
+  socket.emit('ansi-output', 'Filename lengths above 12 are not allowed.\r\n');
+  socket.emit('ansi-output', '\x1b[33mYou can select multiple files for batch upload.\x1b[0m\r\n\r\n');
+
   // Display file areas for upload
   socket.emit('ansi-output', '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
   currentFileAreas.forEach((area, index) => {
@@ -822,7 +826,7 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // Prompt for file area selection
   socket.emit('ansi-output', '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
   session.subState = LoggedOnSubState.FILES_SELECT_AREA;
-  session.tempData = { uploadMode: true, fileAreas: currentFileAreas };
+  session.tempData = { uploadMode: true, fileAreas: currentFileAreas, batchUpload: true };
 }
 
 export function displayDownloadInterface(socket: any, session: BBSSession, params: string) {
@@ -851,6 +855,16 @@ export function displayDownloadInterface(socket: any, session: BBSSession, param
 
   // Display current protocol (simplified)
   socket.emit('ansi-output', '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
+
+  // express.e:20031-20033 - "Space between filenames. Wildcards permitted."
+  socket.emit('ansi-output', 'Space between filenames.  ');
+  // Check ACS_FILE_EXPANSION for wildcard support (express.e:20032)
+  const { checkSecurity } = require('../utils/acs.util');
+  const { ACSPermission } = require('../constants/acs-permissions');
+  if (!checkSecurity(user, ACSPermission.FILE_EXPANSION)) {
+    socket.emit('ansi-output', 'No ');
+  }
+  socket.emit('ansi-output', 'Wildcards permitted.\r\n\r\n');
 
   // Display file areas for download
   socket.emit('ansi-output', '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
@@ -943,11 +957,15 @@ export function startFileUpload(socket: any, session: BBSSession, fileArea: any)
   };
 
   // Trigger file picker immediately (web-friendly approach)
+  // Check if batch upload is enabled from tempData
+  const isBatchUpload = session.tempData?.batchUpload || false;
+
   socket.emit('show-file-upload', {
     accept: '*/*',
     maxSize: 10 * 1024 * 1024, // 10MB max
     uploadUrl: '/api/upload',
-    fieldName: 'file'
+    fieldName: 'file',
+    multiple: isBatchUpload  // Enable HTML5 multiple file selection for batch uploads
   });
 
   session.subState = LoggedOnSubState.FILES_UPLOAD;

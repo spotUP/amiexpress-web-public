@@ -66,8 +66,9 @@ export class DownloadHandler {
   }
 
   /**
-   * Download a file - main download logic
+   * Download a file or multiple files - main download logic
    * Port from express.e:20075+ (downloadAFile)
+   * Supports batch downloads: space-separated filenames or wildcards
    */
   private static async downloadAFile(
     socket: Socket,
@@ -75,62 +76,89 @@ export class DownloadHandler {
     params: string
   ): Promise<string> {
 
-    // Parse parameters or prompt for filename
-    let filename = params.trim();
+    // Parse parameters or prompt for filename(s)
+    let filenameInput = params.trim();
 
-    if (!filename) {
+    if (!filenameInput) {
       // No filename provided - prompt user - express.e:20135+
-      socket.emit('ansi-output', '\r\n\x1b[36mFilename to download: \x1b[0m');
+      socket.emit('ansi-output', '\r\n\x1b[36mFilename(s) to download (space-separated): \x1b[0m');
       session.subState = LoggedOnSubState.DOWNLOAD_FILENAME_INPUT;
       session.tempData = { waitingForDownloadFilename: true };
       return 'SUCCESS';
     }
 
-    // Validate filename - express.e:20136-20155
-    if (!this.isValidFilename(filename)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid filename.\x1b[0m\r\n');
+    // express.e:20037-20055 - Parse multiple filenames (space-separated)
+    // Split by spaces to get individual filenames
+    const filenames = filenameInput.split(/\s+/).filter(f => f.length > 0);
+    console.log(`[DOWNLOAD] Processing ${filenames.length} filename(s):`, filenames);
+
+    // Build file list (express.e:20037-20090 - addFlagItems logic)
+    const fileList: any[] = [];
+
+    for (const filename of filenames) {
+      // Validate filename - express.e:20136-20155
+      if (!this.isValidFilename(filename)) {
+        socket.emit('ansi-output', `\r\n\x1b[31mInvalid filename: ${filename}\x1b[0m\r\n`);
+        continue;
+      }
+
+      // Check if wildcards are used without permission - express.e:20140-20145
+      if (this.hasWildcards(filename) && !checkSecurity(session.user, ACSPermission.FILE_EXPANSION)) {
+        socket.emit('ansi-output', `\r\n\x1b[31mYou may not include wildcards: ${filename}\x1b[0m\r\n`);
+        continue;
+      }
+
+      // Search for files matching this pattern (handles wildcards)
+      const matchingFiles = await this.findFilesInConference(
+        config.get('dataDir'),
+        session.currentConf || 1,
+        filename
+      );
+
+      if (matchingFiles.length === 0) {
+        socket.emit('ansi-output', `\r\n\x1b[31mFile not found: ${filename}\x1b[0m\r\n`);
+        continue;
+      }
+
+      fileList.push(...matchingFiles);
+    }
+
+    if (fileList.length === 0) {
+      socket.emit('ansi-output', '\r\n\x1b[31mNo files found to download.\x1b[0m\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return 'FAILURE';
     }
 
-    // Check if wildcards are used without permission - express.e:20140-20145
-    if (this.hasWildcards(filename) && !checkSecurity(session.user, ACSPermission.FILE_EXPANSION)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mYou may not include any special symbols\x1b[0m\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return 'FAILURE';
+    // express.e:20066 - "Checking..."
+    if (fileList.length > 1) {
+      socket.emit('ansi-output', '\r\n\x1b[36mChecking...\x1b[0m\r\n');
     }
 
-    // Check if file exists in conference
-    const fileInfo = await this.findFileInConference(
-      config.get('dataDir'),
-      session.currentConf || 1,
-      filename
-    );
-
-    if (!fileInfo) {
-      socket.emit('ansi-output', '\r\n\x1b[31mFile not found.\x1b[0m\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return 'FAILURE';
-    }
+    // Calculate total size for ratio check
+    const totalSize = fileList.reduce((sum, file) => sum + file.size, 0);
 
     // Check ratio requirements - express.e:20085-20095, 19823+
-    const ratioCheck = await checkDownloadRatios(session.user, fileInfo.size);
+    const ratioCheck = await checkDownloadRatios(session.user, totalSize);
     if (!ratioCheck.canDownload) {
       socket.emit('ansi-output', `\r\n\x1b[31m${ratioCheck.errorMessage}\x1b[0m\r\n`);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return 'FAILURE';
     }
 
-    // Display file info and confirmation prompt
-    socket.emit('ansi-output', `\r\n\x1b[32mFile: ${fileInfo.name}\x1b[0m\r\n`);
-    socket.emit('ansi-output', `\x1b[32mSize: ${fileInfo.size} bytes\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[36mDownload this file? (Y/N): \x1b[0m');
+    // Display file list
+    socket.emit('ansi-output', `\r\n\x1b[32mFiles to download (${fileList.length}):\x1b[0m\r\n`);
+    fileList.forEach((file, index) => {
+      socket.emit('ansi-output', `  ${index + 1}. ${file.name} (${file.size} bytes)\r\n`);
+    });
+    socket.emit('ansi-output', `\r\n\x1b[32mTotal size: ${totalSize} bytes\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\r\n\x1b[36mDownload these files? (Y/N): \x1b[0m');
 
     // Set state to wait for confirmation
     session.subState = LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT;
     session.tempData = {
       waitingForDownloadConfirm: true,
-      downloadFile: fileInfo
+      downloadFileList: fileList,
+      downloadBatch: fileList.length > 1
     };
 
     return 'SUCCESS';
@@ -169,13 +197,18 @@ export class DownloadHandler {
   ): Promise<void> {
     if (session.tempData?.waitingForDownloadConfirm) {
       session.tempData.waitingForDownloadConfirm = false;
-      const fileInfo = session.tempData.downloadFile;
+      const fileList = session.tempData.downloadFileList || [session.tempData.downloadFile];
+      const isBatch = session.tempData.downloadBatch || false;
 
       const answer = input.trim().toUpperCase();
 
       if (answer === 'Y' || answer === 'YES') {
-        // User confirmed - initiate download
-        await this.initiateDownload(socket, session, fileInfo);
+        // User confirmed - initiate download(s)
+        if (isBatch) {
+          await this.initiateBatchDownload(socket, session, fileList);
+        } else {
+          await this.initiateDownload(socket, session, fileList[0]);
+        }
       } else {
         // User cancelled
         socket.emit('ansi-output', '\r\n\x1b[33mDownload cancelled.\x1b[0m\r\n');
@@ -183,11 +216,13 @@ export class DownloadHandler {
       }
 
       session.tempData.downloadFile = null;
+      session.tempData.downloadFileList = null;
+      session.tempData.downloadBatch = false;
     }
   }
 
   /**
-   * Initiate the actual download
+   * Initiate the actual download (single file)
    */
   private static async initiateDownload(
     socket: Socket,
@@ -231,14 +266,75 @@ export class DownloadHandler {
   }
 
   /**
-   * Find file in conference directories
+   * Initiate batch download (multiple files)
+   * Port from express.e:15571-15720 (downloadFiles)
+   */
+  private static async initiateBatchDownload(
+    socket: Socket,
+    session: BBSSession,
+    fileList: any[]
+  ): Promise<void> {
+    socket.emit('ansi-output', '\r\n\x1b[32mInitiating batch download...\x1b[0m\r\n');
+
+    // Send all files to client for download
+    for (let i = 0; i < fileList.length; i++) {
+      const fileInfo = fileList[i];
+      const downloadUrl = `/api/download/${fileInfo.confNum}/${fileInfo.dirNum}/${encodeURIComponent(fileInfo.name)}`;
+
+      socket.emit('ansi-output', `\r\n\x1b[36m[${i + 1}/${fileList.length}] ${fileInfo.name}\x1b[0m\r\n`);
+
+      // Send download event to client
+      socket.emit('download-file', {
+        filename: fileInfo.name,
+        size: fileInfo.size,
+        url: downloadUrl,
+        path: fileInfo.fullPath,
+        batchIndex: i,
+        batchTotal: fileList.length
+      });
+
+      // Log download activity
+      if (session.user) {
+        const isFree = this.isFreeDownload(fileInfo);
+        await logDownload(session.user, fileInfo.name, fileInfo.size, isFree);
+
+        // Update stats (only if not free)
+        if (!isFree) {
+          await updateDownloadStats(session.user, fileInfo.size);
+        }
+      }
+    }
+
+    socket.emit('ansi-output', `\r\n\x1b[32mBatch download complete! (${fileList.length} files)\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  }
+
+  /**
+   * Find file in conference directories (single file, exact match)
    */
   private static async findFileInConference(
     dataDir: string,
     confNum: number,
     filename: string
   ): Promise<any | null> {
+    const files = await this.findFilesInConference(dataDir, confNum, filename);
+    return files.length > 0 ? files[0] : null;
+  }
+
+  /**
+   * Find files in conference directories (supports wildcards)
+   * Port from express.e:20068-20090 - wildcard matching logic
+   */
+  private static async findFilesInConference(
+    dataDir: string,
+    confNum: number,
+    pattern: string
+  ): Promise<any[]> {
     const confPath = path.join(dataDir, 'BBS', `Conf${String(confNum).padStart(2, '0')}`);
+    const matchingFiles: any[] = [];
+    const hasWildcard = this.hasWildcards(pattern);
 
     // Search through all DIR# directories
     for (let dirNum = 1; dirNum <= 20; dirNum++) {
@@ -246,22 +342,61 @@ export class DownloadHandler {
 
       if (!fs.existsSync(dirPath)) continue;
 
-      const filePath = path.join(dirPath, filename);
+      if (hasWildcard) {
+        // Wildcard search - check all files in directory
+        const files = fs.readdirSync(dirPath);
+        for (const file of files) {
+          if (this.matchesWildcard(file, pattern)) {
+            const filePath = path.join(dirPath, file);
+            const stats = fs.statSync(filePath);
 
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
+            if (stats.isFile()) {
+              matchingFiles.push({
+                name: file,
+                size: stats.size,
+                confNum: confNum,
+                dirNum: dirNum,
+                fullPath: filePath
+              });
+            }
+          }
+        }
+      } else {
+        // Exact match
+        const filePath = path.join(dirPath, pattern);
 
-        return {
-          name: filename,
-          size: stats.size,
-          confNum: confNum,
-          dirNum: dirNum,
-          fullPath: filePath
-        };
+        if (fs.existsSync(filePath)) {
+          const stats = fs.statSync(filePath);
+
+          if (stats.isFile()) {
+            matchingFiles.push({
+              name: pattern,
+              size: stats.size,
+              confNum: confNum,
+              dirNum: dirNum,
+              fullPath: filePath
+            });
+          }
+        }
       }
     }
 
-    return null;
+    return matchingFiles;
+  }
+
+  /**
+   * Match filename against wildcard pattern
+   * Supports * (any chars) and ? (single char)
+   */
+  private static matchesWildcard(filename: string, pattern: string): boolean {
+    // Convert wildcard pattern to regex
+    const regexPattern = pattern
+      .replace(/\./g, '\\.')    // Escape dots
+      .replace(/\*/g, '.*')      // * matches any characters
+      .replace(/\?/g, '.');      // ? matches single character
+
+    const regex = new RegExp(`^${regexPattern}$`, 'i'); // Case insensitive
+    return regex.test(filename);
   }
 
   /**
