@@ -673,6 +673,34 @@ export class Database {
         )
       `);
 
+      // Daily Statistics table - tracks daily BBS activity for ~SC MCI code
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS daily_stats (
+          date TEXT PRIMARY KEY,
+          total_calls INTEGER DEFAULT 0,
+          unique_users INTEGER DEFAULT 0,
+          total_logins INTEGER DEFAULT 0,
+          total_messages INTEGER DEFAULT 0,
+          total_uploads INTEGER DEFAULT 0,
+          total_downloads INTEGER DEFAULT 0,
+          total_door_launches INTEGER DEFAULT 0,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // User sessions table - tracks individual login sessions for unique user counts
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS user_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          login_time INTEGER DEFAULT (strftime('%s', 'now')),
+          logout_time INTEGER,
+          duration INTEGER,
+          node_id INTEGER DEFAULT 0
+        )
+      `);
+
       // Webhooks table
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS webhooks (
@@ -1335,6 +1363,57 @@ export class Database {
   async updateFTNMessage(id: number, updates: Partial<FTNMessage>): Promise<void> {}
   async createTransferSession(session: Omit<TransferSession, 'id'>): Promise<string> { return crypto.randomUUID(); }
   async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {}
+
+  /**
+   * Daily Statistics Methods
+   */
+
+  async getDailyStats(date: string): Promise<any | null> {
+    if (!this.db) throw new Error('Database not initialized');
+    return this.db.get('SELECT * FROM daily_stats WHERE date = ?', [date]);
+  }
+
+  async saveDailyStats(stats: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run(`
+      INSERT OR REPLACE INTO daily_stats
+      (date, total_calls, unique_users, total_logins, total_messages,
+       total_uploads, total_downloads, total_door_launches)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      stats.date,
+      stats.totalCalls,
+      stats.uniqueUsers,
+      stats.totalLogins,
+      stats.totalMessages,
+      stats.totalUploads,
+      stats.totalDownloads,
+      stats.totalDoorLaunches
+    ]);
+  }
+
+  async getTodayUniqueUserCount(date: string): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.get(`
+      SELECT COUNT(DISTINCT user_id) as count
+      FROM user_sessions
+      WHERE DATE(login_time) = ?
+    `, [date]);
+
+    return result?.count || 0;
+  }
+
+  async getDailyStatsRange(startDate: string, endDate: string): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return this.db.all(`
+      SELECT * FROM daily_stats
+      WHERE date BETWEEN ? AND ?
+      ORDER BY date DESC
+    `, [startDate, endDate]);
+  }
 }
 
 // Lazy singleton - initialized on first access

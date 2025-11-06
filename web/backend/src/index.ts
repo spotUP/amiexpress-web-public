@@ -902,6 +902,14 @@ io.on('connection', async (socket) => {
       // Log successful login (express.e:9493 callersLog)
       await callersLog(user.id, user.username, 'Logged on');
 
+      // Track system stats for ~SC MCI code (system calls today)
+      try {
+        const { systemStats } = await import('./services/SystemStatsService');
+        await systemStats.incrementCalls(user.id);
+      } catch (error) {
+        console.error('[SystemStats] Error tracking login:', error);
+      }
+
       // Trigger webhook for user login (skip for sysops to reduce noise)
       if (user.secLevel < 255) {
         try {

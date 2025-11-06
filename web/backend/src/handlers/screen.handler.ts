@@ -255,8 +255,10 @@ export async function parseMciCodes(
   parsed = parsed.replace(/~OD\|/g, `${day}-${month}-${year}`);  // OD - Date Only
 
   // ~SC - System Calls Today (express.e:5407)
-  // Note: This should track daily call statistics - for now return 0
-  parsed = parsed.replace(/~SC\|/g, '0');
+  // Use SystemStatsService to get real call count
+  const { systemStats } = await import('../services/SystemStatsService');
+  const todayCalls = systemStats.getTodayCalls();
+  parsed = parsed.replace(/~SC\|/g, todayCalls.toString());
 
   // File Area Codes (express.e:5408-5410)
   // ~FC - Files Count (flagged/marked files count)
