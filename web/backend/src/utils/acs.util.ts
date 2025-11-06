@@ -290,3 +290,102 @@ export function setUserFlag(user: User, flag: UserFlags, enabled: boolean): void
     user.userFlags &= ~flag;
   }
 }
+
+// ===== Session-based Helper Functions (from security.util.ts) =====
+// These work with session objects that contain user + temporary security state
+
+import { EnvStat } from '../constants/env-codes';
+import { findAcsLevel } from '../constants/security-levels';
+
+/**
+ * Set temporary security flag (grant permission for session)
+ */
+export function setTempSecurityFlag(session: any, acsCode: ACSPermission): void {
+  if (!session.user) return;
+  
+  // Ensure securityFlags is long enough
+  while (session.user.securityFlags.length <= acsCode) {
+    session.user.securityFlags += '?';
+  }
+  // Set to "T" (true)
+  session.user.securityFlags =
+    session.user.securityFlags.substring(0, acsCode) +
+    'T' +
+    session.user.securityFlags.substring(acsCode + 1);
+}
+
+/**
+ * Clear temporary security flag (deny permission for session)
+ */
+export function clearTempSecurityFlag(session: any, acsCode: ACSPermission): void {
+  if (!session.user) return;
+  
+  // Ensure securityFlags is long enough
+  while (session.user.securityFlags.length <= acsCode) {
+    session.user.securityFlags += '?';
+  }
+  // Set to "F" (false)
+  session.user.securityFlags =
+    session.user.securityFlags.substring(0, acsCode) +
+    'F' +
+    session.user.securityFlags.substring(acsCode + 1);
+}
+
+/**
+ * Set override (strongest denial - blocks even if otherwise granted)
+ */
+export function setOverride(session: any, acsCode: ACSPermission): void {
+  if (!session.user) return;
+  
+  // Ensure secOverride is long enough
+  while (session.user.secOverride.length <= acsCode) {
+    session.user.secOverride += 'F';
+  }
+  // Set to "T" (deny)
+  session.user.secOverride =
+    session.user.secOverride.substring(0, acsCode) +
+    'T' +
+    session.user.secOverride.substring(acsCode + 1);
+}
+
+/**
+ * Clear all override denials
+ */
+export function clearOverride(session: any): void {
+  if (!session.user) return;
+  session.user.secOverride = '';
+}
+
+/**
+ * Set environment status (what user is currently doing)
+ */
+export function setEnvStat(session: any, envStat: EnvStat): void {
+  session.currentStat = envStat;
+}
+
+/**
+ * Initialize security fields for a new session
+ */
+export function initializeSecurity(session: any): void {
+  if (!session.user) return;
+  
+  // Calculate ACS level
+  session.acsLevel = findAcsLevel(session.user.secLevel || 0);
+  
+  // Check if user-specific access file exists
+  // TODO for 100% 1:1: Implement checkToolTypeExists
+  session.userSpecificAccess = false;
+  
+  // Check override defaults
+  // TODO for 100% 1:1: Implement checkSecurity(ACS_OVERRIDE_DEFAULTS)
+  session.overrideDefaultAccess = false;
+  
+  // Clear temporary flags
+  session.user.securityFlags = '';
+  session.user.secOverride = '';
+  
+  // Initialize environment status
+  session.currentStat = EnvStat.IDLE;
+  session.quietFlag = false;
+  session.blockOLM = false;
+}
