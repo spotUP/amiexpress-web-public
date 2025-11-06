@@ -180,7 +180,11 @@ import {
   handleMessageEditLineInput,
   handleMessageEditLineContent,
   handleMessageAttachFileInput,
-  handleMessageAttachDeleteConfirm
+  handleMessageAttachDeleteConfirm,
+  handleMessageReplaceSearchInput,
+  handleMessageReplaceWithInput,
+  handleMessageInsertLineInput,
+  handleMessageInsertTextInput
 } from './message-entry.handler';
 
 // Import utilities
@@ -1595,6 +1599,70 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
       handleMessageAttachDeleteConfirm(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle /R (Replace Text) - Search String Input
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessageReplaceSearchInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle /R (Replace Text) - Replacement String Input
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_REPLACE_WITH) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '');  // Don't trim - allow empty replacement
+      session.inputBuffer = '';
+      handleMessageReplaceWithInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle /I (Insert Line) - Line Number Input
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_INSERT_LINE) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessageInsertLineInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle /I (Insert Line) - Text Input
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_INSERT_TEXT) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '');  // Don't trim - preserve spaces
+      session.inputBuffer = '';
+      handleMessageInsertTextInput(socket, session, input);
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);

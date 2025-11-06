@@ -86,6 +86,12 @@ export enum LoggedOnSubState {
   POST_MESSAGE_SAVE = 'post_message_save',
   POST_MESSAGE_ATTACH_FILE = 'post_message_attach_file',
   POST_MESSAGE_ATTACH_DELETE_CONFIRM = 'post_message_attach_delete_confirm',
+  POST_MESSAGE_QUOTE_RANGE = 'post_message_quote_range',        // Quote message line range input
+  POST_MESSAGE_REPLACE_SEARCH = 'post_message_replace_search',  // Replace search string input
+  POST_MESSAGE_REPLACE_WITH = 'post_message_replace_with',      // Replace replacement string input
+  POST_MESSAGE_INSERT_LINE = 'post_message_insert_line',        // Insert line number input
+  POST_MESSAGE_INSERT_TEXT = 'post_message_insert_text',        // Insert line text input
+  POST_MESSAGE_UPLOAD_FILE = 'post_message_upload_file',        // Upload text file input
   JM_INPUT = 'jm_input',                                // Jump to message number input
   RL_CONFIRM = 'rl_confirm',                            // Read last message confirmation
 

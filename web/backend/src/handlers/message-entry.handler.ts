@@ -118,7 +118,11 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/D', 'yellow')} - Delete line\r\n`);
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/E', 'yellow')} - Edit line\r\n`);
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/F', 'yellow')} - Attach file\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/I', 'yellow')} - Insert line\r\n`);
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/L', 'yellow')} - List message\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/Q', 'yellow')} - Quote previous message\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/R', 'yellow')} - Replace text\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/U', 'yellow')} - Upload text file\r\n`);
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/X', 'yellow')} - Transfer files (save and send)\r\n`);
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/H', 'yellow')} - This help\r\n`);
       socket.emit('ansi-output', '\r\n');
@@ -225,6 +229,63 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
         const lineNum = (index + 1).toString().padStart(index >= 99 ? 3 : 2, ' ');
         socket.emit('ansi-output', `${lineNum}> ${bodyLine}\r\n`);
       });
+      socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+      return;
+    }
+
+    // /Q - Quote Previous Message (express.e:10865-10946)
+    if (cmd === 'Q' || cmd === 'QUOTE') {
+      // Check if this is a reply (has parentId or replyTo)
+      const messageData = session.tempData.messageEntry;
+
+      // TODO: Load parent message if replying
+      // For now, just inform user this requires message threading
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.warningLine('Quote requires message threading (not yet implemented)'));
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+      return;
+    }
+
+    // /R - Replace Text
+    if (cmd === 'R' || cmd === 'REPLACE') {
+      const messageData = session.tempData.messageEntry;
+      if (messageData.body.length === 0) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.errorLine('No text to replace!'));
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+        return;
+      }
+
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('Search for: ', 'cyan'));
+      session.subState = LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH;
+      return;
+    }
+
+    // /I - Insert Line
+    if (cmd === 'I' || cmd === 'INSERT') {
+      const messageData = session.tempData.messageEntry;
+      if (messageData.body.length === 0) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.errorLine('No lines yet! Just type to add lines.'));
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+        return;
+      }
+
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', `${AnsiUtil.colorize('Insert before line ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length + 1), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+      session.subState = LoggedOnSubState.POST_MESSAGE_INSERT_LINE;
+      return;
+    }
+
+    // /U - Upload Text File
+    if (cmd === 'U' || cmd === 'UPLOAD') {
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.warningLine('Text file upload requires file upload infrastructure (not yet implemented)'));
+      socket.emit('ansi-output', '\r\n');
       socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
       return;
     }
@@ -541,6 +602,136 @@ export function handleMessageAttachDeleteConfirm(socket: any, session: BBSSessio
   }
 
   socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+}
+
+/**
+ * Handle /R (Replace Text) - Search String Input
+ */
+export function handleMessageReplaceSearchInput(socket: any, session: BBSSession, input: string): void {
+  const searchStr = input.trim();
+
+  // Empty = cancel
+  if (searchStr === '') {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  // Store search string for next step
+  if (!session.tempData.messageEntry.replaceData) {
+    session.tempData.messageEntry.replaceData = {};
+  }
+  session.tempData.messageEntry.replaceData.search = searchStr;
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('Replace with: ', 'cyan'));
+  session.subState = LoggedOnSubState.POST_MESSAGE_REPLACE_WITH;
+}
+
+/**
+ * Handle /R (Replace Text) - Replacement String Input
+ */
+export function handleMessageReplaceWithInput(socket: any, session: BBSSession, input: string): void {
+  const replaceStr = input;  // Allow empty replacement
+  const messageData = session.tempData.messageEntry;
+  const searchStr = messageData.replaceData?.search || '';
+
+  if (!searchStr) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine('No search string!'));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  // Perform replacement (case-sensitive, all occurrences)
+  let replaceCount = 0;
+  for (let i = 0; i < messageData.body.length; i++) {
+    const oldLine = messageData.body[i];
+    const newLine = oldLine.split(searchStr).join(replaceStr);
+    if (oldLine !== newLine) {
+      messageData.body[i] = newLine;
+      replaceCount += (oldLine.split(searchStr).length - 1);
+    }
+  }
+
+  socket.emit('ansi-output', '\r\n');
+  if (replaceCount > 0) {
+    socket.emit('ansi-output', AnsiUtil.colorize(`Replaced ${replaceCount} occurrence(s)`, 'green'));
+  } else {
+    socket.emit('ansi-output', AnsiUtil.warningLine('No matches found'));
+  }
+  socket.emit('ansi-output', '\r\n');
+
+  // Clean up temp data
+  delete messageData.replaceData;
+
+  socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+}
+
+/**
+ * Handle /I (Insert Line) - Line Number Input
+ */
+export function handleMessageInsertLineInput(socket: any, session: BBSSession, input: string): void {
+  const lineNumStr = input.trim();
+  const messageData = session.tempData.messageEntry;
+
+  // Empty = cancel
+  if (lineNumStr === '') {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  const lineNum = parseInt(lineNumStr, 10);
+
+  // Validate line number
+  if (isNaN(lineNum) || lineNum < 1 || lineNum > messageData.body.length + 1) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Invalid line number! Must be 1..${messageData.body.length + 1}`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize('Insert before line ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length + 1), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+    return;
+  }
+
+  // Store line number for next step
+  if (!messageData.insertData) {
+    messageData.insertData = {};
+  }
+  messageData.insertData.lineNum = lineNum;
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('Enter text: ', 'cyan'));
+  session.subState = LoggedOnSubState.POST_MESSAGE_INSERT_TEXT;
+}
+
+/**
+ * Handle /I (Insert Line) - Text Input
+ */
+export function handleMessageInsertTextInput(socket: any, session: BBSSession, input: string): void {
+  const text = input;  // Allow empty line
+  const messageData = session.tempData.messageEntry;
+  const lineNum = messageData.insertData?.lineNum || 1;
+
+  // Insert line at position (array index is lineNum - 1)
+  messageData.body.splice(lineNum - 1, 0, text);
+
+  // Update current line counter
+  messageData.currentLine++;
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize(`Line inserted at position ${lineNum}`, 'green'));
+  socket.emit('ansi-output', '\r\n');
+
+  // Clean up temp data
+  delete messageData.insertData;
+
   socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
   session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
 }
