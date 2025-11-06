@@ -408,6 +408,131 @@ export class XIMIOHandler {
   }
 
   /**
+   * Handle PG_UD (User Data)
+   * From E sources (express.e:4444-4463)
+   * Returns numeric user information based on msg.data field
+   */
+  handleUserData(msg: XIMMessage, bbsSession: any): void {
+    let resultData = 0;
+
+    console.log(`[XIMIOHandler] PG_UD: Request type ${msg.data}`);
+
+    // express.e:4445-4463 - Map data field to user info
+    switch (msg.data) {
+      case 1: // Security level (divided by 10)
+        resultData = Math.floor((bbsSession.user?.secLevel || 0) / 10);
+        break;
+      case 2: // Expert mode flag ('X' = expert)
+        resultData = (bbsSession.user?.expert === 'X') ? 1 : 0;
+        break;
+      case 3: // Reserved
+        resultData = 0;
+        break;
+      case 4: // Times called
+      case 5: // Times called (duplicate in original)
+        resultData = bbsSession.user?.timesCalled || 0;
+        break;
+      case 6: // Node number (always 1 for web version)
+        resultData = 1;
+        break;
+      case 7: // Time limit in minutes
+        resultData = Math.floor((bbsSession.timeLimit || 3600) / 60);
+        break;
+      case 8: // Screen width
+        resultData = 80;
+        break;
+      case 9: // User line length
+        resultData = bbsSession.user?.lineLen || 80;
+        break;
+      default:
+        resultData = 0;
+    }
+
+    console.log(`[XIMIOHandler] PG_UD: Returning ${resultData}`);
+    this.sendReply(msg, resultData);
+  }
+
+  /**
+   * Handle PG_US (User String)
+   * From E sources (express.e:4464-4494)
+   * Returns string user information based on msg.data field
+   */
+  handleUserString(msg: XIMMessage, bbsSession: any): void {
+    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
+    let resultString = '';
+
+    console.log(`[XIMIOHandler] PG_US: Request type ${msg.data}`);
+
+    // express.e:4465-4494 - Map data field to user string
+    switch (msg.data) {
+      case 1: // Username (max 21 chars)
+        resultString = (bbsSession.user?.name || '').substring(0, 21);
+        break;
+      case 2: // Empty string
+        resultString = '';
+        break;
+      case 3: // Location (max 39 chars)
+        resultString = (bbsSession.user?.location || '').substring(0, 39);
+        break;
+      case 4: // Location (max 29 chars)
+        resultString = (bbsSession.user?.location || '').substring(0, 29);
+        break;
+      case 5: // State code (max 2 chars)
+        resultString = (bbsSession.user?.location || '').substring(0, 2);
+        break;
+      case 6: // Zip code (max 7 chars)
+        resultString = (bbsSession.user?.location || '').substring(0, 7);
+        break;
+      case 7: // Door path
+        resultString = 'PGDOORS:';
+        break;
+      case 8: // BBS location path
+        resultString = bbsSession.bbsPath || '~/Code/amiexpress-web/reference-boardBBS';
+        break;
+      case 9: // Long date format
+        const date = new Date();
+        resultString = date.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        break;
+      case 10: // Long time format
+        const time = new Date();
+        resultString = time.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        });
+        break;
+      default:
+        resultString = '';
+    }
+
+    console.log(`[XIMIOHandler] PG_US: Returning "${resultString}"`);
+
+    // Write string to memory
+    if (stringAddr !== 0) {
+      this.messageParser.writeString(stringAddr, resultString, 80);
+    }
+
+    this.sendReply(msg, 1);
+  }
+
+  /**
+   * Handle PG_SM (Serial/Screen Message)
+   * From E sources (express.e:4396-4399)
+   * Displays message to both serial and console (web: same as PG_SO)
+   */
+  handleScreenMessage(msg: XIMMessage): void {
+    console.log('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
+    // In web version, screen and serial are the same (both go to socket)
+    this.handleSerialOutput(msg);
+  }
+
+  /**
    * Send reply to door via ReplyMsg
    */
   private sendReply(msg: XIMMessage, data: number): void {

@@ -387,7 +387,7 @@ export async function initializeData() {
     setSysopCommandsDependencies({
       getRecentCallerActivity,
       setEnvStat,
-      displayAccountEditingMenu
+      db
     });
 
     // Inject dependencies into transfer/misc commands handler

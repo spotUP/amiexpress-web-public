@@ -6,6 +6,8 @@
 import { BBSSession } from '../index';
 import { AnsiUtil } from '../utils/ansi.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { ACSPermission } from '../constants/acs-permissions';
+import { checkSecurity } from '../utils/security.util';
 
 
 // Dependencies (injected from index.ts)
@@ -112,8 +114,117 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
       socket.emit('ansi-output', AnsiUtil.colorize('Editor Commands:', 'cyan') + '\r\n');
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/S', 'yellow')} - Save message\r\n`);
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/A', 'yellow')} - Abort message\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/C', 'yellow')} - Continue editing\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/D', 'yellow')} - Delete line\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/E', 'yellow')} - Edit line\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/F', 'yellow')} - Attach file\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/L', 'yellow')} - List message\r\n`);
+      socket.emit('ansi-output', `  ${AnsiUtil.colorize('/X', 'yellow')} - Transfer files (save and send)\r\n`);
       socket.emit('ansi-output', `  ${AnsiUtil.colorize('/H', 'yellow')} - This help\r\n`);
       socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+      return;
+    }
+
+    // /C - Continue editing (express.e:10543-10550)
+    if (cmd === 'C' || cmd === 'CONTINUE') {
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('Continuing...', 'cyan') + '\r\n');
+      socket.emit('ansi-output', '\r\n');
+      // Display next line prompt
+      socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+      return;
+    }
+
+    // /D - Delete line (express.e:10555-10607)
+    if (cmd === 'D' || cmd === 'DELETE') {
+      const messageData = session.tempData.messageEntry;
+      if (messageData.body.length === 0) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.errorLine('No lines to delete.'));
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+        return;
+      }
+
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', `${AnsiUtil.colorize('Line number to delete ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+      session.subState = LoggedOnSubState.POST_MESSAGE_DELETE_LINE;
+      return;
+    }
+
+    // /E - Edit line (express.e:10608-10630)
+    if (cmd === 'E' || cmd === 'EDIT') {
+      const messageData = session.tempData.messageEntry;
+      if (messageData.body.length === 0) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.errorLine('No lines to edit!'));
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+        return;
+      }
+
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', `${AnsiUtil.colorize('Line number to edit ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+      session.subState = LoggedOnSubState.POST_MESSAGE_EDIT_LINE;
+      return;
+    }
+
+    // /F - File Attach (express.e:10508-10556)
+    if (cmd === 'F' || cmd === 'ATTACH') {
+      // Check security and fileattach flag
+      if (!checkSecurity(session.user!, ACSPermission.ATTACH_FILES)) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.errorLine('You do not have access to attach files.'));
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+        return;
+      }
+
+      // Initialize attachedFiles array if not exists
+      if (!session.tempData.messageEntry.attachedFiles) {
+        session.tempData.messageEntry.attachedFiles = [];
+      }
+
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('Enter path/filename to attach ', 'cyan'));
+      socket.emit('ansi-output', `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
+      session.subState = LoggedOnSubState.POST_MESSAGE_ATTACH_FILE;
+      return;
+    }
+
+    // /X - Transfer Files (express.e:10562-10566)
+    if (cmd === 'X' || cmd === 'TRANSFER') {
+      const messageData = session.tempData.messageEntry;
+
+      // Check security based on private/public
+      const hasAccess = (messageData.isPrivate && checkSecurity(session.user!, ACSPermission.PRI_MSGFILES)) ||
+                        (!messageData.isPrivate && checkSecurity(session.user!, ACSPermission.PUB_MSGFILES));
+
+      if (!hasAccess) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.errorLine('You do not have access to transfer message files.'));
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+        return;
+      }
+
+      // Set flag to trigger file transfer after message save
+      session.tempData.messageEntry.transferFiles = true;
+
+      // Save the message and trigger transfer
+      await saveMessage(socket, session);
+      return;
+    }
+
+    // /L - List message (express.e:10631-10640)
+    if (cmd === 'L' || cmd === 'LIST') {
+      const messageData = session.tempData.messageEntry;
+      socket.emit('ansi-output', '\r\n');
+      messageData.body.forEach((bodyLine: string, index: number) => {
+        const lineNum = (index + 1).toString().padStart(index >= 99 ? 3 : 2, ' ');
+        socket.emit('ansi-output', `${lineNum}> ${bodyLine}\r\n`);
+      });
       socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
       return;
     }
@@ -172,10 +283,11 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       isPrivate: entry.isPrivate,
       toUser: entry.toUser,
       parentId: null,
-      attachments: [],
+      attachments: entry.attachedFiles || [],
       edited: false,
       editedBy: null,
-      editedAt: null
+      editedAt: null,
+      transferFiles: entry.transferFiles || false
     };
 
     // Save to database
@@ -238,6 +350,119 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
 }
 
 /**
+ * Handle delete line number input - express.e:10555-10607
+ */
+export function handleMessageDeleteLineInput(socket: any, session: BBSSession, input: string): void {
+  const lineNumber = parseInt(input.trim());
+  const messageData = session.tempData.messageEntry;
+
+  // Blank = abort
+  if (input.trim() === '') {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  // Validate line number
+  if (isNaN(lineNumber) || lineNumber < 1 || lineNumber > messageData.body.length) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Line ${input} does not exist.`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize('Line number to delete ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+    return;
+  }
+
+  // Show the line and confirm deletion
+  const lineIndex = lineNumber - 1;
+  const lineNum = lineNumber.toString().padStart(lineNumber >= 100 ? 3 : 2, ' ');
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', `${lineNum}> ${messageData.body[lineIndex]}\r\n`);
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', `${AnsiUtil.colorize('Is this the correct line ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Y', 'yellow')}${AnsiUtil.colorize('/', 'green')}${AnsiUtil.colorize('N', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+
+  // Store the line number for confirmation
+  session.tempData.messageEntry.pendingDeleteLine = lineIndex;
+  session.subState = LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM;
+}
+
+/**
+ * Handle delete confirmation - express.e:10555-10607
+ */
+export function handleMessageDeleteConfirm(socket: any, session: BBSSession, input: string): void {
+  const answer = input.trim().toUpperCase();
+  const messageData = session.tempData.messageEntry;
+  const lineIndex = messageData.pendingDeleteLine;
+
+  if (answer === 'Y' || answer === 'YES') {
+    // Delete the line
+    messageData.body.splice(lineIndex, 1);
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.successLine(`Deleted line ${lineIndex + 1}.`));
+    socket.emit('ansi-output', '\r\n');
+  } else {
+    socket.emit('ansi-output', '\r\n');
+  }
+
+  // Return to message body input
+  socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  delete messageData.pendingDeleteLine;
+}
+
+/**
+ * Handle edit line number input - express.e:10608-10630
+ */
+export function handleMessageEditLineInput(socket: any, session: BBSSession, input: string): void {
+  const lineNumber = parseInt(input.trim());
+  const messageData = session.tempData.messageEntry;
+
+  // Blank = abort
+  if (input.trim() === '') {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  // Validate line number
+  if (isNaN(lineNumber) || lineNumber < 1 || lineNumber > messageData.body.length) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Line ${input} does not exist.`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize('Line number to edit ', 'cyan')}${AnsiUtil.colorize('[', 'green')}${AnsiUtil.colorize('1', 'yellow')}${AnsiUtil.colorize('..', 'green')}${AnsiUtil.colorize(String(messageData.body.length), 'yellow')}${AnsiUtil.colorize(']', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+    return;
+  }
+
+  // Show the edit prompt with current line content
+  const lineIndex = lineNumber - 1;
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('    Edit Line', 'cyan') + '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('   (---------------------------------------------------------------------------)', 'cyan') + '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize('    ', 'cyan'));
+
+  // Store the line index for editing
+  messageData.pendingEditLine = lineIndex;
+  session.subState = LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT;
+}
+
+/**
+ * Handle edit line content input - express.e:10608-10630
+ */
+export function handleMessageEditLineContent(socket: any, session: BBSSession, input: string): void {
+  const messageData = session.tempData.messageEntry;
+  const lineIndex = messageData.pendingEditLine;
+
+  // Update the line
+  messageData.body[lineIndex] = input;
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  delete messageData.pendingEditLine;
+}
+
+/**
  * Helper: Prompt for message subject - express.e:10839-10849
  */
 function promptForSubject(socket: any, session: BBSSession): void {
@@ -261,6 +486,63 @@ function promptForPrivate(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', `         ${AnsiUtil.colorize('Private', 'cyan')} `);
   socket.emit('ansi-output', `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Y', 'yellow')}${AnsiUtil.colorize('/', 'green')}${AnsiUtil.colorize('N', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize('?', 'green')} `);
   session.subState = LoggedOnSubState.POST_MESSAGE_PRIVATE;
+}
+
+/**
+ * Handle file attachment input - express.e:10515-10556
+ */
+export async function handleMessageAttachFileInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const messageData = session.tempData.messageEntry;
+  const attachedFile = input.trim();
+
+  // Blank = continue without attaching
+  if (attachedFile === '') {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  // Check for directory command (express.e:10518-10521)
+  if (attachedFile.startsWith('5 ')) {
+    const dirPath = attachedFile.substring(2).trim() || '.';
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.warningLine('Directory listing not yet implemented.'));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.colorize('Enter path/filename to attach ', 'cyan'));
+    socket.emit('ansi-output', `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
+    return;
+  }
+
+  // Add file to attachedFiles array (express.e:10523-10524)
+  if (!messageData.attachedFiles) {
+    messageData.attachedFiles = [];
+  }
+  messageData.attachedFiles.push(attachedFile);
+
+  // Ask if file should be deleted when message is deleted (express.e:10538-10549)
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', `${AnsiUtil.colorize('Delete file(s) when message is deleted ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Y', 'yellow')}${AnsiUtil.colorize('/', 'green')}${AnsiUtil.colorize('N', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize('?', 'green')} `);
+  session.subState = LoggedOnSubState.POST_MESSAGE_ATTACH_DELETE_CONFIRM;
+}
+
+/**
+ * Handle file attachment delete confirmation - express.e:10538-10549
+ */
+export function handleMessageAttachDeleteConfirm(socket: any, session: BBSSession, input: string): void {
+  const answer = input.trim().toUpperCase();
+  const messageData = session.tempData.messageEntry;
+
+  // Store delete flag at position 0 of attachedFiles array (express.e:10545-10549)
+  if (answer === 'Y' || answer === 'YES') {
+    messageData.attachedFiles.unshift('Y');
+  } else {
+    messageData.attachedFiles.unshift('N');
+  }
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
 }
 
 /**

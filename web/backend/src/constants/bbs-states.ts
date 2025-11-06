@@ -79,7 +79,13 @@ export enum LoggedOnSubState {
   POST_MESSAGE_SUBJECT = 'post_message_subject',
   POST_MESSAGE_PRIVATE = 'post_message_private',
   POST_MESSAGE_BODY = 'post_message_body',
+  POST_MESSAGE_DELETE_LINE = 'post_message_delete_line',
+  POST_MESSAGE_DELETE_CONFIRM = 'post_message_delete_confirm',
+  POST_MESSAGE_EDIT_LINE = 'post_message_edit_line',
+  POST_MESSAGE_EDIT_LINE_CONTENT = 'post_message_edit_line_content',
   POST_MESSAGE_SAVE = 'post_message_save',
+  POST_MESSAGE_ATTACH_FILE = 'post_message_attach_file',
+  POST_MESSAGE_ATTACH_DELETE_CONFIRM = 'post_message_attach_delete_confirm',
   JM_INPUT = 'jm_input',                                // Jump to message number input
   RL_CONFIRM = 'rl_confirm',                            // Read last message confirmation
 
@@ -94,6 +100,11 @@ export enum LoggedOnSubState {
   ACCOUNT_CHANGE_PASSWORD_CONFIRM = 'account_change_password_confirm',
   ACCOUNT_EDIT_SETTINGS = 'account_edit_settings',
   ACCOUNT_VIEW_STATS = 'account_view_stats',
+
+  // Account Editor (Command 1) - express.e:22400-22460
+  ACCOUNT_EDITOR_MENU = 'account_editor_menu',              // Main menu input
+  ACCOUNT_EDITOR_SEARCH_NAME = 'account_editor_search_name', // Search by name input
+  ACCOUNT_EDITOR_EDIT = 'account_editor_edit',              // Single-char editing (editInfo)
 
   // Chat operations
   CHAT_PAGE_SYSOP = 'chat_page_sysop',

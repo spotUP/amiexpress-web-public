@@ -5,16 +5,22 @@
  */
 
 import { BBSSession, LoggedOnSubState } from '../index';
+import { Database } from '../database';
 import { checkSecurity } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
+import {
+  handleAccountEditorMenu,
+  handleAccountEditorInput,
+  handleSearchByNameInput
+} from './user-editor.handler';
 
 // Dependencies (injected)
 let _getRecentCallerActivity: any;
 let _setEnvStat: any;
-let _displayAccountEditingMenu: any;
+let _db: Database;
 
 /**
  * Dependency injection setter
@@ -22,11 +28,11 @@ let _displayAccountEditingMenu: any;
 export function setSysopCommandsDependencies(deps: {
   getRecentCallerActivity: any;
   setEnvStat: any;
-  displayAccountEditingMenu: any;
+  db: Database;
 }) {
   _getRecentCallerActivity = deps.getRecentCallerActivity;
   _setEnvStat = deps.setEnvStat;
-  _displayAccountEditingMenu = deps.displayAccountEditingMenu;
+  _db = deps.db;
 }
 
 /**
@@ -85,7 +91,7 @@ export function handleRemoteShellCommand(socket: any, session: BBSSession): void
  * Provides user account management for sysops.
  * Allows editing user accounts, security levels, flags, etc.
  */
-export function handleAccountEditingCommand(socket: any, session: BBSSession): void {
+export async function handleAccountEditingCommand(socket: any, session: BBSSession): Promise<void> {
   // Check security - express.e:24454
   if (!checkSecurity(session.user, ACSPermission.ACCOUNT_EDITING)) {
     ErrorHandler.permissionDenied(socket, 'edit accounts', {
@@ -99,8 +105,8 @@ export function handleAccountEditingCommand(socket: any, session: BBSSession): v
   // Log activity - express.e:24457
   // TODO: Add callersLog('\tAccount editing.\n')
 
-  // Call account editing menu - express.e:24458
-  _displayAccountEditingMenu(socket, session);
+  // Call account editing menu - express.e:24458 (editAccounts)
+  await handleAccountEditorMenu(socket, session, _db);
 }
 
 /**

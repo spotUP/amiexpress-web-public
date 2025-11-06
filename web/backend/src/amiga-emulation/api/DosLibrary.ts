@@ -477,9 +477,15 @@ export class DosLibrary {
     if (isConsoleHandle) {
       const text = String.fromCharCode(...bytes);
 
+      // DEBUG: Log WHO2 door output
+      console.log(`[dos.library] Write: Console output (${length} bytes): ${JSON.stringify(text)}`);
+
       // Send to output callback
       if (this.outputCallback) {
+        console.log(`[dos.library] Write: Sending to socket callback`);
         this.outputCallback(text);
+      } else {
+        console.log(`[dos.library] Write: WARNING - No output callback set!`);
       }
 
       this.lastError = this.ERROR_NO_ERROR;

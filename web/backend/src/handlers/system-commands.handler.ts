@@ -75,23 +75,31 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
   // express.e:25069 - setEnvStat(ENV_LOGOFF)
   console.log('[ENV] Logoff');
 
-  // Display goodbye screen
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Goodbye!'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.successLine('Thank you for calling ' + (session.user?.bbsName || 'AmiExpress BBS')));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('Disconnecting...', 'yellow') + '\r\n');
-
   // Set session state to logoff
   session.state = BBSState.AWAIT;
   session.subState = 'logoff' as any;
 
-  // Emit disconnect event to close connection
+  // express.e:8187 - displayScreen(SCREEN_LOGOFF)
+  // Display Logoff.txt screen file which contains ~XIDOORS:who/No
+  console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
+  const logoffDisplayed = _displayScreen(socket, session, 'Logoff');
+
+  if (!logoffDisplayed) {
+    // Fallback if Logoff.txt doesn't exist
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.headerBox('Goodbye!'));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.successLine('Thank you for calling ' + (session.user?.bbsName || 'AmiExpress BBS')));
+    socket.emit('ansi-output', '\r\n');
+  }
+
+  socket.emit('ansi-output', AnsiUtil.colorize('Disconnecting...', 'yellow') + '\r\n');
+
+  // Emit disconnect event to close connection (give time for screen to display and door to run)
   setTimeout(() => {
     socket.emit('force-disconnect', { reason: 'User logged off' });
     socket.disconnect(true);
-  }, 1000);
+  }, 2000);
 }
 
 /**

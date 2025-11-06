@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "amiexpress-docs": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "mcp-server/index.js"
+      ],
+      "env": {}
+    }
+  }
+}

@@ -31,6 +31,11 @@ export enum XIMCommand {
   JH_20 = 20,          // Command 20
   JH_MCI = 507,        // MCI processing
 
+  // PG_* commands (express.e/axconsts.e)
+  PG_SM = 1,           // Serial/Screen Message (axconsts.e:94)
+  PG_UD = 13,          // User Data (axconsts.e:105)
+  PG_US = 14,          // User String (axconsts.e:106)
+
   // Data query commands (DT_*)
   DT_NAME = 100,
   DT_PASSWORD = 101,

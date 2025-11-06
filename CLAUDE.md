@@ -19,6 +19,14 @@
    - If errors exist, fix them before committing
    - Never commit code with TypeScript compilation errors
    - This prevents error accumulation and maintains code quality
+7. **NO STUBS OR TODOs ALLOWED** - CRITICAL RULE
+   - NEVER leave stub implementations that remove functionality
+   - NEVER use "skip for now" or "complex feature, skip" comments
+   - If you see a stub that breaks functionality, FIX IT IMMEDIATELY
+   - TODOs are NOT allowed to accumulate - fix them when found
+   - Stubs that silently remove MCI codes or commands are BUGS
+   - Example of FORBIDDEN stub: `parsed.replace(/~SR_[^|]+\|\|/g, '')` - This breaks logoff screens!
+   - If implementation is truly complex, document WHY and create tracking issue, don't silently break it
 
 ### Context Rules
 1. **Read minimal files** - Only read what's needed for current task

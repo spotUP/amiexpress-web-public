@@ -10,6 +10,8 @@ import * as path from 'path';
 
 import type { BBSSession } from '../index';
 import { db } from '../database';
+import { flaggedFilesManager } from '../services/FlaggedFilesManager';
+import { sequentialFileManager } from '../services/SequentialFileManager';
 
 interface Conference {
   id: number;
@@ -79,14 +81,39 @@ export async function parseMciCodes(
   // ~XC - Execute Command (CRITICAL for NI/NO tools)
   // Format: ~XC_<command> <params>||
   // Example: ~XC_DOORS:who/NI ~N||
+  console.log('[MCI] ========== PROCESSING MCI CODES ==========');
+  console.log('[MCI] Content length:', content.length);
+  console.log('[MCI] Looking for ~XC_ and ~XI codes...');
   const xcRegex = /~XC_([^\|]+)\|\|/g;
   let xcMatch;
   while ((xcMatch = xcRegex.exec(parsed)) !== null) {
     const commandStr = xcMatch[1];
+    console.log('[MCI] *** FOUND ~XC_ COMMAND:', commandStr);
     // Store command for async execution after screen display
     commandsToExecute.push(commandStr.trim());
     // Remove the ~XC code from output (silent execution)
     parsed = parsed.replace(xcMatch[0], '');
+    console.log('[MCI] Added command to execution queue');
+  }
+
+  // ~XI - Execute XIM door (express.e format: ~XI<doorpath>)
+  // Format: ~XIDOORS:who/NI or ~XIDOORS:who/No
+  // This executes XIM doors silently from screen files
+  const xiRegex = /~XI([^\s\r\n]+)/g;
+  let xiMatch;
+  while ((xiMatch = xiRegex.exec(parsed)) !== null) {
+    const doorPath = xiMatch[1];
+    console.log('[MCI] *** FOUND ~XI DOOR:', doorPath);
+    // Store door command for async execution after screen display
+    commandsToExecute.push(doorPath.trim());
+    // Remove the ~XI code from output (silent execution)
+    parsed = parsed.replace(xiMatch[0], '');
+    console.log('[MCI] Added XIM door to execution queue');
+  }
+
+  console.log('[MCI] Total commands to execute:', commandsToExecute.length);
+  if (commandsToExecute.length > 0) {
+    console.log('[MCI] Commands:', commandsToExecute);
   }
 
   // Conference/Message Board Lists (express.e:5588-5620)
@@ -248,8 +275,20 @@ export async function parseMciCodes(
     console.error('[parseMciCodes] Error getting file count:', error);
   }
   parsed = parsed.replace(/~FC\|/g, totalFiles.toString());
-  parsed = parsed.replace(/~FL\|/g, '');  // FL - File list display (complex, skip for now)
-  parsed = parsed.replace(/~FF\|/g, totalFiles.toString());  // FF - Same as FC for now
+
+  // ~FL - Flagged Files List (express.e:5445-5454)
+  // Displays user's download queue (flagged files) one per line
+  // Format: "                     filename\b\n"
+  const userId = session.user?.id || 0;
+  const flaggedFiles = flaggedFilesManager.getFiles(userId);
+  let flaggedFilesList = '';
+  for (const file of flaggedFiles) {
+    // Format matches express.e: 21 spaces + filename + backspace + newline
+    flaggedFilesList += `                     ${file.fileName}\b\r\n`;
+  }
+  parsed = parsed.replace(/~FL\|/g, flaggedFilesList);
+
+  parsed = parsed.replace(/~FF\|/g, flaggedFilesManager.getCount(userId).toString());  // FF - Flagged files count
 
   parsed = parsed.replace(/~AK\|/g, user.alias || username);  // AK - Alias/Handle
   parsed = parsed.replace(/~SP\|/g, ' ');  // SP - Space
@@ -301,6 +340,11 @@ export async function parseMciCodes(
   // For now, implement ~f as screen clear
   parsed = parsed.replace(/~f\|/g, '\x1b[2J\x1b[H');  // Clear screen + home cursor
 
+  // Standalone ~ - Clear screen (common shorthand in Amiga BBS files)
+  // When ~ appears alone (not followed by a code), it clears the screen
+  parsed = parsed.replace(/^~\s*$/gm, '\x1b[2J\x1b[H');  // Clear screen if ~ is alone on a line
+  parsed = parsed.replace(/^~$/gm, '\x1b[2J\x1b[H');  // Clear screen if ~ is the only content
+
   // ~w - Word wrap / Delay (express.e:5481-5489)
   // Format: ~w or ~w<ms> - delay/pause
   // In screen files, this is typically ignored or minimal delay
@@ -341,11 +385,12 @@ export async function parseMciCodes(
 
   // Advanced File Display Codes (express.e:5490-5560)
   // ~SS_ - Show String / Display File (express.e:5490-5500)
-  // Format: ~SS_<filename>|| - displays another screen file
+  // Format: ~SS_<filename>|| or ~2S<filename> (short form) - displays another screen file
   // Note: || terminator is optional in some screen files
   // Store for async file loading - we'll process these after parsing
   console.log('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
-  const ssRegex = /~SS_([^|\r\n]+)(\|\|)?/g;
+  // Support both ~SS_ and ~2S (short form)
+  const ssRegex = /~(?:SS_|2S)([^|\r\n]+)(\|\|)?/g;
   let ssMatch;
   const filesToDisplay: string[] = [];
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
@@ -356,20 +401,81 @@ export async function parseMciCodes(
   }
   console.log('[MCI DEBUG] Total ~SS_ files found:', filesToDisplay.length);
 
-  // ~SX_ - String Exact / Sequential File Display (express.e:5501-5530)
-  // Format: ~SX_<filename>|| - displays files sequentially with counter
-  // Note: Complex feature requiring state tracking, skip for now
-  parsed = parsed.replace(/~SX_[^|]+\|\|/g, '');
+  // ~SX_ - String Exact / Sequential File Display (express.e:5505-5530)
+  // Format: ~SX_<path>/<basename>|| - displays files sequentially (file.1, file.2, file.3...)
+  // Reads counter from persistent file, increments, displays next file in sequence
+  const sxRegex = /~SX_([^|]+)\|\|/g;
+  let sxMatch;
+  while ((sxMatch = sxRegex.exec(parsed)) !== null) {
+    const basePath = sxMatch[1].trim();
+    console.log('[MCI] Found ~SX_ sequential file request:', basePath);
+
+    // Get next sequential file
+    const nextFile = sequentialFileManager.getNextFile(basePath);
+    console.log('[MCI] ~SX_ next file:', nextFile.filename, '(counter:', nextFile.number + ')');
+
+    // Try to load the file - if it doesn't exist, reset counter and try file.1
+    let foundFile = false;
+    if (loadScreenFile(nextFile.filename, session.currentConf, 0)) {
+      filesToDisplay.push(nextFile.filename);
+      foundFile = true;
+    } else {
+      // File doesn't exist - reset to 1 and try again
+      console.log('[MCI] ~SX_ file not found, resetting to 1');
+      sequentialFileManager.resetCounter(basePath);
+      const firstFile = sequentialFileManager.getNextFile(basePath);
+      if (loadScreenFile(firstFile.filename, session.currentConf, 0)) {
+        filesToDisplay.push(firstFile.filename);
+        foundFile = true;
+      }
+    }
+
+    if (foundFile) {
+      parsed = parsed.replace(sxMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
+    } else {
+      // No files found - remove code
+      parsed = parsed.replace(sxMatch[0], '');
+    }
+  }
 
   // ~SR_ - String Replace / Random File Display (express.e:5531-5560)
-  // Format: ~SR_<count>_<filename>|| - displays random file from numbered set
-  // Note: Complex feature, skip for now
-  parsed = parsed.replace(/~SR_[^|]+\|\|/g, '');
+  // Format: ~SR_<path>/<basename> - displays random file from numbered set
+  // Example: ~SR_WORK:bbs/Screens/logoff/logoff displays logoff.1, logoff.2, etc.
+  const srRegex = /~SR_([^|\r\n]+)(\|\|)?/g;
+  let srMatch;
+  while ((srMatch = srRegex.exec(parsed)) !== null) {
+    const basePath = srMatch[1].trim();
+    console.log('[MCI] Found ~SR_ random file request:', basePath);
 
-  // ~CC_ - Custom Command Execution (express.e:5561-5570)
-  // Format: ~CC_<command>|| - executes a system command
-  // Note: Similar to ~XC but for system commands, we already have ~XC
-  // Store for async execution like ~XC
+    // Pick a random number (1-99) and try to find the file
+    const randomNum = Math.floor(Math.random() * 99) + 1;
+    const randomFile = `${basePath}.${randomNum}`;
+
+    console.log('[MCI] ~SR_ selected random file:', randomFile);
+    filesToDisplay.push(randomFile);
+    parsed = parsed.replace(srMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
+  }
+
+  // ~SP. - Stop Pause (express.e:5455-5461)
+  // Displays pause prompt and waits for keypress
+  parsed = parsed.replace(/~SP\./g, () => {
+    // Set session state to wait for keypress
+    // Note: In web version, this is just a visual prompt since we can't block
+    // The actual pause handling needs to be implemented in the command handler
+    return '\r\n\x1b[0;36m[Press any key to continue]\x1b[0m';
+  });
+
+  // ~CR. - Character Read (express.e:5462-5468)
+  // Waits for single keypress without prompt
+  parsed = parsed.replace(/~CR\./g, () => {
+    // Set session state to wait for character
+    // Note: In web version, this is silent - no visible output
+    // The actual character read handling needs to be implemented in the command handler
+    return '';
+  });
+
+  // ~CC_ - Custom Command Execution (express.e:5555-5563)
+  // Format: ~CC_<command>|| - executes BBS command from screen, then returns to screen display
   const ccRegex = /~CC_([^|]+)\|\|/g;
   let ccMatch;
   while ((ccMatch = ccRegex.exec(parsed)) !== null) {
@@ -387,10 +493,15 @@ export async function parseMciCodes(
     return promptText; // Just show the prompt, no wait
   });
 
-  // ~SM_ - Set Mode / Menu Name (express.e:5581-5590)
-  // Format: ~SM_<menuname>|| - sets current menu name
-  // Note: Menu name tracking would need session state, skip for now
-  parsed = parsed.replace(/~SM_[^|]+\|\|/g, '');
+  // ~SM_ - Set Mode / Menu Name (express.e:5575-5585)
+  // Format: ~SM_<menuname>|| - sets current menu name for context tracking
+  const smRegex = /~SM_([^|]+)\|\|/g;
+  parsed = parsed.replace(smRegex, (match, menuName) => {
+    // Store current menu name in session for context
+    session.currentMenuName = menuName.trim();
+    console.log(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
+    return ''; // Code doesn't display anything
+  });
 
   // ~SMO - Screen Mode On / Slow Mode On (express.e:5726-5736)
   // Format: ~SMO<speed>| where speed is 1-5
@@ -599,24 +710,38 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Send to client
     socket.emit('ansi-output', parsed);
 
-    // Execute any ~XC commands found in screen file (async, non-blocking)
+    // Execute any ~XC/~XI commands found in screen file (async, non-blocking)
     if (commands.length > 0) {
-      console.log(`[displayScreen] Scheduling ${commands.length} commands from screen file ${screenName}`);
+      console.log(`[displayScreen] ==========================================`);
+      console.log(`[displayScreen] EXECUTING ${commands.length} COMMANDS FROM SCREEN FILE: ${screenName}`);
+      console.log(`[displayScreen] Commands:`, commands);
+      console.log(`[displayScreen] ==========================================`);
       const { handleCommand } = require('./command.handler');
 
       // Execute commands asynchronously after screen display (non-blocking)
       // This matches original AmiExpress behavior - screen shows THEN commands run
       setImmediate(async () => {
-        for (const commandStr of commands) {
-          console.log(`[displayScreen] Executing: ${commandStr}`);
+        for (let i = 0; i < commands.length; i++) {
+          const commandStr = commands[i];
+          console.log(`[displayScreen] ------------------------------------------`);
+          console.log(`[displayScreen] EXECUTING COMMAND ${i + 1}/${commands.length}:`, commandStr);
+          console.log(`[displayScreen] Command type:`, commandStr.includes(':') ? 'DOOR PATH' : 'BBSCMD');
           // Parse command string (e.g., "DOORS:who/NI ~N" with params)
           try {
-            await handleCommand(socket, session, commandStr);
+            console.log(`[displayScreen] Calling handleCommand with:`, commandStr);
+            const result = await handleCommand(socket, session, commandStr);
+            console.log(`[displayScreen] ✓ Command completed:`, commandStr, 'Result:', result);
           } catch (error) {
-            console.error(`[displayScreen] Error executing command ${commandStr}:`, error);
+            console.error(`[displayScreen] ✗ ERROR executing command ${commandStr}:`, error);
+            console.error(`[displayScreen] Error stack:`, (error as Error).stack);
           }
         }
+        console.log(`[displayScreen] ==========================================`);
+        console.log(`[displayScreen] ALL COMMANDS COMPLETED FROM: ${screenName}`);
+        console.log(`[displayScreen] ==========================================`);
       });
+    } else {
+      console.log(`[displayScreen] No commands to execute from screen file: ${screenName}`);
     }
 
     // If displaying MENU and user is sysop, append sysop commands

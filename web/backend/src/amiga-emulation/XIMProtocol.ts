@@ -151,6 +151,9 @@ export class XIMProtocol {
       XIMCommand.JH_20,
       XIMCommand.QUICK_KEY,
       XIMCommand.GETKEY,
+      XIMCommand.PG_SM,
+      XIMCommand.PG_UD,
+      XIMCommand.PG_US,
     ].includes(command);
   }
 
@@ -203,6 +206,18 @@ export class XIMProtocol {
 
       case XIMCommand.GETKEY:
         this.ioHandler.handleGetKey(msg);
+        break;
+
+      case XIMCommand.PG_SM:
+        this.ioHandler.handleScreenMessage(msg);
+        break;
+
+      case XIMCommand.PG_UD:
+        this.ioHandler.handleUserData(msg, this.bbsSession);
+        break;
+
+      case XIMCommand.PG_US:
+        this.ioHandler.handleUserString(msg, this.bbsSession);
         break;
     }
   }

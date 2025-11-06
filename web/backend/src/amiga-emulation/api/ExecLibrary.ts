@@ -59,6 +59,7 @@ interface Task {
   sigRecvd: number;      // Signals received (bits OR'd together)
   sigWait: number;       // Signals waiting for (0 = not waiting)
   state: number;         // Task state (TS_READY, TS_WAIT, etc.)
+  msgPort: number;       // Message port address (for Process structure)
 }
 
 /**
@@ -129,6 +130,7 @@ export class ExecLibrary {
     };
 
     // Create current task (the door itself)
+    const taskMsgPortAddr = 0x07005C; // Process msg port at task + 0x5C
     this.currentTask = {
       address: 0x070000,  // Task structure at 448KB
       name: 'Door Task',
@@ -136,8 +138,19 @@ export class ExecLibrary {
       sigRecvd: 0,        // No signals received yet
       sigWait: 0,         // Not waiting for signals (0 = TS_READY)
       state: 0,           // TS_READY
+      msgPort: taskMsgPortAddr, // Message port for Process structure
     };
     this.execBase.thisTask = this.currentTask.address;
+
+    // Register the task's message port
+    this.messagePorts.set(taskMsgPortAddr, {
+      address: taskMsgPortAddr,
+      name: 'Door Task Port',
+      messages: [],
+      sigBit: 0,
+      sigTask: this.currentTask.address,
+      signaled: false,
+    });
 
     console.log('[ExecLibrary] Initialized');
     console.log(`[ExecLibrary] ExecBase at 0x${this.execBase.address.toString(16)}`);
@@ -267,12 +280,109 @@ export class ExecLibrary {
   }
 
   /**
-   * Write Task structure to memory
+   * Write Task/Process structure to memory
+   *
+   * Doors expect a Process structure (Task + additional fields).
+   * Process structure layout (from dos/dosextens.h):
+   *   struct Task pr_Task (92 bytes = 0x5C)
+   *   struct MsgPort pr_MsgPort (starts at offset 0x5C)
+   *
+   * Task structure layout (from exec/tasks.h):
+   *   struct Node tc_Node (14 bytes)
+   *     ln_Succ (4), ln_Pred (4), ln_Type (1), ln_Pri (1), ln_Name (4)
+   *   tc_Flags (1), tc_State (1)
+   *   tc_IDNestCnt (1), tc_TDNestCnt (1)
+   *   tc_SigAlloc (4), tc_SigWait (4), tc_SigRecvd (4), tc_SigExcept (4)
+   *   tc_TrapAlloc (2), tc_TrapAble (2)
+   *   tc_ExceptData (4), tc_ExceptCode (4), tc_TrapData (4), tc_TrapCode (4)
+   *   tc_SPReg (4), tc_SPLower (4), tc_SPUpper (4)
+   *   tc_Switch (4), tc_Launch (4)
+   *   struct List tc_MemEntry (14 bytes), tc_UserData (4)
+   *   Total: 92 bytes (0x5C)
+   *
+   * MsgPort structure layout (from exec/ports.h):
+   *   struct Node mp_Node (14 bytes)
+   *   mp_Flags (1), mp_SigBit (1)
+   *   mp_SigTask (4)
+   *   struct List mp_MsgList (14 bytes)
+   *   Total: 34 bytes
    */
   private writeTaskToMemory(task: Task): void {
-    // Minimal task structure for now
-    // TODO: Implement full task structure when needed
-    console.log(`[ExecLibrary] Task structure at 0x${task.address.toString(16)}: ${task.name}`);
+    const addr = task.address;
+
+    // Write Task structure (92 bytes)
+    // Node header
+    this.emulator.writeMemory32(addr + 0x00, 0);  // ln_Succ
+    this.emulator.writeMemory32(addr + 0x04, 0);  // ln_Pred
+    this.emulator.writeMemory(addr + 0x08, 1);    // ln_Type = NT_TASK
+    this.emulator.writeMemory(addr + 0x09, 0);    // ln_Pri
+    this.emulator.writeMemory32(addr + 0x0A, 0);  // ln_Name (TODO: write name string)
+
+    // Task fields
+    this.emulator.writeMemory(addr + 0x0E, 0);    // tc_Flags
+    this.emulator.writeMemory(addr + 0x0F, 2);    // tc_State = TS_RUN
+    this.emulator.writeMemory(addr + 0x10, 0);    // tc_IDNestCnt
+    this.emulator.writeMemory(addr + 0x11, 0);    // tc_TDNestCnt
+
+    // Signal fields
+    this.emulator.writeMemory32(addr + 0x12, 0);  // tc_SigAlloc
+    this.emulator.writeMemory32(addr + 0x16, task.sigWait);   // tc_SigWait
+    this.emulator.writeMemory32(addr + 0x1A, task.sigRecvd);  // tc_SigRecvd
+    this.emulator.writeMemory32(addr + 0x1E, 0);  // tc_SigExcept
+
+    // Trap fields
+    this.emulator.writeMemory16(addr + 0x22, 0);  // tc_TrapAlloc
+    this.emulator.writeMemory16(addr + 0x24, 0);  // tc_TrapAble
+
+    // Exception/Trap handlers
+    this.emulator.writeMemory32(addr + 0x26, 0);  // tc_ExceptData
+    this.emulator.writeMemory32(addr + 0x2A, 0);  // tc_ExceptCode
+    this.emulator.writeMemory32(addr + 0x2E, 0);  // tc_TrapData
+    this.emulator.writeMemory32(addr + 0x32, 0);  // tc_TrapCode
+
+    // Stack pointers
+    this.emulator.writeMemory32(addr + 0x36, 0);  // tc_SPReg
+    this.emulator.writeMemory32(addr + 0x3A, 0);  // tc_SPLower
+    this.emulator.writeMemory32(addr + 0x3E, 0);  // tc_SPUpper
+
+    // Switch/Launch
+    this.emulator.writeMemory32(addr + 0x42, 0);  // tc_Switch
+    this.emulator.writeMemory32(addr + 0x46, 0);  // tc_Launch
+
+    // MemEntry list (empty list)
+    this.emulator.writeMemory32(addr + 0x4A, addr + 0x4E); // lh_Head -> lh_Tail
+    this.emulator.writeMemory32(addr + 0x4E, 0);           // lh_Tail = NULL
+    this.emulator.writeMemory32(addr + 0x52, addr + 0x4A); // lh_TailPred -> lh_Head
+    this.emulator.writeMemory(addr + 0x56, 0);             // lh_Type
+    this.emulator.writeMemory(addr + 0x57, 0);             // l_pad
+
+    // UserData
+    this.emulator.writeMemory32(addr + 0x58, 0);  // tc_UserData
+
+    // Write Process pr_MsgPort structure at offset 0x5C
+    const msgPortAddr = task.msgPort;
+
+    // MsgPort Node header
+    this.emulator.writeMemory32(msgPortAddr + 0x00, 0);  // ln_Succ
+    this.emulator.writeMemory32(msgPortAddr + 0x04, 0);  // ln_Pred
+    this.emulator.writeMemory(msgPortAddr + 0x08, 4);    // ln_Type = NT_MSGPORT
+    this.emulator.writeMemory(msgPortAddr + 0x09, 0);    // ln_Pri
+    this.emulator.writeMemory32(msgPortAddr + 0x0A, 0);  // ln_Name
+
+    // MsgPort fields
+    this.emulator.writeMemory(msgPortAddr + 0x0E, 0);    // mp_Flags = PA_SIGNAL
+    this.emulator.writeMemory(msgPortAddr + 0x0F, 0);    // mp_SigBit
+    this.emulator.writeMemory32(msgPortAddr + 0x10, task.address); // mp_SigTask = task
+
+    // MsgPort message list (empty list)
+    this.emulator.writeMemory32(msgPortAddr + 0x14, msgPortAddr + 0x18); // lh_Head -> lh_Tail
+    this.emulator.writeMemory32(msgPortAddr + 0x18, 0);                  // lh_Tail = NULL
+    this.emulator.writeMemory32(msgPortAddr + 0x1C, msgPortAddr + 0x14); // lh_TailPred -> lh_Head
+    this.emulator.writeMemory(msgPortAddr + 0x20, 5);                    // lh_Type = NT_MESSAGE
+    this.emulator.writeMemory(msgPortAddr + 0x21, 0);                    // l_pad
+
+    console.log(`[ExecLibrary] Task/Process structure written to 0x${task.address.toString(16)}`);
+    console.log(`[ExecLibrary]   pr_MsgPort at 0x${msgPortAddr.toString(16)}`);
   }
 
   /**

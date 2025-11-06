@@ -802,6 +802,11 @@ export class AmigaDoorSession {
       }
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
+      // Send initial XIM message to door with user data
+      if (!this.startupMessageSent) {
+        this.sendInitialXimMessage();
+        this.startupMessageSent = true;
+      }
 
       while (this.isRunning) {
         // === STEP 1: Check if paused (async input) ===
@@ -1405,6 +1410,86 @@ export class AmigaDoorSession {
     }
     // Null terminate
     this.emulator.writeMemory(msgAddr + 28 + str.length, 0);
+  }
+
+  /**
+   * Send initial XIM message to WHO2 door with user information
+   * WHO2 waits on its Process message port (0x7005C) for user data
+   */
+  private sendInitialXimMessage(): void {
+    if (!this.emulator || !this.execLibrary) {
+      console.log('[AmigaDoorSession] ERROR: Cannot send XIM message - emulator not initialized');
+      return;
+    }
+
+    console.log('[AmigaDoorSession] ===============================================');
+    console.log('[AmigaDoorSession] *** SENDING INITIAL XIM MESSAGE TO DOOR ***');
+    console.log('[AmigaDoorSession] ===============================================');
+
+    // WHO2's Process message port is at task address + 0x5C
+    const doorPortAddr = 0x7005C;
+
+    // For now, create a simple user list with the current user
+    const onlineUsers = [
+      {
+        nodeId: this.config.bbsSession?.nodeId || 0,
+        username: this.config.bbsSession?.user?.username || 'sysop',
+        location: this.config.bbsSession?.currentLocation || 'Main Menu'
+      }
+    ];
+
+    console.log(`[AmigaDoorSession] Online users: ${onlineUsers.length}`);
+
+    // Allocate message structure in memory
+    // Message structure: struct Message (20 bytes) + user data
+    const msgSize = 256;
+    const msgAddr = this.execLibrary.allocMem(msgSize, 0x10001); // MEMF_PUBLIC|MEMF_CLEAR
+
+    if (msgAddr === 0) {
+      console.log('[AmigaDoorSession] ERROR: Failed to allocate message memory');
+      return;
+    }
+
+    // Create a reply port for the door to respond to (not needed for WHO2, but proper protocol)
+    const replyPortAddr = 0;  // WHO2 doesn't reply, so we can skip this
+
+    // Write Message structure (struct Message - 20 bytes)
+    this.emulator.writeMemory32(msgAddr + 0, 0);      // mn_Succ
+    this.emulator.writeMemory32(msgAddr + 4, 0);      // mn_Pred
+    this.emulator.writeMemory(msgAddr + 8, 5);         // mn_Type = NT_MESSAGE
+    this.emulator.writeMemory(msgAddr + 9, 0);         // mn_Pri
+    this.emulator.writeMemory32(msgAddr + 10, replyPortAddr); // mn_ReplyPort
+    this.emulator.writeMemory16(msgAddr + 18, msgSize);        // mn_Length
+
+    // Write user data after the Message header (offset 20+)
+    // Format for WHO2: Simple text with user info, one user per line
+    let dataOffset = 20;
+
+    // First, write the count
+    this.emulator.writeMemory32(msgAddr + dataOffset, onlineUsers.length);
+    dataOffset += 4;
+
+    // Write each user's information as a text string
+    for (const node of onlineUsers) {
+      const userInfo = `Node ${node.nodeId}: ${node.username || 'Unknown'} - ${node.location || 'Main Menu'}\n`;
+      for (let i = 0; i < userInfo.length && dataOffset < msgSize - 1; i++) {
+        this.emulator.writeMemory(msgAddr + dataOffset++, userInfo.charCodeAt(i));
+      }
+    }
+
+    // Null terminate
+    this.emulator.writeMemory(msgAddr + dataOffset, 0);
+
+    console.log(`[AmigaDoorSession]   Message address: 0x${msgAddr.toString(16)}`);
+    console.log(`[AmigaDoorSession]   Door port: 0x${doorPortAddr.toString(16)}`);
+    console.log(`[AmigaDoorSession]   User count: ${onlineUsers.length}`);
+    console.log(`[AmigaDoorSession]   Message size: ${dataOffset} bytes`);
+
+    // Put the message in the door's message port queue
+    this.execLibrary.putMsg(doorPortAddr, msgAddr);
+
+    console.log('[AmigaDoorSession] *** XIM MESSAGE SENT TO DOOR! ***');
+    console.log('[AmigaDoorSession] ===============================================');
   }
 
   /**

@@ -136,7 +136,6 @@ import {
 } from './handlers/file.handler';
 import { setMessageEntryDependencies } from './handlers/message-entry.handler';
 import {
-  displayAccountEditingMenu,
   handleAccountEditing,
   displayUserList,
   handleEditUserAccount,
@@ -215,6 +214,7 @@ export interface BBSSession {
   inputBuffer: string; // Buffer for line-based input (like login system)
   relConfNum: number; // Relative conference number (like AmiExpress relConfNum)
   currentConfName: string; // Current conference name (like AmiExpress currentConfName)
+  currentMenuName?: string; // Current menu name set by ~SM_ MCI code (express.e:5575)
   cmdShortcuts: boolean; // Like AmiExpress cmdShortcuts - controls hotkey vs line input mode
   doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
   tempData?: any; // Temporary data storage for complex operations (like file listing)
@@ -283,6 +283,10 @@ export interface BBSSession {
   pagesAllowed?: number; // Number of pages allowed (-1 = unlimited, 0 = none)
   quietMode?: boolean; // Quiet mode preference
   relogon?: boolean; // Flag for relogon after goodbye
+
+  // Account editor state (Command 1)
+  accountEditorState?: any; // State tracking for account editor
+  inputCallback?: (input: string) => Promise<void>; // Callback for input handling
 }
 
 // Conference and Message Base data structures (simplified)
@@ -747,10 +751,10 @@ io.on('connection', async (socket) => {
   };
   sessions.set(socket.id, session);
 
-  // Display complete connection screen via AWAITSCREEN.TXT
-  // reference-board BBS layout: everything shown via screen file with MCI codes
-  // All messages, node list, etc. are in AWAITSCREEN.TXT
-  await displayScreen(socket, session, 'AWAITSCREEN');
+  // Display complete connection screen via BBSTITLE.TXT (express.e:29552)
+  // BBSTITLE contains ~XIDOORS:who/NI to trigger NI door on connection
+  // NI creates node tracking files for WHO2 door
+  await displayScreen(socket, session, 'BBSTITLE');
 
   // Show ANSI prompt immediately (reference-board style - no key wait)
   socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
@@ -1042,6 +1046,37 @@ io.on('connection', async (socket) => {
     if ((session as any).inChat && data === '\x1b[OP') { // F1 key
       console.log('🎯 F1 pressed during chat - exiting chat');
       exitChat(socket, session);
+      return;
+    }
+
+    // Check for input callback (used by multi-step flows like account editor)
+    if (session.inputCallback) {
+      console.log('📞 Input callback detected - routing to callback handler');
+
+      // Handle character-by-character input (expert mode) - accumulate until Enter
+      if (data === '\r' || data === '\n') {
+        const fullInput = session.inputBuffer;
+        session.inputBuffer = ''; // Clear buffer for next input
+
+        console.log(`📞 Calling callback with accumulated input: "${fullInput}"`);
+        session.inputCallback(fullInput)
+          .then(() => {
+            console.log('✓ Input callback completed');
+          })
+          .catch((error: any) => {
+            console.error('✗ Input callback error:', error);
+          });
+      } else if (data === '\x7F' || data === '\b') {
+        // Handle backspace
+        if (session.inputBuffer.length > 0) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          // Don't echo - frontend terminal handles display
+        }
+      } else {
+        // Accumulate character (frontend terminal handles echo)
+        session.inputBuffer += data;
+      }
+
       return;
     }
 
@@ -2710,7 +2745,7 @@ async function initializeData() {
     setSysopCommandsDependencies({
       getRecentCallerActivity,
       setEnvStat,
-      displayAccountEditingMenu
+      db
     });
 
     // Inject dependencies into transfer/misc commands handler

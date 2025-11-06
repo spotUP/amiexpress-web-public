@@ -5,8 +5,8 @@
 const puppeteer = require('puppeteer');
 
 const BBS_URL = 'http://localhost:5173';
-const TEST_USERNAME = 'testuser';
-const TEST_PASSWORD = 'test123';
+const TEST_USERNAME = 'sysop';
+const TEST_PASSWORD = 'sysop';
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));

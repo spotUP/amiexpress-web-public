@@ -174,7 +174,13 @@ import {
   handleMessageToInput,
   handleMessageSubjectInput,
   handleMessagePrivateInput,
-  handleMessageBodyInput
+  handleMessageBodyInput,
+  handleMessageDeleteLineInput,
+  handleMessageDeleteConfirm,
+  handleMessageEditLineInput,
+  handleMessageEditLineContent,
+  handleMessageAttachFileInput,
+  handleMessageAttachDeleteConfirm
 } from './message-entry.handler';
 
 // Import utilities
@@ -363,6 +369,43 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   if (session.inDoorManager) {
     console.log('[Command Handler] Door Manager is active (inDoorManager=true), skipping command processing for input:', JSON.stringify(data));
     return;
+  }
+
+  // Special handling for WHO2 helper tools (NI/NO) - these must run without authentication
+  // NI (NodeIn) executes on connection, NO (NodeOut) executes on logout
+  // They create tracking files that WHO2 door reads to display connected users
+  if (data === 'DOORS:who/NI' || data === 'DOORS:who/No') {
+    console.log(`[WHO2] Executing helper tool: ${data}`);
+    const fs = require('fs');
+    const path = require('path');
+    const nodeId = session.nodeId || 0;
+    const username = session.user?.username || 'Guest';
+    const whoDir = path.join(process.cwd(), '../../doors/who');
+
+    try {
+      // Ensure directory exists
+      if (!fs.existsSync(whoDir)) {
+        fs.mkdirSync(whoDir, { recursive: true });
+      }
+
+      if (data === 'DOORS:who/NI') {
+        // NodeIn - create node tracking file on connection
+        const nodeFile = path.join(whoDir, `node${nodeId}.txt`);
+        const nodeData = `Node: ${nodeId}\nUser: ${username}\nConnected: ${new Date().toISOString()}\n`;
+        fs.writeFileSync(nodeFile, nodeData);
+        console.log(`[WHO2] NI created tracking file: ${nodeFile}`);
+      } else {
+        // NodeOut - remove node tracking file on logout
+        const nodeFile = path.join(whoDir, `node${nodeId}.txt`);
+        if (fs.existsSync(nodeFile)) {
+          fs.unlinkSync(nodeFile);
+          console.log(`[WHO2] NO removed tracking file: ${nodeFile}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[WHO2] Error executing ${data}:`, error);
+    }
+    return; // Done - don't process further
   }
 
   // Handle pre-login connection flow (AWAIT state)
@@ -1462,6 +1505,102 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Client handles character echo
+    }
+    return;
+  }
+
+  // Handle message editor delete line prompt
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_DELETE_LINE) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessageDeleteLineInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle message editor delete confirmation
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessageDeleteConfirm(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle message editor edit line prompt
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_EDIT_LINE) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessageEditLineInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle message editor edit line content
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '');
+      session.inputBuffer = '';
+      handleMessageEditLineContent(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle message editor file attachment input (express.e:10515-10556)
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_ATTACH_FILE) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleMessageAttachFileInput(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+    }
+    return;
+  }
+
+  // Handle message editor file attachment delete confirmation (express.e:10538-10549)
+  if (session.subState === LoggedOnSubState.POST_MESSAGE_ATTACH_DELETE_CONFIRM) {
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      handleMessageAttachDeleteConfirm(socket, session, input);
+    } else if (data === '\x7f') { // Backspace
+      if (session.inputBuffer && session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
     }
     return;
   }
