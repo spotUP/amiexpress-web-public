@@ -72,6 +72,81 @@ const DOCS = {
     path: path.join(PROJECT_ROOT, 'Docs', 'MCI_CODES_TODO.md'),
     description: 'Complete MCI codes implementation status (52/60+ codes, priorities, reference)',
     mimeType: 'text/markdown'
+  },
+  'development-rules': {
+    inline: `# Development Rules (MCP-Managed)
+
+## File Size Policy
+
+**CRITICAL RULE: Files must not exceed 2,000 lines**
+
+When any source file reaches 2,000 lines:
+1. STOP adding to that file
+2. Plan modularization strategy
+3. Split into focused modules (typically 5-10 modules)
+4. Each module should be 200-500 lines ideally
+5. Main file becomes coordinator (< 500 lines)
+
+**How to modularize:**
+- Group related functionality
+- Create modules by responsibility (types, data, logic, UI, etc.)
+- Use clear naming: \`modulename/types.ts\`, \`modulename/handlers.ts\`, etc.
+- Main file imports and coordinates modules
+- Maintain 100% backward compatibility
+
+**Recent examples:**
+- database.ts (2,985 lines) → 10 modules (database/, main file 1,400 lines)
+- index.ts (2,801 lines) → 7 modules (server/, main file 870 lines)
+- phreakWars.ts (2,378 lines) → 6 modules (phreakwars/, main file 156 lines)
+- XIMProtocol.ts (2,237 lines) → 6 modules (xim/, main file 442 lines)
+
+## Documentation Policy
+
+**ALL development documentation must be stored in MCP, NOT on disk**
+
+**Use MCP resources instead of .md files for:**
+- Architecture decisions
+- Implementation notes
+- Progress tracking (except CURRENT_STATUS.md)
+- Feature specifications
+- Technical designs
+- API documentation
+- Development guides
+
+**MCP resource naming convention:**
+- \`dev-notes/<feature-name>\` - Feature-specific notes
+- \`architecture/<component>\` - Architecture decisions
+- \`implementation/<module>\` - Implementation details
+- \`api/<endpoint>\` - API specifications
+
+**Exceptions (files allowed on disk):**
+- CURRENT_STATUS.md - Single source of truth for project status
+- README.md - Project overview for GitHub
+- CLAUDE.md - Critical rules for AI assistant
+- User-facing documentation (Documentation/1-Users/)
+- Deployment guides (Documentation/2-Sysops/)
+
+**Why MCP over disk files:**
+- Reduces disk clutter
+- Faster access during development
+- Version controlled through MCP updates
+- Easier to search and query
+- No need to maintain file organization on disk
+- AI can access directly without file reads
+
+**Migration guide:**
+If you have existing .md documentation files:
+1. Read the content
+2. Store in appropriate MCP resource
+3. Delete the disk file
+4. Update any references
+
+**When to update this file:**
+Any time you add new development rules, update them here in the MCP.
+This is the single source of truth for development policies.
+`,
+    description: 'Development rules: file size limits (2000 lines max), MCP-based documentation policy',
+    mimeType: 'text/markdown'
   }
 };
 
@@ -143,13 +218,24 @@ class AmiExpressDocsServer {
       // Add documentation resources
       for (const [key, doc] of Object.entries(DOCS)) {
         try {
-          await fs.access(doc.path);
-          resources.push({
-            uri: `amiexpress://docs/${key}`,
-            mimeType: doc.mimeType,
-            name: key,
-            description: doc.description
-          });
+          // Inline content is always available (stored in MCP)
+          if (doc.inline) {
+            resources.push({
+              uri: `amiexpress://docs/${key}`,
+              mimeType: doc.mimeType,
+              name: key,
+              description: doc.description
+            });
+          } else {
+            // Disk-based content - check if file exists
+            await fs.access(doc.path);
+            resources.push({
+              uri: `amiexpress://docs/${key}`,
+              mimeType: doc.mimeType,
+              name: key,
+              description: doc.description
+            });
+          }
         } catch (error) {
           console.error(`[MCP] Document not found: ${doc.path}`);
         }
@@ -212,6 +298,18 @@ class AmiExpressDocsServer {
         }
 
         try {
+          // Check if this is inline content (stored in MCP, not on disk)
+          if (doc.inline) {
+            return {
+              contents: [{
+                uri,
+                mimeType: doc.mimeType,
+                text: doc.inline
+              }]
+            };
+          }
+
+          // Otherwise read from disk
           const content = await fs.readFile(doc.path, 'utf-8');
           return {
             contents: [{
