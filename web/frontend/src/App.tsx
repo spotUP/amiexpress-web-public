@@ -326,23 +326,8 @@ function App() {
         console.log('🚪 Sending input to door:', JSON.stringify(data));
         ws.emit('door:input', data);
       } else {
-        // NORMAL BBS MODE: Local echo + send as command
-        // LOCAL ECHO: Display character immediately for instant feedback
-        // Only echo printable characters and backspace, not control sequences
-        if (data.length === 1) {
-          if (data >= ' ' && data <= '~') {
-            // Printable character - echo immediately (mask with * if in password mode)
-            term.write(passwordMode.current ? '*' : data);
-          } else if (data === '\x7f' || data === '\b') {
-            // Backspace - erase immediately
-            term.write('\b \b');
-          } else if (data === '\r') {
-            // Enter - echo newline
-            term.write('\r\n');
-          }
-        }
-
-        // Send input to server (async, no waiting for echo)
+        // NORMAL BBS MODE: Send to server, let backend handle echo
+        // NO local echo - backend will echo back via ansi-output for proper BBS behavior
         ws.emit('command', data);
       }
     });

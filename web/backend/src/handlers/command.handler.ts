@@ -681,7 +681,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // NO echo - frontend terminal handles local echo for immediate feedback
+      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -714,7 +715,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // NO echo - frontend terminal handles local echo for immediate feedback
+      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -1520,7 +1522,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // NO echo - frontend terminal handles local echo for immediate feedback
+      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -2344,7 +2347,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // NO echo - frontend terminal handles local echo for immediate feedback
+      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
+      socket.emit('ansi-output', data);
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
