@@ -342,9 +342,15 @@ export async function parseMciCodes(
   // Advanced File Display Codes (express.e:5490-5560)
   // ~SS_ - Show String / Display File (express.e:5490-5500)
   // Format: ~SS_<filename>|| - displays another screen file
-  // Note: This is complex and requires async file loading, so we'll skip embedded display for now
-  // Just remove the code to prevent display issues
-  parsed = parsed.replace(/~SS_[^|]+\|\|/g, '');
+  // Store for async file loading - we'll process these after parsing
+  const ssRegex = /~SS_([^|]+)\|\|/g;
+  let ssMatch;
+  const filesToDisplay: string[] = [];
+  while ((ssMatch = ssRegex.exec(parsed)) !== null) {
+    const filename = ssMatch[1].trim();
+    filesToDisplay.push(filename);
+    parsed = parsed.replace(ssMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
+  }
 
   // ~SX_ - String Exact / Sequential File Display (express.e:5501-5530)
   // Format: ~SX_<filename>|| - displays files sequentially with counter
@@ -402,6 +408,29 @@ export async function parseMciCodes(
   parsed = parsed.replace(/%U/g, username);
   parsed = parsed.replace(/%N/g, '1');
   parsed = parsed.replace(/%C/g, conferences.length.toString());
+
+  // Process ~SS_ file display codes (express.e:5490-5500)
+  // Replace {{DISPLAY_FILE:N}} placeholders with actual file content
+  for (let i = 0; i < filesToDisplay.length; i++) {
+    const filename = filesToDisplay[i];
+    const placeholder = `{{DISPLAY_FILE:${i}}}`;
+
+    // Load the file content
+    let fileContent = loadScreenFile(filename, session.currentConf, 0);
+
+    if (fileContent) {
+      // Recursively process MCI codes in the embedded file
+      const embedded = await parseMciCodes(fileContent, session, bbsName, sysopName, location);
+      // Add any commands from embedded file to our command list
+      commandsToExecute.push(...embedded.commands);
+      // Replace placeholder with embedded content
+      parsed = parsed.replace(placeholder, embedded.parsed);
+    } else {
+      // File not found - remove placeholder
+      console.log(`[MCI] ~SS_ file not found: ${filename}`);
+      parsed = parsed.replace(placeholder, '');
+    }
+  }
 
   return { parsed, commands: commandsToExecute };
 }
