@@ -1,0 +1,4 @@
+BBSCMD=ANSI
+DOORNAME=Doors:ansi-editor
+DESCRIPTION=ANSI Screen Editor
+ACS=ACS_SYSOP
