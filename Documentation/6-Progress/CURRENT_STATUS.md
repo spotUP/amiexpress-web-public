@@ -56,12 +56,25 @@
 - **Node Synchronization**: WebSocket-based, no file locks needed
 
 ### In Progress 🔨
-- **Phase 5 Evaluation**: File transfer protocols, AmigaOS-specific features
+- **68K Binary Door System**: Critical - doors don't work yet
+- **Door Testing**: Need extensive testing of all door types
+- **AREXX Door Testing**: Interpreter exists but untested with real doors
+- **Command Testing**: Many commands implemented but not fully tested
+- **Integration Testing**: Components need integration testing
 
-### Not Started ❌
-- **Daily System Stats Tracking**: Needed for ~SC to return real call counts (minor feature)
-- **WHO Door User List**: ~XC now works! NI/NO tools can run on login/logout
-- **NI/NO Tools**: May still have ROM write errors - needs testing with new ~XC
+### Critical Issues ❌
+- **68K Binary Doors**: NOT WORKING - major feature blocker
+- **WHO Door**: Needs debugging (example of door issues)
+- **Door Session Management**: Needs work
+- **Multi-user Testing**: Unknown stability
+- **Performance**: Not tested under load
+- **Database Migrations**: Not implemented
+
+### Project Reality Check ⚠️
+**Actual Completion**: 60-70% (not 90-95% as previously stated)
+**Status**: Active Development - NOT Production Ready
+**Time to Production**: 2-3 months minimum
+**Confidence**: MEDIUM (many features implemented but untested)
 
 ---
 
