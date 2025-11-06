@@ -681,8 +681,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342)
-      socket.emit('ansi-output', data);
+      // NO echo - frontend terminal handles local echo for immediate feedback
     }
     return;
   }
@@ -715,8 +714,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342)
-      socket.emit('ansi-output', data);
+      // NO echo - frontend terminal handles local echo for immediate feedback
     }
     return;
   }
@@ -1522,8 +1520,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342)
-      socket.emit('ansi-output', data);
+      // NO echo - frontend terminal handles local echo for immediate feedback
     }
     return;
   }
@@ -2347,8 +2344,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342)
-      socket.emit('ansi-output', data);
+      // NO echo - frontend terminal handles local echo for immediate feedback
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
