@@ -354,7 +354,7 @@ export function handleZippySearchInput(socket: any, session: BBSSession, input: 
  * @param socket - Socket.IO socket
  * @param session - Current BBS session
  */
-export function handleZoomCommand(socket: any, session: BBSSession): void {
+export async function handleZoomCommand(socket: any, session: BBSSession): Promise<void> {
   // Check security - express.e:26221
   if (!checkSecurity(session.user, ACSPermission.ZOOM_MAIL)) {
     ErrorHandler.permissionDenied(socket, 'download offline mail', {
@@ -366,9 +366,9 @@ export function handleZoomCommand(socket: any, session: BBSSession): void {
   console.log('[ENV] Zoom');
 
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Zoo Mail (QWK/FTN Download)'));
+  socket.emit('ansi-output', AnsiUtil.headerBox('Zoo Mail (QWK Download)'));
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Download your messages in offline format.\r\n');
+  socket.emit('ansi-output', 'Download your messages in QWK offline format.\r\n');
   socket.emit('ansi-output', '\r\n');
 
   // Check if user has any unread messages
@@ -382,27 +382,55 @@ export function handleZoomCommand(socket: any, session: BBSSession): void {
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
   socket.emit('ansi-output', AnsiUtil.colorize(`You have ${unreadMessages.length} unread message(s).`, 'yellow'));
   socket.emit('ansi-output', '\r\n\r\n');
 
-  // Show format options based on user's zoom type - express.e:26227-26233
-  socket.emit('ansi-output', AnsiUtil.colorize('Available formats:', 'cyan'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '1. QWK format (standard)\r\n');
-  socket.emit('ansi-output', '2. ASCII text format\r\n');
-  socket.emit('ansi-output', '\r\n');
+  try {
+    // Import QWKManager (lazy load to avoid circular dependency)
+    const { QWKManager } = await import('../qwk');
+    const qwkManager = new QWKManager();
 
-  // TODO: Implement qwkZoom() and asciiZoom() functions
-  socket.emit('ansi-output', AnsiUtil.warningLine('Offline mail download not yet implemented'));
-  socket.emit('ansi-output', 'This requires QWK/FTN mail packet generation.\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    // Generate QWK packet for all conferences user has access to
+    // express.e:26227-26238 - uses user's zoomType to determine format
+    const userConferences = [session.currentConf]; // For now, just current conference
+    // TODO: Get list of all conferences user has flagged for ZOOM (CF command)
+
+    socket.emit('ansi-output', AnsiUtil.colorize('Generating QWK packet...', 'cyan'));
+    socket.emit('ansi-output', '\r\n');
+
+    const filename = await qwkManager.generateOutgoingPacket(
+      session.user.id.toString(),
+      userConferences
+    );
+
+    socket.emit('ansi-output', AnsiUtil.colorize(`QWK packet generated: ${filename}`, 'green'));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `Download URL: /api/qwk/download/${filename}\r\n`);
+    socket.emit('ansi-output', '\r\n');
+
+    // express.e:26244-26247 - prompt for pack method (LHA or ZIP)
+    socket.emit('ansi-output', AnsiUtil.colorize('Pack Method: ', 'cyan'));
+    socket.emit('ansi-output', '1) LHA, 2) ZIP\r\n');
+    socket.emit('ansi-output', AnsiUtil.colorize('(ZIP selected automatically for web)', 'green'));
+    socket.emit('ansi-output', '\r\n\r\n');
+
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+  } catch (error) {
+    console.error('[ZOOM] QWK generation error:', error);
+    socket.emit('ansi-output', AnsiUtil.errorLine('Error generating QWK packet'));
+    socket.emit('ansi-output', (error as Error).message + '\r\n');
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
 }
 
 /**

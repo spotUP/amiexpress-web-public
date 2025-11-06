@@ -2639,7 +2639,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'ZOOM': // Zoo Mail (internalCommandZOOM) - express.e:26215-26240
-      handleZoomCommand(socket, session);
+      await handleZoomCommand(socket, session);
       return;
 
     case 'R': // Read Messages (internalCommandR) - express.e:25518-25531
