@@ -344,14 +344,17 @@ export async function parseMciCodes(
   // Format: ~SS_<filename>|| - displays another screen file
   // Note: || terminator is optional in some screen files
   // Store for async file loading - we'll process these after parsing
+  console.log('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
   const ssRegex = /~SS_([^|\r\n]+)(\|\|)?/g;
   let ssMatch;
   const filesToDisplay: string[] = [];
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
     const filename = ssMatch[1].trim();
+    console.log('[MCI DEBUG] Found ~SS_ file:', filename);
     filesToDisplay.push(filename);
     parsed = parsed.replace(ssMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
   }
+  console.log('[MCI DEBUG] Total ~SS_ files found:', filesToDisplay.length);
 
   // ~SX_ - String Exact / Sequential File Display (express.e:5501-5530)
   // Format: ~SX_<filename>|| - displays files sequentially with counter
@@ -454,29 +457,63 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   const paths = [];
 
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
-  // If screenName contains ":" or "/" it's a full Amiga path, convert to filesystem path
-  if (screenName.includes(':') || screenName.includes('/')) {
-    // Replace Amiga assign with actual path
-    let fsPath = screenName
-      .replace(/^bbs:/i, path.join(baseDir, 'BBS'))
-      .replace(/^node\d+:/i, (match) => {
-        const nodeNum = match.match(/\d+/)?.[0] || '0';
-        return path.join(baseDir, `Node${nodeNum}`);
-      })
-      .replace(/^screens:/i, path.join(baseDir, 'BBS', 'Screens'));
+  // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
+  // This is important for files imported from real Amigas (like reference-boardBBS)
+  if (screenName.includes(':')) {
+    // Split assign and path parts
+    const [assign, ...pathParts] = screenName.split(':');
+    const relativePath = pathParts.join(':'); // Handle case where path contains ':'
 
-    // Convert forward slashes to platform-specific path separator
-    fsPath = fsPath.replace(/\//g, path.sep);
+    let basePath: string;
+    const assignLower = assign.toLowerCase();
 
-    // Try the full path as-is
-    paths.push(fsPath);
-
-    // Also try under BBS/ if not already prefixed
-    if (!screenName.toLowerCase().startsWith('bbs:')) {
-      paths.push(path.join(baseDir, 'BBS', fsPath));
+    if (assignLower === 'bbs') {
+      // bbs: maps to the root dataDir (not dataDir/BBS)
+      basePath = baseDir;
+    } else if (assignLower.startsWith('node')) {
+      const nodeNum = assign.match(/\d+/)?.[0] || '0';
+      basePath = path.join(baseDir, `Node${nodeNum}`);
+    } else if (assignLower === 'screens') {
+      basePath = path.join(baseDir, 'Screens');
+    } else {
+      // Unknown assign, try as-is under dataDir root
+      basePath = baseDir;
     }
 
-    console.log(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${fsPath}`);
+    // Resolve case-insensitive path (Amiga compatibility)
+    // Try to find actual filesystem path by checking each component
+    const fs = require('fs');
+    let currentPath = basePath;
+    const pathComponents = relativePath.split('/').filter(c => c.length > 0);
+    let resolved = true;
+
+    for (const component of pathComponents) {
+      try {
+        const entries = fs.readdirSync(currentPath);
+        // Find matching entry (case-insensitive)
+        const match = entries.find((e: string) => e.toLowerCase() === component.toLowerCase());
+        if (match) {
+          currentPath = path.join(currentPath, match);
+        } else {
+          // Component not found, use as-is (will fail later)
+          currentPath = path.join(currentPath, component);
+          resolved = false;
+          break;
+        }
+      } catch (error) {
+        // Directory doesn't exist or can't be read
+        currentPath = path.join(currentPath, component);
+        resolved = false;
+        break;
+      }
+    }
+
+    paths.push(currentPath);
+    console.log(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${currentPath} (${resolved ? 'found' : 'not found'})`);
+  } else if (screenName.includes('/')) {
+    // Relative path with slashes - try under dataDir root
+    const fsPath = path.join(baseDir, screenName.split('/').join(path.sep));
+    paths.push(fsPath);
   }
 
   // Try conference-specific screen first (if provided)
