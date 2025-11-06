@@ -56,15 +56,16 @@
 - **Node Synchronization**: WebSocket-based, no file locks needed
 
 ### In Progress 🔨
-- **68K Binary Door System**: Infrastructure 100% complete, execution flow needs debugging
+- **68K Binary Door System**: Fixed WHO command routing, investigating ANSI prompt state issue
 - **Door Testing**: Need extensive testing of all door types
 - **AREXX Door Testing**: Interpreter exists but untested with real doors
 - **Command Testing**: Many commands implemented but not fully tested
 - **Integration Testing**: Components need integration testing
 
 ### Critical Issues ❌
-- **68K Binary Doors**: Command routing works, execution needs debugging
-- **WHO Door**: Infrastructure verified, execution flow needs investigation
+- **ANSI Prompt State**: Session stuck in 'await/ansi_prompt' instead of 'loggedon/read_command'
+- **WHO Door**: Command routing fixed, blocked by ANSI prompt issue
+- **68K Binary Doors**: Infrastructure complete, ANSI prompt blocks execution
 - **Multi-user Testing**: Unknown stability
 - **Performance**: Not tested under load
 - **Database Migrations**: Not implemented
@@ -78,6 +79,37 @@
 ---
 
 ## 📊 Recent Achievements
+
+### Session 2025-11-06 Part 6: WHO Command Routing Fixed, ANSI Prompt Issue Found
+**Achievement**: Fixed WHO command handler conflict, identified ANSI prompt state bug
+
+**Problem Found**:
+- Internal WHO command handler (TypeScript) was intercepting WHO before BBSCMD lookup
+- Command priority: SYSCMD → BBSCMD → InternalCommand
+- WHO.info exists (DOORS:RTW/RTW) but wasn't being reached
+
+**Fix Applied**:
+- Commented out internal WHO handler in command.handler.ts:2624-2628
+- WHO now falls through to BBSCMD as intended by express.e:26094-26103
+- express.e calls who(0) which launches door executable
+
+**New Critical Issue Discovered**:
+- Session stuck in 'await' state with 'ansi_prompt' substate
+- Should be in 'loggedon' state with 'read_command' substate
+- ANSI prompt (ANSI/RIP/No graphics question) not completing properly
+- This blocks ALL command processing, not just doors
+- Need to investigate ANSI prompt completion flow
+
+**Files Modified**:
+1. web/backend/src/handlers/command.handler.ts - Commented out WHO handler
+2. Documentation/6-Progress/CURRENT_STATUS.md - Updated status
+
+**Next Steps**:
+- Fix ANSI prompt state transition
+- Ensure session moves to loggedon/read_command after ANSI selection
+- Then retest WHO door execution
+
+---
 
 ### Session 2025-11-06 Part 5: 68K Door System Infrastructure Complete! 🎉
 **Achievement**: Fixed MCP NDK autodocs access and verified all infrastructure components!
