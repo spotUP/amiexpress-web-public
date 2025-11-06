@@ -13,6 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { getAmigaAssignPaths } from '../utils/bbs-paths.util';
 import { loadCommands } from '../handlers/command-execution.handler';
 
 /**

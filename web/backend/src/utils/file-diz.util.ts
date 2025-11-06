@@ -14,19 +14,8 @@ import { extractFileDizFromDms } from './dms-extractor';
 import { extractFileDizFromLzx } from './lzx-extractor';
 import { runExamineCommandsForDiz } from './examine-runner.util';
 
-// Express.e uses nodeWorkDir for temp file extraction
-// We'll use Node#/WorkDir for extracted DIZ files
-export function getNodeWorkDir(nodeNumber: number, bbsDataPath: string): string {
-  return path.join(bbsDataPath, `Node${nodeNumber}`, 'WorkDir');
-}
-
-// Express.e uses ramPen or Node#/Playpen for uploaded files
-export function getPlaypenDir(nodeNumber: number, bbsDataPath: string, ramPen?: string): string {
-  if (ramPen && ramPen.length > 0) {
-    return ramPen;
-  }
-  return path.join(bbsDataPath, `Node${nodeNumber}`, 'Playpen');
-}
+// Re-export path utilities from centralized bbs-paths.util.ts
+export { getNodeWorkDir, getPlaypenDir } from './bbs-paths.util';
 
 /**
  * Run EXAMINE system command to extract FILE_ID.DIZ
