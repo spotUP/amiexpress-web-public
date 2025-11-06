@@ -545,26 +545,39 @@ class AmiExpressDocsServer {
   }
 
   async searchNDKAutodocs(query, library = null) {
-    const autodocsPath = path.join(PROJECT_ROOT, 'NDK3.2R4', 'Autodocs');
+    const autodocsPath = path.join(PROJECT_ROOT, 'Docs', 'NDK3.2R4', 'Autodocs');
     const results = [];
 
     try {
       // Determine which files to search
       let filesToSearch = [];
       if (library) {
-        const libraryFile = path.join(autodocsPath, library);
+        // Try both AG/library and library directly
+        const agPath = path.join(autodocsPath, 'AG', library);
+        const directPath = path.join(autodocsPath, library);
+
         try {
-          await fs.access(libraryFile);
-          filesToSearch.push({ name: library, path: libraryFile });
+          await fs.access(agPath);
+          filesToSearch.push({ name: library, path: agPath });
         } catch {
-          throw new Error(`Library not found: ${library}`);
+          try {
+            await fs.access(directPath);
+            filesToSearch.push({ name: library, path: directPath });
+          } catch {
+            throw new Error(`Library not found: ${library} (tried AG/${library} and ${library})`);
+          }
         }
       } else {
-        // Search all autodoc files
-        const files = await fs.readdir(autodocsPath);
-        filesToSearch = files
-          .filter(f => !f.startsWith('.'))
-          .map(f => ({ name: f, path: path.join(autodocsPath, f) }));
+        // Search all autodoc files in AG/ subdirectory (main libraries)
+        const agPath = path.join(autodocsPath, 'AG');
+        try {
+          const files = await fs.readdir(agPath);
+          filesToSearch = files
+            .filter(f => !f.startsWith('.') && !f.endsWith('.doc'))
+            .map(f => ({ name: f, path: path.join(agPath, f) }));
+        } catch (error) {
+          throw new Error(`Failed to read AG autodocs directory: ${error.message}`);
+        }
       }
 
       // Search each file
