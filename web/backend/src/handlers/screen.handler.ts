@@ -342,8 +342,9 @@ export async function parseMciCodes(
   // Advanced File Display Codes (express.e:5490-5560)
   // ~SS_ - Show String / Display File (express.e:5490-5500)
   // Format: ~SS_<filename>|| - displays another screen file
+  // Note: || terminator is optional in some screen files
   // Store for async file loading - we'll process these after parsing
-  const ssRegex = /~SS_([^|]+)\|\|/g;
+  const ssRegex = /~SS_([^|\r\n]+)(\|\|)?/g;
   let ssMatch;
   const filesToDisplay: string[] = [];
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
