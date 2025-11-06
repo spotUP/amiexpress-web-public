@@ -119,15 +119,27 @@
 
 **BEFORE Writing or Modifying ANY Code:**
 
-1. **Find the original implementation:**
-   ```bash
-   grep -n "internalCommand<X>" ~/Code/AmiExpress-Web/AmiExpress-Sources/express.e
-   grep -n "PROC <functionName>" ~/Code/AmiExpress-Web/AmiExpress-Sources/express.e
+1. **Find the original implementation using MCP:**
+   ```
+   Use MCP tool: search_express_source
+   - query: "internalCommand<X>" or "PROC <functionName>"
+   Returns: Line numbers + context
    ```
 
-2. **Read the original E code:**
-   ```bash
-   sed -n '<startLine>,<endLine>p' ~/Code/AmiExpress-Web/AmiExpress-Sources/express.e
+2. **Read the original E code using MCP:**
+   ```
+   Use MCP tool: read_source_range
+   - source: "express-e"
+   - startLine: <from search results>
+   - endLine: <from search results>
+
+   OR better yet:
+
+   Use MCP tool: read_express_module
+   - module: "internal-commands" (for A-Z commands)
+   - module: "doors" (for door execution)
+   - module: "mci" (for MCI codes)
+   etc.
    ```
 
 3. **ONLY THEN implement the exact behavior - NO GUESSING, NO ASSUMPTIONS**
@@ -145,9 +157,10 @@
 
 **ALL original AmiExpress commands are SACRED and must NEVER be overwritten.**
 
-Before creating ANY command:
-```bash
-grep -i "ELSEIF.*StrCmp(cmdcode,'YOUR_COMMAND')" ~/Code/AmiExpress-Web/AmiExpress-Sources/express.e
+Before creating ANY command, use MCP to check if it exists:
+```
+Use MCP tool: search_express_source
+- query: "StrCmp(cmdcode,'YOUR_COMMAND')"
 ```
 
 - If found: Implement it EXACTLY as express.e shows
@@ -160,17 +173,19 @@ grep -i "ELSEIF.*StrCmp(cmdcode,'YOUR_COMMAND')" ~/Code/AmiExpress-Web/AmiExpres
 **MANDATORY REQUIREMENTS:**
 1. **NEVER use stubs or placeholders** - Implement functions completely or not at all
 2. **NEVER skip functionality** - All documented behavior must be implemented
-3. **ALWAYS reference Amiga developer docs** - Check NDK3.2R4/Autodocs/ for specifications
-4. **ALWAYS reference E sources** - Check AmiExpress-Sources/ for original behavior
+3. **ALWAYS reference Amiga developer docs** - Use MCP `search_ndk_autodocs` tool for specifications
+4. **ALWAYS reference E sources** - Use MCP `search_express_source` or `read_express_module` tools
 5. **VERIFY 100% correctness** - Test all edge cases and return values
 6. **NO skipped functions** - If a function exists in the spec, implement it fully
 
 **BEFORE implementing ANY AmigaDOS/Exec function:**
-```bash
-# 1. Read the COMPLETE specification
-cat NDK3.2R4/Autodocs/AG/dos | grep -A50 "^@Node \"FunctionName\""
+```
+# 1. Use MCP tool to read the COMPLETE specification
+Use MCP tool: search_ndk_autodocs
+- query: "FunctionName" (e.g., "Close", "AllocMem")
+- library: "dos" or "exec" (optional)
 
-# 2. Check for ALL edge cases mentioned
+# 2. Check for ALL edge cases mentioned in the specification
 # 3. Implement ALL documented behavior (success cases, failure cases, special values)
 # 4. Verify return values match spec EXACTLY (DOSTRUE=-1, DOSFALSE=0, etc.)
 ```
