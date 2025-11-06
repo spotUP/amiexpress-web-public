@@ -415,7 +415,7 @@ export async function parseMciCodes(
     const filename = filesToDisplay[i];
     const placeholder = `{{DISPLAY_FILE:${i}}}`;
 
-    // Load the file content
+    // Load the file content - loadScreenFile now handles Amiga paths
     let fileContent = loadScreenFile(filename, session.currentConf, 0);
 
     if (fileContent) {
@@ -451,6 +451,32 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   const { config } = require('../config');
   const baseDir = config.getConfig().dataDir;
   const paths = [];
+
+  // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
+  // If screenName contains ":" or "/" it's a full Amiga path, convert to filesystem path
+  if (screenName.includes(':') || screenName.includes('/')) {
+    // Replace Amiga assign with actual path
+    let fsPath = screenName
+      .replace(/^bbs:/i, path.join(baseDir, 'BBS'))
+      .replace(/^node\d+:/i, (match) => {
+        const nodeNum = match.match(/\d+/)?.[0] || '0';
+        return path.join(baseDir, `Node${nodeNum}`);
+      })
+      .replace(/^screens:/i, path.join(baseDir, 'BBS', 'Screens'));
+
+    // Convert forward slashes to platform-specific path separator
+    fsPath = fsPath.replace(/\//g, path.sep);
+
+    // Try the full path as-is
+    paths.push(fsPath);
+
+    // Also try under BBS/ if not already prefixed
+    if (!screenName.toLowerCase().startsWith('bbs:')) {
+      paths.push(path.join(baseDir, 'BBS', fsPath));
+    }
+
+    console.log(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${fsPath}`);
+  }
 
   // Try conference-specific screen first (if provided)
   // express.e uses confScreenDir which points to Conf directory
