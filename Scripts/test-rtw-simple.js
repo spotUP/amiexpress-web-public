@@ -76,15 +76,17 @@ async function testRTWDoor() {
       reject(error);
     });
 
-    // Login sequence
-    setTimeout(() => socket.emit('command', TEST_USERNAME), 1000);
+    // Connection sequence
+    setTimeout(() => socket.emit('command', ''), 500);  // Press key after connect screen
+    setTimeout(() => socket.emit('command', ''), 1000); // Answer ANSI prompt (default=ANSI)
+    setTimeout(() => socket.emit('command', TEST_USERNAME), 1500);
     setTimeout(() => socket.emit('command', TEST_PASSWORD), 2000);
-    setTimeout(() => socket.emit('command', ''), 3500); // Skip bulletins
-    setTimeout(() => socket.emit('command', ''), 4000); // Get to menu
+    setTimeout(() => socket.emit('command', ''), 3000); // Skip bulletins
+    setTimeout(() => socket.emit('command', ''), 3500); // Get to menu
     setTimeout(() => {
       console.log('🚪 Launching WHO door...\n');
       socket.emit('command', 'WHO');
-    }, 5000);
+    }, 4500);
 
     // Timeout after 20 seconds
     setTimeout(() => {

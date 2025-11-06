@@ -283,16 +283,15 @@ Only use this when fixing accumulated errors in a dedicated error-fixing session
 **BEFORE restarting servers:**
 
 ```bash
-# ✓ CORRECT - Use atomic startup scripts
-./start-all.sh      # Start both servers
-./start-backend.sh  # Backend only
-./start-frontend.sh # Frontend only
-./stop-all.sh       # Stop all servers
+# ✓ CORRECT - Use the new startup script
+./dev/scripts/start-servers.sh  # Start both backend + frontend (RECOMMENDED)
+./dev/scripts/kill-servers.sh   # Kill all servers cleanly
 
 # ✗ WRONG - NEVER do this:
 npm run dev &
 npm run dev 2>&1 &
 cd backend/backend && npm run dev &
+./start-all.sh  # OLD, don't use anymore
 ```
 
 **Why:** Manual commands create duplicate instances = stale code = wasted time.
