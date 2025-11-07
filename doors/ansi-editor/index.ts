@@ -715,7 +715,10 @@ class ANSIEditor implements ANSIEditorInterface {
     await new Promise<void>((resolve) => {
       // Main input handler - register in session for socket-handlers to call
       const inputHandler = async (key: string) => {
+      console.log('[ANSI Editor input] ===== MAIN EDITOR INPUT =====');
       console.log('[ANSI Editor input] Received key:', JSON.stringify(key));
+      console.log('[ANSI Editor input] Current handler type:', typeof this.doorSession.bbsSession?.doorInputHandler);
+      console.log('[ANSI Editor input] Is this handler?', this.doorSession.bbsSession?.doorInputHandler === inputHandler);
 
       // Handle ESC (exit)
       if (key === '\x1b') {
@@ -740,7 +743,11 @@ class ANSIEditor implements ANSIEditorInterface {
 
       // Handle F1 (help)
       if (key === '\x1bOP' || key === '\x1b[11~') {
+        console.log('[ANSI Editor input] F1 pressed, opening help screen');
+        console.log('[ANSI Editor input] Before help - handler is:', this.doorSession.bbsSession?.doorInputHandler === inputHandler);
         await showHelpScreen(this.getDisplayContext());
+        console.log('[ANSI Editor input] After help - handler is:', this.doorSession.bbsSession?.doorInputHandler === inputHandler);
+        console.log('[ANSI Editor input] After help - handler type:', typeof this.doorSession.bbsSession?.doorInputHandler);
         return;
       }
 
@@ -886,6 +893,7 @@ class ANSIEditor implements ANSIEditorInterface {
 
       // Handle arrow keys (cursor movement or shift tool)
       if (key === '\x1b[A') {  // Up
+        console.log('[ANSI Editor input] Up arrow in main editor');
         if (this.currentTool === 'shift') {
           // Shift tool: move content without redrawing
           this.moveCursorRel(0, -1);
@@ -895,6 +903,7 @@ class ANSIEditor implements ANSIEditorInterface {
         return;
       }
       if (key === '\x1b[B') {  // Down
+        console.log('[ANSI Editor input] Down arrow in main editor');
         if (this.currentTool === 'shift') {
           this.moveCursorRel(0, 1);
         } else {
@@ -903,6 +912,7 @@ class ANSIEditor implements ANSIEditorInterface {
         return;
       }
       if (key === '\x1b[C') {  // Right
+        console.log('[ANSI Editor input] Right arrow in main editor');
         if (this.currentTool === 'shift') {
           saveUndoState(this.getEditorContext());
           shiftCell(this.getDrawingContext(), 'right', false);

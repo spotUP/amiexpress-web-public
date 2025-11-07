@@ -233,18 +233,26 @@ function registerCommandHandler(socket: Socket) {
     }
 
     // If a door is active, call the door's input handler
-    console.log('[socket-handlers] Checking door handler - inDoorManager:', session.inDoorManager, 'doorInputHandler:', typeof session.doorInputHandler, 'exists:', !!session.doorInputHandler);
+    console.log('[socket-handlers] ===== COMMAND EVENT HANDLER =====');
+    console.log('[socket-handlers] Received data:', JSON.stringify(data));
+    console.log('[socket-handlers] inDoorManager:', session.inDoorManager);
+    console.log('[socket-handlers] doorInputHandler type:', typeof session.doorInputHandler);
+    console.log('[socket-handlers] doorInputHandler exists:', !!session.doorInputHandler);
+
     if (session.inDoorManager) {
       if (session.doorInputHandler) {
-        console.log('[socket-handlers] inDoorManager active, calling doorInputHandler');
+        console.log('[socket-handlers] ✓ Calling doorInputHandler (door is active)');
         session.doorInputHandler(data);
         return;
       } else {
-        console.log('[socket-handlers] WARNING: inDoorManager is true but no doorInputHandler set!');
+        console.log('[socket-handlers] ⚠️  WARNING: inDoorManager is true but no doorInputHandler set!');
+        console.log('[socket-handlers] This means door cleanup failed - falling through to BBS handler');
         // Fall through to normal command handling
       }
     }
-    console.log('[socket-handlers] NOT in door or no handler - inDoorManager:', session.inDoorManager, 'handler:', !!session.doorInputHandler);
+    console.log('[socket-handlers] ✗ NOT in door or no handler - routing to BBS command handler');
+    console.log('[socket-handlers]   inDoorManager:', session.inDoorManager);
+    console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
 
     handleCommand(socket, session, data);
     console.log('=== COMMAND PROCESSED ===\n');

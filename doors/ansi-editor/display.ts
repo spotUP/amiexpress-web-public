@@ -507,8 +507,13 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
   return new Promise((resolve) => {
     // Save the original input handler so we can restore it after help closes
     const originalHandler = ctx.doorSession.bbsSession?.doorInputHandler || null;
+    console.log('[ANSI Editor showHelpScreen] ===== OPENING HELP MODAL =====');
+    console.log('[ANSI Editor showHelpScreen] Original handler saved:', !!originalHandler);
+    console.log('[ANSI Editor showHelpScreen] Original handler type:', typeof originalHandler);
+    console.log('[ANSI Editor showHelpScreen] bbsSession exists:', !!ctx.doorSession.bbsSession);
 
     const handler = (input: string) => {
+      console.log('[ANSI Editor showHelpScreen] ===== HELP MODAL INPUT =====');
       console.log('[ANSI Editor showHelpScreen] Received input:', JSON.stringify(input), 'length:', input.length, 'charCodes:', input.split('').map(c => c.charCodeAt(0)));
 
       switch (input) {
@@ -532,13 +537,18 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
         case '\n':      // Enter
         case '\x1b':    // Escape
         case ' ':       // Space
-          console.log('[ANSI Editor showHelpScreen] Exit key pressed, closing help');
+          console.log('[ANSI Editor showHelpScreen] ===== CLOSING HELP MODAL =====');
+          console.log('[ANSI Editor showHelpScreen] Exit key pressed:', JSON.stringify(input));
+          console.log('[ANSI Editor showHelpScreen] Restoring original handler:', !!originalHandler);
           // Clear and redraw the editor immediately
           clearScreen(ctx);
           ctx.refresh();
           // CRITICAL: Restore the original input handler, don't set to null!
           if (ctx.doorSession.bbsSession) {
+            console.log('[ANSI Editor showHelpScreen] Before restore - current handler:', typeof ctx.doorSession.bbsSession.doorInputHandler);
             ctx.doorSession.bbsSession.doorInputHandler = originalHandler;
+            console.log('[ANSI Editor showHelpScreen] After restore - new handler:', typeof ctx.doorSession.bbsSession.doorInputHandler);
+            console.log('[ANSI Editor showHelpScreen] Handler is same as original?', ctx.doorSession.bbsSession.doorInputHandler === originalHandler);
           }
           resolve();
           break;
@@ -546,17 +556,22 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
         default:
           // Any other key closes help (except special sequences)
           if (!input.startsWith('\x1b[')) {
-            console.log('[ANSI Editor showHelpScreen] Other key pressed, closing help');
+            console.log('[ANSI Editor showHelpScreen] ===== CLOSING HELP MODAL (OTHER KEY) =====');
+            console.log('[ANSI Editor showHelpScreen] Other key pressed:', JSON.stringify(input));
+            console.log('[ANSI Editor showHelpScreen] Restoring original handler:', !!originalHandler);
             // Clear and redraw the editor immediately
             clearScreen(ctx);
             ctx.refresh();
             // CRITICAL: Restore the original input handler, don't set to null!
             if (ctx.doorSession.bbsSession) {
+              console.log('[ANSI Editor showHelpScreen] Before restore - current handler:', typeof ctx.doorSession.bbsSession.doorInputHandler);
               ctx.doorSession.bbsSession.doorInputHandler = originalHandler;
+              console.log('[ANSI Editor showHelpScreen] After restore - new handler:', typeof ctx.doorSession.bbsSession.doorInputHandler);
+              console.log('[ANSI Editor showHelpScreen] Handler is same as original?', ctx.doorSession.bbsSession.doorInputHandler === originalHandler);
             }
             resolve();
           } else {
-            console.log('[ANSI Editor showHelpScreen] Unknown escape sequence, ignoring');
+            console.log('[ANSI Editor showHelpScreen] Unknown escape sequence, ignoring:', JSON.stringify(input));
           }
           break;
       }
