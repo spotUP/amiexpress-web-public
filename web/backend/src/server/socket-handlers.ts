@@ -232,21 +232,19 @@ function registerCommandHandler(socket: Socket) {
       return;
     }
 
-    // If a door is active, emit ansi-input event for the door to handle
+    // If a door is active, call the door's input handler
     console.log('[socket-handlers] Checking door handler - inDoorManager:', session.inDoorManager, 'doorInputHandler:', typeof session.doorInputHandler, 'exists:', !!session.doorInputHandler);
     if (session.inDoorManager) {
-      console.log('[socket-handlers] inDoorManager active, emitting ansi-input event');
-      // Emit ansi-input event that doors can listen for
-      socket.emit('ansi-input', { key: data });
-
-      // Also call doorInputHandler if it exists (for backward compatibility)
       if (session.doorInputHandler) {
-        console.log('[socket-handlers] Also calling doorInputHandler');
+        console.log('[socket-handlers] inDoorManager active, calling doorInputHandler');
         session.doorInputHandler(data);
+        return;
+      } else {
+        console.log('[socket-handlers] WARNING: inDoorManager is true but no doorInputHandler set!');
+        // Fall through to normal command handling
       }
-      return;
     }
-    console.log('[socket-handlers] NOT in door - inDoorManager:', session.inDoorManager);
+    console.log('[socket-handlers] NOT in door or no handler - inDoorManager:', session.inDoorManager, 'handler:', !!session.doorInputHandler);
 
     handleCommand(socket, session, data);
     console.log('=== COMMAND PROCESSED ===\n');

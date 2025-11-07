@@ -723,9 +723,8 @@ class ANSIEditor implements ANSIEditorInterface {
 
     // Create promise that will resolve when user exits
     await new Promise<void>((resolve) => {
-      // Main input loop
-      this.socket.on('ansi-input', async (data: any) => {
-      const key = data.key;
+      // Main input handler - register in session for socket-handlers to call
+      const inputHandler = async (key: string) => {
       console.log('[ANSI Editor input] Received key:', JSON.stringify(key));
 
       // Handle ESC (exit)
@@ -735,9 +734,11 @@ class ANSIEditor implements ANSIEditorInterface {
         this.unlockFile();
         this.emit(SHOW_CURSOR);
         this.emit(CLEAR_SCREEN);
-        this.socket.removeAllListeners('ansi-input');
 
+        // Clean up the input handler
         if (this.doorSession.bbsSession) {
+          delete this.doorSession.bbsSession.doorInputHandler;
+          console.log('[ANSI Editor] Cleaned up doorInputHandler');
           console.log('[ANSI Editor] Returning to BBS...');
           this.doorSession.bbsSession.returnFromDoor();
         } else {
@@ -1005,7 +1006,13 @@ class ANSIEditor implements ANSIEditorInterface {
         this.currentChar = key;
         this.refreshDisplay();
       }
-      });
+      }; // End of inputHandler
+
+      // Register the input handler in the BBS session so socket-handlers can call it
+      if (this.doorSession.bbsSession) {
+        this.doorSession.bbsSession.doorInputHandler = inputHandler;
+        console.log('[ANSI Editor] Registered doorInputHandler in session');
+      }
     }); // End of Promise - wait until user exits
   }
 }
