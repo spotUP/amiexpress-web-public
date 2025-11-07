@@ -10,6 +10,20 @@ else
   echo "   Use --debug to see full logs"
 fi
 
+# Create logs directory if it doesn't exist
+LOGS_DIR="~/Code/amiexpress-web/logs"
+mkdir -p "$LOGS_DIR"
+
+# Generate timestamped log filename
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+BACKEND_LOG="$LOGS_DIR/backend_$TIMESTAMP.log"
+FRONTEND_LOG="$LOGS_DIR/frontend_$TIMESTAMP.log"
+
+echo "→ Logs will be saved to:"
+echo "   Backend:  $BACKEND_LOG"
+echo "   Frontend: $FRONTEND_LOG"
+echo ""
+
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1
 
@@ -19,23 +33,23 @@ echo ""
 # Trap to kill both on exit
 trap 'echo ""; echo "→ Stopping servers..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; wait; echo "✓ Servers stopped"; exit' EXIT INT TERM
 
-# Start backend in background (conditionally filter output)
+# Start backend in background (conditionally filter output, always save to log)
 if [ "$DEBUG_MODE" = true ]; then
-  # DEBUG MODE: Show all logs
-  (cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1; echo "BACKEND_DONE") &
+  # DEBUG MODE: Show all logs and save to file
+  (cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
 else
-  # NORMAL MODE: Only show important messages
-  (cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | grep --line-buffered -E "^(✅|🌐|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+  # NORMAL MODE: Show filtered messages but save full logs to file
+  (cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|🌐|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
 fi
 BACKEND_PID=$!
 
-# Start frontend in background (conditionally show output)
+# Start frontend in background (conditionally show output, always save to log)
 if [ "$DEBUG_MODE" = true ]; then
-  # DEBUG MODE: Show frontend logs
-  (cd ~/Code/amiexpress-web/web/frontend && npm run dev 2>&1) &
+  # DEBUG MODE: Show frontend logs and save to file
+  (cd ~/Code/amiexpress-web/web/frontend && npm run dev 2>&1 | tee "$FRONTEND_LOG") &
 else
-  # NORMAL MODE: Suppress frontend output
-  (cd ~/Code/amiexpress-web/web/frontend && npm run dev > /dev/null 2>&1) &
+  # NORMAL MODE: Suppress frontend output but save to file
+  (cd ~/Code/amiexpress-web/web/frontend && npm run dev 2>&1 | tee "$FRONTEND_LOG" > /dev/null) &
 fi
 FRONTEND_PID=$!
 
@@ -58,6 +72,10 @@ fi
 
 # Force print frontend URL (use /dev/tty to ensure it shows)
 echo "🌐 Frontend accessible at http://localhost:$FRONTEND_PORT/" > /dev/tty
+echo "" > /dev/tty
+echo "📝 Logs saved to:" > /dev/tty
+echo "   $BACKEND_LOG" > /dev/tty
+echo "   $FRONTEND_LOG" > /dev/tty
 echo "" > /dev/tty
 if [ "$DEBUG_MODE" = true ]; then
   echo "🔍 DEBUG MODE: All backend and frontend logs visible below" > /dev/tty
