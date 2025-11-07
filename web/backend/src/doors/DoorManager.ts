@@ -21,7 +21,7 @@ interface DoorInfo {
   id: string;
   name: string;
   filename: string;
-  type: 'typescript' | 'amiga' | 'archive';
+  type: 'typescript' | 'python' | 'arexx' | 'amiga' | 'archive';
   size: number;
   uploadDate: Date;
   installed: boolean;

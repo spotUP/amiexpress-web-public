@@ -273,6 +273,15 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
     case 'typescript': // TypeScript door with runDoor() export
       await executeTypeScriptDoor(socket, session, door, doorSession);
       break;
+    case 'python': // Python door
+    case 'PY': // Python door type from BBSCMD file
+      await executePythonDoor(socket, session, door, doorSession);
+      break;
+    case 'arexx': // ARexx door
+    case 'AREXX': // ARexx door type from BBSCMD file
+    case 'REXX': // REXX door type from BBSCMD file
+      await executeARexxDoor(socket, session, door, doorSession);
+      break;
     case 'web':
       await executeWebDoor(socket, session, door, doorSession);
       break;
@@ -281,7 +290,7 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
       await executeNativeDoor(socket, session, door, doorSession);
       break;
     case 'script':
-      // Web version: Execute shell scripts instead of AREXX
+      // Web version: Execute shell scripts
       await executeScriptDoor(socket, session, door, doorSession);
       break;
     case 'XIM': // eXpress Internal Module (Amiga executable)
@@ -931,6 +940,253 @@ async function executeScriptDoor(socket: any, session: BBSSession, door: Door, d
   } catch (error: any) {
     console.error(`[DOOR ${door.id}] Execution error:`, error);
     socket.emit('ansi-output', `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+    doorSession.status = 'error';
+  }
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+}
+
+/**
+ * Execute Python door
+ * Runs Python scripts with full BBS environment variables
+ */
+async function executePythonDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
+  console.log(`[executePythonDoor] Starting Python door: ${door.name}`);
+  console.log(`[executePythonDoor] Door path: ${door.path}`);
+
+  // Check if door script exists
+  const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
+
+  if (!fs.existsSync(doorPath)) {
+    socket.emit('ansi-output', `\r\n\x1b[31mError: Python script not found: ${door.path}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    doorSession.status = 'error';
+    return;
+  }
+
+  // Get node ID from session
+  const nodeId = session.nodeId || 1;
+
+  // Calculate time remaining
+  const timeRemaining = session.timeRemaining || 60;
+
+  // Create drop files for the door
+  doorDropFileManager.createAllDropFiles(nodeId, session.user!, timeRemaining);
+
+  // Get drop file directory path
+  const config = require('../config').config;
+  const bbsRoot = config.get('dataDir');
+  const dropFileDir = path.join(bbsRoot, `Node${nodeId}`);
+
+  // Prepare comprehensive environment variables for Python script
+  const env = {
+    ...process.env,
+    // User information
+    BBS_USERNAME: session.user?.username || 'Guest',
+    BBS_USER_ID: session.user?.id || '',
+    BBS_REALNAME: session.user?.realname || '',
+    BBS_LOCATION: session.user?.location || '',
+    BBS_SECURITY_LEVEL: session.user?.secLevel?.toString() || '0',
+    // Door information
+    BBS_DOOR_ID: door.id,
+    BBS_DOOR_NAME: door.name,
+    BBS_NODE: nodeId.toString(),
+    // Drop file paths
+    BBS_DROP_DIR: dropFileDir,
+    BBS_DOOR_SYS: path.join(dropFileDir, 'DOOR.SYS'),
+    BBS_DOOR32_SYS: path.join(dropFileDir, 'DOOR32.SYS'),
+    BBS_DORINFO_DEF: path.join(dropFileDir, `DORINFO${nodeId}.DEF`),
+    // Conference information
+    BBS_CONFERENCE: session.currentConf?.toString() || '1',
+    BBS_CONFERENCE_NAME: session.currentConfName || 'General',
+    // Time information
+    BBS_TIME_REMAINING: timeRemaining.toString(),
+    BBS_TIME_ONLINE: Math.floor((Date.now() - session.loginTime) / 60000).toString()
+  };
+
+  socket.emit('ansi-output', `\r\n\x1b[36mLaunching Python door: ${door.name}...\x1b[0m\r\n\r\n`);
+
+  try {
+    // Execute Python script
+    const pythonProcess = spawn('python3', [doorPath, ...(door.parameters || [])], {
+      env,
+      cwd: path.dirname(doorPath)
+    });
+
+    // Capture stdout and send to user
+    pythonProcess.stdout.on('data', (data: Buffer) => {
+      const output = data.toString();
+      socket.emit('ansi-output', output);
+
+      // Store in door session history
+      if (!doorSession.output) doorSession.output = [];
+      doorSession.output.push(output);
+    });
+
+    // Capture stderr
+    pythonProcess.stderr.on('data', (data: Buffer) => {
+      const error = data.toString();
+      console.error(`[Python Door ${door.id}] Error:`, error);
+      socket.emit('ansi-output', `\x1b[31m${error}\x1b[0m`);
+    });
+
+    // Allow user input to Python script via stdin
+    const userInputHandler = (input: string) => {
+      pythonProcess.stdin.write(input);
+    };
+
+    // Register input handler in session
+    session.doorInputHandler = userInputHandler;
+
+    // Wait for door to complete
+    await new Promise<void>((resolve, reject) => {
+      pythonProcess.on('close', (code: number) => {
+        console.log(`[Python Door ${door.id}] Exited with code ${code}`);
+
+        // Clean up input handler
+        delete session.doorInputHandler;
+
+        if (code === 0) {
+          socket.emit('ansi-output', `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          resolve();
+        } else {
+          socket.emit('ansi-output', `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          doorSession.status = 'error';
+          resolve();
+        }
+      });
+
+      pythonProcess.on('error', (err: Error) => {
+        console.error(`[Python Door ${door.id}] Spawn error:`, err);
+        socket.emit('ansi-output', `\r\n\x1b[31mError executing Python script: ${err.message}\x1b[0m\r\n`);
+        doorSession.status = 'error';
+
+        // Clean up input handler
+        delete session.doorInputHandler;
+
+        reject(err);
+      });
+
+      // Timeout after 30 minutes
+      setTimeout(() => {
+        pythonProcess.kill();
+        socket.emit('ansi-output', '\r\n\x1b[31mPython door timeout (30 minutes).\x1b[0m\r\n');
+        doorSession.status = 'error';
+
+        // Clean up input handler
+        delete session.doorInputHandler;
+
+        resolve();
+      }, 1800000);
+    });
+
+  } catch (error: any) {
+    console.error(`[Python Door ${door.id}] Execution error:`, error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+    doorSession.status = 'error';
+  }
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+}
+
+/**
+ * Execute ARexx door
+ * Emulates ARexx script execution using a JavaScript ARexx interpreter
+ * In AmiExpress, AREXX doors interact with the BBS via ARexx port commands
+ */
+async function executeARexxDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
+  console.log(`[executeARexxDoor] Starting ARexx door: ${door.name}`);
+  console.log(`[executeARexxDoor] Door path: ${door.path}`);
+
+  // Check if door script exists
+  const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
+
+  if (!fs.existsSync(doorPath)) {
+    socket.emit('ansi-output', `\r\n\x1b[31mError: ARexx script not found: ${door.path}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    doorSession.status = 'error';
+    return;
+  }
+
+  socket.emit('ansi-output', `\r\n\x1b[36mLaunching ARexx door: ${door.name}...\x1b[0m\r\n\r\n`);
+
+  try {
+    // Import ARexx engine from arexx.ts
+    const { arexxEngine } = require('../arexx');
+
+    // Get node ID from session
+    const nodeId = session.nodeId || 1;
+
+    // Calculate time remaining
+    const timeRemaining = session.timeRemaining || 60;
+
+    // Create drop files for the door
+    doorDropFileManager.createAllDropFiles(nodeId, session.user!, timeRemaining);
+
+    // Get drop file directory path
+    const config = require('../config').config;
+    const bbsRoot = config.get('dataDir');
+    const dropFileDir = path.join(bbsRoot, `Node${nodeId}`);
+
+    // Prepare ARexx context with BBS environment
+    const arexxContext = {
+      // User information
+      username: session.user?.username || 'Guest',
+      userId: session.user?.id || '',
+      realname: session.user?.realname || '',
+      location: session.user?.location || '',
+      securityLevel: session.user?.secLevel || 0,
+      // Door information
+      doorId: door.id,
+      doorName: door.name,
+      nodeId: nodeId,
+      // Drop file paths
+      dropDir: dropFileDir,
+      doorSys: path.join(dropFileDir, 'DOOR.SYS'),
+      door32Sys: path.join(dropFileDir, 'DOOR32.SYS'),
+      dorinfodef: path.join(dropFileDir, `DORINFO${nodeId}.DEF`),
+      // Conference information
+      conference: session.currentConf || 1,
+      conferenceName: session.currentConfName || 'General',
+      // Time information
+      timeRemaining: timeRemaining,
+      timeOnline: Math.floor((Date.now() - session.loginTime) / 60000),
+      // BBS output callback
+      output: (text: string) => {
+        socket.emit('ansi-output', text);
+        if (!doorSession.output) doorSession.output = [];
+        doorSession.output.push(text);
+      },
+      // BBS input callback (for prompts)
+      input: (prompt: string): Promise<string> => {
+        return new Promise((resolve) => {
+          socket.emit('ansi-output', prompt);
+
+          const inputHandler = (data: string) => {
+            // Clean up handler
+            delete session.doorInputHandler;
+            resolve(data);
+          };
+
+          // Register input handler
+          session.doorInputHandler = inputHandler;
+        });
+      }
+    };
+
+    // Execute ARexx script through the ARexx engine
+    console.log(`[executeARexxDoor] Executing script: ${doorPath}`);
+    await arexxEngine.executeScript(doorPath, arexxContext);
+
+    socket.emit('ansi-output', `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+
+  } catch (error: any) {
+    console.error(`[ARexx Door ${door.id}] Execution error:`, error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError executing ARexx script: ${error.message}\x1b[0m\r\n`);
     doorSession.status = 'error';
   }
 
