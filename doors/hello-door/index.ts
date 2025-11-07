@@ -8,6 +8,7 @@ import { Socket } from 'socket.io';
 interface DoorSession {
   socket: Socket;
   user: any;
+  bbsSession?: any;
 }
 
 export async function runDoor(session: DoorSession) {
@@ -33,9 +34,19 @@ export async function runDoor(session: DoorSession) {
   socket.emit('ansi-output', '\x1b[90mPress any key to exit...\x1b[0m\r\n');
 
   return new Promise<void>((resolve) => {
-    socket.once('terminal-input', () => {
+    // Register input handler - any keypress exits
+    const inputHandler = (key: string) => {
+      // Clean up handler and return to BBS
+      if (session.bbsSession) {
+        delete session.bbsSession.doorInputHandler;
+      }
       resolve();
-    });
+    };
+
+    // Register handler in session for socket-handlers to call
+    if (session.bbsSession) {
+      session.bbsSession.doorInputHandler = inputHandler;
+    }
   });
 }
 
