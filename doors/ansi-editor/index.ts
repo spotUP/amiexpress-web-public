@@ -708,9 +708,6 @@ class ANSIEditor implements ANSIEditorInterface {
     this.startAutoSave();
     this.refreshDisplay();
 
-    // Show help screen on startup
-    await showHelpScreen(this.getDisplayContext());
-
     // Create promise that will resolve when user exits
     await new Promise<void>((resolve) => {
       // Main input handler - register in session for socket-handlers to call
@@ -1139,6 +1136,11 @@ class ANSIEditor implements ANSIEditorInterface {
       if (this.doorSession.bbsSession) {
         this.doorSession.bbsSession.doorInputHandler = inputHandler;
         console.log('[ANSI Editor] Registered doorInputHandler in session');
+
+        // Show help screen on startup (after handler is registered)
+        showHelpScreen(this.getDisplayContext()).then(() => {
+          console.log('[ANSI Editor] Help screen closed on startup');
+        });
       }
     }); // End of Promise - wait until user exits
   }
