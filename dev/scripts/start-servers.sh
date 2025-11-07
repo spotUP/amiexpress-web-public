@@ -1,5 +1,15 @@
 #!/bin/bash
 
+# Check for debug flag
+DEBUG_MODE=false
+if [[ "$1" == "--debug" ]] || [[ "$1" == "-v" ]] || [[ "$1" == "--verbose" ]]; then
+  DEBUG_MODE=true
+  echo "→ Starting in DEBUG mode (full logs enabled)"
+else
+  echo "→ Starting in normal mode (filtered logs)"
+  echo "   Use --debug to see full logs"
+fi
+
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1
 
@@ -9,12 +19,24 @@ echo ""
 # Trap to kill both on exit
 trap 'echo ""; echo "→ Stopping servers..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; wait; echo "✓ Servers stopped"; exit' EXIT INT TERM
 
-# Start backend in background (only show important messages, with line buffering)
-(cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | grep --line-buffered -E "^(✅|🌐|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+# Start backend in background (conditionally filter output)
+if [ "$DEBUG_MODE" = true ]; then
+  # DEBUG MODE: Show all logs
+  (cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1; echo "BACKEND_DONE") &
+else
+  # NORMAL MODE: Only show important messages
+  (cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | grep --line-buffered -E "^(✅|🌐|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+fi
 BACKEND_PID=$!
 
-# Start frontend in background - suppress output
-(cd ~/Code/amiexpress-web/web/frontend && npm run dev > /dev/null 2>&1) &
+# Start frontend in background (conditionally show output)
+if [ "$DEBUG_MODE" = true ]; then
+  # DEBUG MODE: Show frontend logs
+  (cd ~/Code/amiexpress-web/web/frontend && npm run dev 2>&1) &
+else
+  # NORMAL MODE: Suppress frontend output
+  (cd ~/Code/amiexpress-web/web/frontend && npm run dev > /dev/null 2>&1) &
+fi
 FRONTEND_PID=$!
 
 # Wait for backend to finish startup (look for BACKEND_DONE marker)
@@ -37,6 +59,10 @@ fi
 # Force print frontend URL (use /dev/tty to ensure it shows)
 echo "🌐 Frontend accessible at http://localhost:$FRONTEND_PORT/" > /dev/tty
 echo "" > /dev/tty
+if [ "$DEBUG_MODE" = true ]; then
+  echo "🔍 DEBUG MODE: All backend and frontend logs visible below" > /dev/tty
+  echo "" > /dev/tty
+fi
 echo "Press Ctrl+C to stop both servers" > /dev/tty
 echo "" > /dev/tty
 
