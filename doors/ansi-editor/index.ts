@@ -702,24 +702,14 @@ class ANSIEditor implements ANSIEditorInterface {
     this.emit(HIDE_CURSOR);
     this.emit(CLEAR_SCREEN);
 
-    // Display welcome screen
+    // Initialize canvas
     const ctx = this.getDisplayContext();
-    this.emit(`\x1b[0;37;40m`);
-    this.emit(`\x1b[1;1H┌${'─'.repeat(78)}┐`);
-    this.emit(`\x1b[2;1H│${' '.repeat(78)}│`);
-    this.emit(`\x1b[2;30H ANSI Screen Editor v1.0 `);
-    this.emit(`\x1b[3;1H│${' '.repeat(78)}│`);
-    this.emit(`\x1b[4;1H└${'─'.repeat(78)}┘`);
-    this.emit(`\x1b[6;20HWelcome to the ANSI Screen Editor!`);
-    this.emit(`\x1b[8;15HCanvas: 80x24 | Press F1 for help | ESC to exit`);
-    this.emit(`\x1b[10;1H`);
-
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // Initialize canvas and start editing
     saveUndoState(this.getEditorContext());
     this.startAutoSave();
     this.refreshDisplay();
+
+    // Show help screen on startup
+    await showHelpScreen(this.getDisplayContext());
 
     // Create promise that will resolve when user exits
     await new Promise<void>((resolve) => {
