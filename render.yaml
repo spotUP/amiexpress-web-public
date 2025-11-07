@@ -19,10 +19,14 @@ services:
         value: production
       - key: PORT
         value: 3001
+      - key: HOST
+        value: 0.0.0.0
       - key: DATABASE_DIR
         value: /opt/render/project/src/web/backend/data
       - key: DATABASE_FILE
         value: amiexpress.db
+      - key: BBS_DATA_DIR
+        value: /opt/render/project/src
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
