@@ -765,9 +765,9 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
 
     return true;
   } else {
-    // Fallback if screen not found
-    console.warn(`Using fallback for screen: ${screenName}`);
-    socket.emit('ansi-output', `\x1b[36m-= ${screenName} =-\x1b[0m\r\n`);
+    // Screen not found - return false silently (matches express.e behavior)
+    // Caller decides whether to show error or skip
+    console.warn(`Screen file not found: ${screenName}`);
     return false;
   }
 }
