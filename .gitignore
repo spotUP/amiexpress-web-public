@@ -158,3 +158,8 @@ CallersLog
 **/who/node*.txt
 doors/who/node*.txt
 Doors/who/node*.txt
+
+# BBS runtime config files (contain API keys and secrets)
+bbsConfig.info
+bbsConfig.info_*
+bbsConfig.info__
