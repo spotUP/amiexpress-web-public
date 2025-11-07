@@ -433,16 +433,23 @@ class ANSIEditor implements ANSIEditorInterface {
     this.emit(modal.render());
 
     return new Promise((resolve) => {
-      const handler = (data: any) => {
-        const key = data.key;
+      // Save original handler and replace with modal handler
+      const originalHandler = this.doorSession.bbsSession?.doorInputHandler || null;
 
+      const handler = (key: string) => {
         if (key === '\x1b') {  // ESC
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\r') {  // Enter
           this.currentTool = modal.getSelectedValue() as Tool;
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\x1b[A') {  // Up arrow
@@ -454,7 +461,10 @@ class ANSIEditor implements ANSIEditorInterface {
         }
       };
 
-      this.socket.on('ansi-input', handler);
+      // Register modal handler
+      if (this.doorSession.bbsSession) {
+        this.doorSession.bbsSession.doorInputHandler = handler;
+      }
     });
   }
 
@@ -466,11 +476,15 @@ class ANSIEditor implements ANSIEditorInterface {
     this.emit(modal.render());
 
     return new Promise((resolve) => {
-      const handler = (data: any) => {
-        const key = data.key;
+      // Save original handler and replace with modal handler
+      const originalHandler = this.doorSession.bbsSession?.doorInputHandler || null;
 
+      const handler = (key: string) => {
         if (key === '\x1b') {  // ESC
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\r') {  // Enter
@@ -480,7 +494,10 @@ class ANSIEditor implements ANSIEditorInterface {
           } else {
             this.currentFg = color;
           }
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\x1b[A') {  // Up arrow
@@ -492,7 +509,10 @@ class ANSIEditor implements ANSIEditorInterface {
         }
       };
 
-      this.socket.on('ansi-input', handler);
+      // Register modal handler
+      if (this.doorSession.bbsSession) {
+        this.doorSession.bbsSession.doorInputHandler = handler;
+      }
     });
   }
 
@@ -506,13 +526,16 @@ class ANSIEditor implements ANSIEditorInterface {
     this.emit(modal.render());
 
     return new Promise((resolve) => {
+      // Save original handler and replace with modal handler
+      const originalHandler = this.doorSession.bbsSession?.doorInputHandler || null;
       let inputBuffer = this.filename || '';
 
-      const handler = (data: any) => {
-        const key = data.key;
-
+      const handler = (key: string) => {
         if (key === '\x1b') {  // ESC
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\r') {  // Enter
@@ -534,7 +557,10 @@ class ANSIEditor implements ANSIEditorInterface {
               ANSIEditor.addRecentFile(selectedFile);
             }
           }
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\x1b[A') {  // Up arrow
@@ -556,7 +582,10 @@ class ANSIEditor implements ANSIEditorInterface {
         }
       };
 
-      this.socket.on('ansi-input', handler);
+      // Register modal handler
+      if (this.doorSession.bbsSession) {
+        this.doorSession.bbsSession.doorInputHandler = handler;
+      }
     });
   }
 
@@ -570,11 +599,15 @@ class ANSIEditor implements ANSIEditorInterface {
     this.emit(modal.render());
 
     return new Promise((resolve) => {
-      const handler = (data: any) => {
-        const key = data.key;
+      // Save original handler and replace with modal handler
+      const originalHandler = this.doorSession.bbsSession?.doorInputHandler || null;
 
+      const handler = (key: string) => {
         if (key === '\x1b' || key === 'q' || key === 'Q') {  // ESC or Q
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\r') {  // Enter - load selected file
@@ -588,7 +621,10 @@ class ANSIEditor implements ANSIEditorInterface {
             this.width = ctx.width;
             this.height = ctx.height;
           }
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\x1b[A' || key === 'k' || key === 'K') {  // Up arrow or K
@@ -606,7 +642,10 @@ class ANSIEditor implements ANSIEditorInterface {
         }
       };
 
-      this.socket.on('ansi-input', handler);
+      // Register modal handler
+      if (this.doorSession.bbsSession) {
+        this.doorSession.bbsSession.doorInputHandler = handler;
+      }
     });
   }
 
@@ -618,11 +657,15 @@ class ANSIEditor implements ANSIEditorInterface {
     this.emit(modal.render());
 
     return new Promise((resolve) => {
-      const handler = (data: any) => {
-        const key = data.key;
+      // Save original handler and replace with modal handler
+      const originalHandler = this.doorSession.bbsSession?.doorInputHandler || null;
 
+      const handler = (key: string) => {
         if (key === '\x1b') {  // ESC
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\r') {  // Enter
@@ -637,7 +680,10 @@ class ANSIEditor implements ANSIEditorInterface {
             this.width = ctx.width;
             this.height = ctx.height;
           }
-          this.socket.off('ansi-input', handler);
+          // Restore original handler
+          if (this.doorSession.bbsSession) {
+            this.doorSession.bbsSession.doorInputHandler = originalHandler;
+          }
           this.refreshDisplay();
           resolve();
         } else if (key === '\x1b[A') {  // Up arrow
@@ -649,7 +695,10 @@ class ANSIEditor implements ANSIEditorInterface {
         }
       };
 
-      this.socket.on('ansi-input', handler);
+      // Register modal handler
+      if (this.doorSession.bbsSession) {
+        this.doorSession.bbsSession.doorInputHandler = handler;
+      }
     });
   }
 
