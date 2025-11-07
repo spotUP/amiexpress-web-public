@@ -9,8 +9,8 @@ echo ""
 # Trap to kill both on exit
 trap 'echo ""; echo "→ Stopping servers..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; wait; echo "✓ Servers stopped"; exit' EXIT INT TERM
 
-# Start backend in background (suppress door scan spam)
-(cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | grep -v "^\[.*Door.*\]") &
+# Start backend in background (only show important messages)
+(cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | grep -E "^(✅|🌐|Database initialized|Error|Warning)") &
 BACKEND_PID=$!
 
 # Start frontend in background - suppress output
