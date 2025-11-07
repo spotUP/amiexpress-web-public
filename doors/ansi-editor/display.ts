@@ -505,6 +505,9 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
 
   // Wait for user input
   return new Promise((resolve) => {
+    // Save the original input handler so we can restore it after help closes
+    const originalHandler = ctx.doorSession.bbsSession?.doorInputHandler || null;
+
     const handler = (input: string) => {
       console.log('[ANSI Editor showHelpScreen] Received input:', JSON.stringify(input), 'length:', input.length, 'charCodes:', input.split('').map(c => c.charCodeAt(0)));
 
@@ -533,8 +536,9 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
           // Clear and redraw the editor immediately
           clearScreen(ctx);
           ctx.refresh();
+          // CRITICAL: Restore the original input handler, don't set to null!
           if (ctx.doorSession.bbsSession) {
-            ctx.doorSession.bbsSession.doorInputHandler = null;
+            ctx.doorSession.bbsSession.doorInputHandler = originalHandler;
           }
           resolve();
           break;
@@ -546,8 +550,9 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
             // Clear and redraw the editor immediately
             clearScreen(ctx);
             ctx.refresh();
+            // CRITICAL: Restore the original input handler, don't set to null!
             if (ctx.doorSession.bbsSession) {
-              ctx.doorSession.bbsSession.doorInputHandler = null;
+              ctx.doorSession.bbsSession.doorInputHandler = originalHandler;
             }
             resolve();
           } else {
@@ -562,6 +567,7 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
       console.log('[ANSI Editor showHelpScreen] Registering input handler');
       console.log('[ANSI Editor showHelpScreen] bbsSession exists:', !!ctx.doorSession.bbsSession);
       console.log('[ANSI Editor showHelpScreen] bbsSession.inDoorManager:', ctx.doorSession.bbsSession.inDoorManager);
+      console.log('[ANSI Editor showHelpScreen] Saved original handler:', !!originalHandler);
       ctx.doorSession.bbsSession.doorInputHandler = handler;
       console.log('[ANSI Editor showHelpScreen] Handler registered successfully');
       console.log('[ANSI Editor showHelpScreen] Handler is:', typeof ctx.doorSession.bbsSession.doorInputHandler);
