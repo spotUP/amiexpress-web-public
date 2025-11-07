@@ -1,0 +1,17 @@
+# Backup files
+*.bak
+*.bak[0-9]
+*.backup
+*.final
+*.fix*
+
+# Moira CPU emulator source (keep only compiled artifacts)
+src/amiga-emulation/cpu/moira-source/
+
+# Test files
+*.test.ts
+*.spec.ts
+
+# Development files
+*.dev.ts
+*.tmp
