@@ -507,7 +507,11 @@ function App() {
       <div ref={terminalRef} style={{
         width: '100%',
         height: '100vh',
-        fontSize: '16px'
+        fontSize: '16px',
+        userSelect: 'none',  // Prevent text selection when drawing in ANSI editor
+        WebkitUserSelect: 'none',
+        MozUserSelect: 'none',
+        msUserSelect: 'none'
       }} />
     </div>
   );
