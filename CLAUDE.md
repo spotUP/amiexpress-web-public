@@ -36,9 +36,17 @@
 
 ### Server Management
 - Start: `./dev/scripts/start-servers.sh`
+- Debug mode: `./dev/scripts/start-servers.sh --debug` (shows all logs)
 - Kill: `./dev/scripts/kill-servers.sh`
 - NEVER: `npm run dev &` or background bash or `run_in_background: true`
 - Ports: Backend 3001, Frontend 5173
+
+### Server Logs
+- Backend: `logs/backend.log` (overwritten each start)
+- Frontend: `logs/frontend.log` (overwritten each start)
+- When user says "check the logs": Use Read tool on `logs/backend.log`
+- Normal mode: Terminal shows filtered output, full logs saved to files
+- Debug mode: Terminal shows all output, full logs saved to files
 
 ## BBS Output Rules
 - NO emojis (use `*` `X` `!` `-` `+`)
