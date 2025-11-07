@@ -506,11 +506,13 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
   // Wait for user input
   return new Promise((resolve) => {
     // Save the original input handler so we can restore it after help closes
-    const originalHandler = ctx.doorSession.bbsSession?.doorInputHandler || null;
+    // Note: doorSession/bbsSession might not exist yet if help is shown on startup
+    const originalHandler = ctx.doorSession?.bbsSession?.doorInputHandler || null;
     console.log('[ANSI Editor showHelpScreen] ===== OPENING HELP MODAL =====');
+    console.log('[ANSI Editor showHelpScreen] doorSession exists:', !!ctx.doorSession);
+    console.log('[ANSI Editor showHelpScreen] bbsSession exists:', !!ctx.doorSession?.bbsSession);
     console.log('[ANSI Editor showHelpScreen] Original handler saved:', !!originalHandler);
     console.log('[ANSI Editor showHelpScreen] Original handler type:', typeof originalHandler);
-    console.log('[ANSI Editor showHelpScreen] bbsSession exists:', !!ctx.doorSession.bbsSession);
 
     const handler = (input: string) => {
       console.log('[ANSI Editor showHelpScreen] ===== HELP MODAL INPUT =====');
@@ -544,7 +546,7 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
           clearScreen(ctx);
           ctx.refresh();
           // CRITICAL: Restore the original input handler, don't set to null!
-          if (ctx.doorSession.bbsSession) {
+          if (ctx.doorSession?.bbsSession) {
             console.log('[ANSI Editor showHelpScreen] Before restore - current handler:', typeof ctx.doorSession.bbsSession.doorInputHandler);
             ctx.doorSession.bbsSession.doorInputHandler = originalHandler;
             console.log('[ANSI Editor showHelpScreen] After restore - new handler:', typeof ctx.doorSession.bbsSession.doorInputHandler);
@@ -563,7 +565,7 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
             clearScreen(ctx);
             ctx.refresh();
             // CRITICAL: Restore the original input handler, don't set to null!
-            if (ctx.doorSession.bbsSession) {
+            if (ctx.doorSession?.bbsSession) {
               console.log('[ANSI Editor showHelpScreen] Before restore - current handler:', typeof ctx.doorSession.bbsSession.doorInputHandler);
               ctx.doorSession.bbsSession.doorInputHandler = originalHandler;
               console.log('[ANSI Editor showHelpScreen] After restore - new handler:', typeof ctx.doorSession.bbsSession.doorInputHandler);
@@ -577,8 +579,8 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
       }
     };
 
-    // Register input handler
-    if (ctx.doorSession.bbsSession) {
+    // Register input handler (only if session exists - might not on startup)
+    if (ctx.doorSession?.bbsSession) {
       console.log('[ANSI Editor showHelpScreen] Registering input handler');
       console.log('[ANSI Editor showHelpScreen] bbsSession exists:', !!ctx.doorSession.bbsSession);
       console.log('[ANSI Editor showHelpScreen] bbsSession.inDoorManager:', ctx.doorSession.bbsSession.inDoorManager);
@@ -587,7 +589,8 @@ export async function showHelpScreen(ctx: DisplayContext): Promise<void> {
       console.log('[ANSI Editor showHelpScreen] Handler registered successfully');
       console.log('[ANSI Editor showHelpScreen] Handler is:', typeof ctx.doorSession.bbsSession.doorInputHandler);
     } else {
-      console.error('[ANSI Editor showHelpScreen] ERROR: doorSession.bbsSession is null!');
+      console.warn('[ANSI Editor showHelpScreen] WARNING: doorSession.bbsSession not available (help shown on startup)');
+      console.warn('[ANSI Editor showHelpScreen] Input handler will be set up after help closes');
     }
   });
 }
