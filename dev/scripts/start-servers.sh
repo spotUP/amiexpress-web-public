@@ -14,22 +14,13 @@ fi
 LOGS_DIR="~/Code/amiexpress-web/logs"
 mkdir -p "$LOGS_DIR"
 
-# Generate timestamped log filename
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKEND_LOG="$LOGS_DIR/backend_$TIMESTAMP.log"
-FRONTEND_LOG="$LOGS_DIR/frontend_$TIMESTAMP.log"
-
-# Create symlinks to latest logs for easy access
-ln -sf "$BACKEND_LOG" "$LOGS_DIR/backend_latest.log"
-ln -sf "$FRONTEND_LOG" "$LOGS_DIR/frontend_latest.log"
+# Use fixed log filenames (will be overwritten each time)
+BACKEND_LOG="$LOGS_DIR/backend.log"
+FRONTEND_LOG="$LOGS_DIR/frontend.log"
 
 echo "→ Logs will be saved to:"
-echo "   Backend:  $BACKEND_LOG"
-echo "   Frontend: $FRONTEND_LOG"
-echo ""
-echo "→ Quick access (latest logs):"
-echo "   tail -f logs/backend_latest.log"
-echo "   tail -f logs/frontend_latest.log"
+echo "   $BACKEND_LOG"
+echo "   $FRONTEND_LOG"
 echo ""
 
 # Kill any existing servers first
@@ -81,12 +72,8 @@ fi
 # Force print frontend URL (use /dev/tty to ensure it shows)
 echo "🌐 Frontend accessible at http://localhost:$FRONTEND_PORT/" > /dev/tty
 echo "" > /dev/tty
-echo "📝 Logs saved to:" > /dev/tty
-echo "   $BACKEND_LOG" > /dev/tty
-echo "   $FRONTEND_LOG" > /dev/tty
-echo "" > /dev/tty
 if [ "$DEBUG_MODE" = true ]; then
-  echo "🔍 DEBUG MODE: All backend and frontend logs visible below" > /dev/tty
+  echo "🔍 DEBUG MODE: All logs visible below" > /dev/tty
   echo "" > /dev/tty
 fi
 echo "Press Ctrl+C to stop both servers" > /dev/tty
