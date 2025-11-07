@@ -86,7 +86,7 @@ import {
   executeDoor,
   initializeDoors,
   executePagerDoor,
-  setDoors,
+  getDoors,
   setDoorSessions,
   setDatabase as setDatabaseForDoorHandler,
   setHelpers as setHelpersForDoorHandler,
@@ -306,7 +306,7 @@ interface MessageBase {
 }
 
 // Global data caches (loaded from database)
-let doors: Door[] = [];
+// Note: doors are managed in door.handler.ts, access via getDoors()
 let doorSessions: DoorSession[] = [];
 
 // Chat system state (mirrors AmiExpress chatFlag, sysopAvail, pagedFlag)
@@ -1759,7 +1759,7 @@ async function initializeData() {
     await initializeDoors();
 
     // Inject dependencies into door handler
-    setDoors(doors);
+    // Note: doors are already populated by initializeDoors(), no need to setDoors()
     setDoorSessions(doorSessions);
     setDatabaseForDoorHandler(db);
     setHelpersForDoorHandler({ callersLog, getRecentCallerActivity });
@@ -1902,7 +1902,7 @@ async function initializeData() {
     setCheckSecurity(checkSecurity);
     setSetEnvStat(setEnvStat);
     setGetRecentCallerActivityForCommandHandler(getRecentCallerActivity);
-    setDoorsForCommandHandler(doors);
+    setDoorsForCommandHandler(getDoors());
     setConstantsForCommandHandler({ SCREEN_MENU });
 
     // Inject dependencies into command execution handler
@@ -1913,7 +1913,7 @@ async function initializeData() {
       messageBases: messageBases.length,
       fileAreas: fileAreas.length,
       messages: messages.length,
-      doors: doors.length
+      doors: getDoors().length
     });
   } catch (error) {
     console.error('Failed to initialize data:', error);

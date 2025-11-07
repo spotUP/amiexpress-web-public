@@ -64,6 +64,10 @@ export function setDoors(doorList: Door[]) {
   doors = doorList;
 }
 
+export function getDoors(): Door[] {
+  return doors;
+}
+
 export function setDoorSessions(sessions: DoorSession[]) {
   doorSessions = sessions;
 }
