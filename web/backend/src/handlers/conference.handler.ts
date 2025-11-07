@@ -75,15 +75,17 @@ export function setConstants(constants: {
  */
 export async function displayConferenceBulletins(socket: any, session: BBSSession) {
   // Phase 8: Use authentic screen file system
-  // Express.e:28566 - await displayScreen(SCREEN_BULL)
-  await displayScreen(socket, session, SCREEN_BULL);
-  doPause(socket, session);
+  // Express.e:28556 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
+  if (await displayScreen(socket, session, SCREEN_BULL)) {
+    doPause(socket, session);
+  }
 
-  // Express.e:28571 - await displayScreen(SCREEN_NODE_BULL)
-  await displayScreen(socket, session, SCREEN_NODE_BULL);
-  doPause(socket, session);
+  // Express.e:28557 - IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
+  if (await displayScreen(socket, session, SCREEN_NODE_BULL)) {
+    doPause(socket, session);
+  }
 
-  // Conference scan (confScan equivalent - express.e:28066)
+  // Conference scan (confScan equivalent - express.e:28564)
   socket.emit('ansi-output', '\r\n\x1b[32mScanning conferences for new messages...\x1b[0m\r\n');
 
   // Get user's last scan time (use last login if no scan time stored)
@@ -116,9 +118,7 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
   // TODO: Add lastScanTime column to users table
   // await db.updateUser(session.user!.id, { lastScanTime: new Date() });
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-
-  // Join default conference (joinConf equivalent)
+  // Join default conference (joinConf equivalent - express.e:28574)
   await joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
 }
 
@@ -155,8 +155,8 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
   await loadFlagged(socket, session);
   await loadHistory(session);
 
-  // Show pause prompt before displaying menu
-  doPause(socket, session);
+  // Express.e:28579 - Set menuPause flag (pause before next menu display)
+  session.menuPause = true;
 
   // Move to menu display
   session.subState = LoggedOnSubState.DISPLAY_MENU;

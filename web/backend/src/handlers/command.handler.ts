@@ -265,6 +265,10 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
   if (session.menuPause) {
     console.log('menuPause is TRUE, displaying menu');
 
+    // Express.e:28584 - IF (menuPause) THEN doPause()
+    const { doPause } = require('./screen.handler');
+    doPause(socket, session);
+
     // Clear screen before displaying menu (like AmiExpress does)
     console.log('Sending screen clear: \\x1b[2J\\x1b[H');
     socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
@@ -303,11 +307,14 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
     }
 
     displayMenuPrompt(socket, session);
+
+    // Reset menuPause after using it (prevents repeated pauses)
+    session.menuPause = false;
   } else {
     console.log('menuPause is FALSE, NOT displaying menu - staying in command mode');
   }
 
-  // Reset doorExpertMode after menu display (express.e:28586)
+  // Reset doorExpertMode after menu display (express.e:28588)
   session.doorExpertMode = false;
 
   // Like AmiExpress: Check cmdShortcuts to determine input mode (express.e:28598-28603)
