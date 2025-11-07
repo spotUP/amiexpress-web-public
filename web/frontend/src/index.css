@@ -109,6 +109,11 @@ body {
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
   text-rendering: optimizeSpeed !important;
+  /* Prevent text selection when drawing in ANSI editor */
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
 }
 
 .xterm .xterm-rows {
@@ -116,6 +121,11 @@ body {
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
+  /* Prevent text selection when drawing in ANSI editor */
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
 }
 
 .xterm .xterm-viewport {
@@ -123,6 +133,11 @@ body {
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
+  /* Prevent text selection when drawing in ANSI editor */
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
 }
 
 .xterm .xterm-rows .xterm-row {
@@ -131,6 +146,11 @@ body {
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;
+  /* Prevent text selection when drawing in ANSI editor */
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
 }
 
 h1 {
