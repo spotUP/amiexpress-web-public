@@ -1939,8 +1939,10 @@ async function initializeData() {
     console.log('✅ Database initialization complete');
 
     // Now start accepting connections
-    server.listen(port, () => {
-      console.log(`✅ Server running on port ${port}`);
+    // Bind to 0.0.0.0 for cloud deployments (Render, etc)
+    const host = process.env.HOST || '0.0.0.0';
+    server.listen(port, host, () => {
+      console.log(`✅ Server running on ${host}:${port}`);
       console.log(`🌐 BBS accessible at http://localhost:${port}/`);
     });
   } catch (error) {
