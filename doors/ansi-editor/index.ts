@@ -374,12 +374,15 @@ class ANSIEditor implements ANSIEditorInterface {
       selectionEnd: this.selectionEnd,
       operationMode: this.operationMode,
       mirrorModeEnabled: this.mirrorModeEnabled,
+      guideOverlayEnabled: this.guideOverlayEnabled,
       guideType: this.guideType,
       gridSpacing: this.gridSpacing,
       numpadModeEnabled: this.numpadModeEnabled,
       iceColorsEnabled: this.iceColorsEnabled,
       currentFKeySet: this.currentFKeySet,
-      emit: this.emit.bind(this)
+      emit: this.emit.bind(this),
+      doorSession: this.doorSession,  // CRITICAL: Help modal needs this for input handler
+      refresh: this.refreshDisplay.bind(this)
     };
   }
 

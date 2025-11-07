@@ -62,8 +62,20 @@ export interface DisplayContext {
   // Door session
   doorSession: any;
 
+  // Viewport state (for larger canvases)
+  viewportX: number;
+  viewportY: number;
+  viewportWidth: number;
+  viewportHeight: number;
+
+  // Drawing state
+  brushSize: number;
+  brushMode: string;
+  operationMode: string;
+
   // Output methods
   emit(data: string): void;
+  refresh(): void;
 }
 
 // ========== ANSI HELPER FUNCTIONS ==========
