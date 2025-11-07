@@ -1,0 +1,5 @@
+BBSCMD=ANSI
+TYPE=TS
+LOCATION=Doors/ansi-editor
+DESCRIPTION=ANSI Screen Editor (Modularized)
+ACCESS=255

@@ -13,6 +13,7 @@
  */
 
 import { Cell, Tool, GuideType, HIDE_CURSOR, CLEAR_SCREEN } from './types';
+import { getSelectionBounds } from './canvas';
 
 // ========== DISPLAY CONTEXT INTERFACE ==========
 
@@ -63,10 +64,6 @@ export interface DisplayContext {
 
   // Output methods
   emit(data: string): void;
-
-  // Helper methods needed for display
-  getSelectionBounds(): { x1: number; y1: number; x2: number; y2: number } | null;
-  refresh(): void;
 }
 
 // ========== ANSI HELPER FUNCTIONS ==========
@@ -195,7 +192,7 @@ export function refresh(ctx: DisplayContext): void {
   let buffer = HIDE_CURSOR + CLEAR_SCREEN;
 
   // Get selection bounds for overlay rendering
-  const selBounds = ctx.getSelectionBounds();
+  const selBounds = getSelectionBounds(ctx);
 
   // Render canvas area (lines 1-22)
   for (let y = 0; y < 22; y++) {

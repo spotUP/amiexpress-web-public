@@ -721,8 +721,10 @@ class ANSIEditor implements ANSIEditorInterface {
     this.startAutoSave();
     this.refreshDisplay();
 
-    // Main input loop
-    this.socket.on('ansi-input', async (data: any) => {
+    // Create promise that will resolve when user exits
+    await new Promise<void>((resolve) => {
+      // Main input loop
+      this.socket.on('ansi-input', async (data: any) => {
       const key = data.key;
       console.log('[ANSI Editor input] Received key:', JSON.stringify(key));
 
@@ -741,6 +743,7 @@ class ANSIEditor implements ANSIEditorInterface {
         } else {
           console.error('[ANSI Editor] ERROR: No bbsSession!');
         }
+        resolve(); // Exit the promise to end the door session
         return;
       }
 
@@ -1002,7 +1005,8 @@ class ANSIEditor implements ANSIEditorInterface {
         this.currentChar = key;
         this.refreshDisplay();
       }
-    });
+      });
+    }); // End of Promise - wait until user exits
   }
 }
 
