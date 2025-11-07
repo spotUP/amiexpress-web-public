@@ -19,9 +19,17 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKEND_LOG="$LOGS_DIR/backend_$TIMESTAMP.log"
 FRONTEND_LOG="$LOGS_DIR/frontend_$TIMESTAMP.log"
 
+# Create symlinks to latest logs for easy access
+ln -sf "$BACKEND_LOG" "$LOGS_DIR/backend_latest.log"
+ln -sf "$FRONTEND_LOG" "$LOGS_DIR/frontend_latest.log"
+
 echo "→ Logs will be saved to:"
 echo "   Backend:  $BACKEND_LOG"
 echo "   Frontend: $FRONTEND_LOG"
+echo ""
+echo "→ Quick access (latest logs):"
+echo "   tail -f logs/backend_latest.log"
+echo "   tail -f logs/frontend_latest.log"
 echo ""
 
 # Kill any existing servers first
