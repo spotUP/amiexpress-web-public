@@ -1079,6 +1079,45 @@ class ANSIEditor implements ANSIEditorInterface {
         return;
       }
 
+      // Handle brush mode cycling [ ]
+      if (key === '[') {  // Cycle brush mode backwards
+        const modes: BrushMode[] = ['half-block', 'custom', 'shading', 'colorize', 'blink', 'replace'];
+        const currentIndex = modes.indexOf(this.brushMode);
+        this.brushMode = modes[(currentIndex - 1 + modes.length) % modes.length];
+        this.refreshDisplay();
+        return;
+      }
+      if (key === ']') {  // Cycle brush mode forwards
+        const modes: BrushMode[] = ['half-block', 'custom', 'shading', 'colorize', 'blink', 'replace'];
+        const currentIndex = modes.indexOf(this.brushMode);
+        this.brushMode = modes[(currentIndex + 1) % modes.length];
+        this.refreshDisplay();
+        return;
+      }
+
+      // Handle paste mode cycling T/O/U (when selection exists)
+      if (key === 'T' || key === 't') {
+        if (this.clipboard.length > 0) {
+          cycleOperationMode(this.getEditorContext(), 'transparent');
+          this.refreshDisplay();
+          return;
+        }
+      }
+      if (key === 'O' || key === 'o') {
+        if (this.clipboard.length > 0) {
+          cycleOperationMode(this.getEditorContext(), 'over');
+          this.refreshDisplay();
+          return;
+        }
+      }
+      if (key === 'U' || key === 'u' && this.currentTool !== 'pick') {  // U is pick tool, only paste mode if not in pick mode
+        if (this.clipboard.length > 0) {
+          cycleOperationMode(this.getEditorContext(), 'under');
+          this.refreshDisplay();
+          return;
+        }
+      }
+
       // Handle other printable characters (if not handled above)
       if (key.length === 1 && key >= ' ' && key <= '~') {
         this.currentChar = key;
