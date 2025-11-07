@@ -1210,10 +1210,14 @@ export async function initializeDoors() {
   const bbsCmdDoors: Door[] = [];
 
   for (const [cmdName, cmdDef] of commandCache.bbscmd) {
-    // Map TS type to 'typescript' for execution
+    // Map door type codes to execution types
     let doorType: string = cmdDef.type;
     if (doorType === 'TS') {
       doorType = 'typescript';
+    } else if (doorType === 'PYTHON' || doorType === 'PY') {
+      doorType = 'python';
+    } else if (doorType === 'AREXX' || doorType === 'REXX') {
+      doorType = 'arexx';
     }
 
     // Convert CommandDefinition to Door interface
@@ -1221,7 +1225,7 @@ export async function initializeDoors() {
       id: cmdDef.name.toLowerCase(),
       name: cmdDef.name,
       description: `${cmdDef.type} door`,
-      command: cmdDef.name.toUpperCase(),  // Door command (e.g., "TESTRESTRICT")
+      command: cmdDef.name.toUpperCase(),  // Door command (e.g., "HELLOTS")
       path: cmdDef.location,                // Path from LOCATION= field
       accessLevel: cmdDef.access || 0,      // ACCESS= level
       enabled: true,

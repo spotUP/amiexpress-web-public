@@ -1,0 +1,5 @@
+BBSCMD=HELLOTS
+TYPE=TS
+LOCATION=doors/hello-door
+DESCRIPTION=TypeScript Hello World Door
+ACCESS=1
