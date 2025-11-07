@@ -35,7 +35,7 @@ services:
     disk:
       name: sqlite-data
       mountPath: /opt/render/project/src/web/backend/data
-      sizeGB: 1
+      sizeGB: 10
 
     # Health check endpoint
     healthCheckPath: /health
