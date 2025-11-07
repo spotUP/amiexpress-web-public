@@ -3,11 +3,8 @@ services:
   - type: web
     name: amiexpress-frontend
     env: static
-    buildCommand: cd web/frontend && npm ci && npm run build
+    buildCommand: cd web/frontend && npm ci --include=dev && npm run build
     staticPublishPath: ./web/frontend/dist
-    envVars:
-      - key: NODE_ENV
-        value: production
 
   # Backend - Web Service
   - type: web
