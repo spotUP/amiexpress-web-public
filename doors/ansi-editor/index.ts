@@ -720,6 +720,50 @@ class ANSIEditor implements ANSIEditorInterface {
       console.log('[ANSI Editor input] Current handler type:', typeof this.doorSession.bbsSession?.doorInputHandler);
       console.log('[ANSI Editor input] Is this handler?', this.doorSession.bbsSession?.doorInputHandler === inputHandler);
 
+      // Handle mouse events (sent as JSON from socket-handlers)
+      if (key.startsWith('{')) {
+        try {
+          const mouseData = JSON.parse(key);
+          if (mouseData.type === 'mouse-hover') {
+            // Move cursor to follow mouse (coordinates are 0-indexed)
+            this.cursorX = Math.max(0, Math.min(this.width - 1, mouseData.x));
+            this.cursorY = Math.max(0, Math.min(this.height - 1, mouseData.y));
+            this.refreshDisplay();
+            return;
+          } else if (mouseData.type === 'mouse-click') {
+            // Handle click based on tool
+            this.cursorX = Math.max(0, Math.min(this.width - 1, mouseData.x));
+            this.cursorY = Math.max(0, Math.min(this.height - 1, mouseData.y));
+            if (this.currentTool === 'draw') {
+              saveUndoState(this.getEditorContext(), true);
+              drawWithBrush(this.getDrawingContext(), this.cursorX, this.cursorY);
+              this.modified = true;
+            } else if (this.currentTool === 'pick') {
+              pickCell(this.getDrawingContext(), this.cursorX, this.cursorY);
+              const drawCtx = this.getDrawingContext();
+              this.currentFg = drawCtx.currentFg;
+              this.currentBg = drawCtx.currentBg;
+              this.currentChar = drawCtx.currentChar;
+            }
+            this.refreshDisplay();
+            return;
+          } else if (mouseData.type === 'mouse-drag') {
+            // Continuous drawing while dragging
+            this.cursorX = Math.max(0, Math.min(this.width - 1, mouseData.x));
+            this.cursorY = Math.max(0, Math.min(this.height - 1, mouseData.y));
+            if (this.currentTool === 'draw') {
+              saveUndoState(this.getEditorContext(), true);
+              drawWithBrush(this.getDrawingContext(), this.cursorX, this.cursorY);
+              this.modified = true;
+              this.refreshDisplay();
+            }
+            return;
+          }
+        } catch (e) {
+          // Not JSON, continue to regular key handling
+        }
+      }
+
       // Handle ESC (exit)
       if (key === '\x1b') {
         console.log('[ANSI Editor] ESC pressed, exiting');
