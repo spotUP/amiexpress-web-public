@@ -12,15 +12,19 @@ import { execSync } from 'child_process';
 
 // Door/Command types from axenums.e:15
 export enum DoorType {
-  XIM = 'XIM',   // eXpress Internal Module
-  AIM = 'AIM',   // Amiga Internal Module
-  SIM = 'SIM',   // Standard Internal Module (script)
-  TIM = 'TIM',   // Text Internal Module
-  IIM = 'IIM',   // Interactive Internal Module
-  MCI = 'MCI',   // MCI command
-  AEM = 'AEM',   // AmiExpress Module
-  SUP = 'SUP',   // Support module
-  TS = 'TS'      // TypeScript door (AmiExpress-Web extension)
+  XIM = 'XIM',       // eXpress Internal Module
+  AIM = 'AIM',       // Amiga Internal Module
+  SIM = 'SIM',       // Standard Internal Module (script)
+  TIM = 'TIM',       // Text Internal Module
+  IIM = 'IIM',       // Interactive Internal Module
+  MCI = 'MCI',       // MCI command
+  AEM = 'AEM',       // AmiExpress Module
+  SUP = 'SUP',       // Support module
+  TS = 'TS',         // TypeScript door (AmiExpress-Web extension)
+  PYTHON = 'PYTHON', // Python door (AmiExpress-Web extension)
+  PY = 'PY',         // Python door shorthand (AmiExpress-Web extension)
+  AREXX = 'AREXX',   // ARexx door (AmiExpress-Web extension)
+  REXX = 'REXX'      // REXX door shorthand (AmiExpress-Web extension)
 }
 
 // Command types from axenums.e:11
