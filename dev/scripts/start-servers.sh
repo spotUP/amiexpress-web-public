@@ -5,7 +5,7 @@
 
 echo "→ Starting backend and frontend..."
 echo "  Backend:  http://localhost:3001"
-echo "  Frontend: http://localhost:5173"
+echo "  Frontend: http://localhost:5174 (or next available port if occupied)"
 echo ""
 echo "Press Ctrl+C to stop both servers"
 echo ""
@@ -18,7 +18,16 @@ trap 'echo ""; echo "→ Stopping servers..."; kill $BACKEND_PID $FRONTEND_PID 2
 BACKEND_PID=$!
 
 # Start frontend in background (required for concurrent startup)
-(cd ~/Code/amiexpress-web/web/frontend && npm run dev) &
+(cd ~/Code/amiexpress-web/web/frontend && npm run dev) 2>&1 | while IFS= read -r line; do
+  echo "$line"
+  # Detect Vite's actual port from output
+  if [[ "$line" =~ Local:.*localhost:([0-9]+) ]]; then
+    VITE_PORT="${BASH_REMATCH[1]}"
+    echo ""
+    echo "✓ Frontend started on http://localhost:$VITE_PORT"
+    echo ""
+  fi
+done &
 FRONTEND_PID=$!
 
 # Wait for both to be ready
