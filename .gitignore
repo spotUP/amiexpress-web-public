@@ -143,3 +143,18 @@ backend/data/bbs/BBS/Node*/Screens/*
 # BBS data directories
 reference-boardBBS/
 Example_BBS/
+
+# BBS runtime data files (root level)
+Node*/
+node*.user
+node*.userkeys
+user.data
+user.keys
+user.misc
+DOOR.SYS
+DORINFO*.DEF
+Conf*/Files/*.dir
+CallersLog
+**/who/node*.txt
+doors/who/node*.txt
+Doors/who/node*.txt
