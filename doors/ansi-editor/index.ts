@@ -714,7 +714,7 @@ class ANSIEditor implements ANSIEditorInterface {
     this.emit(`\x1b[8;15HCanvas: 80x24 | Press F1 for help | ESC to exit`);
     this.emit(`\x1b[10;1H`);
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     // Initialize canvas and start editing
     saveUndoState(this.getEditorContext());
