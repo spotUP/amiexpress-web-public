@@ -826,21 +826,102 @@ class ANSIEditor implements ANSIEditorInterface {
         return;
       }
 
-      // Handle arrow keys (cursor movement)
+      // Handle tool selection hotkeys
+      if (key === 'K' || key === 'k') {  // K - Draw mode
+        this.currentTool = 'draw';
+        this.lineStart = null;
+        this.ellipseStart = null;
+        this.refreshDisplay();
+        return;
+      }
+      if (key === 'I' || key === 'i') {  // I - Line mode
+        this.currentTool = 'line';
+        this.lineStart = null;
+        this.ellipseStart = null;
+        this.refreshDisplay();
+        return;
+      }
+      if (key === 'B' || key === 'b') {  // B - Box mode
+        this.currentTool = 'box';
+        this.lineStart = null;
+        this.ellipseStart = null;
+        this.refreshDisplay();
+        return;
+      }
+      if (key === 'E' || key === 'e') {  // E - Ellipse mode
+        this.currentTool = 'ellipse';
+        this.lineStart = null;
+        this.ellipseStart = null;
+        this.refreshDisplay();
+        return;
+      }
+      if (key === 'T' || key === 't') {  // T - Text mode
+        this.currentTool = 'text';
+        this.lineStart = null;
+        this.ellipseStart = null;
+        this.refreshDisplay();
+        return;
+      }
+      if (key === 'P' || key === 'p') {  // P - Fill mode
+        this.currentTool = 'fill';
+        this.lineStart = null;
+        this.ellipseStart = null;
+        this.refreshDisplay();
+        return;
+      }
+      if (key === 'U' || key === 'u') {  // U - Pick mode
+        this.currentTool = 'pick';
+        this.lineStart = null;
+        this.ellipseStart = null;
+        this.refreshDisplay();
+        return;
+      }
+      if (key === 'V' || key === 'v') {  // V - Shifter mode
+        this.currentTool = 'shift';
+        this.lineStart = null;
+        this.ellipseStart = null;
+        this.refreshDisplay();
+        return;
+      }
+
+      // Handle arrow keys (cursor movement or shift tool)
       if (key === '\x1b[A') {  // Up
-        this.moveCursorRel(0, -1);
+        if (this.currentTool === 'shift') {
+          // Shift tool: move content without redrawing
+          this.moveCursorRel(0, -1);
+        } else {
+          this.moveCursorRel(0, -1);
+        }
         return;
       }
       if (key === '\x1b[B') {  // Down
-        this.moveCursorRel(0, 1);
+        if (this.currentTool === 'shift') {
+          this.moveCursorRel(0, 1);
+        } else {
+          this.moveCursorRel(0, 1);
+        }
         return;
       }
       if (key === '\x1b[C') {  // Right
-        this.moveCursorRel(1, 0);
+        if (this.currentTool === 'shift') {
+          saveUndoState(this.getEditorContext());
+          shiftCell(this.getDrawingContext(), 'right', false);
+          this.modified = true;
+          this.refreshDisplay();
+        } else {
+          this.moveCursorRel(1, 0);
+        }
         return;
       }
       if (key === '\x1b[D') {  // Left
-        this.moveCursorRel(-1, 0);
+        if (this.currentTool === 'shift') {
+          saveUndoState(this.getEditorContext());
+          shiftCell(this.getDrawingContext(), 'left', false);
+          this.modified = true;
+          this.refreshDisplay();
+        } else {
+          this.moveCursorRel(-1, 0);
+        }
         return;
       }
 
@@ -987,6 +1068,13 @@ class ANSIEditor implements ANSIEditorInterface {
       // Handle numpad mode drawing
       if (this.numpadModeEnabled && handleNumpadDraw(this.getDrawingContext(), key)) {
         this.modified = true;
+        this.refreshDisplay();
+        return;
+      }
+
+      // Handle brush size controls (1-9)
+      if (key >= '1' && key <= '9' && this.currentTool === 'draw') {
+        this.brushSize = parseInt(key);
         this.refreshDisplay();
         return;
       }
