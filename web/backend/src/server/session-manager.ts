@@ -138,6 +138,11 @@ export function getSession(socketId: string): BBSSession | undefined {
 }
 
 /**
+ * Alias for getSession - for compatibility with handlers
+ */
+export const getSessionBySocketId = getSession;
+
+/**
  * Set session for socket ID
  */
 export function setSession(socketId: string, session: BBSSession): void {

@@ -24,8 +24,12 @@ import { initializeSecurity } from '../utils/security.util';
 
 /**
  * Register all Socket.IO event handlers for a socket connection
+ *
+ * @param io - Socket.IO server instance
+ * @param socket - Socket connection
+ * @param chatState - Chat state (for legacy chat handlers)
  */
-export function registerSocketHandlers(io: SocketIOServer, socket: Socket) {
+export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatState?: any) {
   const clientIp = socket.handshake.address;
   console.log(`Client connected from ${clientIp}`);
 
@@ -89,6 +93,18 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket) {
     // Register all event handlers
     registerCommandHandler(socket);
     registerDisconnectHandler(socket);
+
+    // Register modular socket handlers (imported from separate modules)
+    // These handlers were extracted from index.ts for better code organization
+    const { registerAuthHandlers } = await import('./auth-socket-handlers');
+    const { registerFileHandlers } = await import('./file-socket-handlers');
+    const { registerChatHandlers } = await import('./chat-socket-handlers');
+    const { registerPreferenceHandlers } = await import('./preference-socket-handlers');
+
+    registerAuthHandlers(socket);
+    registerFileHandlers(socket);
+    registerChatHandlers(socket, chatState);
+    registerPreferenceHandlers(socket);
   }).catch(error => {
     console.error('Failed to initialize session:', error);
   });
@@ -295,8 +311,29 @@ function registerDisconnectHandler(socket: Socket) {
     // Release node back to available pool
     await nodeManager.releaseSession(socket.id);
 
-    // Clean up session
-    deleteSession(socket.id);
+    // Clean up session storage
+    // Import socketToUser and userSessions from session-manager
+    const { socketToUser, userSessions } = require('./session-manager');
+
+    // If user was logged in, remove socket-to-user mapping
+    const userId = socketToUser.get(socket.id);
+    if (userId) {
+      console.log(`[DISCONNECT] Removing socket ${socket.id} mapping for user ${userId}`);
+      socketToUser.delete(socket.id);
+
+      // Check if user has any other sockets connected
+      const userHasOtherSockets = Array.from(socketToUser.values()).includes(userId);
+      if (!userHasOtherSockets && session?.user) {
+        // This was the last socket for this user - clean up user session
+        console.log(`[DISCONNECT] Last socket for user ${userId} - removing user session`);
+        userSessions.delete(userId);
+      } else if (userHasOtherSockets) {
+        console.log(`[DISCONNECT] User ${userId} still has other sockets connected - keeping user session`);
+      }
+    } else {
+      // Pre-login socket - just remove from socket-based storage
+      deleteSession(socket.id);
+    }
   });
 }
 
