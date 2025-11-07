@@ -265,6 +265,10 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
     case 'MCI': // MCI door - process MCI codes and display (express.e:4293-4297)
       await executeMciDoor(socket, session, door, doorSession);
       break;
+    case 'TS': // TypeScript door type from BBSCMD file
+    case 'typescript': // TypeScript door with runDoor() export
+      await executeTypeScriptDoor(socket, session, door, doorSession);
+      break;
     case 'web':
       await executeWebDoor(socket, session, door, doorSession);
       break;
@@ -300,6 +304,114 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
   // Set subState so PROCESS_COMMAND handler knows door is done
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
+}
+
+/**
+ * Execute TypeScript door with runDoor() export
+ * Dynamically imports the door module and calls its runDoor() function
+ */
+async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
+  console.log(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
+  console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
+
+  try {
+    // Build absolute path to door - handle both directory and file paths
+    let doorPath = door.path;
+
+    // If path is undefined, error out
+    if (!doorPath) {
+      socket.emit('ansi-output', `\r\n\x1b[31mDoor path is not configured\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // Get project root (go up from web/backend)
+    const projectRoot = path.resolve(process.cwd(), '../..');
+
+    // If path is a directory, append index.ts
+    if (fs.existsSync(path.join(projectRoot, doorPath)) &&
+        fs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
+      doorPath = path.join(doorPath, 'index.ts');
+    }
+
+    // Build absolute path from project root
+    doorPath = path.isAbsolute(doorPath)
+      ? doorPath
+      : path.join(projectRoot, doorPath);
+
+    console.log(`[executeTypeScriptDoor] Resolved path: ${doorPath}`);
+
+    // Check if door exists
+    if (!fs.existsSync(doorPath)) {
+      socket.emit('ansi-output', `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // Dynamically import the door module with cache busting for development
+    // Use timestamp query parameter to force fresh load every time
+    const cacheBuster = `?t=${Date.now()}`;
+    const doorModule = await import(`${doorPath}${cacheBuster}`);
+
+    if (typeof doorModule.runDoor !== 'function') {
+      socket.emit('ansi-output', `\r\n\x1b[31mInvalid TypeScript door: No runDoor() export found\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    console.log(`[executeTypeScriptDoor] Door module loaded, calling runDoor()`);
+
+    // Set door active flag - this blocks command handler but door can still receive events
+    session.inDoorManager = true;
+    console.log(`[executeTypeScriptDoor] Set inDoorManager=true`);
+
+    // Notify frontend that door is active
+    socket.emit('door:status', { status: 'running' });
+    console.log(`[executeTypeScriptDoor] Sent door:status: running`);
+
+    // Create door session object with reference to BBS session
+    const doorSessionObj = {
+      socket,
+      user: session.user,
+      bbsSession: session  // Pass reference to BBS session for input routing
+    };
+
+    // Execute the door (it registers its own input listeners)
+    console.log(`[executeTypeScriptDoor] Calling door's runDoor() function...`);
+    await doorModule.runDoor(doorSessionObj);
+    console.log(`[executeTypeScriptDoor] Door's runDoor() returned`);
+
+    console.log(`[executeTypeScriptDoor] Door completed successfully`);
+
+    // Clear door active flag
+    delete session.inDoorManager;
+    console.log(`[executeTypeScriptDoor] Cleared inDoorManager`);
+
+    // Notify frontend that door is stopped
+    socket.emit('door:status', { status: 'stopped' });
+    console.log(`[executeTypeScriptDoor] Sent door:status: stopped`);
+
+    // Return to menu
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = false;
+
+  } catch (error) {
+    console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error);
+
+    // Clear door active flag on error
+    delete session.inDoorManager;
+
+    socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
 }
 
 /**
@@ -838,6 +950,12 @@ export async function initializeDoors() {
   const bbsCmdDoors: Door[] = [];
 
   for (const [cmdName, cmdDef] of commandCache.bbscmd) {
+    // Map TS type to 'typescript' for execution
+    let doorType: string = cmdDef.type;
+    if (doorType === 'TS') {
+      doorType = 'typescript';
+    }
+
     // Convert CommandDefinition to Door interface
     const door: Door = {
       id: cmdDef.name.toLowerCase(),
@@ -847,12 +965,12 @@ export async function initializeDoors() {
       path: cmdDef.location,                // Path from LOCATION= field
       accessLevel: cmdDef.access || 0,      // ACCESS= level
       enabled: true,
-      type: cmdDef.type,                    // TYPE= (XIM, AIM, etc.)
+      type: doorType,                       // TYPE= (XIM, AIM, TS → typescript, etc.)
       parameters: []
     };
 
     bbsCmdDoors.push(door);
-    console.log(`[initializeDoors] Registered door: ${door.command} → ${door.path}`);
+    console.log(`[initializeDoors] Registered door: ${door.command} → ${door.path} (type: ${doorType})`);
   }
 
   // Hardcoded web doors (these don't have .info files)

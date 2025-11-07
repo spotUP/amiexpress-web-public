@@ -29,6 +29,23 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket) {
   const clientIp = socket.handshake.address;
   console.log(`Client connected from ${clientIp}`);
 
+  // DEVELOPMENT: Force single connection per IP to prevent cache issues
+  if (process.env.NODE_ENV !== 'production') {
+    const existingSockets = Array.from(io.sockets.sockets.values()).filter(
+      s => s.id !== socket.id && s.handshake.address === clientIp
+    );
+
+    if (existingSockets.length > 0) {
+      console.warn(`⚠️ DEVELOPMENT: Disconnecting duplicate connection from ${clientIp}`);
+      console.warn(`   Existing sockets: ${existingSockets.length}, disconnecting new connection`);
+      // Disconnect OLD connections, keep the new one
+      existingSockets.forEach(oldSocket => {
+        console.warn(`   Disconnecting old socket: ${oldSocket.id}`);
+        oldSocket.disconnect(true);
+      });
+    }
+  }
+
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {
     console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);
@@ -100,8 +117,79 @@ async function initializeSession(socket: Socket) {
  * Register command handler
  */
 function registerCommandHandler(socket: Socket) {
+  console.log('[socket-handlers] registerCommandHandler called, registering door:input listener');
+
+  // Handle door input (for TypeScript doors)
+  socket.on('door:input', (data: string) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    console.log('[socket-handlers] door:input received:', JSON.stringify(data));
+
+    if (session.inDoorManager && session.doorInputHandler) {
+      console.log('[socket-handlers] Calling doorInputHandler from door:input');
+      session.doorInputHandler(data);
+    } else {
+      console.log('[socket-handlers] door:input received but no handler - inDoorManager:', session.inDoorManager, 'handler:', !!session.doorInputHandler);
+    }
+  });
+
+  // Handle mouse clicks (for ANSI editor and other mouse-enabled features)
+  socket.on('mouse-click', (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    console.log('[socket-handlers] mouse-click received:', data);
+
+    // If door is active and has a mouse handler, call it
+    if (session.inDoorManager && session.doorInputHandler) {
+      console.log('[socket-handlers] Calling doorInputHandler with mouse data');
+      // Pass mouse data as a special formatted string that the door can recognize
+      session.doorInputHandler(JSON.stringify({ type: 'mouse-click', ...data }));
+    }
+  });
+
+  // Handle mouse drag (for continuous drawing in ANSI editor)
+  socket.on('mouse-drag', (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    console.log('[socket-handlers] mouse-drag received:', data);
+
+    // If door is active and has a mouse handler, call it
+    if (session.inDoorManager && session.doorInputHandler) {
+      console.log('[socket-handlers] Calling doorInputHandler with mouse drag data');
+      session.doorInputHandler(JSON.stringify({ type: 'mouse-drag', ...data }));
+    }
+  });
+
+  // Handle mouse up (end of drag operation)
+  socket.on('mouse-up', (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    console.log('[socket-handlers] mouse-up received:', data);
+
+    // If door is active and has a mouse handler, call it
+    if (session.inDoorManager && session.doorInputHandler) {
+      console.log('[socket-handlers] Calling doorInputHandler with mouse up data');
+      session.doorInputHandler(JSON.stringify({ type: 'mouse-up', ...data }));
+    }
+  });
+
+  // Handle mouse hover (cursor follows mouse without clicking)
+  socket.on('mouse-hover', (data: { x: number; y: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    // If door is active and has a mouse handler, call it
+    if (session.inDoorManager && session.doorInputHandler) {
+      session.doorInputHandler(JSON.stringify({ type: 'mouse-hover', ...data }));
+    }
+  });
+
   socket.on('command', (data: string) => {
-    console.log('=== COMMAND RECEIVED ===');
+    console.log('=== COMMAND RECEIVED [v2024-FIXED] ===');
     console.log('Raw data:', JSON.stringify(data), 'length:', data.length, 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
 
     const session = getSession(socket.id);
@@ -127,6 +215,15 @@ function registerCommandHandler(socket: Socket) {
       exitChat(socket, session);
       return;
     }
+
+    // If a door is active, call the door's input handler directly
+    console.log('[socket-handlers] Checking door handler - inDoorManager:', session.inDoorManager, 'doorInputHandler:', typeof session.doorInputHandler, 'exists:', !!session.doorInputHandler);
+    if (session.inDoorManager && session.doorInputHandler) {
+      console.log('[socket-handlers] inDoorManager active, calling doorInputHandler');
+      session.doorInputHandler(data);
+      return;
+    }
+    console.log('[socket-handlers] NOT calling doorInputHandler - inDoorManager:', session.inDoorManager, 'handler:', !!session.doorInputHandler);
 
     handleCommand(socket, session, data);
     console.log('=== COMMAND PROCESSED ===\n');

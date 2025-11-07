@@ -3,49 +3,27 @@
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1
 
-echo "→ Starting backend..."
-(cd ~/Code/amiexpress-web/web/backend && npx tsx src/index.ts > /tmp/backend.log 2>&1) &
+echo "→ Starting backend and frontend..."
+echo "  Backend:  http://localhost:3001"
+echo "  Frontend: http://localhost:5173"
+echo ""
+echo "Press Ctrl+C to stop both servers"
+echo ""
+
+# Trap to kill both on exit
+trap 'echo ""; echo "→ Stopping servers..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; wait; echo "✓ Servers stopped"; exit' EXIT INT TERM
+
+# Start backend in background (required for concurrent startup)
+(cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts) &
 BACKEND_PID=$!
 
-# Wait for backend to start listening
-echo "  Waiting for backend to bind to port 3001..."
-for i in {1..15}; do
-  if lsof -ti:3001 > /dev/null 2>&1; then
-    echo "✓ Backend started (PID: $BACKEND_PID)"
-    break
-  fi
-  sleep 1
-  if [ $i -eq 15 ]; then
-    echo "✗ Backend failed to start after 15 seconds"
-    tail -30 /tmp/backend.log
-    exit 1
-  fi
-done
-
-echo "→ Starting frontend..."
-(cd ~/Code/amiexpress-web/web/frontend && npm run dev > /tmp/frontend.log 2>&1) &
+# Start frontend in background (required for concurrent startup)
+(cd ~/Code/amiexpress-web/web/frontend && npm run dev) &
 FRONTEND_PID=$!
 
-# Wait for frontend to start listening
-echo "  Waiting for frontend to bind to port 5173..."
-for i in {1..15}; do
-  if lsof -ti:5173 > /dev/null 2>&1; then
-    echo "✓ Frontend started (PID: $FRONTEND_PID)"
-    break
-  fi
-  sleep 1
-  if [ $i -eq 15 ]; then
-    echo "✗ Frontend failed to start after 15 seconds"
-    tail -30 /tmp/frontend.log
-    exit 1
-  fi
-done
+# Wait for both to be ready
+echo "Waiting for servers to start..."
+sleep 3
 
-echo ""
-echo "✓ Both servers running:"
-echo "  Backend:  http://localhost:3001 (PID: $BACKEND_PID)"
-echo "  Frontend: http://localhost:5173 (PID: $FRONTEND_PID)"
-echo ""
-echo "Logs:"
-echo "  tail -f /tmp/backend.log"
-echo "  tail -f /tmp/frontend.log"
+# Keep script running and wait for both processes
+wait

@@ -21,6 +21,8 @@ import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.ut
 import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
+import { registerSocketHandlers } from './server/socket-handlers';
+import { sessions, userSessions, socketToUser } from './server/session-manager';
 import { findSecurityScreen } from './utils/screen-security.util';
 import {
   displayConferenceBulletins,
@@ -220,6 +222,7 @@ export interface BBSSession {
   tempData?: any; // Temporary data storage for complex operations (like file listing)
   flagManager?: any; // File flagging manager for batch downloads
   inDoorManager?: boolean; // Whether user is currently in door manager
+  doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
   ansiEnabled?: boolean; // Whether ANSI is enabled for this session
   currentRoomId?: string; // Current chat room ID for group chat
 
@@ -325,6 +328,8 @@ const io = new Server(server, {
   pingTimeout: 60000, // Wait 60s for pong response before considering connection dead
   pingInterval: 25000, // Send ping every 25s to keep connection alive
   maxHttpBufferSize: 1e6, // 1MB max message size (reduced from 1MB default)
+  // Development: Disable connection state recovery to prevent stale sessions
+  connectionStateRecovery: process.env.NODE_ENV === 'production' ? {} : undefined,
   transports: ['websocket', 'polling'], // Prefer websocket, fallback to polling
   allowEIO3: true, // Support older Socket.io clients
   perMessageDeflate: false, // Disable compression to reduce CPU usage
@@ -335,7 +340,8 @@ const io = new Server(server, {
 const port = process.env.PORT || config.get('port');
 
 // Store active sessions (in production, use Redis/database)
-const sessions = new Map<string, BBSSession>();
+// NOTE: sessions, userSessions, and socketToUser are imported from session-manager module
+// This ensures both index.ts and socket-handlers.ts use the SAME storage
 
 // Connection rate limiting - track recent connections
 const recentConnections: Map<string, number[]> = new Map();
@@ -392,6 +398,26 @@ function getNextAvailableNodeId(): number {
   }
 
   return 1; // Fallback (shouldn't happen with 99 nodes)
+}
+
+// Helper: Get session by socket ID
+// Checks both pre-login (socketId-based) and post-login (userId-based) storage
+function getSessionBySocketId(socketId: string): BBSSession | undefined {
+  // First check if this socket is mapped to a user (post-login)
+  const userId = socketToUser.get(socketId);
+  if (userId) {
+    return userSessions.get(userId);
+  }
+  // Otherwise check pre-login sessions
+  return sessions.get(socketId);
+}
+
+// Helper: Update session (handles both pre-login and post-login)
+function updateSessionForSocket(socketId: string, updates: Partial<BBSSession>): void {
+  const session = getSessionBySocketId(socketId);
+  if (!session) return;
+
+  Object.assign(session, updates);
 }
 
 // Initialize handlers
@@ -455,6 +481,16 @@ setNewUserDependencies({
 
 app.use(cors());
 app.use(express.json());
+
+// Development: Disable caching to prevent stale session issues
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+  });
+}
 
 app.get('/', (req: Request, res: Response) => {
   res.json({ message: 'AmiExpress Backend API' });
@@ -689,6 +725,29 @@ io.on('connection', async (socket) => {
   const clientIp = socket.handshake.address;
   console.log(`Client connected from ${clientIp}`);
 
+  // DEVELOPMENT: Force single connection per IP to prevent cache issues
+  console.log(`[DEBUG] NODE_ENV="${process.env.NODE_ENV}", checking for duplicates...`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[DEBUG] In development mode, checking sockets...`);
+    const allSockets = Array.from(io.sockets.sockets.values());
+    console.log(`[DEBUG] Total sockets: ${allSockets.length}`);
+    const existingSockets = allSockets.filter(
+      s => s.id !== socket.id && s.handshake.address === clientIp
+    );
+    console.log(`[DEBUG] Existing sockets for ${clientIp}: ${existingSockets.length}`);
+
+    if (existingSockets.length > 0) {
+      console.warn(`⚠️ DEVELOPMENT: Disconnecting duplicate connection from ${clientIp}`);
+      console.warn(`   Existing sockets: ${existingSockets.length}, disconnecting NEW connection (keeping existing)`);
+      // Disconnect the NEW connection, keep the old one (which has the session)
+      console.warn(`   Disconnecting NEW socket: ${socket.id}`);
+      socket.disconnect(true);
+      return; // Don't continue with session setup
+    }
+  } else {
+    console.log(`[DEBUG] Production mode, skipping duplicate check`);
+  }
+
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {
     console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);
@@ -751,10 +810,10 @@ io.on('connection', async (socket) => {
   };
   sessions.set(socket.id, session);
 
-  // Display complete connection screen via BBSTITLE.TXT (express.e:29552)
-  // BBSTITLE contains ~XIDOORS:who/NI to trigger NI door on connection
-  // NI creates node tracking files for WHO2 door
-  await displayScreen(socket, session, 'BBSTITLE');
+  // Display complete connection screen via AWAITSCREEN.TXT
+  // reference-board BBS layout: everything shown via screen file with MCI codes
+  // All messages, node list, etc. are in AWAITSCREEN.TXT
+  await displayScreen(socket, session, 'AWAITSCREEN');
 
   // Show ANSI prompt immediately (reference-board style - no key wait)
   socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
@@ -772,12 +831,9 @@ io.on('connection', async (socket) => {
 
   socket.on('login', async (data: { token?: string; username?: string; password?: string }) => {
     try {
-      // Enforce connection screen flow - don't allow login until user is in LOGON state
-      if (session.state === BBSState.AWAIT) {
-        console.log('Login attempt blocked - user must view connection screens first');
-        socket.emit('login-failed', 'Please view connection screens first');
-        return;
-      }
+      // Note: We don't check session state here because there can be race conditions
+      // between the frontend sending 'login' and the backend processing the Enter key
+      // that transitions from AWAIT → LOGON. The authentication itself is the real security check.
 
       let user;
 
@@ -831,7 +887,9 @@ io.on('connection', async (socket) => {
         }
 
         // User exists, authenticate with password
+        console.log('[LOGIN] Authenticating user:', data.username);
         user = await db.authenticateUser(data.username, data.password);
+        console.log('[LOGIN] Authentication result:', user ? 'SUCCESS' : 'FAILED');
         if (!user) {
           // express.e:29209 & 29343 - Invalid password message with linebreak
           session.loginRetryCount++;
@@ -849,6 +907,7 @@ io.on('connection', async (socket) => {
           socket.emit('login-failed', 'Invalid PassWord\r\n');
           return;
         }
+        console.log('[LOGIN] User authenticated successfully, proceeding with login flow');
 
         // Reset retry counter on successful login
         session.loginRetryCount = 0;
@@ -882,6 +941,22 @@ io.on('connection', async (socket) => {
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
+
+      // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
+      // This fixes the multi-socket connection issue where new sockets get fresh sessions
+      console.log(`[SESSION-MIGRATION] User ${user.id} logged in on socket ${socket.id}`);
+      console.log(`[SESSION-MIGRATION] Migrating session from socket-based to user-based storage`);
+
+      // Remove from socket-based pre-login storage
+      sessions.delete(socket.id);
+
+      // Store in user-based post-login storage
+      userSessions.set(user.id, session);
+
+      // Map this socket to the user
+      socketToUser.set(socket.id, user.id);
+
+      console.log(`[SESSION-MIGRATION] Session now keyed by user ID: ${user.id}`);
 
       // CRITICAL: Write node{n}.user and node{n}.userkeys files for WHO door compatibility
       // express.e:2935-2950 createNodeUserFiles()
@@ -1035,63 +1110,9 @@ io.on('connection', async (socket) => {
     }
   });
 
-  socket.on('command', (data: string) => {
-    console.log('=== COMMAND RECEIVED ===');
-    console.log('Raw data:', JSON.stringify(data), 'length:', data.length, 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
-    console.log('Session state:', session.state, 'subState:', session.subState);
-    console.log('Input buffer:', JSON.stringify(session.inputBuffer));
-    console.log('Session ID exists:', sessions.has(socket.id));
-    console.log('Session object:', session ? 'EXISTS' : 'NULL');
-
-    // Special debug for Enter key
-    if (data === '\r') {
-      console.log('🎯 ENTER KEY DETECTED!');
-      console.log('🎯 Current subState:', session.subState);
-      console.log('🎯 Is POST_MESSAGE_SUBJECT?', session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT);
-      console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
-    }
-
-    // Handle special chat keys (like F1 in AmiExpress)
-    if ((session as any).inChat && data === '\x1b[OP') { // F1 key
-      console.log('🎯 F1 pressed during chat - exiting chat');
-      exitChat(socket, session);
-      return;
-    }
-
-    // Check for input callback (used by multi-step flows like account editor)
-    if (session.inputCallback) {
-      console.log('📞 Input callback detected - routing to callback handler');
-
-      // Handle character-by-character input (expert mode) - accumulate until Enter
-      if (data === '\r' || data === '\n') {
-        const fullInput = session.inputBuffer;
-        session.inputBuffer = ''; // Clear buffer for next input
-
-        console.log(`📞 Calling callback with accumulated input: "${fullInput}"`);
-        session.inputCallback(fullInput)
-          .then(() => {
-            console.log('✓ Input callback completed');
-          })
-          .catch((error: any) => {
-            console.error('✗ Input callback error:', error);
-          });
-      } else if (data === '\x7F' || data === '\b') {
-        // Handle backspace
-        if (session.inputBuffer.length > 0) {
-          session.inputBuffer = session.inputBuffer.slice(0, -1);
-          // Don't echo - frontend terminal handles display
-        }
-      } else {
-        // Accumulate character (frontend terminal handles echo)
-        session.inputBuffer += data;
-      }
-
-      return;
-    }
-
-    handleCommand(socket, session, data);
-    console.log('=== COMMAND PROCESSED ===\n');
-  });
+  // Register all socket handlers (command, door:input, chat, etc.)
+  // This includes proper door input routing via doorInputHandler
+  registerSocketHandlers(io, socket);
 
   // Handle special chat commands
   socket.on('chat-message', (message: string) => {
@@ -1562,7 +1583,7 @@ io.on('connection', async (socket) => {
   // Real-time user-to-user chat Socket.io handlers
 
   socket.on('chat:request', async (data: { targetUsername: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleChatRequest } = require('./handlers/internode-chat.handler');
@@ -1570,7 +1591,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('chat:accept', async (data: { sessionId: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleChatAccept } = require('./handlers/internode-chat.handler');
@@ -1578,7 +1599,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('chat:decline', async (data: { sessionId: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleChatDecline } = require('./handlers/internode-chat.handler');
@@ -1589,7 +1610,7 @@ io.on('connection', async (socket) => {
     console.log('📨 [SOCKET.IO] Received chat:message event from client');
     console.log('📨 [SOCKET.IO] Data:', data);
     console.log('📨 [SOCKET.IO] Socket ID:', socket.id);
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) {
       console.log('❌ [SOCKET.IO] No session found for socket:', socket.id);
       return;
@@ -1602,7 +1623,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('chat:end', async () => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleChatEnd } = require('./handlers/internode-chat.handler');
@@ -1613,7 +1634,7 @@ io.on('connection', async (socket) => {
   // Real-time multi-user chat room Socket.io handlers
 
   socket.on('room:create', async (data: { roomName: string; topic?: string; isPublic?: boolean; password?: string; maxUsers?: number }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleRoomCreate } = require('./handlers/group-chat.handler');
@@ -1621,7 +1642,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('room:join', async (data: { roomId?: string; roomName?: string; password?: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleRoomJoin } = require('./handlers/group-chat.handler');
@@ -1629,7 +1650,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('room:leave', async () => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleRoomLeave } = require('./handlers/group-chat.handler');
@@ -1637,7 +1658,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('room:message', async (data: { message: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleRoomMessage } = require('./handlers/group-chat.handler');
@@ -1645,7 +1666,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('room:list', async (data?: { showPrivate?: boolean }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleRoomList } = require('./handlers/group-chat.handler');
@@ -1653,7 +1674,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('room:kick', async (data: { targetUsername: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleRoomKick } = require('./handlers/group-chat.handler');
@@ -1661,7 +1682,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('room:mute', async (data: { targetUsername: string; mute: boolean }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
     const { handleRoomMute } = require('./handlers/group-chat.handler');
@@ -1670,7 +1691,7 @@ io.on('connection', async (socket) => {
 
   // Font preference handlers
   socket.on('get-font-preference', async () => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session || !session.user) {
       socket.emit('font-preference', { font: 'mosoul' }); // Default
       return;
@@ -1681,7 +1702,7 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('set-font-preference', async (data: { font: string }) => {
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
     if (!session || !session.user) return;
 
     try {
@@ -1696,7 +1717,7 @@ io.on('connection', async (socket) => {
   socket.on('disconnect', async () => {
     console.log('Client disconnected');
 
-    const session = sessions.get(socket.id);
+    const session = getSessionBySocketId(socket.id);
 
     // Handle internode chat cleanup if user was in chat
     if (session && session.subState === LoggedOnSubState.CHAT) {
@@ -1731,13 +1752,32 @@ io.on('connection', async (socket) => {
     // Release node back to available pool
     await nodeManager.releaseSession(socket.id);
 
-    // Clean up session
-    sessions.delete(socket.id);
+    // Clean up session storage
+    // If user was logged in, remove socket-to-user mapping
+    const userId = socketToUser.get(socket.id);
+    if (userId) {
+      console.log(`[DISCONNECT] Removing socket ${socket.id} mapping for user ${userId}`);
+      socketToUser.delete(socket.id);
+
+      // Check if user has any other sockets connected
+      const userHasOtherSockets = Array.from(socketToUser.values()).includes(userId);
+      if (!userHasOtherSockets && session?.user) {
+        // This was the last socket for this user - clean up user session
+        console.log(`[DISCONNECT] Last socket for user ${userId} - removing user session`);
+        userSessions.delete(userId);
+      } else if (userHasOtherSockets) {
+        console.log(`[DISCONNECT] User ${userId} still has other sockets connected - keeping user session`);
+      }
+    } else {
+      // Pre-login socket - just remove from socket-based storage
+      sessions.delete(socket.id);
+    }
   });
 });
 
 // Display system bulletins (SCREEN_BULL equivalent)
 function displaySystemBulletins(socket: any, session: BBSSession) {
+  console.log('[BULLETINS] Displaying system bulletins, current state:', session.state);
   // In AmiExpress, await displayScreen(SCREEN_BULL) shows system bulletins
   socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
   socket.emit('ansi-output', '\r\n\x1b[36m-= AmiExpress Web BBS System Bulletins =-\x1b[0m\r\n');
@@ -1751,9 +1791,15 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '- Full conference system\r\n');
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m\r\n');
 
+  // Transition to LOGGEDON state so command handler will process keypresses
+  console.log('[BULLETINS] Setting state to LOGGEDON');
+  session.state = BBSState.LOGGEDON;
+  console.log('[BULLETINS] State is now:', session.state);
+
   // Move to next state after bulletin display
   // express.e:28555-28648 flow: BULL → NODE_BULL → confScan → CONF_BULL → MENU
   session.subState = LoggedOnSubState.CONF_SCAN;
+  console.log('[BULLETINS] SubState is now:', session.subState);
 }
 
 // ===== SCREEN FILE SYSTEM (Phase 8) =====

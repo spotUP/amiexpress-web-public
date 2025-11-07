@@ -76,7 +76,7 @@ export interface Door {
   conferenceId?: number; // Optional conference restriction
   accessLevel: number; // Minimum security level required
   enabled: boolean;
-  type: 'native' | 'script' | 'web'; // Type of door implementation
+  type: 'native' | 'script' | 'web' | 'typescript'; // Type of door implementation
   parameters?: string[]; // Optional parameters for door execution
 }
 

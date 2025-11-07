@@ -12,6 +12,7 @@ import type { BBSSession } from '../index';
 import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import { sequentialFileManager } from '../services/SequentialFileManager';
+import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
 
 interface Conference {
   id: number;
@@ -709,8 +710,16 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // First normalize any existing \r\n to \n, then convert all \n to \r\n
     parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
 
-    // Send to client
-    socket.emit('ansi-output', parsed);
+    // Double-buffered display: Build complete frame buffer before sending
+    // This prevents tearing and visible redraws by sending everything atomically
+    const frameBuffer =
+      HIDE_CURSOR +      // Hide cursor
+      '\x1b[H' +         // Move cursor to home (1,1)
+      parsed +           // Screen content
+      SHOW_CURSOR;       // Show cursor
+
+    // Send entire frame in one atomic operation
+    socket.emit('ansi-output', frameBuffer);
 
     // Execute any ~XC/~XI commands found in screen file (async, non-blocking)
     if (commands.length > 0) {

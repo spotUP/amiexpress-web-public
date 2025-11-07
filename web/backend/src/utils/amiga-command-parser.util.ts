@@ -19,7 +19,8 @@ export enum DoorType {
   IIM = 'IIM',   // Interactive Internal Module
   MCI = 'MCI',   // MCI command
   AEM = 'AEM',   // AmiExpress Module
-  SUP = 'SUP'    // Support module
+  SUP = 'SUP',   // Support module
+  TS = 'TS'      // TypeScript door (AmiExpress-Web extension)
 }
 
 // Command types from axenums.e:11

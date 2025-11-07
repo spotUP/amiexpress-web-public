@@ -100,6 +100,8 @@ function App() {
         style.fontSmooth = 'never';
         style.webkitFontSmoothing = 'none';
         style.MozOsxFontSmoothing = 'none';
+        // Hide mouse cursor when inside the terminal
+        style.cursor = 'none';
         // No padding - screens are designed for full 80-column display
       }
       term.refresh(0, term.rows - 1);
@@ -121,14 +123,13 @@ function App() {
 
     const ws = io(backendUrl, {
       transports: allowedTransports,
-      timeout: 60000, // Increased timeout for Render.com cold starts (60 seconds)
-      forceNew: true,
-      upgrade: true, // Always allow upgrades for WebSocket connections
+      timeout: 60000,
+      upgrade: true,
       rememberUpgrade: true,
       reconnection: true,
-      reconnectionAttempts: isDevelopment ? 5 : 10, // More attempts for production cold starts
-      reconnectionDelay: 2000, // Longer delay between attempts
-      reconnectionDelayMax: 10000 // Max delay of 10 seconds
+      reconnectionAttempts: isDevelopment ? 5 : 10,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000
     });
     socket.current = ws;
 
@@ -324,13 +325,149 @@ function App() {
         // DOOR MODE: Send input directly to door without local echo
         // Door will handle its own display via JH_WRITE
         console.log('🚪 Sending input to door:', JSON.stringify(data));
-        ws.emit('door:input', data);
+        ws.emit('command', data);
       } else {
         // NORMAL BBS MODE: Send to server, let backend handle echo
         // NO local echo - backend will echo back via ansi-output for proper BBS behavior
         ws.emit('command', data);
       }
     });
+
+    // Handle mouse clicks and drag (for ANSI editor and other mouse-enabled features)
+    if (terminalRef.current) {
+      const terminalElement = terminalRef.current;
+      let mouseButtonDown = false;
+      let lastButton = -1;
+      let lastCol = -1;
+      let lastRow = -1;
+
+      const convertToCell = (event: MouseEvent): { col: number; row: number } => {
+        // Get the actual canvas element inside xterm.js
+        const canvas = terminalElement.querySelector('.xterm-screen canvas') as HTMLCanvasElement;
+        if (!canvas) {
+          // Fallback to container if canvas not found
+          const rect = terminalElement.getBoundingClientRect();
+          const x = event.clientX - rect.left;
+          const y = event.clientY - rect.top;
+          const cellWidth = rect.width / term.cols;
+          const cellHeight = rect.height / term.rows;
+          return {
+            col: Math.floor(x / cellWidth),
+            row: Math.floor(y / cellHeight)
+          };
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        // Use the rendered dimensions, not the internal canvas dimensions
+        const cellWidth = rect.width / term.cols;
+        const cellHeight = rect.height / term.rows;
+
+        return {
+          col: Math.floor(x / cellWidth),
+          row: Math.floor(y / cellHeight)
+        };
+      };
+
+      terminalElement.addEventListener('mousedown', (event: MouseEvent) => {
+        event.preventDefault();
+        const { col, row } = convertToCell(event);
+
+        if (col >= 0 && col < term.cols && row >= 0 && row < term.rows) {
+          mouseButtonDown = true;
+          lastButton = event.button;
+          lastCol = col;
+          lastRow = row;
+
+          console.log('🖱️ Mouse down:', { col, row, button: event.button });
+
+          ws.emit('mouse-click', {
+            x: col,
+            y: row,
+            button: event.button,
+            shift: event.shiftKey,
+            ctrl: event.ctrlKey,
+            alt: event.altKey
+          });
+        }
+      });
+
+      terminalElement.addEventListener('mousemove', (event: MouseEvent) => {
+        const { col, row } = convertToCell(event);
+
+        // Only emit if we moved to a different cell
+        if (col !== lastCol || row !== lastRow) {
+          if (col >= 0 && col < term.cols && row >= 0 && row < term.rows) {
+            lastCol = col;
+            lastRow = row;
+
+            if (mouseButtonDown) {
+              // Dragging - emit drag event
+              console.log('🖱️ Mouse drag:', { col, row, button: lastButton });
+
+              ws.emit('mouse-drag', {
+                x: col,
+                y: row,
+                button: lastButton,
+                shift: event.shiftKey,
+                ctrl: event.ctrlKey,
+                alt: event.altKey
+              });
+            } else {
+              // Just hovering - emit hover event
+              ws.emit('mouse-hover', {
+                x: col,
+                y: row,
+                shift: event.shiftKey,
+                ctrl: event.ctrlKey,
+                alt: event.altKey
+              });
+            }
+          }
+        }
+      });
+
+      terminalElement.addEventListener('mouseup', (event: MouseEvent) => {
+        if (mouseButtonDown) {
+          const { col, row } = convertToCell(event);
+
+          console.log('🖱️ Mouse up:', { col, row, button: event.button });
+
+          ws.emit('mouse-up', {
+            x: col,
+            y: row,
+            button: event.button,
+            shift: event.shiftKey,
+            ctrl: event.ctrlKey,
+            alt: event.altKey
+          });
+
+          mouseButtonDown = false;
+          lastButton = -1;
+        }
+      });
+
+      // Handle mouse leaving the terminal area
+      terminalElement.addEventListener('mouseleave', (event: MouseEvent) => {
+        if (mouseButtonDown) {
+          console.log('🖱️ Mouse leave (ending drag)');
+
+          ws.emit('mouse-up', {
+            x: lastCol,
+            y: lastRow,
+            button: lastButton,
+            shift: event.shiftKey,
+            ctrl: event.ctrlKey,
+            alt: event.altKey
+          });
+
+          mouseButtonDown = false;
+          lastButton = -1;
+        }
+      });
+    }
 
     // Handle special keys (F1 for chat, etc.)
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {

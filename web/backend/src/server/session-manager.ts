@@ -13,7 +13,10 @@ import { EnvStat } from '../constants/env-codes';
  */
 
 // Store active sessions (in production, use Redis/database)
-export const sessions = new Map<string, BBSSession>();
+// DUAL SESSION STORAGE: Sessions are keyed by socket ID before login, then by user ID after login
+export const sessions = new Map<string, BBSSession>();  // Socket ID → Session (pre-login)
+export const userSessions = new Map<string, BBSSession>();  // User ID → Session (post-login)
+export const socketToUser = new Map<string, string>();  // Socket ID → User ID (for lookups)
 
 // Connection rate limiting - track recent connections
 const recentConnections: Map<string, number[]> = new Map();
@@ -122,8 +125,15 @@ export function createSession(nodeId: number): BBSSession {
 
 /**
  * Get session by socket ID
+ * Checks both pre-login (socketId-based) and post-login (userId-based) storage
  */
 export function getSession(socketId: string): BBSSession | undefined {
+  // First check if this socket is mapped to a user (post-login)
+  const userId = socketToUser.get(socketId);
+  if (userId) {
+    return userSessions.get(userId);
+  }
+  // Otherwise check pre-login sessions
   return sessions.get(socketId);
 }
 

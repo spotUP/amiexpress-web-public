@@ -5,12 +5,18 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 5174, // Changed from 5173 to bypass browser cache
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true
       }
+    },
+    // Force fresh JavaScript load on every server start
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'Pragma': 'no-cache',
+      'Expires': '0'
     }
   },
   build: {

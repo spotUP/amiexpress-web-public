@@ -369,11 +369,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   console.log('session.state:', session.state);
   console.log('session.subState:', session.subState);
 
-  // Skip processing if Door Manager is active (it handles its own input)
-  if (session.inDoorManager) {
-    console.log('[Command Handler] Door Manager is active (inDoorManager=true), skipping command processing for input:', JSON.stringify(data));
-    return;
-  }
+  // NOTE: Door input routing is handled in socket-handlers.ts (checks doorInputHandler)
+  // This function should only be called for non-door input
 
   // Special handling for WHO2 helper tools (NI/NO) - these must run without authentication
   // NI (NodeIn) executes on connection, NO (NodeOut) executes on logout
@@ -469,11 +466,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // Backspace - remove last character from buffer
         if (session.tempData?.inputBuffer && session.tempData.inputBuffer.length > 0) {
           session.tempData.inputBuffer = session.tempData.inputBuffer.slice(0, -1);
+          socket.emit('ansi-output', '\b \b'); // Echo backspace
         }
         return;
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
-        // Printable character - add to buffer
+        // Printable character - add to buffer and echo it
         session.tempData.inputBuffer = (session.tempData?.inputBuffer || '') + data;
+        socket.emit('ansi-output', data); // Echo the character
         return;
       }
       // Ignore other control characters
@@ -494,10 +493,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  // Allow LOGGEDON and REGISTERING states to continue
-  // All other states (AWAIT, LOGON) are blocked
-  if (session.state !== BBSState.LOGGEDON && session.state !== BBSState.REGISTERING) {
-    console.log('❌ Not in LOGGEDON or REGISTERING state, ignoring command');
+  // Allow LOGGEDON, LOGON, and REGISTERING states to continue
+  // LOGON is allowed temporarily due to session state race conditions
+  if (session.state !== BBSState.LOGGEDON && session.state !== BBSState.LOGON && session.state !== BBSState.REGISTERING) {
+    console.log('❌ Not in LOGGEDON/LOGON or REGISTERING state, ignoring command');
+    console.log('   Current state:', session.state);
     return;
   }
 

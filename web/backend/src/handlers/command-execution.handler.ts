@@ -212,11 +212,15 @@ async function runCommand(
     }
 
     const doorConfig = {
+      id: commandDef.name.toLowerCase(),
       name: commandDef.name,
+      command: commandDef.name.toUpperCase(),
+      description: `${commandDef.type} door`,
       type: commandDef.type,
-      location: location,
-      access: commandDef.access || 0,
-      parameters: params,
+      path: location, // Door execution expects 'path', not 'location'
+      accessLevel: commandDef.access || 0,
+      enabled: true,
+      parameters: params ? [params] : [],
       // express.e:4758-4770 - Additional door options
       priority: commandDef.priority || 'SAME',
       stack: commandDef.stack || 20000,
