@@ -1,0 +1,430 @@
+~
+    BBS commands:
+
+  [33mCTRL-S[0m  [32mSuspend text listings[0m
+  [33mCTRL-Q[0m  [32mStart text listings[0m
+  [33mCTRL-C[0m  [32mAbort text listings[0m
+
+When logging on The BBS,  ~N ,
+if you do not wish to see the log on screen type the following:
+
+Welcome to AmiExpress BBS version Beta
+Your connected at XXXXX baud
+ANSI Graphics ([32mY[0m/[37mN[0m)? {Enter [32mY[0m or [37mN[0m followed by [33mQ[0m for quit opening}
+
+      [36m'A' [35m- [33mAlter file flags[0m
+             This command allows you to change the flagged file list
+             without having to do a file listings and get a PAUSE...MORE
+             prompt to change the flags. This is good only for the current
+             conference that you're in.
+             Chaining data is allowed, or the routine will prompt you.
+
+              First it will show the current list of flags.
+
+              No file flags
+              [36mFilename(s) to flag: [32m([33mC[32m)[36mlear[0m, [32m([33mEnter[33m)[0m=[36mnone[0m?
+
+              At this prompt you may:
+               1. Enter new files to add to the flag list
+               2. Enter [36m'C'[0m to goto the clear flag prompt
+
+              [36mFilename(s) to Clear: [32m([33m*[32m)[36mAll[0m, [32m([33mEnter[32m)[0m=[36mnone[0m?
+
+              At this prompt you may:
+               1. Enter filenames to remove from the flag list
+                  wildcards are valid, however they will only
+                  remove the first entry.
+               2. Using '[36m*[0m' will remove all enties in the list.
+               3. Or ([36mEnter[0m) to exit.
+
+              Once you've exitied the Clear prompt it will once again show
+              the list of flagged files and drop back to the Main Menu.
+
+       [36m'B' [35m- [33mBulletins[0m
+             Displays a list of Bulletins if available in the current
+             conference.  Choose a bulletin number to read or ([36mEnter[0m) to
+             return to Main Menu.
+
+             [37mStacked command[0m:  [33mB 1  [32mRead Bulletin 1[0m
+
+      [36m'C' [35m- [33mComment to SYSOP[0m
+             This command is the same as entering a message, except the
+             message is to the SYSOP.
+
+      [36m'D' [35m- [33mDownload a file[0m
+             You can only download files that are in the conference you're
+             currently in.  You can't flag files in one conference, then
+             join a different conference and still download those flagged
+             files.
+
+             1. The BBS displays the your download/upload stats.
+
+             2. The BBS then figures out what ratio limits you have left
+                before uploading.
+
+             3. Next it asks for the protocol to be used.  At this time
+                Z (Z-Modem) is the only valid protocol.
+
+             4. Wildcards are allowed, but not without at least one normal
+                character.  EG: "*" is not allowed but "a*" is allowed.
+
+             5. As the BBS finds a file and displays the amount of time
+                required and how big, if you can d/l it, the BBS
+                automatically checks the flaglist and if there isn't
+                already a entry like the one just found, then it adds it
+                to the flag list.  This is so if you want to exit the d/l
+                routine to list a file area again, you don't have to type
+                the filenames in again.  If you need to remove a file you
+                don't want to download, just use [36m'A'[0mlter flags command.
+
+             6. After hitting ([36mEnter[0m) on a blank filespec prompt the BBS
+                displays the totals and checks to see if you can download
+                the files within your limits.
+
+             7. Asks "([36mEnter[0m) to Start, ([36mG[0m)oodbye after transfer, ([36mA[0m)bort?"
+                Specifing [36m'A'[0mbort will exit out of the download routine.
+                [36m'G'[0moodbye after transfer will give you 10 secs to decide
+                whether you really want to logoff or not.
+
+             [37mStacked command[0m:  [33mD [32mFilename1 Filename2 Filename3[0m
+
+      [36m'E' [35m- [33mEnter a message.[0m
+             If you're addressing a person who doesn't have access to the
+             conference you're in, they will never get that message.
+
+             1. Asks for who to send it to.  If a wildcard is used the
+                search will find the first user that fits the wildcard and
+                will display it and then ask if its correct, if you say no,
+                then it will search forward.  If it doesn't find the user,
+                it exit back to the Main Menu prompt.
+
+             2. If you just hit ([36mEnter[0m) on the TO: prompt it will send
+                the message to ALL.  This will be a public message.
+
+             3. Another name that is valid in the TO: prompt is SYSOP, this
+                will be replaced by the Name of the SYSOP, in user slot 1.
+
+             4. Next prompt is the Subject of the message, if you just
+                hit ([36mEnter[0m) it will exit back to the Main Menu prompt.
+
+             5. The BBS will now ask if the message is to be readable only
+                by the receiver of the message.
+
+             6. Now you have entered the message editor.
+
+             7. Tabs now work in the editor, they are indicated by a '|' in
+                the header.
+
+             8. Ctrl-X in the message editor will delete the current line.
+
+             9. If you hit ([36mEnter[0m) on a blank line you will exit the
+                message editor to the Edit Command prompt.
+
+            10. The options are:
+
+                 1. [32mA[33m)[36mbort[0m  - Abort entering the message.
+
+                 2. [32mC[33m)[36mont[0m   - Continue entering the message, this option
+                              will print the last line with text and put
+                              the cursor at the end of the line.
+
+                 3. [32mD[33m)[36melete[0m - Allows you to delete a specific line.
+
+                 4. [32mE[33m)[36mdit[0m   - Allows you to change text within a line.
+
+                 5. [32mL[33m)[36mist[0m   - List the message to the screen.
+
+                 6. [32mS[33m)[36mave[0m   - Saves the message.
+
+
+      [36m'F' [35m- [33mFile listings[0m
+             File listing will only show files that are available in the
+             conference you are currently in.
+
+             1. A listing of file directories will be displayed.  Type the
+                directory number to see the list of files, or ([36mEnter[0m) by
+                itself to return to the Main Menu prompt.
+
+             2. The specified directory will be displayed and will pause
+                unless [36mNS[0m (Non-Stop) has been specified.
+
+             3. On the pause prompt, you can select [36m'F'[0m for flagging files.
+
+             [37mStacked commands[0m:   [33mF 1[0m  [32mList Files in directory 1[0m
+                                 [33mF * NS[0m  [32mList Files in non-stop mode![0m
+                                       (Where * = A(ll) U(pload) or dir #)
+
+      [36m'G' [35m- [33mGoodbye[0m
+
+             1. First checks to see if there was a ZooMail that hasn't been
+                downloaded.  If there is, it will ask if you want to leave
+                anyway.  NOTE: ZooMail has been disabled temporarily.
+
+             2. The system then checks to see if there are any partial
+                uploads that the you haven't finished sending yet.  If so,
+                then it will let you know and ask if you want to leave
+                anyway.  If you don't want to leave, then the BBS asks if
+                you want to view the files.  If you do want to view them,
+                the BBS will go into the resume routine showing you the
+                filename and filesize, then ask if you want to resume on
+                that particular file.  If not, the the BBS asks if you
+                want to delete the file.  If you don't want to delete that
+                file, then the BBS will go onto the next file that is to
+                be resumed.
+
+             3. The BBS will display the Log-Off screen.
+
+      [36m'H' [35m- [33mHelp[0m
+
+             1. The BBS will display this file.
+
+      [36m'J' [35m- [33mJoin[0m
+
+             1. The BBS will display a list of conferences that you have
+                access to.  Type the number of the conference you want to
+                go to or ([36mEnter[0m) to return to the Main Menu prompt.
+
+             [37mStacked command[0m:  [33mJ 1  [32mJoin Conference 1[0m
+
+      [36m'M' [35m- [33mMode Select[0m
+            This option allows you to toggle between ANSI color and
+            monochrome display.
+
+      [36m'N' [35m- [33mNew files since.[0m
+            This allows you to list just the files that have been added to
+            the BBS since the last time you've called.  This will only show
+            new files for the conference that you're currently in.
+
+             1. It will then ask for the date you want to list from.
+                The last date you were on will be the default.  This is
+                selected by just hitting ([36mEnter[0m) alone.  Entering the date
+                to start the list from must be done as MM-DD-YY.
+
+             2. Next the BBS asks for the directory to search thru.  An [36m'A'[0m
+                can be used to list all directories, also [36m'U'[0m can be
+                specified for the Upload directory.
+
+             3. The Pause prompt works the same as described in the file
+                listing section.
+
+                          ([33mN[0m)ew Files [36mDate[0m & [37mDir #[0m
+             [37mStacked commands[0m:  [33mN [36m06-01-89 [37m6[0m
+                                [33mN [36m06-01-89 [37m6 [32mNS[0m (Non-Stop)
+
+      [36m'O' [35m- [33mOperator Page[0m
+            This function is used to try to page the SYSOP to see if he's
+            around to chat.
+
+             1. If you select this option you name displayed in the status
+                bar will change to a different color even if the paging
+                function is currently turned off.
+
+             2. If the Chat toggle flag is not set to allow paging then the
+                BBS will say:
+
+                 "Sorry, The SYSOP, is not around right now
+                  You can use [36m'C'[0m to leave a comment."
+
+             3. If the chat toggle flag is set to allow paging, then the
+                BBS displays "paging SYSOP (CTRL-C to Abort). ." followed
+                by bells and more dots.
+
+             4. If the SYSOP is around and wants to chat with you, he will
+                see the flashing and initiate the chat function.  During
+                chat, if ANSI mode is selected, your text will be a
+                different color than his.
+
+      [36m'OPEN' [35m- [33mOpen a door[0m
+             Displays a list of doors available in the current conference.
+             Type the number of the door you want to run or ([36mEnter[0m) to
+             return to the Main Menu prompt.
+
+             [37mStacked command[0m:  [33mOPEN 1  [32mStart door 1[0m
+
+      [36m'R' [35m- [33mRead mail[0m
+             First the BBS shows the read prompt:
+
+                [33mA[32m>[36mgain [33mD[32m>[36melete [33mR[32m>[36meply [33mQ[32m>[36muit [32m<[33mCR[32m>[0m=[36mNext[0m [32m([0ma+b[32m)[0m?
+
+             Hitting ([36mEnter[0m) by itself will show the next available public
+             message.  You can also jump to a message by typing a message
+             number:
+                     ([37m#[0m)  Will take you straight to that message.
+                     ([37m+[0m)  Read messages Forward order.
+                     ([37m-[0m)  Read messages Reverse order.
+
+                 1. [33mA[32m>[36mgain[0m displays the message currently shown again,
+                    (specified by the 'a' in the above line).
+
+                 2. [33mD[32m>[36melete[0m allows you to delete a message only if you
+                    left the message or the message is to you.
+
+                 3. [33mR[32m>[36meply[0m allows you to reply to either a private message
+                    you've just read, or a public (ALL) one.
+
+                 4. [33mQ[32>[36muit[0m exits out of the read mail routine.
+
+                 [37mStacked commands[0m:
+
+                         [33mR 10+  [32mRead at message 10 and go forwards.[0m
+                         [33mR 10-  [32mRead at message 10 and go backwards.[0m
+                         [33mR NS   [32mRead new messages in non-stop mode.[0m
+
+      [36m'S' [35m- [33mStats for the User[0m
+            This function shows you some of your stats.
+
+                            (123456789)
+                [32mConf Access[33m:[0m XXXXXXXXX
+                [32mCaller Num.[33m:[0m 2049
+                [32mLst Date On[33m:[0m 05-14-91
+                [32mSecurity Lv[33m:[0m 30
+                [32m# Times On [33m:[0m 579
+                [32mRatio DL/UL[33m:[0m Disabled
+                [32m# Downloads[33m:[0m 0
+                [32m# Uploads  [33m:[0m 0
+                [32mBytes DL'd [33m:[0m 0
+                [32mBytes UL'd [33m:[0m 0
+                [32mBytes Avail[33m:[0m 99999999
+
+      [36m'T' [35m- [33mTime[0m
+            This function shows the current time and date at the BBS.
+
+      [36m'U' [35m- [33mUpload[0m
+            This function allows you to send files to the BBS.
+
+             1. The BBS shows the amount of free space.  If lower then
+                2,000,000 bytes in the current directory (The second
+                number.), the BBS will not allow any uploads.
+
+             2. At this point the BBS checks to see if you have any
+                incomplete uploads.  This works the same as explained under
+                the [36m'G'[0moodbye command.
+
+             3. The BBS then asks you to enter the filenames of the files
+                you wish to upload.  Pressing ([36mEnter[0m) alone will have
+                Z-Modem tell the BBS the names.  Specifing an [36m'A'[0m will
+                abort out of the upload and return you to the Main Menu
+                prompt.
+
+             4. If you enter filenames, the BBS will check to make sure
+                they don't already exist.  If not, the BBS will prompt you
+                to enter a description for each file.  Enter a blank line
+                to end the description.
+
+             5. Next the BBS will display:
+
+                ([36mEnter[0m) to Start, ([36mG[0m)oodbye after transfer, ([36mA[0m)bort?
+
+               This works the same as specified in the download routines.
+
+
+             6. Once the transfer has completed the BBS displays the stats
+                from the transfer for all the files and the time used is
+                credited for the uploads.
+
+             7. The BBS checks files sent to see if the name is longer than
+                12 characters and asks you to rename them if any are.  You
+                will also be prompted for file descriptions if you've let
+                Z-Modem tell the BBS the file names.
+
+             8. Once the description has been entered the BBS checks to see
+                if the file ends in .ARC .ZOO .LZH .WRP or .DMS and if
+                there is, the BBS tests the file.
+
+      [36m'V' [35m- [33mView a file[0m
+            This function will allow you to view (read) a text file that is
+            in the file listings.
+
+             1. The BBS asks for the filename to view.  The BBS will only
+                display a plain, uncompressed text file.  Files with
+                characters greater than 127 cause the BBS to return the
+                message: "This file is not a text file." and then returns
+                back to the Main Menu prompt
+
+             [37mStacked command[0m:  [33mV [32mFilename.txt[0m
+
+      [36m'W' [35m- [33mWrite info[0m
+            This function allows you to change a couple of items about
+            yourself.
+
+                1. Name     : Joseph Hodge
+                2. From     : Radford, VA
+                3. Phone    : 703-639-6114
+                4. Password : BuggyBoy
+                5. NumLines : 23
+                6. Computer : Amiga 2000/GVP030
+                7. Scr Type : Amiga ANSI
+                8. Scrn Clr : Y
+                9. Protocol : /X Internal Zmodem
+                10.Editor   : Prompt
+
+      [36m'X' [35m- [33mExpert mode toggle[0m
+
+            This function toggles whether you are in expert mode or novice
+            mode.  In novice mode the BBS will redisplay the menu after
+            every command you issue.
+
+      [36m'Z' [35m- [33mZippy search[0m
+
+             1. The BBS will ask for the string to search for, this search
+                is NOT case sensitive.  If you just press ([36mEnter[0m), it will
+                exit back to the Main Menu prompt.
+
+             2. Next it will ask for the directory to search thru, options
+                for this prompt are given above under ([36mN[0m)ew files since.
+
+      [36m'ZOOM' [35m- [33mZoo Mail[0m
+
+            This function will put all unread messages, both private to you and
+            public, into one file.  The BBS will then download the file to you
+            using your default protocol setting.
+
+
+ [37mNOTEABLE FEATURES:[0m
+
+     1. Command history has been added in to allow up to 20 history lines
+        to be remembered.  Once the limit of 20 has been released the
+        history will cycle thru.  [33mCTRL-B[0m will reset the history pointer
+        to zero entries.
+
+
+     2. Automatic Z-Modem upload.  If you start a Z-Modem upload on the
+        Main prompt, the BBS will detect this and enter the Z-Modem
+        upload routines.
+
+
+ [36m*** HST users ***[0m
+
+ For maximum speed make sure you run Amimodem or another similar program
+ to set the HST up for maximum file transfers.  If you have a HST 9600 you
+ can expect around 1200CPS average time.  If you have a 14.4K HST you can
+ expect around 1450-1650CPS average time depending on the phone
+ connection.  How do you tell if you have a 14.4K or 9600 HST?  Well after
+ loging off from the BBS, give your modem the following AT command:
+
+ ATI6
+ USRobotics Courier 9600 HST Dual Standard Link Diagnostics...
+
+ Chars sent                 1168      Chars Received             6840
+ Chars lost                    0
+ Octets sent                1168      Octets Received            6119
+ Blocks sent                1027      Blocks Received            1642
+ Blocks resent                 1
+
+ Retrains Requested            2      Retrains Granted              0
+ Line Reversals                0      Blers                       196
+ Link Timeouts                 0      Link Naks                     0
+
+ Data Compression       On
+ Equalization           Long
+ Fallback               Enabled
+ Speed                  14400/450
+
+ Disconnect Reason is Loss of Carrier
+
+ OK
+
+ If the speed says 14400/450 you have a 14.4K HST if it says 9600/450 you
+ have one of the older 9600 HST's.  Call US Robotics about upgrading to a
+ 14.4K HST.
+

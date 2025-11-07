@@ -13,10 +13,11 @@ import { EnvStat } from '../constants/env-codes';
  */
 
 // Store active sessions (in production, use Redis/database)
-// DUAL SESSION STORAGE: Sessions are keyed by socket ID before login, then by user ID after login
-export const sessions = new Map<string, BBSSession>();  // Socket ID → Session (pre-login)
-export const userSessions = new Map<string, BBSSession>();  // User ID → Session (post-login)
-export const socketToUser = new Map<string, string>();  // Socket ID → User ID (for lookups)
+// SESSION STORAGE: Sessions are keyed by nodeId (not socket.id) to prevent door communication issues
+export const sessions = new Map<string, BBSSession>();  // Node ID → Session (always use nodeId as key)
+export const userSessions = new Map<string, BBSSession>();  // User ID → Session (post-login lookup)
+export const socketToNodeId = new Map<string, number>();  // Socket ID → Node ID (CRITICAL for door events)
+export const socketToUser = new Map<string, string>();  // Socket ID → User ID (for user lookups)
 
 // Connection rate limiting - track recent connections
 const recentConnections: Map<string, number[]> = new Map();
@@ -125,7 +126,8 @@ export function createSession(nodeId: number): BBSSession {
 
 /**
  * Get session by socket ID
- * Checks both pre-login (socketId-based) and post-login (userId-based) storage
+ * CRITICAL: Uses nodeId as the lookup key to prevent door communication issues
+ * Maps socket.id → nodeId → session
  */
 export function getSession(socketId: string): BBSSession | undefined {
   // First check if this socket is mapped to a user (post-login)
@@ -133,8 +135,14 @@ export function getSession(socketId: string): BBSSession | undefined {
   if (userId) {
     return userSessions.get(userId);
   }
-  // Otherwise check pre-login sessions
-  return sessions.get(socketId);
+
+  // Look up nodeId from socket.id, then get session by nodeId
+  const nodeId = socketToNodeId.get(socketId);
+  if (nodeId) {
+    return sessions.get(nodeId.toString());
+  }
+
+  return undefined;
 }
 
 /**
@@ -144,16 +152,39 @@ export const getSessionBySocketId = getSession;
 
 /**
  * Set session for socket ID
+ * CRITICAL: Stores session by nodeId and creates socket.id → nodeId mapping
  */
 export function setSession(socketId: string, session: BBSSession): void {
-  sessions.set(socketId, session);
+  const nodeId = session.nodeId;
+  if (!nodeId) {
+    console.error('[Session Manager] CRITICAL: Tried to set session without nodeId!');
+    return;
+  }
+
+  // Store the mapping: socket.id → nodeId
+  socketToNodeId.set(socketId, nodeId);
+
+  // Store the session: nodeId → session
+  sessions.set(nodeId.toString(), session);
 }
 
 /**
  * Delete session by socket ID
+ * CRITICAL: Removes both the nodeId → session mapping and socket.id → nodeId mapping
  */
 export function deleteSession(socketId: string): void {
-  sessions.delete(socketId);
+  const nodeId = socketToNodeId.get(socketId);
+  if (nodeId) {
+    sessions.delete(nodeId.toString());
+    socketToNodeId.delete(socketId);
+  }
+
+  // Also clean up user mapping if exists
+  const userId = socketToUser.get(socketId);
+  if (userId) {
+    userSessions.delete(userId);
+    socketToUser.delete(socketId);
+  }
 }
 
 /**

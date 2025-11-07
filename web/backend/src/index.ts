@@ -22,7 +22,7 @@ import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
 import { registerSocketHandlers } from './server/socket-handlers';
-import { sessions, userSessions, socketToUser } from './server/session-manager';
+import { sessions, userSessions, socketToUser, setSession } from './server/session-manager';
 import { findSecurityScreen } from './utils/screen-security.util';
 import {
   displayConferenceBulletins,
@@ -808,7 +808,7 @@ io.on('connection', async (socket) => {
     lastMsgReadConf: 0, // Last message manually read
     lastNewReadConf: 0 // Last message auto-scanned
   };
-  sessions.set(socket.id, session);
+  setSession(socket.id, session); // Use helper to store by nodeId
 
   // Display complete connection screen via AWAITSCREEN.TXT
   // reference-board BBS layout: everything shown via screen file with MCI codes
