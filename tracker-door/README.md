@@ -5,11 +5,16 @@
 ## 🌟 Features
 
 ### Tracker Interface
-- **Pattern Editor:** Classic tracker grid (64 rows, 16 channels)
+- **Pattern Editor:** Classic tracker grid (64 rows, up to 16 channels)
 - **Note Entry:** Piano keyboard note input with octave control
-- **Real-time Playback:** Instant audio feedback
-- **Pattern Navigation:** Arrow keys, page up/down, home/end
+- **Real-time Playback:** Instant audio feedback with pattern/song playback
+- **Pattern Navigation:** Arrow keys, page up/down, channel scrolling
 - **Multi-channel:** Up to 16 simultaneous audio channels
+- **Block Selection:** Shift+arrows for selecting note blocks
+- **Copy/Cut/Paste:** Ctrl+C/X/V for clipboard operations
+- **Undo/Redo:** Full undo/redo system with Ctrl+Z/Y
+- **Auto-save:** Automatic saving every 2 minutes
+- **Channel Controls:** Mute (M) and Solo (S) per channel
 
 ### Audio Engine (Tone.js)
 - **Soft Synths:** Multiple synthesis types (FM, AM, subtractive, wavetable)
@@ -40,11 +45,19 @@
 - **Time Signatures:** 4/4, 3/4, 6/8, 7/8, custom
 - **Loop Points:** Set song loop regions
 
-### Module Export
+### Module Export & Import
 - **JSON Format:** Human-readable module format
 - **Binary Export:** Compact .trkmod format
 - **Game Integration:** Direct import into Door SDK games
 - **Metadata:** Title, artist, comments, copyright
+- **Import Formats:**
+  - Protracker MOD (4 channels, 31 samples)
+  - FastTracker II XM (up to 32 channels, 128 instruments)
+  - Impulse Tracker IT (up to 64 channels, 256 samples)
+- **Instrument Formats:**
+  - FastTracker II XI instruments
+  - Impulse Tracker ITI instruments
+  - Renoise XRNI instruments (basic support)
 
 ### AI-Assisted Composition (Scribbletune)
 - **Melody Generation:** AI-suggested melodies
@@ -162,6 +175,16 @@ Octave Controls:
 - [/] Set instrument (01-99)
 ```
 
+### Pattern Editor Advanced
+- **Ctrl+Z:** Undo last action
+- **Ctrl+Y:** Redo last undone action
+- **Ctrl+C:** Copy selection or current note
+- **Ctrl+X:** Cut selection or current note
+- **Ctrl+V:** Paste from clipboard
+- **Shift+Arrows:** Block selection mode
+- **M:** Mute/unmute current channel
+- **S:** Solo/unsolo current channel
+
 ### Global
 - **F1:** Help screen
 - **F2:** Pattern list
@@ -174,8 +197,6 @@ Octave Controls:
 - **F9:** AI assistant
 - **F10:** Quit
 - **Ctrl+S:** Quick save
-- **Ctrl+Z:** Undo
-- **Ctrl+Y:** Redo
 
 ## 🏗️ Architecture
 
@@ -184,31 +205,25 @@ Octave Controls:
 tracker-door/
 ├── src/
 │   ├── audio/              # Audio engine
-│   │   ├── engine.ts       # Tone.js wrapper
-│   │   ├── synth.ts        # Synthesizer
-│   │   ├── sampler.ts      # Sample player
-│   │   ├── effects.ts      # Effect processors
-│   │   └── mixer.ts        # Channel mixer
-│   ├── ui/                 # ANSI UI components
-│   │   ├── pattern-editor.ts
-│   │   ├── instrument-editor.ts
-│   │   ├── sample-editor.ts
-│   │   ├── effects-editor.ts
-│   │   ├── song-editor.ts
-│   │   └── components/     # Reusable UI widgets
+│   │   └── engine.ts       # Tone.js wrapper with full playback
+│   ├── formats/            # Format parsers (NEW!)
+│   │   ├── mod-parser.ts   # Protracker MOD import/export
+│   │   ├── xm-parser.ts    # FastTracker II XM import
+│   │   ├── it-parser.ts    # Impulse Tracker IT import
+│   │   └── instrument-parsers.ts # XI, ITI, XRNI support
 │   ├── data/               # Data structures
-│   │   ├── note.ts
-│   │   ├── pattern.ts
-│   │   ├── instrument.ts
-│   │   ├── song.ts
-│   │   └── export.ts
+│   │   └── types.ts        # All core types (Note, Pattern, etc.)
 │   ├── utils/              # Utilities
-│   │   ├── ansi.ts         # ANSI rendering
-│   │   ├── input.ts        # Keyboard handling
-│   │   ├── file.ts         # File I/O
-│   │   └── math.ts         # DSP math
-│   └── index.ts            # Main door entry
-├── data/                   # Saved songs/presets
+│   │   ├── export.ts       # Module export/import
+│   │   ├── sample.ts       # Sample management
+│   │   ├── undo.ts         # Undo/redo system (NEW!)
+│   │   └── autosave.ts     # Auto-save system (NEW!)
+│   ├── ai/                 # AI composition
+│   │   └── generator.ts    # Scribbletune integration
+│   └── index.ts            # Main door (1000+ lines, all features)
+├── data/                   # Saved songs/presets/autosaves
+│   ├── autosave/          # Auto-save directory
+│   └── import/            # Import directory
 ├── docs/                   # Documentation
 └── package.json
 ```

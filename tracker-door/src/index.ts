@@ -19,6 +19,12 @@ import {
 import { ExportManager } from './utils/export';
 import { SampleManager } from './utils/sample';
 import { AIGenerator } from './ai/generator';
+import { UndoManager, ClipboardManager } from './utils/undo';
+import { AutoSaveManager } from './utils/autosave';
+import { MODParser } from './formats/mod-parser';
+import { XMParser } from './formats/xm-parser';
+import { ITParser } from './formats/it-parser';
+import { XIParser, ITIParser, XRNIParser } from './formats/instrument-parsers';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -31,6 +37,9 @@ class TrackerDoor {
   private exportManager: ExportManager;
   private sampleManager: SampleManager;
   private aiGenerator: AIGenerator;
+  private undoManager: UndoManager;
+  private clipboardManager: ClipboardManager;
+  private autoSaveManager: AutoSaveManager;
   private userId?: number;
 
   // State
@@ -48,7 +57,18 @@ class TrackerDoor {
 
   // Display
   private scrollRow: number = 0;
+  private scrollChannel: number = 0;
   private visibleRows: number = 16;
+  private visibleChannels: number = 6;
+
+  // Selection
+  private selectionMode: boolean = false;
+  private selectionStart: { row: number; channel: number } = { row: 0, channel: 0 };
+  private selectionEnd: { row: number; channel: number } = { row: 0, channel: 0 };
+
+  // Channel controls
+  private channelMute: boolean[] = new Array(16).fill(false);
+  private channelSolo: boolean[] = new Array(16).fill(false);
 
   constructor() {
     this.door = new Door({
@@ -68,6 +88,13 @@ class TrackerDoor {
 
     // Initialize default song
     this.song = this.createDefaultSong();
+
+    // Initialize undo/redo and clipboard
+    this.undoManager = new UndoManager(this.song);
+    this.clipboardManager = new ClipboardManager();
+
+    // Initialize auto-save (every 2 minutes)
+    this.autoSaveManager = new AutoSaveManager(this.dataDir);
 
     this.setupEventHandlers();
   }
@@ -116,6 +143,10 @@ class TrackerDoor {
     this.door.onConnect(async (user: any) => {
       this.userId = user.id;
       await this.audio.init();
+
+      // Start auto-save
+      this.autoSaveManager.start(() => this.song);
+
       this.showMainMenu();
     });
 
@@ -125,6 +156,9 @@ class TrackerDoor {
 
     this.door.onDisconnect(() => {
       this.audio.dispose();
+
+      // Stop auto-save
+      this.autoSaveManager.stop();
     });
   }
 
@@ -183,14 +217,15 @@ class TrackerDoor {
     this.gfx.drawText(10, 8, `BPM: ${this.song.bpm}  Channels: ${this.song.channels}  Patterns: ${this.song.patterns.length}`, AnsiColor.White);
 
     // Menu
-    this.gfx.drawText(10, 10, '┌─────────────── MAIN MENU ────────────────┐', AnsiColor.White);
-    this.gfx.drawText(10, 11, '│                                          │', AnsiColor.White);
-    this.gfx.drawText(10, 12, '│  [P] Pattern Editor                      │', AnsiColor.Green);
-    this.gfx.drawText(10, 13, '│  [I] Instrument Editor                   │', AnsiColor.Green);
-    this.gfx.drawText(10, 14, '│  [M] Sample Manager                      │', AnsiColor.Green);
-    this.gfx.drawText(10, 15, '│  [F] Effects Editor                      │', AnsiColor.Green);
-    this.gfx.drawText(10, 16, '│  [S] Song Arranger                       │', AnsiColor.Green);
-    this.gfx.drawText(10, 17, '│  [E] Export Module                       │', AnsiColor.Green);
+    this.gfx.drawText(10, 9, '┌─────────────── MAIN MENU ────────────────┐', AnsiColor.White);
+    this.gfx.drawText(10, 10, '│                                          │', AnsiColor.White);
+    this.gfx.drawText(10, 11, '│  [P] Pattern Editor                      │', AnsiColor.Green);
+    this.gfx.drawText(10, 12, '│  [I] Instrument Editor                   │', AnsiColor.Green);
+    this.gfx.drawText(10, 13, '│  [M] Sample Manager                      │', AnsiColor.Green);
+    this.gfx.drawText(10, 14, '│  [F] Effects Editor                      │', AnsiColor.Green);
+    this.gfx.drawText(10, 15, '│  [S] Song Arranger                       │', AnsiColor.Green);
+    this.gfx.drawText(10, 16, '│  [E] Export Module                       │', AnsiColor.Green);
+    this.gfx.drawText(10, 17, '│  [L] Import (MOD/XM/IT)                  │', AnsiColor.Cyan);
     this.gfx.drawText(10, 18, '│  [A] AI Assistant                        │', AnsiColor.Cyan);
     this.gfx.drawText(10, 19, '│  [H] Help & Shortcuts                    │', AnsiColor.Yellow);
     this.gfx.drawText(10, 20, '│  [Q] Quit                                │', AnsiColor.Red);
@@ -221,6 +256,13 @@ class TrackerDoor {
     } else if (k === 'e') {
       this.currentView = 'export';
       this.showExport();
+    } else if (k === 'l') {
+      // Show import info message
+      this.gfx.clear(AnsiColor.Black);
+      this.gfx.drawText(5, 5, 'Import feature: Place .mod, .xm, or .it files in data/import/', AnsiColor.Yellow);
+      this.gfx.drawText(5, 6, 'Then use Load from Export menu.', AnsiColor.White);
+      this.gfx.drawText(5, 8, 'Press any key to continue...', AnsiColor.Green);
+      this.door.sendAnsi(this.gfx.render(), this.userId);
     } else if (k === 'a') {
       this.currentView = 'ai-assistant';
       this.showAIAssistant();
@@ -297,28 +339,123 @@ class TrackerDoor {
   private handlePatternEditorInput(key: string): void {
     const pattern = this.song.patterns[this.currentPattern];
 
+    // Undo/Redo (Ctrl+Z, Ctrl+Y)
+    if (key === '\x1a') { // Ctrl+Z
+      const undoneState = this.undoManager.undo();
+      if (undoneState) {
+        this.song = undoneState;
+        this.showPatternEditor();
+      }
+      return;
+    } else if (key === '\x19') { // Ctrl+Y
+      const redoneState = this.undoManager.redo();
+      if (redoneState) {
+        this.song = redoneState;
+        this.showPatternEditor();
+      }
+      return;
+    }
+
+    // Copy/Cut/Paste (Ctrl+C, Ctrl+X, Ctrl+V)
+    if (key === '\x03') { // Ctrl+C
+      if (this.selectionMode) {
+        const startRow = Math.min(this.selectionStart.row, this.selectionEnd.row);
+        const endRow = Math.max(this.selectionStart.row, this.selectionEnd.row);
+        const startCh = Math.min(this.selectionStart.channel, this.selectionEnd.channel);
+        const endCh = Math.max(this.selectionStart.channel, this.selectionEnd.channel);
+        this.clipboardManager.copy(pattern, startRow, endRow, startCh, endCh);
+      } else {
+        this.clipboardManager.copy(pattern, this.currentRow, this.currentRow, this.currentChannel, this.currentChannel);
+      }
+      this.showPatternEditor();
+      return;
+    } else if (key === '\x18') { // Ctrl+X
+      this.undoManager.updateState(this.song);
+      this.undoManager.pushState('Cut block');
+      if (this.selectionMode) {
+        const startRow = Math.min(this.selectionStart.row, this.selectionEnd.row);
+        const endRow = Math.max(this.selectionStart.row, this.selectionEnd.row);
+        const startCh = Math.min(this.selectionStart.channel, this.selectionEnd.channel);
+        const endCh = Math.max(this.selectionStart.channel, this.selectionEnd.channel);
+        this.clipboardManager.cut(pattern, startRow, endRow, startCh, endCh);
+      } else {
+        this.clipboardManager.cut(pattern, this.currentRow, this.currentRow, this.currentChannel, this.currentChannel);
+      }
+      this.showPatternEditor();
+      return;
+    } else if (key === '\x16') { // Ctrl+V
+      if (this.clipboardManager.hasData()) {
+        this.undoManager.updateState(this.song);
+        this.undoManager.pushState('Paste block');
+        this.clipboardManager.paste(pattern, this.currentRow, this.currentChannel, false);
+        this.showPatternEditor();
+      }
+      return;
+    }
+
+    // Block selection (Shift+arrows)
+    const isShift = key.startsWith('Shift+') || key.includes('Shift');
+
+    if (isShift && !this.selectionMode) {
+      this.selectionMode = true;
+      this.selectionStart = { row: this.currentRow, channel: this.currentChannel };
+      this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
+    }
+
+    // Channel mute/solo
+    if (key.toLowerCase() === 'm') {
+      this.channelMute[this.currentChannel] = !this.channelMute[this.currentChannel];
+      this.showPatternEditor();
+      return;
+    } else if (key.toLowerCase() === 's' && key.length === 1) {
+      this.channelSolo[this.currentChannel] = !this.channelSolo[this.currentChannel];
+      this.showPatternEditor();
+      return;
+    }
+
     // Navigation
-    if (key === 'ArrowUp') {
+    if (key === 'ArrowUp' || (isShift && key.includes('Up'))) {
       this.currentRow = Math.max(0, this.currentRow - 1);
       if (this.currentRow < this.scrollRow) this.scrollRow = Math.max(0, this.scrollRow - 1);
+      if (this.selectionMode) {
+        this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
+      }
       this.showPatternEditor();
-    } else if (key === 'ArrowDown') {
+    } else if (key === 'ArrowDown' || (isShift && key.includes('Down'))) {
       this.currentRow = Math.min(pattern.rows - 1, this.currentRow + 1);
       if (this.currentRow >= this.scrollRow + this.visibleRows) this.scrollRow++;
+      if (this.selectionMode) {
+        this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
+      }
       this.showPatternEditor();
-    } else if (key === 'ArrowLeft' || key === '\t' && key.includes('Shift')) {
+    } else if (key === 'ArrowLeft' || (key === '\t' && key.includes('Shift'))) {
       this.currentChannel = Math.max(0, this.currentChannel - 1);
+      if (this.selectionMode) {
+        this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
+      }
       this.showPatternEditor();
-    } else if (key === 'ArrowRight' || key === '\t') {
+    } else if (key === 'ArrowRight' || (isShift && key.includes('Right'))) {
+      this.currentChannel = Math.min(this.song.channels - 1, this.currentChannel + 1);
+      if (this.selectionMode) {
+        this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
+      }
+      this.showPatternEditor();
+    } else if (key === '\t' && !isShift) {
       this.currentChannel = Math.min(this.song.channels - 1, this.currentChannel + 1);
       this.showPatternEditor();
     } else if (key === 'PageUp') {
       this.currentRow = Math.max(0, this.currentRow - 16);
       this.scrollRow = Math.max(0, this.scrollRow - 16);
+      if (this.selectionMode) {
+        this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
+      }
       this.showPatternEditor();
     } else if (key === 'PageDown') {
       this.currentRow = Math.min(pattern.rows - 1, this.currentRow + 16);
       this.scrollRow = Math.min(pattern.rows - this.visibleRows, this.scrollRow + 16);
+      if (this.selectionMode) {
+        this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
+      }
       this.showPatternEditor();
     }
 
@@ -350,18 +487,24 @@ class TrackerDoor {
 
     // Delete note
     if (key === 'Backspace' || key === '\x7f') {
+      this.undoManager.updateState(this.song);
+      this.undoManager.pushState('Delete note');
       this.deleteNote();
       this.showPatternEditor();
     }
 
     // Insert row
     if (key === 'Insert') {
+      this.undoManager.updateState(this.song);
+      this.undoManager.pushState('Insert row');
       this.insertRow();
       this.showPatternEditor();
     }
 
     // Delete row
     if (key === 'Delete') {
+      this.undoManager.updateState(this.song);
+      this.undoManager.pushState('Delete row');
       this.deleteRow();
       this.showPatternEditor();
     }
@@ -371,10 +514,16 @@ class TrackerDoor {
       this.togglePlayback();
     }
 
-    // Back to menu
+    // Back to menu or cancel selection
     if (key === 'Escape' || key === '\x1b') {
-      this.currentView = 'main';
-      this.showMainMenu();
+      if (this.selectionMode) {
+        // Cancel selection
+        this.selectionMode = false;
+        this.showPatternEditor();
+      } else {
+        this.currentView = 'main';
+        this.showMainMenu();
+      }
     }
   }
 
@@ -382,6 +531,10 @@ class TrackerDoor {
    * Add note to current position
    */
   private addNote(note: NoteValue): void {
+    // Save undo state
+    this.undoManager.updateState(this.song);
+    this.undoManager.pushState('Add note');
+
     const pattern = this.song.patterns[this.currentPattern];
     const key = `${this.currentRow}:${this.currentChannel}`;
 
@@ -537,22 +690,26 @@ class TrackerDoor {
     this.gfx.clear(AnsiColor.Black);
 
     this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.Cyan);
-    this.gfx.drawText(0, 1, '║                           TRACKERDOOR HELP                                 ║', AnsiColor.Cyan);
+    this.gfx.drawText(0, 1, '║                    TRACKERDOOR HELP & SHORTCUTS                            ║', AnsiColor.Cyan);
     this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.Cyan);
 
-    let y = 4;
+    let y = 3;
     this.gfx.drawText(2, y++, 'PATTERN EDITOR:', AnsiColor.Yellow);
-    this.gfx.drawText(2, y++, '  Arrow Keys - Navigate pattern', AnsiColor.White);
-    this.gfx.drawText(2, y++, '  Q-I, A-K, Z-M - Play notes (piano layout)', AnsiColor.White);
-    this.gfx.drawText(2, y++, '  -/+ - Lower/raise octave', AnsiColor.White);
-    this.gfx.drawText(2, y++, '  Space - Play/pause pattern', AnsiColor.White);
-    this.gfx.drawText(2, y++, '  Tab - Next channel', AnsiColor.White);
-    this.gfx.drawText(2, y++, '  Backspace - Delete note', AnsiColor.White);
+    this.gfx.drawText(2, y++, '  Arrows - Navigate  Tab - Next channel  Space - Play/pause', AnsiColor.White);
+    this.gfx.drawText(2, y++, '  Q-I,A-K,Z-M - Piano keyboard  -/+ - Octave  Backspace - Del note', AnsiColor.White);
     y++;
-    this.gfx.drawText(2, y++, 'NOTE FORMAT:', AnsiColor.Yellow);
-    this.gfx.drawText(2, y++, '  C-4 01 80 = C note, octave 4, instrument 01, volume 80 (hex)', AnsiColor.White);
-    this.gfx.drawText(2, y++, '  --- = Note off', AnsiColor.White);
-    this.gfx.drawText(2, y++, '  ... = Empty cell', AnsiColor.White);
+    this.gfx.drawText(2, y++, 'EDITING:', AnsiColor.Yellow);
+    this.gfx.drawText(2, y++, '  Ctrl+Z - Undo  Ctrl+Y - Redo  Insert - Insert row  Delete - Del row', AnsiColor.White);
+    this.gfx.drawText(2, y++, '  Ctrl+C - Copy  Ctrl+X - Cut  Ctrl+V - Paste  Shift+Arrows - Select', AnsiColor.White);
+    y++;
+    this.gfx.drawText(2, y++, 'CHANNEL:', AnsiColor.Yellow);
+    this.gfx.drawText(2, y++, '  M - Mute/unmute channel  S - Solo/unsolo channel', AnsiColor.White);
+    y++;
+    this.gfx.drawText(2, y++, 'FORMAT SUPPORT:', AnsiColor.Yellow);
+    this.gfx.drawText(2, y++, '  Import: MOD, XM, IT modules  Export: JSON, .trkmod, .game.json', AnsiColor.White);
+    this.gfx.drawText(2, y++, '  Instruments: XI, ITI, XRNI  Auto-save every 2 minutes', AnsiColor.White);
+    y++;
+    this.gfx.drawText(2, y++, 'NOTE FORMAT: C-4 01 80 = C/octave 4, inst 01, vol 80', AnsiColor.White);
 
     this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.Cyan);
     this.gfx.drawText(0, 23, '║ [ESC] Back to Menu                                                         ║', AnsiColor.White);
