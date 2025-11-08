@@ -1,6 +1,7 @@
 import { Socket } from 'socket.io';
 import { AmigaDoorSession } from './AmigaDoorSession';
 import * as path from 'path';
+import { config } from '../config';
 
 /**
  * Door Handler - Manages door session lifecycle via Socket.io
@@ -39,7 +40,7 @@ export function setupDoorHandlers(socket: Socket): void {
       } else {
         // Look up door by ID
         // TODO: Implement door registry/database
-        const doorsDir = path.join(__dirname, '../../doors');
+        const doorsDir = path.join(config.get('dataDir'), 'Doors');
         executablePath = path.join(doorsDir, payload.doorId);
       }
 

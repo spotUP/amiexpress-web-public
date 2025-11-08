@@ -16,6 +16,7 @@ import * as crypto from 'crypto';
 import { Socket } from 'socket.io';
 import AdmZip from 'adm-zip';
 import { getAmigaDoorManager, DoorArchive } from './amigaDoorManager';
+import { config } from '../config';
 
 interface DoorInfo {
   id: string;
@@ -74,8 +75,8 @@ export class DoorManager {
   constructor(socket: Socket, session?: any) {
     this.socket = socket;
     this.session = session;
-    this.doorsPath = path.join(__dirname, '../../doors');
-    this.archivesPath = path.join(__dirname, '../../doors/archives');
+    this.doorsPath = path.join(config.get('dataDir'), 'Doors');
+    this.archivesPath = path.join(config.get('dataDir'), 'Doors', 'archives');
 
     // Ensure directories exist
     if (!fs.existsSync(this.archivesPath)) {
