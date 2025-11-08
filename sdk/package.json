@@ -12,6 +12,7 @@
     "copy-assets": "cp -r templates dist/ && cp package.json dist/ && cp -r examples/*/assets dist/examples/ 2>/dev/null || true",
     "dev": "tsc --watch",
     "preview": "node tools/preview/server.js",
+    "build-preview": "bash scripts/build-all-examples.sh",
     "create-door": "node dist/tools/cli/index.js create-door",
     "pack": "node dist/tools/cli/index.js pack",
     "validate": "node dist/tools/cli/index.js validate",
