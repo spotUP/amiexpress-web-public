@@ -1,19 +1,15 @@
 #!/bin/bash
 #
-# Build All Examples and Start Preview
+# Build All Examples - Simpler Version with Debug Output
 #
-# This script:
-# 1. Compiles all example doors
-# 2. Starts the preview server
-# 3. Opens browser to view the examples
 
-set -e  # Exit on error
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 EXAMPLES_DIR="$SDK_DIR/examples"
 
-# Colors for output
+# Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -25,17 +21,28 @@ echo -e "${BLUE}  AmiExpress SDK - Build All Examples & Preview${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Function to build an example
-build_example() {
-    local example_name=$1
-    local example_path="$EXAMPLES_DIR/$example_name"
+# Get examples
+examples=$(find "$EXAMPLES_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | grep -v '^\.' | sort)
 
-    echo -e "${YELLOW}📦 Building: $example_name${NC}"
+total=$(echo "$examples" | wc -l | tr -d ' ')
+echo -e "Found ${GREEN}$total${NC} examples to build"
+echo ""
+
+current=0
+success=0
+failed=0
+
+for example in $examples; do
+    current=$((current + 1))
+    example_path="$EXAMPLES_DIR/$example"
+
+    echo -e "${BLUE}[$current/$total]${NC} ${YELLOW}📦 $example${NC}"
 
     # Skip if no package.json
     if [ ! -f "$example_path/package.json" ]; then
-        echo -e "${YELLOW}   ⊘ No package.json, skipping${NC}"
-        return
+        echo -e "   ${YELLOW}⊘ No package.json, skipping${NC}"
+        echo ""
+        continue
     fi
 
     cd "$example_path"
@@ -43,63 +50,50 @@ build_example() {
     # Install dependencies if needed
     if [ ! -d "node_modules" ]; then
         echo -e "   └─ Installing dependencies..."
-        npm install --silent > /dev/null 2>&1 || {
-            echo -e "${RED}   ✗ Install failed${NC}"
-            return
-        }
+        if ! npm install --silent > /dev/null 2>&1; then
+            echo -e "   ${RED}✗ Install failed${NC}"
+            failed=$((failed + 1))
+            echo ""
+            continue
+        fi
     fi
 
     # Build
-    if grep -q '"build"' package.json; then
-        echo -e "   └─ Compiling TypeScript..."
-        npm run build > /tmp/build-$example_name.log 2>&1
-        build_exit=$?
-
-        if [ $build_exit -eq 0 ]; then
-            echo -e "${GREEN}   ✓ Built successfully${NC}"
-        else
-            echo -e "${RED}   ✗ Build failed (exit code: $build_exit)${NC}"
-
-            # Show TypeScript errors if present
-            if grep -q "error TS" /tmp/build-$example_name.log; then
-                echo -e "${YELLOW}   TypeScript errors (first 5):${NC}"
-                grep "error TS" /tmp/build-$example_name.log | head -5 | sed 's/^/     /'
-            else
-                # Show last 10 lines for other errors
-                echo -e "${YELLOW}   Build output (last 10 lines):${NC}"
-                tail -10 /tmp/build-$example_name.log | sed 's/^/     /'
-            fi
-            return
-        fi
-    else
-        echo -e "${YELLOW}   ⊘ No build script${NC}"
+    if ! grep -q '"build"' package.json; then
+        echo -e "   ${YELLOW}⊘ No build script${NC}"
+        echo ""
+        continue
     fi
-}
 
-# Get list of examples (exclude hidden files, only directories)
-examples=$(find "$EXAMPLES_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | grep -v '^\.' | sort || true)
+    echo -e "   └─ Compiling..."
 
-if [ -z "$examples" ]; then
-    echo -e "${RED}No examples found in $EXAMPLES_DIR${NC}"
-    exit 1
-fi
+    # Run build with timeout, redirect to log
+    if timeout 45 npm run build > "/tmp/build-$example.log" 2>&1; then
+        echo -e "   ${GREEN}✓ Built successfully${NC}"
+        success=$((success + 1))
+    else
+        exit_code=$?
+        if [ $exit_code -eq 124 ]; then
+            echo -e "   ${RED}✗ Timeout (>45s)${NC}"
+        else
+            echo -e "   ${RED}✗ Build failed${NC}"
 
-# Count examples
-total=$(echo "$examples" | wc -l | tr -d ' ')
-echo -e "Found ${GREEN}$total${NC} examples to build"
-echo ""
+            # Show first 3 errors
+            if [ -f "/tmp/build-$example.log" ]; then
+                echo ""
+                echo -e "   ${YELLOW}First 3 errors:${NC}"
+                grep "error TS" "/tmp/build-$example.log" 2>/dev/null | head -3 | sed 's/^/     /' || \
+                    tail -5 "/tmp/build-$example.log" | sed 's/^/     /'
+            fi
+        fi
+        failed=$((failed + 1))
+    fi
 
-# Build each example
-current=0
-for example in $examples; do
-    current=$((current + 1))
-    echo -e "${BLUE}[$current/$total]${NC}"
-    build_example "$example"
     echo ""
 done
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}✓ Build complete!${NC}"
+echo -e "${GREEN}✓ Build complete: $success successful, $failed failed${NC}"
 echo ""
 
 # Return to SDK directory
@@ -120,13 +114,10 @@ fi
 (
     sleep 2
     if command -v open >/dev/null 2>&1; then
-        # macOS
         open http://localhost:8080
     elif command -v xdg-open >/dev/null 2>&1; then
-        # Linux
         xdg-open http://localhost:8080
     elif command -v start >/dev/null 2>&1; then
-        # Windows
         start http://localhost:8080
     else
         echo -e "${YELLOW}Could not open browser automatically${NC}"
