@@ -598,8 +598,41 @@ class DungeonRPG {
   }
 
   private showMessage(text: string) {
-    // TODO: Show message in HUD area
-    console.log(text);
+    if (!this.userId) return;
+
+    // Display message in HUD area below controls
+    this.gfx.drawText(42, 14, '─'.repeat(38), AnsiColor.White);
+
+    // Wrap long messages if needed
+    const maxWidth = 38;
+    const lines: string[] = [];
+    let currentLine = '';
+
+    text.split(' ').forEach(word => {
+      if ((currentLine + word).length > maxWidth) {
+        if (currentLine) lines.push(currentLine.trim());
+        currentLine = word + ' ';
+      } else {
+        currentLine += word + ' ';
+      }
+    });
+    if (currentLine) lines.push(currentLine.trim());
+
+    // Display up to 3 lines
+    lines.slice(0, 3).forEach((line, i) => {
+      this.gfx.drawText(42, 15 + i, line.padEnd(maxWidth), AnsiColor.Yellow);
+    });
+
+    this.door.sendAnsi(this.gfx.render(), this.userId);
+
+    // Clear message after 3 seconds
+    setTimeout(() => {
+      if (this.userId) {
+        for (let i = 0; i < 4; i++) {
+          this.gfx.drawText(42, 14 + i, ' '.repeat(38), AnsiColor.Black);
+        }
+      }
+    }, 3000);
   }
 
   start() {

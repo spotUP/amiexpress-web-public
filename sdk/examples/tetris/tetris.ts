@@ -30,6 +30,7 @@ import { GraphicsEngine } from '../../engines/graphics/graphics-engine';
 import { AudioEngine } from '../../engines/audio/audio-engine';
 import { HUDBuilder } from '../../components/hud/hud-builder';
 import { MenuSystem } from '../../components/menus/menu-system';
+import { SaveManager } from '../../systems/save-manager';
 import { Position, AnsiColor } from '../../core/types';
 
 /** Tetris piece shapes (tetrominos) */
@@ -91,6 +92,9 @@ class TetrisGame {
   /** HUD */
   private hud: HUDBuilder;
 
+  /** Save manager for high scores */
+  private saveMgr: SaveManager;
+
   /** Game board (20 rows x 10 columns) */
   private board: number[][];
 
@@ -126,6 +130,7 @@ class TetrisGame {
     this.gfx = new GraphicsEngine({ width: 80, height: 24 });
     this.audio = new AudioEngine();
     this.hud = new HUDBuilder();
+    this.saveMgr = new SaveManager({ userId: 0, gameId: 'tetris' });
 
     // Initialize board
     this.board = Array(20)
@@ -138,6 +143,7 @@ class TetrisGame {
    */
   public async init(userId: number): Promise<void> {
     this.userId = userId;
+    this.saveMgr = new SaveManager({ userId, gameId: 'tetris' });
 
     await this.audio.init();
 
@@ -514,10 +520,13 @@ class TetrisGame {
   /**
    * Game over
    */
-  private gameOver(): void {
+  private async gameOver(): Promise<void> {
     this.gameState = 'gameover';
     this.audio.playSound('gameover');
     this.audio.stopMusic();
+
+    // Save high score
+    await this.saveHighScore();
 
     this.door.send('\r\n\r\n', this.userId);
     this.door.send('╔════════════════════╗\r\n', this.userId);
@@ -528,9 +537,8 @@ class TetrisGame {
     this.door.send(`Level: ${this.level}\r\n\r\n`, this.userId);
     this.door.send('Press any key to continue...\r\n', this.userId);
 
-    this.door.waitForInput(this.userId, 0).then(() => {
-      this.showMainMenu();
-    });
+    await this.door.waitForInput(this.userId, 0);
+    await this.showMainMenu();
   }
 
   /**
@@ -596,16 +604,77 @@ class TetrisGame {
   }
 
   /**
+   * Save high score
+   */
+  private async saveHighScore(): Promise<void> {
+    try {
+      // Load existing high scores
+      const save = await this.saveMgr.load(1);
+      let highScores: Array<{ score: number; lines: number; level: number; date: string }> = [];
+
+      if (save && save.state && Array.isArray(save.state.highScores)) {
+        highScores = save.state.highScores;
+      }
+
+      // Add current score
+      highScores.push({
+        score: this.score,
+        lines: this.lines,
+        level: this.level,
+        date: new Date().toISOString().split('T')[0]
+      });
+
+      // Sort by score descending and keep top 10
+      highScores.sort((a, b) => b.score - a.score);
+      highScores = highScores.slice(0, 10);
+
+      // Save
+      await this.saveMgr.save(1, { highScores });
+    } catch (error) {
+      console.error('Failed to save high score:', error);
+    }
+  }
+
+  /**
    * Show high scores
    */
   private async showHighScores(): Promise<void> {
     this.door.clearScreen(this.userId);
     this.door.send('\r\n', this.userId);
-    this.door.send('╔══════════════════════╗\r\n', this.userId);
-    this.door.send('║   HIGH SCORES      ║\r\n', this.userId);
-    this.door.send('╚══════════════════════╝\r\n', this.userId);
-    this.door.send('\r\nComing soon!\r\n\r\n', this.userId);
-    this.door.send('Press any key...\r\n', this.userId);
+    this.door.send('╔═══════════════════════════════════╗\r\n', this.userId);
+    this.door.send('║         HIGH SCORES             ║\r\n', this.userId);
+    this.door.send('╠═══════════════════════════════════╣\r\n', this.userId);
+    this.door.send('║ #  Score    Lines  Level  Date   ║\r\n', this.userId);
+    this.door.send('╠═══════════════════════════════════╣\r\n', this.userId);
+
+    try {
+      const save = await this.saveMgr.load(1);
+      let highScores: Array<{ score: number; lines: number; level: number; date: string }> = [];
+
+      if (save && save.state && Array.isArray(save.state.highScores)) {
+        highScores = save.state.highScores;
+      }
+
+      if (highScores.length === 0) {
+        this.door.send('║   No high scores yet!           ║\r\n', this.userId);
+      } else {
+        for (let i = 0; i < Math.min(10, highScores.length); i++) {
+          const hs = highScores[i];
+          const rank = (i + 1).toString().padStart(2);
+          const score = hs.score.toString().padStart(7);
+          const lines = hs.lines.toString().padStart(5);
+          const level = hs.level.toString().padStart(5);
+          const date = hs.date.substring(5); // MM-DD
+
+          this.door.send(`║ ${rank} ${score} ${lines}  ${level}  ${date} ║\r\n`, this.userId);
+        }
+      }
+    } catch (error) {
+      this.door.send('║   Error loading scores          ║\r\n', this.userId);
+    }
+
+    this.door.send('╚═══════════════════════════════════╝\r\n', this.userId);
+    this.door.send('\r\nPress any key...\r\n', this.userId);
     await this.door.waitForInput(this.userId, 0);
     await this.showMainMenu();
   }
