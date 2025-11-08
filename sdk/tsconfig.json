@@ -20,12 +20,12 @@
     "core/**/*",
     "engines/**/*",
     "components/**/*",
-    "tools/**/*",
-    "examples/**/*.ts"
+    "tools/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
+    "examples",
     "**/*.spec.ts"
   ]
 }

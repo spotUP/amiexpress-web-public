@@ -1,0 +1,33 @@
+{
+  "name": "space-shooter-example",
+  "version": "1.0.0",
+  "description": "Complete space shooter game showcasing all AmiExpress SDK features",
+  "main": "index.ts",
+  "author": "AmiExpress SDK Team",
+  "license": "MIT",
+  "category": "action",
+  "scripts": {
+    "start": "npx tsx index.ts",
+    "dev": "npx tsx --watch index.ts",
+    "build": "tsc",
+    "preview": "cd ../.. && npm run preview",
+    "pack": "cd ../.. && npm run pack space-shooter",
+    "validate": "cd ../.. && npm run validate ."
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "game",
+    "shooter",
+    "space",
+    "action"
+  ],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2",
+    "tsx": "^4.19.2"
+  }
+}
