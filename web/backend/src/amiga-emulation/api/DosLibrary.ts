@@ -351,17 +351,23 @@ export class DosLibrary {
     const previousIoErr = this.lastError;
     let success = true;
 
-    // If file was opened for writing, flush buffer to disk
-    if (fileHandle.mode === MODE_NEWFILE || fileHandle.mode === MODE_READWRITE) {
-      if (fileHandle.realPath && fileHandle.buffer) {
-        try {
-          fs.writeFileSync(fileHandle.realPath, fileHandle.buffer);
-          console.log(`[dos.library] Close: Wrote ${fileHandle.buffer.length} bytes to ${fileHandle.realPath}`);
-        } catch (error) {
-          console.error(`[dos.library] Close: Error writing file ${fileHandle.realPath}:`, error);
-          this.lastError = this.ERROR_WRITE_PROTECTED;
-          success = false;
-          // NOTE: Still deallocate handle below (per spec)
+    // Console handles and NIL: don't need to flush to disk
+    if (fileHandle.isConsole || fileHandle.name === 'NIL:' || fileHandle.name === 'NIL') {
+      console.log(`[dos.library] Close: Console/NIL handle ${handle}, closing without disk flush`);
+      // Console output is already flushed via Write(), just close the handle
+    } else {
+      // Regular file - flush buffer to disk if it was opened for writing
+      if (fileHandle.mode === MODE_NEWFILE || fileHandle.mode === MODE_READWRITE) {
+        if (fileHandle.realPath && fileHandle.buffer) {
+          try {
+            fs.writeFileSync(fileHandle.realPath, fileHandle.buffer);
+            console.log(`[dos.library] Close: Wrote ${fileHandle.buffer.length} bytes to ${fileHandle.realPath}`);
+          } catch (error) {
+            console.error(`[dos.library] Close: Error writing file ${fileHandle.realPath}:`, error);
+            this.lastError = this.ERROR_WRITE_PROTECTED;
+            success = false;
+            // NOTE: Still deallocate handle below (per spec)
+          }
         }
       }
     }
