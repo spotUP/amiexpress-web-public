@@ -46,18 +46,29 @@
 - **Loop Points:** Set song loop regions
 
 ### Module Export & Import
-- **JSON Format:** Human-readable module format
-- **Binary Export:** Compact .trkmod format
-- **Game Integration:** Direct import into Door SDK games
-- **Metadata:** Title, artist, comments, copyright
+- **Export Formats:**
+  - JSON Format (human-readable)
+  - Protracker MOD (4 channels, 31 samples)
+  - FastTracker II XM (up to 32 channels, 128 instruments)
+  - Impulse Tracker IT (up to 64 channels, 256 samples)
+  - AHX (Abyss Highest Experience) with validation
+  - SDK Format (optimized for AmiExpress games)
 - **Import Formats:**
   - Protracker MOD (4 channels, 31 samples)
   - FastTracker II XM (up to 32 channels, 128 instruments)
   - Impulse Tracker IT (up to 64 channels, 256 samples)
+- **Sample Formats:**
+  - WAV (8/16/24/32-bit, mono/stereo)
+  - AIFF (Apple audio format, with loop points)
+  - Raw PCM (configurable bit depth and sample rate)
+  - AKAI S1000/S3000 instruments and samples
 - **Instrument Formats:**
   - FastTracker II XI instruments
   - Impulse Tracker ITI instruments
   - Renoise XRNI instruments (basic support)
+  - AKAI Program Files (.akp)
+- **Instrument Rendering:** Auto-convert synth instruments to samples for export
+- **Game Integration:** Seamless integration with AmiExpress Door SDK
 
 ### AI-Assisted Composition (Scribbletune)
 - **Melody Generation:** AI-suggested melodies
@@ -206,18 +217,25 @@ tracker-door/
 ├── src/
 │   ├── audio/              # Audio engine
 │   │   └── engine.ts       # Tone.js wrapper with full playback
-│   ├── formats/            # Format parsers (NEW!)
+│   ├── formats/            # Format parsers & exporters
 │   │   ├── mod-parser.ts   # Protracker MOD import/export
 │   │   ├── xm-parser.ts    # FastTracker II XM import
 │   │   ├── it-parser.ts    # Impulse Tracker IT import
-│   │   └── instrument-parsers.ts # XI, ITI, XRNI support
+│   │   ├── instrument-parsers.ts # XI, ITI, XRNI support
+│   │   ├── sample-parsers.ts # WAV, AIFF, Raw PCM (NEW!)
+│   │   ├── akai-parser.ts  # AKAI S1000/S3000 support (NEW!)
+│   │   └── format-exporters.ts # XM, IT, AHX exporters (NEW!)
 │   ├── data/               # Data structures
 │   │   └── types.ts        # All core types (Note, Pattern, etc.)
 │   ├── utils/              # Utilities
 │   │   ├── export.ts       # Module export/import
 │   │   ├── sample.ts       # Sample management
-│   │   ├── undo.ts         # Undo/redo system (NEW!)
-│   │   └── autosave.ts     # Auto-save system (NEW!)
+│   │   ├── undo.ts         # Undo/redo & clipboard system
+│   │   ├── autosave.ts     # Auto-save system
+│   │   └── instrument-renderer.ts # Synth-to-sample renderer (NEW!)
+│   ├── sdk-integration/    # Door SDK integration (NEW!)
+│   │   ├── tracker-audio-engine.ts # SDK music player
+│   │   └── export-utils.ts # SDK export utilities
 │   ├── ai/                 # AI composition
 │   │   └── generator.ts    # Scribbletune integration
 │   └── index.ts            # Main door (1000+ lines, all features)
@@ -282,35 +300,44 @@ tracker-door/
 - [x] Sample playback
 - [x] Channel mixer
 
-### Phase 4: Instruments (Current)
+### Phase 4: Instruments ✅ (Complete)
 - [x] Instrument editor UI
 - [x] ADSR envelopes
 - [x] Filter controls
 - [x] Preset library
+- [x] Sample format support (WAV, AIFF, Raw PCM)
+- [x] AKAI S1000/S3000 instrument support
 
-### Phase 5: Effects
-- [ ] Effect chain UI
-- [ ] Built-in effects
-- [ ] Per-channel routing
-- [ ] Master bus
+### Phase 5: Import/Export ✅ (Complete)
+- [x] MOD import/export (Protracker)
+- [x] XM import/export (FastTracker II)
+- [x] IT import/export (Impulse Tracker)
+- [x] AHX export with validation
+- [x] XI/ITI/XRNI instrument formats
+- [x] Instrument-to-sample rendering
 
-### Phase 6: Song Structure
-- [ ] Pattern sequencer
-- [ ] Song arrangement
-- [ ] Tempo/time signature
-- [ ] Loop regions
+### Phase 6: Advanced Editing ✅ (Complete)
+- [x] Undo/redo system (Ctrl+Z/Y)
+- [x] Clipboard operations (Ctrl+C/X/V)
+- [x] Block selection (Shift+arrows)
+- [x] Auto-save every 2 minutes
+- [x] Channel mute/solo controls
 
-### Phase 7: Export & Integration
-- [ ] JSON exporter
-- [ ] Binary format
-- [ ] Game SDK integration
-- [ ] Metadata editor
+### Phase 7: Game Integration ✅ (Complete)
+- [x] SDK-optimized format
+- [x] TrackerAudioEngine for games
+- [x] Music pack creation
+- [x] Integration code generation
+- [x] Batch export utilities
 
-### Phase 8: Polish & AI
-- [ ] Scribbletune integration
-- [ ] Help system
-- [ ] Undo/redo
-- [ ] Auto-save
+### Phase 8: Future Enhancements
+- [ ] OpenMPT integration for playback
+- [ ] Advanced effect chain UI
+- [ ] Multi-track recording
+- [ ] MIDI input/output
+- [ ] Scribbletune AI integration
+- [ ] Cloud storage/sharing
+- [ ] Real-time collaboration
 
 ## 🎨 Technical Details
 
@@ -321,6 +348,63 @@ tracker-door/
 - **Display:** 80x24 ANSI/ASCII
 - **Storage:** JSON + Binary formats
 
+## 🎮 Door SDK Integration
+
+TrackerDoor music can be seamlessly integrated into AmiExpress BBS games!
+
+### Quick Start
+
+```typescript
+import { createTrackerMusic } from '@amiexpress/tracker-door/sdk-integration';
+import { AudioEngine } from '@amiexpress/sdk/engines/audio';
+
+// Initialize audio
+const audio = new AudioEngine();
+const music = createTrackerMusic(audio);
+
+// Load and play tracker music
+door.onConnect(async () => {
+  await audio.init();
+  await music.loadSongFromFile('./music/theme.sdk.json');
+  music.play();
+});
+
+// Control playback
+music.setChannelMute(2, true);  // Mute channel 2
+music.jumpToPattern(5);         // Jump to pattern 5
+
+// Get song info
+const info = music.getSongInfo();
+console.log(`Playing: ${info.title} by ${info.artist}`);
+
+// Clean up
+door.onDisconnect(() => music.dispose());
+```
+
+### Export for Games
+
+```bash
+# Export to SDK-optimized format
+TrackerDoor > F7 (Export) > SDK Format
+
+# Batch export to multiple formats
+# Creates .sdk.json, .mod, .xm files
+```
+
+### Music Pack Creation
+
+Create game-ready music packs with documentation:
+
+```typescript
+import { SDKExportManager } from '@amiexpress/tracker-door/sdk-integration';
+
+await SDKExportManager.createMusicPack(songs, './game/music', {
+  format: 'sdk',
+  includeSourceJSON: true,
+  includeDocumentation: true
+});
+```
+
 ## 📚 References
 
 - **Renoise:** https://www.renoise.com/
@@ -328,6 +412,8 @@ tracker-door/
 - **FastTracker II:** https://github.com/8bitbubsy/ft2-clone
 - **Tone.js:** https://tonejs.github.io/
 - **Scribbletune:** https://scribbletune.com/
+- **AKAI Formats:** http://www.philrees.co.uk/akai.htm
+- **OpenMPT:** https://openmpt.org/ (reference player)
 
 ## 🤝 Credits
 
