@@ -12,7 +12,7 @@
   "author": "Demo Scene Community",
   "license": "MIT",
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../sdk",
+    "@amiexpress/bbs-door-sdk": "file:../../",
     "tone": "^15.0.4",
     "scribbletune": "^5.1.0"
   },

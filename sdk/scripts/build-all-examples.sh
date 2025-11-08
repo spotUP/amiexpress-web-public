@@ -52,11 +52,14 @@ build_example() {
     # Build
     if grep -q '"build"' package.json; then
         echo -e "   └─ Compiling TypeScript..."
-        npm run build --silent > /dev/null 2>&1 || {
-            echo -e "${RED}   ✗ Build failed${NC}"
+        npm run build > /tmp/build-$example_name.log 2>&1
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}   ✓ Built successfully${NC}"
+        else
+            echo -e "${RED}   ✗ Build failed - first 3 errors:${NC}"
+            grep "error TS" /tmp/build-$example_name.log | head -3
             return
-        }
-        echo -e "${GREEN}   ✓ Built successfully${NC}"
+        fi
     else
         echo -e "${YELLOW}   ⊘ No build script${NC}"
     fi
