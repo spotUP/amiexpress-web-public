@@ -21,7 +21,7 @@
     "{{category}}"
   ],
   "dependencies": {
-    "@amiexpress/sdk": "^1.0.0"
+    "@amiexpress/sdk": "file:../"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
