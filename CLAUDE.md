@@ -6,7 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress/!X. It emulates 68K Amiga binaries in the browser using MOIRA (68000 CPU emulator) and recreates the BBS environment with modern web technologies.
 
-**Architecture**: Monorepo with backend (Node.js/TypeScript) and frontend (React/Vite/xterm.js)
+**Architecture**: Monorepo with 3 main areas:
+- `web/backend` - Node.js/TypeScript BBS server
+- `web/frontend` - React/Vite/xterm.js terminal interface
+- `sdk` - Door Development Kit for creating BBS doors/games
+
+## Project Structure
+```
+/
+├── web/                    - Main BBS application
+│   ├── backend/           - TypeScript BBS server
+│   └── frontend/          - React terminal UI
+├── sdk/                    - Door Development Kit
+├── Documentation/          - All documentation
+├── dev/scripts/           - Development/test scripts
+├── doors/                  - Installed door programs
+├── mcp-server/            - MCP server for source analysis
+└── .mcp.json              - MCP server configuration
+```
 
 ## Development Commands
 
@@ -20,8 +37,8 @@ AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress
 ### Backend (web/backend)
 ```bash
 cd web/backend
+npm install          # Install dependencies
 npm run dev          # Start development server
-npm run build        # Install dependencies
 npm test             # Run Jest tests
 npm run test:watch   # Run tests in watch mode
 npx tsc --noEmit     # TypeScript type check (REQUIRED before commits)
@@ -30,17 +47,57 @@ npx tsc --noEmit     # TypeScript type check (REQUIRED before commits)
 ### Frontend (web/frontend)
 ```bash
 cd web/frontend
+npm install          # Install dependencies
 npm run dev          # Start Vite dev server
 npm run build        # Production build
 npm run build:check  # Type check + build
 npm run lint         # ESLint
 ```
 
+### SDK (Door Development Kit)
+```bash
+cd sdk
+npm install          # Install dependencies
+npm run build        # Build SDK
+npm test             # Run SDK tests
+npm run test:watch   # Watch mode
+npm run create-door  # Create new door
+npm run pack         # Package door
+npm run validate     # Validate door package
+```
+- SDK located at `/sdk/`
+- Builds doors for AmiExpress BBS
+- See `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
+
 ### Testing
-- Puppeteer tests: `node dev/scripts/test-*.js`
-- Interactive test: `node dev/scripts/test-command-interactive.js`
+- **All Commands**: `node dev/scripts/test-all-commands.js`
+- **Quick All Commands**: `./dev/scripts/test-all-commands-quick.sh`
+- **Interactive Test**: `node dev/scripts/test-command-interactive.js`
+- **Door Install Test**: `node dev/scripts/test-door-install.js`
+- **Deep Dive Test**: `node dev/scripts/test-deep-dive.js`
+- **Simple Test**: `node dev/scripts/test-simple.js`
+- **BBS Comprehensive**: `node dev/scripts/test-bbs-comprehensive.js`
 - See `Documentation/3-Developers/TESTING.md` for complete protocol
 - **CRITICAL**: Always use test scripts instead of manual testing
+
+## Environment Variables
+- Copy `.env.example` to `.env.local`
+- Required for development:
+  - `JWT_SECRET` - Generate with `openssl rand -base64 32`
+  - `DATABASE_DIR` - SQLite database location (default: `./data`)
+  - `BACKEND_PORT` - Backend port (default: 3001)
+  - `FRONTEND_PORT` - Frontend port (default: 5173)
+- For deployment:
+  - `VERCEL_TOKEN` - For Vercel deployment
+  - `RENDER_API_KEY` - For Render.com webhooks
+- See `.env.example` for full list
+
+## Deployment
+- Push and deploy: `./dev/scripts/push-and-deploy.sh`
+- Requires environment variables in `.env.local`:
+  - `VERCEL_TOKEN` - For Vercel deployment
+  - `RENDER_API_KEY` - For Render.com webhooks
+- See `.env.example` for deployment configuration
 
 ## Server Logs
 - Backend: `logs/backend.log` (overwritten each start)
