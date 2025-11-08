@@ -12,8 +12,9 @@ services:
     env: node
     region: oregon
     plan: starter
-    buildCommand: cd web/backend && npm ci
-    startCommand: cd web/backend && npm start
+    rootDir: web/backend
+    buildCommand: npm ci
+    startCommand: npm run render-start
     envVars:
       - key: NODE_ENV
         value: production

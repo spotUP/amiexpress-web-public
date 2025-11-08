@@ -388,11 +388,16 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     socket.emit('door:status', { status: 'running' });
     console.log(`[executeTypeScriptDoor] Sent door:status: running`);
 
-    // Create door session object with reference to BBS session
+    // Create BBS API instance for door
+    const { createBBSApi } = require('../doors/BBSApi');
+    const bbsApi = createBBSApi(socket, session);
+
+    // Create door session object with reference to BBS session and API
     const doorSessionObj = {
       socket,
       user: session.user,
-      bbsSession: session  // Pass reference to BBS session for input routing
+      bbsSession: session,  // Pass reference to BBS session for input routing
+      bbs: bbsApi           // BBS API with all functions
     };
 
     // Execute the door (it registers its own input listeners)
@@ -1132,7 +1137,11 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
     const bbsRoot = config.get('dataDir');
     const dropFileDir = path.join(bbsRoot, `Node${nodeId}`);
 
-    // Prepare ARexx context with BBS environment
+    // Create BBS API instance for ARexx door
+    const { createBBSApi } = require('../doors/BBSApi');
+    const bbsApi = createBBSApi(socket, session);
+
+    // Prepare ARexx context with BBS environment and full API
     const arexxContext = {
       // User information
       username: session.user?.username || 'Guest',
@@ -1155,27 +1164,70 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
       // Time information
       timeRemaining: timeRemaining,
       timeOnline: Math.floor((Date.now() - session.loginTime) / 60000),
-      // BBS output callback
+
+      // === BBS API FUNCTIONS (Full Feature Parity) ===
+
+      // Output functions
       output: (text: string) => {
         socket.emit('ansi-output', text);
         if (!doorSession.output) doorSession.output = [];
         doorSession.output.push(text);
       },
-      // BBS input callback (for prompts)
+      write: (text: string) => bbsApi.write(text),
+      writeLine: (text: string) => bbsApi.writeLine(text),
+      clearScreen: () => bbsApi.clearScreen(),
+      moveCursor: (row: number, col: number) => bbsApi.moveCursor(row, col),
+      setColor: (colorCode: number) => bbsApi.setColor(colorCode),
+
+      // Input functions
       input: (prompt: string): Promise<string> => {
         return new Promise((resolve) => {
           socket.emit('ansi-output', prompt);
 
           const inputHandler = (data: string) => {
-            // Clean up handler
             delete session.doorInputHandler;
             resolve(data);
           };
 
-          // Register input handler
           session.doorInputHandler = inputHandler;
         });
-      }
+      },
+      getLine: (prompt?: string, maxLength?: number) => bbsApi.getLine(prompt, maxLength),
+      getKey: (prompt?: string) => bbsApi.getKey(prompt),
+      hotkey: (options: string[], prompt?: string) => bbsApi.hotkey(options, prompt),
+
+      // User data functions
+      getUser: () => bbsApi.getUser(),
+      getUserSecLevel: () => bbsApi.getUserSecLevel(),
+      getTimeRemaining: () => bbsApi.getTimeRemaining(),
+      getTimeOnline: () => bbsApi.getTimeOnline(),
+
+      // Conference functions
+      getCurrentConference: () => bbsApi.getCurrentConference(),
+      getCurrentConferenceName: () => bbsApi.getCurrentConferenceName(),
+      joinConference: (confNum: number) => bbsApi.joinConference(confNum),
+      listConferences: () => bbsApi.listConferences(),
+
+      // Node/system functions
+      getNodeNumber: () => bbsApi.getNodeNumber(),
+      getSystemInfo: () => bbsApi.getSystemInfo(),
+      getNodes: () => bbsApi.getNodes(),
+
+      // File I/O functions
+      readFile: (filename: string) => bbsApi.readFile(filename),
+      writeFile: (filename: string, content: string) => bbsApi.writeFile(filename, content),
+      fileExists: (filename: string) => bbsApi.fileExists(filename),
+      listFiles: (directory: string, pattern?: string) => bbsApi.listFiles(directory, pattern),
+
+      // Message functions
+      sendMessage: (toUsername: string, subject: string, body: string) => bbsApi.sendMessage(toUsername, subject, body),
+      postMessage: (subject: string, body: string) => bbsApi.postMessage(subject, body),
+
+      // Utility functions
+      logActivity: (action: string, details?: string) => bbsApi.logActivity(action, details),
+      displayFile: (filename: string) => bbsApi.displayFile(filename),
+      pause: (prompt?: string) => bbsApi.pause(prompt),
+      displayMCI: (text: string) => bbsApi.displayMCI(text)
     };
 
     // Execute ARexx script through the ARexx engine

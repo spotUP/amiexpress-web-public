@@ -1,67 +1,113 @@
 #!/usr/bin/env python3
 """
 Hello World Python Door for AmiExpress-Web
-Demonstrates Python door capabilities
+Demonstrates Python door capabilities with full BBS API
 """
 
-import os
 import sys
+import os
+
+# Add current directory to path for bbsapi import
+sys.path.insert(0, os.path.dirname(__file__))
+
+from bbsapi import bbs
+
 
 def main():
-    # Get BBS environment variables
-    username = os.getenv('BBS_USERNAME', 'Guest')
-    node = os.getenv('BBS_NODE', '1')
-    security_level = os.getenv('BBS_SECURITY_LEVEL', '0')
-    conference = os.getenv('BBS_CONFERENCE_NAME', 'Unknown')
+    # Use BBS API for all operations
+    bbs.clear_screen()
 
-    # ANSI codes
-    CLEAR = '\x1b[2J\x1b[H'
-    CYAN = '\x1b[0;36m'
-    YELLOW = '\x1b[0;33m'
-    GREEN = '\x1b[0;32m'
-    RESET = '\x1b[0m'
+    # Display header using BBS API
+    bbs.write('\x1b[0;36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m\r\n')
+    bbs.write('\x1b[0;36m║\x1b[0;33m                        PYTHON DOOR - HELLO WORLD                             \x1b[0;36m║\x1b[0m\r\n')
+    bbs.write('\x1b[0;36m║\x1b[0;32m                Demonstrates Full BBS API Capabilities                        \x1b[0;36m║\x1b[0m\r\n')
+    bbs.write('\x1b[0;36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n')
 
-    # Clear screen and display header
-    print(f"{CLEAR}")
-    print(f"{CYAN}╔══════════════════════════════════════════════════════════════════════════════╗{RESET}")
-    print(f"{CYAN}║                                                                              ║{RESET}")
-    print(f"{CYAN}║{YELLOW}                        PYTHON DOOR - HELLO WORLD                             {CYAN}║{RESET}")
-    print(f"{CYAN}║                                                                              ║{RESET}")
-    print(f"{CYAN}╚══════════════════════════════════════════════════════════════════════════════╝{RESET}")
-    print()
-    print(f"{GREEN}  * Hello, {username}!{RESET}")
-    print(f"{GREEN}  * You are on node {node}{RESET}")
-    print(f"{GREEN}  * Your security level is {security_level}{RESET}")
-    print(f"{GREEN}  * Current conference: {conference}{RESET}")
-    print()
-    print(f"{YELLOW}  This door demonstrates Python 3 support in AmiExpress-Web.{RESET}")
-    print(f"{YELLOW}  Python doors have access to:{RESET}")
-    print(f"{RESET}    - Full BBS environment variables")
-    print(f"{RESET}    - stdin/stdout for user interaction")
-    print(f"{RESET}    - Drop files (DOOR.SYS, DORINFOx.DEF)")
-    print(f"{RESET}    - 30-minute timeout protection")
-    print()
+    # Get user information from BBS API
+    user = bbs.get_user()
+    bbs.write('\x1b[0;36m[ User Information ]\x1b[0m\r\n')
+    bbs.writeln(f"  Username:      {user['username']}")
+    bbs.writeln(f"  Real Name:     {user.get('realname', 'Not set')}")
+    bbs.writeln(f"  Location:      {user.get('location', 'Unknown')}")
+    bbs.writeln(f"  Security:      {user['sec_level']}")
+    bbs.writeln()
 
-    # Interactive example
-    print(f"{CYAN}  Enter your favorite programming language (or press Enter to skip): {RESET}", end='', flush=True)
+    # Get node and system information
+    node_id = bbs.get_node_number()
+    bbs_name = bbs.get_bbs_name()
+    sysop = bbs.get_sysop_name()
+    conference = bbs.get_conference_name()
 
-    try:
-        response = input().strip()
-        if response:
-            print()
-            print(f"{GREEN}  * Great choice! {response} is awesome!{RESET}")
+    bbs.write('\x1b[0;36m[ System Information ]\x1b[0m\r\n')
+    bbs.writeln(f"  BBS Name:      {bbs_name}")
+    bbs.writeln(f"  Sysop:         {sysop}")
+    bbs.writeln(f"  Node:          {node_id}")
+    bbs.writeln(f"  Conference:    {conference}")
+    bbs.writeln(f"  Time Online:   {bbs.get_time_online()} minutes")
+    bbs.writeln(f"  Time Left:     {bbs.get_time_remaining()} minutes")
+    bbs.writeln()
+
+    # Interactive examples demonstrating input functions
+    bbs.write('\x1b[0;36m[ Interactive Demo ]\x1b[0m\r\n')
+
+    # Example 1: get_line() - Get text input
+    language = bbs.get_line('\x1b[0;33mEnter your favorite programming language: \x1b[0m')
+    if language and language.strip():
+        bbs.writeln(f'\x1b[0;32m✓ Great choice! {language.strip()} is awesome!\x1b[0m')
+    else:
+        bbs.writeln('\x1b[0;32m✓ Python is pretty great too!\x1b[0m')
+    bbs.writeln()
+
+    # Example 2: get_key() - Get single keypress
+    bbs.write('\x1b[0;33mTest file operations? (Y/N): \x1b[0m')
+    choice = bbs.get_key()
+    bbs.writeln(choice.upper())
+
+    if choice.upper() == 'Y':
+        bbs.writeln()
+        bbs.write('\x1b[0;36m[ File I/O Demo ]\x1b[0m\r\n')
+
+        # Test file operations
+        test_file = 'test-python-door.txt'
+        from datetime import datetime
+        test_content = f"Hello from Python door!\nWritten at: {datetime.now().isoformat()}\n"
+
+        if bbs.write_file(test_file, test_content):
+            bbs.writeln('\x1b[0;32m✓ File written successfully\x1b[0m')
+
+            read_content = bbs.read_file(test_file)
+            if read_content:
+                bbs.writeln('\x1b[0;32m✓ File read successfully:\x1b[0m')
+                bbs.write('\x1b[0;33m')
+                bbs.write(read_content)
+                bbs.writeln('\x1b[0m')
         else:
-            print()
-            print(f"{YELLOW}  * Python is pretty great too!{RESET}")
-    except EOFError:
-        print()
-        print(f"{YELLOW}  * (No response detected){RESET}")
+            bbs.writeln('\x1b[0;31m✗ File write failed\x1b[0m')
 
-    print()
-    print(f"{CYAN}  Python door completed successfully.{RESET}")
-    print()
+    # Display available API functions
+    bbs.writeln()
+    bbs.write('\x1b[0;36m[ BBS API Functions Available ]\x1b[0m\r\n')
+    bbs.writeln('  ✓ write/writeln - Output text')
+    bbs.writeln('  ✓ clear_screen - Clear display')
+    bbs.writeln('  ✓ move_cursor - Position cursor')
+    bbs.writeln('  ✓ get_line - Get text input')
+    bbs.writeln('  ✓ get_key - Get single key')
+    bbs.writeln('  ✓ get_user - Get user information')
+    bbs.writeln('  ✓ get_time_remaining - Check time')
+    bbs.writeln('  ✓ read_file/write_file - File I/O')
+    bbs.writeln('  ✓ list_files - Directory listing')
+    bbs.writeln('  ✓ log_activity - Log actions')
+    bbs.writeln('  ✓ And many more!')
+    bbs.writeln()
+
+    # Log activity
+    bbs.log_activity('Tested Python door', 'All API functions working')
+
+    # Pause before exit
+    bbs.pause('\r\n\x1b[0;32mPress any key to exit...\x1b[0m')
 
     return 0
+
 
 if __name__ == '__main__':
     sys.exit(main())
