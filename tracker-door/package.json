@@ -1,0 +1,24 @@
+{
+  "name": "tracker-door",
+  "version": "1.0.0",
+  "description": "Professional music tracker BBS door inspired by Renoise, Protracker, and FastTracker II",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": ["bbs", "door", "tracker", "music", "chiptune", "demo", "scene"],
+  "author": "Demo Scene Community",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../sdk",
+    "tone": "^15.0.4",
+    "scribbletune": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0"
+  }
+}
