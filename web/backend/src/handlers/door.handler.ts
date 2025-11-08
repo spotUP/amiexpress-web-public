@@ -438,7 +438,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
  */
 async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doorSession: DoorSession) {
   console.log(`[executeAmigaDoor] Starting Amiga door: ${door.name} (${door.type})`);
-  console.log(`[executeAmigaDoor] Location: ${door.location}`);
+  console.log(`[executeAmigaDoor] Path: ${door.path}`);
 
   try {
     // Get the BBS root from AmigaDoorManager (same location where doors are installed)
@@ -447,8 +447,8 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     const bbsRoot = amigaDoorMgr.bbsRoot;
 
     // Build the full path to the door executable
-    // door.location is already converted from Amiga paths (e.g., "Doors/AquaBulls/AquaBulls")
-    let doorPath = path.join(bbsRoot, door.location);
+    // door.path is already converted from Amiga paths (e.g., "Doors/AquaBulls/AquaBulls")
+    let doorPath = path.join(bbsRoot, door.path);
 
     console.log(`[executeAmigaDoor] BBS root: ${bbsRoot}`);
     console.log(`[executeAmigaDoor] Initial door path: ${doorPath}`);
@@ -458,7 +458,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       console.log(`[executeAmigaDoor] Door not found at ${doorPath}, trying alternate paths...`);
 
       // Try alternate path resolutions for common issues:
-      const location = door.location;
+      const location = door.path;
       const alternatePaths = [];
 
       // 1. Try with capital D in Doors/ (doors/ → Doors/)
