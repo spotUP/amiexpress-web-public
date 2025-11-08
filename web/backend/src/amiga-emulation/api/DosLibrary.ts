@@ -556,11 +556,11 @@ export class DosLibrary {
   }
 
   // Inherited input/output handles from parent process
-  // AmiExpress sets SYS_INPUT=0, SYS_OUTPUT=0 (or doorTrapFH) when launching doors
   // Per AmigaDOS spec: "Input() is used to identify the initial input stream allocated when
   // the program was initiated. Never close the filehandle returned by Input!"
-  private inheritedInput: number = 0;   // 0 = NIL for doors
-  private inheritedOutput: number = 0;  // 0 = NIL for doors
+  // XIM/AIM doors expect standard console I/O, so we default to STDIN/STDOUT
+  private inheritedInput: number = 1;   // STDIN_HANDLE
+  private inheritedOutput: number = 2;  // STDOUT_HANDLE
 
   /**
    * Set inherited stdin/stdout handles for the process
