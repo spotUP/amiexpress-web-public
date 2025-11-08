@@ -1244,10 +1244,23 @@ class ANSIEditor implements ANSIEditorInterface {
 
 export async function runDoor(session: DoorSession) {
   console.log('[ANSI Editor runDoor] Starting ANSI editor door');
+
+  // Enable mouse events for ANSI editor (drawing, clicking, hovering)
+  if (session.bbsSession) {
+    session.bbsSession.mouseEventsEnabled = true;
+    console.log('[ANSI Editor runDoor] Mouse events enabled');
+  }
+
   const editor = new ANSIEditor(session);
   console.log('[ANSI Editor runDoor] Editor created, calling run()');
   await editor.run();
   console.log('[ANSI Editor runDoor] Editor run() completed');
+
+  // Disable mouse events when exiting
+  if (session.bbsSession) {
+    session.bbsSession.mouseEventsEnabled = false;
+    console.log('[ANSI Editor runDoor] Mouse events disabled');
+  }
 }
 
 export default runDoor;

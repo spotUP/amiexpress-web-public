@@ -172,8 +172,8 @@ function registerCommandHandler(socket: Socket) {
 
     console.log('[socket-handlers] mouse-drag received:', data);
 
-    // If door is active and has a mouse handler, call it
-    if (session.inDoorManager && session.doorInputHandler) {
+    // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
+    if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
       console.log('[socket-handlers] Calling doorInputHandler with mouse drag data');
       session.doorInputHandler(JSON.stringify({ type: 'mouse-drag', ...data }));
     }
@@ -186,8 +186,8 @@ function registerCommandHandler(socket: Socket) {
 
     console.log('[socket-handlers] mouse-up received:', data);
 
-    // If door is active and has a mouse handler, call it
-    if (session.inDoorManager && session.doorInputHandler) {
+    // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
+    if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
       console.log('[socket-handlers] Calling doorInputHandler with mouse up data');
       session.doorInputHandler(JSON.stringify({ type: 'mouse-up', ...data }));
     }
@@ -198,8 +198,9 @@ function registerCommandHandler(socket: Socket) {
     const session = getSession(socket.id);
     if (!session) return;
 
-    // If door is active and has a mouse handler, call it
-    if (session.inDoorManager && session.doorInputHandler) {
+    // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
+    // Don't send to regular doors as they expect text input, not mouse events
+    if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
       session.doorInputHandler(JSON.stringify({ type: 'mouse-hover', ...data }));
     }
   });

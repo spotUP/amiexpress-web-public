@@ -223,6 +223,7 @@ export interface BBSSession {
   flagManager?: any; // File flagging manager for batch downloads
   inDoorManager?: boolean; // Whether user is currently in door manager
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
+  mouseEventsEnabled?: boolean; // Whether mouse events should be sent to door (for ANSI editor, etc.)
   ansiEnabled?: boolean; // Whether ANSI is enabled for this session
   currentRoomId?: string; // Current chat room ID for group chat
 
