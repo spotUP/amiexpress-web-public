@@ -1,0 +1,17 @@
+{
+  "name": "tetris",
+  "version": "1.0.0",
+  "description": "Classic block puzzle game with modern graphics and sound",
+  "main": "tetris.ts",
+  "category": "Puzzle Game",
+  "author": "AmiExpress SDK",
+  "license": "MIT",
+  "scripts": {
+    "start": "npx tsx tetris.ts",
+    "build": "npx tsc tetris.ts"
+  },
+  "keywords": ["tetris", "puzzle", "game", "bbs", "door"],
+  "dependencies": {
+    "@amiexpress/sdk": "^1.0.0"
+  }
+}
