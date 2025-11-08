@@ -2,5 +2,7 @@
 *.rom
 *.ROM
 
-# Keep the README
+# Keep the README and AROS ROM files (open-source)
 !README.md
+!aros-rom.bin
+!aros-ext.bin
