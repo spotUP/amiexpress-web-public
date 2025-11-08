@@ -99,6 +99,9 @@ export class ExecLibrary {
   private publicPorts: Map<string, number> = new Map(); // name -> address
   private nextPortAddress: number = 0x0A0000; // Start at 640KB
 
+  // Semaphore tracking
+  private publicSemaphores: Map<string, number> = new Map(); // name -> address
+
   // Signal allocation tracking (32 signals, bits 0-31)
   private allocatedSignals: number = 0; // Bitmask of allocated signals
 
@@ -793,6 +796,61 @@ export class ExecLibrary {
 
     console.log(`[ExecLibrary]   Port "${name}" not found - returning NULL`);
     return 0;
+  }
+
+  /**
+   * FindSemaphore() - LVO -306 (0xFFFFFECE)
+   *
+   * Find a public semaphore by name.
+   *
+   * Parameters:
+   *   A1 = Name (C-string pointer)
+   *
+   * Returns:
+   *   D0 = Semaphore pointer (0 if not found)
+   *
+   * WHO doors (like RTW) use FindSemaphore() to locate "AEServer.%d" semaphores
+   * that contain node status information (multicom protocol).
+   */
+  findSemaphore(nameAddr: number): number {
+    const name = this.emulator.readString(nameAddr);
+    console.log(`[ExecLibrary] FindSemaphore("${name}")`);
+
+    // Search for semaphore in public registry
+    const semaAddr = this.publicSemaphores.get(name);
+
+    if (semaAddr !== undefined) {
+      console.log(`[ExecLibrary]   Found "${name}" at 0x${semaAddr.toString(16)}`);
+      return semaAddr;
+    }
+
+    console.log(`[ExecLibrary]   Semaphore "${name}" not found - returning NULL`);
+    return 0;
+  }
+
+  /**
+   * AddSemaphore() - LVO -270 (0xFFFFFEF2)
+   *
+   * Add a semaphore to the public list.
+   *
+   * Parameters:
+   *   A1 = Semaphore structure pointer
+   *
+   * The semaphore structure starts with a Node header containing the name.
+   * Node structure offsets:
+   *   +8:  ln_Name (APTR to name string)
+   */
+  addSemaphore(semaphoreAddr: number): void {
+    // Read semaphore name from ln_Name field (offset +8 in Node header)
+    const nameAddr = this.emulator.readMemory32(semaphoreAddr + 8);
+    const name = this.emulator.readString(nameAddr);
+
+    console.log(`[ExecLibrary] AddSemaphore(0x${semaphoreAddr.toString(16)}) name="${name}"`);
+
+    // Add to public semaphores registry
+    this.publicSemaphores.set(name, semaphoreAddr);
+
+    console.log(`[ExecLibrary]   Semaphore "${name}" added to public list`);
   }
 
   /**

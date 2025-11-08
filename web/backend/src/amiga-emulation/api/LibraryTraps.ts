@@ -15,6 +15,7 @@ import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { ExecLibrary } from './ExecLibrary';
 import { AEDoorLibrary } from './AEDoorLibrary';
 import { DosLibrary } from './DosLibrary';
+import { IconLibrary } from './IconLibrary';
 
 /**
  * Library function vector entry
@@ -346,6 +347,23 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
+    offset: -594,  // LVO -594 (0xFFFFFDA6) - FindSemaphore
+    name: 'FindSemaphore',
+    handler: (emu, lib: ExecLibrary) => {
+      const nameAddr = emu.getRegister(9);   // A1
+      return lib.findSemaphore(nameAddr);
+    }
+  },
+  {
+    offset: -598,  // LVO -598 (0xFFFFFDA2) - AddSemaphore
+    name: 'AddSemaphore',
+    handler: (emu, lib: ExecLibrary) => {
+      const semaphoreAddr = emu.getRegister(9);   // A1
+      lib.addSemaphore(semaphoreAddr);
+      return 0;
+    }
+  },
+  {
     offset: -366,  // LVO -366 (0xFFFFFE72)
     name: 'PutMsg',
     handler: (emu, lib: ExecLibrary) => {
@@ -473,6 +491,53 @@ const EXEC_VECTORS: LibraryVector[] = [
 ];
 
 /**
+ * icon.library function vectors
+ * Icon/Tooltype access for .info files
+ */
+const ICON_VECTORS: LibraryVector[] = [
+  {
+    offset: -30,  // LVO -30 (0xFFFFFFE2) - GetDiskObject
+    name: 'GetDiskObject',
+    handler: (emu, lib: IconLibrary) => {
+      lib.GetDiskObject();
+      return emu.getRegister(0);  // D0
+    }
+  },
+  {
+    offset: -36,  // LVO -36 (0xFFFFFFDC) - PutDiskObject
+    name: 'PutDiskObject',
+    handler: (emu, lib: IconLibrary) => {
+      lib.PutDiskObject();
+      return emu.getRegister(0);  // D0
+    }
+  },
+  {
+    offset: -42,  // LVO -42 (0xFFFFFFD6) - FreeDiskObject
+    name: 'FreeDiskObject',
+    handler: (emu, lib: IconLibrary) => {
+      lib.FreeDiskObject();
+      return 0;
+    }
+  },
+  {
+    offset: -48,  // LVO -48 (0xFFFFFFD0) - FindToolType
+    name: 'FindToolType',
+    handler: (emu, lib: IconLibrary) => {
+      lib.FindToolType();
+      return emu.getRegister(0);  // D0
+    }
+  },
+  {
+    offset: -54,  // LVO -54 (0xFFFFFFCA) - MatchToolValue
+    name: 'MatchToolValue',
+    handler: (emu, lib: IconLibrary) => {
+      lib.MatchToolValue();
+      return emu.getRegister(0);  // D0
+    }
+  },
+];
+
+/**
  * Library trap handler
  *
  * Manages interception of library calls via ILLEGAL instructions
@@ -483,6 +548,7 @@ export class LibraryTraps {
   private execLibrary: ExecLibrary;
   private aedoorLibrary: AEDoorLibrary | null = null;
   private dosLibrary: DosLibrary | null = null;
+  private iconLibrary: IconLibrary | null = null;
 
   // Map of trap address -> vector entry
   private trapMap: Map<number, LibraryVector> = new Map();
@@ -524,6 +590,13 @@ export class LibraryTraps {
    */
   setDOSLibrary(lib: DosLibrary): void {
     this.dosLibrary = lib;
+  }
+
+  /**
+   * Set the icon.library instance
+   */
+  setIconLibrary(lib: IconLibrary): void {
+    this.iconLibrary = lib;
   }
 
   /**
@@ -631,6 +704,44 @@ export class LibraryTraps {
     }
 
     console.log(`[LibraryTraps] Installed ${AEDOOR_VECTORS.length} AEDoor.library vectors`);
+  }
+
+  /**
+   * Install icon.library vectors
+   */
+  installIconVectors(): void {
+    if (!this.iconLibrary) {
+      console.error('[LibraryTraps] Cannot install icon vectors: library not set');
+      return;
+    }
+
+    const iconBase = this.execLibrary.getLibraryBase('icon.library');
+    if (iconBase === 0) {
+      console.error('[LibraryTraps] Cannot install icon vectors: library not opened');
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing icon.library vectors at base 0x${iconBase.toString(16)}`);
+
+    for (const vector of ICON_VECTORS) {
+      const trapAddr = iconBase + vector.offset;
+
+      // Store mapping of address to handler
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.iconLibrary);
+
+      // Also store mapping by offset (array-based to handle collisions)
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.iconLibrary);
+
+      console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
+    }
+
+    console.log(`[LibraryTraps] Installed ${ICON_VECTORS.length} icon.library vectors`);
   }
 
   /**

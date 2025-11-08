@@ -4,6 +4,7 @@ import { HunkLoader } from './loader/HunkLoader';
 import { ExecLibrary } from './api/ExecLibrary';
 import { AEDoorLibrary } from './api/AEDoorLibrary';
 import { DosLibrary } from './api/DosLibrary';
+import { IconLibrary } from './api/IconLibrary';
 import { LibraryTraps } from './api/LibraryTraps';
 import { XIMProtocol } from './XIMProtocol';
 import { KickstartRom } from './KickstartRom';
@@ -28,6 +29,7 @@ export class AmigaDoorSession {
   private execLibrary: ExecLibrary | null = null;
   private aedoorLibrary: AEDoorLibrary | null = null;
   private dosLibrary: DosLibrary | null = null;
+  private iconLibrary: IconLibrary | null = null;
   private libraryTraps: LibraryTraps | null = null;
   private ximProtocol: XIMProtocol | null = null;
   private socket: Socket;
@@ -349,8 +351,8 @@ export class AmigaDoorSession {
     console.log('[AmigaDoorSession] Initializing node status semaphores for WHO doors...');
 
     // Initialize multiPort/singlePort semaphore structures for WHO door access
-    // WHO doors (like RTW) search for node information via FindPort()
-    nodeStatusManager.initializeInEmulator(this.emulator, 0xB0000);
+    // WHO doors (like RTW) search for node information via FindSemaphore("AEServer.%d")
+    nodeStatusManager.initializeInEmulator(this.emulator, this.execLibrary, 0xB0000);
 
     // Update current node status (reuse nodeId from above)
     const userName = this.config.bbsSession?.user?.username || 'Unknown';
@@ -367,16 +369,6 @@ export class AmigaDoorSession {
 
     console.log(`[AmigaDoorSession] Node ${nodeId} status: ${userName} running ${path.basename(this.config.executablePath)}`);
 
-    // RTW and other WHO doors search for "AEServer.%d" ports to detect active nodes
-    // Create AEServer ports for all nodes (WHO doors check which exist via FindPort)
-    console.log('[AmigaDoorSession] Creating AEServer ports for node detection...');
-    for (let i = 0; i < 8; i++) {
-      const serverPortName = `AEServer.${i}`;
-      const serverPortAddr = this.execLibrary.createPublicPort(serverPortName);
-      console.log(`[AmigaDoorSession] Created ${serverPortName} at 0x${serverPortAddr.toString(16)}`);
-    }
-    console.log('[AmigaDoorSession] AEServer ports created for WHO door node detection');
-
     console.log('[AmigaDoorSession] Creating AEDoor.library...');
 
     // Create AEDoorLibrary with socket and session data
@@ -385,6 +377,13 @@ export class AmigaDoorSession {
       this.emulator,
       this.config.bbsSession || {}
     );
+
+    console.log('[AmigaDoorSession] Creating icon.library...');
+
+    // Create IconLibrary for .info file access
+    // bbsRoot is project root (2 levels up from backend directory)
+    const bbsRoot = path.resolve(process.cwd(), '../..');
+    this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
 
     console.log('[AmigaDoorSession] Installing library call traps...');
 
@@ -397,6 +396,9 @@ export class AmigaDoorSession {
     // Set AEDoorLibrary reference
     this.libraryTraps.setAEDoorLibrary(this.aedoorLibrary);
 
+    // Set icon.library reference
+    this.libraryTraps.setIconLibrary(this.iconLibrary);
+
     // Set up callback to install library vectors when libraries are opened
     this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {
       if (name.toLowerCase() === 'dos.library') {
@@ -406,6 +408,10 @@ export class AmigaDoorSession {
       if (name.toLowerCase() === 'aedoor.library') {
         console.log('[AmigaDoorSession] AEDoor.library opened, installing vectors...');
         this.libraryTraps!.installAEDoorVectors();
+      }
+      if (name.toLowerCase() === 'icon.library') {
+        console.log('[AmigaDoorSession] icon.library opened, installing vectors...');
+        this.libraryTraps!.installIconVectors();
       }
     });
 
@@ -803,10 +809,9 @@ export class AmigaDoorSession {
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
       // Send initial message to door
-      // WHO2 expects a simple startup message on its Process port,
-      // not a WbStartup message (it's not a Workbench tool)
+      // WHO2 needs a WbStartup message to get program name and find WHO.info
       if (!this.startupMessageSent) {
-        this.sendSimpleStartupMessage();
+        this.sendInitialXimMessage();
         this.startupMessageSent = true;
       }
 

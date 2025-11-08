@@ -1,11 +1,11 @@
 import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
+import * as fs from 'fs';
+import * as path from 'path';
+import { execSync } from 'child_process';
 
 /**
  * icon.library - Amiga Icon/Tooltype Library
  * Provides access to .info files and their tooltypes
- *
- * This is a STUB implementation that returns fake data to allow doors to initialize.
- * Real icon.library would parse .info files from disk.
  *
  * Function offsets (negative values):
  * -30 = GetDiskObject
@@ -24,9 +24,11 @@ export class IconLibrary {
   private emulator: MoiraEmulator;
   private diskObjects: Map<number, DiskObject> = new Map();
   private nextDiskObjectAddr: number = 0x60000; // DiskObjects at 384KB
+  private bbsRoot: string;
 
-  constructor(emulator: MoiraEmulator) {
+  constructor(emulator: MoiraEmulator, bbsRoot: string = '~/Code/amiexpress-web') {
     this.emulator = emulator;
+    this.bbsRoot = bbsRoot;
   }
 
   /**
@@ -38,15 +40,56 @@ export class IconLibrary {
    */
   GetDiskObject(): void {
     const namePtr = this.emulator.getRegister(CPURegister.A0);
-    const name = this.readString(namePtr);
+    let name = this.readString(namePtr);
 
     console.log(`[icon.library] GetDiskObject("${name}")`);
 
-    // For now, return a fake DiskObject with no tooltypes
-    // Real implementation would load from disk
-    const diskObjAddr = this.createFakeDiskObject([]);
+    // Translate AmigaOS device assignments to Unix paths
+    if (name.startsWith('DOORS:')) {
+      name = 'doors/' + name.substring(6);
+      console.log(`[icon.library]   Translated DOORS: -> ${name}`);
+    } else if (name.startsWith('BBS:')) {
+      name = 'backend/BBS/' + name.substring(4);
+      console.log(`[icon.library]   Translated BBS: -> ${name}`);
+    } else if (name.startsWith('SYS:')) {
+      name = 'system/' + name.substring(4);
+      console.log(`[icon.library]   Translated SYS: -> ${name}`);
+    }
 
-    console.log(`  Returning fake DiskObject at 0x${diskObjAddr.toString(16)}`);
+    // Convert to absolute path
+    let infoPath = name;
+    if (!path.isAbsolute(name)) {
+      infoPath = path.join(this.bbsRoot, name);
+    }
+
+    // Add .info extension if not present
+    if (!infoPath.endsWith('.info')) {
+      infoPath += '.info';
+    }
+
+    console.log(`[icon.library]   Looking for: ${infoPath}`);
+
+    // Check if file exists
+    if (!fs.existsSync(infoPath)) {
+      console.log(`[icon.library]   File not found - returning NULL`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      return;
+    }
+
+    // Parse .info file to extract tooltypes
+    const tooltypes = this.parseInfoFile(infoPath);
+    if (!tooltypes) {
+      console.log(`[icon.library]   Failed to parse .info file - returning NULL`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      return;
+    }
+
+    console.log(`[icon.library]   Found ${tooltypes.length} tooltypes`);
+
+    // Create DiskObject with actual tooltypes
+    const diskObjAddr = this.createFakeDiskObject(tooltypes);
+
+    console.log(`[icon.library]   Returning DiskObject at 0x${diskObjAddr.toString(16)}`);
 
     this.emulator.setRegister(CPURegister.D0, diskObjAddr);
   }
@@ -99,15 +142,46 @@ export class IconLibrary {
     const toolTypeArrayPtr = this.emulator.getRegister(CPURegister.A0);
     const typeNamePtr = this.emulator.getRegister(CPURegister.A1);
 
-    const typeName = this.readString(typeNamePtr);
+    const typeName = this.readString(typeNamePtr).toUpperCase();
 
     console.log(`[icon.library] FindToolType(0x${toolTypeArrayPtr.toString(16)}, "${typeName}")`);
 
-    // For now, return NULL (not found)
-    // Real implementation would search the tooltype array
-    console.log(`  Stub: returning NULL (tooltype not found)`);
+    // Loop through NULL-terminated array of string pointers
+    let arrayIndex = 0;
+    while (true) {
+      // Read pointer from array (each entry is 4 bytes)
+      const tooltypeStrPtr = this.readLong(toolTypeArrayPtr + (arrayIndex * 4));
 
-    this.emulator.setRegister(CPURegister.D0, 0);
+      // NULL terminator - not found
+      if (tooltypeStrPtr === 0) {
+        console.log(`[icon.library]   Tooltype "${typeName}" not found - returning NULL`);
+        this.emulator.setRegister(CPURegister.D0, 0);
+        return;
+      }
+
+      // Read tooltype string
+      const tooltypeStr = this.readString(tooltypeStrPtr);
+
+      // Check if it starts with typeName (case-insensitive)
+      const upperTooltypeStr = tooltypeStr.toUpperCase();
+      if (upperTooltypeStr.startsWith(typeName)) {
+        // Check if followed by '=' or end of string (exact match)
+        if (tooltypeStr.length === typeName.length || tooltypeStr[typeName.length] === '=') {
+          console.log(`[icon.library]   Found "${typeName}" -> "${tooltypeStr}" at 0x${tooltypeStrPtr.toString(16)}`);
+          this.emulator.setRegister(CPURegister.D0, tooltypeStrPtr);
+          return;
+        }
+      }
+
+      arrayIndex++;
+
+      // Safety check to prevent infinite loops
+      if (arrayIndex > 1000) {
+        console.log(`[icon.library]   ERROR: Tooltype array too large (>1000 entries) - returning NULL`);
+        this.emulator.setRegister(CPURegister.D0, 0);
+        return;
+      }
+    }
   }
 
   /**
@@ -128,11 +202,11 @@ export class IconLibrary {
   }
 
   /**
-   * Create a fake DiskObject structure in memory
+   * Create a DiskObject structure in memory with tooltypes
    */
   private createFakeDiskObject(toolTypes: string[]): number {
     const diskObjAddr = this.nextDiskObjectAddr;
-    this.nextDiskObjectAddr += 256; // Reserve 256 bytes per DiskObject
+    this.nextDiskObjectAddr += 0x1000; // Reserve 4KB per DiskObject (enough for tooltypes)
 
     // DiskObject structure (simplified):
     // struct DiskObject {
@@ -162,8 +236,41 @@ export class IconLibrary {
     // DefaultTool pointer (NULL)
     this.writeLong(diskObjAddr + 49, 0);
 
-    // ToolTypes pointer (NULL for now - could create array if needed)
-    this.writeLong(diskObjAddr + 53, 0);
+    // ToolTypes array - if we have tooltypes, create the array
+    let tooltypesPtr = 0;
+    if (toolTypes.length > 0) {
+      // Allocate space for tooltype array and strings
+      const tooltypesArrayAddr = diskObjAddr + 256; // Start array at +256
+      const tooltypeStringsAddr = diskObjAddr + 512; // Start strings at +512
+
+      let stringOffset = 0;
+      for (let i = 0; i < toolTypes.length; i++) {
+        const tooltypeStr = toolTypes[i];
+        const tooltypeAddr = tooltypeStringsAddr + stringOffset;
+
+        // Write pointer to string in array
+        this.writeLong(tooltypesArrayAddr + (i * 4), tooltypeAddr);
+
+        // Write string to memory
+        for (let j = 0; j < tooltypeStr.length; j++) {
+          this.emulator.writeMemory(tooltypeAddr + j, tooltypeStr.charCodeAt(j));
+        }
+        this.emulator.writeMemory(tooltypeAddr + tooltypeStr.length, 0); // Null terminator
+
+        console.log(`[icon.library]       Tooltype[${i}] at 0x${tooltypeAddr.toString(16)}: "${tooltypeStr}"`);
+
+        stringOffset += tooltypeStr.length + 1;
+      }
+
+      // NULL-terminate the tooltype array
+      this.writeLong(tooltypesArrayAddr + (toolTypes.length * 4), 0);
+
+      tooltypesPtr = tooltypesArrayAddr;
+      console.log(`[icon.library]     ToolTypes array at 0x${tooltypesPtr.toString(16)}, ${toolTypes.length} entries`);
+    }
+
+    // ToolTypes pointer
+    this.writeLong(diskObjAddr + 53, tooltypesPtr);
 
     // Other fields (zeros)
     this.writeLong(diskObjAddr + 57, 0); // CurrentX
@@ -183,6 +290,33 @@ export class IconLibrary {
   }
 
   /**
+   * Parse .info file using `strings` command to extract tooltypes
+   */
+  private parseInfoFile(infoPath: string): string[] | null {
+    try {
+      // Use strings command to extract text from .info file
+      const output = execSync(`strings "${infoPath}"`, { encoding: 'utf-8' });
+      const lines = output.split('\n');
+
+      const tooltypes: string[] = [];
+
+      // Look for lines that contain '=' (tooltype format)
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.includes('=') && !trimmed.startsWith('#') && !trimmed.startsWith('/')) {
+          console.log(`[icon.library]     Found tooltype: "${trimmed}"`);
+          tooltypes.push(trimmed);
+        }
+      }
+
+      return tooltypes;
+    } catch (error) {
+      console.log(`[icon.library] Error parsing .info file: ${error}`);
+      return null;
+    }
+  }
+
+  /**
    * Helper: Read null-terminated string from memory
    */
   private readString(address: number, maxLen: number = 256): string {
@@ -193,6 +327,17 @@ export class IconLibrary {
       bytes.push(byte);
     }
     return String.fromCharCode(...bytes);
+  }
+
+  /**
+   * Helper: Read 32-bit big-endian value from memory
+   */
+  private readLong(address: number): number {
+    const b0 = this.emulator.readMemory(address + 0);
+    const b1 = this.emulator.readMemory(address + 1);
+    const b2 = this.emulator.readMemory(address + 2);
+    const b3 = this.emulator.readMemory(address + 3);
+    return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
   }
 
   /**

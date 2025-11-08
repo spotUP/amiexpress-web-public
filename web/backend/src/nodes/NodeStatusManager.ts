@@ -9,6 +9,7 @@
  */
 
 import { MoiraEmulator } from '../amiga-emulation/cpu/MoiraEmulator';
+import { ExecLibrary } from '../amiga-emulation/api/ExecLibrary';
 
 /**
  * Node status codes (from express.e)
@@ -66,6 +67,7 @@ export class NodeStatusManager {
   private readonly MAX_NODES = 8;  // AmiExpress supports up to 8 nodes
   private multiPortAddress: number = 0;
   private singlePortAddresses: Map<number, number> = new Map();
+  private nameAddresses: Map<number, number> = new Map(); // node -> name string address
 
   /**
    * Initialize node status structures in emulator memory
@@ -74,9 +76,10 @@ export class NodeStatusManager {
    * The structure contains node information for all active nodes.
    *
    * @param emulator - The Moira emulator instance
+   * @param execLibrary - The ExecLibrary instance for semaphore registration
    * @param baseAddress - Base address for semaphore structure (default: 0xB0000)
    */
-  initializeInEmulator(emulator: MoiraEmulator, baseAddress: number = 0xB0000): void {
+  initializeInEmulator(emulator: MoiraEmulator, execLibrary: ExecLibrary, baseAddress: number = 0xB0000): void {
     console.log('[NodeStatusManager] Initializing multiPort semaphore structure...');
 
     this.multiPortAddress = baseAddress;
@@ -97,15 +100,37 @@ export class NodeStatusManager {
     // Create singlePort structures for each node
     // Each singlePort is 300 bytes (approx)
     let currentAddr = baseAddress + 0x1000;  // Offset from multiPort
+    const nameStringAddresses: number[] = [];
 
     for (let i = 0; i < this.MAX_NODES; i++) {
       this.singlePortAddresses.set(i, currentAddr);
-      this.writeSinglePortToMemory(emulator, i, currentAddr);
+
+      // Allocate space for semaphore name string (e.g., "AEServer.0")
+      const nameStr = `AEServer.${i}`;
+      const nameAddr = currentAddr + 0x180;  // Store name at end of structure
+
+      // Write semaphore name string
+      for (let j = 0; j < nameStr.length; j++) {
+        emulator.writeMemory(nameAddr + j, nameStr.charCodeAt(j));
+      }
+      emulator.writeMemory(nameAddr + nameStr.length, 0);  // Null terminator
+
+      nameStringAddresses.push(nameAddr);
+      this.nameAddresses.set(i, nameAddr);  // Save for later updates
+
+      this.writeSinglePortToMemory(emulator, i, currentAddr, nameAddr);
       currentAddr += 0x200;  // 512 bytes per node (plenty of space)
     }
 
+    // Register all AEServer semaphores with ExecLibrary
+    console.log('[NodeStatusManager] Registering AEServer semaphores...');
+    for (let i = 0; i < this.MAX_NODES; i++) {
+      const semaphoreAddr = this.singlePortAddresses.get(i)!;
+      execLibrary.addSemaphore(semaphoreAddr);
+    }
+
     console.log(`[NodeStatusManager] MultiPort at 0x${this.multiPortAddress.toString(16)}`);
-    console.log(`[NodeStatusManager] Node status structures initialized`);
+    console.log(`[NodeStatusManager] Node status structures initialized and registered`);
   }
 
   /**
@@ -113,6 +138,12 @@ export class NodeStatusManager {
    *
    * Structure (from axcommon.e):
    *   +0:   semi (semaphore header, 46 bytes)
+   *          +0: ln_Succ (4 bytes)
+   *          +4: ln_Pred (4 bytes)
+   *          +8: ln_Name (4 bytes) - pointer to semaphore name string
+   *          +12: ln_Type (1 byte)
+   *          +13: ln_Pri (1 byte)
+   *          +14-45: rest of semaphore structure
    *   +46:  list (14 bytes)
    *   +60:  multiCom (4 bytes)
    *   +64:  semiName (20 bytes)
@@ -123,15 +154,21 @@ export class NodeStatusManager {
    *   +250: misc2 (100 bytes)
    *   +350: baud (10 bytes)
    */
-  private writeSinglePortToMemory(emulator: MoiraEmulator, nodeId: number, address: number): void {
+  private writeSinglePortToMemory(emulator: MoiraEmulator, nodeId: number, address: number, nameAddr: number): void {
     const node = this.nodes.get(nodeId);
     if (!node) return;
 
-    // Write semaphore header (simplified - just structure, no real semaphore)
-    // ss structure: ln_Node (14 bytes) + rest of Semaphore structure
+    // Write semaphore header (Node structure + semaphore fields)
+    // Clear the entire semaphore header
     for (let i = 0; i < 46; i++) {
       emulator.writeMemory(address + i, 0);
     }
+
+    // Write ln_Name pointer (offset +8) - points to "AEServer.%d" string
+    emulator.writeMemory32(address + 8, nameAddr);
+
+    // Write ln_Type (offset +12) - NT_SIGNALSEM = 15
+    emulator.writeMemory(address + 12, 15);
 
     // Write MinList header (14 bytes)
     for (let i = 0; i < 14; i++) {
@@ -199,8 +236,9 @@ export class NodeStatusManager {
 
     // Write updated structure to emulator memory
     const address = this.singlePortAddresses.get(nodeId);
-    if (address) {
-      this.writeSinglePortToMemory(emulator, nodeId, address);
+    const nameAddr = this.nameAddresses.get(nodeId);
+    if (address && nameAddr) {
+      this.writeSinglePortToMemory(emulator, nodeId, address, nameAddr);
     }
 
     console.log(`[NodeStatusManager] Updated node ${nodeId}: ${node.handle} - ${NodeStatus[node.status]}`);
