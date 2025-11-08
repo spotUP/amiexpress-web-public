@@ -39,6 +39,7 @@ export { QuestSystem } from '../components/quest/quest-system';
 
 // Tools
 export { ReleasePacker } from '../tools/packer';
+export { DebugOverlay } from '../tools/debug/debug-overlay';
 
 // Version
 export const SDK_VERSION = '1.0.0';
