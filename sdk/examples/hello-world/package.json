@@ -1,0 +1,16 @@
+{
+  "name": "hello-world",
+  "version": "1.0.0",
+  "description": "Simple Hello World BBS door",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../.."
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}
