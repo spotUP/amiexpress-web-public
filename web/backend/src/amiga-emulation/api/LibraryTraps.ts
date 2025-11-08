@@ -260,6 +260,22 @@ const DOS_VECTORS: LibraryVector[] = [
       return 0;  // Exit doesn't return in the normal sense
     }
   },
+  {
+    offset: -534,  // LVO -534 (0xFDE6) - V36+
+    name: 'GetArgStr',
+    handler: (emu, lib: DosLibrary) => {
+      lib.GetArgStr();
+      return emu.getRegister(0);  // Returns pointer in D0
+    }
+  },
+  {
+    offset: -576,  // LVO -576 (0xFDC0) - V36+
+    name: 'GetCliProgramName',
+    handler: (emu, lib: DosLibrary) => {
+      lib.GetCliProgramName();
+      return emu.getRegister(0);  // Returns success/failure in D0
+    }
+  },
 ];
 
 /**

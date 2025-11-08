@@ -477,44 +477,26 @@ export class AmigaDoorSession {
     this.emulator.setRegister(14, execBaseAddr);  // A6 = ExecBase
     console.log(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
 
-    // Set up command-line arguments (argc/argv)
-    // Doors need to know which node they're running on via argv[1]
-    const ARGV_BASE = 0x0F0000;
-    const ARGV_ARRAY = ARGV_BASE;         // Array of pointers
-    const ARG0_STRING = ARGV_BASE + 0x100; // Program name string
-    const ARG1_STRING = ARGV_BASE + 0x200; // Node number string
-
-    // Extract door name from executable path (e.g., "/path/to/RTW" -> "RTW")
-    const progName = path.basename(this.config.executablePath);
-    console.log(`[AmigaDoorSession] Door program name: "${progName}"`);
-
-    // Write argv[0] = door program name
-    for (let i = 0; i < progName.length; i++) {
-      this.emulator.writeMemory(ARG0_STRING + i, progName.charCodeAt(i));
-    }
-    this.emulator.writeMemory(ARG0_STRING + progName.length, 0); // Null terminator
-    this.emulator.writeMemory32(ARGV_ARRAY + 0, ARG0_STRING);
-
-    // Write argv[1] = "0" (node number)
-    // Get node ID from bbsSession or default to "0"
+    // Set up command-line arguments for SAS/C startup
+    // SAS/C c.o expects: D0 = length of argument string, A0 = pointer to argument string
+    // AmigaDOS passes arguments WITH leading space: " 2" not "2"
+    // The startup code will parse the string into argc/argv
     const nodeId = this.config.bbsSession?.nodeId || 0;
-    const nodeStr = nodeId.toString();
-    for (let i = 0; i < nodeStr.length; i++) {
-      this.emulator.writeMemory(ARG1_STRING + i, nodeStr.charCodeAt(i));
+    const argString = " " + nodeId.toString();  // Leading space + node number (e.g., " 2")
+    const ARG_STRING_ADDR = 0x0F0100;
+
+    // Write argument string to memory
+    for (let i = 0; i < argString.length; i++) {
+      this.emulator.writeMemory(ARG_STRING_ADDR + i, argString.charCodeAt(i));
     }
-    this.emulator.writeMemory(ARG1_STRING + nodeStr.length, 0); // Null terminator
-    this.emulator.writeMemory32(ARGV_ARRAY + 4, ARG1_STRING);
+    this.emulator.writeMemory(ARG_STRING_ADDR + argString.length, 0); // Null terminator
 
-    // Write argv[2] = NULL (end of array)
-    this.emulator.writeMemory32(ARGV_ARRAY + 8, 0);
-
-    // Set argc=2, argv in registers (SAS C calling convention)
-    this.emulator.setRegister(0, 2);           // D0 = argc
-    this.emulator.setRegister(8, ARGV_ARRAY);  // A0 = argv
-    console.log(`  D0 (argc): 2`);
-    console.log(`  A0 (argv): 0x${ARGV_ARRAY.toString(16)}`);
-    console.log(`    argv[0]: "${progName}" at 0x${ARG0_STRING.toString(16)}`);
-    console.log(`    argv[1]: "${nodeStr}" at 0x${ARG1_STRING.toString(16)}`);
+    // Set D0 = length of argument string (INCLUDING leading space), A0 = pointer to argument string
+    // This is the AmigaDOS/SAS-C calling convention for CLI programs
+    this.emulator.setRegister(0, argString.length);  // D0 = argument length
+    this.emulator.setRegister(8, ARG_STRING_ADDR);   // A0 = argument string
+    console.log(`  D0 (arg length): ${argString.length}`);
+    console.log(`  A0 (arg string): 0x${ARG_STRING_ADDR.toString(16)} = "${argString}"`);
 
     // Now set PC
     this.emulator.setRegister(16, hunkFile.entryPoint);  // PC
@@ -534,15 +516,12 @@ export class AmigaDoorSession {
     // We provide an address that will be detected as program exit
     const exitTrapAddress = 0xFFFF00;  // Special address to detect program exit
 
-    // CRITICAL FIX: Push exit sentinel at multiple stack locations
-    // Door may push/pop values during initialization, changing SP
-    // WHO door exit sequence: MOVE.L (A7)+,D0; MOVEM.L (A7)+,D1-D7/A0-A6; RTS
-    // This pops 1 + 13 registers = 56 bytes before RTS
-    // Cover wider range: finalSP-16 to finalSP+64 to handle all variations
-    for (let offset = -16; offset <= 64; offset += 4) {
-      this.emulator.writeMemory32(finalSP + offset, exitTrapAddress);
-    }
-    console.log(`  Exit trap address: 0x${exitTrapAddress.toString(16)} at 0x${(finalSP-16).toString(16)}-0x${(finalSP+64).toString(16)}`);
+    // Push SINGLE exit address at top of stack for RTS
+    // DO NOT fill entire stack with exit sentinels - this corrupts argc/argv saved by C startup code!
+    // SAS/C startup: saves D0 (argc) and A0 (argv) to stack BEFORE calling main()
+    // If we fill stack with 0xFFFF00, main() gets corrupted argc/argv
+    this.emulator.writeMemory32(finalSP, exitTrapAddress);  // Single exit trap at SP
+    console.log(`  Exit trap address: 0x${exitTrapAddress.toString(16)} at SP=0x${finalSP.toString(16)}`);
 
     // CRITICAL: Initialize stack-based code that door expects
     // Door executes JSR (3682,A7) at PC=0x1248 (instruction 198)
@@ -826,12 +805,13 @@ export class AmigaDoorSession {
       //   ...
       // }
 
-      // Write command line BSTR: "WHO 3" at 0x90100
-      const cmdLineAddr = 0x90100;
+      // Write command line BSTR: "WHO 3"
+      // BSTR format: BPTR points to LENGTH BYTE (4-byte aligned), string data follows
+      const cmdLineAddr = 0x90100;  // 4-byte aligned
       const cmdLine = `WHO ${nodeId}`;
-      this.emulator.writeMemory(cmdLineAddr, cmdLine.length);  // BSTR length
+      this.emulator.writeMemory(cmdLineAddr, cmdLine.length);  // BSTR length at 0x90100
       for (let i = 0; i < cmdLine.length; i++) {
-        this.emulator.writeMemory(cmdLineAddr + 1 + i, cmdLine.charCodeAt(i));
+        this.emulator.writeMemory(cmdLineAddr + 1 + i, cmdLine.charCodeAt(i));  // String data at 0x90101+
       }
       this.emulator.writeMemory(cmdLineAddr + 1 + cmdLine.length, 0); // Null terminate
 
@@ -840,14 +820,44 @@ export class AmigaDoorSession {
       this.emulator.writeMemory32(cliStructAddr + 0x04, 0);  // cli_SetName
       this.emulator.writeMemory32(cliStructAddr + 0x08, 0);  // cli_CommandDir
       this.emulator.writeMemory32(cliStructAddr + 0x0C, 0);  // cli_ReturnCode
+      // BPTR points to LENGTH BYTE (4-byte aligned)
       this.emulator.writeMemory32(cliStructAddr + 0x10, cmdLineAddr >> 2); // cli_CommandName (BPTR)
+      this.emulator.writeMemory32(cliStructAddr + 0x14, 0);  // cli_FailLevel
+      this.emulator.writeMemory32(cliStructAddr + 0x18, 0);  // cli_Prompt
+      this.emulator.writeMemory32(cliStructAddr + 0x1C, 0);  // cli_StandardInput
+      this.emulator.writeMemory32(cliStructAddr + 0x20, 0);  // cli_CurrentInput
+      this.emulator.writeMemory32(cliStructAddr + 0x24, 0);  // cli_CommandFile
+      this.emulator.writeMemory32(cliStructAddr + 0x28, -1); // cli_Interactive = TRUE
+      this.emulator.writeMemory32(cliStructAddr + 0x2C, 0);  // cli_Background = FALSE
+      this.emulator.writeMemory32(cliStructAddr + 0x30, 0);  // cli_CurrentOutput
+      this.emulator.writeMemory32(cliStructAddr + 0x34, 4096); // cli_DefaultStack
+      this.emulator.writeMemory32(cliStructAddr + 0x38, 0);  // cli_StandardOutput
+      this.emulator.writeMemory32(cliStructAddr + 0x3C, 0);  // cli_Module
 
       // Set pr_CLI to point to CLI structure
       this.emulator.writeMemory32(taskAddr + prCliOffset, cliStructAddr >> 2); // pr_CLI is BPTR!
 
       console.log(`[AmigaDoorSession] Created CLI structure at 0x${cliStructAddr.toString(16)}`);
-      console.log(`[AmigaDoorSession]   cli_CommandName: "${cmdLine}" at 0x${cmdLineAddr.toString(16)}`);
+      console.log(`[AmigaDoorSession]   cli_CommandName BSTR: length=${cmdLine.length} at 0x${cmdLineAddr.toString(16)}, data="${cmdLine}"`);
       console.log(`[AmigaDoorSession]   pr_CLI (BPTR): 0x${(cliStructAddr >> 2).toString(16)} -> 0x${cliStructAddr.toString(16)}`);
+
+      // Set up CLI info for GetArgStr() and GetCliProgramName()
+      // GetArgStr() should return just the arguments (node number), not the program name
+      const argStringAddr = 0x90200;  // Separate from full command line
+      const argString = nodeId.toString();
+      for (let i = 0; i < argString.length; i++) {
+        this.emulator.writeMemory(argStringAddr + i, argString.charCodeAt(i));
+      }
+      this.emulator.writeMemory(argStringAddr + argString.length, 0); // Null terminate
+
+      // Extract program name from executable path
+      const progName = path.basename(this.config.executablePath);
+
+      // Tell DOS library about CLI info
+      if (this.dosLibrary) {
+        this.dosLibrary.setCliInfo(argStringAddr, progName);
+        console.log(`[AmigaDoorSession] Set CLI info: argString="${argString}" at 0x${argStringAddr.toString(16)}, progName="${progName}"`);
+      }
 
       // Don't send message - WHO runs as pure CLI command
       if (!this.startupMessageSent) {

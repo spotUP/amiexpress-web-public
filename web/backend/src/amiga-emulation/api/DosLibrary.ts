@@ -85,6 +85,10 @@ export class DosLibrary {
   private dirIterators: Map<number, string[]> = new Map();
   private dirIteratorIndex: Map<number, number> = new Map();
 
+  // CLI support (for GetArgStr, GetProgramName)
+  private argStringPtr: number = 0;     // Pointer to argument string
+  private programName: string = '';     // Program name
+
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
 
@@ -1406,6 +1410,64 @@ export class DosLibrary {
     // Stub: not supported
     this.emulator.setRegister(CPURegister.D0, 0);
     this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+  }
+
+  /**
+   * GetArgStr - Get pointer to argument string (V36+)
+   * Returns: D0 = pointer to argument string (NULL-terminated)
+   *
+   * Returns a pointer to the (null-terminated) arguments for the program.
+   * This is the same string passed in A0 on startup from CLI.
+   */
+  GetArgStr(): void {
+    console.log(`[dos.library] GetArgStr() returning 0x${this.argStringPtr.toString(16)}`);
+    this.emulator.setRegister(CPURegister.D0, this.argStringPtr);
+  }
+
+  /**
+   * GetCliProgramName - Get program name from CLI structure (V36+)
+   * D1 = buffer pointer
+   * D2 = buffer length
+   * Returns: D0 = success (DOSTRUE=-1) or failure (DOSFALSE=0)
+   *
+   * Extracts the program name from the CLI structure and puts it into the buffer.
+   * If the buffer is too small, the name is truncated.
+   * If no CLI structure is present, returns failure.
+   */
+  GetCliProgramName(): void {
+    const bufPtr = this.emulator.getRegister(CPURegister.D1);
+    const bufLen = this.emulator.getRegister(CPURegister.D2);
+
+    console.log(`[dos.library] GetCliProgramName(buf=0x${bufPtr.toString(16)}, len=${bufLen})`);
+
+    if (this.programName.length === 0) {
+      // No program name set - return empty string and failure
+      this.emulator.writeMemory(bufPtr, 0);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = 212; // ERROR_OBJECT_WRONG_TYPE
+      console.log(`[dos.library] GetCliProgramName: No CLI structure, returning failure`);
+      return;
+    }
+
+    // Copy program name to buffer (truncate if necessary)
+    const copyLen = Math.min(this.programName.length, bufLen - 1);
+    for (let i = 0; i < copyLen; i++) {
+      this.emulator.writeMemory(bufPtr + i, this.programName.charCodeAt(i));
+    }
+    this.emulator.writeMemory(bufPtr + copyLen, 0); // Null terminator
+
+    this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
+    this.lastError = this.ERROR_NO_ERROR;
+    console.log(`[dos.library] GetCliProgramName: Returned "${this.programName.substring(0, copyLen)}"`);
+  }
+
+  /**
+   * Set CLI information (called by AmigaDoorSession)
+   */
+  setCliInfo(argStringPtr: number, programName: string): void {
+    this.argStringPtr = argStringPtr;
+    this.programName = programName;
+    console.log(`[dos.library] CLI info set: argString=0x${argStringPtr.toString(16)}, progName="${programName}"`);
   }
 
   /**
