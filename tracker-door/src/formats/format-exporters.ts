@@ -169,10 +169,10 @@ export class XMExporter {
             noteData.push(note.instrument);
           }
 
-          // Volume
-          if (note.volume !== 0x80) {
+          // Volume column
+          if (note.volumeColumn !== undefined && note.volumeColumn !== 0) {
             packByte |= 0x04;
-            noteData.push(note.volume);
+            noteData.push(note.volumeColumn);
           }
 
           packedData.push(packByte);

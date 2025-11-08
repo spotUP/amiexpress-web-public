@@ -25,6 +25,7 @@ import { MODParser } from './formats/mod-parser';
 import { XMParser } from './formats/xm-parser';
 import { ITParser } from './formats/it-parser';
 import { XIParser, ITIParser, XRNIParser } from './formats/instrument-parsers';
+import { formatVolumeColumn, parseVolumeColumn } from './audio/volume-column';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -315,8 +316,17 @@ class TrackerDoor {
         const key = `${row}:${ch}`;
         const note = pattern.data.get(key) || { note: '...', instrument: 0, volume: 0 };
 
-        const noteStr = note.note === '...' ? '... .. ..' :
-                       `${note.note} ${String(note.instrument).padStart(2,'0')} ${note.volume.toString(16).toUpperCase().padStart(2,'0')}`;
+        // Format: "C-4 01 40" where 40 is volume column display
+        let noteStr: string;
+        if (note.note === '...') {
+          noteStr = '... .. ..';
+        } else {
+          const instrStr = String(note.instrument).padStart(2,'0');
+          const volColStr = note.volumeColumn !== undefined && note.volumeColumn !== 0
+            ? formatVolumeColumn(parseVolumeColumn(note.volumeColumn))
+            : '..';
+          noteStr = `${note.note} ${instrStr} ${volColStr}`;
+        }
 
         const cellColor = ch === this.currentChannel && row === this.currentRow ? AnsiColor.Green : rowColor;
         line += ` ${noteStr}│`;

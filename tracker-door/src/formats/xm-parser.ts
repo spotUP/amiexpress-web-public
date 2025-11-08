@@ -357,7 +357,7 @@ export class XMParser {
       // Unpacked note (5 bytes)
       const noteNum = buffer.readUInt8(offset);
       const instrument = buffer.readUInt8(offset + 1);
-      const volume = buffer.readUInt8(offset + 2);
+      const volumeColumn = buffer.readUInt8(offset + 2);
       const effectType = buffer.readUInt8(offset + 3);
       const effectParam = buffer.readUInt8(offset + 4);
 
@@ -370,16 +370,23 @@ export class XMParser {
         note = '---';
       }
 
-      if (note === '...' && instrument === 0 && volume === 0 && effectType === 0) {
+      if (note === '...' && instrument === 0 && volumeColumn === 0 && effectType === 0) {
         return { data: null, bytesRead: 5 };
       }
 
+      const noteData: any = {
+        note,
+        instrument,
+        volume: 0x40, // Default volume
+      };
+
+      // Add volume column if present
+      if (volumeColumn > 0) {
+        noteData.volumeColumn = volumeColumn;
+      }
+
       return {
-        data: {
-          note,
-          instrument,
-          volume: volume || 0x80
-        },
+        data: noteData,
         bytesRead: 5
       };
     }

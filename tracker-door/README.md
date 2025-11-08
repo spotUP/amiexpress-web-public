@@ -18,6 +18,34 @@
 - **Mouse Support:** Full mouse input with click-to-select, drag selection, scroll wheel
 - **Comprehensive Effects:** 26+ tracker effect commands (0-9, A-Z)
 - **Effect Column:** Classic MOD/XM/IT style effect commands
+- **Volume Column:** FastTracker II compatible volume column (set volume, slides, vibrato, panning)
+
+### FastTracker II Compatibility
+- **Volume Column Commands:**
+  - $10-$50: Set volume (0-64)
+  - $60-$6F: Volume slide down
+  - $70-$7F: Volume slide up
+  - $80-$8F: Fine volume down
+  - $90-$9F: Fine volume up
+  - $A0-$AF: Vibrato speed
+  - $B0-$BF: Vibrato depth
+  - $C0-$CF: Set panning
+  - $D0-$DF: Pan slide left
+  - $E0-$EF: Pan slide right
+  - $F0-$FF: Tone portamento
+- **Extended Commands (Exx):**
+  - E1x/E2x: Fine portamento up/down
+  - E3x: Glissando control (semitone rounding)
+  - E4x: Vibrato waveform (sine/saw/square/random + retrigger)
+  - E5x: Set finetune
+  - E6x: Pattern loop (E60 = set start, E6x = loop x times)
+  - E7x: Tremolo waveform (sine/saw/square/random + retrigger)
+  - E8x: Set panning (fine)
+  - E9x: Retrigger note
+  - EAx/EBx: Fine volume slide up/down
+  - ECx: Note cut (after x ticks)
+  - EDx: Note delay (delay x ticks)
+  - EEx: Pattern delay (delay x rows)
 
 ### Audio Engine (Tone.js)
 - **Soft Synths:** Multiple synthesis types (FM, AM, subtractive, wavetable)
