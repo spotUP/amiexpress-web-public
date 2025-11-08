@@ -23,6 +23,7 @@ import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
 import { registerSocketHandlers } from './server/socket-handlers';
 import { sessions, userSessions, socketToUser, setSession } from './server/session-manager';
+import { app } from './server/app';
 import { findSecurityScreen } from './utils/screen-security.util';
 import {
   displayConferenceBulletins,
@@ -318,7 +319,6 @@ let chatState: ChatState = {
   chatToggle: true // Like AmiExpress F7 chat toggle
 };
 
-const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
@@ -480,9 +480,6 @@ setNewUserDependencies({
   sessions
 });
 
-app.use(cors());
-app.use(express.json());
-
 // Development: Disable caching to prevent stale session issues
 if (process.env.NODE_ENV !== 'production') {
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -492,10 +489,6 @@ if (process.env.NODE_ENV !== 'production') {
     next();
   });
 }
-
-app.get('/', (req: Request, res: Response) => {
-  res.json({ message: 'AmiExpress Backend API' });
-});
 
 // Authentication endpoints
 app.post('/auth/login', (req: Request, res: Response) => authHandler.login(req, res));
