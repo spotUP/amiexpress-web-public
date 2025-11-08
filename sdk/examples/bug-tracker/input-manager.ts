@@ -64,7 +64,8 @@ export class InputManager {
     this.renderSingleLine(prompt, currentValue, cursorPos, x, y, maxLength, showCounter);
 
     return new Promise((resolve) => {
-      const inputHandler = async (key: string) => {
+      const inputHandler = async (user: any, keyEvent: any) => {
+        const key = keyEvent.key;
         // Handle special keys
         if (key === 'Enter' || key === '\r') {
           // Validate
@@ -228,7 +229,8 @@ export class InputManager {
     this.renderMultiLine(prompt, lines, currentLine, cursorPos, x, y, maxLineLength, maxLines);
 
     return new Promise((resolve) => {
-      const inputHandler = (key: string) => {
+      const inputHandler = (user: any, keyEvent: any) => {
+        const key = keyEvent.key;
         // Ctrl+D - Done
         if (key === '\x04') {
           const value = lines.join('\n');

@@ -67,18 +67,18 @@ class TicTacToe {
       this.showMainMenu();
     });
 
-    this.door.onInput((key: string, userId: number) => {
+    this.door.onInput((user, keyEvent) => {
       if (this.gameOver) {
-        if (key.toLowerCase() === 'r') {
+        if (keyEvent.key.toLowerCase() === 'r') {
           this.resetGame();
-        } else if (key.toLowerCase() === 'q') {
+        } else if (keyEvent.key.toLowerCase() === 'q') {
           this.quit();
         }
         return;
       }
 
       // Handle move input (1-9 for cells)
-      const move = parseInt(key);
+      const move = parseInt(keyEvent.key);
       if (move >= 1 && move <= 9) {
         this.makeMove(move - 1);
       }
@@ -150,14 +150,14 @@ class TicTacToe {
     this.door.sendAnsi(this.gfx.render(), this.userId);
 
     // Handle menu input
-    const menuHandler = (key: string) => {
-      if (key === '1') {
+    const menuHandler = (user: any, keyEvent: any) => {
+      if (keyEvent.key === '1') {
         this.createGame();
         this.door.off('input', menuHandler);
-      } else if (key === '2') {
+      } else if (keyEvent.key === '2') {
         this.joinGame();
         this.door.off('input', menuHandler);
-      } else if (key.toLowerCase() === 'q') {
+      } else if (keyEvent.key.toLowerCase() === 'q') {
         this.quit();
       }
     };

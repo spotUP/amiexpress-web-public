@@ -213,21 +213,14 @@ class SpaceShooter {
       this.showTitleScreen();
     });
 
-    this.door.onInput((key: string, userId: number) => {
-      const keyEvent = {
-        key,
-        ctrl: false,
-        alt: false,
-        shift: false,
-        code: key.charCodeAt(0)
-      };
+    this.door.onInput((user, keyEvent) => {
       this.input.processInput(keyEvent);
 
       // Handle movement
-      if (key === 'ArrowLeft') this.state.player.vx = -PLAYER_SPEED;
-      else if (key === 'ArrowRight') this.state.player.vx = PLAYER_SPEED;
-      else if (key === 'ArrowUp') this.state.player.vy = -PLAYER_SPEED;
-      else if (key === 'ArrowDown') this.state.player.vy = PLAYER_SPEED;
+      if (keyEvent.key === 'ArrowLeft') this.state.player.vx = -PLAYER_SPEED;
+      else if (keyEvent.key === 'ArrowRight') this.state.player.vx = PLAYER_SPEED;
+      else if (keyEvent.key === 'ArrowUp') this.state.player.vy = -PLAYER_SPEED;
+      else if (keyEvent.key === 'ArrowDown') this.state.player.vy = PLAYER_SPEED;
     });
 
     this.door.onDisconnect(() => {

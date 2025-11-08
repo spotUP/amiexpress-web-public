@@ -340,14 +340,7 @@ class DungeonRPG {
       this.startGame();
     });
 
-    this.door.onInput((key: string, userId: number) => {
-      const keyEvent = {
-        key,
-        ctrl: false,
-        alt: false,
-        shift: false,
-        code: key.charCodeAt(0)
-      };
+    this.door.onInput((user, keyEvent) => {
       this.input.processInput(keyEvent);
     });
 

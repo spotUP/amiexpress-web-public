@@ -195,8 +195,8 @@ class BugTracker {
       this.showMainMenu();
     });
 
-    this.door.onInput((key: string) => {
-      this.handleInput(key);
+    this.door.onInput((user, key) => {
+      this.handleInput(key.key);
     });
 
     this.door.onDisconnect(() => {
@@ -265,7 +265,7 @@ class BugTracker {
 
     // Menu options
     const menuY = 17;
-    const isSysop = this.user.secLevel >= 100;
+    const isSysop = this.user.securityLevel >= 100;
 
     this.gfx.drawText(20, menuY, '┌──────────────────────────────────────┐', AnsiColor.Cyan);
     this.gfx.drawText(20, menuY + 1, '│                                      │', AnsiColor.Cyan);
@@ -347,7 +347,7 @@ class BugTracker {
       this.showSearchPrompt();
     } else if (k === 'l') {
       this.showLeaderboard();
-    } else if (k === 'm' && this.user && this.user.secLevel >= 100) {
+    } else if (k === 'm' && this.user && this.user.securityLevel >= 100) {
       this.showManagementMenu();
     } else if (k === 'q') {
       this.quit();
@@ -387,7 +387,7 @@ class BugTracker {
     this.gfx.drawText(5, y + 3, '│  Use ↑↓ arrow keys to navigate  |  Press ENTER to select           │', AnsiColor.White);
     this.gfx.drawText(5, y + 4, '├──────────────────────────────────────────────────────────────────────┤', AnsiColor.Cyan);
 
-    const templates = this.templateManager.getAllTemplates();
+    const templates = this.templateManager.getTemplates();
     const displayTemplates = [{ id: 'none', name: '[ No Template - Start from Scratch ]', description: 'Create a custom bug report' } as BugTemplate, ...templates];
 
     const startIdx = Math.max(0, this.selectedIndex - 5);
@@ -416,7 +416,7 @@ class BugTracker {
       return;
     }
 
-    const templates = this.templateManager.getAllTemplates();
+    const templates = this.templateManager.getTemplates();
     const displayTemplates = [{ id: 'none', name: '[ No Template ]' } as BugTemplate, ...templates];
 
     if (key === 'ArrowUp') {
@@ -646,10 +646,10 @@ class BugTracker {
         'Enter a short, descriptive title for this bug:',
         7,
         12,
-        { maxLength: 100, required: true, initialValue: this.formData.title }
+        { maxLength: 100, required: true }
       );
 
-      if (titleResult.cancelled) {
+      if (titleResult.canceled) {
         this.showMainMenu();
         return;
       }
@@ -661,10 +661,10 @@ class BugTracker {
         'Provide a detailed description of the bug:',
         7,
         12,
-        { maxLines: 5, initialValue: this.formData.description }
+        { maxLines: 5 }
       );
 
-      if (descResult.cancelled) {
+      if (descResult.canceled) {
         this.showMainMenu();
         return;
       }
@@ -676,10 +676,10 @@ class BugTracker {
         'List the steps to reproduce this bug:',
         7,
         12,
-        { maxLines: 5, initialValue: this.formData.stepsToReproduce }
+        { maxLines: 5 }
       );
 
-      if (stepsResult.cancelled) {
+      if (stepsResult.canceled) {
         this.showMainMenu();
         return;
       }
@@ -691,10 +691,10 @@ class BugTracker {
         'What should happen?',
         7,
         12,
-        { maxLength: 200, initialValue: this.formData.expectedBehavior }
+        { maxLength: 200 }
       );
 
-      if (expectedResult.cancelled) {
+      if (expectedResult.canceled) {
         this.showMainMenu();
         return;
       }
@@ -706,10 +706,10 @@ class BugTracker {
         'What actually happened?',
         7,
         12,
-        { maxLength: 200, initialValue: this.formData.actualBehavior }
+        { maxLength: 200 }
       );
 
-      if (actualResult.cancelled) {
+      if (actualResult.canceled) {
         this.showMainMenu();
         return;
       }
@@ -1085,7 +1085,7 @@ class BugTracker {
     this.gfx.drawText(12, y + 1, this.selectedBug.actualBehavior.substring(0, 66), AnsiColor.White);
 
     // Footer
-    const isSysop = this.user.secLevel >= 100;
+    const isSysop = this.user.securityLevel >= 100;
     if (isSysop) {
       this.gfx.drawText(2, 21, '[C] Add Comment  [S] Change Status  [ESC] Back', AnsiColor.Yellow);
     } else {
@@ -1100,7 +1100,7 @@ class BugTracker {
       this.showBugList(this.listFilter);
     } else if (key.toLowerCase() === 'c') {
       this.addComment();
-    } else if (key.toLowerCase() === 's' && this.user && this.user.secLevel >= 100) {
+    } else if (key.toLowerCase() === 's' && this.user && this.user.securityLevel >= 100) {
       this.showStatusChangeMenu();
     }
   }
@@ -1115,7 +1115,7 @@ class BugTracker {
       { maxLines: 5, required: true }
     );
 
-    if (commentResult.cancelled || !commentResult.value) {
+    if (commentResult.canceled || !commentResult.value) {
       this.showBugDetail();
       return;
     }
@@ -1196,7 +1196,7 @@ class BugTracker {
   // ==========================================================================
 
   private showManagementMenu(): void {
-    if (!this.user || this.user.secLevel < 100) return;
+    if (!this.user || this.user.securityLevel < 100) return;
 
     this.currentView = 'manage';
     this.gfx.clear(AnsiColor.Black);
@@ -1411,7 +1411,7 @@ class BugTracker {
       { maxLength: 50 }
     );
 
-    if (searchResult.cancelled || !searchResult.value) {
+    if (searchResult.canceled || !searchResult.value) {
       this.showMainMenu();
       return;
     }
