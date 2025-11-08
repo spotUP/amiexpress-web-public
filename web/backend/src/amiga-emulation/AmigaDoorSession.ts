@@ -1484,8 +1484,10 @@ export class AmigaDoorSession {
 
     // 3. Write WBArg entry (8 bytes at wbArgAddr)
     // For WHO2, we need to point to its PROGDIR: (doors/who/) and filename "WHO"
-    this.emulator.writeMemory32(wbArgAddr + 0, 0);            // wa_Lock (0 = use PROGDIR:)
-    this.emulator.writeMemory32(wbArgAddr + 4, filenameAddr); // wa_Name (BSTR pointer)
+    // IMPORTANT: wa_Lock and wa_Name are BPTR (BCPL pointers), not C pointers!
+    // BPTR = pointer >> 2 (divided by 4)
+    this.emulator.writeMemory32(wbArgAddr + 0, 0);            // wa_Lock (0 = NULL = use PROGDIR:)
+    this.emulator.writeMemory32(wbArgAddr + 4, filenameAddr >> 2); // wa_Name (BPTR to BSTR)
 
     // 4. Write filename as BSTR (AmigaDOS BSTR = length byte + chars)
     const filename = "WHO";
@@ -1500,8 +1502,8 @@ export class AmigaDoorSession {
     console.log(`  sm_Process: 0x${doorPortAddr.toString(16)}`);
     console.log(`  sm_NumArgs: 1`);
     console.log(`  sm_ArgList: 0x${wbArgAddr.toString(16)}`);
-    console.log(`  WBArg[0].wa_Lock: 0x0 (PROGDIR:)`);
-    console.log(`  WBArg[0].wa_Name: 0x${filenameAddr.toString(16)} ("${filename}")`);
+    console.log(`  WBArg[0].wa_Lock: 0x0 (BPTR NULL = PROGDIR:)`);
+    console.log(`  WBArg[0].wa_Name: 0x${(filenameAddr >> 2).toString(16)} (BPTR to BSTR at 0x${filenameAddr.toString(16)} = "${filename}")`);
 
     // Put the message in the door's message port queue
     this.execLibrary.putMsg(doorPortAddr, msgAddr);
