@@ -91,6 +91,10 @@ public
 tmp/
 temp/
 
+# SDK Preview Server downloads
+sdk/tools/preview/downloads/
+sdk/tools/preview/public-react/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
