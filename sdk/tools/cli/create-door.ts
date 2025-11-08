@@ -305,11 +305,22 @@ async function installDependencies(
 
     if (template === 'typescript') {
       // Install npm packages
-      execSync('npm install', { stdio: 'ignore' });
+      try {
+        execSync('npm install', { stdio: 'inherit' });
+      } catch (error: any) {
+        console.error(chalk.red('\n❌ npm install failed. Please run it manually:'));
+        console.error(chalk.gray(`  cd ${path.basename(projectPath)}`));
+        console.error(chalk.gray('  npm install'));
+        throw error;
+      }
     } else if (template === 'python') {
       // Install pip packages
       if (fs.existsSync('requirements.txt')) {
-        execSync('pip install -r requirements.txt', { stdio: 'ignore' });
+        try {
+          execSync('pip install -r requirements.txt', { stdio: 'inherit' });
+        } catch (error: any) {
+          console.error(chalk.yellow('\n⚠️  pip install failed. You may need to install dependencies manually.'));
+        }
       }
     }
 
