@@ -26,13 +26,48 @@ const path = require('path');
 const fs = require('fs');
 const chokidar = require('chokidar');
 const archiver = require('archiver');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
+
+const PORT = process.env.PORT || 8080;
+
+/**
+ * Kill any existing servers on the port before starting
+ */
+function killOldServers() {
+  try {
+    console.log(`🔍 Checking for existing servers on port ${PORT}...`);
+
+    // Try to find and kill any process on the port
+    const findCmd = `lsof -ti:${PORT}`;
+    try {
+      const pids = execSync(findCmd, { encoding: 'utf8' }).trim();
+      if (pids) {
+        console.log(`💀 Killing old server processes: ${pids.split('\n').join(', ')}`);
+        execSync(`lsof -ti:${PORT} | xargs kill -9`, { stdio: 'ignore' });
+
+        // Wait a moment for the port to be freed
+        const sleep = (ms) => execSync(`sleep ${ms / 1000}`, { stdio: 'ignore' });
+        sleep(1000);
+
+        console.log('✅ Old servers killed');
+      } else {
+        console.log('✅ No old servers found');
+      }
+    } catch (err) {
+      // No process found on port (lsof returns non-zero when nothing found)
+      console.log('✅ No old servers found');
+    }
+  } catch (err) {
+    console.warn('⚠️  Could not check for old servers:', err.message);
+  }
+}
+
+// Kill old servers before starting
+killOldServers();
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
-
-const PORT = process.env.PORT || 8080;
 
 // Middleware
 app.use(express.json());
