@@ -117,6 +117,7 @@ export class BBSApi {
   /**
    * Get line of input from user with optional prompt
    * Equivalent to AEDoor Prompt() function
+   * Buffers input until Enter is pressed
    *
    * @param prompt Text to display before input
    * @param maxLength Maximum input length (default 255)
@@ -128,16 +129,38 @@ export class BBSApi {
     }
 
     return new Promise<string>((resolve) => {
+      let buffer = '';
+
       const handler = (input: string) => {
-        // Clean up handler
-        delete this.session.doorInputHandler;
+        // Handle each character
+        for (let i = 0; i < input.length; i++) {
+          const ch = input.charAt(i);
+          const code = input.charCodeAt(i);
 
-        // Truncate if needed
-        if (input.length > maxLength) {
-          input = input.substring(0, maxLength);
+          // Enter key - submit line
+          if (ch === '\r' || ch === '\n') {
+            delete this.session.doorInputHandler;
+            resolve(buffer);
+            return;
+          }
+
+          // Backspace - delete last character
+          if (code === 127 || code === 8) {
+            if (buffer.length > 0) {
+              buffer = buffer.substring(0, buffer.length - 1);
+              // Send backspace sequence: move left, space, move left
+              this.socket.emit('ansi-output', '\b \b');
+            }
+            continue;
+          }
+
+          // Regular character - add to buffer if printable and under max length
+          if (code >= 32 && code <= 126 && buffer.length < maxLength) {
+            buffer += ch;
+            // Echo character
+            this.socket.emit('ansi-output', ch);
+          }
         }
-
-        resolve(input);
       };
 
       // Register handler in session
