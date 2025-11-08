@@ -2,7 +2,7 @@
   "name": "tic-tac-toe-multiplayer",
   "version": "1.0.0",
   "description": "Turn-based multiplayer Tic-Tac-Toe demonstrating Network Engine",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "author": "AmiExpress SDK Team",
   "license": "MIT",
   "category": "game",

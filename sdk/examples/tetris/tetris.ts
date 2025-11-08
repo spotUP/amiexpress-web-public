@@ -25,13 +25,20 @@
  * ```
  */
 
-import Door from '../../core/door-api';
-import { GraphicsEngine } from '../../engines/graphics/graphics-engine';
-import { AudioEngine } from '../../engines/audio/audio-engine';
-import { HUDBuilder } from '../../components/hud/hud-builder';
-import { MenuSystem } from '../../components/menus/menu-system';
-import { SaveManager } from '../../systems/save-manager';
-import { Position, AnsiColor } from '../../core/types';
+import {
+  Door,
+  GraphicsEngine,
+  AudioEngine,
+  HUDBuilder,
+  MenuSystem,
+  SaveManager,
+  AnsiColor
+} from '@amiexpress/bbs-door-sdk';
+
+interface Position {
+  x: number;
+  y: number;
+}
 
 /** Tetris piece shapes (tetrominos) */
 const PIECES = {

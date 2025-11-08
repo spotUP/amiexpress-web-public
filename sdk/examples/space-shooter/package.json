@@ -2,7 +2,7 @@
   "name": "space-shooter-example",
   "version": "1.0.0",
   "description": "Complete space shooter game showcasing all AmiExpress SDK features",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "author": "AmiExpress SDK Team",
   "license": "MIT",
   "category": "action",

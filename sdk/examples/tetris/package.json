@@ -2,7 +2,7 @@
   "name": "tetris",
   "version": "1.0.0",
   "description": "Classic block puzzle game with modern graphics and sound",
-  "main": "tetris.ts",
+  "main": "dist/tetris.js",
   "category": "Puzzle Game",
   "author": "AmiExpress SDK",
   "license": "MIT",
@@ -12,6 +12,6 @@
   },
   "keywords": ["tetris", "puzzle", "game", "bbs", "door"],
   "dependencies": {
-    "@amiexpress/sdk": "^1.0.0"
+    "@amiexpress/bbs-door-sdk": "file:../.."
   }
 }
