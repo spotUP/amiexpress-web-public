@@ -53,11 +53,22 @@ build_example() {
     if grep -q '"build"' package.json; then
         echo -e "   └─ Compiling TypeScript..."
         npm run build > /tmp/build-$example_name.log 2>&1
-        if [ $? -eq 0 ]; then
+        build_exit=$?
+
+        if [ $build_exit -eq 0 ]; then
             echo -e "${GREEN}   ✓ Built successfully${NC}"
         else
-            echo -e "${RED}   ✗ Build failed - first 3 errors:${NC}"
-            grep "error TS" /tmp/build-$example_name.log | head -3
+            echo -e "${RED}   ✗ Build failed (exit code: $build_exit)${NC}"
+
+            # Show TypeScript errors if present
+            if grep -q "error TS" /tmp/build-$example_name.log; then
+                echo -e "${YELLOW}   TypeScript errors (first 5):${NC}"
+                grep "error TS" /tmp/build-$example_name.log | head -5 | sed 's/^/     /'
+            else
+                # Show last 10 lines for other errors
+                echo -e "${YELLOW}   Build output (last 10 lines):${NC}"
+                tail -10 /tmp/build-$example_name.log | sed 's/^/     /'
+            fi
             return
         fi
     else
