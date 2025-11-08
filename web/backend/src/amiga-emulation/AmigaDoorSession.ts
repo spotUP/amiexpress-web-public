@@ -803,10 +803,15 @@ export class AmigaDoorSession {
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
       // Send initial XIM message to door with user data
+      // DISABLED: WHO2 is a CLI tool, not a Workbench tool
+      // It doesn't expect a WbStartup message
+      /*
       if (!this.startupMessageSent) {
         this.sendInitialXimMessage();
         this.startupMessageSent = true;
       }
+      */
+      this.startupMessageSent = true; // Skip sending message
 
       while (this.isRunning) {
         // === STEP 1: Check if paused (async input) ===
