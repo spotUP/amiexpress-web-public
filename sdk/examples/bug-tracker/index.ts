@@ -66,6 +66,7 @@ interface BugReport {
   id: number;
   title: string;
   category: BugCategory;
+  subcategory?: string;
   description: string;
   stepsToReproduce: string;
   expectedBehavior: string;
@@ -78,6 +79,7 @@ interface BugReport {
   updatedAt: number;
   attachments: BugAttachment[];
   comments: BugComment[];
+  tags?: string[];
 }
 
 interface BugComment {
@@ -102,7 +104,7 @@ class BugTracker {
   private user?: BBSUser;
   private dataFile: string;
   private data: DataStore;
-  private currentView: 'main' | 'create' | 'view' | 'list' | 'filter' | 'manage' | 'template' | 'status-change' | 'leaderboard' = 'main';
+  private currentView: 'main' | 'create' | 'view' | 'list' | 'filter' | 'manage' | 'template' | 'status-change' | 'leaderboard' | 'draft-recovery' | 'duplicate-warning' = 'main';
   private selectedBug?: BugReport;
 
   // Advanced module instances
@@ -125,10 +127,6 @@ class BugTracker {
   private listOffset: number = 0;
   private selectedIndex: number = 0;
   private itemsPerPage: number = 10;
-
-  // Input collection state
-  private inputBuffer: string = '';
-  private isCollectingInput: boolean = false;
 
   constructor() {
     this.door = new Door({
@@ -239,6 +237,12 @@ class BugTracker {
         break;
       case 'leaderboard':
         this.handleLeaderboardInput(key);
+        break;
+      case 'draft-recovery':
+        this.handleDraftRecoveryInput(key);
+        break;
+      case 'duplicate-warning':
+        this.handleDuplicateWarningInput(key);
         break;
     }
   }
@@ -444,6 +448,7 @@ class BugTracker {
         this.formData.stepsToReproduce = this.selectedTemplate.stepsTemplate || '';
         this.formData.expectedBehavior = this.selectedTemplate.expectedTemplate || '';
         this.formData.actualBehavior = this.selectedTemplate.actualTemplate || '';
+        this.formData.tags = this.selectedTemplate.tags || [];
       }
 
       this.formStep = 0;
@@ -453,8 +458,14 @@ class BugTracker {
     }
   }
 
+  private currentDrafts: Draft[] = [];
+
   private showDraftRecoveryPrompt(drafts: Draft[]): void {
     if (!this.user) return;
+
+    this.currentView = 'draft-recovery';
+    this.currentDrafts = drafts;
+    this.selectedIndex = 0;
 
     this.gfx.clear(AnsiColor.Black);
     this.drawHeader('DRAFT RECOVERY', 2);
@@ -480,6 +491,56 @@ class BugTracker {
     this.door.sendAnsi(this.gfx.render(), this.user.id);
   }
 
+  private handleDraftRecoveryInput(key: string): void {
+    if (key === 'Escape' || key === '\x1b') {
+      this.currentDrafts = [];
+      this.showMainMenu();
+      return;
+    }
+
+    if (key === 'ArrowUp') {
+      this.selectedIndex = Math.max(0, this.selectedIndex - 1);
+      this.showDraftRecoveryPrompt(this.currentDrafts);
+    } else if (key === 'ArrowDown') {
+      this.selectedIndex = Math.min(this.currentDrafts.length - 1, this.selectedIndex + 1);
+      this.showDraftRecoveryPrompt(this.currentDrafts);
+    } else if (key === 'Enter' || key === '\r') {
+      // Recover selected draft
+      const draft = this.currentDrafts[this.selectedIndex];
+      this.formData = draft.data;
+      this.formStep = draft.formStep;
+      this.currentDraftId = draft.id;
+      this.currentDrafts = [];
+
+      // Continue from where user left off
+      this.currentView = 'create';
+      if (this.formStep === 0) {
+        this.selectedIndex = 0;
+        this.showCategorySelection();
+      } else {
+        this.collectFormInput();
+      }
+    } else if (key.toLowerCase() === 'd') {
+      // Delete selected draft
+      const draft = this.currentDrafts[this.selectedIndex];
+      this.autoSaveManager.deleteDraft(draft.id);
+      this.currentDrafts.splice(this.selectedIndex, 1);
+
+      if (this.currentDrafts.length === 0) {
+        this.uiComponents.showToast('All drafts deleted', ToastType.INFO);
+        setTimeout(() => this.showTemplateSelection(), 1000);
+      } else {
+        this.selectedIndex = Math.min(this.selectedIndex, this.currentDrafts.length - 1);
+        this.uiComponents.showToast('Draft deleted', ToastType.INFO);
+        this.showDraftRecoveryPrompt(this.currentDrafts);
+      }
+    } else if (key.toLowerCase() === 'n') {
+      // Start new report (ignore drafts)
+      this.currentDrafts = [];
+      this.showTemplateSelection();
+    }
+  }
+
   private showCategorySelection(): void {
     if (!this.user) return;
 
@@ -502,35 +563,6 @@ class BugTracker {
 
     this.gfx.drawText(15, y + 4 + categories.length, '└─────────────────────────────────────────────────┘', AnsiColor.Cyan);
     this.gfx.drawText(15, 21, '[ESC] Cancel', AnsiColor.Red);
-
-    this.door.sendAnsi(this.gfx.render(), this.user.id);
-  }
-
-  private showFormField(fieldName: string, prompt: string, multiline: boolean = false): void {
-    if (!this.user) return;
-
-    this.gfx.clear(AnsiColor.Black);
-    this.drawHeader(`STEP ${this.formStep + 2}: ${fieldName.toUpperCase()}`, 2);
-
-    this.drawProgressBar(this.formStep, 5);
-
-    const y = 10;
-    this.gfx.drawText(5, y, prompt, AnsiColor.Green);
-    this.gfx.drawText(5, y + 2, '┌────────────────────────────────────────────────────────────────────────┐', AnsiColor.Cyan);
-
-    if (multiline) {
-      this.gfx.drawText(5, y + 3, '│ Type your text below (max 10 lines). Press CTRL+D when finished.      │', AnsiColor.White);
-      this.gfx.drawText(5, y + 4, '├────────────────────────────────────────────────────────────────────────┤', AnsiColor.Cyan);
-      for (let i = 0; i < 10; i++) {
-        this.gfx.drawText(5, y + 5 + i, '│                                                                        │', AnsiColor.Cyan);
-      }
-      this.gfx.drawText(5, y + 15, '└────────────────────────────────────────────────────────────────────────┘', AnsiColor.Cyan);
-    } else {
-      this.gfx.drawText(5, y + 3, '│                                                                        │', AnsiColor.Cyan);
-      this.gfx.drawText(5, y + 4, '└────────────────────────────────────────────────────────────────────────┘', AnsiColor.Cyan);
-    }
-
-    this.gfx.drawText(5, 21, '[ESC] Cancel  [ENTER] Continue', AnsiColor.Yellow);
 
     this.door.sendAnsi(this.gfx.render(), this.user.id);
   }
@@ -698,7 +730,9 @@ class BugTracker {
     }
   }
 
-  private async checkForDuplicatesAndSubmit(): Promise<void> {
+  private currentDuplicates: SimilarBug[] = [];
+
+  private checkForDuplicatesAndSubmit(): void {
     if (!this.user || !this.formData.title) return;
 
     // Show loading while checking
@@ -709,18 +743,17 @@ class BugTracker {
 
     if (duplicates.length > 0) {
       // Show duplicate warning
-      const confirmed = await this.showDuplicateWarning(duplicates);
-      if (!confirmed) {
-        this.showMainMenu();
-        return;
-      }
+      this.showDuplicateWarning(duplicates);
+    } else {
+      this.submitBugReport();
     }
-
-    this.submitBugReport();
   }
 
-  private async showDuplicateWarning(duplicates: SimilarBug[]): Promise<boolean> {
-    if (!this.user) return false;
+  private showDuplicateWarning(duplicates: SimilarBug[]): void {
+    if (!this.user) return;
+
+    this.currentView = 'duplicate-warning';
+    this.currentDuplicates = duplicates;
 
     this.gfx.clear(AnsiColor.Black);
     this.drawHeader('POTENTIAL DUPLICATES FOUND', 2);
@@ -740,18 +773,17 @@ class BugTracker {
     this.gfx.drawText(5, 20, '[Y] Submit anyway  [N] Cancel', AnsiColor.Green);
 
     this.door.sendAnsi(this.gfx.render(), this.user.id);
+  }
 
-    // Wait for confirmation
-    return new Promise((resolve) => {
-      const handler = (key: string) => {
-        if (key.toLowerCase() === 'y') {
-          resolve(true);
-        } else if (key.toLowerCase() === 'n' || key === 'Escape') {
-          resolve(false);
-        }
-      };
-      this.door.onInput(handler);
-    });
+  private handleDuplicateWarningInput(key: string): void {
+    if (key.toLowerCase() === 'y') {
+      this.currentDuplicates = [];
+      this.submitBugReport();
+    } else if (key.toLowerCase() === 'n' || key === 'Escape' || key === '\x1b') {
+      this.currentDuplicates = [];
+      this.uiComponents.showToast('Bug report cancelled', ToastType.INFO);
+      setTimeout(() => this.showMainMenu(), 1000);
+    }
   }
 
   private showPrioritySelection(): void {
@@ -789,102 +821,114 @@ class BugTracker {
   }
 
   private async submitBugReport(): Promise<void> {
-    if (!this.user || !this.formData.category || !this.formData.title) return;
-
-    const now = Date.now();
-    const isCritical = this.formData.priority === BugPriority.CRITICAL;
-
-    const bug: BugReport = {
-      id: this.data.nextId++,
-      title: this.formData.title,
-      category: this.formData.category,
-      description: this.formData.description || '',
-      stepsToReproduce: this.formData.stepsToReproduce || '',
-      expectedBehavior: this.formData.expectedBehavior || '',
-      actualBehavior: this.formData.actualBehavior || '',
-      priority: this.formData.priority || BugPriority.MEDIUM,
-      status: BugStatus.NEW,
-      reporter: this.user.name,
-      reporterId: this.user.id,
-      reportedAt: now,
-      updatedAt: now,
-      attachments: [],
-      comments: []
-    };
-
-    this.data.bugs.push(bug);
-    this.saveData();
-
-    // Delete draft if exists
-    if (this.currentDraftId) {
-      this.autoSaveManager.deleteDraft(this.currentDraftId);
-      this.currentDraftId = undefined;
+    if (!this.user || !this.formData.category || !this.formData.title) {
+      this.uiComponents.showToast('Missing required bug report data', ToastType.ERROR);
+      this.showMainMenu();
+      return;
     }
 
-    // Record bug report in gamification system
-    this.gamification.recordBugReport(this.user.id, this.user.name, isCritical);
-    const stats = this.gamification.getUserStats(this.user.id, this.user.name);
+    try {
+      const now = Date.now();
+      const isCritical = this.formData.priority === BugPriority.CRITICAL;
 
-    // Send webhooks
-    const webhookPayload: BugReportWebhookPayload = {
-      id: bug.id,
-      title: bug.title,
-      category: bug.category,
-      subcategory: bug.subcategory,
-      priority: bug.priority,
-      description: bug.description,
-      reporter: bug.reporter,
-      tags: bug.tags
-    };
+      const bug: BugReport = {
+        id: this.data.nextId++,
+        title: this.formData.title,
+        category: this.formData.category,
+        subcategory: this.formData.subcategory,
+        description: this.formData.description || '',
+        stepsToReproduce: this.formData.stepsToReproduce || '',
+        expectedBehavior: this.formData.expectedBehavior || '',
+        actualBehavior: this.formData.actualBehavior || '',
+        priority: this.formData.priority || BugPriority.MEDIUM,
+        status: BugStatus.NEW,
+        reporter: this.user.name,
+        reporterId: this.user.id,
+        reportedAt: now,
+        updatedAt: now,
+        attachments: [],
+        comments: [],
+        tags: this.formData.tags || []
+      };
 
-    this.webhooks.sendBugReport(webhookPayload).catch(err => {
-      console.error('Webhook error:', err);
-    });
+      this.data.bugs.push(bug);
+      this.saveData();
 
-    // Show success message with gamification info
-    this.gfx.clear(AnsiColor.Black);
-    this.drawHeader('SUCCESS!', 2);
+      // Delete draft if exists
+      if (this.currentDraftId) {
+        this.autoSaveManager.deleteDraft(this.currentDraftId);
+        this.currentDraftId = undefined;
+      }
 
-    const y = 8;
-    this.gfx.drawText(10, y, '╔════════════════════════════════════════════════════════════╗', AnsiColor.Green);
-    this.gfx.drawText(10, y + 1, '║                                                            ║', AnsiColor.Green);
-    this.gfx.drawText(10, y + 2, '║   * Bug report submitted successfully!                    ║', AnsiColor.Green);
-    this.gfx.drawText(10, y + 3, '║                                                            ║', AnsiColor.Green);
-    this.gfx.drawText(10, y + 4, `║   Bug ID: #${String(bug.id).padEnd(47)}║`, AnsiColor.Yellow);
-    this.gfx.drawText(10, y + 5, `║   Priority: ${bug.priority.padEnd(45)}║`, AnsiColor.Cyan);
-    this.gfx.drawText(10, y + 6, '║                                                            ║', AnsiColor.Green);
-    this.gfx.drawText(10, y + 7, '╠════════════════════════════════════════════════════════════╣', AnsiColor.Green);
-    this.gfx.drawText(10, y + 8, '║   REWARDS EARNED                                           ║', AnsiColor.Magenta);
-    this.gfx.drawText(10, y + 9, '║                                                            ║', AnsiColor.Green);
+      // Record bug report in gamification system
+      this.gamification.recordBugReport(this.user.id, this.user.name, isCritical);
+      const stats = this.gamification.getUserStats(this.user.id, this.user.name);
 
-    const pointsEarned = isCritical ? 50 : 10;
-    this.gfx.drawText(10, y + 10, `║   + ${String(pointsEarned)} Points${' '.repeat(47 - String(pointsEarned).length)}║`, AnsiColor.Yellow);
-    this.gfx.drawText(10, y + 11, `║   Level: ${String(stats.level).padEnd(48)}║`, AnsiColor.Cyan);
-    this.gfx.drawText(10, y + 12, `║   Total Points: ${String(stats.points).padEnd(41)}║`, AnsiColor.Cyan);
+      // Send webhooks
+      const webhookPayload: BugReportWebhookPayload = {
+        id: bug.id,
+        title: bug.title,
+        category: bug.category,
+        subcategory: bug.subcategory,
+        priority: bug.priority,
+        description: bug.description,
+        reporter: bug.reporter,
+        tags: bug.tags
+      };
 
-    // Check for new achievements
-    const newAchievements = this.gamification.getUserAchievements(this.user.id)
-      .filter(a => a.unlockedAt && a.unlockedAt > now - 1000);
-
-    if (newAchievements.length > 0) {
-      this.gfx.drawText(10, y + 13, '║                                                            ║', AnsiColor.Green);
-      this.gfx.drawText(10, y + 14, '║   NEW ACHIEVEMENT UNLOCKED!                                ║', AnsiColor.Magenta);
-      newAchievements.forEach((ach, idx) => {
-        this.gfx.drawText(10, y + 15 + idx, `║   ${ach.icon} ${ach.name.padEnd(52)}║`, AnsiColor.Yellow);
+      this.webhooks.sendBugReport(webhookPayload).catch(err => {
+        console.error('Webhook error:', err);
       });
+
+      // Show success message with gamification info
+      this.gfx.clear(AnsiColor.Black);
+      this.drawHeader('SUCCESS!', 2);
+
+      const y = 8;
+      this.gfx.drawText(10, y, '╔════════════════════════════════════════════════════════════╗', AnsiColor.Green);
+      this.gfx.drawText(10, y + 1, '║                                                            ║', AnsiColor.Green);
+      this.gfx.drawText(10, y + 2, '║   * Bug report submitted successfully!                    ║', AnsiColor.Green);
+      this.gfx.drawText(10, y + 3, '║                                                            ║', AnsiColor.Green);
+      this.gfx.drawText(10, y + 4, `║   Bug ID: #${String(bug.id).padEnd(47)}║`, AnsiColor.Yellow);
+      this.gfx.drawText(10, y + 5, `║   Priority: ${bug.priority.padEnd(45)}║`, AnsiColor.Cyan);
+      this.gfx.drawText(10, y + 6, '║                                                            ║', AnsiColor.Green);
+      this.gfx.drawText(10, y + 7, '╠════════════════════════════════════════════════════════════╣', AnsiColor.Green);
+      this.gfx.drawText(10, y + 8, '║   REWARDS EARNED                                           ║', AnsiColor.Magenta);
+      this.gfx.drawText(10, y + 9, '║                                                            ║', AnsiColor.Green);
+
+      const pointsEarned = isCritical ? 50 : 10;
+      this.gfx.drawText(10, y + 10, `║   + ${String(pointsEarned)} Points${' '.repeat(47 - String(pointsEarned).length)}║`, AnsiColor.Yellow);
+      this.gfx.drawText(10, y + 11, `║   Level: ${String(stats.level).padEnd(48)}║`, AnsiColor.Cyan);
+      this.gfx.drawText(10, y + 12, `║   Total Points: ${String(stats.points).padEnd(41)}║`, AnsiColor.Cyan);
+
+      // Check for new achievements
+      const newAchievements = this.gamification.getUserAchievements(this.user.id)
+        .filter(a => a.unlockedAt && a.unlockedAt > now - 1000);
+
+      if (newAchievements.length > 0) {
+        this.gfx.drawText(10, y + 13, '║                                                            ║', AnsiColor.Green);
+        this.gfx.drawText(10, y + 14, '║   NEW ACHIEVEMENT UNLOCKED!                                ║', AnsiColor.Magenta);
+        newAchievements.forEach((ach, idx) => {
+          this.gfx.drawText(10, y + 15 + idx, `║   ${ach.icon} ${ach.name.padEnd(52)}║`, AnsiColor.Yellow);
+        });
+      }
+
+      this.gfx.drawText(10, y + 16, '║                                                            ║', AnsiColor.Green);
+      this.gfx.drawText(10, y + 17, '║   Thank you for your report!                               ║', AnsiColor.White);
+      this.gfx.drawText(10, y + 18, '╚════════════════════════════════════════════════════════════╝', AnsiColor.Green);
+
+      this.door.sendAnsi(this.gfx.render(), this.user.id);
+
+      // Show toast notification
+      this.uiComponents.showToast(`Bug #${bug.id} submitted! +${pointsEarned} pts`, ToastType.SUCCESS);
+
+      // Wait for key then return to main menu
+      setTimeout(() => this.showMainMenu(), 3000);
+    } catch (error) {
+      console.error('Error submitting bug report:', error);
+      this.uiComponents.showToast('Failed to submit bug report', ToastType.ERROR);
+      setTimeout(() => this.showMainMenu(), 2000);
     }
-
-    this.gfx.drawText(10, y + 16, '║                                                            ║', AnsiColor.Green);
-    this.gfx.drawText(10, y + 17, '║   Thank you for your report!                               ║', AnsiColor.White);
-    this.gfx.drawText(10, y + 18, '╚════════════════════════════════════════════════════════════╝', AnsiColor.Green);
-
-    this.door.sendAnsi(this.gfx.render(), this.user.id);
-
-    // Show toast notification
-    this.uiComponents.showToast(`Bug #${bug.id} submitted! +${pointsEarned} pts`, ToastType.SUCCESS);
-
-    // Wait for key then return to main menu
-    setTimeout(() => this.showMainMenu(), 3000);
   }
 
   // ==========================================================================

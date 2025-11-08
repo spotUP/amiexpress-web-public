@@ -19,6 +19,7 @@ export interface UserStats {
   criticalBugsFound: number;
   commentsPosted: number;
   achievements: string[];
+  achievementUnlockTimes: Record<string, number>;  // Achievement ID -> timestamp
   badges: string[];
   title?: string;
   joinedAt: number;
@@ -261,6 +262,7 @@ export class GamificationSystem {
         criticalBugsFound: 0,
         commentsPosted: 0,
         achievements: [],
+        achievementUnlockTimes: {},
         badges: [],
         joinedAt: Date.now(),
         lastActive: Date.now()
@@ -269,6 +271,12 @@ export class GamificationSystem {
 
     const stats = this.userStats.get(userId)!;
     stats.lastActive = Date.now();
+
+    // Ensure achievementUnlockTimes exists (for backward compatibility with old saves)
+    if (!stats.achievementUnlockTimes) {
+      stats.achievementUnlockTimes = {};
+    }
+
     return stats;
   }
 
@@ -348,10 +356,12 @@ export class GamificationSystem {
    */
   private checkAchievements(stats: UserStats): string[] {
     const unlocked: string[] = [];
+    const now = Date.now();
 
     for (const achievement of this.achievements) {
       if (!stats.achievements.includes(achievement.id) && achievement.condition(stats)) {
         stats.achievements.push(achievement.id);
+        stats.achievementUnlockTimes[achievement.id] = now;
         this.awardPoints(stats.userId, stats.userName, achievement.points, `Achievement: ${achievement.name}`);
         unlocked.push(achievement.id);
 
@@ -398,7 +408,12 @@ export class GamificationSystem {
     const stats = this.userStats.get(userId);
     if (!stats) return [];
 
-    return this.achievements.filter(a => stats.achievements.includes(a.id));
+    return this.achievements
+      .filter(a => stats.achievements.includes(a.id))
+      .map(a => ({
+        ...a,
+        unlockedAt: stats.achievementUnlockTimes[a.id]
+      }));
   }
 
   /**
