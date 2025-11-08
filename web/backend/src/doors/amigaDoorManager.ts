@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { getAmigaAssignPaths } from '../utils/bbs-paths.util';
 import { loadCommands } from '../handlers/command-execution.handler';
+import { config } from '../config';
 
 /**
  * AmigaDOS Assign Definitions
@@ -257,7 +258,7 @@ export class AmigaDoorManager {
    */
   async scanTypeScriptDoors(): Promise<any[]> {
     const doors: any[] = [];
-    const doorsPath = path.join(__dirname, '../../doors');
+    const doorsPath = path.join(this.bbsRoot, 'Doors');
 
     if (!fs.existsSync(doorsPath)) {
       return doors;
@@ -604,7 +605,7 @@ export class AmigaDoorManager {
     try {
       // Determine door name from package.json or filename
       const doorName = analysis.packageJson?.name || path.basename(archivePath, path.extname(archivePath));
-      const doorInstallPath = path.join(__dirname, '../../doors', doorName);
+      const doorInstallPath = path.join(this.bbsRoot, 'Doors', doorName);
 
       console.log(`Installing TypeScript door: ${doorName}`);
 
@@ -1074,7 +1075,7 @@ export class AmigaDoorManager {
    */
   async deleteTypeScriptDoor(doorName: string): Promise<{ success: boolean; message: string }> {
     try {
-      const doorPath = path.join(__dirname, '../../doors', doorName);
+      const doorPath = path.join(this.bbsRoot, 'Doors', doorName);
 
       // Check if door exists
       if (!fs.existsSync(doorPath)) {
@@ -1131,7 +1132,7 @@ export class AmigaDoorManager {
     }
 
     // Try TypeScript door
-    const tsPath = path.join(__dirname, '../../doors', identifier);
+    const tsPath = path.join(this.bbsRoot, 'Doors', identifier);
     if (fs.existsSync(tsPath)) {
       return this.deleteTypeScriptDoor(identifier);
     }
@@ -1151,9 +1152,9 @@ let managerInstance: AmigaDoorManager | null = null;
 export function getAmigaDoorManager(bbsRoot?: string): AmigaDoorManager {
   if (!managerInstance) {
     // BBS directory structure matches original Amiga AmiExpress
-    // The project root contains Doors/, Commands/, and other BBS directories
-    // When running from web/backend (process.cwd()), go up two levels to reach project root
-    const root = bbsRoot || path.join(process.cwd(), '..', '..');
+    // The data directory contains Doors/, BBS/Commands/, and other BBS directories
+    // Use config's dataDir to support persistent disk storage
+    const root = bbsRoot || config.get('dataDir');
     managerInstance = new AmigaDoorManager(root);
   }
   return managerInstance;

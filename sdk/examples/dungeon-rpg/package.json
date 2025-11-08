@@ -2,7 +2,7 @@
   "name": "dungeon-rpg-complete",
   "version": "1.0.0",
   "description": "Comprehensive RPG example demonstrating all SDK features",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "author": "AmiExpress SDK Team",
   "license": "MIT",
   "category": "rpg",

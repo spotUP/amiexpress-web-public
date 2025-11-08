@@ -591,8 +591,8 @@ app.post('/api/upload/door', (req: Request, res: Response) => {
       console.log('[Door Upload] Door file received:', req.file.originalname, req.file.size, 'bytes');
       console.log('[Door Upload] Saved to:', req.file.path);
 
-      // Move file to doors/archives directory
-      const doorsArchivePath = path.join(__dirname, '../../doors/archives');
+      // Move file to Doors/archives directory in BBS data directory
+      const doorsArchivePath = path.join(config.get('dataDir'), 'Doors', 'archives');
       if (!fs.existsSync(doorsArchivePath)) {
         fs.mkdirSync(doorsArchivePath, { recursive: true });
       }
