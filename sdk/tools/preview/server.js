@@ -131,22 +131,43 @@ function startDoor(clientId, doorId) {
   }
 
   const doorPath = path.join(__dirname, '../../examples', doorId);
-  const mainFile = path.join(doorPath, 'index.js');
 
-  if (!fs.existsSync(mainFile)) {
+  // Check for TypeScript or JavaScript
+  const tsFile = path.join(doorPath, 'index.ts');
+  const jsFile = path.join(doorPath, 'index.js');
+  const distFile = path.join(doorPath, 'dist', 'index.js');
+
+  let command, args, mainFile;
+
+  if (fs.existsSync(tsFile)) {
+    // Use ts-node for TypeScript files
+    command = 'npx';
+    args = ['ts-node', 'index.ts'];
+    mainFile = tsFile;
+  } else if (fs.existsSync(distFile)) {
+    // Use compiled dist file
+    command = 'node';
+    args = ['dist/index.js'];
+    mainFile = distFile;
+  } else if (fs.existsSync(jsFile)) {
+    // Use JavaScript file
+    command = 'node';
+    args = ['index.js'];
+    mainFile = jsFile;
+  } else {
     client.ws.send(
       JSON.stringify({
         type: 'error',
-        message: `Door main file not found: ${mainFile}`,
+        message: `Door main file not found. Checked: ${tsFile}, ${jsFile}, ${distFile}`,
       })
     );
     return;
   }
 
-  console.log(`🚀 Starting door: ${doorId}`);
+  console.log(`🚀 Starting door: ${doorId} (${mainFile})`);
 
   const { spawn } = require('child_process');
-  const doorProcess = spawn('node', [mainFile], {
+  const doorProcess = spawn(command, args, {
     cwd: doorPath,
     env: { ...process.env, PREVIEW_MODE: '1' },
   });
