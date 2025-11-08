@@ -1,0 +1,6 @@
+# Ignore Kickstart ROM files (copyrighted material)
+*.rom
+*.ROM
+
+# Keep the README
+!README.md

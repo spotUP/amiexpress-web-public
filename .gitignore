@@ -122,6 +122,7 @@ Desktop.ini
 data/
 backend/data/*
 !backend/data/bbs/
+!backend/data/amiga-roms/
 backend/data/bbs/*
 !backend/data/bbs/BBS/
 backend/data/bbs/BBS/*
