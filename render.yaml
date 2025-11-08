@@ -12,9 +12,8 @@ services:
     env: node
     region: oregon
     plan: starter
-    rootDir: web/backend
-    buildCommand: npm ci
-    startCommand: npm run render-start
+    buildCommand: cd web/backend && npm ci
+    startCommand: cd web/backend && npx tsx src/index.ts
     envVars:
       - key: NODE_ENV
         value: production
