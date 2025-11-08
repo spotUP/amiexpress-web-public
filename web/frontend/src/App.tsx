@@ -100,8 +100,7 @@ function App() {
         style.fontSmooth = 'never';
         style.webkitFontSmoothing = 'none';
         style.MozOsxFontSmoothing = 'none';
-        // Hide mouse cursor when inside the terminal
-        style.cursor = 'none';
+        // Mouse cursor visibility will be controlled by mouse-mode event
         // No padding - screens are designed for full 80-column display
       }
       term.refresh(0, term.rows - 1);
@@ -314,6 +313,18 @@ function App() {
       console.log('🚪 Door status changed:', data.status);
       doorActive.current = (data.status === 'running');
       console.log('🚪 Door active:', doorActive.current);
+    });
+
+    // Handle mouse mode changes (show/hide mouse cursor)
+    ws.on('mouse-mode', (data: { enabled: boolean }) => {
+      console.log('🖱️ Mouse mode changed:', data.enabled);
+      const termElement = terminalRef.current?.querySelector('.xterm');
+      if (termElement) {
+        const style = (termElement as HTMLElement).style as any;
+        // Hide cursor when mouse controls the terminal cursor (ANSI editor)
+        // Show cursor for normal BBS operation
+        style.cursor = data.enabled ? 'none' : 'default';
+      }
     });
 
     // Handle terminal input

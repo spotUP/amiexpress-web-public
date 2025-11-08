@@ -1249,6 +1249,8 @@ export async function runDoor(session: DoorSession) {
   if (session.bbsSession) {
     session.bbsSession.mouseEventsEnabled = true;
     console.log('[ANSI Editor runDoor] Mouse events enabled');
+    // Notify frontend to hide mouse cursor (mouse controls terminal cursor)
+    session.socket.emit('mouse-mode', { enabled: true });
   }
 
   const editor = new ANSIEditor(session);
@@ -1260,6 +1262,8 @@ export async function runDoor(session: DoorSession) {
   if (session.bbsSession) {
     session.bbsSession.mouseEventsEnabled = false;
     console.log('[ANSI Editor runDoor] Mouse events disabled');
+    // Notify frontend to show mouse cursor (normal BBS operation)
+    session.socket.emit('mouse-mode', { enabled: false });
   }
 }
 
