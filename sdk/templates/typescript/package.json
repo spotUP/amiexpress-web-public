@@ -1,0 +1,31 @@
+{
+  "name": "{{name}}",
+  "version": "{{version}}",
+  "description": "{{description}}",
+  "main": "dist/index.js",
+  "author": "{{author}}",
+  "license": "MIT",
+  "category": "{{category}}",
+  "scripts": {
+    "start": "npx tsx index.ts",
+    "dev": "npx tsx --watch index.ts",
+    "build": "tsc",
+    "preview": "cd ../.. && npm run preview",
+    "pack": "cd ../.. && npm run pack {{name}}",
+    "validate": "cd ../.. && npm run validate ."
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "game",
+    "{{category}}"
+  ],
+  "dependencies": {
+    "@amiexpress/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2",
+    "tsx": "^4.19.2"
+  }
+}

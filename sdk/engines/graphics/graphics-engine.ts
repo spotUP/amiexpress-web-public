@@ -45,6 +45,8 @@ import {
   ParticleSystemConfig,
   AnsiColor,
   Rect,
+  Cutscene,
+  CutsceneScene,
 } from '../../core/types';
 
 /** Particle for visual effects */
@@ -98,6 +100,12 @@ export class GraphicsEngine {
 
   /** Loaded ANSI art cache */
   private ansiCache: Map<string, string> = new Map();
+
+  /** Cutscene playback state */
+  private cutscenePlaying: boolean = false;
+  private currentCutscene: Cutscene | null = null;
+  private cutsceneFrame: number = 0;
+  private cutsceneStartTime: number = 0;
 
   constructor(config: GraphicsEngineConfig) {
     this.width = config.width;
@@ -651,6 +659,165 @@ export class GraphicsEngine {
     }
 
     return output + '\x1b[0m'; // Reset colors at end
+  }
+
+  /**
+   * Play cinematic cutscene
+   *
+   * @param cutscene - Cutscene definition with scenes and transitions
+   *
+   * @example
+   * ```typescript
+   * const intro = {
+   *   id: 'intro',
+   *   scenes: [
+   *     { image: 'scene1', duration: 3000, transition: 'fade' },
+   *     { image: 'scene2', duration: 2000, text: 'Chapter 1', textPosition: { x: 30, y: 20 } }
+   *   ],
+   *   skippable: true,
+   *   onComplete: () => startGame()
+   * };
+   *
+   * gfx.playCutscene(intro);
+   * ```
+   */
+  public playCutscene(cutscene: Cutscene): void {
+    this.currentCutscene = cutscene;
+    this.cutscenePlaying = true;
+    this.cutsceneFrame = 0;
+    this.cutsceneStartTime = Date.now();
+  }
+
+  /**
+   * Update cutscene playback (call each frame)
+   *
+   * @param delta - Time since last frame (milliseconds)
+   * @returns true if cutscene is still playing
+   *
+   * @example
+   * ```typescript
+   * // In game loop
+   * if (gfx.isCutscenePlaying()) {
+   *   gfx.updateCutscene(delta);
+   *   const output = gfx.render();
+   *   door.sendAnsi(output);
+   * }
+   * ```
+   */
+  public updateCutscene(delta: number): boolean {
+    if (!this.cutscenePlaying || !this.currentCutscene) {
+      return false;
+    }
+
+    const elapsed = Date.now() - this.cutsceneStartTime;
+    const currentScene = this.currentCutscene.scenes[this.cutsceneFrame];
+
+    if (!currentScene) {
+      // Cutscene complete
+      this.stopCutscene();
+      if (this.currentCutscene?.onComplete) {
+        this.currentCutscene.onComplete();
+      }
+      return false;
+    }
+
+    // Check if scene duration elapsed
+    if (elapsed >= currentScene.duration) {
+      // Move to next scene
+      this.cutsceneFrame++;
+      this.cutsceneStartTime = Date.now();
+
+      // Check if we have more scenes
+      if (this.cutsceneFrame >= this.currentCutscene.scenes.length) {
+        this.stopCutscene();
+        if (this.currentCutscene?.onComplete) {
+          this.currentCutscene.onComplete();
+        }
+        return false;
+      }
+    }
+
+    // Render current scene
+    this.renderCutsceneScene(currentScene, elapsed);
+
+    return true;
+  }
+
+  /**
+   * Render current cutscene scene
+   * @private
+   */
+  private renderCutsceneScene(scene: CutsceneScene, elapsed: number): void {
+    // Clear screen
+    this.clear(AnsiColor.Black);
+
+    // Calculate transition effect
+    const progress = Math.min(1, elapsed / scene.duration);
+    let alpha = 1;
+
+    if (scene.transition === 'fade') {
+      // Fade in at start, fade out at end
+      if (progress < 0.2) {
+        alpha = progress / 0.2;
+      } else if (progress > 0.8) {
+        alpha = (1 - progress) / 0.2;
+      }
+    }
+
+    // Draw scene image (if loaded in cache)
+    if (this.ansiCache.has(scene.image)) {
+      this.drawAnsi(scene.image);
+    }
+
+    // Draw text overlay
+    if (scene.text && scene.textPosition) {
+      const textLines = scene.text.split('\n');
+      textLines.forEach((line, index) => {
+        this.drawText(
+          scene.textPosition!.x,
+          scene.textPosition!.y + index,
+          line,
+          AnsiColor.White
+        );
+      });
+    }
+  }
+
+  /**
+   * Stop cutscene playback
+   *
+   * @example
+   * ```typescript
+   * // Allow user to skip cutscene
+   * door.onInput((key) => {
+   *   if (key === ' ' && gfx.isCutscenePlaying()) {
+   *     gfx.stopCutscene();
+   *   }
+   * });
+   * ```
+   */
+  public stopCutscene(): void {
+    this.cutscenePlaying = false;
+    this.currentCutscene = null;
+    this.cutsceneFrame = 0;
+    this.cutsceneStartTime = 0;
+  }
+
+  /**
+   * Check if cutscene is currently playing
+   *
+   * @returns true if cutscene is active
+   *
+   * @example
+   * ```typescript
+   * if (!gfx.isCutscenePlaying()) {
+   *   // Resume normal gameplay
+   *   updateGame();
+   * }
+   * ```
+   */
+  public isCutscenePlaying(): boolean {
+    return this.cutscenePlaying;
   }
 
   /**

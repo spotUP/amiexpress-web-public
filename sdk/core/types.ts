@@ -514,6 +514,36 @@ export interface NetworkMessage {
 }
 
 /**
+ * Cutscene scene definition
+ */
+export interface CutsceneScene {
+  /** Scene image (ANSI art ID) */
+  image: string;
+  /** Scene duration (milliseconds) */
+  duration: number;
+  /** Transition type */
+  transition?: 'fade' | 'slide' | 'instant';
+  /** Scene text overlay */
+  text?: string;
+  /** Text position */
+  textPosition?: Position;
+}
+
+/**
+ * Cutscene definition
+ */
+export interface Cutscene {
+  /** Cutscene ID */
+  id: string;
+  /** Cutscene scenes */
+  scenes: CutsceneScene[];
+  /** Skip allowed? */
+  skippable: boolean;
+  /** Callback on complete */
+  onComplete?: () => void;
+}
+
+/**
  * Door lifecycle event types
  */
 export type DoorEvent =
