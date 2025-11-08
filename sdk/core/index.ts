@@ -34,6 +34,8 @@ export { HUDBuilder } from '../components/hud/hud-builder';
 export { LevelManager } from '../components/level/level-manager';
 export { SaveManager } from '../components/save/save-manager';
 export { InventorySystem } from '../components/inventory/inventory-system';
+export { DialogueSystem } from '../components/dialogue/dialogue-system';
+export { QuestSystem } from '../components/quest/quest-system';
 
 // Tools
 export { ReleasePacker } from '../tools/packer';
