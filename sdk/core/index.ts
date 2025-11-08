@@ -25,6 +25,7 @@ export * from './types';
 export { GraphicsEngine } from '../engines/graphics/graphics-engine';
 export { PhysicsEngine } from '../engines/physics/physics-engine';
 export { AudioEngine } from '../engines/audio/audio-engine';
+export { NetworkEngine } from '../engines/network/network-engine';
 
 // Components
 export { MenuSystem } from '../components/menus/menu-system';

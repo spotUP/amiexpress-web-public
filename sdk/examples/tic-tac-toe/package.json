@@ -1,0 +1,33 @@
+{
+  "name": "tic-tac-toe-multiplayer",
+  "version": "1.0.0",
+  "description": "Turn-based multiplayer Tic-Tac-Toe demonstrating Network Engine",
+  "main": "index.ts",
+  "author": "AmiExpress SDK Team",
+  "license": "MIT",
+  "category": "game",
+  "scripts": {
+    "start": "npx tsx index.ts",
+    "dev": "npx tsx --watch index.ts",
+    "build": "tsc",
+    "preview": "cd ../.. && npm run preview",
+    "pack": "cd ../.. && npm run pack tic-tac-toe",
+    "validate": "cd ../.. && npm run validate ."
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "game",
+    "multiplayer",
+    "turn-based",
+    "tic-tac-toe"
+  ],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2",
+    "tsx": "^4.19.2"
+  }
+}
