@@ -62,8 +62,8 @@ build_example() {
     fi
 }
 
-# Get list of examples (exclude hidden files)
-examples=$(ls -1 "$EXAMPLES_DIR" 2>/dev/null | grep -v '^\.' || true)
+# Get list of examples (exclude hidden files, only directories)
+examples=$(find "$EXAMPLES_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | grep -v '^\.' | sort || true)
 
 if [ -z "$examples" ]; then
     echo -e "${RED}No examples found in $EXAMPLES_DIR${NC}"

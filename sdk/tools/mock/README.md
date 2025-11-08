@@ -166,12 +166,20 @@ cleanup(); // Clean up when done
 
 ```typescript
 interface MockUserOptions {
-  id?: number;              // User ID (auto-generated if not provided)
-  name?: string;            // User name
+  // BBSUser core properties
+  id?: number;                              // User ID (auto-generated if not provided)
+  name?: string;                            // User name
+  securityLevel?: number;                   // Security level (0-255)
+  node?: number;                            // Node number
+  timeLeft?: number;                        // Time left in minutes
+  graphicsMode?: 'ANSI' | 'ASCII' | 'RIP';  // Graphics mode
+  termWidth?: number;                       // Terminal width (default: 80)
+  termHeight?: number;                      // Terminal height (default: 24)
+  data?: Record<string, any>;               // Custom data storage
+
+  // Extended properties (stored in user.data)
   realName?: string;        // Real name
   location?: string;        // Location
-  securityLevel?: number;   // Security level (0-255)
-  timeLeft?: number;        // Time left in minutes
   uploads?: number;         // Upload count
   downloads?: number;       // Download count
   posts?: number;           // Post count

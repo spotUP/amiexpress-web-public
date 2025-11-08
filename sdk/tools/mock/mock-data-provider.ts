@@ -25,12 +25,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export interface MockUserOptions {
+  // BBSUser core properties
   id?: number;
   name?: string;
+  securityLevel?: number;
+  node?: number;
+  timeLeft?: number;
+  graphicsMode?: 'ANSI' | 'ASCII' | 'RIP';
+  termWidth?: number;
+  termHeight?: number;
+  data?: Record<string, any>;
+
+  // Extended properties (stored in user.data)
   realName?: string;
   location?: string;
-  securityLevel?: number;
-  timeLeft?: number;
   uploads?: number;
   downloads?: number;
   posts?: number;
@@ -89,15 +97,21 @@ export class MockDataProvider {
     const user: BBSUser = {
       id,
       name: options.name || `User${id}`,
-      realName: options.realName || `Test User ${id}`,
-      location: options.location || 'Test City, USA',
       securityLevel: options.securityLevel ?? 50,
+      node: options.node ?? 1,
       timeLeft: options.timeLeft ?? 60,
-      uploads: options.uploads ?? 0,
-      downloads: options.downloads ?? 0,
-      posts: options.posts ?? 0,
-      lastCall: options.lastCall || new Date(),
-      flags: options.flags || [],
+      graphicsMode: options.graphicsMode || 'ANSI',
+      termWidth: options.termWidth ?? 80,
+      termHeight: options.termHeight ?? 24,
+      data: options.data || {
+        realName: options.realName || `Test User ${id}`,
+        location: options.location || 'Test City, USA',
+        uploads: options.uploads ?? 0,
+        downloads: options.downloads ?? 0,
+        posts: options.posts ?? 0,
+        lastCall: options.lastCall || new Date(),
+        flags: options.flags || [],
+      },
     };
 
     this.mockUsers.set(id, user);
