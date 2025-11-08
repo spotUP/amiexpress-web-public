@@ -70,6 +70,7 @@ export class DosLibrary {
   private readonly ERROR_READ_PROTECTED = 204;
   private readonly ERROR_WRITE_PROTECTED = 214;
   private readonly ERROR_NO_MORE_ENTRIES = 232;
+  private readonly ERROR_SEEK_ERROR = 219;  // Seek not possible (console/device)
 
   // Base path for BBS: logical device
   private readonly BBS_BASE_PATH = '~/Code/amiexpress-web';
@@ -713,8 +714,8 @@ export class DosLibrary {
 
     // Console handles and NIL: don't support seeking
     if (handle <= 3 || handle === this.NIL_HANDLE) {
-      console.error(`[dos.library] Seek: Cannot seek on console/NIL handles`);
-      this.lastError = this.ERROR_OBJECT_IN_USE;
+      console.log(`[dos.library] Seek: Cannot seek on console/NIL handles (this is normal)`);
+      this.lastError = this.ERROR_SEEK_ERROR;  // ERROR_SEEK_ERROR = "seek not possible"
       return -1;
     }
 
