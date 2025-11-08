@@ -26,10 +26,14 @@ export { GraphicsEngine } from '../engines/graphics/graphics-engine';
 export { PhysicsEngine } from '../engines/physics/physics-engine';
 export { AudioEngine } from '../engines/audio/audio-engine';
 export { NetworkEngine } from '../engines/network/network-engine';
+export { AIEngine } from '../engines/ai/ai-engine';
 
 // Components
 export { MenuSystem } from '../components/menus/menu-system';
 export { HUDBuilder } from '../components/hud/hud-builder';
+export { LevelManager } from '../components/level/level-manager';
+export { SaveManager } from '../components/save/save-manager';
+export { InventorySystem } from '../components/inventory/inventory-system';
 
 // Tools
 export { ReleasePacker } from '../tools/packer';
