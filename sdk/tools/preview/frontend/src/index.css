@@ -32,10 +32,33 @@ body {
   overflow: hidden;
 }
 
+/* Theme variables */
+:root {
+  /* Light mode (default) */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e5e5e5;
+  --bg-hover: #f0f0f0;
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --border-color: #d1d5db;
+  --border-hover: #9ca3af;
+}
+
 /* Dark mode colors */
 body.dark {
   background-color: #1e1e1e;
   color: #cccccc;
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #3d3d3d;
+  --bg-hover: #374151;
+  --text-primary: #cccccc;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+  --border-color: #374151;
+  --border-hover: #4b5563;
 }
 
 /* Light mode colors */
@@ -74,6 +97,134 @@ body.light ::-webkit-scrollbar-thumb {
 
 body.light ::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
+}
+
+/* Theme-aware component styles */
+
+/* Background colors */
+body.light .bg-\[\#1E1E1E\],
+body.light .bg-\[\#252526\] {
+  background-color: #ffffff !important;
+}
+
+body.light .bg-gray-900 {
+  background-color: #f8f9fa !important;
+}
+
+body.light .bg-gray-800 {
+  background-color: #e9ecef !important;
+}
+
+body.light .bg-gray-700 {
+  background-color: #dee2e6 !important;
+}
+
+body.light .bg-gray-600 {
+  background-color: #ced4da !important;
+}
+
+body.light .bg-gray-500 {
+  background-color: #adb5bd !important;
+}
+
+body.light .bg-black\/80 {
+  background-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Text colors */
+body.light .text-white,
+body.light .text-gray-100 {
+  color: #1a1a1a !important;
+}
+
+body.light .text-gray-200 {
+  color: #2d2d2d !important;
+}
+
+body.light .text-gray-300 {
+  color: #4a4a4a !important;
+}
+
+body.light .text-gray-400 {
+  color: #6c757d !important;
+}
+
+body.light .text-gray-500 {
+  color: #868e96 !important;
+}
+
+body.light .text-gray-600 {
+  color: #495057 !important;
+}
+
+/* Border colors */
+body.light .border-gray-700 {
+  border-color: #dee2e6 !important;
+}
+
+body.light .border-gray-600 {
+  border-color: #ced4da !important;
+}
+
+body.light .border-gray-500 {
+  border-color: #adb5bd !important;
+}
+
+/* Hover states */
+body.light .hover\:bg-gray-700:hover,
+body.light .hover\:bg-gray-800:hover {
+  background-color: #dde0e3 !important;
+}
+
+body.light .hover\:bg-gray-600:hover {
+  background-color: #c5ccd2 !important;
+}
+
+body.light .hover\:text-white:hover {
+  color: #000000 !important;
+}
+
+body.light .hover\:text-gray-300:hover {
+  color: #2d2d2d !important;
+}
+
+body.light .hover\:border-gray-600:hover {
+  border-color: #adb5bd !important;
+}
+
+/* Placeholder colors */
+body.light .placeholder-gray-500::placeholder {
+  color: #adb5bd !important;
+}
+
+/* Focus ring colors for light theme */
+body.light .focus\:ring-blue-600:focus {
+  --tw-ring-color: #2563eb !important;
+}
+
+body.light .focus\:ring-offset-gray-900:focus {
+  --tw-ring-offset-color: #ffffff !important;
+}
+
+/* Input fields */
+body.light input[type='text'],
+body.light input[type='range'],
+body.light input[type='checkbox'] {
+  background-color: #ffffff !important;
+  border-color: #dee2e6 !important;
+  color: #1a1a1a !important;
+}
+
+body.light input[type='checkbox']:not(:checked) {
+  background-color: #ffffff !important;
+  border-color: #ced4da !important;
+}
+
+/* Keep terminal always dark */
+body.light .terminal,
+body.light .terminal * {
+  background-color: #1E1E1E !important;
+  color: #CCCCCC !important;
 }
 
 /* Smooth transitions */

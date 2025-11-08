@@ -15,7 +15,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
   const {
     url,
     reconnectInterval = 3000,
-    maxReconnectAttempts = 10,
+    maxReconnectAttempts = Infinity, // Infinite reconnection attempts
     onMessage,
     onConnect,
     onDisconnect,
@@ -75,25 +75,19 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
         }));
         onDisconnect?.();
 
-        // Attempt to reconnect
-        if (reconnectAttemptsRef.current < maxReconnectAttempts) {
-          reconnectAttemptsRef.current++;
-          setStatus((prev) => ({
-            ...prev,
-            reconnecting: true,
-            error: `Reconnecting... (${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
-          }));
+        // Attempt to reconnect (infinite attempts)
+        reconnectAttemptsRef.current++;
+        const nextDelay = Math.min(reconnectInterval * Math.pow(1.5, Math.min(reconnectAttemptsRef.current - 1, 5)), 30000);
 
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, reconnectInterval);
-        } else {
-          setStatus((prev) => ({
-            ...prev,
-            reconnecting: false,
-            error: 'Failed to reconnect. Please refresh the page.',
-          }));
-        }
+        setStatus((prev) => ({
+          ...prev,
+          reconnecting: true,
+          error: `Reconnecting... (attempt ${reconnectAttemptsRef.current})`,
+        }));
+
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connect();
+        }, nextDelay);
       };
 
       wsRef.current = ws;
