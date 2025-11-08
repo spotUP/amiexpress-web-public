@@ -38,12 +38,6 @@ build_example() {
         return
     fi
 
-    # Check if it's a symlink (tracker-door)
-    if [ -L "$example_path" ]; then
-        echo -e "${YELLOW}   → Symlink detected, skipping${NC}"
-        return
-    fi
-
     cd "$example_path"
 
     # Install dependencies if needed
@@ -68,8 +62,8 @@ build_example() {
     fi
 }
 
-# Get list of examples (exclude hidden and symlinks initially)
-examples=$(ls -1 "$EXAMPLES_DIR" 2>/dev/null | grep -v '^\.' | grep -v '^tracker-door$' || true)
+# Get list of examples (exclude hidden files)
+examples=$(ls -1 "$EXAMPLES_DIR" 2>/dev/null | grep -v '^\.' || true)
 
 if [ -z "$examples" ]; then
     echo -e "${RED}No examples found in $EXAMPLES_DIR${NC}"
@@ -89,34 +83,6 @@ for example in $examples; do
     build_example "$example"
     echo ""
 done
-
-# Build tracker-door if it exists
-if [ -L "$EXAMPLES_DIR/tracker-door" ] || [ -d "$EXAMPLES_DIR/tracker-door" ]; then
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}🎵 Building: tracker-door (special case)${NC}"
-
-    # Get the real path
-    TRACKER_PATH=$(readlink -f "$EXAMPLES_DIR/tracker-door" 2>/dev/null || realpath "$EXAMPLES_DIR/tracker-door" 2>/dev/null || echo "$SDK_DIR/../tracker-door")
-
-    if [ -d "$TRACKER_PATH" ] && [ -f "$TRACKER_PATH/package.json" ]; then
-        cd "$TRACKER_PATH"
-
-        if [ ! -d "node_modules" ]; then
-            echo -e "   └─ Installing dependencies..."
-            npm install --silent > /dev/null 2>&1
-        fi
-
-        if [ ! -d "dist" ]; then
-            echo -e "   └─ Compiling TypeScript..."
-            npm run build --silent > /dev/null 2>&1 && \
-                echo -e "${GREEN}   ✓ Built successfully${NC}" || \
-                echo -e "${RED}   ✗ Build failed${NC}"
-        else
-            echo -e "${GREEN}   ✓ Already compiled${NC}"
-        fi
-    fi
-    echo ""
-fi
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}✓ Build complete!${NC}"
