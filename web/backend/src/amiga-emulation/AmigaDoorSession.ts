@@ -808,10 +808,19 @@ export class AmigaDoorSession {
       }
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
-      // Send initial message to door
-      // WHO2 needs a WbStartup message to get program name and find WHO.info
+      // Set up Process structure for CLI mode
+      // WHO2 checks pr_CLI field at offset 0xAC in Process structure
+      // If pr_CLI != 0: CLI mode (run normally)
+      // If pr_CLI == 0: WB mode (check WbStartup message)
+      const taskAddr = 0x70000;  // Process structure address
+      const prCliOffset = 0xAC;   // pr_CLI field offset
+      const cliStructAddr = 0x90000;  // Fake CLI structure address
+      this.emulator.writeMemory32(taskAddr + prCliOffset, cliStructAddr);
+      console.log(`[AmigaDoorSession] Set pr_CLI to 0x${cliStructAddr.toString(16)} for CLI mode`);
+
+      // Send initial message to door to wake it from WaitPort()
       if (!this.startupMessageSent) {
-        this.sendInitialXimMessage();
+        this.sendSimpleStartupMessage();
         this.startupMessageSent = true;
       }
 
