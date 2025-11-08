@@ -802,16 +802,13 @@ export class AmigaDoorSession {
       }
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
-      // Send initial XIM message to door with user data
-      // DISABLED: WHO2 is a CLI tool, not a Workbench tool
-      // It doesn't expect a WbStartup message
-      /*
+      // Send initial message to door
+      // WHO2 expects a simple startup message on its Process port,
+      // not a WbStartup message (it's not a Workbench tool)
       if (!this.startupMessageSent) {
-        this.sendInitialXimMessage();
+        this.sendSimpleStartupMessage();
         this.startupMessageSent = true;
       }
-      */
-      this.startupMessageSent = true; // Skip sending message
 
       while (this.isRunning) {
         // === STEP 1: Check if paused (async input) ===
@@ -1418,7 +1415,57 @@ export class AmigaDoorSession {
   }
 
   /**
-   * Send initial WbStartup message to WHO2 door
+   * Send simple startup message to WHO2 door
+   * WHO2 expects a message on its Process port to start execution
+   * This is NOT a WbStartup message - just a simple "go" message
+   */
+  private sendSimpleStartupMessage(): void {
+    if (!this.emulator || !this.execLibrary) {
+      console.log('[AmigaDoorSession] ERROR: Cannot send startup message - emulator not initialized');
+      return;
+    }
+
+    console.log('[AmigaDoorSession] ===============================================');
+    console.log('[AmigaDoorSession] *** SENDING SIMPLE STARTUP MESSAGE TO DOOR ***');
+    console.log('[AmigaDoorSession] ===============================================');
+
+    // WHO2's Process message port is at task address + 0x5C
+    const doorPortAddr = 0x7005C;
+
+    // Allocate simple message structure (just struct Message header, 20 bytes)
+    const msgSize = 20;
+    const msgAddr = this.execLibrary.allocMem(msgSize, 0x10001); // MEMF_PUBLIC|MEMF_CLEAR
+
+    if (msgAddr === 0) {
+      console.log('[AmigaDoorSession] ERROR: Failed to allocate startup message');
+      return;
+    }
+
+    console.log(`[AmigaDoorSession] Allocated simple message at 0x${msgAddr.toString(16)} (${msgSize} bytes)`);
+
+    // Write struct Message header (20 bytes)
+    this.emulator.writeMemory32(msgAddr + 0, 0);      // mn_Succ
+    this.emulator.writeMemory32(msgAddr + 4, 0);      // mn_Pred
+    this.emulator.writeMemory(msgAddr + 8, 5);         // mn_Type = NT_MESSAGE
+    this.emulator.writeMemory(msgAddr + 9, 0);         // mn_Pri
+    this.emulator.writeMemory32(msgAddr + 10, 0);     // mn_ReplyPort (0 = no reply needed)
+    this.emulator.writeMemory16(msgAddr + 18, msgSize); // mn_Length
+
+    console.log(`[AmigaDoorSession] Simple message structure:`);
+    console.log(`  Message address: 0x${msgAddr.toString(16)}`);
+    console.log(`  mn_Length: ${msgSize}`);
+    console.log(`  Sending to port: 0x${doorPortAddr.toString(16)}`);
+
+    // Put the message in the door's message port queue
+    this.execLibrary.putMsg(doorPortAddr, msgAddr);
+
+    console.log('[AmigaDoorSession] *** SIMPLE STARTUP MESSAGE SENT! ***');
+    console.log('[AmigaDoorSession] WHO2 should now wake up and start processing');
+    console.log('[AmigaDoorSession] ===============================================');
+  }
+
+  /**
+   * Send initial WbStartup message to WHO2 door (UNUSED - WHO2 is not a WB tool)
    * WHO2 expects a proper Workbench startup message with program arguments
    * This allows WHO2 to find its WHO.info file and read tooltypes
    */
