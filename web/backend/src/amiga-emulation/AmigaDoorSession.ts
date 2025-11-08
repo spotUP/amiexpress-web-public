@@ -808,17 +808,50 @@ export class AmigaDoorSession {
       }
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
-      // WHO2 is actually both a CLI command AND can run from Workbench
-      // Key insight: Don't send ANY message!
-      // WHO2 will call WaitPort() but timeout and proceed normally
-      //
-      // From disassembly: WHO2 checks if WaitPort returns non-zero
-      // If message received -> validate it, print banner if invalid, exit
-      // If NO message (returns 0) -> proceed to normal execution
-      //
-      // Solution: Don't send message, let WaitPort() return 0
+      // WHO requires pr_CLI with proper CLI structure containing command line
+      // From emulator tests: WHO checks argc - if no args, prints banner and exits
+      // WHO reads command line from CLI structure (cli_CommandName), not D0/A0
+      const taskAddr = 0x70000;
+      const prCliOffset = 0xAC;
+      const cliStructAddr = 0x90000;
+      const nodeId = this.config.bbsSession?.nodeId || 0;
+
+      // Create minimal CLI structure at 0x90000
+      // struct CommandLineInterface {
+      //   BPTR cli_Result2;        // 0x00 - secondary result
+      //   BSTR cli_SetName;        // 0x04 - current program name
+      //   BPTR cli_CommandDir;     // 0x08 - lock on command directory
+      //   LONG cli_ReturnCode;     // 0x0C - return code
+      //   BSTR cli_CommandName;    // 0x10 - command line BSTR ← THIS!
+      //   ...
+      // }
+
+      // Write command line BSTR: "WHO 3" at 0x90100
+      const cmdLineAddr = 0x90100;
+      const cmdLine = `WHO ${nodeId}`;
+      this.emulator.writeMemory(cmdLineAddr, cmdLine.length);  // BSTR length
+      for (let i = 0; i < cmdLine.length; i++) {
+        this.emulator.writeMemory(cmdLineAddr + 1 + i, cmdLine.charCodeAt(i));
+      }
+      this.emulator.writeMemory(cmdLineAddr + 1 + cmdLine.length, 0); // Null terminate
+
+      // Write CLI structure
+      this.emulator.writeMemory32(cliStructAddr + 0x00, 0);  // cli_Result2
+      this.emulator.writeMemory32(cliStructAddr + 0x04, 0);  // cli_SetName
+      this.emulator.writeMemory32(cliStructAddr + 0x08, 0);  // cli_CommandDir
+      this.emulator.writeMemory32(cliStructAddr + 0x0C, 0);  // cli_ReturnCode
+      this.emulator.writeMemory32(cliStructAddr + 0x10, cmdLineAddr >> 2); // cli_CommandName (BPTR)
+
+      // Set pr_CLI to point to CLI structure
+      this.emulator.writeMemory32(taskAddr + prCliOffset, cliStructAddr >> 2); // pr_CLI is BPTR!
+
+      console.log(`[AmigaDoorSession] Created CLI structure at 0x${cliStructAddr.toString(16)}`);
+      console.log(`[AmigaDoorSession]   cli_CommandName: "${cmdLine}" at 0x${cmdLineAddr.toString(16)}`);
+      console.log(`[AmigaDoorSession]   pr_CLI (BPTR): 0x${(cliStructAddr >> 2).toString(16)} -> 0x${cliStructAddr.toString(16)}`);
+
+      // Don't send message - WHO runs as pure CLI command
       if (!this.startupMessageSent) {
-        console.log('[AmigaDoorSession] Not sending message - let WHO2 run without startup message');
+        console.log('[AmigaDoorSession] Not sending message - WHO reads args from CLI structure');
         this.startupMessageSent = true;
       }
 
