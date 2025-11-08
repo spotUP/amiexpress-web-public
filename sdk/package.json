@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc && npm run copy-assets",
-    "copy-assets": "cp -r templates dist/ && cp -r examples/*/assets dist/examples/ 2>/dev/null || true",
+    "copy-assets": "cp -r templates dist/ && cp package.json dist/ && cp -r examples/*/assets dist/examples/ 2>/dev/null || true",
     "dev": "tsc --watch",
     "preview": "node tools/preview/server.js",
     "create-door": "node dist/tools/cli/index.js create-door",
