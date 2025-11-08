@@ -142,9 +142,9 @@ class BugTracker {
     this.data = this.loadData();
 
     // Initialize advanced modules
-    this.inputManager = new InputManager(this.door, this.gfx);
-    this.uiComponents = new UIComponents(this.door, this.gfx);
-    this.templateManager = new TemplateManager(path.join(__dirname, 'templates.json'));
+    this.inputManager = new InputManager(this.door, 0);
+    this.uiComponents = new UIComponents(this.door, 0);
+    this.templateManager = new TemplateManager();
     this.autoSaveManager = new AutoSaveManager(path.join(__dirname, 'drafts.json'));
     this.smartFeatures = new SmartFeatures();
     this.gamification = new GamificationSystem();

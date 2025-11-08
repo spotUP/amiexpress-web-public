@@ -47,15 +47,14 @@ for example in $examples; do
 
     cd "$example_path"
 
-    # Install dependencies if needed
-    if [ ! -d "node_modules" ]; then
-        echo -e "   └─ Installing dependencies..."
-        if ! npm install --silent > /dev/null 2>&1; then
-            echo -e "   ${RED}✗ Install failed${NC}"
-            failed=$((failed + 1))
-            echo ""
-            continue
-        fi
+    # Always refresh dependencies to prevent stale SDK references
+    echo -e "   └─ Refreshing dependencies..."
+    rm -rf node_modules package-lock.json 2>/dev/null || true
+    if ! npm install --silent > /dev/null 2>&1; then
+        echo -e "   ${RED}✗ Install failed${NC}"
+        failed=$((failed + 1))
+        echo ""
+        continue
     fi
 
     # Build

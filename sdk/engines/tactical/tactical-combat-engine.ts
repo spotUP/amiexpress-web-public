@@ -158,6 +158,38 @@ export interface Terrain {
 }
 
 /**
+ * Terrain types enum
+ */
+export enum TerrainType {
+  Plain = 'Plain',
+  Forest = 'Forest',
+  Mountain = 'Mountain',
+  Fort = 'Fort',
+  Throne = 'Throne',
+  Village = 'Village',
+  Road = 'Road',
+  Bridge = 'Bridge',
+  Peak = 'Peak',
+  Sea = 'Sea',
+  River = 'River'
+}
+
+/**
+ * Tactical map definition
+ */
+export interface TacticalMap {
+  width: number;
+  height: number;
+  terrain: TerrainType[][];
+  units: TacticalUnit[];
+  objectives: {
+    type: 'rout' | 'seize' | 'defend' | 'escape' | 'survive';
+    target?: Position;
+    turns?: number;
+  };
+}
+
+/**
  * Battle forecast (what will happen in combat)
  */
 export interface BattleForecast {
