@@ -8,7 +8,7 @@
   "license": "MIT",
   "scripts": {
     "start": "npx tsx tetris.ts",
-    "build": "npx tsc tetris.ts"
+    "build": "tsc"
   },
   "keywords": ["tetris", "puzzle", "game", "bbs", "door"],
   "dependencies": {
