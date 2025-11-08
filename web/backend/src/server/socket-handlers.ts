@@ -157,9 +157,10 @@ function registerCommandHandler(socket: Socket) {
 
     console.log('[socket-handlers] mouse-click received:', data);
 
-    // If door is active and has a mouse handler, call it
-    if (session.inDoorManager && session.doorInputHandler) {
-      console.log('[socket-handlers] Calling doorInputHandler with mouse data');
+    // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
+    // Don't send to regular doors as they expect text input, not mouse events
+    if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
+      console.log('[socket-handlers] Calling doorInputHandler with mouse click data');
       // Pass mouse data as a special formatted string that the door can recognize
       session.doorInputHandler(JSON.stringify({ type: 'mouse-click', ...data }));
     }
