@@ -50,9 +50,8 @@ export class MenuSystem {
 
   constructor(config: MenuConfig) {
     this.config = {
-      modal: config.modal ?? false,
-      position: config.position,
       ...config,
+      modal: config.modal ?? false,
     };
   }
 

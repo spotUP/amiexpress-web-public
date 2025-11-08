@@ -17,7 +17,8 @@
  */
 
 // Core
-export { Door } from './door-api';
+import { Door } from './door-api';
+export { Door };
 export * from './types';
 
 // Engines

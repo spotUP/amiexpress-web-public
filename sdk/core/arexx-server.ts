@@ -235,7 +235,7 @@ export class ARexxServer {
       version: params.VERSION || '1.0.0',
       author: params.AUTHOR || 'Unknown',
       graphics: new GraphicsEngine({ width: 80, height: 24 }),
-      physics: new PhysicsEngine({ gravity: { x: 0, y: 9.8 } }),
+      physics: new PhysicsEngine({ gravity: 9.8 }),
       audio: new AudioEngine(),
       socket
     };
@@ -271,9 +271,8 @@ export class ARexxServer {
     const width = parseInt(params.WIDTH);
     const height = parseInt(params.HEIGHT);
     const fg = parseInt(params.FG || '7') as AnsiColor;
-    const bg = parseInt(params.BG || '0') as AnsiColor;
 
-    session.graphics.drawBox(x, y, width, height, fg, bg);
+    session.graphics.drawBox({ x, y, width, height }, 'single', fg);
     this.sendResponse(socket, 'OK');
   }
 
@@ -388,8 +387,7 @@ export class ARexxServer {
     const freq = parseInt(params.FREQ);
     const duration = parseFloat(params.DURATION);
 
-    session.audio.playSound({
-      type,
+    session.audio.playSound(type, {
       frequency: freq,
       duration,
       envelope: 'pluck',

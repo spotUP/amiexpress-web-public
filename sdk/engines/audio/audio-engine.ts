@@ -172,7 +172,7 @@ export class AudioEngine {
         envelope: { attack: 0.01, decay: 0.05, sustain: 0, release: 0.05 },
       }).connect(this.sfxGain),
       pattern: () => {
-        this.soundLibrary.get('hit')!.synth.triggerAttackRelease(0.05);
+        (this.soundLibrary.get('hit')!.synth as Tone.NoiseSynth).triggerAttackRelease(0.05);
       },
     });
 
@@ -183,11 +183,11 @@ export class AudioEngine {
         envelope: { attack: 0.01, decay: 0.3, sustain: 0.2, release: 0.3 },
       }).connect(this.sfxGain),
       pattern: () => {
-        const synth = this.soundLibrary.get('powerup')!.synth;
-        synth.triggerAttackRelease('C4', '0.1', '+0');
-        synth.triggerAttackRelease('E4', '0.1', '+0.1');
-        synth.triggerAttackRelease('G4', '0.1', '+0.2');
-        synth.triggerAttackRelease('C5', '0.3', '+0.3');
+        const synth = this.soundLibrary.get('powerup')!.synth as Tone.Synth;
+        synth.triggerAttackRelease('C4', '0.1', Tone.now());
+        synth.triggerAttackRelease('E4', '0.1', Tone.now() + 0.1);
+        synth.triggerAttackRelease('G4', '0.1', Tone.now() + 0.2);
+        synth.triggerAttackRelease('C5', '0.3', Tone.now() + 0.3);
       },
     });
 
@@ -210,11 +210,11 @@ export class AudioEngine {
         envelope: { attack: 0.1, decay: 0.5, sustain: 0.3, release: 1.0 },
       }).connect(this.sfxGain),
       pattern: () => {
-        const synth = this.soundLibrary.get('gameover')!.synth;
-        synth.triggerAttackRelease('E4', '0.3', '+0');
-        synth.triggerAttackRelease('D4', '0.3', '+0.3');
-        synth.triggerAttackRelease('C4', '0.3', '+0.6');
-        synth.triggerAttackRelease('B3', '1.0', '+0.9');
+        const synth = this.soundLibrary.get('gameover')!.synth as Tone.Synth;
+        synth.triggerAttackRelease('E4', '0.3', Tone.now());
+        synth.triggerAttackRelease('D4', '0.3', Tone.now() + 0.3);
+        synth.triggerAttackRelease('C4', '0.3', Tone.now() + 0.6);
+        synth.triggerAttackRelease('B3', '1.0', Tone.now() + 0.9);
       },
     });
   }

@@ -68,7 +68,7 @@ export class ReleasePacker {
         resolve(outputFile);
       });
 
-      archive.on('error', (err) => reject(err));
+      archive.on('error', (err: Error) => reject(err));
       archive.pipe(output);
 
       // Add source files
