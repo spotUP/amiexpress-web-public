@@ -215,8 +215,10 @@ export class DosLibrary {
 
     // Handle special devices
     // Check if filename starts with "con:" (case-insensitive) - handles all console specifications
-    // Examples: "*", "CON:", "CONSOLE:", "con:10/10/320/80/Output/auto/close/wait"
-    const isConsoleDevice = filename === '*' ||
+    // Examples: "", "*", "CON:", "CONSOLE:", "con:10/10/320/80/Output/auto/close/wait"
+    // Empty string "" means current console (standard output)
+    const isConsoleDevice = filename === '' ||
+                           filename === '*' ||
                            filename.toUpperCase() === 'CONSOLE:' ||
                            filename.toUpperCase().startsWith('CON:');
 
