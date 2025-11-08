@@ -1,5 +1,7 @@
 import { SessionRecording, SessionEvent } from '../types';
 
+export type { SessionRecording, SessionEvent };
+
 /**
  * Session recorder class for managing terminal sessions
  */

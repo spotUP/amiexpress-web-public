@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
   Terminal,
@@ -91,7 +91,7 @@ function App() {
   const [rightSidebarTab, setRightSidebarTab] = useState<'code' | 'build' | 'info' | 'release'>('info');
 
   // Favorites management
-  const [favorites, setFavorites] = useLocalStorage<string[]>('sdk-preview-favorites', []);
+  const [_favorites, setFavorites] = useLocalStorage<string[]>('sdk-preview-favorites', []);
 
   // WebSocket connection
   const { status: wsStatus, send: wsSend } = useWebSocket({
@@ -217,7 +217,7 @@ function App() {
   // Handle playback event
   const handlePlaybackEvent = (event: SessionEvent) => {
     if (event.type === 'output' && event.ansiData) {
-      setTerminalOutput((prev) => [...prev, event.ansiData]);
+      setTerminalOutput((prev) => [...prev, event.ansiData!]);
     }
   };
 

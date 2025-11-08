@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { ansiToHtml, stripAnsi } from '../utils/ansi';
+import { ansiToHtml } from '../utils/ansi';
 import { SessionRecorder } from '../utils/sessionRecording';
 
 interface TerminalProps {
