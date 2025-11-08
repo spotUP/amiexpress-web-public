@@ -35,6 +35,11 @@ const PORT = process.env.PORT || 8080;
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Root route - explicitly serve index.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // API: List available doors
 app.get('/api/doors', (req, res) => {
   const examplesDir = path.join(__dirname, '../../examples');
