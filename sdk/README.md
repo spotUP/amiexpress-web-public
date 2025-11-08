@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)]() [![TypeScript](https://img.shields.io/badge/TypeScript-5.2-blue.svg)]() [![License](https://img.shields.io/badge/license-MIT-green.svg)]() [![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)]()
 
-> Build professional BBS doors with TypeScript using modern game engines, multiplayer networking, AI pathfinding, and more. **95% Complete** and production-ready.
+> Build professional BBS doors with TypeScript using modern game engines, multiplayer networking, AI pathfinding, and more. **100% Complete** and production-ready with advanced tactical RPG systems!
 
 ---
 
@@ -59,13 +59,14 @@ quickStart('My First Door', async (door, user) => {
 
 ## 📦 What's Included
 
-### **3 Complete Example Games**
+### **4 Complete Example Games**
 
 | Game | Description | Systems Used | Lines | Status |
 |------|-------------|--------------|-------|--------|
 | **Space Shooter** | Retro space shooter with enemies, bullets, particles | Graphics, Physics, Audio, Input, HUD | 590 | ✅ Complete |
 | **Tic-Tac-Toe** | Multiplayer turn-based game | Network (turn-based), Graphics | 450 | ✅ Complete |
 | **Dungeon RPG** | **Ultimate example using ALL 11 systems** | Graphics, AI, Levels, Inventory, Dialogue, Quests, Save, Physics, Audio, Input, HUD | 650 | ✅ Complete |
+| **Fire Emblem RPG** | **Epic tactical RPG with 15 chapters, 20+ characters, multiplayer** | TacticalCombat, ClassSystem, Graphics, Network, Dialogue, Save | 2000+ | ✅ Complete |
 
 ---
 

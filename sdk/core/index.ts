@@ -27,6 +27,7 @@ export { PhysicsEngine } from '../engines/physics/physics-engine';
 export { AudioEngine } from '../engines/audio/audio-engine';
 export { NetworkEngine } from '../engines/network/network-engine';
 export { AIEngine } from '../engines/ai/ai-engine';
+export { TacticalCombatEngine } from '../engines/tactical/tactical-combat-engine';
 
 // Components
 export { MenuSystem } from '../components/menus/menu-system';
@@ -36,6 +37,7 @@ export { SaveManager } from '../components/save/save-manager';
 export { InventorySystem } from '../components/inventory/inventory-system';
 export { DialogueSystem } from '../components/dialogue/dialogue-system';
 export { QuestSystem } from '../components/quest/quest-system';
+export { ClassSystem } from '../components/tactical/class-system';
 
 // Tools
 export { ReleasePacker } from '../tools/packer';
