@@ -808,19 +808,17 @@ export class AmigaDoorSession {
       }
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
-      // Set up Process structure for CLI mode
-      // WHO2 checks pr_CLI field at offset 0xAC in Process structure
-      // If pr_CLI != 0: CLI mode (run normally)
-      // If pr_CLI == 0: WB mode (check WbStartup message)
-      const taskAddr = 0x70000;  // Process structure address
-      const prCliOffset = 0xAC;   // pr_CLI field offset
-      const cliStructAddr = 0x90000;  // Fake CLI structure address
-      this.emulator.writeMemory32(taskAddr + prCliOffset, cliStructAddr);
-      console.log(`[AmigaDoorSession] Set pr_CLI to 0x${cliStructAddr.toString(16)} for CLI mode`);
-
-      // Send initial message to door to wake it from WaitPort()
+      // WHO2 is actually both a CLI command AND can run from Workbench
+      // Key insight: Don't send ANY message!
+      // WHO2 will call WaitPort() but timeout and proceed normally
+      //
+      // From disassembly: WHO2 checks if WaitPort returns non-zero
+      // If message received -> validate it, print banner if invalid, exit
+      // If NO message (returns 0) -> proceed to normal execution
+      //
+      // Solution: Don't send message, let WaitPort() return 0
       if (!this.startupMessageSent) {
-        this.sendSimpleStartupMessage();
+        console.log('[AmigaDoorSession] Not sending message - let WHO2 run without startup message');
         this.startupMessageSent = true;
       }
 
