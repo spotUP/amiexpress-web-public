@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AmiExpress BBS Door Preview</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #000;
+      color: #0f0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      border: 2px solid #0f0;
+      padding: 20px;
+    }
+
+    .header h1 {
+      color: #0f0;
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      color: #0a0;
+      font-size: 14px;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 20px;
+    }
+
+    .sidebar {
+      border: 2px solid #0f0;
+      padding: 15px;
+    }
+
+    .sidebar h2 {
+      color: #0f0;
+      font-size: 18px;
+      margin-bottom: 15px;
+      border-bottom: 1px solid #0f0;
+      padding-bottom: 5px;
+    }
+
+    .door-list {
+      list-style: none;
+    }
+
+    .door-item {
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #060;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .door-item:hover {
+      background: #003300;
+      border-color: #0f0;
+    }
+
+    .door-item.active {
+      background: #005500;
+      border-color: #0f0;
+    }
+
+    .door-name {
+      color: #0f0;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .door-desc {
+      color: #0a0;
+      font-size: 12px;
+    }
+
+    .terminal-container {
+      border: 2px solid #0f0;
+      padding: 10px;
+      background: #000;
+    }
+
+    .terminal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #0f0;
+      margin-bottom: 10px;
+    }
+
+    .terminal-title {
+      color: #0f0;
+      font-weight: bold;
+    }
+
+    .terminal-controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 5px 15px;
+      border: 1px solid #0f0;
+      background: #000;
+      color: #0f0;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: #003300;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .terminal {
+      width: 100%;
+      height: 600px;
+      background: #000;
+      color: #0f0;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.2;
+      padding: 10px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      border: 1px solid #0f0;
+    }
+
+    .terminal:focus {
+      outline: 2px solid #0f0;
+    }
+
+    .debug-console {
+      margin-top: 20px;
+      border: 2px solid #ff0;
+      padding: 10px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .debug-title {
+      color: #ff0;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .debug-message {
+      color: #aa0;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+
+    .debug-error {
+      color: #f00;
+    }
+
+    .status-bar {
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #0f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-text {
+      color: #0f0;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #f00;
+      animation: pulse 2s infinite;
+    }
+
+    .status-indicator.connected {
+      background: #0f0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* ANSI colors */
+    .ansi-30 { color: #000; }
+    .ansi-31 { color: #a00; }
+    .ansi-32 { color: #0a0; }
+    .ansi-33 { color: #a50; }
+    .ansi-34 { color: #00a; }
+    .ansi-35 { color: #a0a; }
+    .ansi-36 { color: #0aa; }
+    .ansi-37 { color: #aaa; }
+    .ansi-90 { color: #555; }
+    .ansi-91 { color: #f55; }
+    .ansi-92 { color: #5f5; }
+    .ansi-93 { color: #ff5; }
+    .ansi-94 { color: #55f; }
+    .ansi-95 { color: #f5f; }
+    .ansi-96 { color: #5ff; }
+    .ansi-97 { color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎮 AmiExpress BBS Door Preview System</h1>
+      <p>Live testing environment with ANSI rendering and keyboard input simulation</p>
+    </div>
+
+    <div class="main-grid">
+      <div class="sidebar">
+        <h2>Available Doors</h2>
+        <ul class="door-list" id="doorList">
+          <li style="color: #0a0; padding: 10px;">Loading doors...</li>
+        </ul>
+      </div>
+
+      <div class="main-content">
+        <div class="terminal-container">
+          <div class="terminal-header">
+            <div class="terminal-title" id="terminalTitle">Select a door to preview</div>
+            <div class="terminal-controls">
+              <button class="btn" id="startBtn" disabled>Start</button>
+              <button class="btn" id="stopBtn" disabled>Stop</button>
+              <button class="btn" id="clearBtn">Clear</button>
+            </div>
+          </div>
+          <div class="terminal" id="terminal" tabindex="0">
+Welcome to the AmiExpress BBS Door Preview System!
+
+Select a door from the left sidebar to begin testing.
+
+Features:
+• Live ANSI rendering
+• Real-time keyboard input
+• Hot reload on file changes
+• Debug console
+
+Your terminal is ready for input.
+          </div>
+        </div>
+
+        <div class="debug-console">
+          <div class="debug-title">Debug Console</div>
+          <div id="debugOutput"></div>
+        </div>
+
+        <div class="status-bar">
+          <div class="status-text" id="statusText">Disconnected</div>
+          <div class="status-indicator" id="statusIndicator"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let currentDoor = null;
+    let isRunning = false;
+
+    // DOM elements
+    const doorList = document.getElementById('doorList');
+    const terminal = document.getElementById('terminal');
+    const terminalTitle = document.getElementById('terminalTitle');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const debugOutput = document.getElementById('debugOutput');
+    const statusText = document.getElementById('statusText');
+    const statusIndicator = document.getElementById('statusIndicator');
+
+    // Connect to WebSocket server
+    function connect() {
+      ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port || 8080}`);
+
+      ws.onopen = () => {
+        updateStatus('Connected', true);
+        addDebug('✅ Connected to preview server');
+      };
+
+      ws.onclose = () => {
+        updateStatus('Disconnected', false);
+        addDebug('❌ Disconnected from server');
+        setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (error) => {
+        addDebug('❌ WebSocket error: ' + error, true);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleServerMessage(data);
+      };
+    }
+
+    // Handle server messages
+    function handleServerMessage(data) {
+      if (data.type === 'output') {
+        appendToTerminal(data.data);
+      } else if (data.type === 'error') {
+        addDebug('❌ Error: ' + data.message, true);
+      } else if (data.type === 'door-started') {
+        isRunning = true;
+        updateButtons();
+        addDebug('✅ Door started: ' + data.doorId);
+      } else if (data.type === 'door-stopped') {
+        isRunning = false;
+        updateButtons();
+        addDebug('🛑 Door stopped (code: ' + data.code + ')');
+      } else if (data.type === 'reload') {
+        addDebug('🔄 ' + data.message);
+      } else if (data.type === 'connected') {
+        addDebug('✅ ' + data.message);
+        loadDoors();
+      }
+    }
+
+    // Load available doors
+    async function loadDoors() {
+      try {
+        const response = await fetch('/api/doors');
+        const doors = await response.json();
+
+        doorList.innerHTML = '';
+        doors.forEach(door => {
+          const li = document.createElement('li');
+          li.className = 'door-item';
+          li.innerHTML = `
+            <div class="door-name">${door.name} v${door.version}</div>
+            <div class="door-desc">${door.description || 'No description'}</div>
+          `;
+          li.onclick = () => selectDoor(door, li);
+          doorList.appendChild(li);
+        });
+
+        addDebug(`📦 Loaded ${doors.length} doors`);
+      } catch (error) {
+        addDebug('❌ Failed to load doors: ' + error, true);
+      }
+    }
+
+    // Select door
+    function selectDoor(door, element) {
+      currentDoor = door.id;
+      terminalTitle.textContent = `${door.name} v${door.version}`;
+      startBtn.disabled = false;
+
+      // Update active state
+      document.querySelectorAll('.door-item').forEach(item => {
+        item.classList.remove('active');
+      });
+      element.classList.add('active');
+
+      addDebug(`📌 Selected: ${door.name}`);
+    }
+
+    // Start door
+    function startDoor() {
+      if (!currentDoor || !ws) return;
+
+      terminal.textContent = '';
+      ws.send(JSON.stringify({
+        type: 'start-door',
+        doorId: currentDoor
+      }));
+    }
+
+    // Stop door
+    function stopDoor() {
+      if (!ws) return;
+
+      ws.send(JSON.stringify({
+        type: 'stop-door'
+      }));
+    }
+
+    // Clear terminal
+    function clearTerminal() {
+      terminal.textContent = '';
+      addDebug('🧹 Terminal cleared');
+    }
+
+    // Append to terminal
+    function appendToTerminal(text) {
+      terminal.textContent += text;
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    // Handle keyboard input
+    terminal.addEventListener('keydown', (e) => {
+      if (!isRunning || !ws) return;
+
+      e.preventDefault();
+
+      let key = e.key;
+
+      // Map special keys
+      if (key === 'Enter') key = '\r';
+      else if (key === 'Backspace') key = '\x7f';
+      else if (key === 'Escape') key = '\x1b';
+
+      ws.send(JSON.stringify({
+        type: 'input',
+        key: key
+      }));
+    });
+
+    // Add debug message
+    function addDebug(message, isError = false) {
+      const div = document.createElement('div');
+      div.className = 'debug-message' + (isError ? ' debug-error' : '');
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      debugOutput.appendChild(div);
+      debugOutput.scrollTop = debugOutput.scrollHeight;
+
+      // Limit debug messages to 100
+      while (debugOutput.children.length > 100) {
+        debugOutput.removeChild(debugOutput.firstChild);
+      }
+    }
+
+    // Update status
+    function updateStatus(text, connected) {
+      statusText.textContent = text;
+      if (connected) {
+        statusIndicator.classList.add('connected');
+      } else {
+        statusIndicator.classList.remove('connected');
+      }
+    }
+
+    // Update buttons
+    function updateButtons() {
+      startBtn.disabled = isRunning || !currentDoor;
+      stopBtn.disabled = !isRunning;
+    }
+
+    // Event listeners
+    startBtn.onclick = startDoor;
+    stopBtn.onclick = stopDoor;
+    clearBtn.onclick = clearTerminal;
+
+    // Focus terminal
+    terminal.focus();
+
+    // Initialize
+    connect();
+    updateButtons();
+  </script>
+</body>
+</html>
