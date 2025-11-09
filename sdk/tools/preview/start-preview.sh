@@ -35,9 +35,17 @@ echo "📦 Building React frontend..."
 # Navigate to frontend directory and build
 cd tools/preview/frontend
 
-# Check if node_modules exists, install if needed
+# Check if dependencies need to be installed
+NEED_INSTALL=false
 if [ ! -d "node_modules" ]; then
-    echo "📥 Installing frontend dependencies..."
+    NEED_INSTALL=true
+    echo "📥 Installing frontend dependencies (node_modules missing)..."
+elif [ "package-lock.json" -nt "node_modules" ]; then
+    NEED_INSTALL=true
+    echo "📥 Installing frontend dependencies (package-lock.json updated)..."
+fi
+
+if [ "$NEED_INSTALL" = true ]; then
     npm install > /dev/null 2>&1
     if [ $? -ne 0 ]; then
         echo "❌ Frontend dependency installation failed!"
@@ -47,16 +55,30 @@ if [ ! -d "node_modules" ]; then
     echo "✅ Frontend dependencies installed"
 fi
 
-# Build the frontend
-npm run build > /dev/null 2>&1
-
-if [ $? -ne 0 ]; then
-    echo "❌ Frontend build failed!"
-    cd ../../..
-    exit 1
+# Check if build is needed
+NEED_BUILD=false
+if [ ! -d "../public-react" ]; then
+    NEED_BUILD=true
+    echo "🔨 Building frontend (build output missing)..."
+elif [ ! -f "../public-react/index.html" ]; then
+    NEED_BUILD=true
+    echo "🔨 Building frontend (build incomplete)..."
+elif [ "src" -nt "../public-react" ] || [ "package.json" -nt "../public-react" ]; then
+    NEED_BUILD=true
+    echo "🔨 Rebuilding frontend (source files changed)..."
 fi
 
-echo "✅ Frontend built successfully"
+if [ "$NEED_BUILD" = true ]; then
+    npm run build > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "❌ Frontend build failed!"
+        cd ../../..
+        exit 1
+    fi
+    echo "✅ Frontend built successfully"
+else
+    echo "✅ Frontend build is up to date"
+fi
 cd ../../..
 
 echo ""
