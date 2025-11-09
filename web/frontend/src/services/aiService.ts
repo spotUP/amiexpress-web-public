@@ -415,3 +415,38 @@ export function validateAudioDescription(audioText: string): { valid: boolean; i
     issues
   };
 }
+
+/**
+ * Generate a game from the wizard
+ */
+export async function generateGame(data: {
+  prompt: string;
+  audioDescription?: string;
+  metadata: any;
+  answers: Record<string, any>;
+  audioAnswers?: Record<string, any>;
+}): Promise<{
+  success: boolean;
+  doorName?: string;
+  doorPath?: string;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/wizard/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.message || 'Game generation failed');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Game generation error:', error);
+    throw error;
+  }
+}

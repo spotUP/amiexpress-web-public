@@ -100,9 +100,16 @@ export async function generateGame(req: Request, res: Response) {
     // Generate game name from prompt
     const gameName = generateGameName(prompt);
 
-    // Path to SDK
-    const sdkPath = path.join(process.cwd(), '../../sdk');
-    const doorsPath = path.join(process.cwd(), '../../doors');
+    // Path resolution: In dev mode (ts-node/tsx), __dirname is in src/handlers
+    // In production (compiled), __dirname is in dist/handlers
+    // Go up to project root: src/handlers -> src -> backend -> web -> project root
+    const projectRoot = path.resolve(__dirname, '../../../..');
+    const sdkPath = path.join(projectRoot, 'sdk');
+    const doorsPath = path.join(projectRoot, 'doors');
+
+    console.log('[wizard.handler] Project root:', projectRoot);
+    console.log('[wizard.handler] SDK path:', sdkPath);
+    console.log('[wizard.handler] Doors path:', doorsPath);
 
     // Create game using SDK CLI
     const result = await createGameWithSDK(sdkPath, doorsPath, gameName, prompt, metadata, answers);
