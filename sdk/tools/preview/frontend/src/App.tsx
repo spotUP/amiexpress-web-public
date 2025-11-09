@@ -21,9 +21,15 @@ import {
   StatusBar,
   QuickActions,
   SuccessCelebration,
+  GradientMesh,
+  OnboardingTour,
+  HapticFeedback,
+  ActivityFeed,
+  ThemeSelector,
 } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { useToast } from './hooks/useToast';
+import { useSoundEffects } from './components/ui/SoundEffects';
 import { SessionRecorder as Recorder } from './utils/sessionRecording';
 import {
   AppSettings,
@@ -36,8 +42,9 @@ import {
   ConnectionStatus,
   SessionEvent,
 } from './types';
-import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles } from 'lucide-react';
 import type { CommandItem } from './components/ui/CommandPalette';
+import type { ActivityItem } from './components/ui/ActivityFeed';
 
 const defaultSettings: AppSettings = {
   theme: 'dark',
@@ -53,6 +60,9 @@ const defaultSettings: AppSettings = {
 function App() {
   // Toast notifications
   const toast = useToast();
+
+  // Sound effects
+  const soundEffects = useSoundEffects();
 
   // State management
   const [settings, setSettings] = useLocalStorage<AppSettings>('sdk-preview-settings', defaultSettings);
@@ -71,6 +81,13 @@ function App() {
     error: null,
     lastConnected: null,
   });
+
+  // New UX features state
+  const [showOnboarding, setShowOnboarding] = useLocalStorage('sdk-preview-onboarding-complete', false);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [hapticTrigger, setHapticTrigger] = useState(false);
+  const [enableSoundEffects, setEnableSoundEffects] = useLocalStorage('sdk-preview-sound-effects', true);
+  const [showGradientMesh, setShowGradientMesh] = useLocalStorage('sdk-preview-gradient-mesh', true);
 
   // Door management
   const [doors, setDoors] = useState<DoorListItem[]>([]);
@@ -116,6 +133,30 @@ function App() {
   // Favorites management
   const [_favorites, setFavorites] = useLocalStorage<string[]>('sdk-preview-favorites', []);
 
+  // Sound effects helper
+  useEffect(() => {
+    soundEffects.setEnabled(enableSoundEffects);
+  }, [enableSoundEffects, soundEffects]);
+
+  // Activity tracking helper
+  const addActivity = (type: ActivityItem['type'], title: string, description?: string, action?: ActivityItem['action']) => {
+    const newActivity: ActivityItem = {
+      id: `${Date.now()}-${Math.random()}`,
+      type,
+      title,
+      description,
+      timestamp: Date.now(),
+      action,
+    };
+    setActivities((prev) => [newActivity, ...prev].slice(0, 50)); // Keep last 50 activities
+  };
+
+  // Trigger haptic feedback
+  const triggerHaptic = () => {
+    setHapticTrigger(true);
+    setTimeout(() => setHapticTrigger(false), 100);
+  };
+
   // Load doors list via HTTP
   const loadDoors = async () => {
     setDoorsLoading(true);
@@ -126,13 +167,19 @@ function App() {
         setDoors(doorsData);
         if (doorsData.length > 0) {
           toast.success(`Loaded ${doorsData.length} door${doorsData.length !== 1 ? 's' : ''}`);
+          addActivity('success', `Loaded ${doorsData.length} door${doorsData.length !== 1 ? 's' : ''}`);
+          soundEffects.click();
         }
       } else {
         toast.error('Failed to load doors', response.statusText);
+        addActivity('error', 'Failed to load doors', response.statusText);
+        soundEffects.error();
         console.error('Failed to load doors:', response.statusText);
       }
     } catch (error) {
       toast.error('Error loading doors', error instanceof Error ? error.message : 'Unknown error');
+      addActivity('error', 'Error loading doors', error instanceof Error ? error.message : 'Unknown error');
+      soundEffects.error();
       console.error('Error loading doors:', error);
     } finally {
       setDoorsLoading(false);
@@ -205,18 +252,25 @@ function App() {
         if (!message.data.building && message.data.lastBuild > 0) {
           if (message.data.errors.length === 0) {
             toast.success('Build succeeded!', `Completed in ${message.data.duration}ms`);
-            // Trigger success celebration and particles!
+            addActivity('success', 'Build succeeded', `Completed in ${message.data.duration}ms`);
+            // Trigger success celebration, particles, sound, and haptic!
             setCelebrationMessage('Build Successful!');
             setShowSuccessCelebration(true);
             setShowParticles(true);
+            soundEffects.buildComplete();
+            triggerHaptic();
           } else {
             toast.error('Build failed', `${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''} found`);
+            addActivity('error', 'Build failed', `${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''} found`);
+            soundEffects.error();
           }
         }
         break;
 
       case 'error':
         setTerminalOutput((prev) => [...prev, `\x1b[31mError: ${message.data}\x1b[0m`]);
+        addActivity('error', 'Error', message.data);
+        soundEffects.error();
         break;
     }
   }
@@ -349,6 +403,9 @@ function App() {
         `\x1b[36m--- Running ${selectedDoor.name} ---\x1b[0m`,
         '',
       ]);
+      addActivity('action', `Running ${selectedDoor.name}`);
+      soundEffects.click();
+      triggerHaptic();
     }
   };
 
@@ -358,6 +415,8 @@ function App() {
       setBuildStatus((prev) => ({ ...prev, building: true }));
       wsSend({ type: 'input', data: `buildDoor:${selectedDoor.id}` });
       toast.info('Building door...', `Compiling ${selectedDoor.name}`);
+      addActivity('action', `Building ${selectedDoor.name}`, 'Compiling...');
+      soundEffects.notification();
     }
   };
 
@@ -420,6 +479,28 @@ function App() {
       shortcut: 'Ctrl+Shift+T',
       category: 'Appearance',
       action: handleThemeToggle,
+    },
+    {
+      id: 'toggle-gradient-mesh',
+      label: 'Toggle Gradient Mesh',
+      description: 'Enable/disable animated background gradient',
+      icon: <Sparkles className="w-4 h-4" />,
+      category: 'Appearance',
+      action: () => setShowGradientMesh(!showGradientMesh),
+    },
+    {
+      id: 'toggle-sound-effects',
+      label: 'Toggle Sound Effects',
+      description: 'Enable/disable UI sound effects',
+      category: 'Appearance',
+      action: () => setEnableSoundEffects(!enableSoundEffects),
+    },
+    {
+      id: 'restart-onboarding',
+      label: 'Restart Onboarding Tour',
+      description: 'Show the onboarding tour again',
+      category: 'General',
+      action: () => setShowOnboarding(false),
     },
   ];
 
@@ -503,8 +584,55 @@ function App() {
     document.body.className = settings.theme === 'dark' ? 'dark bg-[#1E1E1E]' : 'light bg-white';
   }, [settings.theme]);
 
+  // Onboarding tour steps
+  const onboardingSteps = [
+    {
+      id: 'welcome',
+      title: 'Welcome to AmiExpress SDK!',
+      description: 'Let\'s take a quick tour of the interface. This will help you get started quickly.',
+      position: 'center' as const,
+    },
+    {
+      id: 'door-list',
+      title: 'Door List',
+      description: 'Browse and manage your BBS doors here. Click on a door to select it for editing or running.',
+      target: '[data-tour="door-list"]',
+      position: 'right' as const,
+    },
+    {
+      id: 'terminal',
+      title: 'Terminal Output',
+      description: 'View door output and interact with your BBS doors here. This is where you\'ll see everything running.',
+      target: '[data-tour="terminal"]',
+      position: 'top' as const,
+    },
+    {
+      id: 'code-editor',
+      title: 'Code Editor',
+      description: 'Edit your door\'s source code directly in the browser with syntax highlighting and autocompletion.',
+      target: '[data-tour="code-editor"]',
+      position: 'left' as const,
+    },
+    {
+      id: 'command-palette',
+      title: 'Command Palette',
+      description: 'Press Ctrl+K to open the command palette and quickly access any action or setting.',
+      position: 'center' as const,
+    },
+    {
+      id: 'quick-actions',
+      title: 'Quick Actions',
+      description: 'Use the floating action button to quickly create games, run doors, build projects, and capture screenshots.',
+      target: '[data-tour="quick-actions"]',
+      position: 'left' as const,
+    },
+  ];
+
   return (
     <div className="h-screen flex flex-col bg-[#1E1E1E] text-white overflow-hidden">
+      {/* Gradient Mesh Background */}
+      {showGradientMesh && <GradientMesh variant="dark" animated={true} />}
+
       {/* Header with slide-down animation */}
       <div className="animate-slideDown">
         <Header
@@ -522,7 +650,7 @@ function App() {
           {showLeftSidebar && (
             <>
               <Panel defaultSize={20} minSize={15} maxSize={30}>
-                <div className="animate-slideInLeft h-full">
+                <div className="animate-slideInLeft h-full" data-tour="door-list">
                   <DoorListEnhanced
                     doors={doors}
                     selectedDoor={selectedDoor}
@@ -613,7 +741,7 @@ function App() {
               </div>
 
               {/* Terminal with optional CRT effect */}
-              <div ref={terminalRef} className="flex-1">
+              <div ref={terminalRef} className="flex-1" data-tour="terminal">
                 <CRTEffect enabled={enableCRT} intensity="medium">
                   <Terminal
                     output={terminalOutput}
@@ -708,7 +836,7 @@ function App() {
                     )}
 
                     {rightSidebarTab === 'code' && (
-                      <div className="h-full animate-fadeIn">
+                      <div className="h-full animate-fadeIn" data-tour="code-editor">
                         <CodeEditor
                           files={doorFiles}
                           currentFile={currentFile}
@@ -817,41 +945,77 @@ function App() {
       />
 
       {/* Quick Actions Floating Button */}
-      <QuickActions
-        position="bottom-right"
-        actions={[
-          {
-            id: 'create',
-            label: 'Create Game',
-            icon: <Wand2 className="w-5 h-5" />,
-            color: 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white',
-            action: () => setShowGameWizard(true),
-          },
-          {
-            id: 'run',
-            label: 'Run Door',
-            icon: <Play className="w-5 h-5" />,
-            color: 'bg-green-600 hover:bg-green-700 text-white',
-            action: handleRunDoor,
-          },
-          {
-            id: 'build',
-            label: 'Build Door',
-            icon: <Hammer className="w-5 h-5" />,
-            color: 'bg-blue-600 hover:bg-blue-700 text-white',
-            action: handleBuildDoor,
-          },
-          {
-            id: 'screenshot',
-            label: 'Screenshot',
-            icon: <Camera className="w-5 h-5" />,
-            color: 'bg-gray-600 hover:bg-gray-700 text-white',
-            action: () => {
-              // Screenshot handled by component
+      <div data-tour="quick-actions">
+        <QuickActions
+          position="bottom-right"
+          actions={[
+            {
+              id: 'create',
+              label: 'Create Game',
+              icon: <Wand2 className="w-5 h-5" />,
+              color: 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white',
+              action: () => {
+                setShowGameWizard(true);
+                soundEffects.click();
+              },
             },
-          },
-        ]}
+            {
+              id: 'run',
+              label: 'Run Door',
+              icon: <Play className="w-5 h-5" />,
+              color: 'bg-green-600 hover:bg-green-700 text-white',
+              action: handleRunDoor,
+            },
+            {
+              id: 'build',
+              label: 'Build Door',
+              icon: <Hammer className="w-5 h-5" />,
+              color: 'bg-blue-600 hover:bg-blue-700 text-white',
+              action: handleBuildDoor,
+            },
+            {
+              id: 'screenshot',
+              label: 'Screenshot',
+              icon: <Camera className="w-5 h-5" />,
+              color: 'bg-gray-600 hover:bg-gray-700 text-white',
+              action: () => {
+                soundEffects.click();
+              },
+            },
+          ]}
+        />
+      </div>
+
+      {/* Activity Feed */}
+      <ActivityFeed
+        activities={activities}
+        onClear={() => setActivities([])}
+        onItemClick={(item) => {
+          soundEffects.click();
+        }}
       />
+
+      {/* Haptic Feedback Wrapper */}
+      <HapticFeedback type="pulse" trigger={hapticTrigger}>
+        <div />
+      </HapticFeedback>
+
+      {/* Onboarding Tour */}
+      {!showOnboarding && (
+        <OnboardingTour
+          steps={onboardingSteps}
+          onComplete={() => {
+            setShowOnboarding(true);
+            soundEffects.success();
+            addActivity('success', 'Onboarding completed', 'Welcome to AmiExpress SDK!');
+          }}
+          onSkip={() => {
+            setShowOnboarding(true);
+            soundEffects.click();
+          }}
+          autoStart={true}
+        />
+      )}
 
       {/* Status Bar */}
       <StatusBar
