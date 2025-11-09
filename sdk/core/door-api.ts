@@ -104,6 +104,46 @@ export class Door extends EventEmitter {
     // Handle shutdown gracefully
     process.on('SIGINT', () => this.shutdown());
     process.on('SIGTERM', () => this.shutdown());
+
+    // In preview mode, set up stdin for keyboard input and stdout for output
+    if (process.env.PREVIEW_MODE === '1') {
+      // Set up stdin for input
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+      }
+      process.stdin.setEncoding('utf8');
+
+      process.stdin.on('data', (data: string) => {
+        // Get first connected user (in preview mode, there's only one)
+        const user = Array.from(this.users.values())[0];
+        if (!user) return;
+
+        // Convert input to key event
+        const key: KeyEvent = {
+          key: data,
+          ctrl: data.charCodeAt(0) < 32,
+          alt: false,
+          shift: false,
+          code: data.charCodeAt(0),
+        };
+
+        // Handle special keys
+        if (data === '\u001b[A') key.key = 'ArrowUp';
+        else if (data === '\u001b[B') key.key = 'ArrowDown';
+        else if (data === '\u001b[C') key.key = 'ArrowRight';
+        else if (data === '\u001b[D') key.key = 'ArrowLeft';
+        else if (data === '\r' || data === '\n') key.key = 'Enter';
+        else if (data === '\u001b') key.key = 'Escape';
+        else if (data === '\u007f' || data === '\b') key.key = 'Backspace';
+
+        this.emit('input', { user, key });
+      });
+
+      // Set up output handler - send all output to stdout
+      this.on('output', (data: { user: BBSUser; text: string }) => {
+        process.stdout.write(data.text);
+      });
+    }
   }
 
   /**
@@ -121,6 +161,26 @@ export class Door extends EventEmitter {
 
     this.state = 'running';
     this.emit('start');
+
+    // In preview mode, automatically connect a test user
+    if (process.env.PREVIEW_MODE === '1') {
+      const testUser: BBSUser = {
+        id: 1,
+        name: 'Preview User',
+        node: 1,
+        securityLevel: 255,
+        timeLeft: 9999,
+        graphicsMode: 'ANSI',
+        termWidth: 80,
+        termHeight: 24,
+        data: {},
+      };
+
+      // Connect test user after a small delay to ensure handlers are set up
+      setTimeout(() => {
+        this.connect(testUser);
+      }, 100);
+    }
 
     // Start main loop
     this.mainLoop();

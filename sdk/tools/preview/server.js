@@ -1963,6 +1963,7 @@ function startDoor(clientId, doorId) {
   const doorProcess = spawn(command, args, {
     cwd: doorPath,
     env: { ...process.env, PREVIEW_MODE: '1' },
+    stdio: ['pipe', 'pipe', 'pipe'], // Explicitly pipe stdin, stdout, stderr
   });
 
   debugLog(clientId, `✓ [START DOOR] Process spawned with PID: ${doorProcess.pid}`);
