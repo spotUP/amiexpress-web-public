@@ -570,6 +570,10 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   const baseDir = config.getConfig().dataDir;
   const paths = [];
 
+  console.log(`[loadScreenFile] Loading screen: ${screenName}`);
+  console.log(`[loadScreenFile] Base directory: ${baseDir}`);
+  console.log(`[loadScreenFile] Conference ID: ${conferenceId}, Node ID: ${nodeId}`);
+
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
   // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
   // This is important for files imported from real Amigas (like reference-boardBBS)
@@ -655,18 +659,24 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   paths.push(bbsPath);
 
   // Try each path in order
-  for (const filePath of paths) {
+  console.log(`[loadScreenFile] Trying ${paths.length} path(s):`);
+  for (let i = 0; i < paths.length; i++) {
+    const filePath = paths[i];
+    console.log(`[loadScreenFile]   [${i + 1}/${paths.length}] ${filePath}`);
     try {
       if (fs.existsSync(filePath)) {
-        console.log(`✓ Loaded screen ${screenName} from: ${filePath}`);
+        console.log(`[loadScreenFile] ✓ Found screen ${screenName} at: ${filePath}`);
         return fs.readFileSync(filePath, 'utf-8');
+      } else {
+        console.log(`[loadScreenFile]     (not found)`);
       }
     } catch (error) {
-      console.error(`Error loading screen ${screenName} from ${filePath}:`, error);
+      console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
     }
   }
 
-  console.warn(`Screen file not found: ${screenName} (tried: ${paths.join(', ')})`);
+  console.warn(`[loadScreenFile] ✗ Screen file not found: ${screenName}`);
+  console.warn(`[loadScreenFile] Tried ${paths.length} locations`);
   return null;
 }
 
