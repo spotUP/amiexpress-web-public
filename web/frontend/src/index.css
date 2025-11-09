@@ -1,4 +1,8 @@
-/* Custom Amiga Fonts */
+/* Custom Amiga Fonts
+ * NOTE: Font files (.ttf) must be placed in public/fonts/ directory
+ * See: web/frontend/public/fonts/README.md for installation instructions
+ * Fonts will fall back to "Courier New" and monospace if not available
+ */
 @font-face {
   font-family: 'mosoul';
   src: url('/fonts/mOsOul_v1.0.ttf') format('truetype');
