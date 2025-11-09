@@ -1370,18 +1370,21 @@ export class Database {
 
   async getDailyStats(date: string): Promise<any | null> {
     if (!this.db) throw new Error('Database not initialized');
-    return this.db.get('SELECT * FROM daily_stats WHERE date = ?', [date]);
+    const stmt = this.db.prepare('SELECT * FROM daily_stats WHERE date = ?');
+    return stmt.get(date);
   }
 
   async saveDailyStats(stats: any): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
-    await this.db.run(`
+    const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO daily_stats
       (date, total_calls, unique_users, total_logins, total_messages,
        total_uploads, total_downloads, total_door_launches)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
+    `);
+
+    stmt.run(
       stats.date,
       stats.totalCalls,
       stats.uniqueUsers,
@@ -1390,29 +1393,32 @@ export class Database {
       stats.totalUploads,
       stats.totalDownloads,
       stats.totalDoorLaunches
-    ]);
+    );
   }
 
   async getTodayUniqueUserCount(date: string): Promise<number> {
     if (!this.db) throw new Error('Database not initialized');
 
-    const result = await this.db.get(`
+    const stmt = this.db.prepare(`
       SELECT COUNT(DISTINCT user_id) as count
       FROM user_sessions
       WHERE DATE(login_time) = ?
-    `, [date]);
+    `);
 
+    const result = stmt.get(date) as any;
     return result?.count || 0;
   }
 
   async getDailyStatsRange(startDate: string, endDate: string): Promise<any[]> {
     if (!this.db) throw new Error('Database not initialized');
 
-    return this.db.all(`
+    const stmt = this.db.prepare(`
       SELECT * FROM daily_stats
       WHERE date BETWEEN ? AND ?
       ORDER BY date DESC
-    `, [startDate, endDate]);
+    `);
+
+    return stmt.all(startDate, endDate);
   }
 }
 

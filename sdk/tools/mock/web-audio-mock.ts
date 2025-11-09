@@ -125,6 +125,11 @@ export function initWebAudioMocks(): void {
     public maxValue: number = 1;
     public automationRate: string = 'a-rate';
 
+    // Make this look like a real AudioParam to Tone.js
+    get [Symbol.toStringTag]() {
+      return 'AudioParam';
+    }
+
     setValueAtTime(value: number, startTime: number): this {
       this.value = value;
       return this;
@@ -402,9 +407,16 @@ export function isPreviewMode(): boolean {
 }
 
 /**
- * Auto-initialize mocks if in preview mode
+ * Check if we're running in Node.js (not browser)
+ */
+export function isNodeEnvironment(): boolean {
+  return typeof process !== 'undefined' && process.versions?.node !== undefined;
+}
+
+/**
+ * Auto-initialize mocks if in Node.js environment (not browser)
  * This runs when the module is imported
  */
-if (isPreviewMode()) {
+if (isNodeEnvironment() && typeof window === 'undefined') {
   initWebAudioMocks();
 }
