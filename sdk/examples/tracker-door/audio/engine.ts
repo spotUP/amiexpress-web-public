@@ -1,11 +1,10 @@
 /**
  * Audio Engine - Tone.js Wrapper
  * Manages playback, synthesis, and effects
+ *
+ * Now runs in the browser with REAL Web Audio API!
+ * No more mocking needed - this is genuine browser audio.
  */
-
-// Initialize Web Audio API mocks for Node.js preview environment
-// This MUST be imported before Tone.js to provide AudioContext in Node.js
-import '../../../tools/mock/web-audio-mock';
 
 import * as Tone from 'tone';
 import { Instrument, Note, Pattern, Song, EffectPluginType } from '../data/types';

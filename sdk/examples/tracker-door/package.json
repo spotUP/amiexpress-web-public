@@ -2,7 +2,9 @@
   "name": "tracker-door",
   "version": "1.0.0",
   "description": "Professional music tracker BBS door inspired by Renoise, Protracker, and FastTracker II",
-  "main": "dist/index.js",
+  "runtime": "client",
+  "main": "index.ts",
+  "entry": "index.ts",
   "scripts": {
     "dev": "tsx watch index.ts",
     "build": "tsc",
