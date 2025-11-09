@@ -141,6 +141,9 @@ function Terminal() {
 
     ws.on('ansi-output', (data: string) => {
       term.write(data);
+      // Ensure terminal updates and scrolls to show new content even without focus
+      term.scrollToBottom();
+      term.refresh(0, term.rows - 1);
     });
 
     ws.on('login-success', (data: any) => {
