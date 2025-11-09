@@ -682,6 +682,17 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
                         </button>
                       ))}
                     </div>
+                    {provider === 'openrouter' && (
+                      <div className="mt-3 p-3 bg-green-900/20 border border-green-700/50 rounded-lg text-xs text-gray-300">
+                        <p className="font-semibold text-green-400 mb-1">Why OpenRouter?</p>
+                        <ul className="space-y-1 list-disc list-inside">
+                          <li>Access to 14+ free models (Llama, Mistral, DeepSeek, Qwen, etc.)</li>
+                          <li>No credit card required - just sign up</li>
+                          <li>Models updated automatically via API</li>
+                          <li>Includes powerful models like Llama 4 Maverick (400B) for free</li>
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   {/* Model Selection */}
@@ -742,13 +753,34 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
                       </label>
 
                       {!useServerKey && (
-                        <input
-                          type="password"
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          placeholder="Enter your API key..."
-                          className="w-full px-4 py-2 bg-gray-900/50 border border-gray-600 rounded-lg text-white"
-                        />
+                        <>
+                          <input
+                            type="password"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            placeholder={provider === 'openrouter' ? 'Enter your OpenRouter API key (sk-or-...)' : 'Enter your API key...'}
+                            className="w-full px-4 py-2 bg-gray-900/50 border border-gray-600 rounded-lg text-white"
+                          />
+                          {provider === 'openrouter' && (
+                            <div className="text-xs text-gray-400 space-y-1">
+                              <p className="flex items-start gap-2">
+                                <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-400" />
+                                <span>
+                                  <strong className="text-yellow-400">Free models require an API key:</strong> Sign up at{' '}
+                                  <a
+                                    href="https://openrouter.ai/keys"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:text-blue-300 underline"
+                                  >
+                                    openrouter.ai/keys
+                                  </a>
+                                  {' '}to get your free API key. The models are free to use (no credit card required), but you need an account for authentication.
+                                </span>
+                              </p>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
