@@ -2180,12 +2180,12 @@ server.listen(PORT, async () => {
 ║   Server running at: http://localhost:${PORT}                     ║
 ║                                                                ║
 ║   Features:                                                    ║
-║   ✓ Live ANSI rendering                                       ║
-║   ✓ Real-time keyboard input                                  ║
-║   ✓ Hot reload on file changes                                ║
-║   ✓ Debug console                                             ║
+║   ✓ Live ANSI rendering                                        ║
+║   ✓ Real-time keyboard input                                   ║
+║   ✓ Hot reload on file changes                                 ║
+║   ✓ Debug console                                              ║
 ║                                                                ║
-║   Open your browser and start testing!                        ║
+║   Open your browser and start testing!                         ║
 ║                                                                ║
 ╚════════════════════════════════════════════════════════════════╝
   `);

@@ -71,7 +71,7 @@ function App() {
   const [terminalOutput, setTerminalOutput] = useState<string[]>([
     '\x1b[36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m',
     '\x1b[36m║                                                                              ║\x1b[0m',
-    '\x1b[36m║                    \x1b[37mAmiExpress SDK - Door Preview System\x1b[36m                    ║\x1b[0m',
+    '\x1b[36m║                    \x1b[37mAmiExpress SDK - Door Preview System\x1b[36m                       ║\x1b[0m',
     '\x1b[36m║                                                                              ║\x1b[0m',
     '\x1b[36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m',
     '',
