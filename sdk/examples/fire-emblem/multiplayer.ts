@@ -107,8 +107,8 @@ export class MultiplayerManager {
     this.door = door;
     this.localPlayerId = playerId;
     this.gfx = new GraphicsEngine({ width: 80, height: 24 });
-    this.network = new NetworkEngine({ mode: 'turn-based', maxPlayers: 4 });
-    this.combat = new TacticalCombatEngine({ width: 20, height: 15 });
+    this.network = new NetworkEngine({ mode: 'turn-based' });
+    this.combat = new TacticalCombatEngine({ gridWidth: 20, gridHeight: 15 });
     this.classes = new ClassSystem();
 
     this.matchState = {
@@ -150,11 +150,12 @@ export class MultiplayerManager {
     this.matchState.mode = mode;
     this.showMatchmaking();
 
-    // Connect to matchmaking server
-    await this.network.connect('matchmaking.amiexpress.com');
+    // Create a matchmaking room
+    const roomId = `matchmaking-${Date.now()}`;
+    this.network.createRoom(roomId, { maxPlayers: 4 });
 
-    // Wait for match
-    this.network.send('find_match', { mode });
+    // Broadcast find match request
+    this.network.broadcast('find_match', { mode });
   }
 
   /**
@@ -162,9 +163,9 @@ export class MultiplayerManager {
    */
   async createLobby(mode: MultiplayerMode): Promise<string> {
     this.matchState.mode = mode;
-    await this.network.host();
 
     const lobbyCode = this.generateLobbyCode();
+    this.network.createRoom(lobbyCode, { maxPlayers: 4 });
     this.showLobby(lobbyCode);
 
     return lobbyCode;
@@ -175,7 +176,7 @@ export class MultiplayerManager {
    */
   async joinLobby(lobbyCode: string): Promise<void> {
     this.showConnecting();
-    await this.network.join(lobbyCode);
+    this.network.joinRoom(lobbyCode);
   }
 
   /**
@@ -300,11 +301,10 @@ export class MultiplayerManager {
         const unit = this.combat.createUnit({
           id: `draft_${i}`,
           name: classData.name,
-          class: classData,
+          class: classData.name as any,
           level: 5,
           stats: {
             hp: 20,
-            maxHp: 20,
             str: 8,
             mag: 5,
             skl: 7,
@@ -470,7 +470,7 @@ export class MultiplayerManager {
 
     const unit = player.units.find(u => u.id === data.unitId);
     if (unit && !unit.hasMoved) {
-      const validMoves = this.combat.getMovementRange(unit.id, unit.position);
+      const validMoves = this.combat.getMovementRange(unit);
       const isValid = validMoves.some(pos => pos.x === data.position.x && pos.y === data.position.y);
 
       if (isValid) {
@@ -584,8 +584,7 @@ export class MultiplayerManager {
    * Sync state to all players
    */
   private syncState(): void {
-    this.network.broadcast({
-      type: MessageType.Sync,
+    this.network.broadcast(MessageType.Sync, {
       playerId: this.localPlayerId,
       data: this.serializeState()
     });
@@ -661,8 +660,7 @@ export class MultiplayerManager {
    * Send chat message
    */
   sendChat(message: string): void {
-    this.network.broadcast({
-      type: MessageType.Chat,
+    this.network.broadcast(MessageType.Chat, {
       playerId: this.localPlayerId,
       data: { message }
     });
@@ -790,8 +788,7 @@ export class MultiplayerManager {
     const player = this.matchState.players.get(this.localPlayerId);
     if (player) {
       player.ready = ready;
-      this.network.broadcast({
-        type: MessageType.Ready,
+      this.network.broadcast(MessageType.Ready, {
         playerId: this.localPlayerId,
         data: { ready }
       });

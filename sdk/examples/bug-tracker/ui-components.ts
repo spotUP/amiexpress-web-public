@@ -11,7 +11,7 @@
  * - Confirmation prompts
  */
 
-import { Door, AnsiColor } from '@amiexpress/bbs-door-sdk';
+import { Door, AnsiColor, BBSUser, KeyEvent } from '@amiexpress/bbs-door-sdk';
 
 export enum ToastType {
   SUCCESS = 'success',
@@ -68,7 +68,7 @@ export class UIComponents {
         break;
     }
 
-    const width = Math.min(message.length + 6, 76);
+    const width = Math.min(toast.message.length + 6, 76);
     const x = Math.floor((80 - width) / 2);
     const y = 22;
 
@@ -195,7 +195,8 @@ export class UIComponents {
     return new Promise((resolve) => {
       let selected = defaultYes;
 
-      const handler = (key: string) => {
+      const handler = (user: BBSUser, keyEvent: KeyEvent) => {
+        const key = keyEvent.key;
         if (key === 'ArrowLeft' || key === 'ArrowRight') {
           selected = !selected;
 
@@ -371,5 +372,20 @@ export class UIComponents {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
+  }
+
+  /**
+   * Show loading spinner (alias for startSpinner)
+   */
+  showLoadingSpinner(message: string, x: number = 30, y: number = 12): void {
+    this.startSpinner(message, x, y);
+  }
+
+  /**
+   * Handle input events (placeholder for toast management)
+   */
+  handleInput(key: string): void {
+    // This method can be used to handle keyboard shortcuts for toast management
+    // Currently just a placeholder
   }
 }
