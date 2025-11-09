@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { GamePrompt, WizardState } from '../../types/wizard';
 import { gameTemplates, getTemplateById } from '../../data/gameTemplates';
-import { generateReviewQuestions, defaultQuestions } from '../../data/wizardQuestions';
-import { enhancePrompt, analyzePrompt, validatePrompt } from '../../services/aiService';
+import { audioTemplates, getAudioTemplateById } from '../../data/audioTemplates';
+import { generateReviewQuestions, defaultQuestions, generateAudioReviewQuestions, defaultAudioQuestions } from '../../data/wizardQuestions';
+import { enhancePrompt, analyzePrompt, validatePrompt, enhanceAudioDescription, analyzeAudioDescription, validateAudioDescription } from '../../services/aiService';
 import TemplateLibrary from './TemplateLibrary';
+import AudioTemplateLibrary from './AudioTemplateLibrary';
 import PromptInput from './PromptInput';
+import AudioInput from './AudioInput';
 import PromptComparison from './PromptComparison';
+import AudioComparison from './AudioComparison';
 import QuestionFlow from './QuestionFlow';
 import ProgressBar from './ProgressBar';
 import './GamePromptWizard.css';
@@ -17,13 +21,19 @@ function GamePromptWizard() {
     promptHistory: [],
     currentQuestionIndex: 0,
     questions: [],
+    audioQuestions: [],
+    currentAudioQuestionIndex: 0,
     answers: {},
+    audioAnswers: {},
     isEnhancing: false,
+    isEnhancingAudio: false,
     isGenerating: false
   });
 
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showAudioTemplates, setShowAudioTemplates] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [showAudioComparison, setShowAudioComparison] = useState(false);
 
   /**
    * Create a new empty prompt
@@ -208,8 +218,8 @@ function GamePromptWizard() {
         currentQuestionIndex: prev.currentQuestionIndex + 1
       }));
     } else {
-      // All questions answered - move to generate
-      setState(prev => ({ ...prev, step: 'generate' }));
+      // All questions answered - move to audio step
+      setState(prev => ({ ...prev, step: 'audio' }));
     }
   }
 
@@ -218,6 +228,180 @@ function GamePromptWizard() {
    */
   function handleSkipToGenerate() {
     setState(prev => ({ ...prev, step: 'generate' }));
+  }
+
+  /**
+   * Move to audio step
+   */
+  function handleMoveToAudio() {
+    setState(prev => ({ ...prev, step: 'audio' }));
+  }
+
+  /**
+   * Handle audio template selection
+   */
+  function handleAudioTemplateSelect(templateId: string) {
+    const template = getAudioTemplateById(templateId);
+    if (template) {
+      setState(prev => ({
+        ...prev,
+        currentPrompt: {
+          ...prev.currentPrompt,
+          audioDescription: template.exampleDescription,
+          metadata: {
+            ...prev.currentPrompt.metadata,
+            audioMetadata: template.metadata
+          }
+        }
+      }));
+      setShowAudioTemplates(false);
+    }
+  }
+
+  /**
+   * Handle audio description change
+   */
+  function handleAudioChange(text: string) {
+    setState(prev => ({
+      ...prev,
+      currentPrompt: {
+        ...prev.currentPrompt,
+        audioDescription: text
+      }
+    }));
+  }
+
+  /**
+   * Handle AI audio enhancement
+   */
+  async function handleEnhanceAudio() {
+    const validation = validateAudioDescription(state.currentPrompt.audioDescription || '');
+    if (!validation.valid) {
+      setState(prev => ({ ...prev, error: validation.issues.join('. ') }));
+      return;
+    }
+
+    setState(prev => ({ ...prev, isEnhancingAudio: true, error: undefined }));
+
+    try {
+      const result = await enhanceAudioDescription({
+        rawAudioDescription: state.currentPrompt.audioDescription || '',
+        context: state.currentPrompt.metadata,
+        enhancementLevel: 'detailed'
+      });
+
+      setState(prev => ({
+        ...prev,
+        currentPrompt: {
+          ...prev.currentPrompt,
+          enhancedAudioDescription: result.enhanced,
+          metadata: {
+            ...prev.currentPrompt.metadata,
+            audioMetadata: { ...prev.currentPrompt.metadata.audioMetadata, ...result.detectedMetadata }
+          }
+        },
+        isEnhancingAudio: false
+      }));
+
+      setShowAudioComparison(true);
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        isEnhancingAudio: false,
+        error: error.message || 'Audio enhancement failed'
+      }));
+    }
+  }
+
+  /**
+   * Accept enhanced audio
+   */
+  function handleAcceptAudioEnhancement() {
+    if (state.currentPrompt.enhancedAudioDescription) {
+      setState(prev => ({
+        ...prev,
+        currentPrompt: {
+          ...prev.currentPrompt,
+          audioDescription: prev.currentPrompt.enhancedAudioDescription!
+        }
+      }));
+    }
+    setShowAudioComparison(false);
+  }
+
+  /**
+   * Reject audio enhancement
+   */
+  function handleRejectAudioEnhancement() {
+    setState(prev => ({
+      ...prev,
+      currentPrompt: {
+        ...prev.currentPrompt,
+        enhancedAudioDescription: undefined
+      }
+    }));
+    setShowAudioComparison(false);
+  }
+
+  /**
+   * Start audio review
+   */
+  async function handleStartAudioReview() {
+    setState(prev => ({ ...prev, isEnhancingAudio: true }));
+
+    try {
+      const metadata = await analyzeAudioDescription(state.currentPrompt.audioDescription || '');
+      const questions = generateAudioReviewQuestions(state.currentPrompt.audioDescription || '', metadata);
+
+      setState(prev => ({
+        ...prev,
+        step: 'audio-review',
+        audioQuestions: questions.length > 0 ? questions : defaultAudioQuestions,
+        currentAudioQuestionIndex: 0,
+        isEnhancingAudio: false,
+        currentPrompt: {
+          ...prev.currentPrompt,
+          metadata: {
+            ...prev.currentPrompt.metadata,
+            audioMetadata: { ...prev.currentPrompt.metadata.audioMetadata, ...metadata }
+          }
+        }
+      }));
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        isEnhancingAudio: false,
+        error: error.message || 'Audio analysis failed'
+      }));
+    }
+  }
+
+  /**
+   * Handle audio question answer
+   */
+  function handleAudioAnswer(questionId: string, answer: any) {
+    setState(prev => ({
+      ...prev,
+      audioAnswers: {
+        ...prev.audioAnswers,
+        [questionId]: answer
+      }
+    }));
+  }
+
+  /**
+   * Move to next audio question
+   */
+  function handleNextAudioQuestion() {
+    if (state.currentAudioQuestionIndex < state.audioQuestions.length - 1) {
+      setState(prev => ({
+        ...prev,
+        currentAudioQuestionIndex: prev.currentAudioQuestionIndex + 1
+      }));
+    } else {
+      // All audio questions answered - move to generate
+      setState(prev => ({ ...prev, step: 'generate' }));
+    }
   }
 
   /**
@@ -232,8 +416,10 @@ function GamePromptWizard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: state.currentPrompt.rawText,
+          audioDescription: state.currentPrompt.audioDescription,
           metadata: state.currentPrompt.metadata,
-          answers: state.answers
+          answers: state.answers,
+          audioAnswers: state.audioAnswers
         })
       });
 
@@ -284,12 +470,18 @@ function GamePromptWizard() {
       promptHistory: [],
       currentQuestionIndex: 0,
       questions: [],
+      audioQuestions: [],
+      currentAudioQuestionIndex: 0,
       answers: {},
+      audioAnswers: {},
       isEnhancing: false,
+      isEnhancingAudio: false,
       isGenerating: false
     });
     setShowTemplates(false);
+    setShowAudioTemplates(false);
     setShowComparison(false);
+    setShowAudioComparison(false);
   }
 
   return (
@@ -303,8 +495,8 @@ function GamePromptWizard() {
 
       <ProgressBar
         step={state.step}
-        totalSteps={state.questions.length}
-        currentStep={state.currentQuestionIndex}
+        totalSteps={state.step === 'audio-review' ? state.audioQuestions.length : state.questions.length}
+        currentStep={state.step === 'audio-review' ? state.currentAudioQuestionIndex : state.currentQuestionIndex}
       />
 
       {state.error && (
@@ -386,26 +578,121 @@ function GamePromptWizard() {
               answers={state.answers}
               onAnswer={handleAnswer}
               onNext={handleNextQuestion}
+              onSkip={handleMoveToAudio}
+            />
+          </div>
+        )}
+
+        {/* Step 3: Audio Description */}
+        {state.step === 'audio' && (
+          <div className="wizard-step wizard-audio-step">
+            <div className="wizard-actions-top">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowAudioTemplates(!showAudioTemplates)}
+              >
+                {showAudioTemplates ? 'Hide Audio Templates' : 'Browse Audio Templates'}
+              </button>
+            </div>
+
+            {showAudioTemplates && (
+              <AudioTemplateLibrary
+                templates={audioTemplates}
+                onSelect={handleAudioTemplateSelect}
+              />
+            )}
+
+            <AudioInput
+              value={state.currentPrompt.audioDescription || ''}
+              onChange={handleAudioChange}
+              disabled={state.isEnhancingAudio}
+            />
+
+            <div className="wizard-actions">
+              <button
+                className="btn btn-primary btn-large"
+                onClick={handleEnhanceAudio}
+                disabled={state.isEnhancingAudio || (state.currentPrompt.audioDescription?.length || 0) < 50}
+              >
+                {state.isEnhancingAudio ? 'Enhancing Audio...' : 'Enhance Audio with AI'}
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={handleStartAudioReview}
+                disabled={(state.currentPrompt.audioDescription?.length || 0) < 50}
+              >
+                Skip to Audio Review
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={handleSkipToGenerate}
+              >
+                Skip Audio (Generate Now)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Audio Comparison View */}
+        {showAudioComparison && state.currentPrompt.enhancedAudioDescription && (
+          <AudioComparison
+            original={state.currentPrompt.audioDescription || ''}
+            enhanced={state.currentPrompt.enhancedAudioDescription}
+            onAccept={handleAcceptAudioEnhancement}
+            onReject={handleRejectAudioEnhancement}
+            onEdit={(text) => handleAudioChange(text)}
+          />
+        )}
+
+        {/* Step 4: Audio Review */}
+        {state.step === 'audio-review' && (
+          <div className="wizard-step wizard-audio-review-step">
+            <QuestionFlow
+              questions={state.audioQuestions}
+              currentIndex={state.currentAudioQuestionIndex}
+              answers={state.audioAnswers}
+              onAnswer={handleAudioAnswer}
+              onNext={handleNextAudioQuestion}
               onSkip={handleSkipToGenerate}
             />
           </div>
         )}
 
-        {/* Step 3: Generate */}
+        {/* Step 5: Generate */}
         {state.step === 'generate' && (
           <div className="wizard-step wizard-generate-step">
             <div className="generate-summary">
               <h2>Ready to Generate Your Game!</h2>
               <div className="summary-section">
-                <h3>Prompt:</h3>
+                <h3>Game Prompt:</h3>
                 <div className="prompt-display">{state.currentPrompt.rawText}</div>
               </div>
 
+              {state.currentPrompt.audioDescription && (
+                <div className="summary-section">
+                  <h3>Audio Description:</h3>
+                  <div className="prompt-display">{state.currentPrompt.audioDescription}</div>
+                </div>
+              )}
+
               {Object.keys(state.answers).length > 0 && (
                 <div className="summary-section">
-                  <h3>Your Choices:</h3>
+                  <h3>Game Prompt Choices:</h3>
                   <ul className="answers-list">
                     {Object.entries(state.answers).map(([key, value]) => (
+                      <li key={key}>
+                        <strong>{key}:</strong> {Array.isArray(value) ? value.join(', ') : value}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {Object.keys(state.audioAnswers).length > 0 && (
+                <div className="summary-section">
+                  <h3>Audio Choices:</h3>
+                  <ul className="answers-list">
+                    {Object.entries(state.audioAnswers).map(([key, value]) => (
                       <li key={key}>
                         <strong>{key}:</strong> {Array.isArray(value) ? value.join(', ') : value}
                       </li>
