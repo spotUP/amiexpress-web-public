@@ -11,6 +11,7 @@ import {
   Header,
   DoorList,
   Settings,
+  EnhancedGameWizard,
 } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { SessionRecorder as Recorder } from './utils/sessionRecording';
@@ -42,6 +43,7 @@ function App() {
   // State management
   const [settings, setSettings] = useLocalStorage<AppSettings>('sdk-preview-settings', defaultSettings);
   const [showSettings, setShowSettings] = useState(false);
+  const [showGameWizard, setShowGameWizard] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
     connected: false,
     reconnecting: false,
@@ -150,9 +152,16 @@ function App() {
         break;
 
       case 'fileContent':
-        setDoorFiles(message.data.files);
+        // Handle both file tree updates and single file content updates
+        if (message.data.files) {
+          setDoorFiles(message.data.files);
+        }
         if (message.data.currentFile) {
           setCurrentFile(message.data.currentFile);
+        }
+        // Handle single file content (from loadFile)
+        if (message.data.path && message.data.content !== undefined) {
+          setCurrentFile((prev) => prev ? { ...prev, content: message.data.content } : null);
         }
         break;
 
@@ -342,6 +351,7 @@ function App() {
                   selectedDoor={selectedDoor}
                   onDoorSelect={handleDoorSelect}
                   onToggleFavorite={handleToggleFavorite}
+                  onCreateNewGame={() => setShowGameWizard(true)}
                 />
               </Panel>
               <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-600 transition-colors" />
@@ -537,6 +547,22 @@ function App() {
           settings={settings}
           onSettingsChange={setSettings}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Enhanced Game Wizard modal */}
+      {showGameWizard && (
+        <EnhancedGameWizard
+          onClose={() => setShowGameWizard(false)}
+          onGameCreated={(doorId) => {
+            // Reload doors list and select the new door
+            loadDoors().then(() => {
+              const newDoor = doors.find((d) => d.id === doorId);
+              if (newDoor) {
+                handleDoorSelect(newDoor);
+              }
+            });
+          }}
         />
       )}
     </div>

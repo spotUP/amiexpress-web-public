@@ -380,10 +380,10 @@ if (!fs.existsSync(downloadsDir)) {
 const downloadTracking = new Map();
 
 // API: Create release archive
-app.post('/api/doors/:doorId/release', (req, res) => {
+app.post('/api/doors/:doorId/release', async (req, res) => {
   try {
     const { doorId } = req.params;
-    const { format = 'zip' } = req.body;
+    const { format = 'zip', includeSource = true, includeAssets = true, includeDocs = true, doormanCompatible = true } = req.body;
     const doorPath = path.join(__dirname, '../../examples', doorId);
 
     if (!fs.existsSync(doorPath)) {
@@ -403,66 +403,152 @@ app.post('/api/doors/:doorId/release', (req, res) => {
     console.log(`📦 Creating release: ${filename}`);
 
     if (format === 'zip') {
-      const output = fs.createWriteStream(outputPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
+      const AdmZip = require('adm-zip');
+      const zip = new AdmZip();
 
-      archive.on('error', (err) => {
-        throw err;
-      });
+      // Helper to add files recursively
+      const addDirectory = (dirPath, zipPath = '') => {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          const zipFilePath = zipPath ? path.join(zipPath, entry.name) : entry.name;
 
-      archive.on('end', () => {
-        const stats = fs.statSync(outputPath);
-        console.log(`✓ Release created: ${filename} (${stats.size} bytes)`);
+          // Skip excluded directories
+          if (entry.isDirectory()) {
+            if (['node_modules', '.git', 'dist', 'downloads'].includes(entry.name)) {
+              continue;
+            }
+            addDirectory(fullPath, zipFilePath);
+          } else {
+            // Add file based on options
+            if (entry.name === 'package.json' || entry.name === 'tsconfig.json') {
+              zip.addLocalFile(fullPath, zipPath);
+            } else if (includeSource && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
+              zip.addLocalFile(fullPath, zipPath);
+            } else if (includeAssets && (fullPath.includes('/assets/') || fullPath.includes('/data/'))) {
+              zip.addLocalFile(fullPath, zipPath);
+            } else if (includeDocs && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
+              zip.addLocalFile(fullPath, zipPath);
+            }
+          }
+        }
+      };
 
-        // Track for auto-cleanup (1 hour)
-        downloadTracking.set(filename, {
-          path: outputPath,
-          created: Date.now(),
-        });
+      // Add door files based on options
+      addDirectory(doorPath);
 
-        res.json({ filename, size: stats.size });
-      });
+      // Generate FILE_ID.DIZ (BBS standard format)
+      const generateFileDiz = () => {
+        const lines = [];
+        const title = `${pkg.name || doorId} v${version}`;
 
-      archive.pipe(output);
+        // Center title (45 char width for FILE_ID.DIZ standard)
+        const centerText = (text, width = 45) => {
+          const padding = Math.max(0, Math.floor((width - text.length) / 2));
+          return ' '.repeat(padding) + text;
+        };
 
-      // Create .info metadata file
-      const infoContent = `NAME=${pkg.name}
+        const wordWrap = (text, width = 45) => {
+          const words = text.split(' ');
+          const result = [];
+          let currentLine = '';
+          for (const word of words) {
+            if ((currentLine + ' ' + word).trim().length <= width) {
+              currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+              if (currentLine) result.push(currentLine);
+              currentLine = word;
+            }
+          }
+          if (currentLine) result.push(currentLine);
+          return result;
+        };
+
+        lines.push(centerText(title));
+        lines.push(centerText('─'.repeat(Math.min(title.length, 45))));
+        lines.push('');
+
+        // Description (word-wrapped to 45 chars)
+        if (pkg.description) {
+          lines.push(...wordWrap(pkg.description));
+          lines.push('');
+        }
+
+        lines.push(`By: ${pkg.author || 'Unknown'}`);
+        lines.push(`Category: ${pkg.category || 'BBS Door'}`);
+        lines.push(`Released: ${new Date().toISOString().split('T')[0]}`);
+
+        // Limit to 10 lines, 45 chars each (FILE_ID.DIZ standard)
+        return lines.slice(0, 10).map(l => l.substring(0, 45)).join('\r\n');
+      };
+
+      zip.addFile('FILE_ID.DIZ', Buffer.from(generateFileDiz(), 'utf-8'));
+
+      // Create .info metadata file (Doorman compatible)
+      if (doormanCompatible) {
+        const bbsCommand = pkg.bbsCommand || doorId.toUpperCase();
+        const infoContent = `NAME=${pkg.name || doorId}
 VERSION=${version}
-DESCRIPTION=${pkg.description || ''}
-AUTHOR=${pkg.author || ''}
+COMMAND=${bbsCommand}
+DESCRIPTION=${pkg.description || 'BBS Door Game'}
+AUTHOR=${pkg.author || 'Unknown'}
+CATEGORY=${pkg.category || 'Game'}
 CREATED=${new Date().toISOString()}
+REQUIRES_NODE=true
+MIN_NODE_VERSION=18.0.0
 `;
-      archive.append(infoContent, { name: `${doorId}.info` });
-
-      // Create FILE_ID.DIZ if it doesn't exist
-      const dizPath = path.join(doorPath, 'FILE_ID.DIZ');
-      if (!fs.existsSync(dizPath)) {
-        const dizContent = `${pkg.name || doorId} v${version}
-${pkg.description || 'BBS Door Game'}
-
-Author: ${pkg.author || 'Unknown'}
-Created: ${new Date().toISOString().split('T')[0]}
-`;
-        archive.append(dizContent, { name: 'FILE_ID.DIZ' });
+        zip.addFile(`${doorId}.info`, Buffer.from(infoContent, 'utf-8'));
       }
 
-      // Add all door files
-      archive.directory(doorPath, false, (entry) => {
-        // Exclude node_modules, .git, dist, downloads
-        if (
-          entry.name.includes('node_modules') ||
-          entry.name.includes('.git') ||
-          entry.name.includes('dist') ||
-          entry.name.includes('downloads')
-        ) {
-          return false;
-        }
-        return entry;
+      // Create README.TXT
+      if (includeDocs) {
+        const readmeContent = `${pkg.name || doorId} v${version}
+${'='.repeat((pkg.name || doorId).length + version.length + 3)}
+
+${pkg.description || 'BBS Door Game'}
+
+INSTALLATION
+------------
+1. Extract all files to your BBS doors directory
+2. Install Node.js 18+ if not already installed
+3. Run: npm install
+4. Configure in your BBS menu system
+
+REQUIREMENTS
+------------
+- Node.js 18 or higher
+- Modern terminal with ANSI support
+- Minimum 80x24 terminal size
+
+AUTHOR
+------
+${pkg.author || 'Unknown'}
+
+RELEASED
+--------
+${new Date().toISOString().split('T')[0]}
+
+Made with AmiExpress BBS Door SDK
+https://github.com/amiexpress/sdk
+`;
+        zip.addFile('README.TXT', Buffer.from(readmeContent, 'utf-8'));
+      }
+
+      // Write ZIP file
+      zip.writeZip(outputPath);
+
+      const stats = fs.statSync(outputPath);
+      console.log(`✓ Release created: ${filename} (${stats.size} bytes)`);
+
+      // Track for auto-cleanup (1 hour)
+      downloadTracking.set(filename, {
+        path: outputPath,
+        created: Date.now(),
       });
 
-      archive.finalize();
+      res.json({ filename, size: stats.size });
     } else {
-      res.status(400).json({ error: 'Unsupported format. Use "zip"' });
+      res.status(400).json({ error: 'Unsupported format. Only "zip" is supported' });
     }
   } catch (error) {
     console.error('Error creating release:', error);
@@ -498,6 +584,666 @@ app.get('/downloads/:filename', (req, res) => {
     });
   } catch (error) {
     console.error('Error serving download:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API: Generate game with Claude AI
+app.post('/api/games/generate', async (req, res) => {
+  try {
+    const { name, description, bbsCommand, type, features, apiKey } = req.body;
+
+    if (!name || !description) {
+      return res.status(400).json({ error: 'Name and description are required' });
+    }
+
+    console.log(`🎮 Generating game: ${name}`);
+
+    // Use provided API key or server environment variable
+    const claudeApiKey = apiKey || process.env.ANTHROPIC_API_KEY;
+    if (!claudeApiKey) {
+      return res.status(400).json({
+        error: 'No Claude AI API key provided. Either supply your own key or configure ANTHROPIC_API_KEY on the server.'
+      });
+    }
+
+    // Create game prompt
+    const prompt = `You are an expert game developer creating a BBS door game using the AmiExpress SDK.
+
+Create a ${type} game called "${name}".
+
+Description: ${description}
+
+Features to include:
+${features.map(f => `- ${f}`).join('\n')}
+
+Generate COMPLETE, production-ready TypeScript code for this game using the AmiExpress BBS Door SDK.
+
+The code must:
+1. Import from '@amiexpress/bbs-door-sdk'
+2. Use the Door, GraphicsEngine, and other SDK components
+3. Implement all requested features
+4. Include proper ANSI graphics and colors (no emojis, use * X ! - + characters)
+5. Handle user input with arrow keys and common keys
+6. Be playable and fun
+7. Follow BBS aesthetic (80x24 terminal, retro style)
+
+Return ONLY valid TypeScript code with no explanations. The code should be complete and ready to run.`;
+
+    // Call Claude AI API
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeApiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8000,
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Claude AI API request failed');
+    }
+
+    const aiResponse = await response.json();
+    const gameCode = aiResponse.content[0].text;
+
+    // Create door ID (sanitized name)
+    const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    // Create door directory
+    if (fs.existsSync(doorPath)) {
+      return res.status(409).json({ error: `A game with ID "${doorId}" already exists` });
+    }
+
+    fs.mkdirSync(doorPath, { recursive: true });
+
+    // Create package.json
+    const packageJson = {
+      name: `@amiexpress/door-${doorId}`,
+      version: '1.0.0',
+      description: description,
+      bbsCommand: bbsCommand || doorId.toUpperCase().replace(/-/g, '_'),
+      category: type || 'Game',
+      main: 'index.ts',
+      scripts: {
+        start: 'ts-node index.ts',
+        build: 'tsc',
+      },
+      dependencies: {
+        '@amiexpress/bbs-door-sdk': 'file:../../',
+      },
+      devDependencies: {
+        '@types/node': '^20.0.0',
+        'typescript': '^5.0.0',
+        'ts-node': '^10.9.0',
+      },
+      author: 'AI Game Wizard',
+      license: 'MIT',
+    };
+
+    fs.writeFileSync(
+      path.join(doorPath, 'package.json'),
+      JSON.stringify(packageJson, null, 2)
+    );
+
+    // Create tsconfig.json
+    const tsconfig = {
+      compilerOptions: {
+        target: 'ES2020',
+        module: 'commonjs',
+        lib: ['ES2020'],
+        outDir: './dist',
+        rootDir: './',
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        resolveJsonModule: true,
+        declaration: true,
+      },
+      include: ['*.ts'],
+      exclude: ['node_modules', 'dist'],
+    };
+
+    fs.writeFileSync(
+      path.join(doorPath, 'tsconfig.json'),
+      JSON.stringify(tsconfig, null, 2)
+    );
+
+    // Create index.ts with generated code
+    fs.writeFileSync(path.join(doorPath, 'index.ts'), gameCode);
+
+    // Create README.md
+    const readme = `# ${name}
+
+${description}
+
+## Game Type
+${type}
+
+## Features
+${features.map(f => `- ${f}`).join('\n')}
+
+## How to Run
+
+\`\`\`bash
+npm install
+npm start
+\`\`\`
+
+## How to Build
+
+\`\`\`bash
+npm run build
+\`\`\`
+
+---
+*Generated with AI Game Wizard*
+`;
+
+    fs.writeFileSync(path.join(doorPath, 'README.md'), readme);
+
+    // Install dependencies
+    console.log(`📦 Installing dependencies for ${doorId}...`);
+    execSync('npm install', {
+      cwd: doorPath,
+      stdio: 'ignore',
+    });
+
+    console.log(`✅ Game created: ${doorId}`);
+
+    res.json({
+      success: true,
+      doorId,
+      message: `Game "${name}" created successfully!`,
+    });
+  } catch (error) {
+    console.error('Error generating game:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to generate game',
+      details: error.stack,
+    });
+  }
+});
+
+// API: Generate game with streaming and multi-AI support
+app.post('/api/games/generate-stream', async (req, res) => {
+  try {
+    const { name, description, bbsCommand, type, features, provider = 'claude', model, apiKey, qualityMode = 'balanced' } = req.body;
+
+    if (!name || !description) {
+      return res.status(400).json({ error: 'Name and description are required' });
+    }
+
+    console.log(`🎮 Generating game: ${name} (${provider}/${model})`);
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendProgress = (progress, phase) => {
+      res.write(`data: ${JSON.stringify({ type: 'progress', progress, phase })}\n\n`);
+    };
+
+    const sendCodeChunk = (chunk) => {
+      res.write(`data: ${JSON.stringify({ type: 'code_chunk', chunk })}\n\n`);
+    };
+
+    const sendComplete = (doorId) => {
+      res.write(`data: ${JSON.stringify({ type: 'complete', doorId })}\n\n`);
+      res.end();
+    };
+
+    const sendError = (error) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', error })}\n\n`);
+      res.end();
+    };
+
+    sendProgress(10, 'Preparing request...');
+
+    // Get API key
+    const keys = {
+      claude: apiKey || process.env.ANTHROPIC_API_KEY,
+      openai: apiKey || process.env.OPENAI_API_KEY,
+      gemini: apiKey || process.env.GEMINI_API_KEY,
+      ollama: apiKey || 'http://localhost:11434',
+    };
+
+    const providerKey = keys[provider];
+    if (!providerKey && provider !== 'ollama') {
+      return sendError(`No API key for ${provider}. Configure in Settings or set environment variable.`);
+    }
+
+    // Create prompt
+    const maxTokens = qualityMode === 'fast' ? 4000 : qualityMode === 'best' ? 12000 : 8000;
+    const prompt = `You are an expert game developer creating a BBS door game using the AmiExpress SDK.
+
+Create a ${type} game called "${name}".
+
+Description: ${description}
+
+Features to include:
+${features.map(f => `- ${f}`).join('\n')}
+
+Generate COMPLETE, production-ready TypeScript code for this game using the AmiExpress BBS Door SDK.
+
+The code must:
+1. Import from '@amiexpress/bbs-door-sdk'
+2. Use the Door class and SDK components
+3. Implement all requested features
+4. Include proper ANSI graphics and colors (no emojis, use * X ! - + characters)
+5. Handle user input with arrow keys and common keys
+6. Be playable and fun
+7. Follow BBS aesthetic (80x24 terminal, retro style)
+8. Include comments explaining key sections
+
+Return ONLY valid TypeScript code with no explanations before or after.`;
+
+    sendProgress(20, `Calling ${provider} AI...`);
+
+    let gameCode = '';
+
+    // Call appropriate AI provider
+    if (provider === 'claude') {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': providerKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: model || 'claude-sonnet-4-20250514',
+          max_tokens: maxTokens,
+          stream: true,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return sendError(error.error?.message || 'Claude API request failed');
+      }
+
+      sendProgress(40, 'Generating code...');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'content_block_delta' && data.delta?.text) {
+                const text = data.delta.text;
+                gameCode += text;
+                sendCodeChunk(text);
+              }
+            } catch (e) {
+              // Ignore JSON parse errors
+            }
+          }
+        }
+      }
+
+    } else if (provider === 'openai') {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${providerKey}`,
+        },
+        body: JSON.stringify({
+          model: model || 'gpt-4-turbo',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return sendError(error.error?.message || 'OpenAI API request failed');
+      }
+
+      sendProgress(40, 'Generating code...');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') break;
+
+            try {
+              const parsed = JSON.parse(data);
+              const text = parsed.choices?.[0]?.delta?.content;
+              if (text) {
+                gameCode += text;
+                sendCodeChunk(text);
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+    } else if (provider === 'gemini') {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash-exp'}:streamGenerateContent?key=${providerKey}&alt=sse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: maxTokens },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return sendError(error.error?.message || 'Gemini API request failed');
+      }
+
+      sendProgress(40, 'Generating code...');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                gameCode += text;
+                sendCodeChunk(text);
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+    } else if (provider === 'ollama') {
+      const ollamaUrl = providerKey.endsWith('/') ? providerKey : providerKey + '/';
+      const response = await fetch(`${ollamaUrl}api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: model || 'codellama',
+          prompt: prompt,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        return sendError('Ollama API request failed. Make sure Ollama is running.');
+      }
+
+      sendProgress(40, 'Generating code...');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const data = JSON.parse(line);
+              if (data.response) {
+                gameCode += data.response;
+                sendCodeChunk(data.response);
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+    }
+
+    sendProgress(60, 'Creating project structure...');
+
+    // Clean code (remove markdown code blocks if present)
+    gameCode = gameCode.replace(/```typescript\n?/g, '').replace(/```\n?/g, '').trim();
+
+    // Create door ID
+    const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (fs.existsSync(doorPath)) {
+      return sendError(`A game with ID "${doorId}" already exists`);
+    }
+
+    fs.mkdirSync(doorPath, { recursive: true });
+
+    sendProgress(70, 'Creating package files...');
+
+    // Create package.json
+    const packageJson = {
+      name: `@amiexpress/door-${doorId}`,
+      version: '1.0.0',
+      description: description,
+      bbsCommand: bbsCommand || doorId.toUpperCase().replace(/-/g, '_'),
+      category: type || 'Game',
+      main: 'index.ts',
+      scripts: { start: 'ts-node index.ts', build: 'tsc' },
+      dependencies: { '@amiexpress/bbs-door-sdk': 'file:../../' },
+      devDependencies: {
+        '@types/node': '^20.0.0',
+        'typescript': '^5.0.0',
+        'ts-node': '^10.9.0',
+      },
+      author: `AI Game Wizard (${provider})`,
+      license: 'MIT',
+    };
+
+    fs.writeFileSync(path.join(doorPath, 'package.json'), JSON.stringify(packageJson, null, 2));
+
+    // Create tsconfig.json
+    const tsconfig = {
+      compilerOptions: {
+        target: 'ES2020',
+        module: 'commonjs',
+        lib: ['ES2020'],
+        outDir: './dist',
+        rootDir: './',
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        resolveJsonModule: true,
+        declaration: true,
+      },
+      include: ['*.ts'],
+      exclude: ['node_modules', 'dist'],
+    };
+
+    fs.writeFileSync(path.join(doorPath, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+
+    // Create index.ts
+    fs.writeFileSync(path.join(doorPath, 'index.ts'), gameCode);
+
+    // Create README.md
+    const readme = `# ${name}
+
+${description}
+
+## Game Type
+${type}
+
+## Features
+${features.map(f => `- ${f}`).join('\n')}
+
+## AI Provider
+Generated with **${provider}** (${model || 'default model'})
+
+## How to Run
+
+\`\`\`bash
+npm install
+npm start
+\`\`\`
+
+## How to Build
+
+\`\`\`bash
+npm run build
+\`\`\`
+
+---
+*Generated with AI Game Wizard - ${new Date().toISOString()}*
+`;
+
+    fs.writeFileSync(path.join(doorPath, 'README.md'), readme);
+
+    sendProgress(80, 'Installing dependencies...');
+
+    // Install dependencies
+    console.log(`📦 Installing dependencies for ${doorId}...`);
+    execSync('npm install', { cwd: doorPath, stdio: 'ignore' });
+
+    sendProgress(100, 'Complete!');
+    console.log(`✅ Game created: ${doorId}`);
+
+    sendComplete(doorId);
+
+  } catch (error) {
+    console.error('Error generating game:', error);
+    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+    res.end();
+  }
+});
+
+// API: Save generated game code
+app.post('/api/games/save', async (req, res) => {
+  try {
+    const { name, description, type, features, code } = req.body;
+
+    if (!name || !code) {
+      return res.status(400).json({ error: 'Name and code are required' });
+    }
+
+    const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (fs.existsSync(doorPath)) {
+      return res.status(409).json({ error: `A game with ID "${doorId}" already exists` });
+    }
+
+    fs.mkdirSync(doorPath, { recursive: true });
+
+    // Create all files
+    const packageJson = {
+      name: `@amiexpress/door-${doorId}`,
+      version: '1.0.0',
+      description: description || name,
+      main: 'index.ts',
+      scripts: { start: 'ts-node index.ts', build: 'tsc' },
+      dependencies: { '@amiexpress/bbs-door-sdk': 'file:../../' },
+      devDependencies: {
+        '@types/node': '^20.0.0',
+        'typescript': '^5.0.0',
+        'ts-node': '^10.9.0',
+      },
+      author: 'AI Game Wizard',
+      license: 'MIT',
+    };
+
+    fs.writeFileSync(path.join(doorPath, 'package.json'), JSON.stringify(packageJson, null, 2));
+
+    const tsconfig = {
+      compilerOptions: {
+        target: 'ES2020',
+        module: 'commonjs',
+        lib: ['ES2020'],
+        outDir: './dist',
+        rootDir: './',
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        resolveJsonModule: true,
+        declaration: true,
+      },
+      include: ['*.ts'],
+      exclude: ['node_modules', 'dist'],
+    };
+
+    fs.writeFileSync(path.join(doorPath, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+    fs.writeFileSync(path.join(doorPath, 'index.ts'), code);
+
+    const readme = `# ${name}
+
+${description || 'AI-generated BBS door game'}
+
+## Game Type
+${type || 'Custom'}
+
+## Features
+${(features || []).map(f => `- ${f}`).join('\n')}
+
+---
+*Generated with AI Game Wizard*
+`;
+
+    fs.writeFileSync(path.join(doorPath, 'README.md'), readme);
+
+    // Install dependencies
+    execSync('npm install', { cwd: doorPath, stdio: 'ignore' });
+
+    console.log(`✅ Game saved: ${doorId}`);
+
+    res.json({
+      success: true,
+      doorId,
+      message: `Game "${name}" saved successfully!`,
+    });
+
+  } catch (error) {
+    console.error('Error saving game:', error);
     res.status(500).json({ error: error.message });
   }
 });

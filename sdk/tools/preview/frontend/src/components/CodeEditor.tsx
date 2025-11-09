@@ -61,6 +61,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   };
 
   const renderFileTree = (files: DoorFile[], level: number = 0): React.ReactNode => {
+    // Guard against undefined or null files array
+    if (!files || !Array.isArray(files)) {
+      return null;
+    }
+
     return files.map((file) => {
       const isExpanded = expandedFolders.has(file.path);
       const isSelected = currentFile?.path === file.path;
