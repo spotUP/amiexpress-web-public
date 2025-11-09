@@ -27,6 +27,9 @@
     "dist",
     "examples",
     "tools/preview/frontend",
-    "**/*.spec.ts"
+    "tools/preview/client",
+    "tools/preview/public",
+    "**/*.spec.ts",
+    "**/__tests__"
   ]
 }

@@ -1427,7 +1427,7 @@ class BugTracker {
     }
 
     // Show results (extract bugs from search results)
-    const results = searchResults.map(r => r.bug);
+    const results = searchResults.map(r => r.bug) as BugReport[];
     this.showSearchResults(results, query);
   }
 
