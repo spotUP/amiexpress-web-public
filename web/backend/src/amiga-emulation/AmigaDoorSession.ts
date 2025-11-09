@@ -181,7 +181,7 @@ export class AmigaDoorSession {
    * Set up Socket.io event handlers for user input
    */
   private setupSocketHandlers(): void {
-    console.log('[AmigaDoorSession] Setting up socket handlers for door:input');
+    console.log('[AmigaDoorSession] Setting up socket handlers for door:input and keys:state');
 
     // Handle user input (keystrokes)
     this.socket.on('door:input', (data: string) => {
@@ -194,6 +194,18 @@ export class AmigaDoorSession {
         this.ximProtocol.queueInput(data);
       } else {
         console.log(`[AmigaDoorSession] ❌ Input ignored: isRunning=${this.isRunning} hasXIM=${!!this.ximProtocol}`);
+      }
+    });
+
+    // Handle simultaneous key state updates (for games that need multiple keys at once)
+    this.socket.on('keys:state', (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
+      console.log(`[AmigaDoorSession] 🎮 keys:state event received: ${data.key} = ${data.pressed}`);
+
+      if (this.isRunning && this.ximProtocol) {
+        // Update XIM protocol with key state
+        this.ximProtocol.updateKeyState(data);
+      } else {
+        console.log(`[AmigaDoorSession] ❌ Key state update ignored: isRunning=${this.isRunning} hasXIM=${!!this.ximProtocol}`);
       }
     });
 

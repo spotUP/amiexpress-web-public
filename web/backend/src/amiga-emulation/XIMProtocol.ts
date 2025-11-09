@@ -83,6 +83,28 @@ export class XIMProtocol {
   }
 
   /**
+   * Update key state for simultaneous input (from keys:state event)
+   * Called from AmigaDoorSession when 'keys:state' event received
+   */
+  updateKeyState(data: { key: string; pressed: boolean; keyState: Record<string, boolean> }): void {
+    this.ioHandler.updateKeyState(data);
+  }
+
+  /**
+   * Get current key state (for doors that need to check multiple keys at once)
+   */
+  getKeyState(): Record<string, boolean> {
+    return this.ioHandler.getKeyState();
+  }
+
+  /**
+   * Check if a specific key is currently pressed
+   */
+  isKeyPressed(key: string): boolean {
+    return this.ioHandler.isKeyPressed(key);
+  }
+
+  /**
    * Parse XIM message from memory
    */
   parseMessage(msgAddr: number) {
