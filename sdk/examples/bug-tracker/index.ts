@@ -507,7 +507,7 @@ class BugTracker {
     } else if (key === 'Enter' || key === '\r') {
       // Recover selected draft
       const draft = this.currentDrafts[this.selectedIndex];
-      this.formData = draft.data;
+      this.formData = draft.data as Partial<BugReport>;
       this.formStep = draft.formStep;
       this.currentDraftId = draft.id;
       this.currentDrafts = [];
@@ -1418,15 +1418,16 @@ class BugTracker {
 
     // Use fuzzy search
     const query = searchResult.value.toLowerCase();
-    const results = this.smartFeatures.fuzzySearch(query, this.data.bugs, ['title', 'description']);
+    const searchResults = this.smartFeatures.fuzzySearch(query, this.data.bugs, 10);
 
-    if (results.length === 0) {
+    if (searchResults.length === 0) {
       this.uiComponents.showToast('No results found', ToastType.WARNING);
       setTimeout(() => this.showMainMenu(), 2000);
       return;
     }
 
-    // Show results
+    // Show results (extract bugs from search results)
+    const results = searchResults.map(r => r.bug);
     this.showSearchResults(results, query);
   }
 

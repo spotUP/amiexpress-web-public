@@ -427,9 +427,9 @@ class DungeonRPG {
     // Render HUD
     this.hud.reset();
     this.hud.addBar('HP', this.player.hp, this.player.maxHp, { x: 42, y: 0 }, 15, AnsiColor.Red);
-    this.hud.addText(`Level ${this.player.level}`, { x: 42, y: 2 }, AnsiColor.Yellow);
-    this.hud.addText(`XP: ${this.player.xp}`, { x: 42, y: 3 }, AnsiColor.Cyan);
-    this.hud.addText(`Gold: ${this.player.gold}`, { x: 42, y: 4 }, AnsiColor.Yellow);
+    this.hud.addText('level', { position: { x: 42, y: 2 }, format: `Level ${this.player.level}`, color: AnsiColor.Yellow });
+    this.hud.addText('xp', { position: { x: 42, y: 3 }, format: `XP: ${this.player.xp}`, color: AnsiColor.Cyan });
+    this.hud.addText('gold', { position: { x: 42, y: 4 }, format: `Gold: ${this.player.gold}`, color: AnsiColor.Yellow });
 
     const hudOutput = this.hud.render();
     this.gfx.drawText(0, 0, hudOutput, AnsiColor.White);
