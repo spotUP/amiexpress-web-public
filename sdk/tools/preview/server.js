@@ -1103,25 +1103,76 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
       }
 
     } else if (provider === 'openrouter') {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${providerKey}`,
-          'HTTP-Referer': 'https://github.com/amiexpress/sdk',
-          'X-Title': 'AmiExpress BBS Door SDK',
-        },
-        body: JSON.stringify({
-          model: model || 'meta-llama/llama-4-maverick:free',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: maxTokens,
-          stream: true,
-        }),
-      });
+      console.log(`[OpenRouter] Making request with model: ${model}`);
+      console.log(`[OpenRouter] API key present: ${!!providerKey}`);
+
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.error('[OpenRouter] Request timeout after 60 seconds');
+        controller.abort();
+      }, 60000); // 60 second timeout
+
+      let response;
+      try {
+        response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${providerKey}`,
+            'HTTP-Referer': 'https://github.com/amiexpress/sdk',
+            'X-Title': 'AmiExpress BBS Door SDK',
+          },
+          body: JSON.stringify({
+            model: model || 'meta-llama/llama-4-maverick:free',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: maxTokens,
+            stream: true,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        console.error('[OpenRouter] Fetch error:', error);
+        if (error.name === 'AbortError') {
+          return sendError('OpenRouter API request timed out. The service may be slow or unavailable. Please try again.');
+        }
+        return sendError(`OpenRouter connection failed: ${error.message}`);
+      }
+
+      console.log(`[OpenRouter] Response status: ${response.status}`);
+      console.log(`[OpenRouter] Response ok: ${response.ok}`);
+      console.log(`[OpenRouter] Response has body: ${!!response.body}`);
 
       if (!response.ok) {
-        const error = await response.json();
-        return sendError(error.error?.message || 'OpenRouter API request failed');
+        let errorMessage = 'OpenRouter API request failed';
+        try {
+          const error = await response.json();
+          console.log(`[OpenRouter] Error response:`, error);
+          errorMessage = error.error?.message || error.message || errorMessage;
+
+          // Provide specific error messages
+          if (response.status === 401) {
+            errorMessage = 'Invalid OpenRouter API key. Get your free key at https://openrouter.ai/keys';
+          } else if (response.status === 402) {
+            errorMessage = 'This model requires credits. Please select a free model or add credits to your OpenRouter account.';
+          } else if (response.status === 429) {
+            errorMessage = 'Rate limit exceeded. Please wait a few minutes and try again.';
+          } else if (response.status === 400 && error.error?.message?.includes('model')) {
+            errorMessage = `Model not found: ${model}. The model may no longer be available or the name changed.`;
+          }
+        } catch (e) {
+          console.error(`[OpenRouter] Failed to parse error response:`, e);
+          errorMessage = `OpenRouter error: ${response.status} ${response.statusText}`;
+        }
+        return sendError(errorMessage);
+      }
+
+      // Verify response.body exists
+      if (!response.body) {
+        console.error('[OpenRouter] Response body is null or undefined');
+        return sendError('OpenRouter returned an empty response. Please try again or select a different model.');
       }
 
       sendProgress(40, 'Generating code...');
@@ -1129,30 +1180,56 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        console.log('[OpenRouter] Starting to read stream...');
+        let chunkCount = 0;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log(`[OpenRouter] Stream complete. Received ${chunkCount} chunks`);
+            break;
+          }
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') break;
+          chunkCount++;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
 
-            try {
-              const parsed = JSON.parse(data);
-              const text = parsed.choices?.[0]?.delta?.content;
-              if (text) {
-                gameCode += text;
-                sendCodeChunk(text);
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') {
+                console.log('[OpenRouter] Received [DONE] signal');
+                break;
               }
-            } catch (e) {
-              // Ignore parse errors
+
+              try {
+                const parsed = JSON.parse(data);
+                const text = parsed.choices?.[0]?.delta?.content;
+                if (text) {
+                  gameCode += text;
+                  sendCodeChunk(text);
+                }
+              } catch (e) {
+                // Ignore JSON parse errors for incomplete chunks
+                if (data && data.length > 0 && !data.startsWith('{')) {
+                  console.log(`[OpenRouter] Skipping non-JSON line: ${data.substring(0, 50)}`);
+                }
+              }
             }
           }
         }
+
+        // Verify we got some code
+        if (!gameCode || gameCode.trim().length === 0) {
+          console.error('[OpenRouter] No code generated');
+          return sendError('OpenRouter did not generate any code. The model may not support this request. Please try a different model.');
+        }
+
+        console.log(`[OpenRouter] Generated ${gameCode.length} characters of code`);
+      } catch (streamError) {
+        console.error('[OpenRouter] Stream reading error:', streamError);
+        return sendError(`Error reading OpenRouter response: ${streamError.message}`);
       }
     }
 
