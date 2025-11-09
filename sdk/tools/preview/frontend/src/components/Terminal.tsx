@@ -157,13 +157,13 @@ export const Terminal: React.FC<TerminalProps> = ({
 
   return (
     <div
-      className={`terminal relative flex flex-col h-full overflow-hidden bg-[#1E1E1E] text-[#CCCCCC] ${className}`}
+      className={`terminal relative flex flex-col h-full bg-[#1E1E1E] text-[#CCCCCC] ${className}`}
       onClick={handleTerminalClick}
     >
       {/* Output area */}
       <div
         ref={terminalRef}
-        className="flex-1 overflow-y-auto overflow-x-hidden p-4 cursor-text"
+        className="flex-1 overflow-y-scroll overflow-x-hidden p-4 cursor-text min-h-0"
         onScroll={handleScroll}
         style={{ fontSize: `${fontSize}px` }}
       >
