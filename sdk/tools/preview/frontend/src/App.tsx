@@ -3,17 +3,21 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
   Terminal,
   CodeEditor,
-  BuildStatus,
+  BuildStatusEnhanced,
   ScreenshotCapture,
   SessionRecorder,
   ReleaseArchive,
   DoorInfo,
   Header,
-  DoorList,
+  DoorListEnhanced,
   Settings,
   EnhancedGameWizard,
+  ToastContainer,
+  ConnectionBanner,
+  KeyboardOverlay,
 } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
+import { useToast } from './hooks/useToast';
 import { SessionRecorder as Recorder } from './utils/sessionRecording';
 import {
   AppSettings,
@@ -26,7 +30,7 @@ import {
   ConnectionStatus,
   SessionEvent,
 } from './types';
-import { ChevronLeft, ChevronRight, Play, Hammer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard } from 'lucide-react';
 
 const defaultSettings: AppSettings = {
   theme: 'dark',
@@ -40,10 +44,15 @@ const defaultSettings: AppSettings = {
 };
 
 function App() {
+  // Toast notifications
+  const toast = useToast();
+
   // State management
   const [settings, setSettings] = useLocalStorage<AppSettings>('sdk-preview-settings', defaultSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [showGameWizard, setShowGameWizard] = useState(false);
+  const [showKeyboardOverlay, setShowKeyboardOverlay] = useState(false);
+  const [doorsLoading, setDoorsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
     connected: false,
     reconnecting: false,
@@ -97,16 +106,24 @@ function App() {
 
   // Load doors list via HTTP
   const loadDoors = async () => {
+    setDoorsLoading(true);
     try {
       const response = await fetch('/api/doors');
       if (response.ok) {
         const doorsData = await response.json();
         setDoors(doorsData);
+        if (doorsData.length > 0) {
+          toast.success(`Loaded ${doorsData.length} door${doorsData.length !== 1 ? 's' : ''}`);
+        }
       } else {
+        toast.error('Failed to load doors', response.statusText);
         console.error('Failed to load doors:', response.statusText);
       }
     } catch (error) {
+      toast.error('Error loading doors', error instanceof Error ? error.message : 'Unknown error');
       console.error('Error loading doors:', error);
+    } finally {
+      setDoorsLoading(false);
     }
   };
 
@@ -167,6 +184,13 @@ function App() {
 
       case 'buildStatus':
         setBuildStatus(message.data);
+        if (!message.data.building && message.data.lastBuild > 0) {
+          if (message.data.errors.length === 0) {
+            toast.success('Build succeeded!', `Completed in ${message.data.duration}ms`);
+          } else {
+            toast.error('Build failed', `${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''} found`);
+          }
+        }
         break;
 
       case 'error':
@@ -273,54 +297,75 @@ function App() {
     if (selectedDoor) {
       setBuildStatus((prev) => ({ ...prev, building: true }));
       wsSend({ type: 'input', data: `buildDoor:${selectedDoor.id}` });
+      toast.info('Building door...', `Compiling ${selectedDoor.name}`);
     }
   };
 
   // Keyboard shortcuts
+  const allShortcuts = [
+    {
+      key: 's',
+      ctrl: true,
+      action: () => {
+        if (terminalRef.current) {
+          // Screenshot handled by component
+        }
+      },
+      description: 'Take screenshot',
+      category: 'Media',
+    },
+    {
+      key: 'r',
+      ctrl: true,
+      action: () => {
+        if (recorder.isRecording()) {
+          recorder.stopRecording();
+        } else if (selectedDoor) {
+          recorder.startRecording(selectedDoor.name);
+        }
+      },
+      description: 'Toggle recording',
+      category: 'Media',
+    },
+    {
+      key: 'b',
+      ctrl: true,
+      action: handleBuildDoor,
+      description: 'Build door',
+      category: 'Development',
+    },
+    {
+      key: 'Enter',
+      ctrl: true,
+      action: handleRunDoor,
+      description: 'Run door',
+      category: 'Development',
+    },
+    {
+      key: 't',
+      ctrl: true,
+      shift: true,
+      action: handleThemeToggle,
+      description: 'Toggle theme',
+      category: 'Appearance',
+    },
+    {
+      key: ',',
+      ctrl: true,
+      action: () => setShowSettings(true),
+      description: 'Open settings',
+      category: 'General',
+    },
+    {
+      key: '?',
+      action: () => setShowKeyboardOverlay((prev) => !prev),
+      description: 'Show keyboard shortcuts',
+      category: 'General',
+    },
+  ];
+
   useKeyboardShortcuts(
-    [
-      {
-        key: 's',
-        ctrl: true,
-        action: () => {
-          if (terminalRef.current) {
-            // Screenshot handled by component
-          }
-        },
-        description: 'Take screenshot',
-      },
-      {
-        key: 'r',
-        ctrl: true,
-        action: () => {
-          if (recorder.isRecording()) {
-            recorder.stopRecording();
-          } else if (selectedDoor) {
-            recorder.startRecording(selectedDoor.name);
-          }
-        },
-        description: 'Toggle recording',
-      },
-      {
-        key: 'b',
-        ctrl: true,
-        action: handleBuildDoor,
-        description: 'Build door',
-      },
-      {
-        key: 't',
-        ctrl: true,
-        shift: true,
-        action: handleThemeToggle,
-        description: 'Toggle theme',
-      },
-      {
-        key: ',',
-        ctrl: true,
-        action: () => setShowSettings(true),
-        description: 'Open settings',
-      },
-    ],
+    allShortcuts.map(({ category, ...rest }) => rest),
     settings.enableKeyboardShortcuts
   );
 
@@ -346,12 +391,15 @@ function App() {
           {showLeftSidebar && (
             <>
               <Panel defaultSize={20} minSize={15} maxSize={30}>
-                <DoorList
+                <DoorListEnhanced
                   doors={doors}
                   selectedDoor={selectedDoor}
                   onDoorSelect={handleDoorSelect}
                   onToggleFavorite={handleToggleFavorite}
                   onCreateNewGame={() => setShowGameWizard(true)}
+                  onBuildDoor={handleBuildDoor}
+                  onRunDoor={handleRunDoor}
+                  loading={doorsLoading}
                 />
               </Panel>
               <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-600 transition-colors" />
@@ -519,7 +567,7 @@ function App() {
                     )}
 
                     {rightSidebarTab === 'build' && (
-                      <BuildStatus
+                      <BuildStatusEnhanced
                         status={buildStatus}
                         onErrorClick={handleBuildErrorClick}
                       />
@@ -563,6 +611,20 @@ function App() {
               }
             });
           }}
+        />
+      )}
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+
+      {/* Connection status banner */}
+      <ConnectionBanner status={connectionStatus} />
+
+      {/* Keyboard shortcut overlay */}
+      {showKeyboardOverlay && (
+        <KeyboardOverlay
+          shortcuts={allShortcuts}
+          onClose={() => setShowKeyboardOverlay(false)}
         />
       )}
     </div>

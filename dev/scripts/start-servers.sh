@@ -10,47 +10,63 @@ else
   echo "   Use --debug to see full logs"
 fi
 
+# Get the repository root directory (portable)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 # Create logs directory if it doesn't exist
-LOGS_DIR="~/Code/amiexpress-web/logs"
+LOGS_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOGS_DIR"
 
 # Use fixed log filenames (will be overwritten each time)
 BACKEND_LOG="$LOGS_DIR/backend.log"
 FRONTEND_LOG="$LOGS_DIR/frontend.log"
+PREVIEW_LOG="$LOGS_DIR/preview.log"
 
 echo "→ Logs will be saved to:"
 echo "   $BACKEND_LOG"
 echo "   $FRONTEND_LOG"
+echo "   $PREVIEW_LOG"
 echo ""
 
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1
 
-echo "→ Starting backend and frontend..."
+echo "→ Starting backend, frontend, and preview server..."
 echo ""
 
-# Trap to kill both on exit
-trap 'echo ""; echo "→ Stopping servers..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; wait; echo "✓ Servers stopped"; exit' EXIT INT TERM
+# Trap to kill all servers on exit
+trap 'echo ""; echo "→ Stopping servers..."; kill $BACKEND_PID $FRONTEND_PID $PREVIEW_PID 2>/dev/null; wait; echo "✓ Servers stopped"; exit' EXIT INT TERM
 
 # Start backend in background (conditionally filter output, always save to log)
 if [ "$DEBUG_MODE" = true ]; then
   # DEBUG MODE: Show all logs and save to file
-  (cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
+  (cd "$REPO_ROOT/web/backend" && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
 else
   # NORMAL MODE: Show filtered messages but save full logs to file
-  (cd ~/Code/amiexpress-web/web/backend && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|🌐|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+  (cd "$REPO_ROOT/web/backend" && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|🌐|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
 fi
 BACKEND_PID=$!
 
 # Start frontend in background (conditionally show output, always save to log)
 if [ "$DEBUG_MODE" = true ]; then
   # DEBUG MODE: Show frontend logs and save to file
-  (cd ~/Code/amiexpress-web/web/frontend && npm run dev 2>&1 | tee "$FRONTEND_LOG") &
+  (cd "$REPO_ROOT/web/frontend" && npm run dev 2>&1 | tee "$FRONTEND_LOG") &
 else
   # NORMAL MODE: Suppress frontend output but save to file
-  (cd ~/Code/amiexpress-web/web/frontend && npm run dev 2>&1 | tee "$FRONTEND_LOG" > /dev/null) &
+  (cd "$REPO_ROOT/web/frontend" && npm run dev 2>&1 | tee "$FRONTEND_LOG" > /dev/null) &
 fi
 FRONTEND_PID=$!
+
+# Start SDK preview server in background
+if [ "$DEBUG_MODE" = true ]; then
+  # DEBUG MODE: Show preview server logs and save to file
+  (cd "$REPO_ROOT/sdk" && node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG") &
+else
+  # NORMAL MODE: Suppress preview output but save to file
+  (cd "$REPO_ROOT/sdk" && node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG" > /dev/null) &
+fi
+PREVIEW_PID=$!
 
 # Wait for backend to finish startup (look for BACKEND_DONE marker)
 sleep 5
@@ -77,6 +93,29 @@ if [ "$DEBUG_MODE" = true ]; then
   echo "" > /dev/tty
 fi
 echo "Press Ctrl+C to stop both servers" > /dev/tty
+echo "" > /dev/tty
+
+# Open browser to door preview page
+PREVIEW_URL="http://localhost:8080"
+echo "🎮 Opening door preview page at $PREVIEW_URL..." > /dev/tty
+
+# Detect OS and open browser
+if command -v open &> /dev/null; then
+  # macOS
+  open "$PREVIEW_URL" 2>/dev/null &
+elif command -v xdg-open &> /dev/null; then
+  # Linux
+  xdg-open "$PREVIEW_URL" 2>/dev/null &
+elif command -v start &> /dev/null; then
+  # Windows (Git Bash)
+  start "$PREVIEW_URL" 2>/dev/null &
+elif command -v explorer.exe &> /dev/null; then
+  # WSL
+  explorer.exe "$PREVIEW_URL" 2>/dev/null &
+else
+  echo "⚠️  Could not detect browser command. Please open $PREVIEW_URL manually." > /dev/tty
+fi
+
 echo "" > /dev/tty
 
 # Keep script running and wait for both processes
