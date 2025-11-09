@@ -694,6 +694,16 @@ class GraphicsEngine {
         }
         return this.toAnsi();
     }
+    /**
+     * Clean up resources
+     */
+    dispose() {
+        // Clear buffers
+        this.sprites.clear();
+        this.particleSystems.clear();
+        this.parallaxLayers = [];
+        this.ansiCache.clear();
+    }
 }
 exports.GraphicsEngine = GraphicsEngine;
 exports.default = GraphicsEngine;

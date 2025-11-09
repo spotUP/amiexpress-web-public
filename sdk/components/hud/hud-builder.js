@@ -386,6 +386,38 @@ class HUDBuilder {
         this.values.clear();
         this.animations.clear();
     }
+    /**
+     * Reset - Alias for clear()
+     */
+    reset() {
+        this.clear();
+    }
+    /**
+     * Add a generic bar (health, mana, etc.)
+     *
+     * @param label - Label for the bar
+     * @param value - Current value
+     * @param maxValue - Maximum value
+     * @param position - Position {x, y}
+     * @param width - Width of the bar
+     * @param color - Bar color
+     * @returns Element ID
+     */
+    addBar(label, value, maxValue, position, width, color) {
+        const id = `bar-${label.toLowerCase()}`;
+        this.elements.set(id, {
+            type: 'bar',
+            position,
+            size: { width, height: 1 },
+            format: 'solid',
+            color: color || types_1.AnsiColor.Green,
+            visible: true,
+            animate: true,
+        });
+        this.values.set(label.toLowerCase(), value);
+        this.values.set(`${label.toLowerCase()}-max`, maxValue);
+        return id;
+    }
 }
 exports.HUDBuilder = HUDBuilder;
 exports.default = HUDBuilder;

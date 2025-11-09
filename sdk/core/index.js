@@ -31,8 +31,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SDK_VERSION = exports.DebugOverlay = exports.ReleasePacker = exports.ClassSystem = exports.QuestSystem = exports.DialogueSystem = exports.InventorySystem = exports.SaveManager = exports.LevelManager = exports.HUDBuilder = exports.MenuSystem = exports.TacticalCombatEngine = exports.AIEngine = exports.NetworkEngine = exports.AudioEngine = exports.PhysicsEngine = exports.GraphicsEngine = exports.Door = void 0;
-exports.quickStart = quickStart;
+exports.quickStart = exports.SDK_VERSION = exports.DebugOverlay = exports.ReleasePacker = exports.ClassSystem = exports.QuestSystem = exports.DialogueSystem = exports.InventorySystem = exports.SaveManager = exports.LevelManager = exports.HUDBuilder = exports.MenuSystem = exports.TacticalCombatEngine = exports.InputEngine = exports.AIEngine = exports.NetworkEngine = exports.AudioEngine = exports.PhysicsEngine = exports.GraphicsEngine = exports.Door = void 0;
 // Core
 const door_api_1 = require("./door-api");
 Object.defineProperty(exports, "Door", { enumerable: true, get: function () { return door_api_1.Door; } });
@@ -48,6 +47,8 @@ var network_engine_1 = require("../engines/network/network-engine");
 Object.defineProperty(exports, "NetworkEngine", { enumerable: true, get: function () { return network_engine_1.NetworkEngine; } });
 var ai_engine_1 = require("../engines/ai/ai-engine");
 Object.defineProperty(exports, "AIEngine", { enumerable: true, get: function () { return ai_engine_1.AIEngine; } });
+var input_engine_1 = require("../engines/input/input-engine");
+Object.defineProperty(exports, "InputEngine", { enumerable: true, get: function () { return input_engine_1.InputEngine; } });
 var tactical_combat_engine_1 = require("../engines/tactical/tactical-combat-engine");
 Object.defineProperty(exports, "TacticalCombatEngine", { enumerable: true, get: function () { return tactical_combat_engine_1.TacticalCombatEngine; } });
 // Components
@@ -101,3 +102,4 @@ function quickStart(name, callback) {
     });
     door.start();
 }
+exports.quickStart = quickStart;

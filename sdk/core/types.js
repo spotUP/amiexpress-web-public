@@ -21,6 +21,7 @@ var AnsiColor;
     AnsiColor[AnsiColor["Cyan"] = 6] = "Cyan";
     AnsiColor[AnsiColor["White"] = 7] = "White";
     AnsiColor[AnsiColor["BrightBlack"] = 8] = "BrightBlack";
+    AnsiColor[AnsiColor["Gray"] = 8] = "Gray";
     AnsiColor[AnsiColor["BrightRed"] = 9] = "BrightRed";
     AnsiColor[AnsiColor["BrightGreen"] = 10] = "BrightGreen";
     AnsiColor[AnsiColor["BrightYellow"] = 11] = "BrightYellow";
