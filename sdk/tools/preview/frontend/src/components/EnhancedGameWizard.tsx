@@ -144,6 +144,7 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
   const [selectedTemplate, setSelectedTemplate] = useState<GameTemplate | null>(null);
   const [gameName, setGameName] = useState('');
   const [gameDescription, setGameDescription] = useState('');
+  const [bbsCommand, setBbsCommand] = useState('');
   const [gameType, setGameType] = useState('adventure');
   const [features, setFeatures] = useState<string[]>([]);
   const [customFeature, setCustomFeature] = useState('');
@@ -247,6 +248,7 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
         body: JSON.stringify({
           name: gameName,
           description: gameDescription,
+          bbsCommand,
           type: gameType,
           features,
           provider,
@@ -383,7 +385,7 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
       case 0:
         return selectedTemplate !== null;
       case 1:
-        return gameName.trim().length > 0 && gameDescription.trim().length > 10;
+        return gameName.trim().length > 0 && gameDescription.trim().length > 10 && bbsCommand.trim().length > 0;
       case 2:
         return useServerKey || apiKey.trim().length > 0;
       default:
@@ -546,6 +548,24 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
                       </span>
                       <span className="text-gray-500">{tokenCount.toLocaleString()} estimated tokens</span>
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-purple-300 mb-2">
+                      BBS Command *
+                      <span className="text-gray-400 text-xs font-normal ml-2">(What users type to run this door)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={bbsCommand}
+                      onChange={(e) => setBbsCommand(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                      placeholder="e.g., GAME, PUZZLE, RPG"
+                      maxLength={20}
+                      className="w-full px-4 py-3 bg-gray-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 uppercase"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Letters, numbers, and underscores only. This will be used in .info file and BBS menu system.
+                    </p>
                   </div>
                 </div>
               )}

@@ -380,10 +380,10 @@ if (!fs.existsSync(downloadsDir)) {
 const downloadTracking = new Map();
 
 // API: Create release archive
-app.post('/api/doors/:doorId/release', (req, res) => {
+app.post('/api/doors/:doorId/release', async (req, res) => {
   try {
     const { doorId } = req.params;
-    const { format = 'zip' } = req.body;
+    const { format = 'zip', includeSource = true, includeAssets = true, includeDocs = true, doormanCompatible = true } = req.body;
     const doorPath = path.join(__dirname, '../../examples', doorId);
 
     if (!fs.existsSync(doorPath)) {
@@ -403,66 +403,152 @@ app.post('/api/doors/:doorId/release', (req, res) => {
     console.log(`📦 Creating release: ${filename}`);
 
     if (format === 'zip') {
-      const output = fs.createWriteStream(outputPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
+      const AdmZip = require('adm-zip');
+      const zip = new AdmZip();
 
-      archive.on('error', (err) => {
-        throw err;
-      });
+      // Helper to add files recursively
+      const addDirectory = (dirPath, zipPath = '') => {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          const zipFilePath = zipPath ? path.join(zipPath, entry.name) : entry.name;
 
-      archive.on('end', () => {
-        const stats = fs.statSync(outputPath);
-        console.log(`✓ Release created: ${filename} (${stats.size} bytes)`);
+          // Skip excluded directories
+          if (entry.isDirectory()) {
+            if (['node_modules', '.git', 'dist', 'downloads'].includes(entry.name)) {
+              continue;
+            }
+            addDirectory(fullPath, zipFilePath);
+          } else {
+            // Add file based on options
+            if (entry.name === 'package.json' || entry.name === 'tsconfig.json') {
+              zip.addLocalFile(fullPath, zipPath);
+            } else if (includeSource && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
+              zip.addLocalFile(fullPath, zipPath);
+            } else if (includeAssets && (fullPath.includes('/assets/') || fullPath.includes('/data/'))) {
+              zip.addLocalFile(fullPath, zipPath);
+            } else if (includeDocs && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
+              zip.addLocalFile(fullPath, zipPath);
+            }
+          }
+        }
+      };
 
-        // Track for auto-cleanup (1 hour)
-        downloadTracking.set(filename, {
-          path: outputPath,
-          created: Date.now(),
-        });
+      // Add door files based on options
+      addDirectory(doorPath);
 
-        res.json({ filename, size: stats.size });
-      });
+      // Generate FILE_ID.DIZ (BBS standard format)
+      const generateFileDiz = () => {
+        const lines = [];
+        const title = `${pkg.name || doorId} v${version}`;
 
-      archive.pipe(output);
+        // Center title (45 char width for FILE_ID.DIZ standard)
+        const centerText = (text, width = 45) => {
+          const padding = Math.max(0, Math.floor((width - text.length) / 2));
+          return ' '.repeat(padding) + text;
+        };
 
-      // Create .info metadata file
-      const infoContent = `NAME=${pkg.name}
+        const wordWrap = (text, width = 45) => {
+          const words = text.split(' ');
+          const result = [];
+          let currentLine = '';
+          for (const word of words) {
+            if ((currentLine + ' ' + word).trim().length <= width) {
+              currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+              if (currentLine) result.push(currentLine);
+              currentLine = word;
+            }
+          }
+          if (currentLine) result.push(currentLine);
+          return result;
+        };
+
+        lines.push(centerText(title));
+        lines.push(centerText('─'.repeat(Math.min(title.length, 45))));
+        lines.push('');
+
+        // Description (word-wrapped to 45 chars)
+        if (pkg.description) {
+          lines.push(...wordWrap(pkg.description));
+          lines.push('');
+        }
+
+        lines.push(`By: ${pkg.author || 'Unknown'}`);
+        lines.push(`Category: ${pkg.category || 'BBS Door'}`);
+        lines.push(`Released: ${new Date().toISOString().split('T')[0]}`);
+
+        // Limit to 10 lines, 45 chars each (FILE_ID.DIZ standard)
+        return lines.slice(0, 10).map(l => l.substring(0, 45)).join('\r\n');
+      };
+
+      zip.addFile('FILE_ID.DIZ', Buffer.from(generateFileDiz(), 'utf-8'));
+
+      // Create .info metadata file (Doorman compatible)
+      if (doormanCompatible) {
+        const bbsCommand = pkg.bbsCommand || doorId.toUpperCase();
+        const infoContent = `NAME=${pkg.name || doorId}
 VERSION=${version}
-DESCRIPTION=${pkg.description || ''}
-AUTHOR=${pkg.author || ''}
+COMMAND=${bbsCommand}
+DESCRIPTION=${pkg.description || 'BBS Door Game'}
+AUTHOR=${pkg.author || 'Unknown'}
+CATEGORY=${pkg.category || 'Game'}
 CREATED=${new Date().toISOString()}
+REQUIRES_NODE=true
+MIN_NODE_VERSION=18.0.0
 `;
-      archive.append(infoContent, { name: `${doorId}.info` });
-
-      // Create FILE_ID.DIZ if it doesn't exist
-      const dizPath = path.join(doorPath, 'FILE_ID.DIZ');
-      if (!fs.existsSync(dizPath)) {
-        const dizContent = `${pkg.name || doorId} v${version}
-${pkg.description || 'BBS Door Game'}
-
-Author: ${pkg.author || 'Unknown'}
-Created: ${new Date().toISOString().split('T')[0]}
-`;
-        archive.append(dizContent, { name: 'FILE_ID.DIZ' });
+        zip.addFile(`${doorId}.info`, Buffer.from(infoContent, 'utf-8'));
       }
 
-      // Add all door files
-      archive.directory(doorPath, false, (entry) => {
-        // Exclude node_modules, .git, dist, downloads
-        if (
-          entry.name.includes('node_modules') ||
-          entry.name.includes('.git') ||
-          entry.name.includes('dist') ||
-          entry.name.includes('downloads')
-        ) {
-          return false;
-        }
-        return entry;
+      // Create README.TXT
+      if (includeDocs) {
+        const readmeContent = `${pkg.name || doorId} v${version}
+${'='.repeat((pkg.name || doorId).length + version.length + 3)}
+
+${pkg.description || 'BBS Door Game'}
+
+INSTALLATION
+------------
+1. Extract all files to your BBS doors directory
+2. Install Node.js 18+ if not already installed
+3. Run: npm install
+4. Configure in your BBS menu system
+
+REQUIREMENTS
+------------
+- Node.js 18 or higher
+- Modern terminal with ANSI support
+- Minimum 80x24 terminal size
+
+AUTHOR
+------
+${pkg.author || 'Unknown'}
+
+RELEASED
+--------
+${new Date().toISOString().split('T')[0]}
+
+Made with AmiExpress BBS Door SDK
+https://github.com/amiexpress/sdk
+`;
+        zip.addFile('README.TXT', Buffer.from(readmeContent, 'utf-8'));
+      }
+
+      // Write ZIP file
+      zip.writeZip(outputPath);
+
+      const stats = fs.statSync(outputPath);
+      console.log(`✓ Release created: ${filename} (${stats.size} bytes)`);
+
+      // Track for auto-cleanup (1 hour)
+      downloadTracking.set(filename, {
+        path: outputPath,
+        created: Date.now(),
       });
 
-      archive.finalize();
+      res.json({ filename, size: stats.size });
     } else {
-      res.status(400).json({ error: 'Unsupported format. Use "zip"' });
+      res.status(400).json({ error: 'Unsupported format. Only "zip" is supported' });
     }
   } catch (error) {
     console.error('Error creating release:', error);
@@ -505,7 +591,7 @@ app.get('/downloads/:filename', (req, res) => {
 // API: Generate game with Claude AI
 app.post('/api/games/generate', async (req, res) => {
   try {
-    const { name, description, type, features, apiKey } = req.body;
+    const { name, description, bbsCommand, type, features, apiKey } = req.body;
 
     if (!name || !description) {
       return res.status(400).json({ error: 'Name and description are required' });
@@ -588,6 +674,8 @@ Return ONLY valid TypeScript code with no explanations. The code should be compl
       name: `@amiexpress/door-${doorId}`,
       version: '1.0.0',
       description: description,
+      bbsCommand: bbsCommand || doorId.toUpperCase().replace(/-/g, '_'),
+      category: type || 'Game',
       main: 'index.ts',
       scripts: {
         start: 'ts-node index.ts',
@@ -693,7 +781,7 @@ npm run build
 // API: Generate game with streaming and multi-AI support
 app.post('/api/games/generate-stream', async (req, res) => {
   try {
-    const { name, description, type, features, provider = 'claude', model, apiKey, qualityMode = 'balanced' } = req.body;
+    const { name, description, bbsCommand, type, features, provider = 'claude', model, apiKey, qualityMode = 'balanced' } = req.body;
 
     if (!name || !description) {
       return res.status(400).json({ error: 'Name and description are required' });
@@ -978,6 +1066,8 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
       name: `@amiexpress/door-${doorId}`,
       version: '1.0.0',
       description: description,
+      bbsCommand: bbsCommand || doorId.toUpperCase().replace(/-/g, '_'),
+      category: type || 'Game',
       main: 'index.ts',
       scripts: { start: 'ts-node index.ts', build: 'tsc' },
       dependencies: { '@amiexpress/bbs-door-sdk': 'file:../../' },
