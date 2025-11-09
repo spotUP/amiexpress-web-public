@@ -1115,7 +1115,21 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
       console.log(`[OpenRouter] Model (raw): ${model}`);
 
       // Strip :free suffix for the API call (it's metadata, not part of the model ID)
-      const modelForApi = (model || 'meta-llama/llama-4-maverick:free').replace(/:free$/, '');
+      let modelForApi = (model || 'meta-llama/llama-4-maverick:free').replace(/:free$/, '');
+
+      // Capitalization mapping for models where providers expect specific casing
+      const capitalizationMap = {
+        'agentica-org/deepcoder-14b-preview': 'agentica-org/DeepCoder-14B-Preview',
+      };
+
+      // Apply capitalization fix if needed (case-insensitive lookup)
+      const modelLower = modelForApi.toLowerCase();
+      if (capitalizationMap[modelLower]) {
+        const originalModel = modelForApi;
+        modelForApi = capitalizationMap[modelLower];
+        console.log(`[OpenRouter] Applied capitalization fix: "${originalModel}" -> "${modelForApi}"`);
+      }
+
       console.log(`[OpenRouter] Model (for API): ${modelForApi}`);
       console.log(`[OpenRouter] API key present: ${!!providerKey}`);
       console.log(`[OpenRouter] API key length: ${providerKey ? providerKey.length : 0}`);
