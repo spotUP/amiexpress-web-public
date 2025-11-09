@@ -1,11 +1,17 @@
 {
   "name": "@amiexpress/bbs-door-sdk",
-  "version": "1.0.0",
-  "description": "Revolutionary BBS Door Development SDK - Next-Generation Games & Tools",
+  "version": "2.0.0",
+  "description": "Revolutionary BBS Door Development SDK - Dual Runtime (Server & Client)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
     "amiexpress-sdk": "./dist/tools/cli/index.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./server": "./dist/server/index.js",
+    "./client": "./dist/client/index.js",
+    "./common": "./dist/common/index.js"
   },
   "scripts": {
     "build": "tsc && npm run copy-assets",
@@ -43,6 +49,7 @@
     "chalk": "^4.1.2",
     "chokidar": "^3.5.3",
     "commander": "^11.0.0",
+    "esbuild": "^0.19.12",
     "express": "^4.18.2",
     "inquirer": "^8.2.5",
     "ora": "^5.4.1",
