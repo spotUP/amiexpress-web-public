@@ -73,6 +73,13 @@ export class InputEngine {
   }
 
   /**
+   * Reset all bindings (alias for clear)
+   */
+  public reset(): void {
+    this.clear();
+  }
+
+  /**
    * Clean up resources (alias for reset)
    */
   public dispose(): void {
