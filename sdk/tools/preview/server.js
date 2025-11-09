@@ -26,7 +26,9 @@ const path = require('path');
 const fs = require('fs');
 const chokidar = require('chokidar');
 const archiver = require('archiver');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, exec } = require('child_process');
+const { promisify } = require('util');
+const execPromise = promisify(exec);
 
 const PORT = process.env.PORT || 8080;
 const DEBUG_OUTPUT = process.env.DEBUG_OUTPUT === 'true' || false;
@@ -120,35 +122,39 @@ async function compileExamples() {
       return stat.isDirectory();
     });
 
-  // Type-check all TypeScript examples
-  for (const exampleName of examples) {
+  // Type-check all TypeScript examples (in parallel for speed)
+  const compilePromises = examples.map(async (exampleName) => {
     const examplePath = path.join(examplesDir, exampleName);
 
     // Skip if no TypeScript files exist
     const tsFiles = fs.readdirSync(examplePath).filter(f => f.endsWith('.ts'));
     if (tsFiles.length === 0) {
-      continue;
+      return { name: exampleName, success: true, skipped: true };
     }
 
     broadcast(`  📦 Type-checking ${exampleName}...`);
 
     try {
-      // Run TypeScript compiler in type-check mode
-      execSync('npx tsc --noEmit', {
+      // Run TypeScript compiler in type-check mode (non-blocking)
+      await execPromise('npx tsc --noEmit', {
         cwd: examplePath,
-        stdio: 'pipe',
         timeout: 30000, // 30 second timeout
       });
 
       broadcast(`  ✅ ${exampleName} type-checked successfully`);
       broadcast('');
+      return { name: exampleName, success: true };
     } catch (error) {
       // Type errors are non-fatal
       broadcast(`  ⚠️  ${exampleName} has type errors (non-fatal)`);
       broadcast('');
-      compileErrors++;
+      return { name: exampleName, success: false };
     }
-  }
+  });
+
+  // Wait for all compilations to complete
+  const results = await Promise.all(compilePromises);
+  compileErrors = results.filter(r => !r.success && !r.skipped).length;
 
   if (compileErrors > 0) {
     broadcast(`⚠️  Warning: ${compileErrors} game(s) have TypeScript errors`);
