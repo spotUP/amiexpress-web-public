@@ -502,6 +502,194 @@ app.get('/downloads/:filename', (req, res) => {
   }
 });
 
+// API: Generate game with Claude AI
+app.post('/api/games/generate', async (req, res) => {
+  try {
+    const { name, description, type, features, apiKey } = req.body;
+
+    if (!name || !description) {
+      return res.status(400).json({ error: 'Name and description are required' });
+    }
+
+    console.log(`🎮 Generating game: ${name}`);
+
+    // Use provided API key or server environment variable
+    const claudeApiKey = apiKey || process.env.ANTHROPIC_API_KEY;
+    if (!claudeApiKey) {
+      return res.status(400).json({
+        error: 'No Claude AI API key provided. Either supply your own key or configure ANTHROPIC_API_KEY on the server.'
+      });
+    }
+
+    // Create game prompt
+    const prompt = `You are an expert game developer creating a BBS door game using the AmiExpress SDK.
+
+Create a ${type} game called "${name}".
+
+Description: ${description}
+
+Features to include:
+${features.map(f => `- ${f}`).join('\n')}
+
+Generate COMPLETE, production-ready TypeScript code for this game using the AmiExpress BBS Door SDK.
+
+The code must:
+1. Import from '@amiexpress/bbs-door-sdk'
+2. Use the Door, GraphicsEngine, and other SDK components
+3. Implement all requested features
+4. Include proper ANSI graphics and colors (no emojis, use * X ! - + characters)
+5. Handle user input with arrow keys and common keys
+6. Be playable and fun
+7. Follow BBS aesthetic (80x24 terminal, retro style)
+
+Return ONLY valid TypeScript code with no explanations. The code should be complete and ready to run.`;
+
+    // Call Claude AI API
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeApiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8000,
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Claude AI API request failed');
+    }
+
+    const aiResponse = await response.json();
+    const gameCode = aiResponse.content[0].text;
+
+    // Create door ID (sanitized name)
+    const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    // Create door directory
+    if (fs.existsSync(doorPath)) {
+      return res.status(409).json({ error: `A game with ID "${doorId}" already exists` });
+    }
+
+    fs.mkdirSync(doorPath, { recursive: true });
+
+    // Create package.json
+    const packageJson = {
+      name: `@amiexpress/door-${doorId}`,
+      version: '1.0.0',
+      description: description,
+      main: 'index.ts',
+      scripts: {
+        start: 'ts-node index.ts',
+        build: 'tsc',
+      },
+      dependencies: {
+        '@amiexpress/bbs-door-sdk': 'file:../../',
+      },
+      devDependencies: {
+        '@types/node': '^20.0.0',
+        'typescript': '^5.0.0',
+        'ts-node': '^10.9.0',
+      },
+      author: 'AI Game Wizard',
+      license: 'MIT',
+    };
+
+    fs.writeFileSync(
+      path.join(doorPath, 'package.json'),
+      JSON.stringify(packageJson, null, 2)
+    );
+
+    // Create tsconfig.json
+    const tsconfig = {
+      compilerOptions: {
+        target: 'ES2020',
+        module: 'commonjs',
+        lib: ['ES2020'],
+        outDir: './dist',
+        rootDir: './',
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        resolveJsonModule: true,
+        declaration: true,
+      },
+      include: ['*.ts'],
+      exclude: ['node_modules', 'dist'],
+    };
+
+    fs.writeFileSync(
+      path.join(doorPath, 'tsconfig.json'),
+      JSON.stringify(tsconfig, null, 2)
+    );
+
+    // Create index.ts with generated code
+    fs.writeFileSync(path.join(doorPath, 'index.ts'), gameCode);
+
+    // Create README.md
+    const readme = `# ${name}
+
+${description}
+
+## Game Type
+${type}
+
+## Features
+${features.map(f => `- ${f}`).join('\n')}
+
+## How to Run
+
+\`\`\`bash
+npm install
+npm start
+\`\`\`
+
+## How to Build
+
+\`\`\`bash
+npm run build
+\`\`\`
+
+---
+*Generated with AI Game Wizard*
+`;
+
+    fs.writeFileSync(path.join(doorPath, 'README.md'), readme);
+
+    // Install dependencies
+    console.log(`📦 Installing dependencies for ${doorId}...`);
+    execSync('npm install', {
+      cwd: doorPath,
+      stdio: 'ignore',
+    });
+
+    console.log(`✅ Game created: ${doorId}`);
+
+    res.json({
+      success: true,
+      doorId,
+      message: `Game "${name}" created successfully!`,
+    });
+  } catch (error) {
+    console.error('Error generating game:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to generate game',
+      details: error.stack,
+    });
+  }
+});
+
 // API: Health check
 app.get('/api/health', (req, res) => {
   res.json({

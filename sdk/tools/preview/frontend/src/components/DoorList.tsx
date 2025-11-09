@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Star, Clock, Package, X } from 'lucide-react';
+import { Search, Star, Clock, Package, X, Wand2 } from 'lucide-react';
 import { DoorListItem } from '../types';
 import { formatRelativeTime } from '../utils/format';
 
@@ -8,6 +8,7 @@ interface DoorListProps {
   selectedDoor: DoorListItem | null;
   onDoorSelect: (door: DoorListItem) => void;
   onToggleFavorite: (doorId: string) => void;
+  onCreateNewGame?: () => void;
   className?: string;
 }
 
@@ -16,6 +17,7 @@ export const DoorList: React.FC<DoorListProps> = ({
   selectedDoor,
   onDoorSelect,
   onToggleFavorite,
+  onCreateNewGame,
   className = '',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,6 +52,19 @@ export const DoorList: React.FC<DoorListProps> = ({
 
   return (
     <div className={`flex flex-col h-full bg-[#1E1E1E] border-r border-gray-700 ${className}`}>
+      {/* Create New Game Button */}
+      {onCreateNewGame && (
+        <div className="p-3 border-b border-gray-700">
+          <button
+            onClick={onCreateNewGame}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all font-semibold shadow-lg hover:shadow-xl"
+          >
+            <Wand2 className="w-4 h-4" />
+            Create with AI
+          </button>
+        </div>
+      )}
+
       {/* Search bar */}
       <div className="p-3 border-b border-gray-700">
         <div className="relative">

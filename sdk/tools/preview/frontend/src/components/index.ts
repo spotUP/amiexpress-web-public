@@ -9,3 +9,4 @@ export { DoorInfo } from './DoorInfo';
 export { Header } from './Header';
 export { DoorList } from './DoorList';
 export { Settings } from './Settings';
+export { GameWizard } from './GameWizard';
