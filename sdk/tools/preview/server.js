@@ -66,6 +66,101 @@ function killOldServers() {
 // Kill old servers before starting
 killOldServers();
 
+/**
+ * Compile all example games and send progress to connected clients
+ */
+async function compileExamples() {
+  const examplesDir = path.join(__dirname, '../../examples');
+
+  // Broadcast to all clients
+  const broadcast = (message, level = 'log') => {
+    // Determine ANSI color based on message content
+    let color = '';
+    const reset = '\x1b[0m';
+
+    if (level === 'error' || message.includes('⚠️')) {
+      color = '\x1b[33m'; // Yellow for warnings
+    } else if (message.includes('✅')) {
+      color = '\x1b[32m'; // Green for success
+    } else if (message.includes('📦')) {
+      color = '\x1b[36m'; // Cyan for progress
+    } else if (message.includes('🚀')) {
+      color = '\x1b[35m'; // Magenta for important
+    } else {
+      color = '\x1b[90m'; // Gray for info
+    }
+
+    const formattedMessage = `${color}${message}${reset}`;
+
+    // Send to all connected WebSocket clients
+    clients.forEach(client => {
+      if (client.ws && client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(JSON.stringify({
+          type: 'debug',
+          data: formattedMessage,
+        }));
+      }
+    });
+
+    // Also log to console if DEBUG_OUTPUT is enabled
+    if (DEBUG_OUTPUT) {
+      console.log(message);
+    }
+  };
+
+  broadcast('\x1b[36m✨ Compiling example games...\x1b[0m');
+  broadcast('');
+
+  let compileErrors = 0;
+
+  // Get all example directories
+  const examples = fs.readdirSync(examplesDir)
+    .filter(name => {
+      const stat = fs.statSync(path.join(examplesDir, name));
+      return stat.isDirectory();
+    });
+
+  // Type-check all TypeScript examples
+  for (const exampleName of examples) {
+    const examplePath = path.join(examplesDir, exampleName);
+
+    // Skip if no TypeScript files exist
+    const tsFiles = fs.readdirSync(examplePath).filter(f => f.endsWith('.ts'));
+    if (tsFiles.length === 0) {
+      continue;
+    }
+
+    broadcast(`  📦 Type-checking ${exampleName}...`);
+
+    try {
+      // Run TypeScript compiler in type-check mode
+      execSync('npx tsc --noEmit', {
+        cwd: examplePath,
+        stdio: 'pipe',
+        timeout: 30000, // 30 second timeout
+      });
+
+      broadcast(`  ✅ ${exampleName} type-checked successfully`);
+      broadcast('');
+    } catch (error) {
+      // Type errors are non-fatal
+      broadcast(`  ⚠️  ${exampleName} has type errors (non-fatal)`);
+      broadcast('');
+      compileErrors++;
+    }
+  }
+
+  if (compileErrors > 0) {
+    broadcast(`⚠️  Warning: ${compileErrors} game(s) have TypeScript errors`);
+    broadcast('   The preview server is running, but these games may not work correctly');
+    broadcast('');
+  }
+
+  broadcast('🚀 Starting preview server...');
+  broadcast('📦 Serving React frontend from public/');
+  broadcast('');
+}
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -2015,7 +2110,7 @@ function stopDoor(clientId) {
 }
 
 // Start server
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`
 ╔════════════════════════════════════════════════════════════════╗
 ║                                                                ║
@@ -2033,4 +2128,9 @@ server.listen(PORT, () => {
 ║                                                                ║
 ╚════════════════════════════════════════════════════════════════╝
   `);
+
+  // Wait a moment for clients to connect, then compile examples
+  setTimeout(async () => {
+    await compileExamples();
+  }, 2000); // 2 second delay to allow browser to connect
 });
