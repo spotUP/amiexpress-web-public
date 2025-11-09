@@ -13,6 +13,7 @@ import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import { sequentialFileManager } from '../services/SequentialFileManager';
 import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
+import { findCaseInsensitive } from '../utils/fs-amiga.util';
 
 interface Conference {
   id: number;
@@ -634,6 +635,10 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
     paths.push(fsPath);
   }
 
+  // Define search directories and filenames to try (case-insensitive, AmigaOS compatible)
+  // We try multiple filename variations: FILENAME.TXT, filename.txt, Filename.txt, etc.
+  const searchLocations: Array<{ dir: string; desc: string }> = [];
+
   // Try conference-specific screen first (if provided)
   // express.e uses confScreenDir which points to Conf directory
   if (conferenceId) {
@@ -641,28 +646,56 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
     const confIndex = conferences.findIndex(c => c.id === conferenceId);
     if (confIndex !== -1) {
       const relConfNum = confIndex + 1; // Convert to 1-based
-      const confPath = path.join(baseDir, `Conf${String(relConfNum).padStart(2, '0')}`, 'Screens', `${screenName}.TXT`);
-      paths.push(confPath);
+      const confScreensDir = path.join(baseDir, `Conf${String(relConfNum).padStart(2, '0')}`, 'Screens');
+      searchLocations.push({ dir: confScreensDir, desc: `Conf${String(relConfNum).padStart(2, '0')}/Screens` });
     }
   }
 
   // Try node-specific screens - express.e:6580 uses nodeScreenDir which is Node0/ itself
   // Screens can be directly in Node0/ OR in Node0/Screens/ subdirectory
   const nodeDir = path.join(baseDir, `Node${nodeId}`);
-  paths.push(path.join(nodeDir, `${screenName}.TXT`));        // Node0/BBSTITLE.TXT
-  paths.push(path.join(nodeDir, `${screenName}.txt`));        // Node0/bbstitle.txt
-  paths.push(path.join(nodeDir, 'Screens', `${screenName}.TXT`));  // Node0/Screens/BBSTITLE.TXT
-  paths.push(path.join(nodeDir, 'Screens', `${screenName}.txt`));  // Node0/Screens/bbstitle.txt
+  searchLocations.push({ dir: nodeDir, desc: `Node${nodeId}` });
+  searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens` });
 
   // Then try default BBS screens
-  const bbsPath = path.join(baseDir, 'Screens', `${screenName}.TXT`);
-  paths.push(bbsPath);
+  searchLocations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
 
-  // Try each path in order
-  console.log(`[loadScreenFile] Trying ${paths.length} path(s):`);
+  // Possible filename variations (case-insensitive search will handle actual matching)
+  const filenameVariations = [
+    `${screenName}.TXT`,  // MENU.TXT
+    `${screenName}.txt`,  // MENU.txt, menu.txt, Menu.txt (all matched case-insensitively)
+  ];
+
+  // Try each location with case-insensitive matching
+  console.log(`[loadScreenFile] Trying ${searchLocations.length} location(s) with case-insensitive matching:`);
+  let attemptNum = 0;
+
+  for (const location of searchLocations) {
+    for (const filename of filenameVariations) {
+      attemptNum++;
+      const expectedPath = path.join(location.dir, filename);
+      console.log(`[loadScreenFile]   [${attemptNum}/${searchLocations.length * filenameVariations.length}] ${expectedPath}`);
+
+      // Try case-insensitive match
+      const foundPath = findCaseInsensitive(location.dir, filename);
+      if (foundPath) {
+        console.log(`[loadScreenFile] ✓ Found screen ${screenName} at: ${foundPath}`);
+        try {
+          return fs.readFileSync(foundPath, 'utf-8');
+        } catch (error) {
+          console.error(`[loadScreenFile]     (error reading file: ${(error as Error).message})`);
+        }
+      } else {
+        console.log(`[loadScreenFile]     (not found)`);
+      }
+    }
+  }
+
+  // If we have paths from Amiga-style handling, try those too
   for (let i = 0; i < paths.length; i++) {
     const filePath = paths[i];
-    console.log(`[loadScreenFile]   [${i + 1}/${paths.length}] ${filePath}`);
+    attemptNum++;
+    console.log(`[loadScreenFile]   [${attemptNum}] ${filePath}`);
     try {
       if (fs.existsSync(filePath)) {
         console.log(`[loadScreenFile] ✓ Found screen ${screenName} at: ${filePath}`);
@@ -676,7 +709,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   }
 
   console.warn(`[loadScreenFile] ✗ Screen file not found: ${screenName}`);
-  console.warn(`[loadScreenFile] Tried ${paths.length} locations`);
+  console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
   return null;
 }
 
