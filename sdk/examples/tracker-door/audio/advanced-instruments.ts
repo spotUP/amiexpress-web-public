@@ -93,11 +93,20 @@ export class AdvancedSynthVoice {
     // Create panner
     this.panner = new Tone.Panner(0);
 
+    // Map custom oscillator types to valid Tone.js types
+    const mapOscillatorType = (type: string): Tone.ToneOscillatorType => {
+      // Map custom types to valid Tone.js types
+      if (type === 'pwm' || type === 'pulse') return 'square';
+      if (type === 'noise') return 'sine';
+      // Valid types: sine, square, sawtooth, triangle
+      return type as Tone.ToneOscillatorType;
+    };
+
     // Create oscillators
     for (let i = 0; i < params.oscillators.length; i++) {
       const oscParams = params.oscillators[i];
       const osc = new Tone.Oscillator({
-        type: oscParams.type === 'noise' ? 'sine' : oscParams.type,
+        type: mapOscillatorType(oscParams.type),
         phase: oscParams.phase,
         detune: oscParams.detune
       });
@@ -141,10 +150,17 @@ export class AdvancedSynthVoice {
       release: 0.3
     });
 
+    // Map LFO waveforms to valid Tone.js types
+    const mapLFOWaveform = (waveform: LFOWaveform): Tone.ToneOscillatorType => {
+      // Map 'random' to 'sine', keep others as-is
+      if (waveform === 'random') return 'sine';
+      return waveform as Tone.ToneOscillatorType;
+    };
+
     // Create LFO1
     this.lfo1 = new Tone.LFO({
       frequency: params.lfo1.frequency,
-      type: params.lfo1.waveform,
+      type: mapLFOWaveform(params.lfo1.waveform),
       phase: params.lfo1.phase,
       min: -params.lfo1.depth,
       max: params.lfo1.depth
@@ -154,7 +170,7 @@ export class AdvancedSynthVoice {
     if (params.lfo2) {
       this.lfo2 = new Tone.LFO({
         frequency: params.lfo2.frequency,
-        type: params.lfo2.waveform,
+        type: mapLFOWaveform(params.lfo2.waveform),
         phase: params.lfo2.phase,
         min: -params.lfo2.depth,
         max: params.lfo2.depth

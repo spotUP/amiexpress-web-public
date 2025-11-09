@@ -82,7 +82,7 @@ class TrackerDoor {
       runtime: 'client'
     });
 
-    this.gfx = new GraphicsEngine({ width: 80, height: 24 });
+    this.gfx = new GraphicsEngine();
     this.audio = new AudioEngine(16);
     this.dataDir = '/data'; // Browser path
     this.exportManager = new ExportManager(this.dataDir);
