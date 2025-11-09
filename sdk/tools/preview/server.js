@@ -1112,7 +1112,11 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
 
     } else if (provider === 'openrouter') {
       console.log(`[OpenRouter] ========== Starting OpenRouter Request ==========`);
-      console.log(`[OpenRouter] Model: ${model}`);
+      console.log(`[OpenRouter] Model (raw): ${model}`);
+
+      // Strip :free suffix for the API call (it's metadata, not part of the model ID)
+      const modelForApi = (model || 'meta-llama/llama-4-maverick:free').replace(/:free$/, '');
+      console.log(`[OpenRouter] Model (for API): ${modelForApi}`);
       console.log(`[OpenRouter] API key present: ${!!providerKey}`);
       console.log(`[OpenRouter] API key length: ${providerKey ? providerKey.length : 0}`);
       console.log(`[OpenRouter] Max tokens: ${maxTokens}`);
@@ -1139,7 +1143,7 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
             'X-Title': 'AmiExpress BBS Door SDK',
           },
           body: JSON.stringify({
-            model: model || 'meta-llama/llama-4-maverick:free',
+            model: modelForApi,
             messages: [{ role: 'user', content: prompt }],
             max_tokens: maxTokens,
             stream: true,
@@ -1182,8 +1186,16 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
             errorMessage = 'This model requires credits. Please select a free model or add credits to your OpenRouter account.';
           } else if (response.status === 429) {
             errorMessage = 'Rate limit exceeded. Please wait a few minutes and try again.';
+          } else if (response.status === 404 && error.error?.metadata?.raw?.includes('model not found')) {
+            // Extract the model name the provider expected
+            const expectedModel = error.error?.metadata?.raw?.match(/"model not found: ([^"]+)"/)?.[1];
+            errorMessage = `Model not found. OpenRouter API tried: "${modelForApi}". `;
+            if (expectedModel && expectedModel !== modelForApi) {
+              errorMessage += `Provider expects different capitalization: "${expectedModel}". `;
+            }
+            errorMessage += 'Try selecting a different model from the dropdown.';
           } else if (response.status === 400 && error.error?.message?.includes('model')) {
-            errorMessage = `Model not found: ${model}. The model may no longer be available or the name changed.`;
+            errorMessage = `Model not found: ${modelForApi}. The model may no longer be available or the name changed.`;
           }
         } catch (e) {
           console.error(`[OpenRouter] Failed to parse error response:`, e);
