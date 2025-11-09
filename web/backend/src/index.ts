@@ -495,6 +495,12 @@ app.post('/auth/login', (req: Request, res: Response) => authHandler.login(req, 
 app.post('/auth/register', (req: Request, res: Response) => authHandler.register(req, res));
 app.post('/auth/refresh', (req: Request, res: Response) => authHandler.refresh(req, res));
 
+// Game Prompt Wizard API endpoints
+import { enhancePrompt, analyzePrompt, generateGame } from './handlers/wizard.handler';
+app.post('/api/wizard/enhance', (req: Request, res: Response) => enhancePrompt(req, res));
+app.post('/api/wizard/analyze', (req: Request, res: Response) => analyzePrompt(req, res));
+app.post('/api/wizard/generate', (req: Request, res: Response) => generateGame(req, res));
+
 // File upload configuration
 // Express.e uses Node#/Playpen for uploaded files (express.e:19573-19584)
 const playpenStorage = multer.diskStorage({
