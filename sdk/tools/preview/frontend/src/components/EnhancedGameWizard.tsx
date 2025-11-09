@@ -61,6 +61,7 @@ const AI_PROVIDERS: AIProvider[] = [
     name: 'OpenRouter (Free Models)',
     models: [
       'meta-llama/llama-4-maverick:free',
+      'agentica-org/DeepCoder-14B-Preview:free',
       'mistralai/mistral-small-3.1-24b-instruct:free',
       'deepseek/deepseek-chat-v3-0324:free',
       'google/gemma-3-27b-it:free',
