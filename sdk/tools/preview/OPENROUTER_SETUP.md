@@ -13,10 +13,13 @@ OpenRouter provides unified API access to 400+ AI models from various providers.
 
 ### Step 2: Configure Privacy Settings (Important!)
 1. Navigate to https://openrouter.ai/settings/privacy
-2. Under "Data Policy", select **"Allow training on my data"**
-   - This is required to use free models
-   - Your prompts will be used to improve AI models (standard for free tiers)
-   - If you prefer privacy, you can use paid models instead
+2. Under "Data Policy", enable at least one of these:
+   - **"Enable free endpoints that may train on inputs"** - For most free models
+   - **"Enable paid endpoints that may train on inputs"** - For some free models with `:free` suffix
+
+   **Recommendation:** Enable both checkboxes to access all available models
+
+   Note: Your prompts will be used to improve AI models (standard for free tiers)
 
 ### Step 3: Get Your API Key
 1. Navigate to https://openrouter.ai/keys
@@ -94,14 +97,22 @@ OPENROUTER_API_KEY=sk-or-v1-...
 ## Troubleshooting
 
 ### "No endpoints found matching your data policy"
-**Most common issue!** This means you haven't enabled training data in your privacy settings.
+**Most common issue!** This means you need to enable additional privacy settings.
 
-**Solution:**
+**If error says "(Paid model training)":**
 1. Go to https://openrouter.ai/settings/privacy
-2. Select "Allow training on my data"
+2. Check **"Enable paid endpoints that may train on inputs"**
+3. Try your request again
+   - Note: Some models with `:free` suffix still require this setting
+
+**If error doesn't specify:**
+1. Go to https://openrouter.ai/settings/privacy
+2. Check **both** training checkboxes:
+   - "Enable free endpoints that may train on inputs"
+   - "Enable paid endpoints that may train on inputs"
 3. Try your request again
 
-**Alternative:** Use a paid model instead (requires adding credits to your account)
+**Alternative:** Try a different free model from the dropdown
 
 ### "No API key provided"
 - Make sure you've copied the full key (starts with `sk-or-`)
