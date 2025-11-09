@@ -259,8 +259,15 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate game');
+        let errorMessage = 'Failed to generate game';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) {
+          // If response isn't JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       // Handle streaming response
@@ -315,6 +322,8 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
       setError(err.message || 'An error occurred while generating the game');
       setGenerating(false);
       setProgress(0);
+      setCurrentPhase('');
+      setStreamingText('');
     }
   };
 
@@ -652,26 +661,81 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
               )}
 
               {/* Generation Step */}
-              {currentStep === 3 && generating && (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 className="w-20 h-20 text-purple-400 mb-4 animate-spin" />
-                  <h3 className="text-2xl font-bold text-white mb-2">{currentPhase}</h3>
-                  <div className="w-full max-w-md">
-                    <div className="bg-gray-800 rounded-full h-4 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-600 to-blue-600 transition-all duration-500"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                    <p className="text-center text-gray-400 mt-2">{progress}%</p>
-                  </div>
+              {currentStep === 3 && (
+                <>
+                  {generating ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <Loader2 className="w-20 h-20 text-purple-400 mb-4 animate-spin" />
+                      <h3 className="text-2xl font-bold text-white mb-2">{currentPhase}</h3>
+                      <div className="w-full max-w-md">
+                        <div className="bg-gray-800 rounded-full h-4 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-600 to-blue-600 transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                        <p className="text-center text-gray-400 mt-2">{progress}%</p>
+                      </div>
 
-                  {streamingText && (
-                    <div className="mt-6 w-full max-w-2xl max-h-64 overflow-y-auto bg-gray-900 rounded-lg p-4 text-sm text-green-400 font-mono">
-                      {streamingText}
+                      {streamingText && (
+                        <div className="mt-6 w-full max-w-2xl max-h-64 overflow-y-auto bg-gray-900 rounded-lg p-4 text-sm text-green-400 font-mono">
+                          {streamingText}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 max-w-2xl mx-auto">
+                      <h3 className="text-2xl font-bold text-white mb-4">Ready to Generate</h3>
+                      <p className="text-gray-400 text-center mb-6">
+                        Click "Generate Game" below to create your game using AI.
+                      </p>
+
+                      <div className="w-full space-y-4 bg-gray-800/50 rounded-lg p-6">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Game Name:</span>
+                          <span className="text-white font-semibold">{gameName}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Type:</span>
+                          <span className="text-white">{gameType}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">AI Provider:</span>
+                          <span className="text-white">{AI_PROVIDERS.find(p => p.id === provider)?.name}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Model:</span>
+                          <span className="text-white text-xs">{model}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400">Estimated Cost:</span>
+                          <span className="text-green-400 font-semibold">${estimatedCost.toFixed(4)}</span>
+                        </div>
+                      </div>
+
+                      {error && (
+                        <div className="mt-6 flex gap-3">
+                          <button
+                            onClick={() => setCurrentStep(2)}
+                            className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                          >
+                            Back to Settings
+                          </button>
+                          <button
+                            onClick={() => {
+                              setError(null);
+                              handleGenerate();
+                            }}
+                            className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            Try Again
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
 
               {/* Preview Step */}
