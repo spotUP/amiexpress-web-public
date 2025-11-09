@@ -11,7 +11,7 @@ import {
   Header,
   DoorList,
   Settings,
-  GameWizard,
+  EnhancedGameWizard,
 } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { SessionRecorder as Recorder } from './utils/sessionRecording';
@@ -550,9 +550,9 @@ function App() {
         />
       )}
 
-      {/* Game Wizard modal */}
+      {/* Enhanced Game Wizard modal */}
       {showGameWizard && (
-        <GameWizard
+        <EnhancedGameWizard
           onClose={() => setShowGameWizard(false)}
           onGameCreated={(doorId) => {
             // Reload doors list and select the new door
