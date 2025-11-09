@@ -3,7 +3,6 @@ import { Terminal as XTermTerminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
-import { CRTEffect } from './CRTEffect';
 
 function Terminal() {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -392,17 +391,15 @@ function Terminal() {
   }, []);
 
   return (
-    <CRTEffect enabled={true} intensity="medium">
-      <div ref={terminalRef} style={{
-        width: '100%',
-        height: '100vh',
-        fontSize: '16px',
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        MozUserSelect: 'none',
-        msUserSelect: 'none'
-      }} />
-    </CRTEffect>
+    <div ref={terminalRef} style={{
+      width: '100%',
+      height: '100vh',
+      fontSize: '16px',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      MozUserSelect: 'none',
+      msUserSelect: 'none'
+    }} />
   );
 }
 
