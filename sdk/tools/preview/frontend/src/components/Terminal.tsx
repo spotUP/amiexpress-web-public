@@ -42,6 +42,23 @@ export const Terminal: React.FC<TerminalProps> = ({
     }
   }, [output, isAutoScrolling]);
 
+  // Auto-focus the input on mount and when output changes
+  useEffect(() => {
+    // Delay focus slightly to ensure DOM is ready
+    const focusTimer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(focusTimer);
+  }, []); // Focus on mount
+
+  // Maintain focus when new output arrives
+  useEffect(() => {
+    // Only refocus if we're not actively selecting text
+    if (!window.getSelection()?.toString()) {
+      inputRef.current?.focus();
+    }
+  }, [output]);
+
   // Focus input when terminal is clicked
   const handleTerminalClick = () => {
     inputRef.current?.focus();
