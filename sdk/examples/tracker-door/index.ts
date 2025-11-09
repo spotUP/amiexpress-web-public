@@ -1,9 +1,11 @@
 /**
  * TrackerDoor - Professional Music Tracker BBS Door
  * Inspired by Renoise, Protracker, and FastTracker II
+ *
+ * Now runs as a CLIENT DOOR in the browser with real Web Audio API!
  */
 
-import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
+import { ClientDoor, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk/client';
 import { AudioEngine } from './audio/engine';
 import {
   Song,
@@ -26,13 +28,11 @@ import { XMParser } from './formats/xm-parser';
 import { ITParser } from './formats/it-parser';
 import { XIParser, ITIParser, XRNIParser } from './formats/instrument-parsers';
 import { formatVolumeColumn, parseVolumeColumn } from './audio/volume-column';
-import * as fs from 'fs';
-import * as path from 'path';
 
 type View = 'main' | 'pattern-editor' | 'instrument-editor' | 'sample-editor' | 'effects-editor' | 'song-editor' | 'export' | 'ai-assistant' | 'help';
 
 class TrackerDoor {
-  private door: Door;
+  private door: ClientDoor;
   private gfx: GraphicsEngine;
   private audio: AudioEngine;
   private exportManager: ExportManager;
@@ -72,17 +72,18 @@ class TrackerDoor {
   private channelSolo: boolean[] = new Array(16).fill(false);
 
   constructor() {
-    this.door = new Door({
+    this.door = new ClientDoor({
       name: 'TrackerDoor',
       version: '1.0.0',
       author: 'Demo Scene Community',
       description: 'Professional Music Tracker',
-      minSecurity: 0
+      minSecurity: 0,
+      runtime: 'client'
     });
 
     this.gfx = new GraphicsEngine({ width: 80, height: 24 });
     this.audio = new AudioEngine(16);
-    this.dataDir = path.join(__dirname, '../data');
+    this.dataDir = '/data'; // Browser path
     this.exportManager = new ExportManager(this.dataDir);
     this.sampleManager = new SampleManager(this.dataDir);
     this.aiGenerator = new AIGenerator();
