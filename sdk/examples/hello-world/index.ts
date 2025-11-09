@@ -8,8 +8,7 @@
  * - ANSI output
  */
 
-import { Door, AnsiColor, GraphicsEngine } from '@amiexpress/bbs-door-sdk';
-import { setupMockDevelopment } from '../../tools/mock';
+import { Door, AnsiColor, GraphicsEngine, setupMockDevelopment } from '@amiexpress/bbs-door-sdk';
 
 // Create door
 const door = new Door({
