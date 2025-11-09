@@ -149,7 +149,8 @@ export class Door extends EventEmitter {
     }
 
     // Schedule next frame
-    setImmediate(() => this.mainLoop());
+    // Use setTimeout instead of setImmediate to keep the process alive
+    setTimeout(() => this.mainLoop(), 0);
   }
 
   /**
