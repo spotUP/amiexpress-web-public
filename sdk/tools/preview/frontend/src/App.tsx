@@ -603,11 +603,16 @@ function App() {
         <EnhancedGameWizard
           onClose={() => setShowGameWizard(false)}
           onGameCreated={(doorId) => {
-            // Reload doors list and select the new door
+            // Reload doors list, select the new door, and launch it
             loadDoors().then(() => {
               const newDoor = doors.find((d) => d.id === doorId);
               if (newDoor) {
                 handleDoorSelect(newDoor);
+                // Auto-launch the newly created game after a brief delay
+                setTimeout(() => {
+                  handleRunDoor();
+                  toast.success('Game launched!', `${newDoor.name} is now running`);
+                }, 500);
               }
             });
           }}
