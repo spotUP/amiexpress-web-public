@@ -145,7 +145,7 @@ class BugTracker {
     this.inputManager = new InputManager(this.door, 0);
     this.uiComponents = new UIComponents(this.door, 0);
     this.templateManager = new TemplateManager();
-    this.autoSaveManager = new AutoSaveManager(path.join(__dirname, 'drafts.json'));
+    this.autoSaveManager = new AutoSaveManager(__dirname);
     this.smartFeatures = new SmartFeatures();
     this.gamification = new GamificationSystem();
     this.webhooks = new WebhookManager();

@@ -2,8 +2,8 @@
   "name": "@amiexpress/bbs-door-sdk",
   "version": "1.0.0",
   "description": "Revolutionary BBS Door Development SDK - Next-Generation Games & Tools",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "amiexpress-sdk": "./dist/tools/cli/index.js"
   },
