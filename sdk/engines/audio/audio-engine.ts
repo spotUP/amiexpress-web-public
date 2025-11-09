@@ -30,7 +30,7 @@
  * ```
  */
 
-import * as Tone from 'tone';
+import Tone from 'tone';
 import { AudioConfig, SoundEffect, MusicPrompt } from '../../core/types';
 
 /** Music state for adaptive audio */
