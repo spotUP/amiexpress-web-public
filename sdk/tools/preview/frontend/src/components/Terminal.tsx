@@ -30,11 +30,14 @@ export const Terminal: React.FC<TerminalProps> = ({
   // Auto-scroll to bottom when new output arrives
   useEffect(() => {
     if (isAutoScrolling && terminalRef.current) {
-      // Use requestAnimationFrame to ensure DOM has updated before scrolling
+      // Use double requestAnimationFrame to ensure DOM has fully updated
+      // This fixes the issue where clicking Run doesn't scroll until you click again
       requestAnimationFrame(() => {
-        if (terminalRef.current) {
-          terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-        }
+        requestAnimationFrame(() => {
+          if (terminalRef.current) {
+            terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+          }
+        });
       });
     }
   }, [output, isAutoScrolling]);
