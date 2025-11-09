@@ -206,6 +206,26 @@ function registerCommandHandler(socket: Socket) {
     }
   });
 
+  // Handle simultaneous key state updates (for games/doors that need multiple keys pressed at once)
+  socket.on('keys:state', (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    console.log('[socket-handlers] keys:state received:', data);
+
+    // Update session key state
+    if (!session.keyState) {
+      session.keyState = {};
+    }
+    session.keyState = data.keyState;
+
+    // If door is active and has a key state handler, call it
+    if (session.inDoorManager && session.doorKeyStateHandler) {
+      console.log('[socket-handlers] Calling doorKeyStateHandler');
+      session.doorKeyStateHandler(data);
+    }
+  });
+
   socket.on('command', (data: string) => {
     console.log('=== COMMAND RECEIVED [v2024-FIXED] ===');
     console.log('Raw data:', JSON.stringify(data), 'length:', data.length, 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');

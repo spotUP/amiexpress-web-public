@@ -9,6 +9,7 @@ function Terminal() {
   const terminal = useRef<XTermTerminal | null>(null);
   const socket = useRef<Socket | null>(null);
   const doorActive = useRef<boolean>(false);
+  const keyState = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -224,6 +225,11 @@ function Terminal() {
 
     ws.on('door:status', (data: { status: string }) => {
       doorActive.current = (data.status === 'running');
+
+      // Reset key state when door closes
+      if (data.status !== 'running') {
+        keyState.current = {};
+      }
     });
 
     // Handle client door loading (browser-based doors)
@@ -462,6 +468,7 @@ function Terminal() {
     }
 
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      // Handle F1 key for help
       if (loginState.current === 'loggedin') {
         if (event.key === 'F1' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
           event.preventDefault();
@@ -469,6 +476,43 @@ function Terminal() {
           return false;
         }
       }
+
+      // Track key state for simultaneous input (for doors/games)
+      // Only track game-relevant keys to avoid overhead
+      const gameKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Space',
+                        'w', 'a', 's', 'd', 'W', 'A', 'S', 'D',
+                        'Enter', 'Escape', 'Shift', 'Control', 'Alt'];
+
+      if (loginState.current === 'loggedin' && doorActive.current && gameKeys.includes(event.key)) {
+        if (event.type === 'keydown') {
+          // Key pressed - update state and emit if new press (not a repeat)
+          if (!keyState.current[event.key]) {
+            keyState.current[event.key] = true;
+            ws.emit('keys:state', {
+              key: event.key,
+              pressed: true,
+              keyState: { ...keyState.current }
+            });
+          }
+
+          // Prevent default for arrow keys to avoid scrolling
+          if (event.key.startsWith('Arrow')) {
+            event.preventDefault();
+            return false;
+          }
+        } else if (event.type === 'keyup') {
+          // Key released - update state and emit
+          if (keyState.current[event.key]) {
+            keyState.current[event.key] = false;
+            ws.emit('keys:state', {
+              key: event.key,
+              pressed: false,
+              keyState: { ...keyState.current }
+            });
+          }
+        }
+      }
+
       return true;
     });
 

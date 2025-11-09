@@ -19,6 +19,7 @@ export class XIMIOHandler {
   private socket: Socket;
   private messageParser: XIMMessageParser;
   private inputQueue: string[] = [];
+  private keyState: Record<string, boolean> = {}; // Simultaneous key state tracking
 
   // Line input state
   private waitingForLineInput: boolean = false;
@@ -42,6 +43,28 @@ export class XIMIOHandler {
    */
   isWaitingForLineInput(): boolean {
     return this.waitingForLineInput;
+  }
+
+  /**
+   * Update key state for simultaneous input (from keys:state event)
+   */
+  updateKeyState(data: { key: string; pressed: boolean; keyState: Record<string, boolean> }): void {
+    console.log(`[XIMIOHandler] Key state update: ${data.key} = ${data.pressed}`);
+    this.keyState = data.keyState;
+  }
+
+  /**
+   * Get current key state (for doors that need to check multiple keys at once)
+   */
+  getKeyState(): Record<string, boolean> {
+    return { ...this.keyState };
+  }
+
+  /**
+   * Check if a specific key is currently pressed
+   */
+  isKeyPressed(key: string): boolean {
+    return this.keyState[key] === true;
   }
 
   /**
