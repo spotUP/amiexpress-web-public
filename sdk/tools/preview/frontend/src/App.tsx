@@ -419,58 +419,62 @@ function App() {
   }, [settings.theme]);
 
   return (
-    <div className="h-screen flex flex-col bg-[#1E1E1E] text-white">
-      {/* Header */}
-      <Header
-        theme={settings.theme}
-        onThemeToggle={handleThemeToggle}
-        connectionStatus={connectionStatus}
-        onSettingsClick={() => setShowSettings(true)}
-      />
+    <div className="h-screen flex flex-col bg-[#1E1E1E] text-white overflow-hidden">
+      {/* Header with slide-down animation */}
+      <div className="animate-slideDown">
+        <Header
+          theme={settings.theme}
+          onThemeToggle={handleThemeToggle}
+          connectionStatus={connectionStatus}
+          onSettingsClick={() => setShowSettings(true)}
+        />
+      </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main content area with fade-in animation */}
+      <div className="flex-1 flex overflow-hidden animate-fadeIn">
         <PanelGroup direction="horizontal">
-          {/* Left sidebar - Door list */}
+          {/* Left sidebar - Door list with slide-in animation */}
           {showLeftSidebar && (
             <>
               <Panel defaultSize={20} minSize={15} maxSize={30}>
-                <DoorListEnhanced
-                  doors={doors}
-                  selectedDoor={selectedDoor}
-                  onDoorSelect={handleDoorSelect}
-                  onToggleFavorite={handleToggleFavorite}
-                  onCreateNewGame={() => setShowGameWizard(true)}
-                  onBuildDoor={handleBuildDoor}
-                  onRunDoor={handleRunDoor}
-                  loading={doorsLoading}
-                />
+                <div className="animate-slideInLeft h-full">
+                  <DoorListEnhanced
+                    doors={doors}
+                    selectedDoor={selectedDoor}
+                    onDoorSelect={handleDoorSelect}
+                    onToggleFavorite={handleToggleFavorite}
+                    onCreateNewGame={() => setShowGameWizard(true)}
+                    onBuildDoor={handleBuildDoor}
+                    onRunDoor={handleRunDoor}
+                    loading={doorsLoading}
+                  />
+                </div>
               </Panel>
-              <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-600 transition-colors" />
+              <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-600 transition-all duration-300 hover:w-2 cursor-col-resize" />
             </>
           )}
 
           {/* Center - Terminal */}
           <Panel defaultSize={50} minSize={30}>
             <div className="flex flex-col h-full">
-              {/* Terminal toolbar */}
-              <div className="bg-[#252526] border-b border-gray-700 px-4 py-2 flex items-center gap-2">
+              {/* Terminal toolbar with glassmorphism effect */}
+              <div className="bg-[#252526]/95 backdrop-blur-sm border-b border-gray-700 px-4 py-2 flex items-center gap-2 shadow-lg">
                 {!showLeftSidebar && (
                   <button
                     onClick={() => setShowLeftSidebar(true)}
-                    className="p-1 hover:bg-gray-700 rounded transition-colors"
+                    className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
                     title="Show sidebar"
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-4 h-4 transition-transform" />
                   </button>
                 )}
                 {showLeftSidebar && (
                   <button
                     onClick={() => setShowLeftSidebar(false)}
-                    className="p-1 hover:bg-gray-700 rounded transition-colors"
+                    className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
                     title="Hide sidebar"
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="w-4 h-4 transition-transform" />
                   </button>
                 )}
 
@@ -479,19 +483,21 @@ function App() {
                 <button
                   onClick={handleRunDoor}
                   disabled={!selectedDoor}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-colors"
+                  className="group flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 hover:shadow-lg hover:shadow-green-500/50 disabled:hover:scale-100 disabled:hover:shadow-none"
                 >
-                  <Play className="w-4 h-4" />
+                  <Play className="w-4 h-4 transition-transform group-hover:scale-110" />
                   <span className="hidden sm:inline">Run</span>
                 </button>
 
                 <button
                   onClick={handleBuildDoor}
                   disabled={!selectedDoor || buildStatus.building}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-colors"
+                  className={`group flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 hover:shadow-lg hover:shadow-blue-500/50 disabled:hover:scale-100 disabled:hover:shadow-none ${
+                    buildStatus.building ? 'animate-pulse' : ''
+                  }`}
                 >
-                  <Hammer className="w-4 h-4" />
-                  <span className="hidden sm:inline">Build</span>
+                  <Hammer className={`w-4 h-4 transition-transform ${buildStatus.building ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
+                  <span className="hidden sm:inline">{buildStatus.building ? 'Building...' : 'Build'}</span>
                 </button>
 
                 <div className="ml-auto flex items-center gap-2">
@@ -503,19 +509,19 @@ function App() {
                   {!showRightSidebar && (
                     <button
                       onClick={() => setShowRightSidebar(true)}
-                      className="p-1 hover:bg-gray-700 rounded transition-colors"
+                      className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
                       title="Show sidebar"
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="w-4 h-4 transition-transform" />
                     </button>
                   )}
                   {showRightSidebar && (
                     <button
                       onClick={() => setShowRightSidebar(false)}
-                      className="p-1 hover:bg-gray-700 rounded transition-colors"
+                      className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
                       title="Hide sidebar"
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="w-4 h-4 transition-transform" />
                     </button>
                   )}
                 </div>
@@ -541,84 +547,103 @@ function App() {
             </div>
           </Panel>
 
-          {/* Right sidebar - Code editor / Build status / Info */}
+          {/* Right sidebar - Code editor / Build status / Info with slide-in animation */}
           {showRightSidebar && (
             <>
-              <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-600 transition-colors" />
+              <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-600 transition-all duration-300 hover:w-2 cursor-col-resize" />
               <Panel defaultSize={30} minSize={20} maxSize={50}>
-                <div className="flex flex-col h-full bg-[#252526]">
-                  {/* Tabs */}
-                  <div className="flex border-b border-gray-700">
+                <div className="flex flex-col h-full bg-[#252526] animate-slideInRight">
+                  {/* Tabs with smooth transitions and glow effects */}
+                  <div className="flex border-b border-gray-700 bg-[#252526]/95 backdrop-blur-sm">
                     <button
                       onClick={() => setRightSidebarTab('info')}
-                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                      className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
                         rightSidebarTab === 'info'
-                          ? 'bg-[#1E1E1E] text-white border-b-2 border-blue-600'
-                          : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          ? 'bg-[#1E1E1E] text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                       }`}
                     >
                       Info
+                      {rightSidebarTab === 'info' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
+                      )}
                     </button>
                     <button
                       onClick={() => setRightSidebarTab('code')}
-                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                      className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
                         rightSidebarTab === 'code'
-                          ? 'bg-[#1E1E1E] text-white border-b-2 border-blue-600'
-                          : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          ? 'bg-[#1E1E1E] text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                       }`}
                     >
                       Code
+                      {rightSidebarTab === 'code' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
+                      )}
                     </button>
                     <button
                       onClick={() => setRightSidebarTab('build')}
-                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                      className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
                         rightSidebarTab === 'build'
-                          ? 'bg-[#1E1E1E] text-white border-b-2 border-blue-600'
-                          : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          ? 'bg-[#1E1E1E] text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                       }`}
                     >
                       Build
+                      {rightSidebarTab === 'build' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
+                      )}
+                      {buildStatus.building && (
+                        <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+                      )}
                     </button>
                     <button
                       onClick={() => setRightSidebarTab('release')}
-                      className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                      className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
                         rightSidebarTab === 'release'
-                          ? 'bg-[#1E1E1E] text-white border-b-2 border-blue-600'
-                          : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          ? 'bg-[#1E1E1E] text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                       }`}
                     >
                       Release
+                      {rightSidebarTab === 'release' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
+                      )}
                     </button>
                   </div>
 
-                  {/* Tab content */}
+                  {/* Tab content with fade-in animations */}
                   <div className="flex-1 overflow-hidden">
                     {rightSidebarTab === 'info' && (
-                      <div className="h-full overflow-y-auto p-4">
+                      <div className="h-full overflow-y-auto p-4 animate-fadeIn">
                         <DoorInfo metadata={doorMetadata} />
                       </div>
                     )}
 
                     {rightSidebarTab === 'code' && (
-                      <CodeEditor
-                        files={doorFiles}
-                        currentFile={currentFile}
-                        onFileSelect={handleFileSelect}
-                        onFileChange={handleFileChange}
-                        theme={settings.editorTheme}
-                        fontSize={settings.editorFontSize}
-                      />
+                      <div className="h-full animate-fadeIn">
+                        <CodeEditor
+                          files={doorFiles}
+                          currentFile={currentFile}
+                          onFileSelect={handleFileSelect}
+                          onFileChange={handleFileChange}
+                          theme={settings.editorTheme}
+                          fontSize={settings.editorFontSize}
+                        />
+                      </div>
                     )}
 
                     {rightSidebarTab === 'build' && (
-                      <BuildStatusEnhanced
-                        status={buildStatus}
-                        onErrorClick={handleBuildErrorClick}
-                      />
+                      <div className="h-full animate-fadeIn">
+                        <BuildStatusEnhanced
+                          status={buildStatus}
+                          onErrorClick={handleBuildErrorClick}
+                        />
+                      </div>
                     )}
 
                     {rightSidebarTab === 'release' && (
-                      <div className="h-full overflow-y-auto p-4">
+                      <div className="h-full overflow-y-auto p-4 animate-fadeIn">
                         <ReleaseArchive
                           doorName={selectedDoor?.name || 'door'}
                           onCreateArchive={handleCreateArchive}

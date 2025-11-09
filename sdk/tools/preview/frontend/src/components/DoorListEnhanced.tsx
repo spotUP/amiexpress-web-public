@@ -103,34 +103,34 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
 
   return (
     <div className={`flex flex-col h-full bg-[#1E1E1E] border-r border-gray-700 ${className}`}>
-      {/* Create New Game Button */}
+      {/* Create New Game Button with enhanced animations */}
       {onCreateNewGame && (
-        <div className="p-3 border-b border-gray-700">
+        <div className="p-3 border-b border-gray-700 animate-slideDown">
           <button
             onClick={onCreateNewGame}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
+            className="group w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all duration-300 font-semibold shadow-lg hover:shadow-2xl hover:shadow-purple-500/50 hover:scale-105 active:scale-95 animate-glowPulse"
           >
-            <Wand2 className="w-4 h-4" />
-            Create with AI
+            <Wand2 className="w-4 h-4 transition-transform group-hover:rotate-12 group-hover:scale-110" />
+            <span>Create with AI</span>
           </button>
         </div>
       )}
 
-      {/* Search bar */}
-      <div className="p-3 border-b border-gray-700">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+      {/* Search bar with enhanced animations */}
+      <div className="p-3 border-b border-gray-700 animate-slideDown" style={{animationDelay: '0.1s'}}>
+        <div className="relative group">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 transition-all group-focus-within:text-blue-400 group-focus-within:scale-110" />
           <input
             type="text"
             placeholder="Search doors..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-8 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-shadow"
+            className="w-full pl-10 pr-8 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all duration-200 hover:bg-gray-750 focus:bg-gray-800"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-all duration-200 hover:scale-110 active:scale-95 hover:rotate-90"
             >
               <X className="w-4 h-4" />
             </button>
@@ -138,8 +138,8 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex border-b border-gray-700">
+      {/* Filter tabs with enhanced animations */}
+      <div className="flex border-b border-gray-700 bg-gray-900/50 backdrop-blur-sm animate-slideDown" style={{animationDelay: '0.2s'}}>
         {[
           { mode: 'all' as const, label: 'All' },
           { mode: 'favorites' as const, label: 'Favorites', icon: Star },
@@ -149,16 +149,20 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
             key={mode}
             onClick={() => setFilterMode(mode)}
             className={`
-              flex-1 px-3 py-2 text-xs font-medium transition-all
+              relative flex-1 px-3 py-2 text-xs font-medium transition-all duration-300
               ${
                 filterMode === mode
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
               }
+              hover:scale-105 active:scale-95
             `}
           >
-            {Icon && <Icon className="w-3 h-3 inline mr-1" />}
+            {Icon && <Icon className={`w-3 h-3 inline mr-1 transition-transform ${filterMode === mode ? 'scale-110' : ''}`} />}
             {label}
+            {filterMode === mode && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400 animate-shimmer" />
+            )}
           </button>
         ))}
       </div>
@@ -191,12 +195,12 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
                 <ContextMenuWrapper key={door.id} items={getContextMenu(door)}>
                   <div
                     className={`
-                      group relative rounded-lg border transition-all
-                      animate-fade-in
+                      group relative rounded-lg border transition-all duration-300
+                      animate-fadeIn hover:scale-[1.02] active:scale-[0.98]
                       ${
                         isSelected
-                          ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/20'
-                          : 'bg-gray-800 border-gray-700 hover:bg-gray-700 hover:border-gray-600 hover:shadow-md'
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400 shadow-lg shadow-blue-500/30 scale-[1.02] animate-glowPulse'
+                          : 'bg-gray-800 border-gray-700 hover:bg-gray-700 hover:border-gray-600 hover:shadow-lg hover:shadow-gray-900/50'
                       }
                     `}
                     style={{ animationDelay: `${index * 0.05}s` }}
@@ -213,8 +217,8 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
                             className="w-12 h-12 rounded object-cover"
                           />
                         ) : (
-                          <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <Package className="w-6 h-6 text-white" />
+                          <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-lg group-hover:shadow-purple-500/50">
+                            <Package className="w-6 h-6 text-white transition-transform group-hover:scale-110" />
                           </div>
                         )}
 
