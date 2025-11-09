@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import '@xterm/xterm/css/xterm.css';
+import { buildTerminalBuffer, XTERM_CONFIG } from '../utils/terminal-utils';
 
 interface XTermTerminalProps {
   output: string[];
@@ -23,39 +24,13 @@ export const XTermTerminal: React.FC<XTermTerminalProps> = ({
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    // Initialize xterm.js terminal with proper configuration
+    // Initialize xterm.js terminal with shared configuration
     const term = new Terminal({
-      fontFamily: 'mosoul, "Courier New", monospace',
+      fontFamily: XTERM_CONFIG.fontFamily,
       fontSize: fontSize,
-      lineHeight: 1.2,
-      theme: {
-        background: '#1E1E1E',
-        foreground: '#CCCCCC',
-        cursor: '#CCCCCC',
-        black: '#000000',
-        red: '#ff0000',
-        green: '#00ff00',
-        yellow: '#ffff00',
-        blue: '#0000ff',
-        magenta: '#ff00ff',
-        cyan: '#00ffff',
-        white: '#ffffff',
-        brightBlack: '#808080',
-        brightRed: '#ff8080',
-        brightGreen: '#80ff80',
-        brightYellow: '#ffff80',
-        brightBlue: '#8080ff',
-        brightMagenta: '#ff80ff',
-        brightCyan: '#80ffff',
-        brightWhite: '#ffffff'
-      },
-      allowTransparency: false,
-      cursorBlink: true,
-      cursorStyle: 'block',
-      scrollback: 2000,
-      fontWeight: 'normal',
-      fontWeightBold: 'bold',
-      allowProposedApi: true,
+      lineHeight: XTERM_CONFIG.lineHeight,
+      theme: XTERM_CONFIG.themeSdk,
+      ...XTERM_CONFIG.options,
       // CRITICAL: Don't let terminal grow, use fixed dimensions
       convertEol: false,
     });
@@ -90,17 +65,8 @@ export const XTermTerminal: React.FC<XTermTerminalProps> = ({
 
     const newLines = output.slice(lastOutputLength.current);
     if (newLines.length > 0) {
-      // Double buffering: Build complete output buffer before writing
-      // This prevents screen flickering during updates
-      const HIDE_CURSOR = '\x1b[?25l';
-      const SHOW_CURSOR = '\x1b[?25h';
-
-      // Build buffered output with cursor hiding
-      let buffer = HIDE_CURSOR;
-      newLines.forEach((line) => {
-        buffer += line + '\r\n';
-      });
-      buffer += SHOW_CURSOR;
+      // Use shared double buffering utility to prevent screen flickering
+      const buffer = buildTerminalBuffer(newLines, { hideCursor: true });
 
       // Write entire buffer at once
       terminalInstance.current.write(buffer);

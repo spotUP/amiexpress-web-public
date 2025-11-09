@@ -6,38 +6,44 @@
  */
 
 import { Socket } from 'socket.io';
+import { ANSI } from './terminal-utils';
 
 /**
  * Hide cursor (ANSI escape code)
+ * @deprecated Use ANSI.HIDE_CURSOR from shared/terminal-utils instead
  */
-export const HIDE_CURSOR = '\x1b[?25l';
+export const HIDE_CURSOR = ANSI.HIDE_CURSOR;
 
 /**
  * Show cursor (ANSI escape code)
+ * @deprecated Use ANSI.SHOW_CURSOR from shared/terminal-utils instead
  */
-export const SHOW_CURSOR = '\x1b[?25h';
+export const SHOW_CURSOR = ANSI.SHOW_CURSOR;
 
 /**
  * Clear screen (ANSI escape code)
+ * @deprecated Use ANSI.CLEAR_SCREEN from shared/terminal-utils instead
  */
-export const CLEAR_SCREEN = '\x1b[2J\x1b[H';
+export const CLEAR_SCREEN = ANSI.CLEAR_SCREEN;
 
 /**
  * Position cursor (1-indexed)
  * @param x - Column (1-80)
  * @param y - Row (1-24)
+ * @deprecated Use ANSI.moveCursor from shared/terminal-utils instead
  */
 export function moveCursor(x: number, y: number): string {
-  return `\x1b[${y};${x}H`;
+  return ANSI.moveCursor(x, y);
 }
 
 /**
  * Set ANSI colors (no bold)
  * @param fg - Foreground color (0-7)
  * @param bg - Background color (0-7)
+ * @deprecated Use ANSI.setColors from shared/terminal-utils instead
  */
 export function setColors(fg: number, bg: number): string {
-  return `\x1b[0;3${fg};4${bg}m`;
+  return ANSI.setColors(fg, bg);
 }
 
 /**
