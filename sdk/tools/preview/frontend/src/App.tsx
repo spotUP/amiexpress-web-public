@@ -23,12 +23,10 @@ import {
   GradientMesh,
   OnboardingTour,
   HapticFeedback,
-  ActivityFeed,
   ThemeSelector,
   EnhancedLoader,
   TerminalTabs,
   CodeMinimap,
-  TimelineScrubber,
   PerformanceProfiler,
   GitIntegration,
 } from './components';
@@ -49,7 +47,6 @@ import {
 } from './types';
 import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles } from 'lucide-react';
 import type { CommandItem } from './components/ui/CommandPalette';
-import type { ActivityItem } from './components/ui/ActivityFeed';
 
 const defaultSettings: AppSettings = {
   theme: 'dark',
@@ -96,7 +93,6 @@ function App() {
 
   // New UX features state
   const [showOnboarding, setShowOnboarding] = useLocalStorage('sdk-preview-onboarding-complete', false);
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [hapticTrigger, setHapticTrigger] = useState(false);
   const [enableSoundEffects, setEnableSoundEffects] = useLocalStorage('sdk-preview-sound-effects', true);
   const [showGradientMesh, setShowGradientMesh] = useLocalStorage('sdk-preview-gradient-mesh', true);
@@ -150,19 +146,6 @@ function App() {
     soundEffects.setEnabled(enableSoundEffects);
   }, [enableSoundEffects, soundEffects]);
 
-  // Activity tracking helper
-  const addActivity = (type: ActivityItem['type'], title: string, description?: string, action?: ActivityItem['action']) => {
-    const newActivity: ActivityItem = {
-      id: `${Date.now()}-${Math.random()}`,
-      type,
-      title,
-      description,
-      timestamp: Date.now(),
-      action,
-    };
-    setActivities((prev) => [newActivity, ...prev].slice(0, 50)); // Keep last 50 activities
-  };
-
   // Trigger haptic feedback
   const triggerHaptic = () => {
     setHapticTrigger(true);
@@ -179,18 +162,15 @@ function App() {
         setDoors(doorsData);
         if (doorsData.length > 0) {
           toast.success(`Loaded ${doorsData.length} door${doorsData.length !== 1 ? 's' : ''}`);
-          addActivity('success', `Loaded ${doorsData.length} door${doorsData.length !== 1 ? 's' : ''}`);
           soundEffects.click();
         }
       } else {
         toast.error('Failed to load doors', response.statusText);
-        addActivity('error', 'Failed to load doors', response.statusText);
         soundEffects.error();
         console.error('Failed to load doors:', response.statusText);
       }
     } catch (error) {
       toast.error('Error loading doors', error instanceof Error ? error.message : 'Unknown error');
-      addActivity('error', 'Error loading doors', error instanceof Error ? error.message : 'Unknown error');
       soundEffects.error();
       console.error('Error loading doors:', error);
     } finally {
@@ -264,7 +244,6 @@ function App() {
         if (!message.data.building && message.data.lastBuild > 0) {
           if (message.data.errors.length === 0) {
             toast.success('Build succeeded!', `Completed in ${message.data.duration}ms`);
-            addActivity('success', 'Build succeeded', `Completed in ${message.data.duration}ms`);
             // Trigger success celebration, sound, and haptic!
             setCelebrationMessage('Build Successful!');
             setShowSuccessCelebration(true);
@@ -272,7 +251,6 @@ function App() {
             triggerHaptic();
           } else {
             toast.error('Build failed', `${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''} found`);
-            addActivity('error', 'Build failed', `${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''} found`);
             soundEffects.error();
           }
         }
@@ -280,7 +258,6 @@ function App() {
 
       case 'error':
         setTerminalOutput((prev) => [...prev, `\x1b[31mError: ${message.data}\x1b[0m`]);
-        addActivity('error', 'Error', message.data);
         soundEffects.error();
         break;
     }
@@ -414,7 +391,6 @@ function App() {
         `\x1b[36m--- Running ${selectedDoor.name} ---\x1b[0m`,
         '',
       ]);
-      addActivity('action', `Running ${selectedDoor.name}`);
       soundEffects.click();
       triggerHaptic();
     }
@@ -426,7 +402,6 @@ function App() {
       setBuildStatus((prev) => ({ ...prev, building: true }));
       wsSend({ type: 'input', data: `buildDoor:${selectedDoor.id}` });
       toast.info('Building door...', `Compiling ${selectedDoor.name}`);
-      addActivity('action', `Building ${selectedDoor.name}`, 'Compiling...');
       soundEffects.notification();
     }
   };
@@ -756,7 +731,7 @@ function App() {
                 <button
                   onClick={handleRunDoor}
                   disabled={!selectedDoor}
-                  className="group flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 hover:shadow-lg hover:shadow-green-500/50 disabled:hover:scale-100 disabled:hover:shadow-none"
+                  className="group flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100"
                 >
                   <Play className="w-4 h-4 transition-transform group-hover:scale-110" />
                   <span className="hidden sm:inline">Run</span>
@@ -765,7 +740,7 @@ function App() {
                 <button
                   onClick={handleBuildDoor}
                   disabled={!selectedDoor || buildStatus.building}
-                  className={`group flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 hover:shadow-lg hover:shadow-blue-500/50 disabled:hover:scale-100 disabled:hover:shadow-none ${
+                  className={`group flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100 ${
                     buildStatus.building ? 'animate-pulse' : ''
                   }`}
                 >
@@ -943,17 +918,14 @@ function App() {
                           doorPath={selectedDoor?.id || ''}
                           onCommit={(message) => {
                             soundEffects.success();
-                            addActivity('success', 'Git commit', message);
                             toast.success('Committed!', message);
                           }}
                           onPush={() => {
                             soundEffects.success();
-                            addActivity('success', 'Git push', 'Pushed to remote');
                             toast.success('Pushed!', 'Changes pushed to remote');
                           }}
                           onPull={() => {
                             soundEffects.notification();
-                            addActivity('info', 'Git pull', 'Pulled from remote');
                             toast.info('Pulled!', 'Updates pulled from remote');
                           }}
                         />
@@ -1106,15 +1078,6 @@ function App() {
         />
       </div>
 
-      {/* Activity Feed */}
-      <ActivityFeed
-        activities={activities}
-        onClear={() => setActivities([])}
-        onItemClick={(item) => {
-          soundEffects.click();
-        }}
-      />
-
       {/* Haptic Feedback Wrapper */}
       <HapticFeedback type="pulse" trigger={hapticTrigger}>
         <div />
@@ -1127,7 +1090,6 @@ function App() {
           onComplete={() => {
             setShowOnboarding(true);
             soundEffects.success();
-            addActivity('success', 'Onboarding completed', 'Welcome to AmiExpress SDK!');
           }}
           onSkip={() => {
             setShowOnboarding(true);
