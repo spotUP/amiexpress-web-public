@@ -540,6 +540,7 @@ wss.on('connection', (ws) => {
     ws,
     doorProcess: null,
     currentDoor: null,
+    watcher: null,
   });
 
   ws.on('message', (message) => {
@@ -575,9 +576,439 @@ function handleClientMessage(clientId, data) {
   if (data.type === 'start-door') {
     startDoor(clientId, data.doorId);
   } else if (data.type === 'input') {
-    sendInputToDoor(clientId, data.key);
+    // Check if this is a command (selectDoor:, buildDoor:, runDoor:, etc.)
+    if (typeof data.data === 'string') {
+      if (data.data.startsWith('selectDoor:')) {
+        const doorId = data.data.substring('selectDoor:'.length);
+        selectDoor(clientId, doorId);
+      } else if (data.data.startsWith('buildDoor:')) {
+        const doorId = data.data.substring('buildDoor:'.length);
+        buildDoor(clientId, doorId);
+      } else if (data.data.startsWith('runDoor:')) {
+        const doorId = data.data.substring('runDoor:'.length);
+        startDoor(clientId, doorId);
+      } else if (data.data.startsWith('loadFile:')) {
+        const filePath = data.data.substring('loadFile:'.length);
+        loadFile(clientId, filePath);
+      } else if (data.data.startsWith('saveFile:')) {
+        const parts = data.data.substring('saveFile:'.length).split(':');
+        const filePath = parts[0];
+        const content = parts.slice(1).join(':');
+        saveFile(clientId, filePath, content);
+      } else {
+        // Regular keyboard input
+        sendInputToDoor(clientId, data.data);
+      }
+    } else if (data.key) {
+      // Legacy format with 'key' field
+      sendInputToDoor(clientId, data.key);
+    }
   } else if (data.type === 'stop-door') {
     stopDoor(clientId);
+  }
+}
+
+/**
+ * Select door and send metadata
+ */
+function selectDoor(clientId, doorId) {
+  const client = clients.get(clientId);
+  if (!client) return;
+
+  try {
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (!fs.existsSync(doorPath)) {
+      client.ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: `Door not found: ${doorId}`,
+        })
+      );
+      return;
+    }
+
+    // Load package.json
+    const pkgPath = path.join(doorPath, 'package.json');
+    if (!fs.existsSync(pkgPath)) {
+      client.ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: 'package.json not found',
+        })
+      );
+      return;
+    }
+
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+
+    // Scan files
+    const files = [];
+    let totalSize = 0;
+    let fileCount = 0;
+
+    function scanDir(dir, baseDir = '') {
+      const items = fs.readdirSync(dir);
+      items.forEach((item) => {
+        const fullPath = path.join(dir, item);
+        const relativePath = path.join(baseDir, item);
+        const stat = fs.statSync(fullPath);
+
+        if (stat.isDirectory()) {
+          if (item !== 'node_modules' && item !== '.git' && item !== 'dist') {
+            scanDir(fullPath, relativePath);
+          }
+        } else {
+          totalSize += stat.size;
+          fileCount++;
+        }
+      });
+    }
+
+    scanDir(doorPath);
+
+    // Determine door type
+    const tsFile = path.join(doorPath, 'index.ts');
+    const jsFile = path.join(doorPath, 'index.js');
+    const distFile = path.join(doorPath, 'dist', 'index.js');
+
+    let doorType = 'unknown';
+    let entryPoint = '';
+    let hasBuild = false;
+
+    if (fs.existsSync(tsFile)) {
+      doorType = 'typescript';
+      entryPoint = 'index.ts';
+      hasBuild = fs.existsSync(distFile);
+    } else if (fs.existsSync(jsFile)) {
+      doorType = 'javascript';
+      entryPoint = 'index.js';
+      hasBuild = true;
+    } else if (fs.existsSync(distFile)) {
+      doorType = 'javascript';
+      entryPoint = 'dist/index.js';
+      hasBuild = true;
+    }
+
+    // Get last modified time
+    const pkgStat = fs.statSync(pkgPath);
+    const lastModified = pkgStat.mtimeMs;
+
+    // Set current door
+    client.currentDoor = doorId;
+
+    // Send metadata
+    client.ws.send(
+      JSON.stringify({
+        type: 'doorMetadata',
+        data: {
+          name: pkg.name || doorId,
+          version: pkg.version || '1.0.0',
+          description: pkg.description || '',
+          author: pkg.author || '',
+          doorType,
+          entryPoint,
+          hasBuild,
+          fileCount,
+          totalSize,
+          lastModified,
+          dependencies: pkg.dependencies || {},
+        },
+      })
+    );
+
+    // Load file tree
+    loadFileTree(clientId, doorId);
+  } catch (error) {
+    console.error('Error selecting door:', error);
+    client.ws.send(
+      JSON.stringify({
+        type: 'error',
+        data: error.message,
+      })
+    );
+  }
+}
+
+/**
+ * Load file tree for door
+ */
+function loadFileTree(clientId, doorId) {
+  const client = clients.get(clientId);
+  if (!client) return;
+
+  try {
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    function buildTree(dir, baseDir = '') {
+      const items = fs.readdirSync(dir);
+      const tree = [];
+
+      items.forEach((item) => {
+        const fullPath = path.join(dir, item);
+        const relativePath = path.join(baseDir, item);
+        const stat = fs.statSync(fullPath);
+
+        if (stat.isDirectory()) {
+          if (item !== 'node_modules' && item !== '.git' && item !== 'dist') {
+            const children = buildTree(fullPath, relativePath);
+            if (children.length > 0) {
+              tree.push({
+                name: item,
+                path: relativePath.replace(/\\/g, '/'),
+                type: 'directory',
+                children,
+              });
+            }
+          }
+        } else {
+          // Only include editable files
+          const ext = path.extname(item);
+          if (['.ts', '.js', '.json', '.md', '.txt'].includes(ext)) {
+            tree.push({
+              name: item,
+              path: relativePath.replace(/\\/g, '/'),
+              type: 'file',
+              size: stat.size,
+            });
+          }
+        }
+      });
+
+      return tree;
+    }
+
+    const files = buildTree(doorPath);
+
+    // Send file tree
+    client.ws.send(
+      JSON.stringify({
+        type: 'fileContent',
+        data: {
+          files,
+          currentFile: null,
+        },
+      })
+    );
+  } catch (error) {
+    console.error('Error loading file tree:', error);
+  }
+}
+
+/**
+ * Build door
+ */
+function buildDoor(clientId, doorId) {
+  const client = clients.get(clientId);
+  if (!client) return;
+
+  try {
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (!fs.existsSync(doorPath)) {
+      client.ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: `Door not found: ${doorId}`,
+        })
+      );
+      return;
+    }
+
+    console.log(`🔨 Building door: ${doorId}`);
+
+    // Send initial build status
+    client.ws.send(
+      JSON.stringify({
+        type: 'buildStatus',
+        data: {
+          building: true,
+          success: false,
+          errors: [],
+          warnings: [],
+          lastBuild: Date.now(),
+          duration: 0,
+        },
+      })
+    );
+
+    const startTime = Date.now();
+    const tsc = spawn('npx', ['tsc', '--noEmit'], {
+      cwd: doorPath,
+      shell: true,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    tsc.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    tsc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    tsc.on('close', (code) => {
+      const duration = Date.now() - startTime;
+      const output = stdout + stderr;
+      const errors = [];
+      const warnings = [];
+
+      // Parse TypeScript errors
+      // Format: filename(line,col): error TS####: message
+      const errorRegex = /(.+?)\((\d+),(\d+)\):\s+error\s+TS\d+:\s+(.+)/g;
+      let match;
+
+      while ((match = errorRegex.exec(output)) !== null) {
+        errors.push({
+          file: path.basename(match[1]),
+          line: parseInt(match[2]),
+          column: parseInt(match[3]),
+          message: match[4],
+        });
+      }
+
+      const success = code === 0;
+
+      if (success) {
+        console.log(`✓ Build successful: ${doorId} (${duration}ms)`);
+      } else {
+        console.log(`✗ Build failed: ${doorId} (${errors.length} errors, ${duration}ms)`);
+      }
+
+      // Send final build status
+      client.ws.send(
+        JSON.stringify({
+          type: 'buildStatus',
+          data: {
+            building: false,
+            success,
+            errors,
+            warnings,
+            lastBuild: Date.now(),
+            duration,
+          },
+        })
+      );
+
+      // Send output to terminal
+      if (success) {
+        client.ws.send(
+          JSON.stringify({
+            type: 'output',
+            data: `\x1b[32m✓ Build successful\x1b[0m (${duration}ms)\n`,
+          })
+        );
+      } else {
+        client.ws.send(
+          JSON.stringify({
+            type: 'output',
+            data: `\x1b[31m✗ Build failed\x1b[0m (${errors.length} errors, ${duration}ms)\n`,
+          })
+        );
+        errors.forEach((err) => {
+          client.ws.send(
+            JSON.stringify({
+              type: 'output',
+              data: `  ${err.file}:${err.line}:${err.column} - ${err.message}\n`,
+            })
+          );
+        });
+      }
+    });
+  } catch (error) {
+    console.error('Error building door:', error);
+    client.ws.send(
+      JSON.stringify({
+        type: 'error',
+        data: error.message,
+      })
+    );
+  }
+}
+
+/**
+ * Load file content
+ */
+function loadFile(clientId, filePath) {
+  const client = clients.get(clientId);
+  if (!client || !client.currentDoor) return;
+
+  try {
+    const fullPath = path.join(__dirname, '../../examples', client.currentDoor, filePath);
+
+    if (!fs.existsSync(fullPath)) {
+      client.ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: `File not found: ${filePath}`,
+        })
+      );
+      return;
+    }
+
+    const content = fs.readFileSync(fullPath, 'utf8');
+
+    client.ws.send(
+      JSON.stringify({
+        type: 'fileContent',
+        data: {
+          path: filePath,
+          content,
+        },
+      })
+    );
+  } catch (error) {
+    console.error('Error loading file:', error);
+    client.ws.send(
+      JSON.stringify({
+        type: 'error',
+        data: error.message,
+      })
+    );
+  }
+}
+
+/**
+ * Save file content
+ */
+function saveFile(clientId, filePath, content) {
+  const client = clients.get(clientId);
+  if (!client || !client.currentDoor) return;
+
+  try {
+    const fullPath = path.join(__dirname, '../../examples', client.currentDoor, filePath);
+
+    // Security check
+    const doorPath = path.join(__dirname, '../../examples', client.currentDoor);
+    const resolvedPath = path.resolve(fullPath);
+    if (!resolvedPath.startsWith(doorPath)) {
+      client.ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: 'Access denied',
+        })
+      );
+      return;
+    }
+
+    // Create directory if needed
+    const dir = path.dirname(fullPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(fullPath, content, 'utf8');
+    console.log(`✓ Saved file: ${filePath}`);
+  } catch (error) {
+    console.error('Error saving file:', error);
+    client.ws.send(
+      JSON.stringify({
+        type: 'error',
+        data: error.message,
+      })
+    );
   }
 }
 
