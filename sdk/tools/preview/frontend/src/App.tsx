@@ -15,6 +15,12 @@ import {
   ToastContainer,
   ConnectionBanner,
   KeyboardOverlay,
+  CRTEffect,
+  ParticleEffect,
+  CommandPalette,
+  StatusBar,
+  QuickActions,
+  SuccessCelebration,
 } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { useToast } from './hooks/useToast';
@@ -30,7 +36,8 @@ import {
   ConnectionStatus,
   SessionEvent,
 } from './types';
-import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save } from 'lucide-react';
+import type { CommandItem } from './components/ui/CommandPalette';
 
 const defaultSettings: AppSettings = {
   theme: 'dark',
@@ -52,6 +59,11 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showGameWizard, setShowGameWizard] = useState(false);
   const [showKeyboardOverlay, setShowKeyboardOverlay] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showParticles, setShowParticles] = useState(false);
+  const [showSuccessCelebration, setShowSuccessCelebration] = useState(false);
+  const [celebrationMessage, setCelebrationMessage] = useState('Success!');
+  const [enableCRT, setEnableCRT] = useState(false);
   const [doorsLoading, setDoorsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
     connected: false,
@@ -193,6 +205,10 @@ function App() {
         if (!message.data.building && message.data.lastBuild > 0) {
           if (message.data.errors.length === 0) {
             toast.success('Build succeeded!', `Completed in ${message.data.duration}ms`);
+            // Trigger success celebration and particles!
+            setCelebrationMessage('Build Successful!');
+            setShowSuccessCelebration(true);
+            setShowParticles(true);
           } else {
             toast.error('Build failed', `${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''} found`);
           }
@@ -345,8 +361,77 @@ function App() {
     }
   };
 
+  // Command Palette commands
+  const commandPaletteCommands: CommandItem[] = [
+    {
+      id: 'run-door',
+      label: 'Run Door',
+      description: 'Execute the selected door',
+      icon: <Play className="w-4 h-4" />,
+      shortcut: 'Ctrl+Enter',
+      category: 'Development',
+      action: handleRunDoor,
+    },
+    {
+      id: 'build-door',
+      label: 'Build Door',
+      description: 'Compile the selected door',
+      icon: <Hammer className="w-4 h-4" />,
+      shortcut: 'Ctrl+B',
+      category: 'Development',
+      action: handleBuildDoor,
+    },
+    {
+      id: 'create-game',
+      label: 'Create New Game',
+      description: 'AI-powered game generation',
+      icon: <Wand2 className="w-4 h-4" />,
+      category: 'Creation',
+      action: () => setShowGameWizard(true),
+    },
+    {
+      id: 'settings',
+      label: 'Open Settings',
+      description: 'Configure preferences',
+      shortcut: 'Ctrl+,',
+      category: 'General',
+      action: () => setShowSettings(true),
+    },
+    {
+      id: 'keyboard-shortcuts',
+      label: 'Show Keyboard Shortcuts',
+      description: 'View all available shortcuts',
+      icon: <Keyboard className="w-4 h-4" />,
+      shortcut: '?',
+      category: 'General',
+      action: () => setShowKeyboardOverlay(true),
+    },
+    {
+      id: 'toggle-crt',
+      label: 'Toggle CRT Effect',
+      description: 'Enable/disable retro terminal effect',
+      category: 'Appearance',
+      action: () => setEnableCRT(!enableCRT),
+    },
+    {
+      id: 'toggle-theme',
+      label: 'Toggle Theme',
+      description: 'Switch between light and dark mode',
+      shortcut: 'Ctrl+Shift+T',
+      category: 'Appearance',
+      action: handleThemeToggle,
+    },
+  ];
+
   // Keyboard shortcuts
   const allShortcuts = [
+    {
+      key: 'k',
+      ctrl: true,
+      action: () => setShowCommandPalette(true),
+      description: 'Open command palette',
+      category: 'General',
+    },
     {
       key: 's',
       ctrl: true,
@@ -457,8 +542,8 @@ function App() {
           {/* Center - Terminal */}
           <Panel defaultSize={50} minSize={30}>
             <div className="flex flex-col h-full">
-              {/* Terminal toolbar with glassmorphism effect */}
-              <div className="bg-[#252526]/95 backdrop-blur-sm border-b border-gray-700 px-4 py-2 flex items-center gap-2 shadow-lg">
+              {/* Terminal toolbar */}
+              <div className="bg-[#252526] border-b border-gray-700 px-4 py-2 flex items-center gap-2 shadow-lg">
                 {!showLeftSidebar && (
                   <button
                     onClick={() => setShowLeftSidebar(true)}
@@ -527,15 +612,17 @@ function App() {
                 </div>
               </div>
 
-              {/* Terminal */}
+              {/* Terminal with optional CRT effect */}
               <div ref={terminalRef} className="flex-1">
-                <Terminal
-                  output={terminalOutput}
-                  onInput={handleTerminalInput}
-                  autoScroll={settings.autoScroll}
-                  fontSize={settings.terminalFontSize}
-                  recorder={recorder}
-                />
+                <CRTEffect enabled={enableCRT} intensity="medium">
+                  <Terminal
+                    output={terminalOutput}
+                    onInput={handleTerminalInput}
+                    autoScroll={settings.autoScroll}
+                    fontSize={settings.terminalFontSize}
+                    recorder={recorder}
+                  />
+                </CRTEffect>
               </div>
 
               {/* Session recorder controls */}
@@ -554,7 +641,7 @@ function App() {
               <Panel defaultSize={30} minSize={20} maxSize={50}>
                 <div className="flex flex-col h-full bg-[#252526] animate-slideInRight">
                   {/* Tabs with smooth transitions and glow effects */}
-                  <div className="flex border-b border-gray-700 bg-[#252526]/95 backdrop-blur-sm">
+                  <div className="flex border-b border-gray-700 bg-[#252526]">
                     <button
                       onClick={() => setRightSidebarTab('info')}
                       className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
@@ -677,6 +764,10 @@ function App() {
               const newDoor = doors.find((d) => d.id === doorId);
               if (newDoor) {
                 handleDoorSelect(newDoor);
+                // Trigger celebration for game creation!
+                setCelebrationMessage('🎮 Game Created!');
+                setShowSuccessCelebration(true);
+                setShowParticles(true);
                 // Auto-launch the newly created game after a brief delay
                 setTimeout(() => {
                   handleRunDoor();
@@ -701,6 +792,76 @@ function App() {
           onClose={() => setShowKeyboardOverlay(false)}
         />
       )}
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        commands={commandPaletteCommands}
+      />
+
+      {/* Particle Effects */}
+      <ParticleEffect
+        type="confetti"
+        trigger={showParticles}
+        duration={3000}
+        onComplete={() => setShowParticles(false)}
+      />
+
+      {/* Success Celebration */}
+      <SuccessCelebration
+        trigger={showSuccessCelebration}
+        message={celebrationMessage}
+        type="build"
+        onComplete={() => setShowSuccessCelebration(false)}
+      />
+
+      {/* Quick Actions Floating Button */}
+      <QuickActions
+        position="bottom-right"
+        actions={[
+          {
+            id: 'create',
+            label: 'Create Game',
+            icon: <Wand2 className="w-5 h-5" />,
+            color: 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white',
+            action: () => setShowGameWizard(true),
+          },
+          {
+            id: 'run',
+            label: 'Run Door',
+            icon: <Play className="w-5 h-5" />,
+            color: 'bg-green-600 hover:bg-green-700 text-white',
+            action: handleRunDoor,
+          },
+          {
+            id: 'build',
+            label: 'Build Door',
+            icon: <Hammer className="w-5 h-5" />,
+            color: 'bg-blue-600 hover:bg-blue-700 text-white',
+            action: handleBuildDoor,
+          },
+          {
+            id: 'screenshot',
+            label: 'Screenshot',
+            icon: <Camera className="w-5 h-5" />,
+            color: 'bg-gray-600 hover:bg-gray-700 text-white',
+            action: () => {
+              // Screenshot handled by component
+            },
+          },
+        ]}
+      />
+
+      {/* Status Bar */}
+      <StatusBar
+        currentFile={currentFile?.path}
+        lineCount={currentFile?.content?.split('\n').length}
+        errorCount={buildStatus.errors.length}
+        warningCount={buildStatus.warnings.length}
+        buildTime={buildStatus.duration}
+        connected={connectionStatus.connected}
+      />
     </div>
   );
 }
