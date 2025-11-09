@@ -87,6 +87,7 @@ export enum AnsiColor {
   Cyan = 6,
   White = 7,
   BrightBlack = 8,
+  Gray = 8,  // Alias for BrightBlack
   BrightRed = 9,
   BrightGreen = 10,
   BrightYellow = 11,

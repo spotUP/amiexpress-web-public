@@ -34,6 +34,44 @@
 import { EventEmitter } from 'events';
 import { Position } from '../../core/types';
 
+// Re-export Position for convenience
+export { Position };
+
+/**
+ * Terrain types
+ */
+export enum TerrainType {
+  Plains = 'plains',
+  Forest = 'forest',
+  Mountain = 'mountain',
+  Water = 'water',
+  Wall = 'wall',
+  Floor = 'floor',
+  Fort = 'fort',
+  Throne = 'throne',
+  Village = 'village',
+  Peak = 'peak'
+}
+
+/**
+ * Map tile
+ */
+export interface MapTile {
+  x: number;
+  y: number;
+  terrain: TerrainType;
+  occupant: string | null;
+}
+
+/**
+ * Tactical map definition
+ */
+export interface TacticalMap {
+  width: number;
+  height: number;
+  tiles: MapTile[];
+}
+
 /**
  * Weapon types for weapon triangle
  */
@@ -122,6 +160,12 @@ export interface Weapon {
   durability: number;
   maxDurability: number;
   weight: number;       // Affects attack speed
+  effectiveness?: string[]; // Unit types this weapon is effective against
+  magicDamage?: boolean;    // Uses magic damage
+  healAmount?: number;      // HP healed (for staves)
+  // Backward compatibility aliases
+  uses?: number;        // Alias for durability
+  maxUses?: number;     // Alias for maxDurability
 }
 
 /**
@@ -716,13 +760,94 @@ export class TacticalCombatEngine extends EventEmitter {
   /**
    * Get unit at position
    */
-  private getUnitAtPosition(pos: Position): TacticalUnit | null {
+  public getUnitAt(pos: Position): TacticalUnit | null {
     for (const unit of this.units.values()) {
       if (unit.position.x === pos.x && unit.position.y === pos.y) {
         return unit;
       }
     }
     return null;
+  }
+
+  /**
+   * Get unit at position (alias for backward compatibility)
+   */
+  private getUnitAtPosition(pos: Position): TacticalUnit | null {
+    return this.getUnitAt(pos);
+  }
+
+  /**
+   * Load a tactical map
+   */
+  public loadMap(map: TacticalMap): void {
+    this.gridWidth = map.width;
+    this.gridHeight = map.height;
+    // Store terrain information if needed
+    this.emit('map-loaded', map);
+  }
+
+  /**
+   * Move unit to new position
+   */
+  public moveUnit(unitId: string, position: Position): boolean {
+    const unit = this.units.get(unitId);
+    if (!unit) return false;
+
+    // Check if position is valid
+    if (position.x < 0 || position.x >= this.gridWidth || position.y < 0 || position.y >= this.gridHeight) {
+      return false;
+    }
+
+    // Update position
+    unit.position = { ...position };
+    unit.hasMoved = true;
+    this.emit('unit-moved', unit, position);
+    return true;
+  }
+
+  /**
+   * Find path between two positions (simple A* pathfinding)
+   */
+  public findPath(from: Position, to: Position): Position[] | null {
+    // Simple breadth-first search pathfinding
+    const queue: Array<{ pos: Position; path: Position[] }> = [
+      { pos: from, path: [from] }
+    ];
+    const visited = new Set<string>();
+
+    while (queue.length > 0) {
+      const { pos, path } = queue.shift()!;
+      const key = `${pos.x},${pos.y}`;
+
+      if (visited.has(key)) continue;
+      visited.add(key);
+
+      // Found target
+      if (pos.x === to.x && pos.y === to.y) {
+        return path;
+      }
+
+      // Add neighbors
+      const neighbors: Position[] = [
+        { x: pos.x + 1, y: pos.y },
+        { x: pos.x - 1, y: pos.y },
+        { x: pos.x, y: pos.y + 1 },
+        { x: pos.x, y: pos.y - 1 }
+      ];
+
+      for (const next of neighbors) {
+        if (next.x < 0 || next.x >= this.gridWidth || next.y < 0 || next.y >= this.gridHeight) {
+          continue;
+        }
+
+        const nextKey = `${next.x},${next.y}`;
+        if (!visited.has(nextKey)) {
+          queue.push({ pos: next, path: [...path, next] });
+        }
+      }
+    }
+
+    return null; // No path found
   }
 
   /**
