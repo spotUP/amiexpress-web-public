@@ -3,6 +3,10 @@
  * Manages playback, synthesis, and effects
  */
 
+// Initialize Web Audio API mocks for Node.js preview environment
+// This MUST be imported before Tone.js to provide AudioContext in Node.js
+import '../../../tools/mock/web-audio-mock';
+
 import * as Tone from 'tone';
 import { Instrument, Note, Pattern, Song, EffectPluginType } from '../data/types';
 
