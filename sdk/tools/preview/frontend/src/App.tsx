@@ -160,6 +160,12 @@ function App() {
         recorder.addEvent('output', message.data, message.data);
         break;
 
+      case 'debug':
+        // Debug logs from the server
+        setTerminalOutput((prev) => [...prev, message.data]);
+        recorder.addEvent('debug', message.data, message.data);
+        break;
+
       case 'doorList':
         setDoors(message.data);
         break;

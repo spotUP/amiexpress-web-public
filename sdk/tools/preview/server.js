@@ -1235,6 +1235,53 @@ setInterval(() => {
 // WebSocket connections
 const clients = new Map();
 
+/**
+ * Helper to log to both console and browser terminal
+ *
+ * ALWAYS sends logs to browser terminal for debugging
+ * Only logs to console if DEBUG_OUTPUT is enabled (or if it's an error)
+ */
+function debugLog(clientOrId, message, level = 'log') {
+  // Log to console if DEBUG_OUTPUT is enabled or if it's an error
+  if (DEBUG_OUTPUT || level === 'error') {
+    const consoleMethod = level === 'error' ? console.error : console.log;
+    consoleMethod(message);
+  }
+
+  // ALWAYS send to browser if client provided (for debugging in browser)
+  let client = clientOrId;
+  if (typeof clientOrId === 'number') {
+    client = clients.get(clientOrId);
+  }
+
+  if (client && client.ws && client.ws.readyState === WebSocket.OPEN) {
+    // Determine ANSI color based on log level
+    let color = '';
+    let reset = '\x1b[0m';
+
+    if (level === 'error') {
+      color = '\x1b[31m'; // Red
+    } else if (message.includes('✓') || message.includes('SUCCESS')) {
+      color = '\x1b[32m'; // Green
+    } else if (message.includes('⚠️') || message.includes('WARNING')) {
+      color = '\x1b[33m'; // Yellow
+    } else if (message.includes('📨') || message.includes('📤') || message.includes('➡️')) {
+      color = '\x1b[36m'; // Cyan
+    } else if (message.includes('🚀') || message.includes('🛑')) {
+      color = '\x1b[35m'; // Magenta
+    } else {
+      color = '\x1b[90m'; // Gray
+    }
+
+    client.ws.send(
+      JSON.stringify({
+        type: 'debug',
+        data: `${color}${message}${reset}`,
+      })
+    );
+  }
+}
+
 wss.on('connection', (ws) => {
   console.log('✅ Client connected');
 
@@ -1273,59 +1320,59 @@ wss.on('connection', (ws) => {
  * Handle client messages
  */
 function handleClientMessage(clientId, data) {
-  console.log(`📨 [WS MESSAGE] Received from client ${clientId}:`);
-  console.log(`   Type: ${data.type}`);
-  console.log(`   Data: ${JSON.stringify(data).substring(0, 200)}`);
+  debugLog(clientId, `📨 [WS MESSAGE] Received from client ${clientId}:`);
+  debugLog(clientId, `   Type: ${data.type}`);
+  debugLog(clientId, `   Data: ${JSON.stringify(data).substring(0, 200)}`);
 
   const client = clients.get(clientId);
   if (!client) {
-    console.error(`❌ [WS MESSAGE] Client ${clientId} not found`);
+    debugLog(clientId, `❌ [WS MESSAGE] Client ${clientId} not found`, 'error');
     return;
   }
 
   if (data.type === 'start-door') {
-    console.log(`➡️  [WS MESSAGE] Handling start-door for doorId="${data.doorId}"`);
+    debugLog(clientId, `➡️  [WS MESSAGE] Handling start-door for doorId="${data.doorId}"`);
     startDoor(clientId, data.doorId);
   } else if (data.type === 'input') {
     // Check if this is a command (selectDoor:, buildDoor:, runDoor:, etc.)
     if (typeof data.data === 'string') {
       if (data.data.startsWith('selectDoor:')) {
         const doorId = data.data.substring('selectDoor:'.length);
-        console.log(`➡️  [WS MESSAGE] Handling selectDoor for doorId="${doorId}"`);
+        debugLog(clientId, `➡️  [WS MESSAGE] Handling selectDoor for doorId="${doorId}"`);
         selectDoor(clientId, doorId);
       } else if (data.data.startsWith('buildDoor:')) {
         const doorId = data.data.substring('buildDoor:'.length);
-        console.log(`➡️  [WS MESSAGE] Handling buildDoor for doorId="${doorId}"`);
+        debugLog(clientId, `➡️  [WS MESSAGE] Handling buildDoor for doorId="${doorId}"`);
         buildDoor(clientId, doorId);
       } else if (data.data.startsWith('runDoor:')) {
         const doorId = data.data.substring('runDoor:'.length);
-        console.log(`➡️  [WS MESSAGE] Handling runDoor for doorId="${doorId}"`);
+        debugLog(clientId, `➡️  [WS MESSAGE] Handling runDoor for doorId="${doorId}"`);
         startDoor(clientId, doorId);
       } else if (data.data.startsWith('loadFile:')) {
         const filePath = data.data.substring('loadFile:'.length);
-        console.log(`➡️  [WS MESSAGE] Handling loadFile for path="${filePath}"`);
+        debugLog(clientId, `➡️  [WS MESSAGE] Handling loadFile for path="${filePath}"`);
         loadFile(clientId, filePath);
       } else if (data.data.startsWith('saveFile:')) {
         const parts = data.data.substring('saveFile:'.length).split(':');
         const filePath = parts[0];
         const content = parts.slice(1).join(':');
-        console.log(`➡️  [WS MESSAGE] Handling saveFile for path="${filePath}" (${content.length} chars)`);
+        debugLog(clientId, `➡️  [WS MESSAGE] Handling saveFile for path="${filePath}" (${content.length} chars)`);
         saveFile(clientId, filePath, content);
       } else {
         // Regular keyboard input
-        console.log(`⌨️  [WS MESSAGE] Handling keyboard input: "${data.data}"`);
+        debugLog(clientId, `⌨️  [WS MESSAGE] Handling keyboard input: "${data.data}"`);
         sendInputToDoor(clientId, data.data);
       }
     } else if (data.key) {
       // Legacy format with 'key' field
-      console.log(`⌨️  [WS MESSAGE] Handling legacy keyboard input: "${data.key}"`);
+      debugLog(clientId, `⌨️  [WS MESSAGE] Handling legacy keyboard input: "${data.key}"`);
       sendInputToDoor(clientId, data.key);
     }
   } else if (data.type === 'stop-door') {
-    console.log(`➡️  [WS MESSAGE] Handling stop-door`);
+    debugLog(clientId, `➡️  [WS MESSAGE] Handling stop-door`);
     stopDoor(clientId);
   } else {
-    console.log(`⚠️  [WS MESSAGE] Unknown message type: ${data.type}`);
+    debugLog(clientId, `⚠️  [WS MESSAGE] Unknown message type: ${data.type}`);
   }
 }
 
@@ -1737,48 +1784,36 @@ function saveFile(clientId, filePath, content) {
  * Start door process
  */
 function startDoor(clientId, doorId) {
-  if (DEBUG_OUTPUT) {
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`🚀 [START DOOR] Called for clientId=${clientId}, doorId="${doorId}"`);
-    console.log(`${'='.repeat(80)}`);
-  } else {
-    console.log(`🚀 [START DOOR] Starting door "${doorId}"...`);
-  }
+  debugLog(clientId, `\n${'='.repeat(80)}`);
+  debugLog(clientId, `🚀 [START DOOR] Called for clientId=${clientId}, doorId="${doorId}"`);
+  debugLog(clientId, `${'='.repeat(80)}`);
 
   const client = clients.get(clientId);
   if (!client) {
-    console.error(`❌ [START DOOR] Client ${clientId} not found in clients map`);
+    debugLog(clientId, `❌ [START DOOR] Client ${clientId} not found in clients map`, 'error');
     return;
   }
-  if (DEBUG_OUTPUT) {
-    console.log(`✓ [START DOOR] Client ${clientId} found`);
-  }
+  debugLog(clientId, `✓ [START DOOR] Client ${clientId} found`);
 
   // Stop existing door
   if (client.doorProcess) {
-    if (DEBUG_OUTPUT) {
-      console.log(`⚠️  [START DOOR] Existing door process found (PID: ${client.doorProcess.pid}), killing it...`);
-    }
+    debugLog(clientId, `⚠️  [START DOOR] Existing door process found (PID: ${client.doorProcess.pid}), killing it...`);
     client.doorProcess.kill();
   }
 
   const doorPath = path.join(__dirname, '../../examples', doorId);
-  if (DEBUG_OUTPUT) {
-    console.log(`📂 [START DOOR] Door path: ${doorPath}`);
-    console.log(`📂 [START DOOR] Door path exists: ${fs.existsSync(doorPath)}`);
-  }
+  debugLog(clientId, `📂 [START DOOR] Door path: ${doorPath}`);
+  debugLog(clientId, `📂 [START DOOR] Door path exists: ${fs.existsSync(doorPath)}`);
 
   // Check for TypeScript or JavaScript
   const tsFile = path.join(doorPath, 'index.ts');
   const jsFile = path.join(doorPath, 'index.js');
   const distFile = path.join(doorPath, 'dist', 'index.js');
 
-  if (DEBUG_OUTPUT) {
-    console.log(`🔍 [START DOOR] Checking for entry files...`);
-    console.log(`   - index.ts exists: ${fs.existsSync(tsFile)}`);
-    console.log(`   - index.js exists: ${fs.existsSync(jsFile)}`);
-    console.log(`   - dist/index.js exists: ${fs.existsSync(distFile)}`);
-  }
+  debugLog(clientId, `🔍 [START DOOR] Checking for entry files...`);
+  debugLog(clientId, `   - index.ts exists: ${fs.existsSync(tsFile)}`);
+  debugLog(clientId, `   - index.js exists: ${fs.existsSync(jsFile)}`);
+  debugLog(clientId, `   - dist/index.js exists: ${fs.existsSync(distFile)}`);
 
   let command, args, mainFile;
 
@@ -1787,28 +1822,28 @@ function startDoor(clientId, doorId) {
     command = 'npx';
     args = ['ts-node', 'index.ts'];
     mainFile = tsFile;
-    console.log(`✓ [START DOOR] Using TypeScript entry: ${mainFile}`);
+    debugLog(clientId, `✓ [START DOOR] Using TypeScript entry: ${mainFile}`);
   } else if (fs.existsSync(distFile)) {
     // Use compiled dist file
     command = 'node';
     args = ['dist/index.js'];
     mainFile = distFile;
-    console.log(`✓ [START DOOR] Using compiled entry: ${mainFile}`);
+    debugLog(clientId, `✓ [START DOOR] Using compiled entry: ${mainFile}`);
   } else if (fs.existsSync(jsFile)) {
     // Use JavaScript file
     command = 'node';
     args = ['index.js'];
     mainFile = jsFile;
-    console.log(`✓ [START DOOR] Using JavaScript entry: ${mainFile}`);
+    debugLog(clientId, `✓ [START DOOR] Using JavaScript entry: ${mainFile}`);
   } else {
-    console.error(`❌ [START DOOR] No entry file found!`);
-    console.error(`   Checked paths:`);
-    console.error(`   - ${tsFile}`);
-    console.error(`   - ${jsFile}`);
-    console.error(`   - ${distFile}`);
+    debugLog(clientId, `❌ [START DOOR] No entry file found!`, 'error');
+    debugLog(clientId, `   Checked paths:`, 'error');
+    debugLog(clientId, `   - ${tsFile}`, 'error');
+    debugLog(clientId, `   - ${jsFile}`, 'error');
+    debugLog(clientId, `   - ${distFile}`, 'error');
 
     const errorMsg = `Door main file not found. Checked: ${tsFile}, ${jsFile}, ${distFile}`;
-    console.error(`📤 [START DOOR] Sending error to client: ${errorMsg}`);
+    debugLog(clientId, `📤 [START DOOR] Sending error to client: ${errorMsg}`, 'error');
 
     client.ws.send(
       JSON.stringify({
@@ -1819,37 +1854,27 @@ function startDoor(clientId, doorId) {
     return;
   }
 
-  if (DEBUG_OUTPUT) {
-    console.log(`🔧 [START DOOR] Command: ${command}`);
-    console.log(`🔧 [START DOOR] Args: ${JSON.stringify(args)}`);
-    console.log(`🔧 [START DOOR] CWD: ${doorPath}`);
-    console.log(`🔧 [START DOOR] Environment: PREVIEW_MODE=1`);
-  }
+  debugLog(clientId, `🔧 [START DOOR] Command: ${command}`);
+  debugLog(clientId, `🔧 [START DOOR] Args: ${JSON.stringify(args)}`);
+  debugLog(clientId, `🔧 [START DOOR] CWD: ${doorPath}`);
+  debugLog(clientId, `🔧 [START DOOR] Environment: PREVIEW_MODE=1`);
 
   const doorProcess = spawn(command, args, {
     cwd: doorPath,
     env: { ...process.env, PREVIEW_MODE: '1' },
   });
 
-  if (DEBUG_OUTPUT) {
-    console.log(`✓ [START DOOR] Process spawned with PID: ${doorProcess.pid}`);
-  } else {
-    console.log(`✓ [START DOOR] Door "${doorId}" started (PID: ${doorProcess.pid})`);
-  }
+  debugLog(clientId, `✓ [START DOOR] Process spawned with PID: ${doorProcess.pid}`);
 
   client.doorProcess = doorProcess;
   client.currentDoor = doorId;
-  if (DEBUG_OUTPUT) {
-    console.log(`✓ [START DOOR] Client state updated (currentDoor="${doorId}")`);
-  }
+  debugLog(clientId, `✓ [START DOOR] Client state updated (currentDoor="${doorId}")`);
 
   // Capture stdout (ANSI output)
   doorProcess.stdout.on('data', (data) => {
     const output = data.toString();
-    if (DEBUG_OUTPUT) {
-      console.log(`📤 [STDOUT] ${output.length} bytes`);
-      console.log(`   Preview: ${output.substring(0, 100)}${output.length > 100 ? '...' : ''}`);
-    }
+    debugLog(clientId, `📤 [STDOUT] ${output.length} bytes`);
+    debugLog(clientId, `   Preview: ${output.substring(0, 100)}${output.length > 100 ? '...' : ''}`);
 
     client.ws.send(
       JSON.stringify({
@@ -1857,18 +1882,14 @@ function startDoor(clientId, doorId) {
         data: output,
       })
     );
-    if (DEBUG_OUTPUT) {
-      console.log(`✓ [STDOUT] Sent to client via WebSocket`);
-    }
+    debugLog(clientId, `✓ [STDOUT] Sent to client via WebSocket`);
   });
 
   // Capture stderr (errors)
   doorProcess.stderr.on('data', (data) => {
     const errorOutput = data.toString();
-    if (DEBUG_OUTPUT) {
-      console.error(`📤 [STDERR] ${errorOutput.length} bytes`);
-      console.error(`   Error: ${errorOutput}`);
-    }
+    debugLog(clientId, `📤 [STDERR] ${errorOutput.length} bytes`, 'error');
+    debugLog(clientId, `   Error: ${errorOutput}`, 'error');
 
     client.ws.send(
       JSON.stringify({
@@ -1876,24 +1897,18 @@ function startDoor(clientId, doorId) {
         message: errorOutput,
       })
     );
-    if (DEBUG_OUTPUT) {
-      console.log(`✓ [STDERR] Sent to client via WebSocket`);
-    }
+    debugLog(clientId, `✓ [STDERR] Sent to client via WebSocket`);
   });
 
   // Handle process exit
   doorProcess.on('exit', (code, signal) => {
-    if (DEBUG_OUTPUT) {
-      console.log(`\n${'='.repeat(80)}`);
-      console.log(`🛑 [EXIT] Door process exited`);
-      console.log(`   Door: ${doorId}`);
-      console.log(`   PID: ${doorProcess.pid}`);
-      console.log(`   Exit code: ${code}`);
-      console.log(`   Signal: ${signal || 'none'}`);
-      console.log(`${'='.repeat(80)}\n`);
-    } else {
-      console.log(`🛑 [EXIT] Door "${doorId}" exited with code ${code}`);
-    }
+    debugLog(clientId, `\n${'='.repeat(80)}`);
+    debugLog(clientId, `🛑 [EXIT] Door process exited`);
+    debugLog(clientId, `   Door: ${doorId}`);
+    debugLog(clientId, `   PID: ${doorProcess.pid}`);
+    debugLog(clientId, `   Exit code: ${code}`);
+    debugLog(clientId, `   Signal: ${signal || 'none'}`);
+    debugLog(clientId, `${'='.repeat(80)}\n`);
 
     client.ws.send(
       JSON.stringify({
@@ -1901,21 +1916,19 @@ function startDoor(clientId, doorId) {
         code,
       })
     );
-    if (DEBUG_OUTPUT) {
-      console.log(`✓ [EXIT] Sent door-stopped message to client`);
-    }
+    debugLog(clientId, `✓ [EXIT] Sent door-stopped message to client`);
 
     client.doorProcess = null;
   });
 
   // Handle process errors
   doorProcess.on('error', (error) => {
-    console.error(`\n${'='.repeat(80)}`);
-    console.error(`❌ [PROCESS ERROR] Door process error`);
-    console.error(`   Door: ${doorId}`);
-    console.error(`   Error: ${error.message}`);
-    console.error(`   Stack: ${error.stack}`);
-    console.error(`${'='.repeat(80)}\n`);
+    debugLog(clientId, `\n${'='.repeat(80)}`, 'error');
+    debugLog(clientId, `❌ [PROCESS ERROR] Door process error`, 'error');
+    debugLog(clientId, `   Door: ${doorId}`, 'error');
+    debugLog(clientId, `   Error: ${error.message}`, 'error');
+    debugLog(clientId, `   Stack: ${error.stack}`, 'error');
+    debugLog(clientId, `${'='.repeat(80)}\n`, 'error');
 
     client.ws.send(
       JSON.stringify({
@@ -1927,9 +1940,7 @@ function startDoor(clientId, doorId) {
 
   // Watch for file changes (hot reload)
   const watchPattern = path.join(doorPath, '**/*.{ts,js}');
-  if (DEBUG_OUTPUT) {
-    console.log(`👁️  [WATCH] Setting up file watcher for: ${watchPattern}`);
-  }
+  debugLog(clientId, `👁️  [WATCH] Setting up file watcher for: ${watchPattern}`);
 
   const watcher = chokidar.watch(watchPattern, {
     ignored: /node_modules/,
@@ -1937,8 +1948,8 @@ function startDoor(clientId, doorId) {
   });
 
   watcher.on('change', (filePath) => {
-    console.log(`📝 [WATCH] File changed: ${filePath}`);
-    console.log(`🔄 [WATCH] Triggering hot reload...`);
+    debugLog(clientId, `📝 [WATCH] File changed: ${filePath}`);
+    debugLog(clientId, `🔄 [WATCH] Triggering hot reload...`);
 
     client.ws.send(
       JSON.stringify({
@@ -1950,32 +1961,26 @@ function startDoor(clientId, doorId) {
     // Restart door
     stopDoor(clientId);
     setTimeout(() => {
-      console.log(`🔄 [WATCH] Restarting door after file change...`);
+      debugLog(clientId, `🔄 [WATCH] Restarting door after file change...`);
       startDoor(clientId, doorId);
     }, 1000);
   });
 
   watcher.on('error', (error) => {
-    console.error(`❌ [WATCH] Watcher error: ${error.message}`);
+    debugLog(clientId, `❌ [WATCH] Watcher error: ${error.message}`, 'error');
   });
 
   client.watcher = watcher;
-  if (DEBUG_OUTPUT) {
-    console.log(`✓ [START DOOR] File watcher initialized`);
-  }
+  debugLog(clientId, `✓ [START DOOR] File watcher initialized`);
 
   // Send started message
   const startedMsg = { type: 'door-started', doorId };
-  if (DEBUG_OUTPUT) {
-    console.log(`📤 [START DOOR] Sending door-started message: ${JSON.stringify(startedMsg)}`);
-  }
+  debugLog(clientId, `📤 [START DOOR] Sending door-started message: ${JSON.stringify(startedMsg)}`);
 
   client.ws.send(JSON.stringify(startedMsg));
 
-  if (DEBUG_OUTPUT) {
-    console.log(`✓ [START DOOR] Door startup complete!`);
-    console.log(`${'='.repeat(80)}\n`);
-  }
+  debugLog(clientId, `✓ [START DOOR] Door startup complete!`);
+  debugLog(clientId, `${'='.repeat(80)}\n`);
 }
 
 /**
