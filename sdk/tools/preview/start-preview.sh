@@ -29,15 +29,33 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "📦 Preparing React frontend..."
+echo "📦 Building React frontend..."
 
-# Ensure public directory exists and has latest client files
-if [ -d "tools/preview/client" ]; then
-    cp -r tools/preview/client/* tools/preview/public/ 2>/dev/null || true
-    echo "✅ Frontend files updated"
-else
-    echo "⚠️  Client directory not found, using existing public files"
+# Navigate to frontend directory and build
+cd tools/preview/frontend
+
+# Check if node_modules exists, install if needed
+if [ ! -d "node_modules" ]; then
+    echo "📥 Installing frontend dependencies..."
+    npm install
+    if [ $? -ne 0 ]; then
+        echo "❌ Frontend dependency installation failed!"
+        cd ../../..
+        exit 1
+    fi
 fi
+
+# Build the frontend
+npm run build
+
+if [ $? -ne 0 ]; then
+    echo "❌ Frontend build failed!"
+    cd ../../..
+    exit 1
+fi
+
+echo "✅ Frontend built successfully"
+cd ../../..
 
 echo ""
 echo "✨ Compiling example games..."
