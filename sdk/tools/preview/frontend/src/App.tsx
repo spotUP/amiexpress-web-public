@@ -26,6 +26,12 @@ import {
   HapticFeedback,
   ActivityFeed,
   ThemeSelector,
+  EnhancedLoader,
+  TerminalTabs,
+  CodeMinimap,
+  TimelineScrubber,
+  PerformanceProfiler,
+  GitIntegration,
 } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { useToast } from './hooks/useToast';
