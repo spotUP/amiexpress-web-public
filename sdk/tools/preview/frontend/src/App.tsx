@@ -266,7 +266,45 @@ function App() {
 
   // Handle archive creation
   const handleCreateArchive = async (options: ArchiveOptions) => {
-    wsSend({ type: 'input', data: `createArchive:${JSON.stringify(options)}` });
+    if (!selectedDoor) {
+      toast.error('No door selected', 'Please select a door first');
+      return;
+    }
+
+    try {
+      toast.info('Creating archive...', 'Packaging your door');
+
+      const response = await fetch(`/api/doors/${selectedDoor.id}/release`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(options),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create archive');
+      }
+
+      const { filename, size } = await response.json();
+
+      toast.success('Archive created!', `${filename} (${(size / 1024).toFixed(1)} KB)`);
+
+      // Trigger download
+      const downloadUrl = `/downloads/${filename}`;
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      toast.success('Download started', filename);
+    } catch (error) {
+      console.error('Failed to create archive:', error);
+      toast.error('Archive creation failed', error instanceof Error ? error.message : 'Unknown error');
+    }
   };
 
   // Handle playback event
