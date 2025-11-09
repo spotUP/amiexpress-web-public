@@ -432,9 +432,6 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
       const result = await response.json();
       setSuccess(true);
 
-      // Show confetti
-      showConfetti();
-
       setTimeout(() => {
         onGameCreated(result.doorId);
         onClose();
@@ -466,11 +463,6 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
 
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.5);
-  };
-
-  const showConfetti = () => {
-    // Simple confetti animation (you could use a library like canvas-confetti)
-    console.log('🎉 Game created successfully!');
   };
 
   const canProceed = () => {
