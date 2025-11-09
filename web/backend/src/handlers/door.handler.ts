@@ -249,6 +249,14 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
 export async function executeDoor(socket: any, session: BBSSession, door: Door) {
   console.log('Executing door:', door.name);
 
+  // Check if this is a client door (needs to detect runtime from manifest)
+  const doorManifest = await loadDoorManifestForExecution(door);
+  if (doorManifest && (doorManifest.runtime === 'client' || doorManifest.runtime === 'hybrid')) {
+    // Execute as client door (browser-based)
+    await executeClientDoor(socket, session, door, doorManifest);
+    return;
+  }
+
   const nodeId = session.nodeId || 0;
 
   // Create drop files (DOOR.SYS, DORINFOx.DEF) before door execution
@@ -1334,4 +1342,90 @@ export function executePagerDoor(socket: any, session: BBSSession, chatSession: 
   // For now, always fall back to internal pager
   // In full implementation, this would check for PAGER door and execute it
   return false;
+}
+
+/**
+ * Execute client door (browser-based)
+ * Serves bundled JavaScript to browser and establishes WebSocket bridge
+ */
+async function executeClientDoor(socket: any, session: BBSSession, door: Door, manifest: any): Promise<void> {
+  console.log(`[executeClientDoor] Starting client door: ${door.name}`);
+
+  const { getClientDoorBridge } = require('../doors/client-door-bridge');
+  const bridge = getClientDoorBridge();
+
+  try {
+    // Start WebSocket bridge session
+    const sessionId = bridge.startSession(socket, session, door.id);
+
+    // Set door active flag
+    session.inDoorManager = true;
+
+    // Notify frontend to load client door
+    socket.emit('door:load-client', {
+      doorId: door.id,
+      sessionId,
+      bundleUrl: `/api/doors/${door.id}/bundle.js`,
+      manifest: {
+        name: manifest.name,
+        version: manifest.version,
+        runtime: manifest.runtime,
+      },
+    });
+
+    console.log(`[executeClientDoor] Client door session started: ${sessionId}`);
+
+    // Log door execution
+    const nodeId = session.nodeId || 0;
+    callersLog(session.user!.id, session.user!.username, 'Executed client door', door.name);
+    callersLogManager.logDoor(nodeId, door.name);
+
+  } catch (error) {
+    console.error(`[executeClientDoor] Error starting client door:`, error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError starting door: ${(error as Error).message}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    delete session.inDoorManager;
+  }
+}
+
+/**
+ * Load door manifest for execution
+ * Checks SDK examples and doors directory for package.json
+ */
+async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
+  try {
+    // Extract door ID from path
+    let doorId = door.id;
+
+    // Try to get door ID from path
+    if (door.path) {
+      const pathParts = door.path.split('/');
+      // Look for sdk/examples/<doorId> pattern
+      const examplesIndex = pathParts.indexOf('examples');
+      if (examplesIndex >= 0 && pathParts[examplesIndex + 1]) {
+        doorId = pathParts[examplesIndex + 1];
+      }
+    }
+
+    // Try SDK examples first
+    const sdkPath = path.join(process.cwd(), '../../sdk/examples', doorId, 'package.json');
+    if (fs.existsSync(sdkPath)) {
+      const content = fs.readFileSync(sdkPath, 'utf8');
+      return JSON.parse(content);
+    }
+
+    // Try doors directory
+    const doorsPath = path.join(process.cwd(), '../doors', doorId, 'package.json');
+    if (fs.existsSync(doorsPath)) {
+      const content = fs.readFileSync(doorsPath, 'utf8');
+      return JSON.parse(content);
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`[loadDoorManifestForExecution] Error loading manifest:`, error);
+    return null;
+  }
 }
