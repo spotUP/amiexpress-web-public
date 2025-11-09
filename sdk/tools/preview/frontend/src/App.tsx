@@ -88,6 +88,14 @@ function App() {
     lastConnected: null,
   });
 
+  // NEW: Additional UI state
+  const [showThemeSelector, setShowThemeSelector] = useState(false);
+  const [showPerformanceProfiler, setShowPerformanceProfiler] = useState(false);
+  const [terminalTabs, setTerminalTabs] = useState([
+    { id: '1', name: 'Terminal 1', active: true }
+  ]);
+  const [activeTerminalTab, setActiveTerminalTab] = useState('1');
+
   // New UX features state
   const [showOnboarding, setShowOnboarding] = useLocalStorage('sdk-preview-onboarding-complete', false);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -134,7 +142,7 @@ function App() {
   // UI state
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
-  const [rightSidebarTab, setRightSidebarTab] = useState<'code' | 'build' | 'info' | 'release'>('info');
+  const [rightSidebarTab, setRightSidebarTab] = useState<'code' | 'build' | 'info' | 'release' | 'git'>('info');
 
   // Favorites management
   const [_favorites, setFavorites] = useLocalStorage<string[]>('sdk-preview-favorites', []);
@@ -508,6 +516,20 @@ function App() {
       category: 'General',
       action: () => setShowOnboarding(false),
     },
+    {
+      id: 'open-theme-selector',
+      label: 'Open Theme Selector',
+      description: 'Choose from 8 preset themes',
+      category: 'Appearance',
+      action: () => setShowThemeSelector(true),
+    },
+    {
+      id: 'toggle-performance-profiler',
+      label: 'Toggle Performance Profiler',
+      description: 'Show/hide performance metrics',
+      category: 'Development',
+      action: () => setShowPerformanceProfiler(!showPerformanceProfiler),
+    },
   ];
 
   // Keyboard shortcuts
@@ -657,16 +679,26 @@ function App() {
             <>
               <Panel defaultSize={20} minSize={15} maxSize={30}>
                 <div className="animate-slideInLeft h-full" data-tour="door-list">
-                  <DoorListEnhanced
-                    doors={doors}
-                    selectedDoor={selectedDoor}
-                    onDoorSelect={handleDoorSelect}
-                    onToggleFavorite={handleToggleFavorite}
-                    onCreateNewGame={() => setShowGameWizard(true)}
-                    onBuildDoor={handleBuildDoor}
-                    onRunDoor={handleRunDoor}
-                    loading={doorsLoading}
-                  />
+                  {doorsLoading ? (
+                    <div className="flex items-center justify-center h-full bg-[#252526]">
+                      <EnhancedLoader
+                        type="orbital"
+                        size="lg"
+                        message="Loading doors..."
+                      />
+                    </div>
+                  ) : (
+                    <DoorListEnhanced
+                      doors={doors}
+                      selectedDoor={selectedDoor}
+                      onDoorSelect={handleDoorSelect}
+                      onToggleFavorite={handleToggleFavorite}
+                      onCreateNewGame={() => setShowGameWizard(true)}
+                      onBuildDoor={handleBuildDoor}
+                      onRunDoor={handleRunDoor}
+                      loading={doorsLoading}
+                    />
+                  )}
                 </div>
               </Panel>
               <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-600 transition-all duration-300 hover:w-2 cursor-col-resize" />
@@ -676,6 +708,31 @@ function App() {
           {/* Center - Terminal */}
           <Panel defaultSize={50} minSize={30}>
             <div className="flex flex-col h-full">
+              {/* Terminal Tabs */}
+              <TerminalTabs
+                tabs={terminalTabs}
+                activeTab={activeTerminalTab}
+                onTabChange={setActiveTerminalTab}
+                onTabCreate={() => {
+                  const newId = (terminalTabs.length + 1).toString();
+                  setTerminalTabs([...terminalTabs, { id: newId, name: `Terminal ${newId}`, active: false }]);
+                  setActiveTerminalTab(newId);
+                  soundEffects.click();
+                }}
+                onTabClose={(id) => {
+                  if (terminalTabs.length > 1) {
+                    setTerminalTabs(terminalTabs.filter(t => t.id !== id));
+                    if (activeTerminalTab === id) {
+                      setActiveTerminalTab(terminalTabs[0].id);
+                    }
+                    soundEffects.click();
+                  }
+                }}
+                onTabRename={(id, newName) => {
+                  setTerminalTabs(terminalTabs.map(t => t.id === id ? { ...t, name: newName } : t));
+                }}
+              />
+
               {/* Terminal toolbar */}
               <div className="bg-[#252526] border-b border-gray-700 px-4 py-2 flex items-center gap-2 shadow-lg">
                 {!showLeftSidebar && (
@@ -831,6 +888,19 @@ function App() {
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
                       )}
                     </button>
+                    <button
+                      onClick={() => setRightSidebarTab('git')}
+                      className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
+                        rightSidebarTab === 'git'
+                          ? 'bg-[#1E1E1E] text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                      }`}
+                    >
+                      Git
+                      {rightSidebarTab === 'git' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
+                      )}
+                    </button>
                   </div>
 
                   {/* Tab content with fade-in animations */}
@@ -868,6 +938,29 @@ function App() {
                         <ReleaseArchive
                           doorName={selectedDoor?.name || 'door'}
                           onCreateArchive={handleCreateArchive}
+                        />
+                      </div>
+                    )}
+
+                    {rightSidebarTab === 'git' && (
+                      <div className="h-full overflow-y-auto p-4 animate-fadeIn">
+                        <GitIntegration
+                          doorPath={selectedDoor?.id || ''}
+                          onCommit={(message) => {
+                            soundEffects.success();
+                            addActivity('success', 'Git commit', message);
+                            toast.success('Committed!', message);
+                          }}
+                          onPush={() => {
+                            soundEffects.success();
+                            addActivity('success', 'Git push', 'Pushed to remote');
+                            toast.success('Pushed!', 'Changes pushed to remote');
+                          }}
+                          onPull={() => {
+                            soundEffects.notification();
+                            addActivity('info', 'Git pull', 'Pulled from remote');
+                            toast.info('Pulled!', 'Updates pulled from remote');
+                          }}
                         />
                       </div>
                     )}
@@ -911,6 +1004,41 @@ function App() {
             });
           }}
         />
+      )}
+
+      {/* Theme Selector Modal */}
+      {showThemeSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#252526] rounded-lg shadow-2xl p-6 max-w-2xl w-full mx-4 border border-gray-700">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white">Select Theme</h2>
+              <button
+                onClick={() => setShowThemeSelector(false)}
+                className="text-gray-400 hover:text-white text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <ThemeSelector
+              currentTheme={settings.theme}
+              onThemeChange={(theme) => {
+                setSettings({ ...settings, theme: theme.id });
+                soundEffects.click();
+                toast.success('Theme changed!', `Switched to ${theme.name}`);
+                setShowThemeSelector(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Performance Profiler */}
+      {showPerformanceProfiler && (
+        <div className="fixed top-4 right-4 z-40">
+          <PerformanceProfiler
+            onClose={() => setShowPerformanceProfiler(false)}
+          />
+        </div>
       )}
 
       {/* Toast notifications */}
