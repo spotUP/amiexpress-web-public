@@ -2,9 +2,9 @@
 
 # Enhanced SDK Preview Server
 # - Kills old servers on port 8080
-# - Builds SDK and frontend
-# - Compiles TypeScript examples (shows errors)
+# - Builds SDK and frontend (silently)
 # - Starts preview server
+# - Example compilation happens in browser console
 
 echo "🔍 Checking for existing servers on port 8080..."
 
@@ -21,12 +21,13 @@ fi
 
 echo ""
 echo "🔨 Building SDK..."
-npm run build
+npm run build > /dev/null 2>&1
 
 if [ $? -ne 0 ]; then
     echo "❌ SDK build failed!"
     exit 1
 fi
+echo "✅ SDK built successfully"
 
 echo ""
 echo "📦 Building React frontend..."
@@ -37,16 +38,17 @@ cd tools/preview/frontend
 # Check if node_modules exists, install if needed
 if [ ! -d "node_modules" ]; then
     echo "📥 Installing frontend dependencies..."
-    npm install
+    npm install > /dev/null 2>&1
     if [ $? -ne 0 ]; then
         echo "❌ Frontend dependency installation failed!"
         cd ../../..
         exit 1
     fi
+    echo "✅ Frontend dependencies installed"
 fi
 
 # Build the frontend
-npm run build
+npm run build > /dev/null 2>&1
 
 if [ $? -ne 0 ]; then
     echo "❌ Frontend build failed!"
