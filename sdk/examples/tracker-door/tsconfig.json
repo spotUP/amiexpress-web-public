@@ -15,6 +15,6 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "../../core/**/*.ts", "../../engines/**/*.ts", "../../components/**/*.ts", "../../tools/**/*.ts"],
+  "include": ["*.ts", "**/*.ts", "../../core/**/*.ts", "../../engines/**/*.ts", "../../components/**/*.ts", "../../tools/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

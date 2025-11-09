@@ -4,7 +4,7 @@
   "description": "Professional music tracker BBS door inspired by Renoise, Protracker, and FastTracker II",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
