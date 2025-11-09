@@ -77,6 +77,11 @@ export class ConfigManager {
     this.configPath = configPath;
     this.config = this.getDefaultConfig();
     this.loadConfig();
+
+    // Log dataDir for debugging
+    console.log('[ConfigManager] Initialized with dataDir:', this.config.dataDir);
+    console.log('[ConfigManager] process.cwd():', process.cwd());
+    console.log('[ConfigManager] BBS_DATA_DIR env:', process.env.BBS_DATA_DIR || '(not set)');
   }
 
   private getDefaultConfig(): BBSConfig {
@@ -93,7 +98,9 @@ export class ConfigManager {
 
       // Path Settings
       // Project root contains BBS data (Commands/, Conf1/, Doors/, etc.)
-      dataDir: process.env.BBS_DATA_DIR || path.join(__dirname, '../../..'),
+      // Use BBS_DATA_DIR env var if set, otherwise calculate from process.cwd()
+      // process.cwd() is web/backend, so go up 2 levels to get to project root
+      dataDir: process.env.BBS_DATA_DIR || path.resolve(process.cwd(), '../..'),
 
       // Time Settings
       timeZone: 'UTC',

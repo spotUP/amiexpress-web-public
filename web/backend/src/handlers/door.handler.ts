@@ -228,6 +228,12 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
 
   allDoors.forEach((door, index) => {
     socket.emit('ansi-output', `${index + 1}. ${door.name}\r\n`);
+
+    // Display BBS command prominently
+    if (door.command) {
+      socket.emit('ansi-output', `   \x1b[0;36mCommand:\x1b[0m \x1b[33m${door.command}\x1b[0m\r\n`);
+    }
+
     socket.emit('ansi-output', `   ${door.description}\r\n`);
     socket.emit('ansi-output', `   Access Level: ${door.accessLevel}\r\n\r\n`);
   });

@@ -92,6 +92,19 @@ npm run validate     # Validate door package
   - `RENDER_API_KEY` - For Render.com webhooks
 - See `.env.example` for full list
 
+## Fonts
+- **Status**: Classic Amiga BBS fonts are referenced but TTF files are NOT included in repository
+- **Location**: Place font files in `web/frontend/public/fonts/`
+- **Required Fonts**:
+  - `mOsOul_v1.0.ttf` - Default BBS font
+  - `Topaz_a500_v1.0.ttf` / `Topaz_a1200_v1.0.ttf` - Classic Amiga fonts
+  - `MicroKnight_v1.0.ttf` / `MicroKnightPlus_v1.0.ttf`
+  - `P0T-NOoDLE_v1.0.ttf`
+  - `TopazPlus_a500_v1.0.ttf` / `TopazPlus_a1200_v1.0.ttf`
+- **Instructions**: See `web/frontend/public/fonts/README.md`
+- **Fallback**: System will use "Courier New" if fonts are missing
+- **Source**: Amiga bitmap fonts (.F16) available in `Docs/moebius/app/fonts/amiga/`
+
 ## Deployment
 - Push and deploy: `./dev/scripts/push-and-deploy.sh`
 - Requires environment variables in `.env.local`:

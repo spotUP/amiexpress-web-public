@@ -425,14 +425,18 @@ export class DoorManager {
         // Format line
         const status = door.installed ? '\x1b[32m[*]\x1b[0m' : '\x1b[31m[ ]\x1b[0m';
         const type = door.type === 'typescript' ? 'TS' : door.type === 'amiga' ? 'AMI' : 'ARC';
-        const name = door.name.substring(0, 40).padEnd(40);
+        const name = door.name.substring(0, 30).padEnd(30);
         const size = this.formatSize(door.size);
+
+        // Show BBS command if available (for installed doors)
+        const command = (door as any).command || '';
+        const commandDisplay = command ? `\x1b[33m${command.padEnd(10)}\x1b[0m` : ''.padEnd(10);
 
         if (isSelected) {
           // Blue background for selected
-          this.socket.emit('ansi-output', `\x1b[0;37;44m ${status} [${type}] ${name} ${size} \x1b[0m\r\n`);
+          this.socket.emit('ansi-output', `\x1b[0;37;44m ${status} [${type}] ${commandDisplay} ${name} ${size} \x1b[0m\r\n`);
         } else {
-          this.socket.emit('ansi-output', ` ${status} \x1b[33m[${type}]\x1b[0m ${name} \x1b[36m${size}\x1b[0m\r\n`);
+          this.socket.emit('ansi-output', ` ${status} \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m\r\n`);
         }
       }
 
@@ -469,6 +473,13 @@ export class DoorManager {
 
     // Basic info
     this.socket.emit('ansi-output', `\x1b[0;36mName:\x1b[0m ${door.name}\r\n`);
+
+    // Show BBS command prominently if available
+    const command = (door as any).command;
+    if (command) {
+      this.socket.emit('ansi-output', `\x1b[0;36mBBS Command:\x1b[0m \x1b[33m${command}\x1b[0m (Type this command to run the door)\r\n`);
+    }
+
     this.socket.emit('ansi-output', `\x1b[0;36mFile:\x1b[0m ${door.filename}\r\n`);
     this.socket.emit('ansi-output', `\x1b[0;36mType:\x1b[0m ${door.type.toUpperCase()}\r\n`);
     this.socket.emit('ansi-output', `\x1b[0;36mSize:\x1b[0m ${this.formatSize(door.size)}\r\n`);
@@ -1129,10 +1140,13 @@ export class DoorManager {
         this.socket.emit('ansi-output', '\x1b[32m* ' + result.message + '\x1b[0m\r\n');
 
         if (result.door) {
-          this.socket.emit('ansi-output', `\r\nCommand: ${result.door.command}\r\n`);
-          this.socket.emit('ansi-output', `Location: ${result.door.location}\r\n`);
+          this.socket.emit('ansi-output', '\r\n\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+          this.socket.emit('ansi-output', `\x1b[0;36mBBS Command:\x1b[0m \x1b[33m${result.door.command}\x1b[0m\r\n`);
+          this.socket.emit('ansi-output', `\x1b[90m(Type this command to run the door)\x1b[0m\r\n`);
+          this.socket.emit('ansi-output', '\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+          this.socket.emit('ansi-output', `\r\n\x1b[0;36mLocation:\x1b[0m ${result.door.location}\r\n`);
           if (result.door.type) {
-            this.socket.emit('ansi-output', `Type: ${result.door.type}\r\n`);
+            this.socket.emit('ansi-output', `\x1b[0;36mType:\x1b[0m ${result.door.type}\r\n`);
           }
         }
 
