@@ -1,4 +1,4 @@
-import { QuestionStep } from '../types/wizard';
+import { QuestionStep, AudioMetadata } from '../types/wizard';
 
 /**
  * Generate interactive review questions based on prompt analysis
@@ -273,6 +273,241 @@ export const defaultQuestions: QuestionStep[] = [
       { label: 'Web Browser', value: 'web', description: 'Run in any modern browser' },
       { label: 'Terminal/BBS', value: 'terminal', description: 'Classic BBS door experience' },
       { label: 'Mobile', value: 'mobile', description: 'Touch-optimized for phones/tablets' }
+    ],
+    importance: 'critical',
+    skip: false
+  }
+];
+
+/**
+ * Generate audio-specific review questions based on audio description analysis
+ */
+export function generateAudioReviewQuestions(audioText: string, detectedMetadata: AudioMetadata): QuestionStep[] {
+  const questions: QuestionStep[] = [];
+
+  // Question 1: Music Style and Mood (Always ask if not clearly defined)
+  if (!audioText.match(/orchestral|electronic|jazz|chiptune|ambient/i) || !detectedMetadata.musicStyle?.length) {
+    questions.push({
+      id: 'music-style',
+      category: 'Music Style',
+      question: 'What music style and mood should your game have?',
+      description: 'Define the primary musical genre and emotional atmosphere',
+      type: 'multi-choice',
+      options: [
+        { label: 'Orchestral', value: 'orchestral', description: 'Classical orchestra with strings, brass, woodwinds' },
+        { label: 'Electronic', value: 'electronic', description: 'Synths, EDM, techno, house music' },
+        { label: 'Chiptune/8-Bit', value: 'chiptune', description: 'Retro game sounds from NES/Gameboy era' },
+        { label: 'Ambient', value: 'ambient', description: 'Atmospheric drones and textures' },
+        { label: 'Jazz/Fusion', value: 'jazz', description: 'Piano, saxophone, swing rhythms' },
+        { label: 'Rock/Metal', value: 'rock', description: 'Guitars, drums, energetic' }
+      ],
+      importance: 'critical',
+      skip: false
+    });
+  }
+
+  // Question 2: Sound Effects Categories
+  if (!audioText.match(/sfx|sound effect|ui|combat|environment/i)) {
+    questions.push({
+      id: 'sound-effects',
+      category: 'Sound Effects',
+      question: 'What types of sound effects should be included?',
+      description: 'Select all SFX categories relevant to your game',
+      type: 'multi-choice',
+      options: [
+        { label: 'UI/Menu Sounds', value: 'ui-sounds', description: 'Clicks, beeps, navigation sounds' },
+        { label: 'Combat Impacts', value: 'combat-impacts', description: 'Hits, explosions, weapon sounds' },
+        { label: 'Environmental Noises', value: 'environmental', description: 'Wind, water, ambient nature sounds' },
+        { label: 'Movement Sounds', value: 'movement', description: 'Footsteps, jumps, vehicle sounds' },
+        { label: 'Voice Acting', value: 'voice-acting', description: 'Dialogue, narration, character voices' }
+      ],
+      importance: 'high',
+      skip: false
+    });
+  }
+
+  // Question 3: Mood Progression
+  if (!audioText.match(/mood|progression|emotion|shift|evolve/i)) {
+    questions.push({
+      id: 'mood-progression',
+      category: 'Mood Evolution',
+      question: 'How should the audio mood evolve during gameplay?',
+      description: 'Define how music and sound create emotional journeys',
+      type: 'single-choice',
+      options: [
+        { label: 'Calm to Intense', value: 'calm-to-intense', description: 'Build tension gradually' },
+        { label: 'Intense to Triumphant', value: 'intense-to-triumphant', description: 'Epic battle to victory' },
+        { label: 'Dynamic Shifts', value: 'dynamic-shifts', description: 'Adapt to player actions and game states' },
+        { label: 'Consistent Atmosphere', value: 'consistent', description: 'Maintain steady mood throughout' }
+      ],
+      importance: 'high',
+      skip: false
+    });
+  }
+
+  // Question 4: Gameplay Integration
+  if (!audioText.match(/dynamic|adaptive|responsive|integration|layer/i)) {
+    questions.push({
+      id: 'audio-integration',
+      category: 'Gameplay Integration',
+      question: 'How should audio respond to gameplay events?',
+      description: 'Define dynamic audio behavior',
+      type: 'multi-choice',
+      options: [
+        { label: 'Dynamic Music Changes', value: 'dynamic-music', description: 'Music adapts to game state (combat, exploration, etc.)' },
+        { label: 'Layered Tracks', value: 'layered-tracks', description: 'Add/remove layers based on intensity' },
+        { label: 'Contextual SFX Variations', value: 'contextual-sfx', description: 'SFX vary by player actions' },
+        { label: 'Spatial Audio', value: 'spatial-audio', description: '3D positioning for immersive sound' }
+      ],
+      importance: 'high',
+      skip: false
+    });
+  }
+
+  // Question 5: Technical Requirements
+  questions.push({
+    id: 'technical-requirements',
+    category: 'Technical Specifications',
+    question: 'What technical constraints and optimizations are needed?',
+    description: 'Consider platform limitations and performance',
+    type: 'multi-choice',
+    options: [
+      { label: 'Optimize for Mobile', value: 'optimize-mobile', description: 'Small file sizes, low latency' },
+      { label: 'Loopable Tracks', value: 'loopable', description: 'Seamless music loops without gaps' },
+      { label: 'Small File Sizes', value: 'small-files', description: 'Under 5MB per track for web' },
+      { label: 'Adaptive Streaming', value: 'adaptive-streaming', description: 'Variable quality based on connection' },
+      { label: 'Procedural Generation', value: 'procedural', description: 'Generate audio in real-time' }
+    ],
+    importance: 'medium',
+    skip: true
+  });
+
+  // Question 6: Accessibility Features
+  questions.push({
+    id: 'audio-accessibility',
+    category: 'Accessibility',
+    question: 'What accessibility features should the audio system include?',
+    description: 'Make your game audio inclusive for all players',
+    type: 'multi-choice',
+    options: [
+      { label: 'Volume Controls', value: 'volume-controls', description: 'Separate sliders for music, SFX, voice' },
+      { label: 'Subtitles/Captions', value: 'subtitles', description: 'Text for all audio content' },
+      { label: 'Visual Audio Cues', value: 'visual-cues', description: 'Visual indicators for audio events' },
+      { label: 'Mute Option', value: 'mute', description: 'Complete audio disable option' },
+      { label: 'Audio-Only Mode', value: 'audio-only', description: 'Playable without visual elements' }
+    ],
+    importance: 'medium',
+    skip: true
+  });
+
+  // Question 7: Audio Length and Format
+  if (!audioText.match(/length|duration|loop|short|long/i)) {
+    questions.push({
+      id: 'audio-length',
+      category: 'Track Length',
+      question: 'What should be the typical length of music tracks?',
+      description: 'Balance between variety and file size',
+      type: 'single-choice',
+      options: [
+        { label: 'Short Loops (30-90 seconds)', value: 'short', description: 'Minimal file size, quick loops' },
+        { label: 'Medium Tracks (2-4 minutes)', value: 'medium', description: 'Balanced approach with variety' },
+        { label: 'Long Tracks (5+ minutes)', value: 'long', description: 'Extended listening without repetition' },
+        { label: 'Generative/Endless', value: 'generative', description: 'Procedurally generated music' }
+      ],
+      importance: 'medium',
+      skip: true
+    });
+  }
+
+  // Question 8: Licensing and Budget
+  if (!audioText.match(/license|licensing|royalty|custom|budget/i)) {
+    questions.push({
+      id: 'licensing',
+      category: 'Licensing',
+      question: 'What is your approach to music licensing?',
+      description: 'Consider budget and legal requirements',
+      type: 'single-choice',
+      options: [
+        { label: 'Royalty-Free', value: 'royalty-free', description: 'Use stock music libraries' },
+        { label: 'Custom Composition', value: 'custom', description: 'Commission original music' },
+        { label: 'Creative Commons', value: 'cc', description: 'Use CC-licensed music' },
+        { label: 'Mixed Approach', value: 'mixed', description: 'Combination of sources' }
+      ],
+      importance: 'low',
+      skip: true
+    });
+  }
+
+  // Question 9: Voice Acting
+  if (audioText.match(/voice|dialogue|narration|speaking/i)) {
+    questions.push({
+      id: 'voice-acting',
+      category: 'Voice Acting',
+      question: 'How should voice acting be implemented?',
+      description: 'Define dialogue and narration approach',
+      type: 'single-choice',
+      options: [
+        { label: 'Full Voice Acting', value: 'full-va', description: 'All dialogue fully voiced' },
+        { label: 'Partial Voice Acting', value: 'partial-va', description: 'Key moments and characters only' },
+        { label: 'Vocal Sounds Only', value: 'vocal-sounds', description: 'Grunts, exclamations, no words' },
+        { label: 'Text-Only', value: 'text-only', description: 'No voice, just text dialogue' }
+      ],
+      importance: 'medium',
+      skip: true
+    });
+  }
+
+  // Question 10: Audio Customization
+  questions.push({
+    id: 'audio-customization',
+    category: 'Player Customization',
+    question: 'Should players be able to customize audio settings?',
+    description: 'Allow players to personalize their audio experience',
+    type: 'multi-choice',
+    options: [
+      { label: 'Volume Balance Sliders', value: 'volume-sliders', description: 'Adjust music/SFX/voice independently' },
+      { label: 'Tempo Adjustment', value: 'tempo', description: 'Speed up or slow down music' },
+      { label: 'Audio Presets', value: 'presets', description: 'Pre-configured sound profiles' },
+      { label: 'Custom Soundtracks', value: 'custom-soundtracks', description: 'Players can use own music' },
+      { label: 'EQ Controls', value: 'eq', description: 'Equalizer for audio fine-tuning' }
+    ],
+    importance: 'low',
+    skip: true
+  });
+
+  return questions;
+}
+
+/**
+ * Default audio questions when no description is available
+ */
+export const defaultAudioQuestions: QuestionStep[] = [
+  {
+    id: 'audio-presence',
+    category: 'Audio Basics',
+    question: 'Should your game include audio?',
+    description: 'Decide if you want music and sound effects',
+    type: 'single-choice',
+    options: [
+      { label: 'Yes, with Music and SFX', value: 'full-audio' },
+      { label: 'Music Only', value: 'music-only' },
+      { label: 'SFX Only', value: 'sfx-only' },
+      { label: 'Silent Game', value: 'silent' }
+    ],
+    importance: 'critical',
+    skip: false
+  },
+  {
+    id: 'audio-style-default',
+    category: 'Audio Style',
+    question: 'What general audio style fits your game?',
+    description: 'Choose the overall audio aesthetic',
+    type: 'single-choice',
+    options: [
+      { label: 'Retro/Chiptune', value: 'retro' },
+      { label: 'Modern/Electronic', value: 'modern' },
+      { label: 'Orchestral/Epic', value: 'orchestral' },
+      { label: 'Ambient/Minimal', value: 'ambient' }
     ],
     importance: 'critical',
     skip: false

@@ -11,18 +11,21 @@
   text-align: center;
   color: white;
   margin-bottom: 2rem;
+  animation: slideInUp 0.5s ease-out;
 }
 
 .wizard-header h1 {
   font-size: 2.5rem;
   font-weight: 700;
   margin: 0 0 0.5rem 0;
+  animation: bounce 2s infinite;
 }
 
 .wizard-subtitle {
   font-size: 1.1rem;
   opacity: 0.9;
   margin: 0;
+  animation: fadeIn 0.8s ease-in 0.2s both;
 }
 
 .wizard-error {
@@ -50,6 +53,41 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 /* Actions */
@@ -92,10 +130,19 @@
 .btn-primary {
   background: #667eea;
   color: white;
+  position: relative;
+  overflow: hidden;
 }
 
 .btn-primary:hover:not(:disabled) {
   background: #5568d3;
+  animation: pulse 0.6s ease-in-out;
+}
+
+.btn-primary:disabled {
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #667eea 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
 }
 
 .btn-secondary {
@@ -303,13 +350,14 @@
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: scaleIn 0.3s ease-out;
 }
 
 .template-card:hover {
   border-color: #667eea;
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 12px 24px rgba(102, 126, 234, 0.2);
 }
 
 .template-header {
@@ -565,19 +613,22 @@
   background: white;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
   position: relative;
+  animation: slideInLeft 0.3s ease-out;
 }
 
 .option-btn:hover {
   border-color: #667eea;
-  transform: translateY(-2px);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.15);
 }
 
 .option-btn.selected {
   border-color: #667eea;
   background: #f0f4ff;
+  animation: pulse 0.5s ease-in-out;
 }
 
 .option-checkbox {

@@ -1,20 +1,29 @@
 interface ProgressBarProps {
-  step: 'input' | 'enhance' | 'review' | 'customize' | 'generate';
+  step: 'input' | 'enhance' | 'review' | 'audio' | 'audio-review' | 'customize' | 'generate';
   totalSteps?: number;
   currentStep?: number;
 }
 
 const stepLabels = {
-  input: 'Describe Your Game',
-  enhance: 'AI Enhancement',
-  review: 'Interactive Review',
+  input: 'Game Prompt',
+  enhance: 'Enhance Prompt',
+  review: 'Game Review',
+  audio: 'Audio Design',
+  'audio-review': 'Audio Review',
   customize: 'Customization',
-  generate: 'Generate Game'
+  generate: 'Generate'
 };
 
 function ProgressBar({ step, totalSteps = 0, currentStep = 0 }: ProgressBarProps) {
-  const steps = ['input', 'enhance', 'review', 'customize', 'generate'] as const;
-  const currentStepIndex = steps.indexOf(step);
+  const steps = ['input', 'review', 'audio', 'audio-review', 'generate'] as const;
+
+  // Map current step to step index, handling intermediate steps
+  const getStepIndex = () => {
+    if (step === 'enhance') return 0; // Enhance is part of input
+    return steps.indexOf(step as any);
+  };
+
+  const currentStepIndex = getStepIndex();
 
   const getStepClass = (index: number) => {
     if (index < currentStepIndex) return 'completed';
@@ -40,7 +49,7 @@ function ProgressBar({ step, totalSteps = 0, currentStep = 0 }: ProgressBarProps
         ))}
       </div>
 
-      {step === 'review' && totalSteps > 0 && (
+      {(step === 'review' || step === 'audio-review') && totalSteps > 0 && (
         <div className="substep-progress">
           <div className="substep-bar">
             <div
