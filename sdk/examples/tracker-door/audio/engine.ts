@@ -269,12 +269,22 @@ class ChannelStrip {
       this.synth.dispose();
     }
 
+    // Map custom oscillator types to valid Tone.js types
+    const mapOscillatorType = (type?: string): Tone.ToneOscillatorType => {
+      if (!type) return 'sawtooth';
+      // Map custom types to valid Tone.js types
+      if (type === 'pwm' || type === 'pulse') return 'square';
+      if (type === 'noise') return 'sine';
+      // Valid types: sine, square, sawtooth, triangle
+      return type as Tone.ToneOscillatorType;
+    };
+
     const options: Partial<Tone.PolySynthOptions<Tone.Synth>> = {
       voice: Tone.Synth,
       maxPolyphony: 32,
       options: {
         oscillator: {
-          type: instrument.oscillator?.type || 'sawtooth'
+          type: mapOscillatorType(instrument.oscillator?.type)
         },
         envelope: {
           attack: instrument.envelope.attack,

@@ -208,13 +208,23 @@ export class TrackerAudioEngine {
     if (note.note === '---') return;
     if (note.note === '...') return;
 
+    // Map custom oscillator types to valid Tone.js types
+    const mapOscillatorType = (type?: string): Tone.ToneOscillatorType => {
+      if (!type) return 'sawtooth';
+      // Map custom types to valid Tone.js types
+      if (type === 'pwm' || type === 'pulse') return 'square';
+      if (type === 'noise') return 'sine';
+      // Valid types: sine, square, sawtooth, triangle
+      return type as Tone.ToneOscillatorType;
+    };
+
     // Create synth based on instrument type
     let synth: Tone.Synth;
 
     if (inst.type === 'synth') {
       synth = new Tone.Synth({
         oscillator: {
-          type: inst.oscillator?.type || 'sawtooth'
+          type: mapOscillatorType(inst.oscillator?.type)
         },
         envelope: {
           attack: inst.envelope.attack,

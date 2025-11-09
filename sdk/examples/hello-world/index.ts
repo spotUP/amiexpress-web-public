@@ -8,7 +8,7 @@
  * - ANSI output
  */
 
-import { Door, AnsiColor, GraphicsEngine, setupMockDevelopment } from '@amiexpress/bbs-door-sdk';
+import { Door, AnsiColor, GraphicsEngine } from '@amiexpress/bbs-door-sdk';
 
 // Create door
 const door = new Door({
@@ -21,17 +21,8 @@ const door = new Door({
 // Graphics engine for ANSI rendering
 const gfx = new GraphicsEngine({ width: 80, height: 24 });
 
-// Set up mock development mode (auto-connects test user)
-if (process.env.NODE_ENV !== 'production') {
-  setupMockDevelopment(door, {
-    name: 'TestUser',
-    securityLevel: 100,
-    timeLeft: 60
-  });
-}
-
 // Handle user connection
-door.onConnect((user) => {
+door.onConnect((user: any) => {
   console.log(`User ${user.name} connected!`);
 
   gfx.clear(AnsiColor.Black);
@@ -47,7 +38,7 @@ door.onConnect((user) => {
 });
 
 // Handle user input
-door.onInput((user, key) => {
+door.onInput((user: any, key: any) => {
   console.log(`User ${user.name} pressed: ${key.key}`);
 
   gfx.clear(AnsiColor.Black);
@@ -61,7 +52,7 @@ door.onInput((user, key) => {
 });
 
 // Handle disconnection
-door.onDisconnect((user) => {
+door.onDisconnect((user: any) => {
   console.log(`User ${user.name} disconnected`);
 });
 

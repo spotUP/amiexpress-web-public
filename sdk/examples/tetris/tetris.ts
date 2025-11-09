@@ -30,7 +30,6 @@ import {
   GraphicsEngine,
   AudioEngine,
   HUDBuilder,
-  MenuSystem,
   SaveManager,
   AnsiColor
 } from '@amiexpress/bbs-door-sdk';
@@ -181,21 +180,33 @@ class TetrisGame {
    * Show main menu
    */
   private async showMainMenu(): Promise<void> {
-    const menu = new MenuSystem({
-      title: '╔═══ TETRIS ═══╗',
-      style: 'retro-neon',
-      navigation: 'arrow-keys',
-      modal: false,
-      position: { x: 30, y: 8 },
-    });
-
-    menu.addItem('New Game', () => this.startNewGame(), { key: 'N' });
-    menu.addItem('High Scores', () => this.showHighScores(), { key: 'H' });
-    menu.addItem('Instructions', () => this.showInstructions(), { key: 'I' });
-    menu.addItem('Quit', () => this.quit(), { key: 'Q' });
-
     this.gameState = 'menu';
-    await menu.show(this.door, this.userId);
+
+    this.gfx.clear(AnsiColor.Black);
+    this.gfx.drawText(30, 8, '╔═══ TETRIS ═══╗', AnsiColor.Cyan);
+    this.gfx.drawText(30, 10, 'N - New Game', AnsiColor.White);
+    this.gfx.drawText(30, 11, 'H - High Scores', AnsiColor.White);
+    this.gfx.drawText(30, 12, 'I - Instructions', AnsiColor.White);
+    this.gfx.drawText(30, 13, 'Q - Quit', AnsiColor.White);
+
+    this.door.sendAnsi(this.gfx.render(), this.userId);
+
+    // Wait for input
+    const key = await this.door.waitForInput(this.userId, 0);
+    if (key) {
+      const k = key.key.toLowerCase();
+      if (k === 'n') {
+        await this.startNewGame();
+      } else if (k === 'h') {
+        await this.showHighScores();
+      } else if (k === 'i') {
+        await this.showInstructions();
+      } else if (k === 'q') {
+        this.quit();
+      } else {
+        await this.showMainMenu();
+      }
+    }
   }
 
   /**
@@ -724,7 +735,7 @@ const door = new Door({
   description: 'Classic block puzzle game',
 });
 
-door.onConnect(async (user) => {
+door.onConnect(async (user: any) => {
   const game = new TetrisGame(door);
   await game.init(user.id);
 });
