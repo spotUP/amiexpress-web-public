@@ -56,6 +56,29 @@ const AI_PROVIDERS: AIProvider[] = [
     quality: 'excellent',
     costLevel: 'free',
   },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter (Free Models)',
+    models: [
+      'meta-llama/llama-4-maverick:free',
+      'mistralai/mistral-small-3.1-24b-instruct:free',
+      'deepseek/deepseek-chat-v3-0324:free',
+      'google/gemma-3-27b-it:free',
+      'google/gemma-3-12b-it:free',
+      'google/gemma-3-4b-it:free',
+      'meta-llama/llama-3.2-11b-vision-instruct:free',
+      'qwen/qwen2.5-vl-72b-instruct:free',
+      'qwen/qwen2.5-vl-32b-instruct:free',
+      'moonshotai/kimi-vl-a3b-thinking:free',
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'meta-llama/llama-3.2-1b-instruct:free',
+      'google/gemini-flash-1.5:free',
+      'google/gemini-pro-1.5:free',
+    ],
+    speed: 'fast',
+    quality: 'excellent',
+    costLevel: 'free',
+  },
 ];
 
 const GAME_TEMPLATES: GameTemplate[] = [
@@ -191,7 +214,8 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
 
     const costPerToken = provider === 'openai' ? 0.00003 :
                         provider === 'claude' ? 0.000015 :
-                        provider === 'gemini' ? 0 : 0; // Gemini free tier
+                        provider === 'gemini' ? 0 : // Gemini free tier
+                        provider === 'openrouter' ? 0 : 0; // OpenRouter free models
     setEstimatedCost(estimatedTokens * costPerToken);
   }, [gameDescription, provider]);
 
