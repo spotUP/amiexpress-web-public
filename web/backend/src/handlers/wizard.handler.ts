@@ -20,8 +20,20 @@ interface AnalysisRequest {
 
 interface GenerationRequest {
   prompt: string;
+  audioDescription?: string;
   metadata: any;
   answers: Record<string, any>;
+  audioAnswers?: Record<string, any>;
+}
+
+interface AudioEnhancementRequest {
+  rawAudioDescription: string;
+  context?: any;
+  enhancementLevel: 'basic' | 'detailed' | 'comprehensive';
+}
+
+interface AudioAnalysisRequest {
+  audioDescription: string;
 }
 
 /**
@@ -79,6 +91,66 @@ export async function analyzePrompt(req: Request, res: Response) {
     console.error('Analysis error:', error);
     res.status(500).json({
       error: 'Analysis failed',
+      message: error.message
+    });
+  }
+}
+
+/**
+ * Enhance an audio description using AI-powered analysis
+ */
+export async function enhanceAudioDescription(req: Request, res: Response) {
+  try {
+    const { rawAudioDescription, context, enhancementLevel } = req.body as AudioEnhancementRequest;
+
+    if (!rawAudioDescription || rawAudioDescription.length < 10) {
+      return res.status(400).json({
+        error: 'Audio description is too short. Please provide more details.'
+      });
+    }
+
+    // Generate enhanced version
+    const enhanced = await generateEnhancedAudioDescription(rawAudioDescription, enhancementLevel);
+    const metadata = extractAudioMetadata(rawAudioDescription);
+
+    res.json({
+      original: rawAudioDescription,
+      enhanced: enhanced.text,
+      suggestions: enhanced.suggestions,
+      detectedMetadata: metadata,
+      improvements: enhanced.improvements
+    });
+
+  } catch (error: any) {
+    console.error('Audio enhancement error:', error);
+    res.status(500).json({
+      error: 'Audio enhancement failed',
+      message: error.message
+    });
+  }
+}
+
+/**
+ * Analyze audio description and extract metadata
+ */
+export async function analyzeAudioDescription(req: Request, res: Response) {
+  try {
+    const { audioDescription } = req.body as AudioAnalysisRequest;
+
+    if (!audioDescription || audioDescription.length < 10) {
+      return res.status(400).json({
+        error: 'Audio description is too short'
+      });
+    }
+
+    const metadata = extractAudioMetadata(audioDescription);
+
+    res.json(metadata);
+
+  } catch (error: any) {
+    console.error('Audio analysis error:', error);
+    res.status(500).json({
+      error: 'Audio analysis failed',
       message: error.message
     });
   }
@@ -303,6 +375,163 @@ function generateGameName(prompt: string): string {
 
   // Fallback to generic name
   return `game-${Date.now()}`;
+}
+
+/**
+ * Generate enhanced audio description with AI-style improvements
+ */
+async function generateEnhancedAudioDescription(
+  rawAudio: string,
+  level: 'basic' | 'detailed' | 'comprehensive'
+): Promise<{ text: string; suggestions: string[]; improvements: any[] }> {
+
+  let enhanced = rawAudio;
+  const suggestions: string[] = [];
+  const improvements: any[] = [];
+
+  // Add music style details if vague
+  if (!rawAudio.match(/orchestral|electronic|jazz|chiptune|ambient|rock|classical/i)) {
+    enhanced = 'Music Style: Define a specific genre (e.g., orchestral, electronic, chiptune, ambient).\n\n' + enhanced;
+    improvements.push({
+      category: 'Music Style',
+      original: 'No specific genre mentioned',
+      improved: 'Added genre specification prompt',
+      reason: 'Helps audio designers understand the desired musical aesthetic'
+    });
+    suggestions.push('Specify exact music genres and styles for each game state');
+  }
+
+  // Add sound effects details
+  if (!rawAudio.match(/sfx|sound effect|ui|combat|environment/i)) {
+    enhanced += '\n\nSound Effects: Include UI sounds (menu clicks, selections), gameplay SFX (actions, impacts), and environmental ambience.';
+    suggestions.push('Define how sound effects integrate with player actions');
+  }
+
+  // Add technical specifications if missing
+  if (!rawAudio.match(/loopable|file size|format|bitrate|mp3|ogg/i)) {
+    enhanced += '\n\nTechnical Specifications: All audio tracks should be loopable and optimized for web delivery (under 5MB per track, MP3/OGG format, 128-192kbps).';
+    improvements.push({
+      category: 'Technical Details',
+      original: 'No technical specs',
+      improved: 'Added file format and size requirements',
+      reason: 'Ensures audio works within platform constraints'
+    });
+    suggestions.push('Include technical requirements (file formats, sizes, loop points)');
+  }
+
+  // Add accessibility features if missing
+  if (!rawAudio.match(/volume|control|accessibility|subtitle|caption/i) && level !== 'basic') {
+    enhanced += '\n\nAccessibility: Include adjustable volume controls with separate sliders for music, SFX, and voice. Add optional subtitles for any voice content and visual indicators for important audio cues.';
+    improvements.push({
+      category: 'Accessibility',
+      original: 'No accessibility features',
+      improved: 'Added volume controls and subtitle support',
+      reason: 'Makes the game more inclusive for all players'
+    });
+    suggestions.push('Add accessibility features (volume controls, subtitles, audio cues)');
+  }
+
+  // Add gameplay integration if missing
+  if (!rawAudio.match(/dynamic|adaptive|responsive|integration|state/i)) {
+    enhanced += '\n\nGameplay Integration: Music should dynamically respond to player actions and game states. For example, intensity increases during combat or chase sequences, and calms during exploration or menu screens.';
+    improvements.push({
+      category: 'Gameplay Integration',
+      original: 'Static audio description',
+      improved: 'Added dynamic audio integration',
+      reason: 'Audio that responds to gameplay creates more immersive experiences'
+    });
+  }
+
+  // Add mood progression
+  if (!rawAudio.match(/mood|emotion|atmosphere|progression/i) && level === 'comprehensive') {
+    enhanced += '\n\nMood Progression: Define how the emotional tone evolves throughout the game (e.g., tense to triumphant, calm to intense).';
+    suggestions.push('Describe mood progression and dynamic audio changes');
+  }
+
+  return {
+    text: enhanced,
+    suggestions,
+    improvements
+  };
+}
+
+/**
+ * Extract audio metadata from description
+ */
+function extractAudioMetadata(audioText: string): any {
+  const lower = audioText.toLowerCase();
+  const metadata: any = {};
+
+  // Detect music styles
+  metadata.musicStyle = [];
+  if (lower.match(/orchestral|orchestra|symphonic/i)) metadata.musicStyle.push('orchestral');
+  if (lower.match(/electronic|edm|synth|techno|house/i)) metadata.musicStyle.push('electronic');
+  if (lower.match(/jazz|swing|bebop/i)) metadata.musicStyle.push('jazz');
+  if (lower.match(/chiptune|8.?bit|retro|chip|nes|gameboy/i)) metadata.musicStyle.push('chiptune');
+  if (lower.match(/ambient|atmospheric|drone/i)) metadata.musicStyle.push('ambient');
+  if (lower.match(/rock|metal|guitar/i)) metadata.musicStyle.push('rock');
+  if (lower.match(/classical|piano|strings/i)) metadata.musicStyle.push('classical');
+
+  // Detect sound effects
+  metadata.soundEffects = [];
+  if (lower.match(/ui|button|click|menu/i)) metadata.soundEffects.push('UI sounds');
+  if (lower.match(/combat|attack|hit|impact|weapon/i)) metadata.soundEffects.push('Combat impacts');
+  if (lower.match(/environmental|ambient|nature|wind|water/i)) metadata.soundEffects.push('Environmental noises');
+  if (lower.match(/footstep|walk|run|movement/i)) metadata.soundEffects.push('Movement sounds');
+  if (lower.match(/voice|dialogue|narrat|speak/i)) metadata.soundEffects.push('Voice acting');
+
+  // Detect mood progression
+  if (lower.match(/tense.*triumphant|calm.*intense/i)) {
+    metadata.moodProgression = 'Dynamic with emotional shifts';
+  } else if (lower.match(/build|crescendo|increase|intensify/i)) {
+    metadata.moodProgression = 'Building intensity';
+  } else if (lower.match(/calm|peaceful|relaxing|serene/i)) {
+    metadata.moodProgression = 'Calm and consistent';
+  } else {
+    metadata.moodProgression = 'Varies based on gameplay';
+  }
+
+  // Detect integration features
+  metadata.integration = [];
+  if (lower.match(/dynamic|adaptive|respond/i)) metadata.integration.push('Dynamic music changes');
+  if (lower.match(/layer|add|remove|stem/i)) metadata.integration.push('Layered tracks');
+  if (lower.match(/contextual|situation|state/i)) metadata.integration.push('Contextual SFX variations');
+  if (lower.match(/spatial|3d|position|binaural/i)) metadata.integration.push('Spatial audio');
+
+  // Detect technical needs
+  metadata.technicalNeeds = [];
+  if (lower.match(/mobile|phone|tablet/i)) metadata.technicalNeeds.push('Optimize for mobile');
+  if (lower.match(/loopable|loop|seamless/i)) metadata.technicalNeeds.push('Loopable tracks');
+  if (lower.match(/small|tiny|under.*mb|file size/i)) metadata.technicalNeeds.push('Small file sizes');
+  if (lower.match(/streaming|adaptive bitrate/i)) metadata.technicalNeeds.push('Adaptive streaming');
+  if (lower.match(/procedural|generative/i)) metadata.technicalNeeds.push('Procedural generation');
+
+  // Detect accessibility features
+  metadata.accessibility = [];
+  if (lower.match(/volume|control|adjust|slider/i)) metadata.accessibility.push('Volume controls');
+  if (lower.match(/subtitle|caption|text/i)) metadata.accessibility.push('Subtitles/Captions');
+  if (lower.match(/visual.*cue|indicator/i)) metadata.accessibility.push('Visual audio cues');
+  if (lower.match(/mute|silent|toggle|off/i)) metadata.accessibility.push('Mute option');
+
+  // Set default values for sliders
+  metadata.volumeBalance = 70; // Default music/SFX balance (0-100)
+  metadata.tempoAdjustment = 60; // Default tempo (0-100, 50 = normal)
+
+  // Detect audio length preference
+  if (lower.match(/short|quick|brief|30.*sec|90.*sec/i)) metadata.audioLength = 'Short (30-90 seconds)';
+  else if (lower.match(/long|extended|epic|5.*min|10.*min/i)) metadata.audioLength = 'Long (5+ minutes)';
+  else metadata.audioLength = 'Medium (2-4 minutes)';
+
+  // Detect licensing preference
+  if (lower.match(/royalty.?free|free|stock/i)) metadata.licensing = 'Royalty-free';
+  else if (lower.match(/custom|commission|original/i)) metadata.licensing = 'Custom composition';
+  else if (lower.match(/creative.*commons|cc/i)) metadata.licensing = 'Creative Commons';
+  else metadata.licensing = 'TBD';
+
+  // Detect voice acting
+  metadata.voiceActing = lower.match(/voice|narrat|dialogue|speak|vocal/i) !== null;
+
+  return metadata;
 }
 
 /**

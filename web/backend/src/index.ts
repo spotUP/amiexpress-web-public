@@ -496,9 +496,11 @@ app.post('/auth/register', (req: Request, res: Response) => authHandler.register
 app.post('/auth/refresh', (req: Request, res: Response) => authHandler.refresh(req, res));
 
 // Game Prompt Wizard API endpoints
-import { enhancePrompt, analyzePrompt, generateGame } from './handlers/wizard.handler';
+import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from './handlers/wizard.handler';
 app.post('/api/wizard/enhance', (req: Request, res: Response) => enhancePrompt(req, res));
 app.post('/api/wizard/analyze', (req: Request, res: Response) => analyzePrompt(req, res));
+app.post('/api/wizard/enhance-audio', (req: Request, res: Response) => enhanceAudioDescription(req, res));
+app.post('/api/wizard/analyze-audio', (req: Request, res: Response) => analyzeAudioDescription(req, res));
 app.post('/api/wizard/generate', (req: Request, res: Response) => generateGame(req, res));
 
 // File upload configuration
