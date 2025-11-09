@@ -1,5 +1,6 @@
 // Export all components
 export { Terminal } from './Terminal';
+export { XTermTerminal } from './XTermTerminal';
 export { CodeEditor } from './CodeEditor';
 export { BuildStatus } from './BuildStatus';
 export { ScreenshotCapture } from './ScreenshotCapture';

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
-  Terminal,
+  XTermTerminal,
   CodeEditor,
   BuildStatusEnhanced,
   ScreenshotCapture,
@@ -804,14 +804,12 @@ function App() {
               </div>
 
               {/* Terminal with optional CRT effect */}
-              <div ref={terminalRef} className="flex-1" data-tour="terminal">
+              <div ref={terminalRef} className="flex-1 min-h-0 overflow-hidden" data-tour="terminal">
                 <CRTEffect enabled={enableCRT} intensity="medium">
-                  <Terminal
+                  <XTermTerminal
                     output={terminalOutput}
                     onInput={handleTerminalInput}
-                    autoScroll={settings.autoScroll}
                     fontSize={settings.terminalFontSize}
-                    recorder={recorder}
                   />
                 </CRTEffect>
               </div>

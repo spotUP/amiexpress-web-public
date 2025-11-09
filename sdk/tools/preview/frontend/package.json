@@ -12,12 +12,15 @@
     "@radix-ui/react-dropdown-menu": "^2.0.6",
     "@radix-ui/react-switch": "^1.0.3",
     "@radix-ui/react-tabs": "^1.0.4",
+    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-canvas": "^0.7.0",
     "ansi-to-html": "^0.7.2",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-resizable-panels": "^1.0.9"
+    "react-resizable-panels": "^1.0.9",
+    "socket.io-client": "^4.7.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
