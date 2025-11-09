@@ -11,13 +11,20 @@ OpenRouter provides unified API access to 400+ AI models from various providers.
 2. Click "Sign In" (top right)
 3. Sign up with Google, GitHub, or email (no credit card needed)
 
-### Step 2: Get Your API Key
+### Step 2: Configure Privacy Settings (Important!)
+1. Navigate to https://openrouter.ai/settings/privacy
+2. Under "Data Policy", select **"Allow training on my data"**
+   - This is required to use free models
+   - Your prompts will be used to improve AI models (standard for free tiers)
+   - If you prefer privacy, you can use paid models instead
+
+### Step 3: Get Your API Key
 1. Navigate to https://openrouter.ai/keys
 2. Click "Create Key"
 3. Give it a name (e.g., "AmiExpress Game Wizard")
 4. Copy your API key (starts with `sk-or-...`)
 
-### Step 3: Use in AI Game Wizard
+### Step 4: Use in AI Game Wizard
 1. Open the AI Game Wizard in the preview server
 2. Select "OpenRouter (Free Models)" as your AI provider
 3. Paste your API key when prompted
@@ -85,6 +92,16 @@ OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
 ## Troubleshooting
+
+### "No endpoints found matching your data policy"
+**Most common issue!** This means you haven't enabled training data in your privacy settings.
+
+**Solution:**
+1. Go to https://openrouter.ai/settings/privacy
+2. Select "Allow training on my data"
+3. Try your request again
+
+**Alternative:** Use a paid model instead (requires adding credits to your account)
 
 ### "No API key provided"
 - Make sure you've copied the full key (starts with `sk-or-`)

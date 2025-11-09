@@ -1186,14 +1186,27 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
             errorMessage = 'This model requires credits. Please select a free model or add credits to your OpenRouter account.';
           } else if (response.status === 429) {
             errorMessage = 'Rate limit exceeded. Please wait a few minutes and try again.';
-          } else if (response.status === 404 && error.error?.metadata?.raw?.includes('model not found')) {
-            // Extract the model name the provider expected
-            const expectedModel = error.error?.metadata?.raw?.match(/"model not found: ([^"]+)"/)?.[1];
-            errorMessage = `Model not found. OpenRouter API tried: "${modelForApi}". `;
-            if (expectedModel && expectedModel !== modelForApi) {
-              errorMessage += `Provider expects different capitalization: "${expectedModel}". `;
+          } else if (response.status === 404) {
+            // Check if this is a data policy error (free models require training opt-in)
+            const isDataPolicyError = errorMessage.toLowerCase().includes('data policy') ||
+                                     errorMessage.toLowerCase().includes('paid model training');
+
+            if (isDataPolicyError) {
+              errorMessage = 'Free models require enabling "Allow training" in your OpenRouter privacy settings. ' +
+                           'Go to https://openrouter.ai/settings/privacy and select "Allow training on my data" ' +
+                           'to use free models. Alternatively, select a paid model or add credits to your account.';
+            } else if (error.error?.metadata?.raw?.includes('model not found')) {
+              // Extract the model name the provider expected
+              const expectedModel = error.error?.metadata?.raw?.match(/"model not found: ([^"]+)"/)?.[1];
+              errorMessage = `Model not found. OpenRouter API tried: "${modelForApi}". `;
+              if (expectedModel && expectedModel !== modelForApi) {
+                errorMessage += `Provider expects different capitalization: "${expectedModel}". `;
+              }
+              errorMessage += 'Try selecting a different model from the dropdown.';
+            } else {
+              // Generic 404 error
+              errorMessage = `Model or endpoint not found: ${modelForApi}. The model may have been removed or renamed. Try selecting a different model.`;
             }
-            errorMessage += 'Try selecting a different model from the dropdown.';
           } else if (response.status === 400 && error.error?.message?.includes('model')) {
             errorMessage = `Model not found: ${modelForApi}. The model may no longer be available or the name changed.`;
           }
