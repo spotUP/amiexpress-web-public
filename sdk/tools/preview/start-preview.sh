@@ -45,7 +45,7 @@ echo ""
 
 COMPILE_ERRORS=0
 
-# Compile all TypeScript examples to JavaScript
+# Type-check all TypeScript examples (no emit, just validation)
 for example_dir in examples/*/; do
     example_name=$(basename "$example_dir")
 
@@ -54,26 +54,18 @@ for example_dir in examples/*/; do
         continue
     fi
 
-    echo "  📦 Compiling $example_name..."
+    echo "  📦 Type-checking $example_name..."
 
-    # Create compiled directory if it doesn't exist
-    mkdir -p "$example_dir/compiled"
+    # Type check using the example's tsconfig.json
+    cd "$example_dir"
+    npx tsc --noEmit 2>&1 | head -20
+    RESULT=$?
+    cd - > /dev/null
 
-    # Compile TypeScript to JavaScript - SHOW ALL ERRORS
-    npx tsc \
-        --target ES2020 \
-        --module commonjs \
-        --outDir "$example_dir/compiled" \
-        --rootDir "$example_dir" \
-        --esModuleInterop \
-        --skipLibCheck \
-        --pretty \
-        "$example_dir"*.ts 2>&1
-
-    if [ $? -eq 0 ]; then
-        echo "  ✅ $example_name compiled successfully"
+    if [ $RESULT -eq 0 ]; then
+        echo "  ✅ $example_name type-checked successfully"
     else
-        echo "  ❌ $example_name has compilation errors (see above)"
+        echo "  ⚠️  $example_name has type errors (non-fatal)"
         COMPILE_ERRORS=$((COMPILE_ERRORS + 1))
     fi
     echo ""

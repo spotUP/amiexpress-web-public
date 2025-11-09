@@ -2,9 +2,10 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "outDir": "./dist",
-    "rootDir": "../..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -13,8 +14,22 @@
     "moduleResolution": "node",
     "declaration": true,
     "sourceMap": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["*.ts", "**/*.ts", "../../core/**/*.ts", "../../engines/**/*.ts", "../../components/**/*.ts", "../../tools/**/*.ts"],
-  "exclude": ["node_modules", "dist", "../../tools/preview", "../../**/*.spec.ts"]
+  "include": [
+    "*.ts",
+    "**/*.ts",
+    "../../core/**/*.ts",
+    "../../engines/**/*.ts",
+    "../../components/**/*.ts",
+    "../../tools/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "../../tools/preview",
+    "../../**/*.spec.ts"
+  ]
 }
