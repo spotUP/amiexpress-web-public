@@ -2,9 +2,10 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020"
+    ],
     "outDir": "./dist",
-    "rootDir": "../..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,6 +13,17 @@
     "resolveJsonModule": true,
     "moduleResolution": "node"
   },
-  "include": ["*.ts", "../../core/**/*.ts", "../../engines/**/*.ts", "../../components/**/*.ts", "../../tools/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "*.ts",
+    "../../core/**/*.ts",
+    "../../engines/**/*.ts",
+    "../../components/**/*.ts",
+    "../../tools/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "../../tools/preview",
+    "../../**/*.spec.ts"
+  ]
 }

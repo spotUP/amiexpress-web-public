@@ -93,9 +93,24 @@ function App() {
   // Favorites management
   const [_favorites, setFavorites] = useLocalStorage<string[]>('sdk-preview-favorites', []);
 
+  // Load doors list via HTTP
+  const loadDoors = async () => {
+    try {
+      const response = await fetch('/api/doors');
+      if (response.ok) {
+        const doorsData = await response.json();
+        setDoors(doorsData);
+      } else {
+        console.error('Failed to load doors:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error loading doors:', error);
+    }
+  };
+
   // WebSocket connection
   const { status: wsStatus, send: wsSend } = useWebSocket({
-    url: `ws://${window.location.hostname}:${window.location.port || 3000}/ws`,
+    url: `ws://${window.location.hostname}:${window.location.port || 8080}`,
     onMessage: handleWebSocketMessage,
     onConnect: () => {
       setConnectionStatus({
@@ -105,11 +120,12 @@ function App() {
         lastConnected: Date.now(),
       });
       // Request door list on connect
-      wsSend({ type: 'doorList', data: null });
+      loadDoors();
     },
     onDisconnect: () => {
       setConnectionStatus((prev) => ({ ...prev, connected: false }));
     },
+    maxReconnectAttempts: 10,
   });
 
   // Update connection status from WebSocket hook

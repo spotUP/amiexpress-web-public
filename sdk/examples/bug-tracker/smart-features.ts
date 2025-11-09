@@ -16,8 +16,16 @@ export interface BugReport {
   subcategory?: string;
   description: string;
   stepsToReproduce: string;
+  expectedBehavior: string;
+  actualBehavior: string;
   priority: string;
   status: string;
+  reporter: string;
+  reporterId: number;
+  reportedAt: number;
+  updatedAt: number;
+  attachments: any[];
+  comments: any[];
   tags?: string[];
 }
 
