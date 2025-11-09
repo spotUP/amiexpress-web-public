@@ -237,6 +237,12 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
         const response = await fetch('https://openrouter.ai/api/v1/models');
         if (response.ok) {
           const data = await response.json();
+
+          // Capitalization mapping for models where API returns wrong case
+          const capitalizationMap: { [key: string]: string } = {
+            'agentica-org/deepcoder-14b-preview': 'agentica-org/DeepCoder-14B-Preview',
+          };
+
           // Filter for free models (pricing.prompt === "0" and pricing.completion === "0")
           const freeModels = data.data
             .filter((model: any) => {
@@ -244,7 +250,12 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
               const completionPrice = parseFloat(model.pricing?.completion || '1');
               return promptPrice === 0 && completionPrice === 0;
             })
-            .map((model: any) => model.id)
+            .map((model: any) => {
+              const modelId = model.id;
+              // Apply capitalization fix if needed
+              const correctedId = capitalizationMap[modelId.toLowerCase()] || modelId;
+              return correctedId;
+            })
             .sort();
 
           if (freeModels.length > 0) {
