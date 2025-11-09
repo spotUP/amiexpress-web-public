@@ -1,0 +1,248 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // ========================================
+    // BBS Server & Frontend
+    // ========================================
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🚀 Run BBS Backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/web/backend",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎨 Run BBS Frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/web/frontend",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+
+    // ========================================
+    // SDK - Game Preview Server
+    // ========================================
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 SDK Preview Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview"],
+      "cwd": "${workspaceFolder}/sdk",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "sdk",
+        "order": 1
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "⚡ SDK Preview (Quick - No Build)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview:quick"],
+      "cwd": "${workspaceFolder}/sdk",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "sdk",
+        "order": 2
+      }
+    },
+
+    // ========================================
+    // SDK - Example Games (Run Directly)
+    // ========================================
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 Run: Hello World",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "index.ts"],
+      "cwd": "${workspaceFolder}/sdk/examples/hello-world",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "games",
+        "order": 1
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 Run: Tic-Tac-Toe",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "index.ts"],
+      "cwd": "${workspaceFolder}/sdk/examples/tic-tac-toe",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "games",
+        "order": 2
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 Run: Tetris",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "index.ts"],
+      "cwd": "${workspaceFolder}/sdk/examples/tetris",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "games",
+        "order": 3
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 Run: Dungeon RPG",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "index.ts"],
+      "cwd": "${workspaceFolder}/sdk/examples/dungeon-rpg",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "games",
+        "order": 4
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 Run: Space Shooter",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "index.ts"],
+      "cwd": "${workspaceFolder}/sdk/examples/space-shooter",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "games",
+        "order": 5
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 Run: Bug Tracker",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "index.ts"],
+      "cwd": "${workspaceFolder}/sdk/examples/bug-tracker",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "games",
+        "order": 6
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 Run: Tracker Door",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "index.ts"],
+      "cwd": "${workspaceFolder}/sdk/examples/tracker-door",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "games",
+        "order": 7
+      }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🎮 Run: Fire Emblem",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "index.ts"],
+      "cwd": "${workspaceFolder}/sdk/examples/fire-emblem",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "games",
+        "order": 8
+      }
+    },
+
+    // ========================================
+    // SDK - Current File
+    // ========================================
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🔧 Run Current Game (tsx)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "${file}"],
+      "cwd": "${fileDirname}",
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "presentation": {
+        "group": "dev",
+        "order": 1
+      }
+    },
+
+    // ========================================
+    // Testing
+    // ========================================
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🧪 Test Backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["test"],
+      "cwd": "${workspaceFolder}/web/backend",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "🧪 Test SDK",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["test"],
+      "cwd": "${workspaceFolder}/sdk",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "🚀 Full BBS (Backend + Frontend)",
+      "configurations": ["🚀 Run BBS Backend", "🎨 Run BBS Frontend"],
+      "stopAll": true,
+      "presentation": {
+        "group": "full",
+        "order": 1
+      }
+    }
+  ]
+}

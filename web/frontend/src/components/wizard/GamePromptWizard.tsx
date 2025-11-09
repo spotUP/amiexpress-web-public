@@ -3,7 +3,7 @@ import { GamePrompt, WizardState } from '../../types/wizard';
 import { gameTemplates, getTemplateById } from '../../data/gameTemplates';
 import { audioTemplates, getAudioTemplateById } from '../../data/audioTemplates';
 import { generateReviewQuestions, defaultQuestions, generateAudioReviewQuestions, defaultAudioQuestions } from '../../data/wizardQuestions';
-import { enhancePrompt, analyzePrompt, validatePrompt, enhanceAudioDescription, analyzeAudioDescription, validateAudioDescription } from '../../services/aiService';
+import { enhancePrompt, analyzePrompt, validatePrompt, enhanceAudioDescription, analyzeAudioDescription, validateAudioDescription, generateGame } from '../../services/aiService';
 import TemplateLibrary from './TemplateLibrary';
 import AudioTemplateLibrary from './AudioTemplateLibrary';
 import PromptInput from './PromptInput';
@@ -411,23 +411,13 @@ function GamePromptWizard() {
     setState(prev => ({ ...prev, isGenerating: true, error: undefined }));
 
     try {
-      const response = await fetch('/api/wizard/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: state.currentPrompt.rawText,
-          audioDescription: state.currentPrompt.audioDescription,
-          metadata: state.currentPrompt.metadata,
-          answers: state.answers,
-          audioAnswers: state.audioAnswers
-        })
+      const result = await generateGame({
+        prompt: state.currentPrompt.rawText,
+        audioDescription: state.currentPrompt.audioDescription,
+        metadata: state.currentPrompt.metadata,
+        answers: state.answers,
+        audioAnswers: state.audioAnswers
       });
-
-      if (!response.ok) {
-        throw new Error('Game generation failed');
-      }
-
-      const result = await response.json();
 
       // Show success
       setState(prev => ({

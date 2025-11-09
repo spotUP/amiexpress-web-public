@@ -96,8 +96,13 @@ sdk/tools/preview/downloads/
 sdk/tools/preview/public-react/
 
 # Editor directories and files
+# Allow VS Code configuration for SDK game development
 .vscode/*
 !.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/README.md
 .idea
 .DS_Store
 *.suo

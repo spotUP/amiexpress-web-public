@@ -1,0 +1,26 @@
+{
+  "recommendations": [
+    // Essential
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+
+    // TypeScript
+    "ms-vscode.vscode-typescript-next",
+
+    // Git
+    "eamodio.gitlens",
+
+    // Terminal/ANSI
+    "IBM.output-colorizer",
+
+    // Debugging
+    "ms-vscode.js-debug",
+
+    // Documentation
+    "yzhang.markdown-all-in-one",
+
+    // Code Quality
+    "streetsidesoftware.code-spell-checker"
+  ],
+  "unwantedRecommendations": []
+}
