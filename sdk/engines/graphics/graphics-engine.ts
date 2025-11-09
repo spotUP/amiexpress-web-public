@@ -645,11 +645,15 @@ export class GraphicsEngine {
 
         // Optimize: only emit color codes when they change
         if (cell.fg !== lastFg) {
-          output += `\x1b[${30 + (cell.fg % 8)}m`;
+          // AnsiColor enum: 0-7 = normal colors, 8-15 = bright colors
+          const fgCode = cell.fg < 8 ? 30 + cell.fg : 90 + (cell.fg - 8);
+          output += `\x1b[${fgCode}m`;
           lastFg = cell.fg;
         }
         if (cell.bg !== lastBg) {
-          output += `\x1b[${40 + (cell.bg % 8)}m`;
+          // AnsiColor enum: 0-7 = normal colors, 8-15 = bright colors
+          const bgCode = cell.bg < 8 ? 40 + cell.bg : 100 + (cell.bg - 8);
+          output += `\x1b[${bgCode}m`;
           lastBg = cell.bg;
         }
 

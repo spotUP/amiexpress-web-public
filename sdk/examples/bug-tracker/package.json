@@ -2,9 +2,10 @@
   "name": "bug-tracker",
   "version": "1.0.0",
   "description": "Comprehensive bug reporting and tracking system for BBS",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node index.ts",
+    "start": "node dist/index.js",
+    "dev": "ts-node index.ts",
     "build": "tsc"
   },
   "keywords": ["bbs", "bug-tracker", "door"],

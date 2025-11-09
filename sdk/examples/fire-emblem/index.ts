@@ -1225,3 +1225,14 @@ export class FireEmblemGame {
 export function createFireEmblemGame(door: Door): FireEmblemGame {
   return new FireEmblemGame(door);
 }
+
+// Auto-start the game when run directly
+const door = new Door({
+  name: 'Fire Emblem: Emblem of Valor',
+  version: '1.0.0',
+  author: 'AmiExpress SDK Team',
+  description: 'Tactical RPG in the style of Fire Emblem'
+});
+
+const game = createFireEmblemGame(door);
+door.start();
