@@ -848,6 +848,17 @@ export class GraphicsEngine {
 
     return this.toAnsi();
   }
+
+  /**
+   * Clean up resources
+   */
+  public dispose(): void {
+    // Clear buffers
+    this.sprites.clear();
+    this.particleSystems.clear();
+    this.parallaxLayers = [];
+    this.ansiCache.clear();
+  }
 }
 
 export default GraphicsEngine;

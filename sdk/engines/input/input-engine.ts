@@ -423,6 +423,13 @@ export class InputEngine {
     this.mouseButtons.clear();
     this.mousePosition = { x: 0, y: 0 };
   }
+
+  /**
+   * Clean up resources (alias for reset)
+   */
+  public dispose(): void {
+    this.reset();
+  }
 }
 
 export default InputEngine;

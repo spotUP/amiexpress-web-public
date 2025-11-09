@@ -27,6 +27,7 @@ export { PhysicsEngine } from '../engines/physics/physics-engine';
 export { AudioEngine } from '../engines/audio/audio-engine';
 export { NetworkEngine } from '../engines/network/network-engine';
 export { AIEngine } from '../engines/ai/ai-engine';
+export { InputEngine } from '../engines/input/input-engine';
 export { TacticalCombatEngine } from '../engines/tactical/tactical-combat-engine';
 
 // Components
