@@ -40,6 +40,9 @@
 // Common types (shared by both runtimes)
 export * from './common';
 
+// Core types (for engines) - re-export AnsiColor from core to override common version
+export { AnsiColor } from './core/types';
+
 // Server runtime (Node.js)
 export { ServerDoor } from './server';
 
