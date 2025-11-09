@@ -50,18 +50,10 @@ const AI_PROVIDERS: AIProvider[] = [
   },
   {
     id: 'gemini',
-    name: 'Google Gemini',
+    name: 'Google Gemini (Free Tier)',
     models: ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'],
     speed: 'fast',
     quality: 'excellent',
-    costLevel: 'low',
-  },
-  {
-    id: 'ollama',
-    name: 'Ollama (Local)',
-    models: ['codellama', 'deepseek-coder', 'mistral'],
-    speed: 'slow',
-    quality: 'good',
     costLevel: 'free',
   },
 ];
@@ -199,7 +191,7 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
 
     const costPerToken = provider === 'openai' ? 0.00003 :
                         provider === 'claude' ? 0.000015 :
-                        provider === 'gemini' ? 0.0000005 : 0;
+                        provider === 'gemini' ? 0 : 0; // Gemini free tier
     setEstimatedCost(estimatedTokens * costPerToken);
   }, [gameDescription, provider]);
 
