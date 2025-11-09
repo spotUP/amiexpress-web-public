@@ -212,9 +212,13 @@ export class AmigaDoorManager {
     const doors: DoorInfo[] = [];
     const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
 
+    console.log(`[scanInstalledDoors] ========== SCANNING FOR INSTALLED DOORS ==========`);
+    console.log(`[scanInstalledDoors] BBS Root: ${this.bbsRoot}`);
+    console.log(`[scanInstalledDoors] Commands Path: ${commandsPath}`);
+
     // Ensure directory exists
     if (!fs.existsSync(commandsPath)) {
-      console.log(`Commands directory does not exist: ${commandsPath}`);
+      console.log(`[scanInstalledDoors] Commands directory does not exist: ${commandsPath}`);
       return doors;
     }
 
@@ -222,15 +226,73 @@ export class AmigaDoorManager {
     const files = fs.readdirSync(commandsPath);
     const infoFiles = files.filter(f => f.toLowerCase().endsWith('.info'));
 
-    console.log(`Found ${infoFiles.length} .info files in ${commandsPath}`);
+    console.log(`[scanInstalledDoors] Found ${infoFiles.length} .info files in ${commandsPath}:`);
+    infoFiles.forEach(f => console.log(`[scanInstalledDoors]   - ${f}`));
 
     for (const infoFile of infoFiles) {
       const infoPath = path.join(commandsPath, infoFile);
+      console.log(`\n[scanInstalledDoors] --- Processing ${infoFile} ---`);
+      console.log(`[scanInstalledDoors] Info file path: ${infoPath}`);
+
       const metadata = this.parseInfoFile(infoPath);
 
       if (metadata && metadata.location && metadata.resolvedPath) {
+        console.log(`[scanInstalledDoors] Metadata parsed successfully:`);
+        console.log(`[scanInstalledDoors]   Command: ${metadata.command}`);
+        console.log(`[scanInstalledDoors]   Location (from .info): ${metadata.location}`);
+        console.log(`[scanInstalledDoors]   Resolved Path: ${metadata.resolvedPath}`);
+        console.log(`[scanInstalledDoors]   Type: ${metadata.type}`);
+        console.log(`[scanInstalledDoors]   Access Level: ${metadata.access}`);
+        console.log(`[scanInstalledDoors]   Door Name: ${metadata.doorName}`);
+
         // Check if door executable exists
+        console.log(`[scanInstalledDoors] Checking if executable exists at: ${metadata.resolvedPath}`);
         const executableExists = fs.existsSync(metadata.resolvedPath);
+        console.log(`[scanInstalledDoors] Executable exists: ${executableExists}`);
+
+        if (!executableExists) {
+          console.log(`[scanInstalledDoors] ⚠️  EXECUTABLE NOT FOUND!`);
+          console.log(`[scanInstalledDoors] Expected path: ${metadata.resolvedPath}`);
+
+          // Try to find the door directory
+          const doorDir = path.dirname(metadata.resolvedPath);
+          console.log(`[scanInstalledDoors] Checking parent directory: ${doorDir}`);
+
+          if (fs.existsSync(doorDir)) {
+            console.log(`[scanInstalledDoors] Directory exists, listing contents:`);
+            try {
+              const dirContents = fs.readdirSync(doorDir);
+              dirContents.forEach(item => {
+                const itemPath = path.join(doorDir, item);
+                const stat = fs.statSync(itemPath);
+                console.log(`[scanInstalledDoors]   - ${item} (${stat.isDirectory() ? 'DIR' : 'FILE'})`);
+              });
+            } catch (err) {
+              console.log(`[scanInstalledDoors] Error reading directory: ${err}`);
+            }
+          } else {
+            console.log(`[scanInstalledDoors] ⚠️  Parent directory does not exist!`);
+
+            // Check Doors directory
+            const doorsDir = this.assigns['Doors:'];
+            console.log(`[scanInstalledDoors] Checking Doors directory: ${doorsDir}`);
+            if (fs.existsSync(doorsDir)) {
+              console.log(`[scanInstalledDoors] Doors directory exists, listing contents:`);
+              try {
+                const doorsContents = fs.readdirSync(doorsDir);
+                doorsContents.forEach(item => {
+                  const itemPath = path.join(doorsDir, item);
+                  const stat = fs.statSync(itemPath);
+                  console.log(`[scanInstalledDoors]   - ${item} (${stat.isDirectory() ? 'DIR' : 'FILE'})`);
+                });
+              } catch (err) {
+                console.log(`[scanInstalledDoors] Error reading Doors directory: ${err}`);
+              }
+            } else {
+              console.log(`[scanInstalledDoors] ⚠️  Doors directory does not exist!`);
+            }
+          }
+        }
 
         doors.push({
           command: metadata.command || path.basename(infoFile, '.info'),
@@ -246,10 +308,19 @@ export class AmigaDoorManager {
           installed: executableExists,
         });
 
-        console.log(`Loaded door: ${metadata.command} → ${metadata.location} (${executableExists ? 'INSTALLED' : 'MISSING'})`);
+        console.log(`[scanInstalledDoors] Added door to list: ${metadata.command} (${executableExists ? 'INSTALLED' : 'NOT INSTALLED'})`);
+      } else {
+        console.log(`[scanInstalledDoors] ⚠️  Failed to parse metadata or missing location/resolvedPath:`);
+        console.log(`[scanInstalledDoors]   metadata: ${metadata ? 'exists' : 'null'}`);
+        if (metadata) {
+          console.log(`[scanInstalledDoors]   location: ${metadata.location || 'MISSING'}`);
+          console.log(`[scanInstalledDoors]   resolvedPath: ${metadata.resolvedPath || 'MISSING'}`);
+        }
       }
     }
 
+    console.log(`\n[scanInstalledDoors] ========== SCAN COMPLETE ==========`);
+    console.log(`[scanInstalledDoors] Total doors found: ${doors.length}`);
     return doors;
   }
 
