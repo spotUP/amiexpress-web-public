@@ -398,11 +398,11 @@ export async function parseMciCodes(
   const filesToDisplay: string[] = [];
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
     const filename = ssMatch[1].trim();
-    console.log('[MCI DEBUG] Found ~SS_ file:', filename);
+    console.log('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
     filesToDisplay.push(filename);
     parsed = parsed.replace(ssMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
   }
-  console.log('[MCI DEBUG] Total ~SS_ files found:', filesToDisplay.length);
+  console.log('[MCI DEBUG] Total ~SS_ MCI codes found in screen:', filesToDisplay.length);
 
   // ~SX_ - String Exact / Sequential File Display (express.e:5505-5530)
   // Format: ~SX_<path>/<basename>|| - displays files sequentially (file.1, file.2, file.3...)
@@ -706,9 +706,17 @@ export function addAnsiEscapes(content: string): string {
  * @returns true if screen was displayed successfully, false otherwise
  */
 export async function displayScreen(socket: any, session: BBSSession, screenName: string): Promise<boolean> {
+  console.log(`[displayScreen] ========================================`);
+  console.log(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
+  console.log(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
+  console.log(`[displayScreen] User: ${session.user?.name || 'guest'}`);
+  console.log(`[displayScreen] ========================================`);
+
   const content = loadScreenFile(screenName, session.currentConf);
 
   if (content) {
+    console.log(`[displayScreen] ✓ Screen loaded successfully: ${screenName}`);
+    console.log(`[displayScreen] Content length: ${content.length} bytes`);
     // Parse MCI codes (now returns parsed content + commands to execute)
     const { parsed: mciParsed, commands } = await parseMciCodes(content, session);
     let parsed = mciParsed;
@@ -777,7 +785,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   } else {
     // Screen not found - return false silently (matches express.e behavior)
     // Caller decides whether to show error or skip
-    console.warn(`Screen file not found: ${screenName}`);
+    console.error(`[displayScreen] ========================================`);
+    console.error(`[displayScreen] ✗ SCREEN FILE NOT FOUND: ${screenName}`);
+    console.error(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
+    console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
+    console.error(`[displayScreen] ========================================`);
     return false;
   }
 }

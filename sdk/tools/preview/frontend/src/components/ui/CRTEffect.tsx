@@ -26,9 +26,9 @@ export const CRTEffect: React.FC<CRTEffectProps> = ({
   const { scanlineOpacity, glowBlur } = intensitySettings[intensity];
 
   return (
-    <div className={`crt-effect relative ${className}`}>
+    <div className={`crt-effect relative h-full ${className}`}>
       {/* Content */}
-      <div className="relative z-10">{children}</div>
+      <div className="relative z-10 h-full">{children}</div>
 
       {/* Scanlines overlay */}
       <div
