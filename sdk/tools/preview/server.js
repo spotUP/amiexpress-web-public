@@ -29,6 +29,7 @@ const archiver = require('archiver');
 const { spawn, execSync } = require('child_process');
 
 const PORT = process.env.PORT || 8080;
+const DEBUG_OUTPUT = process.env.DEBUG_OUTPUT === 'true' || false;
 
 /**
  * Kill any existing servers on the port before starting
@@ -1736,36 +1737,48 @@ function saveFile(clientId, filePath, content) {
  * Start door process
  */
 function startDoor(clientId, doorId) {
-  console.log(`\n${'='.repeat(80)}`);
-  console.log(`🚀 [START DOOR] Called for clientId=${clientId}, doorId="${doorId}"`);
-  console.log(`${'='.repeat(80)}`);
+  if (DEBUG_OUTPUT) {
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`🚀 [START DOOR] Called for clientId=${clientId}, doorId="${doorId}"`);
+    console.log(`${'='.repeat(80)}`);
+  } else {
+    console.log(`🚀 [START DOOR] Starting door "${doorId}"...`);
+  }
 
   const client = clients.get(clientId);
   if (!client) {
     console.error(`❌ [START DOOR] Client ${clientId} not found in clients map`);
     return;
   }
-  console.log(`✓ [START DOOR] Client ${clientId} found`);
+  if (DEBUG_OUTPUT) {
+    console.log(`✓ [START DOOR] Client ${clientId} found`);
+  }
 
   // Stop existing door
   if (client.doorProcess) {
-    console.log(`⚠️  [START DOOR] Existing door process found (PID: ${client.doorProcess.pid}), killing it...`);
+    if (DEBUG_OUTPUT) {
+      console.log(`⚠️  [START DOOR] Existing door process found (PID: ${client.doorProcess.pid}), killing it...`);
+    }
     client.doorProcess.kill();
   }
 
   const doorPath = path.join(__dirname, '../../examples', doorId);
-  console.log(`📂 [START DOOR] Door path: ${doorPath}`);
-  console.log(`📂 [START DOOR] Door path exists: ${fs.existsSync(doorPath)}`);
+  if (DEBUG_OUTPUT) {
+    console.log(`📂 [START DOOR] Door path: ${doorPath}`);
+    console.log(`📂 [START DOOR] Door path exists: ${fs.existsSync(doorPath)}`);
+  }
 
   // Check for TypeScript or JavaScript
   const tsFile = path.join(doorPath, 'index.ts');
   const jsFile = path.join(doorPath, 'index.js');
   const distFile = path.join(doorPath, 'dist', 'index.js');
 
-  console.log(`🔍 [START DOOR] Checking for entry files...`);
-  console.log(`   - index.ts exists: ${fs.existsSync(tsFile)}`);
-  console.log(`   - index.js exists: ${fs.existsSync(jsFile)}`);
-  console.log(`   - dist/index.js exists: ${fs.existsSync(distFile)}`);
+  if (DEBUG_OUTPUT) {
+    console.log(`🔍 [START DOOR] Checking for entry files...`);
+    console.log(`   - index.ts exists: ${fs.existsSync(tsFile)}`);
+    console.log(`   - index.js exists: ${fs.existsSync(jsFile)}`);
+    console.log(`   - dist/index.js exists: ${fs.existsSync(distFile)}`);
+  }
 
   let command, args, mainFile;
 
@@ -1806,27 +1819,37 @@ function startDoor(clientId, doorId) {
     return;
   }
 
-  console.log(`🔧 [START DOOR] Command: ${command}`);
-  console.log(`🔧 [START DOOR] Args: ${JSON.stringify(args)}`);
-  console.log(`🔧 [START DOOR] CWD: ${doorPath}`);
-  console.log(`🔧 [START DOOR] Environment: PREVIEW_MODE=1`);
+  if (DEBUG_OUTPUT) {
+    console.log(`🔧 [START DOOR] Command: ${command}`);
+    console.log(`🔧 [START DOOR] Args: ${JSON.stringify(args)}`);
+    console.log(`🔧 [START DOOR] CWD: ${doorPath}`);
+    console.log(`🔧 [START DOOR] Environment: PREVIEW_MODE=1`);
+  }
 
   const doorProcess = spawn(command, args, {
     cwd: doorPath,
     env: { ...process.env, PREVIEW_MODE: '1' },
   });
 
-  console.log(`✓ [START DOOR] Process spawned with PID: ${doorProcess.pid}`);
+  if (DEBUG_OUTPUT) {
+    console.log(`✓ [START DOOR] Process spawned with PID: ${doorProcess.pid}`);
+  } else {
+    console.log(`✓ [START DOOR] Door "${doorId}" started (PID: ${doorProcess.pid})`);
+  }
 
   client.doorProcess = doorProcess;
   client.currentDoor = doorId;
-  console.log(`✓ [START DOOR] Client state updated (currentDoor="${doorId}")`);
+  if (DEBUG_OUTPUT) {
+    console.log(`✓ [START DOOR] Client state updated (currentDoor="${doorId}")`);
+  }
 
   // Capture stdout (ANSI output)
   doorProcess.stdout.on('data', (data) => {
     const output = data.toString();
-    console.log(`📤 [STDOUT] ${output.length} bytes`);
-    console.log(`   Preview: ${output.substring(0, 100)}${output.length > 100 ? '...' : ''}`);
+    if (DEBUG_OUTPUT) {
+      console.log(`📤 [STDOUT] ${output.length} bytes`);
+      console.log(`   Preview: ${output.substring(0, 100)}${output.length > 100 ? '...' : ''}`);
+    }
 
     client.ws.send(
       JSON.stringify({
@@ -1834,14 +1857,18 @@ function startDoor(clientId, doorId) {
         data: output,
       })
     );
-    console.log(`✓ [STDOUT] Sent to client via WebSocket`);
+    if (DEBUG_OUTPUT) {
+      console.log(`✓ [STDOUT] Sent to client via WebSocket`);
+    }
   });
 
   // Capture stderr (errors)
   doorProcess.stderr.on('data', (data) => {
     const errorOutput = data.toString();
-    console.error(`📤 [STDERR] ${errorOutput.length} bytes`);
-    console.error(`   Error: ${errorOutput}`);
+    if (DEBUG_OUTPUT) {
+      console.error(`📤 [STDERR] ${errorOutput.length} bytes`);
+      console.error(`   Error: ${errorOutput}`);
+    }
 
     client.ws.send(
       JSON.stringify({
@@ -1849,18 +1876,24 @@ function startDoor(clientId, doorId) {
         message: errorOutput,
       })
     );
-    console.log(`✓ [STDERR] Sent to client via WebSocket`);
+    if (DEBUG_OUTPUT) {
+      console.log(`✓ [STDERR] Sent to client via WebSocket`);
+    }
   });
 
   // Handle process exit
   doorProcess.on('exit', (code, signal) => {
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`🛑 [EXIT] Door process exited`);
-    console.log(`   Door: ${doorId}`);
-    console.log(`   PID: ${doorProcess.pid}`);
-    console.log(`   Exit code: ${code}`);
-    console.log(`   Signal: ${signal || 'none'}`);
-    console.log(`${'='.repeat(80)}\n`);
+    if (DEBUG_OUTPUT) {
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`🛑 [EXIT] Door process exited`);
+      console.log(`   Door: ${doorId}`);
+      console.log(`   PID: ${doorProcess.pid}`);
+      console.log(`   Exit code: ${code}`);
+      console.log(`   Signal: ${signal || 'none'}`);
+      console.log(`${'='.repeat(80)}\n`);
+    } else {
+      console.log(`🛑 [EXIT] Door "${doorId}" exited with code ${code}`);
+    }
 
     client.ws.send(
       JSON.stringify({
@@ -1868,7 +1901,9 @@ function startDoor(clientId, doorId) {
         code,
       })
     );
-    console.log(`✓ [EXIT] Sent door-stopped message to client`);
+    if (DEBUG_OUTPUT) {
+      console.log(`✓ [EXIT] Sent door-stopped message to client`);
+    }
 
     client.doorProcess = null;
   });
@@ -1892,7 +1927,9 @@ function startDoor(clientId, doorId) {
 
   // Watch for file changes (hot reload)
   const watchPattern = path.join(doorPath, '**/*.{ts,js}');
-  console.log(`👁️  [WATCH] Setting up file watcher for: ${watchPattern}`);
+  if (DEBUG_OUTPUT) {
+    console.log(`👁️  [WATCH] Setting up file watcher for: ${watchPattern}`);
+  }
 
   const watcher = chokidar.watch(watchPattern, {
     ignored: /node_modules/,
@@ -1923,16 +1960,22 @@ function startDoor(clientId, doorId) {
   });
 
   client.watcher = watcher;
-  console.log(`✓ [START DOOR] File watcher initialized`);
+  if (DEBUG_OUTPUT) {
+    console.log(`✓ [START DOOR] File watcher initialized`);
+  }
 
   // Send started message
   const startedMsg = { type: 'door-started', doorId };
-  console.log(`📤 [START DOOR] Sending door-started message: ${JSON.stringify(startedMsg)}`);
+  if (DEBUG_OUTPUT) {
+    console.log(`📤 [START DOOR] Sending door-started message: ${JSON.stringify(startedMsg)}`);
+  }
 
   client.ws.send(JSON.stringify(startedMsg));
 
-  console.log(`✓ [START DOOR] Door startup complete!`);
-  console.log(`${'='.repeat(80)}\n`);
+  if (DEBUG_OUTPUT) {
+    console.log(`✓ [START DOOR] Door startup complete!`);
+    console.log(`${'='.repeat(80)}\n`);
+  }
 }
 
 /**
