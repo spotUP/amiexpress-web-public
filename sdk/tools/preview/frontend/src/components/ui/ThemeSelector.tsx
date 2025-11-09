@@ -132,7 +132,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
             relative p-4 rounded-lg border-2 transition-all hover:scale-105
             ${
               currentTheme === theme.id
-                ? 'border-blue-500 shadow-lg shadow-blue-500/50'
+                ? 'border-blue-500'
                 : 'border-gray-700 hover:border-gray-600'
             }
           `}

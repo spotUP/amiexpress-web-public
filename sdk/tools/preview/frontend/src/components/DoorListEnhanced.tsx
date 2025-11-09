@@ -108,7 +108,7 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
         <div className="p-3 border-b border-gray-700 animate-slideDown">
           <button
             onClick={onCreateNewGame}
-            className="group w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all duration-300 font-semibold shadow-lg hover:shadow-2xl hover:shadow-purple-500/50 hover:scale-105 active:scale-95 animate-glowPulse"
+            className="group w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all duration-300 font-semibold hover:scale-105 active:scale-95"
           >
             <Wand2 className="w-4 h-4 transition-transform group-hover:rotate-12 group-hover:scale-110" />
             <span>Create with AI</span>
@@ -199,8 +199,8 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
                       animate-fadeIn hover:scale-[1.02] active:scale-[0.98]
                       ${
                         isSelected
-                          ? 'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400 shadow-lg shadow-blue-500/30 scale-[1.02] animate-glowPulse'
-                          : 'bg-gray-800 border-gray-700 hover:bg-gray-700 hover:border-gray-600 hover:shadow-lg hover:shadow-gray-900/50'
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400 scale-[1.02]'
+                          : 'bg-gray-800 border-gray-700 hover:bg-gray-700 hover:border-gray-600'
                       }
                     `}
                     style={{ animationDelay: `${index * 0.05}s` }}
@@ -217,7 +217,7 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
                             className="w-12 h-12 rounded object-cover"
                           />
                         ) : (
-                          <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-lg group-hover:shadow-purple-500/50">
+                          <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
                             <Package className="w-6 h-6 text-white transition-transform group-hover:scale-110" />
                           </div>
                         )}

@@ -569,7 +569,7 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
                         onClick={() => handleTemplateSelect(template)}
                         className={`p-4 rounded-xl border-2 transition-all text-left ${
                           selectedTemplate?.id === template.id
-                            ? 'border-purple-500 bg-purple-900/30 shadow-lg shadow-purple-500/20'
+                            ? 'border-purple-500 bg-purple-900/30'
                             : 'border-gray-700 bg-gray-800/50 hover:border-gray-600 hover:bg-gray-800'
                         }`}
                       >
@@ -936,7 +936,7 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
             <button
               onClick={handleNext}
               disabled={!canProceed() || generating}
-              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center gap-2 shadow-lg shadow-purple-500/50"
+              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center gap-2"
             >
               {currentStep === steps.length - 2 ? (
                 <>

@@ -61,7 +61,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
           w-14 h-14 rounded-full shadow-2xl
           flex items-center justify-center
           transition-all duration-300 hover:scale-110 active:scale-95
-          ${isOpen ? 'bg-red-600 hover:bg-red-700 rotate-45' : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 animate-glowPulse'}
+          ${isOpen ? 'bg-red-600 hover:bg-red-700 rotate-45' : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700'}
         `}
       >
         {isOpen ? (
