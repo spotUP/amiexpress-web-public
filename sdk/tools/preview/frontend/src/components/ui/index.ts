@@ -5,7 +5,6 @@ export * from './ConnectionBanner';
 export * from './KeyboardOverlay';
 export * from './ContextMenu';
 export * from './CRTEffect';
-export * from './ParticleEffect';
 export * from './CommandPalette';
 export * from './StatusBar';
 export * from './QuickActions';

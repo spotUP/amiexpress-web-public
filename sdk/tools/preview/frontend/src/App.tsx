@@ -16,7 +16,6 @@ import {
   ConnectionBanner,
   KeyboardOverlay,
   CRTEffect,
-  ParticleEffect,
   CommandPalette,
   StatusBar,
   QuickActions,
@@ -76,7 +75,6 @@ function App() {
   const [showGameWizard, setShowGameWizard] = useState(false);
   const [showKeyboardOverlay, setShowKeyboardOverlay] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showParticles, setShowParticles] = useState(false);
   const [showSuccessCelebration, setShowSuccessCelebration] = useState(false);
   const [celebrationMessage, setCelebrationMessage] = useState('Success!');
   const [enableCRT, setEnableCRT] = useState(false);
@@ -267,10 +265,9 @@ function App() {
           if (message.data.errors.length === 0) {
             toast.success('Build succeeded!', `Completed in ${message.data.duration}ms`);
             addActivity('success', 'Build succeeded', `Completed in ${message.data.duration}ms`);
-            // Trigger success celebration, particles, sound, and haptic!
+            // Trigger success celebration, sound, and haptic!
             setCelebrationMessage('Build Successful!');
             setShowSuccessCelebration(true);
-            setShowParticles(true);
             soundEffects.buildComplete();
             triggerHaptic();
           } else {
@@ -992,7 +989,6 @@ function App() {
                 // Trigger celebration for game creation!
                 setCelebrationMessage('🎮 Game Created!');
                 setShowSuccessCelebration(true);
-                setShowParticles(true);
                 // Auto-launch the newly created game after a brief delay
                 setTimeout(() => {
                   handleRunDoor();
@@ -1058,14 +1054,6 @@ function App() {
         isOpen={showCommandPalette}
         onClose={() => setShowCommandPalette(false)}
         commands={commandPaletteCommands}
-      />
-
-      {/* Particle Effects */}
-      <ParticleEffect
-        type="confetti"
-        trigger={showParticles}
-        duration={3000}
-        onComplete={() => setShowParticles(false)}
       />
 
       {/* Success Celebration */}
