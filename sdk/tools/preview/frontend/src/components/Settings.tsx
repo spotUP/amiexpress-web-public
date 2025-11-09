@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Monitor, Type, Keyboard } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Monitor, Type, Keyboard, Key, Eye, EyeOff, Check } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsProps {
@@ -15,11 +15,37 @@ export const Settings: React.FC<SettingsProps> = ({
   onClose,
   className = '',
 }) => {
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [savedNotification, setSavedNotification] = useState(false);
+
+  useEffect(() => {
+    // Load saved API keys
+    const saved = localStorage.getItem('ai_api_keys');
+    if (saved) {
+      setApiKeys(JSON.parse(saved));
+    }
+  }, []);
+
   const updateSetting = <K extends keyof AppSettings>(
     key: K,
     value: AppSettings[K]
   ) => {
     onSettingsChange({ ...settings, [key]: value });
+  };
+
+  const handleAPIKeyChange = (provider: string, value: string) => {
+    setApiKeys((prev) => ({ ...prev, [provider]: value }));
+  };
+
+  const toggleShowKey = (provider: string) => {
+    setShowKeys((prev) => ({ ...prev, [provider]: !prev[provider] }));
+  };
+
+  const saveAPIKeys = () => {
+    localStorage.setItem('ai_api_keys', JSON.stringify(apiKeys));
+    setSavedNotification(true);
+    setTimeout(() => setSavedNotification(false), 2000);
   };
 
   return (
@@ -227,6 +253,71 @@ export const Settings: React.FC<SettingsProps> = ({
                   ))}
                 </div>
               </div>
+            </div>
+          </section>
+
+          {/* AI API Keys */}
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Key className="w-5 h-5 text-blue-400" />
+              <h3 className="text-lg font-semibold text-white">AI API Keys</h3>
+            </div>
+
+            <div className="ml-7 space-y-4">
+              <p className="text-sm text-gray-400 mb-4">
+                Configure API keys for AI-powered game generation. Keys are stored locally in your browser.
+              </p>
+
+              {[
+                { id: 'claude', name: 'Claude (Anthropic)', placeholder: 'sk-ant-...' },
+                { id: 'openai', name: 'OpenAI', placeholder: 'sk-...' },
+                { id: 'gemini', name: 'Google Gemini', placeholder: 'AIza...' },
+                { id: 'ollama', name: 'Ollama URL', placeholder: 'http://localhost:11434' },
+              ].map(({ id, name, placeholder }) => (
+                <div key={id}>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {name}
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showKeys[id] ? 'text' : 'password'}
+                        value={apiKeys[id] || ''}
+                        onChange={(e) => handleAPIKeyChange(id, e.target.value)}
+                        placeholder={placeholder}
+                        className="w-full px-4 py-2 pr-10 bg-gray-800 border border-gray-700 rounded text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      />
+                      <button
+                        onClick={() => toggleShowKey(id)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white"
+                      >
+                        {showKeys[id] ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                onClick={saveAPIKeys}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+              >
+                {savedNotification ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Saved!
+                  </>
+                ) : (
+                  <>
+                    <Key className="w-4 h-4" />
+                    Save API Keys
+                  </>
+                )}
+              </button>
             </div>
           </section>
 
