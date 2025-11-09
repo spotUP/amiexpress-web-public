@@ -84,15 +84,26 @@ export const XTermTerminal: React.FC<XTermTerminalProps> = ({
     };
   }, [fontSize]);
 
-  // Handle output updates - only write new lines
+  // Handle output updates - only write new lines with double buffering and cursor hiding
   useEffect(() => {
     if (!terminalInstance.current) return;
 
     const newLines = output.slice(lastOutputLength.current);
     if (newLines.length > 0) {
+      // Double buffering: Build complete output buffer before writing
+      // This prevents screen flickering during updates
+      const HIDE_CURSOR = '\x1b[?25l';
+      const SHOW_CURSOR = '\x1b[?25h';
+
+      // Build buffered output with cursor hiding
+      let buffer = HIDE_CURSOR;
       newLines.forEach((line) => {
-        terminalInstance.current?.writeln(line);
+        buffer += line + '\r\n';
       });
+      buffer += SHOW_CURSOR;
+
+      // Write entire buffer at once
+      terminalInstance.current.write(buffer);
       lastOutputLength.current = output.length;
     }
   }, [output]);
