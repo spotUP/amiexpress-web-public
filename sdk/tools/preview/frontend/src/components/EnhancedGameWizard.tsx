@@ -56,6 +56,29 @@ const AI_PROVIDERS: AIProvider[] = [
     quality: 'excellent',
     costLevel: 'free',
   },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter (Free Models)',
+    models: [
+      'meta-llama/llama-4-maverick:free',
+      'mistralai/mistral-small-3.1-24b-instruct:free',
+      'deepseek/deepseek-chat-v3-0324:free',
+      'google/gemma-3-27b-it:free',
+      'google/gemma-3-12b-it:free',
+      'google/gemma-3-4b-it:free',
+      'meta-llama/llama-3.2-11b-vision-instruct:free',
+      'qwen/qwen2.5-vl-72b-instruct:free',
+      'qwen/qwen2.5-vl-32b-instruct:free',
+      'moonshotai/kimi-vl-a3b-thinking:free',
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'meta-llama/llama-3.2-1b-instruct:free',
+      'google/gemini-flash-1.5:free',
+      'google/gemini-pro-1.5:free',
+    ],
+    speed: 'fast',
+    quality: 'excellent',
+    costLevel: 'free',
+  },
 ];
 
 const GAME_TEMPLATES: GameTemplate[] = [
@@ -159,6 +182,8 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
   // Iteration
   const [generationAttempts, setGenerationAttempts] = useState<any[]>([]);
   const [selectedAttempt, setSelectedAttempt] = useState(0);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [openRouterModels, setOpenRouterModels] = useState<string[]>([]);
 
   const codePreviewRef = useRef<HTMLDivElement>(null);
 
@@ -180,9 +205,14 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
     // Update model when provider changes
     const selectedProvider = AI_PROVIDERS.find(p => p.id === provider);
     if (selectedProvider) {
-      setModel(selectedProvider.models[0]);
+      // For OpenRouter, use dynamically fetched models if available
+      if (provider === 'openrouter' && openRouterModels.length > 0) {
+        setModel(openRouterModels[0]);
+      } else {
+        setModel(selectedProvider.models[0]);
+      }
     }
-  }, [provider]);
+  }, [provider, openRouterModels]);
 
   useEffect(() => {
     // Estimate cost based on game description
@@ -191,9 +221,48 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
 
     const costPerToken = provider === 'openai' ? 0.00003 :
                         provider === 'claude' ? 0.000015 :
-                        provider === 'gemini' ? 0 : 0; // Gemini free tier
+                        provider === 'gemini' ? 0 : // Gemini free tier
+                        provider === 'openrouter' ? 0 : 0; // OpenRouter free models
     setEstimatedCost(estimatedTokens * costPerToken);
   }, [gameDescription, provider]);
+
+  // Fetch OpenRouter free models dynamically
+  useEffect(() => {
+    const fetchOpenRouterModels = async () => {
+      if (provider !== 'openrouter') return;
+
+      setLoadingModels(true);
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/models');
+        if (response.ok) {
+          const data = await response.json();
+          // Filter for free models (pricing.prompt === "0" and pricing.completion === "0")
+          const freeModels = data.data
+            .filter((model: any) => {
+              const promptPrice = parseFloat(model.pricing?.prompt || '1');
+              const completionPrice = parseFloat(model.pricing?.completion || '1');
+              return promptPrice === 0 && completionPrice === 0;
+            })
+            .map((model: any) => model.id)
+            .sort();
+
+          if (freeModels.length > 0) {
+            setOpenRouterModels(freeModels);
+            console.log(`Found ${freeModels.length} free OpenRouter models`);
+          } else {
+            console.warn('No free models found, using fallback list');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch OpenRouter models:', error);
+        // Will fall back to hardcoded list
+      } finally {
+        setLoadingModels(false);
+      }
+    };
+
+    fetchOpenRouterModels();
+  }, [provider]);
 
   const handleTemplateSelect = (template: GameTemplate) => {
     setSelectedTemplate(template);
@@ -613,6 +682,61 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
                         </button>
                       ))}
                     </div>
+                    {provider === 'openrouter' && (
+                      <div className="mt-3 p-3 bg-green-900/20 border border-green-700/50 rounded-lg text-xs text-gray-300">
+                        <p className="font-semibold text-green-400 mb-1">Why OpenRouter?</p>
+                        <ul className="space-y-1 list-disc list-inside">
+                          <li>Access to 14+ free models (Llama, Mistral, DeepSeek, Qwen, etc.)</li>
+                          <li>No credit card required - just sign up</li>
+                          <li>Models updated automatically via API</li>
+                          <li>Includes powerful models like Llama 4 Maverick (400B) for free</li>
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Model Selection */}
+                  <div>
+                    <label className="block text-sm font-semibold text-purple-300 mb-3">
+                      Model
+                      {provider === 'openrouter' && loadingModels && (
+                        <span className="ml-2 text-xs text-gray-400">(Loading free models...)</span>
+                      )}
+                    </label>
+                    <select
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      disabled={loadingModels}
+                      className="w-full px-4 py-3 bg-gray-900/50 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                    >
+                      {provider === 'openrouter' && openRouterModels.length > 0 ? (
+                        <>
+                          <optgroup label="Free Models (Dynamic)">
+                            {openRouterModels.map((modelId) => (
+                              <option key={modelId} value={modelId}>
+                                {modelId}
+                              </option>
+                            ))}
+                          </optgroup>
+                        </>
+                      ) : (
+                        AI_PROVIDERS.find(p => p.id === provider)?.models.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    {provider === 'openrouter' && openRouterModels.length > 0 && (
+                      <p className="text-xs text-green-400 mt-2">
+                        ✓ Loaded {openRouterModels.length} free models from OpenRouter API
+                      </p>
+                    )}
+                    {provider === 'openrouter' && openRouterModels.length === 0 && !loadingModels && (
+                      <p className="text-xs text-yellow-400 mt-2">
+                        Using fallback model list (API unavailable)
+                      </p>
+                    )}
                   </div>
 
                   {/* API Key */}
@@ -629,13 +753,34 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
                       </label>
 
                       {!useServerKey && (
-                        <input
-                          type="password"
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
-                          placeholder="Enter your API key..."
-                          className="w-full px-4 py-2 bg-gray-900/50 border border-gray-600 rounded-lg text-white"
-                        />
+                        <>
+                          <input
+                            type="password"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            placeholder={provider === 'openrouter' ? 'Enter your OpenRouter API key (sk-or-...)' : 'Enter your API key...'}
+                            className="w-full px-4 py-2 bg-gray-900/50 border border-gray-600 rounded-lg text-white"
+                          />
+                          {provider === 'openrouter' && (
+                            <div className="text-xs text-gray-400 space-y-1">
+                              <p className="flex items-start gap-2">
+                                <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-400" />
+                                <span>
+                                  <strong className="text-yellow-400">Free models require an API key:</strong> Sign up at{' '}
+                                  <a
+                                    href="https://openrouter.ai/keys"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:text-blue-300 underline"
+                                  >
+                                    openrouter.ai/keys
+                                  </a>
+                                  {' '}to get your free API key. The models are free to use (no credit card required), but you need an account for authentication.
+                                </span>
+                              </p>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

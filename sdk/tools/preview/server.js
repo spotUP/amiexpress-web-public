@@ -921,6 +921,7 @@ app.post('/api/games/generate-stream', async (req, res) => {
       claude: apiKey || process.env.ANTHROPIC_API_KEY,
       openai: apiKey || process.env.OPENAI_API_KEY,
       gemini: apiKey || process.env.GEMINI_API_KEY,
+      openrouter: apiKey || process.env.OPENROUTER_API_KEY,
     };
 
     const providerKey = keys[provider];
@@ -1090,6 +1091,59 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
             try {
               const data = JSON.parse(line.slice(6));
               const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                gameCode += text;
+                sendCodeChunk(text);
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+    } else if (provider === 'openrouter') {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${providerKey}`,
+          'HTTP-Referer': 'https://github.com/amiexpress/sdk',
+          'X-Title': 'AmiExpress BBS Door SDK',
+        },
+        body: JSON.stringify({
+          model: model || 'meta-llama/llama-4-maverick:free',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return sendError(error.error?.message || 'OpenRouter API request failed');
+      }
+
+      sendProgress(40, 'Generating code...');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') break;
+
+            try {
+              const parsed = JSON.parse(data);
+              const text = parsed.choices?.[0]?.delta?.content;
               if (text) {
                 gameCode += text;
                 sendCodeChunk(text);
