@@ -417,6 +417,6 @@ export function isNodeEnvironment(): boolean {
  * Auto-initialize mocks if in Node.js environment (not browser)
  * This runs when the module is imported
  */
-if (isNodeEnvironment() && typeof window === 'undefined') {
+if (isNodeEnvironment() && typeof (globalThis as any).window === 'undefined') {
   initWebAudioMocks();
 }

@@ -3,6 +3,7 @@ import { Terminal as XTermTerminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
+import { CRTEffect } from './CRTEffect';
 
 function Terminal() {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -45,7 +46,7 @@ function Terminal() {
       cursorInactiveStyle: 'block',
       cols: 80,
       rows: 24,
-      scrollback: 0,
+      scrollback: 2000,
       fontWeight: 'normal',
       fontWeightBold: 'bold',
       allowProposedApi: true
@@ -141,8 +142,7 @@ function Terminal() {
 
     ws.on('ansi-output', (data: string) => {
       term.write(data);
-      // Ensure terminal updates and scrolls to show new content even without focus
-      term.scrollToBottom();
+      // Only refresh, don't force scroll - let user control scrolling
       term.refresh(0, term.rows - 1);
     });
 
@@ -244,6 +244,16 @@ function Terminal() {
         ws.emit('command', data);
       }
     });
+
+    // Click-to-focus handler - focus terminal when clicked but don't force scroll
+    if (terminalRef.current) {
+      const terminalElement = terminalRef.current;
+      terminalElement.addEventListener('click', () => {
+        if (terminal.current) {
+          terminal.current.focus();
+        }
+      });
+    }
 
     // Mouse handling
     if (terminalRef.current) {
@@ -382,15 +392,17 @@ function Terminal() {
   }, []);
 
   return (
-    <div ref={terminalRef} style={{
-      width: '100%',
-      height: '100vh',
-      fontSize: '16px',
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-      MozUserSelect: 'none',
-      msUserSelect: 'none'
-    }} />
+    <CRTEffect enabled={true} intensity="medium">
+      <div ref={terminalRef} style={{
+        width: '100%',
+        height: '100vh',
+        fontSize: '16px',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        MozUserSelect: 'none',
+        msUserSelect: 'none'
+      }} />
+    </CRTEffect>
   );
 }
 
