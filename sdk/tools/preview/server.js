@@ -819,11 +819,10 @@ app.post('/api/games/generate-stream', async (req, res) => {
       claude: apiKey || process.env.ANTHROPIC_API_KEY,
       openai: apiKey || process.env.OPENAI_API_KEY,
       gemini: apiKey || process.env.GEMINI_API_KEY,
-      ollama: apiKey || 'http://localhost:11434',
     };
 
     const providerKey = keys[provider];
-    if (!providerKey && provider !== 'ollama') {
+    if (!providerKey) {
       return sendError(`No API key for ${provider}. Configure in Settings or set environment variable.`);
     }
 
@@ -992,49 +991,6 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
               if (text) {
                 gameCode += text;
                 sendCodeChunk(text);
-              }
-            } catch (e) {
-              // Ignore parse errors
-            }
-          }
-        }
-      }
-
-    } else if (provider === 'ollama') {
-      const ollamaUrl = providerKey.endsWith('/') ? providerKey : providerKey + '/';
-      const response = await fetch(`${ollamaUrl}api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: model || 'codellama',
-          prompt: prompt,
-          stream: true,
-        }),
-      });
-
-      if (!response.ok) {
-        return sendError('Ollama API request failed. Make sure Ollama is running.');
-      }
-
-      sendProgress(40, 'Generating code...');
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.trim()) {
-            try {
-              const data = JSON.parse(line);
-              if (data.response) {
-                gameCode += data.response;
-                sendCodeChunk(data.response);
               }
             } catch (e) {
               // Ignore parse errors
@@ -1316,41 +1272,59 @@ wss.on('connection', (ws) => {
  * Handle client messages
  */
 function handleClientMessage(clientId, data) {
+  console.log(`📨 [WS MESSAGE] Received from client ${clientId}:`);
+  console.log(`   Type: ${data.type}`);
+  console.log(`   Data: ${JSON.stringify(data).substring(0, 200)}`);
+
   const client = clients.get(clientId);
-  if (!client) return;
+  if (!client) {
+    console.error(`❌ [WS MESSAGE] Client ${clientId} not found`);
+    return;
+  }
 
   if (data.type === 'start-door') {
+    console.log(`➡️  [WS MESSAGE] Handling start-door for doorId="${data.doorId}"`);
     startDoor(clientId, data.doorId);
   } else if (data.type === 'input') {
     // Check if this is a command (selectDoor:, buildDoor:, runDoor:, etc.)
     if (typeof data.data === 'string') {
       if (data.data.startsWith('selectDoor:')) {
         const doorId = data.data.substring('selectDoor:'.length);
+        console.log(`➡️  [WS MESSAGE] Handling selectDoor for doorId="${doorId}"`);
         selectDoor(clientId, doorId);
       } else if (data.data.startsWith('buildDoor:')) {
         const doorId = data.data.substring('buildDoor:'.length);
+        console.log(`➡️  [WS MESSAGE] Handling buildDoor for doorId="${doorId}"`);
         buildDoor(clientId, doorId);
       } else if (data.data.startsWith('runDoor:')) {
         const doorId = data.data.substring('runDoor:'.length);
+        console.log(`➡️  [WS MESSAGE] Handling runDoor for doorId="${doorId}"`);
         startDoor(clientId, doorId);
       } else if (data.data.startsWith('loadFile:')) {
         const filePath = data.data.substring('loadFile:'.length);
+        console.log(`➡️  [WS MESSAGE] Handling loadFile for path="${filePath}"`);
         loadFile(clientId, filePath);
       } else if (data.data.startsWith('saveFile:')) {
         const parts = data.data.substring('saveFile:'.length).split(':');
         const filePath = parts[0];
         const content = parts.slice(1).join(':');
+        console.log(`➡️  [WS MESSAGE] Handling saveFile for path="${filePath}" (${content.length} chars)`);
         saveFile(clientId, filePath, content);
       } else {
         // Regular keyboard input
+        console.log(`⌨️  [WS MESSAGE] Handling keyboard input: "${data.data}"`);
         sendInputToDoor(clientId, data.data);
       }
     } else if (data.key) {
       // Legacy format with 'key' field
+      console.log(`⌨️  [WS MESSAGE] Handling legacy keyboard input: "${data.key}"`);
       sendInputToDoor(clientId, data.key);
     }
   } else if (data.type === 'stop-door') {
+    console.log(`➡️  [WS MESSAGE] Handling stop-door`);
     stopDoor(clientId);
+  } else {
+    console.log(`⚠️  [WS MESSAGE] Unknown message type: ${data.type}`);
   }
 }
 
@@ -1762,20 +1736,36 @@ function saveFile(clientId, filePath, content) {
  * Start door process
  */
 function startDoor(clientId, doorId) {
+  console.log(`\n${'='.repeat(80)}`);
+  console.log(`🚀 [START DOOR] Called for clientId=${clientId}, doorId="${doorId}"`);
+  console.log(`${'='.repeat(80)}`);
+
   const client = clients.get(clientId);
-  if (!client) return;
+  if (!client) {
+    console.error(`❌ [START DOOR] Client ${clientId} not found in clients map`);
+    return;
+  }
+  console.log(`✓ [START DOOR] Client ${clientId} found`);
 
   // Stop existing door
   if (client.doorProcess) {
+    console.log(`⚠️  [START DOOR] Existing door process found (PID: ${client.doorProcess.pid}), killing it...`);
     client.doorProcess.kill();
   }
 
   const doorPath = path.join(__dirname, '../../examples', doorId);
+  console.log(`📂 [START DOOR] Door path: ${doorPath}`);
+  console.log(`📂 [START DOOR] Door path exists: ${fs.existsSync(doorPath)}`);
 
   // Check for TypeScript or JavaScript
   const tsFile = path.join(doorPath, 'index.ts');
   const jsFile = path.join(doorPath, 'index.js');
   const distFile = path.join(doorPath, 'dist', 'index.js');
+
+  console.log(`🔍 [START DOOR] Checking for entry files...`);
+  console.log(`   - index.ts exists: ${fs.existsSync(tsFile)}`);
+  console.log(`   - index.js exists: ${fs.existsSync(jsFile)}`);
+  console.log(`   - dist/index.js exists: ${fs.existsSync(distFile)}`);
 
   let command, args, mainFile;
 
@@ -1784,76 +1774,135 @@ function startDoor(clientId, doorId) {
     command = 'npx';
     args = ['ts-node', 'index.ts'];
     mainFile = tsFile;
+    console.log(`✓ [START DOOR] Using TypeScript entry: ${mainFile}`);
   } else if (fs.existsSync(distFile)) {
     // Use compiled dist file
     command = 'node';
     args = ['dist/index.js'];
     mainFile = distFile;
+    console.log(`✓ [START DOOR] Using compiled entry: ${mainFile}`);
   } else if (fs.existsSync(jsFile)) {
     // Use JavaScript file
     command = 'node';
     args = ['index.js'];
     mainFile = jsFile;
+    console.log(`✓ [START DOOR] Using JavaScript entry: ${mainFile}`);
   } else {
+    console.error(`❌ [START DOOR] No entry file found!`);
+    console.error(`   Checked paths:`);
+    console.error(`   - ${tsFile}`);
+    console.error(`   - ${jsFile}`);
+    console.error(`   - ${distFile}`);
+
+    const errorMsg = `Door main file not found. Checked: ${tsFile}, ${jsFile}, ${distFile}`;
+    console.error(`📤 [START DOOR] Sending error to client: ${errorMsg}`);
+
     client.ws.send(
       JSON.stringify({
         type: 'error',
-        message: `Door main file not found. Checked: ${tsFile}, ${jsFile}, ${distFile}`,
+        message: errorMsg,
       })
     );
     return;
   }
 
-  console.log(`🚀 Starting door: ${doorId} (${mainFile})`);
+  console.log(`🔧 [START DOOR] Command: ${command}`);
+  console.log(`🔧 [START DOOR] Args: ${JSON.stringify(args)}`);
+  console.log(`🔧 [START DOOR] CWD: ${doorPath}`);
+  console.log(`🔧 [START DOOR] Environment: PREVIEW_MODE=1`);
 
   const doorProcess = spawn(command, args, {
     cwd: doorPath,
     env: { ...process.env, PREVIEW_MODE: '1' },
   });
 
+  console.log(`✓ [START DOOR] Process spawned with PID: ${doorProcess.pid}`);
+
   client.doorProcess = doorProcess;
   client.currentDoor = doorId;
+  console.log(`✓ [START DOOR] Client state updated (currentDoor="${doorId}")`);
 
   // Capture stdout (ANSI output)
   doorProcess.stdout.on('data', (data) => {
+    const output = data.toString();
+    console.log(`📤 [STDOUT] ${output.length} bytes`);
+    console.log(`   Preview: ${output.substring(0, 100)}${output.length > 100 ? '...' : ''}`);
+
     client.ws.send(
       JSON.stringify({
         type: 'output',
-        data: data.toString(),
+        data: output,
       })
     );
+    console.log(`✓ [STDOUT] Sent to client via WebSocket`);
   });
 
   // Capture stderr (errors)
   doorProcess.stderr.on('data', (data) => {
+    const errorOutput = data.toString();
+    console.error(`📤 [STDERR] ${errorOutput.length} bytes`);
+    console.error(`   Error: ${errorOutput}`);
+
     client.ws.send(
       JSON.stringify({
         type: 'error',
-        message: data.toString(),
+        message: errorOutput,
       })
     );
+    console.log(`✓ [STDERR] Sent to client via WebSocket`);
   });
 
   // Handle process exit
-  doorProcess.on('exit', (code) => {
-    console.log(`🛑 Door exited with code ${code}`);
+  doorProcess.on('exit', (code, signal) => {
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`🛑 [EXIT] Door process exited`);
+    console.log(`   Door: ${doorId}`);
+    console.log(`   PID: ${doorProcess.pid}`);
+    console.log(`   Exit code: ${code}`);
+    console.log(`   Signal: ${signal || 'none'}`);
+    console.log(`${'='.repeat(80)}\n`);
+
     client.ws.send(
       JSON.stringify({
         type: 'door-stopped',
         code,
       })
     );
+    console.log(`✓ [EXIT] Sent door-stopped message to client`);
+
     client.doorProcess = null;
   });
 
+  // Handle process errors
+  doorProcess.on('error', (error) => {
+    console.error(`\n${'='.repeat(80)}`);
+    console.error(`❌ [PROCESS ERROR] Door process error`);
+    console.error(`   Door: ${doorId}`);
+    console.error(`   Error: ${error.message}`);
+    console.error(`   Stack: ${error.stack}`);
+    console.error(`${'='.repeat(80)}\n`);
+
+    client.ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: `Process error: ${error.message}`,
+      })
+    );
+  });
+
   // Watch for file changes (hot reload)
-  const watcher = chokidar.watch(path.join(doorPath, '**/*.{ts,js}'), {
+  const watchPattern = path.join(doorPath, '**/*.{ts,js}');
+  console.log(`👁️  [WATCH] Setting up file watcher for: ${watchPattern}`);
+
+  const watcher = chokidar.watch(watchPattern, {
     ignored: /node_modules/,
     persistent: true,
   });
 
   watcher.on('change', (filePath) => {
-    console.log(`📝 File changed: ${filePath}`);
+    console.log(`📝 [WATCH] File changed: ${filePath}`);
+    console.log(`🔄 [WATCH] Triggering hot reload...`);
+
     client.ws.send(
       JSON.stringify({
         type: 'reload',
@@ -1863,18 +1912,27 @@ function startDoor(clientId, doorId) {
 
     // Restart door
     stopDoor(clientId);
-    setTimeout(() => startDoor(clientId, doorId), 1000);
+    setTimeout(() => {
+      console.log(`🔄 [WATCH] Restarting door after file change...`);
+      startDoor(clientId, doorId);
+    }, 1000);
+  });
+
+  watcher.on('error', (error) => {
+    console.error(`❌ [WATCH] Watcher error: ${error.message}`);
   });
 
   client.watcher = watcher;
+  console.log(`✓ [START DOOR] File watcher initialized`);
 
   // Send started message
-  client.ws.send(
-    JSON.stringify({
-      type: 'door-started',
-      doorId,
-    })
-  );
+  const startedMsg = { type: 'door-started', doorId };
+  console.log(`📤 [START DOOR] Sending door-started message: ${JSON.stringify(startedMsg)}`);
+
+  client.ws.send(JSON.stringify(startedMsg));
+
+  console.log(`✓ [START DOOR] Door startup complete!`);
+  console.log(`${'='.repeat(80)}\n`);
 }
 
 /**
