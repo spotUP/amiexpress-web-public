@@ -51,8 +51,8 @@ class MultiplayerManager {
         this.door = door;
         this.localPlayerId = playerId;
         this.gfx = new index_1.GraphicsEngine({ width: 80, height: 24 });
-        this.network = new index_1.NetworkEngine({ mode: 'turn-based', maxPlayers: 4 });
-        this.combat = new index_1.TacticalCombatEngine({ width: 20, height: 15 });
+        this.network = new index_1.NetworkEngine({ mode: 'turn-based' });
+        this.combat = new index_1.TacticalCombatEngine({ gridWidth: 20, gridHeight: 15 });
         this.classes = new index_1.ClassSystem();
         this.matchState = {
             mode: MultiplayerMode.Skirmish,
@@ -86,18 +86,19 @@ class MultiplayerManager {
     async findMatch(mode) {
         this.matchState.mode = mode;
         this.showMatchmaking();
-        // Connect to matchmaking server
-        await this.network.connect('matchmaking.amiexpress.com');
-        // Wait for match
-        this.network.send('find_match', { mode });
+        // Create a matchmaking room
+        const roomId = `matchmaking-${Date.now()}`;
+        this.network.createRoom(roomId, { maxPlayers: 4 });
+        // Broadcast find match request
+        this.network.broadcast('find_match', { mode });
     }
     /**
      * Create private lobby
      */
     async createLobby(mode) {
         this.matchState.mode = mode;
-        await this.network.host();
         const lobbyCode = this.generateLobbyCode();
+        this.network.createRoom(lobbyCode, { maxPlayers: 4 });
         this.showLobby(lobbyCode);
         return lobbyCode;
     }
@@ -106,7 +107,7 @@ class MultiplayerManager {
      */
     async joinLobby(lobbyCode) {
         this.showConnecting();
-        await this.network.join(lobbyCode);
+        this.network.joinRoom(lobbyCode);
     }
     /**
      * Handle player joined
@@ -214,11 +215,10 @@ class MultiplayerManager {
                 const unit = this.combat.createUnit({
                     id: `draft_${i}`,
                     name: classData.name,
-                    class: classData,
+                    class: classData.name,
                     level: 5,
                     stats: {
                         hp: 20,
-                        maxHp: 20,
                         str: 8,
                         mag: 5,
                         skl: 7,
@@ -361,7 +361,7 @@ class MultiplayerManager {
             return;
         const unit = player.units.find(u => u.id === data.unitId);
         if (unit && !unit.hasMoved) {
-            const validMoves = this.combat.getMovementRange(unit.id, unit.position);
+            const validMoves = this.combat.getMovementRange(unit);
             const isValid = validMoves.some(pos => pos.x === data.position.x && pos.y === data.position.y);
             if (isValid) {
                 this.combat.moveUnit(unit.id, data.position);
@@ -461,8 +461,7 @@ class MultiplayerManager {
      * Sync state to all players
      */
     syncState() {
-        this.network.broadcast({
-            type: MessageType.Sync,
+        this.network.broadcast(MessageType.Sync, {
             playerId: this.localPlayerId,
             data: this.serializeState()
         });
@@ -532,8 +531,7 @@ class MultiplayerManager {
      * Send chat message
      */
     sendChat(message) {
-        this.network.broadcast({
-            type: MessageType.Chat,
+        this.network.broadcast(MessageType.Chat, {
             playerId: this.localPlayerId,
             data: { message }
         });
@@ -645,8 +643,7 @@ class MultiplayerManager {
         const player = this.matchState.players.get(this.localPlayerId);
         if (player) {
             player.ready = ready;
-            this.network.broadcast({
-                type: MessageType.Ready,
+            this.network.broadcast(MessageType.Ready, {
                 playerId: this.localPlayerId,
                 data: { ready }
             });

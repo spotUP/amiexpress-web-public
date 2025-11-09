@@ -337,9 +337,9 @@ class DungeonRPG {
         // Render HUD
         this.hud.reset();
         this.hud.addBar('HP', this.player.hp, this.player.maxHp, { x: 42, y: 0 }, 15, bbs_door_sdk_1.AnsiColor.Red);
-        this.hud.addText(`Level ${this.player.level}`, { x: 42, y: 2 }, bbs_door_sdk_1.AnsiColor.Yellow);
-        this.hud.addText(`XP: ${this.player.xp}`, { x: 42, y: 3 }, bbs_door_sdk_1.AnsiColor.Cyan);
-        this.hud.addText(`Gold: ${this.player.gold}`, { x: 42, y: 4 }, bbs_door_sdk_1.AnsiColor.Yellow);
+        this.hud.addText('level', { position: { x: 42, y: 2 }, format: `Level ${this.player.level}`, color: bbs_door_sdk_1.AnsiColor.Yellow });
+        this.hud.addText('xp', { position: { x: 42, y: 3 }, format: `XP: ${this.player.xp}`, color: bbs_door_sdk_1.AnsiColor.Cyan });
+        this.hud.addText('gold', { position: { x: 42, y: 4 }, format: `Gold: ${this.player.gold}`, color: bbs_door_sdk_1.AnsiColor.Yellow });
         const hudOutput = this.hud.render();
         this.gfx.drawText(0, 0, hudOutput, bbs_door_sdk_1.AnsiColor.White);
         // Controls help

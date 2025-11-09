@@ -1165,13 +1165,14 @@ class BugTracker {
         }
         // Use fuzzy search
         const query = searchResult.value.toLowerCase();
-        const results = this.smartFeatures.fuzzySearch(query, this.data.bugs, ['title', 'description']);
-        if (results.length === 0) {
+        const searchResults = this.smartFeatures.fuzzySearch(query, this.data.bugs, 10);
+        if (searchResults.length === 0) {
             this.uiComponents.showToast('No results found', ui_components_1.ToastType.WARNING);
             setTimeout(() => this.showMainMenu(), 2000);
             return;
         }
-        // Show results
+        // Show results (extract bugs from search results)
+        const results = searchResults.map(r => r.bug);
         this.showSearchResults(results, query);
     }
     showSearchResults(bugs, query) {

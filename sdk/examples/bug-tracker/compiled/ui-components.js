@@ -58,7 +58,7 @@ class UIComponents {
                 color = '\x1b[33m'; // Yellow
                 break;
         }
-        const width = Math.min(message.length + 6, 76);
+        const width = Math.min(toast.message.length + 6, 76);
         const x = Math.floor((80 - width) / 2);
         const y = 22;
         let output = '';
@@ -164,7 +164,8 @@ class UIComponents {
         this.door.sendAnsi(output, this.userId);
         return new Promise((resolve) => {
             let selected = defaultYes;
-            const handler = (key) => {
+            const handler = (user, keyEvent) => {
+                const key = keyEvent.key;
                 if (key === 'ArrowLeft' || key === 'ArrowRight') {
                     selected = !selected;
                     // Update highlights
@@ -312,6 +313,19 @@ class UIComponents {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
+    }
+    /**
+     * Show loading spinner (alias for startSpinner)
+     */
+    showLoadingSpinner(message, x = 30, y = 12) {
+        this.startSpinner(message, x, y);
+    }
+    /**
+     * Handle input events (placeholder for toast management)
+     */
+    handleInput(key) {
+        // This method can be used to handle keyboard shortcuts for toast management
+        // Currently just a placeholder
     }
 }
 exports.UIComponents = UIComponents;
