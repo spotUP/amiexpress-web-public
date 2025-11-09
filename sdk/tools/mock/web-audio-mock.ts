@@ -13,7 +13,7 @@
  * Call this BEFORE importing Tone.js or any audio libraries
  */
 export function initWebAudioMocks(): void {
-  if (typeof window !== 'undefined') {
+  if (typeof globalThis !== 'undefined' && 'window' in globalThis) {
     // Already in browser environment, no mocking needed
     return;
   }
