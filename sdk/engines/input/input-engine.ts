@@ -71,4 +71,11 @@ export class InputEngine {
   public clear(): void {
     this.actions.clear();
   }
+
+  /**
+   * Clean up resources (alias for reset)
+   */
+  public dispose(): void {
+    this.reset();
+  }
 }
