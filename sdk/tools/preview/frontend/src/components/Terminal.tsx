@@ -30,7 +30,12 @@ export const Terminal: React.FC<TerminalProps> = ({
   // Auto-scroll to bottom when new output arrives
   useEffect(() => {
     if (isAutoScrolling && terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+      // Use requestAnimationFrame to ensure DOM has updated before scrolling
+      requestAnimationFrame(() => {
+        if (terminalRef.current) {
+          terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+        }
+      });
     }
   }, [output, isAutoScrolling]);
 
@@ -106,7 +111,10 @@ export const Terminal: React.FC<TerminalProps> = ({
   }, [output]);
 
   // Copy error logs to clipboard
-  const handleCopyErrors = async () => {
+  const handleCopyErrors = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     const errors = extractErrorLogs();
     if (!errors) {
       // No errors found, copy all output
@@ -146,7 +154,7 @@ export const Terminal: React.FC<TerminalProps> = ({
 
   return (
     <div
-      className={`terminal relative flex flex-col h-full bg-[#1E1E1E] text-[#CCCCCC] ${className}`}
+      className={`terminal relative flex flex-col h-full overflow-hidden bg-[#1E1E1E] text-[#CCCCCC] ${className}`}
       onClick={handleTerminalClick}
     >
       {/* Output area */}
@@ -201,10 +209,16 @@ export const Terminal: React.FC<TerminalProps> = ({
       {/* Auto-scroll indicator */}
       {!isAutoScrolling && (
         <button
-          onClick={() => {
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
             setIsAutoScrolling(true);
             if (terminalRef.current) {
-              terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+              requestAnimationFrame(() => {
+                if (terminalRef.current) {
+                  terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+                }
+              });
             }
           }}
           className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm shadow-lg transition-colors"

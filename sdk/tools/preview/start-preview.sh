@@ -2,9 +2,9 @@
 
 # Enhanced SDK Preview Server
 # - Kills old servers on port 8080
-# - Builds SDK and frontend
-# - Compiles TypeScript examples (shows errors)
+# - Builds SDK and frontend (silently)
 # - Starts preview server
+# - Example compilation happens in browser console
 
 echo "🔍 Checking for existing servers on port 8080..."
 
@@ -21,12 +21,13 @@ fi
 
 echo ""
 echo "🔨 Building SDK..."
-npm run build
+npm run build > /dev/null 2>&1
 
 if [ $? -ne 0 ]; then
     echo "❌ SDK build failed!"
     exit 1
 fi
+echo "✅ SDK built successfully"
 
 echo ""
 echo "📦 Building React frontend..."
@@ -37,16 +38,17 @@ cd tools/preview/frontend
 # Check if node_modules exists, install if needed
 if [ ! -d "node_modules" ]; then
     echo "📥 Installing frontend dependencies..."
-    npm install
+    npm install > /dev/null 2>&1
     if [ $? -ne 0 ]; then
         echo "❌ Frontend dependency installation failed!"
         cd ../../..
         exit 1
     fi
+    echo "✅ Frontend dependencies installed"
 fi
 
 # Build the frontend
-npm run build
+npm run build > /dev/null 2>&1
 
 if [ $? -ne 0 ]; then
     echo "❌ Frontend build failed!"
@@ -58,45 +60,8 @@ echo "✅ Frontend built successfully"
 cd ../../..
 
 echo ""
-echo "✨ Compiling example games..."
-echo ""
-
-COMPILE_ERRORS=0
-
-# Type-check all TypeScript examples (no emit, just validation)
-for example_dir in examples/*/; do
-    example_name=$(basename "$example_dir")
-
-    # Skip if no TypeScript files exist
-    if ! ls "$example_dir"*.ts 1> /dev/null 2>&1; then
-        continue
-    fi
-
-    echo "  📦 Type-checking $example_name..."
-
-    # Type check using the example's tsconfig.json
-    cd "$example_dir"
-    npx tsc --noEmit 2>&1 | head -20
-    RESULT=$?
-    cd - > /dev/null
-
-    if [ $RESULT -eq 0 ]; then
-        echo "  ✅ $example_name type-checked successfully"
-    else
-        echo "  ⚠️  $example_name has type errors (non-fatal)"
-        COMPILE_ERRORS=$((COMPILE_ERRORS + 1))
-    fi
-    echo ""
-done
-
-if [ $COMPILE_ERRORS -gt 0 ]; then
-    echo "⚠️  Warning: $COMPILE_ERRORS game(s) have TypeScript errors"
-    echo "   The preview server will start, but these games may not work correctly"
-    echo ""
-fi
-
 echo "🚀 Starting preview server..."
-echo "📦 Serving React frontend from public/"
+echo "📦 Example games will be compiled in the browser console"
 echo ""
 
 node tools/preview/server.js
