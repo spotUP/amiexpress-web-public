@@ -1184,6 +1184,21 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
             errorMessage = 'Invalid OpenRouter API key. Get your free key at https://openrouter.ai/keys';
           } else if (response.status === 402) {
             errorMessage = 'This model requires credits. Please select a free model or add credits to your OpenRouter account.';
+          } else if (response.status === 403) {
+            // Check if this is a key limit error
+            const isKeyLimitError = errorMessage.toLowerCase().includes('key limit') ||
+                                   errorMessage.toLowerCase().includes('limit exceeded');
+
+            if (isKeyLimitError) {
+              errorMessage = 'OpenRouter API key limit exceeded. Your API key has reached its usage limit. ' +
+                           'To continue using OpenRouter: ' +
+                           '1. Go to https://openrouter.ai/settings/keys to manage your API key limits, ' +
+                           '2. Add credits to your account at https://openrouter.ai/settings/credits, or ' +
+                           '3. Wait for your limit to reset (limits reset monthly). ' +
+                           'Alternatively, try a different AI provider (Claude, OpenAI, or Gemini) from the provider dropdown.';
+            } else {
+              errorMessage = `Access forbidden (403): ${errorMessage}. Check your API key permissions at https://openrouter.ai/settings/keys`;
+            }
           } else if (response.status === 429) {
             errorMessage = 'Rate limit exceeded. Please wait a few minutes and try again.';
           } else if (response.status === 404) {
