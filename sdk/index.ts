@@ -25,6 +25,7 @@ export * from './components/hud/hud-builder';
 
 // Export tools
 export * from './tools/packer';
+export * from './tools/mock';
 
 // SDK info
 export const SDK = {

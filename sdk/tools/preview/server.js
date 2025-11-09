@@ -882,10 +882,17 @@ npm run build
 
 // API: Generate game with streaming and multi-AI support
 app.post('/api/games/generate-stream', async (req, res) => {
+  const requestStartTime = Date.now();
+  console.log(`\n========== /api/games/generate-stream REQUEST RECEIVED ==========`);
+  console.log(`[API] Timestamp: ${new Date().toISOString()}`);
+
   try {
     const { name, description, bbsCommand, type, features, provider = 'claude', model, apiKey, qualityMode = 'balanced' } = req.body;
 
+    console.log(`[API] Request params:`, { name, provider, model, qualityMode, hasApiKey: !!apiKey });
+
     if (!name || !description) {
+      console.error(`[API] Missing required fields`);
       return res.status(400).json({ error: 'Name and description are required' });
     }
 
@@ -895,6 +902,7 @@ app.post('/api/games/generate-stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    console.log(`[API] SSE headers set`);
 
     const sendProgress = (progress, phase) => {
       res.write(`data: ${JSON.stringify({ type: 'progress', progress, phase })}\n\n`);
@@ -1103,18 +1111,25 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
       }
 
     } else if (provider === 'openrouter') {
-      console.log(`[OpenRouter] Making request with model: ${model}`);
+      console.log(`[OpenRouter] ========== Starting OpenRouter Request ==========`);
+      console.log(`[OpenRouter] Model: ${model}`);
       console.log(`[OpenRouter] API key present: ${!!providerKey}`);
+      console.log(`[OpenRouter] API key length: ${providerKey ? providerKey.length : 0}`);
+      console.log(`[OpenRouter] Max tokens: ${maxTokens}`);
+      console.log(`[OpenRouter] About to make fetch request...`);
 
-      // Add timeout to prevent hanging
+      // Add timeout to prevent hanging (reduced to 30 seconds for faster debugging)
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.error('[OpenRouter] Request timeout after 60 seconds');
+        console.error('[OpenRouter] ⏰ Request timeout after 30 seconds');
         controller.abort();
-      }, 60000); // 60 second timeout
+      }, 30000); // 30 second timeout
 
       let response;
       try {
+        console.log(`[OpenRouter] 🚀 Initiating fetch to https://openrouter.ai/api/v1/chat/completions...`);
+        const fetchStartTime = Date.now();
+
         response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -1131,14 +1146,22 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
           }),
           signal: controller.signal,
         });
+
+        const fetchDuration = Date.now() - fetchStartTime;
+        console.log(`[OpenRouter] ✅ Fetch completed in ${fetchDuration}ms`);
         clearTimeout(timeoutId);
       } catch (error) {
+        const fetchDuration = Date.now() - fetchStartTime;
         clearTimeout(timeoutId);
-        console.error('[OpenRouter] Fetch error:', error);
+        console.error(`[OpenRouter] ❌ Fetch error after ${fetchDuration}ms:`, error);
+        console.error(`[OpenRouter] Error name: ${error.name}`);
+        console.error(`[OpenRouter] Error message: ${error.message}`);
+        console.error(`[OpenRouter] Error stack:`, error.stack);
+
         if (error.name === 'AbortError') {
-          return sendError('OpenRouter API request timed out. The service may be slow or unavailable. Please try again.');
+          return sendError('OpenRouter API request timed out after 30 seconds. The service may be slow or unavailable. Please try again or select a different model.');
         }
-        return sendError(`OpenRouter connection failed: ${error.message}`);
+        return sendError(`OpenRouter connection failed: ${error.message}. Check your network connection and API key.`);
       }
 
       console.log(`[OpenRouter] Response status: ${response.status}`);

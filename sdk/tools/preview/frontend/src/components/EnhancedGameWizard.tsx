@@ -303,21 +303,32 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
       setCurrentPhase('Calling AI...');
       setProgress(20);
 
-      const response = await fetch('/api/games/generate-stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: gameName,
-          description: gameDescription,
-          bbsCommand,
-          type: gameType,
-          features,
-          provider,
-          model,
-          apiKey: useServerKey ? undefined : apiKey,
-          qualityMode,
-        }),
-      });
+      console.log(`[Frontend] Starting game generation with provider: ${provider}, model: ${model}`);
+      console.log(`[Frontend] Using server key: ${useServerKey}`);
+      console.log(`[Frontend] Calling /api/games/generate-stream...`);
+
+      let response;
+      try {
+        response = await fetch('/api/games/generate-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: gameName,
+            description: gameDescription,
+            bbsCommand,
+            type: gameType,
+            features,
+            provider,
+            model,
+            apiKey: useServerKey ? undefined : apiKey,
+            qualityMode,
+          }),
+        });
+        console.log(`[Frontend] Received response status: ${response.status}`);
+      } catch (fetchError) {
+        console.error(`[Frontend] Fetch error:`, fetchError);
+        throw new Error(`Network error: ${fetchError.message}`);
+      }
 
       if (!response.ok) {
         let errorMessage = 'Failed to generate game';

@@ -5,6 +5,7 @@
     "lib": [
       "ES2020"
     ],
+    "types": ["node"],
     "outDir": "./dist",
     "strict": true,
     "esModuleInterop": true,
@@ -14,11 +15,7 @@
     "moduleResolution": "node"
   },
   "include": [
-    "*.ts",
-    "../../core/**/*.ts",
-    "../../engines/**/*.ts",
-    "../../components/**/*.ts",
-    "../../tools/**/*.ts"
+    "*.ts"
   ],
   "exclude": [
     "node_modules",
