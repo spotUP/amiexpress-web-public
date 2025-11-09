@@ -116,12 +116,25 @@ export class ClientDoorBridge {
   private setupHandlers(doorSession: ClientDoorSession): void {
     const { socket, sessionId } = doorSession;
 
-    // Listen for door messages on a namespaced event
+    // Listen for door messages on a namespaced event (legacy/direct approach)
     const eventName = `door:message:${sessionId}`;
 
     socket.on(eventName, (message: any) => {
       this.handleMessage(doorSession, message);
     });
+
+    // Listen for client door messages (ClientDoor → Backend)
+    const clientMessageHandler = (data: { sessionId: string; message: any }) => {
+      // Only handle messages for this session
+      if (data.sessionId === sessionId && doorSession.active) {
+        this.handleMessage(doorSession, data.message);
+      }
+    };
+
+    socket.on('door:client:message', clientMessageHandler);
+
+    // Store handler reference for cleanup
+    (doorSession as any).clientMessageHandler = clientMessageHandler;
 
     // Listen for user input and forward to door
     const inputHandler = (data: string) => {
@@ -298,6 +311,10 @@ export class ClientDoorBridge {
     // Clean up event handlers
     if ((session as any).inputHandler) {
       session.socket.off('command', (session as any).inputHandler);
+    }
+
+    if ((session as any).clientMessageHandler) {
+      session.socket.off('door:client:message', (session as any).clientMessageHandler);
     }
 
     // Clear keepalive

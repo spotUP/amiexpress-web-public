@@ -93,7 +93,7 @@ export class ClientDoor extends EventEmitter {
   /**
    * Start the door and connect to BBS
    *
-   * @param wsUrl - WebSocket URL (default: ws://localhost:3001)
+   * @param wsUrl - WebSocket URL (default: ws://localhost:3001) - ignored if window.__BBS__ exists
    */
   public start(wsUrl: string = 'ws://localhost:3001'): void {
     if (this.state !== 'idle') {
@@ -103,12 +103,51 @@ export class ClientDoor extends EventEmitter {
     this.state = 'connecting';
     this.emit('start');
 
-    // Connect via WebSocket
-    this.connectWebSocket(wsUrl);
+    // Check if BBS connection is already available (bundled door scenario)
+    const bbsGlobal = (window as any).__BBS__;
+    if (bbsGlobal && bbsGlobal.socket) {
+      console.log('[ClientDoor] Using existing BBS Socket.IO connection');
+      this.connectViaSocketIO(bbsGlobal.socket, bbsGlobal.sessionId);
+    } else {
+      console.log('[ClientDoor] Creating new WebSocket connection');
+      this.connectWebSocket(wsUrl);
+    }
   }
 
   /**
-   * Connect to BBS via WebSocket
+   * Connect via existing Socket.IO connection (bundled door scenario)
+   * @private
+   */
+  private connectViaSocketIO(socket: any, sessionId: string): void {
+    try {
+      // Store Socket.IO socket in ws field (type mismatch is ok, we handle it)
+      (this as any).socketIO = socket;
+      (this as any).sessionId = sessionId;
+
+      console.log(`[ClientDoor] Connected via Socket.IO, session: ${sessionId}`);
+      this.state = 'running';
+      this.emit('ws:connected');
+
+      // Listen for messages from backend for this session
+      window.addEventListener('bbs:door:message', (event: any) => {
+        if (event.detail.sessionId === sessionId) {
+          this.handleMessage(event.detail.message);
+        }
+      });
+
+      // Simulate connection established
+      // The backend already sent CONNECT message, trigger main loop
+      this.mainLoop();
+
+    } catch (err) {
+      console.error('[ClientDoor] Failed to connect via Socket.IO:', err);
+      this.state = 'idle';
+      throw err;
+    }
+  }
+
+  /**
+   * Connect to BBS via WebSocket (standalone scenario)
    * @private
    */
   private connectWebSocket(url: string): void {
@@ -223,7 +262,18 @@ export class ClientDoor extends EventEmitter {
    * @private
    */
   private sendMessage(message: any): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    // Check if we're using Socket.IO (bundled door scenario)
+    const socketIO = (this as any).socketIO;
+    const sessionId = (this as any).sessionId;
+
+    if (socketIO && sessionId) {
+      // Emit via Socket.IO with session-specific event
+      socketIO.emit('door:client:message', {
+        sessionId,
+        message,
+      });
+    } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      // Send via WebSocket (standalone scenario)
       this.ws.send(JSON.stringify(message));
     }
   }

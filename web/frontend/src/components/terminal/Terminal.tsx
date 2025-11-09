@@ -226,6 +226,100 @@ function Terminal() {
       doorActive.current = (data.status === 'running');
     });
 
+    // Handle client door loading (browser-based doors)
+    ws.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
+      console.log(`[ClientDoor] Loading door: ${data.doorId}`);
+      console.log(`[ClientDoor] Bundle URL: ${data.bundleUrl}`);
+      console.log(`[ClientDoor] Session ID: ${data.sessionId}`);
+
+      try {
+        // Show loading message
+        term.write(`\r\n\x1b[36mLoading ${data.manifest.name}...\x1b[0m\r\n`);
+        doorActive.current = true;
+
+        // Expose BBS socket globally for the door to use
+        // The ClientDoor will use this instead of creating a new connection
+        (window as any).__BBS__ = {
+          socket: ws,
+          sessionId: data.sessionId,
+          backendUrl: backendUrl
+        };
+
+        // Set up listener for door messages from this session
+        const doorMessageListener = (message: any) => {
+          // Door sent a message, forward it to backend
+          ws.emit(`door:message:${data.sessionId}`, message);
+        };
+
+        // Listen for messages FROM the backend for this door session
+        ws.on(`door:message:${data.sessionId}`, (message: any) => {
+          // Backend sent message to door, dispatch custom event
+          window.dispatchEvent(new CustomEvent('bbs:door:message', {
+            detail: { sessionId: data.sessionId, message }
+          }));
+        });
+
+        // Create script element to load the bundled door
+        const script = document.createElement('script');
+        script.id = `door-${data.doorId}`;
+        script.src = `${backendUrl}${data.bundleUrl}`;
+        script.type = 'text/javascript';
+
+        // Store session info for cleanup
+        (script as any).__sessionId = data.sessionId;
+        (script as any).__doorMessageListener = doorMessageListener;
+
+        // Handle script load success
+        script.onload = () => {
+          console.log(`[ClientDoor] Bundle loaded successfully: ${data.doorId}`);
+          term.write(`\x1b[32m✓ Door loaded\x1b[0m\r\n\r\n`);
+
+          // The door bundle is now loaded and will auto-start
+          // It will use window.__BBS__.socket to communicate
+        };
+
+        // Handle script load error
+        script.onerror = (error) => {
+          console.error(`[ClientDoor] Failed to load bundle:`, error);
+          term.write(`\r\n\x1b[31mError loading door: Failed to fetch bundle\x1b[0m\r\n`);
+          term.write(`\x1b[32mPress any key to continue...\x1b[0m`);
+          doorActive.current = false;
+
+          // Cleanup
+          delete (window as any).__BBS__;
+          ws.off(`door:message:${data.sessionId}`);
+        };
+
+        // Append script to document
+        document.body.appendChild(script);
+
+        console.log(`[ClientDoor] Door script appended to document`);
+
+      } catch (error) {
+        console.error(`[ClientDoor] Error loading door:`, error);
+        term.write(`\r\n\x1b[31mError: ${(error as Error).message}\x1b[0m\r\n`);
+        term.write(`\x1b[32mPress any key to continue...\x1b[0m`);
+        doorActive.current = false;
+
+        // Cleanup
+        delete (window as any).__BBS__;
+      }
+    });
+
+    // Handle client door unload
+    ws.on('door:unload-client', (data: { doorId: string }) => {
+      console.log(`[ClientDoor] Unloading door: ${data.doorId}`);
+
+      // Remove the door script from document
+      const script = document.getElementById(`door-${data.doorId}`);
+      if (script) {
+        document.body.removeChild(script);
+      }
+
+      doorActive.current = false;
+      term.write(`\r\n\x1b[32mDoor closed\x1b[0m\r\n`);
+    });
+
     ws.on('mouse-mode', (data: { enabled: boolean }) => {
       const termElement = terminalRef.current?.querySelector('.xterm');
       if (termElement) {
