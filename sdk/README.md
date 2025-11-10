@@ -438,6 +438,7 @@ npm run preview         # http://localhost:8080
 ## 📖 Documentation
 
 - **[Getting Started](docs/getting-started.md)** - Installation and first door
+- **[Braille Graphics](docs/BRAILLE_GRAPHICS.md)** - High-resolution terminal graphics with node-drawille
 - **[API Reference](docs/api/)** - Complete API documentation
 - **[Examples](examples/)** - 3 complete games with full source
 - **[Tutorials](docs/tutorials/)** - Step-by-step guides
@@ -486,6 +487,7 @@ MIT License - Free for commercial and personal use.
 
 ## 🙏 Credits
 
+- **node-drawille** (drawille) - High-resolution braille graphics by @madbence
 - **Tone.js** - Audio synthesis
 - **Scribbletune** - Music generation
 - **Jest** - Testing framework
