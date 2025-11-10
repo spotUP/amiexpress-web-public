@@ -215,10 +215,13 @@ export class ClientDoor extends EventEmitter {
 
       case MessageType.INPUT:
         // Server forwarded keyboard input
-        console.log('[ClientDoor] INPUT message, data:', message.data);
+        console.log('[ClientDoor] ===== INPUT MESSAGE RECEIVED =====');
+        console.log('[ClientDoor] Message data:', JSON.stringify(message.data));
+        console.log('[ClientDoor] User:', this.user ? 'exists' : 'null');
         if (this.user) {
-          console.log('[ClientDoor] Emitting input event');
+          console.log('[ClientDoor] About to emit input event with:', message.data);
           this.emit('input', { user: this.user, key: message.data });
+          console.log('[ClientDoor] Input event emitted');
         } else {
           console.warn('[ClientDoor] No user set, ignoring input');
         }
