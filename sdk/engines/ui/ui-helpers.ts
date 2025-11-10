@@ -9,7 +9,7 @@
  */
 
 import { UIEngine } from './ui-engine';
-import { Widgets } from 'blessed';
+import type { Widgets } from 'blessed';
 
 /**
  * Menu item definition

@@ -60,8 +60,8 @@
  * ```
  */
 
-import * as blessed from 'neo-blessed';
-import { Widgets } from 'blessed';
+import blessed from 'neo-blessed';
+import type { Widgets } from 'blessed';
 
 /**
  * UI Engine Options
