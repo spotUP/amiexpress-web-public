@@ -115,11 +115,11 @@ export class DoorManager {
       this.setupInputHandlers();
       console.log('[Door Manager] Input handlers setup complete');
 
-      console.log('[Door Manager] Current state:', {
+      console.log('[Door Manager] Current state:', JSON.stringify({
         mode: this.state.mode,
         inDoorManager: this.session?.inDoorManager,
         hasInputHandler: !!this.inputHandler
-      });
+      }));
     } catch (error) {
       console.error('[Door Manager] Error starting:', error);
       this.socket.emit('ansi-output', '\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n');
