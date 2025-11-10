@@ -827,7 +827,7 @@ function App() {
           <Panel defaultSize={viewMode === 'terminal-only' ? 100 : viewMode === 'code-only' ? 0 : 50} minSize={viewMode === 'code-only' ? 0 : 30}>
             <PanelGroup direction="vertical">
               {/* Terminal Section */}
-              <Panel defaultSize={60} minSize={30}>
+              <Panel defaultSize={70} minSize={50}>
                 <div className="flex flex-col h-full">
                   {/* Terminal Tabs */}
                   <TerminalTabs
@@ -983,7 +983,7 @@ function App() {
               <PanelResizeHandle className="h-1 bg-gray-700 hover:bg-purple-600 transition-all duration-300 hover:h-2 cursor-row-resize" />
 
               {/* AI Prompt Panel */}
-              <Panel defaultSize={40} minSize={20} maxSize={60}>
+              <Panel defaultSize={30} minSize={15} maxSize={50}>
                 <AIPromptPanel
                   selectedDoor={selectedDoor?.id || null}
                   currentFile={currentFile}
