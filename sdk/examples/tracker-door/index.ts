@@ -300,30 +300,30 @@ class TrackerDoor {
     this.gfx.clear(AnsiColor.BLACK);
 
     // Title
-    this.gfx.drawText(10, 2, '╔════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
-    this.gfx.drawText(10, 3, '║          T R A C K E R D O O R   v 1 . 0                 ║', AnsiColor.CYAN);
-    this.gfx.drawText(10, 4, '║        Professional Music Tracker for BBS                 ║', AnsiColor.CYAN);
-    this.gfx.drawText(10, 5, '╚════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(10, 2, '_____________________________________________________________', AnsiColor.CYAN);
+    this.gfx.drawText(10, 3, '|          T R A C K E R D O O R   v 1 . 0                 |', AnsiColor.CYAN);
+    this.gfx.drawText(10, 4, '|        Professional Music Tracker for BBS                 |', AnsiColor.CYAN);
+    this.gfx.drawText(10, 5, '|___________________________________________________________|', AnsiColor.CYAN);
 
     // Song info
     this.gfx.drawText(10, 7, `Song: ${this.song.title}`, AnsiColor.YELLOW);
     this.gfx.drawText(10, 8, `BPM: ${this.song.bpm}  Channels: ${this.song.channels}  Patterns: ${this.song.patterns.length}`, AnsiColor.WHITE);
 
     // Menu
-    this.gfx.drawText(10, 9, '┌─────────────── MAIN MENU ────────────────┐', AnsiColor.WHITE);
-    this.gfx.drawText(10, 10, '│                                          │', AnsiColor.WHITE);
-    this.gfx.drawText(10, 11, '│  [P] Pattern Editor                      │', AnsiColor.GREEN);
-    this.gfx.drawText(10, 12, '│  [I] Instrument Editor                   │', AnsiColor.GREEN);
-    this.gfx.drawText(10, 13, '│  [M] Sample Manager                      │', AnsiColor.GREEN);
-    this.gfx.drawText(10, 14, '│  [F] Effects Editor                      │', AnsiColor.GREEN);
-    this.gfx.drawText(10, 15, '│  [S] Song Arranger                       │', AnsiColor.GREEN);
-    this.gfx.drawText(10, 16, '│  [E] Export Module                       │', AnsiColor.GREEN);
-    this.gfx.drawText(10, 17, '│  [L] Import (MOD/XM/IT)                  │', AnsiColor.CYAN);
-    this.gfx.drawText(10, 18, '│  [A] AI Assistant                        │', AnsiColor.CYAN);
-    this.gfx.drawText(10, 19, '│  [H] Help & Shortcuts                    │', AnsiColor.YELLOW);
-    this.gfx.drawText(10, 20, '│  [Q] Quit                                │', AnsiColor.RED);
-    this.gfx.drawText(10, 21, '│                                          │', AnsiColor.WHITE);
-    this.gfx.drawText(10, 22, '└──────────────────────────────────────────┘', AnsiColor.WHITE);
+    this.gfx.drawText(10, 9, ' --------------- MAIN MENU --------------- ', AnsiColor.WHITE);
+    this.gfx.drawText(10, 10, '|                                          |', AnsiColor.WHITE);
+    this.gfx.drawText(10, 11, '|  [P] Pattern Editor                      |', AnsiColor.GREEN);
+    this.gfx.drawText(10, 12, '|  [I] Instrument Editor                   |', AnsiColor.GREEN);
+    this.gfx.drawText(10, 13, '|  [M] Sample Manager                      |', AnsiColor.GREEN);
+    this.gfx.drawText(10, 14, '|  [F] Effects Editor                      |', AnsiColor.GREEN);
+    this.gfx.drawText(10, 15, '|  [S] Song Arranger                       |', AnsiColor.GREEN);
+    this.gfx.drawText(10, 16, '|  [E] Export Module                       |', AnsiColor.GREEN);
+    this.gfx.drawText(10, 17, '|  [L] Import (MOD/XM/IT)                  |', AnsiColor.CYAN);
+    this.gfx.drawText(10, 18, '|  [A] AI Assistant                        |', AnsiColor.CYAN);
+    this.gfx.drawText(10, 19, '|  [H] Help & Shortcuts                    |', AnsiColor.YELLOW);
+    this.gfx.drawText(10, 20, '|  [Q] Quit                                |', AnsiColor.RED);
+    this.gfx.drawText(10, 21, '|                                          |', AnsiColor.WHITE);
+    this.gfx.drawText(10, 22, '|__________________________________________|', AnsiColor.WHITE);
 
     this.door.sendAnsi(this.gfx.render());
   }
@@ -379,19 +379,19 @@ class TrackerDoor {
     const pattern = this.song.patterns[this.currentPattern];
 
     // Header
-    this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
+    this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
     const header = ` TrackerDoor v1.0    BPM: ${String(this.song.bpm).padStart(3)}  Row: ${String(this.currentRow).padStart(2,'0')}/${pattern.rows}  Pat: ${String(this.currentPattern + 1).padStart(2,'0')}  Ch: ${String(this.currentChannel + 1).padStart(2,'0')}/${this.song.channels} `;
-    this.gfx.drawText(0, 1, `║${padEndVisible(header, 78)}║`, AnsiColor.CYAN);
-    this.gfx.drawText(0, 2, '╠════════╪══════════╪══════════╪══════════╪══════════╪══════════╪══════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, `|${padEndVisible(header, 78)}|`, AnsiColor.CYAN);
+    this.gfx.drawText(0, 2, '+--------+----------+----------+----------+----------+----------+----------+', AnsiColor.CYAN);
 
     // Channel headers
-    let headerLine = '║   ROW  │';
+    let headerLine = '|   ROW  |';
     for (let ch = 0; ch < Math.min(6, this.song.channels); ch++) {
-      headerLine += ` CH${String(ch + 1).padStart(2,'0')}     │`;
+      headerLine += ` CH${String(ch + 1).padStart(2,'0')}     |`;
     }
-    headerLine = padEndVisible(headerLine, 79) + '║';
+    headerLine = padEndVisible(headerLine, 79) + '|';
     this.gfx.drawText(0, 3, headerLine, AnsiColor.YELLOW);
-    this.gfx.drawText(0, 4, '╠════════╪══════════╪══════════╪══════════╪══════════╪══════════╪══════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 4, '+--------+----------+----------+----------+----------+----------+----------+', AnsiColor.CYAN);
 
     // Pattern data (16 visible rows)
     const startRow = this.scrollRow;
@@ -399,10 +399,10 @@ class TrackerDoor {
 
     for (let row = startRow; row < endRow; row++) {
       const y = 5 + (row - startRow);
-      const cursor = row === this.currentRow ? '►' : ' ';
+      const cursor = row === this.currentRow ? '>' : ' ';
       const rowColor = row === this.currentRow ? AnsiColor.YELLOW : AnsiColor.WHITE;
 
-      let line = `║ ${cursor} ${String(row).padStart(2,'0')}  │`;
+      let line = `| ${cursor} ${String(row).padStart(2,'0')}  |`;
 
       for (let ch = 0; ch < Math.min(6, this.song.channels); ch++) {
         const key = `${row}:${ch}`;
@@ -421,19 +421,19 @@ class TrackerDoor {
         }
 
         const cellColor = ch === this.currentChannel && row === this.currentRow ? AnsiColor.GREEN : rowColor;
-        line += ` ${noteStr}│`;
+        line += ` ${noteStr}|`;
       }
 
-      line = padEndVisible(line, 79) + '║';
+      line = padEndVisible(line, 79) + '|';
       this.gfx.drawText(0, y, line, rowColor);
     }
 
     // Footer
     const footerY = 5 + this.visibleRows;
-    this.gfx.drawText(0, footerY, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, footerY + 1, '║ [F1] Help  [Space] Play  [Tab] Next Ch  [↑↓←→] Navigate  [ESC] Menu       ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, footerY + 2, '║ [Q-I,A-K] Notes  [Z-/] Octave  [0-9] Volume  [1-9] Instrument            ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, footerY + 3, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(0, footerY, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
+    this.gfx.drawText(0, footerY + 1, '| [F1] Help  [Space] Play  [Tab] Next Ch  [Up/Dn/Lt/Rt] Navigate  [ESC] Menu |', AnsiColor.WHITE);
+    this.gfx.drawText(0, footerY + 2, '| [Q-I,A-K] Notes  [Z-/] Octave  [0-9] Volume  [1-9] Instrument              |', AnsiColor.WHITE);
+    this.gfx.drawText(0, footerY + 3, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }
@@ -736,35 +736,35 @@ class TrackerDoor {
     const inst = this.song.instruments[this.currentInstrument - 1];
     if (!inst) return;
 
-    this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
-    this.gfx.drawText(0, 1, `║ INSTRUMENT EDITOR                      Instrument ${String(inst.id).padStart(2,'0')}: "${inst.name.padEnd(20).substring(0,20)}" ║`, AnsiColor.CYAN);
-    this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, `| INSTRUMENT EDITOR                      Instrument ${String(inst.id).padStart(2,'0')}: "${inst.name.padEnd(20).substring(0,20)}" |`, AnsiColor.CYAN);
+    this.gfx.drawText(0, 2, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
 
     let y = 4;
 
     // Type
-    this.gfx.drawText(5, y++, `Type: [${inst.type === 'synth' ? '●' : ' '}] Synth  [${inst.type === 'sample' ? '●' : ' '}] Sample`, AnsiColor.WHITE);
+    this.gfx.drawText(5, y++, `Type: [${inst.type === 'synth' ? '*' : ' '}] Synth  [${inst.type === 'sample' ? '*' : ' '}] Sample`, AnsiColor.WHITE);
     y++;
 
     // Oscillator (if synth)
     if (inst.type === 'synth' && inst.oscillator) {
       this.gfx.drawText(5, y++, 'Oscillator', AnsiColor.YELLOW);
-      this.gfx.drawText(5, y++, '┌──────────────────────────────────────────────────────────────────────┐', AnsiColor.WHITE);
-      this.gfx.drawText(5, y++, `│ Waveform: ${inst.oscillator.type.padEnd(20)}                                        │`, AnsiColor.WHITE);
-      this.gfx.drawText(5, y++, '└──────────────────────────────────────────────────────────────────────┘', AnsiColor.WHITE);
+      this.gfx.drawText(5, y++, ' ----------------------------------------------------------------------', AnsiColor.WHITE);
+      this.gfx.drawText(5, y++, `| Waveform: ${inst.oscillator.type.padEnd(20)}                                        |`, AnsiColor.WHITE);
+      this.gfx.drawText(5, y++, '|______________________________________________________________________|', AnsiColor.WHITE);
       y++;
     }
 
     // Envelope
     this.gfx.drawText(5, y++, 'Amplitude Envelope', AnsiColor.YELLOW);
-    this.gfx.drawText(5, y++, '┌──────────────────────────────────────────────────────────────────────┐', AnsiColor.WHITE);
-    this.gfx.drawText(5, y++, `│ A:${String(Math.floor(inst.envelope.attack * 1000)).padStart(4)}ms  D:${String(Math.floor(inst.envelope.decay * 1000)).padStart(4)}ms  S:${String(Math.floor(inst.envelope.sustain * 100)).padStart(3)}%  R:${String(Math.floor(inst.envelope.release * 1000)).padStart(4)}ms                 │`, AnsiColor.WHITE);
-    this.gfx.drawText(5, y++, '└──────────────────────────────────────────────────────────────────────┘', AnsiColor.WHITE);
+    this.gfx.drawText(5, y++, ' ----------------------------------------------------------------------', AnsiColor.WHITE);
+    this.gfx.drawText(5, y++, `| A:${String(Math.floor(inst.envelope.attack * 1000)).padStart(4)}ms  D:${String(Math.floor(inst.envelope.decay * 1000)).padStart(4)}ms  S:${String(Math.floor(inst.envelope.sustain * 100)).padStart(3)}%  R:${String(Math.floor(inst.envelope.release * 1000)).padStart(4)}ms                 |`, AnsiColor.WHITE);
+    this.gfx.drawText(5, y++, '|______________________________________________________________________|', AnsiColor.WHITE);
 
     // Footer
-    this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [←→] Select Instrument  [P] Preview  [ESC] Back                              ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(0, 22, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
+    this.gfx.drawText(0, 23, '| [Lt/Rt] Select Instrument  [P] Preview  [ESC] Back                          |', AnsiColor.WHITE);
+    this.gfx.drawText(0, 24, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }
@@ -791,9 +791,9 @@ class TrackerDoor {
 
     this.gfx.clear(AnsiColor.BLACK);
 
-    this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
-    this.gfx.drawText(0, 1, '║                    TRACKERDOOR HELP & SHORTCUTS                            ║', AnsiColor.CYAN);
-    this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, '|                    TRACKERDOOR HELP & SHORTCUTS                            |', AnsiColor.CYAN);
+    this.gfx.drawText(0, 2, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
 
     let y = 3;
     this.gfx.drawText(2, y++, 'GLOBAL COMMANDS (work from any screen):', AnsiColor.YELLOW);
@@ -812,9 +812,9 @@ class TrackerDoor {
     y++;
     this.gfx.drawText(2, y++, 'CHANNEL: M - Mute  S - Solo     FORMAT: MOD/XM/IT import supported', AnsiColor.WHITE);
 
-    this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [ESC] Back to Pattern Editor                                               ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(0, 22, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
+    this.gfx.drawText(0, 23, '| [ESC] Back to Pattern Editor                                               |', AnsiColor.WHITE);
+    this.gfx.drawText(0, 24, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }
@@ -835,9 +835,9 @@ class TrackerDoor {
 
     this.gfx.clear(AnsiColor.BLACK);
 
-    this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
-    this.gfx.drawText(0, 1, '║                           SAMPLE MANAGER                                   ║', AnsiColor.CYAN);
-    this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, '|                           SAMPLE MANAGER                                   |', AnsiColor.CYAN);
+    this.gfx.drawText(0, 2, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
 
     let y = 4;
 
@@ -851,9 +851,9 @@ class TrackerDoor {
     this.gfx.drawText(5, y++, 'For advanced sample loading, use a Node.js door instead.', AnsiColor.YELLOW);
 
     y = Math.max(y, 20);
-    this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [ESC] Back                                                                 ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(0, 22, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
+    this.gfx.drawText(0, 23, '| [ESC] Back                                                                 |', AnsiColor.WHITE);
+    this.gfx.drawText(0, 24, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }
@@ -876,9 +876,9 @@ class TrackerDoor {
 
     const inst = this.song.instruments[this.currentInstrument - 1];
 
-    this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
-    this.gfx.drawText(0, 1, `║ EFFECTS EDITOR                         Instrument ${String(inst.id).padStart(2,'0')}: "${inst.name.substring(0,20).padEnd(20)}" ║`, AnsiColor.CYAN);
-    this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, `| EFFECTS EDITOR                         Instrument ${String(inst.id).padStart(2,'0')}: "${inst.name.substring(0,20).padEnd(20)}" |`, AnsiColor.CYAN);
+    this.gfx.drawText(0, 2, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
 
     let y = 4;
 
@@ -901,9 +901,9 @@ class TrackerDoor {
     this.gfx.drawText(5, y++, '  [R] Reverb    [D] Delay      [C] Chorus    [B] Bitcrusher', AnsiColor.WHITE);
     this.gfx.drawText(5, y++, '  [P] Compressor [F] Filter    [O] Overdrive [T] Tremolo', AnsiColor.WHITE);
 
-    this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [R-T] Add Effect  [1-9] Toggle  [ESC] Back                                ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(0, 22, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
+    this.gfx.drawText(0, 23, '| [R-T] Add Effect  [1-9] Toggle  [ESC] Back                                |', AnsiColor.WHITE);
+    this.gfx.drawText(0, 24, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }
@@ -948,9 +948,9 @@ class TrackerDoor {
 
     this.gfx.clear(AnsiColor.BLACK);
 
-    this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
-    this.gfx.drawText(0, 1, `║ SONG ARRANGER                       Song: ${this.song.title.substring(0,30).padEnd(30)} ║`, AnsiColor.CYAN);
-    this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, `| SONG ARRANGER                       Song: ${this.song.title.substring(0,30).padEnd(30)} |`, AnsiColor.CYAN);
+    this.gfx.drawText(0, 2, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
 
     let y = 4;
 
@@ -974,9 +974,9 @@ class TrackerDoor {
       this.gfx.drawText(5, y++, `  ${String(pattern.id).padStart(2,'0')}. ${pattern.name.padEnd(20)} (${noteCount} notes)`, AnsiColor.WHITE);
     });
 
-    this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [+] Add Pattern  [-] Remove  [Space] Play Song  [ESC] Back                ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(0, 22, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
+    this.gfx.drawText(0, 23, '| [+] Add Pattern  [-] Remove  [Space] Play Song  [ESC] Back                |', AnsiColor.WHITE);
+    this.gfx.drawText(0, 24, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }
@@ -1009,9 +1009,9 @@ class TrackerDoor {
 
     this.gfx.clear(AnsiColor.BLACK);
 
-    this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
-    this.gfx.drawText(0, 1, '║                           MODULE EXPORT                                    ║', AnsiColor.CYAN);
-    this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, '|                           MODULE EXPORT                                    |', AnsiColor.CYAN);
+    this.gfx.drawText(0, 2, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
 
     let y = 4;
 
@@ -1031,9 +1031,9 @@ class TrackerDoor {
     this.gfx.drawText(5, y++, 'Your work is stored in browser memory only.', AnsiColor.WHITE);
     this.gfx.drawText(5, y++, 'Future updates may add localStorage export.', AnsiColor.WHITE);
 
-    this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [ESC] Back                                                                 ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(0, 22, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
+    this.gfx.drawText(0, 23, '| [ESC] Back                                                                 |', AnsiColor.WHITE);
+    this.gfx.drawText(0, 24, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }
@@ -1054,9 +1054,9 @@ class TrackerDoor {
 
     this.gfx.clear(AnsiColor.BLACK);
 
-    this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
-    this.gfx.drawText(0, 1, '║                           AI ASSISTANT                                     ║', AnsiColor.CYAN);
-    this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
+    this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, '|                           AI ASSISTANT                                     |', AnsiColor.CYAN);
+    this.gfx.drawText(0, 2, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
 
     let y = 4;
 
@@ -1083,9 +1083,9 @@ class TrackerDoor {
     this.gfx.drawText(5, y++, 'Pattern Variations:', AnsiColor.YELLOW);
     this.gfx.drawText(5, y++, '  [V] Create variation of current pattern', AnsiColor.GREEN);
 
-    this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ Select option above  [ESC] Back                                            ║', AnsiColor.WHITE);
-    this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
+    this.gfx.drawText(0, 22, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
+    this.gfx.drawText(0, 23, '| Select option above  [ESC] Back                                            |', AnsiColor.WHITE);
+    this.gfx.drawText(0, 24, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }

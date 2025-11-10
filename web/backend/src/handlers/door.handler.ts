@@ -1361,6 +1361,12 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
     // Set door active flag
     session.inDoorManager = true;
 
+    // Set a no-op input handler to prevent BBS from echoing input
+    // The actual input handling is done by the client-door-bridge
+    session.doorInputHandler = () => {
+      // Input is handled by client-door-bridge, not here
+    };
+
     // Notify frontend to load client door
     socket.emit('door:load-client', {
       doorId: door.id,
