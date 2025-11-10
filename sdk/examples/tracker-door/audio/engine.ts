@@ -284,7 +284,7 @@ class ChannelStrip {
       maxPolyphony: 32,
       options: {
         oscillator: {
-          type: mapOscillatorType(instrument.oscillator?.type)
+          type: mapOscillatorType(instrument.oscillator?.type) as any
         },
         envelope: {
           attack: instrument.envelope.attack,

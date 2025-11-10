@@ -224,7 +224,7 @@ export class TrackerAudioEngine {
     if (inst.type === 'synth') {
       synth = new Tone.Synth({
         oscillator: {
-          type: mapOscillatorType(inst.oscillator?.type)
+          type: mapOscillatorType(inst.oscillator?.type) as any
         },
         envelope: {
           attack: inst.envelope.attack,

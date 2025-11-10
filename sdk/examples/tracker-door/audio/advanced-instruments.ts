@@ -106,10 +106,10 @@ export class AdvancedSynthVoice {
     for (let i = 0; i < params.oscillators.length; i++) {
       const oscParams = params.oscillators[i];
       const osc = new Tone.Oscillator({
-        type: mapOscillatorType(oscParams.type),
+        type: mapOscillatorType(oscParams.type) as 'sine' | 'square' | 'sawtooth' | 'triangle',
         phase: oscParams.phase,
         detune: oscParams.detune
-      });
+      } as any);
 
       this.oscillators.push(osc);
     }
