@@ -29,10 +29,14 @@ AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress
 
 ### Server Management
 - Start: `./dev/scripts/start-servers.sh`
+  - **Auto-setup**: Automatically checks and installs dependencies, builds SDK, creates .env.local
+  - **First run**: May take 2-3 minutes as it installs all dependencies and builds SDK
+  - **Subsequent runs**: Fast startup, only checks if setup is current
 - Debug mode: `./dev/scripts/start-servers.sh --debug` (shows all logs)
 - Kill: `./dev/scripts/kill-servers.sh`
 - **NEVER**: `npm run dev &` or background bash or `run_in_background: true`
-- Ports: Backend 3001, Frontend 5173
+- Ports: Backend 3001, Frontend 5173, Preview 8080
+- **Just works**: No need to manually run npm install or builds
 
 ### Backend (web/backend)
 ```bash
