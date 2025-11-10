@@ -2349,23 +2349,53 @@ async function startClientDoor(clientId, doorId, doorPath) {
       // Mark Node.js built-ins as external (they'll be replaced with empty objects)
       external: [],
       // Use esbuild plugins to handle Node.js built-ins
-      plugins: [{
-        name: 'node-builtins-browser',
-        setup(build) {
-          // Intercept imports of Node.js built-ins and provide empty shims
-          const nodeBuiltins = ['fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'buffer'];
-          nodeBuiltins.forEach(mod => {
-            build.onResolve({ filter: new RegExp(`^${mod}$`) }, args => ({
-              path: args.path,
-              namespace: 'node-builtin-shim',
-            }));
-            build.onLoad({ filter: /.*/, namespace: 'node-builtin-shim' }, () => ({
+      plugins: [
+        {
+          name: 'node-builtins-browser',
+          setup(build) {
+            // Intercept imports of Node.js built-ins and provide empty shims
+            const nodeBuiltins = [
+              'fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'buffer',
+              'zlib', 'assert', 'http', 'https', 'net', 'tls', 'child_process',
+              'cluster', 'dns', 'dgram', 'readline', 'repl', 'tty', 'v8', 'vm',
+              'async_hooks', 'perf_hooks', 'worker_threads', 'inspector',
+              'constants', 'module', 'process', 'querystring', 'string_decoder',
+              'sys', 'timers', 'url', 'punycode', 'domain'
+            ];
+            nodeBuiltins.forEach(mod => {
+              build.onResolve({ filter: new RegExp(`^${mod}$`) }, args => ({
+                path: args.path,
+                namespace: 'node-builtin-shim',
+              }));
+              build.onLoad({ filter: /.*/, namespace: 'node-builtin-shim' }, () => ({
+                contents: 'export default {}; export const __esModule = true;',
+                loader: 'js',
+              }));
+            });
+          },
+        },
+        {
+          name: 'node-only-packages',
+          setup(build) {
+            // Shim Node.js-only packages that shouldn't run in browser
+            const nodePackages = [
+              'archiver', 'adm-zip', 'glob', 'graceful-fs', 'rimraf',
+              'chokidar', 'fs-extra', 'mkdirp', 'tar', 'tar-stream',
+              'crc32-stream', 'lazystream', 'readable-stream', 'inflight'
+            ];
+            nodePackages.forEach(pkg => {
+              build.onResolve({ filter: new RegExp(`^${pkg}(/.*)?$`) }, args => ({
+                path: args.path,
+                namespace: 'node-package-shim',
+              }));
+            });
+            build.onLoad({ filter: /.*/, namespace: 'node-package-shim' }, () => ({
               contents: 'export default {}; export const __esModule = true;',
               loader: 'js',
             }));
-          });
-        },
-      }],
+          },
+        }
+      ],
     });
 
     debugLog(clientId, `✅ [CLIENT DOOR] Bundle created: ${outfile}`);
