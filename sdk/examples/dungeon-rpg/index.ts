@@ -354,9 +354,10 @@ class DungeonRPG {
     if (!this.userId) return;
 
     this.gfx.clear(AnsiColor.Black);
-    this.gfx.drawText(30, 8, '╔════════════════╗', AnsiColor.Cyan);
-    this.gfx.drawText(30, 9, '║ DUNGEON  RPG  ║', AnsiColor.Cyan);
-    this.gfx.drawText(30, 10, '╚════════════════╝', AnsiColor.Cyan);
+
+    // Draw box using drawBox method (handles positioning correctly)
+    this.gfx.drawBox({ x: 30, y: 8, width: 18, height: 3 }, 'double', AnsiColor.Cyan);
+    this.gfx.drawText(31, 9, 'DUNGEON  RPG', AnsiColor.Cyan);
 
     this.gfx.drawText(20, 14, 'Complete SDK Example - All Features!', AnsiColor.Yellow);
     this.gfx.drawText(30, 17, 'Press any key...', AnsiColor.White);
