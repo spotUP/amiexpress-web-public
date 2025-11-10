@@ -57,6 +57,7 @@ export { ServerDoor as Door } from './server';
 
 // Engines
 export { GraphicsEngine } from './engines/graphics/graphics-engine';
+export { BrailleCanvas, BrailleVUMeter, BrailleWaveform, BrailleSpectrum } from './engines/graphics/braille-graphics';
 export { PhysicsEngine } from './engines/physics/physics-engine';
 export { AudioEngine } from './engines/audio/audio-engine';
 export { NetworkEngine } from './engines/network/network-engine';

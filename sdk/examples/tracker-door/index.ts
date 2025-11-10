@@ -13,6 +13,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/client';
 import { GraphicsEngine } from './graphics-engine';
 import { AudioEngine } from './audio/engine';
+import { TrackerVisualizer } from './visualizations/tracker-visualizer';
 import {
   Song,
   Pattern,
@@ -45,6 +46,7 @@ class TrackerDoor {
   private aiGenerator: AIGenerator;
   private undoManager: UndoManager;
   private clipboardManager: ClipboardManager;
+  private visualizer: TrackerVisualizer;
   private userId?: number;
 
   // State
@@ -74,6 +76,10 @@ class TrackerDoor {
   private channelMute: boolean[] = new Array(16).fill(false);
   private channelSolo: boolean[] = new Array(16).fill(false);
 
+  // Visualization
+  private showVisualizer: boolean = true;
+  private visualizerMode: 'vu' | 'waveform' | 'spectrum' | 'off' = 'vu';
+
   constructor() {
     this.door = new ClientDoor({
       name: 'TrackerDoor',
@@ -87,6 +93,7 @@ class TrackerDoor {
     this.gfx = new GraphicsEngine();
     this.audio = new AudioEngine(16);
     this.aiGenerator = new AIGenerator();
+    this.visualizer = new TrackerVisualizer(8);
 
     // Initialize default song
     this.song = this.createDefaultSong();
@@ -287,6 +294,12 @@ class TrackerDoor {
       return true;
     }
 
+    // Ctrl+V - Toggle Visualizer (when not in pattern editor, since Ctrl+V is paste there)
+    if (key === '\x16' && this.currentView !== 'pattern-editor') {
+      this.cycleVisualizerMode();
+      return true;
+    }
+
     return false;
   }
 
@@ -378,9 +391,20 @@ class TrackerDoor {
 
     const pattern = this.song.patterns[this.currentPattern];
 
+    // Update visualizer with mock channel levels (will be real-time when audio plays)
+    if (this.visualizerMode !== 'off') {
+      for (let ch = 0; ch < this.song.channels; ch++) {
+        // Mock level based on whether channel has data at current row
+        const key = `${this.currentRow}:${ch}`;
+        const hasNote = pattern.data.has(key);
+        this.visualizer.setChannelLevel(ch, hasNote ? Math.random() * 0.8 + 0.2 : 0);
+      }
+    }
+
     // Header
     this.gfx.drawText(0, 0, '________________________________________________________________________________', AnsiColor.CYAN);
-    const header = ` TrackerDoor v1.0    BPM: ${String(this.song.bpm).padStart(3)}  Row: ${String(this.currentRow).padStart(2,'0')}/${pattern.rows}  Pat: ${String(this.currentPattern + 1).padStart(2,'0')}  Ch: ${String(this.currentChannel + 1).padStart(2,'0')}/${this.song.channels} `;
+    const vizMode = this.visualizerMode === 'off' ? 'OFF' : this.visualizerMode.toUpperCase();
+    const header = ` TrackerDoor v1.0  BPM:${String(this.song.bpm).padStart(3)} Row:${String(this.currentRow).padStart(2,'0')}/${pattern.rows} Pat:${String(this.currentPattern + 1).padStart(2,'0')} Ch:${String(this.currentChannel + 1).padStart(2,'0')}/${this.song.channels} Viz:${vizMode} `;
     this.gfx.drawText(0, 1, `|${padEndVisible(header, 78)}|`, AnsiColor.CYAN);
     this.gfx.drawText(0, 2, '+--------+----------+----------+----------+----------+----------+----------+', AnsiColor.CYAN);
 
@@ -431,7 +455,19 @@ class TrackerDoor {
     // Footer
     const footerY = 5 + this.visibleRows;
     this.gfx.drawText(0, footerY, '+------------------------------------------------------------------------------+', AnsiColor.CYAN);
-    this.gfx.drawText(0, footerY + 1, '| [F1] Help  [Space] Play  [Tab] Next Ch  [Up/Dn/Lt/Rt] Navigate  [ESC] Menu |', AnsiColor.WHITE);
+
+    // Show visualizer if enabled
+    if (this.visualizerMode !== 'off') {
+      const vizOutput = this.visualizer.renderLayout(this.visualizerMode, this.currentRow, pattern.rows);
+      const vizLines = vizOutput.split('\n');
+      vizLines.forEach((line, idx) => {
+        if (footerY + idx < 22) {
+          this.gfx.drawText(0, footerY + idx, line, AnsiColor.WHITE);
+        }
+      });
+    }
+
+    this.gfx.drawText(0, footerY + 1, '| [F1] Help  [Space] Play  [V] Viz  [Tab] Ch  [Arrows] Nav  [ESC] Menu       |', AnsiColor.WHITE);
     this.gfx.drawText(0, footerY + 2, '| [Q-I,A-K] Notes  [Z-/] Octave  [0-9] Volume  [1-9] Instrument              |', AnsiColor.WHITE);
     this.gfx.drawText(0, footerY + 3, '|______________________________________________________________________________|', AnsiColor.CYAN);
 
@@ -511,6 +547,13 @@ class TrackerDoor {
       return;
     } else if (key.toLowerCase() === 's' && key.length === 1) {
       this.channelSolo[this.currentChannel] = !this.channelSolo[this.currentChannel];
+      this.showPatternEditor();
+      return;
+    }
+
+    // Toggle visualizer
+    if (key.toLowerCase() === 'v' && key.length === 1) {
+      this.cycleVisualizerMode();
       this.showPatternEditor();
       return;
     }
@@ -1150,6 +1193,19 @@ class TrackerDoor {
   // ==========================================================================
   // UTILITIES
   // ==========================================================================
+
+  /**
+   * Cycle through visualizer modes
+   */
+  private cycleVisualizerMode(): void {
+    const modes: Array<'vu' | 'waveform' | 'spectrum' | 'off'> = ['vu', 'waveform', 'spectrum', 'off'];
+    const currentIndex = modes.indexOf(this.visualizerMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    this.visualizerMode = modes[nextIndex];
+
+    // Reset visualizer when switching modes
+    this.visualizer.reset();
+  }
 
   private quit(): void {
     this.door.shutdown();
