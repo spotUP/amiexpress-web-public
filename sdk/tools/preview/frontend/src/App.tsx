@@ -29,6 +29,7 @@ import {
   CodeMinimap,
   PerformanceProfiler,
   GitIntegration,
+  AIPromptPanel,
 } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { useToast } from './hooks/useToast';
@@ -365,6 +366,34 @@ function App() {
     }
   };
 
+  // Handle AI code application
+  const handleApplyCode = (code: string, filePath: string) => {
+    const file = doorFiles.find((f) => f.path === filePath);
+    if (file) {
+      handleFileChange(file, code);
+      toast.success('Code applied!', `Updated ${filePath}`);
+      soundEffects.success();
+      triggerHaptic();
+    } else {
+      toast.error('File not found', filePath);
+    }
+  };
+
+  // Handle AI diff view
+  const handleShowDiff = (original: string, suggested: string, filePath: string) => {
+    // For now, apply directly and show notification
+    // TODO: Implement proper diff viewer modal
+    const confirmed = window.confirm(
+      `Apply AI suggestions to ${filePath}?\n\n` +
+      `Original length: ${original.length} characters\n` +
+      `Suggested length: ${suggested.length} characters`
+    );
+
+    if (confirmed) {
+      handleApplyCode(suggested, filePath);
+    }
+  };
+
   // Handle playback event
   const handlePlaybackEvent = (event: SessionEvent) => {
     if (event.type === 'output' && event.ansiData) {
@@ -677,122 +706,141 @@ function App() {
             </>
           )}
 
-          {/* Center - Terminal */}
+          {/* Center - Terminal and AI Prompt */}
           <Panel defaultSize={50} minSize={30}>
-            <div className="flex flex-col h-full">
-              {/* Terminal Tabs */}
-              <TerminalTabs
-                tabs={terminalTabs}
-                activeTab={activeTerminalTab}
-                onTabChange={setActiveTerminalTab}
-                onTabCreate={() => {
-                  const newId = (terminalTabs.length + 1).toString();
-                  setTerminalTabs([...terminalTabs, { id: newId, name: `Terminal ${newId}`, active: false }]);
-                  setActiveTerminalTab(newId);
-                  soundEffects.click();
-                }}
-                onTabClose={(id) => {
-                  if (terminalTabs.length > 1) {
-                    setTerminalTabs(terminalTabs.filter(t => t.id !== id));
-                    if (activeTerminalTab === id) {
-                      setActiveTerminalTab(terminalTabs[0].id);
-                    }
-                    soundEffects.click();
-                  }
-                }}
-                onTabRename={(id, newName) => {
-                  setTerminalTabs(terminalTabs.map(t => t.id === id ? { ...t, name: newName } : t));
-                }}
-              />
-
-              {/* Terminal toolbar */}
-              <div className="bg-[#252526] border-b border-gray-700 px-4 py-2 flex items-center gap-2 shadow-lg">
-                {!showLeftSidebar && (
-                  <button
-                    onClick={() => setShowLeftSidebar(true)}
-                    className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
-                    title="Show sidebar"
-                  >
-                    <ChevronRight className="w-4 h-4 transition-transform" />
-                  </button>
-                )}
-                {showLeftSidebar && (
-                  <button
-                    onClick={() => setShowLeftSidebar(false)}
-                    className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
-                    title="Hide sidebar"
-                  >
-                    <ChevronLeft className="w-4 h-4 transition-transform" />
-                  </button>
-                )}
-
-                <div className="h-4 w-px bg-gray-700" />
-
-                <button
-                  onClick={handleRunDoor}
-                  disabled={!selectedDoor}
-                  className="group flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100"
-                >
-                  <Play className="w-4 h-4 transition-transform group-hover:scale-110" />
-                  <span className="hidden sm:inline">Run</span>
-                </button>
-
-                <button
-                  onClick={handleBuildDoor}
-                  disabled={!selectedDoor || buildStatus.building}
-                  className={`group flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100 ${
-                    buildStatus.building ? 'animate-pulse' : ''
-                  }`}
-                >
-                  <Hammer className={`w-4 h-4 transition-transform ${buildStatus.building ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
-                  <span className="hidden sm:inline">{buildStatus.building ? 'Building...' : 'Build'}</span>
-                </button>
-
-                <div className="ml-auto flex items-center gap-2">
-                  <ScreenshotCapture
-                    targetElement={terminalRef.current}
-                    doorName={selectedDoor?.name || 'terminal'}
+            <PanelGroup direction="vertical">
+              {/* Terminal Section */}
+              <Panel defaultSize={60} minSize={30}>
+                <div className="flex flex-col h-full">
+                  {/* Terminal Tabs */}
+                  <TerminalTabs
+                    tabs={terminalTabs}
+                    activeTab={activeTerminalTab}
+                    onTabChange={setActiveTerminalTab}
+                    onTabCreate={() => {
+                      const newId = (terminalTabs.length + 1).toString();
+                      setTerminalTabs([...terminalTabs, { id: newId, name: `Terminal ${newId}`, active: false }]);
+                      setActiveTerminalTab(newId);
+                      soundEffects.click();
+                    }}
+                    onTabClose={(id) => {
+                      if (terminalTabs.length > 1) {
+                        setTerminalTabs(terminalTabs.filter(t => t.id !== id));
+                        if (activeTerminalTab === id) {
+                          setActiveTerminalTab(terminalTabs[0].id);
+                        }
+                        soundEffects.click();
+                      }
+                    }}
+                    onTabRename={(id, newName) => {
+                      setTerminalTabs(terminalTabs.map(t => t.id === id ? { ...t, name: newName } : t));
+                    }}
                   />
 
-                  {!showRightSidebar && (
+                  {/* Terminal toolbar */}
+                  <div className="bg-[#252526] border-b border-gray-700 px-4 py-2 flex items-center gap-2 shadow-lg">
+                    {!showLeftSidebar && (
+                      <button
+                        onClick={() => setShowLeftSidebar(true)}
+                        className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
+                        title="Show sidebar"
+                      >
+                        <ChevronRight className="w-4 h-4 transition-transform" />
+                      </button>
+                    )}
+                    {showLeftSidebar && (
+                      <button
+                        onClick={() => setShowLeftSidebar(false)}
+                        className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
+                        title="Hide sidebar"
+                      >
+                        <ChevronLeft className="w-4 h-4 transition-transform" />
+                      </button>
+                    )}
+
+                    <div className="h-4 w-px bg-gray-700" />
+
                     <button
-                      onClick={() => setShowRightSidebar(true)}
-                      className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
-                      title="Show sidebar"
+                      onClick={handleRunDoor}
+                      disabled={!selectedDoor}
+                      className="group flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100"
                     >
-                      <ChevronLeft className="w-4 h-4 transition-transform" />
+                      <Play className="w-4 h-4 transition-transform group-hover:scale-110" />
+                      <span className="hidden sm:inline">Run</span>
                     </button>
-                  )}
-                  {showRightSidebar && (
+
                     <button
-                      onClick={() => setShowRightSidebar(false)}
-                      className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
-                      title="Hide sidebar"
+                      onClick={handleBuildDoor}
+                      disabled={!selectedDoor || buildStatus.building}
+                      className={`group flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100 ${
+                        buildStatus.building ? 'animate-pulse' : ''
+                      }`}
                     >
-                      <ChevronRight className="w-4 h-4 transition-transform" />
+                      <Hammer className={`w-4 h-4 transition-transform ${buildStatus.building ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
+                      <span className="hidden sm:inline">{buildStatus.building ? 'Building...' : 'Build'}</span>
                     </button>
-                  )}
+
+                    <div className="ml-auto flex items-center gap-2">
+                      <ScreenshotCapture
+                        targetElement={terminalRef.current}
+                        doorName={selectedDoor?.name || 'terminal'}
+                      />
+
+                      {!showRightSidebar && (
+                        <button
+                          onClick={() => setShowRightSidebar(true)}
+                          className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
+                          title="Show sidebar"
+                        >
+                          <ChevronLeft className="w-4 h-4 transition-transform" />
+                        </button>
+                      )}
+                      {showRightSidebar && (
+                        <button
+                          onClick={() => setShowRightSidebar(false)}
+                          className="p-1 hover:bg-gray-700 rounded transition-all duration-200 hover:scale-110 active:scale-95"
+                          title="Hide sidebar"
+                        >
+                          <ChevronRight className="w-4 h-4 transition-transform" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Terminal with optional CRT effect */}
+                  <div ref={terminalRef} className="flex-1 min-h-0 overflow-hidden" data-tour="terminal">
+                    <CRTEffect enabled={enableCRT} intensity="medium">
+                      <XTermTerminal
+                        output={terminalOutput}
+                        onInput={handleTerminalInput}
+                        fontSize={settings.terminalFontSize}
+                      />
+                    </CRTEffect>
+                  </div>
+
+                  {/* Session recorder controls */}
+                  <SessionRecorder
+                    recorder={recorder}
+                    doorName={selectedDoor?.name || 'door'}
+                    onPlaybackEvent={handlePlaybackEvent}
+                  />
                 </div>
-              </div>
+              </Panel>
 
-              {/* Terminal with optional CRT effect */}
-              <div ref={terminalRef} className="flex-1 min-h-0 overflow-hidden" data-tour="terminal">
-                <CRTEffect enabled={enableCRT} intensity="medium">
-                  <XTermTerminal
-                    output={terminalOutput}
-                    onInput={handleTerminalInput}
-                    fontSize={settings.terminalFontSize}
-                  />
-                </CRTEffect>
-              </div>
+              {/* Resize handle between terminal and AI prompt */}
+              <PanelResizeHandle className="h-1 bg-gray-700 hover:bg-purple-600 transition-all duration-300 hover:h-2 cursor-row-resize" />
 
-              {/* Session recorder controls */}
-              <SessionRecorder
-                recorder={recorder}
-                doorName={selectedDoor?.name || 'door'}
-                onPlaybackEvent={handlePlaybackEvent}
-              />
-            </div>
+              {/* AI Prompt Panel */}
+              <Panel defaultSize={40} minSize={20} maxSize={60}>
+                <AIPromptPanel
+                  selectedDoor={selectedDoor?.id || null}
+                  currentFile={currentFile}
+                  buildErrors={buildStatus.errors}
+                  onApplyCode={handleApplyCode}
+                  onShowDiff={handleShowDiff}
+                />
+              </Panel>
+            </PanelGroup>
           </Panel>
 
           {/* Right sidebar - Code editor / Build status / Info with slide-in animation */}
