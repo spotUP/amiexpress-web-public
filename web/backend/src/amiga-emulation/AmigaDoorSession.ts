@@ -20,6 +20,7 @@ import * as path from 'path';
 
 export interface DoorConfig {
   executablePath: string;  // Path to Amiga door binary
+  doorType?: string;       // Door type: XIM, AIM, SIM, TIM, IIM, MCI, AEM, SUP (default: SIM)
   timeout?: number;        // Max execution time in seconds (default: 300)
   bbsSession?: any;        // BBS session data (user, system, node info)
 }
@@ -325,28 +326,41 @@ export class AmigaDoorSession {
     this.execLibrary = new ExecLibrary(this.emulator);
     this.execLibrary.initialize();
 
-    // CORRECT IMPLEMENTATION per express.e lines 4322-4324:
-    // BBS checks if port exists (FindPort), creates it if not (CreatePort)
-    // This handles both fresh start (port doesn't exist) and door already running (port exists)
-    console.log('[AmigaDoorSession] Creating AEDoorPort for door communication...');
-
-    // RTW and other doors search for "AEDoorPort%d" where %d is the node number
-    // From RTW binary strings: "AEDoorPort%d", "Couldn't create reply port"
-    // Each node needs its own numbered port
+    // Get door type (defaults to SIM per express.e:4681)
+    const doorType = this.config.doorType || 'SIM';
     const nodeId = this.config.bbsSession?.nodeId || 0;
-    const portName = `AEDoorPort${nodeId}`;  // e.g., "AEDoorPort0"
 
-    // Create the port that door will use to communicate with BBS
-    const portAddr = this.execLibrary.createPublicPort(portName);
-    console.log(`[AmigaDoorSession] Created ${portName} at 0x${portAddr.toString(16)}`);
+    console.log(`[AmigaDoorSession] Door type: ${doorType}`);
 
-    // Store for message handling
-    this.doorPortAddress = portAddr;
+    // SIM and SUP doors run synchronously without XIM protocol (express.e:4280-4282, 4304-4306)
+    // They execute as standard CLI commands and output to stdout via DOS Write()
+    const useXimProtocol = doorType !== 'SIM' && doorType !== 'SUP';
 
-    console.log('[AmigaDoorSession] Creating XIM Protocol handler...');
+    if (useXimProtocol) {
+      // CORRECT IMPLEMENTATION per express.e lines 4322-4324:
+      // BBS checks if port exists (FindPort), creates it if not (CreatePort)
+      // This handles both fresh start (port doesn't exist) and door already running (port exists)
+      console.log('[AmigaDoorSession] Creating AEDoorPort for door communication...');
 
-    // Create XIM protocol handler for door communication
-    this.ximProtocol = new XIMProtocol(this.emulator, this.execLibrary, this.socket, portAddr);
+      // RTW and other doors search for "AEDoorPort%d" where %d is the node number
+      // From RTW binary strings: "AEDoorPort%d", "Couldn't create reply port"
+      // Each node needs its own numbered port
+      const portName = `AEDoorPort${nodeId}`;  // e.g., "AEDoorPort0"
+
+      // Create the port that door will use to communicate with BBS
+      const portAddr = this.execLibrary.createPublicPort(portName);
+      console.log(`[AmigaDoorSession] Created ${portName} at 0x${portAddr.toString(16)}`);
+
+      // Store for message handling
+      this.doorPortAddress = portAddr;
+
+      console.log('[AmigaDoorSession] Creating XIM Protocol handler...');
+
+      // Create XIM protocol handler for door communication
+      this.ximProtocol = new XIMProtocol(this.emulator, this.execLibrary, this.socket, portAddr);
+    } else {
+      console.log(`[AmigaDoorSession] Skipping XIM protocol for ${doorType} door - runs synchronously`);
+    }
 
     console.log('[AmigaDoorSession] Creating DOS.library...');
 
@@ -366,7 +380,7 @@ export class AmigaDoorSession {
     // WHO doors (like RTW) search for node information via FindSemaphore("AEServer.%d")
     nodeStatusManager.initializeInEmulator(this.emulator, this.execLibrary, 0xB0000);
 
-    // Update current node status (reuse nodeId from above)
+    // Update current node status
     const userName = this.config.bbsSession?.user?.username || 'Unknown';
     const userLocation = this.config.bbsSession?.user?.location || '';
 

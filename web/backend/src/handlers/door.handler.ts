@@ -556,6 +556,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     // Create DoorConfig for AmigaDoorSession
     const doorConfig = {
       executablePath: doorPath,
+      doorType: door.type || 'SIM',  // Pass door type (defaults to SIM per express.e:4681)
       timeout: 300, // 5 minutes
       bbsSession: session  // Pass BBS session for user/system/node data
     };

@@ -54,22 +54,26 @@ cd web/frontend
 npm install          # Install dependencies
 npm run dev          # Start Vite dev server
 npm run build        # Production build
-npm run build:check  # Type check + build
-npm run lint         # ESLint
+npm run build:check  # Type check + build (REQUIRED before PRs)
+npm run lint         # ESLint check
+npm run preview      # Preview production build (port 8080)
 ```
 
 ### SDK (Door Development Kit)
 ```bash
 cd sdk
 npm install          # Install dependencies
-npm run build        # Build SDK
+npm run build        # Build SDK (REQUIRED before using CLI commands)
 npm test             # Run SDK tests
 npm run test:watch   # Watch mode
-npm run create-door  # Create new door
-npm run pack         # Package door
-npm run validate     # Validate door package
+
+# CLI commands (require SDK to be built first)
+npm run create-door  # Create new door (interactive wizard)
+npm run pack         # Package door for distribution
+npm run validate     # Validate door package structure
 ```
 - SDK located at `/sdk/`
+- **IMPORTANT**: Always run `npm run build` before using CLI commands
 - Builds doors for AmiExpress BBS
 - See `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
 
@@ -84,6 +88,24 @@ npm run validate     # Validate door package
 - Example doors are in `sdk/examples/` directory
 
 ### Testing
+
+**Backend Tests:**
+```bash
+cd web/backend
+npm test             # Run all Jest tests
+npm run test:watch   # Watch mode
+npm run test:coverage # Coverage report
+npx tsc --noEmit     # Type check (REQUIRED before commits)
+```
+
+**Frontend Tests:**
+```bash
+cd web/frontend
+npm run build:check  # Type check + build (REQUIRED before PRs)
+npm run lint         # ESLint validation
+```
+
+**BBS Integration Tests:**
 - **All Commands**: `node dev/scripts/test-all-commands.js`
 - **Quick All Commands**: `./dev/scripts/test-all-commands-quick.sh`
 - **Interactive Test**: `node dev/scripts/test-command-interactive.js`
@@ -94,6 +116,30 @@ npm run validate     # Validate door package
 - **BBS Comprehensive**: `node dev/scripts/test-bbs-comprehensive.js`
 - See `Documentation/3-Developers/TESTING.md` for complete protocol
 - **CRITICAL**: Always use test scripts instead of manual testing
+
+## Git Workflow
+
+**Branch Strategy:**
+- Main branch: `main`
+- Create feature branches: `claude/feature-name-sessionid` or `feature/descriptive-name`
+- **NEVER** push directly to `main` - always create PRs
+- Delete branches after merging
+
+**PR Requirements:**
+- Run all relevant tests before creating PR
+- Backend: `cd web/backend && npx tsc --noEmit` must pass
+- Frontend: `cd web/frontend && npm run build:check` must pass
+- SDK: `cd sdk && npm run build` and test 2+ example doors must pass
+- Use descriptive PR titles with context
+- Reference issue numbers if applicable
+
+**Commit Messages:**
+- Use conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, etc.
+- Be descriptive: explain WHY, not just WHAT
+- Examples:
+  - `feat(sdk): Add Neo-Blessed UI engine support`
+  - `fix(backend): Resolve door state transition bug`
+  - `chore(deps): Update Socket.IO to 4.8.1`
 
 ## Environment Variables
 - Copy `.env.example` to `.env.local`
@@ -136,21 +182,60 @@ npm run validate     # Validate door package
 
 ## MCP Server Tools (ALWAYS use these)
 
-The project includes an MCP server at `.mcp.json` providing access to:
+The project includes an MCP server at `.mcp.json` providing access to the original AmiExpress/!X source code.
 
-### Source Code Analysis
+### Available Tools
+
+**Source Code Analysis:**
 - `list_express_modules` - Shows 19 modules with line ranges
 - `read_express_module` - Read by module (mci, internal-commands, doors, etc.) - **BEST option**
-- `search_express_source` - Find functions/commands with context
+- `search_express_source` - Find functions/commands with context (returns line numbers)
 - `read_source_range` - Read specific lines from express.e/hydra.e/acp.e
 
-### AmigaOS Reference
-- `search_ndk_autodocs` - AmigaOS function specs
+**AmigaOS Reference:**
+- `search_ndk_autodocs` - AmigaOS function specs from NDK 3.2R4
 
-### Before Implementing ANY Feature
-1. Use MCP `search_express_source` → `read_express_module` or `read_source_range`
-2. Implement EXACTLY as express.e shows
-3. NO guessing, NO assumptions
+### Workflow Example
+
+**Implementing a BBS Command:**
+```
+1. Search for the command:
+   mcp__amiexpress-docs__search_express_source "StrCmp(cmdcode,'DOWNLOAD')"
+
+2. Results show: Found in express.e at lines 15234-15456
+
+3. Read the module containing it:
+   mcp__amiexpress-docs__read_express_module "internal-commands"
+
+   OR read specific lines:
+   mcp__amiexpress-docs__read_source_range
+     source: "express-e"
+     startLine: 15234
+     endLine: 15456
+
+4. Implement EXACTLY as shown in express.e
+   - Same logic flow
+   - Same state transitions
+   - Same error handling
+```
+
+**Finding MCI Codes:**
+```
+1. Search for MCI implementation:
+   mcp__amiexpress-docs__search_express_source "ParseMCI"
+
+2. Read the MCI module:
+   mcp__amiexpress-docs__read_express_module "mci"
+
+3. Implement the MCI handler matching express.e behavior
+```
+
+### Critical Rules
+1. **ALWAYS** use MCP tools before implementing ANY feature
+2. Use `search_express_source` → `read_express_module` or `read_source_range`
+3. Implement EXACTLY as express.e shows
+4. NO guessing, NO assumptions
+5. If express.e doesn't have it, use `WEB_*`, `MODERN_*`, `CUSTOM_*`, `ADMIN_*` prefixes
 
 ## TypeScript - Zero Errors Policy
 - Run `cd web/backend && npx tsc --noEmit` before commits
@@ -160,6 +245,8 @@ The project includes an MCP server at `.mcp.json` providing access to:
 ## Code Architecture
 
 ### Backend Structure (`web/backend/src/`)
+**Note**: All backend code is in `web/backend/src/`, NOT `backend/backend/src/`
+
 ```
 ├── amiga-emulation/    - 68K emulation, door execution
 ├── constants/          - ANSI codes, enums, static values
@@ -174,6 +261,16 @@ The project includes an MCP server at `.mcp.json` providing access to:
 ├── utils/              - Reusable utility functions
 ├── database.ts         - Main database (being modularized)
 └── index.ts            - Main entry point
+```
+
+**Frontend Structure** (`web/frontend/src/`):
+```
+├── components/         - React components
+├── hooks/              - Custom React hooks
+├── services/           - API/Socket.IO clients
+├── types/              - TypeScript types
+├── utils/              - Utility functions
+└── App.tsx             - Main application component
 ```
 
 ### Modularization Rules
