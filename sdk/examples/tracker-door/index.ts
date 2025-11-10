@@ -1122,6 +1122,8 @@ class TrackerDoor {
   }
 }
 
-// Start the tracker
-const tracker = new TrackerDoor();
-tracker.start();
+// Start the tracker (only in browser environment)
+if (typeof window !== 'undefined') {
+  const tracker = new TrackerDoor();
+  tracker.start();
+}

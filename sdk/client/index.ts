@@ -104,14 +104,19 @@ export class ClientDoor extends EventEmitter {
     this.emit('start');
 
     // Check if BBS connection is already available (bundled door scenario)
-    const bbsGlobal = (window as any).__BBS__;
-    if (bbsGlobal && bbsGlobal.socket) {
-      console.log('[ClientDoor] Using existing BBS Socket.IO connection');
-      this.connectViaSocketIO(bbsGlobal.socket, bbsGlobal.sessionId);
-    } else {
-      console.log('[ClientDoor] Creating new WebSocket connection');
-      this.connectWebSocket(wsUrl);
+    // Only check for window in browser environments
+    if (typeof window !== 'undefined') {
+      const bbsGlobal = (window as any).__BBS__;
+      if (bbsGlobal && bbsGlobal.socket) {
+        console.log('[ClientDoor] Using existing BBS Socket.IO connection');
+        this.connectViaSocketIO(bbsGlobal.socket, bbsGlobal.sessionId);
+        return;
+      }
     }
+
+    // Fallback to WebSocket connection
+    console.log('[ClientDoor] Creating new WebSocket connection');
+    this.connectWebSocket(wsUrl);
   }
 
   /**
@@ -129,11 +134,13 @@ export class ClientDoor extends EventEmitter {
       this.emit('ws:connected');
 
       // Listen for messages from backend for this session
-      window.addEventListener('bbs:door:message', (event: any) => {
-        if (event.detail.sessionId === sessionId) {
-          this.handleMessage(event.detail.message);
-        }
-      });
+      if (typeof window !== 'undefined') {
+        window.addEventListener('bbs:door:message', (event: any) => {
+          if (event.detail.sessionId === sessionId) {
+            this.handleMessage(event.detail.message);
+          }
+        });
+      }
 
       // Simulate connection established
       // The backend already sent CONNECT message, trigger main loop
@@ -151,6 +158,10 @@ export class ClientDoor extends EventEmitter {
    * @private
    */
   private connectWebSocket(url: string): void {
+    if (typeof WebSocket === 'undefined') {
+      throw new Error('WebSocket is not available. ClientDoor requires a browser environment.');
+    }
+
     try {
       this.ws = new WebSocket(url);
 
@@ -297,7 +308,12 @@ export class ClientDoor extends EventEmitter {
       this.emit('render', this.frameCount);
     }
 
-    requestAnimationFrame(() => this.mainLoop());
+    // Use requestAnimationFrame in browser, setTimeout in Node.js
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => this.mainLoop());
+    } else {
+      setTimeout(() => this.mainLoop(), targetDelta);
+    }
   }
 
   /**
@@ -467,10 +483,10 @@ export class ClientDoor extends EventEmitter {
       this.on('input', handler);
 
       if (timeout > 0) {
-        timeoutId = window.setTimeout(() => {
+        timeoutId = setTimeout(() => {
           this.off('input', handler);
           resolve(null);
-        }, timeout);
+        }, timeout) as any;
       }
     });
   }
