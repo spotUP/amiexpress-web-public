@@ -294,6 +294,9 @@ export interface BBSSession {
   // Account editor state (Command 1)
   accountEditorState?: any; // State tracking for account editor
   inputCallback?: (input: string) => Promise<void>; // Callback for input handling
+
+  // Sysop menu state
+  inSysopMenu?: boolean; // Whether user is currently in sysop menu
 }
 
 // Conference and Message Base data structures (simplified)
