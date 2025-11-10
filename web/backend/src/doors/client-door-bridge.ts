@@ -194,10 +194,17 @@ export class ClientDoorBridge {
 
     // Listen for user input and forward to door
     const inputHandler = (data: string) => {
-      if (!doorSession.active) return;
+      console.log(`[ClientDoorBridge] inputHandler called with data:`, JSON.stringify(data));
+      console.log(`[ClientDoorBridge] doorSession.active:`, doorSession.active);
+
+      if (!doorSession.active) {
+        console.log(`[ClientDoorBridge] Session not active, ignoring input`);
+        return;
+      }
 
       // Parse key data and create enhanced key event
       const parsedKey = this.parseKeyInput(data);
+      console.log(`[ClientDoorBridge] Parsed key:`, parsedKey);
 
       // Send to door
       this.sendMessage(doorSession, {
@@ -205,8 +212,10 @@ export class ClientDoorBridge {
         data: parsedKey,
         timestamp: Date.now(),
       });
+      console.log(`[ClientDoorBridge] Sent INPUT message to door`);
     };
 
+    console.log(`[ClientDoorBridge] Registering 'command' listener for session ${sessionId}`);
     socket.on('command', inputHandler);
 
     // Store handler reference for cleanup
