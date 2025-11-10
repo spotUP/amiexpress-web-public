@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Wand2, Send, Loader2, Sparkles, CheckCircle, XCircle, Code, AlertCircle } from 'lucide-react';
+import { Wand2, Send, Loader2, Sparkles, CheckCircle, XCircle, Code, AlertCircle, History, Trash2, RotateCcw } from 'lucide-react';
 
 interface AIPromptPanelProps {
   selectedDoor: string | null;
   currentFile: { path: string; content: string } | null;
   buildErrors: any[];
   onApplyCode: (code: string, filePath: string) => void;
-  onShowDiff: (original: string, suggested: string, filePath: string) => void;
+  onShowDiff: (original: string, suggested: string, filePath: string, explanation?: string) => void;
   className?: string;
 }
 
@@ -20,6 +20,15 @@ interface AIResponse {
     suggestedContent: string;
   }>;
   error?: string;
+}
+
+interface ConversationEntry {
+  id: string;
+  timestamp: number;
+  doorId: string;
+  prompt: string;
+  response: AIResponse;
+  filePath?: string;
 }
 
 export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
@@ -37,6 +46,11 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
     return localStorage.getItem('openrouter-api-key') || '';
   });
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<ConversationEntry[]>(() => {
+    const stored = localStorage.getItem('ai-conversation-history');
+    return stored ? JSON.parse(stored) : [];
+  });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Save API key to localStorage
@@ -45,6 +59,11 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
       localStorage.setItem('openrouter-api-key', apiKey);
     }
   }, [apiKey]);
+
+  // Save conversation history to localStorage
+  useEffect(() => {
+    localStorage.setItem('ai-conversation-history', JSON.stringify(conversationHistory));
+  }, [conversationHistory]);
 
   // Auto-focus textarea when component mounts
   useEffect(() => {
@@ -92,6 +111,19 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
       const data: AIResponse = await res.json();
       setResponse(data);
 
+      // Save to conversation history
+      if (selectedDoor) {
+        const entry: ConversationEntry = {
+          id: Date.now().toString(),
+          timestamp: Date.now(),
+          doorId: selectedDoor,
+          prompt: prompt.trim(),
+          response: data,
+          filePath: currentFile?.path,
+        };
+        setConversationHistory((prev) => [entry, ...prev].slice(0, 50)); // Keep last 50
+      }
+
       // Clear prompt on success
       if (data.success) {
         setPrompt('');
@@ -127,11 +159,32 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
     if (!response?.filesToModify || response.filesToModify.length === 0) return;
 
     const file = response.filesToModify[0];
-    onShowDiff(file.originalContent, file.suggestedContent, file.path);
+    onShowDiff(file.originalContent, file.suggestedContent, file.path, response.explanation);
   };
 
+  // Handle rerunning a prompt from history
+  const handleRerunPrompt = (entry: ConversationEntry) => {
+    setPrompt(entry.prompt);
+    setShowHistory(false);
+    textareaRef.current?.focus();
+  };
+
+  // Clear history
+  const handleClearHistory = () => {
+    if (window.confirm('Clear all conversation history? This cannot be undone.')) {
+      setConversationHistory([]);
+    }
+  };
+
+  // Filter history by current door
+  const filteredHistory = selectedDoor
+    ? conversationHistory.filter((entry) => entry.doorId === selectedDoor)
+    : conversationHistory;
+
   return (
-    <div className={`flex flex-col h-full bg-[#1E1E1E] border-t border-gray-700 ${className}`}>
+    <div className={`flex h-full bg-[#1E1E1E] border-t border-gray-700 ${className}`}>
+      {/* Main Panel */}
+      <div className="flex-1 flex flex-col min-w-0">
       {/* Header */}
       <div className="bg-[#252526] px-4 py-2 border-b border-gray-700 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -141,7 +194,7 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
             <span className="text-xs text-gray-500">({selectedDoor})</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {apiKey ? (
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-green-500" />
@@ -162,6 +215,19 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
               Set API Key
             </button>
           )}
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+              showHistory ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
+            }`}
+            title="Conversation History"
+          >
+            <History className="w-3 h-3" />
+            <span className="hidden sm:inline">History</span>
+            {filteredHistory.length > 0 && (
+              <span className="ml-1 px-1 bg-gray-800 rounded text-xs">{filteredHistory.length}</span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -327,6 +393,82 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
           >
             Add Error Handling
           </button>
+        </div>
+      )}
+      </div>
+
+      {/* Conversation History Sidebar */}
+      {showHistory && (
+        <div className="w-80 border-l border-gray-700 bg-[#252526] flex flex-col">
+          <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <span className="text-sm font-medium text-white">Conversation History</span>
+            {conversationHistory.length > 0 && (
+              <button
+                onClick={handleClearHistory}
+                className="p-1 hover:bg-gray-700 rounded transition-colors"
+                title="Clear history"
+              >
+                <Trash2 className="w-3 h-3 text-gray-400 hover:text-red-400" />
+              </button>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-2">
+            {filteredHistory.length === 0 ? (
+              <div className="text-center text-gray-500 text-sm mt-8">
+                No conversation history yet.
+                <br />
+                Start asking questions!
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredHistory.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="bg-[#1E1E1E] rounded p-3 border border-gray-700 hover:border-blue-600 transition-colors cursor-pointer group"
+                    onClick={() => handleRerunPrompt(entry)}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-gray-500 mb-1">
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </div>
+                        {entry.filePath && (
+                          <div className="text-xs text-blue-400 mb-1 truncate">
+                            {entry.filePath}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRerunPrompt(entry);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-700 rounded"
+                        title="Rerun this prompt"
+                      >
+                        <RotateCcw className="w-3 h-3 text-blue-400" />
+                      </button>
+                    </div>
+                    <div className="text-sm text-gray-300 line-clamp-3">
+                      {entry.prompt}
+                    </div>
+                    {entry.response.success && (
+                      <div className="mt-2 flex items-center gap-1 text-xs text-green-400">
+                        <CheckCircle className="w-3 h-3" />
+                        <span>Success</span>
+                      </div>
+                    )}
+                    {!entry.response.success && (
+                      <div className="mt-2 flex items-center gap-1 text-xs text-red-400">
+                        <XCircle className="w-3 h-3" />
+                        <span>Error</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

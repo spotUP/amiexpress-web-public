@@ -30,6 +30,7 @@ import {
   PerformanceProfiler,
   GitIntegration,
   AIPromptPanel,
+  CodeDiffViewer,
 } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { useToast } from './hooks/useToast';
@@ -46,7 +47,7 @@ import {
   ConnectionStatus,
   SessionEvent,
 } from './types';
-import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles, Layout, Monitor, Code2, Columns } from 'lucide-react';
 import type { CommandItem } from './components/ui/CommandPalette';
 
 const defaultSettings: AppSettings = {
@@ -91,6 +92,11 @@ function App() {
     { id: '1', name: 'Terminal 1', active: true }
   ]);
   const [activeTerminalTab, setActiveTerminalTab] = useState('1');
+
+  // Hot reload state
+  const [hotReloadEnabled, setHotReloadEnabled] = useLocalStorage('sdk-hot-reload-enabled', true);
+  const [hotReloadDelay, setHotReloadDelay] = useLocalStorage('sdk-hot-reload-delay', 2000);
+  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   // New UX features state
   const [showOnboarding, setShowOnboarding] = useLocalStorage('sdk-preview-onboarding-complete', false);
@@ -138,6 +144,19 @@ function App() {
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
   const [rightSidebarTab, setRightSidebarTab] = useState<'code' | 'build' | 'info' | 'release' | 'git'>('info');
+
+  // View mode state
+  type ViewMode = 'split' | 'terminal-only' | 'code-only';
+  const [viewMode, setViewMode] = useLocalStorage<ViewMode>('sdk-view-mode', 'split');
+
+  // Diff viewer state
+  const [showDiffViewer, setShowDiffViewer] = useState(false);
+  const [diffData, setDiffData] = useState<{
+    original: string;
+    suggested: string;
+    filePath: string;
+    explanation?: string;
+  } | null>(null);
 
   // Favorites management
   const [_favorites, setFavorites] = useLocalStorage<string[]>('sdk-preview-favorites', []);
@@ -311,6 +330,23 @@ function App() {
     const updatedFile = { ...file, content };
     setCurrentFile(updatedFile);
     wsSend({ type: 'input', data: `saveFile:${file.path}:${content}` });
+
+    // Hot reload: auto-build and run after delay
+    if (hotReloadEnabled && selectedDoor) {
+      // Clear existing timer
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+      }
+
+      // Set new timer
+      autoSaveTimer.current = setTimeout(() => {
+        // Auto-build
+        setBuildStatus((prev) => ({ ...prev, building: true }));
+        wsSend({ type: 'input', data: `buildDoor:${selectedDoor.id}` });
+        toast.info('Hot reload...', 'Auto-building changes', { duration: 2000 });
+        soundEffects.notification();
+      }, hotReloadDelay);
+    }
   };
 
   // Handle build error click
@@ -380,18 +416,14 @@ function App() {
   };
 
   // Handle AI diff view
-  const handleShowDiff = (original: string, suggested: string, filePath: string) => {
-    // For now, apply directly and show notification
-    // TODO: Implement proper diff viewer modal
-    const confirmed = window.confirm(
-      `Apply AI suggestions to ${filePath}?\n\n` +
-      `Original length: ${original.length} characters\n` +
-      `Suggested length: ${suggested.length} characters`
-    );
-
-    if (confirmed) {
-      handleApplyCode(suggested, filePath);
-    }
+  const handleShowDiff = (original: string, suggested: string, filePath: string, explanation?: string) => {
+    setDiffData({
+      original,
+      suggested,
+      filePath,
+      explanation,
+    });
+    setShowDiffViewer(true);
   };
 
   // Handle playback event
@@ -531,6 +563,61 @@ function App() {
       category: 'Development',
       action: () => setShowPerformanceProfiler(!showPerformanceProfiler),
     },
+    {
+      id: 'toggle-hot-reload',
+      label: 'Toggle Hot Reload',
+      description: 'Enable/disable automatic rebuild on code changes',
+      category: 'Development',
+      action: () => {
+        setHotReloadEnabled(!hotReloadEnabled);
+        toast.info(
+          hotReloadEnabled ? 'Hot reload disabled' : 'Hot reload enabled',
+          hotReloadEnabled ? 'Manual build required' : 'Auto-builds on code changes'
+        );
+      },
+    },
+    {
+      id: 'view-mode-split',
+      label: 'Split View',
+      description: 'Show terminal and code side-by-side',
+      icon: <Columns className="w-4 h-4" />,
+      shortcut: 'Ctrl+1',
+      category: 'View',
+      action: () => {
+        setViewMode('split');
+        setShowRightSidebar(true);
+        toast.info('Split View', 'Terminal and code side-by-side');
+        soundEffects.click();
+      },
+    },
+    {
+      id: 'view-mode-terminal',
+      label: 'Terminal Only',
+      description: 'Focus on terminal output',
+      icon: <Monitor className="w-4 h-4" />,
+      shortcut: 'Ctrl+2',
+      category: 'View',
+      action: () => {
+        setViewMode('terminal-only');
+        setShowRightSidebar(false);
+        toast.info('Terminal Only', 'Maximized terminal view');
+        soundEffects.click();
+      },
+    },
+    {
+      id: 'view-mode-code',
+      label: 'Code Only',
+      description: 'Focus on code editor',
+      icon: <Code2 className="w-4 h-4" />,
+      shortcut: 'Ctrl+3',
+      category: 'View',
+      action: () => {
+        setViewMode('code-only');
+        setShowRightSidebar(true);
+        toast.info('Code Only', 'Maximized code editor');
+        soundEffects.click();
+      },
+    },
   ];
 
   // Keyboard shortcuts
@@ -600,6 +687,36 @@ function App() {
       action: () => setShowKeyboardOverlay((prev) => !prev),
       description: 'Show keyboard shortcuts',
       category: 'General',
+    },
+    {
+      key: '1',
+      ctrl: true,
+      action: () => {
+        setViewMode('split');
+        setShowRightSidebar(true);
+      },
+      description: 'Split view mode',
+      category: 'View',
+    },
+    {
+      key: '2',
+      ctrl: true,
+      action: () => {
+        setViewMode('terminal-only');
+        setShowRightSidebar(false);
+      },
+      description: 'Terminal only mode',
+      category: 'View',
+    },
+    {
+      key: '3',
+      ctrl: true,
+      action: () => {
+        setViewMode('code-only');
+        setShowRightSidebar(true);
+      },
+      description: 'Code only mode',
+      category: 'View',
     },
   ];
 
@@ -707,7 +824,7 @@ function App() {
           )}
 
           {/* Center - Terminal and AI Prompt */}
-          <Panel defaultSize={50} minSize={30}>
+          <Panel defaultSize={viewMode === 'terminal-only' ? 100 : viewMode === 'code-only' ? 0 : 50} minSize={viewMode === 'code-only' ? 0 : 30}>
             <PanelGroup direction="vertical">
               {/* Terminal Section */}
               <Panel defaultSize={60} minSize={30}>
@@ -775,12 +892,47 @@ function App() {
                       className={`group flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100 ${
                         buildStatus.building ? 'animate-pulse' : ''
                       }`}
+                      title={hotReloadEnabled ? 'Manual build (Hot reload enabled)' : 'Build door'}
                     >
                       <Hammer className={`w-4 h-4 transition-transform ${buildStatus.building ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
                       <span className="hidden sm:inline">{buildStatus.building ? 'Building...' : 'Build'}</span>
+                      {hotReloadEnabled && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Hot reload enabled" />
+                      )}
                     </button>
 
                     <div className="ml-auto flex items-center gap-2">
+                      {/* View Mode Toggle */}
+                      <div className="flex items-center gap-1 px-2 py-1 bg-[#1E1E1E] rounded border border-gray-700">
+                        <button
+                          onClick={() => setViewMode('split')}
+                          className={`p-1 rounded transition-all ${
+                            viewMode === 'split' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          }`}
+                          title="Split View (Ctrl+1)"
+                        >
+                          <Columns className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => { setViewMode('terminal-only'); setShowRightSidebar(false); }}
+                          className={`p-1 rounded transition-all ${
+                            viewMode === 'terminal-only' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          }`}
+                          title="Terminal Only (Ctrl+2)"
+                        >
+                          <Monitor className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => { setViewMode('code-only'); setShowRightSidebar(true); }}
+                          className={`p-1 rounded transition-all ${
+                            viewMode === 'code-only' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          }`}
+                          title="Code Only (Ctrl+3)"
+                        >
+                          <Code2 className="w-3 h-3" />
+                        </button>
+                      </div>
+
                       <ScreenshotCapture
                         targetElement={terminalRef.current}
                         doorName={selectedDoor?.name || 'terminal'}
@@ -844,10 +996,10 @@ function App() {
           </Panel>
 
           {/* Right sidebar - Code editor / Build status / Info with slide-in animation */}
-          {showRightSidebar && (
+          {showRightSidebar && viewMode !== 'terminal-only' && (
             <>
               <PanelResizeHandle className="w-1 bg-gray-700 hover:bg-blue-600 transition-all duration-300 hover:w-2 cursor-col-resize" />
-              <Panel defaultSize={30} minSize={20} maxSize={50}>
+              <Panel defaultSize={viewMode === 'code-only' ? 100 : 30} minSize={20} maxSize={viewMode === 'code-only' ? 100 : 50}>
                 <div className="flex flex-col h-full bg-[#252526] animate-slideInRight">
                   {/* Tabs with smooth transitions and glow effects */}
                   <div className="flex border-b border-gray-700 bg-[#252526]">
@@ -1156,6 +1308,25 @@ function App() {
         buildTime={buildStatus.duration}
         connected={connectionStatus.connected}
       />
+
+      {/* Code Diff Viewer */}
+      {showDiffViewer && diffData && (
+        <CodeDiffViewer
+          original={diffData.original}
+          suggested={diffData.suggested}
+          filePath={diffData.filePath}
+          explanation={diffData.explanation}
+          onAccept={() => {
+            handleApplyCode(diffData.suggested, diffData.filePath);
+            setShowDiffViewer(false);
+          }}
+          onReject={() => {
+            setShowDiffViewer(false);
+            toast.info('Changes rejected', 'No modifications were made');
+          }}
+          onClose={() => setShowDiffViewer(false)}
+        />
+      )}
     </div>
   );
 }
