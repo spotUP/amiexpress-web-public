@@ -31,6 +31,89 @@ echo "   $FRONTEND_LOG"
 echo "   $PREVIEW_LOG"
 echo ""
 
+# === ENHANCED SETUP CHECKS ===
+echo "→ Checking environment setup..."
+echo ""
+
+# Check for .env.local
+if [ ! -f "$REPO_ROOT/.env.local" ]; then
+  echo "⚠️  Warning: .env.local not found"
+  echo "   Copying .env.example to .env.local..."
+  cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env.local"
+  echo "   ✓ Created .env.local - please review and update if needed"
+  echo ""
+fi
+
+# Function to check and install dependencies
+check_and_install_deps() {
+  local dir=$1
+  local name=$2
+
+  if [ ! -d "$dir/node_modules" ]; then
+    echo "→ $name: Installing dependencies (this may take a minute)..."
+    (cd "$dir" && npm install --loglevel=error)
+    if [ $? -eq 0 ]; then
+      echo "   ✓ $name dependencies installed"
+    else
+      echo "   ❌ $name dependency installation failed"
+      echo "   Try running: cd $dir && npm install"
+      exit 1
+    fi
+  else
+    echo "   ✓ $name dependencies up to date"
+  fi
+}
+
+# Check backend dependencies
+check_and_install_deps "$REPO_ROOT/web/backend" "Backend"
+
+# Check frontend dependencies
+check_and_install_deps "$REPO_ROOT/web/frontend" "Frontend"
+
+# Check SDK dependencies and build
+if [ ! -d "$REPO_ROOT/sdk/node_modules" ]; then
+  echo "→ SDK: Installing dependencies (this may take a minute)..."
+  (cd "$REPO_ROOT/sdk" && npm install --loglevel=error)
+  if [ $? -eq 0 ]; then
+    echo "   ✓ SDK dependencies installed"
+  else
+    echo "   ❌ SDK dependency installation failed"
+    echo "   Try running: cd sdk && npm install"
+    exit 1
+  fi
+else
+  echo "   ✓ SDK dependencies up to date"
+fi
+
+# Check if SDK is built
+if [ ! -d "$REPO_ROOT/sdk/dist" ] || [ ! -f "$REPO_ROOT/sdk/dist/index.js" ]; then
+  echo "→ SDK: Building (this may take a minute)..."
+  (cd "$REPO_ROOT/sdk" && npm run build --loglevel=error)
+  if [ $? -eq 0 ]; then
+    echo "   ✓ SDK built successfully"
+  else
+    echo "   ❌ SDK build failed"
+    echo "   Try running: cd sdk && npm run build"
+    exit 1
+  fi
+else
+  echo "   ✓ SDK already built"
+fi
+
+# TypeScript check for backend (quick check only, don't block startup)
+echo "→ Running quick TypeScript check..."
+(cd "$REPO_ROOT/web/backend" && npx tsc --noEmit > /dev/null 2>&1)
+if [ $? -ne 0 ]; then
+  echo "   ⚠️  Warning: TypeScript errors detected in backend"
+  echo "   Run 'cd web/backend && npx tsc --noEmit' to see details"
+else
+  echo "   ✓ TypeScript check passed"
+fi
+
+echo ""
+echo "→ Environment setup complete!"
+echo ""
+
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1
 
