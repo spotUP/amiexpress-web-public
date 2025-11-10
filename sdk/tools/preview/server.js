@@ -472,6 +472,172 @@ app.post('/api/doors/:doorId/build', (req, res) => {
   }
 });
 
+// API: AI Prompt for Door Improvement
+app.post('/api/ai-prompt', async (req, res) => {
+  try {
+    const { doorId, currentFile, buildErrors, prompt, apiKey } = req.body;
+
+    if (!doorId || !prompt) {
+      return res.status(400).json({ error: 'doorId and prompt are required' });
+    }
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'OpenRouter API key is required' });
+    }
+
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+    if (!fs.existsSync(doorPath)) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+
+    console.log(`🤖 AI prompt for ${doorId}: ${prompt.substring(0, 50)}...`);
+
+    // Build context for AI
+    let context = `You are an expert TypeScript developer helping to improve a BBS door game for the AmiExpress SDK.
+
+Door: ${doorId}
+`;
+
+    // Add current file context if available
+    if (currentFile && currentFile.content) {
+      context += `\nCurrent file: ${currentFile.path}
+\`\`\`typescript
+${currentFile.content}
+\`\`\`
+`;
+    } else {
+      // Load main index.ts file
+      const indexPath = path.join(doorPath, 'index.ts');
+      if (fs.existsSync(indexPath)) {
+        const indexContent = fs.readFileSync(indexPath, 'utf8');
+        context += `\nMain file (index.ts):
+\`\`\`typescript
+${indexContent}
+\`\`\`
+`;
+      }
+    }
+
+    // Add build errors if any
+    if (buildErrors && buildErrors.length > 0) {
+      context += `\nBuild Errors:
+${buildErrors.map(e => `- ${e.file}:${e.line}: ${e.message}`).join('\n')}
+`;
+    }
+
+    // Add package.json context
+    const pkgPath = path.join(doorPath, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      context += `\nPackage Info:
+Name: ${pkg.name}
+Description: ${pkg.description || 'N/A'}
+`;
+    }
+
+    context += `\nUser Request: ${prompt}
+
+Please provide:
+1. A brief explanation of what you'll change (2-3 sentences)
+2. The complete updated code for the file
+
+Return your response in this JSON format:
+{
+  "explanation": "Brief explanation here",
+  "code": "Complete updated code here"
+}
+
+Important:
+- Return ONLY valid JSON, no markdown code blocks
+- Include the COMPLETE file content, not just the changes
+- Ensure the code is valid TypeScript
+- Maintain the existing code style
+- If fixing errors, explain what was wrong`;
+
+    // Call OpenRouter API
+    const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/spotUP/amiexpress-web',
+        'X-Title': 'AmiExpress SDK Door Editor',
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3.5-sonnet',
+        messages: [
+          {
+            role: 'user',
+            content: context,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+      }),
+    });
+
+    if (!openRouterResponse.ok) {
+      const error = await openRouterResponse.json();
+      console.error('OpenRouter API error:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.error?.message || 'Failed to get AI response',
+      });
+    }
+
+    const aiResponse = await openRouterResponse.json();
+    const aiMessage = aiResponse.choices?.[0]?.message?.content;
+
+    if (!aiMessage) {
+      return res.status(500).json({
+        success: false,
+        error: 'No response from AI',
+      });
+    }
+
+    // Parse AI response
+    let parsedResponse;
+    try {
+      // Try to extract JSON from response (might be wrapped in markdown)
+      const jsonMatch = aiMessage.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedResponse = JSON.parse(jsonMatch[0]);
+      } else {
+        parsedResponse = JSON.parse(aiMessage);
+      }
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', aiMessage);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to parse AI response. Please try again.',
+      });
+    }
+
+    // Build response
+    const filePath = currentFile?.path || 'index.ts';
+    const originalContent = currentFile?.content || fs.readFileSync(path.join(doorPath, 'index.ts'), 'utf8');
+
+    res.json({
+      success: true,
+      explanation: parsedResponse.explanation,
+      filesToModify: [
+        {
+          path: filePath,
+          originalContent: originalContent,
+          suggestedContent: parsedResponse.code,
+        },
+      ],
+    });
+
+  } catch (error) {
+    console.error('Error processing AI prompt:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to process AI prompt',
+    });
+  }
+});
+
 // Temporary downloads directory
 const downloadsDir = path.join(__dirname, 'downloads');
 if (!fs.existsSync(downloadsDir)) {

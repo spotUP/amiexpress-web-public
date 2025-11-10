@@ -16,6 +16,8 @@ export { EnhancedGameWizard } from './EnhancedGameWizard';
 // Enhanced components
 export { BuildStatusEnhanced } from './BuildStatusEnhanced';
 export { DoorListEnhanced } from './DoorListEnhanced';
+export { AIPromptPanel } from './AIPromptPanel';
+export { CodeDiffViewer } from './CodeDiffViewer';
 
 // UI components
 export * from './ui';
