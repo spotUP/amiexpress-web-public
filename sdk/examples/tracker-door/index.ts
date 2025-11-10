@@ -294,8 +294,8 @@ class TrackerDoor {
       return true;
     }
 
-    // Ctrl+V - Toggle Visualizer (when not in pattern editor, since Ctrl+V is paste there)
-    if (key === '\x16' && this.currentView !== 'pattern-editor') {
+    // Ctrl+V - Toggle Visualizer (not in pattern editor due to early return above)
+    if (key === '\x16') {
       this.cycleVisualizerMode();
       return true;
     }
