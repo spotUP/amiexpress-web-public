@@ -5,7 +5,7 @@
  * Now runs as a CLIENT DOOR in the browser with real Web Audio API!
  */
 
-import { ClientDoor, AnsiColor, padEndVisible } from '@amiexpress/bbs-door-sdk/client';
+import { ClientDoor, AnsiColor } from '@amiexpress/bbs-door-sdk/client';
 import { GraphicsEngine } from './graphics-engine';
 import { AudioEngine } from './audio/engine';
 import {
@@ -32,6 +32,24 @@ import { XIParser, ITIParser, XRNIParser } from './formats/instrument-parsers';
 import { formatVolumeColumn, parseVolumeColumn } from './audio/volume-column';
 
 type View = 'main' | 'pattern-editor' | 'instrument-editor' | 'sample-editor' | 'effects-editor' | 'song-editor' | 'export' | 'ai-assistant' | 'help';
+
+/**
+ * Calculate visual length of string (excluding ANSI codes)
+ * Browser-compatible version for client doors
+ */
+function visibleLength(str: string): number {
+  return str.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length;
+}
+
+/**
+ * Pad string to visual width (accounts for ANSI codes)
+ * Browser-compatible version for client doors
+ */
+function padEndVisible(str: string, targetWidth: number, fillChar: string = ' '): string {
+  const currentVisibleWidth = visibleLength(str);
+  const paddingNeeded = Math.max(0, targetWidth - currentVisibleWidth);
+  return str + fillChar.repeat(paddingNeeded);
+}
 
 class TrackerDoor {
   private door: ClientDoor;
