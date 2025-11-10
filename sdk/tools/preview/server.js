@@ -1857,6 +1857,29 @@ function handleClientMessage(clientId, data) {
   } else if (data.type === 'stop-door') {
     debugLog(clientId, `➡️  [WS MESSAGE] Handling stop-door`);
     stopDoor(clientId);
+  } else if (data.type === 'output') {
+    // ClientDoor SDK protocol: door sending ANSI output
+    debugLog(clientId, `📤 [CLIENT DOOR OUTPUT] Sending ANSI to terminal (${data.data?.text?.length || 0} bytes)`);
+    client.ws.send(
+      JSON.stringify({
+        type: 'ansi-output',
+        data: data.data?.text || '',
+      })
+    );
+  } else if (data.type === 'rpc-request') {
+    // ClientDoor SDK protocol: door making RPC call
+    debugLog(clientId, `🔧 [CLIENT DOOR RPC] Request: ${data.method}`);
+    // For now, send error response - RPC handlers can be added later
+    client.ws.send(
+      JSON.stringify({
+        type: 'rpc-error',
+        id: data.id,
+        error: {
+          code: -1,
+          message: 'RPC not implemented in preview server',
+        },
+      })
+    );
   } else {
     debugLog(clientId, `⚠️  [WS MESSAGE] Unknown message type: ${data.type}`);
   }
@@ -2346,6 +2369,27 @@ async function startClientDoor(clientId, doorId, doorPath) {
       runtime: 'client',
     }));
 
+    // Send CONNECT message to initialize the client door
+    // Give the door time to load before sending connect message
+    setTimeout(() => {
+      debugLog(clientId, `🔌 [CLIENT DOOR] Sending CONNECT message to initialize door`);
+      client.ws.send(JSON.stringify({
+        type: 'connect',
+        user: {
+          id: 1,
+          name: 'Developer',
+          node: 1,
+          securityLevel: 255,
+          timeLeft: 3600,
+          graphicsMode: 'ANSI',
+          termWidth: 80,
+          termHeight: 24,
+          data: {},
+        },
+        timestamp: Date.now(),
+      }));
+    }, 100); // Small delay to ensure bundle is loaded and executed
+
   } catch (err) {
     debugLog(clientId, `❌ [CLIENT DOOR] Bundling failed: ${err.message}`, 'error');
     debugLog(clientId, `   Stack: ${err.stack}`, 'error');
@@ -2590,9 +2634,31 @@ function startDoor(clientId, doorId) {
  */
 function sendInputToDoor(clientId, key) {
   const client = clients.get(clientId);
-  if (!client || !client.doorProcess) return;
+  if (!client) return;
 
-  // Send key to door's stdin
+  // Check if this is a client door (no server-side process)
+  if (!client.doorProcess) {
+    // Client door: send INPUT message via WebSocket
+    debugLog(clientId, `⌨️  [CLIENT DOOR INPUT] Sending key to client door: "${key}"`);
+
+    // Convert key to SDK INPUT message format
+    const keyEvent = {
+      key: key,
+      code: key.charCodeAt(0),
+      ctrl: key.charCodeAt(0) < 32,
+      alt: false,
+      shift: false,
+    };
+
+    client.ws.send(JSON.stringify({
+      type: 'input',
+      data: keyEvent,
+      timestamp: Date.now(),
+    }));
+    return;
+  }
+
+  // Server door: send to stdin
   client.doorProcess.stdin.write(key);
 }
 
