@@ -32,6 +32,7 @@ import {
   AIPromptPanel,
   CodeDiffViewer,
 } from './components';
+import type { XTermTerminalRef } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { useToast } from './hooks/useToast';
 import { useSoundEffects } from './components/ui/SoundEffects';
@@ -126,6 +127,7 @@ function App() {
     '',
   ]);
   const terminalRef = useRef<HTMLDivElement>(null);
+  const xtermRef = useRef<XTermTerminalRef>(null);
 
   // Client door state
   const [activeClientDoorSession, setActiveClientDoorSession] = useState<string | null>(null);
@@ -575,6 +577,12 @@ function App() {
       ]);
       soundEffects.click();
       triggerHaptic();
+
+      // CRITICAL: Focus terminal immediately so user can interact with the door
+      // This fixes the issue where clicking Run doesn't focus the terminal
+      setTimeout(() => {
+        xtermRef.current?.focus();
+      }, 100);
     }
   };
 
@@ -1084,6 +1092,7 @@ function App() {
                   <div ref={terminalRef} className="flex-1 min-h-0 overflow-hidden" data-tour="terminal">
                     <CRTEffect enabled={enableCRT} intensity="medium">
                       <XTermTerminal
+                        ref={xtermRef}
                         output={terminalOutput}
                         onInput={handleTerminalInput}
                         fontSize={settings.terminalFontSize}
