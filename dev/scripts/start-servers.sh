@@ -44,6 +44,9 @@ if [ ! -f "$REPO_ROOT/.env.local" ]; then
   echo ""
 fi
 
+# Unset NODE_ENV for dependency installation (we need devDependencies)
+unset NODE_ENV
+
 # Function to check and install dependencies
 check_and_install_deps() {
   local dir=$1
@@ -51,12 +54,12 @@ check_and_install_deps() {
 
   if [ ! -d "$dir/node_modules" ]; then
     echo "→ $name: Installing dependencies (this may take a minute)..."
-    (cd "$dir" && npm install --loglevel=error)
+    (cd "$dir" && npm install --include=dev --loglevel=error)
     if [ $? -eq 0 ]; then
       echo "   ✓ $name dependencies installed"
     else
       echo "   ❌ $name dependency installation failed"
-      echo "   Try running: cd $dir && npm install"
+      echo "   Try running: cd $dir && npm install --include=dev"
       exit 1
     fi
   else
@@ -150,55 +153,80 @@ FRONTEND_PID=$!
 (cd "$REPO_ROOT/sdk" && DEBUG_OUTPUT="$DEBUG_OUTPUT" node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG") &
 PREVIEW_PID=$!
 
-# Wait for backend to finish startup (look for BACKEND_DONE marker)
+# Wait for servers to finish startup
 sleep 5
 
-# Detect actual frontend port by checking common Vite ports
+# Detect actual frontend port by checking common Vite ports (start with 5173)
 FRONTEND_PORT=""
-for port in 5174 5175 5176 5177 5178; do
+for port in 5173 5174 5175 5176 5177 5178 5179 5180 5181 5182 5183 5184; do
   if lsof -ti:$port > /dev/null 2>&1; then
     FRONTEND_PORT=$port
     break
   fi
 done
 
-# Fallback to 5174 if detection fails
+# Fallback to 5173 if detection fails
 if [ -z "$FRONTEND_PORT" ]; then
-  FRONTEND_PORT="5174"
+  FRONTEND_PORT="5173"
 fi
 
-# Force print frontend URL (use /dev/tty to ensure it shows)
-echo "🌐 Frontend accessible at http://localhost:$FRONTEND_PORT/" > /dev/tty
-echo "" > /dev/tty
+echo ""
+echo "╔════════════════════════════════════════════════════════════════╗"
+echo "║                                                                ║"
+echo "║   🎮  AmiExpress BBS - All Servers Running                     ║"
+echo "║                                                                ║"
+echo "║   🌐 BBS Frontend:  http://localhost:$FRONTEND_PORT/"
+echo "║      (Main BBS interface - login: sysop/sysop)                 ║"
+echo "║                                                                ║"
+echo "║   🔧 BBS Backend:   http://localhost:3001/                     ║"
+echo "║      (API server)                                              ║"
+echo "║                                                                ║"
+echo "║   🎪 SDK Preview:   http://localhost:8080/                     ║"
+echo "║      (Door testing preview)                                    ║"
+echo "║                                                                ║"
 if [ "$DEBUG_MODE" = true ]; then
-  echo "🔍 DEBUG MODE: All logs visible below" > /dev/tty
-  echo "" > /dev/tty
+echo "║   🔍 DEBUG MODE: All logs visible below                        ║"
+echo "║                                                                ║"
 fi
-echo "Press Ctrl+C to stop both servers" > /dev/tty
-echo "" > /dev/tty
+echo "║   Press Ctrl+C to stop all servers                             ║"
+echo "║                                                                ║"
+echo "╚════════════════════════════════════════════════════════════════╝"
+echo ""
 
-# Open browser to door preview page
-PREVIEW_URL="http://localhost:8080"
-echo "🎮 Opening door preview page at $PREVIEW_URL..." > /dev/tty
+# Open browser tabs for BBS frontend and SDK preview
+BBS_URL="http://localhost:$FRONTEND_PORT"
+SDK_URL="http://localhost:8080"
+echo "🚀 Opening BBS at $BBS_URL..."
+echo "🎮 Opening SDK Preview at $SDK_URL..."
 
-# Detect OS and open browser
+# Detect OS and open both URLs in browser tabs
 if command -v open &> /dev/null; then
   # macOS
-  open "$PREVIEW_URL" 2>/dev/null &
+  open "$BBS_URL" 2>/dev/null &
+  sleep 0.5
+  open "$SDK_URL" 2>/dev/null &
 elif command -v xdg-open &> /dev/null; then
   # Linux
-  xdg-open "$PREVIEW_URL" 2>/dev/null &
+  xdg-open "$BBS_URL" 2>/dev/null &
+  sleep 0.5
+  xdg-open "$SDK_URL" 2>/dev/null &
 elif command -v start &> /dev/null; then
   # Windows (Git Bash)
-  start "$PREVIEW_URL" 2>/dev/null &
+  start "$BBS_URL" 2>/dev/null &
+  sleep 0.5
+  start "$SDK_URL" 2>/dev/null &
 elif command -v explorer.exe &> /dev/null; then
   # WSL
-  explorer.exe "$PREVIEW_URL" 2>/dev/null &
+  explorer.exe "$BBS_URL" 2>/dev/null &
+  sleep 0.5
+  explorer.exe "$SDK_URL" 2>/dev/null &
 else
-  echo "⚠️  Could not detect browser command. Please open $PREVIEW_URL manually." > /dev/tty
+  echo "⚠️  Could not detect browser command. Please open URLs manually:"
+  echo "   $BBS_URL"
+  echo "   $SDK_URL"
 fi
 
-echo "" > /dev/tty
+echo ""
 
 # Keep script running and wait for both processes
 wait
