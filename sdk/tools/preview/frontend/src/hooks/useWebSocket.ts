@@ -175,5 +175,6 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     send,
     disconnect,
     reconnect: connect,
+    ws: wsRef, // Expose WebSocket instance
   };
 };
