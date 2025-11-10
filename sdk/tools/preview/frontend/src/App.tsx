@@ -280,6 +280,28 @@ function App() {
         setTerminalOutput((prev) => [...prev, `\x1b[31mError: ${message.data}\x1b[0m`]);
         soundEffects.error();
         break;
+
+      case 'client-door-bundle':
+        // Client door: execute bundled code in browser
+        setTerminalOutput((prev) => [
+          ...prev,
+          `\x1b[36m[CLIENT DOOR] Received bundle for ${message.doorId} (${message.code.length} bytes)\x1b[0m`,
+          `\x1b[32m[CLIENT DOOR] Executing in browser with Web Audio API...\x1b[0m`,
+          '',
+        ]);
+        try {
+          // Execute the bundled code
+          // The code will set up its own WebSocket connection and UI
+          eval(message.code);
+          soundEffects.notification();
+        } catch (err: any) {
+          setTerminalOutput((prev) => [
+            ...prev,
+            `\x1b[31m[CLIENT DOOR] Execution error: ${err.message}\x1b[0m`,
+          ]);
+          soundEffects.error();
+        }
+        break;
     }
   }
 

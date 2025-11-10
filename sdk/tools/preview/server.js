@@ -2267,6 +2267,71 @@ function saveFile(clientId, filePath, content) {
 }
 
 /**
+ * Start a CLIENT door (runs in browser)
+ */
+async function startClientDoor(clientId, doorId, doorPath) {
+  const client = clients.get(clientId);
+  if (!client) return;
+
+  debugLog(clientId, `📦 [CLIENT DOOR] Bundling ${doorId} for browser...`);
+
+  try {
+    // Bundle with esbuild for browser
+    const esbuild = require('esbuild');
+    const entryFile = path.join(doorPath, 'index.ts');
+
+    if (!fs.existsSync(entryFile)) {
+      throw new Error(`Entry file not found: ${entryFile}`);
+    }
+
+    const outfile = path.join(doorPath, '.preview-bundle.js');
+
+    debugLog(clientId, `🔨 [CLIENT DOOR] Building bundle...`);
+    await esbuild.build({
+      entryPoints: [entryFile],
+      bundle: true,
+      outfile,
+      platform: 'browser',
+      format: 'iife',
+      sourcemap: 'inline',
+      loader: { '.ts': 'ts' },
+      logLevel: 'warning',
+    });
+
+    debugLog(clientId, `✅ [CLIENT DOOR] Bundle created: ${outfile}`);
+
+    // Read the bundled code
+    const bundledCode = fs.readFileSync(outfile, 'utf8');
+
+    // Send bundle to client for execution in browser
+    debugLog(clientId, `📤 [CLIENT DOOR] Sending bundle to browser (${bundledCode.length} bytes)`);
+    client.ws.send(JSON.stringify({
+      type: 'client-door-bundle',
+      doorId,
+      code: bundledCode,
+    }));
+
+    debugLog(clientId, `✅ [CLIENT DOOR] Bundle sent to browser, door will execute there`);
+
+    // Send door-started message
+    client.ws.send(JSON.stringify({
+      type: 'door-started',
+      doorId,
+      runtime: 'client',
+    }));
+
+  } catch (err) {
+    debugLog(clientId, `❌ [CLIENT DOOR] Bundling failed: ${err.message}`, 'error');
+    debugLog(clientId, `   Stack: ${err.stack}`, 'error');
+
+    client.ws.send(JSON.stringify({
+      type: 'error',
+      message: `Failed to bundle client door: ${err.message}`,
+    }));
+  }
+}
+
+/**
  * Start door process
  */
 function startDoor(clientId, doorId) {
@@ -2290,6 +2355,30 @@ function startDoor(clientId, doorId) {
   const doorPath = path.join(__dirname, '../../examples', doorId);
   debugLog(clientId, `📂 [START DOOR] Door path: ${doorPath}`);
   debugLog(clientId, `📂 [START DOOR] Door path exists: ${fs.existsSync(doorPath)}`);
+
+  // Check door runtime type from package.json
+  const pkgPath = path.join(doorPath, 'package.json');
+  let runtime = 'server'; // Default to server runtime
+
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      runtime = pkg.runtime || 'server';
+      debugLog(clientId, `📦 [START DOOR] Runtime type: ${runtime}`);
+    } catch (err) {
+      debugLog(clientId, `⚠️  [START DOOR] Could not read package.json, assuming server runtime`, 'warn');
+    }
+  }
+
+  // Handle client doors differently
+  if (runtime === 'client') {
+    debugLog(clientId, `🌐 [START DOOR] CLIENT DOOR detected - bundling for browser...`);
+    startClientDoor(clientId, doorId, doorPath);
+    return;
+  }
+
+  // Server door: continue with Node.js execution
+  debugLog(clientId, `🖥️  [START DOOR] SERVER DOOR detected - spawning Node.js process...`);
 
   // Check for TypeScript or JavaScript
   const tsFile = path.join(doorPath, 'index.ts');

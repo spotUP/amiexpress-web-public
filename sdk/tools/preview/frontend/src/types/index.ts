@@ -77,9 +77,12 @@ export interface AppSettings {
 }
 
 export interface WebSocketMessage {
-  type: 'output' | 'input' | 'error' | 'status' | 'build' | 'doorList' | 'doorMetadata' | 'fileContent' | 'buildStatus';
+  type: 'output' | 'input' | 'error' | 'status' | 'build' | 'doorList' | 'doorMetadata' | 'fileContent' | 'buildStatus' | 'client-door-bundle' | 'debug';
   data: any;
   timestamp?: number;
+  // For client-door-bundle messages
+  doorId?: string;
+  code?: string;
 }
 
 export interface ConnectionStatus {

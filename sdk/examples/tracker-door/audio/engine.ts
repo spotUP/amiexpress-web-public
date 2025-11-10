@@ -31,13 +31,6 @@ export class AudioEngine {
   async init(): Promise<void> {
     if (this.initialized) return;
 
-    // Check if we're in a browser environment
-    if (typeof window === 'undefined') {
-      console.log('Audio engine: Node.js environment detected, skipping audio initialization');
-      this.initialized = true;
-      return;
-    }
-
     await Tone.start();
     console.log('Audio engine initialized');
 
