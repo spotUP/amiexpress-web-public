@@ -135,16 +135,23 @@ class TrackerDoor {
    */
   private setupEventHandlers(): void {
     this.door.onConnect(async (user: any) => {
+      console.log('[TrackerDoor] User connected:', user);
       this.userId = user.id;
       await this.audio.init();
-      this.showMainMenu();
+      // Start directly in pattern editor
+      this.currentView = 'pattern-editor';
+      this.showPatternEditor();
     });
 
     this.door.onInput((user: any, key: any) => {
-      this.handleInput(key.key || key);
+      console.log('[TrackerDoor] Input received:', key);
+      const keyStr = key.key || key;
+      console.log('[TrackerDoor] Handling key:', keyStr);
+      this.handleInput(keyStr);
     });
 
     this.door.onDisconnect(() => {
+      console.log('[TrackerDoor] User disconnected');
       this.audio.dispose();
     });
   }
@@ -153,6 +160,11 @@ class TrackerDoor {
    * Handle keyboard input
    */
   private handleInput(key: string): void {
+    // Global commands (accessible from anywhere with Ctrl key)
+    if (this.handleGlobalCommands(key)) {
+      return;
+    }
+
     switch (this.currentView) {
       case 'main':
         this.handleMainMenuInput(key);
@@ -182,6 +194,95 @@ class TrackerDoor {
         this.handleHelpInput(key);
         break;
     }
+  }
+
+  /**
+   * Handle global commands (accessible from any view)
+   * Returns true if command was handled
+   * NOTE: Some Ctrl commands are disabled in pattern-editor to avoid clashing with editing
+   */
+  private handleGlobalCommands(key: string): boolean {
+    const k = key.toLowerCase();
+
+    // F1 - Help (always available)
+    if (key === 'F1' || key === '\x1b[11~') {
+      this.currentView = 'help';
+      this.showHelp();
+      return true;
+    }
+
+    // Ctrl+Q - Quit (always available)
+    if (key === '\x11') {
+      this.quit();
+      return true;
+    }
+
+    // Disable other Ctrl commands in pattern-editor to avoid clashing with editing shortcuts
+    // (Ctrl+C/X/V for copy/paste, Ctrl+Z/Y for undo/redo, etc.)
+    if (this.currentView === 'pattern-editor') {
+      return false;
+    }
+
+    // Ctrl+P - Pattern Editor
+    if (key === '\x10') {
+      this.currentView = 'pattern-editor';
+      this.showPatternEditor();
+      return true;
+    }
+
+    // Ctrl+I - Instrument Editor
+    if (key === '\t') {
+      this.currentView = 'instrument-editor';
+      this.showInstrumentEditor();
+      return true;
+    }
+
+    // Ctrl+M - Sample Manager
+    if (key === '\r') {
+      this.currentView = 'sample-editor';
+      this.showSampleEditor();
+      return true;
+    }
+
+    // Ctrl+F - Effects Editor
+    if (key === '\x06') {
+      this.currentView = 'effects-editor';
+      this.showEffectsEditor();
+      return true;
+    }
+
+    // Ctrl+S - Song Arranger
+    if (key === '\x13') {
+      this.currentView = 'song-editor';
+      this.showSongEditor();
+      return true;
+    }
+
+    // Ctrl+E - Export
+    if (key === '\x05') {
+      this.currentView = 'export';
+      this.showExport();
+      return true;
+    }
+
+    // Ctrl+L - Import
+    if (key === '\x0c') {
+      this.gfx.clear(AnsiColor.BLACK);
+      this.gfx.drawText(5, 5, 'Import feature: Place .mod, .xm, or .it files in data/import/', AnsiColor.YELLOW);
+      this.gfx.drawText(5, 6, 'Then use Load from Export menu.', AnsiColor.WHITE);
+      this.gfx.drawText(5, 8, 'Press any key to continue...', AnsiColor.WHITE);
+      this.door.sendAnsi(this.gfx.render());
+      return true;
+    }
+
+    // Ctrl+A - AI Assistant
+    if (key === '\x01') {
+      this.currentView = 'ai-assistant';
+      this.showAIAssistant();
+      return true;
+    }
+
+    return false;
   }
 
   // ==========================================================================
@@ -690,6 +791,12 @@ class TrackerDoor {
     this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
 
     let y = 3;
+    this.gfx.drawText(2, y++, 'GLOBAL COMMANDS (work from any screen):', AnsiColor.YELLOW);
+    this.gfx.drawText(2, y++, '  F1 - Help          Ctrl+P - Pattern Editor   Ctrl+I - Instrument Editor', AnsiColor.WHITE);
+    this.gfx.drawText(2, y++, '  Ctrl+M - Samples   Ctrl+F - Effects          Ctrl+S - Song Arranger', AnsiColor.WHITE);
+    this.gfx.drawText(2, y++, '  Ctrl+E - Export    Ctrl+L - Import           Ctrl+A - AI Assistant', AnsiColor.WHITE);
+    this.gfx.drawText(2, y++, '  Ctrl+Q - Quit      ESC - Back/Cancel', AnsiColor.WHITE);
+    y++;
     this.gfx.drawText(2, y++, 'PATTERN EDITOR:', AnsiColor.YELLOW);
     this.gfx.drawText(2, y++, '  Arrows - Navigate  Tab - Next channel  Space - Play/pause', AnsiColor.WHITE);
     this.gfx.drawText(2, y++, '  Q-I,A-K,Z-M - Piano keyboard  -/+ - Octave  Backspace - Del note', AnsiColor.WHITE);
@@ -698,17 +805,10 @@ class TrackerDoor {
     this.gfx.drawText(2, y++, '  Ctrl+Z - Undo  Ctrl+Y - Redo  Insert - Insert row  Delete - Del row', AnsiColor.WHITE);
     this.gfx.drawText(2, y++, '  Ctrl+C - Copy  Ctrl+X - Cut  Ctrl+V - Paste  Shift+Arrows - Select', AnsiColor.WHITE);
     y++;
-    this.gfx.drawText(2, y++, 'CHANNEL:', AnsiColor.YELLOW);
-    this.gfx.drawText(2, y++, '  M - Mute/unmute channel  S - Solo/unsolo channel', AnsiColor.WHITE);
-    y++;
-    this.gfx.drawText(2, y++, 'FORMAT SUPPORT:', AnsiColor.YELLOW);
-    this.gfx.drawText(2, y++, '  Import: MOD, XM, IT modules  Export: JSON, .trkmod, .game.json', AnsiColor.WHITE);
-    this.gfx.drawText(2, y++, '  Instruments: XI, ITI, XRNI  Auto-save every 2 minutes', AnsiColor.WHITE);
-    y++;
-    this.gfx.drawText(2, y++, 'NOTE FORMAT: C-4 01 80 = C/octave 4, inst 01, vol 80', AnsiColor.WHITE);
+    this.gfx.drawText(2, y++, 'CHANNEL: M - Mute  S - Solo     FORMAT: MOD/XM/IT import supported', AnsiColor.WHITE);
 
     this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [ESC] Back to Menu                                                         ║', AnsiColor.WHITE);
+    this.gfx.drawText(0, 23, '║ [ESC] Back to Pattern Editor                                               ║', AnsiColor.WHITE);
     this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
@@ -716,8 +816,8 @@ class TrackerDoor {
 
   private handleHelpInput(key: string): void {
     if (key === 'Escape' || key === '\x1b') {
-      this.currentView = 'main';
-      this.showMainMenu();
+      this.currentView = 'pattern-editor';
+      this.showPatternEditor();
     }
   }
 

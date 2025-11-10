@@ -203,6 +203,7 @@ export class ClientDoor extends EventEmitter {
    * @private
    */
   private handleMessage(message: WebSocketMessage): void {
+    console.log('[ClientDoor] Received message:', message.type, message);
     switch (message.type) {
       case MessageType.CONNECT:
         // Server sent user info
@@ -214,8 +215,12 @@ export class ClientDoor extends EventEmitter {
 
       case MessageType.INPUT:
         // Server forwarded keyboard input
+        console.log('[ClientDoor] INPUT message, data:', message.data);
         if (this.user) {
+          console.log('[ClientDoor] Emitting input event');
           this.emit('input', { user: this.user, key: message.data });
+        } else {
+          console.warn('[ClientDoor] No user set, ignoring input');
         }
         break;
 

@@ -33,6 +33,9 @@ const execPromise = promisify(exec);
 const PORT = process.env.PORT || 8080;
 const DEBUG_OUTPUT = process.env.DEBUG_OUTPUT === 'true' || false;
 
+// Log DEBUG_OUTPUT at startup
+console.log(`🔍 DEBUG_OUTPUT: ${DEBUG_OUTPUT} (from env: ${process.env.DEBUG_OUTPUT})`);
+
 /**
  * Kill any existing servers on the port before starting
  */
