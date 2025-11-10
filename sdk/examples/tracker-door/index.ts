@@ -84,7 +84,7 @@ class TrackerDoor {
 
     this.gfx = new GraphicsEngine();
     this.audio = new AudioEngine(16);
-    this.dataDir = '/data'; // Browser path
+    this.dataDir = './tracker-data'; // Data directory relative to CWD
     this.exportManager = new ExportManager(this.dataDir);
     this.sampleManager = new SampleManager(this.dataDir);
     this.aiGenerator = new AIGenerator();
