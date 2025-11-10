@@ -74,6 +74,7 @@ npm run validate     # Validate door package
 - **Quick All Commands**: `./dev/scripts/test-all-commands-quick.sh`
 - **Interactive Test**: `node dev/scripts/test-command-interactive.js`
 - **Door Install Test**: `node dev/scripts/test-door-install.js`
+- **Example Doors**: `./dev/scripts/test-example-doors.sh` (or `--clean` to remove node_modules first)
 - **Deep Dive Test**: `node dev/scripts/test-deep-dive.js`
 - **Simple Test**: `node dev/scripts/test-simple.js`
 - **BBS Comprehensive**: `node dev/scripts/test-bbs-comprehensive.js`
