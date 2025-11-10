@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import '@xterm/xterm/css/xterm.css';
@@ -11,15 +11,26 @@ interface XTermTerminalProps {
   className?: string;
 }
 
-export const XTermTerminal: React.FC<XTermTerminalProps> = ({
+export interface XTermTerminalRef {
+  focus: () => void;
+}
+
+export const XTermTerminal = forwardRef<XTermTerminalRef, XTermTerminalProps>(({
   output,
   onInput,
   fontSize = 14,
   className = '',
-}) => {
+}, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
   const lastOutputLength = useRef<number>(0);
+
+  // Expose focus method to parent components
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      terminalInstance.current?.focus();
+    },
+  }));
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -42,10 +53,13 @@ export const XTermTerminal: React.FC<XTermTerminalProps> = ({
     const canvasAddon = new CanvasAddon();
     term.loadAddon(canvasAddon);
 
-    // Handle input
-    term.onData((data: string) => {
+    // Handle input using onKey for proper keyboard event handling
+    // This gives us actual key values instead of raw escape sequences
+    term.onKey(({ key }) => {
       if (onInput) {
-        onInput(data);
+        // Send the raw key data which includes proper escape sequences
+        // This is what doors expect to receive
+        onInput(key);
       }
     });
 
@@ -101,4 +115,7 @@ export const XTermTerminal: React.FC<XTermTerminalProps> = ({
       }}
     />
   );
-};
+});
+
+// Add display name for debugging
+XTermTerminal.displayName = 'XTermTerminal';
