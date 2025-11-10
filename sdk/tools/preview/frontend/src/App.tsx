@@ -127,6 +127,9 @@ function App() {
   ]);
   const terminalRef = useRef<HTMLDivElement>(null);
 
+  // Client door state
+  const [activeClientDoorSession, setActiveClientDoorSession] = useState<string | null>(null);
+
   // Build state
   const [buildStatus, setBuildStatus] = useState<BuildStatusType>({
     building: false,
@@ -199,7 +202,7 @@ function App() {
   };
 
   // WebSocket connection
-  const { status: wsStatus, send: wsSend } = useWebSocket({
+  const { status: wsStatus, send: wsSend, ws: wsRef } = useWebSocket({
     url: `ws://${window.location.hostname}:${window.location.port || 8080}`,
     onMessage: handleWebSocketMessage,
     onConnect: () => {
@@ -281,6 +284,19 @@ function App() {
         soundEffects.error();
         break;
 
+      case 'door-server-message':
+        // Server sent a message to the door - dispatch as DOM event
+        if (message.sessionId) {
+          const event = new CustomEvent('bbs:door:message', {
+            detail: {
+              sessionId: message.sessionId,
+              message: message.data,
+            },
+          });
+          window.dispatchEvent(event);
+        }
+        break;
+
       case 'client-door-bundle':
         // Client door: execute bundled code in browser
         setTerminalOutput((prev) => [
@@ -290,9 +306,77 @@ function App() {
           '',
         ]);
         try {
+          // Set up window.__BBS__ for the door to use
+          // This provides a Socket.IO-compatible interface wrapping the WebSocket
+          const sessionId = `client-door-${message.doorId}-${Date.now()}`;
+
+          // Create a Socket.IO-like wrapper around the WebSocket
+          const socketIOWrapper = {
+            emit: (event: string, data: any) => {
+              // Handle door:client:message events (output from ClientDoor)
+              if (event === 'door:client:message' && data.message) {
+                const msg = data.message;
+                // Handle OUTPUT messages - display in terminal
+                if (msg.type === 'output') {
+                  setTerminalOutput((prev) => [...prev, msg.data]);
+                }
+                // Could handle other message types here
+              }
+
+              // Also send to server if needed
+              if (wsRef.current) {
+                wsSend({
+                  type: 'door-message',
+                  sessionId,
+                  event,
+                  data,
+                });
+              }
+            },
+            on: (event: string, handler: (data: any) => void) => {
+              // Store event handlers for this session
+              if (!window.__BBS_HANDLERS__) {
+                window.__BBS_HANDLERS__ = {};
+              }
+              if (!window.__BBS_HANDLERS__[sessionId]) {
+                window.__BBS_HANDLERS__[sessionId] = {};
+              }
+              window.__BBS_HANDLERS__[sessionId][event] = handler;
+            },
+          };
+
+          // Set up global __BBS__ object for the door
+          (window as any).__BBS__ = {
+            socket: socketIOWrapper,
+            sessionId,
+          };
+
           // Execute the bundled code
-          // The code will set up its own WebSocket connection and UI
+          // The code will detect window.__BBS__ and use it for communication
           eval(message.code);
+
+          // Set active client door session
+          setActiveClientDoorSession(sessionId);
+
+          // Send CONNECT message to initialize the door
+          // This simulates the server sending user info to the door
+          setTimeout(() => {
+            const connectEvent = new CustomEvent('bbs:door:message', {
+              detail: {
+                sessionId,
+                message: {
+                  type: 'connect',
+                  user: {
+                    id: 1,
+                    username: 'PreviewUser',
+                    secLevel: 255,
+                  },
+                },
+              },
+            });
+            window.dispatchEvent(connectEvent);
+          }, 100);
+
           soundEffects.notification();
         } catch (err: any) {
           setTerminalOutput((prev) => [
@@ -337,8 +421,23 @@ function App() {
 
   // Handle terminal input
   const handleTerminalInput = (input: string) => {
-    setTerminalOutput((prev) => [...prev, `$ ${input}`]);
-    wsSend({ type: 'input', data: input });
+    // If a client door is active, send input directly to it
+    if (activeClientDoorSession) {
+      const inputEvent = new CustomEvent('bbs:door:message', {
+        detail: {
+          sessionId: activeClientDoorSession,
+          message: {
+            type: 'input',
+            data: { key: input },
+          },
+        },
+      });
+      window.dispatchEvent(inputEvent);
+    } else {
+      // Normal terminal input
+      setTerminalOutput((prev) => [...prev, `$ ${input}`]);
+      wsSend({ type: 'input', data: input });
+    }
   };
 
   // Handle file selection in code editor
