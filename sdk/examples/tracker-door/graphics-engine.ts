@@ -9,43 +9,42 @@ export class GraphicsEngine {
   private buffer: string = '';
 
   /**
-   * Clear the screen with a background color
+   * Clear the screen
    */
-  public clear(bgColor: AnsiColor = AnsiColor.BLACK): void {
+  public clear(bgColor?: AnsiColor): void {
     this.buffer = '';
     this.buffer += '\x1b[2J\x1b[H'; // Clear screen and move cursor to home
-    this.buffer += `\x1b[${bgColor}m`; // Set background color
   }
 
   /**
-   * Draw text at a specific position
+   * Draw text at a specific position (0-based coordinates)
    */
-  public drawText(x: number, y: number, text: string, color: AnsiColor): void {
-    this.buffer += `\x1b[${y};${x}H`; // Move cursor to position
-    this.buffer += `\x1b[${color}m`; // Set color
+  public drawText(x: number, y: number, text: string, color?: AnsiColor): void {
+    // ANSI escape sequences use 1-based positioning, so add 1 to both x and y
+    this.buffer += `\x1b[${y + 1};${x + 1}H`; // Move cursor to position
     this.buffer += text;
-    this.buffer += '\x1b[0m'; // Reset color
   }
 
   /**
-   * Move cursor to position
+   * Move cursor to position (0-based coordinates)
    */
   public moveCursor(x: number, y: number): void {
-    this.buffer += `\x1b[${y};${x}H`;
+    // ANSI escape sequences use 1-based positioning, so add 1 to both x and y
+    this.buffer += `\x1b[${y + 1};${x + 1}H`;
   }
 
   /**
-   * Set foreground color
+   * Set foreground color (deprecated - no-op for monochrome mode)
    */
-  public setColor(color: AnsiColor): void {
-    this.buffer += `\x1b[${color}m`;
+  public setColor(color?: AnsiColor): void {
+    // No-op: colors disabled
   }
 
   /**
-   * Reset color to default
+   * Reset color to default (deprecated - no-op for monochrome mode)
    */
   public resetColor(): void {
-    this.buffer += '\x1b[0m';
+    // No-op: colors disabled
   }
 
   /**
