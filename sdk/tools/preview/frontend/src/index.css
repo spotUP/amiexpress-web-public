@@ -67,36 +67,28 @@ body.light {
   color: #333333;
 }
 
-/* Custom scrollbar */
+/* Hide all scrollbars */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  display: none; /* Chrome, Safari, Edge */
+  width: 0px;
+  height: 0px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1e1e1e;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #4a4a4a;
-  border-radius: 5px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #5a5a5a;
-}
-
-/* Light mode scrollbar */
-body.light ::-webkit-scrollbar-track {
-  background: #f0f0f0;
-}
-
-body.light ::-webkit-scrollbar-thumb {
-  background: #c0c0c0;
-}
-
-body.light ::-webkit-scrollbar-thumb:hover {
-  background: #a0a0a0;
+  background: transparent;
 }
 
 /* Theme-aware component styles */
@@ -316,21 +308,27 @@ textarea:focus-visible {
 
 /* Utility classes */
 @layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
   .scrollbar-thin::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    display: none; /* Chrome, Safari, Edge */
+    width: 0px;
+    height: 0px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
-    @apply bg-gray-800;
+    background: transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-gray-600 rounded;
+    background: transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-500;
+    background: transparent;
   }
 
   /* Text truncation */
