@@ -2,12 +2,14 @@
 
 # Check for debug flag
 DEBUG_MODE=false
+DEBUG_OUTPUT="false"
 if [[ "$1" == "--debug" ]] || [[ "$1" == "-v" ]] || [[ "$1" == "--verbose" ]]; then
   DEBUG_MODE=true
+  DEBUG_OUTPUT="true"
   echo "→ Starting in DEBUG mode (full logs enabled)"
 else
-  echo "→ Starting in normal mode (filtered logs)"
-  echo "   Use --debug to see full logs"
+  echo "→ Starting in normal mode (clean door output)"
+  echo "   Use --debug to see full debug logs"
 fi
 
 # Get the repository root directory (portable)
@@ -59,13 +61,10 @@ fi
 FRONTEND_PID=$!
 
 # Start SDK preview server in background
-if [ "$DEBUG_MODE" = true ]; then
-  # DEBUG MODE: Show preview server logs and save to file
-  (cd "$REPO_ROOT/sdk" && node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG") &
-else
-  # NORMAL MODE: Suppress preview output but save to file
-  (cd "$REPO_ROOT/sdk" && node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG" > /dev/null) &
-fi
+# DEBUG_OUTPUT controls whether door-handling debug messages are shown
+# In normal mode, door output is clean without debug messages
+# In debug mode, all debug messages are shown
+(cd "$REPO_ROOT/sdk" && DEBUG_OUTPUT="$DEBUG_OUTPUT" node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG") &
 PREVIEW_PID=$!
 
 # Wait for backend to finish startup (look for BACKEND_DONE marker)
