@@ -83,7 +83,9 @@ export class AudioEngine {
     };
 
     // Check if we're in a browser environment with AudioContext
-    const isBrowser = typeof window !== 'undefined' && typeof (window as any).AudioContext !== 'undefined';
+    const isBrowser = typeof globalThis !== 'undefined' &&
+                       (globalThis as any).window !== undefined &&
+                       typeof (globalThis as any).window.AudioContext !== 'undefined';
 
     if (!isBrowser) {
       // Node.js environment - create placeholder gains that won't be used
