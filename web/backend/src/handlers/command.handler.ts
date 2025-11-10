@@ -57,6 +57,7 @@ import {
   setSystemCommandsDependencies
 } from './system-commands.handler';
 import { WebhookCommandsHandler } from './webhook-commands.handler';
+import { displaySysopMenu, handleSysopMenuInput } from './sysop-menu.handler';
 import {
   handleTimeCommand,
   handleNewFilesCommand,
@@ -2419,6 +2420,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       return;
     }
 
+    // Skip menu display if Sysop Menu is active
+    if (session.inSysopMenu) {
+      console.log('✅ [AFTER COMMAND] Sysop Menu is active - NOT showing menu');
+      return;
+    }
+
     if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
       console.log('⚠️ [AFTER COMMAND] subState is still PROCESS_COMMAND, showing menu');
       // Command didn't change state, so default to showing menu
@@ -2494,6 +2501,12 @@ export async function runBbsCommand(socket: any, session: BBSSession, command: s
 // Process command with priority system (express.e:28229-28257)
 export async function processCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
   console.log(`[CommandPriority] Processing command: ${command} with params: ${params}`);
+
+  // Handle sysop menu input routing
+  if (session.inSysopMenu) {
+    await handleSysopMenuInput(socket, session, command);
+    return 'SUCCESS';
+  }
 
   // Try SysCommand first
   const sysResult = await runSysCommand(socket, session, command, params);
@@ -2754,6 +2767,10 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'CM': // Conference Maintenance (SYSOP) (internalCommandCM) - express.e:24843-24852
       await handleConferenceMaintenanceCommand(socket, session);
+      return;
+
+    case 'SYSOP': // Sysop Commands Menu - Central hub for all sysop commands
+      await displaySysopMenu(socket, session, params);
       return;
 
     case 'WEBHOOK': // Webhook Management (SYSOP) - Custom web command
