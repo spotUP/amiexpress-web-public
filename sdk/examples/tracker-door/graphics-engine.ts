@@ -1,10 +1,19 @@
 /**
- * Simple Graphics Engine for Client Doors
- * Provides text-based graphics rendering for BBS doors
+ * Simple Graphics Helper for TrackerDoor
+ *
+ * Provides basic text-based rendering for the tracker interface.
+ * For advanced graphics like visualizations, see the SDK's BrailleCanvas
+ * and graphics engine modules.
  */
 
 import { AnsiColor } from '@amiexpress/bbs-door-sdk/client';
 
+/**
+ * Simple graphics buffer for text-based UIs
+ *
+ * This is a minimal helper for basic text positioning and rendering.
+ * For pixel-based graphics, use the SDK's BrailleCanvas with node-drawille.
+ */
 export class GraphicsEngine {
   private buffer: string = '';
 
