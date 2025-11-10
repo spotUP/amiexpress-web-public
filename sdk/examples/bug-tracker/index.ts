@@ -1319,7 +1319,7 @@ class BugTracker {
 
       const y = 10;
       this.gfx.drawText(15, y, '╔═══════════════════════════════════════════════╗', AnsiColor.Green);
-      this.gfx.drawText(15, y + 1, '║  ✓ Bug reports exported successfully!        ║', AnsiColor.Green);
+      this.gfx.drawText(15, y + 1, '║  + Bug reports exported successfully!        ║', AnsiColor.Green);
       this.gfx.drawText(15, y + 2, '║                                               ║', AnsiColor.Green);
       this.gfx.drawText(15, y + 3, `║  File: ${filename.padEnd(37)}║`, AnsiColor.Yellow);
       this.gfx.drawText(15, y + 4, '║                                               ║', AnsiColor.Green);

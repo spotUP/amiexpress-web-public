@@ -579,6 +579,22 @@ export class ClientDoor extends EventEmitter {
 export { BBSUser, DoorConfig, KeyEvent, AnsiColor, AnsiBgColor } from '../common';
 
 /**
+ * Export ANSI string utilities
+ */
+export {
+  stripAnsi,
+  visibleLength,
+  padEndVisible,
+  padStartVisible,
+  centerVisible,
+  getCenterX,
+  truncateVisible,
+  substringVisible,
+  measureWidth,
+  formatInBox,
+} from '../core/ansi-string-utils';
+
+/**
  * Export default
  */
 export default ClientDoor;

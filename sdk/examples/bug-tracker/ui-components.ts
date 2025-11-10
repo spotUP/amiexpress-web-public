@@ -51,20 +51,20 @@ export class UIComponents {
   }
 
   private renderToast(toast: { message: string; type: ToastType }): void {
-    let icon = 'ℹ';
+    let icon = 'i';
     let color = '\x1b[36m'; // Cyan
 
     switch (toast.type) {
       case ToastType.SUCCESS:
-        icon = '✓';
+        icon = '+';
         color = '\x1b[32m'; // Green
         break;
       case ToastType.ERROR:
-        icon = '✗';
+        icon = 'X';
         color = '\x1b[31m'; // Red
         break;
       case ToastType.WARNING:
-        icon = '⚠';
+        icon = '!';
         color = '\x1b[33m'; // Yellow
         break;
     }
