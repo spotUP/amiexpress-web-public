@@ -64,6 +64,8 @@ export { NetworkEngine } from './engines/network/network-engine';
 export { AIEngine } from './engines/ai/ai-engine';
 export { InputEngine } from './engines/input/input-engine';
 export { TacticalCombatEngine } from './engines/tactical/tactical-combat-engine';
+export { UIEngine, UIHelpers } from './engines/ui';
+export type { UIEngineOptions, WidgetStyle, MenuItem, DialogOptions, InputDialogOptions, ConfirmDialogOptions, ListSelectionOptions, StatusBarOptions } from './engines/ui';
 
 // Components
 export { MenuSystem } from './components/menus/menu-system';

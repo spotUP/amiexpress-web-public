@@ -31,11 +31,12 @@ quickStart('My First Door', async (door, user) => {
 
 ---
 
-## 🎮 Complete Feature Set (11 Systems)
+## 🎮 Complete Feature Set (12 Systems)
 
 | System | Features | Status |
 |--------|----------|--------|
-| **Graphics Engine** | ANSI rendering, sprites, particles, parallax, cutscenes | ✅ 100% |
+| **UI Engine (Neo-Blessed)** | 20+ widgets, forms, menus, dialogs, ncurses-like UI | ✅ 100% |
+| **Graphics Engine** | ANSI rendering, sprites, particles, parallax, cutscenes, braille graphics | ✅ 100% |
 | **Physics Engine** | 2D collision, forces, gravity | ✅ 100% |
 | **Audio Engine** | Sound effects (Tone.js), procedural audio | ✅ 90% |
 | **Input Engine** | Key mapping, macros, input recording | ✅ 100% |
@@ -59,13 +60,16 @@ quickStart('My First Door', async (door, user) => {
 
 ## 📦 What's Included
 
-### **4 Complete Example Games**
+### **7 Complete Example Games & Demos**
 
 | Game | Description | Systems Used | Lines | Status |
 |------|-------------|--------------|-------|--------|
+| **Neo-Blessed Demo** | Comprehensive UI showcase with forms, menus, dialogs | UIEngine, UIHelpers | 450 | ✅ Complete |
+| **Drawille Cube** | Rotating 3D cube using braille graphics | UIEngine, Drawille | 280 | ✅ Complete |
+| **2048 Game** | Classic sliding tile puzzle with ncurses-style UI | UIEngine, Game Logic | 520 | ✅ Complete |
 | **Space Shooter** | Retro space shooter with enemies, bullets, particles | Graphics, Physics, Audio, Input, HUD | 590 | ✅ Complete |
 | **Tic-Tac-Toe** | Multiplayer turn-based game | Network (turn-based), Graphics | 450 | ✅ Complete |
-| **Dungeon RPG** | **Ultimate example using ALL 11 systems** | Graphics, AI, Levels, Inventory, Dialogue, Quests, Save, Physics, Audio, Input, HUD | 650 | ✅ Complete |
+| **Dungeon RPG** | **Ultimate example using ALL 12 systems** | Graphics, AI, Levels, Inventory, Dialogue, Quests, Save, Physics, Audio, Input, HUD, UI | 650 | ✅ Complete |
 | **Fire Emblem RPG** | **Epic tactical RPG with 15 chapters, 20+ characters, multiplayer** | TacticalCombat, ClassSystem, Graphics, Network, Dialogue, Save | 2000+ | ✅ Complete |
 
 ---
@@ -80,6 +84,7 @@ quickStart('My First Door', async (door, user) => {
 │   └── index.ts           # SDK exports
 │
 ├── engines/               # Game engines
+│   ├── ui/                # UIEngine - Neo-blessed ncurses-like UI
 │   ├── graphics/          # GraphicsEngine - ANSI/ASCII rendering
 │   ├── physics/           # PhysicsEngine - Collision & forces
 │   ├── audio/             # AudioEngine - Sound & music
@@ -115,6 +120,55 @@ quickStart('My First Door', async (door, user) => {
 ---
 
 ## 💡 System Overview
+
+### UI Engine (Neo-Blessed) 🆕
+
+Create professional terminal UIs with **20+ widgets** and ncurses-like capabilities!
+
+```typescript
+import { UIEngine, UIHelpers } from '@amiexpress/bbs-door-sdk';
+
+const ui = new UIEngine({ width: 80, height: 24 });
+const helpers = new UIHelpers(ui);
+
+// Create interactive menu
+const menu = helpers.createMenu({
+  top: 5,
+  left: 'center',
+  width: 40,
+  height: 15,
+  title: 'Main Menu'
+}, [
+  { label: 'New Game', key: '1', action: () => startNewGame() },
+  { label: 'Load Game', key: '2', action: () => loadGame() },
+  { label: 'Options', key: '3', action: () => showOptions() },
+  { label: 'Quit', key: 'q', action: () => quit() }
+]);
+
+// Show dialogs
+await helpers.showAlert({ title: 'Welcome', message: 'Hello!' });
+const confirmed = await helpers.showConfirm({ title: 'Delete', message: 'Are you sure?' });
+const name = await helpers.showInput({ title: 'Name', label: 'Enter name:' });
+
+// Create forms
+const form = ui.createForm({ /* ... */ });
+const input = ui.createTextbox({ parent: form, label: 'Username:' });
+const button = ui.createButton({ parent: form, content: 'Submit' });
+
+// Lists and tables
+const list = ui.createList({ items: ['Item 1', 'Item 2', 'Item 3'] });
+const table = helpers.createDataTable({ data: [['Col1', 'Col2'], ['A', 'B']] });
+
+// Progress bars
+const progress = ui.createProgressBar({ filled: 50 });
+progress.setProgress(75);
+
+ui.render();
+```
+
+**Available Widgets:** Box, Text, Line, List, Form, Textbox, Textarea, Button, Checkbox, RadioSet, Table, ProgressBar, Log, Message, Prompt, Loading, FileManager, and more!
+
+**See:** `docs/NEO_BLESSED_UI.md` for full documentation and `examples/neo-blessed-demo/` for comprehensive showcase.
 
 ### Graphics Engine
 
