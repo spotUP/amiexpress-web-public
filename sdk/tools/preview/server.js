@@ -1880,6 +1880,21 @@ function handleClientMessage(clientId, data) {
         },
       })
     );
+  } else if (data.type === 'door-message') {
+    // Wrapped door message from client door (via socket.io wrapper)
+    debugLog(clientId, `📦 [DOOR MESSAGE] Unwrapping door message, event: ${data.event}`);
+
+    // Extract the inner message from the wrapped format
+    // Structure: { type: 'door-message', event: 'door:client:message', data: { sessionId, message } }
+    const innerMessage = data.data?.message;
+
+    if (innerMessage) {
+      debugLog(clientId, `   ➡️  Inner message type: ${innerMessage.type}`);
+      // Recursively handle the unwrapped message
+      handleClientMessage(clientId, innerMessage);
+    } else {
+      debugLog(clientId, `   ⚠️  No inner message found in door-message wrapper`, 'error');
+    }
   } else {
     debugLog(clientId, `⚠️  [WS MESSAGE] Unknown message type: ${data.type}`);
   }
