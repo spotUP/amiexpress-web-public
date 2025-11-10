@@ -325,7 +325,8 @@ Your terminal is ready for input.
 
     // Handle server messages
     function handleServerMessage(data) {
-      if (data.type === 'output') {
+      if (data.type === 'output' || data.type === 'ansi-output') {
+        // Handle both 'output' and 'ansi-output' message types
         appendToTerminal(data.data);
       } else if (data.type === 'error') {
         addDebug('❌ Error: ' + data.message, true);
