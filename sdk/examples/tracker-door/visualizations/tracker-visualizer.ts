@@ -59,26 +59,10 @@ export class ChannelVUMeters {
   }
 
   /**
-   * Render with ANSI color gradient (green -> yellow -> red)
+   * Render (monochrome)
    */
   renderColored(): string {
-    const lines = this.render().split('\n');
-    const totalLines = lines.length;
-
-    return lines.map((line, idx) => {
-      const position = 1 - (idx / totalLines);
-      let color: AnsiColor;
-
-      if (position > 0.8) {
-        color = AnsiColor.RED;
-      } else if (position > 0.5) {
-        color = AnsiColor.YELLOW;
-      } else {
-        color = AnsiColor.GREEN;
-      }
-
-      return `\x1b[0;${30 + color}m${line}\x1b[0m`;
-    }).join('\n');
+    return this.render();
   }
 
   /**
@@ -116,11 +100,10 @@ export class PatternWaveformViz {
   }
 
   /**
-   * Render with ANSI color
+   * Render (monochrome)
    */
-  renderColored(color: AnsiColor = AnsiColor.CYAN): string {
-    const output = this.render();
-    return `\x1b[0;${30 + color}m${output}\x1b[0m`;
+  renderColored(color?: AnsiColor): string {
+    return this.render();
   }
 }
 
@@ -151,26 +134,10 @@ export class SpectrumAnalyzerViz {
   }
 
   /**
-   * Render with color gradient
+   * Render (monochrome)
    */
   renderColored(): string {
-    const lines = this.render().split('\n');
-    const totalLines = lines.length;
-
-    return lines.map((line, idx) => {
-      const position = 1 - (idx / totalLines);
-      let color: AnsiColor;
-
-      if (position > 0.7) {
-        color = AnsiColor.MAGENTA;
-      } else if (position > 0.4) {
-        color = AnsiColor.CYAN;
-      } else {
-        color = AnsiColor.BLUE;
-      }
-
-      return `\x1b[0;${30 + color}m${line}\x1b[0m`;
-    }).join('\n');
+    return this.render();
   }
 }
 
@@ -215,11 +182,10 @@ export class PatternProgressBar {
   }
 
   /**
-   * Render with color
+   * Render (monochrome)
    */
-  renderColored(current: number, total: number, color: AnsiColor = AnsiColor.YELLOW): string {
-    const output = this.render(current, total);
-    return `\x1b[0;${30 + color}m${output}\x1b[0m`;
+  renderColored(current: number, total: number, color?: AnsiColor): string {
+    return this.render(current, total);
   }
 }
 
@@ -267,7 +233,7 @@ export class TrackerVisualizer {
   renderLayout(mode: 'vu' | 'waveform' | 'spectrum' | 'progress', currentRow: number = 0, totalRows: number = 64): string {
     const lines: string[] = [];
 
-    lines.push('\x1b[0;36m+---------------------- VISUALIZER ---------------------+\x1b[0m');
+    lines.push('+---------------------- VISUALIZER ---------------------+');
 
     switch (mode) {
       case 'vu':
@@ -275,7 +241,7 @@ export class TrackerVisualizer {
         break;
 
       case 'waveform':
-        lines.push(this.waveform.renderColored(AnsiColor.CYAN));
+        lines.push(this.waveform.renderColored());
         break;
 
       case 'spectrum':
@@ -283,13 +249,13 @@ export class TrackerVisualizer {
         break;
 
       case 'progress':
-        lines.push(this.progressBar.renderColored(currentRow, totalRows, AnsiColor.YELLOW));
+        lines.push(this.progressBar.renderColored(currentRow, totalRows));
         lines.push('');
-        lines.push(`\x1b[0;33mRow ${currentRow}/${totalRows}\x1b[0m`);
+        lines.push(`Row ${currentRow}/${totalRows}`);
         break;
     }
 
-    lines.push('\x1b[0;36m+------------------------------------------------------+\x1b[0m');
+    lines.push('+------------------------------------------------------+');
 
     return lines.join('\n');
   }
