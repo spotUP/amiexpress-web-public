@@ -54,6 +54,62 @@ export class ClientDoorBridge {
   private nextSessionId: number = 1;
 
   /**
+   * Parse keyboard input and convert escape sequences to friendly key names
+   * @private
+   */
+  private parseKeyInput(data: string): any {
+    // Map of ANSI escape sequences to key names
+    const escapeMap: Record<string, string> = {
+      '\x1bOP': 'F1',
+      '\x1bOQ': 'F2',
+      '\x1bOR': 'F3',
+      '\x1bOS': 'F4',
+      '\x1b[15~': 'F5',
+      '\x1b[17~': 'F6',
+      '\x1b[18~': 'F7',
+      '\x1b[19~': 'F8',
+      '\x1b[20~': 'F9',
+      '\x1b[21~': 'F10',
+      '\x1b[23~': 'F11',
+      '\x1b[24~': 'F12',
+      '\x1b[A': 'ArrowUp',
+      '\x1b[B': 'ArrowDown',
+      '\x1b[C': 'ArrowRight',
+      '\x1b[D': 'ArrowLeft',
+      '\x1b[H': 'Home',
+      '\x1b[F': 'End',
+      '\x1b[2~': 'Insert',
+      '\x1b[3~': 'Delete',
+      '\x1b[5~': 'PageUp',
+      '\x1b[6~': 'PageDown',
+      '\x1b': 'Escape',
+      '\r': 'Enter',
+      '\n': 'Enter',
+      '\t': 'Tab',
+      '\x7f': 'Backspace',
+      '\x08': 'Backspace',
+      ' ': ' '
+    };
+
+    // Check if this is an escape sequence
+    const keyName = escapeMap[data] || (data.length === 1 ? data : data);
+
+    // Determine modifiers
+    const ctrl = data.length === 1 && data.charCodeAt(0) < 32 && data !== '\r' && data !== '\n' && data !== '\t';
+    const alt = data.startsWith('\x1b') && data.length > 1 && !escapeMap[data];
+    const shift = false; // Can't reliably detect from escape sequences
+
+    return {
+      key: keyName,
+      raw: data,
+      code: data.charCodeAt(0),
+      ctrl,
+      alt,
+      shift,
+    };
+  }
+
+  /**
    * Start a client door session
    *
    * @param socket Socket.IO socket
@@ -140,19 +196,13 @@ export class ClientDoorBridge {
     const inputHandler = (data: string) => {
       if (!doorSession.active) return;
 
-      // Convert string input to key event
-      const key = {
-        key: data,
-        code: data.charCodeAt(0),
-        ctrl: data.charCodeAt(0) < 32,
-        alt: false,
-        shift: false,
-      };
+      // Parse key data and create enhanced key event
+      const parsedKey = this.parseKeyInput(data);
 
       // Send to door
       this.sendMessage(doorSession, {
         type: MessageType.INPUT,
-        data: key,
+        data: parsedKey,
         timestamp: Date.now(),
       });
     };

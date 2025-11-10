@@ -334,13 +334,29 @@ function Terminal() {
       }
     });
 
+    // Handle keyboard input with raw key events for doors
+    term.onKey(({ key, domEvent }) => {
+      // For login states, use processed data via onData
+      if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'new-user-prompt') {
+        // Let onData handler below handle login input
+        return;
+      }
+
+      // For doors, send raw key events with proper names
+      if (doorActive.current) {
+        const keyName = domEvent.key;
+        ws.emit('command', key);
+        return;
+      }
+
+      // For regular BBS commands, send the key data
+      ws.emit('command', key);
+    });
+
+    // Keep onData for login handling
     term.onData((data: string) => {
       if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'new-user-prompt') {
         handleLoginInput(data, ws, term);
-      } else if (doorActive.current) {
-        ws.emit('command', data);
-      } else {
-        ws.emit('command', data);
       }
     });
 
