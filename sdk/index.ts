@@ -43,6 +43,9 @@ export * from './common';
 // Core types (for engines) - re-export AnsiColor from core to override common version
 export { AnsiColor } from './core/types';
 
+// Core utilities - ANSI string manipulation
+export * from './core/ansi-string-utils';
+
 // Server runtime (Node.js)
 export { ServerDoor } from './server';
 
