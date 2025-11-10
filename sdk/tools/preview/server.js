@@ -2296,6 +2296,32 @@ async function startClientDoor(clientId, doorId, doorPath) {
       sourcemap: 'inline',
       loader: { '.ts': 'ts' },
       logLevel: 'warning',
+      // Provide empty shims for Node.js built-in modules that don't work in browser
+      inject: [],
+      define: {
+        'process.env.NODE_ENV': '"production"',
+        'global': 'window',
+      },
+      // Mark Node.js built-ins as external (they'll be replaced with empty objects)
+      external: [],
+      // Use esbuild plugins to handle Node.js built-ins
+      plugins: [{
+        name: 'node-builtins-browser',
+        setup(build) {
+          // Intercept imports of Node.js built-ins and provide empty shims
+          const nodeBuiltins = ['fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'buffer'];
+          nodeBuiltins.forEach(mod => {
+            build.onResolve({ filter: new RegExp(`^${mod}$`) }, args => ({
+              path: args.path,
+              namespace: 'node-builtin-shim',
+            }));
+            build.onLoad({ filter: /.*/, namespace: 'node-builtin-shim' }, () => ({
+              contents: 'export default {}; export const __esModule = true;',
+              loader: 'js',
+            }));
+          });
+        },
+      }],
     });
 
     debugLog(clientId, `✅ [CLIENT DOOR] Bundle created: ${outfile}`);

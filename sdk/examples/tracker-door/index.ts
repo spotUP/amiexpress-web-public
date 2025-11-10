@@ -19,11 +19,12 @@ import {
   EffectType,
   EffectCommand
 } from './data/types';
-import { ExportManager } from './utils/export';
-import { SampleManager } from './utils/sample';
+// Browser-compatible imports only
 import { AIGenerator } from './ai/generator';
 import { UndoManager, ClipboardManager } from './utils/undo';
-import { AutoSaveManager } from './utils/autosave';
+
+// Note: File-based features (export, sample loading, autosave) are disabled in browser mode
+// These features require Node.js file system access which is not available in the browser
 import { MODParser } from './formats/mod-parser';
 import { XMParser } from './formats/xm-parser';
 import { ITParser } from './formats/it-parser';
@@ -36,12 +37,9 @@ class TrackerDoor {
   private door: ClientDoor;
   private gfx: GraphicsEngine;
   private audio: AudioEngine;
-  private exportManager: ExportManager;
-  private sampleManager: SampleManager;
   private aiGenerator: AIGenerator;
   private undoManager: UndoManager;
   private clipboardManager: ClipboardManager;
-  private autoSaveManager: AutoSaveManager;
   private userId?: number;
 
   // State
@@ -55,7 +53,6 @@ class TrackerDoor {
   private currentVolume: number = 0x80;
   private editMode: 'note' | 'instrument' | 'volume' | 'effect' = 'note';
   private playing: boolean = false;
-  private dataDir: string;
 
   // Display
   private scrollRow: number = 0;
@@ -84,20 +81,14 @@ class TrackerDoor {
 
     this.gfx = new GraphicsEngine();
     this.audio = new AudioEngine(16);
-    this.dataDir = './tracker-data'; // Data directory relative to CWD
-    this.exportManager = new ExportManager(this.dataDir);
-    this.sampleManager = new SampleManager(this.dataDir);
     this.aiGenerator = new AIGenerator();
 
     // Initialize default song
     this.song = this.createDefaultSong();
 
-    // Initialize undo/redo and clipboard
+    // Initialize undo/redo and clipboard (browser-compatible features)
     this.undoManager = new UndoManager(this.song);
     this.clipboardManager = new ClipboardManager();
-
-    // Initialize auto-save (every 2 minutes)
-    this.autoSaveManager = new AutoSaveManager(this.dataDir);
 
     this.setupEventHandlers();
   }
@@ -146,10 +137,6 @@ class TrackerDoor {
     this.door.onConnect(async (user: any) => {
       this.userId = user.id;
       await this.audio.init();
-
-      // Start auto-save
-      this.autoSaveManager.start(() => this.song);
-
       this.showMainMenu();
     });
 
@@ -159,9 +146,6 @@ class TrackerDoor {
 
     this.door.onDisconnect(() => {
       this.audio.dispose();
-
-      // Stop auto-save
-      this.autoSaveManager.stop();
     });
   }
 
@@ -750,25 +734,20 @@ class TrackerDoor {
     this.gfx.drawText(0, 1, '║                           SAMPLE MANAGER                                   ║', AnsiColor.CYAN);
     this.gfx.drawText(0, 2, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
 
-    const samples = this.sampleManager.listSamples();
     let y = 4;
 
-    if (samples.length === 0) {
-      this.gfx.drawText(5, y++, 'No samples found in data/samples/', AnsiColor.YELLOW);
-      this.gfx.drawText(5, y++, 'Place WAV or MP3 files there to load them.', AnsiColor.WHITE);
-    } else {
-      this.gfx.drawText(5, y++, 'Available Samples:', AnsiColor.YELLOW);
-      y++;
-
-      samples.slice(0, 15).forEach((sample, idx) => {
-        const sizeKb = Math.floor(sample.size / 1024);
-        this.gfx.drawText(5, y++, `  ${String(idx + 1).padStart(2, '0')}. ${sample.name.padEnd(40)} ${sizeKb}KB`, AnsiColor.WHITE);
-      });
-    }
+    this.gfx.drawText(5, y++, 'Sample loading not available in browser mode', AnsiColor.YELLOW);
+    y++;
+    this.gfx.drawText(5, y++, 'In browser mode, you can:', AnsiColor.WHITE);
+    this.gfx.drawText(5, y++, '  - Create synth instruments in Instrument Editor', AnsiColor.WHITE);
+    this.gfx.drawText(5, y++, '  - Use the built-in synthesizer oscillators', AnsiColor.WHITE);
+    this.gfx.drawText(5, y++, '  - Apply effects to instruments', AnsiColor.WHITE);
+    y++;
+    this.gfx.drawText(5, y++, 'For advanced sample loading, use a Node.js door instead.', AnsiColor.YELLOW);
 
     y = Math.max(y, 20);
     this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [1-9] Load Sample  [T] Test Tone  [ESC] Back                              ║', AnsiColor.WHITE);
+    this.gfx.drawText(0, 23, '║ [ESC] Back                                                                 ║', AnsiColor.WHITE);
     this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
@@ -778,17 +757,6 @@ class TrackerDoor {
     if (key === 'Escape' || key === '\x1b') {
       this.currentView = 'main';
       this.showMainMenu();
-    } else if (key.toLowerCase() === 't') {
-      const testSample = this.sampleManager.loadSample('test.wav');
-      const instrument = this.sampleManager.createInstrumentFromSample(
-        this.song.instruments.length + 1,
-        'Test Sample',
-        testSample,
-        0,
-        testSample.length
-      );
-      this.song.instruments.push(instrument);
-      this.showSampleEditor();
     }
   }
 
@@ -953,57 +921,22 @@ class TrackerDoor {
     this.gfx.drawText(5, y++, `  Channels: ${this.song.channels}`, AnsiColor.WHITE);
     y++;
 
-    this.gfx.drawText(5, y++, 'Export Formats:', AnsiColor.YELLOW);
-    this.gfx.drawText(5, y++, '  [J] JSON Format (.json)       - Human-readable', AnsiColor.GREEN);
-    this.gfx.drawText(5, y++, '  [B] Binary Format (.trkmod)   - Compact', AnsiColor.GREEN);
-    this.gfx.drawText(5, y++, '  [G] Game Format (.game.json)  - For Door SDK games', AnsiColor.GREEN);
+    this.gfx.drawText(5, y++, 'File export not available in browser mode', AnsiColor.YELLOW);
     y++;
-
-    const modules = this.exportManager.listModules();
-    if (modules.length > 0) {
-      this.gfx.drawText(5, y++, 'Saved Modules:', AnsiColor.YELLOW);
-      modules.slice(0, 5).forEach(mod => {
-        const sizeKb = Math.floor(mod.size / 1024);
-        this.gfx.drawText(5, y++, `  ${mod.name.padEnd(40)} ${sizeKb}KB`, AnsiColor.WHITE);
-      });
-    }
+    this.gfx.drawText(5, y++, 'Your work is stored in browser memory only.', AnsiColor.WHITE);
+    this.gfx.drawText(5, y++, 'Future updates may add localStorage export.', AnsiColor.WHITE);
 
     this.gfx.drawText(0, 22, '╠════════════════════════════════════════════════════════════════════════════╣', AnsiColor.CYAN);
-    this.gfx.drawText(0, 23, '║ [J/B/G] Export  [L] Load  [ESC] Back                                      ║', AnsiColor.WHITE);
+    this.gfx.drawText(0, 23, '║ [ESC] Back                                                                 ║', AnsiColor.WHITE);
     this.gfx.drawText(0, 24, '╚════════════════════════════════════════════════════════════════════════════╝', AnsiColor.CYAN);
 
     this.door.sendAnsi(this.gfx.render());
   }
 
   private handleExportInput(key: string): void {
-    const k = key.toLowerCase();
-
     if (key === 'Escape' || key === '\x1b') {
       this.currentView = 'main';
       this.showMainMenu();
-    } else if (k === 'j') {
-      const filename = this.song.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-      this.exportManager.exportJSON(this.song, filename);
-      this.showExport();
-    } else if (k === 'b') {
-      const filename = this.song.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-      this.exportManager.exportBinary(this.song, filename);
-      this.showExport();
-    } else if (k === 'g') {
-      const filename = this.song.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-      this.exportManager.exportForGame(this.song, filename);
-      this.showExport();
-    } else if (k === 'l') {
-      const modules = this.exportManager.listModules();
-      if (modules.length > 0) {
-        const module = modules[0];
-        if (module.type === 'json') {
-          this.song = this.exportManager.importJSON(module.name);
-        } else {
-          this.song = this.exportManager.importBinary(module.name);
-        }
-        this.showExport();
-      }
     }
   }
 
