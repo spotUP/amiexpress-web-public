@@ -6,7 +6,7 @@
  */
 
 import { ClientDoor, AnsiColor } from '@amiexpress/bbs-door-sdk/client';
-import { GraphicsEngine } from './graphics-engine';
+import { GraphicsEngine, getVisualLength, padToWidth } from './graphics-engine';
 import { AudioEngine } from './audio/engine';
 import {
   Song,
@@ -376,7 +376,7 @@ class TrackerDoor {
     // Header
     this.gfx.drawText(0, 0, '╔════════════════════════════════════════════════════════════════════════════╗', AnsiColor.CYAN);
     const header = ` TrackerDoor v1.0    BPM: ${String(this.song.bpm).padStart(3)}  Row: ${String(this.currentRow).padStart(2,'0')}/${pattern.rows}  Pat: ${String(this.currentPattern + 1).padStart(2,'0')}  Ch: ${String(this.currentChannel + 1).padStart(2,'0')}/${this.song.channels} `;
-    this.gfx.drawText(0, 1, `║${header.padEnd(78)}║`, AnsiColor.CYAN);
+    this.gfx.drawText(0, 1, `║${padToWidth(header, 78)}║`, AnsiColor.CYAN);
     this.gfx.drawText(0, 2, '╠════════╪══════════╪══════════╪══════════╪══════════╪══════════╪══════════╣', AnsiColor.CYAN);
 
     // Channel headers
@@ -384,7 +384,7 @@ class TrackerDoor {
     for (let ch = 0; ch < Math.min(6, this.song.channels); ch++) {
       headerLine += ` CH${String(ch + 1).padStart(2,'0')}     │`;
     }
-    headerLine += ' '.repeat(79 - headerLine.length) + '║';
+    headerLine = padToWidth(headerLine, 79) + '║';
     this.gfx.drawText(0, 3, headerLine, AnsiColor.YELLOW);
     this.gfx.drawText(0, 4, '╠════════╪══════════╪══════════╪══════════╪══════════╪══════════╪══════════╣', AnsiColor.CYAN);
 
@@ -419,7 +419,7 @@ class TrackerDoor {
         line += ` ${noteStr}│`;
       }
 
-      line += ' '.repeat(79 - line.length) + '║';
+      line = padToWidth(line, 79) + '║';
       this.gfx.drawText(0, y, line, rowColor);
     }
 
