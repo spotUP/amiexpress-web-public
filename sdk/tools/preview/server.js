@@ -1727,8 +1727,8 @@ const clients = new Map();
 /**
  * Helper to log to both console and browser terminal
  *
- * ALWAYS sends logs to browser terminal for debugging
- * Only logs to console if DEBUG_OUTPUT is enabled (or if it's an error)
+ * Only sends logs to browser and console if DEBUG_OUTPUT is enabled (or if it's an error)
+ * This ensures clean door output in normal mode
  */
 function debugLog(clientOrId, message, level = 'log') {
   // Log to console if DEBUG_OUTPUT is enabled or if it's an error
@@ -1737,37 +1737,40 @@ function debugLog(clientOrId, message, level = 'log') {
     consoleMethod(message);
   }
 
-  // ALWAYS send to browser if client provided (for debugging in browser)
-  let client = clientOrId;
-  if (typeof clientOrId === 'number') {
-    client = clients.get(clientOrId);
-  }
-
-  if (client && client.ws && client.ws.readyState === WebSocket.OPEN) {
-    // Determine ANSI color based on log level
-    let color = '';
-    let reset = '\x1b[0m';
-
-    if (level === 'error') {
-      color = '\x1b[31m'; // Red
-    } else if (message.includes('✓') || message.includes('SUCCESS')) {
-      color = '\x1b[32m'; // Green
-    } else if (message.includes('⚠️') || message.includes('WARNING')) {
-      color = '\x1b[33m'; // Yellow
-    } else if (message.includes('📨') || message.includes('📤') || message.includes('➡️')) {
-      color = '\x1b[36m'; // Cyan
-    } else if (message.includes('🚀') || message.includes('🛑')) {
-      color = '\x1b[35m'; // Magenta
-    } else {
-      color = '\x1b[90m'; // Gray
+  // Also send to browser if DEBUG_OUTPUT is enabled or if it's an error
+  // This ensures clean door output in normal mode (no debug messages in terminal)
+  if (DEBUG_OUTPUT || level === 'error') {
+    let client = clientOrId;
+    if (typeof clientOrId === 'number') {
+      client = clients.get(clientOrId);
     }
 
-    client.ws.send(
-      JSON.stringify({
-        type: 'debug',
-        data: `${color}${message}${reset}`,
-      })
-    );
+    if (client && client.ws && client.ws.readyState === WebSocket.OPEN) {
+      // Determine ANSI color based on log level
+      let color = '';
+      let reset = '\x1b[0m';
+
+      if (level === 'error') {
+        color = '\x1b[31m'; // Red
+      } else if (message.includes('✓') || message.includes('SUCCESS')) {
+        color = '\x1b[32m'; // Green
+      } else if (message.includes('⚠️') || message.includes('WARNING')) {
+        color = '\x1b[33m'; // Yellow
+      } else if (message.includes('📨') || message.includes('📤') || message.includes('➡️')) {
+        color = '\x1b[36m'; // Cyan
+      } else if (message.includes('🚀') || message.includes('🛑')) {
+        color = '\x1b[35m'; // Magenta
+      } else {
+        color = '\x1b[90m'; // Gray
+      }
+
+      client.ws.send(
+        JSON.stringify({
+          type: 'debug',
+          data: `${color}${message}${reset}`,
+        })
+      );
+    }
   }
 }
 
