@@ -19,6 +19,19 @@ pre {
   font-feature-settings: 'liga' 1, 'calt' 1;
 }
 
+/* Disable font smoothing for sharp terminal text */
+.xterm,
+.xterm-screen,
+.xterm-viewport,
+.terminal,
+canvas.xterm-text-layer,
+canvas.xterm-cursor-layer {
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  font-smooth: never;
+  text-rendering: optimizeSpeed;
+}
+
 body {
   margin: 0;
   padding: 0;
