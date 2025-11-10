@@ -384,7 +384,7 @@ class TrackerDoor {
     for (let ch = 0; ch < Math.min(6, this.song.channels); ch++) {
       headerLine += ` CH${String(ch + 1).padStart(2,'0')}     │`;
     }
-    headerLine += ' '.repeat(78 - headerLine.length) + '║';
+    headerLine += ' '.repeat(79 - headerLine.length) + '║';
     this.gfx.drawText(0, 3, headerLine, AnsiColor.YELLOW);
     this.gfx.drawText(0, 4, '╠════════╪══════════╪══════════╪══════════╪══════════╪══════════╪══════════╣', AnsiColor.CYAN);
 
@@ -419,7 +419,7 @@ class TrackerDoor {
         line += ` ${noteStr}│`;
       }
 
-      line += ' '.repeat(78 - line.length) + '║';
+      line += ' '.repeat(79 - line.length) + '║';
       this.gfx.drawText(0, y, line, rowColor);
     }
 
