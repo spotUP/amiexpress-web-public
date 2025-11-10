@@ -48,6 +48,7 @@ import {
   Cutscene,
   CutsceneScene,
 } from '../../core/types';
+import { visibleLength, stripAnsi } from '../../core/ansi-string-utils';
 
 /** Particle for visual effects */
 interface Particle {
@@ -187,15 +188,20 @@ export class GraphicsEngine {
   /**
    * Draw text at position
    *
+   * NOTE: This method strips ANSI codes and draws using the provided colors.
+   * If you need to preserve ANSI color codes in the text, use raw ANSI output instead.
+   *
    * @param x - X coordinate
    * @param y - Y coordinate
-   * @param text - Text to draw
+   * @param text - Text to draw (ANSI codes will be stripped)
    * @param fg - Foreground color
    * @param bg - Background color
    *
    * @example
    * ```typescript
    * gfx.drawText(5, 10, 'GAME OVER', AnsiColor.Red);
+   * // Text with ANSI codes - codes are stripped, only visible text is drawn
+   * gfx.drawText(5, 10, '\x1b[31mColored\x1b[0m Text', AnsiColor.White);
    * ```
    */
   public drawText(
@@ -205,8 +211,11 @@ export class GraphicsEngine {
     fg: AnsiColor = AnsiColor.White,
     bg: AnsiColor = AnsiColor.Black
   ): void {
-    for (let i = 0; i < text.length; i++) {
-      this.drawChar(x + i, y, text[i], fg, bg);
+    // Strip ANSI codes to get only visible characters
+    // This ensures proper positioning even if text contains color codes
+    const cleanText = stripAnsi(text);
+    for (let i = 0; i < cleanText.length; i++) {
+      this.drawChar(x + i, y, cleanText[i], fg, bg);
     }
   }
 
@@ -310,12 +319,11 @@ export class GraphicsEngine {
     const ansi = this.ansiCache.get(id);
     if (!ansi) return;
 
-    // Parse and render ANSI (simplified - real implementation would parse ANSI codes)
+    // Parse and render ANSI (simplified - ANSI codes are stripped by drawText)
     const lines = ansi.split(/\r?\n/);
     lines.forEach((line, y) => {
-      // Strip ANSI codes for now (real implementation would parse them)
-      const text = line.replace(/\x1b\[[0-9;]*m/g, '');
-      this.drawText(position.x, position.y + y, text);
+      // drawText will strip ANSI codes and draw visible characters only
+      this.drawText(position.x, position.y + y, line);
     });
   }
 

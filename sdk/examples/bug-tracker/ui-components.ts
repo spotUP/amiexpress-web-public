@@ -12,6 +12,7 @@
  */
 
 import { Door, AnsiColor, BBSUser, KeyEvent } from '@amiexpress/bbs-door-sdk';
+import { visibleLength, padEndVisible, getCenterX } from '@amiexpress/bbs-door-sdk';
 
 export enum ToastType {
   SUCCESS = 'success',
@@ -68,7 +69,9 @@ export class UIComponents {
         break;
     }
 
-    const width = Math.min(toast.message.length + 6, 76);
+    // Account for ANSI codes when calculating width
+    const messageVisibleWidth = visibleLength(toast.message);
+    const width = Math.min(messageVisibleWidth + 6, 76);
     const x = Math.floor((80 - width) / 2);
     const y = 22;
 
@@ -76,7 +79,8 @@ export class UIComponents {
     output += `\x1b[${y};${x}H`;
     output += `${color}╔${'═'.repeat(width - 2)}╗\x1b[0m`;
     output += `\x1b[${y + 1};${x}H`;
-    output += `${color}║\x1b[0m ${icon} ${toast.message.padEnd(width - 6)} ${color}║\x1b[0m`;
+    // Use padEndVisible to account for ANSI codes in message
+    output += `${color}║\x1b[0m ${icon} ${padEndVisible(toast.message, width - 6)} ${color}║\x1b[0m`;
     output += `\x1b[${y + 2};${x}H`;
     output += `${color}╚${'═'.repeat(width - 2)}╝\x1b[0m`;
 
@@ -177,7 +181,8 @@ export class UIComponents {
     // Dialog box
     output += `\x1b[${y};${x}H\x1b[37m╔${'═'.repeat(width - 2)}╗\x1b[0m`;
     output += `\x1b[${y + 1};${x}H\x1b[37m║\x1b[0m ${' '.repeat(width - 4)} \x1b[37m║\x1b[0m`;
-    output += `\x1b[${y + 2};${x}H\x1b[37m║\x1b[0m  ${message.padEnd(width - 6)} \x1b[37m║\x1b[0m`;
+    // Use padEndVisible to account for ANSI codes in message
+    output += `\x1b[${y + 2};${x}H\x1b[37m║\x1b[0m  ${padEndVisible(message, width - 6)} \x1b[37m║\x1b[0m`;
     output += `\x1b[${y + 3};${x}H\x1b[37m║\x1b[0m ${' '.repeat(width - 4)} \x1b[37m║\x1b[0m`;
     output += `\x1b[${y + 4};${x}H\x1b[37m╠${'═'.repeat(width - 2)}╣\x1b[0m`;
     output += `\x1b[${y + 5};${x}H\x1b[37m║\x1b[0m ${' '.repeat(width - 4)} \x1b[37m║\x1b[0m`;
@@ -230,14 +235,19 @@ export class UIComponents {
 
     // Box
     output += `\x1b[${y};${x}H\x1b[36m╔${'═'.repeat(width - 2)}╗\x1b[0m`;
-    output += `\x1b[${y + 1};${x}H\x1b[36m║\x1b[0m ${title.padEnd(width - 4)} \x1b[36m║\x1b[0m`;
+    // Use padEndVisible to account for ANSI codes in title
+    output += `\x1b[${y + 1};${x}H\x1b[36m║\x1b[0m ${padEndVisible(title, width - 4)} \x1b[36m║\x1b[0m`;
     output += `\x1b[${y + 2};${x}H\x1b[36m╠${'═'.repeat(width - 2)}╣\x1b[0m`;
 
     // Content
     for (let i = 0; i < height - 4; i++) {
       output += `\x1b[${y + 3 + i};${x}H\x1b[36m║\x1b[0m `;
       if (i < content.length) {
-        output += content[i].substring(0, width - 4).padEnd(width - 4);
+        // Truncate based on visible length and pad accounting for ANSI codes
+        const line = content[i];
+        const visLen = visibleLength(line);
+        const truncated = visLen > width - 4 ? line.substring(0, width - 4) : line;
+        output += padEndVisible(truncated, width - 4);
       } else {
         output += ' '.repeat(width - 4);
       }
@@ -266,13 +276,13 @@ export class UIComponents {
     // Top border
     output += '\x1b[1;1H\x1b[36m╔' + '═'.repeat(78) + '╗\x1b[0m';
 
-    // Title
-    const titleX = Math.floor((80 - title.length) / 2);
+    // Title - account for ANSI codes when centering
+    const titleX = getCenterX(title, 80);
     output += `\x1b[2;${titleX}H\x1b[35m\x1b[1m${title}\x1b[0m`;
 
-    // Subtitle
+    // Subtitle - account for ANSI codes when centering
     if (subtitle) {
-      const subtitleX = Math.floor((80 - subtitle.length) / 2);
+      const subtitleX = getCenterX(subtitle, 80);
       output += `\x1b[3;${subtitleX}H\x1b[90m${subtitle}\x1b[0m`;
     }
 
@@ -333,11 +343,12 @@ export class UIComponents {
   drawBox(title: string, x: number, y: number, width: number, height: number, color: string = '\x1b[36m'): void {
     let output = '';
 
-    // Top with title
+    // Top with title - account for ANSI codes
     const titlePadded = ` ${title} `;
-    const titleX = x + Math.floor((width - titlePadded.length) / 2);
-    const leftBorder = Math.floor((width - titlePadded.length) / 2) - 1;
-    const rightBorder = width - titlePadded.length - leftBorder - 2;
+    const titleVisibleWidth = visibleLength(titlePadded);
+    const titleX = x + Math.floor((width - titleVisibleWidth) / 2);
+    const leftBorder = Math.floor((width - titleVisibleWidth) / 2) - 1;
+    const rightBorder = width - titleVisibleWidth - leftBorder - 2;
 
     output += `\x1b[${y};${x}H${color}╔${'═'.repeat(leftBorder)}╡\x1b[37m${titlePadded}\x1b[0m${color}╞${'═'.repeat(rightBorder)}╗\x1b[0m`;
 

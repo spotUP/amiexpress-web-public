@@ -20,6 +20,7 @@
 import { Door } from './door-api';
 export { Door };
 export * from './types';
+export * from './ansi-string-utils';
 
 // Engines
 export { GraphicsEngine } from '../engines/graphics/graphics-engine';

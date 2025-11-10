@@ -26,9 +26,11 @@ door.onConnect((user: any) => {
   console.log(`User ${user.name} connected!`);
 
   gfx.clear(AnsiColor.Black);
-  gfx.drawText(25, 8, '╔════════════════════════════╗', AnsiColor.Cyan);
-  gfx.drawText(25, 9, '║     HELLO WORLD DOOR!     ║', AnsiColor.BrightCyan);
-  gfx.drawText(25, 10, '╚════════════════════════════╝', AnsiColor.Cyan);
+
+  // Draw a box using the drawBox method (handles positioning correctly)
+  gfx.drawBox({ x: 25, y: 8, width: 30, height: 3 }, 'double', AnsiColor.Cyan);
+  gfx.drawText(27, 9, 'HELLO WORLD DOOR!', AnsiColor.BrightCyan);
+
   gfx.drawText(20, 12, `Welcome, ${user.name}!`, AnsiColor.BrightYellow);
   gfx.drawText(20, 14, `Security Level: ${user.securityLevel}`, AnsiColor.White);
   gfx.drawText(20, 15, `Time Remaining: ${user.timeLeft} minutes`, AnsiColor.White);
