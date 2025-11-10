@@ -318,7 +318,7 @@ function App() {
                 const msg = data.message;
                 // Handle OUTPUT messages - display in terminal
                 if (msg.type === 'output') {
-                  setTerminalOutput((prev) => [...prev, msg.data]);
+                  setTerminalOutput((prev) => [...prev, msg.data.text || msg.data]);
                 }
                 // Could handle other message types here
               }
