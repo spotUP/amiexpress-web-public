@@ -5,23 +5,6 @@
 
 import { AnsiColor } from '@amiexpress/bbs-door-sdk/client';
 
-/**
- * Calculate visual length of string (excluding ANSI codes)
- */
-export function getVisualLength(str: string): number {
-  // Remove ANSI escape sequences
-  return str.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length;
-}
-
-/**
- * Pad string to visual width (accounts for ANSI codes)
- */
-export function padToWidth(str: string, width: number, padChar: string = ' '): string {
-  const visualLen = getVisualLength(str);
-  if (visualLen >= width) return str;
-  return str + padChar.repeat(width - visualLen);
-}
-
 export class GraphicsEngine {
   private buffer: string = '';
 

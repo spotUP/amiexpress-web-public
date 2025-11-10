@@ -106,27 +106,27 @@ export class WebhookManager {
     else if (bug.priority === 'Low') color = 0x95a5a6; // Gray
 
     const embed: any = {
-      title: `🐛 Bug Report #${bug.id}`,
+      title: `Bug Report #${bug.id}`,
       description: bug.title,
       color: color,
       fields: [
         {
-          name: '📂 Category',
+          name: 'Category',
           value: bug.subcategory ? `${bug.category} > ${bug.subcategory}` : bug.category,
           inline: true
         },
         {
-          name: '⚠️ Priority',
+          name: 'Priority',
           value: bug.priority,
           inline: true
         },
         {
-          name: '👤 Reporter',
+          name: 'Reporter',
           value: bug.reporter,
           inline: true
         },
         {
-          name: '📝 Description',
+          name: 'Description',
           value: bug.description.substring(0, 1024),
           inline: false
         }

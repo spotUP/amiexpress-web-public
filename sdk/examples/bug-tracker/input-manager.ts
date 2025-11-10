@@ -442,7 +442,7 @@ export class InputManager {
   private showError(x: number, y: number, message: string): void {
     let output = `\x1b[${y};${x}H`;
     output += `\x1b[2K`;
-    output += `\x1b[31m⚠ ${message}\x1b[0m`;
+    output += `\x1b[31m! ${message}\x1b[0m`;
     this.door.sendAnsi(output, this.userId);
 
     setTimeout(() => {

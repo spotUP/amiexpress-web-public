@@ -64,7 +64,7 @@ export class GamificationSystem {
         id: 'first-bug',
         name: 'First Bug',
         description: 'Report your first bug',
-        icon: '🐛',
+        icon: '*',
         points: 10,
         condition: (stats) => stats.bugsReported >= 1
       },
@@ -72,7 +72,7 @@ export class GamificationSystem {
         id: 'bug-hunter',
         name: 'Bug Hunter',
         description: 'Report 10 bugs',
-        icon: '🎯',
+        icon: '+',
         points: 50,
         condition: (stats) => stats.bugsReported >= 10
       },
@@ -80,7 +80,7 @@ export class GamificationSystem {
         id: 'bug-master',
         name: 'Bug Master',
         description: 'Report 50 bugs',
-        icon: '⭐',
+        icon: '*',
         points: 200,
         condition: (stats) => stats.bugsReported >= 50
       },
@@ -88,7 +88,7 @@ export class GamificationSystem {
         id: 'bug-legend',
         name: 'Bug Legend',
         description: 'Report 100 bugs',
-        icon: '👑',
+        icon: '#',
         points: 500,
         condition: (stats) => stats.bugsReported >= 100
       },
@@ -98,7 +98,7 @@ export class GamificationSystem {
         id: 'critical-finder',
         name: 'Critical Finder',
         description: 'Find your first critical bug',
-        icon: '⚠️',
+        icon: '!',
         points: 100,
         condition: (stats) => stats.criticalBugsFound >= 1
       },
@@ -106,7 +106,7 @@ export class GamificationSystem {
         id: 'crisis-spotter',
         name: 'Crisis Spotter',
         description: 'Find 5 critical bugs',
-        icon: '🚨',
+        icon: '!',
         points: 500,
         condition: (stats) => stats.criticalBugsFound >= 5
       },
@@ -116,7 +116,7 @@ export class GamificationSystem {
         id: 'commentator',
         name: 'Commentator',
         description: 'Post 20 comments',
-        icon: '💬',
+        icon: '-',
         points: 50,
         condition: (stats) => stats.commentsPosted >= 20
       },
@@ -124,7 +124,7 @@ export class GamificationSystem {
         id: 'helpful',
         name: 'Helpful',
         description: 'Have 10 bugs marked as fixed',
-        icon: '✅',
+        icon: '+',
         points: 150,
         condition: (stats) => stats.bugsFixed >= 10
       },
@@ -134,7 +134,7 @@ export class GamificationSystem {
         id: 'level-5',
         name: 'Rising Star',
         description: 'Reach level 5',
-        icon: '🌟',
+        icon: '*',
         points: 100,
         condition: (stats) => stats.level >= 5
       },
@@ -142,7 +142,7 @@ export class GamificationSystem {
         id: 'level-10',
         name: 'Expert',
         description: 'Reach level 10',
-        icon: '💎',
+        icon: '*',
         points: 300,
         condition: (stats) => stats.level >= 10
       },
@@ -150,7 +150,7 @@ export class GamificationSystem {
         id: 'early-adopter',
         name: 'Early Adopter',
         description: 'Among the first 10 users',
-        icon: '🚀',
+        icon: '+',
         points: 200,
         condition: (stats) => stats.userId <= 10
       },
@@ -160,7 +160,7 @@ export class GamificationSystem {
         id: 'perfectionist',
         name: 'Perfectionist',
         description: 'Report 5 bugs with all fields filled',
-        icon: '💯',
+        icon: '+',
         points: 150,
         condition: (stats) => stats.bugsReported >= 5
       }
@@ -177,14 +177,14 @@ export class GamificationSystem {
         id: 'reporter',
         name: 'Bug Reporter',
         description: 'Report at least 1 bug',
-        icon: '🐛',
+        icon: '*',
         rarity: 'common'
       },
       {
         id: 'active',
         name: 'Active User',
         description: 'Regular participation',
-        icon: '⚡',
+        icon: '+',
         rarity: 'common'
       },
 
@@ -193,14 +193,14 @@ export class GamificationSystem {
         id: 'contributor',
         name: 'Contributor',
         description: 'Report 10+ bugs',
-        icon: '🎯',
+        icon: '+',
         rarity: 'uncommon'
       },
       {
         id: 'quality-assurance',
         name: 'Quality Assurance',
         description: 'High quality bug reports',
-        icon: '✓',
+        icon: 'X',
         rarity: 'uncommon'
       },
 
@@ -209,14 +209,14 @@ export class GamificationSystem {
         id: 'master-reporter',
         name: 'Master Reporter',
         description: 'Report 50+ bugs',
-        icon: '⭐',
+        icon: '*',
         rarity: 'rare'
       },
       {
         id: 'critical-hunter',
         name: 'Critical Hunter',
         description: 'Find 5+ critical bugs',
-        icon: '🚨',
+        icon: '!',
         rarity: 'rare'
       },
 
@@ -225,14 +225,14 @@ export class GamificationSystem {
         id: 'legend',
         name: 'BBS Legend',
         description: 'Report 100+ bugs',
-        icon: '👑',
+        icon: '#',
         rarity: 'epic'
       },
       {
         id: 'mvp',
         name: 'MVP',
         description: 'Most valuable contributor',
-        icon: '🏆',
+        icon: '#',
         rarity: 'epic'
       },
 
@@ -241,7 +241,7 @@ export class GamificationSystem {
         id: 'hall-of-fame',
         name: 'Hall of Fame',
         description: 'Top contributor of all time',
-        icon: '💫',
+        icon: '*',
         rarity: 'legendary'
       }
     ];
