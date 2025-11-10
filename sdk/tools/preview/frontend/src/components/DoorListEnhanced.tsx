@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Star, Clock, Package, X, Wand2, Play, Hammer, FileCode, Trash2, Download } from 'lucide-react';
+import { Search, Star, Clock, Package, X, Wand2, Play, FileCode, Trash2, Download } from 'lucide-react';
 import { DoorListItem } from '../types';
 import { formatRelativeTime } from '../utils/format';
 import { DoorListSkeleton } from './ui/Skeleton';
@@ -51,26 +51,16 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
     }
   });
 
-  const sortedDoors = [...filteredDoors].sort((a, b) => {
-    if (a.favorite && !b.favorite) return -1;
-    if (!a.favorite && b.favorite) return 1;
-    return b.lastOpened - a.lastOpened;
-  });
+  // Keep doors in their original order - don't rearrange when selected
+  const sortedDoors = filteredDoors;
 
   const getContextMenu = (door: DoorListItem): ContextMenuItem[] => [
     {
       id: 'run',
-      label: 'Run Door',
+      label: 'Build & Run Door',
       icon: <Play className="w-4 h-4" />,
       shortcut: 'Enter',
       onClick: () => onRunDoor?.(door.id),
-    },
-    {
-      id: 'build',
-      label: 'Build Door',
-      icon: <Hammer className="w-4 h-4" />,
-      shortcut: 'Ctrl+B',
-      onClick: () => onBuildDoor?.(door.id),
     },
     {
       id: 'favorite',

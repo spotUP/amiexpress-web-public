@@ -94,6 +94,11 @@ function App() {
   ]);
   const [activeTerminalTab, setActiveTerminalTab] = useState('1');
 
+  // Performance profiling state
+  const [performanceMetrics, setPerformanceMetrics] = useState<any[]>([]);
+  const [performanceSnapshots, setPerformanceSnapshots] = useState<any[]>([]);
+  const [isProfiling, setIsProfiling] = useState(false);
+
   // Hot reload state
   const [hotReloadEnabled, setHotReloadEnabled] = useLocalStorage('sdk-hot-reload-enabled', true);
   const [hotReloadDelay, setHotReloadDelay] = useLocalStorage('sdk-hot-reload-delay', 2000);
@@ -148,7 +153,7 @@ function App() {
   // UI state
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
-  const [rightSidebarTab, setRightSidebarTab] = useState<'code' | 'build' | 'info' | 'release' | 'git'>('info');
+  const [rightSidebarTab, setRightSidebarTab] = useState<'code' | 'build' | 'info' | 'release' | 'git' | 'performance'>('info');
 
   // View mode state
   type ViewMode = 'split' | 'terminal-only' | 'code-only';
@@ -565,24 +570,31 @@ function App() {
     }));
   };
 
-  // Handle run door
+  // Handle run door (now includes build step)
   const handleRunDoor = () => {
     if (selectedDoor) {
-      wsSend({ type: 'input', data: `runDoor:${selectedDoor.id}` });
-      setTerminalOutput((prev) => [
-        ...prev,
-        '',
-        `\x1b[36m--- Running ${selectedDoor.name} ---\x1b[0m`,
-        '',
-      ]);
-      soundEffects.click();
-      triggerHaptic();
+      // First build the door
+      setBuildStatus((prev) => ({ ...prev, building: true }));
+      wsSend({ type: 'input', data: `buildDoor:${selectedDoor.id}` });
 
-      // CRITICAL: Focus terminal immediately so user can interact with the door
-      // This fixes the issue where clicking Run doesn't focus the terminal
+      // Then run it after a short delay to allow build to complete
       setTimeout(() => {
-        xtermRef.current?.focus();
-      }, 100);
+        wsSend({ type: 'input', data: `runDoor:${selectedDoor.id}` });
+        setTerminalOutput((prev) => [
+          ...prev,
+          '',
+          `\x1b[36m--- Building and Running ${selectedDoor.name} ---\x1b[0m`,
+          '',
+        ]);
+        soundEffects.click();
+        triggerHaptic();
+
+        // CRITICAL: Focus terminal immediately so user can interact with the door
+        // This fixes the issue where clicking Run doesn't focus the terminal
+        setTimeout(() => {
+          xtermRef.current?.focus();
+        }, 100);
+      }, 1500);
     }
   };
 
@@ -595,6 +607,48 @@ function App() {
       soundEffects.notification();
     }
   };
+
+  // Performance profiling handlers
+  const handleStartProfiling = () => {
+    setIsProfiling(true);
+    setPerformanceMetrics([]);
+    setPerformanceSnapshots([]);
+    soundEffects.click();
+  };
+
+  const handleStopProfiling = () => {
+    setIsProfiling(false);
+    soundEffects.click();
+  };
+
+  // Collect performance metrics periodically
+  useEffect(() => {
+    if (!isProfiling) return;
+
+    const interval = setInterval(() => {
+      const metric = {
+        timestamp: Date.now(),
+        cpu: Math.random() * 100, // Mock data - replace with real metrics if available
+        memory: 50 + Math.random() * 50,
+        fps: 55 + Math.random() * 10,
+      };
+      setPerformanceMetrics((prev) => [...prev.slice(-100), metric]);
+
+      // Add mock snapshot data
+      if (Math.random() > 0.9) {
+        const snapshot = {
+          function: ['render()', 'update()', 'draw()', 'processInput()'][Math.floor(Math.random() * 4)],
+          calls: Math.floor(Math.random() * 1000),
+          totalTime: Math.random() * 100,
+          avgTime: Math.random() * 10,
+          percentage: Math.random() * 100,
+        };
+        setPerformanceSnapshots((prev) => [...prev.slice(-20), snapshot]);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isProfiling]);
 
   // Command Palette commands
   const commandPaletteCommands: CommandItem[] = [
@@ -1008,26 +1062,14 @@ function App() {
 
                     <button
                       onClick={handleRunDoor}
-                      disabled={!selectedDoor}
-                      className="group flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100"
-                    >
-                      <Play className="w-4 h-4 transition-transform group-hover:scale-110" />
-                      <span className="hidden sm:inline">Run</span>
-                    </button>
-
-                    <button
-                      onClick={handleBuildDoor}
                       disabled={!selectedDoor || buildStatus.building}
-                      className={`group flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100 ${
+                      className={`group flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 hover:scale-105 active:scale-95 disabled:hover:scale-100 ${
                         buildStatus.building ? 'animate-pulse' : ''
                       }`}
-                      title={hotReloadEnabled ? 'Manual build (Hot reload enabled)' : 'Build door'}
+                      title="Build and run door"
                     >
-                      <Hammer className={`w-4 h-4 transition-transform ${buildStatus.building ? 'animate-bounce' : 'group-hover:rotate-12'}`} />
-                      <span className="hidden sm:inline">{buildStatus.building ? 'Building...' : 'Build'}</span>
-                      {hotReloadEnabled && (
-                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Hot reload enabled" />
-                      )}
+                      <Play className={`w-4 h-4 transition-transform ${buildStatus.building ? 'animate-bounce' : 'group-hover:scale-110'}`} />
+                      <span className="hidden sm:inline">{buildStatus.building ? 'Building...' : 'Build & Run'}</span>
                     </button>
 
                     <div className="ml-auto flex items-center gap-2">
@@ -1201,6 +1243,19 @@ function App() {
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
                       )}
                     </button>
+                    <button
+                      onClick={() => setRightSidebarTab('performance')}
+                      className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
+                        rightSidebarTab === 'performance'
+                          ? 'bg-[#1E1E1E] text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                      }`}
+                    >
+                      Performance
+                      {rightSidebarTab === 'performance' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
+                      )}
+                    </button>
                   </div>
 
                   {/* Tab content with fade-in animations */}
@@ -1258,6 +1313,18 @@ function App() {
                             soundEffects.notification();
                             toast.info('Pulled!', 'Updates pulled from remote');
                           }}
+                        />
+                      </div>
+                    )}
+
+                    {rightSidebarTab === 'performance' && (
+                      <div className="h-full animate-fadeIn">
+                        <PerformanceProfiler
+                          metrics={performanceMetrics}
+                          snapshots={performanceSnapshots}
+                          onStartProfiling={handleStartProfiling}
+                          onStopProfiling={handleStopProfiling}
+                          isProfiling={isProfiling}
                         />
                       </div>
                     )}
