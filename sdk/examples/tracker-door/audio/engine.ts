@@ -11,40 +11,48 @@ import { Instrument, Note, Pattern, Song, EffectPluginType } from '../data/types
 
 export class AudioEngine {
   private channels: ChannelStrip[] = [];
-  private master: Tone.Channel;
+  private master: Tone.Channel | null = null;
   private currentRow: number = 0;
   private currentPattern: number = 0;
   private playing: boolean = false;
   private bpm: number = 140;
   private ticksPerRow: number = 6;
+  private channelCount: number = 16;
+  private initialized: boolean = false;
 
   constructor(channelCount: number = 16) {
-    // Initialize master channel
-    this.master = new Tone.Channel().toDestination();
-
-    // Create channels
-    for (let i = 0; i < channelCount; i++) {
-      const channel = new ChannelStrip(i);
-      channel.connect(this.master);
-      this.channels.push(channel);
-    }
-
-    Tone.getTransport().bpm.value = this.bpm;
+    this.channelCount = channelCount;
+    // Don't create any Tone.js objects until init() is called
   }
 
   /**
    * Initialize audio context (must be called after user interaction)
    */
   async init(): Promise<void> {
+    if (this.initialized) return;
+
     await Tone.start();
     console.log('Audio engine initialized');
+
+    // Now create master channel and channels
+    this.master = new Tone.Channel().toDestination();
+
+    // Create channels
+    for (let i = 0; i < this.channelCount; i++) {
+      const channel = new ChannelStrip(i);
+      channel.connect(this.master);
+      this.channels.push(channel);
+    }
+
+    Tone.getTransport().bpm.value = this.bpm;
+    this.initialized = true;
   }
 
   /**
    * Play a single note on a channel
    */
   playNote(channel: number, note: Note, instrument: Instrument): void {
-    if (channel >= this.channels.length) return;
+    if (!this.initialized || channel >= this.channels.length) return;
     if (note.note === '---' || note.note === '...') return;
 
     const freq = this.noteToFrequency(note.note as string);
@@ -57,6 +65,7 @@ export class AudioEngine {
    * Play entire pattern
    */
   playPattern(pattern: Pattern, instruments: Instrument[], loop: boolean = false): void {
+    if (!this.initialized) return;
     this.stop();
     this.currentRow = 0;
     this.currentPattern = pattern.id;
@@ -96,6 +105,7 @@ export class AudioEngine {
    * Play entire song
    */
   playSong(song: Song, loop: boolean = true): void {
+    if (!this.initialized) return;
     this.stop();
     this.setBPM(song.bpm);
     this.playing = true;
@@ -179,6 +189,7 @@ export class AudioEngine {
    * Set master volume
    */
   setMasterVolume(volume: number): void {
+    if (!this.initialized || !this.master) return;
     this.master.volume.value = Tone.gainToDb(volume);
   }
 
@@ -200,7 +211,10 @@ export class AudioEngine {
   dispose(): void {
     this.stop();
     this.channels.forEach(ch => ch.dispose());
-    this.master.dispose();
+    if (this.master) {
+      this.master.dispose();
+    }
+    this.initialized = false;
   }
 }
 
