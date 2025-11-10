@@ -69,6 +69,16 @@ npm run validate     # Validate door package
 - Builds doors for AmiExpress BBS
 - See `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
 
+**CRITICAL - SDK Testing Before PRs:**
+- **ALWAYS** test SDK builds before creating PRs: `cd sdk && npm run build`
+- **ALWAYS** test at least 2 example doors build successfully:
+  ```bash
+  cd sdk/examples/neo-blessed-demo && npm run build
+  cd sdk/examples/2048-game && npm run build
+  ```
+- **NEVER** create a PR with broken SDK or example doors
+- Example doors are in `sdk/examples/` directory
+
 ### Testing
 - **All Commands**: `node dev/scripts/test-all-commands.js`
 - **Quick All Commands**: `./dev/scripts/test-all-commands-quick.sh`
