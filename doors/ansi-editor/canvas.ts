@@ -7,6 +7,12 @@ import { Cell, Point, SelectionBounds, OperationMode } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Minimal selection context interface
+export interface SelectionContext {
+  selectionStart: Point | null;
+  selectionEnd: Point | null;
+}
+
 // Editor context interface - contains all state needed by canvas operations
 export interface EditorContext {
   // Canvas state
@@ -174,7 +180,7 @@ export function updateSelection(ctx: EditorContext): void {
   }
 }
 
-export function getSelectionBounds(ctx: EditorContext): SelectionBounds | null {
+export function getSelectionBounds(ctx: SelectionContext): SelectionBounds | null {
   if (!ctx.selectionStart || !ctx.selectionEnd) return null;
   return {
     x1: Math.min(ctx.selectionStart.x, ctx.selectionEnd.x),

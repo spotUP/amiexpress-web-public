@@ -283,6 +283,20 @@ class ANSIEditor implements ANSIEditorInterface {
     this.socket.emit('ansi-output', data);
   }
 
+  async getInput(): Promise<string> {
+    return new Promise((resolve) => {
+      const handler = (data: string) => {
+        this.socket.off('key-input', handler);
+        resolve(data);
+      };
+      this.socket.on('key-input', handler);
+    });
+  }
+
+  async sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   // Context builder methods
   private getEditorContext(): EditorContext {
     return {
@@ -305,10 +319,12 @@ class ANSIEditor implements ANSIEditorInterface {
       undoChunkTimeout: this.undoChunkTimeout,
       pendingUndoChunk: this.pendingUndoChunk,
       operationMode: this.operationMode,
-      insertMode: this.insertMode,
+      modified: this.modified,
       emit: this.emit.bind(this),
       refresh: () => this.refreshDisplay(),
-      getFileContext: () => this.getFileContext()
+      showStatusBar: () => showStatusBar(this.getDisplayContext()),
+      getInput: () => this.getInput(),
+      sleep: (ms: number) => this.sleep(ms)
     };
   }
 
@@ -326,13 +342,23 @@ class ANSIEditor implements ANSIEditorInterface {
       brushMode: this.brushMode,
       currentTool: this.currentTool,
       mirrorModeEnabled: this.mirrorModeEnabled,
+      guideOverlayEnabled: this.guideOverlayEnabled,
       guideType: this.guideType,
       gridSpacing: this.gridSpacing,
       numpadModeEnabled: this.numpadModeEnabled,
-      viewportWidth: this.viewportWidth,
+      modified: this.modified,
       emit: this.emit.bind(this),
       saveUndoState: (chunk?: boolean) => saveUndoState(this.getEditorContext(), chunk),
-      refresh: () => this.refreshDisplay()
+      refresh: () => this.refreshDisplay(),
+      showStatusBar: () => showStatusBar(this.getDisplayContext()),
+      moveCursor: (x: number, y: number) => {
+        this.cursorX = x;
+        this.cursorY = y;
+      },
+      setColors: (fg: number, bg: number) => {
+        this.currentFg = fg;
+        this.currentBg = bg;
+      }
     };
   }
 
@@ -341,12 +367,8 @@ class ANSIEditor implements ANSIEditorInterface {
       canvas: this.canvas,
       width: this.width,
       height: this.height,
-      filename: this.filename,
-      modified: this.modified,
-      doorSession: this.doorSession,
-      emit: this.emit.bind(this),
-      refresh: () => this.refreshDisplay(),
-      saveUndoState: (chunk?: boolean) => saveUndoState(this.getEditorContext(), chunk)
+      fg: this.currentFg,
+      bg: this.currentBg
     };
   }
 
@@ -472,7 +494,7 @@ class ANSIEditor implements ANSIEditorInterface {
    * Show color picker modal and handle color selection
    */
   private async selectColor(isBg: boolean): Promise<void> {
-    const modal = new ColorPickerModal(this, isBg ? this.currentBg : this.currentFg, isBg);
+    const modal = new ColorPickerModal(this, this.currentFg, this.currentBg);
     this.emit(modal.render());
 
     return new Promise((resolve) => {
@@ -522,7 +544,7 @@ class ANSIEditor implements ANSIEditorInterface {
   private async showFileDialog(mode: 'load' | 'save'): Promise<void> {
     const ctx = this.getFileContext();
     const files = getScreenFiles(ctx);
-    const modal = new FileDialogModal(this, mode, files, this.filename || '');
+    const modal = new FileDialogModal(this, mode, files);
     this.emit(modal.render());
 
     return new Promise((resolve) => {
@@ -572,12 +594,12 @@ class ANSIEditor implements ANSIEditorInterface {
         } else if (key === '\x7f' || key === '\x08') {  // Backspace
           if (inputBuffer.length > 0) {
             inputBuffer = inputBuffer.slice(0, -1);
-            modal.updateInput(inputBuffer);
+            // TODO: updateInput method doesn't exist on FileDialogModal
             this.emit(modal.render());
           }
         } else if (key.length === 1 && key >= ' ' && key <= '~') {  // Printable ASCII
           inputBuffer += key;
-          modal.updateInput(inputBuffer);
+          // TODO: updateInput method doesn't exist on FileDialogModal
           this.emit(modal.render());
         }
       };
@@ -633,11 +655,11 @@ class ANSIEditor implements ANSIEditorInterface {
         } else if (key === '\x1b[B' || key === 'j' || key === 'J') {  // Down arrow or J
           modal.moveDown();
           this.emit(modal.render());
-        } else if (key === '\x1b[D' || key === 'h' || key === 'H') {  // Left arrow or H
-          modal.moveLeft();
+        } else if (key === '\x1b[D' || key === 'h' || key === 'H') {  // Left arrow or H (page up)
+          modal.moveUp();
           this.emit(modal.render());
-        } else if (key === '\x1b[C' || key === 'l' || key === 'L') {  // Right arrow or L
-          modal.moveRight();
+        } else if (key === '\x1b[C' || key === 'l' || key === 'L') {  // Right arrow or L (page down)
+          modal.moveDown();
           this.emit(modal.render());
         }
       };
@@ -977,7 +999,7 @@ class ANSIEditor implements ANSIEditorInterface {
         return;
       }
       if (key === 'V' || key === 'v') {  // V - Shifter mode
-        this.currentTool = 'shift';
+        this.currentTool = 'shifter';
         this.lineStart = null;
         this.ellipseStart = null;
         this.refreshDisplay();
@@ -987,7 +1009,7 @@ class ANSIEditor implements ANSIEditorInterface {
       // Handle arrow keys (cursor movement or shift tool)
       if (key === '\x1b[A') {  // Up
         console.log('[ANSI Editor input] Up arrow in main editor');
-        if (this.currentTool === 'shift') {
+        if (this.currentTool === 'shifter') {
           // Shift tool: move content without redrawing
           this.moveCursorRel(0, -1);
         } else {
@@ -997,7 +1019,7 @@ class ANSIEditor implements ANSIEditorInterface {
       }
       if (key === '\x1b[B') {  // Down
         console.log('[ANSI Editor input] Down arrow in main editor');
-        if (this.currentTool === 'shift') {
+        if (this.currentTool === 'shifter') {
           this.moveCursorRel(0, 1);
         } else {
           this.moveCursorRel(0, 1);
@@ -1006,7 +1028,7 @@ class ANSIEditor implements ANSIEditorInterface {
       }
       if (key === '\x1b[C') {  // Right
         console.log('[ANSI Editor input] Right arrow in main editor');
-        if (this.currentTool === 'shift') {
+        if (this.currentTool === 'shifter') {
           saveUndoState(this.getEditorContext());
           shiftCell(this.getDrawingContext(), 'right', false);
           this.modified = true;
@@ -1017,7 +1039,7 @@ class ANSIEditor implements ANSIEditorInterface {
         return;
       }
       if (key === '\x1b[D') {  // Left
-        if (this.currentTool === 'shift') {
+        if (this.currentTool === 'shifter') {
           saveUndoState(this.getEditorContext());
           shiftCell(this.getDrawingContext(), 'left', false);
           this.modified = true;
@@ -1215,7 +1237,7 @@ class ANSIEditor implements ANSIEditorInterface {
       }
       if (key === 'U' || key === 'u' && this.currentTool !== 'pick') {  // U is pick tool, only paste mode if not in pick mode
         if (this.clipboard.length > 0) {
-          cycleOperationMode(this.getEditorContext(), 'under');
+          cycleOperationMode(this.getEditorContext(), 'underneath');
           this.refreshDisplay();
           return;
         }
