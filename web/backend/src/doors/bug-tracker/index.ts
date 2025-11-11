@@ -14,7 +14,8 @@ import {
   Door,
   GraphicsEngine,
   AnsiColor,
-  BBSUser
+  BBSUser,
+  KeyEvent
 } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -198,7 +199,7 @@ class BugTracker {
       this.showMainMenu();
     });
 
-    this.door.onInput((user, key) => {
+    this.door.onInput((user: BBSUser, key: KeyEvent) => {
       this.handleInput(key.key);
     });
 
