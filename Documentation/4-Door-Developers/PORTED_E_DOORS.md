@@ -216,6 +216,61 @@ Already installed! Command info file at `Commands/BBSLINK.info`.
 
 ---
 
+### 5. BBSLink Wall (BBSLinkWall)
+
+**Status**: ✅ COMPLETE
+
+**Original Source**: `dev/docs/AmiExpressEDoorSources/BBSLink/bbslinkwall.e` (547 lines)
+**TypeScript Port**: `web/backend/src/doors/bbslink-wall/index.ts`
+**Command**: `BBSLINKWALL`
+**Type**: TypeScript door (TS)
+
+**Description**:
+Global graffiti wall client for BBSLink.net. Allows users to read and post messages to a shared wall across all BBSes using BBSLink.
+
+**Features**:
+- Display global graffiti wall
+- Post messages (64 characters max)
+- Username registration for new users
+- 10-minute posting cooldown
+- MD5-based authentication
+- URL encoding for special characters
+
+**Configuration**:
+
+Uses the same config as BBSLink door - `doors/bbslink/bbslink.cfg`:
+```
+syscode=YOUR_SYSCODE
+authcode=YOUR_AUTHCODE
+schemecode=YOUR_SCHEMECODE
+```
+
+Or use environment variables:
+```bash
+export BBSLINK_SYSCODE="your_syscode"
+export BBSLINK_AUTHCODE="your_authcode"
+export BBSLINK_SCHEMECODE="your_schemecode"
+```
+
+**Usage**:
+```
+/BBSLINKWALL
+```
+
+**Flow**:
+1. Display current wall messages
+2. Ask if user wants to post
+3. Authenticate with BBSLink.net
+4. Register username if first time
+5. Get post text (max 64 chars)
+6. Submit to server
+7. Display updated wall
+
+**Installation**:
+Already installed! Command info file at `Commands/BBSLINKWALL.info`.
+
+---
+
 ## Planned Ports
 
 ### 5. ConfTop-II (Conference Top Uploaders)
@@ -319,7 +374,7 @@ All doors located in `dev/docs/AmiExpressEDoorSources/`:
 | TelnetFront | 227 | Telnet | Simple | ✅ DONE |
 | BBSLink | 339 | Network | Medium | ✅ DONE |
 | DiscordAnnounce | 410 | Webhook | Simple | ✅ DONE |
-| BBSLinkWall | 547 | Network | Medium | Low |
+| BBSLinkWall | 547 | Network | Medium | ✅ DONE |
 | GLCUpdater | 770 | Network | Medium | Low |
 | MRC_client | 882 | Chat | Complex | Low |
 | GLCViewer | 943 | Network | Medium | Medium |
