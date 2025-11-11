@@ -11,6 +11,7 @@ export interface MoiraCPU {
   loadROM(romData: Uint8Array): void;
   resetCPU(): void;
   executeCycles(cycles: number): number;
+  executeInstruction(): number;
   getRegister(reg: number): number;
   setRegister(reg: number, value: number): void;
   getCycles(): number;
@@ -149,6 +150,31 @@ export class MoiraEmulator {
       console.log(`[MoiraEmulator] execute() call #${this.executeCallCount}: PC=0x${pc.toString(16)}, SP=0x${sp.toString(16)}, cycles=${cycles}`);
     }
     return this.cpu.executeCycles(cycles);
+  }
+
+  /**
+   * Execute exactly ONE instruction (returns cycles consumed)
+   * CRITICAL: This is the proper way to execute instructions at instruction boundaries.
+   * It calls MOIRA's execute() with NO parameters, which executes exactly one complete
+   * instruction regardless of how many CPU cycles it requires.
+   *
+   * This is the ROOT solution for:
+   * - Ensuring multi-cycle instructions (DBRA, MOVEM, MULU, etc.) complete fully
+   * - Allowing library trap checks between every instruction
+   * - Preventing mid-batch JSR execution bugs
+   */
+  executeInstruction(): number {
+    if (!this.cpu) throw new Error('Emulator not initialized');
+
+    // DEBUG: Verify method exists
+    if (typeof (this.cpu as any).executeInstruction !== 'function') {
+      console.error('[MoiraEmulator] CRITICAL: executeInstruction() method not found on WASM CPU!');
+      console.error('[MoiraEmulator] Available methods:', Object.keys(this.cpu));
+      console.error('[MoiraEmulator] Falling back to execute(20)');
+      return (this.cpu as any).executeCycles(20);
+    }
+
+    return this.cpu.executeInstruction();
   }
 
   private executeCallCount?: number;

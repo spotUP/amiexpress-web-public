@@ -681,28 +681,6 @@ export class DosLibrary {
   }
 
   /**
-   * WaitForChar - Wait for character input with timeout
-   * D1 = file handle
-   * D2 = timeout in microseconds (0 = no wait, -1 = wait forever)
-   * Returns: D0 = -1 if char available, 0 if timeout
-   */
-  WaitForChar(): number {
-    const handle = this.emulator.getRegister(CPURegister.D1);
-    const timeout = this.emulator.getRegister(CPURegister.D2);
-
-    console.log(`[dos.library] WaitForChar(handle=${handle}, timeout=${timeout})`);
-
-    if (handle === this.STDIN_HANDLE) {
-      // Check if data available in input buffer
-      const hasData = this.inputBuffer.length > 0;
-      console.log(`[dos.library] WaitForChar returned: ${hasData ? 'data available' : 'no data'}`);
-      return hasData ? -1 : 0;
-    } else {
-      return 0;
-    }
-  }
-
-  /**
    * Seek - Change file position
    * D1 = file handle
    * D2 = position (signed 32-bit offset)
@@ -1471,6 +1449,496 @@ export class DosLibrary {
   }
 
   /**
+   * WaitForChar - Check if character available within timeout (V36)
+   * D1 = file handle (BPTR)
+   * D2 = timeout (microseconds)
+   * Returns: D0 = -1 (TRUE) if char available, 0 (FALSE) otherwise
+   */
+  WaitForChar(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    const timeout = this.emulator.getRegister(CPURegister.D2);
+
+    console.log(`[dos.library] WaitForChar(fh=${fileHandle}, timeout=${timeout})`);
+
+    // For console/stdin, check if input buffer has data
+    if (fileHandle === this.STDIN_HANDLE || fileHandle === this.STDOUT_HANDLE) {
+      const hasData = this.inputBuffer.length > 0;
+      this.emulator.setRegister(CPURegister.D0, hasData ? -1 : 0);
+      console.log(`[dos.library] WaitForChar: Console, hasData=${hasData}`);
+      return;
+    }
+
+    // For regular files, character is always available (file in memory)
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.emulator.setRegister(CPURegister.D0, 0); // FALSE - invalid handle
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] WaitForChar: Invalid file handle`);
+      return;
+    }
+
+    if (file.isConsole) {
+      const hasData = this.inputBuffer.length > 0;
+      this.emulator.setRegister(CPURegister.D0, hasData ? -1 : 0);
+      console.log(`[dos.library] WaitForChar: Console file, hasData=${hasData}`);
+    } else {
+      // File: check if position < file size
+      const atEOF = !file.buffer || file.position >= file.buffer.length;
+      this.emulator.setRegister(CPURegister.D0, atEOF ? 0 : -1);
+      console.log(`[dos.library] WaitForChar: Regular file, atEOF=${atEOF}`);
+    }
+  }
+
+  /**
+   * FGetC - Read character from file (buffered) (V36)
+   * D1 = file handle (BPTR)
+   * Returns: D0 = character (0-255) or -1 for EOF
+   */
+  FGetC(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    console.log(`[dos.library] FGetC(fh=${fileHandle})`);
+
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.emulator.setRegister(CPURegister.D0, -1); // EOF
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] FGetC: Invalid file handle, returning EOF`);
+      return;
+    }
+
+    // Console/stdin - read from input buffer
+    if (file.isConsole) {
+      if (this.inputBuffer.length > 0) {
+        const char = this.inputBuffer.charCodeAt(0);
+        this.inputBuffer = this.inputBuffer.substring(1);
+        this.emulator.setRegister(CPURegister.D0, char);
+        console.log(`[dos.library] FGetC: Console, read char ${char} ('${String.fromCharCode(char)}')`);
+      } else {
+        this.emulator.setRegister(CPURegister.D0, -1); // EOF
+        console.log(`[dos.library] FGetC: Console buffer empty, returning EOF`);
+      }
+      return;
+    }
+
+    // Regular file - read from buffer
+    if (!file.buffer || file.position >= file.buffer.length) {
+      this.emulator.setRegister(CPURegister.D0, -1); // EOF
+      this.lastError = this.ERROR_NO_ERROR; // EOF is not an error
+      console.log(`[dos.library] FGetC: EOF reached`);
+      return;
+    }
+
+    const char = file.buffer[file.position++];
+    this.emulator.setRegister(CPURegister.D0, char);
+    console.log(`[dos.library] FGetC: Read char ${char} ('${String.fromCharCode(char)}') at pos ${file.position - 1}`);
+  }
+
+  /**
+   * FPutC - Write character to file (buffered) (V36)
+   * D1 = file handle (BPTR)
+   * D2 = character (LONG, 0-255)
+   * Returns: D0 = character written or -1 (EOF) for error
+   */
+  FPutC(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    const char = this.emulator.getRegister(CPURegister.D2) & 0xFF;
+    console.log(`[dos.library] FPutC(fh=${fileHandle}, char=${char})`);
+
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.emulator.setRegister(CPURegister.D0, -1); // EOF
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] FPutC: Invalid file handle, returning EOF`);
+      return;
+    }
+
+    // Console output - send to callback
+    if (file.isConsole) {
+      const charStr = String.fromCharCode(char);
+      if (this.outputCallback) {
+        this.outputCallback(charStr);
+      }
+      this.emulator.setRegister(CPURegister.D0, char);
+      console.log(`[dos.library] FPutC: Console output: '${charStr}'`);
+      return;
+    }
+
+    // Regular file - append to buffer
+    if (!file.buffer) {
+      file.buffer = Buffer.alloc(0);
+    }
+    file.buffer = Buffer.concat([file.buffer, Buffer.from([char])]);
+    file.position = file.buffer.length;
+
+    this.emulator.setRegister(CPURegister.D0, char);
+    console.log(`[dos.library] FPutC: Wrote char to file, new size=${file.buffer.length}`);
+  }
+
+  /**
+   * FGets - Read line from file (buffered) (V36)
+   * D1 = file handle (BPTR)
+   * D2 = buffer address (STRPTR)
+   * D3 = buffer length (ULONG, must be > 0)
+   * Returns: D0 = buffer pointer or NULL for EOF
+   */
+  FGets(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    const bufAddr = this.emulator.getRegister(CPURegister.D2);
+    const bufLen = this.emulator.getRegister(CPURegister.D3);
+
+    console.log(`[dos.library] FGets(fh=${fileHandle}, buf=0x${bufAddr.toString(16)}, len=${bufLen})`);
+
+    if (bufLen === 0) {
+      this.emulator.setRegister(CPURegister.D0, 0); // NULL
+      this.lastError = this.ERROR_NO_ERROR; // EOF condition
+      console.log(`[dos.library] FGets: Zero length buffer, returning NULL`);
+      return;
+    }
+
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.emulator.setRegister(CPURegister.D0, 0); // NULL
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] FGets: Invalid file handle, returning NULL`);
+      return;
+    }
+
+    // Check for immediate EOF
+    if (!file.buffer || file.position >= file.buffer.length) {
+      this.emulator.setRegister(CPURegister.D0, 0); // NULL
+      this.lastError = this.ERROR_NO_ERROR; // EOF, not an error
+      console.log(`[dos.library] FGets: EOF, returning NULL`);
+      return;
+    }
+
+    // Read up to bufLen-1 bytes or until newline
+    let bytesRead = 0;
+    const maxBytes = bufLen - 1; // Leave room for null terminator
+
+    while (bytesRead < maxBytes && file.position < file.buffer.length) {
+      const byte = file.buffer[file.position++];
+      this.emulator.writeMemory(bufAddr + bytesRead, byte);
+      bytesRead++;
+
+      // Stop at newline (newline IS included in buffer)
+      if (byte === 0x0A) { // '\n'
+        break;
+      }
+    }
+
+    // Null-terminate the string
+    this.emulator.writeMemory(bufAddr + bytesRead, 0);
+
+    this.emulator.setRegister(CPURegister.D0, bufAddr); // Return buffer pointer
+    const line = String.fromCharCode(...Array.from({ length: bytesRead }, (_, i) =>
+      this.emulator.readMemory(bufAddr + i)
+    ));
+    console.log(`[dos.library] FGets: Read ${bytesRead} bytes: "${line.replace(/\n/g, '\\n')}"`);
+  }
+
+  /**
+   * FPuts - Write string to file (buffered) (V36)
+   * D1 = file handle (BPTR)
+   * D2 = string address (STRPTR, null-terminated)
+   * Returns: D0 = 0 for success, -1 for error
+   */
+  FPuts(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    const strAddr = this.emulator.getRegister(CPURegister.D2);
+    const str = this.readString(strAddr);
+
+    console.log(`[dos.library] FPuts(fh=${fileHandle}, str="${str}")`);
+
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.emulator.setRegister(CPURegister.D0, -1); // Error
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] FPuts: Invalid file handle, returning error`);
+      return;
+    }
+
+    // Console output - send to callback
+    if (file.isConsole) {
+      if (this.outputCallback) {
+        this.outputCallback(str);
+      }
+      this.emulator.setRegister(CPURegister.D0, 0); // Success
+      console.log(`[dos.library] FPuts: Console output (${str.length} bytes)`);
+      return;
+    }
+
+    // Regular file - append to buffer
+    if (!file.buffer) {
+      file.buffer = Buffer.alloc(0);
+    }
+    const strBuf = Buffer.from(str, 'binary');
+    file.buffer = Buffer.concat([file.buffer, strBuf]);
+    file.position = file.buffer.length;
+
+    this.emulator.setRegister(CPURegister.D0, 0); // Success
+    console.log(`[dos.library] FPuts: Wrote ${str.length} bytes to file`);
+  }
+
+  /**
+   * FRead - Read blocks from file (buffered) (V36)
+   * D1 = file handle (BPTR)
+   * D2 = buffer address (STRPTR)
+   * D3 = block length (ULONG, must be > 0)
+   * D4 = number of blocks (ULONG, must be > 0)
+   * Returns: D0 = number of blocks read (0 for EOF)
+   */
+  FRead(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    const bufAddr = this.emulator.getRegister(CPURegister.D2);
+    const blockLen = this.emulator.getRegister(CPURegister.D3);
+    const numBlocks = this.emulator.getRegister(CPURegister.D4);
+
+    console.log(`[dos.library] FRead(fh=${fileHandle}, buf=0x${bufAddr.toString(16)}, blocklen=${blockLen}, blocks=${numBlocks})`);
+
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.emulator.setRegister(CPURegister.D0, 0); // 0 blocks read
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] FRead: Invalid file handle`);
+      return;
+    }
+
+    if (!file.buffer || file.position >= file.buffer.length) {
+      this.emulator.setRegister(CPURegister.D0, 0); // EOF
+      console.log(`[dos.library] FRead: EOF`);
+      return;
+    }
+
+    // Read blocks
+    let blocksRead = 0;
+    const bytesPerBlock = blockLen;
+    const totalBytes = blockLen * numBlocks;
+
+    for (let block = 0; block < numBlocks; block++) {
+      const blockOffset = block * bytesPerBlock;
+
+      // Read one block
+      for (let i = 0; i < bytesPerBlock; i++) {
+        if (file.position >= file.buffer.length) {
+          // EOF reached mid-block
+          this.emulator.setRegister(CPURegister.D0, blocksRead);
+          console.log(`[dos.library] FRead: EOF mid-block, read ${blocksRead} complete blocks`);
+          return;
+        }
+
+        const byte = file.buffer[file.position++];
+        this.emulator.writeMemory(bufAddr + blockOffset + i, byte);
+      }
+
+      blocksRead++;
+    }
+
+    this.emulator.setRegister(CPURegister.D0, blocksRead);
+    console.log(`[dos.library] FRead: Read ${blocksRead} blocks (${blocksRead * bytesPerBlock} bytes)`);
+  }
+
+  /**
+   * FWrite - Write blocks to file (buffered) (V36)
+   * D1 = file handle (BPTR)
+   * D2 = buffer address (STRPTR)
+   * D3 = block length (ULONG, must be > 0)
+   * D4 = number of blocks (ULONG, must be > 0)
+   * Returns: D0 = number of blocks written
+   */
+  FWrite(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    const bufAddr = this.emulator.getRegister(CPURegister.D2);
+    const blockLen = this.emulator.getRegister(CPURegister.D3);
+    const numBlocks = this.emulator.getRegister(CPURegister.D4);
+
+    console.log(`[dos.library] FWrite(fh=${fileHandle}, buf=0x${bufAddr.toString(16)}, blocklen=${blockLen}, blocks=${numBlocks})`);
+
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.emulator.setRegister(CPURegister.D0, 0); // 0 blocks written
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] FWrite: Invalid file handle`);
+      return;
+    }
+
+    // Console output
+    if (file.isConsole) {
+      const totalBytes = blockLen * numBlocks;
+      const bytes: number[] = [];
+      for (let i = 0; i < totalBytes; i++) {
+        bytes.push(this.emulator.readMemory(bufAddr + i));
+      }
+      const str = String.fromCharCode(...bytes);
+      if (this.outputCallback) {
+        this.outputCallback(str);
+      }
+      this.emulator.setRegister(CPURegister.D0, numBlocks);
+      console.log(`[dos.library] FWrite: Console output (${totalBytes} bytes)`);
+      return;
+    }
+
+    // Regular file - write blocks
+    if (!file.buffer) {
+      file.buffer = Buffer.alloc(0);
+    }
+
+    const totalBytes = blockLen * numBlocks;
+    const bytes: number[] = [];
+    for (let i = 0; i < totalBytes; i++) {
+      bytes.push(this.emulator.readMemory(bufAddr + i));
+    }
+
+    const newData = Buffer.from(bytes);
+    file.buffer = Buffer.concat([file.buffer, newData]);
+    file.position = file.buffer.length;
+
+    this.emulator.setRegister(CPURegister.D0, numBlocks);
+    console.log(`[dos.library] FWrite: Wrote ${numBlocks} blocks (${totalBytes} bytes)`);
+  }
+
+  /**
+   * VFPrintf - Formatted print to file (buffered) (V36)
+   * D1 = file handle (BPTR)
+   * D2 = format string (STRPTR, RawDoFmt style)
+   * D3 = argv pointer (LONG array)
+   * Returns: D0 = number of bytes written or -1 for error
+   */
+  VFPrintf(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    const fmtAddr = this.emulator.getRegister(CPURegister.D2);
+    const argvAddr = this.emulator.getRegister(CPURegister.D3);
+
+    const fmt = this.readString(fmtAddr);
+    console.log(`[dos.library] VFPrintf(fh=${fileHandle}, fmt="${fmt}")`);
+
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.emulator.setRegister(CPURegister.D0, -1); // EOF
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] VFPrintf: Invalid file handle`);
+      return;
+    }
+
+    // Parse format string and arguments (simple implementation)
+    const formatted = this.formatString(fmt, argvAddr);
+
+    // Write to file or console
+    if (file.isConsole) {
+      if (this.outputCallback) {
+        this.outputCallback(formatted);
+      }
+    } else {
+      if (!file.buffer) {
+        file.buffer = Buffer.alloc(0);
+      }
+      const formattedBuf = Buffer.from(formatted, 'binary');
+      file.buffer = Buffer.concat([file.buffer, formattedBuf]);
+      file.position = file.buffer.length;
+    }
+
+    this.emulator.setRegister(CPURegister.D0, formatted.length);
+    console.log(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
+  }
+
+  /**
+   * VPrintf - Formatted print to Output() (buffered) (V36)
+   * D1 = format string (STRPTR, RawDoFmt style)
+   * D2 = argv pointer (LONG array)
+   * Returns: D0 = number of bytes written or -1 for error
+   */
+  VPrintf(): void {
+    const fmtAddr = this.emulator.getRegister(CPURegister.D1);
+    const argvAddr = this.emulator.getRegister(CPURegister.D2);
+
+    const fmt = this.readString(fmtAddr);
+    console.log(`[dos.library] VPrintf(fmt="${fmt}")`);
+
+    // Format string
+    const formatted = this.formatString(fmt, argvAddr);
+
+    // Write to Output()
+    if (this.outputCallback) {
+      this.outputCallback(formatted);
+    }
+
+    this.emulator.setRegister(CPURegister.D0, formatted.length);
+    console.log(`[dos.library] VPrintf: Wrote ${formatted.length} bytes to Output()`);
+  }
+
+  /**
+   * Helper: Simple printf-style formatting (RawDoFmt compatible)
+   * Supports: %s (string), %ld/%d (decimal), %lx/%x (hex), %c (char)
+   */
+  private formatString(fmt: string, argvAddr: number): string {
+    let result = '';
+    let argIndex = 0;
+
+    for (let i = 0; i < fmt.length; i++) {
+      if (fmt[i] === '%' && i + 1 < fmt.length) {
+        const spec = fmt[i + 1];
+        let longFormat = false;
+
+        // Check for 'l' prefix (e.g., %ld, %lx)
+        if (spec === 'l' && i + 2 < fmt.length) {
+          longFormat = true;
+          i++; // Skip 'l'
+        }
+
+        const actualSpec = longFormat ? fmt[i + 1] : spec;
+
+        switch (actualSpec) {
+          case 's': {
+            // String pointer
+            const strPtr = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            const str = this.readString(strPtr);
+            result += str;
+            argIndex++;
+            i++;
+            break;
+          }
+          case 'd': {
+            // Decimal integer
+            const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            // Handle as signed
+            const signed = value > 0x7FFFFFFF ? value - 0x100000000 : value;
+            result += signed.toString(10);
+            argIndex++;
+            i++;
+            break;
+          }
+          case 'x': {
+            // Hexadecimal
+            const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            result += value.toString(16);
+            argIndex++;
+            i++;
+            break;
+          }
+          case 'c': {
+            // Character
+            const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            result += String.fromCharCode(value & 0xFF);
+            argIndex++;
+            i++;
+            break;
+          }
+          default:
+            // Unknown format, just output as-is
+            result += '%' + (longFormat ? 'l' : '') + actualSpec;
+            i++;
+            break;
+        }
+
+        if (longFormat) i++; // Skip the format character after 'l'
+      } else {
+        result += fmt[i];
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Helper: Read null-terminated string from memory
    */
   private readString(address: number, maxLen: number = 256): string {
@@ -1512,6 +1980,526 @@ export class DosLibrary {
     for (let i = len; i < maxLen; i++) {
       this.emulator.writeMemory(address + 1 + i, 0);
     }
+  }
+
+  /**
+   * Helper: Write null-terminated C string to memory
+   */
+  private writeString(address: number, str: string): void {
+    for (let i = 0; i < str.length; i++) {
+      this.emulator.writeMemory(address + i, str.charCodeAt(i));
+    }
+    // Null terminator
+    this.emulator.writeMemory(address + str.length, 0);
+  }
+
+  // ============================================================================
+  // PHASE 2: PATH AND ERROR HANDLING FUNCTIONS (V36+)
+  // ============================================================================
+
+  /**
+   * NameFromLock - Returns the name of a locked object (V36)
+   * D1 = lock (BPTR)
+   * D2 = buffer (STRPTR)
+   * D3 = len (LONG)
+   * Returns: D0 = success (BOOL) - TRUE if successful, FALSE otherwise
+   *
+   * Returns a fully qualified path for the lock.
+   * If lock is NULL, returns "SYS:"
+   * Sets IoErr() to ERROR_LINE_TOO_LONG if buffer too short
+   */
+  NameFromLock(): void {
+    const lock = this.emulator.getRegister(CPURegister.D1);
+    const bufAddr = this.emulator.getRegister(CPURegister.D2);
+    const bufLen = this.emulator.getRegister(CPURegister.D3);
+
+    console.log(`[dos.library] NameFromLock(lock=${lock.toString(16)}, buf=${bufAddr.toString(16)}, len=${bufLen})`);
+
+    // If lock is NULL, return "SYS:"
+    if (lock === 0) {
+      const path = "SYS:";
+      if (bufLen < path.length + 1) {
+        this.lastError = 120; // ERROR_LINE_TOO_LONG
+        this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+        return;
+      }
+      this.writeString(bufAddr, path);
+      this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+      return;
+    }
+
+    // Look up lock in our locks map
+    const lockInfo = this.locks.get(lock);
+    if (!lockInfo) {
+      console.log(`[dos.library] NameFromLock: Lock ${lock.toString(16)} not found`);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+      return;
+    }
+
+    const path = lockInfo.path;
+    if (bufLen < path.length + 1) {
+      this.lastError = 120; // ERROR_LINE_TOO_LONG
+      this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+      return;
+    }
+
+    this.writeString(bufAddr, path);
+    console.log(`[dos.library] NameFromLock returned: ${path}`);
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+  }
+
+  /**
+   * NameFromFH - Get the name of an open filehandle (V36)
+   * D1 = fh (BPTR)
+   * D2 = buffer (STRPTR)
+   * D3 = len (LONG)
+   * Returns: D0 = success (BOOL) - TRUE if successful, FALSE otherwise
+   */
+  NameFromFH(): void {
+    const fileHandle = this.emulator.getRegister(CPURegister.D1);
+    const bufAddr = this.emulator.getRegister(CPURegister.D2);
+    const bufLen = this.emulator.getRegister(CPURegister.D3);
+
+    console.log(`[dos.library] NameFromFH(fh=${fileHandle.toString(16)}, buf=${bufAddr.toString(16)}, len=${bufLen})`);
+
+    const file = this.openFiles.get(fileHandle);
+    if (!file) {
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+      return;
+    }
+
+    const path = file.realPath || file.name;
+    if (bufLen < path.length + 1) {
+      this.lastError = 120; // ERROR_LINE_TOO_LONG
+      this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+      return;
+    }
+
+    this.writeString(bufAddr, path);
+    console.log(`[dos.library] NameFromFH returned: ${path}`);
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+  }
+
+  /**
+   * FilePart - Returns the last component of a path (V36)
+   * D1 = path (STRPTR)
+   * Returns: D0 = pointer to last component (STRPTR)
+   *
+   * Returns a pointer to the last component of a path (normally the filename).
+   * Example: "xxx:yyy/zzz/qqq" returns pointer to "qqq"
+   */
+  FilePart(): void {
+    const pathAddr = this.emulator.getRegister(CPURegister.D1);
+    const path = this.readString(pathAddr);
+
+    console.log(`[dos.library] FilePart(path="${path}")`);
+
+    // Find last '/' or ':'
+    let lastSep = -1;
+    for (let i = path.length - 1; i >= 0; i--) {
+      if (path[i] === '/' || path[i] === ':') {
+        lastSep = i;
+        break;
+      }
+    }
+
+    // Return pointer to character after last separator (or start if no separator)
+    const offset = lastSep + 1;
+    const resultAddr = pathAddr + offset;
+
+    console.log(`[dos.library] FilePart returned offset ${offset}, addr=${resultAddr.toString(16)}`);
+    this.emulator.setRegister(CPURegister.D0, resultAddr);
+  }
+
+  /**
+   * PathPart - Returns pointer to end of next-to-last component (V36)
+   * D1 = path (STRPTR)
+   * Returns: D0 = pointer to end of directory part (STRPTR)
+   *
+   * Returns a pointer to the character after the next-to-last component.
+   * Example: "xxx:yyy/zzz/qqq" returns pointer to last '/'
+   * Example: "xxx:yyy" returns pointer to first 'y'
+   */
+  PathPart(): void {
+    const pathAddr = this.emulator.getRegister(CPURegister.D1);
+    const path = this.readString(pathAddr);
+
+    console.log(`[dos.library] PathPart(path="${path}")`);
+
+    // Find last '/'
+    let lastSlash = -1;
+    for (let i = path.length - 1; i >= 0; i--) {
+      if (path[i] === '/') {
+        lastSlash = i;
+        break;
+      }
+    }
+
+    if (lastSlash >= 0) {
+      // Return pointer to the '/'
+      const resultAddr = pathAddr + lastSlash;
+      console.log(`[dos.library] PathPart returned offset ${lastSlash}, addr=${resultAddr.toString(16)}`);
+      this.emulator.setRegister(CPURegister.D0, resultAddr);
+      return;
+    }
+
+    // No '/', find last ':'
+    let lastColon = -1;
+    for (let i = path.length - 1; i >= 0; i--) {
+      if (path[i] === ':') {
+        lastColon = i;
+        break;
+      }
+    }
+
+    // Return pointer after the ':' or to beginning
+    const offset = lastColon + 1;
+    const resultAddr = pathAddr + offset;
+    console.log(`[dos.library] PathPart returned offset ${offset}, addr=${resultAddr.toString(16)}`);
+    this.emulator.setRegister(CPURegister.D0, resultAddr);
+  }
+
+  /**
+   * Fault - Returns the text associated with a DOS error code (V36)
+   * D1 = code (LONG)
+   * D2 = header (STRPTR)
+   * D3 = buffer (STRPTR)
+   * D4 = len (LONG)
+   * Returns: D0 = length of message (LONG) - 0 if code was 0
+   *
+   * Obtains error message text for the given error code.
+   * The header is prepended to the text followed by a colon.
+   * Sets IoErr() to the code passed in.
+   */
+  Fault(): void {
+    const code = this.emulator.getRegister(CPURegister.D1);
+    const headerAddr = this.emulator.getRegister(CPURegister.D2);
+    const bufAddr = this.emulator.getRegister(CPURegister.D3);
+    const bufLen = this.emulator.getRegister(CPURegister.D4);
+
+    this.lastError = code;
+
+    if (code === 0) {
+      this.emulator.writeMemory(bufAddr, 0); // Empty string
+      this.emulator.setRegister(CPURegister.D0, 0);
+      return;
+    }
+
+    const header = headerAddr ? this.readString(headerAddr) : "";
+    const errorMsg = this.getErrorMessage(code);
+
+    let message: string;
+    if (header) {
+      message = `${header}: ${errorMsg}`;
+    } else {
+      message = errorMsg;
+    }
+
+    console.log(`[dos.library] Fault(code=${code}, header="${header}") -> "${message}"`);
+
+    // Truncate if necessary
+    if (message.length >= bufLen) {
+      message = message.substring(0, bufLen - 1);
+    }
+
+    this.writeString(bufAddr, message);
+    this.emulator.setRegister(CPURegister.D0, message.length);
+  }
+
+  /**
+   * PrintFault - Prints the text associated with a DOS error code (V36)
+   * D1 = code (LONG)
+   * D2 = header (STRPTR)
+   * Returns: D0 = success (BOOL)
+   *
+   * Similar to Fault() but outputs to Output() stream.
+   * Sets IoErr() to the code passed in.
+   */
+  PrintFault(): void {
+    const code = this.emulator.getRegister(CPURegister.D1);
+    const headerAddr = this.emulator.getRegister(CPURegister.D2);
+
+    this.lastError = code;
+
+    const header = headerAddr ? this.readString(headerAddr) : "";
+    const errorMsg = this.getErrorMessage(code);
+
+    let message: string;
+    if (header) {
+      message = `${header}: ${errorMsg}\n`;
+    } else {
+      message = `${errorMsg}\n`;
+    }
+
+    console.log(`[dos.library] PrintFault(code=${code}, header="${header}") -> "${message}"`);
+
+    // Write to Output() stream (stdout)
+    if (this.outputCallback) {
+      this.outputCallback(message);
+    }
+
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+  }
+
+  /**
+   * Helper: Get error message text for DOS error code
+   */
+  private getErrorMessage(code: number): string {
+    const errorMessages: Record<number, string> = {
+      103: "Insufficient free store",
+      120: "Line too long",
+      202: "Object not found",
+      203: "Object wrong type",
+      204: "Disk write protected",
+      205: "Directory not found",
+      206: "Object too large",
+      209: "Invalid stream component name",
+      210: "Invalid object lock",
+      211: "Object already exists",
+      212: "Directory not empty",
+      213: "Seek error",
+      214: "Comment too long",
+      215: "Disk is full",
+      216: "File is protected from deletion",
+      217: "File is protected from writing",
+      218: "File is protected from reading",
+      219: "Not a DOS disk",
+      220: "No disk in drive",
+      221: "No more entries in directory",
+      222: "Object is soft link",
+      223: "Object is linked",
+      224: "Bad loadfile hunk",
+      225: "Function not implemented",
+      226: "Bad number",
+      232: "No default directory",
+      233: "Seek error beyond end of file"
+    };
+
+    return errorMessages[code] || `Error code ${code}`;
+  }
+
+  // ============================================================================
+  // PHASE 4: CRITICAL FUNCTIONS FOR 68K DOOR COMPATIBILITY
+  // Identified from comprehensive analysis of 17 AmiExpress door source files
+  // ============================================================================
+
+  /**
+   * ReadArgs - Parse command-line arguments (V36+)
+   * Used by: QuickNew.asm line 53, DiscordAnnounce.e, MultiTop2
+   *
+   * Signature: struct RDArgs *ReadArgs(STRPTR template, LONG *array, struct RDArgs *rdargs)
+   * D1 = template string pointer
+   * D2 = array pointer (results)
+   * D3 = RDArgs pointer (or NULL)
+   * Returns: RDArgs pointer in D0 (NULL on error)
+   *
+   * Template modifiers:
+   * /A = Required argument
+   * /S = Switch (boolean)
+   * /K = Keyword required
+   * /N = Numeric value
+   * /M = Multiple strings
+   * /F = Rest of line
+   * /T = Toggle switch
+   */
+  ReadArgs(): void {
+    const templateAddr = this.emulator.getRegister(CPURegister.D1);
+    const arrayAddr = this.emulator.getRegister(CPURegister.D2);
+    const rdargsAddr = this.emulator.getRegister(CPURegister.D3);
+
+    const template = this.readString(templateAddr);
+
+    console.log(`[dos.library] ReadArgs(template="${template}", array=0x${arrayAddr.toString(16)}, rdargs=0x${rdargsAddr.toString(16)})`);
+
+    // Get command line from Input() stream
+    // For now, use a simple stub that returns NULL (will be enhanced)
+    console.log(`[dos.library] ReadArgs() - STUB IMPLEMENTATION - Returning NULL`);
+    console.log(`[dos.library] Template parsing not yet implemented for: "${template}"`);
+
+    // Return NULL to indicate no arguments parsed
+    // TODO: Implement full template parsing with /A /S /K /N /M /F /T modifiers
+    this.emulator.setRegister(CPURegister.D0, 0);
+    this.lastError = 0; // No error, just no input
+  }
+
+  /**
+   * FreeArgs - Free memory allocated by ReadArgs (V36+)
+   * Used by: QuickNew.asm lines 75, 222, DiscordAnnounce.e
+   *
+   * Signature: VOID FreeArgs(struct RDArgs *args)
+   * D1 = RDArgs pointer
+   */
+  FreeArgs(): void {
+    const rdargsAddr = this.emulator.getRegister(CPURegister.D1);
+
+    console.log(`[dos.library] FreeArgs(rdargs=0x${rdargsAddr.toString(16)})`);
+
+    if (rdargsAddr === 0) {
+      console.log(`[dos.library] FreeArgs() - NULL pointer, nothing to free`);
+      return;
+    }
+
+    // TODO: Free allocated memory when ReadArgs is fully implemented
+    console.log(`[dos.library] FreeArgs() - STUB IMPLEMENTATION`);
+
+    this.emulator.setRegister(CPURegister.D0, 0); // void return
+  }
+
+  /**
+   * DateToStr - Convert DateStamp to formatted string (V36+)
+   * Used by: QuickNew.asm lines 330, 336, MultiTop2
+   *
+   * Signature: BOOL DateToStr(struct DateTime *datetime)
+   * D1 = DateTime pointer
+   * Returns: BOOL success in D0
+   *
+   * DateTime structure:
+   * - struct DateStamp dat_Stamp (12 bytes)
+   * - UBYTE dat_Format (1 byte)
+   * - UBYTE dat_Flags (1 byte)
+   * - STRPTR dat_StrDate (4 bytes)
+   * - STRPTR dat_StrTime (4 bytes)
+   * - STRPTR dat_StrDay (4 bytes)
+   *
+   * Formats:
+   * 0 = FORMAT_DOS (dd-mmm-yy)
+   * 1 = FORMAT_INT (yy-mm-dd)
+   * 2 = FORMAT_USA (mm-dd-yy)
+   * 3 = FORMAT_CDN (dd-mm-yy)
+   */
+  DateToStr(): void {
+    const datetimeAddr = this.emulator.getRegister(CPURegister.D1);
+
+    // Read DateTime structure
+    const ds_Days = this.emulator.readMemory32(datetimeAddr);
+    const ds_Minute = this.emulator.readMemory32(datetimeAddr + 4);
+    const ds_Tick = this.emulator.readMemory32(datetimeAddr + 8);
+    const dat_Format = this.emulator.readMemory(datetimeAddr + 12);
+    const dat_Flags = this.emulator.readMemory(datetimeAddr + 13);
+    const dat_StrDate = this.emulator.readMemory32(datetimeAddr + 14);
+    const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 18);
+    const dat_StrDay = this.emulator.readMemory32(datetimeAddr + 22);
+
+    console.log(`[dos.library] DateToStr(days=${ds_Days}, minute=${ds_Minute}, tick=${ds_Tick}, format=${dat_Format})`);
+
+    // Convert Amiga days (since 1978-01-01) to JavaScript Date
+    const epoch = new Date('1978-01-01T00:00:00Z');
+    const dateMs = epoch.getTime() + (ds_Days * 24 * 60 * 60 * 1000);
+    const date = new Date(dateMs);
+
+    const year = date.getFullYear() % 100; // 2-digit year
+    const month = date.getMonth() + 1; // 1-12
+    const day = date.getDate(); // 1-31
+
+    const hours = Math.floor(ds_Minute / 60);
+    const minutes = ds_Minute % 60;
+    const seconds = Math.floor(ds_Tick / 50);
+
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    let dateStr: string;
+
+    // Format date based on dat_Format
+    switch (dat_Format) {
+      case 0: // FORMAT_DOS (dd-mmm-yy)
+        dateStr = `${day.toString().padStart(2, '0')}-${monthNames[month - 1]}-${year.toString().padStart(2, '0')}`;
+        break;
+      case 1: // FORMAT_INT (yy-mm-dd)
+        dateStr = `${year.toString().padStart(2, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        break;
+      case 2: // FORMAT_USA (mm-dd-yy)
+        dateStr = `${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}-${year.toString().padStart(2, '0')}`;
+        break;
+      case 3: // FORMAT_CDN (dd-mm-yy)
+        dateStr = `${day.toString().padStart(2, '0')}-${month.toString().padStart(2, '0')}-${year.toString().padStart(2, '0')}`;
+        break;
+      default:
+        dateStr = `${day.toString().padStart(2, '0')}-${monthNames[month - 1]}-${year.toString().padStart(2, '0')}`;
+    }
+
+    // Format time (HH:MM:SS)
+    const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+    // Day of week names
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayStr = dayNames[date.getDay()];
+
+    console.log(`[dos.library] DateToStr() -> date="${dateStr}", time="${timeStr}", day="${dayStr}"`);
+
+    // Write strings to buffers
+    if (dat_StrDate) {
+      this.writeString(dat_StrDate, dateStr);
+    }
+    if (dat_StrTime) {
+      this.writeString(dat_StrTime, timeStr);
+    }
+    if (dat_StrDay) {
+      this.writeString(dat_StrDay, dayStr);
+    }
+
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+  }
+
+  /**
+   * AddPart - Append filename to path (V36+)
+   * Used by: GLCViewer.e
+   *
+   * Signature: BOOL AddPart(STRPTR dirname, STRPTR filename, ULONG size)
+   * D1 = dirname (modified in-place)
+   * D2 = filename
+   * D3 = buffer size
+   * Returns: BOOL success in D0 (FALSE if overflow)
+   */
+  AddPart(): void {
+    const dirnameAddr = this.emulator.getRegister(CPURegister.D1);
+    const filenameAddr = this.emulator.getRegister(CPURegister.D2);
+    const size = this.emulator.getRegister(CPURegister.D3);
+
+    const dirname = this.readString(dirnameAddr);
+    const filename = this.readString(filenameAddr);
+
+    console.log(`[dos.library] AddPart(dirname="${dirname}", filename="${filename}", size=${size})`);
+
+    // If filename contains : it's a fully qualified path - replace dirname entirely
+    if (filename.includes(':')) {
+      if (filename.length + 1 > size) {
+        console.log(`[dos.library] AddPart() - buffer overflow (need ${filename.length + 1}, have ${size})`);
+        this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+        this.lastError = 120; // ERROR_LINE_TOO_LONG
+        return;
+      }
+      this.writeString(dirnameAddr, filename);
+      console.log(`[dos.library] AddPart() -> "${filename}" (fully qualified)`);
+      this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+      return;
+    }
+
+    // Build result path
+    let result = dirname;
+
+    // Add separator if needed
+    if (result.length > 0 && !result.endsWith('/') && !result.endsWith(':')) {
+      result += '/';
+    }
+
+    // Append filename
+    result += filename;
+
+    // Check buffer overflow
+    if (result.length + 1 > size) {
+      console.log(`[dos.library] AddPart() - buffer overflow (need ${result.length + 1}, have ${size})`);
+      this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+      this.lastError = 120; // ERROR_LINE_TOO_LONG
+      return;
+    }
+
+    // Write result
+    this.writeString(dirnameAddr, result);
+    console.log(`[dos.library] AddPart() -> "${result}"`);
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
   }
 
   /**
@@ -1628,6 +2616,9 @@ export class DosLibrary {
         return true;
 
       // Date/time (STANDARD Amiga offsets from Amiga include files)
+      case -180:
+        this.WaitForChar();
+        return true;
       case -192:
         this.DateStamp();
         return true;
@@ -1635,7 +2626,67 @@ export class DosLibrary {
         this.Delay();
         return true;
       case -204:
-        this.WaitForChar();
+        this.WaitForChar(); // Also at -204 for compatibility
+        return true;
+
+      // Buffered I/O (V36+) - Phase 1 critical functions
+      case -264:
+        this.VPrintf();
+        return true;
+      case -516:
+        this.FGetC();
+        return true;
+      case -522:
+        this.FPutC();
+        return true;
+      case -534:
+        this.FRead();
+        return true;
+      case -540:
+        this.FWrite();
+        return true;
+      case -546:
+        this.FGets();
+        return true;
+      case -552:
+        this.FPuts();
+        return true;
+      case -564:
+        this.VFPrintf();
+        return true;
+
+      // Phase 2: Path and error handling (V36+)
+      case -288:
+        this.FilePart();
+        return true;
+      case -294:
+        this.PathPart();
+        return true;
+      case -324:
+        this.NameFromLock();
+        return true;
+      case -330:
+        this.NameFromFH();
+        return true;
+      case -390:
+        this.Fault();
+        return true;
+      case -396:
+        this.PrintFault();
+        return true;
+
+      // Phase 4: Critical missing functions for 68K door compatibility
+      case -300:
+        this.AddPart();
+        return true;
+      case -744:
+        this.DateToStr();
+        return true;
+      case -804:
+        this.ReadArgs();
+        return true;
+      case -810:
+        this.FreeArgs();
         return true;
 
       default:

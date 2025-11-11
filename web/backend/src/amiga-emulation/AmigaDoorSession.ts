@@ -94,6 +94,56 @@ export class AmigaDoorSession {
 
     const a6 = this.emulator.getRegister(14);
 
+    // === CRITICAL FIX: Handle JSR (d16,A6) FIRST ===
+    // JSR instructions must be intercepted by checking the TARGET address,
+    // not the call site (PC). The old logic calculated offset = PC - A6,
+    // which is always positive for calls from code, causing isTrapOffset
+    // check to fail (requires offset < 0).
+    if (isJSR_A6) {
+      const offset16 = this.emulator.readMemory16(pc + 2);
+      const jsrOffset = (offset16 & 0x8000) ? (offset16 - 0x10000) : offset16;
+      const targetAddr = (a6 + jsrOffset) & 0xFFFFFF;
+
+      // Check if TARGET is a trap (not PC!)
+      const isTargetTrap = this.libraryTraps.isTrapOffset(jsrOffset);
+
+      if (!isTargetTrap) {
+        // Not a library call, let MOIRA execute it normally
+        return Promise.resolve(false);
+      }
+
+      // Check if we just handled this exact trap (prevent double interception)
+      if (pc === this.lastInterceptedTrap &&
+          this.iterationCount - this.lastInterceptedIteration <= 2) {
+        console.log(`[LibraryTraps] SKIPPING DUPLICATE TRAP at PC=0x${pc.toString(16)}`);
+        this.lastInterceptedTrap = 0;
+        this.lastInterceptedIteration = 0;
+        return Promise.resolve(true);
+      }
+
+      console.log(`[LibraryTraps] Intercepted JSR at PC=0x${pc.toString(16)} -> target=0x${targetAddr.toString(16)} (offset=${jsrOffset})`);
+
+      // Manually push return address (JSR is 4 bytes)
+      const returnAddr = pc + 4;
+      const sp = this.emulator.getRegister(15);
+      this.emulator.writeMemory32(sp - 4, returnAddr);
+      this.emulator.setRegister(15, sp - 4);
+
+      // Handle the trap
+      const handled = this.libraryTraps.handleTrapByOffset(jsrOffset, a6);
+
+      if (handled) {
+        // Mark as intercepted to prevent duplicate handling
+        this.lastInterceptedTrap = targetAddr;
+        this.lastInterceptedIteration = this.iterationCount;
+        return Promise.resolve(true);
+      }
+
+      return Promise.resolve(false);
+    }
+
+    // === ORIGINAL LOGIC FOR NON-JSR TRAPS ===
+    // PC is already at a trap address (jumped via exception vector)
     // Calculate offset from A6
     let offset = pc - a6;
 
@@ -117,41 +167,14 @@ export class AmigaDoorSession {
     // Check if we just handled this exact trap (prevent double interception)
     if (pc === this.lastInterceptedTrap &&
         this.iterationCount - this.lastInterceptedIteration <= 2) {
-      console.log(`[AmigaDoorSession] *** SKIPPING DUPLICATE TRAP at PC=0x${pc.toString(16)} (already handled at iteration ${this.lastInterceptedIteration}) ***`);
+      console.log(`[LibraryTraps] SKIPPING DUPLICATE TRAP at PC=0x${pc.toString(16)}`);
       this.lastInterceptedTrap = 0;
       this.lastInterceptedIteration = 0;
-      return Promise.resolve(true); // Skip but return true to continue iteration
-    }
-
-    // Handle JSR (d16,A6) specially - intercept BEFORE execution
-    if (isJSR_A6) {
-      const offset16 = this.emulator.readMemory16(pc + 2);
-      const jsrOffset = (offset16 & 0x8000) ? (offset16 - 0x10000) : offset16;
-      const targetAddr = (a6 + jsrOffset) & 0xFFFFFF;
-
-      console.log(`[AmigaDoorSession] *** JSR (d16,A6) TRAP at PC=0x${pc.toString(16)} -> target=0x${targetAddr.toString(16)} ***`);
-
-      // Manually push return address (JSR is 4 bytes)
-      const returnAddr = pc + 4;
-      const sp = this.emulator.getRegister(15);
-      this.emulator.writeMemory32(sp - 4, returnAddr);
-      this.emulator.setRegister(15, sp - 4);
-
-      // Handle the trap
-      const handled = this.libraryTraps.handleTrapByOffset(jsrOffset, a6);
-
-      if (handled) {
-        // Mark as intercepted to prevent duplicate handling
-        this.lastInterceptedTrap = targetAddr;
-        this.lastInterceptedIteration = this.iterationCount;
-        return Promise.resolve(true);
-      }
-
-      return Promise.resolve(false);
+      return Promise.resolve(true);
     }
 
     // Handle trap at current PC (PC is already at library vector)
-    console.log(`[AmigaDoorSession] *** DIRECT TRAP at PC=0x${pc.toString(16)} (offset=${offset}, A6=0x${a6.toString(16)}) ***`);
+    console.log(`[LibraryTraps] DIRECT TRAP at PC=0x${pc.toString(16)} (offset=${offset}, A6=0x${a6.toString(16)})`);
 
     const handled = isTrapAddress
       ? this.libraryTraps.handleTrap(pc)
@@ -528,6 +551,16 @@ export class AmigaDoorSession {
     console.log(`  D0 (arg length): ${argString.length}`);
     console.log(`  A0 (arg string): 0x${ARG_STRING_ADDR.toString(16)} = "${argString}"`);
 
+    // Set A1 to end of CODE segment (SAS/C startup code uses this for initialization)
+    // The startup code copies initialization data from end of CODE to BSS
+    if (hunkFile.segments.length > 0) {
+      // Find the first segment (CODE segment)
+      const codeSegment = hunkFile.segments[0];
+      const codeEnd = codeSegment.address + codeSegment.size;
+      this.emulator.setRegister(9, codeEnd);  // A1 = end of CODE
+      console.log(`  A1 (end of CODE): 0x${codeEnd.toString(16)}`);
+    }
+
     // Now set PC
     this.emulator.setRegister(16, hunkFile.entryPoint);  // PC
     console.log(`  PC: 0x${hunkFile.entryPoint.toString(16)}`);
@@ -895,6 +928,12 @@ export class AmigaDoorSession {
         this.startupMessageSent = true;
       }
 
+      // Track execution path for debugging WHO door
+      let lastPC = 0;
+      let pcChangeCount = 0;
+      const pcHistory: number[] = [];
+      let logged0x1020 = false;
+
       while (this.isRunning) {
         // === STEP 1: Check if paused (async input) ===
         if (this.emulator.isPaused()) {
@@ -904,6 +943,112 @@ export class AmigaDoorSession {
 
         // === STEP 2: Get current PC ===
         const pc = this.emulator.getRegister(16);
+
+        // Track PC changes for WHO debugging (collect 200 unique PCs, log first 100)
+        if (pc !== lastPC && pcHistory.length < 200) {
+          pcHistory.push(pc);
+          pcChangeCount++;
+          if (pcChangeCount <= 100) {
+            const instruction = this.emulator.readMemory16(pc);
+            console.log(`[WHO-DEBUG] PC: 0x${pc.toString(16)} -> Instr: 0x${instruction.toString(16)}`);
+
+            // After LEA at 0x1008, check what A1 was set to
+            if (lastPC === 0x1008 && pc === 0x100e) {
+              const a1 = this.emulator.getRegister(9);
+              console.log(`[WHO-DEBUG] *** AFTER LEA at 0x1008: A1 = 0x${a1.toString(16)} ***`);
+            }
+          }
+          lastPC = pc;
+        }
+
+        // Log all registers at 0x1020 (before entering the loop) - only once
+        if (pc === 0x1020 && !logged0x1020) {
+          logged0x1020 = true;
+          const d0 = this.emulator.getRegister(0);
+          const a1 = this.emulator.getRegister(9);
+          const a2 = this.emulator.getRegister(10);
+          const a3 = this.emulator.getRegister(11);
+          const a4 = this.emulator.getRegister(12);
+          const a5 = this.emulator.getRegister(13);
+          console.log(`[WHO-DEBUG-INIT] At 0x1020 (before loop):`);
+          console.log(`  D0=0x${d0.toString(16)}`);
+          console.log(`  A1=0x${a1.toString(16)} A2=0x${a2.toString(16)} A3=0x${a3.toString(16)}`);
+          console.log(`  A4=0x${a4.toString(16)} A5=0x${a5.toString(16)}`);
+
+          // Dump memory at 0x1020-0x1028 to see actual instructions
+          console.log(`[WHO-DEBUG-INIT] Memory at 0x1020-0x1028:`);
+          for (let addr = 0x1020; addr < 0x1028; addr += 2) {
+            const word = this.emulator.readMemory16(addr);
+            console.log(`  0x${addr.toString(16)}: 0x${word.toString(16).padStart(4, '0')}`);
+          }
+        }
+
+        // Track A1 at both 0x1022 (before MOVE) and 0x1024 (after MOVE)
+        if ((pc === 0x1022 || pc === 0x1024) && this.iterationCount >= 100 && this.iterationCount <= 104) {
+          const d0 = this.emulator.getRegister(0);
+          const a1 = this.emulator.getRegister(9);
+          const a3 = this.emulator.getRegister(11);
+
+          // Read actual memory at A1 to see what would be copied
+          const memAtA1 = this.emulator.readMemory32(a1);
+          const memAtA1Minus4 = this.emulator.readMemory32(a1 - 4);
+          const memAtA1Minus708 = this.emulator.readMemory32(a1 - 708);  // Before BSS
+          const memAtA1Minus800 = this.emulator.readMemory32(a1 - 800);  // Well before BSS
+
+          if (pc === 0x1022) {
+            console.log(`[WHO-DEBUG-MOVE] BEFORE MOVE at 0x1022:`);
+            console.log(`  D0=0x${d0.toString(16)} A1=0x${a1.toString(16)} A3=0x${a3.toString(16)}`);
+            console.log(`  Memory[A1]=0x${memAtA1.toString(16)} Memory[A1-4]=0x${memAtA1Minus4.toString(16)}`);
+            console.log(`  Memory[A1-708]=0x${memAtA1Minus708.toString(16)} Memory[A1-800]=0x${memAtA1Minus800.toString(16)}`);
+          } else {
+            console.log(`[WHO-DEBUG-MOVE] AFTER MOVE at 0x1024:`);
+            console.log(`  D0=0x${d0.toString(16)} A1=0x${a1.toString(16)} A3=0x${a3.toString(16)}`);
+            console.log(`  Memory[A1]=0x${memAtA1.toString(16)} Memory[A1-4]=0x${memAtA1Minus4.toString(16)}`);
+
+            // Check what was written to A3-4
+            const writtenValue = this.emulator.readMemory32(a3 - 4);
+            console.log(`  Written to [A3-4]=0x${writtenValue.toString(16)}`);
+          }
+        }
+
+        // === DEBUG: Track the mystery jump from 0x24a6 to 0x1ffce ===
+        if (pc === 0x24a6) {
+          console.log(`[WHO-DEBUG-24A6] === AT PC 0x24a6 (mystery jump location) ===`);
+
+          // Read next 5 instructions
+          for (let i = 0; i < 10; i += 2) {
+            const addr = pc + i;
+            const instr = this.emulator.readMemory16(addr);
+            console.log(`[WHO-DEBUG-24A6] Memory[0x${addr.toString(16)}] = 0x${instr.toString(16).padStart(4, '0')}`);
+          }
+
+          // Log ALL registers
+          console.log(`[WHO-DEBUG-24A6] Registers BEFORE execute():`);
+          for (let d = 0; d < 8; d++) {
+            const val = this.emulator.getRegister(d);
+            console.log(`  D${d}=0x${val.toString(16).padStart(8, '0')}`);
+          }
+          for (let a = 0; a < 7; a++) {
+            const val = this.emulator.getRegister(8 + a);
+            console.log(`  A${a}=0x${val.toString(16).padStart(8, '0')}`);
+          }
+          const sp = this.emulator.getRegister(15);
+          const pc_reg = this.emulator.getRegister(16);
+          const sr = this.emulator.getRegister(17);
+          console.log(`  SP=0x${sp.toString(16).padStart(8, '0')}`);
+          console.log(`  PC=0x${pc_reg.toString(16).padStart(8, '0')}`);
+          console.log(`  SR=0x${sr.toString(16).padStart(4, '0')}`);
+
+          // Check what A0 points to (0x2940 is MOVE.L (A0),(A4)+)
+          const a0 = this.emulator.getRegister(8);
+          console.log(`[WHO-DEBUG-24A6] A0 points to: 0x${a0.toString(16)}`);
+          if (a0 >= 0x1000 && a0 < 0x200000) {
+            const memAtA0 = this.emulator.readMemory32(a0);
+            console.log(`[WHO-DEBUG-24A6] Memory[A0] = 0x${memAtA0.toString(16)}`);
+          } else {
+            console.log(`[WHO-DEBUG-24A6] A0 is INVALID! (0x${a0.toString(16)})`);
+          }
+        }
 
         // === STEP 3: Check exit conditions ===
 
@@ -921,6 +1066,11 @@ export class AmigaDoorSession {
         if (pc < 0x100 && this.iterationCount > 100) {
           console.log(`[AmigaDoorSession] PC in low memory (0x${pc.toString(16)}) - likely stack corruption`);
           console.log(`[AmigaDoorSession] Total iterations: ${this.iterationCount}`);
+          console.log(`[WHO-DEBUG] Execution path (${pcHistory.length} unique PCs):`);
+          console.log(`[WHO-DEBUG] First 30: ${pcHistory.slice(0, 30).map(p => '0x' + p.toString(16)).join(' -> ')}`);
+          if (pcHistory.length > 30) {
+            console.log(`[WHO-DEBUG] Last 30: ${pcHistory.slice(-30).map(p => '0x' + p.toString(16)).join(' -> ')}`);
+          }
           this.terminate();
           return;
         }
@@ -940,9 +1090,30 @@ export class AmigaDoorSession {
           continue;
         }
 
-        // === STEP 5: Execute one instruction ===
-        this.emulator.execute(1);
-        this.totalCycles += 1;
+        // === STEP 5: Execute exactly ONE instruction ===
+        // CRITICAL FIX: Use MOIRA's executeInstruction() which executes exactly ONE
+        // complete instruction (regardless of cycles required). This is the ROOT solution:
+        // - Multi-cycle instructions (DBRA, MOVEM, MULU) complete fully
+        // - Library traps checked between EVERY instruction
+        // - No mid-batch JSR execution bugs
+        // Previous execute(20) ran multiple instructions, missing JSRs within the batch.
+        const wasAt24a6 = (pc === 0x24a6);
+        const cyclesExecuted = this.emulator.executeInstruction();
+        this.totalCycles += cyclesExecuted;
+
+        // === DEBUG: Check PC after executeInstruction() if we were at 0x24a6 ===
+        if (wasAt24a6) {
+          const newPc = this.emulator.getRegister(16);
+          console.log(`[WHO-DEBUG-24A6] AFTER executeInstruction(): PC = 0x${newPc.toString(16)}, cycles=${cyclesExecuted}`);
+          if (newPc === 0x1ffce) {
+            console.log(`[WHO-DEBUG-24A6] !!! PC JUMPED TO GARBAGE MEMORY 0x1ffce !!!`);
+            // Log registers again
+            for (let a = 0; a < 7; a++) {
+              const val = this.emulator.getRegister(8 + a);
+              console.log(`  A${a}=0x${val.toString(16).padStart(8, '0')}`);
+            }
+          }
+        }
 
         // === STEP 6: Track progress and yield ===
         this.iterationCount++;

@@ -499,6 +499,17 @@ public:
         return (int)(getClock() - startClock);
     }
 
+    // Execute exactly ONE instruction (returns cycles consumed)
+    // CRITICAL: This calls MOIRA's execute() with NO parameters,
+    // which executes exactly one complete instruction, regardless of
+    // how many CPU cycles it requires. This is the ROOT solution for
+    // proper instruction-boundary execution.
+    int executeInstruction() {
+        i64 startClock = getClock();
+        execute();  // MOIRA's execute() with no parameters - one instruction
+        return (int)(getClock() - startClock);
+    }
+
     // Get registers
     uint32_t getRegister(int reg) {
         if (reg < 8) return this->reg.d[reg];
@@ -586,6 +597,7 @@ EMSCRIPTEN_BINDINGS(moira_module) {
         .function("loadROM", &MoiraCPU::loadROM)
         .function("resetCPU", &MoiraCPU::resetCPU)
         .function("executeCycles", &MoiraCPU::executeCycles)
+        .function("executeInstruction", &MoiraCPU::executeInstruction)
         .function("getRegister", &MoiraCPU::getRegister)
         .function("setRegister", &MoiraCPU::setRegister)
         .function("getCycles", &MoiraCPU::getCycles)

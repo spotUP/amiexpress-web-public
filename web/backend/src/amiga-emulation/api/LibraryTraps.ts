@@ -249,7 +249,8 @@ const DOS_VECTORS: LibraryVector[] = [
     offset: -204,
     name: 'WaitForChar',
     handler: (emu, lib: DosLibrary) => {
-      return lib.WaitForChar();
+      lib.WaitForChar();
+      return emu.getRegister(0);  // Returns -1 if char available, 0 if timeout
     }
   },
   {
@@ -425,7 +426,38 @@ const EXEC_VECTORS: LibraryVector[] = [
       // Returns: D0 = result from supervisor function
 
       const a5 = emu.getRegister(13);  // A5 - supervisor function pointer
-      console.log(`[LibraryTraps] Supervisor: calling function at 0x${a5.toString(16)}, returnAddr=0x${returnAddr.toString(16)}`);
+
+      // CRITICAL FIX: Check for invalid/NULL function pointers
+      // WHO door passes A5=0x46f8 which contains zeros (uninitialized memory)
+      // vamos skips/ignores such calls instead of crashing
+      // See investigation: /tmp/SUPERVISOR_INVESTIGATION_FINAL.md
+
+      // Check 1: NULL or very low address (< 0x1000 is in exception vectors)
+      if (a5 === 0 || a5 < 0x1000) {
+        console.log(`[LibraryTraps] Supervisor: NULL/invalid function pointer (0x${a5.toString(16)}), skipping execution`);
+        console.log(`[LibraryTraps] Supervisor: Preserving all registers (per NDK specs)`);
+        emu.setRegister(16, returnAddr);  // CRITICAL: Move PC past the JSR instruction
+        // CRITICAL: Preserve D0! NDK says "does not modify or save registers"
+        // Return current D0 value unchanged instead of 0
+        const d0 = emu.getRegister(0);
+        return d0;
+      }
+
+      // Check 2: Memory at function pointer contains valid code
+      // Read first word - if it's 0x0000 or 0xFFFF, it's not valid code
+      const firstWord = emu.readMemory16(a5);
+      if (firstWord === 0x0000 || firstWord === 0xFFFF) {
+        console.log(`[LibraryTraps] Supervisor: Function at 0x${a5.toString(16)} contains invalid code (0x${firstWord.toString(16)}), skipping execution`);
+        console.log(`[LibraryTraps] Supervisor: Preserving all registers (per NDK specs)`);
+        emu.setRegister(16, returnAddr);  // CRITICAL: Move PC past the JSR instruction
+        // CRITICAL: Preserve D0! NDK says "does not modify or save registers"
+        // Return current D0 value unchanged instead of 0
+        const d0 = emu.getRegister(0);
+        return d0;
+      }
+
+      // Valid function - execute normally
+      console.log(`[LibraryTraps] Supervisor: calling VALID function at 0x${a5.toString(16)}, returnAddr=0x${returnAddr.toString(16)}`);
 
       // Set PC to the supervisor function address
       // The function will execute and eventually RTS back to returnAddr

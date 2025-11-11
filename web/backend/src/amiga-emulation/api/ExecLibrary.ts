@@ -1522,4 +1522,154 @@ export class ExecLibrary {
 
     console.log(`[ExecLibrary]   Signal operation complete`);
   }
+
+  // ============================================================================
+  // PHASE 3: CRITICAL EXEC FUNCTIONS FOR DOOR SUPPORT
+  // ============================================================================
+
+  // Forbid nesting counter
+  private forbidNest: number = 0;
+
+  /**
+   * Forbid - Forbid task rescheduling
+   *
+   * Prevents other tasks from being scheduled to run by the dispatcher.
+   * Calls nest - must call Permit() once for each Forbid().
+   * In single-task emulation, this is essentially a no-op but we track nesting.
+   */
+  forbid(): void {
+    this.forbidNest++;
+    console.log(`[ExecLibrary] Forbid() - nest level now: ${this.forbidNest}`);
+  }
+
+  /**
+   * Permit - Permit task rescheduling
+   *
+   * Allows other tasks to be scheduled after a matching Forbid().
+   * Must call exactly once for each Forbid().
+   */
+  permit(): void {
+    if (this.forbidNest > 0) {
+      this.forbidNest--;
+    }
+    console.log(`[ExecLibrary] Permit() - nest level now: ${this.forbidNest}`);
+  }
+
+  /**
+   * CopyMem - General purpose memory copy
+   * A0 = source address
+   * A1 = dest address
+   * D0 = size (bytes)
+   *
+   * Copies memory from source to dest. Handles arbitrary lengths and alignments.
+   * Does NOT support overlapping copies.
+   */
+  copyMem(source: number, dest: number, size: number): void {
+    console.log(`[ExecLibrary] CopyMem(src=0x${source.toString(16)}, dst=0x${dest.toString(16)}, size=${size})`);
+
+    if (size === 0) {
+      return;
+    }
+
+    // Byte-by-byte copy (simple but works for all alignments)
+    for (let i = 0; i < size; i++) {
+      const byte = this.emulator.readMemory(source + i);
+      this.emulator.writeMemory(dest + i, byte);
+    }
+  }
+
+  /**
+   * CopyMemQuick - Optimized memory copy for aligned data
+   * A0 = source address (must be longword aligned)
+   * A1 = dest address (must be longword aligned)
+   * D0 = size (must be multiple of 4)
+   *
+   * Optimized version that requires longword alignment.
+   * Does NOT support overlapping copies.
+   */
+  copyMemQuick(source: number, dest: number, size: number): void {
+    console.log(`[ExecLibrary] CopyMemQuick(src=0x${source.toString(16)}, dst=0x${dest.toString(16)}, size=${size})`);
+
+    if (size === 0) {
+      return;
+    }
+
+    // Verify alignment
+    if (source % 4 !== 0 || dest % 4 !== 0 || size % 4 !== 0) {
+      console.warn(`[ExecLibrary]   WARNING: CopyMemQuick requires longword alignment!`);
+      // Fall back to byte copy
+      this.copyMem(source, dest, size);
+      return;
+    }
+
+    // Longword copy (4 bytes at a time)
+    for (let i = 0; i < size; i += 4) {
+      const long = this.emulator.readMemory32(source + i);
+      this.emulator.writeMemory32(dest + i, long);
+    }
+  }
+
+  /**
+   * AllocVec - Allocate memory and track size (V36+)
+   * D0 = byteSize
+   * D1 = attributes (MEMF_PUBLIC, MEMF_CHIP, MEMF_CLEAR, etc.)
+   * Returns: D0 = memory block address (or 0 on failure)
+   *
+   * Like AllocMem but tracks the size internally so FreeVec doesn't need size.
+   * We store size in a hidden header before the returned pointer.
+   */
+  allocVec(byteSize: number, attributes: number): number {
+    console.log(`[ExecLibrary] AllocVec(size=${byteSize}, attrs=0x${attributes.toString(16)})`);
+
+    if (byteSize === 0) {
+      console.log(`[ExecLibrary]   Zero-size allocation - returning NULL`);
+      return 0;
+    }
+
+    // Allocate extra 4 bytes for size header
+    const totalSize = byteSize + 4;
+    const headerAddr = this.allocMem(totalSize, attributes);
+
+    if (headerAddr === 0) {
+      console.log(`[ExecLibrary]   Allocation failed - out of memory`);
+      return 0;
+    }
+
+    // Write size to header (first 4 bytes)
+    this.emulator.writeMemory32(headerAddr, byteSize);
+
+    // Return pointer after header
+    const userAddr = headerAddr + 4;
+    console.log(`[ExecLibrary]   Allocated at 0x${userAddr.toString(16)} (header at 0x${headerAddr.toString(16)})`);
+
+    return userAddr;
+  }
+
+  /**
+   * FreeVec - Free memory allocated by AllocVec (V36+)
+   * A1 = memory block address (or NULL)
+   *
+   * Frees memory allocated by AllocVec. Size is retrieved from hidden header.
+   * Passing NULL is safe (does nothing).
+   */
+  freeVec(memoryBlock: number): void {
+    console.log(`[ExecLibrary] FreeVec(addr=0x${memoryBlock.toString(16)})`);
+
+    if (memoryBlock === 0) {
+      console.log(`[ExecLibrary]   NULL pointer - nothing to free`);
+      return;
+    }
+
+    // Read size from header (4 bytes before user pointer)
+    const headerAddr = memoryBlock - 4;
+    const size = this.emulator.readMemory32(headerAddr);
+
+    console.log(`[ExecLibrary]   Size from header: ${size} bytes`);
+
+    // Free including header
+    const totalSize = size + 4;
+    this.freeMem(headerAddr, totalSize);
+
+    console.log(`[ExecLibrary]   Freed ${totalSize} bytes at 0x${headerAddr.toString(16)}`);
+  }
 }
