@@ -347,9 +347,93 @@ Already installed! Command info file at `Commands/GLCVIEWER.info`.
 
 ---
 
+### 7. Global Wall (Global Graffiti Wall)
+
+**Status**: ✅ COMPLETE (Core Features)
+
+**Original Source**: `dev/docs/AmiExpressEDoorSources/Global Wall/gwall.e` (1,832 lines)
+**TypeScript Port**: `web/backend/src/doors/global-wall/index.ts` (700+ lines)
+**Command**: `GWALL`
+**Type**: TypeScript door (TS)
+
+**Description**:
+Global graffiti wall shared across all BBSes using scenewall.bbs.io. Users can read and post colored messages visible to all connected BBSes worldwide.
+
+**Implemented Features**:
+- Display global wall with pagination (F/B keys)
+- 4 different ANSI art display styles
+- Color-coded messages (7 colors: white, red, yellow, blue, pink, cyan, green)
+- Anonymous posting option
+- 14-color customization system
+- Settings persistence (style, BBS code, colors)
+- JSON API integration with scenewall.bbs.io
+- HTTP GET/POST/PUT/DELETE support
+- Full ANSI formatting with grid borders
+
+**Not Implemented** (Sysop features - too complex for session scope):
+- Sysop menu (edit/remove comments)
+- BBS key display
+- Advanced settings editor
+
+**Configuration**:
+
+1. Edit `doors/global-wall/GWALL.cfg`:
+```
+SERVERHOST=scenewall.bbs.io
+SERVERPORT=1541
+TIMEOUT=5
+```
+
+2. First run will prompt sysop to set 3-letter BBS code
+
+**Usage**:
+```
+/GWALL
+```
+
+**Display Navigation**:
+- `Y` - Post a comment
+- `N` - Exit without posting
+- `B` - Next page (back)
+- `F` - Previous page (forward)
+- `K` - Show BBS key (not implemented)
+- `S` - Sysop mode (not implemented)
+
+**Color Selection**:
+- W - White (7)
+- R - Red (1)
+- Y - Yellow (3)
+- D - Dark Blue (4)
+- P - Pink (5)
+- C - Cyan (6)
+- G - Green (2)
+
+**Display Styles**:
+1. Style 1: Classic grid with rounded corners
+2. Style 2: Plus-sign grid
+3. Style 3: Pipe grid with detailed headers
+4. Style 4: Box-drawing grid
+
+**Technical Details**:
+- Uses Node.js http module for API requests
+- JSON parsing with native JavaScript
+- Settings stored in `doors/global-wall/GWall.cfg`
+- String encoding/decoding for special chars (&#91; etc.)
+- Real-time pagination without reloading door
+
+**Installation**:
+Already installed! Command info file at `Commands/GWALL.info`.
+
+**Notes**:
+- Core posting/viewing features fully functional
+- Sysop admin features require dedicated session to complete
+- 1:1 port of main user-facing functionality
+
+---
+
 ## Planned Ports
 
-### 7. ConfTop-II (Conference Top Uploaders)
+### 8. ConfTop-II (Conference Top Uploaders)
 
 **Status**: 📋 PLANNED
 
@@ -357,7 +441,7 @@ Already installed! Command info file at `Commands/GLCVIEWER.info`.
 **Purpose**: Track and display top uploaders per conference
 **Complexity**: Medium - local data storage, conference integration
 
-### 4. Global Wall
+### 8. Global Wall
 
 **Status**: 📋 PLANNED
 
@@ -365,13 +449,45 @@ Already installed! Command info file at `Commands/GLCVIEWER.info`.
 **Purpose**: Global graffiti wall shared across BBSes
 **Complexity**: Complex - requires backend server communication
 
-### 5. MultiTop2
+### 9. MRC_client
 
 **Status**: 📋 PLANNED
 
+**Original Source**: `dev/docs/AmiExpressEDoorSources/MRC_client/mrc_client.e` (882 lines)
+**Purpose**: Multi-Relay Chat client
+**Complexity**: Medium - real-time chat protocol
+
+### 10. MRC_door
+
+**Status**: 📋 PLANNED
+
+**Original Source**: `dev/docs/AmiExpressEDoorSources/MRC_door/mrc_door.e` (1,999 lines)
+**Purpose**: Multi-Relay Chat server/door
+**Complexity**: Complex - chat server with relay protocol
+
+---
+
+## Batch Utilities (Skipped - Not Interactive Doors)
+
+These are command-line batch utilities, not interactive doors. They would require 1:1 CLI ports reading binary database files.
+
+### GLCUpdater (Batch Utility)
+
+**Original Source**: `dev/docs/AmiExpressEDoorSources/GLCUpdater/` (770 lines)
+**Purpose**: Parse CallersLog, post to scenewall.bbs.io
+**Type**: CLI batch utility
+
+### MultiTop2 (Batch Utility)
+
 **Original Source**: `dev/docs/AmiExpressEDoorSources/MultiTop2/mtop.e` (1,087 lines)
-**Purpose**: Multi-category top users statistics
-**Complexity**: Medium - local stats tracking
+**Purpose**: Generate user statistics reports from database files
+**Type**: CLI batch utility with template system
+
+### ConfTop-II (Batch Utility)
+
+**Original Source**: `dev/docs/AmiExpressEDoorSources/Conftop-II/ctop.e` (1,153 lines)
+**Purpose**: Track and display top uploaders per conference
+**Type**: CLI batch utility
 
 ---
 
@@ -451,13 +567,13 @@ All doors located in `dev/docs/AmiExpressEDoorSources/`:
 | BBSLink | 339 | Network | Medium | ✅ DONE |
 | DiscordAnnounce | 410 | Webhook | Simple | ✅ DONE |
 | BBSLinkWall | 547 | Network | Medium | ✅ DONE |
-| GLCUpdater | 770 | Network | Medium | Low |
-| MRC_client | 882 | Chat | Complex | Low |
+| GLCUpdater | 770 | Network | Batch Util | SKIP |
+| MRC_client | 882 | Chat Daemon | Complex | PLANNED |
 | GLCViewer | 943 | Network | Medium | ✅ DONE |
-| MultiTop2 | 1,087 | Stats | Medium | Medium |
-| ConfTop-II | 1,153 | Stats | Medium | High |
-| Global Wall | 1,832 | Network | Complex | Medium |
-| MRC_door | 1,999 | Chat | Complex | Low |
+| MultiTop2 | 1,087 | Stats | Batch Util | SKIP |
+| ConfTop-II | 1,153 | Stats | Batch Util | SKIP |
+| Global Wall | 1,832 | Network | Complex | ✅ DONE |
+| MRC_door | 1,999 | Chat Door | Complex | PLANNED |
 
 ---
 
