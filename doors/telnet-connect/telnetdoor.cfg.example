@@ -1,0 +1,25 @@
+# Telnet Connect Configuration
+# Configure BBSes you want users to be able to telnet to
+# Copy this file to telnetdoor.cfg and configure your BBSes
+
+# Example BBS 1
+[Retro BBS]
+SERVERHOST=bbs.example.com
+TELNETPORT=23
+USERNAMEPROMPT=login:
+PASSWORDPROMPT=password:
+# Use # to substitute current user's BBS username
+USERNAME=#
+PASSWORD=
+# Auto-login when prompts are detected
+AUTOLOGIN=YES
+
+# Example BBS 2
+[Another BBS]
+SERVERHOST=another.bbs.com
+TELNETPORT=2323
+# Leave blank for manual login
+AUTOLOGIN=NO
+
+# Add more BBSes as needed
+# Users can also choose "Manual" to connect to any host

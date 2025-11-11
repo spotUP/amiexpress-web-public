@@ -1,0 +1,17 @@
+# Discord Announce Configuration
+# Copy this file to dannounce.cfg and configure your webhook
+
+# Discord Webhook URL (required)
+# Get this from Discord: Server Settings -> Integrations -> Webhooks
+# Example: https://discord.com/api/webhooks/123456789/abcdef...
+WEBHOOKURL=
+
+# Enable/disable announcements (YES/NO)
+ENABLED=YES
+
+# Bot name shown in Discord
+BOTNAME=/X Announce Bot
+
+# Avatar URL for the bot (optional)
+# Leave empty to use default
+AVATARURL=

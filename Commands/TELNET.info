@@ -1,0 +1,9 @@
+COMMAND=TELNET
+NAME=Telnet to Other BBSes
+TYPE=TS
+PATH=web/backend/src/doors/telnet-connect
+ACCESS=0
+HOT=
+PRIVATE=N
+OVERLOAD=N
+HIDDEN=N
