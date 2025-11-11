@@ -155,9 +155,70 @@ Already installed! Command info file at `Commands/TFRONT.info`.
 
 ---
 
+### 4. BBSLink (BBSLink)
+
+**Status**: ✅ COMPLETE
+
+**Original Source**: `dev/docs/AmiExpressEDoorSources/BBSLink/bbslink.e` (339 lines)
+**TypeScript Port**: `web/backend/src/doors/bbslink/index.ts`
+**Command**: `BBSLINK`
+**Type**: TypeScript door (TS)
+
+**Description**:
+Client for BBSLink.net InterBBS games server. Allows users to play classic BBS door games hosted on BBSLink.net, including LORD, Trade Wars 2002, Operation Overkill, and many more.
+
+**Features**:
+- Connect to BBSLink.net InterBBS games server
+- MD5-based authentication with token system
+- Play 30+ classic door games
+- Game code shortcuts (e.g., `/BBSLINK LORD`)
+- Full bidirectional telnet terminal
+
+**Configuration**:
+
+1. Sign up for free account at http://www.bbslink.net/
+2. Get your syscode, authcode, and schemecode from BBSLink
+3. Create `doors/bbslink/bbslink.cfg`:
+
+```
+timeout=10
+syscode=YOUR_SYSCODE
+authcode=YOUR_AUTHCODE
+schemecode=YOUR_SCHEMECODE
+doorcode=MENU
+
+# Game shortcuts
+lord=LORD
+tw2002=TW
+ooii=OOII
+# ... see bbslink.cfg.example for full list
+```
+
+Or use environment variables:
+```bash
+export BBSLINK_SYSCODE="your_syscode"
+export BBSLINK_AUTHCODE="your_authcode"
+export BBSLINK_SCHEMECODE="your_schemecode"
+```
+
+**Usage**:
+```
+/BBSLINK          # Show game menu
+/BBSLINK LORD     # Launch Legend of the Red Dragon directly
+/BBSLINK TW2002   # Launch Trade Wars 2002
+```
+
+**Available Games**:
+LORD, LORD2, MZKL, TEOS, OOII, TW2002, GWAR, GGAM, USRP, BRE, FALC, FHON, ARCL, DMUD, PIMP, LUNA, NETR, ASSN, BBSC, VSYS, TPIT, BORD, JUNK, MMOT, DARK, HACK, MEGA, FISH, LMON, DMAS, BCR, LEGN, DKNS
+
+**Installation**:
+Already installed! Command info file at `Commands/BBSLINK.info`.
+
+---
+
 ## Planned Ports
 
-### 4. ConfTop-II (Conference Top Uploaders)
+### 5. ConfTop-II (Conference Top Uploaders)
 
 **Status**: 📋 PLANNED
 
@@ -256,7 +317,7 @@ All doors located in `dev/docs/AmiExpressEDoorSources/`:
 |------|-------|------|------------|----------|
 | telnetConnect | 133 | Telnet | Simple | ✅ DONE |
 | TelnetFront | 227 | Telnet | Simple | ✅ DONE |
-| BBSLink | 339 | Network | Medium | Medium |
+| BBSLink | 339 | Network | Medium | ✅ DONE |
 | DiscordAnnounce | 410 | Webhook | Simple | ✅ DONE |
 | BBSLinkWall | 547 | Network | Medium | Low |
 | GLCUpdater | 770 | Network | Medium | Low |
