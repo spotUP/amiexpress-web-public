@@ -222,6 +222,39 @@ export class HunkLoader {
     // Entry point is typically the start of the first code segment
     const entryPoint = segments.find(s => s.type === SegmentType.CODE)?.address || 0x1000;
 
+    // CRITICAL FIX: Apply relocations to segment data NOW (during parse)
+    // instead of waiting until load(). This ensures that when doors execute
+    // their startup code (like WHO's "LEA <data_segment>,A4"), they read
+    // correctly relocated values instead of zeros.
+    console.log('[HunkLoader] Applying relocations to segment data...');
+    for (const [segmentIndex, relocs] of relocations.entries()) {
+      const segment = segments[segmentIndex];
+      console.log(`[HunkLoader] Applying ${relocs.length} relocations to segment ${segmentIndex}`);
+
+      for (const reloc of relocs) {
+        const targetSegment = segments[reloc.targetSegment];
+        const offset = reloc.offset;
+
+        // Read current value at relocation offset (big-endian 32-bit)
+        const b0 = segment.data[offset];
+        const b1 = segment.data[offset + 1];
+        const b2 = segment.data[offset + 2];
+        const b3 = segment.data[offset + 3];
+        const currentValue = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+
+        // Add target segment's base address
+        const newValue = currentValue + targetSegment.address;
+
+        // Write back relocated value (big-endian 32-bit)
+        segment.data[offset] = (newValue >>> 24) & 0xFF;
+        segment.data[offset + 1] = (newValue >>> 16) & 0xFF;
+        segment.data[offset + 2] = (newValue >>> 8) & 0xFF;
+        segment.data[offset + 3] = newValue & 0xFF;
+
+        console.log(`[HunkLoader]   Reloc at 0x${offset.toString(16)}: 0x${currentValue.toString(16)} -> 0x${newValue.toString(16)} (target seg ${reloc.targetSegment} @ 0x${targetSegment.address.toString(16)})`);
+      }
+    }
+
     return {
       segments,
       relocations,
@@ -313,12 +346,17 @@ export class HunkLoader {
     }
 
     // Apply relocations
+    console.log(`[HunkLoader] Relocations map size: ${hunkFile.relocations.size}`);
+    console.log(`[HunkLoader] Relocations map keys: ${Array.from(hunkFile.relocations.keys()).join(', ')}`);
+
     for (const [segmentIndex, relocs] of hunkFile.relocations.entries()) {
       const segment = hunkFile.segments[segmentIndex];
 
       console.log(`[HunkLoader] Applying ${relocs.length} relocations to segment ${segmentIndex}`);
 
+      let relocNum = 0;
       for (const reloc of relocs) {
+        relocNum++;
         // Validate target segment exists
         if (reloc.targetSegment >= hunkFile.segments.length) {
           console.warn(`[HunkLoader] Skipping invalid relocation: target segment ${reloc.targetSegment} doesn't exist (only ${hunkFile.segments.length} segments)`);
@@ -328,8 +366,10 @@ export class HunkLoader {
         const targetSegment = hunkFile.segments[reloc.targetSegment];
         const relocAddress = segment.address + reloc.offset;
 
-        // CRITICAL: Check if this relocation affects 0x1248
-        const isCriticalRange = (relocAddress >= 0x1246 && relocAddress <= 0x124a) ||
+        // CRITICAL: Check if this relocation affects early initialization or 0x1248
+        const isEarlyReloc = segmentIndex === 0 && relocNum <= 10;
+        const isCriticalRange = isEarlyReloc ||
+                                 (relocAddress >= 0x1246 && relocAddress <= 0x124a) ||
                                  (relocAddress >= 0x2b38 && relocAddress <= 0x2b3e);
 
         if (isCriticalRange) {
