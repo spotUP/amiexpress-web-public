@@ -44,6 +44,8 @@ export class AmigaDoorSession {
   private rtwInitPCs?: number[]; // Track PCs between 0x11CE and 0x124C to find FindPort call
   private doorPortAddress: number = 0; // AEDoorPort message port address
   private rtwPortInjected: boolean = false; // Track if we've injected RTW reply port
+  private aePortAddress: number = 0; // AEDoorPort2 message port address
+  private trapVerified: boolean = false; // Track if we've verified trap instructions in memory
 
   // Virtual time tracking (8MHz 68000 = 0.125 microseconds per cycle)
   private totalCycles: number = 0;
@@ -1340,7 +1342,9 @@ export class AmigaDoorSession {
                 this.emulator.writeMemory(dataOffset + 0x04 + userName.length, 0); // Null terminator
 
                 // Send message using ExecLibrary.putMsg
-                this.execLibrary.putMsg(portAddr, msgAddr);
+                if (this.execLibrary) {
+                  this.execLibrary.putMsg(portAddr, msgAddr);
+                }
 
                 console.log(`[GetMsg-POLL] ✓ Sent initial message to port 0x${portAddr.toString(16)}`);
                 console.log(`[GetMsg-POLL]   Message addr: 0x${msgAddr.toString(16)}`);

@@ -1,0 +1,9 @@
+COMMAND=HELLOWORLD
+NAME=Hello World SDK Test
+TYPE=SDK
+PATH=sdk/examples/hello-world
+ACCESS=0
+HOT=
+PRIVATE=N
+OVERLOAD=N
+HIDDEN=N

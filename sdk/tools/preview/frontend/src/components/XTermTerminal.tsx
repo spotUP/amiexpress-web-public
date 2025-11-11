@@ -77,6 +77,12 @@ export const XTermTerminal = forwardRef<XTermTerminalRef, XTermTerminalProps>(({
   useEffect(() => {
     if (!terminalInstance.current) return;
 
+    // If output array has shrunk (e.g., tab switch), clear terminal and re-render all
+    if (output.length < lastOutputLength.current) {
+      terminalInstance.current.clear();
+      lastOutputLength.current = 0;
+    }
+
     const newLines = output.slice(lastOutputLength.current);
     if (newLines.length > 0) {
       // Use shared double buffering utility to prevent screen flickering

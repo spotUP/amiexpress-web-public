@@ -29,7 +29,7 @@
     "build": "tsc && npm run copy-assets",
     "copy-assets": "cp -r templates dist/ && cp package.json dist/ && cp -r examples/*/assets dist/examples/ 2>/dev/null || true",
     "dev": "tsc --watch",
-    "preview": "bash tools/preview/start-preview.sh",
+    "preview": "bash tools/preview/start-preview.sh --",
     "preview:quick": "node tools/preview/server.js",
     "create-door": "node dist/tools/cli/index.js create-door",
     "pack": "node dist/tools/cli/index.js pack",

@@ -6,6 +6,7 @@
  */
 
 import { displayScreen, doPause } from './screen.handler';
+import { displayMainMenu } from './command-handler/menu';
 
 import type { BBSSession } from '../index';
 
@@ -120,6 +121,10 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
 
   // Join default conference (joinConf equivalent - express.e:28574)
   await joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
+
+  // Express.e:28582-28603 - After conference join, display menu
+  // menuPause is already set to true by joinConference
+  await displayMainMenu(socket, session);
 }
 
 /**

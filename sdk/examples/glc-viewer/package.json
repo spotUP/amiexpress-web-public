@@ -1,0 +1,27 @@
+{
+  "name": "glc-viewer-door",
+  "version": "1.0.0",
+  "description": "GLC Viewer - View BBS login statistics (runDoor pattern)",
+  "main": "index.ts",
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "utility",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": false,
+  "scripts": {
+    "preview": "cd ../.. && npm run preview glc-viewer"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "glc",
+    "stats",
+    "viewer",
+    "runDoor",
+    "reference"
+  ],
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

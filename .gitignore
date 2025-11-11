@@ -16,6 +16,7 @@ backend/dist/
 .env.staging.local
 .env.production
 .env.staging
+.sdk-preview.env
 
 # Vercel
 .vercel/

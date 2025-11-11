@@ -54,7 +54,7 @@ quickStart('My First Door', async (door, user) => {
 - ✅ **Debug Overlay** - FPS, profiler, memory, logs
 - ✅ **Testing Suite** - Jest with comprehensive tests
 - ✅ **Templates** - TypeScript, ARexx, Python
-- ✅ **Preview Server** - Browser-based testing
+- ✅ **Preview System** - Test doors in real BBS environment
 
 ---
 
@@ -483,8 +483,9 @@ npm run pack my-game    # Creates .zip with FILE_ID.DIZ
 # Validate door
 npm run validate        # Check for issues
 
-# Preview in browser
-npm run preview         # http://localhost:8080
+# Preview in real BBS environment
+npm run preview examples/hello-world
+# Starts BBS, opens http://localhost:5173, run /HELLOWORLD
 ```
 
 ---

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Monitor, Type, Keyboard, Key, Eye, EyeOff, Check } from 'lucide-react';
+import { X, Monitor, Type, Keyboard, Key, Eye, EyeOff, Check, Zap } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsProps {
@@ -18,12 +18,29 @@ export const Settings: React.FC<SettingsProps> = ({
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [savedNotification, setSavedNotification] = useState(false);
+  const [quickConnect, setQuickConnect] = useState(false);
+  const [bbsUsername, setBbsUsername] = useState('');
+  const [bbsPassword, setBbsPassword] = useState('');
+  const [showBbsPassword, setShowBbsPassword] = useState(false);
 
   useEffect(() => {
     // Load saved API keys
     const saved = localStorage.getItem('ai_api_keys');
     if (saved) {
       setApiKeys(JSON.parse(saved));
+    }
+
+    // Load Quick Connect setting and credentials
+    const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
+    setQuickConnect(autoLoginEnabled);
+
+    const savedUsername = localStorage.getItem('bbs_saved_username');
+    const savedPassword = localStorage.getItem('bbs_saved_password');
+    if (savedUsername) {
+      setBbsUsername(atob(savedUsername));
+    }
+    if (savedPassword) {
+      setBbsPassword(atob(savedPassword));
     }
   }, []);
 
@@ -48,6 +65,33 @@ export const Settings: React.FC<SettingsProps> = ({
     setTimeout(() => setSavedNotification(false), 2000);
   };
 
+  const toggleQuickConnect = () => {
+    const newValue = !quickConnect;
+    setQuickConnect(newValue);
+    localStorage.setItem('bbs_auto_login_enabled', String(newValue));
+
+    // If enabling, save current credentials
+    if (newValue && bbsUsername && bbsPassword) {
+      localStorage.setItem('bbs_saved_username', btoa(bbsUsername));
+      localStorage.setItem('bbs_saved_password', btoa(bbsPassword));
+    }
+
+    // If disabling, clear saved credentials
+    if (!newValue) {
+      localStorage.removeItem('bbs_saved_username');
+      localStorage.removeItem('bbs_saved_password');
+    }
+  };
+
+  const handleSaveCredentials = () => {
+    if (bbsUsername && bbsPassword) {
+      localStorage.setItem('bbs_saved_username', btoa(bbsUsername));
+      localStorage.setItem('bbs_saved_password', btoa(bbsPassword));
+      setSavedNotification(true);
+      setTimeout(() => setSavedNotification(false), 2000);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div
@@ -66,6 +110,107 @@ export const Settings: React.FC<SettingsProps> = ({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)] space-y-6">
+          {/* BBS Connection */}
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Zap className="w-5 h-5 text-blue-400" />
+              <h3 className="text-lg font-semibold text-white">BBS Connection</h3>
+            </div>
+
+            <div className="space-y-4 ml-7">
+              {/* Credentials Section */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    BBS Username
+                  </label>
+                  <input
+                    type="text"
+                    value={bbsUsername}
+                    onChange={(e) => setBbsUsername(e.target.value)}
+                    placeholder="Enter your BBS username"
+                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    BBS Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showBbsPassword ? 'text' : 'password'}
+                      value={bbsPassword}
+                      onChange={(e) => setBbsPassword(e.target.value)}
+                      placeholder="Enter your BBS password"
+                      className="w-full px-4 py-2 pr-10 bg-gray-800 border border-gray-700 rounded text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowBbsPassword(!showBbsPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white"
+                    >
+                      {showBbsPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSaveCredentials}
+                  disabled={!bbsUsername || !bbsPassword}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded transition-colors text-sm"
+                >
+                  {savedNotification ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Saved!
+                    </>
+                  ) : (
+                    'Save Credentials'
+                  )}
+                </button>
+              </div>
+
+              {/* Quick Connect Toggle */}
+              <div className="pt-3 border-t border-gray-700">
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
+                      Quick Connect (Auto-Login)
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Automatically log into the BBS tab with saved credentials
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleQuickConnect}
+                    disabled={!bbsUsername || !bbsPassword}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      quickConnect ? 'bg-blue-600' : 'bg-gray-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        quickConnect ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </label>
+              </div>
+
+              {quickConnect && (
+                <div className="bg-yellow-900/20 border border-yellow-600/30 rounded p-3 text-xs text-yellow-400">
+                  <strong>⚠ Security Note:</strong> Your credentials are stored locally in your browser. Only enable this on trusted devices.
+                </div>
+              )}
+            </div>
+          </section>
+
           {/* Appearance */}
           <section>
             <div className="flex items-center gap-2 mb-4">

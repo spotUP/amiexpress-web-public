@@ -1,0 +1,27 @@
+{
+  "name": "bbslink-wall-door",
+  "version": "1.0.0",
+  "description": "BBSLink Wall - One-liner wall (runDoor pattern)",
+  "main": "index.ts",
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "utility",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": false,
+  "scripts": {
+    "preview": "cd ../.. && npm run preview bbslink-wall"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "bbslink",
+    "wall",
+    "oneliner",
+    "runDoor",
+    "reference"
+  ],
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

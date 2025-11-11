@@ -26,6 +26,7 @@ const path = require('path');
 const fs = require('fs');
 const chokidar = require('chokidar');
 const archiver = require('archiver');
+const AdmZip = require('adm-zip');
 const { spawn, execSync, exec } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
@@ -295,6 +296,7 @@ app.get('/api/doors/:doorId/metadata', (req, res) => {
       files,
       totalSize,
       dependencies: pkg.dependencies || {},
+      bbsCommand: pkg.bbsCommand || '',
     });
   } catch (error) {
     console.error('Error getting door metadata:', error);
@@ -855,6 +857,360 @@ app.get('/downloads/:filename', (req, res) => {
     });
   } catch (error) {
     console.error('Error serving download:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =============================================================================
+// INSTALL/UNINSTALL DOOR TO BBS
+// =============================================================================
+
+/**
+ * Get door install status - check if door is installed in main BBS
+ */
+app.get('/api/doors/:doorId/install-status', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const sdkDoorPath = path.join(__dirname, '../../examples', doorId);
+
+    // BBS doors directory (web/backend/src/doors)
+    const bbsDoorsPath = path.join(__dirname, '../../../web/backend/src/doors', doorId);
+
+    if (!fs.existsSync(sdkDoorPath)) {
+      return res.status(404).json({ error: 'Door not found in SDK' });
+    }
+
+    const installed = fs.existsSync(bbsDoorsPath);
+
+    res.json({ installed, doorId, bbsPath: bbsDoorsPath });
+  } catch (error) {
+    console.error('Error checking install status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Install door to main BBS
+ */
+app.post('/api/doors/:doorId/install', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const sdkDoorPath = path.join(__dirname, '../../examples', doorId);
+    const bbsDoorsPath = path.join(__dirname, '../../../web/backend/src/doors', doorId);
+
+    if (!fs.existsSync(sdkDoorPath)) {
+      return res.status(404).json({ error: 'Door not found in SDK' });
+    }
+
+    if (fs.existsSync(bbsDoorsPath)) {
+      return res.status(409).json({ error: 'Door already installed in BBS' });
+    }
+
+    console.log(`📥 Installing door to BBS: ${doorId}`);
+
+    // Copy door directory recursively
+    const copyRecursive = (src, dest) => {
+      fs.mkdirSync(dest, { recursive: true });
+      const entries = fs.readdirSync(src, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+
+        // Skip node_modules, dist, and hidden files
+        if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.')) {
+          continue;
+        }
+
+        if (entry.isDirectory()) {
+          copyRecursive(srcPath, destPath);
+        } else {
+          fs.copyFileSync(srcPath, destPath);
+        }
+      }
+    };
+
+    copyRecursive(sdkDoorPath, bbsDoorsPath);
+
+    console.log(`✅ Door installed to BBS: ${doorId}`);
+
+    res.json({
+      success: true,
+      message: `Door "${doorId}" installed to BBS successfully`,
+      path: bbsDoorsPath
+    });
+  } catch (error) {
+    console.error('Error installing door:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Uninstall door from main BBS
+ */
+app.delete('/api/doors/:doorId/install', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const bbsDoorsPath = path.join(__dirname, '../../../web/backend/src/doors', doorId);
+
+    if (!fs.existsSync(bbsDoorsPath)) {
+      return res.status(404).json({ error: 'Door not installed in BBS' });
+    }
+
+    console.log(`📤 Uninstalling door from BBS: ${doorId}`);
+
+    // Remove directory recursively
+    const removeRecursive = (dir) => {
+      if (fs.existsSync(dir)) {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            removeRecursive(fullPath);
+          } else {
+            fs.unlinkSync(fullPath);
+          }
+        }
+        fs.rmdirSync(dir);
+      }
+    };
+
+    removeRecursive(bbsDoorsPath);
+
+    console.log(`✅ Door uninstalled from BBS: ${doorId}`);
+
+    res.json({
+      success: true,
+      message: `Door "${doorId}" uninstalled from BBS successfully`
+    });
+  } catch (error) {
+    console.error('Error uninstalling door:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =============================================================================
+// README/NFO FILE EDITOR
+// =============================================================================
+
+/**
+ * Get .nfo file content for door
+ */
+app.get('/api/doors/:doorId/nfo', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (!fs.existsSync(doorPath)) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+
+    // Look for .nfo files
+    const nfoFiles = fs.readdirSync(doorPath).filter(f => f.toLowerCase().endsWith('.nfo'));
+
+    if (nfoFiles.length === 0) {
+      // Return empty template if no .nfo file exists
+      return res.json({
+        exists: false,
+        filename: `${doorId}.nfo`,
+        content: `╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                            ${doorId.toUpperCase()}                                ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+[Description of your door here]
+
+Features:
+  * Feature 1
+  * Feature 2
+  * Feature 3
+
+Installation:
+  1. Install door files to your BBS
+  2. Configure command in BBS menu
+  3. Set appropriate user access levels
+
+Author: [Your Name]
+Version: 1.0.0
+Released: ${new Date().toISOString().split('T')[0]}
+
+═══════════════════════════════════════════════════════════════════════════════
+`
+      });
+    }
+
+    const nfoPath = path.join(doorPath, nfoFiles[0]);
+    const content = fs.readFileSync(nfoPath, 'utf8');
+
+    res.json({
+      exists: true,
+      filename: nfoFiles[0],
+      content
+    });
+  } catch (error) {
+    console.error('Error reading .nfo file:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Save .nfo file content for door
+ */
+app.post('/api/doors/:doorId/nfo', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const { content, filename } = req.body;
+
+    if (content === undefined) {
+      return res.status(400).json({ error: 'Content is required' });
+    }
+
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (!fs.existsSync(doorPath)) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+
+    const nfoFilename = filename || `${doorId}.nfo`;
+    const nfoPath = path.join(doorPath, nfoFilename);
+
+    fs.writeFileSync(nfoPath, content, 'utf8');
+    console.log(`✓ Saved .nfo file: ${nfoFilename}`);
+
+    res.json({ success: true, filename: nfoFilename });
+  } catch (error) {
+    console.error('Error saving .nfo file:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// =============================================================================
+// FILE_ID.DIZ TEMPLATE EDITOR
+// =============================================================================
+
+/**
+ * Get FILE_ID.DIZ content for door
+ */
+app.get('/api/doors/:doorId/file_id_diz', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (!fs.existsSync(doorPath)) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+
+    const dizPath = path.join(doorPath, 'FILE_ID.DIZ');
+
+    if (!fs.existsSync(dizPath)) {
+      // Generate default FILE_ID.DIZ template
+      const pkgPath = path.join(doorPath, 'package.json');
+      let pkg = {};
+      if (fs.existsSync(pkgPath)) {
+        pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      }
+
+      const centerText = (text, width = 45) => {
+        const padding = Math.max(0, Math.floor((width - text.length) / 2));
+        return ' '.repeat(padding) + text;
+      };
+
+      const name = pkg.name || doorId;
+      const version = pkg.version || '1.0.0';
+      const title = `${name} v${version}`;
+
+      const template = `${centerText(title)}
+${centerText('─'.repeat(Math.min(title.length, 45)))}
+
+${pkg.description || 'BBS Door Game'}
+
+By: ${pkg.author || 'Unknown'}
+Category: ${pkg.category || 'BBS Door'}
+Released: ${new Date().toISOString().split('T')[0]}
+
+Made with AmiExpress SDK`;
+
+      return res.json({
+        exists: false,
+        content: template
+      });
+    }
+
+    const content = fs.readFileSync(dizPath, 'utf8');
+
+    res.json({
+      exists: true,
+      content
+    });
+  } catch (error) {
+    console.error('Error reading FILE_ID.DIZ:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Save FILE_ID.DIZ content for door
+ */
+app.post('/api/doors/:doorId/file_id_diz', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const { content } = req.body;
+
+    if (content === undefined) {
+      return res.status(400).json({ error: 'Content is required' });
+    }
+
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (!fs.existsSync(doorPath)) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+
+    // FILE_ID.DIZ should be max 10 lines, 45 chars each (BBS standard)
+    const lines = content.split('\n').slice(0, 10);
+    const formattedContent = lines.map(l => l.substring(0, 45)).join('\r\n');
+
+    const dizPath = path.join(doorPath, 'FILE_ID.DIZ');
+    fs.writeFileSync(dizPath, formattedContent, 'utf8');
+    console.log(`✓ Saved FILE_ID.DIZ`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving FILE_ID.DIZ:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Upload FILE_ID.DIZ template file
+ */
+app.post('/api/doors/:doorId/file_id_diz/upload', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const { content } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: 'Content is required' });
+    }
+
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (!fs.existsSync(doorPath)) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+
+    // FILE_ID.DIZ should be max 10 lines, 45 chars each (BBS standard)
+    const lines = content.split('\n').slice(0, 10);
+    const formattedContent = lines.map(l => l.substring(0, 45)).join('\r\n');
+
+    const dizPath = path.join(doorPath, 'FILE_ID.DIZ');
+    fs.writeFileSync(dizPath, formattedContent, 'utf8');
+    console.log(`✓ Uploaded FILE_ID.DIZ template`);
+
+    res.json({ success: true, message: 'FILE_ID.DIZ template uploaded successfully' });
+  } catch (error) {
+    console.error('Error uploading FILE_ID.DIZ:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1694,6 +2050,208 @@ ${(features || []).map(f => `- ${f}`).join('\n')}
   }
 });
 
+// =============================================================================
+// DOOR IMPORT - Import door sources from ZIP/LHA/LZX/Directory
+// =============================================================================
+
+/**
+ * Import door sources from archive or directory
+ * Supports: ZIP, LHA, LZX formats
+ */
+app.post('/api/doors/import', async (req, res) => {
+  try {
+    const { fileData, fileName, fileType } = req.body;
+
+    if (!fileData || !fileName) {
+      return res.status(400).json({ error: 'Missing file data or file name' });
+    }
+
+    console.log(`📦 Importing door from: ${fileName} (${fileType})`);
+
+    // Create temp directory for extraction
+    const tempDir = path.join(__dirname, 'temp-import');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    // Decode base64 file data
+    const fileBuffer = Buffer.from(fileData.split(',')[1] || fileData, 'base64');
+    const tempFilePath = path.join(tempDir, fileName);
+    fs.writeFileSync(tempFilePath, fileBuffer);
+
+    let extractedDir = null;
+
+    // Extract based on file type
+    if (fileType === 'application/zip' || fileName.endsWith('.zip')) {
+      console.log('📦 Extracting ZIP archive...');
+      const zip = new AdmZip(tempFilePath);
+      const extractPath = path.join(tempDir, 'extracted');
+      zip.extractAllTo(extractPath, true);
+      extractedDir = extractPath;
+    } else if (fileType === 'application/x-lzh-compressed' || fileName.endsWith('.lha') || fileName.endsWith('.lzh')) {
+      console.log('📦 Extracting LHA archive...');
+      // Try to use unlha command if available
+      try {
+        const extractPath = path.join(tempDir, 'extracted');
+        fs.mkdirSync(extractPath, { recursive: true });
+        execSync(`unlha x "${tempFilePath}" "${extractPath}"`, { stdio: 'pipe' });
+        extractedDir = extractPath;
+      } catch (err) {
+        // Clean up temp files
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        return res.status(400).json({
+          error: 'LHA extraction failed. Please install "unlha" command or use ZIP format instead.',
+          details: err.message
+        });
+      }
+    } else if (fileType === 'application/x-lzx' || fileName.endsWith('.lzx')) {
+      console.log('📦 Extracting LZX archive...');
+      // Try to use unlzx command if available
+      try {
+        const extractPath = path.join(tempDir, 'extracted');
+        fs.mkdirSync(extractPath, { recursive: true });
+        execSync(`unlzx -x "${tempFilePath}" "${extractPath}"`, { stdio: 'pipe' });
+        extractedDir = extractPath;
+      } catch (err) {
+        // Clean up temp files
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        return res.status(400).json({
+          error: 'LZX extraction failed. Please install "unlzx" command or use ZIP format instead.',
+          details: err.message
+        });
+      }
+    } else {
+      // Clean up temp files
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      return res.status(400).json({
+        error: 'Unsupported file type. Please use ZIP, LHA, or LZX format.'
+      });
+    }
+
+    // Find the door directory (should contain package.json)
+    let doorSourceDir = null;
+    const findDoorDirectory = (dir) => {
+      const entries = fs.readdirSync(dir);
+
+      // Check if current directory has package.json
+      if (entries.includes('package.json')) {
+        return dir;
+      }
+
+      // If only one subdirectory, check it (common case: archive contains single folder)
+      const subdirs = entries.filter(name => {
+        const fullPath = path.join(dir, name);
+        return fs.statSync(fullPath).isDirectory() && !name.startsWith('.');
+      });
+
+      if (subdirs.length === 1) {
+        return findDoorDirectory(path.join(dir, subdirs[0]));
+      }
+
+      // Multiple subdirectories - look for one with package.json
+      for (const subdir of subdirs) {
+        const fullPath = path.join(dir, subdir);
+        const subEntries = fs.readdirSync(fullPath);
+        if (subEntries.includes('package.json')) {
+          return fullPath;
+        }
+      }
+
+      return null;
+    };
+
+    doorSourceDir = findDoorDirectory(extractedDir);
+
+    if (!doorSourceDir) {
+      // Clean up temp files
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      return res.status(400).json({
+        error: 'Invalid door structure. Archive must contain a directory with package.json file.'
+      });
+    }
+
+    // Validate door structure
+    const requiredFiles = ['package.json'];
+    const missingFiles = requiredFiles.filter(file => !fs.existsSync(path.join(doorSourceDir, file)));
+
+    if (missingFiles.length > 0) {
+      // Clean up temp files
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      return res.status(400).json({
+        error: `Invalid door structure. Missing required files: ${missingFiles.join(', ')}`
+      });
+    }
+
+    // Read package.json to get door name
+    const pkgPath = path.join(doorSourceDir, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    let doorId = pkg.name || path.basename(doorSourceDir);
+
+    // Sanitize door ID (remove @ prefix, convert slashes to hyphens)
+    doorId = doorId.replace(/^@[^/]+\//, '').replace(/\//g, '-').toLowerCase();
+
+    // Check if door already exists
+    const examplesDir = path.join(__dirname, '../../examples');
+    const targetDir = path.join(examplesDir, doorId);
+
+    if (fs.existsSync(targetDir)) {
+      // Clean up temp files
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      return res.status(409).json({
+        error: `Door "${doorId}" already exists in SDK. Please remove it first or rename your door.`,
+        doorId
+      });
+    }
+
+    // Copy door to examples directory
+    console.log(`📦 Installing door to: ${targetDir}`);
+
+    const copyRecursive = (src, dest) => {
+      const stat = fs.statSync(src);
+      if (stat.isDirectory()) {
+        if (!fs.existsSync(dest)) {
+          fs.mkdirSync(dest, { recursive: true });
+        }
+        fs.readdirSync(src).forEach(item => {
+          copyRecursive(path.join(src, item), path.join(dest, item));
+        });
+      } else {
+        fs.copyFileSync(src, dest);
+      }
+    };
+
+    copyRecursive(doorSourceDir, targetDir);
+
+    // Clean up temp files
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    console.log(`✅ Door "${doorId}" imported successfully!`);
+
+    res.json({
+      success: true,
+      doorId,
+      name: pkg.name || doorId,
+      version: pkg.version || '1.0.0',
+      message: `Door "${doorId}" imported successfully!`
+    });
+
+  } catch (error) {
+    console.error('Error importing door:', error);
+
+    // Clean up temp files on error
+    const tempDir = path.join(__dirname, 'temp-import');
+    if (fs.existsSync(tempDir)) {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        console.error('Error cleaning up temp files:', cleanupErr);
+      }
+    }
+
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // API: Health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -2131,7 +2689,9 @@ function buildDoor(clientId, doorId) {
     );
 
     const startTime = Date.now();
-    const tsc = spawn('npx', ['tsc', '--noEmit'], {
+
+    // Actually build the door with npm run build
+    const build = spawn('npm', ['run', 'build'], {
       cwd: doorPath,
       shell: true,
     });
@@ -2139,21 +2699,20 @@ function buildDoor(clientId, doorId) {
     let stdout = '';
     let stderr = '';
 
-    tsc.stdout.on('data', (data) => {
+    build.stdout.on('data', (data) => {
       stdout += data.toString();
     });
 
-    tsc.stderr.on('data', (data) => {
+    build.stderr.on('data', (data) => {
       stderr += data.toString();
     });
 
-    tsc.on('close', (code) => {
-      const duration = Date.now() - startTime;
+    build.on('close', (code) => {
       const output = stdout + stderr;
       const errors = [];
       const warnings = [];
 
-      // Parse TypeScript errors
+      // Parse TypeScript errors from build output
       // Format: filename(line,col): error TS####: message
       const errorRegex = /(.+?)\((\d+),(\d+)\):\s+error\s+TS\d+:\s+(.+)/g;
       let match;
@@ -2167,38 +2726,25 @@ function buildDoor(clientId, doorId) {
         });
       }
 
-      const success = code === 0;
-
-      if (success) {
-        console.log(`✓ Build successful: ${doorId} (${duration}ms)`);
-      } else {
+      // If TypeScript compilation failed, report immediately
+      if (code !== 0) {
+        const duration = Date.now() - startTime;
         console.log(`✗ Build failed: ${doorId} (${errors.length} errors, ${duration}ms)`);
-      }
 
-      // Send final build status
-      client.ws.send(
-        JSON.stringify({
-          type: 'buildStatus',
-          data: {
-            building: false,
-            success,
-            errors,
-            warnings,
-            lastBuild: Date.now(),
-            duration,
-          },
-        })
-      );
-
-      // Send output to terminal
-      if (success) {
         client.ws.send(
           JSON.stringify({
-            type: 'output',
-            data: `\x1b[32m✓ Build successful\x1b[0m (${duration}ms)\n`,
+            type: 'buildStatus',
+            data: {
+              building: false,
+              success: false,
+              errors,
+              warnings,
+              lastBuild: Date.now(),
+              duration,
+            },
           })
         );
-      } else {
+
         client.ws.send(
           JSON.stringify({
             type: 'output',
@@ -2213,8 +2759,116 @@ function buildDoor(clientId, doorId) {
             })
           );
         });
+        return;
       }
-    });
+
+      // TypeScript compiled - now verify door can actually run
+      console.log(`✓ TypeScript compiled: ${doorId}, verifying runtime...`);
+
+      const verify = spawn('ts-node', ['--compilerOptions', '{"module":"commonjs"}', 'index.ts'], {
+        cwd: doorPath,
+        shell: true,
+        timeout: 3000, // 3 second timeout for verification
+      });
+
+      let verifyStderr = '';
+
+      verify.stderr.on('data', (data) => {
+        verifyStderr += data.toString();
+      });
+
+      verify.on('close', (verifyCode) => {
+        const duration = Date.now() - startTime;
+
+        // Parse runtime errors from ts-node output
+        const runtimeErrorRegex = /(.+?)\((\d+),(\d+)\):\s+error\s+TS\d+:\s+(.+)/g;
+        while ((match = runtimeErrorRegex.exec(verifyStderr)) !== null) {
+          errors.push({
+            file: path.basename(match[1]),
+            line: parseInt(match[2]),
+            column: parseInt(match[3]),
+            message: match[4],
+          });
+        }
+
+        // Only check for TSError compilation failures (not runtime warnings)
+        // Lines like "TSError: ⨯ Unable to compile TypeScript:" indicate actual errors
+        if (verifyStderr.includes('TSError:') || verifyStderr.includes('Unable to compile TypeScript')) {
+          // Extract TypeScript compilation errors
+          const tsErrorLines = verifyStderr.split('\n').filter(line =>
+            line.includes('error TS') && !line.includes('Error:')
+          );
+
+          tsErrorLines.forEach(line => {
+            if (errors.length === 0) {
+              errors.push({
+                file: 'index.ts',
+                line: 0,
+                column: 0,
+                message: line.trim(),
+              });
+            }
+          });
+        }
+
+        const success = errors.length === 0;
+
+        if (success) {
+          console.log(`✓ Build successful: ${doorId} (${duration}ms)`);
+
+          // Auto-launch door in BBS terminal after successful build
+          console.log(`🚀 Auto-launching door in BBS: ${doorId}`);
+          client.ws.send(
+            JSON.stringify({
+              type: 'auto-launch',
+              data: { doorId },
+            })
+          );
+        } else {
+          console.log(`✗ Build failed: ${doorId} (${errors.length} runtime errors, ${duration}ms)`);
+        }
+
+        // Send final build status
+        client.ws.send(
+          JSON.stringify({
+            type: 'buildStatus',
+            data: {
+              building: false,
+              success,
+              errors,
+              warnings,
+              lastBuild: Date.now(),
+              duration,
+            },
+          })
+        );
+
+        // Send output to terminal
+        if (success) {
+          client.ws.send(
+            JSON.stringify({
+              type: 'output',
+              data: `\x1b[32m✓ Build successful\x1b[0m (${duration}ms)\n`,
+            })
+          );
+        } else {
+          client.ws.send(
+            JSON.stringify({
+              type: 'output',
+              data: `\x1b[31m✗ Build failed\x1b[0m (${errors.length} errors, ${duration}ms)\n`,
+            })
+          );
+          errors.forEach((err) => {
+            client.ws.send(
+              JSON.stringify({
+                type: 'output',
+                data: `  ${err.file}:${err.line}:${err.column} - ${err.message}\n`,
+              })
+            );
+          });
+        }
+      }); // End verify.on('close')
+    }); // End build.on('close')
   } catch (error) {
     console.error('Error building door:', error);
     client.ws.send(
@@ -2555,17 +3209,30 @@ function startDoor(clientId, doorId) {
   debugLog(clientId, `🔧 [START DOOR] CWD: ${doorPath}`);
   debugLog(clientId, `🔧 [START DOOR] Environment: PREVIEW_MODE=1`);
 
-  const doorProcess = spawn(command, args, {
-    cwd: doorPath,
-    env: { ...process.env, PREVIEW_MODE: '1' },
-    stdio: ['pipe', 'pipe', 'pipe'], // Explicitly pipe stdin, stdout, stderr
-  });
+  let doorProcess;
 
-  debugLog(clientId, `✓ [START DOOR] Process spawned with PID: ${doorProcess.pid}`);
+  try {
+    doorProcess = spawn(command, args, {
+      cwd: doorPath,
+      env: { ...process.env, PREVIEW_MODE: '1' },
+      stdio: ['pipe', 'pipe', 'pipe'], // Explicitly pipe stdin, stdout, stderr
+    });
 
-  client.doorProcess = doorProcess;
-  client.currentDoor = doorId;
-  debugLog(clientId, `✓ [START DOOR] Client state updated (currentDoor="${doorId}")`);
+    debugLog(clientId, `✓ [START DOOR] Process spawned with PID: ${doorProcess.pid}`);
+
+    client.doorProcess = doorProcess;
+    client.currentDoor = doorId;
+    debugLog(clientId, `✓ [START DOOR] Client state updated (currentDoor="${doorId}")`);
+  } catch (error) {
+    debugLog(clientId, `❌ [START DOOR] Failed to spawn process: ${error.message}`, 'error');
+    client.ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: `Failed to start door: ${error.message}`,
+      })
+    );
+    return;
+  }
 
   // Capture stdout (ANSI output)
   doorProcess.stdout.on('data', (data) => {
@@ -2585,6 +3252,17 @@ function startDoor(clientId, doorId) {
   // Capture stderr (errors)
   doorProcess.stderr.on('data', (data) => {
     const errorOutput = data.toString();
+
+    // Filter out benign informational messages
+    const isBenign = errorOutput.includes('AudioEngine: Running in Node.js environment') ||
+                     errorOutput.includes('Audio features disabled');
+
+    if (isBenign) {
+      // Log but don't send to client
+      debugLog(clientId, `ℹ️  [INFO] ${errorOutput.trim()}`);
+      return;
+    }
+
     debugLog(clientId, `📤 [STDERR] ${errorOutput.length} bytes`, 'error');
     debugLog(clientId, `   Error: ${errorOutput}`, 'error');
 
@@ -2595,6 +3273,29 @@ function startDoor(clientId, doorId) {
       })
     );
     debugLog(clientId, `✓ [STDERR] Sent to client via WebSocket`);
+  });
+
+  // Handle process errors (like EAGAIN)
+  doorProcess.on('error', (error) => {
+    debugLog(clientId, `\n${'='.repeat(80)}`);
+    debugLog(clientId, `❌ [PROCESS ERROR] Door process error`);
+    debugLog(clientId, `   Door: ${doorId}`);
+    debugLog(clientId, `   Error: ${error.message}`);
+    debugLog(clientId, `   Stack: ${error.stack}`);
+    debugLog(clientId, `${'='.repeat(80)}\n`);
+
+    // Send error to client (only once)
+    if (client.doorProcess) {
+      client.ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: `Door process error: ${error.message}`,
+        })
+      );
+
+      client.doorProcess = null;
+      client.currentDoor = null;
+    }
   });
 
   // Handle process exit
@@ -2616,23 +3317,6 @@ function startDoor(clientId, doorId) {
     debugLog(clientId, `✓ [EXIT] Sent door-stopped message to client`);
 
     client.doorProcess = null;
-  });
-
-  // Handle process errors
-  doorProcess.on('error', (error) => {
-    debugLog(clientId, `\n${'='.repeat(80)}`, 'error');
-    debugLog(clientId, `❌ [PROCESS ERROR] Door process error`, 'error');
-    debugLog(clientId, `   Door: ${doorId}`, 'error');
-    debugLog(clientId, `   Error: ${error.message}`, 'error');
-    debugLog(clientId, `   Stack: ${error.stack}`, 'error');
-    debugLog(clientId, `${'='.repeat(80)}\n`, 'error');
-
-    client.ws.send(
-      JSON.stringify({
-        type: 'error',
-        message: `Process error: ${error.message}`,
-      })
-    );
   });
 
   // Watch for file changes (hot reload)

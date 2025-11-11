@@ -1,5 +1,5 @@
 import React from 'react';
-import { Info, Package, User, Calendar, File, HardDrive } from 'lucide-react';
+import { Info, Package, User, Calendar, File, HardDrive, Terminal } from 'lucide-react';
 import { DoorMetadata } from '../types';
 import { formatBytes, formatRelativeTime } from '../utils/format';
 
@@ -118,6 +118,19 @@ export const DoorInfo: React.FC<DoorInfoProps> = ({ metadata, className = '' }) 
             {metadata.entryPoint}
           </code>
         </div>
+
+        {/* BBS Command */}
+        {metadata.bbsCommand && (
+          <div className="pt-4 border-t border-gray-700">
+            <h4 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-gray-400" />
+              BBS Command
+            </h4>
+            <code className="block text-xs text-green-400 bg-gray-800 px-2 py-1 rounded font-mono">
+              /{metadata.bbsCommand}
+            </code>
+          </div>
+        )}
 
         {/* Build status */}
         <div className="pt-4 border-t border-gray-700">

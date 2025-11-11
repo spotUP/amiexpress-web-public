@@ -1,0 +1,27 @@
+{
+  "name": "global-wall-door",
+  "version": "1.0.0",
+  "description": "Global Wall - One-liner wall for all BBS users (runDoor pattern)",
+  "main": "index.ts",
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "utility",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": false,
+  "scripts": {
+    "preview": "cd ../.. && npm run preview global-wall"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "wall",
+    "oneliner",
+    "global",
+    "runDoor",
+    "reference"
+  ],
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

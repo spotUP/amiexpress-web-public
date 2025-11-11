@@ -1,0 +1,27 @@
+{
+  "name": "bbslink-door",
+  "version": "1.0.0",
+  "description": "BBSLink InterBBS games client (runDoor pattern)",
+  "main": "index.ts",
+  "author": "REbEL/QTX (Ported by AmiExpress Team)",
+  "license": "MIT",
+  "category": "game",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": false,
+  "scripts": {
+    "preview": "cd ../.. && npm run preview bbslink"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "bbslink",
+    "interbbs",
+    "games",
+    "runDoor",
+    "reference"
+  ],
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

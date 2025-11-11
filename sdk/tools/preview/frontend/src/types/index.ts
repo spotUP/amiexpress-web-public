@@ -12,6 +12,7 @@ export interface DoorMetadata {
   totalSize: number;
   dependencies: Record<string, string>;
   hasBuild: boolean;
+  bbsCommand?: string;
 }
 
 export interface DoorFile {
@@ -77,7 +78,7 @@ export interface AppSettings {
 }
 
 export interface WebSocketMessage {
-  type: 'output' | 'input' | 'error' | 'status' | 'build' | 'doorList' | 'doorMetadata' | 'fileContent' | 'buildStatus' | 'client-door-bundle' | 'debug';
+  type: 'output' | 'input' | 'error' | 'status' | 'build' | 'doorList' | 'doorMetadata' | 'fileContent' | 'buildStatus' | 'client-door-bundle' | 'debug' | 'auto-launch';
   data: any;
   timestamp?: number;
   // For client-door-bundle messages

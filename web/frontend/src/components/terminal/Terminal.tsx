@@ -151,6 +151,20 @@ function Terminal() {
       if (data && data.token) {
         localStorage.setItem('bbs_auth_token', data.token);
       }
+
+      // Save credentials if auto-login is enabled
+      const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
+      if (autoLoginEnabled && newUserPromptUsername.current) {
+        // Encode credentials with base64 (basic obfuscation)
+        const encodedUsername = btoa(newUserPromptUsername.current);
+        const encodedPassword = btoa(password.current || '');
+
+        localStorage.setItem('bbs_saved_username', encodedUsername);
+        localStorage.setItem('bbs_saved_password', encodedPassword);
+
+        console.log('[Quick Connect] Credentials saved for future auto-login');
+      }
+
       ws.emit('get-font-preference');
       term.focus();
     });
@@ -158,6 +172,14 @@ function Terminal() {
     ws.on('login-failed', (reason: string) => {
       console.log('Login failed:', reason);
       localStorage.removeItem('bbs_auth_token');
+
+      // Clear saved credentials if auto-login was attempted
+      const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
+      if (autoLoginEnabled) {
+        localStorage.removeItem('bbs_saved_username');
+        localStorage.removeItem('bbs_saved_password');
+        term.write('\r\n\x1b[33m[Quick Connect] Saved credentials cleared due to login failure\x1b[0m\r\n');
+      }
     });
 
     ws.on('user-not-found', (data: { username: string; prompt: string }) => {
@@ -533,8 +555,40 @@ function Terminal() {
     });
 
     ws.on('prompt-login', () => {
-      term.write('Username: ');
-      loginState.current = 'username';
+      // Check if auto-login is enabled
+      const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
+      const savedUsername = localStorage.getItem('bbs_saved_username');
+      const savedPassword = localStorage.getItem('bbs_saved_password');
+
+      if (autoLoginEnabled && savedUsername && savedPassword) {
+        // Auto-login with saved credentials
+        const decodedUsername = atob(savedUsername);
+        const decodedPassword = atob(savedPassword);
+
+        term.write(`\x1b[36m[Quick Connect] Logging in as ${decodedUsername}...\x1b[0m\r\n`);
+
+        // Skip username prompt, go straight to password check
+        newUserPromptUsername.current = decodedUsername;
+        ws.emit('check-username', { username: decodedUsername });
+        loginState.current = 'checking-username';
+
+        // Wait for password prompt, then auto-submit
+        const autoLoginHandler = () => {
+          if (loginState.current === 'password') {
+            password.current = decodedPassword;
+            ws.emit('login', { username: decodedUsername, password: decodedPassword });
+            loginState.current = 'loggedin';
+            ws.off('prompt-password', autoLoginHandler);
+          }
+        };
+
+        ws.on('prompt-password', autoLoginHandler);
+      } else {
+        // Normal login flow
+        term.write('Username: ');
+        loginState.current = 'username';
+      }
+
       term.focus();
     });
 

@@ -19,6 +19,8 @@ export { BuildStatusEnhanced } from './BuildStatusEnhanced';
 export { DoorListEnhanced } from './DoorListEnhanced';
 export { AIPromptPanel } from './AIPromptPanel';
 export { CodeDiffViewer } from './CodeDiffViewer';
+export { NFOEditor } from './NFOEditor';
+export { FileDizEditor } from './FileDizEditor';
 
 // UI components
 export * from './ui';

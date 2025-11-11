@@ -1,0 +1,27 @@
+{
+  "name": "telnet-connect-door",
+  "version": "1.0.0",
+  "description": "Telnet client for connecting to other BBSes (runDoor pattern)",
+  "main": "index.ts",
+  "author": "REbEL/QTX (Ported by AmiExpress Team)",
+  "license": "MIT",
+  "category": "utility",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": false,
+  "scripts": {
+    "preview": "cd ../.. && npm run preview telnet-connect"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "telnet",
+    "client",
+    "utility",
+    "runDoor",
+    "reference"
+  ],
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

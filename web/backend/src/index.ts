@@ -355,6 +355,14 @@ const MAX_CONNECTIONS_PER_IP = 5; // Max 5 connections per IP
 const CONNECTION_WINDOW = 60000; // 60 second window
 
 function checkConnectionLimit(ip: string): boolean {
+  // Skip rate limiting for localhost in development mode
+  if (process.env.NODE_ENV !== 'production') {
+    const localhostIPs = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+    if (localhostIPs.includes(ip)) {
+      return true; // Allow unlimited connections from localhost in dev
+    }
+  }
+
   const now = Date.now();
   const connections = recentConnections.get(ip) || [];
 
@@ -731,29 +739,6 @@ app.get('/users/:id', authenticateToken(db), async (req: AuthRequest, res: Respo
 io.on('connection', async (socket) => {
   const clientIp = socket.handshake.address;
   console.log(`Client connected from ${clientIp}`);
-
-  // DEVELOPMENT: Force single connection per IP to prevent cache issues
-  console.log(`[DEBUG] NODE_ENV="${process.env.NODE_ENV}", checking for duplicates...`);
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`[DEBUG] In development mode, checking sockets...`);
-    const allSockets = Array.from(io.sockets.sockets.values());
-    console.log(`[DEBUG] Total sockets: ${allSockets.length}`);
-    const existingSockets = allSockets.filter(
-      s => s.id !== socket.id && s.handshake.address === clientIp
-    );
-    console.log(`[DEBUG] Existing sockets for ${clientIp}: ${existingSockets.length}`);
-
-    if (existingSockets.length > 0) {
-      console.warn(`⚠️ DEVELOPMENT: Disconnecting duplicate connection from ${clientIp}`);
-      console.warn(`   Existing sockets: ${existingSockets.length}, disconnecting NEW connection (keeping existing)`);
-      // Disconnect the NEW connection, keep the old one (which has the session)
-      console.warn(`   Disconnecting NEW socket: ${socket.id}`);
-      socket.disconnect(true);
-      return; // Don't continue with session setup
-    }
-  } else {
-    console.log(`[DEBUG] Production mode, skipping duplicate check`);
-  }
 
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {

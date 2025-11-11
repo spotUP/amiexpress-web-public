@@ -33,23 +33,6 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   const clientIp = socket.handshake.address;
   console.log(`Client connected from ${clientIp}`);
 
-  // DEVELOPMENT: Force single connection per IP to prevent cache issues
-  if (process.env.NODE_ENV !== 'production') {
-    const existingSockets = Array.from(io.sockets.sockets.values()).filter(
-      s => s.id !== socket.id && s.handshake.address === clientIp
-    );
-
-    if (existingSockets.length > 0) {
-      console.warn(`⚠️ DEVELOPMENT: Disconnecting duplicate connection from ${clientIp}`);
-      console.warn(`   Existing sockets: ${existingSockets.length}, disconnecting new connection`);
-      // Disconnect OLD connections, keep the new one
-      existingSockets.forEach(oldSocket => {
-        console.warn(`   Disconnecting old socket: ${oldSocket.id}`);
-        oldSocket.disconnect(true);
-      });
-    }
-  }
-
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {
     console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);
@@ -61,53 +44,20 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
     return;
   }
 
-  // Initialize session with multi-node support
-  initializeSession(socket).then(async (nodeSession) => {
-    if (!nodeSession) {
-      // Node assignment failed - socket already disconnected
-      return;
-    }
+  // NOTE: Session initialization is handled by index.ts BEFORE calling this function
+  // This function only registers event handlers - it should NOT create or initialize sessions
+  // The duplicate session creation here was causing subState to be undefined, breaking input handling
 
-    const session = createSession(getNextAvailableNodeId());
-    setSession(socket.id, session);
+  // Register all event handlers
+  registerCommandHandler(socket);
+  registerDisconnectHandler(socket);
 
-    // Display complete connection screen via AWAITSCREEN.TXT
-    // reference-board BBS layout: everything shown via screen file with MCI codes
-    // All messages, node list, etc. are in AWAITSCREEN.TXT
-    await displayScreen(socket, session, 'AWAITSCREEN');
-
-    // Show ANSI prompt immediately (reference-board style - no key wait)
-    socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
-
-    // Set state to wait for ANSI response
-    session.subState = LoggedOnSubState.ANSI_PROMPT;
-    session.tempData = { inputBuffer: '' };
-
-    // Execute login trigger for AREXX scripts
-    await arexxEngine.executeTrigger('login', {
-      userId: undefined,
-      sessionId: socket.id,
-      environment: { nodeId: nodeSession.nodeId }
-    });
-
-    // Register all event handlers
-    registerCommandHandler(socket);
-    registerDisconnectHandler(socket);
-
-    // Register modular socket handlers (imported from separate modules)
-    // These handlers were extracted from index.ts for better code organization
-    const { registerAuthHandlers } = await import('./auth-socket-handlers');
-    const { registerFileHandlers } = await import('./file-socket-handlers');
-    const { registerChatHandlers } = await import('./chat-socket-handlers');
-    const { registerPreferenceHandlers } = await import('./preference-socket-handlers');
-
-    registerAuthHandlers(socket);
-    registerFileHandlers(socket);
-    registerChatHandlers(socket, chatState);
-    registerPreferenceHandlers(socket);
-  }).catch(error => {
-    console.error('Failed to initialize session:', error);
-  });
+  // Register modular socket handlers (imported from separate modules)
+  // These handlers were extracted from index.ts for better code organization
+  import('./auth-socket-handlers').then(({ registerAuthHandlers }) => registerAuthHandlers(socket));
+  import('./file-socket-handlers').then(({ registerFileHandlers }) => registerFileHandlers(socket));
+  import('./chat-socket-handlers').then(({ registerChatHandlers }) => registerChatHandlers(socket, chatState));
+  import('./preference-socket-handlers').then(({ registerPreferenceHandlers }) => registerPreferenceHandlers(socket));
 }
 
 /**

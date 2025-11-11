@@ -105,44 +105,52 @@ export class Door extends EventEmitter {
     process.on('SIGINT', () => this.shutdown());
     process.on('SIGTERM', () => this.shutdown());
 
-    // In preview mode, set up stdin for keyboard input and stdout for output
-    if (process.env.PREVIEW_MODE === '1') {
-      // Set up stdin for input
-      if (process.stdin.isTTY) {
-        process.stdin.setRawMode(true);
-      }
-      process.stdin.setEncoding('utf8');
+    // Check if running in SDK_MODE (spawned by BBS backend)
+    const isBBSMode = process.env.SDK_MODE === '1';
 
-      process.stdin.on('data', (data: string) => {
-        // Get first connected user (in preview mode, there's only one)
-        const user = Array.from(this.users.values())[0];
-        if (!user) return;
+    if (isBBSMode) {
+      // BBS Mode - Use IPC to communicate with parent process
+      console.log('[Door SDK] Running in BBS mode - using IPC');
 
-        // Convert input to key event
-        const key: KeyEvent = {
-          key: data,
-          ctrl: data.charCodeAt(0) < 32,
-          alt: false,
-          shift: false,
-          code: data.charCodeAt(0),
-        };
-
-        // Handle special keys
-        if (data === '\u001b[A') key.key = 'ArrowUp';
-        else if (data === '\u001b[B') key.key = 'ArrowDown';
-        else if (data === '\u001b[C') key.key = 'ArrowRight';
-        else if (data === '\u001b[D') key.key = 'ArrowLeft';
-        else if (data === '\r' || data === '\n') key.key = 'Enter';
-        else if (data === '\u001b') key.key = 'Escape';
-        else if (data === '\u007f' || data === '\b') key.key = 'Backspace';
-
-        this.emit('input', { user, key });
+      // Listen for input messages from BBS
+      process.on('message', (message: any) => {
+        if (message.type === 'input') {
+          const user = Array.from(this.users.values())[0];
+          if (user) {
+            this.emit('input', { user, key: message.key });
+          }
+        } else if (message.type === 'disconnect') {
+          const user = Array.from(this.users.values())[0];
+          if (user) {
+            this.disconnect(user.id);
+          }
+          this.shutdown();
+        }
       });
 
-      // Set up output handler - send all output to stdout
+      // Send output via IPC
       this.on('output', (data: { user: BBSUser; text: string }) => {
-        process.stdout.write(data.text);
+        if (process.send) {
+          process.send({
+            type: 'output',
+            text: data.text
+          });
+        }
       });
+
+      // Parse user data from environment
+      if (process.env.BBS_USER_DATA) {
+        try {
+          const userData = JSON.parse(process.env.BBS_USER_DATA);
+          console.log('[Door SDK] Parsed BBS user data:', userData);
+
+          // Store for auto-connect during start()
+          (this as any).__bbsUserData = userData;
+        } catch (err) {
+          console.error('[Door SDK] Failed to parse BBS_USER_DATA:', err);
+        }
+      }
+
     }
   }
 
@@ -162,23 +170,16 @@ export class Door extends EventEmitter {
     this.state = 'running';
     this.emit('start');
 
-    // In preview mode, automatically connect a test user
-    if (process.env.PREVIEW_MODE === '1') {
-      const testUser: BBSUser = {
-        id: 1,
-        name: 'Preview User',
-        node: 1,
-        securityLevel: 255,
-        timeLeft: 9999,
-        graphicsMode: 'ANSI',
-        termWidth: 80,
-        termHeight: 24,
-        data: {},
-      };
+    // Auto-connect user in BBS mode
+    const isBBSMode = process.env.SDK_MODE === '1';
 
-      // Connect test user after a small delay to ensure handlers are set up
+    if (isBBSMode && (this as any).__bbsUserData) {
+      // BBS Mode - connect the user passed from backend
+      const bbsUser: BBSUser = (this as any).__bbsUserData;
+      console.log('[Door SDK] Auto-connecting BBS user:', bbsUser.name);
+
       setTimeout(() => {
-        this.connect(testUser);
+        this.connect(bbsUser);
       }, 100);
     }
 

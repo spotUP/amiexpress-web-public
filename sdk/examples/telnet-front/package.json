@@ -1,0 +1,27 @@
+{
+  "name": "telnet-front-door",
+  "version": "1.0.0",
+  "description": "Telnet front-end door for BBS access (runDoor pattern)",
+  "main": "index.ts",
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "utility",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": false,
+  "scripts": {
+    "preview": "cd ../.. && npm run preview telnet-front"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "telnet",
+    "frontend",
+    "utility",
+    "runDoor",
+    "reference"
+  ],
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}

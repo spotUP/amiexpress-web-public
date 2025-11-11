@@ -5,7 +5,7 @@
  * Based on express.e door system.
  */
 
-import { spawn } from 'child_process';
+import { spawn, fork } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
@@ -287,6 +287,9 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
     case 'typescript': // TypeScript door with runDoor() export
       await executeTypeScriptDoor(socket, session, door, doorSession);
       break;
+    case 'SDK': // SDK door with Door wrapper class (separate process)
+      await executeSDKDoor(socket, session, door, doorSession);
+      break;
     case 'python': // Python door
     case 'PY': // Python door type from BBSCMD file
       await executePythonDoor(socket, session, door, doorSession);
@@ -440,6 +443,185 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     delete session.inDoorManager;
 
     socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
+}
+
+/**
+ * Execute SDK door as separate Node.js process
+ * Uses child_process.fork() to spawn SDK door with Door wrapper class
+ * Bridges Door events to Socket.IO for real-time communication
+ */
+async function executeSDKDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
+  console.log(`[executeSDKDoor] Starting SDK door: ${door.name}`);
+  console.log(`[executeSDKDoor] Door path: ${door.path}`);
+
+  try {
+    // Build absolute path to door
+    let doorPath = door.path;
+
+    if (!doorPath) {
+      socket.emit('ansi-output', `\r\n\x1b[31mDoor path is not configured\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // Get project root
+    const projectRoot = path.resolve(process.cwd(), '../..');
+
+    // If path is a directory, append index.js (compiled)
+    if (fs.existsSync(path.join(projectRoot, doorPath)) &&
+        fs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
+      // Try compiled version first, fall back to TypeScript
+      const compiledPath = path.join(doorPath, 'dist', 'index.js');
+      const tsPath = path.join(doorPath, 'index.ts');
+
+      if (fs.existsSync(path.join(projectRoot, compiledPath))) {
+        doorPath = compiledPath;
+      } else if (fs.existsSync(path.join(projectRoot, tsPath))) {
+        doorPath = tsPath;
+      } else {
+        doorPath = path.join(doorPath, 'index.js');
+      }
+    }
+
+    // Build absolute path
+    doorPath = path.isAbsolute(doorPath)
+      ? doorPath
+      : path.join(projectRoot, doorPath);
+
+    console.log(`[executeSDKDoor] Resolved path: ${doorPath}`);
+
+    // Check if door exists
+    if (!fs.existsSync(doorPath)) {
+      socket.emit('ansi-output', `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // Prepare user data for SDK door
+    const userData = {
+      id: session.user!.id,
+      name: session.user!.username,
+      node: session.nodeId || 1,
+      securityLevel: session.user!.securityLevel,
+      timeLeft: session.timeRemaining || 3600,
+      graphicsMode: 'ANSI',
+      termWidth: 80,
+      termHeight: 24,
+      data: {}
+    };
+
+    console.log(`[executeSDKDoor] Forking child process...`);
+
+    // Fork child process for SDK door
+    const childProcess = fork(doorPath, [], {
+      cwd: path.dirname(doorPath),
+      env: {
+        ...process.env,
+        SDK_MODE: '1',
+        BBS_USER_DATA: JSON.stringify(userData)
+      },
+      silent: true, // Capture stdout/stderr
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+    });
+
+    console.log(`[executeSDKDoor] Child process spawned with PID: ${childProcess.pid}`);
+
+    let doorRunning = true;
+
+    // Handle Door output events via IPC
+    childProcess.on('message', (message: any) => {
+      if (message.type === 'output') {
+        // Door emitted output event - send to user
+        socket.emit('ansi-output', message.text);
+      } else if (message.type === 'disconnect') {
+        // Door requested disconnect
+        console.log('[executeSDKDoor] Door requested disconnect');
+        doorRunning = false;
+        childProcess.kill();
+      }
+    });
+
+    // Handle stdout (fallback if not using IPC)
+    if (childProcess.stdout) {
+      childProcess.stdout.on('data', (data: Buffer) => {
+        socket.emit('ansi-output', data.toString());
+      });
+    }
+
+    // Handle stderr
+    if (childProcess.stderr) {
+      childProcess.stderr.on('data', (data: Buffer) => {
+        console.error(`[executeSDKDoor] stderr: ${data.toString()}`);
+      });
+    }
+
+    // Forward user input to SDK door
+    const inputHandler = (data: string) => {
+      if (doorRunning && childProcess && !childProcess.killed) {
+        // Send input to door via IPC
+        childProcess.send({
+          type: 'input',
+          key: {
+            key: data,
+            ctrl: data.charCodeAt(0) < 32,
+            alt: false,
+            shift: false,
+            code: data.charCodeAt(0)
+          }
+        });
+      }
+    };
+
+    socket.on('user-input', inputHandler);
+
+    // Handle door disconnect
+    const disconnectHandler = () => {
+      console.log('[executeSDKDoor] User disconnected');
+      doorRunning = false;
+      if (childProcess && !childProcess.killed) {
+        childProcess.send({ type: 'disconnect' });
+        setTimeout(() => {
+          if (!childProcess.killed) {
+            childProcess.kill();
+          }
+        }, 1000);
+      }
+    };
+
+    socket.once('disconnect', disconnectHandler);
+
+    // Wait for door to exit
+    await new Promise<void>((resolve) => {
+      childProcess.on('exit', (code) => {
+        console.log(`[executeSDKDoor] Child process exited with code: ${code}`);
+        doorRunning = false;
+        socket.off('user-input', inputHandler);
+        socket.off('disconnect', disconnectHandler);
+        resolve();
+      });
+
+      childProcess.on('error', (err) => {
+        console.error(`[executeSDKDoor] Child process error:`, err);
+        doorRunning = false;
+        socket.off('user-input', inputHandler);
+        socket.off('disconnect', disconnectHandler);
+        resolve();
+      });
+    });
+
+    console.log('[executeSDKDoor] Door execution completed');
+
+  } catch (error) {
+    console.error('[executeSDKDoor] Error:', error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError executing SDK door: ${(error as Error).message}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;

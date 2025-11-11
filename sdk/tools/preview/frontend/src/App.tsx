@@ -31,7 +31,10 @@ import {
   GitIntegration,
   AIPromptPanel,
   CodeDiffViewer,
+  NFOEditor,
+  FileDizEditor,
 } from './components';
+import { BBSTerminal, type BBSTerminalRef } from './components/BBSTerminal';
 import type { XTermTerminalRef } from './components';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { useToast } from './hooks/useToast';
@@ -48,7 +51,7 @@ import {
   ConnectionStatus,
   SessionEvent,
 } from './types';
-import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles, Layout, Monitor, Code2, Columns } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles, Layout, Monitor, Code2, Columns, File, FileText } from 'lucide-react';
 import type { CommandItem } from './components/ui/CommandPalette';
 
 const defaultSettings: AppSettings = {
@@ -89,10 +92,11 @@ function App() {
   // NEW: Additional UI state
   const [showThemeSelector, setShowThemeSelector] = useState(false);
   const [showPerformanceProfiler, setShowPerformanceProfiler] = useState(false);
-  const [terminalTabs, setTerminalTabs] = useState([
-    { id: '1', name: 'Terminal 1', active: true }
+  const [terminalTabs] = useState([
+    { id: 'bbs', name: 'BBS', active: true },
+    { id: 'logs', name: 'Logs', active: false }
   ]);
-  const [activeTerminalTab, setActiveTerminalTab] = useState('1');
+  const [activeTerminalTab, setActiveTerminalTab] = useState('bbs');
 
   // Performance profiling state
   const [performanceMetrics, setPerformanceMetrics] = useState<any[]>([]);
@@ -117,8 +121,8 @@ function App() {
   const [doorFiles, setDoorFiles] = useState<DoorFile[]>([]);
   const [currentFile, setCurrentFile] = useState<DoorFile | null>(null);
 
-  // Terminal state
-  const [terminalOutput, setTerminalOutput] = useState<string[]>([
+  // Terminal state - separated into BBS and Logs
+  const [bbsOutput, setBbsOutput] = useState<string[]>([
     '\x1b[36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m',
     '\x1b[36m║                                                                              ║\x1b[0m',
     '\x1b[36m║                    \x1b[37mAmiExpress SDK - Door Preview System\x1b[36m                       ║\x1b[0m',
@@ -131,8 +135,15 @@ function App() {
     'Use keyboard shortcuts for quick actions (Ctrl+, for settings).',
     '',
   ]);
+  const [logsOutput, setLogsOutput] = useState<string[]>([
+    '\x1b[36m=== SDK Logs ===\x1b[0m',
+    '',
+    'Build and debug output will appear here.',
+    '',
+  ]);
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTermTerminalRef>(null);
+  const bbsTerminalRef = useRef<BBSTerminalRef>(null);
 
   // Client door state
   const [activeClientDoorSession, setActiveClientDoorSession] = useState<string | null>(null);
@@ -153,7 +164,7 @@ function App() {
   // UI state
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
-  const [rightSidebarTab, setRightSidebarTab] = useState<'code' | 'build' | 'info' | 'release' | 'git' | 'performance'>('info');
+  const [rightSidebarTab, setRightSidebarTab] = useState<'code' | 'build' | 'info' | 'release' | 'git' | 'performance' | 'nfo' | 'file_id_diz'>('info');
 
   // View mode state
   type ViewMode = 'split' | 'terminal-only' | 'code-only';
@@ -237,13 +248,14 @@ function App() {
   function handleWebSocketMessage(message: WebSocketMessage) {
     switch (message.type) {
       case 'output':
-        setTerminalOutput((prev) => [...prev, message.data]);
+        // Door/BBS output goes to BBS tab
+        setBbsOutput((prev) => [...prev, message.data]);
         recorder.addEvent('output', message.data, message.data);
         break;
 
       case 'debug':
-        // Debug logs from the server
-        setTerminalOutput((prev) => [...prev, message.data]);
+        // Debug logs from the server go to Logs tab
+        setLogsOutput((prev) => [...prev, message.data]);
         recorder.addEvent('debug', message.data, message.data);
         break;
 
@@ -273,21 +285,28 @@ function App() {
         setBuildStatus(message.data);
         if (!message.data.building && message.data.lastBuild > 0) {
           if (message.data.errors.length === 0) {
-            toast.success('Build succeeded!', `Completed in ${message.data.duration}ms`);
-            // Trigger success celebration, sound, and haptic!
-            setCelebrationMessage('Build Successful!');
-            setShowSuccessCelebration(true);
+            // Build success message goes to Logs tab
+            setLogsOutput((prev) => [...prev, `\x1b[32m✓ Build succeeded in ${message.data.duration}ms\x1b[0m`]);
+            // Celebration and toast removed - user feedback via logs, sound, haptic
             soundEffects.buildComplete();
             triggerHaptic();
           } else {
+            // Build errors go to Logs tab
+            setLogsOutput((prev) => [...prev, `\x1b[31m✗ Build failed with ${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''}\x1b[0m`]);
             toast.error('Build failed', `${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''} found`);
             soundEffects.error();
           }
+        } else if (message.data.building) {
+          // Build start message goes to Logs tab
+          setLogsOutput((prev) => [...prev, '\x1b[36m🔨 Building door...\x1b[0m']);
+          // Auto-switch to Logs tab to show build output
+          setActiveTerminalTab('logs');
         }
         break;
 
       case 'error':
-        setTerminalOutput((prev) => [...prev, `\x1b[31mError: ${message.data}\x1b[0m`]);
+        // Error messages go to Logs tab
+        setLogsOutput((prev) => [...prev, `\x1b[31mError: ${message.data}\x1b[0m`]);
         soundEffects.error();
         break;
 
@@ -304,9 +323,30 @@ function App() {
         }
         break;
 
+      case 'auto-launch':
+        // Auto-launch door in BBS terminal after successful build
+        console.log('🚀 Auto-launching door:', message.data.doorId);
+        const doorCommand = `/${message.data.doorId}\r`;
+
+        // Switch to BBS tab if not already active
+        setActiveTerminalTab('bbs');
+
+        // Send command to BBS terminal
+        if (bbsTerminalRef.current) {
+          console.log('📤 Sending door command to BBS:', doorCommand);
+          // Send each character of the command
+          for (const char of doorCommand) {
+            bbsTerminalRef.current.sendCommand(char);
+          }
+        } else {
+          console.warn('⚠️ BBSTerminal ref not available for auto-launch');
+          setLogsOutput((prev) => [...prev, `\x1b[33m⚠️  Cannot auto-launch: BBS terminal not ready\x1b[0m`]);
+        }
+        break;
+
       case 'client-door-bundle':
-        // Client door: execute bundled code in browser
-        setTerminalOutput((prev) => [
+        // Client door: execute bundled code in browser - output goes to BBS tab
+        setBbsOutput((prev) => [
           ...prev,
           `\x1b[36m[CLIENT DOOR] Received bundle for ${message.doorId} (${message.code.length} bytes)\x1b[0m`,
           `\x1b[32m[CLIENT DOOR] Executing in browser with Web Audio API...\x1b[0m`,
@@ -323,9 +363,9 @@ function App() {
               // Handle door:client:message events (output from ClientDoor)
               if (event === 'door:client:message' && data.message) {
                 const msg = data.message;
-                // Handle OUTPUT messages - display in terminal
+                // Handle OUTPUT messages - display in BBS terminal
                 if (msg.type === 'output') {
-                  setTerminalOutput((prev) => [...prev, msg.data.text || msg.data]);
+                  setBbsOutput((prev) => [...prev, msg.data.text || msg.data]);
                 }
                 // Could handle other message types here
               }
@@ -386,7 +426,8 @@ function App() {
 
           soundEffects.notification();
         } catch (err: any) {
-          setTerminalOutput((prev) => [
+          // Execution errors go to Logs tab
+          setLogsOutput((prev) => [
             ...prev,
             `\x1b[31m[CLIENT DOOR] Execution error: ${err.message}\x1b[0m`,
           ]);
@@ -441,8 +482,8 @@ function App() {
       });
       window.dispatchEvent(inputEvent);
     } else {
-      // Normal terminal input
-      setTerminalOutput((prev) => [...prev, `$ ${input}`]);
+      // Normal terminal input - show in BBS tab
+      setBbsOutput((prev) => [...prev, `$ ${input}`]);
       wsSend({ type: 'input', data: input });
     }
   };
@@ -557,7 +598,8 @@ function App() {
   // Handle playback event
   const handlePlaybackEvent = (event: SessionEvent) => {
     if (event.type === 'output' && event.ansiData) {
-      setTerminalOutput((prev) => [...prev, event.ansiData!]);
+      // Playback goes to BBS tab
+      setBbsOutput((prev) => [...prev, event.ansiData!]);
     }
   };
 
@@ -580,7 +622,8 @@ function App() {
       // Then run it after a short delay to allow build to complete
       setTimeout(() => {
         wsSend({ type: 'input', data: `runDoor:${selectedDoor.id}` });
-        setTerminalOutput((prev) => [
+        // Run message goes to BBS tab
+        setBbsOutput((prev) => [
           ...prev,
           '',
           `\x1b[36m--- Building and Running ${selectedDoor.name} ---\x1b[0m`,
@@ -606,6 +649,73 @@ function App() {
       toast.info('Building door...', `Compiling ${selectedDoor.name}`);
       soundEffects.notification();
     }
+  };
+
+  // Handle install door to BBS
+  const handleInstallDoor = async (doorId: string) => {
+    try {
+      toast.info('Installing door...', `Installing ${doorId} to BBS`);
+      const response = await fetch(`/api/doors/${doorId}/install`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Door installed!', data.message);
+        soundEffects.success();
+        triggerHaptic();
+      } else {
+        const error = await response.json();
+        toast.error('Install failed', error.error || 'Failed to install door');
+        soundEffects.error();
+      }
+    } catch (error) {
+      console.error('Error installing door:', error);
+      toast.error('Install failed', 'Network error');
+      soundEffects.error();
+    }
+  };
+
+  // Handle uninstall door from BBS
+  const handleUninstallDoor = async (doorId: string) => {
+    try {
+      toast.info('Uninstalling door...', `Removing ${doorId} from BBS`);
+      const response = await fetch(`/api/doors/${doorId}/install`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Door uninstalled!', data.message);
+        soundEffects.success();
+        triggerHaptic();
+      } else {
+        const error = await response.json();
+        toast.error('Uninstall failed', error.error || 'Failed to uninstall door');
+        soundEffects.error();
+      }
+    } catch (error) {
+      console.error('Error uninstalling door:', error);
+      toast.error('Uninstall failed', 'Network error');
+      soundEffects.error();
+    }
+  };
+
+  // Handle door import - refresh door list
+  const handleImportDoor = () => {
+    // Reload doors list after successful import
+    setDoorsLoading(true);
+    fetch('/api/doors')
+      .then(res => res.json())
+      .then(data => {
+        setDoors(data);
+        setDoorsLoading(false);
+        toast.success('Import complete!', 'Door list refreshed');
+      })
+      .catch(err => {
+        console.error('Error refreshing doors:', err);
+        setDoorsLoading(false);
+      });
   };
 
   // Performance profiling handlers
@@ -655,20 +765,11 @@ function App() {
     {
       id: 'run-door',
       label: 'Run Door',
-      description: 'Execute the selected door',
+      description: 'Build and execute the selected door',
       icon: <Play className="w-4 h-4" />,
       shortcut: 'Ctrl+Enter',
       category: 'Development',
       action: handleRunDoor,
-    },
-    {
-      id: 'build-door',
-      label: 'Build Door',
-      description: 'Compile the selected door',
-      icon: <Hammer className="w-4 h-4" />,
-      shortcut: 'Ctrl+B',
-      category: 'Development',
-      action: handleBuildDoor,
     },
     {
       id: 'create-game',
@@ -837,17 +938,10 @@ function App() {
       category: 'Media',
     },
     {
-      key: 'b',
-      ctrl: true,
-      action: handleBuildDoor,
-      description: 'Build door',
-      category: 'Development',
-    },
-    {
       key: 'Enter',
       ctrl: true,
       action: handleRunDoor,
-      description: 'Run door',
+      description: 'Build and run door',
       category: 'Development',
     },
     {
@@ -995,8 +1089,10 @@ function App() {
                       onDoorSelect={handleDoorSelect}
                       onToggleFavorite={handleToggleFavorite}
                       onCreateNewGame={() => setShowGameWizard(true)}
-                      onBuildDoor={handleBuildDoor}
+                      onImportDoor={handleImportDoor}
                       onRunDoor={handleRunDoor}
+                      onInstallDoor={handleInstallDoor}
+                      onUninstallDoor={handleUninstallDoor}
                       loading={doorsLoading}
                     />
                   )}
@@ -1010,31 +1106,13 @@ function App() {
           <Panel defaultSize={viewMode === 'terminal-only' ? 100 : viewMode === 'code-only' ? 0 : 50} minSize={viewMode === 'code-only' ? 0 : 30}>
             <PanelGroup direction="vertical">
               {/* Terminal Section */}
-              <Panel defaultSize={70} minSize={50}>
+              <Panel defaultSize={80} minSize={60}>
                 <div className="flex flex-col h-full">
-                  {/* Terminal Tabs */}
+                  {/* Terminal Tabs - Fixed tabs for BBS and Logs */}
                   <TerminalTabs
                     tabs={terminalTabs}
                     activeTab={activeTerminalTab}
                     onTabChange={setActiveTerminalTab}
-                    onTabCreate={() => {
-                      const newId = (terminalTabs.length + 1).toString();
-                      setTerminalTabs([...terminalTabs, { id: newId, name: `Terminal ${newId}`, active: false }]);
-                      setActiveTerminalTab(newId);
-                      soundEffects.click();
-                    }}
-                    onTabClose={(id) => {
-                      if (terminalTabs.length > 1) {
-                        setTerminalTabs(terminalTabs.filter(t => t.id !== id));
-                        if (activeTerminalTab === id) {
-                          setActiveTerminalTab(terminalTabs[0].id);
-                        }
-                        soundEffects.click();
-                      }
-                    }}
-                    onTabRename={(id, newName) => {
-                      setTerminalTabs(terminalTabs.map(t => t.id === id ? { ...t, name: newName } : t));
-                    }}
                   />
 
                   {/* Terminal toolbar */}
@@ -1133,12 +1211,19 @@ function App() {
                   {/* Terminal with optional CRT effect */}
                   <div ref={terminalRef} className="flex-1 min-h-0 overflow-hidden" data-tour="terminal">
                     <CRTEffect enabled={enableCRT} intensity="medium">
-                      <XTermTerminal
-                        ref={xtermRef}
-                        output={terminalOutput}
-                        onInput={handleTerminalInput}
-                        fontSize={settings.terminalFontSize}
-                      />
+                      {activeTerminalTab === 'bbs' ? (
+                        <BBSTerminal
+                          ref={bbsTerminalRef}
+                          fontSize={settings.terminalFontSize}
+                        />
+                      ) : (
+                        <XTermTerminal
+                          ref={xtermRef}
+                          output={logsOutput}
+                          onInput={handleTerminalInput}
+                          fontSize={settings.terminalFontSize}
+                        />
+                      )}
                     </CRTEffect>
                   </div>
 
@@ -1155,7 +1240,7 @@ function App() {
               <PanelResizeHandle className="h-1 bg-gray-700 hover:bg-purple-600 transition-all duration-300 hover:h-2 cursor-row-resize" />
 
               {/* AI Prompt Panel */}
-              <Panel defaultSize={30} minSize={15} maxSize={50}>
+              <Panel defaultSize={20} minSize={15} maxSize={40}>
                 <AIPromptPanel
                   selectedDoor={selectedDoor?.id || null}
                   currentFile={currentFile}
@@ -1256,6 +1341,32 @@ function App() {
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 animate-shimmer" />
                       )}
                     </button>
+                    <button
+                      onClick={() => setRightSidebarTab('nfo')}
+                      className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
+                        rightSidebarTab === 'nfo'
+                          ? 'bg-[#1E1E1E] text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                      }`}
+                    >
+                      .NFO
+                      {rightSidebarTab === 'nfo' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-purple-500 to-cyan-500 animate-shimmer" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setRightSidebarTab('file_id_diz')}
+                      className={`relative flex-1 px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 ${
+                        rightSidebarTab === 'file_id_diz'
+                          ? 'bg-[#1E1E1E] text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                      }`}
+                    >
+                      .DIZ
+                      {rightSidebarTab === 'file_id_diz' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 animate-shimmer" />
+                      )}
+                    </button>
                   </div>
 
                   {/* Tab content with fade-in animations */}
@@ -1327,6 +1438,38 @@ function App() {
                           isProfiling={isProfiling}
                         />
                       </div>
+                    )}
+
+                    {rightSidebarTab === 'nfo' && (
+                      selectedDoor ? (
+                        <div className="h-full animate-fadeIn">
+                          <NFOEditor doorId={selectedDoor.id} className="h-full" />
+                        </div>
+                      ) : (
+                        <div className="h-full flex items-center justify-center bg-gray-900 animate-fadeIn">
+                          <div className="text-center text-gray-500 px-4">
+                            <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                            <p className="text-lg font-medium mb-2">No Door Selected</p>
+                            <p className="text-sm">Select a door from the sidebar to edit its .NFO file</p>
+                          </div>
+                        </div>
+                      )
+                    )}
+
+                    {rightSidebarTab === 'file_id_diz' && (
+                      selectedDoor ? (
+                        <div className="h-full animate-fadeIn">
+                          <FileDizEditor doorId={selectedDoor.id} className="h-full" />
+                        </div>
+                      ) : (
+                        <div className="h-full flex items-center justify-center bg-gray-900 animate-fadeIn">
+                          <div className="text-center text-gray-500 px-4">
+                            <File className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                            <p className="text-lg font-medium mb-2">No Door Selected</p>
+                            <p className="text-sm">Select a door from the sidebar to edit its FILE_ID.DIZ</p>
+                          </div>
+                        </div>
+                      )
                     )}
                   </div>
                 </div>
@@ -1454,13 +1597,6 @@ function App() {
               icon: <Play className="w-5 h-5" />,
               color: 'bg-green-600 hover:bg-green-700 text-white',
               action: handleRunDoor,
-            },
-            {
-              id: 'build',
-              label: 'Build Door',
-              icon: <Hammer className="w-5 h-5" />,
-              color: 'bg-blue-600 hover:bg-blue-700 text-white',
-              action: handleBuildDoor,
             },
             {
               id: 'screenshot',

@@ -25,7 +25,10 @@ import { UIComponents, ToastType } from './ui-components';
 import { TemplateManager, BugTemplate } from './templates';
 import { AutoSaveManager, Draft } from './auto-save';
 import { SmartFeatures, SimilarBug } from './smart-features';
-import { GamificationSystem, UserStats } from './gamification';
+import * as GamificationModule from './gamification';
+const { GamificationSystem } = GamificationModule;
+type GamificationSystemType = typeof GamificationSystem;
+import type { UserStats } from './gamification';
 import { WebhookManager, WebhookPlatform, BugReportWebhookPayload } from './webhook';
 import { AnalyticsEngine, AnalyticsMetrics } from './analytics';
 
@@ -113,7 +116,7 @@ class BugTracker {
   private templateManager: TemplateManager;
   private autoSaveManager: AutoSaveManager;
   private smartFeatures: SmartFeatures;
-  private gamification: GamificationSystem;
+  private gamification: InstanceType<typeof GamificationSystem>;
   private webhooks: WebhookManager;
 
   // Form state

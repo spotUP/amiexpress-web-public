@@ -13,9 +13,9 @@
  * - Interactive controls
  */
 
-import { Door, UIEngine } from '@amiexpress/bbs-door-sdk';
+const { Door, UIEngine } = require('@amiexpress/bbs-door-sdk');
 // @ts-ignore - drawille doesn't have type definitions
-import * as drawille from 'drawille';
+const drawille = require('drawille');
 
 const door = new Door({
   name: 'Drawille Cube Demo',

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Star, Clock, Package, X, Wand2, Play, FileCode, Trash2, Download } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Star, Clock, Package, X, Wand2, Play, FileCode, Trash2, Download, Upload, ServerCog, ServerOff, FolderInput } from 'lucide-react';
 import { DoorListItem } from '../types';
 import { formatRelativeTime } from '../utils/format';
 import { DoorListSkeleton } from './ui/Skeleton';
@@ -11,9 +11,11 @@ interface DoorListEnhancedProps {
   onDoorSelect: (door: DoorListItem) => void;
   onToggleFavorite: (doorId: string) => void;
   onCreateNewGame?: () => void;
-  onBuildDoor?: (doorId: string) => void;
+  onImportDoor?: () => void;
   onRunDoor?: (doorId: string) => void;
   onDeleteDoor?: (doorId: string) => void;
+  onInstallDoor?: (doorId: string) => void;
+  onUninstallDoor?: (doorId: string) => void;
   loading?: boolean;
   className?: string;
 }
@@ -24,14 +26,19 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
   onDoorSelect,
   onToggleFavorite,
   onCreateNewGame,
-  onBuildDoor,
+  onImportDoor,
   onRunDoor,
   onDeleteDoor,
+  onInstallDoor,
+  onUninstallDoor,
   loading = false,
   className = '',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'favorites' | 'recent'>('all');
+  const [installStatus, setInstallStatus] = useState<Record<string, boolean>>({});
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filteredDoors = doors.filter((door) => {
     const matchesSearch =
@@ -54,48 +61,164 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
   // Keep doors in their original order - don't rearrange when selected
   const sortedDoors = filteredDoors;
 
-  const getContextMenu = (door: DoorListItem): ContextMenuItem[] => [
-    {
-      id: 'run',
-      label: 'Build & Run Door',
-      icon: <Play className="w-4 h-4" />,
-      shortcut: 'Enter',
-      onClick: () => onRunDoor?.(door.id),
-    },
-    {
-      id: 'favorite',
-      label: door.favorite ? 'Remove from Favorites' : 'Add to Favorites',
-      icon: <Star className={`w-4 h-4 ${door.favorite ? 'fill-current' : ''}`} />,
-      onClick: () => onToggleFavorite(door.id),
-    },
-    { id: 'sep1', label: '', separator: true },
-    {
-      id: 'view-files',
-      label: 'View Files',
-      icon: <FileCode className="w-4 h-4" />,
-      onClick: () => onDoorSelect(door),
-    },
-    {
-      id: 'export',
-      label: 'Export Archive',
-      icon: <Download className="w-4 h-4" />,
-      onClick: () => {},
-    },
-    { id: 'sep2', label: '', separator: true },
-    {
-      id: 'delete',
-      label: 'Delete Door',
-      icon: <Trash2 className="w-4 h-4" />,
-      danger: true,
-      onClick: () => onDeleteDoor?.(door.id),
-    },
-  ];
+  // Fetch install status for all doors
+  useEffect(() => {
+    const fetchInstallStatus = async () => {
+      const statuses: Record<string, boolean> = {};
+      for (const door of doors) {
+        try {
+          const response = await fetch(`/api/doors/${door.id}/install-status`);
+          if (response.ok) {
+            const data = await response.json();
+            statuses[door.id] = data.installed;
+          }
+        } catch (error) {
+          console.error(`Error fetching install status for ${door.id}:`, error);
+        }
+      }
+      setInstallStatus(statuses);
+    };
+
+    if (doors.length > 0) {
+      fetchInstallStatus();
+    }
+  }, [doors]);
+
+  // Handle file import
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+
+    try {
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const fileData = reader.result as string;
+
+          // Send to backend
+          const response = await fetch('/api/doors/import', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fileData,
+              fileName: file.name,
+              fileType: file.type,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            console.log('Door imported successfully:', data);
+            alert(`Door "${data.name}" imported successfully! Refresh the page to see it in the list.`);
+
+            // Trigger refresh callback if provided
+            if (onImportDoor) {
+              onImportDoor();
+            }
+          } else {
+            console.error('Import failed:', data.error);
+            alert(`Import failed: ${data.error}`);
+          }
+        } catch (error) {
+          console.error('Error during import:', error);
+          alert('Import failed: Network error');
+        } finally {
+          setImporting(false);
+          // Reset file input
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }
+      };
+
+      reader.onerror = () => {
+        console.error('Error reading file');
+        alert('Error reading file');
+        setImporting(false);
+      };
+
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error handling file:', error);
+      alert('Error handling file');
+      setImporting(false);
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const getContextMenu = (door: DoorListItem): ContextMenuItem[] => {
+    const isInstalled = installStatus[door.id] || false;
+
+    return [
+      {
+        id: 'run',
+        label: 'Run Door',
+        icon: <Play className="w-4 h-4" />,
+        shortcut: 'Enter',
+        onClick: () => onRunDoor?.(door.id),
+      },
+      {
+        id: 'favorite',
+        label: door.favorite ? 'Remove from Favorites' : 'Add to Favorites',
+        icon: <Star className={`w-4 h-4 ${door.favorite ? 'fill-current' : ''}`} />,
+        onClick: () => onToggleFavorite(door.id),
+      },
+      { id: 'sep1', label: '', separator: true },
+      {
+        id: 'view-files',
+        label: 'View Files',
+        icon: <FileCode className="w-4 h-4" />,
+        onClick: () => onDoorSelect(door),
+      },
+      {
+        id: 'export',
+        label: 'Export Archive',
+        icon: <Download className="w-4 h-4" />,
+        onClick: () => {},
+      },
+      { id: 'sep-install', label: '', separator: true },
+      {
+        id: 'install',
+        label: isInstalled ? 'Uninstall from BBS' : 'Install to BBS',
+        icon: isInstalled ? <ServerOff className="w-4 h-4" /> : <ServerCog className="w-4 h-4" />,
+        onClick: async () => {
+          if (isInstalled) {
+            onUninstallDoor?.(door.id);
+            // Update install status locally
+            setInstallStatus(prev => ({ ...prev, [door.id]: false }));
+          } else {
+            onInstallDoor?.(door.id);
+            // Update install status locally
+            setInstallStatus(prev => ({ ...prev, [door.id]: true }));
+          }
+        },
+      },
+      { id: 'sep2', label: '', separator: true },
+      {
+        id: 'delete',
+        label: 'Delete Door',
+        icon: <Trash2 className="w-4 h-4" />,
+        danger: true,
+        onClick: () => onDeleteDoor?.(door.id),
+      },
+    ];
+  };
 
   return (
     <div className={`flex flex-col h-full bg-[#1E1E1E] border-r border-gray-700 ${className}`}>
-      {/* Create New Game Button with enhanced animations */}
-      {onCreateNewGame && (
-        <div className="p-3 border-b border-gray-700 animate-slideDown">
+      {/* Action buttons with enhanced animations */}
+      <div className="p-3 border-b border-gray-700 animate-slideDown space-y-2">
+        {/* Create New Game Button */}
+        {onCreateNewGame && (
           <button
             onClick={onCreateNewGame}
             className="group w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all duration-300 font-semibold hover:scale-105 active:scale-95"
@@ -103,8 +226,40 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
             <Wand2 className="w-4 h-4 transition-transform group-hover:rotate-12 group-hover:scale-110" />
             <span>Create with AI</span>
           </button>
+        )}
+
+        {/* Import Door Button */}
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip,.lha,.lzh,.lzx"
+            onChange={handleFileImport}
+            className="hidden"
+          />
+          <button
+            onClick={handleImportClick}
+            disabled={importing}
+            className={`group w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-all duration-300 font-semibold ${
+              importing
+                ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white hover:scale-105 active:scale-95'
+            }`}
+          >
+            {importing ? (
+              <>
+                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                <span>Importing...</span>
+              </>
+            ) : (
+              <>
+                <FolderInput className="w-4 h-4 transition-transform group-hover:scale-110" />
+                <span>Import Door</span>
+              </>
+            )}
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Search bar with enhanced animations */}
       <div className="p-3 border-b border-gray-700 animate-slideDown" style={{animationDelay: '0.1s'}}>
@@ -180,6 +335,7 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
           <div className="p-2 space-y-1">
             {sortedDoors.map((door, index) => {
               const isSelected = selectedDoor?.id === door.id;
+              const isInstalled = installStatus[door.id];
 
               return (
                 <ContextMenuWrapper key={door.id} items={getContextMenu(door)}>
@@ -190,6 +346,8 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
                       ${
                         isSelected
                           ? 'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400 scale-[1.02]'
+                          : isInstalled
+                          ? 'bg-gray-800 border-l-4 border-l-green-500 border-y-gray-700 border-r-gray-700 hover:bg-gray-700 hover:border-y-gray-600 hover:border-r-gray-600'
                           : 'bg-gray-800 border-gray-700 hover:bg-gray-700 hover:border-gray-600'
                       }
                     `}

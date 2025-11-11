@@ -1,15 +1,39 @@
 #!/bin/bash
 
-# Check for debug flag
+# Parse command-line flags
 DEBUG_MODE=false
 DEBUG_OUTPUT="false"
-if [[ "$1" == "--debug" ]] || [[ "$1" == "-v" ]] || [[ "$1" == "--verbose" ]]; then
-  DEBUG_MODE=true
-  DEBUG_OUTPUT="true"
+OPEN_MODE="sdk-only"  # Default: Only open SDK Preview
+
+# Check all arguments
+for arg in "$@"; do
+  case "$arg" in
+    --debug|-v|--verbose)
+      DEBUG_MODE=true
+      DEBUG_OUTPUT="true"
+      ;;
+    --full|--all)
+      OPEN_MODE="full"
+      ;;
+    --sdk-only)
+      OPEN_MODE="sdk-only"
+      ;;
+  esac
+done
+
+# Display startup mode
+if [ "$DEBUG_MODE" = true ]; then
   echo "→ Starting in DEBUG mode (full logs enabled)"
 else
   echo "→ Starting in normal mode (clean door output)"
   echo "   Use --debug to see full debug logs"
+fi
+
+if [ "$OPEN_MODE" = "full" ]; then
+  echo "→ Will open both BBS and SDK Preview in browser"
+else
+  echo "→ Will open SDK Preview only in browser"
+  echo "   Use --full to open both BBS and SDK"
 fi
 
 # Get the repository root directory (portable)
@@ -193,37 +217,62 @@ echo "║                                                                ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Open browser tabs for BBS frontend and SDK preview
+# Open browser tabs based on OPEN_MODE
 BBS_URL="http://localhost:$FRONTEND_PORT"
 SDK_URL="http://localhost:8080"
-echo "🚀 Opening BBS at $BBS_URL..."
-echo "🎮 Opening SDK Preview at $SDK_URL..."
 
-# Detect OS and open both URLs in browser tabs
-if command -v open &> /dev/null; then
-  # macOS
-  open "$BBS_URL" 2>/dev/null &
-  sleep 0.5
-  open "$SDK_URL" 2>/dev/null &
-elif command -v xdg-open &> /dev/null; then
-  # Linux
-  xdg-open "$BBS_URL" 2>/dev/null &
-  sleep 0.5
-  xdg-open "$SDK_URL" 2>/dev/null &
-elif command -v start &> /dev/null; then
-  # Windows (Git Bash)
-  start "$BBS_URL" 2>/dev/null &
-  sleep 0.5
-  start "$SDK_URL" 2>/dev/null &
-elif command -v explorer.exe &> /dev/null; then
-  # WSL
-  explorer.exe "$BBS_URL" 2>/dev/null &
-  sleep 0.5
-  explorer.exe "$SDK_URL" 2>/dev/null &
+if [ "$OPEN_MODE" = "full" ]; then
+  # Open both BBS and SDK
+  echo "🚀 Opening BBS at $BBS_URL..."
+  echo "🎮 Opening SDK Preview at $SDK_URL..."
+
+  # Detect OS and open both URLs in browser tabs
+  if command -v open &> /dev/null; then
+    # macOS
+    open "$BBS_URL" 2>/dev/null &
+    sleep 0.5
+    open "$SDK_URL" 2>/dev/null &
+  elif command -v xdg-open &> /dev/null; then
+    # Linux
+    xdg-open "$BBS_URL" 2>/dev/null &
+    sleep 0.5
+    xdg-open "$SDK_URL" 2>/dev/null &
+  elif command -v start &> /dev/null; then
+    # Windows (Git Bash)
+    start "$BBS_URL" 2>/dev/null &
+    sleep 0.5
+    start "$SDK_URL" 2>/dev/null &
+  elif command -v explorer.exe &> /dev/null; then
+    # WSL
+    explorer.exe "$BBS_URL" 2>/dev/null &
+    sleep 0.5
+    explorer.exe "$SDK_URL" 2>/dev/null &
+  else
+    echo "⚠️  Could not detect browser command. Please open URLs manually:"
+    echo "   $BBS_URL"
+    echo "   $SDK_URL"
+  fi
 else
-  echo "⚠️  Could not detect browser command. Please open URLs manually:"
-  echo "   $BBS_URL"
-  echo "   $SDK_URL"
+  # Open SDK only
+  echo "🎮 Opening SDK Preview at $SDK_URL..."
+
+  # Detect OS and open SDK URL in browser
+  if command -v open &> /dev/null; then
+    # macOS
+    open "$SDK_URL" 2>/dev/null &
+  elif command -v xdg-open &> /dev/null; then
+    # Linux
+    xdg-open "$SDK_URL" 2>/dev/null &
+  elif command -v start &> /dev/null; then
+    # Windows (Git Bash)
+    start "$SDK_URL" 2>/dev/null &
+  elif command -v explorer.exe &> /dev/null; then
+    # WSL
+    explorer.exe "$SDK_URL" 2>/dev/null &
+  else
+    echo "⚠️  Could not detect browser command. Please open URL manually:"
+    echo "   $SDK_URL"
+  fi
 fi
 
 echo ""
