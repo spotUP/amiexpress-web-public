@@ -114,9 +114,50 @@ Already installed! Command info file at `Commands/TELNET.info`.
 
 ---
 
+### 3. Telnet Frontend (TelnetFront)
+
+**Status**: ✅ COMPLETE
+
+**Original Source**: `dev/docs/AmiExpressEDoorSources/TelnetFront/telnetfront.e` (227 lines)
+**TypeScript Port**: `web/backend/src/doors/telnet-front/index.ts`
+**Command**: `TFRONT`
+**Type**: TypeScript door (TS)
+
+**Description**:
+Displays a fancy "Who's Online" screen showing all active BBS nodes. Typically used as a login frontend to welcome telnet users.
+
+**Features**:
+- Display all active BBS nodes in ANSI art table
+- Show username, location, and IP address for each user
+- Show node status (Awaiting Call, Inactive, Suspended, Connecting)
+- Display connecting user's hostname
+- Display BBS's own IP address
+- Auto-exits after 2 seconds or on any keypress
+- Fancy ANSI art borders (kOOL fRONTEND V1.1 design)
+
+**Configuration**:
+
+Optional environment variables:
+```bash
+export BBS_IP="your.bbs.ip.address"
+export MAX_NODES=8
+```
+
+**Usage**:
+```
+/TFRONT
+```
+
+Or call from login scripts to show automatically on connect.
+
+**Installation**:
+Already installed! Command info file at `Commands/TFRONT.info`.
+
+---
+
 ## Planned Ports
 
-### 3. ConfTop-II (Conference Top Uploaders)
+### 4. ConfTop-II (Conference Top Uploaders)
 
 **Status**: 📋 PLANNED
 
@@ -213,8 +254,8 @@ All doors located in `dev/docs/AmiExpressEDoorSources/`:
 
 | Door | Lines | Type | Complexity | Priority |
 |------|-------|------|------------|----------|
-| telnetConnect | 133 | Telnet | Simple | High |
-| TelnetFront | 227 | Telnet | Simple | Medium |
+| telnetConnect | 133 | Telnet | Simple | ✅ DONE |
+| TelnetFront | 227 | Telnet | Simple | ✅ DONE |
 | BBSLink | 339 | Network | Medium | Medium |
 | DiscordAnnounce | 410 | Webhook | Simple | ✅ DONE |
 | BBSLinkWall | 547 | Network | Medium | Low |
