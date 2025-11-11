@@ -465,7 +465,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,
           timeout: 600,
-          bbsSession: { nodeId: 0, user: session.user }
+          bbsSession: session // Use actual session with proper nodeId
         });
 
         await amigaSession.start();

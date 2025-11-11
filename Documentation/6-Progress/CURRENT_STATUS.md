@@ -1,11 +1,53 @@
 # AmiExpress-Web Current Status
-**Last Updated**: 2025-11-06 (Session: UX Fixes)
+**Last Updated**: 2025-11-11 (Session: 68K Door Debugging - PAUSED)
 
 ---
 
 ## 🎯 Current State
 
-### Latest Session (2025-11-06): UX Improvements ✅
+### Latest Session (2025-11-11): 68K XIM Door Debugging - PAUSED ⏸️
+
+**Status**: 68K binary door work paused due to lack of progress after extensive debugging
+
+**Work Done** (3-4 days):
+- ✓ Identified RTW exits at PC 0x124C due to zero port at A4+0x474
+- ✓ Discovered dead code at 0x1B0-0x1C0 that would set port (unreachable)
+- ✓ Implemented port injection hack at PC 0x124C
+- ✓ Fixed BBS port address (A4+0x44C) and reply port (A4+0x450, A4+0x474)
+- ✓ RTW now enters IPC loop successfully
+- ✗ **RTW still produces no output** - displays "Starting RTW... Press ENTER" then exits
+
+**Issues Identified**:
+1. FindPort() never called by RTW despite having the code
+2. Dead code for CreatePort at A4+0x474 is unreachable (unconditional branch skips it)
+3. Port injection allows IPC loop entry but still no visible output
+4. Unknown if BBS correctly handles XIM door messages
+5. Possible missing file requirements (DOOR.SYS, etc.)
+
+**Decision**: Pause 68K door work. Cost vs benefit not favorable.
+
+**Documentation Created**:
+- `RTW_COMPREHENSIVE_STATUS_20251111.md` - Complete analysis (400+ lines)
+- `RTW_NEXT_STEPS.md` - Quick-start guide for future work
+- 8 other investigation docs in `Documentation/6-Progress/`
+
+**Recommended Next Steps**:
+1. Test WHO door to verify basic emulation works
+2. Implement FindPort() library call properly
+3. Consider native TypeScript rewrite instead of 68K emulation
+4. OR mark XIM doors as unsupported for now
+
+**Code Modified**:
+- `web/backend/src/amiga-emulation/AmigaDoorSession.ts:1061-1094` - Port injection hack
+
+**To Revert**:
+```bash
+git checkout web/backend/src/amiga-emulation/AmigaDoorSession.ts
+```
+
+---
+
+### Previous Session (2025-11-06): UX Improvements ✅
 - **Server Management**: Replaced broken scripts with reliable startup system
   - New: `dev/scripts/kill-servers.sh` (port-based killer with verification)
   - New: `dev/scripts/start-servers.sh` (sequential startup, absolute paths)
@@ -68,16 +110,15 @@
 - **Node Synchronization**: WebSocket-based, no file locks needed
 
 ### In Progress 🔨
-- **68K Binary Door System**: Fixed WHO command routing, investigating ANSI prompt state issue
-- **Door Testing**: Need extensive testing of all door types
 - **AREXX Door Testing**: Interpreter exists but untested with real doors
 - **Command Testing**: Many commands implemented but not fully tested
 - **Integration Testing**: Components need integration testing
+- **Door System**: Need to decide on 68K emulation vs native rewrites
 
 ### Critical Issues ❌
-- **ANSI Prompt State**: Session stuck in 'await/ansi_prompt' instead of 'loggedon/read_command'
-- **WHO Door**: Command routing fixed, blocked by ANSI prompt issue
-- **68K Binary Doors**: Infrastructure complete, ANSI prompt blocks execution
+- **68K XIM Doors**: PAUSED - RTW/WHO don't produce output despite entering IPC loop
+  - See `RTW_COMPREHENSIVE_STATUS_20251111.md` for complete analysis
+  - Options: Fix FindPort, test simpler doors, or native TypeScript rewrites
 - **Multi-user Testing**: Unknown stability
 - **Performance**: Not tested under load
 - **Database Migrations**: Not implemented

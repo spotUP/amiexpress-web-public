@@ -38,6 +38,33 @@ AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress
 - Ports: Backend 3001, Frontend 5173, Preview 8080
 - **Just works**: No need to manually run npm install or builds
 
+### CRITICAL: Zombie Process Cleanup
+**VERY IMPORTANT** - Zombie processes consume context and must be killed immediately!
+
+When context usage seems high or you see many stale background bash references:
+```bash
+# Check for zombie processes
+ps aux | grep -E "(start-servers|kill-servers|build-wasm)" | grep -v grep
+
+# Kill all zombie processes (REQUIRED - do this immediately!)
+pkill -f "start-servers.sh" && pkill -f "kill-servers.sh" && pkill -f "build-wasm.sh"
+
+# Verify cleanup
+ps aux | grep -E "(start-servers|kill-servers|build-wasm)" | grep -v grep | wc -l
+# Should return: 0
+```
+
+**Why this matters:**
+- Zombie processes from previous sessions leave stale background bash references
+- Each reference consumes 100-200 tokens with "has new output" reminders
+- Over many sessions, these accumulate and consume thousands of tokens
+- **ALWAYS kill zombie processes at start of session if context seems tight**
+
+**Signs of zombie process problem:**
+- Context window filling up quickly
+- Many duplicate "Background Bash has new output" system reminders
+- Dozens of start-servers.sh or build-wasm.sh processes in ps output
+
 ### Backend (web/backend)
 ```bash
 cd web/backend
@@ -315,6 +342,20 @@ BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
 - **NEVER blame MOIRA** - it's battle-tested and correct
 - 99.9% of bugs are in YOUR implementation
 - Check YOUR code first
+
+## 68K Disassembly
+- **Use radare2** for disassembling Amiga 68K binaries
+- Install: `brew install radare2`
+- Disassemble at specific address:
+  ```bash
+  r2 -q -c "e asm.arch=m68k; e asm.bits=32; s 0x1156; pd 20" /path/to/binary
+  ```
+- Disassemble range:
+  ```bash
+  r2 -q -c "e asm.arch=m68k; e asm.bits=32; s 0x1000; pd 100" doors/RTW/rtw
+  ```
+- Essential for debugging door execution, understanding polling loops, and identifying missing library calls
+- Much more effective than trying to infer behavior from register/memory logging
 
 ## NO STUBS OR TODOs
 - NEVER leave stub implementations that break functionality

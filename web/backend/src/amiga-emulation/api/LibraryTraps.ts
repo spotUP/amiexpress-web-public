@@ -224,10 +224,26 @@ const DOS_VECTORS: LibraryVector[] = [
     }
   },
   {
+    offset: -90,  // LVO -90 - UnLock
+    name: 'UnLock',
+    handler: (emu, lib: DosLibrary) => {
+      lib.UnLock();
+      return 0;
+    }
+  },
+  {
     offset: -132,
     name: 'IoErr',
     handler: (emu, lib: DosLibrary) => {
       return lib.IoErr();
+    }
+  },
+  {
+    offset: -150,  // LVO -150 - FreeLock (same as UnLock for our purposes)
+    name: 'FreeLock',
+    handler: (emu, lib: DosLibrary) => {
+      lib.UnLock();  // FreeLock and UnLock do the same thing
+      return 0;
     }
   },
   {
@@ -259,6 +275,14 @@ const DOS_VECTORS: LibraryVector[] = [
     handler: (emu, lib: DosLibrary) => {
       lib.Exit();
       return 0;  // Exit doesn't return in the normal sense
+    }
+  },
+  {
+    offset: -126,  // LVO -126 (0xFFFFFF82) - FindVar
+    name: 'FindVar',
+    handler: (emu, lib: DosLibrary) => {
+      lib.FindVar();
+      return emu.getRegister(0);  // Returns pointer to LocalVar structure in D0
     }
   },
   {

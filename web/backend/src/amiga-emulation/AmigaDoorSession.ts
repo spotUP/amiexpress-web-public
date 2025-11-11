@@ -38,7 +38,12 @@ export class AmigaDoorSession {
   private isRunning: boolean = false;
   private executionTimer: NodeJS.Timeout | null = null;
   private iterationCount: number = 0;
+  private d0Was30: boolean = false; // Track if D0 has been set to 30 (for debugging)
+  private sentInitialMessage: boolean = false; // Track if we've sent initial IPC message to RTW
+  private rtwLoopCount: number = 0; // Track iterations in RTW loop at 0x1158-0x1160
+  private rtwInitPCs?: number[]; // Track PCs between 0x11CE and 0x124C to find FindPort call
   private doorPortAddress: number = 0; // AEDoorPort message port address
+  private rtwPortInjected: boolean = false; // Track if we've injected RTW reply port
 
   // Virtual time tracking (8MHz 68000 = 0.125 microseconds per cycle)
   private totalCycles: number = 0;
@@ -87,63 +92,10 @@ export class AmigaDoorSession {
     }
 
     // Read instruction at PC to check if it's JSR (d16,A6)
-    const op0 = this.emulator.readMemory(pc);
-    const op1 = this.emulator.readMemory(pc + 1);
-    const opcode = (op0 << 8) | op1;
-    const isJSR_A6 = (opcode === 0x4eae);
-
     const a6 = this.emulator.getRegister(14);
 
-    // === CRITICAL FIX: Handle JSR (d16,A6) FIRST ===
-    // JSR instructions must be intercepted by checking the TARGET address,
-    // not the call site (PC). The old logic calculated offset = PC - A6,
-    // which is always positive for calls from code, causing isTrapOffset
-    // check to fail (requires offset < 0).
-    if (isJSR_A6) {
-      const offset16 = this.emulator.readMemory16(pc + 2);
-      const jsrOffset = (offset16 & 0x8000) ? (offset16 - 0x10000) : offset16;
-      const targetAddr = (a6 + jsrOffset) & 0xFFFFFF;
-
-      // Check if TARGET is a trap (not PC!)
-      const isTargetTrap = this.libraryTraps.isTrapOffset(jsrOffset);
-
-      if (!isTargetTrap) {
-        // Not a library call, let MOIRA execute it normally
-        return Promise.resolve(false);
-      }
-
-      // Check if we just handled this exact trap (prevent double interception)
-      if (pc === this.lastInterceptedTrap &&
-          this.iterationCount - this.lastInterceptedIteration <= 2) {
-        console.log(`[LibraryTraps] SKIPPING DUPLICATE TRAP at PC=0x${pc.toString(16)}`);
-        this.lastInterceptedTrap = 0;
-        this.lastInterceptedIteration = 0;
-        return Promise.resolve(true);
-      }
-
-      console.log(`[LibraryTraps] Intercepted JSR at PC=0x${pc.toString(16)} -> target=0x${targetAddr.toString(16)} (offset=${jsrOffset})`);
-
-      // Manually push return address (JSR is 4 bytes)
-      const returnAddr = pc + 4;
-      const sp = this.emulator.getRegister(15);
-      this.emulator.writeMemory32(sp - 4, returnAddr);
-      this.emulator.setRegister(15, sp - 4);
-
-      // Handle the trap
-      const handled = this.libraryTraps.handleTrapByOffset(jsrOffset, a6);
-
-      if (handled) {
-        // Mark as intercepted to prevent duplicate handling
-        this.lastInterceptedTrap = targetAddr;
-        this.lastInterceptedIteration = this.iterationCount;
-        return Promise.resolve(true);
-      }
-
-      return Promise.resolve(false);
-    }
-
-    // === ORIGINAL LOGIC FOR NON-JSR TRAPS ===
-    // PC is already at a trap address (jumped via exception vector)
+    // === Handle library calls when PC is at trap address ===
+    // JSR instructions execute normally and jump here
     // Calculate offset from A6
     let offset = pc - a6;
 
@@ -391,6 +343,12 @@ export class AmigaDoorSession {
     // Create DosLibrary for file I/O and console operations
     this.dosLibrary = new DosLibrary(this.emulator);
 
+    // Enable new FileManager/PathManager system for real file I/O
+    // Backend runs from web/backend/, so go up 2 levels to project root
+    const projectRoot = path.resolve(process.cwd(), '../..');
+    console.log(`[AmigaDoorSession] Enabling FileManager with base directory: ${projectRoot}`);
+    this.dosLibrary.enableNewFileSystem(projectRoot);
+
     // CRITICAL FIX: Set output callback so DOS Write() sends to terminal
     // WHO door and other DOS-based doors use Write() instead of AEDoor WriteStr()
     this.dosLibrary.setOutputCallback((text: string) => {
@@ -531,11 +489,12 @@ export class AmigaDoorSession {
     console.log(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
 
     // Set up command-line arguments for SAS/C startup
-    // SAS/C c.o expects: D0 = length of argument string, A0 = pointer to argument string
-    // AmigaDOS passes arguments WITH leading space: " 2" not "2"
-    // The startup code will parse the string into argc/argv
+    // SAS/C c.o expects: D0 = length of FULL command line, A0 = pointer to FULL command line
+    // The full command line is "progname arg1 arg2..." (NO leading space!)
+    // The startup code will parse this into argc/argv
     const nodeId = this.config.bbsSession?.nodeId || 0;
-    const argString = " " + nodeId.toString();  // Leading space + node number (e.g., " 2")
+    const progName = path.basename(this.config.executablePath);
+    const argString = `${progName} ${nodeId}`;  // Full command line: "rtw 2"
     const ARG_STRING_ADDR = 0x0F0100;
 
     // Write argument string to memory
@@ -544,10 +503,10 @@ export class AmigaDoorSession {
     }
     this.emulator.writeMemory(ARG_STRING_ADDR + argString.length, 0); // Null terminator
 
-    // Set D0 = length of argument string (INCLUDING leading space), A0 = pointer to argument string
+    // Set D0 = length of FULL command line, A0 = pointer to command line
     // This is the AmigaDOS/SAS-C calling convention for CLI programs
-    this.emulator.setRegister(0, argString.length);  // D0 = argument length
-    this.emulator.setRegister(8, ARG_STRING_ADDR);   // A0 = argument string
+    this.emulator.setRegister(0, argString.length);  // D0 = full command line length
+    this.emulator.setRegister(8, ARG_STRING_ADDR);   // A0 = full command line
     console.log(`  D0 (arg length): ${argString.length}`);
     console.log(`  A0 (arg string): 0x${ARG_STRING_ADDR.toString(16)} = "${argString}"`);
 
@@ -579,12 +538,15 @@ export class AmigaDoorSession {
     // We provide an address that will be detected as program exit
     const exitTrapAddress = 0xFFFF00;  // Special address to detect program exit
 
-    // Push SINGLE exit address at top of stack for RTS
-    // DO NOT fill entire stack with exit sentinels - this corrupts argc/argv saved by C startup code!
-    // SAS/C startup: saves D0 (argc) and A0 (argv) to stack BEFORE calling main()
-    // If we fill stack with 0xFFFF00, main() gets corrupted argc/argv
-    this.emulator.writeMemory32(finalSP, exitTrapAddress);  // Single exit trap at SP
-    console.log(`  Exit trap address: 0x${exitTrapAddress.toString(16)} at SP=0x${finalSP.toString(16)}`);
+    // Fill top of stack with exit trap addresses
+    // When program returns (RTS), it will pop return address from stack
+    // We fill multiple locations to catch the return no matter where SP ends up
+    // The C startup code will push/pop things, so we need coverage
+    // CRITICAL: RTW/WHO doors need coverage ABOVE finalSP too (up to SP+60)
+    for (let offset = -64; offset < 64; offset += 4) {
+      this.emulator.writeMemory32(finalSP + offset, exitTrapAddress);
+    }
+    console.log(`  Exit trap addresses: 0x${exitTrapAddress.toString(16)} from 0x${(finalSP-64).toString(16)} to 0x${(finalSP+60).toString(16)}`);
 
     // CRITICAL: Initialize stack-based code that door expects
     // Door executes JSR (3682,A7) at PC=0x1248 (instruction 198)
@@ -605,41 +567,19 @@ export class AmigaDoorSession {
     this.emulator.setRegister(15, finalSP);  // A7 (SP)
     console.log(`  SP: 0x${finalSP.toString(16)}`);
 
-    // CRITICAL FIX: Set A0 to AEDoorPort0 address
-    // Door expects this in A0 and doesn't call FindPort()!
-    // Discovery: Door uses A0 value directly for GetMsg/WaitPort calls
-    console.log(`[AmigaDoorSession] ===============================================`);
-    console.log(`[AmigaDoorSession] CRITICAL FIX: Setting A0 to AEDoorPort0 address`);
-    console.log(`[AmigaDoorSession] ===============================================`);
-    this.emulator.setRegister(8, this.doorPortAddress);  // A0 = AEDoorPort0
-    console.log(`  A0: 0x${this.doorPortAddress.toString(16)} (AEDoorPort0)`);
-    console.log(`[AmigaDoorSession] Door will now use correct port address!`);
+    // NOTE: A0 already points to argument string (set above at line 503)
+    // Do NOT overwrite A0 - SAS/C startup needs it to parse argc/argv!
+    // Doors will call FindPort() themselves to find AEDoorPort
 
     console.log(`[AmigaDoorSession] CPU configured for door execution`);
 
     console.log('[AmigaDoorSession] Door ready to execute!');
 
-    // READ BACK REGISTERS ONE MORE TIME AT END OF loadDoor()
+    // Verify final state before execution
     const verifyFinalSP = this.emulator.getRegister(15);
     const verifyFinalPC = this.emulator.getRegister(16);
     const verifyFinalA0 = this.emulator.getRegister(8);
-    console.log(`[AmigaDoorSession] END OF loadDoor(): SP=0x${verifyFinalSP.toString(16)}, PC=0x${verifyFinalPC.toString(16)}, A0=0x${verifyFinalA0.toString(16)}`);
-
-    // CRITICAL FIX: Write AEDoorPort0 address to memory location 0xac
-    // Discovery from A0 monitoring: Door reads port address from 0xac at iteration 168
-    // The door loads A0 from this memory location instead of using FindPort()
-    console.log(`[AmigaDoorSession] ===============================================`);
-    console.log(`[AmigaDoorSession] CRITICAL FIX: Writing port address to memory[0xac]`);
-    console.log(`[AmigaDoorSession] ===============================================`);
-    this.emulator.writeMemory32(0xac, this.doorPortAddress);
-    const verifyMemory = this.emulator.readMemory32(0xac);
-    console.log(`  Memory[0xac] = 0x${verifyMemory.toString(16)} (AEDoorPort0 address)`);
-    console.log(`[AmigaDoorSession] Door will now read correct port address from memory!`);
-    console.log(`[AmigaDoorSession] ===============================================\n`);
-
-    // Initialize A0 monitoring to track when it gets overwritten
-    this.lastA0Value = verifyFinalA0;
-    console.log(`[AmigaDoorSession] Starting A0 monitoring - will detect when door overwrites 0x${verifyFinalA0.toString(16)}`);
+    console.log(`[AmigaDoorSession] Door ready: SP=0x${verifyFinalSP.toString(16)}, PC=0x${verifyFinalPC.toString(16)}, A0=0x${verifyFinalA0.toString(16)}`);
   }
 
   /**
@@ -850,13 +790,16 @@ export class AmigaDoorSession {
       }
       console.log(`[AmigaDoorSession] Code at 0x1000: ${bytes.join(' ')}`);
 
-      // WHO requires pr_CLI with proper CLI structure containing command line
-      // From emulator tests: WHO checks argc - if no args, prints banner and exits
-      // WHO reads command line from CLI structure (cli_CommandName), not D0/A0
+      // CLI structure required for doors to read command line arguments
+      // Door checks argc - if no args, prints banner and exits
+      // Door reads command line from CLI structure (cli_CommandName), not D0/A0
       const taskAddr = 0x70000;
       const prCliOffset = 0xAC;
       const cliStructAddr = 0x90000;
       const nodeId = this.config.bbsSession?.nodeId || 0;
+
+      // Extract program name from executable path (e.g., "rtw", "who")
+      const progName = path.basename(this.config.executablePath);
 
       // Create minimal CLI structure at 0x90000
       // struct CommandLineInterface {
@@ -868,10 +811,10 @@ export class AmigaDoorSession {
       //   ...
       // }
 
-      // Write command line BSTR: "WHO 3"
+      // Write command line BSTR: "<DOORNAME> <nodeId>" (e.g., "RTW 3", "WHO 0")
       // BSTR format: BPTR points to LENGTH BYTE (4-byte aligned), string data follows
       const cmdLineAddr = 0x90100;  // 4-byte aligned
-      const cmdLine = `WHO ${nodeId}`;
+      const cmdLine = `${progName.toUpperCase()} ${nodeId}`;
       this.emulator.writeMemory(cmdLineAddr, cmdLine.length);  // BSTR length at 0x90100
       for (let i = 0; i < cmdLine.length; i++) {
         this.emulator.writeMemory(cmdLineAddr + 1 + i, cmdLine.charCodeAt(i));  // String data at 0x90101+
@@ -896,6 +839,57 @@ export class AmigaDoorSession {
       this.emulator.writeMemory32(cliStructAddr + 0x34, 4096); // cli_DefaultStack
       this.emulator.writeMemory32(cliStructAddr + 0x38, 0);  // cli_StandardOutput
       this.emulator.writeMemory32(cliStructAddr + 0x3C, 0);  // cli_Module
+      this.emulator.writeMemory32(cliStructAddr + 0x40, 0);  // cli_CurrentDir (no current dir lock)
+      this.emulator.writeMemory32(cliStructAddr + 0x44, 0);  // cli_DirLen
+      this.emulator.writeMemory32(cliStructAddr + 0x48, 0);  // cli_DirBuf
+      this.emulator.writeMemory32(cliStructAddr + 0x4C, 0);  // cli_PathList
+      this.emulator.writeMemory32(cliStructAddr + 0x50, 0);  // cli_ReturnAddr
+      this.emulator.writeMemory32(cliStructAddr + 0x54, 0);  // cli_Pid
+      this.emulator.writeMemory32(cliStructAddr + 0x58, 0);  // cli_NumArgs
+
+      // Create local variables list for FindVar() support (RTW checks RC and Result2)
+      // cli_LocalVars at offset 0x5C points to MinList of LocalVar structures
+      const localVarsListAddr = 0x90300;
+
+      // Initialize MinList (8 bytes): lh_Head, lh_Tail, lh_TailPred
+      this.emulator.writeMemory32(localVarsListAddr + 0, localVarsListAddr + 4); // lh_Head -> Tail
+      this.emulator.writeMemory32(localVarsListAddr + 4, 0);                      // lh_Tail (always NULL)
+      this.emulator.writeMemory32(localVarsListAddr + 8, localVarsListAddr);      // lh_TailPred -> Head
+
+      // Create RC local variable (return code = 0)
+      const rcVarAddr = 0x90320;
+      const rcNameAddr = 0x90340;
+      this.emulator.writeString(rcNameAddr, 'RC');
+      this.emulator.writeMemory32(rcVarAddr + 0, 0);            // ln_Succ (end of list)
+      this.emulator.writeMemory32(rcVarAddr + 4, 0);            // ln_Pred
+      this.emulator.writeMemory(rcVarAddr + 8, 0);              // ln_Type
+      this.emulator.writeMemory(rcVarAddr + 9, 0);              // ln_Pri
+      this.emulator.writeMemory32(rcVarAddr + 10, rcNameAddr);  // ln_Name
+      this.emulator.writeMemory32(rcVarAddr + 14, 0);           // lv_Value = 0 (success)
+      this.emulator.writeMemory32(rcVarAddr + 18, 0);           // lv_Len = 0 (numeric)
+
+      // Create Result2 local variable (secondary result = 0)
+      const result2VarAddr = 0x90360;
+      const result2NameAddr = 0x90380;
+      this.emulator.writeString(result2NameAddr, 'Result2');
+      this.emulator.writeMemory32(result2VarAddr + 0, 0);               // ln_Succ (end)
+      this.emulator.writeMemory32(result2VarAddr + 4, rcVarAddr);       // ln_Pred -> RC
+      this.emulator.writeMemory(result2VarAddr + 8, 0);                 // ln_Type
+      this.emulator.writeMemory(result2VarAddr + 9, 0);                 // ln_Pri
+      this.emulator.writeMemory32(result2VarAddr + 10, result2NameAddr); // ln_Name
+      this.emulator.writeMemory32(result2VarAddr + 14, 0);              // lv_Value = 0
+      this.emulator.writeMemory32(result2VarAddr + 18, 0);              // lv_Len = 0
+
+      // Link RC to the list
+      this.emulator.writeMemory32(rcVarAddr + 0, result2VarAddr);  // RC.ln_Succ -> Result2
+
+      // Update list head to point to RC
+      this.emulator.writeMemory32(localVarsListAddr + 0, rcVarAddr); // lh_Head -> RC
+
+      // Set cli_LocalVars BPTR to point to list
+      this.emulator.writeMemory32(cliStructAddr + 0x5C, localVarsListAddr >> 2); // cli_LocalVars (BPTR)
+
+      console.log(`[AmigaDoorSession] Created CLI local variables: RC=0, Result2=0`);
 
       // Set pr_CLI to point to CLI structure
       this.emulator.writeMemory32(taskAddr + prCliOffset, cliStructAddr >> 2); // pr_CLI is BPTR!
@@ -913,18 +907,15 @@ export class AmigaDoorSession {
       }
       this.emulator.writeMemory(argStringAddr + argString.length, 0); // Null terminate
 
-      // Extract program name from executable path
-      const progName = path.basename(this.config.executablePath);
-
       // Tell DOS library about CLI info
       if (this.dosLibrary) {
         this.dosLibrary.setCliInfo(argStringAddr, progName);
         console.log(`[AmigaDoorSession] Set CLI info: argString="${argString}" at 0x${argStringAddr.toString(16)}, progName="${progName}"`);
       }
 
-      // Don't send message - WHO runs as pure CLI command
+      // Don't send message - doors read args from CLI structure
       if (!this.startupMessageSent) {
-        console.log('[AmigaDoorSession] Not sending message - WHO reads args from CLI structure');
+        console.log(`[AmigaDoorSession] Not sending message - ${progName.toUpperCase()} reads args from CLI structure`);
         this.startupMessageSent = true;
       }
 
@@ -1052,12 +1043,335 @@ export class AmigaDoorSession {
 
         // === STEP 3: Check exit conditions ===
 
+        // === DEBUG: Check A4 setup (right after LEA.L <data>,A4) ===
+        if (pc === 0x1034) {
+          const a4 = this.emulator.getRegister(12); // A4 = register 12
+          console.log(`\n[A4-DEBUG] A4 initialized at PC=0x1034`);
+          console.log(`[A4-DEBUG] A4 = 0x${a4.toString(16)}`);
+          const testValue = this.emulator.readMemory32(a4 + 0x474);
+          console.log(`[A4-DEBUG] A4+0x474 = 0x${(a4 + 0x474).toString(16)}`);
+          console.log(`[A4-DEBUG] Memory[A4+0x474] = 0x${testValue.toString(16)}`);
+          if (testValue !== 0) {
+            console.log(`[A4-DEBUG] *** WARNING: A4+0x474 is NON-ZERO (0x${testValue.toString(16)}) - RTW will exit early! ***\n`);
+          } else {
+            console.log(`[A4-DEBUG] ✓ A4+0x474 is zero - RTW should continue to IPC code\n`);
+          }
+        }
+
+        // === FIX: Inject reply port AND BBS port RIGHT BEFORE the critical test ===
+        if (pc === 0x124C && !this.rtwPortInjected) {
+          this.rtwPortInjected = true;
+
+          const a4 = this.emulator.getRegister(12);
+          console.log(`\n[RTW-FIX] *** INJECTING RTW PORTS ***`);
+          console.log(`[RTW-FIX] A4 (data segment) = 0x${a4.toString(16)}`);
+
+          // Create a reply port for RTW using this.execLibrary
+          if (this.execLibrary && a4 !== 0 && this.aePortAddress) {
+            const replyPortAddr = this.execLibrary.createMsgPort();
+            console.log(`[RTW-FIX] Created reply port at 0x${replyPortAddr.toString(16)}`);
+            console.log(`[RTW-FIX] BBS door port (AEDoorPort2) at 0x${this.aePortAddress.toString(16)}`);
+
+            // Inject BBS door port at A4+0x44C
+            this.emulator.writeMemory32(a4 + 0x44C, this.aePortAddress);
+            console.log(`[RTW-FIX] ✓ Injected BBS port into A4+0x44C (0x${(a4+0x44C).toString(16)})`);
+
+            // Inject reply port into BOTH locations
+            this.emulator.writeMemory32(a4 + 0x450, replyPortAddr);
+            this.emulator.writeMemory32(a4 + 0x474, replyPortAddr);
+            console.log(`[RTW-FIX] ✓ Injected reply port into A4+0x450 (0x${(a4+0x450).toString(16)})`);
+            console.log(`[RTW-FIX] ✓ Injected reply port into A4+0x474 (0x${(a4+0x474).toString(16)})`);
+
+            // Verify it was written
+            const verifyBBS = this.emulator.readMemory32(a4 + 0x44C);
+            const verifyReply = this.emulator.readMemory32(a4 + 0x474);
+            console.log(`[RTW-FIX] Verification: A4+0x44C (BBS port) = 0x${verifyBBS.toString(16)}`);
+            console.log(`[RTW-FIX] Verification: A4+0x474 (reply port) = 0x${verifyReply.toString(16)}`);
+            console.log(`[RTW-FIX] ✓ RTW should now enter IPC loop and communicate with BBS!\n`);
+          } else {
+            console.log(`[RTW-FIX] ✗ ERROR: A4=${a4}, aePortAddress=${this.aePortAddress}\n`);
+          }
+        }
+
+        // === DEBUG: The critical test at PC=0x124C (file 0x278 -> memory 0x124C) ===
+        if (pc === 0x124C) {
+          const a4 = this.emulator.getRegister(12);
+          const testValue = this.emulator.readMemory32(a4 + 0x474);
+          console.log(`[CRITICAL-TEST] PC=0x124C: TST.L 0x474(A4)`);
+          console.log(`[CRITICAL-TEST] A4 = 0x${a4.toString(16)}`);
+          console.log(`[CRITICAL-TEST] Value at A4+0x474: 0x${testValue.toString(16)}`);
+          if (testValue !== 0) {
+            console.log(`[CRITICAL-TEST] ✓ Port is set! RTW will enter IPC loop!\n`);
+          } else {
+            console.log(`[CRITICAL-TEST] ✗ Port is ZERO - RTW will exit with code 30\n`);
+          }
+        }
+
+        // === DEBUG: Track reply port creation at PC=0x1068 (file 0x1068) ===
+        if (pc === 0x1068) {
+          const a4 = this.emulator.getRegister(12);
+          const d0 = this.emulator.getRegister(0);
+          console.log(`\n[REPLY-PORT-CREATE] PC=0x1068: MOVE.L D0, 0x450(A4)`);
+          console.log(`[REPLY-PORT-CREATE] D0 (port address) = 0x${d0.toString(16)}`);
+          console.log(`[REPLY-PORT-CREATE] A4 = 0x${a4.toString(16)}`);
+          console.log(`[REPLY-PORT-CREATE] Storing at A4+0x450 = 0x${(a4 + 0x450).toString(16)}\n`);
+        }
+
+        // === DEBUG: Test reply port creation at PC=0x1078 (file 0x1078) ===
+        if (pc === 0x1078) {
+          const a4 = this.emulator.getRegister(12);
+          const testValue = this.emulator.readMemory32(a4 + 0x450);
+          console.log(`\n[REPLY-PORT-TEST] PC=0x1078: TST.L 0x450(A4)`);
+          console.log(`[REPLY-PORT-TEST] Value at A4+0x450 = 0x${testValue.toString(16)}`);
+          if (testValue === 0) {
+            console.log(`[REPLY-PORT-TEST] ✗ Reply port creation FAILED - RTW will take error path\n`);
+          } else {
+            console.log(`[REPLY-PORT-TEST] ✓ Reply port created successfully at 0x${testValue.toString(16)}\n`);
+          }
+        }
+
+        // === DEBUG: The cleanup branch at PC=0x1270 (file 0x29C -> memory 0x1270) ===
+        if (pc === 0x1270) {
+          console.log(`\n[CLEANUP-BRANCH] PC=0x1270 (file 0x29C): BRA.B to cleanup`);
+          console.log(`[CLEANUP-BRANCH] RTW is now executing cleanup and will exit with code 30\n`);
+        }
+
+        // === DEBUG: Verify trap instructions in memory ===
+        if (pc === 0x1000 && !this.trapVerified) {
+          this.trapVerified = true;
+          const putMsgTrap = this.emulator.readMemory16(0xFE92);
+          const waitTrap = this.emulator.readMemory16(0xFEC2);
+          const allocMemTrap = this.emulator.readMemory16(0xFF3A);
+          console.log(`\n[TRAP-VERIFY] Checking trap instructions in memory:`);
+          console.log(`[TRAP-VERIFY] PutMsg at 0xFE92: 0x${putMsgTrap.toString(16).padStart(4,'0')}`);
+          console.log(`[TRAP-VERIFY] Wait at 0xFEC2: 0x${waitTrap.toString(16).padStart(4,'0')}`);
+          console.log(`[TRAP-VERIFY] AllocMem at 0xFF3A: 0x${allocMemTrap.toString(16).padStart(4,'0')}\n`);
+        }
+
+        // === DEBUG: Check A6 and JSR execution ===
+        if (pc === 0x116C && this.emulator) {
+          const a6 = this.emulator.getRegister(14);
+          const opcode116C = this.emulator.readMemory32(0x116C);
+          const opcode1170 = this.emulator.readMemory32(0x1170);
+          console.log(`\n[RTW-JSR] PC=0x116C: About to execute instruction`);
+          console.log(`[RTW-JSR] A6 (ExecBase) = 0x${a6.toString(16)}`);
+          console.log(`[RTW-JSR] Memory at 0x116C: 0x${opcode116C.toString(16)} (should be 0x2C780004 = movea.l 0x4.w,a6)`);
+          console.log(`[RTW-JSR] Memory at 0x1170: 0x${opcode1170.toString(16)} (should be 0x4EAEFE92 = jsr -0x16e(a6))`);
+          console.log(`[RTW-JSR] Expected jump to: 0x${(a6 - 0x16e).toString(16)}\n`);
+        }
+
+        // === DEBUG: Check if we reach JSR instruction ===
+        if (pc === 0x1170 && this.emulator) {
+          console.log(`\n[RTW-JSR] *** PC=0x1170: Executing JSR -0x16e(A6) to PutMsg ***`);
+          const a6 = this.emulator.getRegister(14);
+          console.log(`[RTW-JSR] A6 = 0x${a6.toString(16)}, will jump to 0x${(a6 - 0x16e).toString(16)}\n`);
+        }
+
+        // === DEBUG: Check exit point at 0x117C ===
+        if (pc === 0x117C && this.emulator) {
+          const a0 = this.emulator.getRegister(8);
+          const d0 = this.emulator.getRegister(0);
+          const opcode = this.emulator.readMemory16(0x117C);
+          console.log(`\n[RTW-EXIT-117C] *** PC=0x117C: About to execute move.b 0x22, (a0) ***`);
+          console.log(`[RTW-EXIT-117C] A0 = 0x${a0.toString(16)} (write destination)`);
+          console.log(`[RTW-EXIT-117C] D0 = 0x${d0.toString(16)}`);
+          console.log(`[RTW-EXIT-117C] Opcode: 0x${opcode.toString(16)}`);
+          console.log(`[RTW-EXIT-117C] Next instruction at 0x117E: move.l a0, -(a7)`);
+          console.log(`[RTW-EXIT-117C] Then BRA to 0x11CE\n`);
+        }
+
+        // === DEBUG: Check if we reach instructions after 0x117C ===
+        if (pc === 0x117E && this.emulator) {
+          console.log(`\n[RTW-EXIT-117E] *** PC=0x117E: Reached instruction after 0x117C! ***`);
+          console.log(`[RTW-EXIT-117E] move.b succeeded, continuing execution\n`);
+        }
+
+        // === DEBUG: Check if we reach branch target ===
+        if (pc === 0x11CE && this.emulator) {
+          console.log(`\n[RTW-EXIT-11CE] *** PC=0x11CE: Reached branch target! ***`);
+          console.log(`[RTW-EXIT-11CE] Executing initialization code\n`);
+        }
+
+        // === DEBUG: Trace ALL execution between 0x11CE and 0x124C to find missing FindPort ===
+        if (pc >= 0x11CE && pc <= 0x124C) {
+          if (!this.rtwInitPCs) this.rtwInitPCs = [];
+          this.rtwInitPCs.push(pc);
+
+          // Log every 10th PC to avoid spam
+          if (this.rtwInitPCs.length % 10 === 0) {
+            console.log(`[RTW-INIT] PCs so far: ${this.rtwInitPCs.slice(-10).map(p => '0x' + p.toString(16)).join(' -> ')}`);
+          }
+        }
+
+        // === DEBUG: Log when we reach the critical test ===
+        if (pc === 0x124C && this.emulator) {
+          console.log(`\n[RTW-INIT] *** Complete path from 0x11CE to 0x124C: ***`);
+          if (this.rtwInitPCs) {
+            const uniquePCs = [...new Set(this.rtwInitPCs)];
+            console.log(`[RTW-INIT] ${uniquePCs.length} unique PCs visited`);
+            console.log(`[RTW-INIT] Path: ${uniquePCs.map(p => '0x' + p.toString(16)).join(' -> ')}`);
+          }
+          console.log(`[RTW-INIT] Now executing TST.L 0x474(A4) - this will determine exit or IPC\n`);
+        }
+
+        // === DEBUG: RTW actual loop at 0x1158-0x1160 ===
+        if (pc === 0x1158 || pc === 0x115E || pc === 0x1160) {
+          if (!this.rtwLoopCount) this.rtwLoopCount = 0;
+          this.rtwLoopCount++;
+
+          if (this.rtwLoopCount % 100 === 0) {
+            console.log(`\n[RTW-LOOP] PC=0x${pc.toString(16)}, iteration ${this.rtwLoopCount}`);
+            const opcode = this.emulator.readMemory16(pc);
+            console.log(`[RTW-LOOP] Opcode: 0x${opcode.toString(16).padStart(4,'0')}`);
+
+            // Log all registers
+            const regs = [];
+            for (let i = 0; i < 8; i++) {
+              regs.push(`D${i}=0x${this.emulator.getRegister(i).toString(16)}`);
+            }
+            for (let i = 8; i < 16; i++) {
+              regs.push(`A${i-8}=0x${this.emulator.getRegister(i).toString(16)}`);
+            }
+            console.log(`[RTW-LOOP] ${regs.join(', ')}`);
+
+            if (this.rtwLoopCount >= 500) {
+              console.log(`[RTW-LOOP] *** STUCK IN LOOP FOR 500+ iterations - forcing exit ***`);
+              this.isRunning = false;
+            }
+          }
+        }
+
+        // === DEBUG: PutMsg() call at PC 0x1170 - RTW sending message to BBS ===
+        if (pc === 0x1170 && this.emulator && this.execLibrary) {
+          const a0 = this.emulator.getRegister(8);   // A0 = port address
+          const a1 = this.emulator.getRegister(9);   // A1 = message address
+          const a4 = this.emulator.getRegister(12);
+
+          console.log(`\n[PutMsg-SEND] PC=0x1170: RTW calling PutMsg()`);
+          console.log(`[PutMsg-SEND] A0 (port) = 0x${a0.toString(16)}`);
+          console.log(`[PutMsg-SEND] A1 (message) = 0x${a1.toString(16)}`);
+          console.log(`[PutMsg-SEND] A4 = 0x${a4.toString(16)}`);
+
+          // Read message structure
+          const mn_ReplyPort = this.emulator.readMemory32(a1 + 0x10);
+          const mn_Length = this.emulator.readMemory16(a1 + 0x0E);
+
+          console.log(`[PutMsg-SEND] Message.mn_ReplyPort = 0x${mn_ReplyPort.toString(16)}`);
+          console.log(`[PutMsg-SEND] Message.mn_Length = ${mn_Length}`);
+
+          // Check if port exists in ExecLibrary
+          const portName = this.execLibrary.getPortName(a0);
+          const replyPortName = this.execLibrary.getPortName(mn_ReplyPort);
+
+          console.log(`[PutMsg-SEND] Destination port name: ${portName || 'UNKNOWN'}`);
+          console.log(`[PutMsg-SEND] Reply port name: ${replyPortName || 'UNKNOWN'}`);
+
+          // Read first 16 bytes of message data
+          const msgData: number[] = [];
+          for (let i = 0; i < 16; i++) {
+            msgData.push(this.emulator.readMemory(a1 + 0x14 + i));
+          }
+          console.log(`[PutMsg-SEND] Message data (first 16 bytes): ${msgData.map(b => `0x${b.toString(16).padStart(2,'0')}`).join(' ')}\n`);
+        }
+
+        // === DEBUG: Wait() call at PC 0x1176 - RTW waiting for reply signal ===
+        if (pc === 0x1176 && this.emulator) {
+          const d0 = this.emulator.getRegister(0);   // D0 = signal mask
+          const d7 = this.emulator.getRegister(7);   // D7 was copied to D0
+
+          console.log(`\n[Wait-CALL] PC=0x1176: RTW calling Wait()`);
+          console.log(`[Wait-CALL] D0 (signal mask) = 0x${d0.toString(16)}`);
+          console.log(`[Wait-CALL] D7 (original mask) = 0x${d7.toString(16)}`);
+          console.log(`[Wait-CALL] RTW is blocking, waiting for signal from reply port\n`);
+        }
+
+        // === DEBUG: GetMsg() polling loop entry (PC 0x118E) ===
+        if (pc === 0x118E) {
+          const a4 = this.emulator.getRegister(12);
+          const portAddr = this.emulator.readMemory32(a4 + 0x450);
+          console.log(`\n[GetMsg-POLL] PC=0x118E: RTW entering GetMsg() polling loop`);
+          console.log(`[GetMsg-POLL] A4 = 0x${a4.toString(16)}`);
+          console.log(`[GetMsg-POLL] A4+0x450 (port pointer) = 0x${portAddr.toString(16)}`);
+
+          if (portAddr === 0 || portAddr === 0xFFFFFFFF) {
+            console.log(`[GetMsg-POLL] *** INVALID PORT ADDRESS! RTW will crash or loop forever! ***\n`);
+          } else {
+            // Check message count in port's message list
+            const msgListHead = this.emulator.readMemory32(portAddr + 20); // mp_MsgList.lh_Head
+            const msgListTail = portAddr + 20 + 4; // mp_MsgList.lh_Tail
+            const msgCount = (msgListHead === msgListTail) ? 0 : 1; // Simple check
+
+            console.log(`[GetMsg-POLL] Port mp_MsgList.lh_Head = 0x${msgListHead.toString(16)}`);
+            console.log(`[GetMsg-POLL] Port mp_MsgList.lh_Tail = 0x${msgListTail.toString(16)}`);
+            console.log(`[GetMsg-POLL] Messages in queue: ${msgCount}`);
+
+            if (msgCount === 0) {
+              console.log(`[GetMsg-POLL] *** PORT IS EMPTY! GetMsg() will return NULL and RTW will exit! ***`);
+
+              // WORKAROUND: Send initial door configuration message to unblock RTW
+              if (!this.sentInitialMessage) {
+                this.sentInitialMessage = true;
+                console.log(`[GetMsg-POLL] === SENDING INITIAL IPC MESSAGE ===`);
+
+                // Allocate message structure (Message = 20 bytes + data)
+                const msgAddr = 0x90800; // Safe area for message
+                const nodeId = this.config.bbsSession?.nodeId || 0;
+                const userName = this.config.bbsSession?.user?.username || 'TestUser';
+
+                // Fill Message structure (exec/ports.h)
+                this.emulator.writeMemory32(msgAddr + 0x00, 0); // mn_Node.ln_Succ
+                this.emulator.writeMemory32(msgAddr + 0x04, 0); // mn_Node.ln_Pred
+                this.emulator.writeMemory(msgAddr + 0x08, 5);   // mn_Node.ln_Type = NT_MESSAGE
+                this.emulator.writeMemory(msgAddr + 0x09, 0);   // mn_Node.ln_Pri
+                this.emulator.writeMemory32(msgAddr + 0x0A, 0); // mn_Node.ln_Name
+                this.emulator.writeMemory16(msgAddr + 0x0E, 256); // mn_Length
+                this.emulator.writeMemory32(msgAddr + 0x10, portAddr); // mn_ReplyPort (same port)
+
+                // Write door configuration data starting at offset 0x14 (20 bytes)
+                const dataOffset = msgAddr + 0x14;
+
+                // Write node ID
+                this.emulator.writeMemory32(dataOffset + 0x00, nodeId);
+
+                // Write user name (null-terminated string)
+                for (let i = 0; i < userName.length; i++) {
+                  this.emulator.writeMemory(dataOffset + 0x04 + i, userName.charCodeAt(i));
+                }
+                this.emulator.writeMemory(dataOffset + 0x04 + userName.length, 0); // Null terminator
+
+                // Send message using ExecLibrary.putMsg
+                this.execLibrary.putMsg(portAddr, msgAddr);
+
+                console.log(`[GetMsg-POLL] ✓ Sent initial message to port 0x${portAddr.toString(16)}`);
+                console.log(`[GetMsg-POLL]   Message addr: 0x${msgAddr.toString(16)}`);
+                console.log(`[GetMsg-POLL]   Node ID: ${nodeId}, User: ${userName}\n`);
+              }
+            } else {
+              console.log(`[GetMsg-POLL] ✓ Port has messages - RTW should continue\n`);
+            }
+          }
+        }
+
+        // === DEBUG: Track when D0 becomes 30 (0x1E) ===
+        const currentD0 = this.emulator.getRegister(0);
+        if (currentD0 === 30 || currentD0 === 0x1E) {
+          if (!this.d0Was30) {
+            this.d0Was30 = true;
+            const opcode = this.emulator.readMemory16(pc);
+            console.log(`[D0=30] First time D0=30 at PC=0x${pc.toString(16)}, opcode=0x${opcode.toString(16).padStart(4,'0')}`);
+            console.log(`[D0=30] Last 10 PCs: ${pcHistory.slice(-10).map(p => '0x' + p.toString(16)).join(' -> ')}`);
+          }
+        }
+
         // Exit trap: Door returned to our sentinel address
         if (pc === 0xFFFF00) {
           const returnCode = this.emulator.getRegister(0);
           console.log(`[AmigaDoorSession] === DOOR EXITED CLEANLY ===`);
           console.log(`[AmigaDoorSession] Return code (D0): ${returnCode}`);
           console.log(`[AmigaDoorSession] Total iterations: ${this.iterationCount}`);
+          console.log(`[RTW-EXIT] Execution path (${pcHistory.length} unique PCs):`);
+          console.log(`[RTW-EXIT] Last 50 PCs before exit:`);
+          console.log(`[RTW-EXIT] ${pcHistory.slice(-50).map(p => '0x' + p.toString(16)).join(' -> ')}`);
           this.terminate();
           return;
         }
@@ -1100,6 +1414,22 @@ export class AmigaDoorSession {
         const wasAt24a6 = (pc === 0x24a6);
         const cyclesExecuted = this.emulator.executeInstruction();
         this.totalCycles += cyclesExecuted;
+
+        // === DEBUG: WHO/RTW Polling Loop Analysis (0x1140-0x1178) ===
+        // Track what happens just before and during polling loops
+        // WHO enters loop at 0x1140 after calling functions that return counts in D0
+        if (pc >= 0x1140 && pc <= 0x1178) {
+          const newPc = this.emulator.getRegister(16);
+          const opcode = this.emulator.readMemory16(pc);
+          const d0 = this.emulator.getRegister(0);
+          const d1 = this.emulator.getRegister(1);
+          const d2 = this.emulator.getRegister(2);
+          const a0 = this.emulator.getRegister(8);
+          const a1 = this.emulator.getRegister(9);
+          const sr = this.emulator.getRegister(17);
+          const ccr = sr & 0x1F; // Condition Code Register (lower 5 bits)
+          console.log(`[POLL] PC=0x${pc.toString(16)} Op=0x${opcode.toString(16).padStart(4, '0')} -> 0x${newPc.toString(16)} | D0=${d0.toString(16).padStart(8,'0')} D1=${d1.toString(16).padStart(8,'0')} D2=${d2.toString(16).padStart(8,'0')} | A0=0x${a0.toString(16)}`);
+        }
 
         // === DEBUG: Check PC after executeInstruction() if we were at 0x24a6 ===
         if (wasAt24a6) {

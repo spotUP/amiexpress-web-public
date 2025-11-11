@@ -1,0 +1,9 @@
+COMMAND=MRC
+NAME=Multi Relay Chat
+TYPE=TS
+PATH=web/backend/src/doors/mrc
+ACCESS=0
+HOT=
+PRIVATE=N
+OVERLOAD=N
+HIDDEN=N

@@ -1,6 +1,8 @@
 import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
 import * as fs from 'fs';
 import * as path from 'path';
+import { FileManager } from './FileManager';
+import { PathManager } from './PathManager';
 
 /**
  * dos.library - Amiga DOS Library
@@ -55,6 +57,11 @@ export class DosLibrary {
   private outputCallback: ((data: string) => void) | null = null;
   private inputBuffer: string = '';
   private lastError: number = 0;
+
+  // NEW: File I/O management system (phase 3)
+  private fileManager: FileManager | null = null;
+  private pathManager: PathManager | null = null;
+  private useNewFileSystem: boolean = false;  // Feature flag for gradual migration
 
   // Standard file handles
   private readonly STDIN_HANDLE = 1;
@@ -125,6 +132,17 @@ export class DosLibrary {
       position: 0,
       isConsole: false
     });
+  }
+
+  /**
+   * Enable the new file system with FileManager and PathManager
+   * Called by AmigaDoorSession during initialization
+   */
+  enableNewFileSystem(baseDir: string): void {
+    console.log('[dos.library] Enabling new file system with FileManager/PathManager');
+    this.pathManager = new PathManager(baseDir);
+    this.fileManager = new FileManager(baseDir, this.pathManager);
+    this.useNewFileSystem = true;
   }
 
   /**
@@ -216,6 +234,20 @@ export class DosLibrary {
 
     console.log(`[dos.library] Open(filename="${filename}", mode=${mode})`);
 
+    // NEW: Use FileManager if enabled
+    if (this.useNewFileSystem && this.fileManager) {
+      const bptr = this.fileManager.open(filename, mode);
+      if (bptr > 0) {
+        this.lastError = this.ERROR_NO_ERROR;
+        console.log(`[dos.library] Open (FileManager) returned BPTR: ${bptr}`);
+      } else {
+        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        console.error(`[dos.library] Open (FileManager) failed for "${filename}"`);
+      }
+      return bptr;
+    }
+
+    // LEGACY: Old implementation (backward compatibility)
     let fileId = 0;
 
     // Handle special devices
@@ -339,6 +371,21 @@ export class DosLibrary {
       return -1;  // DOSTRUE
     }
 
+    // NEW: Use FileManager if enabled
+    if (this.useNewFileSystem && this.fileManager) {
+      const success = this.fileManager.close(handle);
+      if (success) {
+        console.log(`[dos.library] Close (FileManager) succeeded for handle ${handle}`);
+        return -1;  // DOSTRUE
+      } else {
+        console.error(`[dos.library] Close (FileManager) failed for handle ${handle}`);
+        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        return 0;  // DOSFALSE
+      }
+    }
+
+    // LEGACY: Old implementation (backward compatibility)
+
     // Standard handles should not be closed
     if (handle <= 3 || handle === this.NIL_HANDLE) {
       console.log(`[dos.library] Close: Standard handle ${handle}, returning success without closing`);
@@ -406,6 +453,22 @@ export class DosLibrary {
 
     console.log(`[dos.library] Read(handle=${handle}, buffer=0x${bufferAddr.toString(16)}, length=${length})`);
 
+    // NEW: Use FileManager if enabled
+    if (this.useNewFileSystem && this.fileManager) {
+      const dataBuffer = this.fileManager.read(handle, length);
+      const bytesRead = dataBuffer.length;
+
+      // Copy data to emulator memory
+      for (let i = 0; i < bytesRead; i++) {
+        this.emulator.writeMemory(bufferAddr + i, dataBuffer[i]);
+      }
+
+      this.lastError = this.ERROR_NO_ERROR;
+      console.log(`[dos.library] Read (FileManager) returned: ${bytesRead} bytes`);
+      return bytesRead;
+    }
+
+    // LEGACY: Old implementation (backward compatibility)
     if (handle === this.STDIN_HANDLE) {
       // Read from input buffer
       const bytesToRead = Math.min(length, this.inputBuffer.length);
@@ -482,6 +545,32 @@ export class DosLibrary {
       bytes.push(this.emulator.readMemory(bufferAddr + i));
     }
 
+    // NEW: Use FileManager if enabled
+    if (this.useNewFileSystem && this.fileManager) {
+      const dataBuffer = Buffer.from(bytes);
+      const result = this.fileManager.write(handle, dataBuffer);
+
+      if (result.bytesWritten < 0) {
+        console.error(`[dos.library] Write (FileManager) failed for handle ${handle}`);
+        this.lastError = this.ERROR_WRITE_PROTECTED;
+        return -1;
+      }
+
+      // If console output, send to callback
+      if (result.consoleData) {
+        const text = result.consoleData.toString();
+        console.log(`[dos.library] Write (FileManager): Console output (${length} bytes): ${JSON.stringify(text)}`);
+        if (this.outputCallback) {
+          this.outputCallback(text);
+        }
+      }
+
+      this.lastError = this.ERROR_NO_ERROR;
+      console.log(`[dos.library] Write (FileManager) returned: ${result.bytesWritten} bytes`);
+      return result.bytesWritten;
+    }
+
+    // LEGACY: Old implementation (backward compatibility)
     // Check if this is a console/stdout/stderr handle
     const fileHandle = this.openFiles.get(handle);
     const isConsoleHandle = (handle === this.STDOUT_HANDLE || handle === this.STDERR_HANDLE ||
@@ -586,6 +675,14 @@ export class DosLibrary {
    * the program was initiated. Never close the filehandle returned by Input!"
    */
   Input(): number {
+    // NEW: Use FileManager if enabled
+    if (this.useNewFileSystem && this.fileManager) {
+      const bptr = this.fileManager.getStdinBptr();
+      console.log(`[dos.library] Input (FileManager) returning BPTR ${bptr}`);
+      return bptr;
+    }
+
+    // LEGACY: Old implementation
     console.log(`[dos.library] Input() returning inherited handle ${this.inheritedInput}`);
     return this.inheritedInput;
   }
@@ -599,6 +696,14 @@ export class DosLibrary {
    * the program was initiated."
    */
   Output(): number {
+    // NEW: Use FileManager if enabled
+    if (this.useNewFileSystem && this.fileManager) {
+      const bptr = this.fileManager.getStdoutBptr();
+      console.log(`[dos.library] Output (FileManager) returning BPTR ${bptr}`);
+      return bptr;
+    }
+
+    // LEGACY: Old implementation
     console.log(`[dos.library] Output() returning inherited handle ${this.inheritedOutput}`);
     return this.inheritedOutput;
   }
@@ -2688,9 +2793,87 @@ export class DosLibrary {
       case -810:
         this.FreeArgs();
         return true;
+      case -126:
+        this.FindVar();
+        return true;
 
       default:
         return false; // Unknown function
     }
+  }
+
+  /**
+   * FindVar() - LVO -126 (0xFFFFFF82)
+   *
+   * Find a local or global shell variable.
+   *
+   * Parameters:
+   *   A0 = name (C-string pointer)
+   *   D1 = type (GVF_LOCAL_ONLY=0, GVF_GLOBAL_ONLY=1, GVF_BINARY_VAR=256)
+   *
+   * Returns:
+   *   D0 = Pointer to LocalVar structure (0 if not found)
+   *
+   * RTW calls this to check for RC and Result2 local variables.
+   */
+  public FindVar(): void {
+    const nameAddr = this.emulator.getRegister(8);  // A0
+    const type = this.emulator.getRegister(1);      // D1
+    const name = this.emulator.readString(nameAddr);
+
+    console.log(`[dos.library] FindVar("${name}", type=${type})`);
+
+    // For local variables (type=0 or GVF_LOCAL_ONLY), search CLI local vars
+    if ((type & 0xFF) === 0) {
+      // Get current CLI structure from pr_CLI
+      const taskAddr = 0x70000;  // Current task
+      const prCliOffset = 0xAC;
+      const cliBPTR = this.emulator.readMemory32(taskAddr + prCliOffset);
+
+      if (cliBPTR === 0) {
+        console.log(`[dos.library]   No CLI structure found`);
+        this.emulator.setRegister(0, 0);
+        return;
+      }
+
+      const cliAddr = cliBPTR << 2;
+      const localVarsBPTR = this.emulator.readMemory32(cliAddr + 0x5C); // cli_LocalVars
+
+      if (localVarsBPTR === 0) {
+        console.log(`[dos.library]   No local variables list`);
+        this.emulator.setRegister(0, 0);
+        return;
+      }
+
+      const localVarsListAddr = localVarsBPTR << 2;
+
+      // Walk the list to find the variable
+      let nodeAddr = this.emulator.readMemory32(localVarsListAddr + 0); // lh_Head
+
+      while (nodeAddr !== 0 && nodeAddr !== (localVarsListAddr + 4)) { // Not NULL and not Tail
+        const nodeNameAddr = this.emulator.readMemory32(nodeAddr + 10); // ln_Name
+
+        if (nodeNameAddr !== 0) {
+          const nodeName = this.emulator.readString(nodeNameAddr);
+
+          if (nodeName === name) {
+            console.log(`[dos.library]   Found local variable "${name}" at 0x${nodeAddr.toString(16)}`);
+            this.emulator.setRegister(0, nodeAddr);
+            return;
+          }
+        }
+
+        // Move to next node
+        nodeAddr = this.emulator.readMemory32(nodeAddr + 0); // ln_Succ
+      }
+
+      console.log(`[dos.library]   Variable "${name}" not found`);
+      this.emulator.setRegister(0, 0);
+      return;
+    }
+
+    // Global variables not supported yet
+    console.log(`[dos.library]   Global variables not supported`);
+    this.emulator.setRegister(0, 0);
   }
 }

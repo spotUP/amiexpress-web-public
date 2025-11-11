@@ -431,39 +431,150 @@ Already installed! Command info file at `Commands/GWALL.info`.
 
 ---
 
+### 8. Multi Relay Chat (MRC)
+
+**Status**: ✅ COMPLETE
+
+**Original Sources**:
+- `dev/docs/AmiExpressEDoorSources/MultiRelayChat/mrc_client.e` (882 lines)
+- `dev/docs/AmiExpressEDoorSources/MultiRelayChat/mrc_door.e` (1,999 lines)
+
+**TypeScript Ports**:
+- `web/backend/src/services/mrc-client.ts` (MRC daemon/multiplexer)
+- `web/backend/src/doors/mrc/index.ts` (Interactive door)
+
+**Command**: `MRC`
+**Type**: Two-component system (TypeScript daemon + TypeScript door)
+
+**Description**:
+Multi Relay Chat is a cross-platform real-time chat system that allows BBS users to chat with users on other BBSes around the world. Consists of two components that work together:
+
+1. **mrc-client** - Background daemon/multiplexer that:
+   - Maintains persistent connection to MRC server (mrc.bottomlessabyss.net:5000)
+   - Opens local listening socket on port 5000 for door connections
+   - Relays messages between MRC server and connected doors
+   - Handles server protocol and stats
+   - Auto-reconnect with exponential backoff
+
+2. **mrc_door** - Interactive chat door that:
+   - Connects to local mrc-client daemon
+   - Full-screen ANSI chat interface
+   - Real-time chat with users across all connected BBSes worldwide
+   - Customizable colors, brackets, and settings
+   - Buffer history (UP/DOWN arrows)
+   - Nick auto-completion (TAB)
+   - Many commands
+
+**Features**:
+- Full-screen ANSI interface with header, chat area, input, footer
+- Real-time multi-BBS chat via relay protocol
+- Customizable user settings (colors, brackets, messages, clock)
+- Buffer history with UP/DOWN arrow navigation
+- Nick auto-completion with TAB key
+- Chat color changing with PgUp/PgDn
+- Scrolling information banner
+- Server latency indicator and heartbeat
+- Private messages (/MSG, /TELL, /T, /M)
+- Room management (/JOIN, /TOPIC)
+- Action messages (/ME)
+- Broadcast to all rooms (/B)
+- Server info commands (/BBSES, /USERS, /ROOMS, /INFO, /WHOON)
+- Help system (/?
+
+, /HELP)
+- Version checking
+- User settings persistence
+- Chat log per node
+- Reply to last PM (/R shortcut)
+
+**Configuration**:
+
+1. **Start the MRC daemon first** (required before door can connect):
+```bash
+cd web/backend
+npx ts-node src/services/mrc-client.ts mrc.bottomlessabyss.net 5000
+```
+
+2. **Configure BBS information** in `doors/mrc-client/mrc_client.cfg`:
+```
+BBSNAME=Your BBS Name
+INFO_WEB=https://yourbbs.com
+INFO_TELNET=telnet://yourbbs.com:23
+INFO_SSH=ssh://yourbbs.com:22
+INFO_SYSOP=sysop@yourbbs.com
+INFO_DESC=A description of your BBS
+```
+
+3. **Run the door** from BBS menu:
+```
+/MRC
+```
+
+**Usage**:
+
+The mrc-client daemon must be running before users can access the door. Start it on system boot or manually.
+
+Common commands:
+- `/JOIN lobby` - Join lobby room
+- `/MSG username message` - Send private message
+- `/ME action` - Perform action
+- `/B message` - Broadcast to all rooms
+- `/TOPIC new topic` - Change room topic
+- `/USERS` - List all users online
+- `/ROOMS` - List all available rooms
+- `/QUIT` or CTRL-Q - Leave chat
+
+**Installation**:
+
+1. Build the daemon:
+```bash
+cd web/backend
+npm run build
+```
+
+2. Start daemon on system boot (example with systemd):
+```bash
+# Create /etc/systemd/system/mrc-client.service
+[Unit]
+Description=MRC Client Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=bbs
+WorkingDirectory=/path/to/amiexpress-web/web/backend
+ExecStart=/usr/bin/node dist/services/mrc-client.js mrc.bottomlessabyss.net 5000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+3. Door is already registered at `Commands/MRC.info`
+
+**Technical Details**:
+- Protocol: `fromuser~fromsite~fromroom~touser~tosite~toroom~message~\n`
+- Local IPC: TCP socket on localhost:5000
+- MRC Server: mrc.bottomlessabyss.net:5000
+- PIPE color codes (|00-|31) converted to ANSI
+- User settings in binary format (simplified for TypeScript)
+- Non-blocking I/O throughout
+- Auto-reconnect on connection loss
+
+**Benefits of TypeScript Port**:
+- No need for bsdsocket.library - uses Node.js net module
+- No need for aedoor.library - uses integrated door pattern
+- Simplified user settings (removed binary file complexity)
+- Modern async/await patterns throughout
+- Better error handling
+- Cross-platform (not Amiga-specific)
+- Easy to debug and extend
+
+---
+
 ## Planned Ports
 
-### 8. ConfTop-II (Conference Top Uploaders)
-
-**Status**: 📋 PLANNED
-
-**Original Source**: `dev/docs/AmiExpressEDoorSources/Conftop-II/ctop.e` (1,153 lines)
-**Purpose**: Track and display top uploaders per conference
-**Complexity**: Medium - local data storage, conference integration
-
-### 8. Global Wall
-
-**Status**: 📋 PLANNED
-
-**Original Source**: `dev/docs/AmiExpressEDoorSources/Global Wall/gwall.e` (1,832 lines)
-**Purpose**: Global graffiti wall shared across BBSes
-**Complexity**: Complex - requires backend server communication
-
-### 9. MRC_client
-
-**Status**: 📋 PLANNED
-
-**Original Source**: `dev/docs/AmiExpressEDoorSources/MRC_client/mrc_client.e` (882 lines)
-**Purpose**: Multi-Relay Chat client
-**Complexity**: Medium - real-time chat protocol
-
-### 10. MRC_door
-
-**Status**: 📋 PLANNED
-
-**Original Source**: `dev/docs/AmiExpressEDoorSources/MRC_door/mrc_door.e` (1,999 lines)
-**Purpose**: Multi-Relay Chat server/door
-**Complexity**: Complex - chat server with relay protocol
+**NONE** - All interactive Amiga E doors have been ported!
 
 ---
 
@@ -568,12 +679,14 @@ All doors located in `dev/docs/AmiExpressEDoorSources/`:
 | DiscordAnnounce | 410 | Webhook | Simple | ✅ DONE |
 | BBSLinkWall | 547 | Network | Medium | ✅ DONE |
 | GLCUpdater | 770 | Network | Batch Util | SKIP |
-| MRC_client | 882 | Chat Daemon | Complex | PLANNED |
+| MRC_client | 882 | Chat Daemon | Complex | ✅ DONE |
 | GLCViewer | 943 | Network | Medium | ✅ DONE |
 | MultiTop2 | 1,087 | Stats | Batch Util | SKIP |
 | ConfTop-II | 1,153 | Stats | Batch Util | SKIP |
 | Global Wall | 1,832 | Network | Complex | ✅ DONE |
-| MRC_door | 1,999 | Chat Door | Complex | PLANNED |
+| MRC_door | 1,999 | Chat Door | Complex | ✅ DONE |
+
+**Summary**: 8 of 8 interactive E doors ported (100%)! All Amiga E doors completed.
 
 ---
 

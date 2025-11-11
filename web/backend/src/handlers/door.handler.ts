@@ -554,11 +554,18 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     console.log(`[executeAmigaDoor] Starting 68k emulation for: ${doorPath}`);
 
     // Create DoorConfig for AmigaDoorSession
+    // TEMPORARY FIX: Force RTW as XIM door (it explicitly declares itself as XIM in banner)
+    let doorType = door.type || 'SIM';  // Default to SIM per express.e:4681
+    if (doorPath.toLowerCase().includes('/rtw/rtw') || doorPath.toLowerCase().includes('\\rtw\\rtw')) {
+      doorType = 'XIM';
+      console.log(`[executeAmigaDoor] RTW detected - forcing XIM door type`);
+    }
+
     const doorConfig = {
       executablePath: doorPath,
-      doorType: door.type || 'SIM',  // Pass door type (defaults to SIM per express.e:4681)
+      doorType: doorType,
       timeout: 300, // 5 minutes
-      bbsSession: session  // Pass BBS session for user/system/node data
+      bbsSession: session // Use session's actual nodeId assigned by getNextAvailableNodeId()
     };
 
     // Create AmigaDoorSession to run the native Amiga executable

@@ -799,6 +799,28 @@ export class ExecLibrary {
   }
 
   /**
+   * Helper: Get port name from port address (for debugging)
+   */
+  getPortName(portAddr: number): string | undefined {
+    if (portAddr === 0) return undefined;
+
+    // Search messagePorts registry
+    const port = this.messagePorts.get(portAddr);
+    if (port && port.name) {
+      return port.name;
+    }
+
+    // Search publicPorts registry
+    for (const [name, addr] of this.publicPorts.entries()) {
+      if (addr === portAddr) {
+        return name;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
    * FindSemaphore() - LVO -306 (0xFFFFFECE)
    *
    * Find a public semaphore by name.
@@ -1342,10 +1364,6 @@ export class ExecLibrary {
    * The structure is modified in-place to contain the OLD stack values,
    * allowing restoration by calling StackSwap again with the same structure.
    */
-  // Track when we've allocated a separate stack to maintain symmetry
-  private separateStackAllocated: boolean = false;
-  private separateStackPointer: number = 0;
-
   stackSwap(structAddr: number): void {
     console.log(`[ExecLibrary] StackSwap(struct=0x${structAddr.toString(16)})`);
 
@@ -1366,53 +1384,19 @@ export class ExecLibrary {
     console.log(`[ExecLibrary]   OLD: Lower=0x${oldLower.toString(16)}, Upper=0x${oldUpper.toString(16)}, SP=0x${oldPointer.toString(16)}`);
     console.log(`[ExecLibrary]   NEW: Lower=0x${newLower.toString(16)}, Upper=0x${newUpper.toString(16)}, SP=0x${newPointer.toString(16)}`);
 
-    // CRITICAL: Detect dangerous overlap that would corrupt saved data
-    // If NEW stack pointer is in same region as OLD and within 256 bytes, allocate separate stack
-    const inSameRegion = (newLower === oldLower && newUpper === oldUpper);
-    const tooClose = Math.abs(newPointer - oldPointer) < 256;
+    // Per AmigaOS docs: StackSwap is a symmetric operation
+    // Structure is modified in-place with OLD values, allowing restoration
+    // Trust the caller - they know their stack requirements
 
-    if (inSameRegion && tooClose && !this.separateStackAllocated) {
-      // First swap: Allocate truly separate stack to prevent corruption
-      this.separateStackPointer = 0x53FFC;  // 16KB separate stack at 0x50000-0x54000
-      console.log(`[ExecLibrary]   ⚠️  OVERLAP DANGER! OLD SP=0x${oldPointer.toString(16)}, requested NEW SP=0x${newPointer.toString(16)}`);
-      console.log(`[ExecLibrary]   Allocating separate stack at 0x${this.separateStackPointer.toString(16)} to prevent corruption`);
+    // Write OLD values to structure
+    this.emulator.writeMemory32(structAddr + 0, oldLower);
+    this.emulator.writeMemory32(structAddr + 4, oldUpper);
+    this.emulator.writeMemory32(structAddr + 8, oldPointer);
 
-      // Write OLD values to structure
-      this.emulator.writeMemory32(structAddr + 0, oldLower);
-      this.emulator.writeMemory32(structAddr + 4, oldUpper);
-      this.emulator.writeMemory32(structAddr + 8, oldPointer);
+    // Set SP to NEW value requested by caller
+    this.emulator.setRegister(15, newPointer);
 
-      // Set SP to separate safe stack
-      this.emulator.setRegister(15, this.separateStackPointer);
-      this.separateStackAllocated = true;
-
-      console.log(`[ExecLibrary]   Stack swapped! SP now 0x${this.separateStackPointer.toString(16)} (safe separate stack)`);
-    } else if (this.separateStackAllocated) {
-      // Second swap: Restore from separate stack
-      // Per NDK docs: Structure ALREADY contains the old values from first swap!
-      // We must swap them back (symmetric operation)
-      console.log(`[ExecLibrary]   Swapping back from separate stack`);
-
-      // Write CURRENT separate stack info to structure
-      this.emulator.writeMemory32(structAddr + 0, 0x50000);
-      this.emulator.writeMemory32(structAddr + 4, 0x54000);
-      this.emulator.writeMemory32(structAddr + 8, oldPointer);  // Current SP on separate stack
-
-      // Restore to the SP that's IN the structure (from first swap)
-      // This is the original stack pointer the door saved
-      this.emulator.setRegister(15, newPointer);  // newPointer is what door put in struct
-      this.separateStackAllocated = false;
-
-      console.log(`[ExecLibrary]   Stack swapped! SP now 0x${newPointer.toString(16)} (restored from struct)`);
-    } else {
-      // Normal symmetric swap
-      this.emulator.writeMemory32(structAddr + 0, oldLower);
-      this.emulator.writeMemory32(structAddr + 4, oldUpper);
-      this.emulator.writeMemory32(structAddr + 8, oldPointer);
-      this.emulator.setRegister(15, newPointer);
-
-      console.log(`[ExecLibrary]   Stack swapped! SP now 0x${newPointer.toString(16)}`);
-    }
+    console.log(`[ExecLibrary]   Stack swapped! SP now 0x${newPointer.toString(16)}`);
   }
 
   /**
