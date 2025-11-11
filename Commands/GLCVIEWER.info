@@ -1,0 +1,9 @@
+COMMAND=GLCVIEWER
+NAME=Global Last Callers Viewer
+TYPE=TS
+PATH=web/backend/src/doors/glc-viewer
+ACCESS=0
+HOT=
+PRIVATE=N
+OVERLOAD=N
+HIDDEN=N

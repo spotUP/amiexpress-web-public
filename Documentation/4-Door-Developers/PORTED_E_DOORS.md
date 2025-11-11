@@ -271,9 +271,85 @@ Already installed! Command info file at `Commands/BBSLINKWALL.info`.
 
 ---
 
+### 6. GLC Viewer (GLCViewer)
+
+**Status**: ✅ COMPLETE
+
+**Original Source**: `dev/docs/AmiExpressEDoorSources/Global Last Callers/GLCViewer.e` (943 lines)
+**TypeScript Port**: `web/backend/src/doors/glc-viewer/index.ts`
+**Command**: `GLCVIEWER`
+**Type**: TypeScript door (TS)
+
+**Description**:
+Displays global last callers from scenewall.bbs.io showing callers across all participating BBSes.
+
+**Features**:
+- Display last 10 callers (configurable)
+- 4 different ANSI art styles (can randomize)
+- Yesterday and previous day statistics
+- All-time records display
+- Top 3 most called BBSes
+- View specific BBS or all BBSes
+- Timezone support
+- Center names option
+
+**Configuration**:
+
+Create `doors/glc-viewer/glcviewer.cfg`:
+```
+serverhost=scenewall.bbs.io
+serverport=1541
+timeout=10
+retries=5
+lines=10
+screenclear=NO
+style=1
+# Or random styles: style=1,2,3,4
+centrename=0
+timezone=
+viewbbs=
+```
+
+Or use environment variables:
+```bash
+export GLC_SERVER_HOST="scenewall.bbs.io"
+export GLC_SERVER_PORT="1541"
+```
+
+**Usage**:
+```
+/GLCVIEWER
+```
+
+**Display Styles**:
+1. **Style 1**: Classic GLOBAL LASTCALLERS header with side-by-side stats
+2. **Style 2**: Alternate ASCII art header with side-by-side stats
+3. **Style 3**: Classic header with Top 3 most called systems
+4. **Style 4**: Alternate header with Top 3 most called systems
+
+**Actions Legend**:
+- `*` = New user
+- `U` = Upload success
+- `u` = Upload fail
+- `D` = Download success
+- `d` = Download fail
+- `o` = Operator paged
+- `O` = Operator chat
+- `F` = File scan
+- `B` = Bulletins
+- `E` = Exit restricted file
+- `A` = Account edit
+- `H` = Hack try (password fail)
+- `L` = Lost carrier
+
+**Installation**:
+Already installed! Command info file at `Commands/GLCVIEWER.info`.
+
+---
+
 ## Planned Ports
 
-### 5. ConfTop-II (Conference Top Uploaders)
+### 7. ConfTop-II (Conference Top Uploaders)
 
 **Status**: 📋 PLANNED
 
@@ -377,7 +453,7 @@ All doors located in `dev/docs/AmiExpressEDoorSources/`:
 | BBSLinkWall | 547 | Network | Medium | ✅ DONE |
 | GLCUpdater | 770 | Network | Medium | Low |
 | MRC_client | 882 | Chat | Complex | Low |
-| GLCViewer | 943 | Network | Medium | Medium |
+| GLCViewer | 943 | Network | Medium | ✅ DONE |
 | MultiTop2 | 1,087 | Stats | Medium | Medium |
 | ConfTop-II | 1,153 | Stats | Medium | High |
 | Global Wall | 1,832 | Network | Complex | Medium |
