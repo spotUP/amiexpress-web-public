@@ -357,7 +357,7 @@ function Terminal() {
     });
 
     // Handle keyboard input with raw key events for doors
-    term.onKey(({ key, domEvent }) => {
+    term.onKey(({ key }) => {
       // For login states, use processed data via onData
       if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'new-user-prompt') {
         // Let onData handler below handle login input
@@ -366,7 +366,6 @@ function Terminal() {
 
       // For doors, send raw key events with proper names
       if (doorActive.current) {
-        const keyName = domEvent.key;
         ws.emit('command', key);
         return;
       }
