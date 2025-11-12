@@ -2974,11 +2974,25 @@ function buildDoor(clientId, doorId) {
           console.log(`✓ Build successful: ${doorId} (${duration}ms)`);
 
           // Auto-launch door in BBS terminal after successful build
-          console.log(`🚀 Auto-launching door in BBS: ${doorId}`);
+          // Read bbsCommand from package.json
+          const doorPath = path.join(__dirname, '../../examples', doorId);
+          const pkgPath = path.join(doorPath, 'package.json');
+          let bbsCommand = doorId.toUpperCase(); // Default fallback
+
+          if (fs.existsSync(pkgPath)) {
+            try {
+              const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+              bbsCommand = pkg.bbsCommand || doorId.toUpperCase();
+            } catch (err) {
+              console.warn(`⚠️  Could not read bbsCommand from ${pkgPath}`);
+            }
+          }
+
+          console.log(`🚀 Auto-launching door in BBS: ${doorId} (command: ${bbsCommand})`);
           client.ws.send(
             JSON.stringify({
               type: 'auto-launch',
-              data: { doorId },
+              data: { doorId, bbsCommand },
             })
           );
         } else {
@@ -3192,7 +3206,9 @@ async function startClientDoor(clientId, doorId, doorPath) {
             const nodePackages = [
               'archiver', 'adm-zip', 'glob', 'graceful-fs', 'rimraf',
               'chokidar', 'fs-extra', 'mkdirp', 'tar', 'tar-stream',
-              'crc32-stream', 'lazystream', 'readable-stream', 'inflight'
+              'crc32-stream', 'lazystream', 'readable-stream', 'inflight',
+              // neo-blessed internal dependencies that don't work in browser
+              'term.js', 'pty.js', 'blessed/lib/colors'
             ];
             nodePackages.forEach(pkg => {
               build.onResolve({ filter: new RegExp(`^${pkg}(/.*)?$`) }, args => ({

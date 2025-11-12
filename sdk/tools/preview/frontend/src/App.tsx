@@ -325,8 +325,9 @@ function App() {
 
       case 'auto-launch':
         // Auto-launch door in BBS terminal after successful build
-        console.log('🚀 Auto-launching door:', message.data.doorId);
-        const doorCommand = `/${message.data.doorId}\r`;
+        console.log('🚀 Auto-launching door:', message.data.doorId, 'command:', message.data.bbsCommand);
+        // Use bbsCommand from message (no slash prefix)
+        const doorCommand = `${message.data.bbsCommand || message.data.doorId.toUpperCase()}\r`;
 
         // Switch to BBS tab if not already active
         setActiveTerminalTab('bbs');
