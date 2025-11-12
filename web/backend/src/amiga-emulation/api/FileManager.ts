@@ -121,8 +121,17 @@ export class FileManager {
     // Map AmigaDOS path to system path
     const sysPath = this.pathManager.amiToSysPath(amiPath, this.currentDir);
     if (!sysPath) {
-      console.error(`[FileManager] Failed to resolve path: "${amiPath}"`);
+      console.error(`[FileManager] ❌ Failed to resolve path: "${amiPath}"`);
       return 0; // Failed
+    }
+
+    // Check if file exists and log it
+    const fs = require('fs');
+    const fileExists = fs.existsSync(sysPath);
+    if (fileExists) {
+      console.log(`[FileManager] ✅ Open: "${amiPath}" -> "${sysPath}" (EXISTS)`);
+    } else {
+      console.log(`[FileManager] ⚠️  Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will fail with IoErr=205)`);
     }
 
     // Determine file open mode

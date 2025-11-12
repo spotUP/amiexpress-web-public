@@ -425,10 +425,25 @@ const EXEC_VECTORS: LibraryVector[] = [
   },
   {
     offset: -372,  // LVO -372 (0xFFFFFE6C)
-    name: 'GetMsg',
+    name: 'CreatePort_or_GetMsg',  // B door calls CreatePort here!
     handler: (emu, lib: ExecLibrary) => {
-      const portAddr = emu.getRegister(8);   // A0
-      return lib.getMsg(portAddr);
+      // CRITICAL: B door (and possibly other legacy doors) call CreatePort at -372
+      // But standard AmigaOS has GetMsg at -372
+      // Solution: Check if we're being called with typical CreatePort parameters
+      const a0 = emu.getRegister(8);   // A0 could be name (CreatePort) or port (GetMsg)
+      const d0 = emu.getRegister(0);   // D0 could be priority (CreatePort) or unused (GetMsg)
+
+      // Heuristic: If A0 looks like a valid port address (high memory) it's GetMsg
+      // If A0 is 0 or points to low memory (likely string), it's CreatePort
+      if (a0 >= 0x20000 && a0 < 0x100000) {
+        // Looks like a port address - call GetMsg
+        console.log(`[LibraryTraps] LVO -372 called with A0=0x${a0.toString(16)} - routing to GetMsg`);
+        return lib.getMsg(a0);
+      } else {
+        // Looks like CreatePort parameters - call CreatePort
+        console.log(`[LibraryTraps] LVO -372 called with A0=0x${a0.toString(16)}, D0=${d0} - routing to CreatePort`);
+        return lib.createPort(a0, d0);
+      }
     }
   },
   {

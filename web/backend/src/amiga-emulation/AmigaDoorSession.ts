@@ -9,6 +9,8 @@ import { LibraryTraps } from './api/LibraryTraps';
 import { XIMProtocol } from './XIMProtocol';
 import { KickstartRom } from './KickstartRom';
 import { nodeStatusManager, NodeStatus } from '../nodes/NodeStatusManager';
+import { SharedUserData } from './structures/UserStructures';
+import { SharedBBSData } from './structures/GlobalStructures';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -33,6 +35,8 @@ export class AmigaDoorSession {
   private iconLibrary: IconLibrary | null = null;
   private libraryTraps: LibraryTraps | null = null;
   private ximProtocol: XIMProtocol | null = null;
+  private sharedUserData: SharedUserData | null = null;
+  private sharedBBSData: SharedBBSData | null = null;
   private socket: Socket;
   private config: DoorConfig;
   private isRunning: boolean = false;
@@ -96,6 +100,29 @@ export class AmigaDoorSession {
     // Read instruction at PC to check if it's JSR (d16,A6)
     const a6 = this.emulator.getRegister(14);
 
+    // DEBUG: Log Bulls initialization check (loaded at 0x1000, so 0x100 → 0x1100)
+    if (pc >= 0x1100 && pc <= 0x1110) {
+      const a3 = this.emulator.getRegister(11);
+      console.log(`[BULLS-INIT] PC=0x${pc.toString(16)}, A3=0x${a3.toString(16)}`);
+      if (pc === 0x1108) {
+        const checkAddr = a3 + 0xAC;
+        const checkValue = this.emulator.readMemory32(checkAddr);
+        console.log(`[BULLS-INIT] *** Testing value at A3+0xAC (0x${checkAddr.toString(16)}) = 0x${checkValue.toString(16)}`);
+        console.log(`[BULLS-INIT] *** If ZERO, Bulls branches to 0x118C and skips CreatePort!`);
+      }
+    }
+
+    // DEBUG: Log Bulls CreatePort call area (0x198 → 0x1198)
+    if (pc >= 0x1190 && pc <= 0x11A0) {
+      const a0 = this.emulator.getRegister(8);
+      const d0 = this.emulator.getRegister(0);
+      console.log(`[BULLS-DEBUG] PC=0x${pc.toString(16)}, A6=0x${a6.toString(16)}, A0=0x${a0.toString(16)}, D0=0x${d0.toString(16)}`);
+      if (pc === 0x1198) {
+        const targetAddr = a6 - 0x174;
+        console.log(`[BULLS-DEBUG] *** CreatePort call! Target=0x${targetAddr.toString(16)} (A6-0x174)`);
+      }
+    }
+
     // === Handle library calls when PC is at trap address ===
     // JSR instructions execute normally and jump here
     // Calculate offset from A6
@@ -113,6 +140,11 @@ export class AmigaDoorSession {
     const isTrapAddress = this.libraryTraps.isTrapAddress(pc);
     const isTrapOffset = (offset < 0 && offset >= -2000 && this.libraryTraps.isTrapOffset(offset));
     const isLibraryTrap = isTrapAddress || isTrapOffset;
+
+    // DEBUG: Log trap detection for offset -372
+    if (offset === -372 || (pc >= 0xFE80 && pc <= 0xFE90)) {
+      console.log(`[TRAP-DEBUG] PC=0x${pc.toString(16)}, offset=${offset}, isTrapAddr=${isTrapAddress}, isTrapOffset=${isTrapOffset}`);
+    }
 
     if (!isLibraryTrap) {
       return Promise.resolve(false);
@@ -237,6 +269,36 @@ export class AmigaDoorSession {
         console.log(`[AmigaDoorSession] Set door directory: ${doorDir}`);
       }
 
+      // ========================================================================
+      // SHARED MEMORY STRUCTURES - Initialize user and BBS data for door access
+      // ========================================================================
+      console.log('[AmigaDoorSession] Initializing shared memory structures...');
+
+      // Initialize shared user data structures (loggedOnUser, loggedOnUserKeys, loggedOnUserMisc)
+      this.sharedUserData = new SharedUserData(this.emulator);
+      if (this.config.bbsSession?.user) {
+        this.sharedUserData.writeUserData(this.config.bbsSession.user);
+        console.log(`[AmigaDoorSession] Wrote user data for "${this.config.bbsSession.user.username}"`);
+        console.log(`  loggedOnUser:     0x${this.sharedUserData.getUserAddr().toString(16)}`);
+        console.log(`  loggedOnUserKeys: 0x${this.sharedUserData.getUserKeysAddr().toString(16)}`);
+        console.log(`  loggedOnUserMisc: 0x${this.sharedUserData.getUserMiscAddr().toString(16)}`);
+      } else {
+        console.warn('[AmigaDoorSession] No user data in bbsSession - doors may not work correctly');
+      }
+
+      // Initialize shared BBS data structures (cmds, sopt, node state)
+      this.sharedBBSData = new SharedBBSData(this.emulator);
+      if (this.config.bbsSession) {
+        this.sharedBBSData.writeBBSData(this.config.bbsSession);
+        console.log(`[AmigaDoorSession] Wrote BBS config data`);
+        console.log(`  cmds:       0x${this.sharedBBSData.getCmdsAddr().toString(16)}`);
+        console.log(`  sopt:       0x${this.sharedBBSData.getSoptAddr().toString(16)}`);
+        console.log(`  nodeState:  0x${this.sharedBBSData.getNodeStateAddr().toString(16)}`);
+      }
+
+      console.log('[AmigaDoorSession] Shared memory structures initialized!');
+      // ========================================================================
+
       // Set up timeout
       if (this.config.timeout) {
         this.executionTimer = setTimeout(() => {
@@ -323,8 +385,13 @@ export class AmigaDoorSession {
     const portAddr = this.execLibrary.createPublicPort(portName);
     console.log(`[AmigaDoorSession] Created ${portName} at 0x${portAddr.toString(16)}`);
 
+    // ALSO create simple "AEDoorPort" for doors that don't use node numbers (like ustats)
+    const simplePortAddr = this.execLibrary.createPublicPort("AEDoorPort");
+    console.log(`[AmigaDoorSession] Created AEDoorPort (simple) at 0x${simplePortAddr.toString(16)}`);
+
     // Store for cleanup
     this.doorPortAddress = portAddr;
+    this.aePortAddress = portAddr; // RTW-FIX needs this for port injection
 
     // SIM and SUP doors run synchronously without XIM message protocol (express.e:4280-4282, 4304-4306)
     // They execute as standard CLI commands and output to stdout via DOS Write()
@@ -549,6 +616,10 @@ export class AmigaDoorSession {
       this.emulator.writeMemory32(finalSP + offset, exitTrapAddress);
     }
     console.log(`  Exit trap addresses: 0x${exitTrapAddress.toString(16)} from 0x${(finalSP-64).toString(16)} to 0x${(finalSP+60).toString(16)}`);
+
+    // NOTE: SP+0xAC already contains exit trap (0xFFFF00) from loop above
+    // Bulls checks this location - leaving it as-is for now
+    console.log(`  SP+0xAC: 0x${(finalSP + 0xAC).toString(16)} contains exit trap value`);
 
     // CRITICAL: Initialize stack-based code that door expects
     // Door executes JSR (3682,A7) at PC=0x1248 (instruction 198)
@@ -893,12 +964,15 @@ export class AmigaDoorSession {
 
       console.log(`[AmigaDoorSession] Created CLI local variables: RC=0, Result2=0`);
 
-      // Set pr_CLI to point to CLI structure
-      this.emulator.writeMemory32(taskAddr + prCliOffset, cliStructAddr >> 2); // pr_CLI is BPTR!
+      // CRITICAL FIX: Leave pr_CLI = 0 initially so doors like Bulls can detect first run
+      // Bulls checks pr_CLI at A3+0xAC - if ZERO, initializes and calls CreatePort
+      // If non-zero, Bulls assumes already initialized and skips CreatePort!
+      // We set pr_CLI AFTER door initializes (or door will set it itself)
+      this.emulator.writeMemory32(taskAddr + prCliOffset, 0); // pr_CLI = 0 (first run!)
 
       console.log(`[AmigaDoorSession] Created CLI structure at 0x${cliStructAddr.toString(16)}`);
       console.log(`[AmigaDoorSession]   cli_CommandName BSTR: length=${cmdLine.length} at 0x${cmdLineAddr.toString(16)}, data="${cmdLine}"`);
-      console.log(`[AmigaDoorSession]   pr_CLI (BPTR): 0x${(cliStructAddr >> 2).toString(16)} -> 0x${cliStructAddr.toString(16)}`);
+      console.log(`[AmigaDoorSession]   pr_CLI initially 0 - door will detect first run and initialize`);
 
       // Set up CLI info for GetArgStr() and GetCliProgramName()
       // GetArgStr() should return just the arguments (node number), not the program name
@@ -915,11 +989,24 @@ export class AmigaDoorSession {
         console.log(`[AmigaDoorSession] Set CLI info: argString="${argString}" at 0x${argStringAddr.toString(16)}, progName="${progName}"`);
       }
 
-      // Don't send message - doors read args from CLI structure
-      if (!this.startupMessageSent) {
-        console.log(`[AmigaDoorSession] Not sending message - ${progName.toUpperCase()} reads args from CLI structure`);
-        this.startupMessageSent = true;
+      // CRITICAL: Set callback to update pr_CLI after door calls CreatePort (init complete)
+      // Bulls and other doors need pr_CLI = 0 for first-run detection, but then need
+      // pr_CLI pointing to CLI structure to read command-line arguments
+      let prCliSet = false;
+      if (this.execLibrary && this.emulator) {
+        this.execLibrary.setDoorInitCallback(() => {
+          if (!prCliSet && this.emulator) {
+            console.log(`[AmigaDoorSession] *** CreatePort called - door initialized! Setting pr_CLI ***`);
+            this.emulator.writeMemory32(taskAddr + prCliOffset, cliStructAddr >> 2);
+            console.log(`[AmigaDoorSession]   pr_CLI set to 0x${(cliStructAddr >> 2).toString(16)} (BPTR) -> 0x${cliStructAddr.toString(16)}`);
+            prCliSet = true;
+          }
+        });
       }
+
+      // REMOVED: This was blocking XIM protocol for doors like Bulls
+      // XIM doors NEED the message protocol to communicate with BBS
+      // Setting startupMessageSent = true here prevented XIM doors from ever entering IPC mode
 
       // Track execution path for debugging WHO door
       let lastPC = 0;

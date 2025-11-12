@@ -713,7 +713,9 @@ export class DosLibrary {
    * Returns: D0 = error code
    */
   IoErr(): number {
-    console.log(`[dos.library] IoErr() returning ${this.lastError}`);
+    if (this.lastError !== 0) {
+      console.log(`[dos.library] 🔴 IoErr() = ${this.lastError} (${this.getErrorMessage(this.lastError)})`);
+    }
     return this.lastError;
   }
 
@@ -929,23 +931,23 @@ export class DosLibrary {
     const mode = this.emulator.getRegister(CPURegister.D2);
     const name = this.readString(namePtr);
 
-    console.log(`[dos.library] Lock("${name}", mode=${mode})`);
-
     const realPath = this.resolvePath(name);
     if (!realPath) {
-      console.error(`[dos.library] Lock: Failed to resolve path "${name}"`);
-      this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] 🔒 Lock("${name}") - ❌ Failed to resolve path [IoErr=${this.lastError}: ${this.getErrorMessage(this.lastError)}]`);
+      this.emulator.setRegister(CPURegister.D0, 0);
       return;
     }
 
     // Check if path exists
     if (!fs.existsSync(realPath)) {
-      console.error(`[dos.library] Lock: Path does not exist: ${realPath}`);
-      this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.log(`[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ⚠️  NOT FOUND [IoErr=${this.lastError}: ${this.getErrorMessage(this.lastError)}]`);
+      this.emulator.setRegister(CPURegister.D0, 0);
       return;
     }
+
+    console.log(`[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ✅ EXISTS`);
 
     // Create lock
     const lockId = this.nextLockId++;

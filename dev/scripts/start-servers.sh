@@ -127,6 +127,16 @@ else
   echo "   ✓ SDK already built"
 fi
 
+# Always rebuild SDK Preview frontend (ensures latest changes are reflected)
+echo "→ SDK Preview: Building frontend..."
+(cd "$REPO_ROOT/sdk/tools/preview/frontend" && npm run build --loglevel=error > /dev/null 2>&1)
+if [ $? -eq 0 ]; then
+  echo "   ✓ SDK Preview frontend built successfully"
+else
+  echo "   ⚠️  Warning: SDK Preview frontend build failed"
+  echo "   Try running: cd sdk/tools/preview/frontend && npm run build"
+fi
+
 # TypeScript check for backend (quick check only, don't block startup)
 echo "→ Running quick TypeScript check..."
 (cd "$REPO_ROOT/web/backend" && npx tsc --noEmit > /dev/null 2>&1)

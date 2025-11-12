@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 **🔴 MANDATORY: READ THIS ENTIRE FILE BEFORE ANY ACTION 🔴**
 
 You MUST read ALL of CLAUDE.md from top to bottom before doing ANY work.
@@ -46,6 +48,11 @@ AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress
 - `web/backend` - Node.js/TypeScript BBS server
 - `web/frontend` - React/Vite/xterm.js terminal interface
 - `sdk` - Door Development Kit for creating BBS doors/games
+
+**Door Types**:
+- **68K Doors**: Legacy Amiga binaries executed via MOIRA emulator (in `doors/`)
+- **TypeScript Doors**: Modern doors using SDK, native execution (in `web/backend/src/doors/`)
+- Both types register commands the same way via `.info` files
 
 ## Project Structure
 ```
@@ -150,6 +157,18 @@ npm run validate     # Validate door package structure
 - **NEVER** create a PR with broken SDK or example doors
 - Example doors are in `sdk/examples/` directory
 
+### SDK Preview (Door Development Tool)
+```bash
+cd sdk
+npm run preview        # Start SDK preview at http://localhost:8080
+npm run preview:quick  # Skip dependency checks, start immediately
+```
+- Live door development environment
+- Hot reload on code changes
+- Integrated BBS terminal for testing
+- View door metadata, code, and test in real-time
+- No need to restart BBS server when developing doors
+
 ### Testing
 
 **Backend Tests:**
@@ -215,6 +234,11 @@ npm run lint         # ESLint validation
   - `VERCEL_TOKEN` - For Vercel deployment
   - `RENDER_API_KEY` - For Render.com webhooks
 - See `.env.example` for full list
+
+**Database Location**:
+- Development: `./data/amiexpress.db` (project root)
+- Production: Set via `DATABASE_DIR` environment variable
+- SQLite file created automatically on first run
 
 ## Fonts
 - **Status**: Classic Amiga BBS fonts are referenced but TTF files are NOT included in repository
@@ -392,6 +416,13 @@ BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
   ```
 - Essential for debugging door execution, understanding polling loops, and identifying missing library calls
 - Much more effective than trying to infer behavior from register/memory logging
+
+## Amiga Binary Testing (Optional)
+- **vamos**: CLI tool for testing Amiga binaries outside BBS
+- Install: `pip3 install amitools`
+- Usage: `vamos doors/who/who` (test door execution)
+- Also available: `vda68k` for disassembly
+- Helpful for debugging 68K door issues before BBS integration
 
 ## NO STUBS OR TODOs
 - NEVER leave stub implementations that break functionality

@@ -108,6 +108,9 @@ export class ExecLibrary {
   // Door message callback - called when door sends message to AEDoorPort
   private doorMessageCallback: ((portAddr: number, msgAddr: number) => void) | null = null;
 
+  // Door init callback - called when door calls CreatePort (initialization complete)
+  private doorInitCallback: (() => void) | null = null;
+
   // Standard library addresses (for stubs)
   private readonly EXEC_BASE_ADDR = 0x010000;    // ExecBase at 64KB
   private readonly DOS_LIB_ADDR = 0x020000;       // DOS.library at 128KB
@@ -166,6 +169,14 @@ export class ExecLibrary {
    */
   setDoorMessageCallback(callback: (portAddr: number, msgAddr: number) => void): void {
     this.doorMessageCallback = callback;
+  }
+
+  /**
+   * Set callback for when door calls CreatePort (initialization complete)
+   * This allows AmigaDoorSession to set pr_CLI after door has initialized
+   */
+  setDoorInitCallback(callback: () => void): void {
+    this.doorInitCallback = callback;
   }
 
   /**
@@ -1040,10 +1051,16 @@ export class ExecLibrary {
     // Read the port name if provided
     let portName = '';
     if (nameAddr !== 0) {
-      portName = this.readString(nameAddr);
+      portName = this.emulator.readString(nameAddr);
       console.log(`[ExecLibrary]   Port name: "${portName}"`);
     } else {
       console.log(`[ExecLibrary]   Port name: (NULL - private port)`);
+    }
+
+    // CRITICAL: Notify door session that CreatePort was called (initialization complete)
+    // Door needs pr_CLI set to CLI structure AFTER initialization
+    if (this.doorInitCallback) {
+      this.doorInitCallback();
     }
 
     // Initialize MsgPort structure
