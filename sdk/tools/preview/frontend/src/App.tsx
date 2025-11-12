@@ -529,7 +529,7 @@ function App() {
   };
 
   // Handle archive creation
-  const handleCreateArchive = async (options: ArchiveOptions) => {
+  const handleCreateArchive = async (options: ArchiveOptions, extraFiles?: File[]) => {
     if (!selectedDoor) {
       toast.error('No door selected', 'Please select a door first');
       return;
@@ -538,12 +538,20 @@ function App() {
     try {
       toast.info('Creating archive...', 'Packaging your door');
 
+      // Use FormData to support file uploads
+      const formData = new FormData();
+      formData.append('options', JSON.stringify(options));
+
+      // Add extra files if provided
+      if (extraFiles && extraFiles.length > 0) {
+        extraFiles.forEach((file) => {
+          formData.append('extraFiles', file);
+        });
+      }
+
       const response = await fetch(`/api/doors/${selectedDoor.id}/release`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(options),
+        body: formData,
       });
 
       if (!response.ok) {

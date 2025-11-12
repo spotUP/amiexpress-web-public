@@ -27,9 +27,13 @@ const fs = require('fs');
 const chokidar = require('chokidar');
 const archiver = require('archiver');
 const AdmZip = require('adm-zip');
+const multer = require('multer');
 const { spawn, execSync, exec } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
+
+// Configure multer for file uploads (store in memory)
+const upload = multer({ storage: multer.memoryStorage() });
 
 const PORT = process.env.PORT || 8080;
 const DEBUG_OUTPUT = process.env.DEBUG_OUTPUT === 'true' || false;
@@ -653,10 +657,18 @@ if (!fs.existsSync(downloadsDir)) {
 const downloadTracking = new Map();
 
 // API: Create release archive
-app.post('/api/doors/:doorId/release', async (req, res) => {
+app.post('/api/doors/:doorId/release', upload.array('extraFiles'), async (req, res) => {
   try {
     const { doorId } = req.params;
-    const { format = 'zip', includeSource = true, includeAssets = true, includeDocs = true, doormanCompatible = true } = req.body;
+
+    // Parse options from formData
+    const options = req.body.options ? JSON.parse(req.body.options) : req.body;
+    const { format = 'zip', includeSource = true, includeAssets = true, includeDocs = true, doormanCompatible = true } = options;
+
+    // Get uploaded files from multer
+    const extraFiles = req.files || [];
+    console.log(`📦 Creating release with ${extraFiles.length} extra file(s)`);
+
     const doorPath = path.join(__dirname, '../../examples', doorId);
 
     if (!fs.existsSync(doorPath)) {
@@ -709,6 +721,15 @@ app.post('/api/doors/:doorId/release', async (req, res) => {
 
       // Add door files based on options
       addDirectory(doorPath);
+
+      // Add extra uploaded files to root of archive
+      if (extraFiles.length > 0) {
+        console.log(`📎 Adding ${extraFiles.length} extra file(s) to archive`);
+        extraFiles.forEach((file) => {
+          console.log(`  + ${file.originalname} (${file.size} bytes)`);
+          zip.addFile(file.originalname, file.buffer);
+        });
+      }
 
       // Generate FILE_ID.DIZ (BBS standard format)
       const generateFileDiz = () => {

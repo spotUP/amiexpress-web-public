@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Package, Download, Loader } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Package, Download, Loader, Upload, X, File } from 'lucide-react';
 import { ArchiveOptions } from '../types';
 
 interface ReleaseArchiveProps {
   doorName: string;
-  onCreateArchive: (options: ArchiveOptions) => Promise<void>;
+  onCreateArchive: (options: ArchiveOptions, extraFiles?: File[]) => Promise<void>;
   className?: string;
 }
 
@@ -14,6 +14,8 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
   className = '',
 }) => {
   const [isCreating, setIsCreating] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [options, setOptions] = useState<ArchiveOptions>({
     format: 'zip',
     includeSource: true,
@@ -22,10 +24,31 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
     doormanCompatible: true,
   });
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setUploadedFiles(prev => [...prev, ...files]);
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
   const handleCreateArchive = async () => {
     setIsCreating(true);
     try {
-      await onCreateArchive(options);
+      await onCreateArchive(options, uploadedFiles);
     } catch (error) {
       console.error('Failed to create archive:', error);
     } finally {
@@ -111,6 +134,59 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
             />
             <span className="text-sm text-gray-300">Documentation (README, etc.)</span>
           </label>
+        </div>
+
+        {/* Extra Files Upload */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-300">
+            Additional Files
+          </label>
+          <p className="text-xs text-gray-500 mb-2">
+            Add extra files to include in the release (READMEs, licenses, docs, etc.)
+          </p>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Upload Files
+          </button>
+
+          {/* Uploaded files list */}
+          {uploadedFiles.length > 0 && (
+            <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+              {uploadedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between px-2 py-1.5 bg-gray-800 rounded text-xs"
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <File className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                    <span className="text-gray-300 truncate">{file.name}</span>
+                    <span className="text-gray-500 flex-shrink-0">
+                      ({formatFileSize(file.size)})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveFile(index)}
+                    className="ml-2 p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-red-400 transition-colors flex-shrink-0"
+                    title="Remove file"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Doorman compatibility */}
