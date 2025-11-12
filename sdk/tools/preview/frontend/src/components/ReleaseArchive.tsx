@@ -1,6 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Package, Download, Loader, Upload, X, File } from 'lucide-react';
 import { ArchiveOptions } from '../types';
+import { ArchiveFileManager } from './ArchiveFileManager';
+
+interface FileNode {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  path: string;
+  size?: number;
+  children?: FileNode[];
+  isEditing?: boolean;
+}
 
 interface ReleaseArchiveProps {
   doorName: string;
@@ -15,6 +26,7 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [archiveFiles, setArchiveFiles] = useState<FileNode[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [options, setOptions] = useState<ArchiveOptions>({
     format: 'zip',
@@ -23,6 +35,18 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
     includeDocs: true,
     doormanCompatible: true,
   });
+
+  // Convert uploaded files to FileNode format
+  useEffect(() => {
+    const fileNodes: FileNode[] = uploadedFiles.map((file, index) => ({
+      id: `file-${index}-${Date.now()}`,
+      name: file.name,
+      type: 'file' as const,
+      path: file.name,
+      size: file.size,
+    }));
+    setArchiveFiles(fileNodes);
+  }, [uploadedFiles]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -208,6 +232,14 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
             Makes the archive installable via the BBS doorman utility
           </p>
         </div>
+
+        {/* Archive File Manager */}
+        {archiveFiles.length > 0 && (
+          <ArchiveFileManager
+            files={archiveFiles}
+            onFilesChange={setArchiveFiles}
+          />
+        )}
 
         {/* Create button */}
         <button

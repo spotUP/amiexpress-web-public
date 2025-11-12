@@ -24,3 +24,4 @@ export { FileDizEditor } from './FileDizEditor';
 
 // UI components
 export * from './ui';
+export { ArchiveFileManager } from './ArchiveFileManager';
