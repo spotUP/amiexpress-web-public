@@ -2,6 +2,32 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⛔ CRITICAL RULES - READ FIRST ⛔
+
+**NEVER USE BACKGROUND PROCESSES - THIS IS NON-NEGOTIABLE**
+
+1. **NEVER use `run_in_background: true`** in Bash tool calls
+2. **NEVER run `./dev/scripts/start-servers.sh` in background**
+3. **NEVER use `&` in bash commands for servers**
+4. **NEVER create multiple server restarts in one session**
+
+**Why:** Background bash processes create zombie references that:
+- Persist across session summarization
+- Generate 100-200 tokens per message in system reminders
+- Cannot be cleaned up with KillShell
+- Accumulate to thousands of wasted tokens
+- Cost money and consume context window
+
+**What TO do:**
+- Run commands synchronously (they complete in 5-10 seconds)
+- If servers need restart: user will handle it manually
+- Only use background for true long-running monitoring (rare)
+- Maximum ONE server operation per session
+
+**Violation = Session must end immediately**
+
+---
+
 ## Project Overview
 
 AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress/!X. It emulates 68K Amiga binaries in the browser using MOIRA (68000 CPU emulator) and recreates the BBS environment with modern web technologies.
