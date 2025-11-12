@@ -16,6 +16,10 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 2. **NEVER run `./dev/scripts/start-servers.sh` in background**
 3. **NEVER use `&` in bash commands for servers**
 4. **NEVER create multiple server restarts in one session**
+5. **ALWAYS ask user to start server script** - Never start/restart servers yourself
+   - User will run `./dev/scripts/start-servers.sh` manually
+   - You may check if servers are running but never restart them
+   - If restart needed: inform user and wait for them to do it
 
 **Why:** Background bash processes create zombie references that:
 - Persist across session summarization
