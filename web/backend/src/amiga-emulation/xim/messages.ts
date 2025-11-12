@@ -98,6 +98,8 @@ export class XIMMessageParser {
       [XIMCommand.JH_CO]: 'JH_CO (Console Output)',
       [XIMCommand.JH_SO]: 'JH_SO (Serial Output)',
       [XIMCommand.GETKEY]: 'GETKEY',
+
+      // Data query commands (DT_*)
       [XIMCommand.DT_NAME]: 'DT_NAME',
       [XIMCommand.DT_PASSWORD]: 'DT_PASSWORD',
       [XIMCommand.DT_LOCATION]: 'DT_LOCATION',
@@ -105,6 +107,9 @@ export class XIMMessageParser {
       [XIMCommand.DT_REALNAME]: 'DT_REALNAME',
       [XIMCommand.DT_SLOTNUMBER]: 'DT_SLOTNUMBER',
       [XIMCommand.DT_SECSTATUS]: 'DT_SECSTATUS',
+      [XIMCommand.DT_SECBOARD]: 'DT_SECBOARD',
+      [XIMCommand.DT_SECLIBRARY]: 'DT_SECLIBRARY',
+      [XIMCommand.DT_SECBULLETIN]: 'DT_SECBULLETIN',
       [XIMCommand.DT_TIMELIMIT]: 'DT_TIMELIMIT',
       [XIMCommand.DT_LINELENGTH]: 'DT_LINELENGTH',
       [XIMCommand.DT_EXPERT]: 'DT_EXPERT',
@@ -115,8 +120,33 @@ export class XIMMessageParser {
       [XIMCommand.DT_TIMELASTON]: 'DT_TIMELASTON',
       [XIMCommand.DT_TIMEUSED]: 'DT_TIMEUSED',
       [XIMCommand.DT_TIMETOTAL]: 'DT_TIMETOTAL',
+      [XIMCommand.DT_BYTESUPLOAD]: 'DT_BYTESUPLOAD',
+      [XIMCommand.DT_BYTEDOWNLOAD]: 'DT_BYTEDOWNLOAD',
+      [XIMCommand.DT_DAILYBYTELIMIT]: 'DT_DAILYBYTELIMIT',
+      [XIMCommand.DT_DAILYBYTEDLD]: 'DT_DAILYBYTEDLD',
+      [XIMCommand.ACTIVE_NODES]: 'ACTIVE_NODES',
+      [XIMCommand.DT_DUMP]: 'DT_DUMP',
+      [XIMCommand.DT_TIMEOUT]: 'DT_TIMEOUT',
+      [XIMCommand.DT_STAMP_LASTON]: 'DT_STAMP_LASTON',
+      [XIMCommand.DT_STAMP_CTIME]: 'DT_STAMP_CTIME',
+      [XIMCommand.DT_CURR_TIME]: 'DT_CURR_TIME',
+      [XIMCommand.DT_CONFACCESS]: 'DT_CONFACCESS',
+      [XIMCommand.DT_LANGUAGE]: 'DT_LANGUAGE',
+      [XIMCommand.DT_QUICKFLAG]: 'DT_QUICKFLAG',
+      [XIMCommand.DT_GOODFILE]: 'DT_GOODFILE',
+      [XIMCommand.DT_ANSICOLOR]: 'DT_ANSICOLOR',
+      [XIMCommand.DT_ISANSI]: 'DT_ISANSI',
+      [XIMCommand.DT_MSGCODE]: 'DT_MSGCODE',
+      [XIMCommand.DT_FILECODE]: 'DT_FILECODE',
+      [XIMCommand.DT_ADDBIT]: 'DT_ADDBIT',
+      [XIMCommand.DT_REMBIT]: 'DT_REMBIT',
+      [XIMCommand.DT_QUERYBIT]: 'DT_QUERYBIT',
+
+      // BBS info commands
       [XIMCommand.DT_HOSTNAME]: 'DT_HOSTNAME',
       [XIMCommand.DT_HOSTIP]: 'DT_HOSTIP',
+
+      // System commands
       [XIMCommand.EXPRESS_VERSION]: 'EXPRESS_VERSION',
     };
 

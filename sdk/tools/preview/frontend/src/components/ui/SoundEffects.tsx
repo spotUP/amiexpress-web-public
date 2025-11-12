@@ -1,13 +1,83 @@
-// Sound Effects System using Web Audio API
+// Sound Effects System using Web Audio API with Reverb and Echo
 export class SoundEffects {
   private audioContext: AudioContext | null = null;
   private enabled: boolean = true;
   private volume: number = 0.3;
+  private reverbNode: ConvolverNode | null = null;
+  private delayNode: DelayNode | null = null;
+  private feedbackGain: GainNode | null = null;
+  private wetGain: GainNode | null = null;
+  private dryGain: GainNode | null = null;
+  private masterGain: GainNode | null = null;
 
   constructor() {
     if (typeof window !== 'undefined' && 'AudioContext' in window) {
       this.audioContext = new AudioContext();
+      this.setupEffectsChain();
     }
+  }
+
+  // Setup reverb and echo effects chain
+  private setupEffectsChain() {
+    if (!this.audioContext) return;
+
+    // Create reverb using impulse response
+    this.reverbNode = this.audioContext.createConvolver();
+    this.reverbNode.buffer = this.createReverbImpulse(3.0, 3.0); // 3 second decay, strong reverb
+
+    // Create echo/delay effect
+    this.delayNode = this.audioContext.createDelay(2.0);
+    this.delayNode.delayTime.value = 0.25; // 250ms delay time (reduced)
+
+    // Feedback gain for echo repeats
+    this.feedbackGain = this.audioContext.createGain();
+    this.feedbackGain.gain.value = 0.3; // 30% feedback - moderate echo (halved)
+
+    // Wet/dry mix
+    this.wetGain = this.audioContext.createGain();
+    this.wetGain.gain.value = 0.5; // 50% wet - balanced mix (reduced from 85%)
+
+    this.dryGain = this.audioContext.createGain();
+    this.dryGain.gain.value = 0.5; // 50% dry - balanced with wet
+
+    // Master output
+    this.masterGain = this.audioContext.createGain();
+    this.masterGain.gain.value = 1.0;
+
+    // Connect echo feedback loop
+    this.delayNode.connect(this.feedbackGain);
+    this.feedbackGain.connect(this.delayNode);
+
+    // Connect wet signal: delay -> reverb -> wetGain -> master
+    this.delayNode.connect(this.reverbNode);
+    this.reverbNode.connect(this.wetGain);
+    this.wetGain.connect(this.masterGain);
+
+    // Connect dry signal: dryGain -> master
+    this.dryGain.connect(this.masterGain);
+
+    // Connect master to output
+    this.masterGain.connect(this.audioContext.destination);
+  }
+
+  // Create reverb impulse response (synthetic)
+  private createReverbImpulse(duration: number, decay: number): AudioBuffer {
+    if (!this.audioContext) throw new Error('No audio context');
+
+    const sampleRate = this.audioContext.sampleRate;
+    const length = sampleRate * duration;
+    const impulse = this.audioContext.createBuffer(2, length, sampleRate);
+    const leftChannel = impulse.getChannelData(0);
+    const rightChannel = impulse.getChannelData(1);
+
+    for (let i = 0; i < length; i++) {
+      const n = length - i;
+      // Exponential decay with random diffusion for realistic reverb
+      leftChannel[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+      rightChannel[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+    }
+
+    return impulse;
   }
 
   setEnabled(enabled: boolean) {
@@ -18,15 +88,17 @@ export class SoundEffects {
     this.volume = Math.max(0, Math.min(1, volume));
   }
 
-  // Play a simple tone
+  // Play a simple tone with reverb and echo
   private playTone(frequency: number, duration: number, type: OscillatorType = 'sine') {
-    if (!this.enabled || !this.audioContext) return;
+    if (!this.enabled || !this.audioContext || !this.delayNode || !this.dryGain) return;
 
     const oscillator = this.audioContext.createOscillator();
     const gainNode = this.audioContext.createGain();
 
+    // Connect to both wet (effects) and dry paths
     oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
+    gainNode.connect(this.delayNode); // Wet path (reverb + echo)
+    gainNode.connect(this.dryGain);   // Dry path
 
     oscillator.frequency.value = frequency;
     oscillator.type = type;
@@ -59,15 +131,17 @@ export class SoundEffects {
     this.playTone(800, 0.05, 'square');
   }
 
-  // Whoosh sound - for panel transitions
+  // Whoosh sound - for panel transitions (with reverb and echo)
   whoosh() {
-    if (!this.enabled || !this.audioContext) return;
+    if (!this.enabled || !this.audioContext || !this.delayNode || !this.dryGain) return;
 
     const oscillator = this.audioContext.createOscillator();
     const gainNode = this.audioContext.createGain();
 
+    // Connect to both wet (effects) and dry paths
     oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
+    gainNode.connect(this.delayNode); // Wet path (reverb + echo)
+    gainNode.connect(this.dryGain);   // Dry path
 
     oscillator.type = 'sawtooth';
     oscillator.frequency.setValueAtTime(200, this.audioContext.currentTime);

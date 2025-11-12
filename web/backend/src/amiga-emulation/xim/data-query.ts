@@ -39,8 +39,10 @@ export class XIMDataQueryHandler {
     console.log(`[XIMDataQuery] Door querying data: ${this.messageParser.getCommandName(msg.command)}`);
     console.log(`  msg.data (direction): ${msg.data} (${msg.data !== 0 ? 'READ' : 'WRITE'})`);
 
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
-    console.log(`  String address: 0x${stringAddr.toString(16)}`);
+    // CRITICAL FIX: string[200] is embedded in jhMessage at offset 20, NOT a pointer
+    // jhMessage structure: header(20) + string[200](20-219) + data(220-223) + command(224-227)
+    const stringAddr = msg.msgAddr + 20;
+    console.log(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`);
 
     const isRead = msg.data !== 0;
     const user = this.bbsSession?.user;
@@ -320,17 +322,42 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_STAMP_LASTON:
         if (isRead) {
-          const stampLastOn = user?.lastLoginAt ? new Date(user.lastLoginAt).toISOString() : '';
-          this.messageParser.writeString(stringAddr, stampLastOn, 200);
-          console.log(`  [READ] DT_STAMP_LASTON: "${stampLastOn}"`);
+          // Format as Amiga-style date: "DD-MMM-YY HH:MM:SS"
+          // Based on express.e:3769 formatCDateTime(loggedOnUser.timeLastOn,tempstring)
+          if (user?.lastLoginAt) {
+            const lastOn = new Date(user.lastLoginAt);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const day = lastOn.getDate().toString().padStart(2, '0');
+            const month = months[lastOn.getMonth()];
+            const year = lastOn.getFullYear().toString().slice(-2);
+            const hours = lastOn.getHours().toString().padStart(2, '0');
+            const minutes = lastOn.getMinutes().toString().padStart(2, '0');
+            const seconds = lastOn.getSeconds().toString().padStart(2, '0');
+            const amigaDate = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+            this.messageParser.writeString(stringAddr, amigaDate, 200);
+            console.log(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
+          } else {
+            this.messageParser.writeString(stringAddr, '01-Jan-70 00:00:00', 200);
+            console.log(`  [READ] DT_STAMP_LASTON: "01-Jan-70 00:00:00" (never logged in)`);
+          }
         }
         break;
 
       case XIMCommand.DT_STAMP_CTIME:
         if (isRead) {
-          const now = new Date().toISOString();
-          this.messageParser.writeString(stringAddr, now, 200);
-          console.log(`  [READ] DT_STAMP_CTIME: "${now}"`);
+          // Format as Amiga-style date: "DD-MMM-YY HH:MM:SS"
+          // Based on express.e:3775 formatCDateTime(getSystemTime(),tempstring)
+          const now = new Date();
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const day = now.getDate().toString().padStart(2, '0');
+          const month = months[now.getMonth()];
+          const year = now.getFullYear().toString().slice(-2);
+          const hours = now.getHours().toString().padStart(2, '0');
+          const minutes = now.getMinutes().toString().padStart(2, '0');
+          const seconds = now.getSeconds().toString().padStart(2, '0');
+          const amigaDate = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
+          this.messageParser.writeString(stringAddr, amigaDate, 200);
+          console.log(`  [READ] DT_STAMP_CTIME: "${amigaDate}"`);
         }
         break;
 
