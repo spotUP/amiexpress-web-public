@@ -2,6 +2,7 @@
   "name": "bbslink-door",
   "version": "1.0.0",
   "description": "BBSLink InterBBS games client (runDoor pattern)",
+  "bbsCommand": "BBSLINK",
   "main": "index.ts",
   "author": "REbEL/QTX (Ported by AmiExpress Team)",
   "license": "MIT",

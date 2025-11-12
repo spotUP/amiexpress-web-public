@@ -171,6 +171,7 @@ import {
   loadCommands,
   setCommandExecutionDependencies
 } from './handlers/command.handler';
+import { reloadDoorCommands } from './handlers/command-execution.handler';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -636,6 +637,39 @@ app.post('/api/upload/door', (req: Request, res: Response) => {
       res.status(500).json({ error: 'Door upload processing failed' });
     }
   });
+});
+
+// Door hot-reload endpoint - reload doors without restarting server
+app.post('/api/doors/reload', async (req: Request, res: Response) => {
+  try {
+    console.log('[Door Reload] Hot-reload request received');
+
+    const bbsBaseDir = config.get('dataDir');
+    const result = await reloadDoorCommands(bbsBaseDir, 1, 0);
+
+    if (result.success) {
+      console.log(`[Door Reload] ${result.message}`);
+      res.json({
+        success: true,
+        message: result.message,
+        doorsReloaded: result.doorsReloaded
+      });
+    } else {
+      console.error(`[Door Reload] ${result.message}`);
+      res.status(500).json({
+        success: false,
+        message: result.message,
+        doorsReloaded: 0
+      });
+    }
+  } catch (error) {
+    console.error('[Door Reload] Unexpected error:', error);
+    res.status(500).json({
+      success: false,
+      message: `Reload failed: ${(error as Error).message}`,
+      doorsReloaded: 0
+    });
+  }
 });
 
 // File download endpoint - express.e:20075+ (downloadAFile)

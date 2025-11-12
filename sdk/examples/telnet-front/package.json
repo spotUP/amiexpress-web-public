@@ -2,6 +2,7 @@
   "name": "telnet-front-door",
   "version": "1.0.0",
   "description": "Telnet front-end door for BBS access (runDoor pattern)",
+  "bbsCommand": "TELNETFRONT",
   "main": "index.ts",
   "author": "AmiExpress Team",
   "license": "MIT",

@@ -2,6 +2,7 @@
   "name": "blessed-contrib-demos",
   "version": "1.0.0",
   "description": "Showcase blessed-contrib widgets in BBS doors",
+  "bbsCommand": "BLESSEDDEMO",
   "main": "compiled/index.js",
   "scripts": {
     "build": "tsc",

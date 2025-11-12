@@ -2,6 +2,7 @@
   "name": "bbslink-wall-door",
   "version": "1.0.0",
   "description": "BBSLink Wall - One-liner wall (runDoor pattern)",
+  "bbsCommand": "BBSLINKWALL",
   "main": "index.ts",
   "author": "AmiExpress Team",
   "license": "MIT",

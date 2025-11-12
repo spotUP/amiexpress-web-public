@@ -6,6 +6,7 @@
   "author": "AmiExpress SDK Team",
   "license": "MIT",
   "category": "game",
+  "bbsCommand": "TICTACTOE",
   "scripts": {
     "start": "npx tsx index.ts",
     "dev": "npx tsx --watch index.ts",

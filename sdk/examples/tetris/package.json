@@ -4,6 +4,7 @@
   "description": "Classic block puzzle game with modern graphics and sound",
   "main": "dist/tetris.js",
   "category": "Puzzle Game",
+  "bbsCommand": "TETRIS",
   "author": "AmiExpress SDK",
   "license": "MIT",
   "scripts": {

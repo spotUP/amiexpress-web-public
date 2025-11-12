@@ -29,6 +29,7 @@
     "build": "tsc && npm run copy-assets",
     "copy-assets": "cp -r templates dist/ && cp package.json dist/ && cp -r examples/*/assets dist/examples/ 2>/dev/null || true",
     "dev": "tsc --watch",
+    "start": "bash -c 'if ! lsof -ti:3001 > /dev/null 2>&1; then echo \"Starting BBS servers...\"; cd .. && ./dev/scripts/start-servers.sh > /dev/null 2>&1 & sleep 5; fi && cd tools/preview && lsof -ti:8080 | xargs kill -9 2>/dev/null || true && sleep 1 && node server.js'",
     "preview": "bash tools/preview/start-preview.sh --",
     "preview:quick": "node tools/preview/server.js",
     "create-door": "node dist/tools/cli/index.js create-door",

@@ -1,6 +1,12 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**🔴 MANDATORY: READ THIS ENTIRE FILE BEFORE ANY ACTION 🔴**
+
+You MUST read ALL of CLAUDE.md from top to bottom before doing ANY work.
+You MUST follow EVERY rule in this file without exception.
+Apologizing after violating rules is NOT acceptable - PREVENT violations.
+
+---
 
 ## ⛔ CRITICAL RULES - READ FIRST ⛔
 

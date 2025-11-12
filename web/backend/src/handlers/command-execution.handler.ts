@@ -78,6 +78,53 @@ export function loadCommands(
 }
 
 /**
+ * Hot-reload all door commands without restarting the server
+ * Clears command cache and re-scans all .info files
+ *
+ * @param baseDir - BBS base directory
+ * @param conferenceId - Current conference ID (optional)
+ * @param nodeId - Node ID
+ */
+export async function reloadDoorCommands(
+  baseDir: string,
+  conferenceId?: number,
+  nodeId: number = 0
+): Promise<{ success: boolean; message: string; doorsReloaded: number }> {
+  console.log('[Hot-Reload] Reloading door commands...');
+
+  try {
+    // Clear existing BBSCMD cache (keep SYSCMD)
+    const beforeCount = commandCache.bbscmd.size;
+    commandCache.bbscmd.clear();
+
+    // Reload commands from disk
+    loadCommands(baseDir, conferenceId, nodeId);
+
+    // Reinitialize doors from updated command cache
+    const { initializeDoors } = await import('./door.handler');
+    await initializeDoors();
+
+    const afterCount = commandCache.bbscmd.size;
+    const message = `Reloaded ${afterCount} door commands (was ${beforeCount})`;
+    console.log(`[Hot-Reload] ${message}`);
+
+    return {
+      success: true,
+      message,
+      doorsReloaded: afterCount
+    };
+  } catch (error) {
+    const errorMsg = `Failed to reload doors: ${(error as Error).message}`;
+    console.error(`[Hot-Reload] ${errorMsg}`, error);
+    return {
+      success: false,
+      message: errorMsg,
+      doorsReloaded: 0
+    };
+  }
+}
+
+/**
  * Run a system command (SYSCMD)
  * 1:1 port from express.e:4813-4817 runSysCommand()
  *

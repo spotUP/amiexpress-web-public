@@ -380,6 +380,15 @@ const EXEC_VECTORS: LibraryVector[] = [
     }
   },
   {
+    offset: -384,  // LVO -384 (0xFFFFFE80) - CreatePort (AmigaOS 1.x)
+    name: 'CreatePort',
+    handler: (emu, lib: ExecLibrary) => {
+      const nameAddr = emu.getRegister(8);   // A0 = name pointer
+      const priority = emu.getRegister(0);   // D0 = priority
+      return lib.createPort(nameAddr, priority);
+    }
+  },
+  {
     offset: -390,  // LVO -390 (0xFFFFFE7A)
     name: 'FindPort',
     handler: (emu, lib: ExecLibrary) => {

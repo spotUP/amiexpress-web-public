@@ -952,7 +952,9 @@ export class ExecLibrary {
    * responses from the BBS.
    */
   createMsgPort(): number {
-    console.log('[ExecLibrary] CreateMsgPort()');
+    console.log('[ExecLibrary] CreateMsgPort() called');
+    console.log(`[ExecLibrary]   Current task: 0x${this.currentTask.address.toString(16)}`);
+    console.log(`[ExecLibrary]   Next port address: 0x${this.nextPortAddress.toString(16)}`);
 
     // Allocate memory for MsgPort structure (34 bytes)
     const portAddr = this.nextPortAddress;
@@ -970,7 +972,7 @@ export class ExecLibrary {
     // mp_Node (14 bytes at offset 0)
     this.emulator.writeMemory32(portAddr + 0, 0);  // ln_Succ
     this.emulator.writeMemory32(portAddr + 4, 0);  // ln_Pred
-    this.emulator.writeMemory(portAddr + 8, 0);     // ln_Type (NT_MSGPORT=4)
+    this.emulator.writeMemory(portAddr + 8, 4);     // ln_Type (NT_MSGPORT=4)
     this.emulator.writeMemory(portAddr + 9, 0);     // ln_Pri
     this.emulator.writeMemory32(portAddr + 10, 0); // ln_Name
 
@@ -1002,7 +1004,99 @@ export class ExecLibrary {
     };
     this.messagePorts.set(portAddr, port);
 
-    console.log(`[ExecLibrary]   Created MsgPort at 0x${portAddr.toString(16)}`);
+    console.log(`[ExecLibrary] ✅ Created MsgPort at 0x${portAddr.toString(16)}`);
+    console.log(`[ExecLibrary]    mp_Flags: 0x${this.emulator.readMemory(portAddr + 14).toString(16)}`);
+    console.log(`[ExecLibrary]    mp_SigBit: ${this.emulator.readMemory(portAddr + 15)}`);
+    console.log(`[ExecLibrary]    mp_SigTask: 0x${this.emulator.readMemory32(portAddr + 16).toString(16)}`);
+    console.log(`[ExecLibrary]    Returning D0 = 0x${portAddr.toString(16)}`);
+    return portAddr;
+  }
+
+  /**
+   * CreatePort() - LVO -372 (0xFFFFFE8C)
+   *
+   * Create a message port (AmigaOS 1.x API - obsolete but still used by legacy doors).
+   * This is the old API that takes name and priority parameters.
+   * Modern code should use CreateMsgPort() instead.
+   *
+   * Parameters:
+   *   A0 = name pointer (STRPTR, can be NULL for private port)
+   *   D0 = priority (LONG, typically 0)
+   *
+   * Returns:
+   *   D0 = MsgPort address (or 0 if failed)
+   */
+  createPort(nameAddr: number, priority: number): number {
+    console.log('[ExecLibrary] CreatePort() called (AmigaOS 1.x API)');
+    console.log(`[ExecLibrary]   name: 0x${nameAddr.toString(16)}`);
+    console.log(`[ExecLibrary]   priority: ${priority}`);
+    console.log(`[ExecLibrary]   Current task: 0x${this.currentTask.address.toString(16)}`);
+    console.log(`[ExecLibrary]   Next port address: 0x${this.nextPortAddress.toString(16)}`);
+
+    // Allocate memory for MsgPort structure (34 bytes)
+    const portAddr = this.nextPortAddress;
+    this.nextPortAddress += 0x100; // Space for port + message queue
+
+    // Read the port name if provided
+    let portName = '';
+    if (nameAddr !== 0) {
+      portName = this.readString(nameAddr);
+      console.log(`[ExecLibrary]   Port name: "${portName}"`);
+    } else {
+      console.log(`[ExecLibrary]   Port name: (NULL - private port)`);
+    }
+
+    // Initialize MsgPort structure
+    // struct MsgPort {
+    //   struct Node mp_Node;      // 14 bytes
+    //   UBYTE mp_Flags;           // 1 byte
+    //   UBYTE mp_SigBit;          // 1 byte
+    //   struct Task *mp_SigTask;  // 4 bytes
+    //   struct List mp_MsgList;   // 14 bytes
+    // }
+
+    // mp_Node (14 bytes at offset 0)
+    this.emulator.writeMemory32(portAddr + 0, 0);        // ln_Succ
+    this.emulator.writeMemory32(portAddr + 4, 0);        // ln_Pred
+    this.emulator.writeMemory(portAddr + 8, 4);          // ln_Type (NT_MSGPORT=4)
+    this.emulator.writeMemory(portAddr + 9, priority & 0xFF); // ln_Pri (set priority!)
+    this.emulator.writeMemory32(portAddr + 10, nameAddr); // ln_Name (pointer to name string)
+
+    // mp_Flags (1 byte at offset 14)
+    this.emulator.writeMemory(portAddr + 14, 0x02); // PA_SIGNAL
+
+    // mp_SigBit (1 byte at offset 15)
+    this.emulator.writeMemory(portAddr + 15, 1); // Signal bit 1
+
+    // mp_SigTask (4 bytes at offset 16)
+    this.emulator.writeMemory32(portAddr + 16, this.currentTask.address);
+
+    // mp_MsgList (14 bytes at offset 20)
+    // Initialize as empty list
+    this.emulator.writeMemory32(portAddr + 20, portAddr + 24); // lh_Head (points to Tail)
+    this.emulator.writeMemory32(portAddr + 24, 0);              // lh_Tail (always NULL)
+    this.emulator.writeMemory32(portAddr + 28, portAddr + 20); // lh_TailPred (points to Head)
+    this.emulator.writeMemory(portAddr + 32, 0);                // lh_Type
+    this.emulator.writeMemory(portAddr + 33, 0);                // l_pad
+
+    // Track port in our registry
+    const port: MessagePort = {
+      address: portAddr,
+      name: portName,
+      messages: [],
+      sigBit: 1,
+      sigTask: this.currentTask.address,
+      signaled: false
+    };
+    this.messagePorts.set(portAddr, port);
+
+    console.log(`[ExecLibrary] ✅ Created MsgPort at 0x${portAddr.toString(16)} (via CreatePort)`);
+    console.log(`[ExecLibrary]    mp_Node.ln_Name: "${portName}"`);
+    console.log(`[ExecLibrary]    mp_Node.ln_Pri: ${priority}`);
+    console.log(`[ExecLibrary]    mp_Flags: 0x${this.emulator.readMemory(portAddr + 14).toString(16)} (PA_SIGNAL)`);
+    console.log(`[ExecLibrary]    mp_SigBit: ${this.emulator.readMemory(portAddr + 15)}`);
+    console.log(`[ExecLibrary]    mp_SigTask: 0x${this.emulator.readMemory32(portAddr + 16).toString(16)}`);
+    console.log(`[ExecLibrary]    Returning D0 = 0x${portAddr.toString(16)} (success)`);
     return portAddr;
   }
 

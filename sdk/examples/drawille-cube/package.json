@@ -2,12 +2,20 @@
   "name": "drawille-cube",
   "version": "1.0.0",
   "description": "Rotating 3D cube using node-drawille braille graphics",
+  "bbsCommand": "DRAWCUBE",
   "main": "index.ts",
   "scripts": {
     "start": "ts-node index.ts",
     "build": "tsc"
   },
-  "keywords": ["bbs", "door", "drawille", "braille", "3d", "cube"],
+  "keywords": [
+    "bbs",
+    "door",
+    "drawille",
+    "braille",
+    "3d",
+    "cube"
+  ],
   "author": "AmiExpress SDK",
   "license": "MIT",
   "dependencies": {

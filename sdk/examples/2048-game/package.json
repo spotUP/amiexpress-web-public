@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Classic 2048 sliding tile puzzle game for BBS",
   "main": "index.ts",
+  "bbsCommand": "2048",
   "scripts": {
     "start": "ts-node index.ts",
     "build": "tsc"

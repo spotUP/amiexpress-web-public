@@ -2,6 +2,7 @@
   "name": "telnet-connect-door",
   "version": "1.0.0",
   "description": "Telnet client for connecting to other BBSes (runDoor pattern)",
+  "bbsCommand": "TELNET",
   "main": "index.ts",
   "author": "REbEL/QTX (Ported by AmiExpress Team)",
   "license": "MIT",

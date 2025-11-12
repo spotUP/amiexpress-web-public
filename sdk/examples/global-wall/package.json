@@ -2,6 +2,7 @@
   "name": "global-wall-door",
   "version": "1.0.0",
   "description": "Global Wall - One-liner wall for all BBS users (runDoor pattern)",
+  "bbsCommand": "GLOBALWALL",
   "main": "index.ts",
   "author": "AmiExpress Team",
   "license": "MIT",

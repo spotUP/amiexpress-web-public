@@ -892,7 +892,7 @@ app.get('/api/doors/:doorId/install-status', (req, res) => {
 /**
  * Install door to main BBS
  */
-app.post('/api/doors/:doorId/install', (req, res) => {
+app.post('/api/doors/:doorId/install', async (req, res) => {
   try {
     const { doorId } = req.params;
     const sdkDoorPath = path.join(__dirname, '../../examples', doorId);
@@ -934,11 +934,60 @@ app.post('/api/doors/:doorId/install', (req, res) => {
 
     console.log(`✅ Door installed to BBS: ${doorId}`);
 
-    res.json({
-      success: true,
-      message: `Door "${doorId}" installed to BBS successfully`,
-      path: bbsDoorsPath
-    });
+    // Hot-reload doors in BBS backend without restart
+    console.log(`🔄 Hot-reloading BBS doors...`);
+    try {
+      const reloadResult = await new Promise((resolve, reject) => {
+        const postData = JSON.stringify({});
+        const options = {
+          hostname: 'localhost',
+          port: 3001,
+          path: '/api/doors/reload',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+          }
+        };
+
+        const req = http.request(options, (res) => {
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            if (res.statusCode === 200) {
+              resolve(JSON.parse(data));
+            } else {
+              reject(new Error(`Reload failed with status ${res.statusCode}: ${data}`));
+            }
+          });
+        });
+
+        req.on('error', reject);
+        req.write(postData);
+        req.end();
+      });
+
+      console.log(`✅ Doors reloaded: ${reloadResult.message}`);
+
+      res.json({
+        success: true,
+        message: `Door "${doorId}" installed and activated successfully (${reloadResult.doorsReloaded} doors loaded)`,
+        path: bbsDoorsPath,
+        reloaded: true,
+        doorsReloaded: reloadResult.doorsReloaded
+      });
+    } catch (reloadError) {
+      console.warn(`⚠️  Door installed but hot-reload failed:`, reloadError.message);
+      console.warn(`   Backend restart required for door to be available`);
+
+      res.json({
+        success: true,
+        message: `Door "${doorId}" installed but hot-reload failed. Restart BBS backend to activate.`,
+        path: bbsDoorsPath,
+        reloaded: false,
+        reloadError: reloadError.message
+      });
+    }
   } catch (error) {
     console.error('Error installing door:', error);
     res.status(500).json({ error: error.message });

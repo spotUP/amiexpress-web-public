@@ -6,6 +6,7 @@
   "author": "AmiExpress SDK",
   "license": "MIT",
   "category": "game",
+  "bbsCommand": "FIREEMBLEM",
   "scripts": {
     "start": "npx tsx index.ts",
     "dev": "npx tsx --watch index.ts",

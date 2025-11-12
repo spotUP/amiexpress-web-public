@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Comprehensive BBS Dashboard for System Operators",
   "main": "compiled/index.js",
+  "bbsCommand": "DASHBOARD",
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch"

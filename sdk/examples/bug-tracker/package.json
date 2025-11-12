@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Comprehensive bug reporting and tracking system for BBS",
   "main": "dist/index.js",
+  "bbsCommand": "BUGTRACK",
   "scripts": {
     "start": "node dist/index.js",
     "dev": "ts-node index.ts",
