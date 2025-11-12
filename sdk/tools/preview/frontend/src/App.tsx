@@ -1411,6 +1411,7 @@ function App() {
                       <div className="h-full overflow-y-auto p-4 animate-fadeIn">
                         <ReleaseArchive
                           doorName={selectedDoor?.name || 'door'}
+                          doorId={selectedDoor?.id || ''}
                           onCreateArchive={handleCreateArchive}
                         />
                       </div>

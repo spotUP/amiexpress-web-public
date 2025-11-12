@@ -656,6 +656,93 @@ if (!fs.existsSync(downloadsDir)) {
 // Track downloads for auto-cleanup
 const downloadTracking = new Map();
 
+// API: Get door files (for archive file manager)
+app.get('/api/doors/:doorId/files', async (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const { includeSource = 'true', includeAssets = 'true', includeDocs = 'true' } = req.query;
+
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+
+    if (!fs.existsSync(doorPath)) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+
+    // Build file tree recursively
+    const buildFileTree = (dirPath, relativePath = '') => {
+      const files = [];
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        const entryRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+
+        // Skip excluded directories
+        if (entry.isDirectory()) {
+          if (['node_modules', '.git', 'dist', 'downloads'].includes(entry.name)) {
+            continue;
+          }
+
+          const children = buildFileTree(fullPath, entryRelativePath);
+          if (children.length > 0) {
+            files.push({
+              id: `folder-${entryRelativePath}`,
+              name: entry.name,
+              type: 'folder',
+              path: entryRelativePath,
+              children: children,
+            });
+          }
+        } else {
+          // Check if file should be included based on options
+          let shouldInclude = false;
+
+          // Always include package.json and tsconfig.json
+          if (entry.name === 'package.json' || entry.name === 'tsconfig.json') {
+            shouldInclude = true;
+          }
+          // Source files
+          else if (includeSource === 'true' && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
+            shouldInclude = true;
+          }
+          // Assets
+          else if (includeAssets === 'true' && (fullPath.includes('/assets/') || fullPath.includes('/data/'))) {
+            shouldInclude = true;
+          }
+          // Docs
+          else if (includeDocs === 'true' && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
+            shouldInclude = true;
+          }
+
+          if (shouldInclude) {
+            const stats = fs.statSync(fullPath);
+            files.push({
+              id: `file-${entryRelativePath}`,
+              name: entry.name,
+              type: 'file',
+              path: entryRelativePath,
+              size: stats.size,
+            });
+          }
+        }
+      }
+
+      return files;
+    };
+
+    const fileTree = buildFileTree(doorPath);
+
+    res.json({
+      doorId,
+      files: fileTree,
+    });
+
+  } catch (error) {
+    console.error('Error fetching door files:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // API: Create release archive
 app.post('/api/doors/:doorId/release', upload.array('extraFiles'), async (req, res) => {
   try {

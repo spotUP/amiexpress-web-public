@@ -15,18 +15,22 @@ interface FileNode {
 
 interface ReleaseArchiveProps {
   doorName: string;
+  doorId: string;
   onCreateArchive: (options: ArchiveOptions, extraFiles?: File[]) => Promise<void>;
   className?: string;
 }
 
 export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
   doorName,
+  doorId,
   onCreateArchive,
   className = '',
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [archiveFiles, setArchiveFiles] = useState<FileNode[]>([]);
+  const [doorFiles, setDoorFiles] = useState<FileNode[]>([]);
+  const [isFetchingFiles, setIsFetchingFiles] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [options, setOptions] = useState<ArchiveOptions>({
     format: 'zip',
@@ -36,17 +40,48 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
     doormanCompatible: true,
   });
 
-  // Convert uploaded files to FileNode format
+  // Fetch door files when options change
   useEffect(() => {
-    const fileNodes: FileNode[] = uploadedFiles.map((file, index) => ({
-      id: `file-${index}-${Date.now()}`,
+    const fetchDoorFiles = async () => {
+      setIsFetchingFiles(true);
+      try {
+        const params = new URLSearchParams({
+          includeSource: String(options.includeSource),
+          includeAssets: String(options.includeAssets),
+          includeDocs: String(options.includeDocs),
+        });
+
+        const response = await fetch(`/api/doors/${doorId}/files?${params}`);
+        if (!response.ok) throw new Error('Failed to fetch door files');
+
+        const data = await response.json();
+        setDoorFiles(data.files || []);
+      } catch (error) {
+        console.error('Error fetching door files:', error);
+        setDoorFiles([]);
+      } finally {
+        setIsFetchingFiles(false);
+      }
+    };
+
+    if (doorId) {
+      fetchDoorFiles();
+    }
+  }, [doorId, options.includeSource, options.includeAssets, options.includeDocs]);
+
+  // Merge door files and uploaded files
+  useEffect(() => {
+    const uploadedFileNodes: FileNode[] = uploadedFiles.map((file, index) => ({
+      id: `uploaded-${index}-${Date.now()}`,
       name: file.name,
       type: 'file' as const,
       path: file.name,
       size: file.size,
     }));
-    setArchiveFiles(fileNodes);
-  }, [uploadedFiles]);
+
+    // Combine door files with uploaded files at the root
+    setArchiveFiles([...doorFiles, ...uploadedFileNodes]);
+  }, [doorFiles, uploadedFiles]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -234,7 +269,12 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
         </div>
 
         {/* Archive File Manager */}
-        {archiveFiles.length > 0 && (
+        {isFetchingFiles ? (
+          <div className="flex items-center justify-center p-8 text-gray-400">
+            <Loader className="w-5 h-5 animate-spin mr-2" />
+            <span>Loading door files...</span>
+          </div>
+        ) : (
           <ArchiveFileManager
             files={archiveFiles}
             onFilesChange={setArchiveFiles}
