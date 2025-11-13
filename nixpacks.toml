@@ -1,0 +1,24 @@
+# Nixpacks configuration for Railway.app deployment
+# https://nixpacks.com/docs/configuration/file
+
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "npm-9_x"]
+
+[phases.install]
+cmds = [
+    "cd web/backend && npm ci",
+    "cd ../../web/frontend && npm ci",
+    "cd ../../sdk && npm ci"
+]
+
+[phases.build]
+cmds = [
+    "cd web/frontend && npm run build",
+    "cd ../../sdk && npm run build"
+]
+
+[start]
+cmd = "cd web/backend && npm start"
+
+[variables]
+NODE_ENV = "production"

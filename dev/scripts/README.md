@@ -1,142 +1,187 @@
-# Scripts Directory
+# Development Scripts
 
-This directory contains all operational scripts for the AmiExpress-Web project.
+This directory contains scripts for developing, testing, and deploying AmiExpress BBS.
 
-## Available Scripts
+---
 
-### Development Scripts
+## Sysop Scripts (Setup & Deployment) ⭐ NEW
 
-#### `start-dev.sh`
-**Full-featured development startup script**
-- Starts both backend and frontend servers
-- Checks prerequisites (Node.js, npm, SQLite)
-- Cleans up existing processes
-- Creates necessary environment files
-- Installs dependencies
-- Provides detailed status output
+### Setup & Configuration
+
+#### `sysop-setup.sh` ⭐
+**Interactive setup wizard for first-time BBS deployment**
+
+```bash
+./dev/scripts/sysop-setup.sh
+```
+
+**What it does:**
+- Collects BBS configuration (name, sysop, location)
+- Creates admin account with secure password
+- Generates JWT secret automatically
+- Creates .env.local configuration file
+- Installs all dependencies (backend, frontend, SDK)
+- Initializes database and creates tables
+- Optionally generates SSH host key
+- Offers to start servers
+
+**When to use**: First-time setup, clean installation
+
+**Time**: 5-10 minutes
+
+---
+
+#### `health-check.sh` ⭐
+**Comprehensive health check for deployed BBS**
+
+```bash
+./dev/scripts/health-check.sh
+
+# Options:
+./dev/scripts/health-check.sh --fast                    # Skip TypeScript checks
+./dev/scripts/health-check.sh --backend-url=<URL>       # Test specific backend
+./dev/scripts/health-check.sh --frontend-url=<URL>      # Test specific frontend
+```
+
+**What it checks:**
+- Environment configuration
+- Database connectivity
+- File system structure
+- Backend API health
+- Frontend availability
+- Port availability
+- Door system
+- TypeScript compilation
+- Security configuration
+
+**When to use**: After deployment, troubleshooting
+
+**Time**: 30 seconds (fast) or 2-3 minutes (full)
+
+---
+
+#### `pre-deploy-check.sh` ⭐
+**Pre-deployment validation checklist**
+
+```bash
+./dev/scripts/pre-deploy-check.sh
+```
+
+**What it validates:**
+- Git status (committed, pushed)
+- TypeScript compilation
+- Production builds (backend, frontend, config-app, SDK)
+- Configuration files
+- Security checks
+- Dependencies
+- Documentation
+
+**When to use**: Before every production deployment
+
+**Exit codes**: 0 = Ready, 1 = Blocked
+
+---
+
+### Server Management
+
+#### `start-servers.sh`
+**Start all BBS services**
+
+```bash
+./dev/scripts/start-servers.sh
+
+# Options:
+--debug     # Show full debug logs
+--sdk-only  # Only start SDK preview
+```
+
+**Starts**: Backend, Frontend, Config App, SDK Preview, Telnet, SSH
+
+**Features**:
+- Auto-installs dependencies
+- Creates .env.local if missing
 - Opens browser automatically
-- Saves PIDs for stop script
-
-**Usage:**
-```bash
-./Scripts/start-dev.sh
-```
-
-**Features:**
-- ✓ Comprehensive error checking
-- ✓ Automatic port cleanup
-- ✓ Health checks
-- ✓ Colored output
-- ✓ Progress indicators
-- ✓ Automatic browser launch
+- Saves logs to logs/ directory
 
 ---
 
-#### `start-backend.sh`
-**Standalone backend startup**
-- Starts only the backend server on port 3001
-- Kills any existing processes on port 3001
-- Verifies successful startup
+#### `kill-servers.sh`
+**Stop all running BBS services**
 
-**Usage:**
 ```bash
-./Scripts/start-backend.sh
+./dev/scripts/kill-servers.sh
 ```
 
 ---
 
-#### `start-frontend.sh`
-**Standalone frontend startup**
-- Starts only the frontend server on port 5173
-- Kills any existing processes on port 5173
-- Verifies successful startup
-
-**Usage:**
-```bash
-./Scripts/start-frontend.sh
-```
-
----
-
-#### `start-all.sh`
-**Simple combined startup**
-- Starts both backend and frontend
-- Uses start-backend.sh and start-frontend.sh
-- Minimal output, quick startup
-
-**Usage:**
-```bash
-./Scripts/start-all.sh
-```
-
----
-
-#### `stop-dev.sh`
-**Stop development servers (graceful)**
-- Stops servers using saved PID files
-- Falls back to port-based cleanup
-- Removes PID files after stopping
-
-**Usage:**
-```bash
-./Scripts/stop-dev.sh
-```
-
----
-
-#### `stop-all.sh`
-**Force stop all servers**
-- Kills all processes on ports 3001 and 5173
-- Uses kill -9 for immediate termination
-- Simple and effective
-
-**Usage:**
-```bash
-./Scripts/stop-all.sh
-```
-
----
-
-### Conference Management
-
-#### `standardize-conferences.sh`
-**Standardize conference directory structures**
-- Creates missing subdirectories in Conf1-Conf14
-- Adds standard files (Menu.txt, upload/download messages)
-- Sets up file areas (Dir0, Dir1, Dir2)
-- Idempotent (safe to run multiple times)
-
-**Usage:**
-```bash
-./Scripts/standardize-conferences.sh
-```
-
-**Creates in each conference:**
-- Bulletins/, MsgBase/, Hold/
-- Upload/, PartUpload/, LCFiles/
-- Dir0/, Dir1/, Dir2/
-- Menu.txt, downloadmsg.txt, uploadmsg.txt, NDIRS
-
----
-
-### Deployment Scripts
+### Deployment
 
 #### `push-and-deploy.sh`
 **Push to GitHub and trigger Render deployment**
-- Pushes changes to GitHub
-- Automatically triggers Render deployment (if on main branch)
-- Handles deployment script execution
 
-**Usage:**
 ```bash
-./Scripts/push-and-deploy.sh [git push arguments]
+./dev/scripts/push-and-deploy.sh [git push arguments]
 ```
 
-**Examples:**
+---
+
+## Testing Scripts
+
+### Comprehensive Testing
+
+- `test-all-commands.js` - Test all BBS commands
+- `test-all-commands-quick.sh` - Quick command tests
+- `test-bbs-comprehensive.js` - Full system test
+- `test-command-interactive.js` - Interactive tester
+
+### Specialized Testing
+
+- `test-door-install.js` - Door testing
+- `test-example-doors.sh` - SDK example validation
+- `test-deep-dive.js` - Deep system analysis
+- `test-simple.js` - Quick smoke test
+
+### Import/Export Testing
+
+- `test-import-execution.js` - Import functionality
+- `test-user-parsing.js` - User file parsing
+
+### Configuration Testing
+
+- `test-config-api.js` - Config API tests
+- `verify-config-tables.js` - Database schema validation
+
+---
+
+## Common Workflows
+
+### First-Time Setup
 ```bash
-./Scripts/push-and-deploy.sh
-./Scripts/push-and-deploy.sh origin main
-./Scripts/push-and-deploy.sh --force
+./dev/scripts/sysop-setup.sh
+```
+
+### Daily Development
+```bash
+# Start
+./dev/scripts/start-servers.sh
+
+# Stop
+./dev/scripts/kill-servers.sh
+```
+
+### Before Deployment
+```bash
+# Validate
+./dev/scripts/pre-deploy-check.sh
+
+# Deploy
+./dev/scripts/push-and-deploy.sh
+```
+
+### After Deployment
+```bash
+# Health check
+./dev/scripts/health-check.sh --backend-url=https://your-bbs.com
 ```
 
 ---
@@ -145,123 +190,26 @@ This directory contains all operational scripts for the AmiExpress-Web project.
 
 | Task | Command |
 |------|---------|
-| Start development environment | `./Scripts/start-dev.sh` |
-| Start backend only | `./Scripts/start-backend.sh` |
-| Start frontend only | `./Scripts/start-frontend.sh` |
-| Start both (simple) | `./Scripts/start-all.sh` |
-| Stop development servers | `./Scripts/stop-dev.sh` |
-| Force stop all servers | `./Scripts/stop-all.sh` |
-| Standardize conferences | `./Scripts/standardize-conferences.sh` |
-| Push and deploy | `./Scripts/push-and-deploy.sh` |
+| **First-time setup** | `./dev/scripts/sysop-setup.sh` |
+| **Start BBS** | `./dev/scripts/start-servers.sh` |
+| **Stop BBS** | `./dev/scripts/kill-servers.sh` |
+| **Health check** | `./dev/scripts/health-check.sh` |
+| **Pre-deploy check** | `./dev/scripts/pre-deploy-check.sh` |
+| **Deploy** | `./dev/scripts/push-and-deploy.sh` |
+| **Test all** | `node dev/scripts/test-all-commands.js` |
 
 ---
 
-## Notes
+## Documentation
 
-### Port Usage
-- **Backend:** 3001
-- **Frontend:** 5173 (or 5174 if 5173 is occupied)
+For detailed information:
 
-### Log Files
-When using `start-dev.sh`, logs are written to:
-- `logs/backend.log`
-- `logs/frontend.log`
-
-### PID Files
-The start-dev.sh script saves process IDs to:
-- `.backend.pid`
-- `.frontend.pid`
-
-These files are located in the project root and are used by stop-dev.sh for graceful shutdown.
-
-### Script Location
-All scripts must be run from the project root or using their full path:
-```bash
-# From project root:
-./Scripts/start-dev.sh
-
-# From anywhere:
-/path/to/project/Scripts/start-dev.sh
-```
-
-The scripts automatically detect the project root and adjust paths accordingly.
+- **Sysop Quick Start**: [Documentation/2-Sysops/QUICK_START.md](../../Documentation/2-Sysops/QUICK_START.md)
+- **Railway Deployment**: [Documentation/2-Sysops/RAILWAY_DEPLOYMENT.md](../../Documentation/2-Sysops/RAILWAY_DEPLOYMENT.md)
+- **Deployment Guide**: [Documentation/2-Sysops/DEPLOYMENT.md](../../Documentation/2-Sysops/DEPLOYMENT.md)
+- **Testing Guide**: [Documentation/3-Developers/TESTING.md](../../Documentation/3-Developers/TESTING.md)
 
 ---
 
-## Subdirectories
-
-### `deployment/`
-Contains deployment-related scripts (e.g., deploy-render.sh)
-
----
-
-## Making Scripts Executable
-
-If scripts aren't executable, run:
-```bash
-chmod +x Scripts/*.sh
-```
-
----
-
-## Troubleshooting
-
-### Port Already in Use
-If you get "port in use" errors:
-```bash
-# Kill processes manually
-lsof -ti:3001 | xargs kill -9   # Backend
-lsof -ti:5173 | xargs kill -9   # Frontend
-
-# Or use the stop script
-./Scripts/stop-all.sh
-```
-
-### Scripts Not Found
-Make sure you're in the project root:
-```bash
-cd /path/to/amiexpress-web
-./Scripts/start-dev.sh
-```
-
-### Permission Denied
-Make scripts executable:
-```bash
-chmod +x Scripts/*.sh
-```
-
----
-
-## Development Workflow
-
-**Recommended workflow:**
-
-1. **Start development environment:**
-   ```bash
-   ./Scripts/start-dev.sh
-   ```
-
-2. **Development work...**
-
-3. **Stop when done:**
-   ```bash
-   ./Scripts/stop-dev.sh
-   ```
-
-4. **Push and deploy:**
-   ```bash
-   ./Scripts/push-and-deploy.sh
-   ```
-
----
-
-## Script Organization
-
-Scripts are organized by purpose:
-- **Development**: Local development server management
-- **Conference**: BBS conference structure management
-- **Deployment**: Production deployment automation
-
----
-
-**Last Updated:** 2025-10-28
+**Last Updated**: 2025-11-13
+**New Scripts**: sysop-setup.sh, health-check.sh, pre-deploy-check.sh

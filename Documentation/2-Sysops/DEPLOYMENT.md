@@ -1,5 +1,65 @@
 # Deployment Guide
 
+**Quick Start**: New to deployment? See [QUICK_START.md](./QUICK_START.md) for a 10-minute setup guide.
+
+**Railway.app (Recommended)**: See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for the easiest deployment option.
+
+---
+
+## Deployment Options
+
+### Option 1: Railway.app (Recommended)
+
+**Best for**: Most sysops, easiest setup, great pricing
+
+- **Cost**: $3-8/month
+- **Setup Time**: 10 minutes
+- **Difficulty**: Easy
+- **Guide**: [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)
+
+### Option 2: Render.com
+
+**Best for**: Medium to large BBSs with dedicated resources
+
+- **Cost**: $7+/month
+- **Setup Time**: 20 minutes
+- **Difficulty**: Easy
+- **Guide**: This document
+
+### Option 3: Self-Hosted
+
+**Best for**: Advanced sysops with VPS/dedicated server
+
+- **Cost**: Variable ($5-50+/month)
+- **Setup Time**: 30-60 minutes
+- **Difficulty**: Medium-Advanced
+- **Guide**: [QUICK_START.md](./QUICK_START.md#option-3-self-hosted-vpsdedicated)
+
+---
+
+## Pre-Deployment Tools
+
+Before deploying, use these helpful scripts:
+
+**Setup Wizard** (for first-time setup):
+```bash
+./dev/scripts/sysop-setup.sh
+```
+
+**Health Check** (verify configuration):
+```bash
+./dev/scripts/health-check.sh
+```
+
+**Pre-Deploy Checklist** (validate before production):
+```bash
+./dev/scripts/pre-deploy-check.sh
+```
+
+---
+
+## Render.com Deployment (Current Setup)
+
 ## Architecture
 
 ```
