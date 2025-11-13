@@ -1007,7 +1007,7 @@ io.on('connection', async (socket) => {
   await displayScreen(socket, session, 'AWAITSCREEN');
 
   // Show ANSI prompt immediately (reference-board style - no key wait)
-  socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
+  socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
 
   // Set state to wait for ANSI response
   session.subState = LoggedOnSubState.ANSI_PROMPT;

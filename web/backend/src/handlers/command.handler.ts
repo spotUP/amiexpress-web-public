@@ -426,7 +426,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       console.log('📋 Connection screen viewed, showing ANSI prompt');
       session.subState = LoggedOnSubState.ANSI_PROMPT;
       session.tempData = { inputBuffer: '' }; // Initialize input buffer
-      socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
+      socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
       return;
     }
 
@@ -442,6 +442,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // Default (empty/just Enter) = ANSI enabled
         const hasN = answer.includes('N'); // No graphics
         const hasR = answer.includes('R'); // RIP mode
+        const hasP = answer.includes('P'); // PETSCII mode
         const hasQ = answer.includes('Q'); // Quick logon
 
         // express.e:29538-29539 - If 'N' in string, disable ANSI
@@ -457,7 +458,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           session.tempData.ripMode = true;
         }
 
-        console.log('📋 Graphics mode set:', session.ansiEnabled ? 'ANSI/RIP' : 'None');
+        // PETSCII mode - C64/128 terminal mode (40x25 display, .seq files)
+        if (hasP) {
+          session.petsciiMode = true;
+          session.ansiEnabled = true; // PETSCII needs ANSI codes
+          session.tempData.termWidth = 40;
+          session.tempData.termHeight = 25;
+          console.log('📋 PETSCII mode enabled: 40x25 terminal');
+        }
+
+        console.log('📋 Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ansiEnabled ? 'ANSI/RIP' : 'None');
 
         // express.e:29551 - Display BBSTITLE screen and immediately show login prompt
         session.tempData.inputBuffer = ''; // Clear buffer
