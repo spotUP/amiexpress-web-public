@@ -24,7 +24,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import archiver from 'archiver';
+import { spawn } from 'child_process';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AdmZip = require('adm-zip');
 
 interface PackConfig {
   name: string;
@@ -34,6 +37,7 @@ interface PackConfig {
   category: string;
   sourceDir: string;
   outputDir: string;
+  format?: 'zip' | 'lha'; // Archive format
 }
 
 export class ReleasePacker {
@@ -47,9 +51,10 @@ export class ReleasePacker {
    * Create release archive
    */
   public async pack(): Promise<string> {
+    const format = this.config.format || 'lha'; // Default to LHA for BBS compatibility
     const outputFile = path.join(
       this.config.outputDir,
-      `${this.config.name}-v${this.config.version}.zip`
+      `${this.config.name}-v${this.config.version}.${format}`
     );
 
     // Ensure output directory exists
@@ -57,69 +62,214 @@ export class ReleasePacker {
       fs.mkdirSync(this.config.outputDir, { recursive: true });
     }
 
-    // Create ZIP archive
-    const output = fs.createWriteStream(outputFile);
-    const archive = archiver('zip', { zlib: { level: 9 } });
-
-    return new Promise((resolve, reject) => {
-      output.on('close', () => {
-        console.log(`✅ Release created: ${outputFile}`);
-        console.log(`📦 Size: ${archive.pointer()} bytes`);
-        resolve(outputFile);
-      });
-
-      archive.on('error', (err: Error) => reject(err));
-      archive.pipe(output);
-
-      // Add source files
-      this.addSourceFiles(archive);
-
-      // Add FILE_ID.DIZ
-      this.addFileIdDiz(archive);
-
-      // Add NFO file
-      this.addNfoFile(archive);
-
-      // Add README
-      this.addReadme(archive);
-
-      // Finalize archive
-      archive.finalize();
-    });
+    if (format === 'zip') {
+      return this.packZip(outputFile);
+    } else if (format === 'lha') {
+      return this.packLha(outputFile);
+    } else {
+      throw new Error(`Unsupported archive format: ${format}`);
+    }
   }
 
   /**
-   * Add source files to archive
+   * Create ZIP archive
    */
-  private addSourceFiles(archive: archiver.Archiver): void {
+  private async packZip(outputFile: string): Promise<string> {
+    const zip = new AdmZip();
+
+    // Create temp directory for assembly
+    const tempDir = path.join(this.config.outputDir, '.temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    try {
+      // Generate all files in temp directory
+      await this.generateFiles(tempDir);
+
+      // Add all files from temp directory to ZIP
+      zip.addLocalFolder(tempDir);
+
+      // Write ZIP file
+      zip.writeZip(outputFile);
+
+      const stats = fs.statSync(outputFile);
+      console.log(`[OK] Release created: ${outputFile}`);
+      console.log(`[OK] Size: ${stats.size} bytes`);
+
+      return outputFile;
+    } finally {
+      // Clean up temp directory
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+  }
+
+  /**
+   * Create LHA archive
+   */
+  private async packLha(outputFile: string): Promise<string> {
+    const lhaBinary = path.join(process.cwd(), '..', 'web', 'backend', 'tools', 'bin', 'lha');
+
+    // Check if lha is available (try multiple paths)
+    const lhaPaths = [
+      lhaBinary,
+      path.join(process.cwd(), 'tools', 'bin', 'lha'),
+      path.join(process.cwd(), '../../tools/bin/lha'),
+    ];
+
+    let lhaPath: string | null = null;
+    for (const p of lhaPaths) {
+      if (fs.existsSync(p)) {
+        lhaPath = p;
+        break;
+      }
+    }
+
+    if (!lhaPath) {
+      throw new Error(
+        'LHA binary not found. Please compile it:\n' +
+        '  cd web/backend && mkdir -p tools/bin && cd tools/bin && \n' +
+        '  wget https://github.com/jca02266/lha/archive/refs/tags/release-20211125.tar.gz && \n' +
+        '  tar -xzf release-20211125.tar.gz && cd lha-release-20211125 && \n' +
+        '  autoreconf -i && ./configure --prefix=$PWD/../../ && make && make install'
+      );
+    }
+
+    // Create temp directory for assembly
+    const tempDir = path.join(this.config.outputDir, '.temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    try {
+      // Generate all files in temp directory
+      await this.generateFiles(tempDir);
+
+      // Create LHA archive using lha command
+      await new Promise<void>((resolve, reject) => {
+        // lha a -o5 output.lha *
+        // Run from temp directory so * expands to temp files
+        const absoluteOutputFile = path.isAbsolute(outputFile) ? outputFile : path.resolve(outputFile);
+        const args = ['a', '-o5', absoluteOutputFile, '*'];
+
+        const lha = spawn(lhaPath!, args, {
+          cwd: tempDir, // Run from temp directory
+          shell: true, // Use shell to expand wildcards
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        let stderr = '';
+
+        lha.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString();
+        });
+
+        lha.on('error', (error: Error) => {
+          reject(new Error(`LHA process error: ${error.message}`));
+        });
+
+        lha.on('close', (code: number) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`LHA failed with exit code ${code}: ${stderr}`));
+          }
+        });
+      });
+
+      const stats = fs.statSync(outputFile);
+      console.log(`[OK] Release created: ${outputFile}`);
+      console.log(`[OK] Size: ${stats.size} bytes`);
+
+      return outputFile;
+    } finally {
+      // Clean up temp directory
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+  }
+
+  /**
+   * Generate all files (FILE_ID.DIZ, NFO, README, source files)
+   */
+  private async generateFiles(outputDir: string): Promise<void> {
+    // Add source files
+    this.copySourceFiles(outputDir);
+
+    // Generate FILE_ID.DIZ
+    this.writeFileIdDiz(outputDir);
+
+    // Generate NFO file
+    this.writeNfoFile(outputDir);
+
+    // Generate README
+    this.writeReadme(outputDir);
+  }
+
+  /**
+   * Copy source files to output directory
+   */
+  private copySourceFiles(outputDir: string): void {
     const sourceDir = this.config.sourceDir;
 
-    // Add main file
+    // Copy main file
     if (fs.existsSync(path.join(sourceDir, 'index.js'))) {
-      archive.file(path.join(sourceDir, 'index.js'), {
-        name: `${this.config.name}.js`,
-      });
+      fs.copyFileSync(
+        path.join(sourceDir, 'index.js'),
+        path.join(outputDir, `${this.config.name}.js`)
+      );
     }
 
-    // Add assets directory
+    // Copy assets directory
     const assetsDir = path.join(sourceDir, 'assets');
     if (fs.existsSync(assetsDir)) {
-      archive.directory(assetsDir, 'assets');
+      const targetAssetsDir = path.join(outputDir, 'assets');
+      if (!fs.existsSync(targetAssetsDir)) {
+        fs.mkdirSync(targetAssetsDir, { recursive: true });
+      }
+      this.copyDirectoryRecursive(assetsDir, targetAssetsDir);
     }
 
-    // Add config file if exists
+    // Copy config file if exists
     if (fs.existsSync(path.join(sourceDir, 'config.json'))) {
-      archive.file(path.join(sourceDir, 'config.json'), { name: 'config.json' });
+      fs.copyFileSync(
+        path.join(sourceDir, 'config.json'),
+        path.join(outputDir, 'config.json')
+      );
     }
   }
 
   /**
-   * Generate and add FILE_ID.DIZ
+   * Copy directory recursively
+   */
+  private copyDirectoryRecursive(src: string, dest: string): void {
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!fs.existsSync(destPath)) {
+          fs.mkdirSync(destPath, { recursive: true });
+        }
+        this.copyDirectoryRecursive(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  }
+
+  /**
+   * Generate and write FILE_ID.DIZ
    *
    * FILE_ID.DIZ is a BBS standard file description
    * Max 10 lines, 45 characters wide
    */
-  private addFileIdDiz(archive: archiver.Archiver): void {
+  private writeFileIdDiz(outputDir: string): void {
     const lines: string[] = [];
 
     // Title line (centered)
@@ -146,13 +296,13 @@ export class ReleasePacker {
     lines.push(`Released: ${date}`);
 
     const content = lines.join('\r\n');
-    archive.append(content, { name: 'FILE_ID.DIZ' });
+    fs.writeFileSync(path.join(outputDir, 'FILE_ID.DIZ'), content);
   }
 
   /**
-   * Generate and add NFO file (ASCII art)
+   * Generate and write NFO file (ASCII art)
    */
-  private addNfoFile(archive: archiver.Archiver): void {
+  private writeNfoFile(outputDir: string): void {
     const nfo = `
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║                                                                            ║
@@ -192,13 +342,13 @@ ${this.formatDescriptionForNfo(this.config.description)}
 ╚════════════════════════════════════════════════════════════════════════════╝
 `.trim();
 
-    archive.append(nfo, { name: `${this.config.name}.NFO` });
+    fs.writeFileSync(path.join(outputDir, `${this.config.name}.NFO`), nfo);
   }
 
   /**
-   * Generate and add README.TXT
+   * Generate and write README.TXT
    */
-  private addReadme(archive: archiver.Archiver): void {
+  private writeReadme(outputDir: string): void {
     const readme = `
 ${this.config.name} v${this.config.version}
 ${'='.repeat(this.config.name.length + this.config.version.length + 3)}
@@ -248,7 +398,7 @@ See LICENSE file for details.
 
 `.trim();
 
-    archive.append(readme, { name: 'README.TXT' });
+    fs.writeFileSync(path.join(outputDir, 'README.TXT'), readme);
   }
 
   /**
