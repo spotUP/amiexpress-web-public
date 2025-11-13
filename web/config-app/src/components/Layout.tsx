@@ -1,0 +1,112 @@
+import { ReactNode } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  Settings,
+  Server,
+  MessageSquare,
+  DoorOpen,
+  Languages,
+  Download,
+  History,
+  LogOut,
+  User,
+  Shield,
+  HardDrive,
+  Monitor,
+  Eye,
+  FileCheck,
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+
+interface LayoutProps {
+  children: ReactNode;
+}
+
+export function Layout({ children }: LayoutProps) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const navLinks = [
+    { to: '/system', icon: Settings, label: 'System Config' },
+    { to: '/nodes', icon: Server, label: 'Nodes' },
+    { to: '/users', icon: User, label: 'Users' },
+    { to: '/conferences', icon: MessageSquare, label: 'Conferences' },
+    { to: '/doors', icon: DoorOpen, label: 'Doors' },
+    { to: '/security', icon: Shield, label: 'Security' },
+    { to: '/drives', icon: HardDrive, label: 'Drives' },
+    { to: '/computers', icon: Monitor, label: 'Computers' },
+    { to: '/screen-types', icon: Eye, label: 'Screen Types' },
+    { to: '/file-checkers', icon: FileCheck, label: 'File Checkers' },
+    { to: '/languages', icon: Languages, label: 'Languages' },
+    { to: '/protocols', icon: Download, label: 'Protocols' },
+    { to: '/audit', icon: History, label: 'Audit Log' },
+  ];
+
+  return (
+    <div className="min-h-screen flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-bbs-surface border-r border-bbs-primary flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b border-bbs-primary">
+          <h1 className="text-xl font-bold text-bbs-accent">AmiExpress</h1>
+          <p className="text-sm text-bbs-muted">BBS Configuration</p>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-2">
+          {navLinks.map((link) => {
+            const Icon = link.icon;
+            return (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-4 py-3 rounded transition-colors ${
+                    isActive
+                      ? 'bg-bbs-primary text-bbs-accent'
+                      : 'text-bbs-muted hover:bg-bbs-primary/50 hover:text-bbs-text'
+                  }`
+                }
+              >
+                <Icon size={20} />
+                <span>{link.label}</span>
+              </NavLink>
+            );
+          })}
+        </nav>
+
+        {/* User Info */}
+        <div className="p-4 border-t border-bbs-primary">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-bbs-primary flex items-center justify-center">
+              <User size={20} className="text-bbs-accent" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{user?.username}</p>
+              <p className="text-xs text-bbs-muted">Sysop Level {user?.secLevel}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-bbs-primary hover:bg-bbs-primary/80 text-bbs-text rounded transition-colors"
+          >
+            <LogOut size={16} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto">
+        <div className="container mx-auto p-8">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}

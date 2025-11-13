@@ -2,6 +2,8 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import multer from 'multer';
 import { User, Door, DoorSession, ChatSession, ChatMessage, ChatState } from './types';
 import { db } from './database';
@@ -19,11 +21,14 @@ import { moveUploadedFile, getConferenceDir } from './utils/file-hold.util';
 import { writeUploadToDirFile } from './utils/dir-file.util';
 import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.util';
 import { AuthHandler } from './handlers/auth.handler';
-import { authenticateToken, AuthRequest } from './middleware/auth.middleware';
+import { authenticateToken, requireSysop, AuthRequest } from './middleware/auth.middleware';
+import { createConfigRouter } from './api/config-routes';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
 import { registerSocketHandlers } from './server/socket-handlers';
 import { sessions, userSessions, socketToUser, setSession } from './server/session-manager';
 import { app } from './server/app';
+import { TelnetServer, TelnetConnection } from './server/telnet-server';
+import { SSHServerImpl, SSHConnection } from './server/ssh-server';
 import { findSecurityScreen } from './utils/screen-security.util';
 import {
   displayConferenceBulletins,
@@ -346,6 +351,25 @@ const io = new Server(server, {
 
 const port = process.env.PORT || config.get('port');
 
+// Create telnet and SSH servers for native BBS client connections
+const telnetPort = parseInt(process.env.TELNET_PORT || '2323');
+const sshPort = parseInt(process.env.SSH_PORT || '2222');
+const telnetServer = new TelnetServer(telnetPort);
+
+// Load SSH host keys
+let sshHostKeys: Buffer[] = [];
+const sshKeyPath = process.env.SSH_HOST_KEY_PATH || join(process.cwd(), '../../ssh_host_rsa_key');
+if (existsSync(sshKeyPath)) {
+  try {
+    sshHostKeys = [readFileSync(sshKeyPath)];
+    console.log(`[SSH] Loaded host key from: ${sshKeyPath}`);
+  } catch (error: any) {
+    console.warn(`[SSH] Failed to load host key from ${sshKeyPath}:`, error.message);
+  }
+}
+
+const sshServer = new SSHServerImpl(sshPort, sshHostKeys);
+
 // Store active sessions (in production, use Redis/database)
 // NOTE: sessions, userSessions, and socketToUser are imported from session-manager module
 // This ensures both index.ts and socket-handlers.ts use the SAME storage
@@ -508,6 +532,54 @@ if (process.env.NODE_ENV !== 'production') {
 app.post('/auth/login', (req: Request, res: Response) => authHandler.login(req, res));
 app.post('/auth/register', (req: Request, res: Response) => authHandler.register(req, res));
 app.post('/auth/refresh', (req: Request, res: Response) => authHandler.refresh(req, res));
+
+// Configuration API - Sysop-only routes
+const configRouter = createConfigRouter(db);
+app.use('/api/config', authenticateToken(db), requireSysop(), configRouter);
+
+// ===== Static File Serving for Unified Deployment =====
+// Serve SDK Preview at /sdk/
+const sdkPreviewPath = join(__dirname, '../../../sdk/tools/preview/frontend/dist');
+app.use('/sdk', express.static(sdkPreviewPath));
+app.use('/sdk', (req: Request, res: Response, next: NextFunction) => {
+  // Only serve index.html for navigation requests, not for assets
+  if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+    return next(); // Let it 404 if file doesn't exist
+  }
+  res.sendFile(join(sdkPreviewPath, 'index.html'));
+});
+
+// Serve Admin Config at /admin/
+const adminConfigPath = join(__dirname, '../../config-app/dist');
+app.use('/admin', express.static(adminConfigPath));
+app.use('/admin', (req: Request, res: Response, next: NextFunction) => {
+  // Only serve index.html for navigation requests, not for assets
+  if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+    return next(); // Let it 404 if file doesn't exist
+  }
+  res.sendFile(join(adminConfigPath, 'index.html'));
+});
+
+// Serve BBS Terminal Frontend at / (fallback)
+const bbsFrontendPath = join(__dirname, '../../frontend/dist');
+app.use(express.static(bbsFrontendPath));
+// Catch-all for SPA routing - must be AFTER all API routes
+app.use((req: Request, res: Response, next: NextFunction) => {
+  // Skip API, auth, and socket.io routes
+  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/socket.io')) {
+    return next();
+  }
+  // Skip /sdk and /admin as they're handled above
+  if (req.path.startsWith('/sdk') || req.path.startsWith('/admin')) {
+    return next();
+  }
+  // Only serve index.html for navigation requests, not for assets
+  if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+    return next(); // Let it 404 if file doesn't exist
+  }
+  // Serve BBS frontend index.html for all other routes
+  res.sendFile(join(bbsFrontendPath, 'index.html'));
+});
 
 // Game Prompt Wizard API endpoints
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from './handlers/wizard.handler';
@@ -770,13 +842,90 @@ app.get('/users/:id', authenticateToken(db), async (req: AuthRequest, res: Respo
   }
 });
 
+// Telnet/SSH Connection Handler
+// Connects native telnet and SSH clients to BBS command processing
+function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, type: 'telnet' | 'ssh') {
+  const remoteAddress = connection.getRemoteAddress();
+  console.log(`[${type.toUpperCase()}] Connection from ${remoteAddress} on node ${connection.nodeId}`);
+
+  // Create emitter interface that mimics Socket.IO socket
+  const emitter = {
+    emit: (event: string, data: any) => {
+      if (event === 'ansi-output') {
+        connection.write(data);
+      }
+    },
+    id: connection.sessionId,
+    on: (event: string, handler: (...args: any[]) => void) => {
+      connection.on(event, handler);
+    },
+    off: (event: string, handler: (...args: any[]) => void) => {
+      connection.off(event, handler);
+    }
+  };
+
+  // Handle incoming data (user input)
+  connection.on('data', async (data: Buffer) => {
+    // Convert telnet/SSH data to string
+    // Use 'binary' encoding to preserve raw bytes, then convert to UTF-8
+    const input = data.toString('utf-8');
+
+    // Process through BBS command handler (same as Socket.IO)
+    if (connection.session) {
+      // Call handleCommand directly (same logic as Socket.IO 'command' event)
+      const { handleCommand } = await import('./handlers/command.handler');
+      handleCommand(emitter as any, connection.session, input);
+    }
+  });
+
+  // Handle window size changes
+  connection.on('window-size', (width: number, height: number) => {
+    if (connection.session) {
+      // Update session terminal size
+      console.log(`[${type.toUpperCase()}] Window size: ${width}x${height}`);
+    }
+  });
+
+  // Handle disconnect
+  connection.on('close', () => {
+    console.log(`[${type.toUpperCase()}] Disconnected: node ${connection.nodeId}`);
+    // Cleanup session
+    if (connection.session) {
+      sessions.delete(connection.sessionId);
+    }
+  });
+
+  // Handle errors
+  connection.on('error', (error: Error) => {
+    console.error(`[${type.toUpperCase()}] Error on node ${connection.nodeId}:`, error.message);
+  });
+
+  // Send welcome message with ASCII-safe characters
+  // Use '=' instead of UTF-8 box-drawing for telnet compatibility
+  connection.write('\r\n\x1b[36m' + '='.repeat(50) + '\x1b[0m\r\n');
+  connection.write('\x1b[1;37mWelcome to AmiExpress BBS\x1b[0m\r\n');
+  connection.write(`\x1b[33mConnected via ${type.toUpperCase()} on node ${connection.nodeId}\x1b[0m\r\n`);
+  connection.write('\x1b[36m' + '='.repeat(50) + '\x1b[0m\r\n\r\n');
+  connection.write('Login: ');
+}
+
+// Set up telnet server event handlers
+telnetServer.on('connection', (connection: TelnetConnection) => {
+  setupTelnetSSHHandler(connection, 'telnet');
+});
+
+// Set up SSH server event handlers
+sshServer.on('connection', (connection: SSHConnection) => {
+  setupTelnetSSHHandler(connection, 'ssh');
+});
+
 io.on('connection', async (socket) => {
   const clientIp = socket.handshake.address;
   console.log(`Client connected from ${clientIp}`);
 
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {
-    console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);
+    console.warn(`[WARNING] Rate limit exceeded for IP: ${clientIp}`);
     socket.emit('ansi-output', '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[31mToo many connections from your IP.\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[33mPlease wait a moment and try again.\x1b[0m\r\n');
@@ -1962,17 +2111,43 @@ async function initializeData() {
   try {
     console.log('Initializing database and loading data...');
     await initializeData();
-    console.log('✅ Database initialization complete');
+    console.log('[OK] Database initialization complete');
 
     // Now start accepting connections
     // Bind to 0.0.0.0 for cloud deployments (Render, etc)
     const host = process.env.HOST || '0.0.0.0';
+
+    // Start HTTP/Socket.IO server
     server.listen(port, host, () => {
-      console.log(`✅ Server running on ${host}:${port}`);
-      console.log(`🌐 BBS accessible at http://localhost:${port}/`);
+      console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
+      console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
     });
+
+    // Start telnet server
+    try {
+      await telnetServer.start();
+      console.log(`[OK] Telnet Server ready on port ${telnetPort}`);
+      console.log(`[TELNET] Connect: telnet localhost ${telnetPort}`);
+    } catch (error) {
+      console.error(`[WARNING] Failed to start Telnet server:`, error);
+      console.log('   BBS will continue without telnet support');
+    }
+
+    // Start SSH server
+    try {
+      await sshServer.start();
+      console.log(`[OK] SSH Server ready on port ${sshPort}`);
+      console.log(`[SSH] Connect: ssh -p ${sshPort} user@localhost`);
+    } catch (error) {
+      console.error(`[WARNING] Failed to start SSH server:`, error);
+      console.log('   BBS will continue without SSH support');
+    }
+
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('[READY] AmiExpress BBS is ready for connections!');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error('[ERROR] Failed to start server:', error);
     process.exit(1);
   }
 })();

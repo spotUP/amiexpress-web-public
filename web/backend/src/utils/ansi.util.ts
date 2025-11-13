@@ -136,4 +136,55 @@ export class AnsiUtil {
       part.color ? this.colorize(part.text, part.color) : part.text
     ).join('');
   }
+
+  /**
+   * Strip ANSI codes from text to get visible length
+   * Matches all ANSI escape sequences including colors, cursor movement, etc.
+   */
+  static stripAnsi(text: string): string {
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+  }
+
+  /**
+   * Get visible length of text (excluding ANSI codes)
+   */
+  static visibleLength(text: string): number {
+    return this.stripAnsi(text).length;
+  }
+
+  /**
+   * Pad text to right with spaces (ANSI-aware)
+   * @param text - Text to pad (may contain ANSI codes)
+   * @param width - Target visible width
+   */
+  static padRight(text: string, width: number): string {
+    const visibleLen = this.visibleLength(text);
+    const padding = Math.max(0, width - visibleLen);
+    return text + ' '.repeat(padding);
+  }
+
+  /**
+   * Pad text to left with spaces (ANSI-aware)
+   * @param text - Text to pad (may contain ANSI codes)
+   * @param width - Target visible width
+   */
+  static padLeft(text: string, width: number): string {
+    const visibleLen = this.visibleLength(text);
+    const padding = Math.max(0, width - visibleLen);
+    return ' '.repeat(padding) + text;
+  }
+
+  /**
+   * Center text with spaces (ANSI-aware)
+   * @param text - Text to center (may contain ANSI codes)
+   * @param width - Target visible width
+   */
+  static center(text: string, width: number): string {
+    const visibleLen = this.visibleLength(text);
+    const totalPadding = Math.max(0, width - visibleLen);
+    const leftPadding = Math.floor(totalPadding / 2);
+    const rightPadding = totalPadding - leftPadding;
+    return ' '.repeat(leftPadding) + text + ' '.repeat(rightPadding);
+  }
 }
