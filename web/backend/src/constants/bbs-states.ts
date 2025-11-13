@@ -106,6 +106,7 @@ export enum LoggedOnSubState {
   ACCOUNT_CHANGE_PASSWORD_CONFIRM = 'account_change_password_confirm',
   ACCOUNT_EDIT_SETTINGS = 'account_edit_settings',
   ACCOUNT_VIEW_STATS = 'account_view_stats',
+  DELETE_ACCOUNT_CONFIRM = 'delete_account_confirm',
 
   // Account Editor (Command 1) - express.e:22400-22460
   ACCOUNT_EDITOR_MENU = 'account_editor_menu',              // Main menu input
