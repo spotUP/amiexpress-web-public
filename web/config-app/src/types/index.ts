@@ -21,23 +21,84 @@ export interface LoginResponse {
 // Configuration types
 export interface SystemConfig {
   id: number;
+
+  // Identity
   bbs_name: string;
   sysop_name: string;
+  location: string;
+  phone: string;
+  email: string;
+  website: string;
+
+  // Security & Authentication
   min_password_length: number;
+  min_password_strength: number;
+  max_password_fails: number;
+  password_security: string;
+  strict_password_policy: boolean;
+  auto_validate: boolean;
+  confirm_deletions: boolean;
+
+  // Session Settings
+  default_time_limit: number;
   max_session_time: number;
-  inactivity_timeout: number;
-  min_baud_rate: number;
-  max_upload_size_kb: number;
-  download_timeout: number;
-  enable_guest_access: boolean;
-  guest_sec_level: number;
-  new_user_sec_level: number;
-  allow_alias: boolean;
-  allow_ansi: boolean;
-  allow_avatar: boolean;
-  max_login_attempts: number;
-  show_last_callers: boolean;
-  show_who_is_online: boolean;
+  idle_timeout: number;
+
+  // Display Settings
+  ansi_enabled: boolean;
+  color_scheme: string;
+  allow_custom_screens: boolean;
+
+  // Language
+  language_base: string;
+  default_language: string;
+
+  // Limits
+  max_conferences: number;
+  max_message_bases: number;
+  max_file_areas: number;
+  max_nodes: number;
+
+  // File Management
+  file_check_enabled: boolean;
+  upload_check_virus: boolean;
+  upload_check_dupe: boolean;
+
+  // Mail & SMTP Settings
+  allow_internet_email: boolean;
+  smtp_server: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password: string;
+  smtp_ssl: boolean;
+  smtp_from_email: string;
+  sysop_email: string;
+  bbs_email: string;
+
+  // FTP Server Settings
+  ftp_enabled: boolean;
+  ftp_host: string;
+  ftp_port: number;
+  ftp_data_ports: string;
+
+  // HTTP Server Settings
+  http_enabled: boolean;
+  http_host: string;
+  http_port: number;
+
+  // System Behavior
+  quiet_join: boolean;
+  convert_to_mb: boolean;
+
+  // Registration
+  reg_key: string;
+
+  // Logging
+  debug_mode: boolean;
+  log_level: string;
+  log_retention_days: number;
+
+  // Metadata
   created_at: Date;
   updated_at: Date;
 }

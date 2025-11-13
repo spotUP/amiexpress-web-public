@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form';
 import { Save } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { SystemConfig } from '../types';
-import { ImportExport } from '../components/import/ImportExport';
 
 export function SystemConfigPage() {
   const queryClient = useQueryClient();
@@ -80,6 +79,54 @@ export function SystemConfigPage() {
                 className="input-field w-full"
               />
             </div>
+
+            <div>
+              <label htmlFor="location" className="label">
+                Location
+              </label>
+              <input
+                id="location"
+                type="text"
+                {...register('location')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="phone" className="label">
+                Phone
+              </label>
+              <input
+                id="phone"
+                type="text"
+                {...register('phone')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="email" className="label">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                {...register('email')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="website" className="label">
+                Website
+              </label>
+              <input
+                id="website"
+                type="url"
+                {...register('website')}
+                className="input-field w-full"
+              />
+            </div>
           </div>
         </div>
 
@@ -100,15 +147,78 @@ export function SystemConfigPage() {
             </div>
 
             <div>
-              <label htmlFor="max_login_attempts" className="label">
-                Max Login Attempts
+              <label htmlFor="min_password_strength" className="label">
+                Minimum Password Strength
               </label>
               <input
-                id="max_login_attempts"
+                id="min_password_strength"
                 type="number"
-                {...register('max_login_attempts', { min: 1, valueAsNumber: true })}
+                {...register('min_password_strength', { min: 0, max: 4, valueAsNumber: true })}
                 className="input-field w-full"
               />
+            </div>
+
+            <div>
+              <label htmlFor="max_password_fails" className="label">
+                Max Password Fails
+              </label>
+              <input
+                id="max_password_fails"
+                type="number"
+                {...register('max_password_fails', { min: -1, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password_security" className="label">
+                Password Security
+              </label>
+              <select
+                id="password_security"
+                {...register('password_security')}
+                className="input-field w-full"
+              >
+                <option value="bcrypt">bcrypt</option>
+                <option value="sha256">SHA256</option>
+                <option value="md5">MD5</option>
+              </select>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="strict_password_policy"
+                type="checkbox"
+                {...register('strict_password_policy')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="strict_password_policy" className="text-sm text-bbs-text">
+                Strict Password Policy
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="auto_validate"
+                type="checkbox"
+                {...register('auto_validate')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="auto_validate" className="text-sm text-bbs-text">
+                Auto Validate New Users
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="confirm_deletions"
+                type="checkbox"
+                {...register('confirm_deletions')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="confirm_deletions" className="text-sm text-bbs-text">
+                Confirm Deletions
+              </label>
             </div>
           </div>
         </div>
@@ -118,147 +228,39 @@ export function SystemConfigPage() {
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Session Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
+              <label htmlFor="default_time_limit" className="label">
+                Default Time Limit (minutes)
+              </label>
+              <input
+                id="default_time_limit"
+                type="number"
+                {...register('default_time_limit', { min: 1, max: 1440, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
               <label htmlFor="max_session_time" className="label">
                 Max Session Time (minutes)
               </label>
               <input
                 id="max_session_time"
                 type="number"
-                {...register('max_session_time', { min: 1, valueAsNumber: true })}
+                {...register('max_session_time', { min: 1, max: 1440, valueAsNumber: true })}
                 className="input-field w-full"
               />
             </div>
 
             <div>
-              <label htmlFor="inactivity_timeout" className="label">
-                Inactivity Timeout (seconds)
+              <label htmlFor="idle_timeout" className="label">
+                Idle Timeout (minutes)
               </label>
               <input
-                id="inactivity_timeout"
+                id="idle_timeout"
                 type="number"
-                {...register('inactivity_timeout', { min: 0, valueAsNumber: true })}
+                {...register('idle_timeout', { min: 1, max: 60, valueAsNumber: true })}
                 className="input-field w-full"
               />
-            </div>
-
-            <div>
-              <label htmlFor="min_baud_rate" className="label">
-                Minimum Baud Rate
-              </label>
-              <input
-                id="min_baud_rate"
-                type="number"
-                {...register('min_baud_rate', { min: 0, valueAsNumber: true })}
-                className="input-field w-full"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* File Transfer Settings */}
-        <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">File Transfer Settings</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="max_upload_size_kb" className="label">
-                Max Upload Size (KB)
-              </label>
-              <input
-                id="max_upload_size_kb"
-                type="number"
-                {...register('max_upload_size_kb', { min: 0, valueAsNumber: true })}
-                className="input-field w-full"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="download_timeout" className="label">
-                Download Timeout (seconds)
-              </label>
-              <input
-                id="download_timeout"
-                type="number"
-                {...register('download_timeout', { min: 0, valueAsNumber: true })}
-                className="input-field w-full"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* User Settings */}
-        <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">User Settings</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="new_user_sec_level" className="label">
-                New User Security Level
-              </label>
-              <input
-                id="new_user_sec_level"
-                type="number"
-                {...register('new_user_sec_level', { min: 0, max: 255, valueAsNumber: true })}
-                className="input-field w-full"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="guest_sec_level" className="label">
-                Guest Security Level
-              </label>
-              <input
-                id="guest_sec_level"
-                type="number"
-                {...register('guest_sec_level', { min: 0, max: 255, valueAsNumber: true })}
-                className="input-field w-full"
-              />
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <input
-                id="enable_guest_access"
-                type="checkbox"
-                {...register('enable_guest_access')}
-                className="w-4 h-4"
-              />
-              <label htmlFor="enable_guest_access" className="text-sm text-bbs-text">
-                Enable Guest Access
-              </label>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <input
-                id="allow_alias"
-                type="checkbox"
-                {...register('allow_alias')}
-                className="w-4 h-4"
-              />
-              <label htmlFor="allow_alias" className="text-sm text-bbs-text">
-                Allow Alias Names
-              </label>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <input
-                id="allow_ansi"
-                type="checkbox"
-                {...register('allow_ansi')}
-                className="w-4 h-4"
-              />
-              <label htmlFor="allow_ansi" className="text-sm text-bbs-text">
-                Allow ANSI Graphics
-              </label>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <input
-                id="allow_avatar"
-                type="checkbox"
-                {...register('allow_avatar')}
-                className="w-4 h-4"
-              />
-              <label htmlFor="allow_avatar" className="text-sm text-bbs-text">
-                Allow User Avatars
-              </label>
             </div>
           </div>
         </div>
@@ -267,27 +269,464 @@ export function SystemConfigPage() {
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Display Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="color_scheme" className="label">
+                Color Scheme
+              </label>
+              <input
+                id="color_scheme"
+                type="text"
+                {...register('color_scheme')}
+                className="input-field w-full"
+              />
+            </div>
+
             <div className="flex items-center space-x-3">
               <input
-                id="show_last_callers"
+                id="ansi_enabled"
                 type="checkbox"
-                {...register('show_last_callers')}
+                {...register('ansi_enabled')}
                 className="w-4 h-4"
               />
-              <label htmlFor="show_last_callers" className="text-sm text-bbs-text">
-                Show Last Callers List
+              <label htmlFor="ansi_enabled" className="text-sm text-bbs-text">
+                ANSI Graphics Enabled
               </label>
             </div>
 
             <div className="flex items-center space-x-3">
               <input
-                id="show_who_is_online"
+                id="allow_custom_screens"
                 type="checkbox"
-                {...register('show_who_is_online')}
+                {...register('allow_custom_screens')}
                 className="w-4 h-4"
               />
-              <label htmlFor="show_who_is_online" className="text-sm text-bbs-text">
-                Show Who Is Online
+              <label htmlFor="allow_custom_screens" className="text-sm text-bbs-text">
+                Allow Custom Screens
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Language Settings */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">Language Settings</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="language_base" className="label">
+                Language Base Path
+              </label>
+              <input
+                id="language_base"
+                type="text"
+                {...register('language_base')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="default_language" className="label">
+                Default Language
+              </label>
+              <input
+                id="default_language"
+                type="text"
+                {...register('default_language')}
+                className="input-field w-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* System Limits */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">System Limits</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="max_conferences" className="label">
+                Max Conferences
+              </label>
+              <input
+                id="max_conferences"
+                type="number"
+                {...register('max_conferences', { min: 1, max: 256, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="max_message_bases" className="label">
+                Max Message Bases
+              </label>
+              <input
+                id="max_message_bases"
+                type="number"
+                {...register('max_message_bases', { min: 1, max: 1024, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="max_file_areas" className="label">
+                Max File Areas
+              </label>
+              <input
+                id="max_file_areas"
+                type="number"
+                {...register('max_file_areas', { min: 1, max: 1024, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="max_nodes" className="label">
+                Max Nodes
+              </label>
+              <input
+                id="max_nodes"
+                type="number"
+                {...register('max_nodes', { min: 1, max: 8, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* File Management */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">File Management</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex items-center space-x-3">
+              <input
+                id="file_check_enabled"
+                type="checkbox"
+                {...register('file_check_enabled')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="file_check_enabled" className="text-sm text-bbs-text">
+                File Check Enabled
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="upload_check_virus"
+                type="checkbox"
+                {...register('upload_check_virus')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="upload_check_virus" className="text-sm text-bbs-text">
+                Check Uploads for Viruses
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="upload_check_dupe"
+                type="checkbox"
+                {...register('upload_check_dupe')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="upload_check_dupe" className="text-sm text-bbs-text">
+                Check for Duplicate Uploads
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Mail & SMTP Settings */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">Mail & SMTP Settings</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="smtp_server" className="label">
+                SMTP Server
+              </label>
+              <input
+                id="smtp_server"
+                type="text"
+                {...register('smtp_server')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="smtp_port" className="label">
+                SMTP Port
+              </label>
+              <input
+                id="smtp_port"
+                type="number"
+                {...register('smtp_port', { min: 1, max: 65535, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="smtp_username" className="label">
+                SMTP Username
+              </label>
+              <input
+                id="smtp_username"
+                type="text"
+                {...register('smtp_username')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="smtp_password" className="label">
+                SMTP Password
+              </label>
+              <input
+                id="smtp_password"
+                type="password"
+                {...register('smtp_password')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="smtp_from_email" className="label">
+                SMTP From Email
+              </label>
+              <input
+                id="smtp_from_email"
+                type="email"
+                {...register('smtp_from_email')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="sysop_email" className="label">
+                Sysop Email
+              </label>
+              <input
+                id="sysop_email"
+                type="email"
+                {...register('sysop_email')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="bbs_email" className="label">
+                BBS Email
+              </label>
+              <input
+                id="bbs_email"
+                type="email"
+                {...register('bbs_email')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="allow_internet_email"
+                type="checkbox"
+                {...register('allow_internet_email')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="allow_internet_email" className="text-sm text-bbs-text">
+                Allow Internet Email
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="smtp_ssl"
+                type="checkbox"
+                {...register('smtp_ssl')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="smtp_ssl" className="text-sm text-bbs-text">
+                SMTP SSL/TLS
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* FTP Server Settings */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">FTP Server Settings</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="ftp_host" className="label">
+                FTP Host
+              </label>
+              <input
+                id="ftp_host"
+                type="text"
+                {...register('ftp_host')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="ftp_port" className="label">
+                FTP Port
+              </label>
+              <input
+                id="ftp_port"
+                type="number"
+                {...register('ftp_port', { min: 1, max: 65535, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="ftp_data_ports" className="label">
+                FTP Data Ports (comma-separated)
+              </label>
+              <input
+                id="ftp_data_ports"
+                type="text"
+                {...register('ftp_data_ports')}
+                className="input-field w-full"
+                placeholder="50101,50102,50103"
+              />
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="ftp_enabled"
+                type="checkbox"
+                {...register('ftp_enabled')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="ftp_enabled" className="text-sm text-bbs-text">
+                FTP Server Enabled
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* HTTP Server Settings */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">HTTP Server Settings</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="http_host" className="label">
+                HTTP Host
+              </label>
+              <input
+                id="http_host"
+                type="text"
+                {...register('http_host')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="http_port" className="label">
+                HTTP Port
+              </label>
+              <input
+                id="http_port"
+                type="number"
+                {...register('http_port', { min: 1, max: 65535, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="http_enabled"
+                type="checkbox"
+                {...register('http_enabled')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="http_enabled" className="text-sm text-bbs-text">
+                HTTP Server Enabled
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* System Behavior */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">System Behavior</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="reg_key" className="label">
+                Registration Key
+              </label>
+              <input
+                id="reg_key"
+                type="text"
+                {...register('reg_key')}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="quiet_join"
+                type="checkbox"
+                {...register('quiet_join')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="quiet_join" className="text-sm text-bbs-text">
+                Quiet Join (suppress conference join messages)
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="convert_to_mb"
+                type="checkbox"
+                {...register('convert_to_mb')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="convert_to_mb" className="text-sm text-bbs-text">
+                Convert to MB (display byte counts as megabytes)
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Logging Settings */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">Logging Settings</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="log_level" className="label">
+                Log Level
+              </label>
+              <select
+                id="log_level"
+                {...register('log_level')}
+                className="input-field w-full"
+              >
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="log_retention_days" className="label">
+                Log Retention (days)
+              </label>
+              <input
+                id="log_retention_days"
+                type="number"
+                {...register('log_retention_days', { min: 1, max: 365, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="debug_mode"
+                type="checkbox"
+                {...register('debug_mode')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="debug_mode" className="text-sm text-bbs-text">
+                Debug Mode
               </label>
             </div>
           </div>
@@ -305,11 +744,6 @@ export function SystemConfigPage() {
           </button>
         </div>
       </form>
-
-      {/* Import/Export Section */}
-      <div className="mt-12 pt-8 border-t border-bbs-muted/20">
-        <ImportExport />
-      </div>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   Monitor,
   Eye,
   FileCheck,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -44,6 +45,7 @@ export function Layout({ children }: LayoutProps) {
     { to: '/file-checkers', icon: FileCheck, label: 'File Checkers' },
     { to: '/languages', icon: Languages, label: 'Languages' },
     { to: '/protocols', icon: Download, label: 'Protocols' },
+    { to: '/import-export', icon: ArrowUpDown, label: 'Import/Export' },
     { to: '/audit', icon: History, label: 'Audit Log' },
   ];
 

@@ -15,6 +15,7 @@ import { ComputersPage } from './pages/ComputersPage';
 import { ScreenTypesPage } from './pages/ScreenTypesPage';
 import { FileCheckersPage } from './pages/FileCheckersPage';
 import { UsersPage } from './pages/UsersPage';
+import { ImportExportPage } from './pages/ImportExportPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -55,6 +56,7 @@ function App() {
                 <Route path="/screen-types" element={<ScreenTypesPage />} />
                 <Route path="/file-checkers" element={<FileCheckersPage />} />
                 <Route path="/audit" element={<AuditLogPage />} />
+                <Route path="/import-export" element={<ImportExportPage />} />
               </Routes>
             </Layout>
           </PrivateRoute>
