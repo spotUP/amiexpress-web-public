@@ -317,7 +317,23 @@ export class AmigaExportService {
     const config = this.db.getConfigRepository().getSystemConfig();
 
     if (!config) {
-      throw new Error('System configuration not found');
+      // No system config exists - create default export
+      const defaultConfig: any = {
+        bbsName: 'AmiExpress BBS',
+        sysopName: 'Sysop',
+        minPasswordLength: 8,
+        maxPasswordFails: -1,
+        maxSessionTime: 120,
+        idleTimeout: 10,
+        ansiEnabled: true,
+      };
+
+      await fs.writeFile(
+        path.join(exportDir, 'config.json'),
+        JSON.stringify(defaultConfig, null, 2),
+        'utf-8'
+      );
+      return;
     }
 
     const amigaConfig: any = {
