@@ -528,35 +528,68 @@ export class UserFileManager {
   }
 
   /**
-   * Update a specific user's record in user.data
-   * Finds by slotNumber and overwrites
+   * Update a specific user's record in user.data, user.keys, and user.misc
+   * Writes to the correct slot position (slots are 1-indexed in AmiExpress)
    */
   public updateUserDataFile(user: User, slotNumber: number): void {
     try {
-      if (!fs.existsSync(this.userDataPath)) {
-        // File doesn't exist, write new record
-        this.writeUserFiles(user, slotNumber);
-        return;
+      // Convert to file structs
+      const userStruct = this.userToFileStruct(user, slotNumber);
+      const keysStruct = this.userToKeysStruct(user, slotNumber);
+      const miscStruct = this.userToMiscStruct(user);
+
+      // Serialize to buffers
+      const userBuffer = this.serializeUserStruct(userStruct);
+      const keysBuffer = this.serializeUserKeysStruct(keysStruct);
+      const miscBuffer = this.serializeUserMiscStruct(miscStruct);
+
+      // Calculate file offsets (slots are 1-indexed in AmiExpress)
+      const userOffset = (slotNumber - 1) * this.USER_STRUCT_SIZE;
+      const keysOffset = (slotNumber - 1) * this.USERKEYS_STRUCT_SIZE;
+      const miscOffset = (slotNumber - 1) * this.USERMISC_STRUCT_SIZE;
+
+      // Update all three files at the correct offsets
+      this.updateFileAtOffset(this.userDataPath, userBuffer, userOffset);
+      this.updateFileAtOffset(this.userKeysPath, keysBuffer, keysOffset);
+      this.updateFileAtOffset(this.userMiscPath, miscBuffer, miscOffset);
+
+      console.log(`[UserFileManager] Updated user files for ${user.username} (slot ${slotNumber})`);
+    } catch (error) {
+      console.error('[UserFileManager] Error updating user files:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update a file at a specific byte offset
+   * Creates file if it doesn't exist, expands if needed
+   */
+  private updateFileAtOffset(filePath: string, buffer: Buffer, offset: number): void {
+    try {
+      let fd: number;
+
+      // Open file for reading and writing, create if doesn't exist
+      if (!fs.existsSync(filePath)) {
+        fd = fs.openSync(filePath, 'w+');
+      } else {
+        fd = fs.openSync(filePath, 'r+');
+
+        // Check if we need to expand the file
+        const stats = fs.fstatSync(fd);
+        const requiredSize = offset + buffer.length;
+
+        if (stats.size < requiredSize) {
+          // Expand file with zeros
+          const padding = Buffer.alloc(requiredSize - stats.size);
+          fs.writeSync(fd, padding, 0, padding.length, stats.size);
+        }
       }
 
-      // Read entire file
-      const buffer = fs.readFileSync(this.userDataPath);
-      const numUsers = Math.floor(buffer.length / this.USER_STRUCT_SIZE);
-
-      // Find user by slotNumber (would need to deserialize to search)
-      // For now, just append (TODO: implement proper update)
-      console.log(`[UserFileManager] TODO: Implement proper update for slot ${slotNumber}`);
-      console.log(`[UserFileManager] Currently appending instead of updating`);
-
-      // Convert and serialize
-      const userStruct = this.userToFileStruct(user, slotNumber);
-      const userBuffer = this.serializeUserStruct(userStruct);
-
-      // Append for now
-      fs.appendFileSync(this.userDataPath, userBuffer);
-
+      // Write buffer at offset
+      fs.writeSync(fd, buffer, 0, buffer.length, offset);
+      fs.closeSync(fd);
     } catch (error) {
-      console.error('[UserFileManager] Error updating user.data:', error);
+      console.error(`[UserFileManager] Error updating file ${filePath} at offset ${offset}:`, error);
       throw error;
     }
   }
