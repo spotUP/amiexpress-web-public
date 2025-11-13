@@ -393,12 +393,11 @@ export function checkOverrideDefaults(session: any): boolean {
   // Check if user has ACS_OVERRIDE_DEFAULTS permission
   // This allows users to bypass certain default security restrictions
   const acsLevel = findAcsLevel(session.user.secLevel || 0);
-  const acsConfig = getAcsConfig();
 
   // Check if this ACS level grants override permission
   // In AmiExpress, this was a specific tooltype setting
-  // Web implementation: Check against security level threshold
-  return acsLevel >= acsConfig.sysopLevel;
+  // Web implementation: Check against security level threshold (255 = sysop)
+  return acsLevel >= 255;
 }
 
 /**

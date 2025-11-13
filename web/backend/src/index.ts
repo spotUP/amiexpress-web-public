@@ -14,7 +14,7 @@ import { nodeFileManager } from './services/NodeFileManager';
 import { callersLogManager } from './services/CallersLogManager';
 import { doorDropFileManager } from './services/DoorDropFileManager';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
-export { LoggedOnSubState };
+export { BBSState, LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
 import { testFile, TestResult } from './utils/file-test.util';
 import { moveUploadedFile, getConferenceDir } from './utils/file-hold.util';

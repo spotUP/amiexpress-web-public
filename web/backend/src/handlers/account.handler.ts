@@ -4,7 +4,7 @@
  * 1:1 port from AmiExpress express.e account management
  */
 
-import { BBSSession, LoggedOnSubState } from '../index';
+import { BBSSession, LoggedOnSubState, BBSState } from '../index';
 
 // Dependencies (injected)
 let db: any;
@@ -289,8 +289,8 @@ export async function handleDeleteUserAccount(socket: any, session: BBSSession, 
       socket.emit('ansi-output', 'Thank you for using the BBS. Goodbye!\r\n\r\n');
 
       // Log them out
-      session.state = BBSState.LOGGED_OFF;
-      session.subState = LoggedOnSubState.NONE;
+      session.state = BBSState.AWAIT;
+      session.subState = LoggedOnSubState.DISPLAY_CONNECT;
       session.user = undefined;
       session.tempData = undefined;
 
