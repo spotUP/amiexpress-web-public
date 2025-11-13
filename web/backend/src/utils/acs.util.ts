@@ -364,26 +364,62 @@ export function setEnvStat(session: any, envStat: EnvStat): void {
 }
 
 /**
+ * Check if user-specific tooltype file exists (Amiga-specific)
+ * Express.e checks for user-specific .info files with custom tooltype settings
+ *
+ * Web implementation: Not applicable - Amiga tooltype files don't exist in web environment
+ * Returns false to indicate no user-specific overrides via filesystem
+ *
+ * @param username User to check
+ * @returns Always false (feature not applicable to web BBS)
+ */
+export function checkToolTypeExists(username: string): boolean {
+  // Amiga-specific feature: Checked for BBS:Users/<username>.info files
+  // with custom tooltype settings (e.g., SECURITY_LEVEL=xxx)
+  // Web implementation: Not applicable
+  return false;
+}
+
+/**
+ * Check if user can override default access settings
+ * Express.e checks ACS_OVERRIDE_DEFAULTS permission flag
+ *
+ * @param session Current session
+ * @returns True if user has override permission
+ */
+export function checkOverrideDefaults(session: any): boolean {
+  if (!session.user) return false;
+
+  // Check if user has ACS_OVERRIDE_DEFAULTS permission
+  // This allows users to bypass certain default security restrictions
+  const acsLevel = findAcsLevel(session.user.secLevel || 0);
+  const acsConfig = getAcsConfig();
+
+  // Check if this ACS level grants override permission
+  // In AmiExpress, this was a specific tooltype setting
+  // Web implementation: Check against security level threshold
+  return acsLevel >= acsConfig.sysopLevel;
+}
+
+/**
  * Initialize security fields for a new session
  */
 export function initializeSecurity(session: any): void {
   if (!session.user) return;
-  
+
   // Calculate ACS level
   session.acsLevel = findAcsLevel(session.user.secLevel || 0);
-  
-  // Check if user-specific access file exists
-  // TODO for 100% 1:1: Implement checkToolTypeExists
-  session.userSpecificAccess = false;
-  
-  // Check override defaults
-  // TODO for 100% 1:1: Implement checkSecurity(ACS_OVERRIDE_DEFAULTS)
-  session.overrideDefaultAccess = false;
-  
+
+  // Check if user-specific access file exists (Amiga tooltype checking)
+  session.userSpecificAccess = checkToolTypeExists(session.user.username);
+
+  // Check override defaults permission
+  session.overrideDefaultAccess = checkOverrideDefaults(session);
+
   // Clear temporary flags
   session.user.securityFlags = '';
   session.user.secOverride = '';
-  
+
   // Initialize environment status
   session.currentStat = EnvStat.IDLE;
   session.quietFlag = false;

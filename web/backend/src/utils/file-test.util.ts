@@ -36,8 +36,15 @@ export async function testFile(filepath: string, nodeWorkDir: string): Promise<T
   console.log(`[testFile] Testing ${filename} (extension: ${ext})`);
 
   // Express.e:18645-18648 - Try FILECHECK system command first
-  // TODO: Implement FILECHECK system command support
-  // For now, skip to extension-based checking
+  // Check if FILECHECK system command exists in config
+  try {
+    const filecheckResult = await tryFilecheckCommand(filepath, nodeWorkDir);
+    if (filecheckResult !== null) {
+      return filecheckResult;
+    }
+  } catch (error: any) {
+    console.log(`[testFile] FILECHECK command error: ${error.message}`);
+  }
 
   // Express.e:18650-18672 - Extract extension and run checker for that type
   if (ext.length === 3 || ext.length === 2) {
@@ -47,6 +54,63 @@ export async function testFile(filepath: string, nodeWorkDir: string): Promise<T
   // No extension or unsupported
   console.log(`[testFile] No valid extension, file not tested`);
   return TestResult.NOT_TESTED;
+}
+
+/**
+ * Try to execute FILECHECK system command if configured
+ * Express.e:18645-18648 - checkSystemCommand('FILECHECK')
+ *
+ * @param filepath Full path to file
+ * @param nodeWorkDir Work directory for output
+ * @returns Test result or null if command not configured
+ */
+async function tryFilecheckCommand(filepath: string, nodeWorkDir: string): Promise<TestResult | null> {
+  const { db } = require('../database');
+  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
+
+  // Check if FILECHECK system command is configured
+  const syscmdResult = await db.query(
+    `SELECT commandstring FROM system_commands WHERE UPPER(commandname) = 'FILECHECK' LIMIT 1`
+  );
+
+  if (syscmdResult.rows.length === 0) {
+    console.log(`[testFile] FILECHECK system command not configured`);
+    return null;
+  }
+
+  const commandString = syscmdResult.rows[0].commandstring;
+  console.log(`[testFile] Running FILECHECK command: ${commandString}`);
+
+  try {
+    // Replace placeholders: %f = filename, %p = filepath
+    const command = commandString
+      .replace(/%f/g, path.basename(filepath))
+      .replace(/%p/g, filepath)
+      .replace(/%w/g, nodeWorkDir);
+
+    // Execute the command
+    const { stdout, stderr } = await execAsync(command, {
+      timeout: 60000, // 60 second timeout
+      cwd: nodeWorkDir,
+    });
+
+    // Write output to test output file
+    await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
+
+    // Check for error indicators in output
+    const output = `${stdout} ${stderr}`.toLowerCase();
+    if (output.includes('error') || output.includes('failed') || output.includes('corrupt')) {
+      console.log(`[testFile] FILECHECK command reported failure`);
+      return TestResult.FAILURE;
+    }
+
+    console.log(`[testFile] FILECHECK command succeeded`);
+    return TestResult.SUCCESS;
+  } catch (error: any) {
+    console.error(`[testFile] FILECHECK command execution error: ${error.message}`);
+    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
+    return TestResult.FAILURE;
+  }
 }
 
 /**

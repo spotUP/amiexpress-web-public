@@ -504,7 +504,7 @@ export class PhysicsEngine {
     end: Position,
     body: PhysicsBody
   ): boolean {
-    // Simplified ray-AABB intersection
+    // Accurate ray-AABB intersection using slab method
     const bx1 = body.position.x;
     const by1 = body.position.y;
     const bx2 = body.position.x + body.size.width;
@@ -518,8 +518,49 @@ export class PhysicsEngine {
       return true;
     }
 
-    // TODO: More accurate ray-box intersection
-    return false;
+    // Ray direction
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+
+    // Handle degenerate case (ray is a point)
+    if (dx === 0 && dy === 0) {
+      return false;
+    }
+
+    // Calculate intersection parameters using slab method
+    // For each axis, calculate tmin and tmax where ray enters/exits the slab
+
+    let tmin = 0;
+    let tmax = 1;
+
+    // X axis
+    if (dx !== 0) {
+      const tx1 = (bx1 - start.x) / dx;
+      const tx2 = (bx2 - start.x) / dx;
+      tmin = Math.max(tmin, Math.min(tx1, tx2));
+      tmax = Math.min(tmax, Math.max(tx1, tx2));
+    } else {
+      // Ray parallel to Y axis - check if X is in range
+      if (start.x < bx1 || start.x > bx2) {
+        return false;
+      }
+    }
+
+    // Y axis
+    if (dy !== 0) {
+      const ty1 = (by1 - start.y) / dy;
+      const ty2 = (by2 - start.y) / dy;
+      tmin = Math.max(tmin, Math.min(ty1, ty2));
+      tmax = Math.min(tmax, Math.max(ty1, ty2));
+    } else {
+      // Ray parallel to X axis - check if Y is in range
+      if (start.y < by1 || start.y > by2) {
+        return false;
+      }
+    }
+
+    // Ray intersects if tmin < tmax and intersection is within segment bounds
+    return tmin <= tmax && tmin <= 1 && tmax >= 0;
   }
 
   /**

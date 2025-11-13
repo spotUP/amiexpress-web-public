@@ -154,13 +154,77 @@ export function getConferenceDir(conferenceId: number, bbsDataPath: string): str
 }
 
 /**
+ * Get file area directory path
+ * Express.e:19403 - Gets the file area's actual storage directory
+ *
+ * @param fileAreaId File area ID
+ * @param bbsDataPath Base BBS data path
+ * @returns Path to file area directory
+ */
+export async function getFileAreaDir(fileAreaId: number, bbsDataPath: string): Promise<string> {
+  const { db } = require('../database');
+
+  // Get file area path from database
+  const fileAreaResult = await db.query(
+    `SELECT path FROM file_areas WHERE id = $1 LIMIT 1`,
+    [fileAreaId]
+  );
+
+  if (fileAreaResult.rows.length === 0) {
+    throw new Error(`File area ${fileAreaId} not found`);
+  }
+
+  const fileAreaPath = fileAreaResult.rows[0].path;
+
+  // If path is absolute, use it; otherwise make it relative to BBS data path
+  if (path.isAbsolute(fileAreaPath)) {
+    return fileAreaPath;
+  } else {
+    return path.join(bbsDataPath, fileAreaPath);
+  }
+}
+
+/**
+ * Move file to file area directory
+ * Express.e:19403-19415 - Move file to its final destination
+ *
+ * @param sourcePath Current file location
+ * @param filename Filename
+ * @param fileAreaId Target file area ID
+ * @param bbsDataPath Base BBS data path
+ * @returns New file path
+ */
+export async function moveToFileArea(
+  sourcePath: string,
+  filename: string,
+  fileAreaId: number,
+  bbsDataPath: string
+): Promise<string> {
+  const fileAreaDir = await getFileAreaDir(fileAreaId, bbsDataPath);
+  const targetPath = path.join(fileAreaDir, filename);
+
+  // Ensure file area directory exists
+  await fs.mkdir(fileAreaDir, { recursive: true });
+
+  try {
+    // Move file from playpen to file area
+    await fs.rename(sourcePath, targetPath);
+    console.log(`[FileArea] Moved ${filename} to file area ${fileAreaId}`);
+    return targetPath;
+  } catch (error: any) {
+    console.error(`[FileArea] Error moving file to file area: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
  * Move file to appropriate directory based on status
  * Express.e:19403-19415 - Complete file movement logic
  *
  * @param sourcePath Current file location
  * @param filename Filename
- * @param status File status (hold, lcfiles, or normal)
- * @param conferenceId Conference ID
+ * @param status File status (hold, lcfiles, or active)
+ * @param targetId Conference ID (for hold/lcfiles) or File Area ID (for active)
  * @param bbsDataPath Base BBS data path
  * @returns New file path
  */
@@ -168,21 +232,19 @@ export async function moveUploadedFile(
   sourcePath: string,
   filename: string,
   status: 'hold' | 'lcfiles' | 'active' | 'private',
-  conferenceId: number,
+  targetId: number,
   bbsDataPath: string
 ): Promise<string> {
-  const conferenceDir = getConferenceDir(conferenceId, bbsDataPath);
-
   if (status === 'hold' || status === 'private') {
-    // Move to HOLD directory for sysop review
+    // targetId is conferenceId - Move to HOLD directory for sysop review
+    const conferenceDir = getConferenceDir(targetId, bbsDataPath);
     return await moveToHold(sourcePath, filename, conferenceDir);
   } else if (status === 'lcfiles') {
-    // Move to LCFILES directory for lost carrier handling
+    // targetId is conferenceId - Move to LCFILES directory for lost carrier handling
+    const conferenceDir = getConferenceDir(targetId, bbsDataPath);
     return await moveToLCFiles(sourcePath, filename, conferenceDir);
   } else {
-    // Normal upload - file stays in playpen until moved to file area
-    // TODO: Implement file area directory structure
-    // For now, keep in playpen (will be moved by file area handler)
-    return sourcePath;
+    // targetId is fileAreaId - Move to file area directory (normal upload)
+    return await moveToFileArea(sourcePath, filename, targetId, bbsDataPath);
   }
 }

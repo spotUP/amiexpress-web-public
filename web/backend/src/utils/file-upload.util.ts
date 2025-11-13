@@ -7,7 +7,14 @@ import { db } from '../database';
 
 // checkForFile() - express.e:18408-18453
 // Returns true if file exists (duplicate), false if safe to upload
-export async function checkForFile(filename: string, currentConf: number): Promise<boolean> {
+export async function checkForFile(
+  filename: string,
+  currentConf: number,
+  bbsDataPath?: string
+): Promise<boolean> {
+  const fs = require('fs/promises');
+  const path = require('path');
+
   // Check for illegal characters (express.e:18410-18411)
   const illegalChars = ['%', '#', '?', ' ', '/', '(', ')', ':', '*'];
   for (const char of illegalChars) {
@@ -32,9 +39,50 @@ export async function checkForFile(filename: string, currentConf: number): Promi
     return true; // Duplicate found
   }
 
-  // TODO: Check LCFILES directory (express.e:18424-18428)
-  // TODO: Check DLPATH.1, DLPATH.2, etc. from config (express.e:18431-18439)
-  // TODO: Check ULPATH.1, ULPATH.2, etc. from config (express.e:18440-18448)
+  // Check LCFILES directory (express.e:18424-18428)
+  if (bbsDataPath) {
+    const confNum = currentConf.toString().padStart(2, '0');
+    const lcfilesPath = path.join(bbsDataPath, 'BBS', `Conf${confNum}`, 'LCFILES', filename);
+    try {
+      await fs.access(lcfilesPath);
+      console.log(`[checkForFile] Duplicate found in LCFILES: ${filename}`);
+      return true; // File exists in LCFILES
+    } catch {
+      // File doesn't exist in LCFILES, continue checking
+    }
+
+    // Check DLPATH.1, DLPATH.2, etc. from config (express.e:18431-18439)
+    // Get download paths from system config
+    const dlPathConfig = await db.query(
+      `SELECT value FROM system_config WHERE key LIKE 'DLPATH.%'`
+    );
+    for (const row of dlPathConfig.rows) {
+      const dlPath = path.join(bbsDataPath, row.value, filename);
+      try {
+        await fs.access(dlPath);
+        console.log(`[checkForFile] Duplicate found in DLPATH: ${filename}`);
+        return true; // File exists in download path
+      } catch {
+        // File doesn't exist in this path, continue
+      }
+    }
+
+    // Check ULPATH.1, ULPATH.2, etc. from config (express.e:18440-18448)
+    // Get upload paths from system config
+    const ulPathConfig = await db.query(
+      `SELECT value FROM system_config WHERE key LIKE 'ULPATH.%'`
+    );
+    for (const row of ulPathConfig.rows) {
+      const ulPath = path.join(bbsDataPath, row.value, filename);
+      try {
+        await fs.access(ulPath);
+        console.log(`[checkForFile] Duplicate found in ULPATH: ${filename}`);
+        return true; // File exists in upload path
+      } catch {
+        // File doesn't exist in this path, continue
+      }
+    }
+  }
 
   return false; // File is safe to upload
 }

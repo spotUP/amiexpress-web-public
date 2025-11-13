@@ -91,18 +91,34 @@ export async function updateSysopUploadStats(
  * @param bbsName BBS name
  * @param sysopEmail Sysop's email (if configured)
  * @param mailOnUpload Whether MAIL_ON_UPLOAD is enabled
+ * @param webhookService Optional webhook service for triggering events
  */
 export async function doUploadNotify(
   username: string,
   location: string,
   bbsName: string,
   sysopEmail?: string,
-  mailOnUpload: boolean = false
+  mailOnUpload: boolean = false,
+  webhookService?: any
 ): Promise<void> {
   try {
     // Express.e:6691 - runExecuteOn('UPLOAD')
-    // TODO: Implement AREXX script execution for UPLOAD event
+    // Web implementation: Use webhook system for event notifications
     console.log(`[UploadNotify] Upload event triggered for ${username}`);
+
+    // Trigger NEW_UPLOAD webhook if webhook service is available
+    if (webhookService) {
+      try {
+        await webhookService.sendWebhook('new_upload', {
+          username,
+          location,
+          timestamp: new Date().toISOString(),
+        });
+        console.log(`[UploadNotify] NEW_UPLOAD webhook triggered`);
+      } catch (webhookError: any) {
+        console.error(`[UploadNotify] Webhook error: ${webhookError.message}`);
+      }
+    }
 
     // Express.e:6693-6697 - Send email notification if configured
     if (mailOnUpload && sysopEmail && sysopEmail.length > 0) {
@@ -113,8 +129,10 @@ export async function doUploadNotify(
       console.log(`[UploadNotify] Subject: ${subject}`);
       console.log(`[UploadNotify] Body: ${body}`);
 
-      // TODO: Implement actual email sending via sendMail()
-      // For now, just log the notification
+      // Email sending requires email service configuration
+      // When EmailService is implemented, call:
+      // await emailService.send({ to: sysopEmail, subject, body });
+      console.log(`[UploadNotify] Email sending requires EmailService implementation`);
     }
   } catch (error: any) {
     console.error(`[UploadNotify] Error sending notification: ${error.message}`);
