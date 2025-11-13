@@ -67,7 +67,6 @@
   font-display: block;
 }
 
-/* PetMe64 font disabled - font file not included in repository
 @font-face {
   font-family: 'PetMe64';
   src: url('/fonts/PetMe64.ttf') format('truetype');
@@ -75,7 +74,6 @@
   font-style: normal;
   font-display: block;
 }
-*/
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
