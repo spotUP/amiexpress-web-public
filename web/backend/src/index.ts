@@ -304,6 +304,11 @@ export interface BBSSession {
 
   // Sysop menu state
   inSysopMenu?: boolean; // Whether user is currently in sysop menu
+
+  // Command history (express.e:207-209, 2158-2168, 2669-2713)
+  commandHistory: string[]; // Circular buffer of last 20 commands (historyBuf) - express.e:207
+  historyIndex: number; // Current position for next command storage (historyNum) - express.e:208
+  historyCycle: number; // Current position when navigating history - express.e:209
 }
 
 // Conference and Message Base data structures (simplified)
@@ -986,7 +991,12 @@ io.on('connection', async (socket) => {
 
     // Phase 10: Initialize message pointers (express.e:199-200)
     lastMsgReadConf: 0, // Last message manually read
-    lastNewReadConf: 0 // Last message auto-scanned
+    lastNewReadConf: 0, // Last message auto-scanned
+
+    // Command history (express.e:31561-31563)
+    commandHistory: [], // Circular buffer of last 20 commands (historyBuf)
+    historyIndex: 0, // Current position for next command storage (historyNum)
+    historyCycle: 0 // Current position when navigating history
   };
   setSession(socket.id, session); // Use helper to store by nodeId
 

@@ -279,6 +279,16 @@ function registerDisconnectHandler(socket: Socket) {
     if (session.user) {
       await callersLog(session.user.id, session.user.username, 'Logged off');
 
+      // Save command history to disk (express.e:25067, 7951, 28612, 28631)
+      try {
+        const { saveHistory } = require('../utils/command-history.util');
+        await saveHistory(session, session.user.id);
+        console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${session.user.username}`);
+      } catch (error) {
+        console.error('[CommandHistory] Error saving command history:', error);
+        // Don't fail logout on history save error
+      }
+
       // CRITICAL: Delete node{n}.user files on logoff
       // express.e deletes these when user logs off so WHO doesn't show logged-off users
       const nodeId = session.nodeId || 0;
