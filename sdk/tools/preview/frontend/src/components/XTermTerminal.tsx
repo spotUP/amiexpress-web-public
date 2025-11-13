@@ -36,14 +36,17 @@ export const XTermTerminal = forwardRef<XTermTerminalRef, XTermTerminalProps>(({
     if (!terminalRef.current) return;
 
     // Initialize xterm.js terminal with shared configuration
+    // IMPORTANT: Use BBS theme (not SDK theme) for 100% BBS compatibility
     const term = new Terminal({
       fontFamily: XTERM_CONFIG.fontFamily,
       fontSize: fontSize,
       lineHeight: XTERM_CONFIG.lineHeight,
-      theme: XTERM_CONFIG.themeSdk,
+      theme: XTERM_CONFIG.theme, // Use BBS theme for consistency
       ...XTERM_CONFIG.options,
       // CRITICAL: Don't let terminal grow, use fixed dimensions
       convertEol: false,
+      cols: 80, // BBS standard width
+      rows: 24, // BBS standard height
     });
 
     term.open(terminalRef.current);

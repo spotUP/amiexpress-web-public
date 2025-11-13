@@ -220,8 +220,14 @@ function App() {
   };
 
   // WebSocket connection
+  // In dev mode (port 3000), connect to SDK preview server (port 8080)
+  // In production (port 8080), connect to same port
+  const wsPort = window.location.port === '3000' ? '8080' : (window.location.port || '8080');
+  const wsUrl = import.meta.env.VITE_SDK_PREVIEW_WS_URL ||
+                `ws://${window.location.hostname}:${wsPort}`;
+
   const { status: wsStatus, send: wsSend, ws: wsRef } = useWebSocket({
-    url: `ws://${window.location.hostname}:${window.location.port || 8080}`,
+    url: wsUrl,
     onMessage: handleWebSocketMessage,
     onConnect: () => {
       setConnectionStatus({

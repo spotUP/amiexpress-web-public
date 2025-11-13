@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@amiexpress/terminal": "file:../../packages/terminal",
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/xterm": "^5.5.0",
     "react": "^18.3.1",
