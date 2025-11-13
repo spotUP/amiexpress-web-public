@@ -18,6 +18,7 @@ import { ValidationResults } from './ValidationResults';
 import { ConflictResolver } from './ConflictResolver';
 import { ImportProgress } from './ImportProgress';
 import { ImportResults } from './ImportResults';
+import { ExportSection } from './ExportSection';
 import './ImportExport.css';
 
 type ImportStep = 'upload' | 'validate' | 'resolve' | 'execute' | 'complete';
@@ -250,11 +251,8 @@ export function ImportExport() {
         </div>
       </div>
 
-      {/* Export section placeholder */}
-      <div className="export-section">
-        <h2>Export BBS Data</h2>
-        <p className="coming-soon">Coming soon: Export current BBS to Amiga-compatible archive</p>
-      </div>
+      {/* Export section */}
+      <ExportSection />
     </div>
   );
 }
