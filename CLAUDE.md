@@ -65,6 +65,18 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ---
 
+## ⚠️ Development Status
+
+**This project is in ACTIVE DEVELOPMENT - NOT production ready**
+
+- Actual completion: 60-70% (many features untested)
+- Time to production: 2-3 months minimum
+- Multi-user stability unknown
+- Performance not tested under load
+- See `Documentation/6-Progress/CURRENT_STATUS.md` for detailed status
+
+---
+
 ## Project Overview
 
 AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress/!X. It emulates 68K Amiga binaries in the browser using MOIRA (68000 CPU emulator) and recreates the BBS environment with modern web technologies.
@@ -79,12 +91,21 @@ AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress
 - **TypeScript Doors**: Modern doors using SDK, native execution (in `web/backend/src/doors/`)
 - Both types register commands the same way via `.info` files
 
+### Key Features
+- **68K Emulation**: MOIRA-based execution of Amiga binary doors
+- **AREXX Interpreter**: Full AREXX support (1905 lines, 40+ BBS API functions)
+- **Import/Export**: Amiga BBS data migration (users, messages, files, config)
+- **Multi-Protocol Access**: Telnet (port 2323), SSH (port 2222), WebSocket
+- **QWK/REP Mail**: Offline mail packet generation
+- **Multi-Node Chat**: Real-time Socket.IO-based chat system
+
 ## Project Structure
 ```
 /
 ├── web/                    - Main BBS application
 │   ├── backend/           - TypeScript BBS server
-│   └── frontend/          - React terminal UI
+│   ├── frontend/          - React terminal UI
+│   └── config-app/        - Admin configuration UI (React)
 ├── sdk/                    - Door Development Kit
 ├── Documentation/          - All documentation
 ├── dev/scripts/           - Development/test scripts
@@ -105,6 +126,14 @@ AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress
 - **NEVER**: `npm run dev &` or background bash or `run_in_background: true`
 - Ports: Backend 3001, Frontend 5173, Preview 8080
 - **Just works**: No need to manually run npm install or builds
+
+### Multi-Protocol Access
+- **WebSocket**: Main browser interface (Frontend port 5173)
+- **Telnet**: Classic BBS access (port 2323)
+- **SSH**: Secure terminal access (port 2222)
+  - Generate host key: `ssh-keygen -t rsa -b 4096 -f ssh_host_rsa_key -N ""`
+  - Set path via `SSH_HOST_KEY_PATH` in `.env.local`
+  - See `Documentation/3-Developers/TELNET_SSH_SERVERS.md`
 
 ### CRITICAL: Zombie Process Cleanup
 **VERY IMPORTANT** - Zombie processes consume context and must be killed immediately!
@@ -154,6 +183,19 @@ npm run lint         # ESLint check
 npm run preview      # Preview production build (port 8080)
 ```
 
+### Config App (Admin UI)
+```bash
+cd web/config-app
+npm install          # Install dependencies
+npm run dev          # Start config UI dev server
+npm run build        # Production build
+npm run build:check  # Type check + build (REQUIRED before PRs)
+```
+- Standalone React app for BBS administration
+- Full CRUD for conferences, file areas, users, config
+- Runs on separate port from main frontend
+- See `Documentation/3-Developers/API_REFERENCE.md`
+
 ### SDK (Door Development Kit)
 ```bash
 cd sdk
@@ -161,6 +203,8 @@ npm install          # Install dependencies
 npm run build        # Build SDK (REQUIRED before using CLI commands)
 npm test             # Run SDK tests
 npm run test:watch   # Watch mode
+npm run test:unit        # Unit tests only
+npm run test:integration # Integration tests only
 
 # CLI commands (require SDK to be built first)
 npm run create-door  # Create new door (interactive wizard)
@@ -229,6 +273,10 @@ npm run lint         # ESLint validation
 - **Deep Dive Test**: `node dev/scripts/test-deep-dive.js`
 - **Simple Test**: `node dev/scripts/test-simple.js`
 - **BBS Comprehensive**: `node dev/scripts/test-bbs-comprehensive.js`
+- **Config API Test**: `node dev/scripts/test-config-api.js`
+- **Config Verification**: `node dev/scripts/verify-config-tables.js`
+- **Import Testing**: `node dev/scripts/test-import-execution.js`
+- **User Parsing**: `node dev/scripts/test-user-parsing.js`
 - See `Documentation/3-Developers/TESTING.md` for complete protocol
 - **CRITICAL**: Always use test scripts instead of manual testing
 
@@ -400,12 +448,36 @@ The project includes an MCP server at `.mcp.json` providing access to the origin
 - See `Documentation/3-Developers/ARCHITECTURE.md` for full details
 
 ### Key Utilities (Import These!)
+Backend has 39+ utility modules in `web/backend/src/utils/`:
+
+**Essential Utilities:**
 ```typescript
-import { AnsiUtil } from './utils/ansi.util';           // 13 ANSI methods
-import { ErrorHandler } from './utils/error-handling.util';  // 6 error methods
-import { ParamsUtil } from './utils/params.util';       // 5 param parsing methods
-import { PermissionsUtil } from './utils/permissions.util';  // 13 permission checks
+import { AnsiUtil } from './utils/ansi.util';           // ANSI codes (4.9KB)
+import { AnsiOutputUtil } from './utils/ansi-output.util';  // ANSI output (4.2KB)
+import { ErrorHandler } from './utils/error-handling.util';  // Error handling (6 methods)
+import { ParamsUtil } from './utils/params.util';       // Parameter parsing (5 methods)
+import { PermissionsUtil } from './utils/permissions.util';  // Permission checks (13+ methods)
 ```
+
+**File Operations:**
+```typescript
+import { FileDizUtil } from './utils/file-diz.util';    // FILE_ID.DIZ extraction (12KB)
+import { FileFlagUtil } from './utils/file-flag.util';  // File flagging system (8.6KB)
+import { FileUploadUtil } from './utils/file-upload.util';  // Upload handling
+import { ArchiveExtractor } from './utils/archive-extractor';  // ZIP, LZX, LHA, TAR, DMS
+```
+
+**BBS-Specific:**
+```typescript
+import { AcsUtil } from './utils/acs.util';             // Access Control System (11KB)
+import { BbsPathsUtil } from './utils/bbs-paths.util';  // Path resolution (10KB)
+import { MenuUtil } from './utils/menu.util';           // Menu system
+import { MessagePointersUtil } from './utils/message-pointers.util';  // Message threading
+import { PetsciiUtil } from './utils/petscii.util';     // C64/PETSCII conversion (13KB)
+import { AmigaCommandParser } from './utils/amiga-command-parser.util';  // .info parsing (13KB)
+```
+
+**Always check `utils/` before implementing - DO NOT duplicate code**
 
 ## Command Implementation
 
@@ -414,6 +486,13 @@ import { PermissionsUtil } from './utils/permissions.util';  // 13 permission ch
 2. If found: Implement EXACTLY as shown
 3. If not found: Use `WEB_*`, `MODERN_*`, `CUSTOM_*`, `ADMIN_*` prefixes
 4. Command Priority: SYSCMD → BBSCMD → InternalCommand
+
+### AREXX Door Support
+- Full AREXX interpreter (1905 lines, `web/backend/src/services/arexx.ts`)
+- 40+ BBS API functions (BBSWRITE, BBSGETUSER, BBSPOSTMSG, etc.)
+- Drop file creation (DOOR.SYS, DORINFO1.DEF)
+- Amiga AREXX doors run as-is
+- See `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
 
 ## BBS Output Rules
 - NO emojis (use `*` `X` `!` `-` `+`)
@@ -456,6 +535,15 @@ BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
 - Usage: `vamos doors/who/who` (test door execution)
 - Also available: `vda68k` for disassembly
 - Helpful for debugging 68K door issues before BBS integration
+
+## Amiga BBS Import/Export
+- Import users, messages, files, and configuration from classic Amiga BBS
+- Parses Amiga binary formats (BCD math, packed structures)
+- Conflict resolution strategies for duplicate data
+- Supports AmiExpress/!X binary user files and configuration
+- See `Documentation/1-Users/IMPORT_USER_GUIDE.md`
+- Test: `node dev/scripts/test-import-execution.js`
+- User parsing: `node dev/scripts/test-user-parsing.js`
 
 ## NO STUBS OR TODOs
 - NEVER leave stub implementations that break functionality
