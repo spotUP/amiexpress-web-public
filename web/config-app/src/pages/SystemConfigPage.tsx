@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Save } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { SystemConfig } from '../types';
+import { ImportExport } from '../components/import/ImportExport';
 
 export function SystemConfigPage() {
   const queryClient = useQueryClient();
@@ -304,6 +305,11 @@ export function SystemConfigPage() {
           </button>
         </div>
       </form>
+
+      {/* Import/Export Section */}
+      <div className="mt-12 pt-8 border-t border-bbs-muted/20">
+        <ImportExport />
+      </div>
     </div>
   );
 }
