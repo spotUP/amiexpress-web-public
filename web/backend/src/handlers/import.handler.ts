@@ -13,6 +13,7 @@ import { ImportTransactionService } from '../services/import-transaction.service
 import { AmigaParserService } from '../services/amiga-parser.service';
 import { ImportValidationService } from '../services/import-validation.service';
 import { ImportMappingService } from '../services/import-mapping.service';
+import { AmigaExportService } from '../services/amiga-export.service';
 import type { Database } from '../database';
 import type { ImportOptions } from '../services/import-transaction.service';
 
@@ -52,6 +53,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
   const validator = new ImportValidationService(db);
   const mapper = new ImportMappingService();
   const transactionService = new ImportTransactionService(db, parser, validator, mapper);
+  const exportService = new AmigaExportService(db);
 
   // Setup progress event broadcasting (for WebSocket/SSE in future)
   transactionService.on('progress', (event) => {
@@ -270,9 +272,132 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
     }
   });
 
-  // TODO: Export endpoints
-  // router.post('/export/create', async (req: Request, res: Response) => { ... });
-  // router.get('/export/download/:exportId', async (req: Request, res: Response) => { ... });
+  /**
+   * POST /api/import/export/create
+   * Create BBS export archive
+   */
+  router.post('/export/create', async (req: Request, res: Response) => {
+    try {
+      const options = {
+        includeUsers: req.body.includeUsers !== false,
+        includeConferences: req.body.includeConferences !== false,
+        includeMessages: req.body.includeMessages !== false,
+        includeFiles: req.body.includeFiles !== false,
+        includeConfig: req.body.includeConfig !== false,
+        includeBulletins: req.body.includeBulletins !== false,
+        includeScreens: req.body.includeScreens !== false,
+        format: req.body.format || 'zip',
+      };
+
+      console.log('[ExportAPI] Creating export with options:', options);
+
+      const result = await exportService.exportBBS(options);
+
+      if (result.success) {
+        res.json({
+          success: true,
+          filename: result.filename,
+          size: result.size,
+          itemsExported: result.itemsExported,
+          warnings: result.warnings,
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          errors: result.errors,
+          warnings: result.warnings,
+        });
+      }
+    } catch (error: any) {
+      console.error('[ExportAPI] Export creation error:', error);
+      res.status(500).json({
+        error: 'Export failed',
+        message: error.message,
+      });
+    }
+  });
+
+  /**
+   * GET /api/import/export/list
+   * List available export archives
+   */
+  router.get('/export/list', async (req: Request, res: Response) => {
+    try {
+      const exports = await exportService.listExports();
+
+      res.json({
+        success: true,
+        exports,
+      });
+    } catch (error: any) {
+      console.error('[ExportAPI] List exports error:', error);
+      res.status(500).json({
+        error: 'Failed to list exports',
+        message: error.message,
+      });
+    }
+  });
+
+  /**
+   * GET /api/import/export/download/:filename
+   * Download export archive
+   */
+  router.get('/export/download/:filename', async (req: Request, res: Response) => {
+    try {
+      const { filename } = req.params;
+
+      // Security check: ensure filename is just a basename
+      if (filename !== path.basename(filename)) {
+        return res.status(400).json({ error: 'Invalid filename' });
+      }
+
+      // Security check: ensure it's an export file
+      if (!filename.startsWith('amiexpress-export-')) {
+        return res.status(400).json({ error: 'Invalid export filename' });
+      }
+
+      const exportsDir = path.join(process.cwd(), 'data', 'exports');
+      const filePath = path.join(exportsDir, filename);
+
+      // Check if file exists
+      try {
+        await fs.access(filePath);
+      } catch {
+        return res.status(404).json({ error: 'Export file not found' });
+      }
+
+      (res as any).download(filePath, filename);
+    } catch (error: any) {
+      console.error('[ExportAPI] Download error:', error);
+      res.status(500).json({
+        error: 'Download failed',
+        message: error.message,
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/import/export/:filename
+   * Delete export archive
+   */
+  router.delete('/export/:filename', async (req: Request, res: Response) => {
+    try {
+      const { filename } = req.params;
+
+      await exportService.deleteExport(filename);
+
+      res.json({
+        success: true,
+        message: 'Export deleted',
+      });
+    } catch (error: any) {
+      console.error('[ExportAPI] Delete export error:', error);
+      res.status(500).json({
+        error: 'Failed to delete export',
+        message: error.message,
+      });
+    }
+  });
 
   return router;
 }

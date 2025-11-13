@@ -495,9 +495,133 @@
   border-top: 3px solid #333;
 }
 
+.export-section h2 {
+  margin-bottom: 0.5rem;
+}
+
+.export-section > p {
+  color: #666;
+  margin-bottom: 2rem;
+}
+
 .coming-soon {
   color: #999;
   font-style: italic;
+}
+
+.success-banner {
+  background: #d4edda;
+  border: 1px solid #28a745;
+  color: #155724;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+}
+
+.export-options {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.export-options h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.options-grid label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.options-grid label:hover {
+  background: #e9ecef;
+}
+
+.options-grid input[type="checkbox"] {
+  width: 1.2rem;
+  height: 1.2rem;
+  cursor: pointer;
+}
+
+.export-actions {
+  text-align: center;
+  margin: 2rem 0;
+}
+
+.exports-list {
+  margin-top: 3rem;
+}
+
+.exports-list h3 {
+  margin-bottom: 1rem;
+}
+
+.exports-list table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.exports-list thead {
+  background: #f8f9fa;
+}
+
+.exports-list th {
+  text-align: left;
+  padding: 1rem;
+  font-weight: bold;
+  border-bottom: 2px solid #ddd;
+}
+
+.exports-list td {
+  padding: 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+.exports-list tr:last-child td {
+  border-bottom: none;
+}
+
+.exports-list tr:hover {
+  background: #f8f9fa;
+}
+
+.btn-small {
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  margin-right: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #c82333;
 }
 
 /* Responsive */
