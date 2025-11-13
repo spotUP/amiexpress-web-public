@@ -24,9 +24,52 @@ export class LzhExtractor extends BaseArchiveExtractor {
   }
 
   async extractFile(filepath: string, filename: string): Promise<Buffer | null> {
-    // LZH parser doesn't have generic extraction, only FILE_ID.DIZ search
-    this.log('Generic file extraction not implemented for LZH');
-    return null;
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const fs = require('fs/promises');
+    const path = require('path');
+    const os = require('os');
+    const execAsync = promisify(exec);
+
+    // Use system lha command for extraction if available
+    try {
+      // Check if lha command exists
+      try {
+        await execAsync('which lha');
+      } catch {
+        this.log('lha command not found in system PATH - cannot extract files');
+        this.log('Install lha: brew install lha (macOS) or apt-get install lha (Linux)');
+        return null;
+      }
+
+      // Create temporary directory for extraction
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lzh-extract-'));
+
+      try {
+        // Extract specific file using lha command
+        // lha x -w=<tempdir> <archive> <filename>
+        await execAsync(`lha x "-w=${tempDir}" "${filepath}" "${filename}"`, {
+          timeout: 30000
+        });
+
+        // Read extracted file
+        const extractedPath = path.join(tempDir, filename);
+        const content = await fs.readFile(extractedPath);
+
+        this.log(`✓ Extracted ${filename} from LZH archive`);
+        return content;
+      } finally {
+        // Clean up temp directory
+        try {
+          await fs.rm(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          this.log(`Warning: Failed to clean up temp directory: ${tempDir}`);
+        }
+      }
+    } catch (error: any) {
+      this.log(`Error extracting file from LZH: ${error.message}`);
+      return null;
+    }
   }
 
   async extractFileDiz(filepath: string, outputPath: string): Promise<boolean> {

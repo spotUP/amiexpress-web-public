@@ -255,12 +255,63 @@ export function handleToggleUserFlags(socket: any, session: BBSSession, input: s
 }
 
 // handleDeleteUserAccount() - Delete user account
-export function handleDeleteUserAccount(socket: any, session: BBSSession, input: string) {
-  socket.emit('ansi-output', '\r\n\x1b[32mUser account deletion not implemented yet.\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  session.tempData = undefined;
+export async function handleDeleteUserAccount(socket: any, session: BBSSession, input: string) {
+  const { db } = require('../database');
+
+  if (!session.user) {
+    socket.emit('ansi-output', '\r\n\x1b[31mError: No user logged in\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // If this is first call, ask for confirmation
+  if (!session.tempData?.deleteUserConfirmed) {
+    socket.emit('ansi-output', '\r\n\x1b[33;1m WARNING: Account Deletion \x1b[0m\r\n\r\n');
+    socket.emit('ansi-output', 'Are you sure you want to delete your account?\r\n');
+    socket.emit('ansi-output', 'This action CANNOT be undone!\r\n\r\n');
+    socket.emit('ansi-output', 'All your messages, uploads, and account data will be permanently removed.\r\n\r\n');
+    socket.emit('ansi-output', '\x1b[36mType YES (in capitals) to confirm deletion, or press any other key to cancel:\x1b[0m ');
+
+    session.tempData = { deleteUserConfirmed: false, awaitingConfirmation: true };
+    session.subState = LoggedOnSubState.DELETE_ACCOUNT_CONFIRM;
+    return;
+  }
+
+  // Check confirmation
+  if (input.trim() === 'YES') {
+    socket.emit('ansi-output', '\r\n\r\n\x1b[31mDeleting your account...\x1b[0m\r\n');
+
+    try {
+      // Delete user from database
+      await db.deleteUser(session.user.id);
+
+      socket.emit('ansi-output', '\x1b[32mYour account has been successfully deleted.\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Thank you for using the BBS. Goodbye!\r\n\r\n');
+
+      // Log them out
+      session.state = BBSState.LOGGED_OFF;
+      session.subState = LoggedOnSubState.NONE;
+      session.user = undefined;
+      session.tempData = undefined;
+
+      setTimeout(() => {
+        socket.disconnect();
+      }, 2000);
+    } catch (error: any) {
+      console.error('[DeleteAccount] Error deleting user:', error);
+      socket.emit('ansi-output', `\r\n\x1b[31mError deleting account: ${error.message}\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+    }
+  } else {
+    socket.emit('ansi-output', '\r\n\r\n\x1b[32mAccount deletion cancelled.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+  }
 }
 
 // handleSearchUsers() - Search users by various criteria
