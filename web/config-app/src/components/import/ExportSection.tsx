@@ -77,7 +77,7 @@ export function ExportSection() {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        const itemsCount = Object.values(data.itemsExported).reduce((a: number, b: number) => a + b, 0);
+        const itemsCount = Object.values(data.itemsExported as Record<string, number>).reduce((a, b) => a + b, 0);
         setSuccess(`Export created successfully! Exported ${itemsCount} items (${formatBytes(data.size)})`);
         loadExports(); // Reload the list
       } else {
