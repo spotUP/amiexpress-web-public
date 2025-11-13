@@ -5,20 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3e%3ctext y='.9em' font-size='90'%3e%F0%9F%92%BB%3c/text%3e%3c/svg%3e" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AmiExpress Web BBS</title>
-    <style>
-      @font-face {
-        font-family: 'MicroKnight_v1.0';
-        src: url('/Fonts/MicroKnight_v1.0.ttf') format('truetype');
-        font-weight: normal;
-        font-style: normal;
-      }
 
+    <!-- Preload critical BBS fonts to ensure they load before terminal displays -->
+    <link rel="preload" href="/fonts/mOsOul_v1.0.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/fonts/PetMe64.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/fonts/MicroKnight_v1.0.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/fonts/Topaz_a500_v1.0.ttf" as="font" type="font/ttf" crossorigin />
+    <style>
       body {
         margin: 0;
         padding: 0;
         background: #000;
         color: #fff;
-        font-family: 'MicroKnight_v1.0', 'Courier New', monospace;
         overflow: hidden;
         height: 100vh;
         width: 100vw;
@@ -35,10 +33,6 @@
       /* BBS-style cursor and selection */
       .xterm .xterm-viewport {
         background: #000 !important;
-      }
-
-      .xterm .xterm-screen {
-        font-family: 'MicroKnight_v1.0', 'Courier New', monospace !important;
       }
 
       /* Authentic BBS cursor styling */

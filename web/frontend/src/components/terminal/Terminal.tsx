@@ -10,6 +10,7 @@ function Terminal() {
   const socket = useRef<Socket | null>(null);
   const doorActive = useRef<boolean>(false);
   const keyState = useRef<Record<string, boolean>>({});
+  const normalFont = useRef<string>('mosoul, "Courier New", monospace');
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -141,9 +142,37 @@ function Terminal() {
     });
 
     ws.on('ansi-output', (data: string) => {
+      // Regular ANSI output - restore normal BBS font if we were in PETSCII mode
+      // BUT only when we're clearing the screen or starting fresh content
+      const currentFont = term.options.fontFamily;
+      if (currentFont && currentFont.includes('PetMe64')) {
+        // Check if this output contains screen clear or home cursor codes
+        if (data.includes('\x1b[2J') || data.includes('\x1b[H\x1b[2J') || data.includes('\x1b[0m\x1b[2J')) {
+          // Screen is being cleared, safe to switch back to normal font
+          term.options.fontFamily = normalFont.current;
+          console.log('[ANSI] Screen clear detected, restored font from PetMe64 to', normalFont.current);
+        }
+        // Otherwise, leave font as PetMe64 so existing PETSCII graphics stay visible
+      }
       term.write(data);
       // Only refresh, don't force scroll - let user control scrolling
       term.refresh(0, term.rows - 1);
+    });
+
+    ws.on('petscii-output', (data: string) => {
+      // PETSCII content - use PetMe64 C64 font
+      console.log('[PETSCII] Received petscii-output, length:', data.length);
+      const currentFont = term.options.fontFamily;
+      // Save current font before switching (unless already in PetMe64)
+      if (!currentFont?.includes('PetMe64')) {
+        normalFont.current = currentFont || 'mosoul, "Courier New", monospace';
+        console.log('[PETSCII] Saved normal font:', normalFont.current);
+      }
+      console.log('[PETSCII] Switching font from', currentFont, 'to PetMe64');
+      term.options.fontFamily = 'PetMe64, "Courier New", monospace';
+      term.write(data);
+      term.refresh(0, term.rows - 1);
+      console.log('[PETSCII] PETSCII content written to terminal');
     });
 
     ws.on('login-success', (data: any) => {
@@ -218,19 +247,25 @@ function Terminal() {
 
     ws.on('font-preference', (data: { font: string }) => {
       const metrics = fontMetrics[data.font] || { size: 16, lineHeight: 1.0 };
-      term.options.fontFamily = `${data.font}, "Courier New", monospace`;
+      const newFont = `${data.font}, "Courier New", monospace`;
+      term.options.fontFamily = newFont;
       term.options.fontSize = metrics.size;
       term.options.lineHeight = metrics.lineHeight;
       term.refresh(0, term.rows - 1);
+      // Update normal font reference
+      normalFont.current = newFont;
     });
 
     ws.on('font-changed', (data: { font: string }) => {
       const metrics = fontMetrics[data.font] || { size: 16, lineHeight: 1.0 };
-      term.options.fontFamily = `${data.font}, "Courier New", monospace`;
+      const newFont = `${data.font}, "Courier New", monospace`;
+      term.options.fontFamily = newFont;
       term.options.fontSize = metrics.size;
       term.options.lineHeight = metrics.lineHeight;
       term.refresh(0, term.rows - 1);
       term.write(`\r\n\x1b[32mFont changed to ${data.font}\x1b[0m\r\n`);
+      // Update normal font reference
+      normalFont.current = newFont;
     });
 
     ws.on('show-file-upload', (options: any) => {
@@ -598,15 +633,19 @@ function Terminal() {
   }, []);
 
   return (
-    <div ref={terminalRef} style={{
-      width: '100%',
-      height: '100vh',
-      fontSize: '16px',
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-      MozUserSelect: 'none',
-      msUserSelect: 'none'
-    }} />
+    <div
+      ref={terminalRef}
+      id="terminal"
+      style={{
+        width: '100%',
+        height: '100vh',
+        fontSize: '16px',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        MozUserSelect: 'none',
+        msUserSelect: 'none'
+      }}
+    />
   );
 }
 
