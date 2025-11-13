@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from '../config';
 import { doorApiRouter } from '../doors/door-api-routes';
+import { deploymentRouter } from '../api/deployment-routes';
 
 /**
  * Express Application Setup
@@ -12,6 +13,7 @@ import { doorApiRouter } from '../doors/door-api-routes';
  * - JSON body parsing
  * - Basic health check endpoint
  * - Door API routes for client door bundling
+ * - Deployment and health check routes
  */
 
 export const app = express();
@@ -33,5 +35,8 @@ app.get('/api', (req, res) => {
 
 // Door API routes
 app.use('/api', doorApiRouter);
+
+// Deployment API routes
+app.use('/api', deploymentRouter);
 
 export default app;
