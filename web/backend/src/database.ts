@@ -36,6 +36,7 @@ import { SessionRepository } from './database/session-repository';
 import { ChatRepository } from './database/chat-repository';
 import { BulletinRepository } from './database/bulletin-repository';
 import { WebhookRepository } from './database/webhook-repository';
+import { ConfigRepository } from './database/config-repository';
 
 // Re-export types for backward compatibility
 export type {
@@ -48,7 +49,15 @@ export type {
   Webhook,
   Session,
   Bulletin,
-  SystemLog
+  SystemLog,
+  SystemConfig,
+  NodeConfig,
+  ConferenceConfig,
+  Door,
+  SystemLanguages,
+  Language,
+  Protocol,
+  ConfigAuditLog
 } from './database/types';
 
 export class Database {
@@ -65,6 +74,7 @@ export class Database {
   private chatRepo?: ChatRepository;
   private bulletinRepo?: BulletinRepository;
   private webhookRepo?: WebhookRepository;
+  private configRepo?: ConfigRepository;
 
   constructor() {
     // SQLite database path
@@ -110,6 +120,7 @@ export class Database {
       this.chatRepo = new ChatRepository(this.db);
       this.bulletinRepo = new BulletinRepository(this.db);
       this.webhookRepo = new WebhookRepository(this.db);
+      this.configRepo = new ConfigRepository(this.db);
 
       console.log('✅ Connected to SQLite database');
     } catch (error) {
@@ -131,6 +142,14 @@ export class Database {
   // Check if database is connected
   public isHealthy(): boolean {
     return this.isConnected;
+  }
+
+  // Get configuration repository
+  public getConfigRepository(): ConfigRepository {
+    if (!this.configRepo) {
+      throw new Error('Config repository not initialized');
+    }
+    return this.configRepo;
   }
 
   // Generic query method for custom SQL queries
@@ -715,6 +734,566 @@ export class Database {
         )
       `);
 
+      // ===== Configuration Tables =====
+
+      // System Configuration (Singleton - TOOLTYPE_BBSCONFIG)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS system_config (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+
+          -- Identity (TOOLTYPE_BBSCONFIG)
+          bbs_name TEXT NOT NULL DEFAULT 'AmiExpress BBS',
+          sysop_name TEXT NOT NULL DEFAULT 'Sysop',
+          location TEXT DEFAULT '',
+          phone TEXT DEFAULT '',
+          email TEXT DEFAULT '',
+          website TEXT DEFAULT '',
+
+          -- Security & Authentication
+          min_password_length INTEGER DEFAULT 8 CHECK (min_password_length >= 0 AND min_password_length <= 32),
+          min_password_strength INTEGER DEFAULT 0 CHECK (min_password_strength >= 0 AND min_password_strength <= 4),
+          max_password_fails INTEGER DEFAULT -1,
+          password_security TEXT DEFAULT 'bcrypt',
+          strict_password_policy INTEGER DEFAULT 0,
+          auto_validate INTEGER DEFAULT 0,
+          confirm_deletions INTEGER DEFAULT 1,
+
+          -- Session Settings
+          default_time_limit INTEGER DEFAULT 60,
+          max_session_time INTEGER DEFAULT 120,
+          idle_timeout INTEGER DEFAULT 10,
+
+          -- Display Settings
+          ansi_enabled INTEGER DEFAULT 1,
+          color_scheme TEXT DEFAULT 'standard',
+          allow_custom_screens INTEGER DEFAULT 1,
+
+          -- Language
+          language_base TEXT DEFAULT '',
+          default_language TEXT DEFAULT 'English',
+
+          -- Limits
+          max_conferences INTEGER DEFAULT 32,
+          max_message_bases INTEGER DEFAULT 256,
+          max_file_areas INTEGER DEFAULT 256,
+          max_nodes INTEGER DEFAULT 8,
+
+          -- File Management
+          file_check_enabled INTEGER DEFAULT 1,
+          upload_check_virus INTEGER DEFAULT 0,
+          upload_check_dupe INTEGER DEFAULT 1,
+
+          -- Mail
+          allow_internet_email INTEGER DEFAULT 0,
+          smtp_server TEXT DEFAULT '',
+          smtp_port INTEGER DEFAULT 25,
+
+          -- Logging
+          debug_mode INTEGER DEFAULT 0,
+          log_level TEXT DEFAULT 'info',
+          log_retention_days INTEGER DEFAULT 90,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+
+          CHECK (id = 1)
+        )
+      `);
+
+      // Node Configuration (TOOLTYPE_NODE)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS node_config (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          node_number INTEGER NOT NULL UNIQUE CHECK (node_number >= 1 AND node_number <= 8),
+
+          -- Node Settings
+          node_start TEXT NOT NULL DEFAULT 'BBS:EXPRESS',
+          priority INTEGER DEFAULT -1 CHECK (priority >= -1 AND priority <= 20),
+
+          -- Display Settings
+          capitol_files INTEGER DEFAULT 0,
+          def_screens INTEGER DEFAULT 0,
+          no_mci_msg INTEGER DEFAULT 0,
+
+          -- Chat Settings
+          sysop_chat_color INTEGER DEFAULT 33,
+          user_chat_color INTEGER DEFAULT 32,
+          break_chat INTEGER DEFAULT 0,
+
+          -- File Transfer Settings
+          sentby_files INTEGER DEFAULT 0,
+          keep_upload_credit INTEGER DEFAULT 0,
+          free_resuming INTEGER DEFAULT 0,
+
+          -- Logging Settings
+          callers_log INTEGER DEFAULT 0,
+          start_log INTEGER DEFAULT 0,
+          door_log INTEGER DEFAULT 0,
+          ud_log INTEGER DEFAULT 0,
+          log_host INTEGER DEFAULT 0,
+
+          -- Network Settings
+          telnet INTEGER DEFAULT 0,
+          ftp INTEGER DEFAULT 0,
+
+          -- Security Settings
+          disable_quick_logons INTEGER DEFAULT 0,
+          view_password INTEGER DEFAULT 0,
+
+          -- Modem/Network
+          no_rad_boogie INTEGER DEFAULT 0,
+          nrams TEXT DEFAULT '[]',
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // Conference Configuration (TOOLTYPE_CONF)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS conference_config (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          conference_id INTEGER NOT NULL UNIQUE REFERENCES conferences(id) ON DELETE CASCADE,
+
+          -- Directory Settings
+          ndirs INTEGER DEFAULT 0 CHECK (ndirs >= 0 AND ndirs <= 16),
+          dlpath_1 TEXT DEFAULT '',
+          dlpath_2 TEXT DEFAULT '',
+          dlpath_3 TEXT DEFAULT '',
+          dlpath_4 TEXT DEFAULT '',
+          dlpath_5 TEXT DEFAULT '',
+          dlpath_6 TEXT DEFAULT '',
+          dlpath_7 TEXT DEFAULT '',
+          dlpath_8 TEXT DEFAULT '',
+          dlpath_9 TEXT DEFAULT '',
+          dlpath_10 TEXT DEFAULT '',
+          dlpath_11 TEXT DEFAULT '',
+          dlpath_12 TEXT DEFAULT '',
+          dlpath_13 TEXT DEFAULT '',
+          dlpath_14 TEXT DEFAULT '',
+          dlpath_15 TEXT DEFAULT '',
+          dlpath_16 TEXT DEFAULT '',
+          ulpath_1 TEXT DEFAULT '',
+          ulpath_2 TEXT DEFAULT '',
+          ulpath_3 TEXT DEFAULT '',
+          ulpath_4 TEXT DEFAULT '',
+          ulpath_5 TEXT DEFAULT '',
+          ulpath_6 TEXT DEFAULT '',
+          ulpath_7 TEXT DEFAULT '',
+          ulpath_8 TEXT DEFAULT '',
+          ulpath_9 TEXT DEFAULT '',
+          ulpath_10 TEXT DEFAULT '',
+          ulpath_11 TEXT DEFAULT '',
+          ulpath_12 TEXT DEFAULT '',
+          ulpath_13 TEXT DEFAULT '',
+          ulpath_14 TEXT DEFAULT '',
+          ulpath_15 TEXT DEFAULT '',
+          ulpath_16 TEXT DEFAULT '',
+
+          -- Conference Settings
+          force_newscan INTEGER DEFAULT 0,
+          no_newscan INTEGER DEFAULT 0,
+          show_new_files INTEGER DEFAULT 0,
+          no_new_files INTEGER DEFAULT 0,
+          free_downloads INTEGER DEFAULT 0,
+          exclude_ftp INTEGER DEFAULT 0,
+          private_conf INTEGER DEFAULT 0,
+          read_only INTEGER DEFAULT 0,
+          menu_prompt TEXT DEFAULT '',
+          confdb_shared INTEGER DEFAULT 0,
+
+          -- Name Display Options
+          use_username INTEGER DEFAULT 1,
+          use_realname INTEGER DEFAULT 0,
+          use_internetname INTEGER DEFAULT 0,
+
+          -- Access Control
+          min_access_level INTEGER DEFAULT 1,
+          max_access_level INTEGER DEFAULT 255,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // Doors (TOOLTYPE_SYSCMD, TOOLTYPE_BBSCMD)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS doors (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Door Identity
+          door_name TEXT NOT NULL UNIQUE,
+          door_command TEXT NOT NULL UNIQUE,
+          door_type TEXT NOT NULL CHECK (door_type IN ('SYSCMD', 'BBSCMD', 'INTERNAL')),
+
+          -- Execution Settings
+          door_path TEXT NOT NULL,
+          door_args TEXT DEFAULT '',
+          working_directory TEXT DEFAULT '',
+
+          -- Door Options
+          priority TEXT DEFAULT 'P3',
+          door_options TEXT DEFAULT '[]',
+          runtime_env TEXT DEFAULT 'AMIGA_68K',
+
+          -- Access Control
+          min_security_level INTEGER DEFAULT 1,
+          max_security_level INTEGER DEFAULT 255,
+          required_flags TEXT DEFAULT '',
+
+          -- Resource Limits
+          time_limit INTEGER DEFAULT 0,
+          memory_limit INTEGER DEFAULT 0,
+
+          -- Display Settings
+          title TEXT DEFAULT '',
+          description TEXT DEFAULT '',
+          category TEXT DEFAULT 'general',
+
+          -- Status
+          enabled INTEGER DEFAULT 1,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // System Languages (Singleton - TOOLTYPE_LANGUAGES)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS system_languages (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+
+          -- Host Language
+          host_language TEXT NOT NULL DEFAULT 'English',
+
+          -- Language Settings
+          language_base_path TEXT DEFAULT '',
+          allow_user_selection INTEGER DEFAULT 1,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+
+          CHECK (id = 1)
+        )
+      `);
+
+      // Languages (TOOLTYPE_LANGUAGES)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS languages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          language_number INTEGER NOT NULL UNIQUE CHECK (language_number >= 1 AND language_number <= 10),
+
+          -- Language Identity
+          title TEXT NOT NULL,
+          language_code TEXT NOT NULL UNIQUE,
+
+          -- File Settings
+          file_path TEXT DEFAULT '',
+
+          -- Status
+          enabled INTEGER DEFAULT 1,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // Protocols (File Transfer Protocols)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS protocols (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Protocol Identity
+          protocol_name TEXT NOT NULL UNIQUE,
+          protocol_code TEXT NOT NULL UNIQUE,
+
+          -- Protocol Settings
+          command TEXT NOT NULL,
+          upload_command TEXT DEFAULT '',
+          download_command TEXT DEFAULT '',
+          batch_upload INTEGER DEFAULT 0,
+          batch_download INTEGER DEFAULT 0,
+          bidirectional INTEGER DEFAULT 0,
+
+          -- Status
+          enabled INTEGER DEFAULT 1,
+          is_default INTEGER DEFAULT 0,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // Security Level Access Control (TOOLTYPE_ACCESS from express.e)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS security_level_access (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Security Level
+          security_level INTEGER NOT NULL,
+
+          -- Access Control Flag
+          acs_flag TEXT NOT NULL,
+
+          -- Status
+          enabled INTEGER DEFAULT 1,
+
+          -- Description
+          description TEXT,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+
+          UNIQUE(security_level, acs_flag)
+        )
+      `);
+
+      // Drives (TOOLTYPE_DRIVES from express.e:17412-17418)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS drives (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Drive Identity
+          drive_number INTEGER NOT NULL UNIQUE,
+          drive_path TEXT NOT NULL,
+
+          -- Status
+          enabled INTEGER DEFAULT 1,
+
+          -- Description
+          description TEXT,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // Computer Types (TOOLTYPE_COMPUTERLIST from express.e:31954-31965)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS computer_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Computer Identity
+          computer_number INTEGER NOT NULL UNIQUE,
+          computer_name TEXT NOT NULL,
+
+          -- Status
+          enabled INTEGER DEFAULT 1,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // Screen Types (TOOLTYPE_SCREENTYPES from express.e:31905-31915)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS screen_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Screen Type Identity
+          screen_number INTEGER NOT NULL UNIQUE,
+          screen_type TEXT NOT NULL,
+          screen_title TEXT NOT NULL,
+
+          -- Status
+          enabled INTEGER DEFAULT 1,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // File Checkers (TOOLTYPE_FCHECK from express.e:18556-18614)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS file_checkers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Checker Identity
+          checker_name TEXT NOT NULL,
+
+          -- Execution Settings
+          checker_path TEXT NOT NULL,
+          options TEXT DEFAULT '',
+          stack_size INTEGER DEFAULT 4096,
+          priority INTEGER DEFAULT 0,
+
+          -- Post-Check Script
+          script_path TEXT,
+
+          -- Status
+          enabled INTEGER DEFAULT 1,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // File Checker Error Patterns (express.e:18614-18621)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS file_checker_errors (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Parent Checker
+          file_checker_id INTEGER NOT NULL,
+
+          -- Error Pattern
+          error_number INTEGER NOT NULL,
+          error_pattern TEXT NOT NULL,
+
+          -- Metadata
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+
+          FOREIGN KEY (file_checker_id) REFERENCES file_checkers(id) ON DELETE CASCADE,
+          UNIQUE(file_checker_id, error_number)
+        )
+      `);
+
+      // Configuration Audit Log
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS config_audit_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+          -- Audit Fields
+          table_name TEXT NOT NULL,
+          record_id INTEGER NOT NULL,
+          action TEXT NOT NULL CHECK (action IN ('CREATE', 'UPDATE', 'DELETE')),
+
+          -- Change Details
+          old_values TEXT,
+          new_values TEXT,
+          changed_fields TEXT DEFAULT '[]',
+
+          -- User Context
+          user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+          username TEXT NOT NULL,
+
+          -- Request Context
+          ip_address TEXT,
+          user_agent TEXT,
+
+          -- Metadata
+          timestamp INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // Create triggers for automatic timestamp updates
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_system_config_timestamp
+        AFTER UPDATE ON system_config
+        BEGIN
+          UPDATE system_config SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_node_config_timestamp
+        AFTER UPDATE ON node_config
+        BEGIN
+          UPDATE node_config SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_conference_config_timestamp
+        AFTER UPDATE ON conference_config
+        BEGIN
+          UPDATE conference_config SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_doors_timestamp
+        AFTER UPDATE ON doors
+        BEGIN
+          UPDATE doors SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_system_languages_timestamp
+        AFTER UPDATE ON system_languages
+        BEGIN
+          UPDATE system_languages SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_languages_timestamp
+        AFTER UPDATE ON languages
+        BEGIN
+          UPDATE languages SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_protocols_timestamp
+        AFTER UPDATE ON protocols
+        BEGIN
+          UPDATE protocols SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_security_level_access_timestamp
+        AFTER UPDATE ON security_level_access
+        BEGIN
+          UPDATE security_level_access SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_drives_timestamp
+        AFTER UPDATE ON drives
+        BEGIN
+          UPDATE drives SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_computer_types_timestamp
+        AFTER UPDATE ON computer_types
+        BEGIN
+          UPDATE computer_types SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_screen_types_timestamp
+        AFTER UPDATE ON screen_types
+        BEGIN
+          UPDATE screen_types SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_file_checkers_timestamp
+        AFTER UPDATE ON file_checkers
+        BEGIN
+          UPDATE file_checkers SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS update_file_checker_errors_timestamp
+        AFTER UPDATE ON file_checker_errors
+        BEGIN
+          UPDATE file_checker_errors SET updated_at = strftime('%s', 'now') WHERE id = NEW.id;
+        END;
+      `);
+
       // Create indexes
       await this.createIndexes();
     } catch (error) {
@@ -747,6 +1326,14 @@ export class Database {
       // User indexes
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_users_seclevel ON users(seclevel)');
+
+      // Configuration indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_security_level_access_level ON security_level_access(security_level)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_security_level_access_flag ON security_level_access(acs_flag)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_drives_number ON drives(drive_number)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_computer_types_number ON computer_types(computer_number)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_screen_types_number ON screen_types(screen_number)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_file_checker_errors_checker ON file_checker_errors(file_checker_id)');
 
       // Online messages indexes
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_online_messages_to_user ON online_messages(to_user_id, delivered, read)');
@@ -781,6 +1368,20 @@ export class Database {
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_results_topic ON vote_results(topic_id)');
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_status_user ON vote_status(user_id)');
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_vote_status_conference ON vote_status(conference_id)');
+
+      // Configuration indexes
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_node_config_node_number ON node_config(node_number)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_conference_config_conference ON conference_config(conference_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_doors_command ON doors(door_command)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_doors_type ON doors(door_type)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_doors_enabled ON doors(enabled)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_languages_code ON languages(language_code)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_languages_enabled ON languages(enabled)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_protocols_code ON protocols(protocol_code)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_protocols_enabled ON protocols(enabled)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_config_audit_table ON config_audit_log(table_name, record_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_config_audit_timestamp ON config_audit_log(timestamp DESC)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_config_audit_user ON config_audit_log(user_id)');
     } catch (error) {
       console.error('Error creating indexes:', error);
       // Don't throw - indexes are not critical
@@ -806,6 +1407,10 @@ export class Database {
 
   async getUsers(...args: Parameters<UserRepository['getUsers']>) {
     return this.userRepo!.getUsers(...args);
+  }
+
+  async deleteUser(...args: Parameters<UserRepository['deleteUser']>) {
+    return this.userRepo!.deleteUser(...args);
   }
 
   // Conference management methods - delegate to ConferenceRepository
