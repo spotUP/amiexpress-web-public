@@ -104,6 +104,9 @@ import {
   processBBSCommand,
   displayMainMenu
 } from '../handlers/command.handler';
+import {
+  setConstants as setConstantsForMenuDependencies
+} from '../handlers/command-handler/dependency-injection';
 import { checkSecurity, setEnvStat } from '../utils/security.util';
 import { getMailStatFile, loadMsgPointers, validatePointers, updateReadPointer } from '../utils/message-pointers.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
@@ -432,6 +435,7 @@ export async function initializeData() {
     setGetRecentCallerActivityForCommandHandler(getRecentCallerActivity);
     setDoorsForCommandHandler(doors);
     setConstantsForCommandHandler({ SCREEN_MENU });
+    setConstantsForMenuDependencies({ SCREEN_MENU });
 
     // Inject dependencies into command execution handler
     setCommandExecutionDependencies(executeDoor, processBBSCommand);
