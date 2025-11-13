@@ -107,7 +107,19 @@ check_and_install_deps() {
       exit 1
     fi
   else
-    echo -e "   ${GREEN}[OK] $name dependencies up to date${RESET}"
+    # Check if package.json is newer than node_modules (dependencies changed)
+    if [ "$dir/package.json" -nt "$dir/node_modules" ]; then
+      echo -e "${CYAN}→ $name: Dependencies changed, updating...${RESET}"
+      (cd "$dir" && npm install --include=dev --loglevel=error)
+      if [ $? -eq 0 ]; then
+        echo -e "   ${GREEN}[OK] $name dependencies updated${RESET}"
+      else
+        echo -e "   ${RED}[ERROR] $name dependency update failed${RESET}"
+        exit 1
+      fi
+    else
+      echo -e "   ${GREEN}[OK] $name dependencies up to date${RESET}"
+    fi
   fi
 }
 
