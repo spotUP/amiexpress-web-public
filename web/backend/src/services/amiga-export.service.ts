@@ -7,9 +7,11 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import archiver from 'archiver';
 import type { Database } from '../database';
 import type { AmigaBBSArchive, AmigaUserData, AmigaConference, AmigaBBSConfig } from '../types/amiga-import';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AdmZip = require('adm-zip');
 
 export interface ExportOptions {
   includeUsers?: boolean;
@@ -396,36 +398,27 @@ export class AmigaExportService {
 
   /**
    * Create archive from export directory
+   * Currently only supports ZIP format
    */
   private async createArchive(exportDir: string, format: string, timestamp: number): Promise<string> {
     const exportsDir = path.join(process.cwd(), 'data', 'exports');
     await fs.mkdir(exportsDir, { recursive: true });
 
-    const archivePath = path.join(exportsDir, `amiexpress-export-${timestamp}.${format}`);
-
+    // Only ZIP format is supported
     if (format !== 'zip') {
-      throw new Error(`Format ${format} not yet supported. Only ZIP is currently available.`);
+      throw new Error(`Format ${format} not supported. Only ZIP format is currently available.`);
     }
 
-    return new Promise((resolve, reject) => {
-      const output = require('fs').createWriteStream(archivePath);
-      const archive = archiver('zip', {
-        zlib: { level: 9 }
-      });
+    const archivePath = path.join(exportsDir, `amiexpress-export-${timestamp}.${format}`);
 
-      output.on('close', () => {
-        console.log(`[Export] Archive created: ${archive.pointer()} bytes`);
-        resolve(archivePath);
-      });
+    // Create ZIP archive using adm-zip
+    const zip = new AdmZip();
+    zip.addLocalFolder(exportDir);
+    zip.writeZip(archivePath);
 
-      archive.on('error', (err: Error) => {
-        reject(err);
-      });
+    console.log(`[Export] ZIP archive created: ${archivePath}`);
 
-      archive.pipe(output);
-      archive.directory(exportDir, false);
-      archive.finalize();
-    });
+    return archivePath;
   }
 
   /**
