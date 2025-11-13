@@ -120,7 +120,12 @@ export function createSession(nodeId: number): BBSSession {
 
     // Phase 10: Initialize message pointers (express.e:199-200)
     lastMsgReadConf: 0, // Last message manually read
-    lastNewReadConf: 0 // Last message auto-scanned
+    lastNewReadConf: 0, // Last message auto-scanned
+
+    // Command history (express.e:207-209)
+    commandHistory: [], // Circular buffer of last 20 commands (historyBuf)
+    historyIndex: 0, // Current position for next command storage (historyNum)
+    historyCycle: 0 // Current position when navigating history
   };
 }
 

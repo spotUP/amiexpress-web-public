@@ -541,6 +541,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     if (data === '\r' || data === '\n') {
       const input = (session.inputBuffer || '').trim();
 
+      // Echo newline to move cursor to next line (express.e:2342)
+      socket.emit('ansi-output', '\r\n');
+
       // Check for /END or /EXIT command
       if (input.toUpperCase() === '/END' || input.toUpperCase() === '/EXIT') {
         console.log('💬 [COMMAND] User wants to end chat');
