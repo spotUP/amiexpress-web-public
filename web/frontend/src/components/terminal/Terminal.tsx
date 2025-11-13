@@ -383,6 +383,12 @@ function Terminal() {
       term.write(`\r\n\x1b[32mDoor closed\x1b[0m\r\n`);
     });
 
+    ws.on('terminal-resize', (data: { cols: number; rows: number }) => {
+      console.log(`[Terminal] Resizing terminal to ${data.cols}x${data.rows}`);
+      term.resize(data.cols, data.rows);
+      term.refresh(0, term.rows - 1);
+    });
+
     ws.on('mouse-mode', (data: { enabled: boolean }) => {
       const termElement = terminalRef.current?.querySelector('.xterm');
       if (termElement) {
