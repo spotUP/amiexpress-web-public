@@ -7,9 +7,12 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import archiver from 'archiver';
 import type { Database } from '../database';
 import type { AmigaBBSArchive, AmigaUserData, AmigaConference, AmigaBBSConfig } from '../types/amiga-import';
+import { createLhaArchive, isLhaAvailable } from '../utils/lha-archiver.util';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AdmZip = require('adm-zip');
 
 export interface ExportOptions {
   includeUsers?: boolean;
@@ -396,6 +399,7 @@ export class AmigaExportService {
 
   /**
    * Create archive from export directory
+   * Supports ZIP and LHA formats
    */
   private async createArchive(exportDir: string, format: string, timestamp: number): Promise<string> {
     const exportsDir = path.join(process.cwd(), 'data', 'exports');
@@ -403,29 +407,37 @@ export class AmigaExportService {
 
     const archivePath = path.join(exportsDir, `amiexpress-export-${timestamp}.${format}`);
 
-    if (format !== 'zip') {
-      throw new Error(`Format ${format} not yet supported. Only ZIP is currently available.`);
+    if (format === 'zip') {
+      // Create ZIP archive using adm-zip
+      const zip = new AdmZip();
+      zip.addLocalFolder(exportDir);
+      zip.writeZip(archivePath);
+      console.log(`[Export] ZIP archive created: ${archivePath}`);
+      return archivePath;
+    } else if (format === 'lha') {
+      // Create LHA archive using lha binary
+      const lhaAvailable = await isLhaAvailable();
+      if (!lhaAvailable) {
+        throw new Error(
+          'LHA binary not available. Please compile it:\n' +
+          '  cd web/backend && mkdir -p tools/bin && cd tools/bin && \n' +
+          '  wget https://github.com/jca02266/lha/archive/refs/tags/release-20211125.tar.gz && \n' +
+          '  tar -xzf release-20211125.tar.gz && cd lha-release-20211125 && \n' +
+          '  autoreconf -i && ./configure --prefix=$PWD/../../ && make && make install'
+        );
+      }
+
+      await createLhaArchive(archivePath, exportDir, {
+        compressionMethod: 'lh5', // Standard Amiga BBS compression
+        recursive: true,
+        verbose: true,
+      });
+
+      console.log(`[Export] LHA archive created: ${archivePath}`);
+      return archivePath;
+    } else {
+      throw new Error(`Format ${format} not supported. Supported formats: zip, lha`);
     }
-
-    return new Promise((resolve, reject) => {
-      const output = require('fs').createWriteStream(archivePath);
-      const archive = archiver('zip', {
-        zlib: { level: 9 }
-      });
-
-      output.on('close', () => {
-        console.log(`[Export] Archive created: ${archive.pointer()} bytes`);
-        resolve(archivePath);
-      });
-
-      archive.on('error', (err: Error) => {
-        reject(err);
-      });
-
-      archive.pipe(output);
-      archive.directory(exportDir, false);
-      archive.finalize();
-    });
   }
 
   /**
@@ -439,7 +451,7 @@ export class AmigaExportService {
       const exports = [];
 
       for (const file of files) {
-        if (file.startsWith('amiexpress-export-') && file.endsWith('.zip')) {
+        if (file.startsWith('amiexpress-export-') && (file.endsWith('.zip') || file.endsWith('.lha'))) {
           const filePath = path.join(exportsDir, file);
           const stats = await fs.stat(filePath);
           exports.push({
