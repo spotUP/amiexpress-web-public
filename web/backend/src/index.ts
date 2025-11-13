@@ -23,6 +23,7 @@ import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.ut
 import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, requireSysop, AuthRequest } from './middleware/auth.middleware';
 import { createConfigRouter } from './api/config-routes';
+import { createImportRouter } from './handlers/import.handler';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
 import { registerSocketHandlers } from './server/socket-handlers';
 import { sessions, userSessions, socketToUser, setSession } from './server/session-manager';
@@ -536,6 +537,10 @@ app.post('/auth/refresh', (req: Request, res: Response) => authHandler.refresh(r
 // Configuration API - Sysop-only routes
 const configRouter = createConfigRouter(db);
 app.use('/api/config', authenticateToken(db), requireSysop(), configRouter);
+
+// Import/Export API - Sysop-only routes
+const importRouter = createImportRouter(db);
+app.use('/api/import', authenticateToken(db), requireSysop(), importRouter);
 
 // ===== Static File Serving for Unified Deployment =====
 // Serve SDK Preview at /sdk/

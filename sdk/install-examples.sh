@@ -6,9 +6,9 @@ for dir in examples/*/; do
   cd "$dir"
   npm install --silent > /dev/null 2>&1
   if [ $? -eq 0 ]; then
-    echo "  ✓ $example installed"
+    echo "  [OK] $example installed"
   else
-    echo "  ✗ $example failed"
+    echo "  [ERROR] $example failed"
   fi
   cd - > /dev/null
 done

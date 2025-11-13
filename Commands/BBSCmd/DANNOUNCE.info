@@ -1,0 +1,7 @@
+BBSCMD=DANNOUNCE
+TYPE=TS
+LOCATION=doors/discord-announce
+DESCRIPTION=Announces user logins/logoffs to a Discord channel via webhook (runDoor pattern)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

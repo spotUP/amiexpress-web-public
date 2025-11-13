@@ -16,7 +16,7 @@ let testResults = {
 };
 
 function log(message, type = 'info') {
-  const symbols = { info: '→', success: '✓', error: '✗', warning: '⚠' };
+  const symbols = { info: '→', success: '✓', error: '✗', warning: '[WARNING]' };
   console.log(`${symbols[type] || '→'} ${message}`);
 }
 
@@ -385,7 +385,7 @@ async function generateReport() {
   if (testResults.issues.length > 0) {
     console.log('\n📋 ISSUES FOUND:\n');
     testResults.issues.forEach((issue, idx) => {
-      const icon = issue.severity === 'error' ? '✗' : '⚠';
+      const icon = issue.severity === 'error' ? '✗' : '[WARNING]';
       console.log(`  ${idx + 1}. ${icon} ${issue.test}`);
       console.log(`     ${issue.description}`);
     });

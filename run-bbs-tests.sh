@@ -79,25 +79,25 @@ if ! node -e "require('socket.io-client')" 2>/dev/null; then
     echo -e "${YELLOW}      Installing socket.io-client...${NC}"
     npm install socket.io-client --silent
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}      ✓ socket.io-client installed${NC}"
+        echo -e "${GREEN}      [OK] socket.io-client installed${NC}"
     else
-        echo -e "${RED}      ✗ Failed to install socket.io-client${NC}"
+        echo -e "${RED}      [ERROR] Failed to install socket.io-client${NC}"
         exit 1
     fi
 else
-    echo -e "${GREEN}      ✓ socket.io-client already installed${NC}"
+    echo -e "${GREEN}      [OK] socket.io-client already installed${NC}"
 fi
 echo ""
 
 echo -e "${BLUE}[2/4] Checking server connectivity...${NC}"
 if curl -s -f "${SERVER_URL}" > /dev/null 2>&1; then
-    echo -e "${GREEN}      ✓ Server is reachable at ${SERVER_URL}${NC}"
+    echo -e "${GREEN}      [OK] Server is reachable at ${SERVER_URL}${NC}"
 else
     echo -e "${YELLOW}      Server not running, starting it...${NC}"
     
     # Start backend from web/backend directory
     if [ ! -d "$SCRIPT_DIR/web/backend" ]; then
-        echo -e "${RED}      ✗ web/backend directory not found${NC}"
+        echo -e "${RED}      [ERROR] web/backend directory not found${NC}"
         exit 1
     fi
     
@@ -109,7 +109,7 @@ else
         echo -e "${YELLOW}      Installing backend dependencies...${NC}"
         npm install
         if [ $? -ne 0 ]; then
-            echo -e "${RED}      ✗ Failed to install backend dependencies${NC}"
+            echo -e "${RED}      [ERROR] Failed to install backend dependencies${NC}"
             cd "$SCRIPT_DIR"
             exit 1
         fi
@@ -127,7 +127,7 @@ else
     WAIT_COUNT=0
     while [ $WAIT_COUNT -lt 60 ]; do
         if curl -s -f "${SERVER_URL}" > /dev/null 2>&1; then
-            echo -e "${GREEN}      ✓ Server ready at ${SERVER_URL}${NC}"
+            echo -e "${GREEN}      [OK] Server ready at ${SERVER_URL}${NC}"
             break
         fi
         sleep 0.5
@@ -135,13 +135,13 @@ else
         
         if ! kill -0 $SERVER_PID 2>/dev/null; then
             echo ""
-            echo -e "${RED}      ✗ Server process died${NC}"
+            echo -e "${RED}      [ERROR] Server process died${NC}"
             exit 1
         fi
     done
     
     if [ $WAIT_COUNT -ge 60 ]; then
-        echo -e "${RED}      ✗ Server timeout${NC}"
+        echo -e "${RED}      [ERROR] Server timeout${NC}"
         exit 1
     fi
 fi
@@ -149,11 +149,11 @@ echo ""
 
 echo -e "${BLUE}[3/4] Checking test scripts...${NC}"
 if [ ! -f "$SCRIPT_DIR/test-bbs-commands.js" ]; then
-    echo -e "${RED}      ✗ test-bbs-commands.js not found${NC}"
+    echo -e "${RED}      [ERROR] test-bbs-commands.js not found${NC}"
     exit 1
 fi
 chmod +x "$SCRIPT_DIR/test-bbs-commands.js"
-echo -e "${GREEN}      ✓ Test script found and ready${NC}"
+echo -e "${GREEN}      [OK] Test script found and ready${NC}"
 echo ""
 
 echo -e "${BLUE}[4/4] Running BBS command tests...${NC}"
@@ -177,12 +177,12 @@ echo ""
 # Report final result
 if [ $TEST_EXIT_CODE -eq 0 ]; then
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║              ✓ ALL TESTS PASSED                            ║${NC}"
+    echo -e "${GREEN}║              [OK] ALL TESTS PASSED                            ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     exit 0
 else
     echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║              ✗ SOME TESTS FAILED                           ║${NC}"
+    echo -e "${RED}║              [ERROR] SOME TESTS FAILED                           ║${NC}"
     echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${YELLOW}Run with --verbose flag to see detailed output:${NC}"

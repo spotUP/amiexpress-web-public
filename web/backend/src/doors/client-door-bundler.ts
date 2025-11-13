@@ -78,6 +78,19 @@ export class ClientDoorBundler {
       // Output file path
       const outputPath = path.join(this.cacheDir, `${doorId}.bundle.js`);
 
+      // Get BBS root (use BBS_ROOT env var or default to project root)
+      const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+      const sdkPath = path.join(bbsRoot, 'sdk');
+
+      console.log(`[ClientDoorBundler] BBS root: ${bbsRoot}`);
+      console.log(`[ClientDoorBundler] SDK path: ${sdkPath}`);
+
+      // Create shim files for Node.js modules
+      const fsShimPath = this.createFsShim();
+      const pathShimPath = this.createPathShim();
+      const eventsShimPath = this.createEventsShim();
+      const osShimPath = this.createOsShim();
+
       // Bundle with esbuild
       const result = await esbuild.build({
         entryPoints: [absolutePath],
@@ -90,17 +103,36 @@ export class ClientDoorBundler {
         minify,
         sourcemap: sourcemap ? 'external' : false,
 
-        // External Node.js modules (provide browser shims)
+        // Resolve SDK imports and Node.js built-ins to shims
+        alias: {
+          // Use client-only bundle to avoid server dependencies
+          '@amiexpress/bbs-door-sdk': path.join(sdkPath, 'dist/client/index.js'),
+          '@amiexpress/bbs-door-sdk/client': path.join(sdkPath, 'dist/client/index.js'),
+          '@amiexpress/bbs-door-sdk/server': path.join(sdkPath, 'dist/server/index.js'),
+          '@amiexpress/bbs-door-sdk/common': path.join(sdkPath, 'dist/common/index.js'),
+          // Node.js built-in shims for browser
+          'fs': fsShimPath,
+          'path': pathShimPath,
+          'events': eventsShimPath,
+          'os': osShimPath,
+        },
+
+        // Additional resolve paths
+        nodePaths: [
+          sdkPath,
+          path.join(sdkPath, 'node_modules'),
+        ],
+
+        // Don't mark as external - let alias handle them
         external: [],
 
         // Define globals for Node.js compatibility
         define: {
           'process.env.NODE_ENV': '"production"',
           'global': 'window',
+          '__dirname': '"/bbs/doors"',
+          '__filename': '"/bbs/doors/index.js"',
         },
-
-        // Inject browser shims for Node.js modules
-        inject: [this.createNodeShimsFile()],
 
         // Enable JSX if needed
         loader: {
@@ -114,7 +146,7 @@ export class ClientDoorBundler {
         write: true,
 
         // Log level
-        logLevel: 'warning',
+        logLevel: 'info',
       });
 
       // Read bundled code
@@ -162,21 +194,117 @@ export class ClientDoorBundler {
   }
 
   /**
-   * Create Node.js shims file for browser
-   * Provides minimal implementations of Node.js modules
+   * Create fs module shim for browser
    */
-  private createNodeShimsFile(): string {
-    const shimsPath = path.join(this.cacheDir, 'node-shims.js');
+  private createFsShim(): string {
+    const shimPath = path.join(this.cacheDir, 'fs-shim.js');
 
-    if (fs.existsSync(shimsPath)) {
-      return shimsPath;
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
     }
 
-    const shimsCode = `
-// Node.js shims for browser environment
+    const shimCode = `
+// Filesystem shim for browser (uses localStorage)
+export default {
+  existsSync: (path) => {
+    try {
+      return localStorage.getItem(\`fs:\${path}\`) !== null;
+    } catch {
+      return false;
+    }
+  },
+  readFileSync: (path, encoding) => {
+    try {
+      const data = localStorage.getItem(\`fs:\${path}\`);
+      return data || '';
+    } catch {
+      return '';
+    }
+  },
+  writeFileSync: (path, data, encoding) => {
+    try {
+      localStorage.setItem(\`fs:\${path}\`, String(data));
+    } catch (err) {
+      console.warn('writeFileSync failed:', err);
+    }
+  },
+  mkdirSync: (path, options) => {
+    // No-op in browser
+  },
+  readdirSync: (path) => {
+    return [];
+  },
+  statSync: (path) => {
+    return {
+      isDirectory: () => false,
+      isFile: () => true,
+      size: 0,
+      mtime: new Date(),
+    };
+  },
+};
+`;
 
-// EventEmitter shim
-export class EventEmitter {
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create path module shim for browser
+   */
+  private createPathShim(): string {
+    const shimPath = path.join(this.cacheDir, 'path-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// Path module shim for browser
+export default {
+  join: (...parts) => {
+    const joined = parts.join('/').replace(/\\/\\/+/g, '/');
+    return joined.replace(/\\\\\\\\/g, '/');
+  },
+  resolve: (...parts) => {
+    const joined = parts.join('/').replace(/\\/\\/+/g, '/');
+    return joined.startsWith('/') ? joined : '/' + joined;
+  },
+  dirname: (p) => {
+    const lastSlash = p.lastIndexOf('/');
+    return lastSlash > 0 ? p.substring(0, lastSlash) : p.substring(0, lastSlash + 1);
+  },
+  basename: (p, ext) => {
+    const base = p.substring(p.lastIndexOf('/') + 1);
+    return ext && base.endsWith(ext) ? base.slice(0, -ext.length) : base;
+  },
+  extname: (p) => {
+    const index = p.lastIndexOf('.');
+    return index > 0 ? p.substring(index) : '';
+  },
+  isAbsolute: (p) => p.startsWith('/'),
+  sep: '/',
+  delimiter: ':',
+};
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create events module shim for browser
+   */
+  private createEventsShim(): string {
+    const shimPath = path.join(this.cacheDir, 'events-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// EventEmitter shim for browser
+class EventEmitter {
   constructor() {
     this._events = new Map();
   }
@@ -238,63 +366,67 @@ export class EventEmitter {
   }
 }
 
-// Path shim
-export const path = {
-  join: (...parts) => parts.join('/').replace(/\\/\\/+/g, '/'),
-  resolve: (...parts) => path.join('/', ...parts),
-  dirname: (p) => p.substring(0, p.lastIndexOf('/')),
-  basename: (p, ext) => {
-    const base = p.substring(p.lastIndexOf('/') + 1);
-    return ext && base.endsWith(ext) ? base.slice(0, -ext.length) : base;
-  },
-  extname: (p) => {
-    const index = p.lastIndexOf('.');
-    return index > 0 ? p.substring(index) : '';
-  },
-  isAbsolute: (p) => p.startsWith('/'),
-  sep: '/',
-  delimiter: ':',
-};
-
-// Process shim
-export const process = {
-  env: { NODE_ENV: 'production' },
-  cwd: () => '/',
-  platform: 'browser',
-  version: 'v18.0.0',
-  versions: { node: '18.0.0' },
-  stdin: { isTTY: false },
-  stdout: { isTTY: false },
-  stderr: { isTTY: false },
-};
-
-// Buffer shim (minimal)
-export class Buffer extends Uint8Array {
-  static from(data, encoding) {
-    if (typeof data === 'string') {
-      const encoder = new TextEncoder();
-      return new Buffer(encoder.encode(data));
-    }
-    return new Buffer(data);
-  }
-
-  toString(encoding) {
-    const decoder = new TextDecoder(encoding || 'utf-8');
-    return decoder.decode(this);
-  }
-}
-
-// Export for use in bundled code
-if (typeof window !== 'undefined') {
-  window.events = { EventEmitter };
-  window.path = path;
-  window.process = process;
-  window.Buffer = Buffer;
-}
+export { EventEmitter };
+export default EventEmitter;
 `;
 
-    fs.writeFileSync(shimsPath, shimsCode, 'utf8');
-    return shimsPath;
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create os module shim for browser
+   */
+  private createOsShim(): string {
+    const shimPath = path.join(this.cacheDir, 'os-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// OS module shim for browser
+export default {
+  cpus: () => {
+    // Return mock CPU info
+    const count = navigator.hardwareConcurrency || 4;
+    return Array.from({ length: count }, (_, i) => ({
+      model: 'Browser CPU',
+      speed: 2400,
+      times: {
+        user: 0,
+        nice: 0,
+        sys: 0,
+        idle: 0,
+        irq: 0,
+      },
+    }));
+  },
+  totalmem: () => {
+    // Return 8GB as default
+    if (performance && performance.memory) {
+      return performance.memory.jsHeapSizeLimit || 8 * 1024 * 1024 * 1024;
+    }
+    return 8 * 1024 * 1024 * 1024;
+  },
+  freemem: () => {
+    // Return available memory if possible
+    if (performance && performance.memory) {
+      return performance.memory.jsHeapSizeLimit - performance.memory.usedJSHeapSize;
+    }
+    return 4 * 1024 * 1024 * 1024;
+  },
+  platform: () => 'browser',
+  arch: () => 'x64',
+  hostname: () => location.hostname || 'localhost',
+  tmpdir: () => '/tmp',
+  homedir: () => '/home/user',
+  EOL: '\\n',
+};
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
   }
 
   /**

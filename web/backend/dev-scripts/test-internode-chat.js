@@ -33,7 +33,7 @@ async function testChatSystem() {
     const roomColumns = roomsTableResult.map(r => r.name);
     const missingRoomCols = expectedRoomColumns.filter(c => !roomColumns.includes(c));
     if (missingRoomCols.length > 0) {
-      console.log('  ❌ Missing columns:', missingRoomCols.join(', '));
+      console.log('  [ERROR] Missing columns:', missingRoomCols.join(', '));
     } else {
       console.log('  ✓ All expected columns present');
     }
@@ -71,7 +71,7 @@ async function testChatSystem() {
     // Get a test user
     const userResult = db.prepare(`SELECT id, username FROM users LIMIT 1`).get();
     if (!userResult) {
-      console.log('❌ No users found in database. Please create a user first.');
+      console.log('[ERROR] No users found in database. Please create a user first.');
       return;
     }
     const testUser = userResult;
@@ -94,7 +94,7 @@ async function testChatSystem() {
       console.log('  - Max users:', roomCheck.max_users);
       console.log('  - Public:', roomCheck.is_public);
     } else {
-      console.log('❌ Failed to retrieve created room');
+      console.log('[ERROR] Failed to retrieve created room');
     }
 
     console.log('\n📋 Test 3: Room Membership');
@@ -220,7 +220,7 @@ async function testChatSystem() {
     console.log('  - Messages deleted:', afterDeleteMessages.count === 0);
 
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('✅ All Database Tests Passed!');
+    console.log('[OK] All Database Tests Passed!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     console.log('📊 Test Summary:');
@@ -232,10 +232,10 @@ async function testChatSystem() {
     console.log('  ✓ Room listing queries');
     console.log('  ✓ Leave room functionality');
     console.log('  ✓ Cascade delete constraints');
-    console.log('\n✅ Internode Chat System: READY FOR USE\n');
+    console.log('\n[OK] Internode Chat System: READY FOR USE\n');
 
   } catch (error) {
-    console.error('\n❌ Test failed:', error.message);
+    console.error('\n[ERROR] Test failed:', error.message);
     console.error(error.stack);
   } finally {
     db.close();

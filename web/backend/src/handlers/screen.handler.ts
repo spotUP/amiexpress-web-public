@@ -14,6 +14,7 @@ import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import { sequentialFileManager } from '../services/SequentialFileManager';
 import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
 import { findCaseInsensitive } from '../utils/fs-amiga.util';
+import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 
 interface Conference {
   id: number;
@@ -535,11 +536,11 @@ export async function parseMciCodes(
     const placeholder = `{{DISPLAY_FILE:${i}}}`;
 
     // Load the file content - loadScreenFile now handles Amiga paths
-    let fileContent = loadScreenFile(filename, session.currentConf, 0);
+    let screenData = loadScreenFile(filename, session.currentConf, 0);
 
-    if (fileContent) {
+    if (screenData) {
       // Recursively process MCI codes in the embedded file
-      const embedded = await parseMciCodes(fileContent, session, bbsName, sysopName, location);
+      const embedded = await parseMciCodes(screenData.content, session, bbsName, sysopName, location);
       // Add any commands from embedded file to our command list
       commandsToExecute.push(...embedded.commands);
       // Replace placeholder with embedded content
@@ -564,7 +565,7 @@ export async function parseMciCodes(
  * @param nodeId - Node ID (default 0)
  * @returns Screen file content or null if not found
  */
-export function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0): string | null {
+export function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0): { content: string; isPetscii: boolean } | null {
   // BBS directory structure matches original Amiga AmiExpress
   // Use dataDir from config which points to project root
   const { config } = require('../config');
@@ -664,6 +665,8 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   const filenameVariations = [
     `${screenName}.TXT`,  // MENU.TXT
     `${screenName}.txt`,  // MENU.txt, menu.txt, Menu.txt (all matched case-insensitively)
+    `${screenName}.seq`,  // PETSCII sequence files (C64/C128 format)
+    `${screenName}.SEQ`,  // PETSCII sequence files (uppercase)
   ];
 
   // Try each location with case-insensitive matching
@@ -681,7 +684,20 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
       if (foundPath) {
         console.log(`[loadScreenFile] ✓ Found screen ${screenName} at: ${foundPath}`);
         try {
-          return fs.readFileSync(foundPath, 'utf-8');
+          // Check if this is a PETSCII .seq file
+          if (isPetsciiSeqFile(foundPath)) {
+            console.log(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
+            try {
+              const petsciiBuffer = fs.readFileSync(foundPath);
+              const content = convertPetsciiToPetMe64(petsciiBuffer);
+              return { content, isPetscii: true };
+            } catch (error) {
+              console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
+            }
+          } else {
+            // Regular text file
+            return { content: fs.readFileSync(foundPath, 'utf-8'), isPetscii: false };
+          }
         } catch (error) {
           console.error(`[loadScreenFile]     (error reading file: ${(error as Error).message})`);
         }
@@ -699,7 +715,20 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
     try {
       if (fs.existsSync(filePath)) {
         console.log(`[loadScreenFile] ✓ Found screen ${screenName} at: ${filePath}`);
-        return fs.readFileSync(filePath, 'utf-8');
+        // Check if this is a PETSCII .seq file
+        if (isPetsciiSeqFile(filePath)) {
+          console.log(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
+          try {
+            const petsciiBuffer = fs.readFileSync(filePath);
+            const content = convertPetsciiToPetMe64(petsciiBuffer);
+            return { content, isPetscii: true };
+          } catch (error) {
+            console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
+          }
+        } else {
+          // Regular text file
+          return { content: fs.readFileSync(filePath, 'utf-8'), isPetscii: false };
+        }
       } else {
         console.log(`[loadScreenFile]     (not found)`);
       }
@@ -745,21 +774,33 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   console.log(`[displayScreen] User: ${session.user?.name || 'guest'}`);
   console.log(`[displayScreen] ========================================`);
 
-  const content = loadScreenFile(screenName, session.currentConf);
+  const screenData = loadScreenFile(screenName, session.currentConf);
 
-  if (content) {
+  if (screenData) {
+    const { content, isPetscii } = screenData;
     console.log(`[displayScreen] ✓ Screen loaded successfully: ${screenName}`);
     console.log(`[displayScreen] Content length: ${content.length} bytes`);
-    // Parse MCI codes (now returns parsed content + commands to execute)
-    const { parsed: mciParsed, commands } = await parseMciCodes(content, session);
-    let parsed = mciParsed;
+    console.log(`[displayScreen] PETSCII: ${isPetscii ? 'YES' : 'NO'}`);
 
-    // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
-    parsed = addAnsiEscapes(parsed);
+    let parsed: string;
+    let commands: any[] = [];
 
-    // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
-    // First normalize any existing \r\n to \n, then convert all \n to \r\n
-    parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+    if (isPetscii) {
+      // PETSCII content is already fully converted - skip MCI/ANSI processing
+      parsed = content;
+    } else {
+      // Parse MCI codes (now returns parsed content + commands to execute)
+      const result = await parseMciCodes(content, session);
+      parsed = result.parsed;
+      commands = result.commands;
+
+      // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
+      parsed = addAnsiEscapes(parsed);
+
+      // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
+      // First normalize any existing \r\n to \n, then convert all \n to \r\n
+      parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+    }
 
     // Double-buffered display: Build complete frame buffer before sending
     // This prevents tearing and visible redraws by sending everything atomically
@@ -770,7 +811,10 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       SHOW_CURSOR;       // Show cursor
 
     // Send entire frame in one atomic operation
-    socket.emit('ansi-output', frameBuffer);
+    // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
+    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+    console.log(`[displayScreen] Emitting ${eventName} event`);
+    socket.emit(eventName, frameBuffer);
 
     // Execute any ~XC/~XI commands found in screen file (async, non-blocking)
     if (commands.length > 0) {

@@ -33,11 +33,13 @@ doorApiRouter.get('/doors/:doorId/bundle.js', async (req: Request, res: Response
     }
 
     // Get door entry point
-    const entryPoint = doorManifest.client?.entry || doorManifest.entry;
+    const entryPoint = doorManifest.client?.entry || doorManifest.entry || doorManifest.main || 'index.ts';
 
     if (!entryPoint) {
       return res.status(500).json({ error: 'Door entry point not configured' });
     }
+
+    console.log(`[DoorAPI] Entry point for ${doorId}: ${entryPoint}`);
 
     // Resolve door path
     const doorPath = resolveDoorPath(doorId, entryPoint);

@@ -357,8 +357,8 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       return;
     }
 
-    // Get project root (go up from web/backend)
-    const projectRoot = path.resolve(process.cwd(), '../..');
+    // Get BBS root directory (use BBS_ROOT env var or default to project root)
+    const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
     // If path is a directory, append index.ts
     if (fs.existsSync(path.join(projectRoot, doorPath)) &&
@@ -414,7 +414,8 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       socket,
       user: session.user,
       bbsSession: session,  // Pass reference to BBS session for input routing
-      bbs: bbsApi           // BBS API with all functions
+      bbs: bbsApi,          // BBS API with all functions
+      params: door.parameters || []  // Pass command-line parameters from .info PARAMS
     };
 
     // Execute the door (it registers its own input listeners)
@@ -470,8 +471,8 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
       return;
     }
 
-    // Get project root
-    const projectRoot = path.resolve(process.cwd(), '../..');
+    // Get BBS root directory (use BBS_ROOT env var or default to project root)
+    const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
     // If path is a directory, append index.js (compiled)
     if (fs.existsSync(path.join(projectRoot, doorPath)) &&
@@ -1598,6 +1599,8 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
     // Extract door ID from path
     let doorId = door.id;
 
+    console.log(`[loadDoorManifestForExecution] Loading manifest for door: ${door.name}, id: ${door.id}, path: ${door.path}`);
+
     // Try to get door ID from path
     if (door.path) {
       const pathParts = door.path.split('/');
@@ -1606,22 +1609,39 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
       if (examplesIndex >= 0 && pathParts[examplesIndex + 1]) {
         doorId = pathParts[examplesIndex + 1];
       }
+      // Look for doors/<doorId> pattern
+      const doorsIndex = pathParts.indexOf('doors');
+      if (doorsIndex >= 0 && pathParts[doorsIndex + 1]) {
+        doorId = pathParts[doorsIndex + 1];
+      }
     }
+
+    console.log(`[loadDoorManifestForExecution] Extracted doorId: ${doorId}`);
+
+    // Get BBS root (use BBS_ROOT env var or default to project root)
+    const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
     // Try SDK examples first
-    const sdkPath = path.join(process.cwd(), '../../sdk/examples', doorId, 'package.json');
+    const sdkPath = path.join(bbsRoot, 'sdk/examples', doorId, 'package.json');
+    console.log(`[loadDoorManifestForExecution] Trying SDK path: ${sdkPath}`);
     if (fs.existsSync(sdkPath)) {
       const content = fs.readFileSync(sdkPath, 'utf8');
-      return JSON.parse(content);
+      const manifest = JSON.parse(content);
+      console.log(`[loadDoorManifestForExecution] Found SDK manifest, runtime: ${manifest.runtime || 'not specified'}`);
+      return manifest;
     }
 
-    // Try doors directory
-    const doorsPath = path.join(process.cwd(), '../doors', doorId, 'package.json');
+    // Try doors directory at BBS root
+    const doorsPath = path.join(bbsRoot, 'doors', doorId, 'package.json');
+    console.log(`[loadDoorManifestForExecution] Trying doors path: ${doorsPath}`);
     if (fs.existsSync(doorsPath)) {
       const content = fs.readFileSync(doorsPath, 'utf8');
-      return JSON.parse(content);
+      const manifest = JSON.parse(content);
+      console.log(`[loadDoorManifestForExecution] Found doors manifest, runtime: ${manifest.runtime || 'not specified'}`);
+      return manifest;
     }
 
+    console.log(`[loadDoorManifestForExecution] No manifest found for ${doorId}`);
     return null;
   } catch (error) {
     console.error(`[loadDoorManifestForExecution] Error loading manifest:`, error);

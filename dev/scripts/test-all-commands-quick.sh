@@ -53,7 +53,7 @@ echo "Commands implemented:"
 for cmd_entry in "${commands[@]}"; do
   cmd=$(echo "$cmd_entry" | cut -d':' -f1)
   desc=$(echo "$cmd_entry" | cut -d':' -f2-)
-  echo "  ✓ $cmd - $desc"
+  echo "  [OK] $cmd - $desc"
 done
 
 echo ""

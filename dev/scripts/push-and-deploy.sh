@@ -44,11 +44,11 @@ echo ""
 
 if git push "$@"; then
     echo ""
-    echo -e "${GREEN}✓${NC} Successfully pushed to GitHub"
+    echo -e "${GREEN}[OK]${NC} Successfully pushed to GitHub"
     echo ""
 else
     echo ""
-    echo -e "${RED}✗ Error: Git push failed${NC}"
+    echo -e "${RED}[ERROR] Error: Git push failed${NC}"
     exit 1
 fi
 
@@ -56,7 +56,7 @@ fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 if [ "$CURRENT_BRANCH" != "main" ]; then
-    echo -e "${YELLOW}ℹ Not on main branch, skipping Render deployment${NC}"
+    echo -e "${YELLOW}[INFO] Not on main branch, skipping Render deployment${NC}"
     echo ""
     exit 0
 fi
@@ -71,7 +71,7 @@ if [ -f "$SCRIPT_DIR/deployment/deploy-render.sh" ]; then
     "$SCRIPT_DIR/deployment/deploy-render.sh"
     exit $?
 else
-    echo -e "${YELLOW}⚠ Warning: deployment/deploy-render.sh not found${NC}"
-    echo -e "${CYAN}ℹ Skipping Render deployment trigger${NC}"
+    echo -e "${YELLOW}[WARNING] Warning: deployment/deploy-render.sh not found${NC}"
+    echo -e "${CYAN}[INFO] Skipping Render deployment trigger${NC}"
     exit 0
 fi

@@ -218,11 +218,11 @@ export async function performConferenceScan(socket: any, session: any): Promise<
 export async function displayMailScanScreen(socket: any, session: any): Promise<void> {
   // express.e:28073 - await displayScreen(SCREEN_MAILSCAN)
   if (_loadScreenFile) {
-    const content = _loadScreenFile('MailScan', session.currentConf);
+    const screenData = _loadScreenFile('MailScan', session.currentConf);
 
-    if (content) {
+    if (screenData) {
       // Parse MCI codes with scan results
-      let parsed = content;
+      let parsed = screenData.content;
 
       if (_parseMciCodes) {
         parsed = _parseMciCodes(parsed, session);

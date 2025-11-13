@@ -435,6 +435,18 @@ async function handleEditInfoCommand(socket: any, session: BBSSession, db: Datab
 async function handlePageZeroEdit(socket: any, session: BBSSession, db: Database, user: User, command: string): Promise<void> {
   const state = getAccountEditorState(session);
 
+  // Check security level edit permission (express.e:21458-21469)
+  // Remote users can only edit security level if they're slot #1 (sysop)
+  // F6 mode (onlineEdit) allows editing
+  const canEditSecLevel = (): boolean => {
+    // If editing own account (onlineEdit mode), allow if sysop
+    if (session.user && user.id === session.user.id) {
+      return session.user.secLevel >= 255; // Sysop level
+    }
+    // If editing another user, must be sysop
+    return session.user?.secLevel >= 255;
+  };
+
   const fieldMap: { [key: string]: { field: keyof User, prompt: string, maxLen: number } } = {
     'A': { field: 'username', prompt: 'Name', maxLen: 30 },
     'B': { field: 'realname', prompt: 'Real Name', maxLen: 25 },
@@ -450,6 +462,17 @@ async function handlePageZeroEdit(socket: any, session: BBSSession, db: Database
 
   if (fieldMap[command]) {
     const field = fieldMap[command];
+
+    // Check permission for security level editing (express.e:21458-21469)
+    if (command === 'F' && !canEditSecLevel()) {
+      socket.emit('ansi-output', '\r\nAccess Denied: Only sysop can edit security level\r\n');
+      await displayAccount(socket, user, state.page!);
+      session.inputCallback = async (nextInput: string) => {
+        await handleEditInfoCommand(socket, session, db, user, nextInput);
+      };
+      return;
+    }
+
     socket.emit('ansi-output', `\r\n${field.prompt}: `);
 
     session.inputCallback = async (newValue: string) => {

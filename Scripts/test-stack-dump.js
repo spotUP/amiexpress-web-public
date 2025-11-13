@@ -15,9 +15,9 @@ async function testStackDump() {
 
   try {
     await session.start();
-    console.log('\n✅ Door completed!');
+    console.log('\n[OK] Door completed!');
   } catch (error) {
-    console.error('\n❌ Door error:', error.message);
+    console.error('\n[ERROR] Door error:', error.message);
   }
 }
 

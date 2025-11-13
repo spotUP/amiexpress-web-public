@@ -11,7 +11,7 @@ async function testGADoor() {
   const page = await browser.newPage();
   
   // Monitor console
-  page.on('console', msg => console.log('🖥️ [BROWSER]', msg.text()));
+  page.on('console', msg => console.log('[SERVER] [BROWSER]', msg.text()));
   
   await page.goto('http://localhost:5173');
   await new Promise(r => setTimeout(r, 1500));
@@ -51,12 +51,12 @@ async function testGADoor() {
   console.log('===\n');
   
   if (text.includes('GetAnswer') || text.includes('question') || text.length > 500) {
-    console.log('✅ GA door produced output!');
+    console.log('[OK] GA door produced output!');
   } else {
-    console.log('❌ No GA door output detected');
+    console.log('[ERROR] No GA door output detected');
   }
   
-  console.log('\n💡 Check backend logs: tail -f /tmp/backend.log | grep -E "XIM|🔊|GetAnswer"');
+  console.log('\n[INFO] Check backend logs: tail -f /tmp/backend.log | grep -E "XIM|🔊|GetAnswer"');
   console.log('⏸️  Browser will stay open for 60 seconds...\n');
   
   await new Promise(r => setTimeout(r, 60000));

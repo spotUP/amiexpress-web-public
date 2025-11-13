@@ -9,7 +9,11 @@
     "dev": "ts-node index.ts",
     "build": "tsc"
   },
-  "keywords": ["bbs", "bug-tracker", "door"],
+  "keywords": [
+    "bbs",
+    "bug-tracker",
+    "door"
+  ],
   "author": "AmiExpress SDK",
   "license": "MIT",
   "dependencies": {
@@ -19,5 +23,6 @@
     "@types/node": "^20.0.0",
     "typescript": "^5.2.2",
     "ts-node": "^10.9.1"
-  }
+  },
+  "runtime": "client"
 }

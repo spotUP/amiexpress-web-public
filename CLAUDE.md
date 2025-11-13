@@ -40,6 +40,31 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ---
 
+**NO EMOJIS ANYWHERE - THIS IS NON-NEGOTIABLE**
+
+1. **NEVER use emojis** in ANY code, scripts, output, comments, or documentation
+2. **Scripts**: Use ASCII tags only: `[OK]`, `[ERROR]`, `[WARNING]`, `[INFO]`, `[BUILD]`, etc.
+3. **BBS Output**: Use ASCII characters: `*`, `X`, `!`, `-`, `+`, `|`, `=`
+4. **Code Comments**: Plain text only, no decorative characters
+5. **Documentation**: ASCII-safe formatting only
+
+**Why:** Emojis cause:
+- Terminal compatibility issues (telnet, SSH, various shells)
+- Display problems in different environments
+- Encoding issues in logs and error messages
+- Inconsistent rendering across platforms
+- Git diff noise and merge conflicts
+- Screen reader accessibility problems
+
+**What TO use:**
+- ASCII tags: `[OK]`, `[ERROR]`, `[WARNING]`, `[INFO]`, `[DEBUG]`, `[BUILD]`, `[START]`, `[STOP]`
+- ASCII symbols: `*`, `X`, `!`, `-`, `+`, `|`, `=`, `>`, `<`, `/`, `\`
+- Plain text descriptions
+
+**Violation = Fix immediately and document in commit message**
+
+---
+
 ## Project Overview
 
 AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress/!X. It emulates 68K Amiga binaries in the browser using MOIRA (68000 CPU emulator) and recreates the BBS environment with modern web technologies.
@@ -156,6 +181,14 @@ npm run validate     # Validate door package structure
   ```
 - **NEVER** create a PR with broken SDK or example doors
 - Example doors are in `sdk/examples/` directory
+
+**CRITICAL - Creating New Doors:**
+- **ALWAYS** use the SDK when creating new doors
+- **NEVER** create integrated doors in `web/backend/src/doors/` directly
+- Use `npm run create-door` in the SDK to scaffold new doors
+- SDK doors are standalone packages with proper metadata
+- SDK doors can be shared and distributed independently
+- Only use integrated doors for core BBS functionality that requires deep backend integration
 
 ### SDK Preview (Door Development Tool)
 ```bash

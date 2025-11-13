@@ -68,7 +68,7 @@ async function runTests() {
     console.log('='.repeat(60) + '\n');
 
   } catch (error) {
-    console.error('\n❌ TEST FAILED:');
+    console.error('\n[ERROR] TEST FAILED:');
     console.error(error.message);
     console.error('\nFull error:');
     console.error(error);

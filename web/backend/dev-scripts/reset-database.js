@@ -43,11 +43,11 @@ async function resetDatabase() {
     db.prepare('DELETE FROM users WHERE username != ?').run('sysop');
     console.log('  ✓ Cleared non-sysop users');
 
-    console.log('✅ Database reset complete!');
+    console.log('[OK] Database reset complete!');
     console.log('   Restart the backend to re-initialize with correct IDs');
 
   } catch (error) {
-    console.error('❌ Error resetting database:', error);
+    console.error('[ERROR] Error resetting database:', error);
     process.exit(1);
   } finally {
     db.close();

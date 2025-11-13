@@ -10,7 +10,7 @@ let received = [];
 let commandSent = false;
 
 socket.on('connect', () => {
-  console.log('✅ Connected to BBS');
+  console.log('[OK] Connected to BBS');
   console.log('   Socket ID:', socket.id);
 
   // Send RTW command immediately after connection
@@ -40,9 +40,9 @@ socket.on('output', (data) => {
 });
 
 socket.on('door:output', (data) => {
-  console.log('\n🎮 RTW DOOR OUTPUT:');
+  console.log('\n[GAME] RTW DOOR OUTPUT:');
   console.log(data);
-  console.log('\n✅ RTW door executed!');
+  console.log('\n[OK] RTW door executed!');
   console.log('\n📋 Check backend logs for corruption detection:');
   console.log('   grep -A20 "CORRUPTION" logs/backend.log');
   process.exit(0);
@@ -56,7 +56,7 @@ socket.on('door:exit', (data) => {
 });
 
 socket.on('error', (err) => {
-  console.error('❌ Socket error:', err);
+  console.error('[ERROR] Socket error:', err);
   process.exit(1);
 });
 

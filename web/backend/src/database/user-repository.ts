@@ -244,4 +244,29 @@ export class UserRepository {
     const users = stmt.all(...params) as any[];
     return users.map(u => this.mapUserFromDb(u));
   }
+
+  async deleteUser(id: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Get user before deletion for logging
+    const user = await this.getUserById(id);
+    if (!user) {
+      throw new Error(`User with ID ${id} not found`);
+    }
+
+    // Delete from database
+    const stmt = this.db.prepare('DELETE FROM users WHERE id = ?');
+    const result = stmt.run(id);
+
+    if (result.changes === 0) {
+      throw new Error(`Failed to delete user ${id}`);
+    }
+
+    console.log(`[Database] Deleted user ${user.username} (ID: ${id})`);
+
+    // Note: Disk file synchronization for deletions would need additional logic
+    // to update user.data/keys/misc files and reindex slots
+    // This is complex and would require full user database rebuild
+    // For now, we only handle database deletion
+  }
 }

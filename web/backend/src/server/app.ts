@@ -22,13 +22,13 @@ app.use(cors());
 // Parse JSON bodies
 app.use(express.json());
 
-// Health check endpoints
-app.get('/', (req, res) => {
-  res.json({ message: 'AmiExpress Backend API' });
-});
-
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/api', (req, res) => {
+  res.json({ message: 'AmiExpress Backend API' });
 });
 
 // Door API routes

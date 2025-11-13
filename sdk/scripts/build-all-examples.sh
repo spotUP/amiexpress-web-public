@@ -36,11 +36,11 @@ for example in $examples; do
     current=$((current + 1))
     example_path="$EXAMPLES_DIR/$example"
 
-    echo -e "${BLUE}[$current/$total]${NC} ${YELLOW}📦 $example${NC}"
+    echo -e "${BLUE}[$current/$total]${NC} ${YELLOW}[DOOR] $example${NC}"
 
     # Skip if no package.json
     if [ ! -f "$example_path/package.json" ]; then
-        echo -e "   ${YELLOW}⊘ No package.json, skipping${NC}"
+        echo -e "   ${YELLOW}[SKIP] No package.json, skipping${NC}"
         echo ""
         continue
     fi
@@ -51,7 +51,7 @@ for example in $examples; do
     echo -e "   └─ Refreshing dependencies..."
     rm -rf node_modules package-lock.json 2>/dev/null || true
     if ! npm install --silent > /dev/null 2>&1; then
-        echo -e "   ${RED}✗ Install failed${NC}"
+        echo -e "   ${RED}[ERROR] Install failed${NC}"
         failed=$((failed + 1))
         echo ""
         continue
@@ -59,7 +59,7 @@ for example in $examples; do
 
     # Build
     if ! grep -q '"build"' package.json; then
-        echo -e "   ${YELLOW}⊘ No build script${NC}"
+        echo -e "   ${YELLOW}[SKIP] No build script${NC}"
         echo ""
         continue
     fi
@@ -68,14 +68,14 @@ for example in $examples; do
 
     # Run build with timeout, redirect to log
     if timeout 45 npm run build > "/tmp/build-$example.log" 2>&1; then
-        echo -e "   ${GREEN}✓ Built successfully${NC}"
+        echo -e "   ${GREEN}[OK] Built successfully${NC}"
         success=$((success + 1))
     else
         exit_code=$?
         if [ $exit_code -eq 124 ]; then
-            echo -e "   ${RED}✗ Timeout (>45s)${NC}"
+            echo -e "   ${RED}[ERROR] Timeout (>45s)${NC}"
         else
-            echo -e "   ${RED}✗ Build failed${NC}"
+            echo -e "   ${RED}[ERROR] Build failed${NC}"
 
             # Show first 3 errors
             if [ -f "/tmp/build-$example.log" ]; then
@@ -92,19 +92,19 @@ for example in $examples; do
 done
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}✓ Build complete: $success successful, $failed failed${NC}"
+echo -e "${GREEN}[OK] Build complete: $success successful, $failed failed${NC}"
 echo ""
 
 # Return to SDK directory
 cd "$SDK_DIR"
 
 # Start preview server
-echo -e "${BLUE}🚀 Starting preview server...${NC}"
+echo -e "${BLUE}[START] Starting preview server...${NC}"
 echo ""
 
 # Kill existing server if running
 if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}⚠ Port 8080 in use, killing existing process...${NC}"
+    echo -e "${YELLOW}[WARNING] Port 8080 in use, killing existing process...${NC}"
     lsof -ti:8080 | xargs kill -9 2>/dev/null || true
     sleep 1
 fi

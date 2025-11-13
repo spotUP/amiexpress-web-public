@@ -887,7 +887,7 @@ export class AmigaParserService {
     pos += 86;
 
     return {
-      realName,
+      realname: realName, // Use lowercase to match database schema
       email: eMail,
       lastDlCPS,
       passwordHash: pwdHash,

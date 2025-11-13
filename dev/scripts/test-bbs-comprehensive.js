@@ -70,7 +70,7 @@ let currentTest = null;
 
 function log(message, type = 'info') {
   const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-  const symbols = { info: '→', success: '✓', error: '✗', warning: '⚠' };
+  const symbols = { info: '→', success: '✓', error: '✗', warning: '[WARNING]' };
   console.log(`[${timestamp}] ${symbols[type] || '→'} ${message}`);
 }
 
@@ -301,7 +301,7 @@ function generateReport() {
     Object.keys(byCategory).forEach(category => {
       console.log(`\n[${category.toUpperCase()}]`);
       byCategory[category].forEach((issue, idx) => {
-        const icon = issue.severity === 'error' ? '✗' : '⚠';
+        const icon = issue.severity === 'error' ? '✗' : '[WARNING]';
         console.log(`  ${icon} ${issue.command}: ${issue.description}`);
       });
     });

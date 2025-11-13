@@ -14,7 +14,7 @@ async function sleep(ms) {
 }
 
 async function testRTWDoor() {
-  console.log('🚀 Starting RTW (WHO) door test...\n');
+  console.log('[START] Starting RTW (WHO) door test...\n');
 
   const socket = io(BBS_URL, {
     transports: ['websocket'],
@@ -27,7 +27,7 @@ async function testRTWDoor() {
     let doorOutput = false;
 
     socket.on('connect', () => {
-      console.log('✅ Connected to BBS\n');
+      console.log('[OK] Connected to BBS\n');
     });
 
     socket.on('ansi-output', (data) => {
@@ -38,7 +38,7 @@ async function testRTWDoor() {
       if (data.includes('RTW') || data.includes('Who is online') || data.includes('Node')) {
         doorLaunched = true;
         doorOutput = true;
-        console.log('\n✅ DOOR LAUNCHED - Output detected!\n');
+        console.log('\n[OK] DOOR LAUNCHED - Output detected!\n');
       }
     });
 
@@ -46,14 +46,14 @@ async function testRTWDoor() {
       console.log(`\n📊 Door status: ${data.status}\n`);
 
       if (data.status === 'running') {
-        console.log('✅ Door execution started!\n');
+        console.log('[OK] Door execution started!\n');
 
         // Give door 3 seconds to produce output
         setTimeout(() => {
           if (doorOutput) {
-            console.log('✅ SUCCESS - Door produced output!\n');
+            console.log('[OK] SUCCESS - Door produced output!\n');
           } else {
-            console.log('⚠️  Door running but no output yet...\n');
+            console.log('[WARNING]  Door running but no output yet...\n');
           }
 
           // Exit door
@@ -72,7 +72,7 @@ async function testRTWDoor() {
     });
 
     socket.on('error', (error) => {
-      console.error('❌ Socket error:', error);
+      console.error('[ERROR] Socket error:', error);
       reject(error);
     });
 
@@ -91,7 +91,7 @@ async function testRTWDoor() {
     // Timeout after 20 seconds
     setTimeout(() => {
       if (!doorLaunched) {
-        console.log('❌ Test timeout - door did not launch\n');
+        console.log('[ERROR] Test timeout - door did not launch\n');
         socket.disconnect();
         reject(new Error('Timeout'));
       }
@@ -101,10 +101,10 @@ async function testRTWDoor() {
 
 testRTWDoor()
   .then(() => {
-    console.log('✅ Test complete');
+    console.log('[OK] Test complete');
     process.exit(0);
   })
   .catch((error) => {
-    console.error('❌ Test failed:', error.message);
+    console.error('[ERROR] Test failed:', error.message);
     process.exit(1);
   });

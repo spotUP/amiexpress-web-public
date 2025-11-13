@@ -22,7 +22,7 @@ async function resetFileAreas() {
     const deleteResult = deleteStmt.run();
     console.log(`   Deleted: ${deleteResult.changes} rows`);
 
-    console.log('\n✅ Remaining file areas:');
+    console.log('\n[OK] Remaining file areas:');
     const after = db.prepare('SELECT id, name, conferenceid FROM file_areas ORDER BY id').all();
     console.log(`   Total: ${after.length}`);
     after.forEach(row => {
@@ -31,7 +31,7 @@ async function resetFileAreas() {
 
     console.log('\n✓ Cleanup complete!');
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('[ERROR] Error:', error.message);
   } finally {
     db.close();
   }

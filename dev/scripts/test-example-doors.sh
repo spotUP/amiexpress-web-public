@@ -59,7 +59,7 @@ echo -e "${YELLOW}Building SDK...${NC}"
 cd "$SDK_DIR"
 npm install > /dev/null 2>&1
 npm run build > /dev/null 2>&1
-echo -e "${GREEN}✓ SDK built successfully${NC}"
+echo -e "${GREEN}[OK] SDK built successfully${NC}"
 echo ""
 
 # Test each door
@@ -85,7 +85,7 @@ for door in "${DOORS[@]}"; do
   # Install dependencies
   echo "  Installing dependencies..."
   if npm install > /dev/null 2>&1; then
-    echo -e "  ${GREEN}✓ Dependencies installed${NC}"
+    echo -e "  ${GREEN}[OK] Dependencies installed${NC}"
   else
     echo -e "  ${RED}✗ npm install failed${NC}"
     FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -96,7 +96,7 @@ for door in "${DOORS[@]}"; do
   # Build
   echo "  Building..."
   if npm run build > /dev/null 2>&1; then
-    echo -e "  ${GREEN}✓ Build successful${NC}"
+    echo -e "  ${GREEN}[OK] Build successful${NC}"
     SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
   else
     echo -e "  ${RED}✗ Build failed${NC}"

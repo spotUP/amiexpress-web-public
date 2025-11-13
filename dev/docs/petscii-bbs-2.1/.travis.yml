@@ -1,0 +1,15 @@
+language: java
+jdk:
+- openjdk8
+addons:
+  sonarcloud:
+    organization: "key-for-sblendorio-java-source-code"
+    token:
+      secure: NuwYhrJkLxPHnvdMWLzZTU+ZqzYbTNT5iHz1ynGszhFeOqB0qlnunXcuO6LwzMoJYgfM7kXPPbfe3vr86dQWSQYLl4rmapq38UGACmK6NXO9Y7dMe2GhpF6Z9oqPPdE88jfNIbt7Y6NesNc1p/3mbB1gUgrLBTxKnOnOcAbp9CwBRjQJlFjgsg/cK1UZcIzUMjdN7eHLMMWtrFuddeRBsbzcpcDBkRkfN+Z9jDbCwpTHL43R8TUSXiVgrZpIJjr0xMTt5y0PZaiQ6b6jnIDZKBSLMVOEUc9rGnBmH8iV29jjBPPr27YWiomomVQFI8P0OSxTL93Aw4w1BXtbXgNSvyZXpkbMAwcSEZ5p3GmJymaiK2XZ6wGlb1+N3sqRnhzJz0xgBATgw24DzZS2KW1PNaIWSOl9KfLhB05mxShN4eaaiuqKKD/iKpeTT9SVOoKL7B5TdWk3QUkBAwUU9QQrVnmkmKFJwGoz20pKz7kxb2WAmjd6AEvhLbC5RN9KyLd8j/T4VKtm8U8x9S2Ch50K5W+TlsNGjchHtfCK+SB0bJrfOTPh+rzrOuzTmMQGsnmgwETjz6Ldoz69aiajmL0SyDp2PubQt0tswTFLfjhR5+lolf/1RgbWLf6OG2B9CQHSxJGoGtkSGnOuRsRxyP/oMYKkIVCB2pnnotpvO5EZJHU=
+script:
+  # the following command line builds the project, runs the tests with coverage and then execute the SonarCloud analysis
+  - mvn clean install sonar:sonar -Pcoverage -Dsonar.projectKey=sblendorio_petscii-bbs
+cache:
+  directories:
+    - $HOME/.m2/repository
+    - $HOME/.sonar/cache

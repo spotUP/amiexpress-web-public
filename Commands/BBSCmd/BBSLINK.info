@@ -1,0 +1,7 @@
+BBSCMD=BBSLINK
+TYPE=TS
+LOCATION=doors/bbslink
+DESCRIPTION=BBSLink InterBBS games client (runDoor pattern)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

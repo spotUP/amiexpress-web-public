@@ -61,11 +61,11 @@ async function testDoorOutput() {
 
     // Check if door list is displayed
     if (terminalText.includes('Door Games') || terminalText.includes('Available doors')) {
-      console.log('✅ DOORS command working - door menu displayed');
+      console.log('[OK] DOORS command working - door menu displayed');
 
       // Try to select first door if available
       if (terminalText.includes('1.')) {
-        console.log('🎮 Attempting to select door #1...');
+        console.log('[GAME] Attempting to select door #1...');
         await page.keyboard.type('1');
         await page.keyboard.press('Enter');
         await sleep(3000);
@@ -82,15 +82,15 @@ async function testDoorOutput() {
         console.log('---\n');
 
         if (terminalText.includes('Starting') || terminalText.includes('Launching')) {
-          console.log('✅ Door execution started');
+          console.log('[OK] Door execution started');
         } else {
-          console.log('❌ Door may not have started properly');
+          console.log('[ERROR] Door may not have started properly');
         }
       } else {
-        console.log('⚠️  No doors found in list');
+        console.log('[WARNING]  No doors found in list');
       }
     } else {
-      console.log('❌ DOORS command failed - menu not displayed');
+      console.log('[ERROR] DOORS command failed - menu not displayed');
     }
 
     console.log('\n⏸️  Keeping browser open for manual inspection...');
@@ -98,7 +98,7 @@ async function testDoorOutput() {
     await sleep(300000); // Keep open for 5 minutes
 
   } catch (error) {
-    console.error('❌ Test error:', error);
+    console.error('[ERROR] Test error:', error);
   } finally {
     // Don't close browser automatically
     // await browser.close();

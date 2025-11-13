@@ -18,7 +18,7 @@ async function testWhoDoor() {
     let doorExecuting = false;
 
     const timeout = setTimeout(() => {
-      console.log('\n❌ Test timed out after 30 seconds');
+      console.log('\n[ERROR] Test timed out after 30 seconds');
       ws.close();
       reject(new Error('Timeout'));
     }, 30000);
@@ -66,14 +66,14 @@ async function testWhoDoor() {
     });
 
     ws.on('error', (error) => {
-      console.error('❌ WebSocket error:', error.message);
+      console.error('[ERROR] WebSocket error:', error.message);
       clearTimeout(timeout);
       reject(error);
     });
 
     ws.on('close', () => {
       if (!connected) {
-        console.log('❌ Failed to connect');
+        console.log('[ERROR] Failed to connect');
         reject(new Error('Connection failed'));
       }
       clearTimeout(timeout);
@@ -88,6 +88,6 @@ testWhoDoor()
     process.exit(0);
   })
   .catch((error) => {
-    console.error('\n❌ Test failed:', error.message);
+    console.error('\n[ERROR] Test failed:', error.message);
     process.exit(1);
   });

@@ -35,3 +35,25 @@ export const authenticateToken = (db: Database) => {
     }
   };
 };
+
+/**
+ * Middleware to require sysop-level access (security level 255)
+ * Must be used after authenticateToken
+ */
+export const requireSysop = () => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Sysop level is typically 255 in AmiExpress
+    if (req.user.secLevel < 255) {
+      return res.status(403).json({
+        error: 'Sysop access required',
+        message: 'This operation requires sysop-level privileges'
+      });
+    }
+
+    next();
+  };
+};

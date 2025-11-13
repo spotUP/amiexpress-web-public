@@ -1,0 +1,7 @@
+BBSCMD=HELLO
+TYPE=TS
+LOCATION=doors/hello-world
+DESCRIPTION=Simple hello world BBS door with mock data
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

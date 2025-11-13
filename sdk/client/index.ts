@@ -598,6 +598,16 @@ export {
 } from '../core/ansi-string-utils';
 
 /**
+ * Export Door as alias for ClientDoor (for backwards compatibility)
+ */
+export { ClientDoor as Door };
+
+/**
+ * Export UIEngine for client doors
+ */
+export { UIEngine } from '../engines/ui/ui-engine';
+
+/**
  * Export default
  */
 export default ClientDoor;

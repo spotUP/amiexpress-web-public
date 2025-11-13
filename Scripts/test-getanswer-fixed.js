@@ -72,7 +72,7 @@ async function testGetAnswerFixed() {
       console.log('\n✓ SUCCESS: Door output detected!');
       console.log('✓ WriteStr() fix is working!');
     } else {
-      console.log('\n⚠ No door output visible yet');
+      console.log('\n[WARNING] No door output visible yet');
       console.log('Check backend logs for AEDoor.library calls');
     }
 

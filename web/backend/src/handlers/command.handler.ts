@@ -573,9 +573,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       }
     }
     // Handle Backspace - real-time transmission
-    else if (data === '\x7f') {
+    else if (data === '\x7f' || data === '\b') {
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Echo backspace to local terminal (express.e:2307-2319)
+        socket.emit('ansi-output', '\b \b');
         // Don't transmit backspace if we're typing a command
         const isCommand = session.inputBuffer.trim().startsWith('/');
         if (!isCommand) {
@@ -586,6 +588,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     // Handle printable characters - real-time transmission
     else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
+      // Echo character to local terminal (express.e:2342)
+      socket.emit('ansi-output', data);
       // Don't transmit commands (starting with /) to partner
       const isCommand = session.inputBuffer.trim().startsWith('/');
       if (!isCommand) {
@@ -775,12 +779,19 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           await newUserHandler.handleConfirmInput(socket, session, input);
           break;
       }
-    } else if (data === '\x7f') { // Backspace
+    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
+      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
+        // This moves cursor back, overwrites char with space, moves cursor back again
+        socket.emit('ansi-output', '\b \b');
       }
+      // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
+      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -1998,10 +2009,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = session.inputBuffer;
       session.inputBuffer = '';
       await FileMaintenanceHandler.handleYesNoInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data === '\x7f' || data === '\b') {
+      // Backspace (express.e:2304-2320)
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+      }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
+      // Echo character back to terminal (express.e:2342)
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -2013,10 +2030,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = session.inputBuffer;
       session.inputBuffer = '';
       await FileMaintenanceHandler.handleFilenameInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data === '\x7f' || data === '\b') {
+      // Backspace (express.e:2304-2320)
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+      }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
+      // Echo character back to terminal (express.e:2342)
+      socket.emit('ansi-output', data);
     }
     return;
   }

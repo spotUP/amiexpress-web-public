@@ -12,7 +12,7 @@ async function sleep(ms) {
 
 async function testWhoCommand() {
   console.log('🧪 Testing WHO Command\n');
-  console.log('📝 This script will:');
+  console.log('[NOTE] This script will:');
   console.log('   1. Connect to BBS');
   console.log('   2. Select ANSI graphics');
   console.log('   3. Login as sysop');
@@ -33,7 +33,7 @@ async function testWhoCommand() {
     page.on('console', msg => {
       const text = msg.text();
       if (text.includes('Login successful') || text.includes('door') || text.includes('Door')) {
-        console.log('🖥️  [BROWSER]', text);
+        console.log('[SERVER]  [BROWSER]', text);
       }
     });
 
@@ -64,15 +64,15 @@ async function testWhoCommand() {
     await page.keyboard.press('Enter');
     await sleep(2000);
 
-    console.log('⏳ Waiting for command prompt...');
+    console.log('[WAIT] Waiting for command prompt...');
     await sleep(2000);
 
     console.log('\n🚪 Executing WHO command...');
     await page.keyboard.type('who');
     await page.keyboard.press('Enter');
 
-    console.log('⏳ Waiting for door execution (10 seconds)...');
-    console.log('💡 Monitor backend logs in another terminal:');
+    console.log('[WAIT] Waiting for door execution (10 seconds)...');
+    console.log('[INFO] Monitor backend logs in another terminal:');
     console.log('   tail -f /tmp/backend.log | grep -E "WHO|who|RTW"\n');
 
     await sleep(10000);
@@ -89,9 +89,9 @@ async function testWhoCommand() {
     console.log('═'.repeat(60));
 
     if (terminalText.includes('GetAnswer') || terminalText.includes('question')) {
-      console.log('\n✅ SUCCESS: GA door produced output!');
+      console.log('\n[OK] SUCCESS: GA door produced output!');
     } else {
-      console.log('\n❌ NO OUTPUT: GA door did not produce visible output');
+      console.log('\n[ERROR] NO OUTPUT: GA door did not produce visible output');
       console.log('   Check backend logs for execution details');
     }
 
@@ -101,7 +101,7 @@ async function testWhoCommand() {
     await sleep(120000);
 
   } catch (error) {
-    console.error('\n❌ Error:', error.message);
+    console.error('\n[ERROR] Error:', error.message);
   } finally {
     await browser.close();
     console.log('\n👋 Test complete');

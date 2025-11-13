@@ -191,3 +191,493 @@ export interface SystemLog {
   nodeId?: number;
   context?: string;
 }
+
+// ===== Configuration Types =====
+
+/**
+ * System Configuration (Singleton)
+ * TOOLTYPE_BBSCONFIG from express.e
+ */
+export interface SystemConfig {
+  id: number;  // Always 1 (singleton)
+
+  // Identity
+  bbs_name: string;
+  sysop_name: string;
+  location: string;
+  phone: string;
+  email: string;
+  website: string;
+
+  // Security & Authentication
+  min_password_length: number;
+  min_password_strength: number;
+  max_password_fails: number;
+  password_security: string;
+  strict_password_policy: boolean;
+  auto_validate: boolean;
+  confirm_deletions: boolean;
+
+  // Session Settings
+  default_time_limit: number;
+  max_session_time: number;
+  idle_timeout: number;
+
+  // Display Settings
+  ansi_enabled: boolean;
+  color_scheme: string;
+  allow_custom_screens: boolean;
+
+  // Language
+  language_base: string;
+  default_language: string;
+
+  // Limits
+  max_conferences: number;
+  max_message_bases: number;
+  max_file_areas: number;
+  max_nodes: number;
+
+  // File Management
+  file_check_enabled: boolean;
+  upload_check_virus: boolean;
+  upload_check_dupe: boolean;
+
+  // Mail & SMTP Settings (TOOLTYPE_BBSCONFIG from reference-boardBBS)
+  allow_internet_email: boolean;
+  smtp_server: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password: string;  // Encrypted
+  smtp_ssl: boolean;
+  smtp_from_email: string;
+  sysop_email: string;
+  bbs_email: string;
+
+  // FTP Server Settings (TOOLTYPE_BBSCONFIG, express.e:15485-15489, 15536-15540)
+  ftp_enabled: boolean;
+  ftp_host: string;
+  ftp_port: number;
+  ftp_data_ports: string;  // Comma-separated ports, e.g., "50101,50102,50103"
+
+  // HTTP Server Settings (TOOLTYPE_XFERLIB, express.e:15002-15006, 15019-15027)
+  http_enabled: boolean;
+  http_host: string;
+  http_port: number;
+
+  // System Behavior (TOOLTYPE_BBSCONFIG)
+  quiet_join: boolean;         // Suppress conference join messages
+  convert_to_mb: boolean;      // Convert byte counts to megabytes
+
+  // Registration
+  reg_key: string;             // BBS registration key
+
+  // Logging
+  debug_mode: boolean;
+  log_level: string;
+  log_retention_days: number;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Node Configuration (1-8 nodes)
+ * TOOLTYPE_NODE from express.e
+ */
+export interface NodeConfig {
+  id: number;
+  node_number: number;  // 1-8
+
+  // Node Settings
+  node_start: string;
+  priority: number;  // -1 to 20
+
+  // Display Settings
+  capitol_files: boolean;
+  def_screens: boolean;
+  no_mci_msg: boolean;
+
+  // Chat Settings
+  sysop_chat_color: number;
+  user_chat_color: number;
+  break_chat: boolean;
+
+  // File Transfer Settings
+  sentby_files: boolean;
+  keep_upload_credit: boolean;
+  free_resuming: boolean;
+
+  // Logging Settings
+  callers_log: boolean;
+  start_log: boolean;
+  door_log: boolean;
+  ud_log: boolean;
+  log_host: boolean;
+
+  // Network Settings
+  telnet: boolean;
+  ftp: boolean;
+
+  // Security Settings
+  disable_quick_logons: boolean;
+  view_password: boolean;
+
+  // Modem/Network
+  no_rad_boogie: boolean;
+  nrams: string[];  // Array of init strings
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Conference Configuration
+ * TOOLTYPE_CONF from express.e
+ */
+export interface ConferenceConfig {
+  id: number;
+  conference_id: number;
+
+  // Directory Settings (1-16)
+  ndirs: number;
+  dlpath_1: string;
+  dlpath_2: string;
+  dlpath_3: string;
+  dlpath_4: string;
+  dlpath_5: string;
+  dlpath_6: string;
+  dlpath_7: string;
+  dlpath_8: string;
+  dlpath_9: string;
+  dlpath_10: string;
+  dlpath_11: string;
+  dlpath_12: string;
+  dlpath_13: string;
+  dlpath_14: string;
+  dlpath_15: string;
+  dlpath_16: string;
+  ulpath_1: string;
+  ulpath_2: string;
+  ulpath_3: string;
+  ulpath_4: string;
+  ulpath_5: string;
+  ulpath_6: string;
+  ulpath_7: string;
+  ulpath_8: string;
+  ulpath_9: string;
+  ulpath_10: string;
+  ulpath_11: string;
+  ulpath_12: string;
+  ulpath_13: string;
+  ulpath_14: string;
+  ulpath_15: string;
+  ulpath_16: string;
+
+  // Conference Settings
+  force_newscan: boolean;
+  no_newscan: boolean;
+  show_new_files: boolean;
+  no_new_files: boolean;
+  free_downloads: boolean;
+  exclude_ftp: boolean;
+  private_conf: boolean;
+  read_only: boolean;
+  menu_prompt: string;
+  confdb_shared: number;  // Conference ID to share database with (0=none)
+
+  // Name Display Options
+  use_username: boolean;
+  use_realname: boolean;
+  use_internetname: boolean;
+
+  // Access Control
+  min_access_level: number;
+  max_access_level: number;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Door/Command Configuration
+ * TOOLTYPE_SYSCMD, TOOLTYPE_BBSCMD from express.e
+ */
+export interface Door {
+  id: number;
+
+  // Door Identity
+  door_name: string;
+  door_command: string;
+  door_type: 'SYSCMD' | 'BBSCMD' | 'INTERNAL';
+
+  // Execution Settings
+  door_path: string;
+  door_args: string;
+  working_directory: string;
+
+  // Door Options
+  priority: string;  // P0-P4
+  door_options: string[];
+  runtime_env: 'AMIGA_68K' | 'NATIVE_NODE' | 'BROWSER';
+
+  // Access Control
+  min_security_level: number;
+  max_security_level: number;
+  required_flags: string;
+
+  // Resource Limits
+  time_limit: number;
+  memory_limit: number;
+
+  // Display Settings
+  title: string;
+  description: string;
+  category: string;
+
+  // Status
+  enabled: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * System Languages (Singleton)
+ * TOOLTYPE_LANGUAGES host language from express.e
+ */
+export interface SystemLanguages {
+  id: number;  // Always 1 (singleton)
+
+  // Host Language
+  host_language: string;
+
+  // Language Settings
+  language_base_path: string;
+  allow_user_selection: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Available Languages (1-10)
+ * TOOLTYPE_LANGUAGES language list from express.e
+ */
+export interface Language {
+  id: number;
+  language_number: number;  // 1-10
+
+  // Language Identity
+  title: string;
+  language_code: string;
+
+  // File Settings
+  file_path: string;
+
+  // Status
+  enabled: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * File Transfer Protocols
+ * Protocol configuration from express.e
+ */
+export interface Protocol {
+  id: number;
+
+  // Protocol Identity
+  protocol_name: string;
+  protocol_code: string;
+
+  // Protocol Settings
+  command: string;
+  upload_command: string;
+  download_command: string;
+  batch_upload: boolean;
+  batch_download: boolean;
+  bidirectional: boolean;
+
+  // Status
+  enabled: boolean;
+  is_default: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Configuration Audit Log
+ * Tracks all configuration changes
+ */
+export interface ConfigAuditLog {
+  id: number;
+
+  // Audit Fields
+  table_name: string;
+  record_id: number;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+
+  // Change Details
+  old_values?: string;  // JSON
+  new_values?: string;  // JSON
+  changed_fields: string[];
+
+  // User Context
+  user_id?: string;
+  username: string;
+
+  // Request Context
+  ip_address?: string;
+  user_agent?: string;
+
+  // Metadata
+  timestamp: Date;
+}
+
+/**
+ * Security Level Access Control
+ * TOOLTYPE_ACCESS from express.e (lines 3029, 8497, 28540)
+ * Per-security-level ACS_* flag configuration
+ */
+export interface SecurityLevelAccess {
+  id: number;
+
+  // Security Level
+  security_level: number;  // 1-255
+
+  // Access Control Flag
+  acs_flag: string;  // e.g., "READ_MESSAGE", "DOWNLOAD", "ENTER_MESSAGE"
+
+  // Status
+  enabled: boolean;
+
+  // Description
+  description?: string;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Drive Configuration
+ * TOOLTYPE_DRIVES from express.e (lines 17412-17418)
+ * File system drive/volume list
+ */
+export interface DriveConfig {
+  id: number;
+
+  // Drive Identity
+  drive_number: number;  // 1-N
+  drive_path: string;    // e.g., "DH1:", "/data/drive1"
+
+  // Status
+  enabled: boolean;
+
+  // Description
+  description?: string;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Computer Types
+ * TOOLTYPE_COMPUTERLIST from express.e (lines 31954-31965)
+ * List of computer types users can select from
+ */
+export interface ComputerType {
+  id: number;
+
+  // Computer Identity
+  computer_number: number;  // 1-N
+  computer_name: string;    // e.g., "AMiGA 500", "PC", "mAC"
+
+  // Status
+  enabled: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * Screen Types
+ * TOOLTYPE_SCREENTYPES from express.e (lines 31905-31915)
+ * Terminal/screen format types (ANSI, ASCII, etc.)
+ */
+export interface ScreenType {
+  id: number;
+
+  // Screen Type Identity
+  screen_number: number;  // 1-N
+  screen_type: string;    // e.g., "TXT.GR", "IBM", "ASCII"
+  screen_title: string;   // e.g., "Amiga Ansi", "IBM Ansi"
+
+  // Status
+  enabled: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * File Checkers
+ * TOOLTYPE_FCHECK from express.e (lines 18556-18614, 31677-31681)
+ * External file validation tools (virus scanners, archive validators)
+ */
+export interface FileChecker {
+  id: number;
+
+  // Checker Identity
+  checker_name: string;  // e.g., "Virus Scanner", "Archive Validator"
+
+  // Execution Settings
+  checker_path: string;  // Path to checker executable
+  options: string;       // Command-line options (express.e:18562-18564)
+  stack_size: number;    // Stack size for process (express.e:18567-18571)
+  priority: number;      // Process priority (express.e:18573-18577)
+
+  // Post-Check Script
+  script_path?: string;  // Optional script to run after check (express.e:18595-18606)
+
+  // Status
+  enabled: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+/**
+ * File Checker Error Patterns
+ * ERROR.N patterns from TOOLTYPE_FCHECK (express.e:18614-18621)
+ * Defines error strings to detect in checker output
+ */
+export interface FileCheckerError {
+  id: number;
+
+  // Parent Checker
+  file_checker_id: number;
+
+  // Error Pattern
+  error_number: number;    // 1-N
+  error_pattern: string;   // String to match in output
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}

@@ -783,7 +783,7 @@ class AmiExpressDocsServer {
           text: `Module: ${module.name}
 Lines: ${module.startLine}-${module.endLine} (${module.endLine - module.startLine + 1} lines)
 Description: ${module.description}
-${module.critical ? 'CRITICAL MODULE ⚠️' : ''}
+${module.critical ? 'CRITICAL MODULE [WARNING]' : ''}
 ${module.note ? `\nNote: ${module.note}` : ''}
 
 Keywords: ${module.keywords.join(', ')}

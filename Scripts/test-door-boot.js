@@ -5,11 +5,11 @@ const socket = io('http://localhost:3001', {
   transports: ['websocket']
 });
 
-console.log('🚀 Starting GetAnswer door test...');
+console.log('[START] Starting GetAnswer door test...');
 console.log('📋 Monitoring ROM boot sequence...\n');
 
 socket.on('connect', () => {
-  console.log('✅ Connected to backend');
+  console.log('[OK] Connected to backend');
 
   // Launch GetAnswer door
   socket.emit('door:launch', {
@@ -23,7 +23,7 @@ socket.on('door:status', (data) => {
 });
 
 socket.on('door:error', (data) => {
-  console.error(`❌ Door error: ${data.message}`);
+  console.error(`[ERROR] Door error: ${data.message}`);
   process.exit(1);
 });
 
@@ -36,7 +36,7 @@ socket.on('ansi-output', (data) => {
 });
 
 socket.on('disconnect', () => {
-  console.log('\n❌ Disconnected from backend');
+  console.log('\n[ERROR] Disconnected from backend');
   process.exit(0);
 });
 

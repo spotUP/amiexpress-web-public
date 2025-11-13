@@ -1,5 +1,7 @@
 BBSCMD=TRACKER
 TYPE=TS
-LOCATION=tracker-door
-DESCRIPTION=Professional Music Tracker - Create chiptunes and game music
-ACCESS=1
+LOCATION=doors/tracker-door
+DESCRIPTION=Professional music tracker BBS door inspired by Renoise, Protracker, and FastTracker II
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

@@ -59,16 +59,16 @@ async function testWHODoor() {
 
     // Check if WHO produced output
     if (terminalText.includes('Node') || terminalText.includes('User') || terminalText.includes('sysop')) {
-      console.log('\n✅ WHO door appears to be working!');
+      console.log('\n[OK] WHO door appears to be working!');
     } else {
-      console.log('\n⚠️  WHO door may not be working - no expected output found');
+      console.log('\n[WARNING]  WHO door may not be working - no expected output found');
     }
 
     console.log('\n⏸️  Keeping browser open for 2 minutes for inspection...');
     await sleep(120000);
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('[ERROR] Error:', error);
   } finally {
     await browser.close();
   }

@@ -823,7 +823,7 @@ class DeepBBSTester {
     console.log(`${colors.bright}Total Tests:${colors.reset}     ${testResults.total}`);
     console.log(`${colors.green}${colors.bright}✓ Passed:${colors.reset}        ${testResults.passed.length}`);
     console.log(`${colors.red}${colors.bright}✗ Failed:${colors.reset}        ${testResults.failed.length}`);
-    console.log(`${colors.yellow}${colors.bright}⚠ Warnings:${colors.reset}      ${testResults.warnings.length}`);
+    console.log(`${colors.yellow}${colors.bright}[WARNING] Warnings:${colors.reset}      ${testResults.warnings.length}`);
     console.log(`${colors.dim}Duration:${colors.reset}        ${duration}s`);
     console.log();
     

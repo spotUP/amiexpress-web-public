@@ -18,7 +18,7 @@ function log(message, level = 'info') {
   const entry = { timestamp, message, level };
   testLog.push(entry);
 
-  const symbols = { info: '→', pass: '✓', fail: '✗', warn: '⚠' };
+  const symbols = { info: '→', pass: '✓', fail: '✗', warn: '[WARNING]' };
   console.log(`[${timestamp}] ${symbols[level] || '→'} ${message}`);
 }
 
@@ -456,7 +456,7 @@ async function generateReport() {
   console.log(`  Success Rate: ${percentage}%`);
 
   if (issues.length > 0) {
-    console.log(`\n❌ Issues Found (${issues.length}):\n`);
+    console.log(`\n[ERROR] Issues Found (${issues.length}):\n`);
     issues.forEach((issue, idx) => {
       console.log(`${idx + 1}. ${issue.test}: ${issue.message}`);
       if (issue.details) {
@@ -464,7 +464,7 @@ async function generateReport() {
       }
     });
   } else {
-    console.log(`\n✅ All tests passed!`);
+    console.log(`\n[OK] All tests passed!`);
   }
 
   // Save report

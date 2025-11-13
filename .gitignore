@@ -177,3 +177,4 @@ bbsConfig.info
 bbsConfig.info_*
 bbsConfig.info__
 dev/docs/OSSource/
+ssh_host_rsa_key*

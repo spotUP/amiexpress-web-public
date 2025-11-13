@@ -1,0 +1,7 @@
+BBSCMD=BUGTRACK
+TYPE=TS
+LOCATION=doors/bug-tracker
+DESCRIPTION=Comprehensive bug reporting and tracking system for BBS
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

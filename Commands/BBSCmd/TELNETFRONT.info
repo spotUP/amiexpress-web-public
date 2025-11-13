@@ -1,0 +1,7 @@
+BBSCMD=TELNETFRONT
+TYPE=TS
+LOCATION=doors/telnet-front
+DESCRIPTION=Telnet front-end door for BBS access (runDoor pattern)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

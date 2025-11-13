@@ -26,7 +26,7 @@ async function testGA() {
   await page.keyboard.press('Enter');
   
   // Wait for menu to fully load
-  console.log('⏳ Waiting for menu (8 seconds)...');
+  console.log('[WAIT] Waiting for menu (8 seconds)...');
   await sleep(8000);
   
   console.log('🚪 Typing GA command...');

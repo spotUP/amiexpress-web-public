@@ -39,14 +39,103 @@ const PORT = process.env.PORT || 8080;
 const DEBUG_OUTPUT = process.env.DEBUG_OUTPUT === 'true' || false;
 
 // Log DEBUG_OUTPUT at startup
-console.log(`🔍 DEBUG_OUTPUT: ${DEBUG_OUTPUT} (from env: ${process.env.DEBUG_OUTPUT})`);
+console.log(`[DEBUG] DEBUG_OUTPUT: ${DEBUG_OUTPUT} (from env: ${process.env.DEBUG_OUTPUT})`);
+
+/**
+ * Install door to BBS structure
+ * Creates .info file in Commands/BBSCmd/ and symlinks door to doors/
+ *
+ * @param {string} doorId - Door directory name (e.g., "2048-game")
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+async function installDoorToBBS(doorId) {
+  try {
+    const projectRoot = path.resolve(__dirname, '../../..');
+    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const pkgPath = path.join(doorPath, 'package.json');
+
+    // Read package.json for door metadata
+    if (!fs.existsSync(pkgPath)) {
+      return { success: false, message: 'package.json not found' };
+    }
+
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const bbsCommand = pkg.bbsCommand || doorId.toUpperCase().replace(/-/g, '');
+    const doorType = pkg.doorType || 'TS';
+    const description = pkg.description || '';
+    const access = pkg.accessLevel !== undefined ? pkg.accessLevel : 0;
+
+    // Generate .info file content
+    const infoContent = [
+      `BBSCMD=${bbsCommand}`,
+      `TYPE=${doorType}`,
+      `LOCATION=doors/${doorId}`,
+      description ? `DESCRIPTION=${description}` : '',
+      `ACCESS=${access}`,
+      `MULTINODE=YES`,
+      `PRIORITY=SAME`,
+      ''
+    ].filter(Boolean).join('\n');
+
+    // Write .info file to Commands/BBSCmd/
+    const commandsDir = path.join(projectRoot, 'Commands/BBSCmd');
+    if (!fs.existsSync(commandsDir)) {
+      fs.mkdirSync(commandsDir, { recursive: true });
+    }
+
+    const infoPath = path.join(commandsDir, `${bbsCommand}.info`);
+    fs.writeFileSync(infoPath, infoContent);
+    console.log(`✓ Created ${bbsCommand}.info`);
+
+    // Create symlink in doors/ directory
+    const doorsDir = path.join(projectRoot, 'doors');
+    if (!fs.existsSync(doorsDir)) {
+      fs.mkdirSync(doorsDir, { recursive: true });
+    }
+
+    const targetDoorPath = path.join(doorsDir, doorId);
+    if (!fs.existsSync(targetDoorPath)) {
+      fs.symlinkSync(doorPath, targetDoorPath, 'dir');
+      console.log(`✓ Linked to doors/${doorId}`);
+    }
+
+    // Reload BBS command cache via API
+    try {
+      const response = await fetch('http://localhost:3001/api/doors/reload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✓ BBS commands reloaded: ${result.message}`);
+      } else {
+        console.warn(`[WARNING]  Failed to reload BBS commands: ${response.statusText}`);
+      }
+    } catch (err) {
+      console.warn(`[WARNING]  Could not reload BBS commands (is BBS running?): ${err.message}`);
+    }
+
+    return {
+      success: true,
+      message: `Installed ${bbsCommand} to BBS (Command: ${bbsCommand})`
+    };
+
+  } catch (error) {
+    console.error(`[ERROR] Error installing door to BBS:`, error);
+    return {
+      success: false,
+      message: `Failed to install: ${error.message}`
+    };
+  }
+}
 
 /**
  * Kill any existing servers on the port before starting
  */
 function killOldServers() {
   try {
-    console.log(`🔍 Checking for existing servers on port ${PORT}...`);
+    console.log(`[DEBUG] Checking for existing servers on port ${PORT}...`);
 
     // Try to find and kill any process on the port
     const findCmd = `lsof -ti:${PORT}`;
@@ -60,16 +149,16 @@ function killOldServers() {
         const sleep = (ms) => execSync(`sleep ${ms / 1000}`, { stdio: 'ignore' });
         sleep(1000);
 
-        console.log('✅ Old servers killed');
+        console.log('[OK] Old servers killed');
       } else {
-        console.log('✅ No old servers found');
+        console.log('[OK] No old servers found');
       }
     } catch (err) {
       // No process found on port (lsof returns non-zero when nothing found)
-      console.log('✅ No old servers found');
+      console.log('[OK] No old servers found');
     }
   } catch (err) {
-    console.warn('⚠️  Could not check for old servers:', err.message);
+    console.warn('[WARNING]  Could not check for old servers:', err.message);
   }
 }
 
@@ -88,13 +177,13 @@ async function compileExamples() {
     let color = '';
     const reset = '\x1b[0m';
 
-    if (level === 'error' || message.includes('⚠️')) {
+    if (level === 'error' || message.includes('[WARNING]')) {
       color = '\x1b[33m'; // Yellow for warnings
-    } else if (message.includes('✅')) {
+    } else if (message.includes('[OK]')) {
       color = '\x1b[32m'; // Green for success
-    } else if (message.includes('📦')) {
+    } else if (message.includes('[PACKAGE]')) {
       color = '\x1b[36m'; // Cyan for progress
-    } else if (message.includes('🚀')) {
+    } else if (message.includes('[START]')) {
       color = '\x1b[35m'; // Magenta for important
     } else {
       color = '\x1b[90m'; // Gray for info
@@ -118,7 +207,7 @@ async function compileExamples() {
     }
   };
 
-  broadcast('\x1b[36m✨ Compiling example games...\x1b[0m');
+  broadcast('\x1b[36m[BUILD] Compiling example games...\x1b[0m');
   broadcast('');
 
   let compileErrors = 0;
@@ -140,7 +229,7 @@ async function compileExamples() {
       return { name: exampleName, success: true, skipped: true };
     }
 
-    broadcast(`  📦 Type-checking ${exampleName}...`);
+    broadcast(`  [PACKAGE] Type-checking ${exampleName}...`);
 
     try {
       // Run TypeScript compiler in type-check mode (non-blocking)
@@ -149,12 +238,12 @@ async function compileExamples() {
         timeout: 30000, // 30 second timeout
       });
 
-      broadcast(`  ✅ ${exampleName} type-checked successfully`);
+      broadcast(`  [OK] ${exampleName} type-checked successfully`);
       broadcast('');
       return { name: exampleName, success: true };
     } catch (error) {
       // Type errors are non-fatal
-      broadcast(`  ⚠️  ${exampleName} has type errors (non-fatal)`);
+      broadcast(`  [WARNING]  ${exampleName} has type errors (non-fatal)`);
       broadcast('');
       return { name: exampleName, success: false };
     }
@@ -165,13 +254,13 @@ async function compileExamples() {
   compileErrors = results.filter(r => !r.success && !r.skipped).length;
 
   if (compileErrors > 0) {
-    broadcast(`⚠️  Warning: ${compileErrors} game(s) have TypeScript errors`);
+    broadcast(`[WARNING]  Warning: ${compileErrors} game(s) have TypeScript errors`);
     broadcast('   The preview server is running, but these games may not work correctly');
     broadcast('');
   }
 
-  broadcast('🚀 Starting preview server...');
-  broadcast('📦 Serving React frontend from public/');
+  broadcast('[START] Starting preview server...');
+  broadcast('[PACKAGE] Serving React frontend from public/');
   broadcast('');
 }
 
@@ -203,10 +292,10 @@ app.use((req, res, next) => {
 const publicReactDir = path.join(__dirname, 'public-react');
 const publicDir = path.join(__dirname, 'public');
 if (fs.existsSync(publicReactDir)) {
-  console.log('📦 Serving React frontend from public-react/');
+  console.log('[PACKAGE] Serving React frontend from public-react/');
   app.use(express.static(publicReactDir));
 } else {
-  console.log('📦 Serving classic frontend from public/');
+  console.log('[PACKAGE] Serving classic frontend from public/');
   app.use(express.static(publicDir));
 }
 
@@ -431,7 +520,7 @@ app.post('/api/doors/:doorId/build', (req, res) => {
       return res.status(404).json({ error: 'Door not found' });
     }
 
-    console.log(`🔨 Building door: ${doorId}`);
+    console.log(`[BUILD] Building door: ${doorId}`);
 
     const tsc = spawn('npx', ['tsc', '--noEmit'], {
       cwd: doorPath,
@@ -499,7 +588,7 @@ app.post('/api/ai-prompt', async (req, res) => {
       return res.status(404).json({ error: 'Door not found' });
     }
 
-    console.log(`🤖 AI prompt for ${doorId}: ${prompt.substring(0, 50)}...`);
+    console.log(`[AI] AI prompt for ${doorId}: ${prompt.substring(0, 50)}...`);
 
     // Build context for AI
     let context = `You are an expert TypeScript developer helping to improve a BBS door game for the AmiExpress SDK.
@@ -754,7 +843,7 @@ app.post('/api/doors/:doorId/release', upload.array('extraFiles'), async (req, r
 
     // Get uploaded files from multer
     const extraFiles = req.files || [];
-    console.log(`📦 Creating release with ${extraFiles.length} extra file(s)`);
+    console.log(`[PACKAGE] Creating release with ${extraFiles.length} extra file(s)`);
 
     const doorPath = path.join(__dirname, '../../examples', doorId);
 
@@ -772,7 +861,7 @@ app.post('/api/doors/:doorId/release', upload.array('extraFiles'), async (req, r
     const filename = `${doorId}-v${version}.${format}`;
     const outputPath = path.join(downloadsDir, filename);
 
-    console.log(`📦 Creating release: ${filename}`);
+    console.log(`[PACKAGE] Creating release: ${filename}`);
 
     if (format === 'zip') {
       const AdmZip = require('adm-zip');
@@ -1040,7 +1129,7 @@ app.post('/api/doors/:doorId/install', async (req, res) => {
 
     copyRecursive(sdkDoorPath, bbsDoorsPath);
 
-    console.log(`✅ Door installed to BBS: ${doorId}`);
+    console.log(`[OK] Door installed to BBS: ${doorId}`);
 
     // Hot-reload doors in BBS backend without restart
     console.log(`🔄 Hot-reloading BBS doors...`);
@@ -1075,7 +1164,7 @@ app.post('/api/doors/:doorId/install', async (req, res) => {
         req.end();
       });
 
-      console.log(`✅ Doors reloaded: ${reloadResult.message}`);
+      console.log(`[OK] Doors reloaded: ${reloadResult.message}`);
 
       res.json({
         success: true,
@@ -1085,7 +1174,7 @@ app.post('/api/doors/:doorId/install', async (req, res) => {
         doorsReloaded: reloadResult.doorsReloaded
       });
     } catch (reloadError) {
-      console.warn(`⚠️  Door installed but hot-reload failed:`, reloadError.message);
+      console.warn(`[WARNING]  Door installed but hot-reload failed:`, reloadError.message);
       console.warn(`   Backend restart required for door to be available`);
 
       res.json({
@@ -1134,7 +1223,7 @@ app.delete('/api/doors/:doorId/install', (req, res) => {
 
     removeRecursive(bbsDoorsPath);
 
-    console.log(`✅ Door uninstalled from BBS: ${doorId}`);
+    console.log(`[OK] Door uninstalled from BBS: ${doorId}`);
 
     res.json({
       success: true,
@@ -1167,12 +1256,16 @@ app.get('/api/doors/:doorId/nfo', (req, res) => {
 
     if (nfoFiles.length === 0) {
       // Return empty template if no .nfo file exists
+      const doorName = doorId.toUpperCase();
+      const titleLine = ' '.repeat(Math.floor((76 - doorName.length) / 2)) + doorName;
+      const titlePadding = ' '.repeat(76 - titleLine.length);
+
       return res.json({
         exists: false,
         filename: `${doorId}.nfo`,
         content: `╔════════════════════════════════════════════════════════════════════════════╗
 ║                                                                            ║
-║                            ${doorId.toUpperCase()}                                ║
+║${titleLine}${titlePadding}║
 ║                                                                            ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 
@@ -1381,7 +1474,7 @@ app.post('/api/games/generate', async (req, res) => {
       return res.status(400).json({ error: 'Name and description are required' });
     }
 
-    console.log(`🎮 Generating game: ${name}`);
+    console.log(`[GAME] Generating game: ${name}`);
 
     // Use provided API key or server environment variable
     const claudeApiKey = apiKey || process.env.ANTHROPIC_API_KEY;
@@ -1540,13 +1633,13 @@ npm run build
     fs.writeFileSync(path.join(doorPath, 'README.md'), readme);
 
     // Install dependencies
-    console.log(`📦 Installing dependencies for ${doorId}...`);
+    console.log(`[PACKAGE] Installing dependencies for ${doorId}...`);
     execSync('npm install', {
       cwd: doorPath,
       stdio: 'ignore',
     });
 
-    console.log(`✅ Game created: ${doorId}`);
+    console.log(`[OK] Game created: ${doorId}`);
 
     res.json({
       success: true,
@@ -1578,7 +1671,7 @@ app.post('/api/games/generate-stream', async (req, res) => {
       return res.status(400).json({ error: 'Name and description are required' });
     }
 
-    console.log(`🎮 Generating game: ${name} (${provider}/${model})`);
+    console.log(`[GAME] Generating game: ${name} (${provider}/${model})`);
 
     // Set up SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1827,7 +1920,7 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
 
       let response;
       try {
-        console.log(`[OpenRouter] 🚀 Initiating fetch to https://openrouter.ai/api/v1/chat/completions...`);
+        console.log(`[OpenRouter] [START] Initiating fetch to https://openrouter.ai/api/v1/chat/completions...`);
         const fetchStartTime = Date.now();
 
         response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -1848,12 +1941,12 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
         });
 
         const fetchDuration = Date.now() - fetchStartTime;
-        console.log(`[OpenRouter] ✅ Fetch completed in ${fetchDuration}ms`);
+        console.log(`[OpenRouter] [OK] Fetch completed in ${fetchDuration}ms`);
         clearTimeout(timeoutId);
       } catch (error) {
         const fetchDuration = Date.now() - fetchStartTime;
         clearTimeout(timeoutId);
-        console.error(`[OpenRouter] ❌ Fetch error after ${fetchDuration}ms:`, error);
+        console.error(`[OpenRouter] [ERROR] Fetch error after ${fetchDuration}ms:`, error);
         console.error(`[OpenRouter] Error name: ${error.name}`);
         console.error(`[OpenRouter] Error message: ${error.message}`);
         console.error(`[OpenRouter] Error stack:`, error.stack);
@@ -2101,11 +2194,11 @@ npm run build
     sendProgress(80, 'Installing dependencies...');
 
     // Install dependencies
-    console.log(`📦 Installing dependencies for ${doorId}...`);
+    console.log(`[PACKAGE] Installing dependencies for ${doorId}...`);
     execSync('npm install', { cwd: doorPath, stdio: 'ignore' });
 
     sendProgress(100, 'Complete!');
-    console.log(`✅ Game created: ${doorId}`);
+    console.log(`[OK] Game created: ${doorId}`);
 
     sendComplete(doorId);
 
@@ -2193,7 +2286,7 @@ ${(features || []).map(f => `- ${f}`).join('\n')}
     // Install dependencies
     execSync('npm install', { cwd: doorPath, stdio: 'ignore' });
 
-    console.log(`✅ Game saved: ${doorId}`);
+    console.log(`[OK] Game saved: ${doorId}`);
 
     res.json({
       success: true,
@@ -2223,7 +2316,7 @@ app.post('/api/doors/import', async (req, res) => {
       return res.status(400).json({ error: 'Missing file data or file name' });
     }
 
-    console.log(`📦 Importing door from: ${fileName} (${fileType})`);
+    console.log(`[PACKAGE] Importing door from: ${fileName} (${fileType})`);
 
     // Create temp directory for extraction
     const tempDir = path.join(__dirname, 'temp-import');
@@ -2240,13 +2333,13 @@ app.post('/api/doors/import', async (req, res) => {
 
     // Extract based on file type
     if (fileType === 'application/zip' || fileName.endsWith('.zip')) {
-      console.log('📦 Extracting ZIP archive...');
+      console.log('[PACKAGE] Extracting ZIP archive...');
       const zip = new AdmZip(tempFilePath);
       const extractPath = path.join(tempDir, 'extracted');
       zip.extractAllTo(extractPath, true);
       extractedDir = extractPath;
     } else if (fileType === 'application/x-lzh-compressed' || fileName.endsWith('.lha') || fileName.endsWith('.lzh')) {
-      console.log('📦 Extracting LHA archive...');
+      console.log('[PACKAGE] Extracting LHA archive...');
       // Try to use unlha command if available
       try {
         const extractPath = path.join(tempDir, 'extracted');
@@ -2262,7 +2355,7 @@ app.post('/api/doors/import', async (req, res) => {
         });
       }
     } else if (fileType === 'application/x-lzx' || fileName.endsWith('.lzx')) {
-      console.log('📦 Extracting LZX archive...');
+      console.log('[PACKAGE] Extracting LZX archive...');
       // Try to use unlzx command if available
       try {
         const extractPath = path.join(tempDir, 'extracted');
@@ -2361,7 +2454,7 @@ app.post('/api/doors/import', async (req, res) => {
     }
 
     // Copy door to examples directory
-    console.log(`📦 Installing door to: ${targetDir}`);
+    console.log(`[PACKAGE] Installing door to: ${targetDir}`);
 
     const copyRecursive = (src, dest) => {
       const stat = fs.statSync(src);
@@ -2382,7 +2475,7 @@ app.post('/api/doors/import', async (req, res) => {
     // Clean up temp files
     fs.rmSync(tempDir, { recursive: true, force: true });
 
-    console.log(`✅ Door "${doorId}" imported successfully!`);
+    console.log(`[OK] Door "${doorId}" imported successfully!`);
 
     res.json({
       success: true,
@@ -2469,11 +2562,11 @@ function debugLog(clientOrId, message, level = 'log') {
         color = '\x1b[31m'; // Red
       } else if (message.includes('✓') || message.includes('SUCCESS')) {
         color = '\x1b[32m'; // Green
-      } else if (message.includes('⚠️') || message.includes('WARNING')) {
+      } else if (message.includes('[WARNING]') || message.includes('WARNING')) {
         color = '\x1b[33m'; // Yellow
       } else if (message.includes('📨') || message.includes('📤') || message.includes('➡️')) {
         color = '\x1b[36m'; // Cyan
-      } else if (message.includes('🚀') || message.includes('🛑')) {
+      } else if (message.includes('[START]') || message.includes('🛑')) {
         color = '\x1b[35m'; // Magenta
       } else {
         color = '\x1b[90m'; // Gray
@@ -2490,7 +2583,7 @@ function debugLog(clientOrId, message, level = 'log') {
 }
 
 wss.on('connection', (ws) => {
-  console.log('✅ Client connected');
+  console.log('[OK] Client connected');
 
   const clientId = Date.now();
   clients.set(clientId, {
@@ -2506,7 +2599,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    console.log('❌ Client disconnected');
+    console.log('[ERROR] Client disconnected');
     const client = clients.get(clientId);
     if (client && client.doorProcess) {
       client.doorProcess.kill();
@@ -2533,7 +2626,7 @@ function handleClientMessage(clientId, data) {
 
   const client = clients.get(clientId);
   if (!client) {
-    debugLog(clientId, `❌ [WS MESSAGE] Client ${clientId} not found`, 'error');
+    debugLog(clientId, `[ERROR] [WS MESSAGE] Client ${clientId} not found`, 'error');
     return;
   }
 
@@ -2589,7 +2682,7 @@ function handleClientMessage(clientId, data) {
     );
   } else if (data.type === 'rpc-request') {
     // ClientDoor SDK protocol: door making RPC call
-    debugLog(clientId, `🔧 [CLIENT DOOR RPC] Request: ${data.method}`);
+    debugLog(clientId, `[CONFIG] [CLIENT DOOR RPC] Request: ${data.method}`);
     // For now, send error response - RPC handlers can be added later
     client.ws.send(
       JSON.stringify({
@@ -2603,7 +2696,7 @@ function handleClientMessage(clientId, data) {
     );
   } else if (data.type === 'door-message') {
     // Wrapped door message from client door (via socket.io wrapper)
-    debugLog(clientId, `📦 [DOOR MESSAGE] Unwrapping door message, event: ${data.event}`);
+    debugLog(clientId, `[PACKAGE] [DOOR MESSAGE] Unwrapping door message, event: ${data.event}`);
 
     // Extract the inner message from the wrapped format
     // Structure: { type: 'door-message', event: 'door:client:message', data: { sessionId, message } }
@@ -2614,10 +2707,10 @@ function handleClientMessage(clientId, data) {
       // Recursively handle the unwrapped message
       handleClientMessage(clientId, innerMessage);
     } else {
-      debugLog(clientId, `   ⚠️  No inner message found in door-message wrapper`, 'error');
+      debugLog(clientId, `   [WARNING]  No inner message found in door-message wrapper`, 'error');
     }
   } else {
-    debugLog(clientId, `⚠️  [WS MESSAGE] Unknown message type: ${data.type}`);
+    debugLog(clientId, `[WARNING]  [WS MESSAGE] Unknown message type: ${data.type}`);
   }
 }
 
@@ -2828,7 +2921,7 @@ function buildDoor(clientId, doorId) {
       return;
     }
 
-    console.log(`🔨 Building door: ${doorId}`);
+    console.log(`[BUILD] Building door: ${doorId}`);
 
     // Send initial build status
     client.ws.send(
@@ -2934,7 +3027,7 @@ function buildDoor(clientId, doorId) {
         verifyStderr += data.toString();
       });
 
-      verify.on('close', (verifyCode) => {
+      verify.on('close', async (verifyCode) => {
         const duration = Date.now() - startTime;
 
         // Parse runtime errors from ts-node output
@@ -2973,6 +3066,16 @@ function buildDoor(clientId, doorId) {
         if (success) {
           console.log(`✓ Build successful: ${doorId} (${duration}ms)`);
 
+          // Install door to BBS (generate .info, create symlink, reload commands)
+          console.log(`[PACKAGE] Installing ${doorId} to BBS...`);
+          const installResult = await installDoorToBBS(doorId);
+
+          if (installResult.success) {
+            console.log(`✓ ${installResult.message}`);
+          } else {
+            console.warn(`[WARNING]  ${installResult.message}`);
+          }
+
           // Auto-launch door in BBS terminal after successful build
           // Read bbsCommand from package.json
           const doorPath = path.join(__dirname, '../../examples', doorId);
@@ -2984,11 +3087,11 @@ function buildDoor(clientId, doorId) {
               const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
               bbsCommand = pkg.bbsCommand || doorId.toUpperCase();
             } catch (err) {
-              console.warn(`⚠️  Could not read bbsCommand from ${pkgPath}`);
+              console.warn(`[WARNING]  Could not read bbsCommand from ${pkgPath}`);
             }
           }
 
-          console.log(`🚀 Auto-launching door in BBS: ${doorId} (command: ${bbsCommand})`);
+          console.log(`[START] Auto-launching door in BBS: ${doorId} (command: ${bbsCommand})`);
           client.ws.send(
             JSON.stringify({
               type: 'auto-launch',
@@ -3142,7 +3245,7 @@ async function startClientDoor(clientId, doorId, doorPath) {
   const client = clients.get(clientId);
   if (!client) return;
 
-  debugLog(clientId, `📦 [CLIENT DOOR] Bundling ${doorId} for browser...`);
+  debugLog(clientId, `[PACKAGE] [CLIENT DOOR] Bundling ${doorId} for browser...`);
 
   try {
     // Bundle with esbuild for browser
@@ -3155,7 +3258,7 @@ async function startClientDoor(clientId, doorId, doorPath) {
 
     const outfile = path.join(doorPath, '.preview-bundle.js');
 
-    debugLog(clientId, `🔨 [CLIENT DOOR] Building bundle...`);
+    debugLog(clientId, `[BUILD] [CLIENT DOOR] Building bundle...`);
     await esbuild.build({
       entryPoints: [entryFile],
       bundle: true,
@@ -3225,7 +3328,7 @@ async function startClientDoor(clientId, doorId, doorPath) {
       ],
     });
 
-    debugLog(clientId, `✅ [CLIENT DOOR] Bundle created: ${outfile}`);
+    debugLog(clientId, `[OK] [CLIENT DOOR] Bundle created: ${outfile}`);
 
     // Read the bundled code
     const bundledCode = fs.readFileSync(outfile, 'utf8');
@@ -3238,7 +3341,7 @@ async function startClientDoor(clientId, doorId, doorPath) {
       code: bundledCode,
     }));
 
-    debugLog(clientId, `✅ [CLIENT DOOR] Bundle sent to browser, door will execute there`);
+    debugLog(clientId, `[OK] [CLIENT DOOR] Bundle sent to browser, door will execute there`);
 
     // Send door-started message
     client.ws.send(JSON.stringify({
@@ -3269,7 +3372,7 @@ async function startClientDoor(clientId, doorId, doorPath) {
     }, 100); // Small delay to ensure bundle is loaded and executed
 
   } catch (err) {
-    debugLog(clientId, `❌ [CLIENT DOOR] Bundling failed: ${err.message}`, 'error');
+    debugLog(clientId, `[ERROR] [CLIENT DOOR] Bundling failed: ${err.message}`, 'error');
     debugLog(clientId, `   Stack: ${err.stack}`, 'error');
 
     client.ws.send(JSON.stringify({
@@ -3284,19 +3387,19 @@ async function startClientDoor(clientId, doorId, doorPath) {
  */
 function startDoor(clientId, doorId) {
   debugLog(clientId, `\n${'='.repeat(80)}`);
-  debugLog(clientId, `🚀 [START DOOR] Called for clientId=${clientId}, doorId="${doorId}"`);
+  debugLog(clientId, `[START] [START DOOR] Called for clientId=${clientId}, doorId="${doorId}"`);
   debugLog(clientId, `${'='.repeat(80)}`);
 
   const client = clients.get(clientId);
   if (!client) {
-    debugLog(clientId, `❌ [START DOOR] Client ${clientId} not found in clients map`, 'error');
+    debugLog(clientId, `[ERROR] [START DOOR] Client ${clientId} not found in clients map`, 'error');
     return;
   }
   debugLog(clientId, `✓ [START DOOR] Client ${clientId} found`);
 
   // Stop existing door
   if (client.doorProcess) {
-    debugLog(clientId, `⚠️  [START DOOR] Existing door process found (PID: ${client.doorProcess.pid}), killing it...`);
+    debugLog(clientId, `[WARNING]  [START DOOR] Existing door process found (PID: ${client.doorProcess.pid}), killing it...`);
     client.doorProcess.kill();
   }
 
@@ -3312,28 +3415,28 @@ function startDoor(clientId, doorId) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       runtime = pkg.runtime || 'server';
-      debugLog(clientId, `📦 [START DOOR] Runtime type: ${runtime}`);
+      debugLog(clientId, `[PACKAGE] [START DOOR] Runtime type: ${runtime}`);
     } catch (err) {
-      debugLog(clientId, `⚠️  [START DOOR] Could not read package.json, assuming server runtime`, 'warn');
+      debugLog(clientId, `[WARNING]  [START DOOR] Could not read package.json, assuming server runtime`, 'warn');
     }
   }
 
   // Handle client doors differently
   if (runtime === 'client') {
-    debugLog(clientId, `🌐 [START DOOR] CLIENT DOOR detected - bundling for browser...`);
+    debugLog(clientId, `[WEB] [START DOOR] CLIENT DOOR detected - bundling for browser...`);
     startClientDoor(clientId, doorId, doorPath);
     return;
   }
 
   // Server door: continue with Node.js execution
-  debugLog(clientId, `🖥️  [START DOOR] SERVER DOOR detected - spawning Node.js process...`);
+  debugLog(clientId, `[SERVER]  [START DOOR] SERVER DOOR detected - spawning Node.js process...`);
 
   // Check for TypeScript or JavaScript
   const tsFile = path.join(doorPath, 'index.ts');
   const jsFile = path.join(doorPath, 'index.js');
   const distFile = path.join(doorPath, 'dist', 'index.js');
 
-  debugLog(clientId, `🔍 [START DOOR] Checking for entry files...`);
+  debugLog(clientId, `[DEBUG] [START DOOR] Checking for entry files...`);
   debugLog(clientId, `   - index.ts exists: ${fs.existsSync(tsFile)}`);
   debugLog(clientId, `   - index.js exists: ${fs.existsSync(jsFile)}`);
   debugLog(clientId, `   - dist/index.js exists: ${fs.existsSync(distFile)}`);
@@ -3359,7 +3462,7 @@ function startDoor(clientId, doorId) {
     mainFile = jsFile;
     debugLog(clientId, `✓ [START DOOR] Using JavaScript entry: ${mainFile}`);
   } else {
-    debugLog(clientId, `❌ [START DOOR] No entry file found!`, 'error');
+    debugLog(clientId, `[ERROR] [START DOOR] No entry file found!`, 'error');
     debugLog(clientId, `   Checked paths:`, 'error');
     debugLog(clientId, `   - ${tsFile}`, 'error');
     debugLog(clientId, `   - ${jsFile}`, 'error');
@@ -3377,10 +3480,10 @@ function startDoor(clientId, doorId) {
     return;
   }
 
-  debugLog(clientId, `🔧 [START DOOR] Command: ${command}`);
-  debugLog(clientId, `🔧 [START DOOR] Args: ${JSON.stringify(args)}`);
-  debugLog(clientId, `🔧 [START DOOR] CWD: ${doorPath}`);
-  debugLog(clientId, `🔧 [START DOOR] Environment: PREVIEW_MODE=1`);
+  debugLog(clientId, `[CONFIG] [START DOOR] Command: ${command}`);
+  debugLog(clientId, `[CONFIG] [START DOOR] Args: ${JSON.stringify(args)}`);
+  debugLog(clientId, `[CONFIG] [START DOOR] CWD: ${doorPath}`);
+  debugLog(clientId, `[CONFIG] [START DOOR] Environment: PREVIEW_MODE=1`);
 
   let doorProcess;
 
@@ -3397,7 +3500,7 @@ function startDoor(clientId, doorId) {
     client.currentDoor = doorId;
     debugLog(clientId, `✓ [START DOOR] Client state updated (currentDoor="${doorId}")`);
   } catch (error) {
-    debugLog(clientId, `❌ [START DOOR] Failed to spawn process: ${error.message}`, 'error');
+    debugLog(clientId, `[ERROR] [START DOOR] Failed to spawn process: ${error.message}`, 'error');
     client.ws.send(
       JSON.stringify({
         type: 'error',
@@ -3451,7 +3554,7 @@ function startDoor(clientId, doorId) {
   // Handle process errors (like EAGAIN)
   doorProcess.on('error', (error) => {
     debugLog(clientId, `\n${'='.repeat(80)}`);
-    debugLog(clientId, `❌ [PROCESS ERROR] Door process error`);
+    debugLog(clientId, `[ERROR] [PROCESS ERROR] Door process error`);
     debugLog(clientId, `   Door: ${doorId}`);
     debugLog(clientId, `   Error: ${error.message}`);
     debugLog(clientId, `   Stack: ${error.stack}`);
@@ -3502,7 +3605,7 @@ function startDoor(clientId, doorId) {
   });
 
   watcher.on('change', (filePath) => {
-    debugLog(clientId, `📝 [WATCH] File changed: ${filePath}`);
+    debugLog(clientId, `[NOTE] [WATCH] File changed: ${filePath}`);
     debugLog(clientId, `🔄 [WATCH] Triggering hot reload...`);
 
     client.ws.send(
@@ -3521,7 +3624,7 @@ function startDoor(clientId, doorId) {
   });
 
   watcher.on('error', (error) => {
-    debugLog(clientId, `❌ [WATCH] Watcher error: ${error.message}`, 'error');
+    debugLog(clientId, `[ERROR] [WATCH] Watcher error: ${error.message}`, 'error');
   });
 
   client.watcher = watcher;
@@ -3592,18 +3695,22 @@ function stopDoor(clientId) {
 
 // Start server
 server.listen(PORT, async () => {
+  const serverUrl = `http://localhost:${PORT}`;
+  const urlLine = `   Server running at: ${serverUrl}`;
+  const urlPadding = ' '.repeat(64 - urlLine.length);
+
   console.log(`
 ╔════════════════════════════════════════════════════════════════╗
 ║                                                                ║
-║   🎮  AmiExpress BBS Door Preview Server                       ║
+║   [GAME]  AmiExpress BBS Door Preview Server                   ║
 ║                                                                ║
-║   Server running at: http://localhost:${PORT}                     ║
+║${urlLine}${urlPadding}║
 ║                                                                ║
 ║   Features:                                                    ║
-║   ✓ Live ANSI rendering                                        ║
-║   ✓ Real-time keyboard input                                   ║
-║   ✓ Hot reload on file changes                                 ║
-║   ✓ Debug console                                              ║
+║   [OK] Live ANSI rendering                                     ║
+║   [OK] Real-time keyboard input                                ║
+║   [OK] Hot reload on file changes                              ║
+║   [OK] Debug console                                           ║
 ║                                                                ║
 ║   Open your browser and start testing!                         ║
 ║                                                                ║

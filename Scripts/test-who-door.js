@@ -13,7 +13,7 @@ async function sleep(ms) {
 }
 
 async function testWhoDoor() {
-  console.log('🚀 Starting AquaWho door test...\n');
+  console.log('[START] Starting AquaWho door test...\n');
 
   const browser = await puppeteer.launch({
     headless: false,
@@ -27,7 +27,7 @@ async function testWhoDoor() {
     page.on('console', msg => {
       const type = msg.type();
       if (type === 'error') {
-        console.log('❌ Browser error:', msg.text());
+        console.log('[ERROR] Browser error:', msg.text());
       }
     });
 
@@ -47,7 +47,7 @@ async function testWhoDoor() {
     await page.keyboard.press('Enter');
     await sleep(2000);
 
-    console.log('✅ Logged in\n');
+    console.log('[OK] Logged in\n');
 
     console.log('📋 Getting to main menu...');
     await page.keyboard.press('Enter');
@@ -66,32 +66,32 @@ async function testWhoDoor() {
     });
 
     if (terminalContent.includes('AquaWho') || terminalContent.includes('Who is online')) {
-      console.log('✅ WHO door launched!');
+      console.log('[OK] WHO door launched!');
       await sleep(5000);
       console.log('🚪 Exiting door...');
       await page.keyboard.press('q');
       await sleep(2000);
     } else if (terminalContent.includes('Command not found') || terminalContent.includes('Unknown command')) {
-      console.log('❌ WHO door NOT installed');
-      console.log('\n📝 To install:');
+      console.log('[ERROR] WHO door NOT installed');
+      console.log('\n[NOTE] To install:');
       console.log('   Create BBS/Commands/BBSCmd/WHO.info with:');
       console.log('   TYPE=DOOR');
       console.log('   LOCATION=Doors:AquaWho/AquaWho');
       console.log('   SECURITY=10');
       console.log('   DESCRIPTION=View who is online\n');
     } else {
-      console.log('⚠️  Unexpected response');
+      console.log('[WARNING]  Unexpected response');
       console.log('Last 500 chars:', terminalContent.substring(terminalContent.length - 500));
     }
 
-    console.log('\n⏳ Waiting 10 seconds (you can test manually)...');
+    console.log('\n[WAIT] Waiting 10 seconds (you can test manually)...');
     await sleep(10000);
 
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
+    console.error('[ERROR] Test failed:', error.message);
   } finally {
     await browser.close();
-    console.log('\n✅ Test complete');
+    console.log('\n[OK] Test complete');
   }
 }
 

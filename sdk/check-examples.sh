@@ -7,9 +7,9 @@ for dir in examples/*/; do
   cd "$dir"
   npx tsc --noEmit > /dev/null 2>&1
   if [ $? -eq 0 ]; then
-    echo "✓ OK"
+    echo "[OK] OK"
   else
-    echo "✗ ERRORS"
+    echo "[ERROR] ERRORS"
     ERRORS=$((ERRORS + 1))
   fi
   cd - > /dev/null

@@ -123,12 +123,13 @@ export const DoorInfo: React.FC<DoorInfoProps> = ({ metadata, className = '' }) 
         {metadata.bbsCommand && (
           <div className="pt-4 border-t border-gray-700">
             <h4 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-gray-400" />
+              <Terminal className="w-4 h-4 text-green-400" />
               BBS Command
             </h4>
-            <code className="block text-xs text-green-400 bg-gray-800 px-2 py-1 rounded font-mono">
-              /{metadata.bbsCommand}
+            <code className="block text-sm text-green-400 bg-gray-800 px-3 py-2 rounded font-mono font-bold">
+              {metadata.bbsCommand}
             </code>
+            <p className="text-xs text-gray-500 mt-1">Type this command in the BBS terminal</p>
           </div>
         )}
 

@@ -153,7 +153,7 @@ async function testDoor() {
     console.log('To view: cat', BACKEND_LOG, '| grep -E "Restored|DOOR|stuck|PC=0x9"\n');
 
     if (!hasDoorMessage) {
-      console.log('⚠️  Door did not send messages. Next steps:');
+      console.log('[WARNING]  Door did not send messages. Next steps:');
       console.log('   1. Check where door is stuck now');
       console.log('   2. Verify argc/argv were actually restored');
       console.log('   3. Look for other register corruption');

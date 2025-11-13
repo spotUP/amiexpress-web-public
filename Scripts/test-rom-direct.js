@@ -24,15 +24,15 @@ async function test() {
       timeout: 30
     };
 
-    console.log('🚀 Creating door session...');
+    console.log('[START] Creating door session...');
     const session = new AmigaDoorSession(mockSocket, config);
 
     console.log('🎬 Starting ROM boot...\n');
     await session.start();
 
-    console.log('\n✅ ROM boot test completed!');
+    console.log('\n[OK] ROM boot test completed!');
   } catch (error) {
-    console.error('\n❌ ROM boot test failed:');
+    console.error('\n[ERROR] ROM boot test failed:');
     console.error(error.message);
     console.error(error.stack);
     process.exit(1);

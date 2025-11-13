@@ -14,10 +14,10 @@ for dir in examples/*/; do
   cd "$dir"
 
   if npm run build 2>&1 | grep -q "error TS"; then
-    echo "❌ FAILED: $name"
+    echo "[ERROR] FAILED: $name"
     failed=$((failed + 1))
   else
-    echo "✓ SUCCESS: $name"
+    echo "[OK] SUCCESS: $name"
     success=$((success + 1))
   fi
 

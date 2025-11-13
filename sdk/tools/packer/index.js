@@ -71,8 +71,8 @@ class ReleasePacker {
         const archive = (0, archiver_1.default)('zip', { zlib: { level: 9 } });
         return new Promise((resolve, reject) => {
             output.on('close', () => {
-                console.log(`✅ Release created: ${outputFile}`);
-                console.log(`📦 Size: ${archive.pointer()} bytes`);
+                console.log(`[OK] Release created: ${outputFile}`);
+                console.log(`[PACKAGE] Size: ${archive.pointer()} bytes`);
                 resolve(outputFile);
             });
             archive.on('error', (err) => reject(err));
@@ -286,7 +286,7 @@ async function main(doorName) {
     const doorPath = path.join(process.cwd(), 'examples', doorName);
     const packagePath = path.join(doorPath, 'package.json');
     if (!fs.existsSync(packagePath)) {
-        console.error(`❌ Error: Could not find ${doorName} in examples/`);
+        console.error(`[ERROR] Error: Could not find ${doorName} in examples/`);
         process.exit(1);
     }
     const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
@@ -299,9 +299,9 @@ async function main(doorName) {
         sourceDir: doorPath,
         outputDir: path.join(process.cwd(), 'releases'),
     });
-    console.log(`📦 Packing ${doorName}...`);
+    console.log(`[PACKAGE] Packing ${doorName}...`);
     const outputFile = await packer.pack();
-    console.log(`\n✨ Success! Release ready: ${outputFile}`);
+    console.log(`\n[BUILD] Success! Release ready: ${outputFile}`);
 }
 exports.main = main;
 // Run if called directly

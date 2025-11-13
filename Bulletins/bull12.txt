@@ -1,0 +1,15 @@
+================================================================
+                   SYSTEM INFORMATION
+================================================================
+
+BBS Name: AmiExpress Web BBS
+Software: AmiExpress 3.xx (Web Port)
+Sysop: TestSysop
+
+Nodes: 4 nodes available
+Storage: 4.5 GB online
+
+Running on: Modern web infrastructure
+Emulating: Amiga 68000 CPU with MOIRA
+
+Last updated: November 12, 2025

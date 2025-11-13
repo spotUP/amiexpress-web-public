@@ -68,15 +68,15 @@ trap cleanup EXIT INT TERM
 echo -e "${BLUE}[1/3] Installing dependencies...${NC}"
 if ! node -e "require('socket.io-client')" 2>/dev/null; then
     npm install socket.io-client --silent
-    echo -e "${GREEN}      ✓ Installed${NC}"
+    echo -e "${GREEN}      [OK] Installed${NC}"
 else
-    echo -e "${GREEN}      ✓ Already installed${NC}"
+    echo -e "${GREEN}      [OK] Already installed${NC}"
 fi
 echo ""
 
 echo -e "${BLUE}[2/3] Starting BBS server...${NC}"
 if curl -s -f "$SERVER_URL" > /dev/null 2>&1; then
-    echo -e "${GREEN}      ✓ Server already running${NC}"
+    echo -e "${GREEN}      [OK] Server already running${NC}"
 else
     echo -e "${YELLOW}      Starting server from web/backend...${NC}"
     cd "$SCRIPT_DIR/web/backend"
@@ -95,20 +95,20 @@ else
     WAIT_COUNT=0
     while [ $WAIT_COUNT -lt 60 ]; do
         if curl -s -f "$SERVER_URL" > /dev/null 2>&1; then
-            echo -e "${GREEN}      ✓ Server ready${NC}"
+            echo -e "${GREEN}      [OK] Server ready${NC}"
             break
         fi
         sleep 0.5
         WAIT_COUNT=$((WAIT_COUNT + 1))
         
         if ! kill -0 $SERVER_PID 2>/dev/null; then
-            echo -e "${RED}      ✗ Server died - check /tmp/bbs-server.log${NC}"
+            echo -e "${RED}      [ERROR] Server died - check /tmp/bbs-server.log${NC}"
             exit 1
         fi
     done
     
     if [ $WAIT_COUNT -ge 60 ]; then
-        echo -e "${RED}      ✗ Server timeout${NC}"
+        echo -e "${RED}      [ERROR] Server timeout${NC}"
         exit 1
     fi
 fi

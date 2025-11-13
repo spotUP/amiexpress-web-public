@@ -1,0 +1,7 @@
+BBSCMD=BLESSEDDEMO
+TYPE=TS
+LOCATION=doors/blessed-contrib-demos
+DESCRIPTION=Showcase blessed-contrib widgets in BBS doors
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

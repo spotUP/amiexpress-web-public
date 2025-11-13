@@ -26,7 +26,7 @@ print_step() {
 }
 
 print_success() {
-    echo -e "${GREEN}✓${NC} $1"
+    echo -e "${GREEN}[OK]${NC} $1"
 }
 
 print_error() {
@@ -295,7 +295,7 @@ fi
 # Summary
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}✓ Development servers started successfully!${NC}"
+echo -e "${GREEN}[OK] Development servers started successfully!${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
 echo ""
 echo -e "${BLUE}Services:${NC}"

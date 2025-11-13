@@ -1,0 +1,19 @@
+================================================================
+                    BULLETIN SYSTEM HELP
+================================================================
+
+The Bulletin System allows you to read important announcements
+and information posted by the Sysop and other users.
+
+Available Bulletins:
+
+  1  - Top Uploaders
+  2  - Top Downloaders
+  6  - Last Callers
+  12 - System Information
+
+To read a bulletin, select its number from the menu.
+
+Press Q to quit and return to the main menu.
+
+================================================================

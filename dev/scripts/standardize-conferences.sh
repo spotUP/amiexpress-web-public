@@ -70,7 +70,7 @@ EOF
         echo "  Created NDIRS (set to 3 directories)"
     fi
     
-    echo "  ✓ $CONF_DIR standardized"
+    echo "  [OK] $CONF_DIR standardized"
 done
 
 echo ""

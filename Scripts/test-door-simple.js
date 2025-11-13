@@ -63,7 +63,7 @@ async function testDoor() {
     await sleep(120000);
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('[ERROR] Error:', error);
   } finally {
     await browser.close();
   }

@@ -174,7 +174,7 @@ async function testGetAnswerDoor() {
     if (totalFound === totalExpected) {
       console.log('\n✓ SUCCESS: All library trap messages detected!');
     } else if (totalFound > 0) {
-      console.log('\n⚠ PARTIAL: Some library trap messages detected');
+      console.log('\n[WARNING] PARTIAL: Some library trap messages detected');
     } else {
       console.log('\n✗ FAILURE: No library trap messages detected');
     }

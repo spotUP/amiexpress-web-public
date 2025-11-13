@@ -82,11 +82,11 @@ trap cleanup EXIT INT TERM
 
 echo -e "${BLUE}[1/5] Checking project structure...${NC}"
 if [ ! -f "$SCRIPT_DIR/web/backend/src/index.ts" ] && [ ! -f "$SCRIPT_DIR/web/backend/src/index.js" ]; then
-    echo -e "${RED}      ✗ Backend source not found${NC}"
+    echo -e "${RED}      [ERROR] Backend source not found${NC}"
     echo -e "${YELLOW}      Make sure you're in the project root directory${NC}"
     exit 1
 fi
-echo -e "${GREEN}      ✓ Project structure OK${NC}"
+echo -e "${GREEN}      [OK] Project structure OK${NC}"
 echo ""
 
 echo -e "${BLUE}[2/5] Installing dependencies...${NC}"
@@ -102,13 +102,13 @@ if ! node -e "require('socket.io-client')" 2>/dev/null; then
     echo -e "${YELLOW}      Installing socket.io-client...${NC}"
     npm install socket.io-client --silent
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}      ✓ socket.io-client installed${NC}"
+        echo -e "${GREEN}      [OK] socket.io-client installed${NC}"
     else
-        echo -e "${RED}      ✗ Failed to install socket.io-client${NC}"
+        echo -e "${RED}      [ERROR] Failed to install socket.io-client${NC}"
         exit 1
     fi
 else
-    echo -e "${GREEN}      ✓ socket.io-client already installed${NC}"
+    echo -e "${GREEN}      [OK] socket.io-client already installed${NC}"
 fi
 echo ""
 
@@ -116,14 +116,14 @@ echo -e "${BLUE}[3/5] Checking/starting BBS server...${NC}"
 
 # Check if server is already running
 if curl -s -f "$SERVER_URL" > /dev/null 2>&1; then
-    echo -e "${GREEN}      ✓ Server already running at $SERVER_URL${NC}"
+    echo -e "${GREEN}      [OK] Server already running at $SERVER_URL${NC}"
     WE_STARTED_SERVER=false
 else
     echo -e "${YELLOW}      Server not running, starting it...${NC}"
     
     # Start backend from web/backend directory
     if [ ! -d "$SCRIPT_DIR/web/backend" ]; then
-        echo -e "${RED}      ✗ web/backend directory not found${NC}"
+        echo -e "${RED}      [ERROR] web/backend directory not found${NC}"
         exit 1
     fi
     
@@ -135,7 +135,7 @@ else
         echo -e "${YELLOW}      Installing backend dependencies...${NC}"
         npm install
         if [ $? -ne 0 ]; then
-            echo -e "${RED}      ✗ Failed to install backend dependencies${NC}"
+            echo -e "${RED}      [ERROR] Failed to install backend dependencies${NC}"
             cd "$SCRIPT_DIR"
             exit 1
         fi
@@ -155,7 +155,7 @@ else
     MAX_WAIT=60  # 60 attempts = 30 seconds
     while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
         if curl -s -f "$SERVER_URL" > /dev/null 2>&1; then
-            echo -e "${GREEN}      ✓ Server is ready at $SERVER_URL${NC}"
+            echo -e "${GREEN}      [OK] Server is ready at $SERVER_URL${NC}"
             break
         fi
         sleep 0.5
@@ -169,7 +169,7 @@ else
         # Check if process is still running
         if ! kill -0 $SERVER_PID 2>/dev/null; then
             echo ""
-            echo -e "${RED}      ✗ Server process died${NC}"
+            echo -e "${RED}      [ERROR] Server process died${NC}"
             echo -e "${YELLOW}      Check logs: tail /tmp/bbs-server.log${NC}"
             exit 1
         fi
@@ -177,7 +177,7 @@ else
     
     if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
         echo ""
-        echo -e "${RED}      ✗ Server failed to start within 30 seconds${NC}"
+        echo -e "${RED}      [ERROR] Server failed to start within 30 seconds${NC}"
         echo -e "${YELLOW}      Check logs: tail /tmp/bbs-server.log${NC}"
         exit 1
     fi
@@ -187,9 +187,9 @@ echo ""
 echo -e "${BLUE}[4/5] Verifying server connectivity...${NC}"
 SERVER_RESPONSE=$(curl -s "$SERVER_URL")
 if echo "$SERVER_RESPONSE" | grep -q "AmiExpress\|BBS"; then
-    echo -e "${GREEN}      ✓ Server responding correctly${NC}"
+    echo -e "${GREEN}      [OK] Server responding correctly${NC}"
 else
-    echo -e "${YELLOW}      ⚠ Server response unexpected: $SERVER_RESPONSE${NC}"
+    echo -e "${YELLOW}      [WARNING] Server response unexpected: $SERVER_RESPONSE${NC}"
 fi
 echo ""
 
@@ -212,9 +212,9 @@ if [ "$RUN_TYPE" == "basic" ] || [ "$RUN_TYPE" == "both" ]; then
     
     echo ""
     if [ $BASIC_EXIT -eq 0 ]; then
-        echo -e "${GREEN}✓ Basic tests PASSED${NC}"
+        echo -e "${GREEN}[OK] Basic tests PASSED${NC}"
     else
-        echo -e "${RED}✗ Basic tests FAILED${NC}"
+        echo -e "${RED}[ERROR] Basic tests FAILED${NC}"
     fi
     echo ""
 fi
@@ -231,9 +231,9 @@ if [ "$RUN_TYPE" == "deep" ] || [ "$RUN_TYPE" == "both" ]; then
     
     echo ""
     if [ $DEEP_EXIT -eq 0 ]; then
-        echo -e "${GREEN}✓ Deep tests PASSED${NC}"
+        echo -e "${GREEN}[OK] Deep tests PASSED${NC}"
     else
-        echo -e "${RED}✗ Deep tests FAILED${NC}"
+        echo -e "${RED}[ERROR] Deep tests FAILED${NC}"
     fi
     echo ""
 fi
@@ -246,46 +246,46 @@ echo ""
 
 if [ "$RUN_TYPE" == "basic" ]; then
     if [ $BASIC_EXIT -eq 0 ]; then
-        echo -e "${GREEN}${CYAN}║${NC}  ${GREEN}✓ All basic tests passed!${NC}"
+        echo -e "${GREEN}${CYAN}║${NC}  ${GREEN}[OK] All basic tests passed!${NC}"
         echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
         exit 0
     else
-        echo -e "${RED}✗ Basic tests failed${NC}"
+        echo -e "${RED}[ERROR] Basic tests failed${NC}"
         exit 1
     fi
 elif [ "$RUN_TYPE" == "deep" ]; then
     if [ $DEEP_EXIT -eq 0 ]; then
-        echo -e "${GREEN}✓ All deep tests passed!${NC}"
+        echo -e "${GREEN}[OK] All deep tests passed!${NC}"
         exit 0
     else
-        echo -e "${RED}✗ Deep tests failed${NC}"
+        echo -e "${RED}[ERROR] Deep tests failed${NC}"
         exit 1
     fi
 else
     # Both tests
     if [ $BASIC_EXIT -eq 0 ] && [ $DEEP_EXIT -eq 0 ]; then
         echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}║        ✓✓✓ ALL TESTS PASSED (110+ tests) ✓✓✓             ║${NC}"
+        echo -e "${GREEN}║        [OK][OK][OK] ALL TESTS PASSED (110+ tests) [OK][OK][OK]             ║${NC}"
         echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
         echo ""
-        echo -e "${GREEN}Basic Tests:  ✓ PASSED${NC}"
-        echo -e "${GREEN}Deep Tests:   ✓ PASSED${NC}"
+        echo -e "${GREEN}Basic Tests:  [OK] PASSED${NC}"
+        echo -e "${GREEN}Deep Tests:   [OK] PASSED${NC}"
         echo -e "${GREEN}Total:        110+ tests successful${NC}"
         exit 0
     else
         echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${RED}║        ✗ SOME TESTS FAILED                                 ║${NC}"
+        echo -e "${RED}║        [ERROR] SOME TESTS FAILED                                 ║${NC}"
         echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
         echo ""
         if [ $BASIC_EXIT -ne 0 ]; then
-            echo -e "${RED}Basic Tests:  ✗ FAILED${NC}"
+            echo -e "${RED}Basic Tests:  [ERROR] FAILED${NC}"
         else
-            echo -e "${GREEN}Basic Tests:  ✓ PASSED${NC}"
+            echo -e "${GREEN}Basic Tests:  [OK] PASSED${NC}"
         fi
         if [ $DEEP_EXIT -ne 0 ]; then
-            echo -e "${RED}Deep Tests:   ✗ FAILED${NC}"
+            echo -e "${RED}Deep Tests:   [ERROR] FAILED${NC}"
         else
-            echo -e "${GREEN}Deep Tests:   ✓ PASSED${NC}"
+            echo -e "${GREEN}Deep Tests:   [OK] PASSED${NC}"
         fi
         exit 1
     fi

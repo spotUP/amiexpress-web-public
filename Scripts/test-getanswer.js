@@ -6,7 +6,7 @@ const socket = io('http://localhost:3001', {
 });
 
 socket.on('connect', () => {
-  console.log('🚀 Starting GetAnswer (8KB XIM door)...');
+  console.log('[START] Starting GetAnswer (8KB XIM door)...');
 
   // Emit door-test event
   socket.emit('door-test', { doorName: 'GetAnswer' });

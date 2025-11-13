@@ -27,7 +27,7 @@ async function testRomBasedDoor() {
     page.on('console', msg => {
       const text = msg.text();
       if (text.includes('[BROWSER]') || text.includes('🔊') || text.includes('XIM') || text.includes('Door')) {
-        console.log(`🖥️  ${text}`);
+        console.log(`[SERVER]  ${text}`);
       }
     });
 
@@ -35,7 +35,7 @@ async function testRomBasedDoor() {
     await sleep(1500);
 
     // Login sequence
-    console.log('📝 Logging in...');
+    console.log('[NOTE] Logging in...');
     await page.keyboard.type('A');
     await page.keyboard.press('Enter');
     await sleep(750);
@@ -59,7 +59,7 @@ async function testRomBasedDoor() {
     await page.keyboard.press('Enter');
 
     // Wait for door to execute
-    console.log('⏳ Waiting for door execution...\n');
+    console.log('[WAIT] Waiting for door execution...\n');
     await sleep(10000);
 
     // Check terminal content
@@ -75,17 +75,17 @@ async function testRomBasedDoor() {
 
     // Check for output
     if (terminalText.includes('GetAnswer') || terminalText.includes('Question')) {
-      console.log('✅ GA door produced output!');
+      console.log('[OK] GA door produced output!');
     } else {
-      console.log('❌ No GA door output detected');
+      console.log('[ERROR] No GA door output detected');
     }
 
-    console.log('\n💡 Check backend logs: tail -f /tmp/backend.log | grep -E "ROM|Supervisor|RTE"');
+    console.log('\n[INFO] Check backend logs: tail -f /tmp/backend.log | grep -E "ROM|Supervisor|RTE"');
     console.log('⏸️  Browser will stay open for 60 seconds...\n');
     await sleep(60000);
 
   } catch (error) {
-    console.error('❌ Test failed:', error);
+    console.error('[ERROR] Test failed:', error);
   } finally {
     await browser.close();
   }

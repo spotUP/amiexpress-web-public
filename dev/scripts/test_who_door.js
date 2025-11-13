@@ -10,7 +10,7 @@ let received = [];
 let commandSent = false;
 
 socket.on('connect', () => {
-  console.log('✅ Connected to BBS');
+  console.log('[OK] Connected to BBS');
 });
 
 socket.on('output', (data) => {
@@ -30,9 +30,9 @@ socket.on('output', (data) => {
 });
 
 socket.on('door:output', (data) => {
-  console.log('\n🎮 WHO DOOR OUTPUT:');
+  console.log('\n[GAME] WHO DOOR OUTPUT:');
   console.log(data);
-  console.log('\n✅ WHO door executed successfully!');
+  console.log('\n[OK] WHO door executed successfully!');
   process.exit(0);
 });
 
@@ -41,15 +41,15 @@ socket.on('door:exit', (data) => {
 
   // Check if we got output
   if (received.length > 2) {
-    console.log('\n✅ Test PASSED - WHO door executed');
+    console.log('\n[OK] Test PASSED - WHO door executed');
   } else {
-    console.log('\n❌ Test FAILED - No output from WHO');
+    console.log('\n[ERROR] Test FAILED - No output from WHO');
   }
   process.exit(0);
 });
 
 socket.on('error', (err) => {
-  console.error('❌ Socket error:', err);
+  console.error('[ERROR] Socket error:', err);
   process.exit(1);
 });
 

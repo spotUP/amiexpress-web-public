@@ -26,7 +26,7 @@ echo ""
 
 # Check for .sdk-preview.env in current directory
 if [ -f ".sdk-preview.env" ]; then
-    echo -e "${CYAN}📝 Loading configuration from .sdk-preview.env${NC}"
+    echo -e "${CYAN}[CONFIG] Loading configuration from .sdk-preview.env${NC}"
     source .sdk-preview.env
     QUICK_LOGIN="${SDK_QUICK_LOGIN:-false}"
     LOGIN_USER="${SDK_LOGIN_USER:-sysop}"
@@ -35,7 +35,7 @@ fi
 
 # Check if door path provided
 if [ -z "$DOOR_PATH" ]; then
-    echo -e "${RED}❌ Error: Door path required${NC}"
+    echo -e "${RED}[ERROR] Error: Door path required${NC}"
     echo ""
     echo "Usage: npm run preview <door-path> [door-name]"
     echo ""
@@ -60,7 +60,7 @@ FULL_DOOR_PATH=$(cd "$(dirname "$DOOR_PATH")" && pwd)/$(basename "$DOOR_PATH")
 
 # Check if door exists
 if [ ! -d "$FULL_DOOR_PATH" ]; then
-    echo -e "${RED}❌ Error: Door not found: $DOOR_PATH${NC}"
+    echo -e "${RED}[ERROR] Error: Door not found: $DOOR_PATH${NC}"
     exit 1
 fi
 
@@ -79,23 +79,23 @@ fi
 # Convert name to command (uppercase, remove special chars)
 COMMAND_NAME=$(echo "$DOOR_NAME" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]//g')
 
-echo -e "${YELLOW}📦 Door:${NC} $DOOR_NAME"
-echo -e "${YELLOW}📂 Path:${NC} $DOOR_PATH"
-echo -e "${YELLOW}🔖 Command:${NC} /$COMMAND_NAME"
+echo -e "${YELLOW}[DOOR] Door:${NC} $DOOR_NAME"
+echo -e "${YELLOW}[PATH] Path:${NC} $DOOR_PATH"
+echo -e "${YELLOW}[CMD] Command:${NC} /$COMMAND_NAME"
 echo ""
 
 # Step 1: Build SDK
-echo -e "${CYAN}🔨 Building SDK...${NC}"
+echo -e "${CYAN}[BUILD] Building SDK...${NC}"
 cd "$(dirname "$0")/../.."
 npm run build > /dev/null 2>&1
 if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ SDK build failed!${NC}"
+    echo -e "${RED}[ERROR] SDK build failed!${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ SDK built${NC}"
+echo -e "${GREEN}[OK] SDK built${NC}"
 
 # Step 2: Build Door
-echo -e "${CYAN}🔨 Building door...${NC}"
+echo -e "${CYAN}[BUILD] Building door...${NC}"
 cd "$FULL_DOOR_PATH"
 
 # Install dependencies if needed
@@ -107,16 +107,16 @@ fi
 # Build door
 npm run build > /dev/null 2>&1
 if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Door build failed!${NC}"
+    echo -e "${RED}[ERROR] Door build failed!${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ Door built${NC}"
+echo -e "${GREEN}[OK] Door built${NC}"
 
 # Step 3: Create .info file
 PROJECT_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 INFO_FILE="$PROJECT_ROOT/Commands/$COMMAND_NAME.info"
 
-echo -e "${CYAN}📝 Creating command registration...${NC}"
+echo -e "${CYAN}[CONFIG] Creating command registration...${NC}"
 
 # Get relative path from project root
 REL_DOOR_PATH=$(realpath --relative-to="$PROJECT_ROOT" "$FULL_DOOR_PATH" 2>/dev/null || \
@@ -135,11 +135,11 @@ OVERLOAD=N
 HIDDEN=N
 EOF
 
-echo -e "${GREEN}✅ Command registered: $INFO_FILE${NC}"
+echo -e "${GREEN}[OK] Command registered: $INFO_FILE${NC}"
 
 # Step 4: Start BBS
 echo ""
-echo -e "${CYAN}🚀 Starting BBS servers...${NC}"
+echo -e "${CYAN}[START] Starting BBS servers...${NC}"
 
 # Export quick login variables if configured
 if [ "$QUICK_LOGIN" = "true" ]; then
@@ -161,20 +161,22 @@ sleep 3
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  ✅ Preview Ready!                                   ║${NC}"
+echo -e "${GREEN}║  [OK] Preview Ready!                                   ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${CYAN}To test your door:${NC}"
 echo ""
 
 if [ "$QUICK_LOGIN" = "true" ]; then
-    echo -e "  1. Open browser to: ${YELLOW}http://localhost:5173${NC}"
+    echo -e "  1. Open browser to: ${YELLOW}http://localhost:3001/${NC}"
     echo -e "  2. ${GREEN}Quick login will auto-login as $LOGIN_USER and run /$COMMAND_NAME${NC}"
     echo ""
     echo -e "${YELLOW}Note: Quick login requires the user '$LOGIN_USER' to exist in the BBS.${NC}"
     echo -e "${YELLOW}If not, create the account first, then restart preview.${NC}"
+    echo ""
+    echo -e "${CYAN}Production URL: https://bbs.uprough.net/${NC}"
 else
-    echo -e "  1. Open browser to: ${YELLOW}http://localhost:5173${NC}"
+    echo -e "  1. Open browser to: ${YELLOW}http://localhost:3001/${NC}"
     echo -e "  2. Create an account or login"
     echo -e "  3. Run command: ${YELLOW}/$COMMAND_NAME${NC}"
     echo ""
@@ -182,6 +184,8 @@ else
     echo -e "  SDK_QUICK_LOGIN=true"
     echo -e "  SDK_LOGIN_USER=sysop"
     echo -e "  SDK_LOGIN_PASS=password"
+    echo ""
+    echo -e "${CYAN}Production URL: https://bbs.uprough.net/${NC}"
 fi
 
 echo ""
@@ -191,7 +195,7 @@ echo -e "${YELLOW}Your door is running in the REAL BBS environment!${NC}"
 echo ""
 
 # Wait for user to stop
-trap "echo -e '\n${YELLOW}🛑 Stopping servers...${NC}'; ./dev/scripts/kill-servers.sh; exit 0" INT TERM
+trap "echo -e '\n${YELLOW}[STOP] Stopping servers...${NC}'; ./dev/scripts/kill-servers.sh; exit 0" INT TERM
 
 # Keep script running
 wait $BBS_PID

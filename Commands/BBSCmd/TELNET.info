@@ -1,0 +1,7 @@
+BBSCMD=TELNET
+TYPE=TS
+LOCATION=doors/telnet-connect
+DESCRIPTION=Telnet client for connecting to other BBSes (runDoor pattern)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

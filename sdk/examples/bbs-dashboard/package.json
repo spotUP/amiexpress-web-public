@@ -16,5 +16,6 @@
   "devDependencies": {
     "@types/node": "^20.19.24",
     "typescript": "^5.2.2"
-  }
+  },
+  "runtime": "client"
 }

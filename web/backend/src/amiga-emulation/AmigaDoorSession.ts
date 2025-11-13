@@ -413,8 +413,8 @@ export class AmigaDoorSession {
     this.dosLibrary = new DosLibrary(this.emulator);
 
     // Enable new FileManager/PathManager system for real file I/O
-    // Backend runs from web/backend/, so go up 2 levels to project root
-    const projectRoot = path.resolve(process.cwd(), '../..');
+    // Use BBS_ROOT env var or default to project root (go up 2 levels from web/backend)
+    const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
     console.log(`[AmigaDoorSession] Enabling FileManager with base directory: ${projectRoot}`);
     this.dosLibrary.enableNewFileSystem(projectRoot);
 

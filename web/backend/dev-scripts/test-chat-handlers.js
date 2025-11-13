@@ -37,7 +37,7 @@ async function testHandlers() {
         const stats = fs.statSync(filePath);
         console.log('✓', file, '(' + stats.size + ' bytes)');
       } else {
-        console.log('❌', file, '- NOT FOUND');
+        console.log('[ERROR]', file, '- NOT FOUND');
       }
     });
 
@@ -50,13 +50,13 @@ async function testHandlers() {
     if (statesContent.includes('CHAT = \'chat\'')) {
       console.log('✓ CHAT substate defined');
     } else {
-      console.log('❌ CHAT substate missing');
+      console.log('[ERROR] CHAT substate missing');
     }
 
     if (statesContent.includes('CHAT_ROOM = \'chat_room\'')) {
       console.log('✓ CHAT_ROOM substate defined');
     } else {
-      console.log('❌ CHAT_ROOM substate missing');
+      console.log('[ERROR] CHAT_ROOM substate missing');
     }
 
     console.log('\n📋 Test 3: Verify Command Handler Integration');
@@ -68,19 +68,19 @@ async function testHandlers() {
     if (commandContent.includes('case \'CHAT\':')) {
       console.log('✓ CHAT command case found in command.handler.ts');
     } else {
-      console.log('❌ CHAT command case missing');
+      console.log('[ERROR] CHAT command case missing');
     }
 
     if (commandContent.includes('case \'ROOM\':')) {
       console.log('✓ ROOM command case found in command.handler.ts');
     } else {
-      console.log('❌ ROOM command case missing');
+      console.log('[ERROR] ROOM command case missing');
     }
 
     if (commandContent.includes('LoggedOnSubState.CHAT_ROOM')) {
       console.log('✓ CHAT_ROOM input handling found');
     } else {
-      console.log('❌ CHAT_ROOM input handling missing');
+      console.log('[ERROR] CHAT_ROOM input handling missing');
     }
 
     console.log('\n📋 Test 4: Verify Socket.io Event Wiring');
@@ -108,7 +108,7 @@ async function testHandlers() {
       if (indexContent.includes(`socket.on('${event}'`)) {
         console.log('✓', event, 'handler registered');
       } else {
-        console.log('❌', event, 'handler missing');
+        console.log('[ERROR]', event, 'handler missing');
       }
     });
 
@@ -118,19 +118,19 @@ async function testHandlers() {
     if (indexContent.includes('setInternodeChatDependencies')) {
       console.log('✓ Internode chat dependencies initialized');
     } else {
-      console.log('❌ Internode chat dependencies not initialized');
+      console.log('[ERROR] Internode chat dependencies not initialized');
     }
 
     if (indexContent.includes('setGroupChatDependencies')) {
       console.log('✓ Group chat dependencies initialized');
     } else {
-      console.log('❌ Group chat dependencies not initialized');
+      console.log('[ERROR] Group chat dependencies not initialized');
     }
 
     if (indexContent.includes('setRoomCommandsDependencies')) {
       console.log('✓ Room commands dependencies initialized');
     } else {
-      console.log('❌ Room commands dependencies not initialized');
+      console.log('[ERROR] Room commands dependencies not initialized');
     }
 
     console.log('\n📋 Test 6: Verify Database Methods');
@@ -168,7 +168,7 @@ async function testHandlers() {
     if (foundMethods === requiredMethods.length) {
       console.log('  ✓ All required methods present');
     } else {
-      console.log('  ❌ Some methods missing');
+      console.log('  [ERROR] Some methods missing');
     }
 
     console.log('\n📋 Test 7: Count Lines of Code');
@@ -192,17 +192,17 @@ async function testHandlers() {
     if (indexContent.includes('handleChatDisconnect')) {
       console.log('✓ Chat disconnect cleanup handler registered');
     } else {
-      console.log('❌ Chat disconnect cleanup missing');
+      console.log('[ERROR] Chat disconnect cleanup missing');
     }
 
     if (indexContent.includes('handleRoomDisconnect')) {
       console.log('✓ Room disconnect cleanup handler registered');
     } else {
-      console.log('❌ Room disconnect cleanup missing');
+      console.log('[ERROR] Room disconnect cleanup missing');
     }
 
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('✅ All Handler Tests Passed!');
+    console.log('[OK] All Handler Tests Passed!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     console.log('📊 Integration Summary:');
@@ -214,10 +214,10 @@ async function testHandlers() {
     console.log('  ✓ 15 database methods implemented');
     console.log('  ✓ 2 disconnect cleanup handlers');
     console.log('  ✓ ' + totalLines + ' lines of handler code');
-    console.log('\n✅ Internode Chat System: FULLY INTEGRATED\n');
+    console.log('\n[OK] Internode Chat System: FULLY INTEGRATED\n');
 
   } catch (error) {
-    console.error('\n❌ Test failed:', error.message);
+    console.error('\n[ERROR] Test failed:', error.message);
     console.error(error.stack);
   } finally {
     db.close();
