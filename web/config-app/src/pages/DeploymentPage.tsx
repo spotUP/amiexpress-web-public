@@ -8,11 +8,9 @@ import {
   XCircle,
   AlertTriangle,
   Info,
-  Play,
   HardDrive,
   Users,
-  MessageSquare,
-  Clock
+  MessageSquare
 } from 'lucide-react';
 
 interface HealthCheck {
