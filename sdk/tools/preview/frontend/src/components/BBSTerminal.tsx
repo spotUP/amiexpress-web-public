@@ -41,7 +41,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    // Initialize xterm.js terminal for BBS connection (fixed 80x25 for BBS compatibility)
+    // Initialize xterm.js terminal for BBS connection (fixed 80x24 for BBS compatibility)
     const term = new Terminal({
       fontFamily: XTERM_CONFIG.fontFamily,
       fontSize: fontSize,
@@ -52,7 +52,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       cursorBlink: true,
       cursorStyle: 'block',
       cols: 80,
-      rows: 25,
+      rows: 24, // Standard BBS screen height (per CLAUDE.md)
     });
 
     term.open(terminalRef.current);
@@ -62,19 +62,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const canvasAddon = new CanvasAddon();
     term.loadAddon(canvasAddon);
 
-    // Connect to BBS backend on port 3001
-    const bbsUrl = 'http://localhost:3001';
+    // Connect to BBS backend
+    // Use environment variable or default to current host with port 3001
+    const bbsUrl = import.meta.env.VITE_BBS_BACKEND_URL ||
+                   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                    ? 'http://localhost:3001'
+                    : `${window.location.protocol}//${window.location.hostname}:3001`);
     console.log('🔌 BBS Tab: Connecting to BBS backend:', bbsUrl);
 
     const socket = io(bbsUrl, {
-      transports: ['websocket'],
-      timeout: 60000,
+      transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
+      timeout: 10000, // Reduced timeout for faster failure detection
       upgrade: true,
       rememberUpgrade: true,
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 3, // Reduced attempts for faster feedback
       reconnectionDelay: 2000,
-      reconnectionDelayMax: 10000
+      reconnectionDelayMax: 5000 // Reduced max delay
     });
     socketRef.current = socket;
 
@@ -89,8 +93,27 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('connect_error', (error: any) => {
       console.error('❌ BBS Tab: Connection error:', error.message);
-      term.writeln('\r\n\x1b[31mError: Could not connect to BBS server on port 3001\x1b[0m');
-      term.writeln('\x1b[33mMake sure the BBS backend is running.\x1b[0m\r\n');
+      term.clear();
+      term.writeln('\r\n\x1b[36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m');
+      term.writeln('\x1b[36m║                                                                              ║\x1b[0m');
+      term.writeln('\x1b[36m║                     \x1b[31mBBS Backend Connection Failed\x1b[36m                          ║\x1b[0m');
+      term.writeln('\x1b[36m║                                                                              ║\x1b[0m');
+      term.writeln('\x1b[36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m');
+      term.writeln('');
+      term.writeln('\x1b[33m[!] Cannot connect to BBS server at: \x1b[0m' + bbsUrl);
+      term.writeln('');
+      term.writeln('\x1b[37mThe BBS terminal requires the AmiExpress BBS backend to be running.\x1b[0m');
+      term.writeln('');
+      term.writeln('\x1b[32mTo start the BBS backend:\x1b[0m');
+      term.writeln('  \x1b[37m1. Open a new terminal\x1b[0m');
+      term.writeln('  \x1b[37m2. Navigate to project root: \x1b[36mcd amiexpress-web\x1b[0m');
+      term.writeln('  \x1b[37m3. Run: \x1b[36m./dev/scripts/start-servers.sh\x1b[0m');
+      term.writeln('');
+      term.writeln('\x1b[90m' + '-'.repeat(80) + '\x1b[0m');
+      term.writeln('');
+      term.writeln('\x1b[37mNote: You can still use the SDK preview for door development.\x1b[0m');
+      term.writeln('\x1b[37mThe BBS tab is optional and only needed for testing doors in a live BBS.\x1b[0m');
+      term.writeln('');
     });
 
     socket.on('disconnect', (reason: string) => {
