@@ -203,7 +203,7 @@ io.on('connection', async (socket) => {
 
   // Display connection screen
   await displayScreen(socket, session, 'AWAITSCREEN');
-  socket.emit('ansi-output', 'ANSI, RIP or No graphics (A/r/n)? ');
+  socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
 
   session.subState = LoggedOnSubState.ANSI_PROMPT;
   session.tempData = { inputBuffer: '' };
