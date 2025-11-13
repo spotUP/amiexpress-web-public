@@ -708,42 +708,16 @@ export async function loadFlagged(socket: any, session: BBSSession) {
  * For web version, we store in database but maintain exact behavior
  */
 export async function loadHistory(session: BBSSession) {
-  try {
-    // Initialize history storage
-    if (!session.tempData) {
-      session.tempData = {};
-    }
-
-    session.tempData.historyBuf = [];
-    session.tempData.historyNum = 0;
-    session.tempData.historyCycle = 0;
-
-    // Load from database
-    const result = await db.query(
-      'SELECT history_num, history_cycle, commands FROM command_history WHERE user_id = ?',
-      [session.user!.id]
-    );
-
-    if (result.rows.length > 0) {
-      const history = result.rows[0];
-      session.tempData.historyNum = history.history_num || 0;
-      session.tempData.historyCycle = history.history_cycle || 0;
-
-      // commands is stored as JSON array
-      if (history.commands) {
-        session.tempData.historyBuf = Array.isArray(history.commands)
-          ? history.commands
-          : JSON.parse(history.commands);
-      }
-    }
-  } catch (error) {
-    console.error('Error loading command history:', error);
-    // Fail silently like express.e would if file doesn't exist
-    session.tempData = session.tempData || {};
-    session.tempData.historyBuf = [];
-    session.tempData.historyNum = 0;
-    session.tempData.historyCycle = 0;
+  // Load command history from disk files (express.e:2669-2688, 28577)
+  // Uses the user's slot number (ID) to load persisted history
+  if (!session.user) {
+    console.log('[CommandHistory] No user logged in, skipping loadHistory');
+    return;
   }
+
+  const { loadHistory: loadHistoryUtil } = require('../utils/command-history.util');
+  await loadHistoryUtil(session, session.user.id);
+  console.log(`[CommandHistory] Loaded ${session.commandHistory.length} commands for user ${session.user.username}`);
 }
 
 /**

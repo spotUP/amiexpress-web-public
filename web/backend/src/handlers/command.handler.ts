@@ -2344,12 +2344,61 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       session.inputBuffer = '';
     }
 
+    // Handle command history navigation (express.e:2236-2291)
+    // Up Arrow - previous command (express.e:2258-2274)
+    if (data === '\x1b[A') {
+      const { getPreviousCommand } = require('../utils/command-history.util');
+      const previousCmd = getPreviousCommand(session);
+      if (previousCmd) {
+        // Clear current line (express.e:2260-2267)
+        let clearSequence = '';
+        for (let i = 0; i < session.inputBuffer.length; i++) {
+          clearSequence += '\b \b';
+        }
+        socket.emit('ansi-output', clearSequence);
+
+        // Display previous command (express.e:2268, 2272)
+        session.inputBuffer = previousCmd;
+        socket.emit('ansi-output', previousCmd);
+      }
+      return;
+    }
+    // Down Arrow - next command (express.e:2275-2291)
+    else if (data === '\x1b[B') {
+      const { getNextCommand } = require('../utils/command-history.util');
+      const nextCmd = getNextCommand(session);
+      if (nextCmd) {
+        // Clear current line (express.e:2277-2284)
+        let clearSequence = '';
+        for (let i = 0; i < session.inputBuffer.length; i++) {
+          clearSequence += '\b \b';
+        }
+        socket.emit('ansi-output', clearSequence);
+
+        // Display next command (express.e:2285, 2289)
+        session.inputBuffer = nextCmd;
+        socket.emit('ansi-output', nextCmd);
+      }
+      return;
+    }
+    // Ctrl-B - clear history (express.e:2236-2239)
+    else if (data === '\x02') {
+      const { clearHistory } = require('../utils/command-history.util');
+      clearHistory(session);
+      console.log('[CommandHistory] History cleared by user (Ctrl-B)');
+      return;
+    }
+
     // Buffer characters until Enter is pressed
     if (data === '\r' || data === '\n') {
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
 
       if (input.length > 0) {
+        // Add command to history (express.e:2158-2168)
+        const { addToHistory } = require('../utils/command-history.util');
+        addToHistory(session, input);
+
         // Store command text in session for PROCESS_COMMAND state
         session.commandText = input.toUpperCase();
         console.log('📝 Command text stored:', session.commandText);
