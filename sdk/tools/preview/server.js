@@ -322,6 +322,9 @@ app.get('/api/doors', (req, res) => {
     })
     .map((name) => {
       const pkgPath = path.join(examplesDir, name, 'package.json');
+      const thumbnailPath = path.join(examplesDir, name, 'thumbnail.png');
+      const hasScreenshot = fs.existsSync(thumbnailPath);
+
       if (fs.existsSync(pkgPath)) {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
         return {
@@ -329,9 +332,22 @@ app.get('/api/doors', (req, res) => {
           name: pkg.name || name,
           description: pkg.description || '',
           version: pkg.version || '1.0.0',
+          author: pkg.author || 'Unknown',
+          favorite: false,
+          lastOpened: 0,
+          thumbnail: hasScreenshot ? `/api/doors/${name}/thumbnail` : undefined,
         };
       }
-      return { id: name, name, description: '', version: '1.0.0' };
+      return {
+        id: name,
+        name,
+        description: '',
+        version: '1.0.0',
+        author: 'Unknown',
+        favorite: false,
+        lastOpened: 0,
+        thumbnail: hasScreenshot ? `/api/doors/${name}/thumbnail` : undefined,
+      };
     });
 
   res.json(doors);
@@ -470,6 +486,23 @@ app.get('/api/doors/:doorId/files/*', (req, res) => {
     res.json({ content });
   } catch (error) {
     console.error('Error reading file:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API: Get door thumbnail
+app.get('/api/doors/:doorId/thumbnail', (req, res) => {
+  try {
+    const { doorId } = req.params;
+    const thumbnailPath = path.join(__dirname, '../../examples', doorId, 'thumbnail.png');
+
+    if (!fs.existsSync(thumbnailPath)) {
+      return res.status(404).json({ error: 'Thumbnail not found' });
+    }
+
+    res.sendFile(thumbnailPath);
+  } catch (error) {
+    console.error('Error serving thumbnail:', error);
     res.status(500).json({ error: error.message });
   }
 });
