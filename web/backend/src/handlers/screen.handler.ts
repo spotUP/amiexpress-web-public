@@ -421,7 +421,7 @@ export async function parseMciCodes(
 
     // Try to load the file - if it doesn't exist, reset counter and try file.1
     let foundFile = false;
-    if (loadScreenFile(nextFile.filename, session.currentConf, 0)) {
+    if (loadScreenFile(nextFile.filename, session.currentConf, 0, session)) {
       filesToDisplay.push(nextFile.filename);
       foundFile = true;
     } else {
@@ -429,7 +429,7 @@ export async function parseMciCodes(
       console.log('[MCI] ~SX_ file not found, resetting to 1');
       sequentialFileManager.resetCounter(basePath);
       const firstFile = sequentialFileManager.getNextFile(basePath);
-      if (loadScreenFile(firstFile.filename, session.currentConf, 0)) {
+      if (loadScreenFile(firstFile.filename, session.currentConf, 0, session)) {
         filesToDisplay.push(firstFile.filename);
         foundFile = true;
       }
@@ -536,7 +536,7 @@ export async function parseMciCodes(
     const placeholder = `{{DISPLAY_FILE:${i}}}`;
 
     // Load the file content - loadScreenFile now handles Amiga paths
-    let screenData = loadScreenFile(filename, session.currentConf, 0);
+    let screenData = loadScreenFile(filename, session.currentConf, 0, session);
 
     if (screenData) {
       // Recursively process MCI codes in the embedded file
@@ -565,7 +565,7 @@ export async function parseMciCodes(
  * @param nodeId - Node ID (default 0)
  * @returns Screen file content or null if not found
  */
-export function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0): { content: string; isPetscii: boolean } | null {
+export function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0, session?: BBSSession): { content: string; isPetscii: boolean } | null {
   // BBS directory structure matches original Amiga AmiExpress
   // Use dataDir from config which points to project root
   const { config } = require('../config');
@@ -575,6 +575,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   console.log(`[loadScreenFile] Loading screen: ${screenName}`);
   console.log(`[loadScreenFile] Base directory: ${baseDir}`);
   console.log(`[loadScreenFile] Conference ID: ${conferenceId}, Node ID: ${nodeId}`);
+  console.log(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
 
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
   // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
@@ -662,8 +663,14 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   searchLocations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
 
   // Possible filename variations (case-insensitive search will handle actual matching)
-  const filenameVariations = [
-    `${screenName}.TXT`,  // MENU.TXT
+  // In PETSCII mode, prefer .seq files over .TXT files
+  const filenameVariations = session?.petsciiMode ? [
+    `${screenName}.seq`,  // PETSCII sequence files (C64/C128 format) - PREFERRED in PETSCII mode
+    `${screenName}.SEQ`,  // PETSCII sequence files (uppercase)
+    `${screenName}.TXT`,  // Fallback to ANSI if no PETSCII version exists
+    `${screenName}.txt`,
+  ] : [
+    `${screenName}.TXT`,  // MENU.TXT - PREFERRED in ANSI mode
     `${screenName}.txt`,  // MENU.txt, menu.txt, Menu.txt (all matched case-insensitively)
     `${screenName}.seq`,  // PETSCII sequence files (C64/C128 format)
     `${screenName}.SEQ`,  // PETSCII sequence files (uppercase)
@@ -774,7 +781,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   console.log(`[displayScreen] User: ${session.user?.name || 'guest'}`);
   console.log(`[displayScreen] ========================================`);
 
-  const screenData = loadScreenFile(screenName, session.currentConf);
+  const screenData = loadScreenFile(screenName, session.currentConf, 0, session);
 
   if (screenData) {
     const { content, isPetscii } = screenData;

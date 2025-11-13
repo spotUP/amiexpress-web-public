@@ -235,6 +235,7 @@ export interface BBSSession {
   keyState?: Record<string, boolean>; // Current key state for simultaneous input (which keys are pressed)
   mouseEventsEnabled?: boolean; // Whether mouse events should be sent to door (for ANSI editor, etc.)
   ansiEnabled?: boolean; // Whether ANSI is enabled for this session
+  petsciiMode?: boolean; // Whether PETSCII mode is enabled (40x25, .seq files)
   currentRoomId?: string; // Current chat room ID for group chat
 
   // Phase 9: Security/ACS System (express.e:165-167, 306-308)
