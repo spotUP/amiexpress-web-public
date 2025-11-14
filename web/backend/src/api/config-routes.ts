@@ -1249,7 +1249,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       const logType = type as string;
 
       // Determine log file path
-      const projectRoot = path.resolve(__dirname, '../../..');
+      const projectRoot = path.resolve(__dirname, '../../../..');
       let logFile: string;
 
       switch (logType) {
@@ -1351,7 +1351,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       const path = await import('path');
 
       const logType = type as string;
-      const projectRoot = path.resolve(__dirname, '../../..');
+      const projectRoot = path.resolve(__dirname, '../../../..');
       let logFile: string;
 
       switch (logType) {
