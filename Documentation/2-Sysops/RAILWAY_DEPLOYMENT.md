@@ -91,9 +91,8 @@ NODE_ENV=production
 **Optional Variables:**
 
 ```bash
-# Ports (Railway assigns PORT automatically)
+# Ports (Railway assigns PORT automatically, serves all frontends)
 BACKEND_PORT=$PORT
-FRONTEND_PORT=5173
 
 # Telnet/SSH (if you want to enable)
 TELNET_PORT=2323
