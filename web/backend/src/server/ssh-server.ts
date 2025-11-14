@@ -193,8 +193,8 @@ export class SSHServerImpl extends EventEmitter {
       // Check if host keys are provided
       if (this.hostKeys.length === 0) {
         console.warn('[SSH Server] No host keys provided - SSH server disabled');
-        console.warn('[SSH Server] To enable: Generate keys with: ssh-keygen -t rsa -b 4096 -f ssh_host_rsa_key');
-        console.warn('[SSH Server] Then set SSH_HOST_KEY_PATH=/path/to/ssh_host_rsa_key in .env.local');
+        console.warn('[SSH Server] To enable: Generate keys via the admin configuration portal');
+        console.warn('[SSH Server] Or manually: ssh-keygen -t rsa -b 4096 -f data/ssh/ssh_host_rsa_key -N ""');
         resolve(); // Resolve successfully but don't start
         return;
       }

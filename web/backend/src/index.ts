@@ -30,6 +30,7 @@ import { sessions, userSessions, socketToUser, setSession } from './server/sessi
 import { app } from './server/app';
 import { TelnetServer, TelnetConnection } from './server/telnet-server';
 import { SSHServerImpl, SSHConnection } from './server/ssh-server';
+import { SSHKeyUtil } from './utils/ssh-key.util';
 import { findSecurityScreen } from './utils/screen-security.util';
 import {
   displayConferenceBulletins,
@@ -363,16 +364,15 @@ const telnetPort = parseInt(process.env.TELNET_PORT || '2323');
 const sshPort = parseInt(process.env.SSH_PORT || '2222');
 const telnetServer = new TelnetServer(telnetPort);
 
-// Load SSH host keys
+// Load SSH host keys using SSHKeyUtil
 let sshHostKeys: Buffer[] = [];
-const sshKeyPath = process.env.SSH_HOST_KEY_PATH || join(process.cwd(), '../../ssh_host_rsa_key');
-if (existsSync(sshKeyPath)) {
-  try {
-    sshHostKeys = [readFileSync(sshKeyPath)];
-    console.log(`[SSH] Loaded host key from: ${sshKeyPath}`);
-  } catch (error: any) {
-    console.warn(`[SSH] Failed to load host key from ${sshKeyPath}:`, error.message);
-  }
+const hostKey = SSHKeyUtil.loadHostKey();
+if (hostKey) {
+  sshHostKeys = [hostKey];
+} else {
+  console.warn('[SSH] No SSH host key found. SSH server will not accept connections.');
+  console.warn('[SSH] Generate a key via the admin configuration portal or by running:');
+  console.warn('[SSH]   ssh-keygen -t rsa -b 4096 -f data/ssh/ssh_host_rsa_key -N ""');
 }
 
 const sshServer = new SSHServerImpl(sshPort, sshHostKeys);

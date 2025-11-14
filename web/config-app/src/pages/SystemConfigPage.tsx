@@ -1,15 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { Save } from 'lucide-react';
+import { Save, Key, Trash2, RefreshCw } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { SystemConfig } from '../types';
+import { useState } from 'react';
 
 export function SystemConfigPage() {
   const queryClient = useQueryClient();
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+  const [isDeletingKey, setIsDeletingKey] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['systemConfig'],
     queryFn: () => apiClient.getSystemConfig(),
+  });
+
+  // SSH Key Info Query
+  const { data: sshKeyData, refetch: refetchSSHKey } = useQuery({
+    queryKey: ['sshKeyInfo'],
+    queryFn: () => apiClient.getSSHKeyInfo(),
+    refetchInterval: false,
   });
 
   const mutation = useMutation({
@@ -30,6 +40,42 @@ export function SystemConfigPage() {
 
   const onSubmit = (formData: SystemConfig) => {
     mutation.mutate(formData);
+  };
+
+  const handleGenerateSSHKey = async () => {
+    if (sshKeyData?.data?.exists) {
+      if (!confirm('An SSH key already exists. Do you want to overwrite it? This will require a server restart.')) {
+        return;
+      }
+    }
+
+    setIsGeneratingKey(true);
+    try {
+      const result = await apiClient.generateSSHKey(4096, sshKeyData?.data?.exists);
+      alert(`SSH key generated successfully!\n\nFingerprint: ${result.data.fingerprint}\n\nPlease restart the BBS server for the changes to take effect.`);
+      refetchSSHKey();
+    } catch (error: any) {
+      alert(`Failed to generate SSH key: ${error.message}`);
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
+
+  const handleDeleteSSHKey = async () => {
+    if (!confirm('Are you sure you want to delete the SSH key? The SSH server will not be available until a new key is generated. This requires a server restart.')) {
+      return;
+    }
+
+    setIsDeletingKey(true);
+    try {
+      await apiClient.deleteSSHKey();
+      alert('SSH key deleted successfully. Please restart the BBS server for the changes to take effect.');
+      refetchSSHKey();
+    } catch (error: any) {
+      alert(`Failed to delete SSH key: ${error.message}`);
+    } finally {
+      setIsDeletingKey(false);
+    }
   };
 
   if (isLoading) {
@@ -682,6 +728,121 @@ export function SystemConfigPage() {
             <p className="text-sm text-bbs-muted">
               Note: Changing these ports requires restarting the BBS server for the changes to take effect. The current server is using the ports specified in the environment variables or these configured values.
             </p>
+          </div>
+        </div>
+
+        {/* SSH Key Management */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6 flex items-center gap-2">
+            <Key size={24} />
+            SSH Key Management
+          </h2>
+
+          <div className="space-y-4">
+            {/* SSH Key Status */}
+            <div className="p-4 bg-bbs-background border border-bbs-border rounded">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-bbs-text">SSH Key Status:</span>
+                  <span className={`px-3 py-1 rounded text-sm font-semibold ${
+                    sshKeyData?.data?.exists
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}>
+                    {sshKeyData?.data?.exists ? 'Key Exists' : 'No Key Found'}
+                  </span>
+                </div>
+
+                {sshKeyData?.data?.exists && (
+                  <>
+                    {sshKeyData.data.fingerprint && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-bbs-muted">Fingerprint:</span>
+                        <code className="text-xs bg-bbs-background/50 p-2 rounded border border-bbs-border font-mono text-bbs-text break-all">
+                          {sshKeyData.data.fingerprint}
+                        </code>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      {sshKeyData.data.keyType && (
+                        <div>
+                          <span className="text-bbs-muted">Key Type:</span>
+                          <span className="ml-2 text-bbs-text font-semibold">{sshKeyData.data.keyType}</span>
+                        </div>
+                      )}
+                      {sshKeyData.data.keySize && (
+                        <div>
+                          <span className="text-bbs-muted">Key Size:</span>
+                          <span className="ml-2 text-bbs-text font-semibold">{sshKeyData.data.keySize} bits</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {sshKeyData.data.createdAt && (
+                      <div className="text-xs text-bbs-muted">
+                        Created: {new Date(sshKeyData.data.createdAt).toLocaleString()}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleGenerateSSHKey}
+                disabled={isGeneratingKey || isDeletingKey}
+                className="btn-primary flex items-center gap-2"
+              >
+                {isGeneratingKey ? (
+                  <>
+                    <RefreshCw size={18} className="animate-spin" />
+                    <span>Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Key size={18} />
+                    <span>{sshKeyData?.data?.exists ? 'Regenerate SSH Key' : 'Generate SSH Key'}</span>
+                  </>
+                )}
+              </button>
+
+              {sshKeyData?.data?.exists && (
+                <button
+                  type="button"
+                  onClick={handleDeleteSSHKey}
+                  disabled={isGeneratingKey || isDeletingKey}
+                  className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-600/40 text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isDeletingKey ? (
+                    <>
+                      <RefreshCw size={18} className="animate-spin" />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={18} />
+                      <span>Delete SSH Key</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Info Box */}
+            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded">
+              <h3 className="text-sm font-semibold text-blue-400 mb-2">Important Information</h3>
+              <ul className="text-xs text-bbs-muted space-y-1 list-disc list-inside">
+                <li>SSH keys are required for the SSH server to function</li>
+                <li>Generated keys are stored in the data/ssh directory</li>
+                <li>4096-bit RSA keys are generated by default for maximum security</li>
+                <li>Server restart is required after generating or deleting keys</li>
+                <li>Regenerating keys will invalidate any cached client connections</li>
+              </ul>
+            </div>
           </div>
         </div>
 
