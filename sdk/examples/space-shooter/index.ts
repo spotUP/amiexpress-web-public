@@ -4,6 +4,8 @@
  */
 
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface Player {
   x: number;
@@ -23,6 +25,10 @@ interface Bullet {
   active: boolean;
 }
 
+interface HighScoreData {
+  [userId: number]: number;
+}
+
 class SpaceShooter {
   private door: Door;
   private gfx: GraphicsEngine;
@@ -33,6 +39,8 @@ class SpaceShooter {
   private highScore = 0;
   private gameRunning = false;
   private currentUserId = 0;
+  private dataDir: string;
+  private highScoreFile: string;
 
   constructor() {
     this.door = new Door({
@@ -48,6 +56,15 @@ class SpaceShooter {
       y: 20,
       lives: 3,
     };
+
+    // Set up data directory for high scores
+    this.dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+    this.highScoreFile = path.join(this.dataDir, 'space-shooter-scores.json');
+
+    // Ensure data directory exists
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
+    }
 
     this.door.onConnect(async (user) => {
       this.currentUserId = user.id;
@@ -178,14 +195,40 @@ class SpaceShooter {
   }
 
   private async loadHighScore(): Promise<void> {
-    // TODO: Implement high score loading for ServerDoor
-    this.highScore = 0;
+    try {
+      if (fs.existsSync(this.highScoreFile)) {
+        const data = fs.readFileSync(this.highScoreFile, 'utf-8');
+        const scores: HighScoreData = JSON.parse(data);
+        this.highScore = scores[this.currentUserId] || 0;
+      } else {
+        this.highScore = 0;
+      }
+    } catch (error) {
+      console.error('Error loading high score:', error);
+      this.highScore = 0;
+    }
   }
 
   private async saveHighScore(): Promise<void> {
-    // TODO: Implement high score saving for ServerDoor
-    if (this.score > this.highScore) {
-      this.highScore = this.score;
+    try {
+      if (this.score > this.highScore) {
+        this.highScore = this.score;
+
+        // Load existing scores
+        let scores: HighScoreData = {};
+        if (fs.existsSync(this.highScoreFile)) {
+          const data = fs.readFileSync(this.highScoreFile, 'utf-8');
+          scores = JSON.parse(data);
+        }
+
+        // Update this user's score
+        scores[this.currentUserId] = this.highScore;
+
+        // Save back to file
+        fs.writeFileSync(this.highScoreFile, JSON.stringify(scores, null, 2));
+      }
+    } catch (error) {
+      console.error('Error saving high score:', error);
     }
   }
 

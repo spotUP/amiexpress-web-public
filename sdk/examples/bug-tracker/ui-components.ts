@@ -392,11 +392,4 @@ export class UIComponents {
     this.startSpinner(message, x, y);
   }
 
-  /**
-   * Handle input events (placeholder for toast management)
-   */
-  handleInput(key: string): void {
-    // This method can be used to handle keyboard shortcuts for toast management
-    // Currently just a placeholder
-  }
 }
