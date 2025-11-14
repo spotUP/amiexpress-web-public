@@ -258,6 +258,101 @@ export class Database {
         console.log('✓ Added fontpreference column');
       }
 
+      // Check and add missing columns to system_config table
+      console.log('Checking for missing columns in system_config table...');
+      const systemConfigInfo = this.db.prepare('PRAGMA table_info(system_config)').all() as any[];
+      const systemConfigColumns = systemConfigInfo.map(col => col.name);
+
+      if (!systemConfigColumns.includes('smtp_username')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN smtp_username TEXT DEFAULT \'\'');
+        console.log('✓ Added smtp_username column');
+      }
+
+      if (!systemConfigColumns.includes('smtp_password')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN smtp_password TEXT DEFAULT \'\'');
+        console.log('✓ Added smtp_password column');
+      }
+
+      if (!systemConfigColumns.includes('smtp_ssl')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN smtp_ssl INTEGER DEFAULT 0');
+        console.log('✓ Added smtp_ssl column');
+      }
+
+      if (!systemConfigColumns.includes('smtp_from_email')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN smtp_from_email TEXT DEFAULT \'\'');
+        console.log('✓ Added smtp_from_email column');
+      }
+
+      if (!systemConfigColumns.includes('sysop_email')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN sysop_email TEXT DEFAULT \'\'');
+        console.log('✓ Added sysop_email column');
+      }
+
+      if (!systemConfigColumns.includes('bbs_email')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN bbs_email TEXT DEFAULT \'\'');
+        console.log('✓ Added bbs_email column');
+      }
+
+      if (!systemConfigColumns.includes('ftp_enabled')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN ftp_enabled INTEGER DEFAULT 0');
+        console.log('✓ Added ftp_enabled column');
+      }
+
+      if (!systemConfigColumns.includes('ftp_host')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN ftp_host TEXT DEFAULT \'\'');
+        console.log('✓ Added ftp_host column');
+      }
+
+      if (!systemConfigColumns.includes('ftp_port')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN ftp_port INTEGER DEFAULT 21');
+        console.log('✓ Added ftp_port column');
+      }
+
+      if (!systemConfigColumns.includes('ftp_data_ports')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN ftp_data_ports TEXT DEFAULT \'\'');
+        console.log('✓ Added ftp_data_ports column');
+      }
+
+      if (!systemConfigColumns.includes('http_enabled')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN http_enabled INTEGER DEFAULT 0');
+        console.log('✓ Added http_enabled column');
+      }
+
+      if (!systemConfigColumns.includes('http_host')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN http_host TEXT DEFAULT \'\'');
+        console.log('✓ Added http_host column');
+      }
+
+      if (!systemConfigColumns.includes('http_port')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN http_port INTEGER DEFAULT 80');
+        console.log('✓ Added http_port column');
+      }
+
+      if (!systemConfigColumns.includes('telnet_port')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN telnet_port INTEGER DEFAULT 2323 CHECK (telnet_port >= 1 AND telnet_port <= 65535)');
+        console.log('✓ Added telnet_port column');
+      }
+
+      if (!systemConfigColumns.includes('ssh_port')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN ssh_port INTEGER DEFAULT 2222 CHECK (ssh_port >= 1 AND ssh_port <= 65535)');
+        console.log('✓ Added ssh_port column');
+      }
+
+      if (!systemConfigColumns.includes('quiet_join')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN quiet_join INTEGER DEFAULT 0');
+        console.log('✓ Added quiet_join column');
+      }
+
+      if (!systemConfigColumns.includes('convert_to_mb')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN convert_to_mb INTEGER DEFAULT 0');
+        console.log('✓ Added convert_to_mb column');
+      }
+
+      if (!systemConfigColumns.includes('reg_key')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN reg_key TEXT DEFAULT \'\'');
+        console.log('✓ Added reg_key column');
+      }
+
       console.log('All migrations completed successfully');
     } catch (error) {
       console.error('Error running migrations:', error);
@@ -783,10 +878,36 @@ export class Database {
           upload_check_virus INTEGER DEFAULT 0,
           upload_check_dupe INTEGER DEFAULT 1,
 
-          -- Mail
+          -- Mail & SMTP Settings
           allow_internet_email INTEGER DEFAULT 0,
           smtp_server TEXT DEFAULT '',
           smtp_port INTEGER DEFAULT 25,
+          smtp_username TEXT DEFAULT '',
+          smtp_password TEXT DEFAULT '',
+          smtp_ssl INTEGER DEFAULT 0,
+          smtp_from_email TEXT DEFAULT '',
+          sysop_email TEXT DEFAULT '',
+          bbs_email TEXT DEFAULT '',
+
+          -- FTP Server Settings
+          ftp_enabled INTEGER DEFAULT 0,
+          ftp_host TEXT DEFAULT '',
+          ftp_port INTEGER DEFAULT 21 CHECK (ftp_port >= 1 AND ftp_port <= 65535),
+          ftp_data_ports TEXT DEFAULT '',
+
+          -- HTTP Server Settings
+          http_enabled INTEGER DEFAULT 0,
+          http_host TEXT DEFAULT '',
+          http_port INTEGER DEFAULT 80 CHECK (http_port >= 1 AND http_port <= 65535),
+
+          -- BBS Server Ports
+          telnet_port INTEGER DEFAULT 2323 CHECK (telnet_port >= 1 AND telnet_port <= 65535),
+          ssh_port INTEGER DEFAULT 2222 CHECK (ssh_port >= 1 AND ssh_port <= 65535),
+
+          -- System Behavior
+          quiet_join INTEGER DEFAULT 0,
+          convert_to_mb INTEGER DEFAULT 0,
+          reg_key TEXT DEFAULT '',
 
           -- Logging
           debug_mode INTEGER DEFAULT 0,

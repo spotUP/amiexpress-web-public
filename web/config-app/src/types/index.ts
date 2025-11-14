@@ -86,6 +86,10 @@ export interface SystemConfig {
   http_host: string;
   http_port: number;
 
+  // BBS Server Ports
+  telnet_port: number;
+  ssh_port: number;
+
   // System Behavior
   quiet_join: boolean;
   convert_to_mb: boolean;
