@@ -2983,11 +2983,27 @@ function buildDoor(clientId, doorId) {
     let stderr = '';
 
     build.stdout.on('data', (data) => {
-      stdout += data.toString();
+      const text = data.toString();
+      stdout += text;
+      // Send to client terminal in real-time
+      client.ws.send(
+        JSON.stringify({
+          type: 'output',
+          data: text,
+        })
+      );
     });
 
     build.stderr.on('data', (data) => {
-      stderr += data.toString();
+      const text = data.toString();
+      stderr += text;
+      // Send to client terminal in real-time
+      client.ws.send(
+        JSON.stringify({
+          type: 'output',
+          data: text,
+        })
+      );
     });
 
     build.on('close', (code) => {
@@ -3057,7 +3073,15 @@ function buildDoor(clientId, doorId) {
       let verifyStderr = '';
 
       verify.stderr.on('data', (data) => {
-        verifyStderr += data.toString();
+        const text = data.toString();
+        verifyStderr += text;
+        // Send verification errors to client terminal in real-time
+        client.ws.send(
+          JSON.stringify({
+            type: 'output',
+            data: text,
+          })
+        );
       });
 
       verify.on('close', async (verifyCode) => {
