@@ -389,11 +389,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       socket.emit('command', key);
     });
 
-    term.onData((data) => {
-      if (socket.connected) {
-        socket.emit('command', data);
-      }
-    });
+    // Note: onData handler removed to prevent double character input
+    // onKey already handles all input and provides domEvent access for door key tracking
 
     // Focus terminal on mount
     term.focus();
