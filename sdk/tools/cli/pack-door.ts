@@ -64,16 +64,16 @@ export async function packDoor(
     spinner.succeed(chalk.green('Release created successfully!'));
 
     console.log('');
-    console.log(chalk.bold('📦 Release Archive:'));
+    console.log(chalk.bold('[PACK] Release Archive:'));
     console.log(chalk.gray('  File: ') + chalk.cyan(outputFile));
     console.log(chalk.gray('  Size: ') + chalk.white(getFileSize(outputFile)));
     console.log('');
-    console.log(chalk.bold('📋 Contents:'));
-    console.log(chalk.gray('  ✓ Main executable'));
-    console.log(chalk.gray('  ✓ FILE_ID.DIZ (BBS description)'));
-    console.log(chalk.gray('  ✓ .NFO file (ASCII art info)'));
-    console.log(chalk.gray('  ✓ README.TXT'));
-    console.log(chalk.gray('  ✓ Assets and configuration'));
+    console.log(chalk.bold('[PACK] Contents:'));
+    console.log(chalk.gray('  * Main executable'));
+    console.log(chalk.gray('  * FILE_ID.DIZ (BBS description)'));
+    console.log(chalk.gray('  * .NFO file (ASCII art info)'));
+    console.log(chalk.gray('  * README.TXT'));
+    console.log(chalk.gray('  * Assets and configuration'));
     console.log('');
 
   } catch (error: any) {

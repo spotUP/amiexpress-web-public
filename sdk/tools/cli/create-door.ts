@@ -65,7 +65,7 @@ export async function createDoor(
     ]);
 
     if (!confirmed) {
-      console.log(chalk.yellow('\n⚠️  Cancelled'));
+      console.log(chalk.yellow('\n[WARNING] Cancelled'));
       return;
     }
   }
@@ -96,7 +96,7 @@ export async function createDoor(
     spinner.succeed(chalk.green('Door created successfully!'));
 
     // Show next steps
-    console.log(chalk.bold('\n🚀 Next Steps:\n'));
+    console.log(chalk.bold('\n[INFO] Next Steps:\n'));
     console.log(chalk.gray('  cd') + ' ' + chalk.cyan(config.name));
     console.log(chalk.gray('  npm run') + ' ' + chalk.cyan('dev'));
     console.log(chalk.gray('  or'));
@@ -308,7 +308,7 @@ async function installDependencies(
       try {
         execSync('npm install', { stdio: 'inherit' });
       } catch (error: any) {
-        console.error(chalk.red('\n❌ npm install failed. Please run it manually:'));
+        console.error(chalk.red('\n[ERROR] npm install failed. Please run it manually:'));
         console.error(chalk.gray(`  cd ${path.basename(projectPath)}`));
         console.error(chalk.gray('  npm install'));
         throw error;
@@ -319,7 +319,7 @@ async function installDependencies(
         try {
           execSync('pip install -r requirements.txt', { stdio: 'inherit' });
         } catch (error: any) {
-          console.error(chalk.yellow('\n⚠️  pip install failed. You may need to install dependencies manually.'));
+          console.error(chalk.yellow('\n[WARNING] pip install failed. You may need to install dependencies manually.'));
         }
       }
     }

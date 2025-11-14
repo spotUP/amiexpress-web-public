@@ -21,7 +21,7 @@ export async function deployDoor(
   doorPath: string,
   options?: Partial<DeployOptions>
 ): Promise<void> {
-  console.log(chalk.yellow('⚠️  Deploy functionality coming soon!\n'));
+  console.log(chalk.yellow('[WARNING] Deploy functionality coming soon!\n'));
 
   console.log(chalk.bold('Planned features:'));
   console.log(chalk.gray('  • SSH/SFTP upload'));
@@ -75,7 +75,7 @@ export async function deployDoor(
       }
     ]);
 
-    console.log(chalk.green('\n✓ Config saved for future use'));
+    console.log(chalk.green('\n[OK] Config saved for future use'));
     console.log(chalk.gray('(Deploy functionality will be implemented in a future update)'));
   }
 }
