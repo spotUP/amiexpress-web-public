@@ -265,6 +265,10 @@ export interface SystemConfig {
   http_host: string;
   http_port: number;
 
+  // BBS Server Ports
+  telnet_port: number;         // Telnet server port (default: 2323)
+  ssh_port: number;            // SSH server port (default: 2222)
+
   // System Behavior (TOOLTYPE_BBSCONFIG)
   quiet_join: boolean;         // Suppress conference join messages
   convert_to_mb: boolean;      // Convert byte counts to megabytes

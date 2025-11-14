@@ -644,6 +644,47 @@ export function SystemConfigPage() {
           </div>
         </div>
 
+        {/* BBS Server Ports */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">BBS Server Ports</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="telnet_port" className="label">
+                Telnet Port
+              </label>
+              <input
+                id="telnet_port"
+                type="number"
+                {...register('telnet_port', { min: 1, max: 65535, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+              <p className="text-xs text-bbs-muted mt-1">
+                Default: 2323
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="ssh_port" className="label">
+                SSH Port
+              </label>
+              <input
+                id="ssh_port"
+                type="number"
+                {...register('ssh_port', { min: 1, max: 65535, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+              <p className="text-xs text-bbs-muted mt-1">
+                Default: 2222
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 p-4 bg-bbs-background border border-bbs-border rounded">
+            <p className="text-sm text-bbs-muted">
+              Note: Changing these ports requires restarting the BBS server for the changes to take effect. The current server is using the ports specified in the environment variables or these configured values.
+            </p>
+          </div>
+        </div>
+
         {/* System Behavior */}
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">System Behavior</h2>
