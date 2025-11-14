@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "description": "Professional music tracker BBS door inspired by Renoise, Protracker, and FastTracker II",
   "bbsCommand": "TRACKER",
-  "runtime": "client",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "index.ts"
+  },
+  "server": {
+    "entry": "server.ts"
+  },
   "main": "index.ts",
-  "entry": "index.ts",
   "scripts": {
     "dev": "tsx watch index.ts",
     "build": "tsc",

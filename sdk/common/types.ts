@@ -5,6 +5,11 @@
 
 /**
  * Door runtime type
+ *
+ * @deprecated 'client' runtime is deprecated - use 'hybrid' instead for browser features.
+ * Hybrid doors work on ALL protocols (telnet, SSH, WebSocket) by providing:
+ * - Browser component with Web Audio/Canvas/WebGL for WebSocket users
+ * - Server component with text fallback for telnet/SSH users
  */
 export type DoorRuntime = 'server' | 'client' | 'hybrid';
 
