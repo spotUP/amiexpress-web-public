@@ -3327,11 +3327,91 @@ async function startClientDoor(clientId, doorId, doorPath) {
               build.onResolve({ filter: new RegExp(`^${mod}$`) }, args => ({
                 path: args.path,
                 namespace: 'node-builtin-shim',
+                pluginData: { moduleName: mod },
               }));
-              build.onLoad({ filter: /.*/, namespace: 'node-builtin-shim' }, () => ({
-                contents: 'export default {}; export const __esModule = true;',
-                loader: 'js',
-              }));
+              build.onLoad({ filter: /.*/, namespace: 'node-builtin-shim' }, (args) => {
+                const moduleName = args.pluginData?.moduleName;
+
+                // Provide a proper EventEmitter implementation for the 'events' module
+                if (moduleName === 'events') {
+                  return {
+                    contents: `
+                      // Browser-compatible EventEmitter implementation
+                      export class EventEmitter {
+                        constructor() {
+                          this._events = {};
+                        }
+
+                        on(event, listener) {
+                          if (!this._events[event]) {
+                            this._events[event] = [];
+                          }
+                          this._events[event].push(listener);
+                          return this;
+                        }
+
+                        once(event, listener) {
+                          const onceWrapper = (...args) => {
+                            this.off(event, onceWrapper);
+                            listener.apply(this, args);
+                          };
+                          this.on(event, onceWrapper);
+                          return this;
+                        }
+
+                        off(event, listener) {
+                          if (!this._events[event]) return this;
+                          this._events[event] = this._events[event].filter(l => l !== listener);
+                          return this;
+                        }
+
+                        removeListener(event, listener) {
+                          return this.off(event, listener);
+                        }
+
+                        removeAllListeners(event) {
+                          if (event) {
+                            delete this._events[event];
+                          } else {
+                            this._events = {};
+                          }
+                          return this;
+                        }
+
+                        emit(event, ...args) {
+                          if (!this._events[event]) return false;
+                          this._events[event].forEach(listener => {
+                            try {
+                              listener.apply(this, args);
+                            } catch (err) {
+                              console.error('Error in event listener:', err);
+                            }
+                          });
+                          return true;
+                        }
+
+                        listeners(event) {
+                          return this._events[event] || [];
+                        }
+
+                        listenerCount(event) {
+                          return this.listeners(event).length;
+                        }
+                      }
+
+                      export default EventEmitter;
+                      export const __esModule = true;
+                    `,
+                    loader: 'js',
+                  };
+                }
+
+                // For other Node.js built-ins, return empty shim
+                return {
+                  contents: 'export default {}; export const __esModule = true;',
+                  loader: 'js',
+                };
+              });
             });
           },
         },
