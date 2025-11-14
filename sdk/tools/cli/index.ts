@@ -47,11 +47,11 @@ program
   .option('-d, --dir <directory>', 'Output directory', '.')
   .option('-y, --yes', 'Skip prompts and use defaults', false)
   .action(async (name, options) => {
-    console.log(chalk.cyan.bold('\n🎮 AmiExpress SDK - Create Door\n'));
+    console.log(chalk.cyan.bold('\n[SDK] AmiExpress SDK - Create Door\n'));
     try {
       await createDoor(name, options);
     } catch (error: any) {
-      console.error(chalk.red('\n❌ Error:'), error.message);
+      console.error(chalk.red('\n[ERROR] Error:'), error.message);
       process.exit(1);
     }
   });
@@ -64,11 +64,11 @@ program
   .option('-o, --output <dir>', 'Output directory', './releases')
   .option('-v, --version <version>', 'Override version number')
   .action(async (doorName, options) => {
-    console.log(chalk.cyan.bold('\n📦 AmiExpress SDK - Pack Door\n'));
+    console.log(chalk.cyan.bold('\n[SDK] AmiExpress SDK - Pack Door\n'));
     try {
       await packDoor(doorName, options);
     } catch (error: any) {
-      console.error(chalk.red('\n❌ Error:'), error.message);
+      console.error(chalk.red('\n[ERROR] Error:'), error.message);
       process.exit(1);
     }
   });
@@ -81,11 +81,11 @@ program
   .option('--fix', 'Automatically fix issues where possible', false)
   .option('--strict', 'Use strict validation rules', false)
   .action(async (doorPath, options) => {
-    console.log(chalk.cyan.bold('\n✅ AmiExpress SDK - Validate Door\n'));
+    console.log(chalk.cyan.bold('\n[SDK] AmiExpress SDK - Validate Door\n'));
     try {
       await validateDoor(doorPath, options);
     } catch (error: any) {
-      console.error(chalk.red('\n❌ Error:'), error.message);
+      console.error(chalk.red('\n[ERROR] Error:'), error.message);
       process.exit(1);
     }
   });
@@ -100,11 +100,11 @@ program
   .option('-p, --port <port>', 'SSH port', '22')
   .option('--path <path>', 'Remote installation path')
   .action(async (doorPath, options) => {
-    console.log(chalk.cyan.bold('\n🚀 AmiExpress SDK - Deploy Door\n'));
+    console.log(chalk.cyan.bold('\n[SDK] AmiExpress SDK - Deploy Door\n'));
     try {
       await deployDoor(doorPath, options);
     } catch (error: any) {
-      console.error(chalk.red('\n❌ Error:'), error.message);
+      console.error(chalk.red('\n[ERROR] Error:'), error.message);
       process.exit(1);
     }
   });
@@ -115,7 +115,7 @@ program
   .description('Start preview server for testing doors in browser')
   .option('-p, --port <port>', 'Server port', '8080')
   .action((options) => {
-    console.log(chalk.cyan.bold('\n🌐 Starting preview server...\n'));
+    console.log(chalk.cyan.bold('\n[SDK] Starting preview server...\n'));
     console.log(chalk.gray('This will run: npm run preview\n'));
 
     const { spawn } = require('child_process');

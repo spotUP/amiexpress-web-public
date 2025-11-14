@@ -292,19 +292,26 @@ function App() {
         if (!message.data.building && message.data.lastBuild > 0) {
           if (message.data.errors.length === 0) {
             // Build success message goes to Logs tab
-            setLogsOutput((prev) => [...prev, `\x1b[32m✓ Build succeeded in ${message.data.duration}ms\x1b[0m`]);
+            const doorName = selectedDoor?.name || 'door';
+            const bbsCommand = doorMetadata?.bbsCommand || selectedDoor?.id.toUpperCase() || '';
+            setLogsOutput((prev) => [...prev, `\x1b[32m[OK] Build succeeded in ${message.data.duration}ms\x1b[0m`]);
+            setLogsOutput((prev) => [...prev, `\x1b[36m[INFO] Door: ${doorName}\x1b[0m`]);
+            setLogsOutput((prev) => [...prev, `\x1b[36m[INFO] BBS Command: ${bbsCommand}\x1b[0m`]);
             // Celebration and toast removed - user feedback via logs, sound, haptic
             soundEffects.buildComplete();
             triggerHaptic();
           } else {
             // Build errors go to Logs tab
-            setLogsOutput((prev) => [...prev, `\x1b[31m✗ Build failed with ${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''}\x1b[0m`]);
+            setLogsOutput((prev) => [...prev, `\x1b[31m[ERROR] Build failed with ${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''}\x1b[0m`]);
             toast.error('Build failed', `${message.data.errors.length} error${message.data.errors.length !== 1 ? 's' : ''} found`);
             soundEffects.error();
           }
         } else if (message.data.building) {
           // Build start message goes to Logs tab
-          setLogsOutput((prev) => [...prev, '\x1b[36m🔨 Building door...\x1b[0m']);
+          const doorName = selectedDoor?.name || 'door';
+          const bbsCommand = doorMetadata?.bbsCommand || selectedDoor?.id.toUpperCase() || '';
+          setLogsOutput((prev) => [...prev, `\x1b[36m[BUILD] Building door: ${doorName}\x1b[0m`]);
+          setLogsOutput((prev) => [...prev, `\x1b[36m[INFO] BBS Command: ${bbsCommand}\x1b[0m`]);
           // Auto-switch to Logs tab to show build output
           setActiveTerminalTab('logs');
         }
@@ -331,7 +338,7 @@ function App() {
 
       case 'auto-launch':
         // Auto-launch door in BBS terminal after successful build
-        console.log('🚀 Auto-launching door:', message.data.doorId, 'command:', message.data.bbsCommand);
+        console.log('[AUTO-LAUNCH] Door:', message.data.doorId, 'command:', message.data.bbsCommand);
         // Use bbsCommand from message (no slash prefix)
         const doorCommand = `${message.data.bbsCommand || message.data.doorId.toUpperCase()}\r`;
 
@@ -340,14 +347,14 @@ function App() {
 
         // Send command to BBS terminal
         if (bbsTerminalRef.current) {
-          console.log('📤 Sending door command to BBS:', doorCommand);
+          console.log('[AUTO-LAUNCH] Sending door command to BBS:', doorCommand);
           // Send each character of the command
           for (const char of doorCommand) {
             bbsTerminalRef.current.sendCommand(char);
           }
         } else {
-          console.warn('⚠️ BBSTerminal ref not available for auto-launch');
-          setLogsOutput((prev) => [...prev, `\x1b[33m⚠️  Cannot auto-launch: BBS terminal not ready\x1b[0m`]);
+          console.warn('[WARNING] BBSTerminal ref not available for auto-launch');
+          setLogsOutput((prev) => [...prev, `\x1b[33m[WARNING] Cannot auto-launch: BBS terminal not ready\x1b[0m`]);
         }
         break;
 

@@ -49,42 +49,42 @@ export async function validateDoor(
     console.log('');
 
     if (errors.length === 0 && warnings.length === 0) {
-      console.log(chalk.green.bold('✅ Door validation passed!\n'));
+      console.log(chalk.green.bold('[OK] Door validation passed!\n'));
       if (infos.length > 0) {
-        console.log(chalk.bold('ℹ️  Suggestions:\n'));
+        console.log(chalk.bold('[INFO] Suggestions:\n'));
         infos.forEach(issue => {
-          console.log(chalk.cyan('  •'), chalk.gray(issue.message));
+          console.log(chalk.cyan('  *'), chalk.gray(issue.message));
         });
       }
       return;
     }
 
     if (errors.length > 0) {
-      console.log(chalk.red.bold(`❌ ${errors.length} Error(s):\n`));
+      console.log(chalk.red.bold(`[ERROR] ${errors.length} Error(s):\n`));
       errors.forEach(issue => {
-        console.log(chalk.red('  ✗'), issue.message);
+        console.log(chalk.red('  X'), issue.message);
         if (issue.fixable && !opts.fix) {
-          console.log(chalk.gray('    → Run with --fix to auto-fix'));
+          console.log(chalk.gray('    -> Run with --fix to auto-fix'));
         }
       });
       console.log('');
     }
 
     if (warnings.length > 0) {
-      console.log(chalk.yellow.bold(`⚠️  ${warnings.length} Warning(s):\n`));
+      console.log(chalk.yellow.bold(`[WARNING] ${warnings.length} Warning(s):\n`));
       warnings.forEach(issue => {
         console.log(chalk.yellow('  !'), issue.message);
         if (issue.fixable && !opts.fix) {
-          console.log(chalk.gray('    → Run with --fix to auto-fix'));
+          console.log(chalk.gray('    -> Run with --fix to auto-fix'));
         }
       });
       console.log('');
     }
 
     if (infos.length > 0) {
-      console.log(chalk.bold('ℹ️  Suggestions:\n'));
+      console.log(chalk.bold('[INFO] Suggestions:\n'));
       infos.forEach(issue => {
-        console.log(chalk.cyan('  •'), chalk.gray(issue.message));
+        console.log(chalk.cyan('  *'), chalk.gray(issue.message));
       });
       console.log('');
     }

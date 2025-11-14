@@ -456,7 +456,7 @@ export async function main(doorName: string): Promise<void> {
   const packagePath = path.join(doorPath, 'package.json');
 
   if (!fs.existsSync(packagePath)) {
-    console.error(`❌ Error: Could not find ${doorName} in examples/`);
+    console.error(`[ERROR] Could not find ${doorName} in examples/`);
     process.exit(1);
   }
 
@@ -472,9 +472,9 @@ export async function main(doorName: string): Promise<void> {
     outputDir: path.join(process.cwd(), 'releases'),
   });
 
-  console.log(`📦 Packing ${doorName}...`);
+  console.log(`[PACK] Packing ${doorName}...`);
   const outputFile = await packer.pack();
-  console.log(`\n✨ Success! Release ready: ${outputFile}`);
+  console.log(`\n[OK] Success! Release ready: ${outputFile}`);
 }
 
 // Run if called directly
