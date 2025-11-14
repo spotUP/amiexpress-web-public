@@ -1,5 +1,5 @@
 BBSCMD=2048
-TYPE=TS
+TYPE=SDK
 LOCATION=doors/2048-game
 DESCRIPTION=Classic 2048 sliding tile puzzle game for BBS
 ACCESS=0

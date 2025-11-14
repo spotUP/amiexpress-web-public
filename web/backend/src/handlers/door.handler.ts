@@ -522,7 +522,9 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
     console.log(`[executeSDKDoor] Forking child process...`);
 
     // Fork child process for SDK door
-    const childProcess = fork(doorPath, [], {
+    // If it's a TypeScript file, use tsx to run it
+    const isTypeScript = doorPath.endsWith('.ts');
+    const forkOptions: any = {
       cwd: path.dirname(doorPath),
       env: {
         ...process.env,
@@ -531,7 +533,14 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
       },
       silent: true, // Capture stdout/stderr
       stdio: ['pipe', 'pipe', 'pipe', 'ipc']
-    });
+    };
+
+    // Add tsx loader for TypeScript files
+    if (isTypeScript) {
+      forkOptions.execArgv = ['--import', 'tsx'];
+    }
+
+    const childProcess = fork(doorPath, [], forkOptions);
 
     console.log(`[executeSDKDoor] Child process spawned with PID: ${childProcess.pid}`);
 
