@@ -158,6 +158,33 @@ else
   echo -e "   ${GREEN}[OK] SDK already built${RESET}"
 fi
 
+# Check and build @amiexpress/terminal package (required by SDK and BBS frontends)
+check_and_install_deps "$REPO_ROOT/packages/terminal" "Terminal Package"
+
+if [ ! -d "$REPO_ROOT/packages/terminal/dist" ] || [ ! -f "$REPO_ROOT/packages/terminal/dist/index.js" ]; then
+  echo -e "${CYAN}→ Terminal Package: Building (first time)...${RESET}"
+  (cd "$REPO_ROOT/packages/terminal" && npm run build --loglevel=error)
+  if [ $? -eq 0 ]; then
+    echo -e "   ${GREEN}[OK] Terminal Package built successfully${RESET}"
+  else
+    echo -e "   ${RED}[ERROR] Terminal Package build failed${RESET}"
+    echo -e "   ${WHITE}Try running: cd packages/terminal && npm run build${RESET}"
+    exit 1
+  fi
+else
+  # Always rebuild to ensure latest changes
+  echo -e "${CYAN}→ Terminal Package: Rebuilding...${RESET}"
+  (cd "$REPO_ROOT/packages/terminal" && npm run build --loglevel=error > /dev/null 2>&1)
+  if [ $? -eq 0 ]; then
+    echo -e "   ${GREEN}[OK] Terminal Package rebuilt${RESET}"
+  else
+    echo -e "   ${YELLOW}[WARNING] Terminal Package rebuild had issues${RESET}"
+  fi
+fi
+
+# Check SDK Preview Frontend dependencies
+check_and_install_deps "$REPO_ROOT/sdk/tools/preview/frontend" "SDK Preview Frontend"
+
 # Always rebuild all frontends for unified deployment (ensures correct base paths)
 echo -e "${CYAN}→ Building all frontends for unified deployment...${RESET}"
 echo -e "   ${WHITE}(This takes 15-30 seconds, please wait...)${RESET}"
