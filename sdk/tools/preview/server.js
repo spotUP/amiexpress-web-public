@@ -3329,6 +3329,14 @@ async function startClientDoor(clientId, doorId, doorPath) {
       inject: [],
       define: {
         'process.env.NODE_ENV': '"production"',
+        'process.env.PREVIEW_MODE': '"0"',
+        'process.platform': '"browser"',
+        'process.stdin': 'undefined',
+        'process.stdout': 'undefined',
+        'process.stderr': 'undefined',
+        'process.exit': '(function(){})',
+        'process.cwd': '(function(){return "/"})',
+        'process.on': '(function(){})',
         'global': 'window',
       },
       // Mark Node.js built-ins as external (they'll be replaced with empty objects)

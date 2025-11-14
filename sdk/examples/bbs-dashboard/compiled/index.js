@@ -3,32 +3,8 @@
  * BBS Dashboard Door
  * Comprehensive real-time dashboard for System Operators
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
-const os = __importStar(require("os"));
 const door = new bbs_door_sdk_1.Door({
     name: 'BBS SysOp Dashboard',
     version: '1.0.0',
@@ -167,25 +143,14 @@ function drawProgressBar(x, y, width, percent, color) {
     gfx.drawText(x, y, bar, color);
 }
 function getCPUUsage() {
-    const cpus = os.cpus();
-    let totalIdle = 0;
-    let totalTick = 0;
-    cpus.forEach(cpu => {
-        for (const type in cpu.times) {
-            totalTick += cpu.times[type];
-        }
-        totalIdle += cpu.times.idle;
-    });
-    const idle = totalIdle / cpus.length;
-    const total = totalTick / cpus.length;
-    const usage = 100 - ~~(100 * idle / total);
-    return Math.max(0, Math.min(100, usage));
+    // Mock CPU usage for browser environment
+    // In a real implementation, this would fetch from BBS API
+    return Math.floor(Math.random() * 40) + 20; // Random 20-60%
 }
 function getMemoryUsage() {
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const usedMem = totalMem - freeMem;
-    return Math.floor((usedMem / totalMem) * 100);
+    // Mock memory usage for browser environment
+    // In a real implementation, this would fetch from BBS API
+    return Math.floor(Math.random() * 30) + 50; // Random 50-80%
 }
 function formatUptime(seconds) {
     const days = Math.floor(seconds / 86400);

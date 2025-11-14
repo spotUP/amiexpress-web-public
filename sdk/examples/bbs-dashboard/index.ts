@@ -4,7 +4,6 @@
  */
 
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
-import * as os from 'os';
 
 interface BBSStats {
   totalUsers: number;
@@ -186,29 +185,15 @@ function drawProgressBar(x: number, y: number, width: number, percent: number, c
 }
 
 function getCPUUsage(): number {
-  const cpus = os.cpus();
-  let totalIdle = 0;
-  let totalTick = 0;
-
-  cpus.forEach(cpu => {
-    for (const type in cpu.times) {
-      totalTick += (cpu.times as any)[type];
-    }
-    totalIdle += cpu.times.idle;
-  });
-
-  const idle = totalIdle / cpus.length;
-  const total = totalTick / cpus.length;
-  const usage = 100 - ~~(100 * idle / total);
-
-  return Math.max(0, Math.min(100, usage));
+  // Mock CPU usage for browser environment
+  // In a real implementation, this would fetch from BBS API
+  return Math.floor(Math.random() * 40) + 20; // Random 20-60%
 }
 
 function getMemoryUsage(): number {
-  const totalMem = os.totalmem();
-  const freeMem = os.freemem();
-  const usedMem = totalMem - freeMem;
-  return Math.floor((usedMem / totalMem) * 100);
+  // Mock memory usage for browser environment
+  // In a real implementation, this would fetch from BBS API
+  return Math.floor(Math.random() * 30) + 50; // Random 50-80%
 }
 
 function formatUptime(seconds: number): string {
