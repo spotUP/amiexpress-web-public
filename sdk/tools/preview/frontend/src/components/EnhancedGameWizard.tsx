@@ -4,6 +4,7 @@ import {
   Eye, Code, Zap, RefreshCw, Save, Play, AlertCircle, Lightbulb,
   TrendingUp, Clock, DollarSign, Settings as SettingsIcon
 } from 'lucide-react';
+import { SDK_API_URL } from '../utils/api-config';
 
 interface EnhancedGameWizardProps {
   onClose: () => void;
@@ -321,7 +322,7 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
 
       let response;
       try {
-        response = await fetch('/api/games/generate-stream', {
+        response = await fetch(`${SDK_API_URL}/api/games/generate-stream`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -413,7 +414,7 @@ export const EnhancedGameWizard: React.FC<EnhancedGameWizardProps> = ({
 
   const handleSaveGame = async () => {
     try {
-      const response = await fetch('/api/games/save', {
+      const response = await fetch(`${SDK_API_URL}/api/games/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

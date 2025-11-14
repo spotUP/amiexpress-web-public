@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { File, Save, Loader2, CheckCircle, XCircle, Info, Upload } from 'lucide-react';
+import { SDK_API_URL } from '../utils/api-config';
 
 interface FileDizEditorProps {
   doorId: string;
@@ -22,7 +23,7 @@ export const FileDizEditor: React.FC<FileDizEditorProps> = ({ doorId, className 
   const loadFileDiz = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/doors/${doorId}/file_id_diz`);
+      const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/file_id_diz`);
       if (response.ok) {
         const data = await response.json();
         setContent(data.content);
@@ -41,7 +42,7 @@ export const FileDizEditor: React.FC<FileDizEditorProps> = ({ doorId, className 
     setSaving(true);
     setSaveStatus('idle');
     try {
-      const response = await fetch(`/api/doors/${doorId}/file_id_diz`, {
+      const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/file_id_diz`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,7 +76,7 @@ export const FileDizEditor: React.FC<FileDizEditorProps> = ({ doorId, className 
       const text = await file.text();
 
       // Upload to server
-      const response = await fetch(`/api/doors/${doorId}/file_id_diz/upload`, {
+      const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/file_id_diz/upload`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

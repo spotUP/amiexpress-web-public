@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Package, Download, Loader, Upload, X, File } from 'lucide-react';
 import { ArchiveOptions } from '../types';
 import { ArchiveFileManager } from './ArchiveFileManager';
+import { SDK_API_URL } from '../utils/api-config';
 
 interface FileNode {
   id: string;
@@ -51,7 +52,7 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
           includeDocs: String(options.includeDocs),
         });
 
-        const response = await fetch(`/api/doors/${doorId}/files?${params}`);
+        const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/files?${params}`);
         if (!response.ok) throw new Error('Failed to fetch door files');
 
         const data = await response.json();

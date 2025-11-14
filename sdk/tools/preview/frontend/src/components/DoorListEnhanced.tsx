@@ -4,6 +4,7 @@ import { DoorListItem } from '../types';
 import { formatRelativeTime } from '../utils/format';
 import { DoorListSkeleton } from './ui/Skeleton';
 import { ContextMenuWrapper, ContextMenuItem } from './ui/ContextMenu';
+import { SDK_API_URL } from '../utils/api-config';
 
 interface DoorListEnhancedProps {
   doors: DoorListItem[];
@@ -67,7 +68,7 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
       const statuses: Record<string, boolean> = {};
       for (const door of doors) {
         try {
-          const response = await fetch(`/api/doors/${door.id}/install-status`);
+          const response = await fetch(`${SDK_API_URL}/api/doors/${door.id}/install-status`);
           if (response.ok) {
             const data = await response.json();
             statuses[door.id] = data.installed;
@@ -99,7 +100,7 @@ export const DoorListEnhanced: React.FC<DoorListEnhancedProps> = ({
           const fileData = reader.result as string;
 
           // Send to backend
-          const response = await fetch('/api/doors/import', {
+          const response = await fetch(`${SDK_API_URL}/api/doors/import`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
