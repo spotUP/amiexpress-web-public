@@ -178,31 +178,14 @@ class SpaceShooter {
   }
 
   private async loadHighScore(): Promise<void> {
-    try {
-      const result = await this.door.rpc('getHighScore', {
-        userId: this.currentUserId
-      });
-      this.highScore = result.score || 0;
-    } catch (err) {
-      console.error('Failed to load high score:', err);
-      this.highScore = 0;
-    }
+    // TODO: Implement high score loading for ServerDoor
+    this.highScore = 0;
   }
 
   private async saveHighScore(): Promise<void> {
-    if (this.score === 0) return;
-
-    try {
-      const result = await this.door.rpc('saveHighScore', {
-        userId: this.currentUserId,
-        score: this.score
-      });
-
-      if (result.newRecord) {
-        this.highScore = this.score;
-      }
-    } catch (err) {
-      console.error('Failed to save high score:', err);
+    // TODO: Implement high score saving for ServerDoor
+    if (this.score > this.highScore) {
+      this.highScore = this.score;
     }
   }
 

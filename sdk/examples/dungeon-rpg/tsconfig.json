@@ -27,6 +27,7 @@
     "node_modules",
     "dist",
     "../../tools/preview",
-    "../../**/*.spec.ts"
+    "../../**/*.spec.ts",
+    "../../engines/**/*"
   ]
 }

@@ -123,7 +123,7 @@ door.onConnect(async (user) => {
 
   // Text-based info screen
   gfx.clear();
-  gfx.drawBox(0, 0, 80, 24, AnsiColor.Cyan);
+  gfx.drawBox({ x: 0, y: 0, width: 80, height: 24 }, 'single', AnsiColor.Cyan);
   gfx.drawText(28, 2, 'DUNGEON RPG', AnsiColor.BrightYellow);
   gfx.drawText(10, 5, 'This is a comprehensive RPG demonstrating all SDK features.');
   gfx.drawText(10, 7, 'For the full graphical version with sound and rich UI:');
@@ -138,13 +138,13 @@ door.onConnect(async (user) => {
   gfx.drawText(10, 20, 'Press S to view saves, Q to quit...', AnsiColor.BrightWhite);
 
   const rendered = gfx.render();
-  door.send(user.id, rendered);
+  door.send(rendered, user.id);
 
   // Handle input
-  door.onInput((inputData) => {
-    if (inputData.user.id !== user.id) return;
+  door.onInput((inputUser, keyEvent) => {
+    if (inputUser.id !== user.id) return;
 
-    const key = inputData.key.key.toLowerCase();
+    const key = keyEvent.key.toLowerCase();
 
     if (key === 'q' || key === 'escape') {
       door.disconnect(user.id);
@@ -161,7 +161,7 @@ async function showSaves(userId: number) {
   const gfx = new GraphicsEngine({ width: 80, height: 24 });
 
   gfx.clear();
-  gfx.drawBox(0, 0, 80, 24, AnsiColor.Cyan);
+  gfx.drawBox({ x: 0, y: 0, width: 80, height: 24 }, 'single', AnsiColor.Cyan);
   gfx.drawText(30, 2, 'SAVED GAMES', AnsiColor.BrightYellow);
 
   // Get saves via internal RPC call
@@ -189,7 +189,7 @@ async function showSaves(userId: number) {
   gfx.drawText(20, 20, 'Press Q to quit...', AnsiColor.BrightWhite);
 
   const rendered = gfx.render();
-  door.send(userId, rendered);
+  door.send(rendered, userId);
 }
 
 // Start server

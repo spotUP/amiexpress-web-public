@@ -1211,7 +1211,6 @@ export class FireEmblemGame {
     this.input.dispose();
     this.combat.dispose();
     this.classes.dispose();
-    this.save.dispose();
     this.dialogue.dispose();
   }
 }

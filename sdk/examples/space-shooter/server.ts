@@ -122,7 +122,7 @@ door.onConnect(async (user) => {
 
   // Text-based info screen
   gfx.clear();
-  gfx.drawBox(0, 0, 80, 24, AnsiColor.Cyan);
+  gfx.drawBox({ x: 0, y: 0, width: 80, height: 24 }, 'single', AnsiColor.Cyan);
   gfx.drawText(28, 2, 'SPACE SHOOTER', AnsiColor.BrightYellow);
   gfx.drawText(10, 5, 'A simple BBS door game demonstrating game loops and graphics.');
   gfx.drawText(10, 7, 'For the full graphical game with smooth animations:');
@@ -136,13 +136,13 @@ door.onConnect(async (user) => {
   gfx.drawText(10, 19, 'Press L to view leaderboard, Q to quit...', AnsiColor.BrightWhite);
 
   const rendered = gfx.render();
-  door.send(user.id, rendered);
+  door.send(rendered, user.id);
 
   // Handle input
-  door.onInput((inputData) => {
-    if (inputData.user.id !== user.id) return;
+  door.onInput((inputUser, keyEvent) => {
+    if (inputUser.id !== user.id) return;
 
-    const key = inputData.key.key.toLowerCase();
+    const key = keyEvent.key.toLowerCase();
 
     if (key === 'q' || key === 'escape') {
       door.disconnect(user.id);
@@ -159,7 +159,7 @@ async function showLeaderboard(userId: number) {
   const gfx = new GraphicsEngine({ width: 80, height: 24 });
 
   gfx.clear();
-  gfx.drawBox(0, 0, 80, 24, AnsiColor.Cyan);
+  gfx.drawBox({ x: 0, y: 0, width: 80, height: 24 }, 'single', AnsiColor.Cyan);
   gfx.drawText(30, 2, 'HIGH SCORES', AnsiColor.BrightYellow);
 
   // Get leaderboard via internal RPC call
@@ -190,7 +190,7 @@ async function showLeaderboard(userId: number) {
   gfx.drawText(20, 20, 'Press Q to quit...', AnsiColor.BrightWhite);
 
   const rendered = gfx.render();
-  door.send(userId, rendered);
+  door.send(rendered, userId);
 }
 
 // Start server
