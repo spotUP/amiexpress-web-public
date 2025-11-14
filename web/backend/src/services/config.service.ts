@@ -97,6 +97,10 @@ export const SystemConfigSchema = z.object({
   http_host: z.string().max(200).optional(),
   http_port: z.number().int().min(1).max(65535).optional(),
 
+  // BBS Server Ports
+  telnet_port: z.number().int().min(1).max(65535).optional(),
+  ssh_port: z.number().int().min(1).max(65535).optional(),
+
   // System Behavior (TOOLTYPE_BBSCONFIG)
   quiet_join: z.boolean().optional(),
   convert_to_mb: z.boolean().optional(),
