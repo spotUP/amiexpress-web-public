@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { User as UserIcon, Edit2, Trash2, Plus, X, Shield } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface BbsUser {
   id: string;
@@ -36,6 +37,7 @@ interface UserFormData {
 
 export function UsersPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<BbsUser | null>(null);
   const [formData, setFormData] = useState<UserFormData>({
@@ -59,12 +61,12 @@ export function UsersPage() {
     mutationFn: (user: UserFormData) => apiClient.createUser(user),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      alert('User created successfully');
+      showSuccess('User created successfully');
       setIsModalOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(`Failed to create user: ${error.message}`);
+      showError(`Failed to create user: ${error.message}`);
     },
   });
 
@@ -73,13 +75,13 @@ export function UsersPage() {
       apiClient.updateUser(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      alert('User updated successfully');
+      showSuccess('User updated successfully');
       setIsModalOpen(false);
       setEditingUser(null);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(`Failed to update user: ${error.message}`);
+      showError(`Failed to update user: ${error.message}`);
     },
   });
 
@@ -87,10 +89,10 @@ export function UsersPage() {
     mutationFn: (id: string) => apiClient.deleteUser(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      alert('User deleted successfully');
+      showSuccess('User deleted successfully');
     },
     onError: (error: Error) => {
-      alert(`Failed to delete user: ${error.message}`);
+      showError(`Failed to delete user: ${error.message}`);
     },
   });
 
@@ -135,7 +137,7 @@ export function UsersPage() {
 
     // Validate password for new users
     if (!editingUser && !formData.password) {
-      alert('Password is required for new users');
+      showError('Password is required for new users');
       return;
     }
 
@@ -152,8 +154,15 @@ export function UsersPage() {
     }
   };
 
-  const handleDelete = (user: BbsUser) => {
-    if (confirm(`Are you sure you want to delete user "${user.username}"?\n\nThis action cannot be undone.`)) {
+  const handleDelete = async (user: BbsUser) => {
+    const confirmed = await confirm({
+      title: 'Delete User',
+      message: `Are you sure you want to delete user "${user.username}"?\n\nThis action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(user.id);
     }
   };

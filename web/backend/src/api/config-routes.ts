@@ -1233,5 +1233,121 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
     }
   });
 
+  // ===== Log Viewer =====
+
+  /**
+   * GET /api/config/logs
+   * Get system logs
+   */
+  router.get('/logs', async (req: Request, res: Response) => {
+    try {
+      const { type = 'backend', lines = '500', search = '' } = req.query;
+      const fs = await import('fs').then(m => m.promises);
+      const path = await import('path');
+
+      const maxLines = Math.min(parseInt(lines as string, 10) || 500, 5000);
+      const logType = type as string;
+
+      // Determine log file path
+      const projectRoot = path.resolve(__dirname, '../../..');
+      let logFile: string;
+
+      switch (logType) {
+        case 'backend':
+          logFile = path.join(projectRoot, 'logs', 'backend.log');
+          break;
+        case 'frontend':
+          logFile = path.join(projectRoot, 'logs', 'frontend.log');
+          break;
+        case 'error':
+          logFile = path.join(projectRoot, 'logs', 'error.log');
+          break;
+        case 'access':
+          logFile = path.join(projectRoot, 'logs', 'access.log');
+          break;
+        default:
+          throw new Error(`Invalid log type: ${logType}`);
+      }
+
+      // Check if file exists
+      try {
+        await fs.access(logFile);
+      } catch {
+        return sendResponse(res, {
+          lines: [],
+          totalLines: 0,
+          logType,
+          message: `No ${logType} log file found`
+        });
+      }
+
+      // Read log file
+      const content = await fs.readFile(logFile, 'utf-8');
+      let lines_array = content.split('\n').filter(line => line.trim());
+
+      // Apply search filter
+      const searchTerm = (search as string).toLowerCase();
+      if (searchTerm) {
+        lines_array = lines_array.filter(line =>
+          line.toLowerCase().includes(searchTerm)
+        );
+      }
+
+      // Get last N lines
+      const totalLines = lines_array.length;
+      const logLines = lines_array.slice(-maxLines).reverse();
+
+      sendResponse(res, {
+        lines: logLines,
+        totalLines,
+        displayedLines: logLines.length,
+        logType,
+        searchTerm: searchTerm || undefined
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * DELETE /api/config/logs
+   * Clear a specific log file
+   */
+  router.delete('/logs', async (req: any, res: Response) => {
+    try {
+      const { type = 'backend' } = req.query;
+      const fs = await import('fs').then(m => m.promises);
+      const path = await import('path');
+
+      const logType = type as string;
+      const projectRoot = path.resolve(__dirname, '../../..');
+      let logFile: string;
+
+      switch (logType) {
+        case 'backend':
+          logFile = path.join(projectRoot, 'logs', 'backend.log');
+          break;
+        case 'frontend':
+          logFile = path.join(projectRoot, 'logs', 'frontend.log');
+          break;
+        case 'error':
+          logFile = path.join(projectRoot, 'logs', 'error.log');
+          break;
+        case 'access':
+          logFile = path.join(projectRoot, 'logs', 'access.log');
+          break;
+        default:
+          throw new Error(`Invalid log type: ${logType}`);
+      }
+
+      // Clear log file (write empty string)
+      await fs.writeFile(logFile, '', 'utf-8');
+
+      sendResponse(res, { cleared: true, logType }, `${logType} log cleared`);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
   return router;
 }

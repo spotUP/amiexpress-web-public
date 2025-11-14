@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shield, Edit2, Trash2, Plus, AlertCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface FileChecker {
   id: number;
@@ -17,6 +18,7 @@ interface FileChecker {
 
 export function FileCheckersPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, confirm } = useNotification();
 
   const { data, isLoading } = useQuery({
     queryKey: ['file-checkers'],
@@ -27,12 +29,19 @@ export function FileCheckersPage() {
     mutationFn: (id: number) => apiClient.deleteFileChecker(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['file-checkers'] });
-      alert('File checker deleted successfully');
+      showSuccess('File checker deleted successfully');
     },
   });
 
-  const handleDelete = (checker: FileChecker) => {
-    if (confirm(`Are you sure you want to delete file checker "${checker.checker_name}"? This will also delete all associated error patterns.`)) {
+  const handleDelete = async (checker: FileChecker) => {
+    const confirmed = await confirm({
+      title: 'Delete File Checker',
+      message: `Are you sure you want to delete file checker "${checker.checker_name}"? This will also delete all associated error patterns.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(checker.id);
     }
   };

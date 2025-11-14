@@ -17,6 +17,7 @@ import { FileCheckersPage } from './pages/FileCheckersPage';
 import { UsersPage } from './pages/UsersPage';
 import { ImportExportPage } from './pages/ImportExportPage';
 import { DeploymentPage } from './pages/DeploymentPage';
+import { LogsPage } from './pages/LogsPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -59,6 +60,7 @@ function App() {
                 <Route path="/deployment" element={<DeploymentPage />} />
                 <Route path="/import-export" element={<ImportExportPage />} />
                 <Route path="/audit" element={<AuditLogPage />} />
+                <Route path="/logs" element={<LogsPage />} />
               </Routes>
             </Layout>
           </PrivateRoute>

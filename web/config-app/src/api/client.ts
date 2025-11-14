@@ -434,6 +434,22 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Logs
+  async getLogs(type: string = 'backend', lines: number = 500, search: string = '') {
+    const params = new URLSearchParams();
+    params.append('type', type);
+    params.append('lines', lines.toString());
+    if (search) params.append('search', search);
+
+    return this.request<ApiResponse>(`${API_BASE}/config/logs?${params.toString()}`);
+  }
+
+  async clearLogs(type: string = 'backend') {
+    return this.request<ApiResponse>(`${API_BASE}/config/logs?type=${type}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

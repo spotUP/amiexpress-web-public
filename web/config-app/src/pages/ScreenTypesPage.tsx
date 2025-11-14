@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Monitor, Edit2, Trash2, Plus } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface ScreenType {
   id: number;
@@ -14,6 +15,7 @@ interface ScreenType {
 
 export function ScreenTypesPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, confirm } = useNotification();
 
   const { data, isLoading } = useQuery({
     queryKey: ['screen-types'],
@@ -24,12 +26,19 @@ export function ScreenTypesPage() {
     mutationFn: (id: number) => apiClient.deleteScreenType(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['screen-types'] });
-      alert('Screen type deleted successfully');
+      showSuccess('Screen type deleted successfully');
     },
   });
 
-  const handleDelete = (screenType: ScreenType) => {
-    if (confirm(`Are you sure you want to delete screen type "${screenType.screen_title}"?`)) {
+  const handleDelete = async (screenType: ScreenType) => {
+    const confirmed = await confirm({
+      title: 'Delete Screen Type',
+      message: `Are you sure you want to delete screen type "${screenType.screen_title}"?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(screenType.id);
     }
   };
