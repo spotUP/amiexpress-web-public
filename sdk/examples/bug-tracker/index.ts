@@ -210,9 +210,6 @@ class BugTracker {
   }
 
   private handleInput(key: string): void {
-    // Pass input to UI components for toast management
-    this.uiComponents.handleInput(key);
-
     switch (this.currentView) {
       case 'main':
         this.handleMainMenuInput(key);

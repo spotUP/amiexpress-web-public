@@ -359,11 +359,20 @@ export class MODParser {
     }
 
     const sampleNum = note.instrument || 0;
-    const effect = 0; // TODO: Convert effects
+
+    // Convert effect from tracker format to MOD format
+    // MOD effects are 12 bits: 4 bits type + 8 bits parameter
+    let effectValue = 0;
+    if (note.effect && note.effectParam !== undefined) {
+      // Parse effect type (hex string like "01", "0C")
+      const effectType = parseInt(note.effect, 16) & 0x0F;
+      const effectParam = note.effectParam & 0xFF;
+      effectValue = (effectType << 8) | effectParam;
+    }
 
     buffer.writeUInt8((sampleNum & 0xF0) | ((period >> 8) & 0x0F), offset);
     buffer.writeUInt8(period & 0xFF, offset + 1);
-    buffer.writeUInt8(((sampleNum & 0x0F) << 4) | ((effect >> 8) & 0x0F), offset + 2);
-    buffer.writeUInt8(effect & 0xFF, offset + 3);
+    buffer.writeUInt8(((sampleNum & 0x0F) << 4) | ((effectValue >> 8) & 0x0F), offset + 2);
+    buffer.writeUInt8(effectValue & 0xFF, offset + 3);
   }
 }
