@@ -15,7 +15,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist',
+    outDir: '../public-react',
     emptyOutDir: true,
     assetsDir: 'assets',
   }
