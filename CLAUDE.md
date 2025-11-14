@@ -124,11 +124,15 @@ AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress
 - Debug mode: `./dev/scripts/start-servers.sh --debug` (shows all logs)
 - Kill: `./dev/scripts/kill-servers.sh`
 - **NEVER**: `npm run dev &` or background bash or `run_in_background: true`
-- Ports: Backend 3001, Frontend 5173, Preview 8080
+- **Unified Deployment**: All frontends served from backend on port 3001
+  - BBS Terminal: `http://localhost:3001/`
+  - Admin Config: `http://localhost:3001/admin/`
+  - SDK Preview: `http://localhost:3001/sdk/`
+  - SDK Backend API: port 8080 (WebSocket for door preview)
 - **Just works**: No need to manually run npm install or builds
 
 ### Multi-Protocol Access
-- **WebSocket**: Main browser interface (Frontend port 5173)
+- **WebSocket**: Main browser interface at `http://localhost:3001/`
 - **Telnet**: Classic BBS access (port 2323)
 - **SSH**: Secure terminal access (port 2222)
   - Generate host key: `ssh-keygen -t rsa -b 4096 -f ssh_host_rsa_key -N ""`
@@ -309,8 +313,7 @@ npm run lint         # ESLint validation
 - Required for development:
   - `JWT_SECRET` - Generate with `openssl rand -base64 32`
   - `DATABASE_DIR` - SQLite database location (default: `./data`)
-  - `BACKEND_PORT` - Backend port (default: 3001)
-  - `FRONTEND_PORT` - Frontend port (default: 5173)
+  - `BACKEND_PORT` - Backend port (default: 3001, serves all frontends)
 - For deployment:
   - `VERCEL_TOKEN` - For Vercel deployment
   - `RENDER_API_KEY` - For Render.com webhooks

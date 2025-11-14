@@ -58,7 +58,7 @@ cd amiexpress-web
 6. Optionally generate SSH keys
 7. Start your BBS
 
-**That's it!** Your BBS will be running at `http://localhost:5173`
+**That's it!** Your BBS will be running at `http://localhost:3001`
 
 ---
 
@@ -114,7 +114,7 @@ DATABASE_FILE=amiexpress.db
 
 #### 4. Create Admin Account
 
-Open your browser to `http://localhost:5173` and:
+Open your browser to `http://localhost:3001` and:
 1. Click "New User" or "Register"
 2. Create account with username: `sysop`
 3. Email the sysop to request admin elevation OR manually edit database
@@ -210,20 +210,14 @@ server {
     listen 80;
     server_name yourbbs.com;
 
+    # All frontend paths and API served from port 3001
     location / {
-        proxy_pass http://localhost:5173;
+        proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
-    }
-
-    location /socket.io/ {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
     }
 }
 ```
@@ -235,7 +229,9 @@ server {
 After setup, access your BBS:
 
 **Local:**
-- Web Terminal: `http://localhost:5173`
+- Web Terminal: `http://localhost:3001/`
+- Admin Panel: `http://localhost:3001/admin/`
+- SDK Preview: `http://localhost:3001/sdk/`
 - Telnet: `telnet localhost 2323`
 - SSH: `ssh -p 2222 sysop@localhost`
 
@@ -612,16 +608,15 @@ This validates:
 ```
 
 **Access Points:**
-- Web: `http://localhost:5173`
-- Admin: `http://localhost:5173/admin`
-- Config: `http://localhost:8081` (config-app)
+- Web Terminal: `http://localhost:3001/`
+- Admin Panel: `http://localhost:3001/admin/`
+- SDK Preview: `http://localhost:3001/sdk/`
 - Telnet: `telnet localhost 2323`
 - SSH: `ssh -p 2222 user@localhost`
 
 **Logs:**
 - Backend: `logs/backend.log`
-- Frontend: `logs/frontend.log`
-- Config App: `logs/config.log`
+- SDK Preview: `logs/preview.log`
 
 ---
 

@@ -64,15 +64,11 @@ mkdir -p "$LOGS_DIR"
 
 # Use fixed log filenames (will be overwritten each time)
 BACKEND_LOG="$LOGS_DIR/backend.log"
-FRONTEND_LOG="$LOGS_DIR/frontend.log"
 PREVIEW_LOG="$LOGS_DIR/preview.log"
-CONFIG_LOG="$LOGS_DIR/config.log"
 
 echo -e "${CYAN}→ Logs will be saved to:${RESET}"
 echo -e "   ${WHITE}$BACKEND_LOG${RESET}"
-echo -e "   ${WHITE}$FRONTEND_LOG${RESET}"
 echo -e "   ${WHITE}$PREVIEW_LOG${RESET}"
-echo -e "   ${WHITE}$CONFIG_LOG${RESET}"
 echo ""
 
 # === ENHANCED SETUP CHECKS ===
@@ -230,14 +226,18 @@ echo ""
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1
 
-echo -e "${CYAN}→ Starting backend, frontend, config app, and preview server...${RESET}"
+echo -e "${CYAN}→ Starting servers (unified deployment - all frontends served from backend)...${RESET}"
 echo ""
 
 # Trap to kill all servers on exit
-trap 'echo ""; echo -e "${CYAN}→ Stopping servers...${RESET}"; kill $BACKEND_PID $FRONTEND_PID $CONFIG_PID $PREVIEW_PID 2>/dev/null; wait; echo -e "${GREEN}[OK] Servers stopped${RESET}"; exit' EXIT INT TERM
+trap 'echo ""; echo -e "${CYAN}→ Stopping servers...${RESET}"; kill $BACKEND_PID $PREVIEW_PID 2>/dev/null; wait; echo -e "${GREEN}[OK] Servers stopped${RESET}"; exit' EXIT INT TERM
 
 # Start backend in background (conditionally filter output, always save to log)
-echo -ne "   ${MAGENTA}[1/4]${RESET} Starting backend... "
+# Backend serves all three frontends from built static files:
+# - BBS Terminal at /
+# - Admin Config at /admin/
+# - SDK Preview at /sdk/
+echo -ne "   ${MAGENTA}[1/2]${RESET} Starting backend... "
 if [ "$DEBUG_MODE" = true ]; then
   # DEBUG MODE: Show all logs and save to file
   (cd "$REPO_ROOT/web/backend" && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
@@ -247,33 +247,9 @@ else
 fi
 BACKEND_PID=$!
 
-# Start frontend in background (conditionally show output, always save to log)
+# Start SDK preview backend server in background (handles SDK door preview WebSocket API)
 echo -e "${GREEN}[STARTED]${RESET}"
-echo -ne "   ${MAGENTA}[2/4]${RESET} Starting frontend... "
-if [ "$DEBUG_MODE" = true ]; then
-  # DEBUG MODE: Show frontend logs and save to file
-  (cd "$REPO_ROOT/web/frontend" && npm run dev 2>&1 | tee "$FRONTEND_LOG") &
-else
-  # NORMAL MODE: Suppress frontend output but save to file
-  (cd "$REPO_ROOT/web/frontend" && npm run dev 2>&1 | tee "$FRONTEND_LOG" > /dev/null) &
-fi
-FRONTEND_PID=$!
-
-# Start config app in background (conditionally show output, always save to log)
-echo -e "${GREEN}[STARTED]${RESET}"
-echo -ne "   ${MAGENTA}[3/4]${RESET} Starting config app... "
-if [ "$DEBUG_MODE" = true ]; then
-  # DEBUG MODE: Show config app logs and save to file
-  (cd "$REPO_ROOT/web/config-app" && npm run dev 2>&1 | tee "$CONFIG_LOG") &
-else
-  # NORMAL MODE: Suppress config app output but save to file
-  (cd "$REPO_ROOT/web/config-app" && npm run dev 2>&1 | tee "$CONFIG_LOG" > /dev/null) &
-fi
-CONFIG_PID=$!
-
-# Start SDK preview server in background
-echo -e "${GREEN}[STARTED]${RESET}"
-echo -ne "   ${MAGENTA}[4/4]${RESET} Starting SDK preview... "
+echo -ne "   ${MAGENTA}[2/2]${RESET} Starting SDK preview backend... "
 # DEBUG_OUTPUT controls whether door-handling debug messages are shown
 # In normal mode, door output is clean without debug messages
 # In debug mode, all debug messages are shown
@@ -317,39 +293,26 @@ fi
 # Give everything a moment to stabilize
 sleep 2
 
-# Detect actual frontend port by checking common Vite ports (start with 5173)
-FRONTEND_PORT=""
-for port in 5173 5174 5175 5176 5177 5178 5179 5180 5181 5182 5183 5184; do
-  if lsof -ti:$port > /dev/null 2>&1; then
-    FRONTEND_PORT=$port
-    break
-  fi
-done
-
-# Fallback to 5173 if detection fails
-if [ -z "$FRONTEND_PORT" ]; then
-  FRONTEND_PORT="5173"
-fi
-
 echo ""
 echo -e "${GREEN}${BOLD}"
 echo "======================================================================"
-echo "                   AmiExpress BBS - All Servers Running              "
+echo "                   AmiExpress BBS - Servers Running                  "
 echo "======================================================================"
 echo -e "${RESET}"
-echo -e "${CYAN}  UNIFIED DEPLOYMENT (Single Backend, Multiple Frontends):${RESET}"
-echo -e "${CYAN}  --------------------------------------------------------${RESET}"
+echo -e "${CYAN}  UNIFIED DEPLOYMENT (All Frontends Served from Single Backend):${RESET}"
+echo -e "${CYAN}  ----------------------------------------------------------------${RESET}"
 echo ""
 echo -e "${GREEN}  [BBS]${RESET}    ${WHITE}http://localhost:3001/${RESET}"
 echo -e "           ${CYAN}Main BBS Terminal Interface${RESET}"
 echo -e "           ${YELLOW}Login: sysop / sysop${RESET}"
 echo ""
-echo -e "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/system${RESET}"
+echo -e "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/${RESET}"
 echo -e "           ${CYAN}Configuration Management Panel${RESET}"
 echo -e "           ${YELLOW}Login: sysop / sysop${RESET}"
 echo ""
 echo -e "${BLUE}  [SDK]${RESET}    ${WHITE}http://localhost:3001/sdk/${RESET}"
 echo -e "           ${CYAN}Door Development Preview Tool${RESET}"
+echo -e "           ${YELLOW}(Backend API on port 8080)${RESET}"
 echo ""
 echo -e "${WHITE}  [API]${RESET}    ${WHITE}http://localhost:3001/api/${RESET}"
 echo -e "           ${CYAN}Backend REST API Server${RESET}"
@@ -359,8 +322,11 @@ echo -e "${YELLOW}  [DEBUG] MODE: Full logs visible below${RESET}"
 echo ""
 fi
 echo -e "${WHITE}  Production URLs: ${CYAN}https://bbs.uprough.net/${RESET}"
-echo -e "                   ${CYAN}https://bbs.uprough.net/admin/system${RESET}"
+echo -e "                   ${CYAN}https://bbs.uprough.net/admin/${RESET}"
 echo -e "                   ${CYAN}https://bbs.uprough.net/sdk/${RESET}"
+echo ""
+echo -e "${WHITE}  Note: All frontends built and served as static files from backend${RESET}"
+echo -e "${WHITE}        No separate dev servers running for instant startup${RESET}"
 echo ""
 echo -e "${RED}  Press Ctrl+C to stop all servers${RESET}"
 echo ""
@@ -372,7 +338,7 @@ echo ""
 # Open browser tabs based on OPEN_MODE
 # All three apps now served from single backend on port 3001
 BBS_URL="http://localhost:3001/"
-ADMIN_URL="http://localhost:3001/admin/system"
+ADMIN_URL="http://localhost:3001/admin/"
 SDK_URL="http://localhost:3001/sdk/"
 
 if [ "$OPEN_MODE" = "full" ]; then
