@@ -911,13 +911,26 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
     console.error(`[${type.toUpperCase()}] Error on node ${connection.nodeId}:`, error.message);
   });
 
-  // Send welcome message with ASCII-safe characters
-  // Use '=' instead of UTF-8 box-drawing for telnet compatibility
-  connection.write('\r\n\x1b[36m' + '='.repeat(50) + '\x1b[0m\r\n');
-  connection.write('\x1b[1;37mWelcome to AmiExpress BBS\x1b[0m\r\n');
-  connection.write(`\x1b[33mConnected via ${type.toUpperCase()} on node ${connection.nodeId}\x1b[0m\r\n`);
-  connection.write('\x1b[36m' + '='.repeat(50) + '\x1b[0m\r\n\r\n');
-  connection.write('Login: ');
+  // Function to send welcome message
+  const sendWelcomeMessage = () => {
+    // Clear screen and move cursor to home position
+    connection.write('\x1b[2J\x1b[H');
+    // Send welcome message with ASCII-safe characters
+    // Use '=' instead of UTF-8 box-drawing for telnet compatibility
+    connection.write('\r\n\x1b[36m' + '='.repeat(50) + '\x1b[0m\r\n');
+    connection.write('\x1b[0;37mWelcome to AmiExpress BBS\x1b[0m\r\n');
+    connection.write(`\x1b[33mConnected via ${type.toUpperCase()} on node ${connection.nodeId}\x1b[0m\r\n`);
+    connection.write('\x1b[36m' + '='.repeat(50) + '\x1b[0m\r\n\r\n');
+    connection.write('Login: ');
+  };
+
+  // For SSH: Wait for 'ready' event before sending welcome
+  // For Telnet: Send welcome immediately (stream is ready on connection)
+  if (type === 'ssh') {
+    connection.once('ready', sendWelcomeMessage);
+  } else {
+    sendWelcomeMessage();
+  }
 }
 
 // Set up telnet server event handlers
