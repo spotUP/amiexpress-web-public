@@ -31,7 +31,12 @@ const TELOPT_ECHO = 1;        // Echo
 const TELOPT_SGA = 3;         // Suppress Go Ahead
 const TELOPT_STATUS = 5;      // Status
 const TELOPT_TIMING_MARK = 6; // Timing Mark
+const TELOPT_TTYPE = 24;      // Terminal Type (RFC 1091)
 const TELOPT_NAWS = 31;       // Negotiate About Window Size (RFC 1073)
+
+// TTYPE subnegotiation commands
+const TTYPE_SEND = 1;         // Request terminal type
+const TTYPE_IS = 0;           // Terminal type response
 
 /**
  * IAC Protocol State Machine
@@ -59,6 +64,9 @@ export class TelnetConnection extends EventEmitter {
   private nawsHeight: number = 24;
   private willSent: boolean = false;
   private doSent: boolean = false;
+  private ttypeRequested: boolean = false;
+  private ttypeData: number[] = [];
+  public terminalType: string = 'unknown';
   public sessionId: string;
   public nodeId: number;
   public session: BBSSession | null = null;
@@ -83,6 +91,9 @@ export class TelnetConnection extends EventEmitter {
    * Send WILL/DO commands for supported options
    */
   private initializeTelnet(): void {
+    // Request client terminal type (RFC 1091)
+    this.sendCommand([IAC, DO, TELOPT_TTYPE]);
+
     // Request client to send window size (NAWS)
     this.sendCommand([IAC, DO, TELOPT_NAWS]);
 
@@ -143,6 +154,8 @@ export class TelnetConnection extends EventEmitter {
           // Subnegotiation option
           if (byte === TELOPT_NAWS) {
             this.nawsMode = 4; // Expecting 4 bytes (width MSB, width LSB, height MSB, height LSB)
+          } else if (byte === TELOPT_TTYPE) {
+            this.ttypeData = []; // Start collecting TTYPE data
           }
           this.iacState = IACState.SB_DATA;
           break;
@@ -162,12 +175,19 @@ export class TelnetConnection extends EventEmitter {
               this.emit('window-size', this.nawsWidth || 80, this.nawsHeight || 24);
             }
             this.nawsMode--;
+          } else if (this.ttypeData.length >= 0) {
+            // TTYPE data collection
+            this.ttypeData.push(byte);
           }
           break;
 
         case IACState.SB_IAC:
           if (byte === SE) {
             // IAC SE = end of subnegotiation
+            // Process collected TTYPE data
+            if (this.ttypeData.length > 0) {
+              this.handleTerminalType();
+            }
             this.iacState = IACState.NORMAL;
           } else if (byte === IAC) {
             // IAC IAC in SB mode = literal 255
@@ -187,6 +207,38 @@ export class TelnetConnection extends EventEmitter {
   }
 
   /**
+   * Handle TERMINAL-TYPE subnegotiation response (RFC 1091)
+   * Detects C64 vs modern terminals based on reported type
+   */
+  private handleTerminalType(): void {
+    // First byte should be TTYPE_IS (0)
+    if (this.ttypeData.length < 2 || this.ttypeData[0] !== TTYPE_IS) {
+      console.log(`[Telnet] Invalid TTYPE response on node ${this.nodeId}`);
+      return;
+    }
+
+    // Extract terminal type string (skip first byte which is TTYPE_IS)
+    const terminalTypeBytes = this.ttypeData.slice(1);
+    const terminalTypeString = String.fromCharCode(...terminalTypeBytes).toUpperCase();
+
+    this.terminalType = terminalTypeString;
+    console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"`);
+
+    // Detect C64 based on terminal type string
+    const isC64 = terminalTypeString.includes('C64') ||
+                  terminalTypeString.includes('COMMODORE') ||
+                  terminalTypeString.includes('PETSCII');
+
+    // Emit terminal-type event for session configuration
+    this.emit('terminal-type', {
+      terminalType: terminalTypeString,
+      isC64: isC64,
+      width: isC64 ? 40 : 80,
+      height: isC64 ? 25 : 24
+    });
+  }
+
+  /**
    * Handle telnet option negotiation
    * Based on express.e IAC handling
    */
@@ -194,7 +246,13 @@ export class TelnetConnection extends EventEmitter {
     switch (command) {
       case WILL:
         // Client willing to do something
-        if (option === TELOPT_NAWS) {
+        if (option === TELOPT_TTYPE) {
+          // Client will send terminal type - request it
+          if (!this.ttypeRequested) {
+            this.sendCommand([IAC, SB, TELOPT_TTYPE, TTYPE_SEND, IAC, SE]);
+            this.ttypeRequested = true;
+          }
+        } else if (option === TELOPT_NAWS) {
           // Client will send window size - acknowledge
           if (!this.doSent) {
             this.sendCommand([IAC, DO, TELOPT_NAWS]);

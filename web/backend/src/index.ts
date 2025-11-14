@@ -18,6 +18,7 @@ export { BBSState, LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
 import { testFile, TestResult } from './utils/file-test.util';
 import { moveUploadedFile, getConferenceDir } from './utils/file-hold.util';
+import { convertUnicodePuaToPetscii } from './utils/petscii.util';
 import { writeUploadToDirFile } from './utils/dir-file.util';
 import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.util';
 import { AuthHandler } from './handlers/auth.handler';
@@ -237,6 +238,9 @@ export interface BBSSession {
   mouseEventsEnabled?: boolean; // Whether mouse events should be sent to door (for ANSI editor, etc.)
   ansiEnabled?: boolean; // Whether ANSI is enabled for this session
   petsciiMode?: boolean; // Whether PETSCII mode is enabled (40x25, .seq files)
+  terminalType?: 'c64' | 'modern' | 'unknown'; // Terminal type: C64 (raw PETSCII), modern (Unicode PUA), or unknown
+  screenWidth?: number; // Terminal width (40 for C64, 80 for modern)
+  screenHeight?: number; // Terminal height (25 for C64, 24 for modern)
   currentRoomId?: string; // Current chat room ID for group chat
 
   // Phase 9: Security/ACS System (express.e:165-167, 306-308)
@@ -863,7 +867,19 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
   const emitter = {
     emit: (event: string, data: any) => {
       if (event === 'ansi-output') {
+        // Modern terminal or unknown - send as-is (ANSI codes)
         connection.write(data);
+      } else if (event === 'petscii-output') {
+        // Handle PETSCII output based on terminal type
+        if (connection.session?.terminalType === 'c64') {
+          // Real C64 - send raw PETSCII bytes (data is already in Unicode PUA format)
+          // Need to convert Unicode PUA back to raw PETSCII bytes
+          const petsciiBytes = convertUnicodePuaToPetscii(data);
+          connection.write(petsciiBytes);
+        } else {
+          // Modern terminal - send Unicode PUA for PetMe64 font rendering
+          connection.write(data);
+        }
       }
     },
     id: connection.sessionId,
@@ -889,11 +905,32 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
     }
   });
 
-  // Handle window size changes
+  // Handle terminal type detection (telnet TTYPE negotiation)
+  connection.on('terminal-type', (info: { terminalType: string; isC64: boolean; width: number; height: number }) => {
+    if (connection.session) {
+      connection.session.terminalType = info.isC64 ? 'c64' : 'modern';
+      connection.session.screenWidth = info.width;
+      connection.session.screenHeight = info.height;
+      connection.session.petsciiMode = info.isC64;
+      console.log(`[${type.toUpperCase()}] Terminal detected: ${info.terminalType} (${info.isC64 ? 'C64' : 'Modern'}) - ${info.width}x${info.height}`);
+    }
+  });
+
+  // Handle window size changes (NAWS)
   connection.on('window-size', (width: number, height: number) => {
     if (connection.session) {
-      // Update session terminal size
-      console.log(`[${type.toUpperCase()}] Window size: ${width}x${height}`);
+      connection.session.screenWidth = width;
+      connection.session.screenHeight = height;
+
+      // Fallback detection: If terminal type not yet determined, use screen size
+      if (!connection.session.terminalType || connection.session.terminalType === 'unknown') {
+        const isC64 = (width === 40 && height === 25);
+        connection.session.terminalType = isC64 ? 'c64' : 'modern';
+        connection.session.petsciiMode = isC64;
+        console.log(`[${type.toUpperCase()}] Terminal detected via NAWS: ${width}x${height} (${isC64 ? 'C64' : 'Modern'})`);
+      } else {
+        console.log(`[${type.toUpperCase()}] Window size: ${width}x${height}`);
+      }
     }
   });
 
