@@ -179,7 +179,7 @@ class SpaceShooter {
 
   private async loadHighScore(): Promise<void> {
     try {
-      const result = await this.door.callRPC('getHighScore', {
+      const result = await this.door.rpc('getHighScore', {
         userId: this.currentUserId
       });
       this.highScore = result.score || 0;
@@ -193,7 +193,7 @@ class SpaceShooter {
     if (this.score === 0) return;
 
     try {
-      const result = await this.door.callRPC('saveHighScore', {
+      const result = await this.door.rpc('saveHighScore', {
         userId: this.currentUserId,
         score: this.score
       });

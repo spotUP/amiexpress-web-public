@@ -565,7 +565,7 @@ class DungeonRPG {
   private async saveGame() {
     if (!this.userId) return;
 
-    const result = await this.door.callRPC('saveGame', {
+    const result = await this.door.rpc('saveGame', {
       userId: this.userId,
       slot: 1,
       state: {
@@ -588,7 +588,7 @@ class DungeonRPG {
   private async loadGame() {
     if (!this.userId) return;
 
-    const result = await this.door.callRPC('loadGame', {
+    const result = await this.door.rpc('loadGame', {
       userId: this.userId,
       slot: 1
     });
