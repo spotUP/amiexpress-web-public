@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Save, Loader2, CheckCircle, XCircle, Info } from 'lucide-react';
+import { SDK_API_URL } from '../utils/api-config';
 
 interface NFOEditorProps {
   doorId: string;
@@ -21,7 +22,7 @@ export const NFOEditor: React.FC<NFOEditorProps> = ({ doorId, className = '' }) 
   const loadNFOFile = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/doors/${doorId}/nfo`);
+      const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/nfo`);
       if (response.ok) {
         const data = await response.json();
         setContent(data.content);
@@ -41,7 +42,7 @@ export const NFOEditor: React.FC<NFOEditorProps> = ({ doorId, className = '' }) 
     setSaving(true);
     setSaveStatus('idle');
     try {
-      const response = await fetch(`/api/doors/${doorId}/nfo`, {
+      const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/nfo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

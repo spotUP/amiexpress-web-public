@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Wand2, Send, Loader2, Sparkles, CheckCircle, XCircle, Code, AlertCircle, History, Trash2, RotateCcw } from 'lucide-react';
+import { SDK_API_URL } from '../utils/api-config';
 
 interface AIPromptPanelProps {
   selectedDoor: string | null;
@@ -95,7 +96,7 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
         apiKey: apiKey,
       };
 
-      const res = await fetch('/api/ai-prompt', {
+      const res = await fetch(`${SDK_API_URL}/api/ai-prompt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

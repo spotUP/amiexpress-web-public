@@ -53,6 +53,7 @@ import {
 } from './types';
 import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles, Layout, Monitor, Code2, Columns, File, FileText } from 'lucide-react';
 import type { CommandItem } from './components/ui/CommandPalette';
+import { SDK_API_URL } from './utils/api-config';
 
 const defaultSettings: AppSettings = {
   theme: 'dark',
@@ -197,7 +198,7 @@ function App() {
   const loadDoors = async () => {
     setDoorsLoading(true);
     try {
-      const response = await fetch('/api/doors');
+      const response = await fetch(`${SDK_API_URL}/api/doors`);
       if (response.ok) {
         const doorsData = await response.json();
         setDoors(doorsData);
@@ -555,7 +556,7 @@ function App() {
         });
       }
 
-      const response = await fetch(`/api/doors/${selectedDoor.id}/release`, {
+      const response = await fetch(`${SDK_API_URL}/api/doors/${selectedDoor.id}/release`, {
         method: 'POST',
         body: formData,
       });
@@ -570,7 +571,7 @@ function App() {
       toast.success('Archive created!', `${filename} (${(size / 1024).toFixed(1)} KB)`);
 
       // Trigger download
-      const downloadUrl = `/downloads/${filename}`;
+      const downloadUrl = `${SDK_API_URL}/downloads/${filename}`;
       const a = document.createElement('a');
       a.href = downloadUrl;
       a.download = filename;
@@ -669,7 +670,7 @@ function App() {
   const handleInstallDoor = async (doorId: string) => {
     try {
       toast.info('Installing door...', `Installing ${doorId} to BBS`);
-      const response = await fetch(`/api/doors/${doorId}/install`, {
+      const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/install`, {
         method: 'POST',
       });
 
@@ -694,7 +695,7 @@ function App() {
   const handleUninstallDoor = async (doorId: string) => {
     try {
       toast.info('Uninstalling door...', `Removing ${doorId} from BBS`);
-      const response = await fetch(`/api/doors/${doorId}/install`, {
+      const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/install`, {
         method: 'DELETE',
       });
 
@@ -719,7 +720,7 @@ function App() {
   const handleImportDoor = () => {
     // Reload doors list after successful import
     setDoorsLoading(true);
-    fetch('/api/doors')
+    fetch(`${SDK_API_URL}/api/doors`)
       .then(res => res.json())
       .then(data => {
         setDoors(data);

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Wand2, Loader2, CheckCircle, XCircle, ChevronRight, Sparkles } from 'lucide-react';
+import { SDK_API_URL } from '../utils/api-config';
 
 interface GameWizardProps {
   onClose: () => void;
@@ -107,7 +108,7 @@ export const GameWizard: React.FC<GameWizardProps> = ({
         localStorage.setItem('claude_api_key', apiKey);
       }
 
-      const response = await fetch('/api/games/generate', {
+      const response = await fetch(`${SDK_API_URL}/api/games/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
