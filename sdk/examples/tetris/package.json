@@ -5,6 +5,7 @@
   "main": "dist/tetris.js",
   "category": "Puzzle Game",
   "bbsCommand": "TETRIS",
+  "runtime": "client",
   "author": "AmiExpress SDK",
   "license": "MIT",
   "scripts": {

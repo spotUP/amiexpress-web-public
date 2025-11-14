@@ -26,13 +26,13 @@
  */
 
 import {
-  Door,
+  ClientDoor,
   GraphicsEngine,
   AudioEngine,
   HUDBuilder,
   SaveManager,
   AnsiColor
-} from '@amiexpress/bbs-door-sdk';
+} from '@amiexpress/bbs-door-sdk/client';
 
 interface Position {
   x: number;
@@ -87,7 +87,7 @@ interface TetrisPiece {
 
 class TetrisGame {
   /** Door instance */
-  private door: Door;
+  private door: ClientDoor;
 
   /** Graphics engine */
   private gfx: GraphicsEngine;
@@ -131,7 +131,7 @@ class TetrisGame {
   /** User ID */
   private userId: number = 0;
 
-  constructor(door: Door) {
+  constructor(door: ClientDoor) {
     this.door = door;
     this.gfx = new GraphicsEngine({ width: 80, height: 24 });
     this.audio = new AudioEngine();
@@ -728,11 +728,12 @@ class TetrisGame {
 }
 
 // Main entry point
-const door = new Door({
+const door = new ClientDoor({
   name: 'Tetris',
   version: '1.0.0',
   author: 'AmiExpress SDK',
   description: 'Classic block puzzle game',
+  runtime: 'client',
 });
 
 door.onConnect(async (user: any) => {
