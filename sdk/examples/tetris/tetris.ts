@@ -30,7 +30,6 @@ import {
   GraphicsEngine,
   AudioEngine,
   HUDBuilder,
-  SaveManager,
   AnsiColor
 } from '@amiexpress/bbs-door-sdk/client';
 
@@ -98,9 +97,6 @@ class TetrisGame {
   /** HUD */
   private hud: HUDBuilder;
 
-  /** Save manager for high scores */
-  private saveMgr: SaveManager;
-
   /** Game board (20 rows x 10 columns) */
   private board: number[][];
 
@@ -136,7 +132,6 @@ class TetrisGame {
     this.gfx = new GraphicsEngine({ width: 80, height: 24 });
     this.audio = new AudioEngine();
     this.hud = new HUDBuilder();
-    this.saveMgr = new SaveManager({ userId: 0, gameId: 'tetris' });
 
     // Initialize board
     this.board = Array(20)
@@ -149,7 +144,6 @@ class TetrisGame {
    */
   public async init(userId: number): Promise<void> {
     this.userId = userId;
-    this.saveMgr = new SaveManager({ userId, gameId: 'tetris' });
 
     await this.audio.init();
 
@@ -622,39 +616,21 @@ class TetrisGame {
   }
 
   /**
-   * Save high score
+   * Save high score via RPC
    */
   private async saveHighScore(): Promise<void> {
     try {
-      // Load existing high scores
-      const save = await this.saveMgr.load(1);
-      let highScores: Array<{ score: number; lines: number; level: number; date: string }> = [];
-
-      if (save && save.state && Array.isArray(save.state.highScores)) {
-        highScores = save.state.highScores;
-      }
-
-      // Add current score
-      highScores.push({
-        score: this.score,
-        lines: this.lines,
-        level: this.level,
-        date: new Date().toISOString().split('T')[0]
+      await this.door.rpc('saveHighScore', {
+        userId: this.userId,
+        score: this.score
       });
-
-      // Sort by score descending and keep top 10
-      highScores.sort((a, b) => b.score - a.score);
-      highScores = highScores.slice(0, 10);
-
-      // Save
-      await this.saveMgr.save(1, { highScores });
     } catch (error) {
       console.error('Failed to save high score:', error);
     }
   }
 
   /**
-   * Show high scores
+   * Show high scores via RPC
    */
   private async showHighScores(): Promise<void> {
     this.door.clearScreen(this.userId);
@@ -662,29 +638,24 @@ class TetrisGame {
     this.door.send('╔═══════════════════════════════════╗\r\n', this.userId);
     this.door.send('║         HIGH SCORES             ║\r\n', this.userId);
     this.door.send('╠═══════════════════════════════════╣\r\n', this.userId);
-    this.door.send('║ #  Score    Lines  Level  Date   ║\r\n', this.userId);
+    this.door.send('║ Rank  User ID    Score     Date  ║\r\n', this.userId);
     this.door.send('╠═══════════════════════════════════╣\r\n', this.userId);
 
     try {
-      const save = await this.saveMgr.load(1);
-      let highScores: Array<{ score: number; lines: number; level: number; date: string }> = [];
+      const result = await this.door.rpc('getLeaderboard', {});
+      const leaderboard = result.leaderboard || [];
 
-      if (save && save.state && Array.isArray(save.state.highScores)) {
-        highScores = save.state.highScores;
-      }
-
-      if (highScores.length === 0) {
+      if (leaderboard.length === 0) {
         this.door.send('║   No high scores yet!           ║\r\n', this.userId);
       } else {
-        for (let i = 0; i < Math.min(10, highScores.length); i++) {
-          const hs = highScores[i];
-          const rank = (i + 1).toString().padStart(2);
-          const score = hs.score.toString().padStart(7);
-          const lines = hs.lines.toString().padStart(5);
-          const level = hs.level.toString().padStart(5);
-          const date = hs.date.substring(5); // MM-DD
+        for (let i = 0; i < Math.min(10, leaderboard.length); i++) {
+          const hs = leaderboard[i];
+          const rank = (i + 1).toString().padStart(4);
+          const userId = hs.userId.toString().padStart(10);
+          const score = hs.score.toString().padStart(9);
+          const date = new Date(hs.date).toLocaleDateString().substring(0, 5);
 
-          this.door.send(`║ ${rank} ${score} ${lines}  ${level}  ${date} ║\r\n`, this.userId);
+          this.door.send(`║ ${rank} ${userId} ${score} ${date} ║\r\n`, this.userId);
         }
       }
     } catch (error) {

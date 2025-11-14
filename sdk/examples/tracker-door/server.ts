@@ -210,6 +210,74 @@ door.onRPC('autoSave', async (params) => {
   };
 });
 
+/**
+ * For telnet/SSH connections, provide text-based interface
+ */
+door.onConnect(async (user) => {
+  console.log(`[Tracker-Server] Telnet/SSH user connected: ${user.name}`);
+
+  // Send welcome message
+  door.send(user.id, '\x1b[2J\x1b[H'); // Clear screen
+  door.send(user.id, '\x1b[1;36m'); // Bright cyan
+  door.send(user.id, '╔════════════════════════════════════════════════════════════════════════════╗\r\n');
+  door.send(user.id, '║                          TRACKER-DOOR                                      ║\r\n');
+  door.send(user.id, '║                Professional Music Tracker for BBS                          ║\r\n');
+  door.send(user.id, '╚════════════════════════════════════════════════════════════════════════════╝\r\n');
+  door.send(user.id, '\x1b[0m\r\n'); // Reset color
+
+  door.send(user.id, '\x1b[1;33m'); // Yellow
+  door.send(user.id, 'This is a simplified text-based interface for telnet/SSH connections.\r\n\r\n');
+  door.send(user.id, '\x1b[0m'); // Reset
+
+  door.send(user.id, 'For the full graphical music tracker with:\r\n');
+  door.send(user.id, '  • Real-time audio synthesis (Tone.js)\r\n');
+  door.send(user.id, '  • Pattern editor with effects\r\n');
+  door.send(user.id, '  • Instrument editor\r\n');
+  door.send(user.id, '  • Visual spectrum analyzer\r\n');
+  door.send(user.id, '  • MOD/XM/IT format support\r\n\r\n');
+
+  door.send(user.id, '\x1b[1;36m'); // Bright cyan
+  door.send(user.id, 'Please connect via WebSocket:\r\n');
+  door.send(user.id, '  https://your-bbs-url.com\r\n\r\n');
+  door.send(user.id, '\x1b[0m'); // Reset
+
+  door.send(user.id, '─────────────────────────────────────────────────────────────────────────────\r\n');
+  door.send(user.id, 'Your saved songs:\r\n\r\n');
+
+  // List user's saved songs
+  try {
+    const result = await door.handleRPC('listSongs', { userId: user.id });
+    const songs = result.songs || [];
+
+    if (songs.length === 0) {
+      door.send(user.id, '  (No saved songs yet)\r\n');
+    } else {
+      door.send(user.id, `  Found ${songs.length} saved song(s):\r\n\r\n`);
+      songs.forEach((song: any, index: number) => {
+        const date = new Date(song.modified).toLocaleDateString();
+        const size = (song.size / 1024).toFixed(1);
+        door.send(user.id, `    ${index + 1}. ${song.name.padEnd(30)} ${size.padStart(8)} KB  ${date}\r\n`);
+      });
+    }
+  } catch (error) {
+    door.send(user.id, '  Error loading saved songs\r\n');
+  }
+
+  door.send(user.id, '\r\n─────────────────────────────────────────────────────────────────────────────\r\n');
+  door.send(user.id, '\r\nPress Q to quit...\r\n');
+
+  // Wait for quit command
+  door.onInput((inputData) => {
+    if (inputData.user.id !== user.id) return;
+
+    const key = inputData.key.key.toLowerCase();
+
+    if (key === 'q' || key === 'escape') {
+      door.disconnect(user.id);
+    }
+  });
+});
+
 // Start server
 door.start();
-console.log('[Tracker-Server] Server component started, waiting for RPC calls...');
+console.log('[Tracker-Server] Server component started, waiting for connections and RPC calls...');
