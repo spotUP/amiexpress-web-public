@@ -575,6 +575,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   console.log(`[loadScreenFile] Loading screen: ${screenName}`);
   console.log(`[loadScreenFile] Base directory: ${baseDir}`);
   console.log(`[loadScreenFile] Conference ID: ${conferenceId}, Node ID: ${nodeId}`);
+  console.log(`[loadScreenFile] Terminal type: ${session?.terminalType || 'unknown'} (${session?.screenWidth}x${session?.screenHeight})`);
   console.log(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
 
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
@@ -664,12 +665,23 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
 
   // Possible filename variations (case-insensitive search will handle actual matching)
   // In PETSCII mode, prefer .seq files over .TXT files
-  const filenameVariations = session?.petsciiMode ? [
-    `${screenName}.seq`,  // PETSCII sequence files (C64/C128 format) - PREFERRED in PETSCII mode
-    `${screenName}.SEQ`,  // PETSCII sequence files (uppercase)
-    `${screenName}.TXT`,  // Fallback to ANSI if no PETSCII version exists
-    `${screenName}.txt`,
-  ] : [
+  // For real C64 clients (terminalType === 'c64'), prioritize _C64.seq variants
+  const isC64Client = session?.terminalType === 'c64';
+  const filenameVariations = session?.petsciiMode ? (
+    isC64Client ? [
+      `${screenName}_C64.seq`,  // C64-specific variant (40x25 layout) - HIGHEST PRIORITY for real C64
+      `${screenName}_C64.SEQ`,
+      `${screenName}.seq`,      // Standard PETSCII file
+      `${screenName}.SEQ`,
+      `${screenName}.TXT`,      // Fallback to ANSI
+      `${screenName}.txt`,
+    ] : [
+      `${screenName}.seq`,  // PETSCII sequence files (C64/C128 format) - for modern terminals with PetMe64 font
+      `${screenName}.SEQ`,
+      `${screenName}.TXT`,  // Fallback to ANSI if no PETSCII version exists
+      `${screenName}.txt`,
+    ]
+  ) : [
     `${screenName}.TXT`,  // MENU.TXT - PREFERRED in ANSI mode
     `${screenName}.txt`,  // MENU.txt, menu.txt, Menu.txt (all matched case-insensitively)
     `${screenName}.seq`,  // PETSCII sequence files (C64/C128 format)

@@ -423,6 +423,96 @@ export function writePetsciiSeqFile(filePath: string, text: string): boolean {
 }
 
 /**
+ * Convert Unicode PUA (PetMe64 format) back to raw PETSCII bytes
+ * Used when sending to real C64 terminals
+ *
+ * This is the inverse of convertPetsciiToPetMe64:
+ * - Unicode U+E000-E0FF → PETSCII 0x00-0xFF
+ * - ANSI color codes → PETSCII color codes
+ *
+ * @param data - String containing Unicode PUA characters and ANSI codes
+ * @returns Buffer containing raw PETSCII byte codes
+ *
+ * @example
+ * ```typescript
+ * const unicodePua = '\uE093\uE041'; // Clear screen + 'A' in PetMe64
+ * const petsciiBytes = convertUnicodePuaToPetscii(unicodePua);
+ * // Returns Buffer([0x93, 0x41]) - raw PETSCII codes
+ * ```
+ */
+export function convertUnicodePuaToPetscii(data: string): Buffer {
+  const bytes: number[] = [];
+  let i = 0;
+
+  while (i < data.length) {
+    const char = data[i];
+    const code = char.charCodeAt(0);
+
+    // Check for ANSI escape sequence
+    if (char === '\x1b' && i + 1 < data.length && data[i + 1] === '[') {
+      // Parse ANSI escape sequence
+      let j = i + 2;
+      let ansiCode = '';
+      while (j < data.length && data[j] !== 'm') {
+        ansiCode += data[j];
+        j++;
+      }
+
+      // Convert ANSI color codes to PETSCII color codes
+      const petsciiColor = ansiColorToPetscii(ansiCode);
+      if (petsciiColor !== null) {
+        bytes.push(petsciiColor);
+      }
+
+      i = j + 1; // Skip past the 'm'
+      continue;
+    }
+
+    // Check for Unicode PUA range (U+E000-E0FF)
+    if (code >= 0xE000 && code <= 0xE0FF) {
+      // Convert Unicode PUA back to PETSCII byte
+      bytes.push(code - 0xE000);
+    } else {
+      // Regular ASCII character - pass through
+      bytes.push(code & 0xFF);
+    }
+
+    i++;
+  }
+
+  return Buffer.from(bytes);
+}
+
+/**
+ * Convert ANSI color code to PETSCII color byte
+ * Maps ANSI SGR codes (like "0;37m") to PETSCII color control codes
+ *
+ * @param ansiCode - ANSI code string (e.g., "0;37" for white)
+ * @returns PETSCII color byte, or null if not a recognized color
+ */
+function ansiColorToPetscii(ansiCode: string): number | null {
+  // Map of ANSI codes to PETSCII colors (inverse of PETSCII_COLORS)
+  const ansiToPetscii: { [key: string]: number } = {
+    '0;37': 0x05,  // White
+    '0;31': 0x1C,  // Red
+    '0;32': 0x1E,  // Green
+    '0;34': 0x1F,  // Blue
+    '0;33': 0x81,  // Orange/Yellow
+    '0;30': 0x90,  // Black
+    '0;91': 0x96,  // Light Red
+    '0;90': 0x97,  // Dark Gray
+    '0;92': 0x99,  // Light Green
+    '0;94': 0x9A,  // Light Blue
+    '0;35': 0x9C,  // Purple
+    '0;93': 0x9E,  // Yellow
+    '0;36': 0x9F,  // Cyan
+    '0': 0x05,     // Reset → White
+  };
+
+  return ansiToPetscii[ansiCode] || null;
+}
+
+/**
  * Get PETSCII color name from byte code
  *
  * @param byte - PETSCII color code
