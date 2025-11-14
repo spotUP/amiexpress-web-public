@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Search, Trash2, Download, Terminal, Filter } from 'lucide-react';
+import { RefreshCw, Search, Trash2, Download, Terminal, Filter, Info, ExternalLink } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 
 type LogType = 'backend' | 'frontend' | 'error' | 'access';
+type Environment = 'local' | 'render' | 'railway' | 'fly' | 'heroku' | 'vercel';
 
 interface LogData {
   lines: string[];
@@ -13,6 +14,7 @@ interface LogData {
   logType: string;
   searchTerm?: string;
   message?: string;
+  environment?: Environment;
 }
 
 export function LogsPage() {
@@ -125,6 +127,75 @@ export function LogsPage() {
         <h1 className="text-3xl font-bold text-bbs-accent mb-2">System Logs</h1>
         <p className="text-bbs-muted">View and manage BBS system logs</p>
       </div>
+
+      {/* Platform Info Banner */}
+      {logData?.environment && logData.environment !== 'local' && (
+        <div className="card mb-4 bg-blue-500/10 border-blue-500/30">
+          <div className="flex items-start gap-3">
+            <Info size={20} className="text-blue-400 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-blue-400 mb-2">
+                Platform: {logData.environment.charAt(0).toUpperCase() + logData.environment.slice(1)}
+              </h3>
+              <p className="text-xs text-bbs-muted mb-3">
+                File-based logs are not available on this platform. All application output is captured by the platform and available through their logging system.
+              </p>
+              <div className="flex gap-2">
+                {logData.environment === 'render' && (
+                  <a
+                    href="https://dashboard.render.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                  >
+                    Open Render Dashboard <ExternalLink size={12} />
+                  </a>
+                )}
+                {logData.environment === 'railway' && (
+                  <a
+                    href="https://railway.app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                  >
+                    Open Railway Dashboard <ExternalLink size={12} />
+                  </a>
+                )}
+                {logData.environment === 'fly' && (
+                  <a
+                    href="https://fly.io/dashboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                  >
+                    Open Fly.io Dashboard <ExternalLink size={12} />
+                  </a>
+                )}
+                {logData.environment === 'heroku' && (
+                  <a
+                    href="https://dashboard.heroku.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                  >
+                    Open Heroku Dashboard <ExternalLink size={12} />
+                  </a>
+                )}
+                {logData.environment === 'vercel' && (
+                  <a
+                    href="https://vercel.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                  >
+                    Open Vercel Dashboard <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="card mb-4">
@@ -275,9 +346,11 @@ export function LogsPage() {
           </div>
         ) : logData?.message ? (
           <div className="flex items-center justify-center h-64">
-            <div className="text-center">
+            <div className="text-center max-w-2xl px-4">
               <Terminal size={48} className="text-bbs-muted mx-auto mb-4" />
-              <p className="text-bbs-muted">{logData.message}</p>
+              <pre className="text-sm text-bbs-muted whitespace-pre-wrap text-left bg-bbs-bg p-4 rounded border border-bbs-border">
+                {logData.message}
+              </pre>
             </div>
           </div>
         ) : (
