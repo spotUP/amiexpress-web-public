@@ -1269,6 +1269,36 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
           throw new Error(`Invalid log type: ${logType}`);
       }
 
+      // Detect hosting environment
+      const detectEnvironment = () => {
+        if (process.env.RENDER) return 'render';
+        if (process.env.RAILWAY_ENVIRONMENT) return 'railway';
+        if (process.env.FLY_APP_NAME) return 'fly';
+        if (process.env.HEROKU_APP_NAME) return 'heroku';
+        if (process.env.VERCEL) return 'vercel';
+        return 'local';
+      };
+
+      const environment = detectEnvironment();
+
+      // Platform-specific log viewing instructions
+      const getPlatformMessage = () => {
+        switch (environment) {
+          case 'render':
+            return 'Log files not available on Render.com. View logs in your Render dashboard:\n\n1. Go to your Render dashboard\n2. Select your service\n3. Click the "Logs" tab\n4. Logs update in real-time';
+          case 'railway':
+            return 'Log files not available on Railway. View logs in your Railway dashboard:\n\n1. Go to railway.app\n2. Select your project\n3. Click "Deployments" → Select active deployment\n4. View real-time logs in the deployment view';
+          case 'fly':
+            return 'Log files not available on Fly.io. View logs using the Fly CLI or dashboard:\n\n1. CLI: fly logs (in your project directory)\n2. Dashboard: Go to fly.io/dashboard → Select app → Monitoring';
+          case 'heroku':
+            return 'Log files not available on Heroku. View logs using Heroku CLI or dashboard:\n\n1. CLI: heroku logs --tail --app your-app-name\n2. Dashboard: Go to dashboard.heroku.com → Select app → More → View logs';
+          case 'vercel':
+            return 'Log files not available on Vercel. View logs in your Vercel dashboard:\n\n1. Go to vercel.com\n2. Select your project\n3. Click "Deployments" → Select deployment\n4. View logs in the deployment detail view';
+          default:
+            return `No ${logType} log file found. Start the BBS server to generate logs:\n\n./dev/scripts/start-servers.sh`;
+        }
+      };
+
       // Check if file exists
       try {
         await fs.access(logFile);
@@ -1277,7 +1307,8 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
           lines: [],
           totalLines: 0,
           logType,
-          message: `No ${logType} log file found`
+          environment,
+          message: getPlatformMessage()
         });
       }
 
