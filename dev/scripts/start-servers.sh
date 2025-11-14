@@ -306,7 +306,7 @@ echo -e "${GREEN}  [BBS]${RESET}    ${WHITE}http://localhost:3001/${RESET}"
 echo -e "           ${CYAN}Main BBS Terminal Interface${RESET}"
 echo -e "           ${YELLOW}Login: sysop / sysop${RESET}"
 echo ""
-echo -e "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/system${RESET}"
+echo -e "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/${RESET}"
 echo -e "           ${CYAN}Configuration Management Panel${RESET}"
 echo -e "           ${YELLOW}Login: sysop / sysop${RESET}"
 echo ""
@@ -322,7 +322,7 @@ echo -e "${YELLOW}  [DEBUG] MODE: Full logs visible below${RESET}"
 echo ""
 fi
 echo -e "${WHITE}  Production URLs: ${CYAN}https://bbs.uprough.net/${RESET}"
-echo -e "                   ${CYAN}https://bbs.uprough.net/admin/system${RESET}"
+echo -e "                   ${CYAN}https://bbs.uprough.net/admin/${RESET}"
 echo -e "                   ${CYAN}https://bbs.uprough.net/sdk/${RESET}"
 echo ""
 echo -e "${WHITE}  Note: All frontends built and served as static files from backend${RESET}"
@@ -338,7 +338,7 @@ echo ""
 # Open browser tabs based on OPEN_MODE
 # All three apps now served from single backend on port 3001
 BBS_URL="http://localhost:3001/"
-ADMIN_URL="http://localhost:3001/admin/system"
+ADMIN_URL="http://localhost:3001/admin/"
 SDK_URL="http://localhost:3001/sdk/"
 
 if [ "$OPEN_MODE" = "full" ]; then
