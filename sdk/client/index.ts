@@ -579,7 +579,8 @@ export class ClientDoor extends EventEmitter {
 /**
  * Export types
  */
-export { BBSUser, DoorConfig, KeyEvent, AnsiColor, AnsiBgColor } from '../common';
+export { BBSUser, DoorConfig, KeyEvent, AnsiBgColor } from '../common';
+export { AnsiColor } from '../core/types';
 
 /**
  * Export ANSI string utilities
@@ -606,6 +607,29 @@ export { ClientDoor as Door };
  * Export UIEngine for client doors
  */
 export { UIEngine } from '../engines/ui/ui-engine';
+
+/**
+ * Export engines for client doors
+ */
+export { GraphicsEngine } from '../engines/graphics/graphics-engine';
+export { PhysicsEngine } from '../engines/physics/physics-engine';
+export { AudioEngine } from '../engines/audio/audio-engine';
+export { NetworkEngine } from '../engines/network/network-engine';
+export { AIEngine } from '../engines/ai/ai-engine';
+export { InputEngine } from '../engines/input/input-engine';
+export { TacticalCombatEngine } from '../engines/tactical/tactical-combat-engine';
+
+/**
+ * Export components for client doors
+ */
+export { MenuSystem } from '../components/menus/menu-system';
+export { HUDBuilder } from '../components/hud/hud-builder';
+export { LevelManager } from '../components/level/level-manager';
+export { SaveManager } from '../components/save/save-manager';
+export { InventorySystem } from '../components/inventory/inventory-system';
+export { DialogueSystem } from '../components/dialogue/dialogue-system';
+export { QuestSystem } from '../components/quest/quest-system';
+export { ClassSystem } from '../components/tactical/class-system';
 
 /**
  * Export default

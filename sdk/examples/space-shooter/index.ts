@@ -30,6 +30,7 @@ class SpaceShooter {
   private enemies: Enemy[] = [];
   private bullets: Bullet[] = [];
   private score = 0;
+  private highScore = 0;
   private gameRunning = false;
   private currentUserId = 0;
 
@@ -48,8 +49,9 @@ class SpaceShooter {
       lives: 3,
     };
 
-    this.door.onConnect((user) => {
+    this.door.onConnect(async (user) => {
       this.currentUserId = user.id;
+      await this.loadHighScore();
       this.startGame();
     });
 
@@ -74,7 +76,7 @@ class SpaceShooter {
     }
   }
 
-  private handleInput(key: string): void {
+  private async handleInput(key: string): Promise<void> {
     if (!this.gameRunning) return;
 
     if (key === 'ArrowLeft' && this.player.x > 1) {
@@ -90,6 +92,7 @@ class SpaceShooter {
       });
     } else if (key === 'q' || key === 'Q') {
       this.gameRunning = false;
+      await this.saveHighScore();
       this.door.disconnect(this.currentUserId);
     }
   }
@@ -138,8 +141,9 @@ class SpaceShooter {
 
     // Draw HUD
     this.gfx.drawText(2, 0, `SCORE: ${this.score.toString().padStart(6, '0')}`, AnsiColor.Yellow);
-    this.gfx.drawText(30, 0, `LIVES: ${this.player.lives}`, AnsiColor.Green);
-    this.gfx.drawText(60, 0, 'Q=QUIT', AnsiColor.White);
+    this.gfx.drawText(22, 0, `HI: ${this.highScore.toString().padStart(6, '0')}`, AnsiColor.BrightYellow);
+    this.gfx.drawText(45, 0, `LIVES: ${this.player.lives}`, AnsiColor.Green);
+    this.gfx.drawText(65, 0, 'Q=QUIT', AnsiColor.White);
 
     // Draw player
     this.gfx.drawChar(this.player.x, this.player.y, '^', AnsiColor.Cyan);
@@ -171,6 +175,35 @@ class SpaceShooter {
     this.render();
 
     setTimeout(() => this.gameLoop(), 100);
+  }
+
+  private async loadHighScore(): Promise<void> {
+    try {
+      const result = await this.door.rpc('getHighScore', {
+        userId: this.currentUserId
+      });
+      this.highScore = result.score || 0;
+    } catch (err) {
+      console.error('Failed to load high score:', err);
+      this.highScore = 0;
+    }
+  }
+
+  private async saveHighScore(): Promise<void> {
+    if (this.score === 0) return;
+
+    try {
+      const result = await this.door.rpc('saveHighScore', {
+        userId: this.currentUserId,
+        score: this.score
+      });
+
+      if (result.newRecord) {
+        this.highScore = this.score;
+      }
+    } catch (err) {
+      console.error('Failed to save high score:', err);
+    }
   }
 
   public start(): void {

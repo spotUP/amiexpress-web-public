@@ -25,7 +25,6 @@ import {
   InputEngine,
   TacticalCombatEngine,
   ClassSystem,
-  SaveManager,
   DialogueSystem,
   HUDBuilder,
   AnsiColor
@@ -156,7 +155,6 @@ export class FireEmblemGame {
   private input: InputEngine;
   private combat: TacticalCombatEngine;
   private classes: ClassSystem;
-  private save: SaveManager;
   private dialogue: DialogueSystem;
   private hud: HUDBuilder;
 
@@ -181,7 +179,6 @@ export class FireEmblemGame {
     this.input = new InputEngine();
     this.combat = new TacticalCombatEngine({ gridWidth: 20, gridHeight: 15 });
     this.classes = new ClassSystem();
-    this.save = new SaveManager({ userId: 1, gameId: 'fire-emblem' });
     this.dialogue = new DialogueSystem();
     this.hud = new HUDBuilder();
 

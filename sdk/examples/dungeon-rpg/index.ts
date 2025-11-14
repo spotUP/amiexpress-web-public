@@ -26,20 +26,19 @@
  */
 
 import {
-  Door,
+  ClientDoor,
   GraphicsEngine,
   PhysicsEngine,
   AudioEngine,
   AIEngine,
   InputEngine,
   LevelManager,
-  SaveManager,
   InventorySystem,
   DialogueSystem,
   QuestSystem,
   HUDBuilder,
   AnsiColor
-} from '@amiexpress/bbs-door-sdk';
+} from '@amiexpress/bbs-door-sdk/client';
 
 interface Player {
   x: number;
@@ -64,14 +63,13 @@ interface Enemy {
 }
 
 class DungeonRPG {
-  private door: Door;
+  private door: ClientDoor;
   private gfx: GraphicsEngine;
   private physics: PhysicsEngine;
   private audio: AudioEngine;
   private ai: AIEngine;
   private input: InputEngine;
   private levelMgr: LevelManager;
-  private saveMgr: SaveManager;
   private inventory: InventorySystem;
   private dialogue: DialogueSystem;
   private quests: QuestSystem;
@@ -86,7 +84,7 @@ class DungeonRPG {
   private inMenu: boolean = false;
 
   constructor() {
-    this.door = new Door({
+    this.door = new ClientDoor({
       name: 'Dungeon RPG',
       version: '1.0.0',
       author: 'AmiExpress SDK Team',
@@ -99,7 +97,6 @@ class DungeonRPG {
     this.ai = new AIEngine({ updateInterval: 200 });
     this.input = new InputEngine();
     this.levelMgr = new LevelManager();
-    this.saveMgr = new SaveManager({ userId: 0, gameId: 'dungeon-rpg' });
     this.inventory = new InventorySystem({ capacity: 20, maxWeight: 100 });
     this.dialogue = new DialogueSystem();
     this.quests = new QuestSystem();
@@ -331,7 +328,6 @@ class DungeonRPG {
   private setupDoorEvents() {
     this.door.onConnect(async (user: any) => {
       this.userId = user.id;
-      this.saveMgr = new SaveManager({ userId: user.id, gameId: 'dungeon-rpg' });
 
       await this.audio.init();
       this.ai.init();
@@ -567,27 +563,49 @@ class DungeonRPG {
   }
 
   private async saveGame() {
-    await this.saveMgr.save(1, {
-      player: this.player,
-      enemies: Array.from(this.enemies.entries()),
-      inventory: this.inventory.exportToJSON(),
-      quests: this.quests.exportState(),
-      dialogue: this.dialogue.saveState()
+    if (!this.userId) return;
+
+    const result = await this.door.rpc('saveGame', {
+      userId: this.userId,
+      slot: 1,
+      state: {
+        player: this.player,
+        enemies: Array.from(this.enemies.entries()),
+        inventory: this.inventory.exportToJSON(),
+        quests: this.quests.exportState(),
+        dialogue: this.dialogue.saveState(),
+        currentLevel: this.currentLevel
+      }
     });
 
-    this.showMessage('Game saved!');
+    if (result.success) {
+      this.showMessage('Game saved!');
+    } else {
+      this.showMessage('Failed to save game!');
+    }
   }
 
   private async loadGame() {
-    const save = await this.saveMgr.load(1);
-    if (save && save.state) {
-      this.player = save.state.player;
-      this.enemies = new Map(save.state.enemies);
-      this.inventory.importFromJSON(save.state.inventory);
-      this.quests.importState(save.state.quests);
-      this.dialogue.loadState(save.state.dialogue);
+    if (!this.userId) return;
+
+    const result = await this.door.rpc('loadGame', {
+      userId: this.userId,
+      slot: 1
+    });
+
+    if (result.success && result.state) {
+      this.player = result.state.player;
+      this.enemies = new Map(result.state.enemies);
+      this.inventory.importFromJSON(result.state.inventory);
+      this.quests.importState(result.state.quests);
+      this.dialogue.loadState(result.state.dialogue);
+      if (result.state.currentLevel) {
+        this.currentLevel = result.state.currentLevel;
+      }
 
       this.showMessage('Game loaded!');
+    } else {
+      this.showMessage('No saved game found!');
     }
   }
 
