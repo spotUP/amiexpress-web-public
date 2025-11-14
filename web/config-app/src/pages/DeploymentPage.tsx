@@ -88,7 +88,7 @@ export function DeploymentPage() {
       setError(null);
 
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('http://localhost:3001/api/deployment/health', {
+      const response = await fetch('/api/deployment/health', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -110,7 +110,7 @@ export function DeploymentPage() {
   const loadSystemInfo = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('http://localhost:3001/api/deployment/system-info', {
+      const response = await fetch('/api/deployment/system-info', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -130,7 +130,7 @@ export function DeploymentPage() {
   const loadDatabaseStats = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('http://localhost:3001/api/deployment/database-stats', {
+      const response = await fetch('/api/deployment/database-stats', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
