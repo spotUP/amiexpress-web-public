@@ -119,7 +119,7 @@ door.onConnect(async (user) => {
 
   // Simple text-based Tetris game
   gfx.clear();
-  gfx.drawBox(0, 0, 80, 24, AnsiColor.Cyan);
+  gfx.drawBox({ x: 0, y: 0, width: 80, height: 24 }, 'single', AnsiColor.Cyan);
   gfx.drawText(25, 2, 'TETRIS - Text Mode', AnsiColor.BrightYellow);
   gfx.drawText(10, 5, 'This is a simplified version for telnet/SSH connections.');
   gfx.drawText(10, 7, 'For the full graphical version with sound, connect via:');
@@ -127,13 +127,13 @@ door.onConnect(async (user) => {
   gfx.drawText(10, 11, 'Press any key to view high scores, or Q to quit...');
 
   const rendered = gfx.render();
-  door.send(user.id, rendered);
+  door.send(rendered, user.id);
 
   // Wait for input
-  door.onInput((inputData) => {
-    if (inputData.user.id !== user.id) return;
+  door.onInput((inputUser, keyEvent) => {
+    if (inputUser.id !== user.id) return;
 
-    const key = inputData.key.key.toLowerCase();
+    const key = keyEvent.key.toLowerCase();
 
     if (key === 'q' || key === 'escape') {
       door.disconnect(user.id);
@@ -149,7 +149,7 @@ async function showHighScores(userId: number) {
   const gfx = new GraphicsEngine({ width: 80, height: 24 });
 
   gfx.clear();
-  gfx.drawBox(0, 0, 80, 24, AnsiColor.Cyan);
+  gfx.drawBox({ x: 0, y: 0, width: 80, height: 24 }, 'single', AnsiColor.Cyan);
   gfx.drawText(28, 2, 'HIGH SCORES', AnsiColor.BrightYellow);
 
   // Get leaderboard via internal RPC call
@@ -165,7 +165,7 @@ async function showHighScores(userId: number) {
   } else {
     leaderboard.forEach((entry: any, index: number) => {
       const rank = `${index + 1}.`.padEnd(6);
-      const userId = entry.userId.toString().padEnd(12);
+      const userIdStr = entry.userId.toString().padEnd(12);
       const score = entry.score.toString().padEnd(12);
       const date = new Date(entry.date).toLocaleDateString();
 
@@ -173,14 +173,14 @@ async function showHighScores(userId: number) {
                    index === 1 ? AnsiColor.BrightCyan :
                    index === 2 ? AnsiColor.BrightGreen : AnsiColor.White;
 
-      gfx.drawText(15, y++, `${rank} ${userId} ${score} ${date}`, color);
+      gfx.drawText(15, y++, `${rank} ${userIdStr} ${score} ${date}`, color);
     });
   }
 
   gfx.drawText(20, 20, 'Press Q to quit...', AnsiColor.BrightWhite);
 
   const rendered = gfx.render();
-  door.send(userId, rendered);
+  door.send(rendered, userId);
 }
 
 // Start server

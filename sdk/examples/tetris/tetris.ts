@@ -183,10 +183,10 @@ class TetrisGame {
     this.gfx.drawText(30, 12, 'I - Instructions', AnsiColor.White);
     this.gfx.drawText(30, 13, 'Q - Quit', AnsiColor.White);
 
-    this.door.sendAnsi(this.gfx.render(), this.userId);
+    this.door.sendAnsi(this.gfx.render());
 
     // Wait for input
-    const key = await this.door.waitForInput(this.userId, 0);
+    const key = await this.door.waitForInput(0);
     if (key) {
       const k = key.key.toLowerCase();
       if (k === 'n') {
@@ -288,7 +288,7 @@ class TetrisGame {
       const delta = now - this.lastDrop;
 
       // Handle input (non-blocking)
-      const key = await this.door.waitForInput(this.userId, 0);
+      const key = await this.door.waitForInput(0);
       if (key) {
         await this.handleInput(key.key);
       }
@@ -540,16 +540,16 @@ class TetrisGame {
     // Save high score
     await this.saveHighScore();
 
-    this.door.send('\r\n\r\n', this.userId);
-    this.door.send('╔════════════════════╗\r\n', this.userId);
-    this.door.send('║   GAME OVER!!!    ║\r\n', this.userId);
-    this.door.send('╚════════════════════╝\r\n', this.userId);
-    this.door.send(`\r\nFinal Score: ${this.score}\r\n`, this.userId);
-    this.door.send(`Lines: ${this.lines}\r\n`, this.userId);
-    this.door.send(`Level: ${this.level}\r\n\r\n`, this.userId);
-    this.door.send('Press any key to continue...\r\n', this.userId);
+    this.door.send('\r\n\r\n');
+    this.door.send('╔════════════════════╗\r\n');
+    this.door.send('║   GAME OVER!!!    ║\r\n');
+    this.door.send('╚════════════════════╝\r\n');
+    this.door.send(`\r\nFinal Score: ${this.score}\r\n`);
+    this.door.send(`Lines: ${this.lines}\r\n`);
+    this.door.send(`Level: ${this.level}\r\n\r\n`);
+    this.door.send('Press any key to continue...\r\n');
 
-    await this.door.waitForInput(this.userId, 0);
+    await this.door.waitForInput(0);
     await this.showMainMenu();
   }
 
@@ -612,7 +612,7 @@ class TetrisGame {
 
     // Send output
     const output = this.gfx.render() + hudOutput;
-    this.door.sendAnsi(output, this.userId);
+    this.door.sendAnsi(output);
   }
 
   /**
@@ -633,20 +633,20 @@ class TetrisGame {
    * Show high scores via RPC
    */
   private async showHighScores(): Promise<void> {
-    this.door.clearScreen(this.userId);
-    this.door.send('\r\n', this.userId);
-    this.door.send('╔═══════════════════════════════════╗\r\n', this.userId);
-    this.door.send('║         HIGH SCORES             ║\r\n', this.userId);
-    this.door.send('╠═══════════════════════════════════╣\r\n', this.userId);
-    this.door.send('║ Rank  User ID    Score     Date  ║\r\n', this.userId);
-    this.door.send('╠═══════════════════════════════════╣\r\n', this.userId);
+    this.door.clearScreen();
+    this.door.send('\r\n');
+    this.door.send('╔═══════════════════════════════════╗\r\n');
+    this.door.send('║         HIGH SCORES             ║\r\n');
+    this.door.send('╠═══════════════════════════════════╣\r\n');
+    this.door.send('║ Rank  User ID    Score     Date  ║\r\n');
+    this.door.send('╠═══════════════════════════════════╣\r\n');
 
     try {
       const result = await this.door.rpc('getLeaderboard', {});
       const leaderboard = result.leaderboard || [];
 
       if (leaderboard.length === 0) {
-        this.door.send('║   No high scores yet!           ║\r\n', this.userId);
+        this.door.send('║   No high scores yet!           ║\r\n');
       } else {
         for (let i = 0; i < Math.min(10, leaderboard.length); i++) {
           const hs = leaderboard[i];
@@ -655,16 +655,16 @@ class TetrisGame {
           const score = hs.score.toString().padStart(9);
           const date = new Date(hs.date).toLocaleDateString().substring(0, 5);
 
-          this.door.send(`║ ${rank} ${userId} ${score} ${date} ║\r\n`, this.userId);
+          this.door.send(`║ ${rank} ${userId} ${score} ${date} ║\r\n`);
         }
       }
     } catch (error) {
-      this.door.send('║   Error loading scores          ║\r\n', this.userId);
+      this.door.send('║   Error loading scores          ║\r\n');
     }
 
-    this.door.send('╚═══════════════════════════════════╝\r\n', this.userId);
-    this.door.send('\r\nPress any key...\r\n', this.userId);
-    await this.door.waitForInput(this.userId, 0);
+    this.door.send('╚═══════════════════════════════════╝\r\n');
+    this.door.send('\r\nPress any key...\r\n');
+    await this.door.waitForInput(0);
     await this.showMainMenu();
   }
 
@@ -672,20 +672,20 @@ class TetrisGame {
    * Show instructions
    */
   private async showInstructions(): Promise<void> {
-    this.door.clearScreen(this.userId);
-    this.door.send('\r\n', this.userId);
-    this.door.send('╔══════════════════════╗\r\n', this.userId);
-    this.door.send('║   INSTRUCTIONS     ║\r\n', this.userId);
-    this.door.send('╚══════════════════════╝\r\n', this.userId);
-    this.door.send('\r\n', this.userId);
-    this.door.send('← →  : Move piece\r\n', this.userId);
-    this.door.send('↑    : Rotate\r\n', this.userId);
-    this.door.send('↓    : Soft drop\r\n', this.userId);
-    this.door.send('SPACE: Hard drop\r\n', this.userId);
-    this.door.send('P    : Pause\r\n', this.userId);
-    this.door.send('Q    : Quit\r\n\r\n', this.userId);
-    this.door.send('Press any key...\r\n', this.userId);
-    await this.door.waitForInput(this.userId, 0);
+    this.door.clearScreen();
+    this.door.send('\r\n');
+    this.door.send('╔══════════════════════╗\r\n');
+    this.door.send('║   INSTRUCTIONS     ║\r\n');
+    this.door.send('╚══════════════════════╝\r\n');
+    this.door.send('\r\n');
+    this.door.send('← →  : Move piece\r\n');
+    this.door.send('↑    : Rotate\r\n');
+    this.door.send('↓    : Soft drop\r\n');
+    this.door.send('SPACE: Hard drop\r\n');
+    this.door.send('P    : Pause\r\n');
+    this.door.send('Q    : Quit\r\n\r\n');
+    this.door.send('Press any key...\r\n');
+    await this.door.waitForInput(0);
     await this.showMainMenu();
   }
 
@@ -694,7 +694,7 @@ class TetrisGame {
    */
   private quit(): void {
     this.audio.dispose();
-    this.door.disconnect(this.userId);
+    this.door.shutdown();
   }
 }
 

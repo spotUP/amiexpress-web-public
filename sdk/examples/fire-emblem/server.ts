@@ -115,7 +115,7 @@ door.onConnect(async (user) => {
 
   // Text-based info screen
   gfx.clear();
-  gfx.drawBox(0, 0, 80, 24, AnsiColor.Cyan);
+  gfx.drawBox({ x: 0, y: 0, width: 80, height: 24 }, 'single', AnsiColor.Cyan);
   gfx.drawText(25, 2, 'FIRE EMBLEM: Emblem of Valor', AnsiColor.BrightYellow);
   gfx.drawText(10, 5, 'A complete Fire Emblem-style tactical RPG using the SDK.');
   gfx.drawText(10, 7, 'For the full graphical experience with tactical combat:');
@@ -130,13 +130,13 @@ door.onConnect(async (user) => {
   gfx.drawText(10, 20, 'Press C to view campaigns, Q to quit...', AnsiColor.BrightWhite);
 
   const rendered = gfx.render();
-  door.send(user.id, rendered);
+  door.send(rendered, user.id);
 
   // Handle input
-  door.onInput((inputData) => {
-    if (inputData.user.id !== user.id) return;
+  door.onInput((inputUser, keyEvent) => {
+    if (inputUser.id !== user.id) return;
 
-    const key = inputData.key.key.toLowerCase();
+    const key = keyEvent.key.toLowerCase();
 
     if (key === 'q' || key === 'escape') {
       door.disconnect(user.id);
@@ -153,7 +153,7 @@ async function showCampaigns(userId: number) {
   const gfx = new GraphicsEngine({ width: 80, height: 24 });
 
   gfx.clear();
-  gfx.drawBox(0, 0, 80, 24, AnsiColor.Cyan);
+  gfx.drawBox({ x: 0, y: 0, width: 80, height: 24 }, 'single', AnsiColor.Cyan);
   gfx.drawText(28, 2, 'SAVED CAMPAIGNS', AnsiColor.BrightYellow);
 
   // Get campaigns via internal RPC call
@@ -181,7 +181,7 @@ async function showCampaigns(userId: number) {
   gfx.drawText(20, 20, 'Press Q to quit...', AnsiColor.BrightWhite);
 
   const rendered = gfx.render();
-  door.send(userId, rendered);
+  door.send(rendered, userId);
 }
 
 // Start server

@@ -358,7 +358,7 @@ class DungeonRPG {
     this.gfx.drawText(20, 14, 'Complete SDK Example - All Features!', AnsiColor.Yellow);
     this.gfx.drawText(30, 17, 'Press any key...', AnsiColor.White);
 
-    this.door.sendAnsi(this.gfx.render(), this.userId);
+    this.door.sendAnsi(this.gfx.render());
   }
 
   private startGame() {
@@ -440,7 +440,7 @@ class DungeonRPG {
     this.gfx.drawText(42, 11, 'T: Talk', AnsiColor.White);
     this.gfx.drawText(42, 12, 'S: Save', AnsiColor.White);
 
-    this.door.sendAnsi(this.gfx.render(), this.userId);
+    this.door.sendAnsi(this.gfx.render());
   }
 
   private movePlayer(dx: number, dy: number) {
@@ -510,7 +510,7 @@ class DungeonRPG {
       this.gfx.drawText(5, 10 + i, `${i + 1}. ${choice.text}`, AnsiColor.Yellow);
     });
 
-    this.door.sendAnsi(this.gfx.render(), this.userId);
+    this.door.sendAnsi(this.gfx.render());
 
     // Handle choice (simplified - in production use input binding)
     // For now, end dialogue after showing
@@ -533,7 +533,7 @@ class DungeonRPG {
     });
 
     this.gfx.drawText(5, 15, 'Press any key to close', AnsiColor.Yellow);
-    this.door.sendAnsi(this.gfx.render(), this.userId);
+    this.door.sendAnsi(this.gfx.render());
 
     setTimeout(() => { this.inMenu = false; }, 2000);
   }
@@ -557,7 +557,7 @@ class DungeonRPG {
     });
 
     this.gfx.drawText(5, 18, 'Press any key to close', AnsiColor.Yellow);
-    this.door.sendAnsi(this.gfx.render(), this.userId);
+    this.door.sendAnsi(this.gfx.render());
 
     setTimeout(() => { this.inMenu = false; }, 3000);
   }
@@ -635,7 +635,7 @@ class DungeonRPG {
       this.gfx.drawText(42, 15 + i, line.padEnd(maxWidth), AnsiColor.Yellow);
     });
 
-    this.door.sendAnsi(this.gfx.render(), this.userId);
+    this.door.sendAnsi(this.gfx.render());
 
     // Clear message after 3 seconds
     setTimeout(() => {
