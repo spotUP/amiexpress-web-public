@@ -289,11 +289,11 @@ app.use((req, res, next) => {
 });
 
 // Serve static files - prefer React build if available
-const publicReactDir = path.join(__dirname, 'public-react');
+const reactDistDir = path.join(__dirname, 'frontend/dist');
 const publicDir = path.join(__dirname, 'public');
-if (fs.existsSync(publicReactDir)) {
-  console.log('[PACKAGE] Serving React frontend from public-react/');
-  app.use(express.static(publicReactDir));
+if (fs.existsSync(reactDistDir)) {
+  console.log('[PACKAGE] Serving React frontend from frontend/dist/');
+  app.use(express.static(reactDistDir));
 } else {
   console.log('[PACKAGE] Serving classic frontend from public/');
   app.use(express.static(publicDir));
@@ -301,7 +301,7 @@ if (fs.existsSync(publicReactDir)) {
 
 // Root route - explicitly serve index.html
 app.get('/', (req, res) => {
-  const reactIndex = path.join(publicReactDir, 'index.html');
+  const reactIndex = path.join(reactDistDir, 'index.html');
   const classicIndex = path.join(publicDir, 'index.html');
 
   if (fs.existsSync(reactIndex)) {
