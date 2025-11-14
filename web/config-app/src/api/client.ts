@@ -416,6 +416,24 @@ class ApiClient {
 
     return this.request<ApiResponse>(url);
   }
+
+  // SSH Key Management
+  async getSSHKeyInfo() {
+    return this.request<ApiResponse>(`${API_BASE}/config/ssh-key`);
+  }
+
+  async generateSSHKey(keySize: number = 4096, overwrite: boolean = false) {
+    return this.request<ApiResponse>(`${API_BASE}/config/ssh-key/generate`, {
+      method: 'POST',
+      body: JSON.stringify({ keySize, overwrite }),
+    });
+  }
+
+  async deleteSSHKey() {
+    return this.request<ApiResponse>(`${API_BASE}/config/ssh-key`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

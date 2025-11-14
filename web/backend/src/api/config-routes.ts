@@ -8,6 +8,7 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import { ConfigService } from '../services/config.service';
+import { SSHKeyUtil } from '../utils/ssh-key.util';
 import type { Database } from '../database';
 
 // Standard API response format
@@ -1174,6 +1175,59 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
 
       const entries = await configService.getAuditLog(tableName, recordId, limit);
       sendResponse(res, entries);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // ===== SSH Key Management =====
+
+  /**
+   * GET /api/config/ssh-key
+   * Get SSH key information
+   */
+  router.get('/ssh-key', async (req: Request, res: Response) => {
+    try {
+      const keyInfo = await SSHKeyUtil.getKeyInfo();
+      sendResponse(res, keyInfo);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/ssh-key/generate
+   * Generate new SSH host key
+   * Body: { keySize?: number, overwrite?: boolean }
+   */
+  router.post('/ssh-key/generate', async (req: any, res: Response) => {
+    try {
+      const { keySize = 4096, overwrite = false } = req.body;
+      const result = await SSHKeyUtil.generateKey(keySize, overwrite);
+
+      if (!result.success) {
+        return handleError(res, new Error(result.error || 'Failed to generate SSH key'));
+      }
+
+      sendResponse(res, result, 'SSH key generated successfully. Restart the BBS server to use the new key.');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * DELETE /api/config/ssh-key
+   * Delete SSH host key
+   */
+  router.delete('/ssh-key', async (req: any, res: Response) => {
+    try {
+      const result = await SSHKeyUtil.deleteKey();
+
+      if (!result.success) {
+        return handleError(res, new Error(result.error || 'Failed to delete SSH key'));
+      }
+
+      sendResponse(res, { deleted: true }, 'SSH key deleted successfully. SSH server will not be available until a new key is generated.');
     } catch (error) {
       handleError(res, error);
     }
