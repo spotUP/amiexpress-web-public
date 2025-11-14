@@ -3,9 +3,11 @@ import { useState } from 'react';
 import { Edit2, Trash2, Save, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { NodeConfig } from '../types';
+import { useNotification } from '../contexts/NotificationContext';
 
 export function NodesPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, confirm } = useNotification();
   const [editingNode, setEditingNode] = useState<number | null>(null);
   const [formData, setFormData] = useState<Partial<NodeConfig>>({});
 
@@ -20,7 +22,7 @@ export function NodesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] });
       setEditingNode(null);
-      alert('Node configuration updated successfully');
+      showSuccess('Node configuration updated successfully');
     },
   });
 
@@ -28,7 +30,7 @@ export function NodesPage() {
     mutationFn: (nodeNumber: number) => apiClient.deleteNodeConfig(nodeNumber),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] });
-      alert('Node configuration deleted successfully');
+      showSuccess('Node configuration deleted successfully');
     },
   });
 
@@ -48,8 +50,15 @@ export function NodesPage() {
     setFormData({});
   };
 
-  const handleDelete = (nodeNumber: number) => {
-    if (confirm(`Are you sure you want to delete node ${nodeNumber} configuration?`)) {
+  const handleDelete = async (nodeNumber: number) => {
+    const confirmed = await confirm({
+      title: 'Delete Node Configuration?',
+      message: `Are you sure you want to delete node ${nodeNumber} configuration?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger',
+    });
+    if (confirmed) {
       deleteMutation.mutate(nodeNumber);
     }
   };

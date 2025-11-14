@@ -4,9 +4,11 @@ import { Save, Key, Trash2, RefreshCw } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { SystemConfig } from '../types';
 import { useState } from 'react';
+import { useNotification } from '../contexts/NotificationContext';
 
 export function SystemConfigPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, showError, confirm } = useNotification();
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [isDeletingKey, setIsDeletingKey] = useState(false);
 
@@ -27,10 +29,10 @@ export function SystemConfigPage() {
       apiClient.updateSystemConfig(updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['systemConfig'] });
-      alert('System configuration updated successfully');
+      showSuccess('System configuration updated successfully');
     },
     onError: (error: Error) => {
-      alert(`Failed to update configuration: ${error.message}`);
+      showError(`Failed to update configuration: ${error.message}`);
     },
   });
 
@@ -44,7 +46,14 @@ export function SystemConfigPage() {
 
   const handleGenerateSSHKey = async () => {
     if (sshKeyData?.data?.exists) {
-      if (!confirm('An SSH key already exists. Do you want to overwrite it? This will require a server restart.')) {
+      const confirmed = await confirm({
+        title: 'Overwrite SSH Key?',
+        message: 'An SSH key already exists. Do you want to overwrite it? This will require a server restart.',
+        confirmText: 'Overwrite',
+        cancelText: 'Cancel',
+        type: 'warning',
+      });
+      if (!confirmed) {
         return;
       }
     }
@@ -52,27 +61,34 @@ export function SystemConfigPage() {
     setIsGeneratingKey(true);
     try {
       const result = await apiClient.generateSSHKey(4096, sshKeyData?.data?.exists);
-      alert(`SSH key generated successfully!\n\nFingerprint: ${result.data.fingerprint}\n\nPlease restart the BBS server for the changes to take effect.`);
+      showSuccess(`SSH key generated successfully!\n\nFingerprint: ${result.data.fingerprint}\n\nPlease restart the BBS server for the changes to take effect.`);
       refetchSSHKey();
     } catch (error: any) {
-      alert(`Failed to generate SSH key: ${error.message}`);
+      showError(`Failed to generate SSH key: ${error.message}`);
     } finally {
       setIsGeneratingKey(false);
     }
   };
 
   const handleDeleteSSHKey = async () => {
-    if (!confirm('Are you sure you want to delete the SSH key? The SSH server will not be available until a new key is generated. This requires a server restart.')) {
+    const confirmed = await confirm({
+      title: 'Delete SSH Key?',
+      message: 'Are you sure you want to delete the SSH key? The SSH server will not be available until a new key is generated. This requires a server restart.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger',
+    });
+    if (!confirmed) {
       return;
     }
 
     setIsDeletingKey(true);
     try {
       await apiClient.deleteSSHKey();
-      alert('SSH key deleted successfully. Please restart the BBS server for the changes to take effect.');
+      showSuccess('SSH key deleted successfully. Please restart the BBS server for the changes to take effect.');
       refetchSSHKey();
     } catch (error: any) {
-      alert(`Failed to delete SSH key: ${error.message}`);
+      showError(`Failed to delete SSH key: ${error.message}`);
     } finally {
       setIsDeletingKey(false);
     }

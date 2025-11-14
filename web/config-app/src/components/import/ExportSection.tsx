@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useNotification } from '../../contexts/NotificationContext';
 
 interface ExportOptions {
   includeUsers: boolean;
@@ -23,6 +24,7 @@ interface ExportFile {
 }
 
 export function ExportSection() {
+  const { showSuccess, showError, confirm } = useNotification();
   const [options, setOptions] = useState<ExportOptions>({
     includeUsers: true,
     includeConferences: true,
@@ -34,8 +36,6 @@ export function ExportSection() {
   });
   const [isExporting, setIsExporting] = useState(false);
   const [exports, setExports] = useState<ExportFile[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   // Load existing exports on mount
   useEffect(() => {
@@ -61,8 +61,6 @@ export function ExportSection() {
 
   const handleExport = async () => {
     setIsExporting(true);
-    setError(null);
-    setSuccess(null);
 
     try {
       const response = await fetch('/api/import/export/create', {
@@ -78,13 +76,13 @@ export function ExportSection() {
 
       if (response.ok && data.success) {
         const itemsCount = Object.values(data.itemsExported as Record<string, number>).reduce((a, b) => a + b, 0);
-        setSuccess(`Export created successfully! Exported ${itemsCount} items (${formatBytes(data.size)})`);
+        showSuccess(`Export created successfully! Exported ${itemsCount} items (${formatBytes(data.size)})`);
         loadExports(); // Reload the list
       } else {
-        setError(data.errors?.join(', ') || 'Export failed');
+        showError(data.errors?.join(', ') || 'Export failed');
       }
     } catch (err: any) {
-      setError(`Export error: ${err.message}`);
+      showError(`Export error: ${err.message}`);
     } finally {
       setIsExporting(false);
     }
@@ -96,7 +94,15 @@ export function ExportSection() {
   };
 
   const handleDelete = async (filename: string) => {
-    if (!confirm(`Delete export ${filename}?`)) {
+    const confirmed = await confirm({
+      title: 'Delete Export',
+      message: `Delete export ${filename}?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -109,14 +115,14 @@ export function ExportSection() {
       });
 
       if (response.ok) {
-        setSuccess('Export deleted successfully');
+        showSuccess('Export deleted successfully');
         loadExports();
       } else {
         const data = await response.json();
-        setError(data.error || 'Failed to delete export');
+        showError(data.error || 'Failed to delete export');
       }
     } catch (err: any) {
-      setError(`Delete error: ${err.message}`);
+      showError(`Delete error: ${err.message}`);
     }
   };
 
@@ -135,18 +141,6 @@ export function ExportSection() {
     <div className="export-section">
       <h2>Export BBS Data</h2>
       <p>Export current BBS data to Amiga-compatible archive (ZIP format)</p>
-
-      {error && (
-        <div className="error-banner">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="success-banner">
-          <strong>Success:</strong> {success}
-        </div>
-      )}
 
       <div className="export-options">
         <h3>Export Options</h3>

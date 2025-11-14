@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { HardDrive, Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface DriveConfig {
   id: number;
@@ -22,6 +23,7 @@ interface DriveFormData {
 
 export function DrivesPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDrive, setEditingDrive] = useState<DriveConfig | null>(null);
   const [formData, setFormData] = useState<DriveFormData>({
@@ -40,12 +42,12 @@ export function DrivesPage() {
     mutationFn: (drive: DriveFormData) => apiClient.createDrive(drive),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drives'] });
-      alert('Drive created successfully');
+      showSuccess('Drive created successfully');
       setIsModalOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(`Failed to create drive: ${error.message}`);
+      showError(`Failed to create drive: ${error.message}`);
     },
   });
 
@@ -54,13 +56,13 @@ export function DrivesPage() {
       apiClient.updateDrive(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drives'] });
-      alert('Drive updated successfully');
+      showSuccess('Drive updated successfully');
       setIsModalOpen(false);
       setEditingDrive(null);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(`Failed to update drive: ${error.message}`);
+      showError(`Failed to update drive: ${error.message}`);
     },
   });
 
@@ -68,10 +70,10 @@ export function DrivesPage() {
     mutationFn: (id: number) => apiClient.deleteDrive(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drives'] });
-      alert('Drive deleted successfully');
+      showSuccess('Drive deleted successfully');
     },
     onError: (error: Error) => {
-      alert(`Failed to delete drive: ${error.message}`);
+      showError(`Failed to delete drive: ${error.message}`);
     },
   });
 
@@ -110,8 +112,15 @@ export function DrivesPage() {
     }
   };
 
-  const handleDelete = (drive: DriveConfig) => {
-    if (confirm(`Are you sure you want to delete drive ${drive.drive_number} (${drive.drive_path})?`)) {
+  const handleDelete = async (drive: DriveConfig) => {
+    const confirmed = await confirm({
+      title: 'Delete Drive',
+      message: `Are you sure you want to delete drive ${drive.drive_number} (${drive.drive_path})?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(drive.id);
     }
   };

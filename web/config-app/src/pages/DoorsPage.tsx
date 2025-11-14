@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DoorOpen, Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Door } from '../types';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface DoorFormData {
   door_name: string;
@@ -17,6 +18,7 @@ interface DoorFormData {
 
 export function DoorsPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoor, setEditingDoor] = useState<Door | null>(null);
   const [formData, setFormData] = useState<DoorFormData>({
@@ -39,12 +41,12 @@ export function DoorsPage() {
     mutationFn: (door: DoorFormData) => apiClient.createDoor(door),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doors'] });
-      alert('Door created successfully');
+      showSuccess('Door created successfully');
       setIsModalOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(`Failed to create door: ${error.message}`);
+      showError(`Failed to create door: ${error.message}`);
     },
   });
 
@@ -53,13 +55,13 @@ export function DoorsPage() {
       apiClient.updateDoor(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doors'] });
-      alert('Door updated successfully');
+      showSuccess('Door updated successfully');
       setIsModalOpen(false);
       setEditingDoor(null);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(`Failed to update door: ${error.message}`);
+      showError(`Failed to update door: ${error.message}`);
     },
   });
 
@@ -67,10 +69,10 @@ export function DoorsPage() {
     mutationFn: (id: number) => apiClient.deleteDoor(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doors'] });
-      alert('Door deleted successfully');
+      showSuccess('Door deleted successfully');
     },
     onError: (error: Error) => {
-      alert(`Failed to delete door: ${error.message}`);
+      showError(`Failed to delete door: ${error.message}`);
     },
   });
 
@@ -117,8 +119,15 @@ export function DoorsPage() {
     }
   };
 
-  const handleDelete = (door: Door) => {
-    if (confirm(`Are you sure you want to delete door "${door.door_name}"?`)) {
+  const handleDelete = async (door: Door) => {
+    const confirmed = await confirm({
+      title: 'Delete Door',
+      message: `Are you sure you want to delete door "${door.door_name}"?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(door.id);
     }
   };

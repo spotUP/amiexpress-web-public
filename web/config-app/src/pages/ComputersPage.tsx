@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Monitor, Edit2, Trash2, Plus } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface ComputerType {
   id: number;
@@ -13,6 +14,7 @@ interface ComputerType {
 
 export function ComputersPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, confirm } = useNotification();
 
   const { data, isLoading } = useQuery({
     queryKey: ['computers'],
@@ -23,12 +25,19 @@ export function ComputersPage() {
     mutationFn: (id: number) => apiClient.deleteComputerType(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['computers'] });
-      alert('Computer type deleted successfully');
+      showSuccess('Computer type deleted successfully');
     },
   });
 
-  const handleDelete = (computer: ComputerType) => {
-    if (confirm(`Are you sure you want to delete computer type "${computer.computer_name}"?`)) {
+  const handleDelete = async (computer: ComputerType) => {
+    const confirmed = await confirm({
+      title: 'Delete Computer Type',
+      message: `Are you sure you want to delete computer type "${computer.computer_name}"?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(computer.id);
     }
   };

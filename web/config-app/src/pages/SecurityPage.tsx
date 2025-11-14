@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shield, Plus, ToggleLeft, ToggleRight, X, Trash2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useState } from 'react';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface SecurityLevelAccess {
   id: number;
@@ -30,6 +31,7 @@ export function SecurityPage() {
     enabled: true,
   });
   const queryClient = useQueryClient();
+  const { showSuccess, showError, confirm } = useNotification();
 
   const { data, isLoading } = useQuery({
     queryKey: ['security', selectedLevel],
@@ -41,12 +43,12 @@ export function SecurityPage() {
       apiClient.createSecurityAccess(access),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security', selectedLevel] });
-      alert('ACS flag created successfully');
+      showSuccess('ACS flag created successfully');
       setIsModalOpen(false);
       setFormData({ acs_flag: '', description: '', enabled: true });
     },
     onError: (error: Error) => {
-      alert(`Failed to create ACS flag: ${error.message}`);
+      showError(`Failed to create ACS flag: ${error.message}`);
     },
   });
 
@@ -57,7 +59,7 @@ export function SecurityPage() {
       queryClient.invalidateQueries({ queryKey: ['security', selectedLevel] });
     },
     onError: (error: Error) => {
-      alert(`Failed to update ACS flag: ${error.message}`);
+      showError(`Failed to update ACS flag: ${error.message}`);
     },
   });
 
@@ -65,10 +67,10 @@ export function SecurityPage() {
     mutationFn: (id: number) => apiClient.deleteSecurityAccess(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security', selectedLevel] });
-      alert('ACS flag deleted successfully');
+      showSuccess('ACS flag deleted successfully');
     },
     onError: (error: Error) => {
-      alert(`Failed to delete ACS flag: ${error.message}`);
+      showError(`Failed to delete ACS flag: ${error.message}`);
     },
   });
 
@@ -89,8 +91,15 @@ export function SecurityPage() {
     });
   };
 
-  const handleDelete = (access: SecurityLevelAccess) => {
-    if (confirm(`Are you sure you want to delete ACS flag "${access.acs_flag}"?`)) {
+  const handleDelete = async (access: SecurityLevelAccess) => {
+    const confirmed = await confirm({
+      title: 'Delete ACS Flag',
+      message: `Are you sure you want to delete ACS flag "${access.acs_flag}"?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(access.id);
     }
   };

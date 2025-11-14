@@ -17,6 +17,7 @@ import {
   FileCheck,
   ArrowUpDown,
   Activity,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -48,6 +49,7 @@ export function Layout({ children }: LayoutProps) {
     { to: '/protocols', icon: Download, label: 'Protocols' },
     { to: '/deployment', icon: Activity, label: 'Deployment' },
     { to: '/import-export', icon: ArrowUpDown, label: 'Import/Export' },
+    { to: '/logs', icon: FileText, label: 'System Logs' },
     { to: '/audit', icon: History, label: 'Audit Log' },
   ];
 

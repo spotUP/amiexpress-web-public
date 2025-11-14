@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MessageSquare, Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { ConferenceConfig } from '../types';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface ConferenceFormData {
   conference_id: number;
@@ -19,6 +20,7 @@ interface ConferenceFormData {
 
 export function ConferencesPage() {
   const queryClient = useQueryClient();
+  const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConference, setEditingConference] = useState<ConferenceConfig | null>(null);
   const [formData, setFormData] = useState<ConferenceFormData>({
@@ -43,12 +45,12 @@ export function ConferencesPage() {
     mutationFn: (conference: ConferenceFormData) => apiClient.createConferenceConfig(conference),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conferences'] });
-      alert('Conference created successfully');
+      showSuccess('Conference created successfully');
       setIsModalOpen(false);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(`Failed to create conference: ${error.message}`);
+      showError(`Failed to create conference: ${error.message}`);
     },
   });
 
@@ -57,13 +59,13 @@ export function ConferencesPage() {
       apiClient.updateConferenceConfig(confNumber, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conferences'] });
-      alert('Conference updated successfully');
+      showSuccess('Conference updated successfully');
       setIsModalOpen(false);
       setEditingConference(null);
       resetForm();
     },
     onError: (error: Error) => {
-      alert(`Failed to update conference: ${error.message}`);
+      showError(`Failed to update conference: ${error.message}`);
     },
   });
 
@@ -71,10 +73,10 @@ export function ConferencesPage() {
     mutationFn: (confNumber: number) => apiClient.deleteConferenceConfig(confNumber),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conferences'] });
-      alert('Conference deleted successfully');
+      showSuccess('Conference deleted successfully');
     },
     onError: (error: Error) => {
-      alert(`Failed to delete conference: ${error.message}`);
+      showError(`Failed to delete conference: ${error.message}`);
     },
   });
 
@@ -125,8 +127,15 @@ export function ConferencesPage() {
     }
   };
 
-  const handleDelete = (conf: ConferenceConfig) => {
-    if (confirm(`Are you sure you want to delete conference ${conf.conference_id}?`)) {
+  const handleDelete = async (conf: ConferenceConfig) => {
+    const confirmed = await confirm({
+      title: 'Delete Conference',
+      message: `Are you sure you want to delete conference ${conf.conference_id}?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(conf.conference_id);
     }
   };
