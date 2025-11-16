@@ -16,6 +16,7 @@ import {
   AnsiColor,
   BBSUser
 } from '@amiexpress/bbs-door-sdk';
+import { runDoorWithSession } from '../../tools/runDoorSession';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -376,37 +377,64 @@ class BugTracker {
     if (!this.user) return;
 
     this.currentView = 'template';
-    this.selectedIndex = 0;
 
     this.gfx.clear(AnsiColor.Black);
     this.drawHeader('SELECT BUG REPORT TEMPLATE', 2);
 
     const y = 6;
     this.gfx.drawText(5, y, 'Choose a template to speed up your report, or start from scratch:', AnsiColor.Green);
-    this.gfx.drawText(5, y + 2, '┌──────────────────────────────────────────────────────────────────────┐', AnsiColor.Cyan);
-    this.gfx.drawText(5, y + 3, '│  Use ↑↓ arrow keys to navigate  |  Press ENTER to select           │', AnsiColor.White);
-    this.gfx.drawText(5, y + 4, '├──────────────────────────────────────────────────────────────────────┤', AnsiColor.Cyan);
+    const boxWidth = 72;
+    const listRows = 8;
+    const boxX = 4;
+    const listStartY = y + 5;
+
+    this.gfx.drawText(boxX, y + 2, `┌${'─'.repeat(boxWidth - 2)}┐`, AnsiColor.Cyan);
+    this.gfx.drawText(
+      boxX,
+      y + 3,
+      `│  Use ↑↓ arrow keys to navigate  |  Press ENTER to select  │`.padEnd(boxWidth - 1, ' ') + '│',
+      AnsiColor.White
+    );
+    this.gfx.drawText(boxX, y + 4, `├${'─'.repeat(boxWidth - 2)}┤`, AnsiColor.Cyan);
 
     const templates = this.templateManager.getTemplates();
     const displayTemplates = [{ id: 'none', name: '[ No Template - Start from Scratch ]', description: 'Create a custom bug report' } as BugTemplate, ...templates];
 
-    const startIdx = Math.max(0, this.selectedIndex - 5);
-    const endIdx = Math.min(displayTemplates.length, startIdx + 10);
+    this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, displayTemplates.length - 1));
 
-    for (let i = startIdx; i < endIdx; i++) {
-      const template = displayTemplates[i];
-      const rowY = y + 5 + (i - startIdx);
-      const selected = this.selectedIndex === i;
+    const startIdx = Math.max(0, this.selectedIndex - Math.floor(listRows / 2));
+    const endIdx = Math.min(displayTemplates.length, startIdx + listRows);
+
+    for (let i = 0; i < listRows; i++) {
+      const templateIndex = startIdx + i;
+      const rowY = listStartY + i * 2;
+
+      // Clear entry area (two lines per entry for description spacing)
+      this.gfx.drawText(boxX + 1, rowY, ' '.repeat(boxWidth - 2), AnsiColor.White, AnsiColor.Black);
+      this.gfx.drawText(boxX + 1, rowY + 1, ' '.repeat(boxWidth - 2), AnsiColor.White, AnsiColor.Black);
+
+      if (templateIndex >= displayTemplates.length) {
+        continue;
+      }
+
+      const template = displayTemplates[templateIndex];
+      const selected = this.selectedIndex === templateIndex;
       const prefix = selected ? '►' : ' ';
       const color = selected ? AnsiColor.Yellow : AnsiColor.White;
+      const entryText = `${prefix} ${template.name}`.substring(0, boxWidth - 4).padEnd(boxWidth - 4, ' ');
 
-      this.gfx.drawText(7, rowY, `${prefix} ${template.name.substring(0, 50)}`, color);
+      this.gfx.drawText(boxX + 2, rowY, entryText, color);
+
       if (selected && template.description) {
-        this.gfx.drawText(10, rowY + 1, template.description.substring(0, 60), AnsiColor.Cyan);
+        const desc = template.description.substring(0, boxWidth - 6).padEnd(boxWidth - 6, ' ');
+        this.gfx.drawText(boxX + 3, rowY + 1, desc, AnsiColor.Cyan);
       }
     }
 
-    this.gfx.drawText(5, 21, '[ESC] Cancel', AnsiColor.Red);
+    const boxBottom = listStartY + listRows * 2;
+    this.gfx.drawText(boxX, boxBottom, `└${'─'.repeat(boxWidth - 2)}┘`, AnsiColor.Cyan);
+
+    this.gfx.drawText(boxX, boxBottom + 2, '[ESC] Cancel', AnsiColor.Red);
     this.door.sendAnsi(this.gfx.render(), this.user.id);
   }
 
@@ -1498,11 +1526,17 @@ class BugTracker {
   public start(): void {
     this.door.start();
   }
+
+  public getDoor(): Door {
+    return this.door;
+  }
 }
 
 // ============================================================================
 // START THE DOOR
 // ============================================================================
 
-const bugTracker = new BugTracker();
-bugTracker.start();
+export async function runDoor(doorSession: any): Promise<void> {
+  const bugTracker = new BugTracker();
+  await runDoorWithSession(bugTracker.getDoor(), doorSession);
+}

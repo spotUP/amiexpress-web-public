@@ -652,5 +652,23 @@ class DungeonRPG {
   }
 }
 
-const game = new DungeonRPG();
-game.start();
+if (typeof process !== 'undefined' && process.argv?.[1]?.includes('dungeon-rpg')) {
+  const game = new DungeonRPG();
+  game.start();
+}
+
+export async function runDoor(doorSession: any): Promise<void> {
+  const { socket } = doorSession;
+
+  socket.emit('ansi-output', '\r\n\x1b[33mDungeon RPG currently runs as a client/hybrid door with full browser graphics.\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[33mUse the web preview to experience the game. This text node shows a placeholder.\x1b[0m\r\n');
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to return to the menu...\x1b[0m');
+
+  await new Promise<void>((resolve) => {
+    const handler = () => {
+      socket.off('user-input', handler);
+      resolve();
+    };
+    socket.on('user-input', handler);
+  });
+}

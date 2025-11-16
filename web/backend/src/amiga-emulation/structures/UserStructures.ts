@@ -359,7 +359,7 @@ export class UserKeysStructure {
     emulator.writeMemory16(addr + 0x28, user.userFlags || 0);
 
     // +0x2A: baud (INT) - last online baud rate
-    emulator.writeMemory16(addr + 0x2A, user.baud || 33600);
+    emulator.writeMemory16(addr + 0x2A, user.baud || 57600);
 
     // +0x2C: upCPS2 (LONG) - new high upload cps >64k
     emulator.writeMemory32(addr + 0x2C, user.upCPS || 0);

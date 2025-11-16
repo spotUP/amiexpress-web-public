@@ -4,6 +4,7 @@
  */
 
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
+import { runDoorWithSession } from '../../tools/runDoorSession';
 
 interface BBSStats {
   totalUsers: number;
@@ -203,5 +204,6 @@ function formatUptime(seconds: number): string {
   return `${days}d ${hours}h ${mins}m`;
 }
 
-door.start();
-console.log('BBS Dashboard door started!');
+export async function runDoor(doorSession: any): Promise<void> {
+  await runDoorWithSession(door, doorSession);
+}

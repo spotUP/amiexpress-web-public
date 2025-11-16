@@ -39,6 +39,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GraphicsEngine = void 0;
 const types_1 = require("../../core/types");
+const ansi_string_utils_1 = require("../../core/ansi-string-utils");
 class GraphicsEngine {
     constructor(config) {
         /** Registered sprites */
@@ -58,7 +59,7 @@ class GraphicsEngine {
         this.cutsceneStartTime = 0;
         this.width = config.width;
         this.height = config.height;
-        this.doubleBuffer = config.doubleBuffer ?? true;
+        this.doubleBuffer = config.doubleBuffer ?? false;
         // Initialize buffers
         this.buffer = this.createBuffer();
         this.backBuffer = this.createBuffer();
@@ -124,20 +125,28 @@ class GraphicsEngine {
     /**
      * Draw text at position
      *
+     * NOTE: This method strips ANSI codes and draws using the provided colors.
+     * If you need to preserve ANSI color codes in the text, use raw ANSI output instead.
+     *
      * @param x - X coordinate
      * @param y - Y coordinate
-     * @param text - Text to draw
+     * @param text - Text to draw (ANSI codes will be stripped)
      * @param fg - Foreground color
      * @param bg - Background color
      *
      * @example
      * ```typescript
      * gfx.drawText(5, 10, 'GAME OVER', AnsiColor.Red);
+     * // Text with ANSI codes - codes are stripped, only visible text is drawn
+     * gfx.drawText(5, 10, '\x1b[31mColored\x1b[0m Text', AnsiColor.White);
      * ```
      */
     drawText(x, y, text, fg = types_1.AnsiColor.White, bg = types_1.AnsiColor.Black) {
-        for (let i = 0; i < text.length; i++) {
-            this.drawChar(x + i, y, text[i], fg, bg);
+        // Strip ANSI codes to get only visible characters
+        // This ensures proper positioning even if text contains color codes
+        const cleanText = (0, ansi_string_utils_1.stripAnsi)(text);
+        for (let i = 0; i < cleanText.length; i++) {
+            this.drawChar(x + i, y, cleanText[i], fg, bg);
         }
     }
     /**
@@ -224,12 +233,11 @@ class GraphicsEngine {
         const ansi = this.ansiCache.get(id);
         if (!ansi)
             return;
-        // Parse and render ANSI (simplified - real implementation would parse ANSI codes)
+        // Parse and render ANSI (simplified - ANSI codes are stripped by drawText)
         const lines = ansi.split(/\r?\n/);
         lines.forEach((line, y) => {
-            // Strip ANSI codes for now (real implementation would parse them)
-            const text = line.replace(/\x1b\[[0-9;]*m/g, '');
-            this.drawText(position.x, position.y + y, text);
+            // drawText will strip ANSI codes and draw visible characters only
+            this.drawText(position.x, position.y + y, line);
         });
     }
     /**
@@ -514,11 +522,15 @@ class GraphicsEngine {
                 const cell = this.buffer[y][x];
                 // Optimize: only emit color codes when they change
                 if (cell.fg !== lastFg) {
-                    output += `\x1b[${30 + (cell.fg % 8)}m`;
+                    // AnsiColor enum: 0-7 = normal colors, 8-15 = bright colors
+                    const fgCode = cell.fg < 8 ? 30 + cell.fg : 90 + (cell.fg - 8);
+                    output += `\x1b[${fgCode}m`;
                     lastFg = cell.fg;
                 }
                 if (cell.bg !== lastBg) {
-                    output += `\x1b[${40 + (cell.bg % 8)}m`;
+                    // AnsiColor enum: 0-7 = normal colors, 8-15 = bright colors
+                    const bgCode = cell.bg < 8 ? 40 + cell.bg : 100 + (cell.bg - 8);
+                    output += `\x1b[${bgCode}m`;
                     lastBg = cell.bg;
                 }
                 output += cell.char;

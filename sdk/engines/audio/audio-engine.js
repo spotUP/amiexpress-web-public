@@ -74,7 +74,19 @@ class AudioEngine {
             sfxVolume: config.sfxVolume ?? 0.8,
             enabled: config.enabled ?? true,
         };
-        // Initialize Tone.js
+        // Check if we're in a browser environment with AudioContext
+        const isBrowser = typeof globalThis !== 'undefined' &&
+            globalThis.window !== undefined &&
+            typeof globalThis.window.AudioContext !== 'undefined';
+        if (!isBrowser) {
+            // Node.js environment - create placeholder gains that won't be used
+            console.warn('AudioEngine: Running in Node.js environment. Audio features disabled.');
+            this.masterGain = {};
+            this.musicGain = {};
+            this.sfxGain = {};
+            return;
+        }
+        // Initialize Tone.js (browser only)
         this.masterGain = new Tone.Gain(this.config.masterVolume).toDestination();
         this.musicGain = new Tone.Gain(this.config.musicVolume).connect(this.masterGain);
         this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(this.masterGain);

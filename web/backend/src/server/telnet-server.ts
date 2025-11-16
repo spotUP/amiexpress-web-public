@@ -16,6 +16,8 @@ import { Server as NetServer, Socket } from 'net';
 import { EventEmitter } from 'events';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession } from './session-manager';
 import { BBSSession } from '../index';
+import { config } from '../config';
+import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 
 // Telnet IAC (Interpret As Command) constants - express.e:2389-2508
 const IAC = 255;  // Interpret As Command
@@ -432,6 +434,13 @@ export class TelnetServer extends EventEmitter {
 
     // Create BBS session (express.e:1028-1044)
     const session = createSession(connection.nodeId);
+    const cfg = config.getConfig();
+    session.connectionType = 'telnet';
+    session.remoteAddress = remoteAddress;
+    session.connectionHostname = cfg.hostname;
+    session.connectionPort = this.port;
+    session.connectionBaud = DEFAULT_CONNECTION_BAUD;
+    session.connectionStart = Date.now();
     connection.session = session;
 
     // Map session to node ID for lookup

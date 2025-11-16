@@ -17,6 +17,8 @@ import { Server as SSHServer, Connection, AcceptConnection } from 'ssh2';
 import { EventEmitter } from 'events';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession } from './session-manager';
 import { BBSSession } from '../index';
+import { config } from '../config';
+import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 
 /**
  * SSH Connection
@@ -265,6 +267,13 @@ export class SSHServerImpl extends EventEmitter {
     connection.on('ready', () => {
       // Create BBS session (same as telnet)
       const session = createSession(connection.nodeId);
+      const cfg = config.getConfig();
+      session.connectionType = 'ssh';
+      session.remoteAddress = remoteAddress;
+      session.connectionHostname = cfg.hostname;
+      session.connectionPort = this.port;
+      session.connectionBaud = DEFAULT_CONNECTION_BAUD;
+      session.connectionStart = Date.now();
       connection.session = session;
 
       // Map session to node ID for lookup

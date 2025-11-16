@@ -9,6 +9,7 @@
  */
 
 import { Door, AnsiColor, GraphicsEngine } from '@amiexpress/bbs-door-sdk';
+import { runDoorWithSession } from '../../tools/runDoorSession';
 
 // Create door
 const door = new Door({
@@ -58,6 +59,6 @@ door.onDisconnect((user: any) => {
   console.log(`User ${user.name} disconnected`);
 });
 
-// Start the door
-door.start();
-console.log('Hello World door started!');
+export async function runDoor(doorSession: any): Promise<void> {
+  await runDoorWithSession(door, doorSession);
+}

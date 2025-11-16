@@ -56,7 +56,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const socketRef = useRef<Socket | null>(null);
 
   // Login state tracking
-  const loginState = useRef<'waiting' | 'username' | 'password' | 'new-user-prompt' | 'loggedin'>('waiting');
+  const loginState = useRef<'waiting' | 'username' | 'password' | 'new-user-prompt' | 'registering' | 'loggedin'>('waiting');
   const username = useRef<string>('');
   const password = useRef<string>('');
   const newUserPromptUsername = useRef<string>('');
@@ -166,7 +166,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         term.clear();
         term.writeln('\r\n\x1b[36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m');
         term.writeln('\x1b[36m║                                                                              ║\x1b[0m');
-        term.writeln('\x1b[36m║                     \x1b[31mBBS Backend Connection Failed\x1b[36m                          ║\x1b[0m');
+        const bannerMessage = 'BBS Backend Connection Failed';
+        const interiorWidth = 78;
+        const leftPadding = Math.max(0, Math.floor((interiorWidth - bannerMessage.length) / 2));
+        const rightPadding = Math.max(0, interiorWidth - bannerMessage.length - leftPadding);
+        term.writeln(
+          `\x1b[36m║${' '.repeat(leftPadding)}\x1b[31m${bannerMessage}\x1b[36m${' '.repeat(rightPadding)}║\x1b[0m`
+        );
         term.writeln('\x1b[36m║                                                                              ║\x1b[0m');
         term.writeln('\x1b[36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m');
         term.writeln('');
@@ -368,15 +374,30 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // Handle new user prompt
       if (loginState.current === 'new-user-prompt') {
-        if (key.toLowerCase() === 'y') {
-          term.write('y\r\n\r\nPassword: ');
-          loginState.current = 'password';
-          password.current = '';
-        } else if (key.toLowerCase() === 'n') {
-          term.write('n\r\n\r\nUsername: ');
-          loginState.current = 'username';
-          username.current = '';
-          password.current = '';
+        const promptUser = newUserPromptUsername.current || username.current || '';
+        const sendResponse = (response: string) => {
+          socket.emit('new-user-response', { response, username: promptUser });
+        };
+
+        if (key === '\r') {
+          term.write('\r\n');
+          sendResponse('');
+          loginState.current = 'registering';
+        } else {
+          const lower = key.toLowerCase();
+          if (lower === 'c') {
+            term.write('C\r\n');
+            sendResponse('C');
+            loginState.current = 'registering';
+          } else if (lower === 'r') {
+            term.write('R\r\n');
+            sendResponse('R');
+            loginState.current = 'username';
+            username.current = '';
+            password.current = '';
+          } else {
+            term.write('\r\n\x1b[33mPress R to retry or C to continue as a new user\x1b[0m\r\n');
+          }
         }
         return;
       }

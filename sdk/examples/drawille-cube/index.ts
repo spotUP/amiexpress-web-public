@@ -14,6 +14,7 @@
  */
 
 const { Door, UIEngine } = require('@amiexpress/bbs-door-sdk');
+const { runDoorWithSession } = require('../../tools/runDoorSession');
 // @ts-ignore - drawille doesn't have type definitions
 const drawille = require('drawille');
 
@@ -318,5 +319,6 @@ door.onDisconnect((user: any) => {
   console.log(`User ${user.name} disconnected from Drawille Cube Demo`);
 });
 
-door.start();
-console.log('Drawille Cube Demo door started!');
+export async function runDoor(doorSession: any): Promise<void> {
+  await runDoorWithSession(door, doorSession);
+}

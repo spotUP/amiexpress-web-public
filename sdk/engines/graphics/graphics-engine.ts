@@ -111,7 +111,7 @@ export class GraphicsEngine {
   constructor(config: GraphicsEngineConfig) {
     this.width = config.width;
     this.height = config.height;
-    this.doubleBuffer = config.doubleBuffer ?? true;
+    this.doubleBuffer = config.doubleBuffer ?? false;
 
     // Initialize buffers
     this.buffer = this.createBuffer();

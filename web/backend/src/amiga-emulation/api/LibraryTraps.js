@@ -210,6 +210,14 @@ var DOS_VECTORS = [
         }
     },
     {
+        offset: -906,
+        name: 'FGets',
+        handler: function (emu, lib) {
+            lib.FGets();
+            return emu.getRegister(0);
+        }
+    },
+    {
         offset: -132,
         name: 'IoErr',
         handler: function (emu, lib) {

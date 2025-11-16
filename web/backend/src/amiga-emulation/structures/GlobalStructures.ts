@@ -66,7 +66,7 @@ export class CommandsStructure {
     this.writeString(emulator, addr + 0x8D, '', 15);
 
     // +0x9C: openingBaud (LONG)
-    emulator.writeMemory32(addr + 0x9C, 33600);
+    emulator.writeMemory32(addr + 0x9C, 57600);
 
     // +0xA0: taskPri (CHAR)
     emulator.writeMemory(addr + 0xA0, 0);
@@ -349,7 +349,7 @@ export class NodeStateGlobals {
 
     // onlineBaud (LONG) - connection baud rate
     const onlineBaudAddr = baseAddr + 8;
-    emulator.writeMemory32(onlineBaudAddr, 33600);
+    emulator.writeMemory32(onlineBaudAddr, 57600);
 
     // timeLimit (LONG) - time limit in seconds
     const timeLimitAddr = baseAddr + 12;

@@ -80,6 +80,7 @@ export { ClassSystem } from './components/tactical/class-system';
 // Tools
 export { ReleasePacker } from './tools/packer';
 export { DebugOverlay } from './tools/debug/debug-overlay';
+export { runDoorWithSession } from './tools/runDoorSession';
 
 // Version
 export const SDK_VERSION = '2.0.0';

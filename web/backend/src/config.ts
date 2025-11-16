@@ -24,6 +24,9 @@ export interface BBSConfig {
   defaultSecLevel: number;
   maxUsers: number;
   newUserSecLevel: number;
+  newUserPassword: string;
+  autoValidationPassword: string;
+  autoValidationSecLevel: number;
 
   // File Settings
   uploadPath: string;
@@ -111,6 +114,9 @@ export class ConfigManager {
       defaultSecLevel: 10,
       maxUsers: 1000,
       newUserSecLevel: 10,
+      newUserPassword: process.env.NEW_USER_PASSWORD || '',
+      autoValidationPassword: process.env.AUTO_VALIDATION_PASSWORD || '',
+      autoValidationSecLevel: parseInt(process.env.AUTO_VALIDATION_SECLEVEL || '50', 10),
 
       // File Settings
       uploadPath: './uploads',

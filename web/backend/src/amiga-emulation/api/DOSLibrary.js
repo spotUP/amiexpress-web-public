@@ -596,17 +596,37 @@ var DosLibrary = /** @class */ (function () {
         var offset = this.emulator.getRegister(MoiraEmulator_1.CPURegister.D2);
         var mode = this.emulator.getRegister(MoiraEmulator_1.CPURegister.D3);
         console.log("[dos.library] Seek(handle=".concat(handle, ", offset=").concat(offset, ", mode=").concat(mode, ")"));
-        // Console handles and NIL: don't support seeking
-        if (handle <= 3 || handle === this.NIL_HANDLE) {
-            console.error("[dos.library] Seek: Cannot seek on console/NIL handles");
-            this.lastError = this.ERROR_OBJECT_IN_USE;
-            return -1;
-        }
         var fileHandle = this.openFiles.get(handle);
         if (!fileHandle) {
             console.error("[dos.library] Seek: Invalid handle ".concat(handle));
             this.lastError = this.ERROR_OBJECT_NOT_FOUND;
             return -1;
+        }
+        // Treat console/NIL handles as virtual streams that support Seek()
+        if (fileHandle.isConsole || handle === this.NIL_HANDLE) {
+            var oldPos = fileHandle.position;
+            var newPos = oldPos;
+            if (mode === OFFSET_BEGINNING) {
+                newPos = offset;
+            }
+            else if (mode === OFFSET_CURRENT) {
+                newPos = oldPos + offset;
+            }
+            else if (mode === OFFSET_END) {
+                newPos = oldPos;
+            }
+            else {
+                console.error("[dos.library] Seek: Invalid mode ".concat(mode, " for console handle"));
+                this.lastError = this.ERROR_OBJECT_IN_USE;
+                return -1;
+            }
+            if (newPos < 0) {
+                newPos = 0;
+            }
+            fileHandle.position = newPos;
+            this.lastError = this.ERROR_NO_ERROR;
+            console.log("[dos.library] Seek: Console/NIL handle ".concat(handle, " moved from ").concat(oldPos, " to ").concat(newPos));
+            return oldPos;
         }
         if (!fileHandle.buffer) {
             console.error("[dos.library] Seek: No buffer for handle ".concat(handle));
@@ -642,6 +662,48 @@ var DosLibrary = /** @class */ (function () {
         this.lastError = this.ERROR_NO_ERROR;
         console.log("[dos.library] Seek: Moved from ".concat(oldPosition, " to ").concat(newPosition));
         return oldPosition;
+    };
+    DosLibrary.prototype.FGets = function () {
+        var fileHandle = this.emulator.getRegister(MoiraEmulator_1.CPURegister.D1);
+        var bufAddr = this.emulator.getRegister(MoiraEmulator_1.CPURegister.D2);
+        var bufLen = this.emulator.getRegister(MoiraEmulator_1.CPURegister.D3);
+        console.log("[dos.library] FGets(fh=".concat(fileHandle, ", buf=0x").concat(bufAddr.toString(16), ", len=").concat(bufLen, ")"));
+        if (bufLen === 0) {
+            this.emulator.setRegister(MoiraEmulator_1.CPURegister.D0, 0);
+            this.lastError = this.ERROR_NO_ERROR;
+            console.log('[dos.library] FGets: Zero length buffer, returning NULL');
+            return;
+        }
+        var file = this.openFiles.get(fileHandle);
+        if (!file) {
+            this.emulator.setRegister(MoiraEmulator_1.CPURegister.D0, 0);
+            this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+            console.log('[dos.library] FGets: Invalid file handle, returning NULL');
+            return;
+        }
+        if (!file.buffer || file.position >= file.buffer.length) {
+            this.emulator.setRegister(MoiraEmulator_1.CPURegister.D0, 0);
+            this.lastError = this.ERROR_NO_ERROR;
+            console.log('[dos.library] FGets: EOF, returning NULL');
+            return;
+        }
+        var bytesRead = 0;
+        var maxBytes = bufLen - 1;
+        while (bytesRead < maxBytes && file.position < file.buffer.length) {
+            var byte = file.buffer[file.position++];
+            this.emulator.writeMemory(bufAddr + bytesRead, byte);
+            bytesRead++;
+            if (byte === 10) {
+                break;
+            }
+        }
+        this.emulator.writeMemory(bufAddr + bytesRead, 0);
+        this.emulator.setRegister(MoiraEmulator_1.CPURegister.D0, bufAddr);
+        var chars = [];
+        for (var i = 0; i < bytesRead; i++) {
+            chars.push(String.fromCharCode(this.emulator.readMemory(bufAddr + i)));
+        }
+        console.log("[dos.library] FGets: Read ".concat(bytesRead, " bytes: \"").concat(chars.join('').replace(/\n/g, '\\n'), "\""));
     };
     /**
      * DeleteFile - Delete a file

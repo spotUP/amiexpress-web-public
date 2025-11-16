@@ -172,6 +172,9 @@ CallersLog
 doors/who/node*.txt
 Doors/who/node*.txt
 
+# Local Emscripten cache
+web/backend/src/amiga-emulation/cpu/.emcache/
+
 # BBS runtime config files (contain API keys and secrets)
 bbsConfig.info
 bbsConfig.info_*

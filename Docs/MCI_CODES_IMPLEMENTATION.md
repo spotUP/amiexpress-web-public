@@ -25,7 +25,7 @@ All 70+ MCI codes from the original AmiExpress E source have been implemented in
 | `~A\|` | Access/Security Level | "255" |
 | `~S\|` | Slot Number (User ID) | "1" |
 | `~CA\|` | Conference Access | "" |
-| `~BR\|` | Baud Rate | "38400" |
+| `~BR\|` | Baud Rate | "57600" |
 | `~HW\|` | Hardware/Computer Type | "Web Browser" |
 | `~TL\|` | Time Limit (minutes) | "120" |
 | `~TR\|` | Time Remaining (minutes) | "115" |
@@ -119,7 +119,7 @@ For backward compatibility with older screen files:
 | `%S` | Sysop Name | "Sysop" |
 | `%L` | Location | "The Internet" |
 | `%CF` | Current Conference | `~CF\|` |
-| `%R` | Baud Rate/Time Remaining | `~TR\|` or "38400" |
+| `%R` | Baud Rate/Time Remaining | `~TR\|` or "57600" |
 | `%D` | Full Date/Time | `~DT\|` |
 | `%T` | Time Only | `~OT\|` |
 | `%U` | Username | `~N\|` |

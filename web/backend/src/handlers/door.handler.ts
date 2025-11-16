@@ -13,6 +13,7 @@ import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 
 import type { BBSSession } from '../index';
+import type { User } from '../database/types';
 
 interface Door {
   id: string;
@@ -88,6 +89,63 @@ export function setConstants(constants: {
   LoggedOnSubState: any;
 }) {
   LoggedOnSubState = constants.LoggedOnSubState;
+}
+
+function resolveDoorExecutionUser(session: BBSSession): { user: User; isGuest: boolean } {
+  if (session.user) {
+    return { user: session.user, isGuest: false };
+  }
+
+  const now = new Date();
+  const nodeId = session.nodeId || 0;
+  const linesPerScreen = session.tempData?.termHeight || session.screenHeight || 24;
+
+  const guestUser: User = {
+    id: `guest-${nodeId}`,
+    username: 'Guest',
+    passwordHash: '',
+    realname: 'Guest User',
+    location: session.connectionHostname || session.remoteAddress || 'Unknown',
+    phone: '000-000-0000',
+    secLevel: 0,
+    uploads: 0,
+    downloads: 0,
+    bytesUpload: 0,
+    bytesDownload: 0,
+    ratio: 0,
+    ratioType: 0,
+    timeTotal: 0,
+    timeLimit: Math.floor((session.timeRemaining || 3600) / 60),
+    timeUsed: 0,
+    chatLimit: 0,
+    chatUsed: 0,
+    firstLogin: now,
+    calls: 0,
+    callsToday: 0,
+    newUser: true,
+    expert: false,
+    ansi: session.ansiEnabled !== false,
+    linesPerScreen,
+    computer: 'Unknown',
+    screenType: session.petsciiMode ? 'PETSCII' : 'ANSI',
+    protocol: 'Z',
+    editor: 'NONE',
+    zoomType: '',
+    availableForChat: false,
+    quietNode: false,
+    autoRejoin: session.confRJoin || 1,
+    confAccess: '',
+    areaName: session.currentConfName || 'General',
+    uuCP: false,
+    topUploadCPS: 0,
+    topDownloadCPS: 0,
+    byteLimit: 0,
+    userFlags: 0,
+    created: now,
+    updated: now
+  };
+
+  return { user: guestUser, isGuest: true };
 }
 
 /**
@@ -258,15 +316,16 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
   }
 
   const nodeId = session.nodeId || 0;
+  const { user: doorUser, isGuest } = resolveDoorExecutionUser(session);
 
   // Create drop files (DOOR.SYS, DORINFOx.DEF) before door execution
   const timeRemaining = session.timeRemaining || 3600; // Default 1 hour
-  doorDropFileManager.createAllDropFiles(nodeId, session.user!, timeRemaining);
+  doorDropFileManager.createAllDropFiles(nodeId, doorUser, timeRemaining);
 
   // Create door session
   const doorSession: DoorSession = {
     doorId: door.id,
-    userId: session.user!.id,
+    userId: doorUser.id,
     startTime: new Date(),
     status: 'running'
   };
@@ -275,7 +334,7 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
   socket.emit('ansi-output', `\r\n\x1b[32mStarting ${door.name}...\x1b[0m\r\n`);
 
   // Log door execution
-  callersLog(session.user!.id, session.user!.username, 'Executed door', door.name);
+  callersLog(isGuest ? null : doorUser.id, doorUser.username, 'Executed door', door.name);
   callersLogManager.logDoor(nodeId, door.name);
 
   // Execute based on door type
@@ -506,16 +565,18 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
       return;
     }
 
+    const { user: sdkUser } = resolveDoorExecutionUser(session);
+
     // Prepare user data for SDK door
     const userData = {
-      id: session.user!.id,
-      name: session.user!.username,
+      id: sdkUser.id,
+      name: sdkUser.username,
       node: session.nodeId || 1,
-      securityLevel: session.user!.securityLevel,
+      securityLevel: sdkUser.secLevel,
       timeLeft: session.timeRemaining || 3600,
-      graphicsMode: 'ANSI',
-      termWidth: 80,
-      termHeight: 24,
+      graphicsMode: sdkUser.ansi ? 'ANSI' : 'ASCII',
+      termWidth: session.screenWidth || 80,
+      termHeight: session.screenHeight || 24,
       data: {}
     };
 
@@ -1191,8 +1252,10 @@ async function executePythonDoor(socket: any, session: BBSSession, door: Door, d
   // Calculate time remaining
   const timeRemaining = session.timeRemaining || 60;
 
+  const { user: pythonDoorUser } = resolveDoorExecutionUser(session);
+
   // Create drop files for the door
-  doorDropFileManager.createAllDropFiles(nodeId, session.user!, timeRemaining);
+  doorDropFileManager.createAllDropFiles(nodeId, pythonDoorUser, timeRemaining);
 
   // Get drop file directory path
   const config = require('../config').config;
@@ -1203,11 +1266,11 @@ async function executePythonDoor(socket: any, session: BBSSession, door: Door, d
   const env = {
     ...process.env,
     // User information
-    BBS_USERNAME: session.user?.username || 'Guest',
-    BBS_USER_ID: session.user?.id || '',
-    BBS_REALNAME: session.user?.realname || '',
-    BBS_LOCATION: session.user?.location || '',
-    BBS_SECURITY_LEVEL: session.user?.secLevel?.toString() || '0',
+    BBS_USERNAME: pythonDoorUser.username,
+    BBS_USER_ID: pythonDoorUser.id,
+    BBS_REALNAME: pythonDoorUser.realname,
+    BBS_LOCATION: pythonDoorUser.location,
+    BBS_SECURITY_LEVEL: pythonDoorUser.secLevel.toString(),
     // Door information
     BBS_DOOR_ID: door.id,
     BBS_DOOR_NAME: door.name,
@@ -1337,14 +1400,16 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
     // Import ARexx engine from arexx.ts
     const { arexxEngine } = require('../arexx');
 
-    // Get node ID from session
-    const nodeId = session.nodeId || 1;
+  // Get node ID from session
+  const nodeId = session.nodeId || 1;
 
-    // Calculate time remaining
-    const timeRemaining = session.timeRemaining || 60;
+  // Calculate time remaining
+  const timeRemaining = session.timeRemaining || 60;
 
-    // Create drop files for the door
-    doorDropFileManager.createAllDropFiles(nodeId, session.user!, timeRemaining);
+  const { user: arexxDoorUser } = resolveDoorExecutionUser(session);
+
+  // Create drop files for the door
+  doorDropFileManager.createAllDropFiles(nodeId, arexxDoorUser, timeRemaining);
 
     // Get drop file directory path
     const config = require('../config').config;
@@ -1358,11 +1423,11 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
     // Prepare ARexx context with BBS environment and full API
     const arexxContext = {
       // User information
-      username: session.user?.username || 'Guest',
-      userId: session.user?.id || '',
-      realname: session.user?.realname || '',
-      location: session.user?.location || '',
-      securityLevel: session.user?.secLevel || 0,
+      username: arexxDoorUser.username,
+      userId: arexxDoorUser.id,
+      realname: arexxDoorUser.realname,
+      location: arexxDoorUser.location,
+      securityLevel: arexxDoorUser.secLevel,
       // Door information
       doorId: door.id,
       doorName: door.name,
@@ -1586,7 +1651,8 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
 
     // Log door execution
     const nodeId = session.nodeId || 0;
-    callersLog(session.user!.id, session.user!.username, 'Executed client door', door.name);
+    const { user: clientDoorUser, isGuest } = resolveDoorExecutionUser(session);
+    callersLog(isGuest ? null : clientDoorUser.id, clientDoorUser.username, 'Executed client door', door.name);
     callersLogManager.logDoor(nodeId, door.name);
 
   } catch (error) {

@@ -181,6 +181,14 @@ export class DosLibrary {
       return resolved;
     }
 
+    // Handle S: device - Amiga system scripts/config (maps to BBS root /S)
+    if (amigaPath.toUpperCase().startsWith('S:')) {
+      const relativePath = amigaPath.substring(2);
+      const resolved = path.join(this.BBS_BASE_PATH, 'S', relativePath);
+      console.log(`[dos.library] S: device -> ${resolved}`);
+      return resolved;
+    }
+
     // Handle absolute paths
     if (amigaPath.startsWith('/')) {
       console.log(`[dos.library] Absolute path -> ${amigaPath}`);
@@ -801,18 +809,38 @@ export class DosLibrary {
 
     console.log(`[dos.library] Seek(handle=${handle}, offset=${offset}, mode=${mode})`);
 
-    // Console handles and NIL: don't support seeking
-    if (handle <= 3 || handle === this.NIL_HANDLE) {
-      console.log(`[dos.library] Seek: Cannot seek on console/NIL handles (this is normal)`);
-      this.lastError = this.ERROR_SEEK_ERROR;  // ERROR_SEEK_ERROR = "seek not possible"
-      return -1;
-    }
-
     const fileHandle = this.openFiles.get(handle);
     if (!fileHandle) {
       console.error(`[dos.library] Seek: Invalid handle ${handle}`);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return -1;
+    }
+
+    // Treat console/NIL handles as virtual streams that support Seek()
+    if (fileHandle.isConsole || handle === this.NIL_HANDLE) {
+      const oldPos = fileHandle.position;
+      let newPos = oldPos;
+      if (mode === OFFSET_BEGINNING) {
+        newPos = offset;
+      } else if (mode === OFFSET_CURRENT) {
+        newPos = oldPos + offset;
+      } else if (mode === OFFSET_END) {
+        // Consoles/NIL don't have a meaningful end; treat as no-op
+        newPos = oldPos;
+      } else {
+        console.error(`[dos.library] Seek: Invalid mode ${mode} for console handle`);
+        this.lastError = this.ERROR_OBJECT_IN_USE;
+        return -1;
+      }
+
+      if (newPos < 0) {
+        newPos = 0;
+      }
+
+      fileHandle.position = newPos;
+      this.lastError = this.ERROR_NO_ERROR;
+      console.log(`[dos.library] Seek: Console/NIL handle ${handle} moved from ${oldPos} to ${newPos}`);
+      return oldPos;
     }
 
     if (!fileHandle.buffer) {

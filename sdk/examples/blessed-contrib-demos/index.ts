@@ -4,6 +4,7 @@
  */
 
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
+import { runDoorWithSession } from '../../tools/runDoorSession';
 // @ts-ignore - neo-blessed doesn't have complete type definitions
 import * as blessed from 'neo-blessed';
 // @ts-ignore - blessed-contrib doesn't have type definitions
@@ -210,5 +211,6 @@ function drawLogAscii(x: number, y: number) {
   gfx.drawText(x, y + 10, '+' + '─'.repeat(58) + '+', AnsiColor.Cyan);
 }
 
-door.start();
-console.log('blessed-contrib Demos door started!');
+export async function runDoor(doorSession: any): Promise<void> {
+  await runDoorWithSession(door, doorSession);
+}

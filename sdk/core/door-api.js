@@ -85,6 +85,49 @@ class Door extends events_1.EventEmitter {
         // Handle shutdown gracefully
         process.on('SIGINT', () => this.shutdown());
         process.on('SIGTERM', () => this.shutdown());
+        // Check if running in SDK_MODE (spawned by BBS backend)
+        const isBBSMode = process.env.SDK_MODE === '1';
+        if (isBBSMode) {
+            // BBS Mode - Use IPC to communicate with parent process
+            console.log('[Door SDK] Running in BBS mode - using IPC');
+            // Listen for input messages from BBS
+            process.on('message', (message) => {
+                if (message.type === 'input') {
+                    const user = Array.from(this.users.values())[0];
+                    if (user) {
+                        this.emit('input', { user, key: message.key });
+                    }
+                }
+                else if (message.type === 'disconnect') {
+                    const user = Array.from(this.users.values())[0];
+                    if (user) {
+                        this.disconnect(user.id);
+                    }
+                    this.shutdown();
+                }
+            });
+            // Send output via IPC
+            this.on('output', (data) => {
+                if (process.send) {
+                    process.send({
+                        type: 'output',
+                        text: data.text
+                    });
+                }
+            });
+            // Parse user data from environment
+            if (process.env.BBS_USER_DATA) {
+                try {
+                    const userData = JSON.parse(process.env.BBS_USER_DATA);
+                    console.log('[Door SDK] Parsed BBS user data:', userData);
+                    // Store for auto-connect during start()
+                    this.__bbsUserData = userData;
+                }
+                catch (err) {
+                    console.error('[Door SDK] Failed to parse BBS_USER_DATA:', err);
+                }
+            }
+        }
     }
     /**
      * Start the door and begin accepting connections
@@ -100,6 +143,16 @@ class Door extends events_1.EventEmitter {
         }
         this.state = 'running';
         this.emit('start');
+        // Auto-connect user in BBS mode
+        const isBBSMode = process.env.SDK_MODE === '1';
+        if (isBBSMode && this.__bbsUserData) {
+            // BBS Mode - connect the user passed from backend
+            const bbsUser = this.__bbsUserData;
+            console.log('[Door SDK] Auto-connecting BBS user:', bbsUser.name);
+            setTimeout(() => {
+                this.connect(bbsUser);
+            }, 100);
+        }
         // Start main loop
         this.mainLoop();
     }
@@ -122,7 +175,8 @@ class Door extends events_1.EventEmitter {
             this.emit('render', this.frameCount);
         }
         // Schedule next frame
-        setImmediate(() => this.mainLoop());
+        // Use setTimeout instead of setImmediate to keep the process alive
+        setTimeout(() => this.mainLoop(), 0);
     }
     /**
      * Handle new user connection
