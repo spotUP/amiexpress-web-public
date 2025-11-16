@@ -29,6 +29,9 @@ export class PathManager {
     this.assigns.set('data:', path.join(this.baseDir, 'data/'));
     this.assigns.set('screens:', path.join(this.baseDir, 'BBS/Screens/'));
     this.assigns.set('bulletins:', path.join(this.baseDir, 'BBS/Bulletins/'));
+    this.assigns.set('s:', path.join(this.baseDir, 'S/'));
+    this.assigns.set('work:', this.baseDir);
+    this.assigns.set('sami:', path.join(this.baseDir, 'S/'));
 
     // Standard AmigaDOS assigns
     this.assigns.set('sys:', path.join(this.baseDir, 'System/'));

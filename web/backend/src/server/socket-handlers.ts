@@ -21,6 +21,7 @@ import { displayScreen } from '../handlers/screen.handler';
 import { handleCommand } from '../handlers/command.handler';
 import { exitChat, sendChatMessage, acceptChat } from '../handlers/chat.handler';
 import { initializeSecurity } from '../utils/security.util';
+import { triggerSamiLogRefresh } from '../services/SamiLogService';
 
 /**
  * Register all Socket.IO event handlers for a socket connection
@@ -329,6 +330,8 @@ function registerDisconnectHandler(socket: Socket) {
       // Pre-login socket - just remove from socket-based storage
       deleteSession(socket.id);
     }
+
+    triggerSamiLogRefresh();
   });
 }
 

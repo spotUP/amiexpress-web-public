@@ -16,6 +16,13 @@ import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
 import { findCaseInsensitive } from '../utils/fs-amiga.util';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 
+const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG === '1';
+const screenDebug = (...args: any[]) => {
+  if (SCREEN_DEBUG_ENABLED) {
+    console.log(...args);
+  }
+};
+
 interface Conference {
   id: number;
   name: string;
@@ -84,19 +91,19 @@ export async function parseMciCodes(
   // ~XC - Execute Command (CRITICAL for NI/NO tools)
   // Format: ~XC_<command> <params>||
   // Example: ~XC_DOORS:who/NI ~N||
-  console.log('[MCI] ========== PROCESSING MCI CODES ==========');
-  console.log('[MCI] Content length:', content.length);
-  console.log('[MCI] Looking for ~XC_ and ~XI codes...');
+screenDebug('[MCI] ========== PROCESSING MCI CODES ==========');
+screenDebug('[MCI] Content length:', content.length);
+screenDebug('[MCI] Looking for ~XC_ and ~XI codes...');
   const xcRegex = /~XC_([^\|]+)\|\|/g;
   let xcMatch;
   while ((xcMatch = xcRegex.exec(parsed)) !== null) {
     const commandStr = xcMatch[1];
-    console.log('[MCI] *** FOUND ~XC_ COMMAND:', commandStr);
+    screenDebug('[MCI] *** FOUND ~XC_ COMMAND:', commandStr);
     // Store command for async execution after screen display
     commandsToExecute.push(commandStr.trim());
     // Remove the ~XC code from output (silent execution)
     parsed = parsed.replace(xcMatch[0], '');
-    console.log('[MCI] Added command to execution queue');
+    screenDebug('[MCI] Added command to execution queue');
   }
 
   // ~XI - Execute XIM door (express.e format: ~XI<doorpath>)
@@ -106,17 +113,17 @@ export async function parseMciCodes(
   let xiMatch;
   while ((xiMatch = xiRegex.exec(parsed)) !== null) {
     const doorPath = xiMatch[1];
-    console.log('[MCI] *** FOUND ~XI DOOR:', doorPath);
+    screenDebug('[MCI] *** FOUND ~XI DOOR:', doorPath);
     // Store door command for async execution after screen display
     commandsToExecute.push(doorPath.trim());
     // Remove the ~XI code from output (silent execution)
     parsed = parsed.replace(xiMatch[0], '');
-    console.log('[MCI] Added XIM door to execution queue');
+    screenDebug('[MCI] Added XIM door to execution queue');
   }
 
-  console.log('[MCI] Total commands to execute:', commandsToExecute.length);
+screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   if (commandsToExecute.length > 0) {
-    console.log('[MCI] Commands:', commandsToExecute);
+    screenDebug('[MCI] Commands:', commandsToExecute);
   }
 
   // Conference/Message Board Lists (express.e:5588-5620)
@@ -201,6 +208,7 @@ export async function parseMciCodes(
 
   // User Information Codes (express.e:5291-5400)
   parsed = parsed.replace(/~N\|/g, username);           // N - Username
+  parsed = parsed.replace(/~N(?=\s|$)/g, username);
   parsed = parsed.replace(/~P\|/g, '');  // P - Password (security - intentionally blank)
   parsed = parsed.replace(/~UL\|/g, user.location || '');  // UL - User Location
   parsed = parsed.replace(/~#\|/g, user.phoneNumber || '');  // # - Phone Number
@@ -211,7 +219,7 @@ export async function parseMciCodes(
   parsed = parsed.replace(/~A\|/g, secLevel.toString());  // A - Access/Security Level
   parsed = parsed.replace(/~S\|/g, user.id?.toString() || '0');  // S - Slot Number (user ID)
   parsed = parsed.replace(/~CA\|/g, user.confAccess || 'XXX');  // CA - Conference Access String
-  parsed = parsed.replace(/~BR\|/g, '38400');  // BR - Baud Rate
+  parsed = parsed.replace(/~BR\|/g, '57600');  // BR - Baud Rate
   parsed = parsed.replace(/~HW\|/g, 'Web Browser');  // HW - Hardware/Computer Type
   parsed = parsed.replace(/~TL\|/g, Math.floor((user.dailyTimeLimit || 120) / 60).toString());  // TL - Time Limit
   parsed = parsed.replace(/~TR\|/g, Math.floor(session.timeRemaining / 60).toString());  // TR - Time Remaining
@@ -343,7 +351,7 @@ export async function parseMciCodes(
   // ~f - Fill character (express.e:5471-5480)
   // Format: ~f or ~f<char> - clears screen or fills with character
   // For now, implement ~f as screen clear
-  parsed = parsed.replace(/~f\|/g, '\x1b[2J\x1b[H');  // Clear screen + home cursor
+  parsed = parsed.replace(/~f(\||(?=\s|$))/g, '\x1b[2J\x1b[H');  // Clear screen + home cursor
 
   // Standalone ~ - Clear screen (common shorthand in Amiga BBS files)
   // When ~ appears alone (not followed by a code), it clears the screen
@@ -393,18 +401,18 @@ export async function parseMciCodes(
   // Format: ~SS_<filename>|| or ~2S<filename> (short form) - displays another screen file
   // Note: || terminator is optional in some screen files
   // Store for async file loading - we'll process these after parsing
-  console.log('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
+  screenDebug('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
   // Support both ~SS_ and ~2S (short form)
   const ssRegex = /~(?:SS_|2S)([^|\r\n]+)(\|\|)?/g;
   let ssMatch;
   const filesToDisplay: string[] = [];
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
     const filename = ssMatch[1].trim();
-    console.log('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
+    screenDebug('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
     filesToDisplay.push(filename);
     parsed = parsed.replace(ssMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
   }
-  console.log('[MCI DEBUG] Total ~SS_ MCI codes found in screen:', filesToDisplay.length);
+  screenDebug('[MCI DEBUG] Total ~SS_ MCI codes found in screen:', filesToDisplay.length);
 
   // ~SX_ - String Exact / Sequential File Display (express.e:5505-5530)
   // Format: ~SX_<path>/<basename>|| - displays files sequentially (file.1, file.2, file.3...)
@@ -413,11 +421,11 @@ export async function parseMciCodes(
   let sxMatch;
   while ((sxMatch = sxRegex.exec(parsed)) !== null) {
     const basePath = sxMatch[1].trim();
-    console.log('[MCI] Found ~SX_ sequential file request:', basePath);
+    screenDebug('[MCI] Found ~SX_ sequential file request:', basePath);
 
     // Get next sequential file
     const nextFile = sequentialFileManager.getNextFile(basePath);
-    console.log('[MCI] ~SX_ next file:', nextFile.filename, '(counter:', nextFile.number + ')');
+    screenDebug('[MCI] ~SX_ next file:', nextFile.filename, '(counter:', nextFile.number + ')');
 
     // Try to load the file - if it doesn't exist, reset counter and try file.1
     let foundFile = false;
@@ -426,7 +434,7 @@ export async function parseMciCodes(
       foundFile = true;
     } else {
       // File doesn't exist - reset to 1 and try again
-      console.log('[MCI] ~SX_ file not found, resetting to 1');
+      screenDebug('[MCI] ~SX_ file not found, resetting to 1');
       sequentialFileManager.resetCounter(basePath);
       const firstFile = sequentialFileManager.getNextFile(basePath);
       if (loadScreenFile(firstFile.filename, session.currentConf, 0, session)) {
@@ -450,13 +458,13 @@ export async function parseMciCodes(
   let srMatch;
   while ((srMatch = srRegex.exec(parsed)) !== null) {
     const basePath = srMatch[1].trim();
-    console.log('[MCI] Found ~SR_ random file request:', basePath);
+    screenDebug('[MCI] Found ~SR_ random file request:', basePath);
 
     // Pick a random number (1-99) and try to find the file
     const randomNum = Math.floor(Math.random() * 99) + 1;
     const randomFile = `${basePath}.${randomNum}`;
 
-    console.log('[MCI] ~SR_ selected random file:', randomFile);
+    screenDebug('[MCI] ~SR_ selected random file:', randomFile);
     filesToDisplay.push(randomFile);
     parsed = parsed.replace(srMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
   }
@@ -480,8 +488,8 @@ export async function parseMciCodes(
   });
 
   // ~CC_ - Custom Command Execution (express.e:5555-5563)
-  // Format: ~CC_<command>|| - executes BBS command from screen, then returns to screen display
-  const ccRegex = /~CC_([^|]+)\|\|/g;
+  // Format: ~CC_<command>| or ~CC_<command>|| (some screens only use a single pipe)
+  const ccRegex = /~CC_([^|]+)\|{1,2}/g;
   let ccMatch;
   while ((ccMatch = ccRegex.exec(parsed)) !== null) {
     const commandStr = ccMatch[1];
@@ -504,7 +512,7 @@ export async function parseMciCodes(
   parsed = parsed.replace(smRegex, (match, menuName) => {
     // Store current menu name in session for context
     session.currentMenuName = menuName.trim();
-    console.log(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
+    screenDebug(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
     return ''; // Code doesn't display anything
   });
 
@@ -522,7 +530,7 @@ export async function parseMciCodes(
   parsed = parsed.replace(/%S/g, sysopName);
   parsed = parsed.replace(/%L/g, location);
   parsed = parsed.replace(/%CF/g, session.currentConfName || 'Main');
-  parsed = parsed.replace(/%R/g, session.user ? Math.floor(session.timeRemaining / 60).toString() : '38400');
+  parsed = parsed.replace(/%R/g, session.user ? Math.floor(session.timeRemaining / 60).toString() : '57600');
   parsed = parsed.replace(/%D/g, fullDateTime);
   parsed = parsed.replace(/%T/g, timeStr);
   parsed = parsed.replace(/%U/g, username);
@@ -547,7 +555,7 @@ export async function parseMciCodes(
       parsed = parsed.replace(placeholder, embedded.parsed);
     } else {
       // File not found - remove placeholder
-      console.log(`[MCI] ~SS_ file not found: ${filename}`);
+      screenDebug(`[MCI] ~SS_ file not found: ${filename}`);
       parsed = parsed.replace(placeholder, '');
     }
   }
@@ -572,11 +580,11 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   const baseDir = config.getConfig().dataDir;
   const paths = [];
 
-  console.log(`[loadScreenFile] Loading screen: ${screenName}`);
-  console.log(`[loadScreenFile] Base directory: ${baseDir}`);
-  console.log(`[loadScreenFile] Conference ID: ${conferenceId}, Node ID: ${nodeId}`);
-  console.log(`[loadScreenFile] Terminal type: ${session?.terminalType || 'unknown'} (${session?.screenWidth}x${session?.screenHeight})`);
-  console.log(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
+  screenDebug(`[loadScreenFile] Loading screen: ${screenName}`);
+  screenDebug(`[loadScreenFile] Base directory: ${baseDir}`);
+  screenDebug(`[loadScreenFile] Conference ID: ${conferenceId}, Node ID: ${nodeId}`);
+  screenDebug(`[loadScreenFile] Terminal type: ${session?.terminalType || 'unknown'} (${session?.screenWidth}x${session?.screenHeight})`);
+  screenDebug(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
 
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
   // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
@@ -631,7 +639,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
     }
 
     paths.push(currentPath);
-    console.log(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${currentPath} (${resolved ? 'found' : 'not found'})`);
+    screenDebug(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${currentPath} (${resolved ? 'found' : 'not found'})`);
   } else if (screenName.includes('/')) {
     // Relative path with slashes - try under dataDir root
     const fsPath = path.join(baseDir, screenName.split('/').join(path.sep));
@@ -689,23 +697,23 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   ];
 
   // Try each location with case-insensitive matching
-  console.log(`[loadScreenFile] Trying ${searchLocations.length} location(s) with case-insensitive matching:`);
+  screenDebug(`[loadScreenFile] Trying ${searchLocations.length} location(s) with case-insensitive matching:`);
   let attemptNum = 0;
 
   for (const location of searchLocations) {
     for (const filename of filenameVariations) {
       attemptNum++;
       const expectedPath = path.join(location.dir, filename);
-      console.log(`[loadScreenFile]   [${attemptNum}/${searchLocations.length * filenameVariations.length}] ${expectedPath}`);
+      screenDebug(`[loadScreenFile]   [${attemptNum}/${searchLocations.length * filenameVariations.length}] ${expectedPath}`);
 
       // Try case-insensitive match
       const foundPath = findCaseInsensitive(location.dir, filename);
       if (foundPath) {
-        console.log(`[loadScreenFile] ✓ Found screen ${screenName} at: ${foundPath}`);
+        screenDebug(`[loadScreenFile] ✓ Found screen ${screenName} at: ${foundPath}`);
         try {
           // Check if this is a PETSCII .seq file
           if (isPetsciiSeqFile(foundPath)) {
-            console.log(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
+            screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
             try {
               const petsciiBuffer = fs.readFileSync(foundPath);
               const content = convertPetsciiToPetMe64(petsciiBuffer);
@@ -721,7 +729,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
           console.error(`[loadScreenFile]     (error reading file: ${(error as Error).message})`);
         }
       } else {
-        console.log(`[loadScreenFile]     (not found)`);
+        screenDebug(`[loadScreenFile]     (not found)`);
       }
     }
   }
@@ -730,13 +738,13 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   for (let i = 0; i < paths.length; i++) {
     const filePath = paths[i];
     attemptNum++;
-    console.log(`[loadScreenFile]   [${attemptNum}] ${filePath}`);
+    screenDebug(`[loadScreenFile]   [${attemptNum}] ${filePath}`);
     try {
       if (fs.existsSync(filePath)) {
-        console.log(`[loadScreenFile] ✓ Found screen ${screenName} at: ${filePath}`);
+        screenDebug(`[loadScreenFile] ✓ Found screen ${screenName} at: ${filePath}`);
         // Check if this is a PETSCII .seq file
         if (isPetsciiSeqFile(filePath)) {
-          console.log(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
+          screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
           try {
             const petsciiBuffer = fs.readFileSync(filePath);
             const content = convertPetsciiToPetMe64(petsciiBuffer);
@@ -749,7 +757,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
           return { content: fs.readFileSync(filePath, 'utf-8'), isPetscii: false };
         }
       } else {
-        console.log(`[loadScreenFile]     (not found)`);
+        screenDebug(`[loadScreenFile]     (not found)`);
       }
     } catch (error) {
       console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
@@ -787,19 +795,19 @@ export function addAnsiEscapes(content: string): string {
  * @returns true if screen was displayed successfully, false otherwise
  */
 export async function displayScreen(socket: any, session: BBSSession, screenName: string): Promise<boolean> {
-  console.log(`[displayScreen] ========================================`);
-  console.log(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
-  console.log(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
-  console.log(`[displayScreen] User: ${session.user?.name || 'guest'}`);
-  console.log(`[displayScreen] ========================================`);
+  screenDebug(`[displayScreen] ========================================`);
+  screenDebug(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
+  screenDebug(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
+  screenDebug(`[displayScreen] User: ${session.user?.name || 'guest'}`);
+  screenDebug(`[displayScreen] ========================================`);
 
   const screenData = loadScreenFile(screenName, session.currentConf, 0, session);
 
   if (screenData) {
     const { content, isPetscii } = screenData;
-    console.log(`[displayScreen] ✓ Screen loaded successfully: ${screenName}`);
-    console.log(`[displayScreen] Content length: ${content.length} bytes`);
-    console.log(`[displayScreen] PETSCII: ${isPetscii ? 'YES' : 'NO'}`);
+    screenDebug(`[displayScreen] ✓ Screen loaded successfully: ${screenName}`);
+    screenDebug(`[displayScreen] Content length: ${content.length} bytes`);
+    screenDebug(`[displayScreen] PETSCII: ${isPetscii ? 'YES' : 'NO'}`);
 
     let parsed: string;
     let commands: any[] = [];
@@ -832,41 +840,57 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Send entire frame in one atomic operation
     // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
     const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
-    console.log(`[displayScreen] Emitting ${eventName} event`);
+    screenDebug(`[displayScreen] Emitting ${eventName} event`);
     socket.emit(eventName, frameBuffer);
 
     // Execute any ~XC/~XI commands found in screen file (async, non-blocking)
     if (commands.length > 0) {
-      console.log(`[displayScreen] ==========================================`);
-      console.log(`[displayScreen] EXECUTING ${commands.length} COMMANDS FROM SCREEN FILE: ${screenName}`);
-      console.log(`[displayScreen] Commands:`, commands);
-      console.log(`[displayScreen] ==========================================`);
+      screenDebug(`[displayScreen] ==========================================`);
+      screenDebug(`[displayScreen] EXECUTING ${commands.length} COMMANDS FROM SCREEN FILE: ${screenName}`);
+      screenDebug(`[displayScreen] Commands:`, commands);
+      screenDebug(`[displayScreen] ==========================================`);
       const { handleCommand } = require('./command.handler');
+
+      session.pendingScreenCommand = new Promise<void>(resolve => {
+        session.screenCommandResolver = resolve;
+      });
 
       // Execute commands asynchronously after screen display (non-blocking)
       // This matches original AmiExpress behavior - screen shows THEN commands run
       setImmediate(async () => {
-        for (let i = 0; i < commands.length; i++) {
-          const commandStr = commands[i];
-          console.log(`[displayScreen] ------------------------------------------`);
-          console.log(`[displayScreen] EXECUTING COMMAND ${i + 1}/${commands.length}:`, commandStr);
-          console.log(`[displayScreen] Command type:`, commandStr.includes(':') ? 'DOOR PATH' : 'BBSCMD');
-          // Parse command string (e.g., "DOORS:who/NI ~N" with params)
-          try {
-            console.log(`[displayScreen] Calling handleCommand with:`, commandStr);
-            const result = await handleCommand(socket, session, commandStr);
-            console.log(`[displayScreen] ✓ Command completed:`, commandStr, 'Result:', result);
-          } catch (error) {
-            console.error(`[displayScreen] ✗ ERROR executing command ${commandStr}:`, error);
-            console.error(`[displayScreen] Error stack:`, (error as Error).stack);
+        session.executingScreenCommand = true;
+        try {
+          for (let i = 0; i < commands.length; i++) {
+            const commandStr = commands[i];
+            screenDebug(`[displayScreen] ------------------------------------------`);
+            screenDebug(`[displayScreen] EXECUTING COMMAND ${i + 1}/${commands.length}:`, commandStr);
+            screenDebug(`[displayScreen] Command type:`, commandStr.includes(':') ? 'DOOR PATH' : 'BBSCMD');
+            // Parse command string (e.g., "DOORS:who/NI ~N" with params)
+            try {
+              screenDebug(`[displayScreen] Calling handleCommand with:`, commandStr);
+              const result = await handleCommand(socket, session, commandStr);
+              screenDebug(`[displayScreen] ✓ Command completed:`, commandStr, 'Result:', result);
+            } catch (error) {
+              console.error(`[displayScreen] ✗ ERROR executing command ${commandStr}:`, error);
+              console.error(`[displayScreen] Error stack:`, (error as Error).stack);
+            }
+          }
+          screenDebug(`[displayScreen] ==========================================`);
+          screenDebug(`[displayScreen] ALL COMMANDS COMPLETED FROM: ${screenName}`);
+          screenDebug(`[displayScreen] ==========================================`);
+        } finally {
+          session.executingScreenCommand = false;
+          if (session.screenCommandResolver) {
+            session.screenCommandResolver();
+            session.screenCommandResolver = null;
+            session.pendingScreenCommand = undefined;
           }
         }
-        console.log(`[displayScreen] ==========================================`);
-        console.log(`[displayScreen] ALL COMMANDS COMPLETED FROM: ${screenName}`);
-        console.log(`[displayScreen] ==========================================`);
       });
     } else {
-      console.log(`[displayScreen] No commands to execute from screen file: ${screenName}`);
+      screenDebug(`[displayScreen] No commands to execute from screen file: ${screenName}`);
+      session.pendingScreenCommand = undefined;
+      session.screenCommandResolver = null;
     }
 
     return true;
@@ -917,12 +941,12 @@ export function hasKeysFile(screenName: string, conferenceId?: number, nodeId: n
   // Check each path in order
   for (const filePath of paths) {
     if (fs.existsSync(filePath)) {
-      console.log(`✓ Found .keys file: ${filePath}`);
+      screenDebug(`✓ Found .keys file: ${filePath}`);
       return true;
     }
   }
 
-  console.log(`No .keys file found for screen: ${screenName}`);
+  screenDebug(`No .keys file found for screen: ${screenName}`);
   return false;
 }
 

@@ -12,6 +12,7 @@ import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity } from '../utils/security.util';
 import { getSessionBySocketId, sessions, userSessions, socketToUser } from './session-manager';
 import { callersLog, displaySystemBulletins } from './database-helpers';
+import { triggerSamiLogRefresh } from '../services/SamiLogService';
 
 /**
  * Register authentication socket event handlers
@@ -213,9 +214,9 @@ export function registerAuthHandlers(socket: Socket) {
           }
         });
       }
-
       // Start the proper AmiExpress flow: bulletins first
       displaySystemBulletins(socket, session);
+      triggerSamiLogRefresh();
     } catch (error) {
       console.error('Socket login error:', error);
       socket.emit('login-failed', 'Invalid credentials');

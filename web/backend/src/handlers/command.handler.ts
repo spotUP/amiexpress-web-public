@@ -207,7 +207,7 @@ let doors: any[] = [];
 export { loadCommands, setCommandExecutionDependencies } from './command-execution.handler';
 
 // Constants (injected)
-let SCREEN_MENU: string;
+let SCREEN_MENU: string = 'MENU';
 
 // Dependency injection setters
 export function setDatabase(database: any) {
@@ -376,6 +376,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   console.log('data:', JSON.stringify(data));
   console.log('session.state:', session.state);
   console.log('session.subState:', session.subState);
+  const isAwaitScreenRunning = session.pendingScreenCommand && session.executingScreenCommand;
+  const allowScreenCommand = !!session.executingScreenCommand;
+  const trimmedScreenCommand = (data || '').trim();
+  const isScreenDoorsPath = /^DOORS:/i.test(trimmedScreenCommand);
+  if (allowScreenCommand) {
+    console.log('[handleCommand] Executing screen-initiated command (state bypass enabled)');
+  }
 
   // NOTE: Door input routing is handled in socket-handlers.ts (checks doorInputHandler)
   // This function should only be called for non-door input
@@ -417,8 +424,25 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return; // Done - don't process further
   }
 
+  // Screen-triggered commands (from ~CC_ / ~XC_ MCI codes) need to run even if the
+  // session is still in AWAIT states (ANSI prompt, etc.). Allow them to bypass the
+  // usual subState gating as long as they are not raw DOORS: helper paths.
+  if (allowScreenCommand && trimmedScreenCommand.length > 0 && !isScreenDoorsPath) {
+    const normalized = trimmedScreenCommand.toUpperCase();
+    const parts = normalized.split(/\s+/);
+    const command = parts[0];
+    const params = parts.slice(1).join(' ');
+    console.log('[handleCommand] Running screen command immediately:', command, params);
+    try {
+      await processCommand(socket, session, command, params);
+    } catch (error) {
+      console.error('[handleCommand] Screen command failed:', error);
+    }
+    return;
+  }
+
   // Handle pre-login connection flow (AWAIT state)
-  if (session.state === BBSState.AWAIT) {
+  if (!allowScreenCommand && session.state === BBSState.AWAIT) {
     if (session.subState === LoggedOnSubState.DISPLAY_CONNECT) {
       // User pressed key after connection screen (welcome + node list)
       // reference-board BBS layout: everything shown on connect, now just show ANSI prompt
@@ -426,11 +450,27 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       console.log('📋 Connection screen viewed, showing ANSI prompt');
       session.subState = LoggedOnSubState.ANSI_PROMPT;
       session.tempData = { inputBuffer: '' }; // Initialize input buffer
-      socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+      if (session.pendingScreenCommand) {
+        console.log('[handleCommand] Await screen command still running, deferring prompt');
+        session.pendingScreenCommand.then(() => {
+          if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
+            socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+          }
+        }).catch(error => {
+          console.error('[handleCommand] Pending screen command rejected:', error);
+          socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+        });
+      } else {
+        socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+      }
       return;
     }
 
     if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
+      if (session.pendingScreenCommand) {
+        console.log('[handleCommand] ANSI prompt input ignored until screen command completes');
+        return;
+      }
       // express.e:29530-29546 - Line input for ANSI prompt (not single keypress!)
       // Buffer input until Enter is pressed
       if (data === '\r') {
@@ -513,7 +553,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Allow LOGGEDON, LOGON, and REGISTERING states to continue
   // LOGON is allowed temporarily due to session state race conditions
-  if (session.state !== BBSState.LOGGEDON && session.state !== BBSState.LOGON && session.state !== BBSState.REGISTERING) {
+  if (!allowScreenCommand &&
+    session.state !== BBSState.LOGGEDON &&
+    session.state !== BBSState.LOGON &&
+    session.state !== BBSState.REGISTERING) {
     console.log('❌ Not in LOGGEDON/LOGON or REGISTERING state, ignoring command');
     console.log('   Current state:', session.state);
     return;
@@ -707,7 +750,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      socket.emit('ansi-output', data);
+      socket.emit('ansi-output', session.maskInput ? '*' : data);
     }
     return;
   }
@@ -741,7 +784,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      socket.emit('ansi-output', data);
+      socket.emit('ansi-output', session.maskInput ? '*' : data);
     }
     return;
   }
@@ -763,6 +806,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       switch (session.subState) {
         case LoggedOnSubState.NEW_USER_NAME:
           await newUserHandler.handleNameInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_ACCESS_PASSWORD:
+          await newUserHandler.handleAccessPasswordInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_AUTOVAL:
+          await newUserHandler.handleAutoValidationInput(socket, session, input);
           break;
         case LoggedOnSubState.NEW_USER_LOCATION:
           await newUserHandler.handleLocationInput(socket, session, input);
@@ -791,6 +840,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         case LoggedOnSubState.NEW_USER_CONFIRM:
           await newUserHandler.handleConfirmInput(socket, session, input);
           break;
+        case LoggedOnSubState.NEW_USER_SCRIPT:
+          await newUserHandler.handleQuestionnaireAnswer(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_SCRIPT_CONFIRM:
+          await newUserHandler.handleQuestionnaireConfirmInput(socket, session, input);
+          break;
       }
     } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
       // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
@@ -804,7 +859,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      socket.emit('ansi-output', data);
+      socket.emit('ansi-output', session.maskInput ? '*' : data);
     }
     return;
   }
@@ -836,7 +891,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       } else if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
         // After conference join, display the main menu
         session.menuPause = true;
-        displayMainMenu(socket, session);
+        await displayMainMenu(socket, session);
       }
     } catch (error) {
       console.error('Error in display state handling:', error);
