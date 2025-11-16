@@ -21,6 +21,9 @@ const USERS_OFFSET =
   DAILY_COUNT * DAILY_ENTRY_BYTES +
   RECORD_BYTES;
 const TOTAL_USER_BYTES = USER_COUNT * USER_ENTRY_BYTES;
+const RECORDS_OFFSET = VERSION_LENGTH + CLEAR_DATE_BYTES + RESERVED_BYTES + DAILY_COUNT * DAILY_ENTRY_BYTES;
+const CALLS_COUNT_OFFSET = RECORDS_OFFSET;
+const CALLS_DATE_OFFSET = CALLS_COUNT_OFFSET + 2;
 
 const DEFAULT_ENTRY = {
   name: '[-----USER-----] ',
@@ -40,11 +43,19 @@ const DEFAULT_ENTRY = {
   flag3: 0
 };
 
+const DEFAULT_NAME = DEFAULT_ENTRY.name.trim();
+const AMIGA_EPOCH = Date.UTC(1978, 0, 1);
+
 const REFRESH_INTERVAL_MS = 60 * 1000;
 
 function getStorePath(): string {
   const baseDir = config.get('dataDir');
   return path.join(baseDir, 'S', 'SAmiLog.Store');
+}
+
+function getBaselineStorePath(): string {
+  const baseDir = config.get('dataDir');
+  return path.join(baseDir, 'Source', 'Documentation', 'reference-boardBBS', 'Utils', 'samilog', 'SAmiLog.Store');
 }
 
 function sanitizeString(value: string): string {
@@ -162,17 +173,62 @@ function writeEntry(buffer: Buffer, offset: number, entry: ReturnType<typeof bui
   buffer.fill(0, cursor, cursor + 40);
 }
 
+function countNonDefaultEntries(buffer: Buffer): number {
+  let count = 0;
+  for (let i = 0; i < USER_COUNT; i++) {
+    const entryOffset = USERS_OFFSET + i * USER_ENTRY_BYTES;
+    const name = buffer
+      .toString('ascii', entryOffset, entryOffset + 18)
+      .replace(/\u0000/g, '')
+      .trim();
+    if (name && name !== DEFAULT_NAME) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function getDaysSinceAmigaEpoch(): number {
+  const diffMs = Date.now() - AMIGA_EPOCH;
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000));
+}
+
+function loadBaselineStore(): Buffer | null {
+  const baselinePath = getBaselineStorePath();
+  if (fs.existsSync(baselinePath)) {
+    console.log('[SamiLog] Seeding store from reference-board baseline');
+    return fs.readFileSync(baselinePath);
+  }
+
+  console.warn('[SamiLog] Baseline store not found at:', baselinePath);
+  return null;
+}
+
 export async function refreshSamiLogStore(activeSessions: BBSSession[]): Promise<void> {
   try {
     const storePath = getStorePath();
+    let buffer: Buffer;
     if (!fs.existsSync(storePath)) {
-      console.warn('[SamiLog] Storage file not found:', storePath);
-      return;
+      const baseline = loadBaselineStore();
+      if (!baseline) {
+        console.warn('[SamiLog] Storage file not found and no baseline available:', storePath);
+        return;
+      }
+      buffer = Buffer.from(baseline);
+      fs.mkdirSync(path.dirname(storePath), { recursive: true });
+      fs.writeFileSync(storePath, buffer);
+    } else {
+      buffer = fs.readFileSync(storePath);
+      if (countNonDefaultEntries(buffer) === 0) {
+        const baseline = loadBaselineStore();
+        if (baseline) {
+          buffer = Buffer.from(baseline);
+        }
+      }
     }
 
     console.log(`[SamiLog] Refreshing store with ${activeSessions.length} session(s)`);
 
-    const buffer = fs.readFileSync(storePath);
     if (buffer.length < USERS_OFFSET + TOTAL_USER_BYTES) {
       console.warn('[SamiLog] Storage file is smaller than expected, skipping update');
       return;
@@ -180,16 +236,21 @@ export async function refreshSamiLogStore(activeSessions: BBSSession[]): Promise
 
     const sortedSessions = activeSessions
       .filter(session => !!session)
-      .sort((a, b) => (a.nodeId || 0) - (b.nodeId || 0));
+      .sort((a, b) => (a.nodeId || 0) - (b.nodeId || 0))
+      .slice(0, USER_COUNT);
 
-    for (let i = 0; i < USER_COUNT; i++) {
-      const entry = buildEntry(sortedSessions[i]);
-      const entryOffset = USERS_OFFSET + i * USER_ENTRY_BYTES;
+    sortedSessions.forEach((session, index) => {
+      const entry = buildEntry(session);
+      const entryOffset = USERS_OFFSET + index * USER_ENTRY_BYTES;
       writeEntry(buffer, entryOffset, entry);
-      if (i === 0) {
+      if (index === 0) {
         console.log(`[SamiLog] Entry #1 -> name="${entry.name}" node=${entry.node} usage=${entry.usage}`);
       }
-    }
+    });
+
+    const totalEntries = countNonDefaultEntries(buffer);
+    buffer.writeUInt16BE(totalEntries, CALLS_COUNT_OFFSET);
+    buffer.writeUInt32BE(getDaysSinceAmigaEpoch(), CALLS_DATE_OFFSET);
 
     fs.writeFileSync(storePath, buffer);
     console.log('[SamiLog] Storage file updated');

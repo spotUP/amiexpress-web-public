@@ -1,8 +1,19 @@
 import { Socket as SocketIOSocket } from 'socket.io';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import * as net from 'net';
 import * as http from 'http';
+import { resolveDoorResourcePath } from '../door-path.util';
+
+const PROJECT_ROOT = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+
+function resolveGlobalWallDir(): string {
+  return resolveDoorResourcePath('doors', 'global-wall') || path.join(PROJECT_ROOT, 'doors', 'global-wall');
+}
+
+function resolveGlobalWallFile(filename: string): string {
+  return resolveDoorResourcePath('doors', 'global-wall', filename) || path.join(resolveGlobalWallDir(), filename);
+}
 
 // Constants
 const BUFSIZE = 8192;
@@ -137,8 +148,8 @@ function parseConfigFile(configFileName: string): GlobalWallConfig {
 }
 
 function loadConfig(): void {
-  const progdirCfg = path.join(process.cwd(), 'doors', 'global-wall', 'GWALL.cfg');
-  const localCfg = path.join(process.cwd(), 'GWALL.cfg');
+  const progdirCfg = resolveGlobalWallFile('GWALL.cfg');
+  const localCfg = resolveDoorResourcePath('GWALL.cfg') || path.join(PROJECT_ROOT, 'GWALL.cfg');
 
   let config = parseConfigFile(progdirCfg);
   if (existsSync(localCfg)) {
@@ -192,7 +203,7 @@ function calculateDisplayLines(): number {
 }
 
 function readSettings(): void {
-  const settingsPath = path.join(process.cwd(), 'doors', 'global-wall', 'GWall.cfg');
+  const settingsPath = resolveGlobalWallFile('GWall.cfg');
 
   if (existsSync(settingsPath)) {
     try {
@@ -211,10 +222,14 @@ function readSettings(): void {
 }
 
 function saveSettings(): void {
-  const settingsPath = path.join(process.cwd(), 'doors', 'global-wall', 'GWall.cfg');
+  const settingsPath = resolveGlobalWallFile('GWall.cfg');
   const content = `${settings.style}\n${settings.mybbsshortcode}\n${settings.coloursettings}\n`;
 
   try {
+    const dir = path.dirname(settingsPath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
     writeFileSync(settingsPath, content, 'utf-8');
   } catch (err) {
     console.error('Error saving settings:', err);
