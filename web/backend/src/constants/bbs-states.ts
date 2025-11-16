@@ -130,12 +130,16 @@ export enum LoggedOnSubState {
   NEW_USER_LOCATION = 'new_user_location',  // City, State
   NEW_USER_PHONE = 'new_user_phone',        // Phone number
   NEW_USER_EMAIL = 'new_user_email',        // E-Mail address
+  NEW_USER_ACCESS_PASSWORD = 'new_user_access_password', // Pre-registration password
+  NEW_USER_AUTOVAL = 'new_user_autoval',    // Auto-validation password
   NEW_USER_PASSWORD = 'new_user_password',  // Password entry
   NEW_USER_PASSWORD_CONFIRM = 'new_user_password_confirm', // Password confirmation
   NEW_USER_LINES = 'new_user_lines',        // Lines per screen
   NEW_USER_COMPUTER = 'new_user_computer',  // Computer type
   NEW_USER_SCREEN_CLEAR = 'new_user_screen_clear', // Screen clear preference
   NEW_USER_CONFIRM = 'new_user_confirm',    // Confirm all details
+  NEW_USER_SCRIPT = 'new_user_script',      // Node questionnaire prompts
+  NEW_USER_SCRIPT_CONFIRM = 'new_user_script_confirm', // Confirm questionnaire answers
 
   // Conference operations
   CONFERENCE_SELECT = 'conference_select',

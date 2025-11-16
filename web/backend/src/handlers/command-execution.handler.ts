@@ -212,7 +212,12 @@ async function runCommand(
   console.log(`  Found command: ${commandDef.name} (${commandDef.type})`);
 
   // express.e:4700-4708 - Check access level
-  const userSecLevel = session.user?.secLevel || 0;
+  // Screen-triggered commands during the connect flow (AWAIT state) need to run
+  // before a user has logged in. When session.user is undefined but the screen
+  // handler queued a command, temporarily treat the call as privileged so
+  // await-screen animations like V-AWAIT can still execute.
+  const isScreenAutoCommand = !session.user && session.executingScreenCommand;
+  const userSecLevel = isScreenAutoCommand ? Number.MAX_SAFE_INTEGER : (session.user?.secLevel || 0);
   const requiredAccess = commandDef.access || 0;
 
   if (requiredAccess === 0) {

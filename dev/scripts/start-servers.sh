@@ -144,18 +144,14 @@ else
 fi
 
 # Check if SDK is built
-if [ ! -d "$REPO_ROOT/sdk/dist" ] || [ ! -f "$REPO_ROOT/sdk/dist/index.js" ]; then
-  echo -e "${CYAN}→ SDK: Building (this may take a minute)...${RESET}"
-  (cd "$REPO_ROOT/sdk" && npm run build --loglevel=error)
-  if [ $? -eq 0 ]; then
-    echo -e "   ${GREEN}[OK] SDK built successfully${RESET}"
-  else
-    echo -e "   ${RED}[ERROR] SDK build failed${RESET}"
-    echo -e "   ${WHITE}Try running: cd sdk && npm run build${RESET}"
-    exit 1
-  fi
+echo -e "${CYAN}→ SDK: Rebuilding to ensure latest changes...${RESET}"
+(cd "$REPO_ROOT/sdk" && npm run build --loglevel=error)
+if [ $? -eq 0 ]; then
+  echo -e "   ${GREEN}[OK] SDK built successfully${RESET}"
 else
-  echo -e "   ${GREEN}[OK] SDK already built${RESET}"
+  echo -e "   ${RED}[ERROR] SDK build failed${RESET}"
+  echo -e "   ${WHITE}Try running: cd sdk && npm run build${RESET}"
+  exit 1
 fi
 
 # Check and build @amiexpress/terminal package (required by SDK and BBS frontends)
@@ -286,15 +282,14 @@ echo -e "${GREEN}[STARTED]${RESET}"
 
 # Wait for backend to be ready (check port 3001)
 echo ""
-echo -ne "${CYAN}→ Waiting for backend to be ready (port 3001)... ${RESET}"
+echo -e "${CYAN}→ Waiting for backend to be ready (port 3001)...${RESET}"
 WAIT_COUNT=0
 MAX_WAIT=60  # 60 seconds max
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
   if lsof -ti:3001 > /dev/null 2>&1; then
-    echo -e " ${GREEN}[OK]${RESET}"
+    echo -e "   ${GREEN}[OK] Backend listening on port 3001${RESET}"
     break
   fi
-  echo -n "."
   sleep 1
   WAIT_COUNT=$((WAIT_COUNT + 1))
 
@@ -310,7 +305,6 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
 done
 
 if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-  echo -e " ${YELLOW}[TIMEOUT]${RESET}"
   echo ""
   echo -e "${YELLOW}[WARNING] Backend did not start within 60 seconds${RESET}"
   echo -e "${WHITE}Check logs/backend.log for details${RESET}"

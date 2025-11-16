@@ -8,7 +8,7 @@
  * WITHOUT full hardware emulation or ROM boot.
  */
 
-import { MoiraEmulator } from '../cpu/MoiraEmulator';
+import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -1474,9 +1474,17 @@ export class ExecLibrary {
    *
    * The structure is modified in-place to contain the OLD stack values,
    * allowing restoration by calling StackSwap again with the same structure.
-   */
+  */
   stackSwap(structAddr: number): void {
     console.log(`[ExecLibrary] StackSwap(struct=0x${structAddr.toString(16)})`);
+    const callerPC = this.emulator.getRegister(CPURegister.PC);
+    console.log(`[ExecLibrary]   Called from PC=0x${callerPC.toString(16)}`);
+    const rawWords: string[] = [];
+    for (let offset = 0; offset < 12; offset += 4) {
+      const word = this.emulator.readMemory32(structAddr + offset);
+      rawWords.push(`0x${word.toString(16)}`);
+    }
+    console.log(`[ExecLibrary]   Raw struct dump: [${rawWords.join(', ')}]`);
 
     // Per Amiga NDK docs: "This function will swap the stack of your task with
     // the given values in StackSwap. The StackSwapStruct structure will then

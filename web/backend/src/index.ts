@@ -13,6 +13,7 @@ import { nodeManager, arexxEngine, protocolManager } from './nodes';
 import { nodeFileManager } from './services/NodeFileManager';
 import { callersLogManager } from './services/CallersLogManager';
 import { doorDropFileManager } from './services/DoorDropFileManager';
+import { triggerSamiLogRefresh } from './services/SamiLogService';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 export { BBSState, LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
@@ -33,6 +34,23 @@ import { TelnetServer, TelnetConnection } from './server/telnet-server';
 import { SSHServerImpl, SSHConnection } from './server/ssh-server';
 import { SSHKeyUtil } from './utils/ssh-key.util';
 import { findSecurityScreen } from './utils/screen-security.util';
+import { DEFAULT_CONNECTION_BAUD } from './constants/modem';
+
+const SCREEN_BBSTITLE = 'BBSTITLE';
+const SCREEN_LOGON = 'LOGON';
+const SCREEN_BULL = 'BULL';
+const SCREEN_NODE_BULL = 'NODE_BULL';
+const SCREEN_CONF_BULL = 'CONF_BULL';
+const SCREEN_MENU = 'MENU';
+const SCREEN_LOGOFF = 'LOGOFF';
+const SCREEN_JOINCONF = 'JoinConf';
+const SCREEN_JOINED = 'JOINED';
+const SCREEN_JOINMSGBASE = 'JoinMsgBase';
+const SCREEN_NONEWUSERS = 'NoNewUsers';
+const SCREEN_NONEWATBAUD = 'NoNewAtBaud';
+const SCREEN_NEWUSERPW = 'NewUserPw';
+const SCREEN_GUESTLOGON = 'GuestLogon';
+const SCREEN_JOIN = 'JOIN';
 import {
   displayConferenceBulletins,
   joinConference,
@@ -224,6 +242,13 @@ export interface BBSSession {
   messageBody?: string; // For message posting workflow
   messageRecipient?: string; // For private message recipient
   inputBuffer: string; // Buffer for line-based input (like login system)
+  maskInput?: boolean; // When true, echo '*' instead of typed characters (password prompts)
+  connectionType?: 'web' | 'telnet' | 'ssh';
+  remoteAddress?: string;
+  connectionHostname?: string;
+  connectionPort?: number;
+  connectionBaud?: number;
+  connectionStart?: number;
   relConfNum: number; // Relative conference number (like AmiExpress relConfNum)
   currentConfName: string; // Current conference name (like AmiExpress currentConfName)
   currentMenuName?: string; // Current menu name set by ~SM_ MCI code (express.e:5575)
@@ -303,6 +328,11 @@ export interface BBSSession {
   pagesAllowed?: number; // Number of pages allowed (-1 = unlimited, 0 = none)
   quietMode?: boolean; // Quiet mode preference
   relogon?: boolean; // Flag for relogon after goodbye
+
+  // Screen-triggered command execution
+  executingScreenCommand?: boolean; // True while ~CC/~XI command is running
+  pendingScreenCommand?: Promise<void>; // Resolves when screen-initiated commands complete
+  screenCommandResolver?: (() => void) | null;
 
   // Account editor state (Command 1)
   accountEditorState?: any; // State tracking for account editor
@@ -526,7 +556,17 @@ const { setNewUserDependencies } = require('./handlers/new-user.handler');
 
 setNewUserDependencies({
   db,
-  sessions
+  sessions,
+  screens: {
+    NONEWUSERS: SCREEN_NONEWUSERS,
+    NONEWATBAUD: SCREEN_NONEWATBAUD,
+    NEWUSERPW: SCREEN_NEWUSERPW,
+    GUESTLOGON: SCREEN_GUESTLOGON,
+    JOIN: SCREEN_JOIN
+  },
+  newUserPassword: config.get('newUserPassword'),
+  autoValidationPassword: config.get('autoValidationPassword'),
+  autoValidationSecLevel: config.get('autoValidationSecLevel')
 });
 
 // Development: Disable caching to prevent stale session issues
@@ -1009,18 +1049,28 @@ io.on('connection', async (socket) => {
     return;
   }
 
+  const bbsConfig = config.getConfig();
+  const sessionStart = Date.now();
+
   const session: BBSSession = {
     state: BBSState.AWAIT,
     subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
     currentConf: 1, // Start in General conference (ID 1) → BBS/Conf01/
     currentMsgBase: 1, // Start in Main message base (ID 1)
     timeRemaining: 60, // 60 minutes default
-    lastActivity: Date.now(),
+    lastActivity: sessionStart,
     confRJoin: 1, // Default to General conference (ID 1)
     msgBaseRJoin: 1, // Default to Main message base (ID 1)
     commandBuffer: '', // Buffer for command input
     menuPause: true, // Like AmiExpress - menu displays immediately by default
     inputBuffer: '', // Buffer for line-based input
+    maskInput: false, // Echo typed characters unless password masking is active
+    connectionType: 'web',
+    remoteAddress: clientIp,
+    connectionHostname: bbsConfig.hostname,
+    connectionPort: bbsConfig.port,
+    connectionBaud: DEFAULT_CONNECTION_BAUD,
+    connectionStart: sessionStart,
     relConfNum: 0, // Relative conference number
     currentConfName: 'General', // Current conference name (matches ID 4)
     cmdShortcuts: false, // Like AmiExpress - default to line input mode, not hotkeys
@@ -1050,11 +1100,19 @@ io.on('connection', async (socket) => {
     historyCycle: 0 // Current position when navigating history
   };
   setSession(socket.id, session); // Use helper to store by nodeId
+  triggerSamiLogRefresh();
 
   // Display complete connection screen via AWAITSCREEN.TXT
   // reference-board BBS layout: everything shown via screen file with MCI codes
   // All messages, node list, etc. are in AWAITSCREEN.TXT
   await displayScreen(socket, session, 'AWAITSCREEN');
+  if (session.pendingScreenCommand) {
+    try {
+      await session.pendingScreenCommand;
+    } catch (error) {
+      console.error('[AWAITSCREEN] Error waiting for screen commands:', error);
+    }
+  }
 
   // Show ANSI prompt immediately (reference-board style - no key wait)
   socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
@@ -1101,26 +1159,6 @@ function displaySystemBulletins(socket: any, session: BBSSession) {
   session.subState = LoggedOnSubState.CONF_SCAN;
   console.log('[BULLETINS] SubState is now:', session.subState);
 }
-
-// ===== SCREEN FILE SYSTEM (Phase 8) =====
-// AmiExpress screen file system for authentic BBS display
-// express.e uses await displayScreen() throughout - lines 28566, 28571, 28586, etc.
-
-// Screen name constants (like express.e SCREEN_* constants)
-const SCREEN_BBSTITLE = 'BBSTITLE';
-const SCREEN_LOGON = 'LOGON';
-const SCREEN_BULL = 'BULL';
-const SCREEN_NODE_BULL = 'NODE_BULL';
-const SCREEN_CONF_BULL = 'CONF_BULL';
-const SCREEN_MENU = 'MENU';
-const SCREEN_LOGOFF = 'LOGOFF';
-const SCREEN_JOINCONF = 'JoinConf';
-const SCREEN_JOINED = 'JOINED';
-const SCREEN_JOINMSGBASE = 'JoinMsgBase';
-
-// Parse MCI codes (Macro Command Interface) in screen files
-// Like express.e parseMci() function
-// ===== SCREEN HANDLING NOW IN handlers/screen.handler.ts =====
 
 // Log caller activity (express.e:9493 callersLog)
 // Logs to database like express.e logs to BBS:Node{X}/CallersLog file

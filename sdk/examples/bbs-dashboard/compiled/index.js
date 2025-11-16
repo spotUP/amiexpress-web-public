@@ -4,7 +4,9 @@
  * Comprehensive real-time dashboard for System Operators
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.runDoor = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const runDoorSession_1 = require("../../tools/runDoorSession");
 const door = new bbs_door_sdk_1.Door({
     name: 'BBS SysOp Dashboard',
     version: '1.0.0',
@@ -158,5 +160,7 @@ function formatUptime(seconds) {
     const mins = Math.floor((seconds % 3600) / 60);
     return `${days}d ${hours}h ${mins}m`;
 }
-door.start();
-console.log('BBS Dashboard door started!');
+async function runDoor(doorSession) {
+    await (0, runDoorSession_1.runDoorWithSession)(door, doorSession);
+}
+exports.runDoor = runDoor;

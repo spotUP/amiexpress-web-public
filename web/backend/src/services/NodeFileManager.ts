@@ -115,7 +115,7 @@ export class NodeFileManager {
   writeNodeUserFile(nodeId: number, user: User): void {
     const filePath = path.join(this.bbsRoot, `node${nodeId}.user`);
 
-    console.log(`[NodeFileManager] Writing ${filePath}`);
+    console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
 
     // Create binary buffer matching E struct layout
     const buffer = this.userToBuffer(user);
@@ -134,7 +134,7 @@ export class NodeFileManager {
   writeNodeUserKeysFile(nodeId: number, user: User): void {
     const filePath = path.join(this.bbsRoot, `node${nodeId}.userkeys`);
 
-    console.log(`[NodeFileManager] Writing ${filePath}`);
+    console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
 
     const buffer = this.userKeysToBuffer(user);
 
@@ -398,7 +398,7 @@ export class NodeFileManager {
     offset += 2;
 
     // baud: INT
-    buffer.writeInt16BE(user.baud || 28800, offset);
+    buffer.writeInt16BE(user.baud || 57600, offset);
     offset += 2;
 
     // upCPS2, dnCPS2 (2 LONGs)

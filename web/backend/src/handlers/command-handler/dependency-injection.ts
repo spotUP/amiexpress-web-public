@@ -16,7 +16,7 @@ let getRecentCallerActivity: any;
 let doors: any[] = [];
 
 // Constants (injected)
-let SCREEN_MENU: string;
+let SCREEN_MENU: string = 'MENU';
 
 // Dependency injection setters
 export function setDatabase(database: any) {

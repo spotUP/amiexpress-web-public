@@ -6,6 +6,7 @@
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
+import { runDoorWithSession } from '../../tools/runDoorSession';
 
 interface Player {
   x: number;
@@ -235,7 +236,13 @@ class SpaceShooter {
   public start(): void {
     this.door.start();
   }
+
+  public getDoor(): Door {
+    return this.door;
+  }
 }
 
-const game = new SpaceShooter();
-game.start();
+export async function runDoor(doorSession: any): Promise<void> {
+  const game = new SpaceShooter();
+  await runDoorWithSession(game.getDoor(), doorSession);
+}

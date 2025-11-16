@@ -224,6 +224,14 @@ const DOS_VECTORS: LibraryVector[] = [
     }
   },
   {
+    offset: -906,  // LVO -906 (0xFFFFFC7A)
+    name: 'FGets',
+    handler: (emu, lib: DosLibrary) => {
+      lib.FGets();
+      return emu.getRegister(0);  // Returns buffer pointer or NULL
+    }
+  },
+  {
     offset: -90,  // LVO -90 - UnLock
     name: 'UnLock',
     handler: (emu, lib: DosLibrary) => {

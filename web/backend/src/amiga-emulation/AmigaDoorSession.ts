@@ -77,6 +77,18 @@ export class AmigaDoorSession {
   // iteration tries to intercept the same address, skip it (we already handled it).
   private lastInterceptedTrap: number = 0; // Last library trap address we intercepted
   private lastInterceptedIteration: number = 0; // Iteration when we intercepted it
+  private loggedMoveaStack: boolean = false; // Instrumentation flag for movea.l D0,A7 logging
+  private dumpInstruction(pc: number, count: number = 8): void {
+    if (!this.emulator) {
+      return;
+    }
+    const bytes: string[] = [];
+    for (let offset = 0; offset < count; offset += 2) {
+      const word = this.emulator.readMemory16(pc + offset);
+      bytes.push(`0x${word.toString(16).padStart(4, '0')}`);
+    }
+    console.log(`[AmigaDoorSession] Instruction dump @0x${pc.toString(16)}: ${bytes.join(', ')}`);
+  }
 
   /**
    * UNIFIED TRAP DETECTION AND HANDLING
@@ -411,6 +423,8 @@ export class AmigaDoorSession {
 
     // Create DosLibrary for file I/O and console operations
     this.dosLibrary = new DosLibrary(this.emulator);
+    // Doors expect CLI-style STDIN/STDOUT handles (Input()/Output())
+    this.dosLibrary.setInheritedHandles(1, 2);
 
     // Enable new FileManager/PathManager system for real file I/O
     // Use BBS_ROOT env var or default to project root (go up 2 levels from web/backend)
@@ -444,7 +458,7 @@ export class AmigaDoorSession {
       location: userLocation,
       misc1: path.basename(this.config.executablePath),  // Door name
       misc2: 1,  // Available for chat
-      baud: '28800'  // Default baud rate
+      baud: '57600'  // Default baud rate
     });
 
     console.log(`[AmigaDoorSession] Node ${nodeId} status: ${userName} running ${path.basename(this.config.executablePath)}`);
@@ -645,7 +659,6 @@ export class AmigaDoorSession {
     // Doors will call FindPort() themselves to find AEDoorPort
 
     console.log(`[AmigaDoorSession] CPU configured for door execution`);
-
     console.log('[AmigaDoorSession] Door ready to execute!');
 
     // Verify final state before execution
@@ -653,6 +666,11 @@ export class AmigaDoorSession {
     const verifyFinalPC = this.emulator.getRegister(16);
     const verifyFinalA0 = this.emulator.getRegister(8);
     console.log(`[AmigaDoorSession] Door ready: SP=0x${verifyFinalSP.toString(16)}, PC=0x${verifyFinalPC.toString(16)}, A0=0x${verifyFinalA0.toString(16)}`);
+
+    // Prefill the 68000 instruction queue so the very first instruction
+    // (typically a BRA.W over the $VER string) executes correctly.
+    this.emulator.refillPrefetch();
+    console.log('[AmigaDoorSession] Prefetch queue primed for first instruction');
   }
 
   /**
@@ -964,15 +982,13 @@ export class AmigaDoorSession {
 
       console.log(`[AmigaDoorSession] Created CLI local variables: RC=0, Result2=0`);
 
-      // CRITICAL FIX: Leave pr_CLI = 0 initially so doors like Bulls can detect first run
-      // Bulls checks pr_CLI at A3+0xAC - if ZERO, initializes and calls CreatePort
-      // If non-zero, Bulls assumes already initialized and skips CreatePort!
-      // We set pr_CLI AFTER door initializes (or door will set it itself)
-      this.emulator.writeMemory32(taskAddr + prCliOffset, 0); // pr_CLI = 0 (first run!)
+      const cliBPTR = cliStructAddr >> 2;
+      // Provide CLI pointer immediately so SAS/C startup can fetch stack defaults
+      this.emulator.writeMemory32(taskAddr + prCliOffset, cliBPTR);
 
       console.log(`[AmigaDoorSession] Created CLI structure at 0x${cliStructAddr.toString(16)}`);
       console.log(`[AmigaDoorSession]   cli_CommandName BSTR: length=${cmdLine.length} at 0x${cmdLineAddr.toString(16)}, data="${cmdLine}"`);
-      console.log(`[AmigaDoorSession]   pr_CLI initially 0 - door will detect first run and initialize`);
+      console.log(`[AmigaDoorSession]   pr_CLI set to BPTR 0x${cliBPTR.toString(16)} -> 0x${cliStructAddr.toString(16)}`);
 
       // Set up CLI info for GetArgStr() and GetCliProgramName()
       // GetArgStr() should return just the arguments (node number), not the program name
@@ -989,17 +1005,16 @@ export class AmigaDoorSession {
         console.log(`[AmigaDoorSession] Set CLI info: argString="${argString}" at 0x${argStringAddr.toString(16)}, progName="${progName}"`);
       }
 
-      // CRITICAL: Set callback to update pr_CLI after door calls CreatePort (init complete)
-      // Bulls and other doors need pr_CLI = 0 for first-run detection, but then need
-      // pr_CLI pointing to CLI structure to read command-line arguments
-      let prCliSet = false;
       if (this.execLibrary && this.emulator) {
         this.execLibrary.setDoorInitCallback(() => {
-          if (!prCliSet && this.emulator) {
-            console.log(`[AmigaDoorSession] *** CreatePort called - door initialized! Setting pr_CLI ***`);
-            this.emulator.writeMemory32(taskAddr + prCliOffset, cliStructAddr >> 2);
-            console.log(`[AmigaDoorSession]   pr_CLI set to 0x${(cliStructAddr >> 2).toString(16)} (BPTR) -> 0x${cliStructAddr.toString(16)}`);
-            prCliSet = true;
+          if (!this.emulator) {
+            return;
+          }
+
+          const currentValue = this.emulator.readMemory32(taskAddr + prCliOffset);
+          if (currentValue === 0) {
+            console.log('[AmigaDoorSession] *** Door CreatePort reset pr_CLI - restoring CLI pointer ***');
+            this.emulator.writeMemory32(taskAddr + prCliOffset, cliBPTR);
           }
         });
       }
@@ -1023,6 +1038,16 @@ export class AmigaDoorSession {
 
         // === STEP 2: Get current PC ===
         const pc = this.emulator.getRegister(16);
+
+        // Instrumentation: capture when doors execute movea.l D0,A7 (stack change without StackSwap)
+        if (!this.loggedMoveaStack && (pc === 0x11b2 || pc === 0x1232)) {
+          const d0 = this.emulator.getRegister(0);
+          const d1 = this.emulator.getRegister(1);
+          const spBefore = this.emulator.getRegister(15);
+          this.dumpInstruction(pc);
+          console.log(`[AmigaDoorSession] movea.l D0,A7 at PC=0x${pc.toString(16)} -> D0=0x${d0.toString(16)}, D1=0x${d1.toString(16)}, SP(before)=0x${spBefore.toString(16)}`);
+          this.loggedMoveaStack = true;
+        }
 
         // Track PC changes for WHO debugging (collect 200 unique PCs, log first 100)
         if (pc !== lastPC && pcHistory.length < 200) {
@@ -1480,13 +1505,7 @@ export class AmigaDoorSession {
           return;
         }
 
-        // Unmapped memory region (bug in address calculation)
-        if (pc >= 0xF00000 && pc < 0xF80000) {
-          console.log(`[AmigaDoorSession] PC in unmapped memory (0x${pc.toString(16)}) - memory mapping bug`);
-          this.terminate();
-          return;
-        }
-
+        // ROM polling loop (door jumped into Kickstart routine)
         // === STEP 4: UNIFIED trap detection (single canonical check) ===
         const trapHandled = await this.checkAndHandleLibraryTrap(pc);
         if (trapHandled) {
@@ -1771,10 +1790,10 @@ export class AmigaDoorSession {
    * 3. Setting PC to that return address
    * 4. Refilling the prefetch queue
    */
-  private forceROMReturn(): void {
+  private forceROMReturn(): boolean {
     if (!this.emulator || !this.execLibrary) {
       console.error('[AmigaDoorSession] Cannot force ROM return: not initialized');
-      return;
+      return false;
     }
 
     console.log('[AmigaDoorSession] Attempting to return door from ROM...');
@@ -1790,7 +1809,7 @@ export class AmigaDoorSession {
     // Validate return address (should be in door code range)
     if (returnAddr < 0x1000 || returnAddr > 0x100000) {
       console.error(`[AmigaDoorSession]   Invalid return address: 0x${returnAddr.toString(16)}`);
-      return;
+      return false;
     }
 
     // Check for messages in AEDoorPort0
@@ -1811,7 +1830,7 @@ export class AmigaDoorSession {
 
     if (portAddr === 0) {
       console.error('[AmigaDoorSession]   Port not found!');
-      return;
+      return false;
     }
 
     // Call WaitPort to get message (if any)
@@ -1836,6 +1855,7 @@ export class AmigaDoorSession {
 
     console.log('[AmigaDoorSession] *** DOOR RETURNED FROM ROM ***');
     console.log(`[AmigaDoorSession]   Door should now process message at 0x${msgAddr.toString(16)}`);
+    return true;
   }
 
   /**

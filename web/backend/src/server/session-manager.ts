@@ -99,6 +99,8 @@ export function createSession(nodeId: number): BBSSession {
     commandBuffer: '', // Buffer for command input
     menuPause: true, // Like AmiExpress - menu displays immediately by default
     inputBuffer: '', // Buffer for line-based input
+    maskInput: false, // Echo typed characters unless password masking is active
+    connectionStart: Date.now(),
     relConfNum: 0, // Relative conference number
     currentConfName: 'General', // Current conference name (matches ID 4)
     cmdShortcuts: false, // Like AmiExpress - default to line input mode, not hotkeys

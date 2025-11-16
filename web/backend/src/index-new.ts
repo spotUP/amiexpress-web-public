@@ -84,6 +84,12 @@ export interface BBSSession {
   messageBody?: string;
   messageRecipient?: string;
   inputBuffer: string;
+  connectionType?: 'web' | 'telnet' | 'ssh';
+  remoteAddress?: string;
+  connectionHostname?: string;
+  connectionPort?: number;
+  connectionBaud?: number;
+  connectionStart?: number;
   relConfNum: number;
   currentConfName: string;
   cmdShortcuts: boolean;

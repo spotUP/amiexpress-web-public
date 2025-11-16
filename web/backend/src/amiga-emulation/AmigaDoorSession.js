@@ -93,6 +93,7 @@ var AmigaDoorSession = /** @class */ (function () {
         // iteration tries to intercept the same address, skip it (we already handled it).
         this.lastInterceptedTrap = 0; // Last library trap address we intercepted
         this.lastInterceptedIteration = 0; // Iteration when we intercepted it
+        this.loggedMoveaStack = false; // Instrumentation flag for movea.l D0,A7 logging
         /**
          * Monitor A0 register changes during door execution to find where port address gets overwritten
          * This helps us identify where the door reads the garbage 0x7500002f value
@@ -334,6 +335,7 @@ var AmigaDoorSession = /** @class */ (function () {
                 console.log('[AmigaDoorSession] Creating DOS.library...');
                 // Create DosLibrary for file I/O and console operations
                 this.dosLibrary = new DOSLibrary_1.DosLibrary(this.emulator);
+                this.dosLibrary.setInheritedHandles(1, 2);
                 // CRITICAL FIX: Set output callback so DOS Write() sends to terminal
                 // WHO door and other DOS-based doors use Write() instead of AEDoor WriteStr()
                 this.dosLibrary.setOutputCallback(function (text) {
@@ -352,7 +354,7 @@ var AmigaDoorSession = /** @class */ (function () {
                     location: userLocation,
                     misc1: path.basename(this.config.executablePath), // Door name
                     misc2: 1, // Available for chat
-                    baud: '28800' // Default baud rate
+                    baud: '57600' // Default baud rate
                 });
                 console.log("[AmigaDoorSession] Node ".concat(nodeId, " status: ").concat(userName, " running ").concat(path.basename(this.config.executablePath)));
                 // RTW and other WHO doors search for "AEServer.%d" ports to detect active nodes
@@ -510,6 +512,8 @@ var AmigaDoorSession = /** @class */ (function () {
                 verifyFinalPC = this.emulator.getRegister(16);
                 verifyFinalA0 = this.emulator.getRegister(8);
                 console.log("[AmigaDoorSession] END OF loadDoor(): SP=0x".concat(verifyFinalSP.toString(16), ", PC=0x").concat(verifyFinalPC.toString(16), ", A0=0x").concat(verifyFinalA0.toString(16)));
+                this.emulator.refillPrefetch();
+                console.log('[AmigaDoorSession] Prefetch queue primed for first instruction');
                 // CRITICAL FIX: Write AEDoorPort0 address to memory location 0xac
                 // Discovery from A0 monitoring: Door reads port address from 0xac at iteration 168
                 // The door loads A0 from this memory location instead of using FindPort()
@@ -699,7 +703,7 @@ var AmigaDoorSession = /** @class */ (function () {
      */
     AmigaDoorSession.prototype.runExecutionLoop = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var entryPoint, bytes, i, pc, returnCode, trapHandled, totalSeconds, isWaitingForInput, error_2;
+            var entryPoint, bytes, i, pc, returnCode, d0_1, d1_1, spBefore, trapHandled, totalSeconds, isWaitingForInput, error_2;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -729,6 +733,14 @@ var AmigaDoorSession = /** @class */ (function () {
                         return [3 /*break*/, 2];
                     case 4:
                         pc = this.emulator.getRegister(16);
+                        if (!this.loggedMoveaStack && (pc === 0x11b2 || pc === 0x1232)) {
+                            d0_1 = this.emulator.getRegister(0);
+                            d1_1 = this.emulator.getRegister(1);
+                            spBefore = this.emulator.getRegister(15);
+                            this.dumpInstruction(pc);
+                            console.log("[AmigaDoorSession] movea.l D0,A7 at PC=0x".concat(pc.toString(16), " -> D0=0x").concat(d0_1.toString(16), ", D1=0x").concat(d1_1.toString(16), ", SP(before)=0x").concat(spBefore.toString(16)));
+                            this.loggedMoveaStack = true;
+                        }
                         // === STEP 3: Check exit conditions ===
                         // Exit trap: Door returned to our sentinel address
                         if (pc === 0xFFFF00) {
@@ -746,12 +758,7 @@ var AmigaDoorSession = /** @class */ (function () {
                             this.terminate();
                             return [2 /*return*/];
                         }
-                        // Unmapped memory region (bug in address calculation)
-                        if (pc >= 0xF00000 && pc < 0xF80000) {
-                            console.log("[AmigaDoorSession] PC in unmapped memory (0x".concat(pc.toString(16), ") - memory mapping bug"));
-                            this.terminate();
-                            return [2 /*return*/];
-                        }
+                        // ROM polling loop (door jumped into Kickstart routine)
                         return [4 /*yield*/, this.checkAndHandleLibraryTrap(pc)];
                     case 5:
                         trapHandled = _a.sent();
@@ -969,7 +976,7 @@ var AmigaDoorSession = /** @class */ (function () {
         var _a;
         if (!this.emulator || !this.execLibrary) {
             console.error('[AmigaDoorSession] Cannot force ROM return: not initialized');
-            return;
+            return false;
         }
         console.log('[AmigaDoorSession] Attempting to return door from ROM...');
         // Check if there's a return address on stack
@@ -981,7 +988,7 @@ var AmigaDoorSession = /** @class */ (function () {
         // Validate return address (should be in door code range)
         if (returnAddr < 0x1000 || returnAddr > 0x100000) {
             console.error("[AmigaDoorSession]   Invalid return address: 0x".concat(returnAddr.toString(16)));
-            return;
+            return false;
         }
         // Check for messages in AEDoorPort0
         var nodeId = ((_a = this.config.bbsSession) === null || _a === void 0 ? void 0 : _a.nodeId) || 0;
@@ -998,7 +1005,7 @@ var AmigaDoorSession = /** @class */ (function () {
         this.execLibrary.freeMem(portNameAddr, portNameSize);
         if (portAddr === 0) {
             console.error('[AmigaDoorSession]   Port not found!');
-            return;
+            return false;
         }
         // Call WaitPort to get message (if any)
         var msgAddr = this.execLibrary.waitPort(portAddr);
@@ -1017,6 +1024,7 @@ var AmigaDoorSession = /** @class */ (function () {
         console.log("[AmigaDoorSession]   Refilled prefetch queue");
         console.log('[AmigaDoorSession] *** DOOR RETURNED FROM ROM ***');
         console.log("[AmigaDoorSession]   Door should now process message at 0x".concat(msgAddr.toString(16)));
+        return true;
     };
     /**
      * Handle door message (trap-based, not polling)
@@ -1260,6 +1268,18 @@ var AmigaDoorSession = /** @class */ (function () {
         console.log('[AmigaDoorSession] 🚪 Emitting door:status = terminated');
         this.socket.emit('door:status', { status: 'terminated' });
         console.log('[AmigaDoorSession] Door session terminated');
+    };
+    AmigaDoorSession.prototype.dumpInstruction = function (pc, count) {
+        if (count === void 0) { count = 8; }
+        if (!this.emulator) {
+            return;
+        }
+        var words = [];
+        for (var offset = 0; offset < count; offset += 2) {
+            var value = this.emulator.readMemory16(pc + offset);
+            words.push("0x".concat(value.toString(16).padStart(4, '0')));
+        }
+        console.log("[AmigaDoorSession] Instruction dump @0x".concat(pc.toString(16), ": ").concat(words.join(', ')));
     };
     return AmigaDoorSession;
 }());

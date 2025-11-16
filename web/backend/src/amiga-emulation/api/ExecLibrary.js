@@ -955,6 +955,14 @@ var ExecLibrary = /** @class */ (function () {
     };
     ExecLibrary.prototype.stackSwap = function (structAddr) {
         console.log("[ExecLibrary] StackSwap(struct=0x".concat(structAddr.toString(16), ")"));
+        var callerPC = this.emulator.getRegister(16);
+        console.log("[ExecLibrary]   Called from PC=0x".concat(callerPC.toString(16)));
+        var rawWords = [];
+        for (var offset = 0; offset < 12; offset += 4) {
+            var value = this.emulator.readMemory32(structAddr + offset);
+            rawWords.push("0x".concat(value.toString(16)));
+        }
+        console.log("[ExecLibrary]   Raw struct dump: [".concat(rawWords.join(', '), "]"));
         // Per Amiga NDK docs: "This function will swap the stack of your task with
         // the given values in StackSwap. The StackSwapStruct structure will then
         // contain the values of the old stack such that the old stack can be restored."
@@ -975,7 +983,7 @@ var ExecLibrary = /** @class */ (function () {
         if (inSameRegion && tooClose && !this.separateStackAllocated) {
             // First swap: Allocate truly separate stack to prevent corruption
             this.separateStackPointer = 0x53FFC; // 16KB separate stack at 0x50000-0x54000
-            console.log("[ExecLibrary]   \u26A0\uFE0F  OVERLAP DANGER! OLD SP=0x".concat(oldPointer.toString(16), ", requested NEW SP=0x").concat(newPointer.toString(16)));
+            console.log("[ExecLibrary]   [WARNING] OVERLAP DANGER! OLD SP=0x".concat(oldPointer.toString(16), ", requested NEW SP=0x").concat(newPointer.toString(16)));
             console.log("[ExecLibrary]   Allocating separate stack at 0x".concat(this.separateStackPointer.toString(16), " to prevent corruption"));
             // Write OLD values to structure
             this.emulator.writeMemory32(structAddr + 0, oldLower);

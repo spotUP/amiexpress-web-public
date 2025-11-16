@@ -4,6 +4,7 @@
  */
 
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
+import { runDoorWithSession } from '../../tools/runDoorSession';
 
 type Cell = 'X' | 'O' | ' ';
 
@@ -211,7 +212,13 @@ class TicTacToe {
   public start(): void {
     this.door.start();
   }
+
+  public getDoor(): Door {
+    return this.door;
+  }
 }
 
-const game = new TicTacToe();
-game.start();
+export async function runDoor(doorSession: any): Promise<void> {
+  const game = new TicTacToe();
+  await runDoorWithSession(game.getDoor(), doorSession);
+}

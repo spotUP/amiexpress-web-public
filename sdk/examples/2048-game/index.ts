@@ -20,16 +20,10 @@
  * - Undo functionality
  */
 
-import { Door, UIEngine } from '@amiexpress/bbs-door-sdk';
+import { UIEngine } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
-
-const door = new Door({
-  name: '2048 Game',
-  version: '1.0.0',
-  author: 'AmiExpress SDK',
-  description: 'Classic 2048 sliding tile puzzle game',
-});
+import { PassThrough } from 'stream';
 
 // Game state
 type Grid = number[][];
@@ -246,232 +240,260 @@ class Game2048 {
   }
 }
 
-door.onConnect(async (user: any) => {
-  console.log(`User ${user.name} connected to 2048 Game`);
+export async function runDoor(doorSession: any): Promise<void> {
+  const { socket, user } = doorSession;
+  const playerName = user?.name || user?.username || 'Guest';
+
+  console.log(`User ${playerName} connected to 2048 Game`);
 
   const highScorePath = path.join(__dirname, 'highscore.txt');
   const game = new Game2048(highScorePath);
 
-  // Create UI engine
+  const inputStream = new PassThrough();
+  const outputStream = new PassThrough();
+
   const ui = new UIEngine({
     width: 80,
     height: 24,
     smartCSR: true,
     enableMouse: false,
     enableKeys: true,
+    input: inputStream,
+    output: outputStream,
   });
 
-  const renderGame = () => {
-    ui.clear();
+  const sendAnsi = (chunk: Buffer) => {
+    socket.emit('ansi-output', chunk.toString('binary'));
+  };
 
-    const state = game.getState();
+  outputStream.on('data', sendAnsi);
 
-    // Title bar
-    ui.createBox({
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: 3,
-      content: '{center}{bold}2048 GAME{/bold}\n{center}Combine tiles to reach 2048!{/center}',
-      tags: true,
-      style: {
-        fg: 'white',
-        bg: 'blue',
-      },
-    });
+  const handleSocketInput = (data: string) => {
+    inputStream.write(data);
+  };
 
-    // Score panel
-    ui.createBox({
-      top: 3,
-      left: 2,
-      width: 20,
-      height: 5,
-      border: { type: 'line' },
-      label: ' Score ',
-      content: `{center}{bold}{yellow-fg}${state.score}{/yellow-fg}{/bold}{/center}`,
-      tags: true,
-      style: {
-        border: { fg: 'yellow' },
-      },
-    });
+  socket.on('user-input', handleSocketInput);
 
-    // Best score panel
-    ui.createBox({
-      top: 3,
-      left: 24,
-      width: 20,
-      height: 5,
-      border: { type: 'line' },
-      label: ' Best ',
-      content: `{center}{bold}{green-fg}${state.bestScore}{/green-fg}{/bold}{/center}`,
-      tags: true,
-      style: {
-        border: { fg: 'green' },
-      },
-    });
+  await new Promise<void>((resolve) => {
+    let finished = false;
 
-    // Game board
-    const boardTop = 9;
-    const boardLeft = 10;
-    const tileWidth = 10;
-    const tileHeight = 4;
+    const cleanup = () => {
+      outputStream.off('data', sendAnsi);
+      socket.off('user-input', handleSocketInput);
+      ui.destroy();
+    };
 
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 4; c++) {
-        const value = state.grid[r][c];
-        const colors = TILE_COLORS[value] || TILE_COLORS[0];
-
-        const x = boardLeft + c * (tileWidth + 1);
-        const y = boardTop + r * (tileHeight + 1);
-
-        ui.createBox({
-          top: y,
-          left: x,
-          width: tileWidth,
-          height: tileHeight,
-          content: value > 0 ? `{center}{bold}${value}{/bold}{/center}` : '',
-          tags: true,
-          border: { type: 'line' },
-          style: {
-            fg: colors.fg,
-            bg: colors.bg,
-            border: { fg: 'cyan' },
-          },
-        });
+    const finish = () => {
+      if (finished) {
+        return;
       }
-    }
+      finished = true;
+      cleanup();
+      socket.emit('ansi-output', '\r\n\x1b[32mThanks for playing 2048!\x1b[0m\r\n');
+      resolve();
+    };
 
-    // Controls panel
-    ui.createBox({
-      top: 9,
-      left: 56,
-      width: 22,
-      height: 12,
-      border: { type: 'line' },
-      label: ' Controls ',
-      content:
-        '{cyan-fg}Arrow Keys:{/cyan-fg}\n' +
-        '  Move tiles\n\n' +
-        '{cyan-fg}[U]{/cyan-fg} Undo\n' +
-        '{cyan-fg}[N]{/cyan-fg} New Game\n' +
-        '{cyan-fg}[Q]{/cyan-fg} Quit\n\n' +
-        '{yellow-fg}Combine tiles\n' +
-        'to reach 2048!{/yellow-fg}',
-      tags: true,
-      style: {
-        border: { fg: 'yellow' },
-      },
-    });
+    const renderGame = () => {
+      ui.clear();
 
-    // Game status
-    if (state.won && !state.gameOver) {
+      const state = game.getState();
+
       ui.createBox({
-        top: 'center',
-        left: 'center',
-        width: 40,
-        height: 8,
-        border: { type: 'line' },
-        label: ' YOU WON! ',
-        content: '{center}{bold}{green-fg}Congratulations!{/green-fg}{/bold}\n\n' +
-          `{center}Final Score: {yellow-fg}${state.score}{/yellow-fg}\n\n` +
-          '{center}Press {cyan-fg}N{/cyan-fg} for new game\n' +
-          '{center}or {cyan-fg}Q{/cyan-fg} to quit{/center}',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: 3,
+        content: '{center}{bold}2048 GAME{/bold}\n{center}Combine tiles to reach 2048!{/center}',
         tags: true,
         style: {
           fg: 'white',
-          bg: 'black',
+          bg: 'blue',
+        },
+      });
+
+      ui.createBox({
+        top: 3,
+        left: 2,
+        width: 20,
+        height: 5,
+        border: { type: 'line' },
+        label: ' Score ',
+        content: `{center}{bold}{yellow-fg}${state.score}{/yellow-fg}{/bold}{/center}`,
+        tags: true,
+        style: {
+          border: { fg: 'yellow' },
+        },
+      });
+
+      ui.createBox({
+        top: 3,
+        left: 24,
+        width: 20,
+        height: 5,
+        border: { type: 'line' },
+        label: ' Best ',
+        content: `{center}{bold}{green-fg}${state.bestScore}{/green-fg}{/bold}{/center}`,
+        tags: true,
+        style: {
           border: { fg: 'green' },
         },
       });
-    } else if (state.gameOver) {
+
+      const boardTop = 9;
+      const boardLeft = 10;
+      const tileWidth = 10;
+      const tileHeight = 4;
+
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          const value = state.grid[r][c];
+          const colors = TILE_COLORS[value] || TILE_COLORS[0];
+
+          const x = boardLeft + c * (tileWidth + 1);
+          const y = boardTop + r * (tileHeight + 1);
+
+          ui.createBox({
+            top: y,
+            left: x,
+            width: tileWidth,
+            height: tileHeight,
+            content: value > 0 ? `{center}{bold}${value}{/bold}{/center}` : '',
+            tags: true,
+            border: { type: 'line' },
+            style: {
+              fg: colors.fg,
+              bg: colors.bg,
+              border: { fg: 'cyan' },
+            },
+          });
+        }
+      }
+
       ui.createBox({
-        top: 'center',
-        left: 'center',
-        width: 40,
-        height: 8,
+        top: 9,
+        left: 56,
+        width: 22,
+        height: 12,
         border: { type: 'line' },
-        label: ' GAME OVER ',
-        content: '{center}{bold}{red-fg}No more moves!{/red-fg}{/bold}\n\n' +
-          `{center}Final Score: {yellow-fg}${state.score}{/yellow-fg}\n\n` +
-          '{center}Press {cyan-fg}N{/cyan-fg} for new game\n' +
-          '{center}or {cyan-fg}Q{/cyan-fg} to quit{/center}',
+        label: ' Controls ',
+        content:
+          '{cyan-fg}Arrow Keys:{/cyan-fg}\n' +
+          '  Move tiles\n\n' +
+          '{cyan-fg}[U]{/cyan-fg} Undo\n' +
+          '{cyan-fg}[N]{/cyan-fg} New Game\n' +
+          '{cyan-fg}[Q]{/cyan-fg} Quit\n\n' +
+          '{yellow-fg}Combine tiles\n' +
+          'to reach 2048!{/yellow-fg}',
         tags: true,
         style: {
-          fg: 'white',
-          bg: 'black',
-          border: { fg: 'red' },
+          border: { fg: 'yellow' },
         },
       });
-    }
 
-    // Status bar
-    ui.createBox({
-      bottom: 0,
-      left: 0,
-      width: '100%',
-      height: 1,
-      content: ` Player: ${user.name} | Use arrow keys to move | Q to quit `,
-      style: {
-        fg: 'white',
-        bg: 'blue',
-      },
+      if (state.won && !state.gameOver) {
+        ui.createBox({
+          top: 'center',
+          left: 'center',
+          width: 40,
+          height: 8,
+          border: { type: 'line' },
+          label: ' YOU WON! ',
+          content: '{center}{bold}{green-fg}Congratulations!{/green-fg}{/bold}\n\n' +
+            `{center}Final Score: {yellow-fg}${state.score}{/yellow-fg}\n\n` +
+            '{center}Press {cyan-fg}N{/cyan-fg} for new game\n' +
+            '{center}or {cyan-fg}Q{/cyan-fg} to quit{/center}',
+          tags: true,
+          style: {
+            fg: 'white',
+            bg: 'black',
+            border: { fg: 'green' },
+          },
+        });
+      } else if (state.gameOver) {
+        ui.createBox({
+          top: 'center',
+          left: 'center',
+          width: 40,
+          height: 8,
+          border: { type: 'line' },
+          label: ' GAME OVER ',
+          content: '{center}{bold}{red-fg}No more moves!{/red-fg}{/bold}\n\n' +
+            `{center}Final Score: {yellow-fg}${state.score}{/yellow-fg}\n\n` +
+            '{center}Press {cyan-fg}N{/cyan-fg} for new game\n' +
+            '{center}or {cyan-fg}Q{/cyan-fg} to quit{/center}`,
+          tags: true,
+          style: {
+            fg: 'white',
+            bg: 'black',
+            border: { fg: 'red' },
+          },
+        });
+      }
+
+      ui.createBox({
+        bottom: 0,
+        left: 0,
+        width: '100%',
+        height: 1,
+        content: ` Player: ${playerName} | Use arrow keys to move | Q to quit `,
+        style: {
+          fg: 'white',
+          bg: 'blue',
+        },
+      });
+
+      ui.render();
+    };
+
+    renderGame();
+
+    ui.onKey(['up', 'k'], () => {
+      if (!game.getState().gameOver) {
+        game.move('up');
+        renderGame();
+      }
     });
 
-    ui.render();
-  };
+    ui.onKey(['down', 'j'], () => {
+      if (!game.getState().gameOver) {
+        game.move('down');
+        renderGame();
+      }
+    });
 
-  // Initial render
-  renderGame();
+    ui.onKey(['left', 'h'], () => {
+      if (!game.getState().gameOver) {
+        game.move('left');
+        renderGame();
+      }
+    });
 
-  // Keyboard controls
-  ui.onKey(['up', 'k'], () => {
-    if (!game.getState().gameOver) {
-      game.move('up');
+    ui.onKey(['right', 'l'], () => {
+      if (!game.getState().gameOver) {
+        game.move('right');
+        renderGame();
+      }
+    });
+
+    ui.onKey(['u', 'U'], () => {
+      if (game.undo()) {
+        renderGame();
+      }
+    });
+
+    ui.onKey(['n', 'N'], () => {
+      game.reset();
       renderGame();
-    }
+    });
+
+    ui.onKey(['q', 'Q', 'escape'], () => {
+      finish();
+    });
+
+    socket.once('disconnect', () => {
+      finish();
+    });
   });
 
-  ui.onKey(['down', 'j'], () => {
-    if (!game.getState().gameOver) {
-      game.move('down');
-      renderGame();
-    }
-  });
-
-  ui.onKey(['left', 'h'], () => {
-    if (!game.getState().gameOver) {
-      game.move('left');
-      renderGame();
-    }
-  });
-
-  ui.onKey(['right', 'l'], () => {
-    if (!game.getState().gameOver) {
-      game.move('right');
-      renderGame();
-    }
-  });
-
-  ui.onKey(['u', 'U'], () => {
-    if (game.undo()) {
-      renderGame();
-    }
-  });
-
-  ui.onKey(['n', 'N'], () => {
-    game.reset();
-    renderGame();
-  });
-
-  ui.onKey(['q', 'Q', 'escape'], () => {
-    ui.destroy();
-    door.disconnect(user.id);
-  });
-});
-
-door.onDisconnect((user: any) => {
-  console.log(`User ${user.name} disconnected from 2048 Game`);
-});
-
-door.start();
-console.log('2048 Game door started!');
+  console.log(`User ${playerName} disconnected from 2048 Game`);
+}

@@ -13,6 +13,7 @@
  */
 
 import { Door, UIEngine, UIHelpers } from '@amiexpress/bbs-door-sdk';
+import { runDoorWithSession } from '../../tools/runDoorSession';
 
 const door = new Door({
   name: 'Neo-Blessed UI Demo',
@@ -617,5 +618,6 @@ door.onDisconnect((user: any) => {
   console.log(`User ${user.name} disconnected from UI demo`);
 });
 
-door.start();
-console.log('Neo-Blessed UI Demo door started!');
+export async function runDoor(doorSession: any): Promise<void> {
+  await runDoorWithSession(door, doorSession);
+}
