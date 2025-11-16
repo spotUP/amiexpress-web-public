@@ -481,7 +481,9 @@ export async function parseMciCodes(
 
   // ~CC_ - Custom Command Execution (express.e:5555-5563)
   // Format: ~CC_<command>|| - executes BBS command from screen, then returns to screen display
-  const ccRegex = /~CC_([^|]+)\|\|/g;
+  // Some classic screen files terminate with a single "|" (e.g. V-AWAIT trigger),
+  // so allow one or two pipes just like express.e tolerated.
+  const ccRegex = /~CC_([^|]+)\|{1,2}/g;
   let ccMatch;
   while ((ccMatch = ccRegex.exec(parsed)) !== null) {
     const commandStr = ccMatch[1];
