@@ -115,6 +115,7 @@ export class FileHandle {
     }
 
     try {
+      console.log(`[FileHandle] read ${length} bytes from ${this.sysPath}`);
       const buffer = Buffer.alloc(length);
       const bytesRead = fs.readSync(this.fd, buffer, 0, length, this.position);
       this.position += bytesRead;

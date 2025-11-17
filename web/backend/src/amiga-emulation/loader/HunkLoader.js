@@ -57,6 +57,7 @@ class HunkLoader {
      * Parse a Hunk file from buffer
      */
     parse(buffer) {
+        var _a;
         this.buffer = buffer;
         this.position = 0;
         const segments = [];
@@ -178,7 +179,22 @@ class HunkLoader {
             }
         }
         // Entry point is typically the start of the first code segment
-        const entryPoint = segments.find(s => s.type === SegmentType.CODE)?.address || 0x1000;
+        const entryPoint = ((_a = segments.find(s => s.type === SegmentType.CODE)) === null || _a === void 0 ? void 0 : _a.address) || 0x1000;
+        // === DEBUG: Check bytes at offset 0x22 in segment 0 BEFORE relocations ===
+        const seg0 = segments[0];
+        if (seg0 && seg0.data.length > 0x25) {
+            const b0 = seg0.data[0x22];
+            const b1 = seg0.data[0x23];
+            const b2 = seg0.data[0x24];
+            const b3 = seg0.data[0x25];
+            const bytesHex = `${b0.toString(16).padStart(2, '0')} ${b1.toString(16).padStart(2, '0')} ${b2.toString(16).padStart(2, '0')} ${b3.toString(16).padStart(2, '0')}`;
+            console.log(`[HunkLoader] === BEFORE RELOCATIONS: segment.data[0x22-0x25] = ${bytesHex} ===`);
+            console.log(`[HunkLoader]   Expected from file: b8 80 6d c2`);
+            if (b0 !== 0xb8 || b1 !== 0x80) {
+                console.log(`[HunkLoader]   *** CORRUPTION ALREADY PRESENT IN PARSED DATA! ***`);
+                console.log(`[HunkLoader]   *** The hunk parser read wrong bytes from file! ***`);
+            }
+        }
         // CRITICAL FIX: Apply relocations to segment data NOW (during parse)
         // instead of waiting until load(). This ensures that when doors execute
         // their startup code (like WHO's "LEA <data_segment>,A4"), they read
@@ -186,16 +202,27 @@ class HunkLoader {
         console.log('[HunkLoader] Applying relocations to segment data...');
         for (const [segmentIndex, relocs] of relocations.entries()) {
             const segment = segments[segmentIndex];
-            console.log(`[HunkLoader] Applying ${relocs.length} relocations to segment ${segmentIndex}`);
+            console.log(`[HunkLoader] Applying ${relocs.length} relocations to segment ${segmentIndex} @ 0x${segment.address.toString(16)}`);
             for (const reloc of relocs) {
                 const targetSegment = segments[reloc.targetSegment];
                 const offset = reloc.offset;
+                const memoryAddress = segment.address + offset;
                 // Read current value at relocation offset (big-endian 32-bit)
                 const b0 = segment.data[offset];
                 const b1 = segment.data[offset + 1];
                 const b2 = segment.data[offset + 2];
                 const b3 = segment.data[offset + 3];
                 const currentValue = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+                // === SPECIAL DEBUG: Track corruption at 0x1022 ===
+                if (memoryAddress === 0x1022) {
+                    const bytesHex = `${b0.toString(16).padStart(2, '0')} ${b1.toString(16).padStart(2, '0')} ${b2.toString(16).padStart(2, '0')} ${b3.toString(16).padStart(2, '0')}`;
+                    console.log(`[CORRUPTION] *** FOUND RELOCATION AT 0x1022 ***`);
+                    console.log(`[CORRUPTION]   Segment: ${segmentIndex}, Offset: 0x${offset.toString(16)}`);
+                    console.log(`[CORRUPTION]   Current bytes: ${bytesHex}`);
+                    console.log(`[CORRUPTION]   Current value: 0x${currentValue.toString(16).padStart(8, '0')}`);
+                    console.log(`[CORRUPTION]   Target segment: ${reloc.targetSegment} @ 0x${targetSegment.address.toString(16)}`);
+                    console.log(`[CORRUPTION]   Will add base: 0x${targetSegment.address.toString(16)}`);
+                }
                 // Add target segment's base address
                 const newValue = currentValue + targetSegment.address;
                 // Write back relocated value (big-endian 32-bit)
@@ -203,7 +230,22 @@ class HunkLoader {
                 segment.data[offset + 1] = (newValue >>> 16) & 0xFF;
                 segment.data[offset + 2] = (newValue >>> 8) & 0xFF;
                 segment.data[offset + 3] = newValue & 0xFF;
-                console.log(`[HunkLoader]   Reloc at 0x${offset.toString(16)}: 0x${currentValue.toString(16)} -> 0x${newValue.toString(16)} (target seg ${reloc.targetSegment} @ 0x${targetSegment.address.toString(16)})`);
+                // === SPECIAL DEBUG: Show result at 0x1022 ===
+                if (memoryAddress === 0x1022) {
+                    const newB0 = segment.data[offset];
+                    const newB1 = segment.data[offset + 1];
+                    const newB2 = segment.data[offset + 2];
+                    const newB3 = segment.data[offset + 3];
+                    const newBytesHex = `${newB0.toString(16).padStart(2, '0')} ${newB1.toString(16).padStart(2, '0')} ${newB2.toString(16).padStart(2, '0')} ${newB3.toString(16).padStart(2, '0')}`;
+                    console.log(`[CORRUPTION]   New bytes: ${newBytesHex}`);
+                    console.log(`[CORRUPTION]   New value: 0x${newValue.toString(16).padStart(8, '0')}`);
+                    console.log(`[CORRUPTION]   Expected bytes (from file): b8 80 (CMP.L D0,D4)`);
+                    console.log(`[CORRUPTION] *** THIS RELOCATION CORRUPTS 0x1022 ***`);
+                }
+                // Only log first 10 relocations per segment to avoid spam
+                if (relocs.indexOf(reloc) < 10) {
+                    console.log(`[HunkLoader]   Reloc @ 0x${memoryAddress.toString(16)} (seg+0x${offset.toString(16)}): 0x${currentValue.toString(16)} -> 0x${newValue.toString(16)} (target seg ${reloc.targetSegment} @ 0x${targetSegment.address.toString(16)})`);
+                }
             }
         }
         return {
@@ -279,74 +321,11 @@ class HunkLoader {
                 }
             }
         }
-        // DEBUG: Check memory at critical address BEFORE relocations
-        console.log('[HunkLoader] === MEMORY CHECK BEFORE RELOCATIONS ===');
-        const check1248_before = (emulator.readMemory(0x1248) << 8) | emulator.readMemory(0x1249);
-        console.log(`[HunkLoader] Memory at 0x1248 BEFORE relocations: 0x${check1248_before.toString(16).padStart(4, '0')}`);
-        console.log(`[HunkLoader] Expected: 0x4eae (JSR (A6,d16))`);
-        if (check1248_before !== 0x4eae) {
-            console.log(`[HunkLoader] *** ALREADY CORRUPTED BEFORE RELOCATIONS! ***`);
-        }
-        // Apply relocations
-        console.log(`[HunkLoader] Relocations map size: ${hunkFile.relocations.size}`);
-        console.log(`[HunkLoader] Relocations map keys: ${Array.from(hunkFile.relocations.keys()).join(', ')}`);
-        for (const [segmentIndex, relocs] of hunkFile.relocations.entries()) {
-            const segment = hunkFile.segments[segmentIndex];
-            console.log(`[HunkLoader] Applying ${relocs.length} relocations to segment ${segmentIndex}`);
-            let relocNum = 0;
-            for (const reloc of relocs) {
-                relocNum++;
-                // Validate target segment exists
-                if (reloc.targetSegment >= hunkFile.segments.length) {
-                    console.warn(`[HunkLoader] Skipping invalid relocation: target segment ${reloc.targetSegment} doesn't exist (only ${hunkFile.segments.length} segments)`);
-                    continue;
-                }
-                const targetSegment = hunkFile.segments[reloc.targetSegment];
-                const relocAddress = segment.address + reloc.offset;
-                // CRITICAL: Check if this relocation affects early initialization or 0x1248
-                const isEarlyReloc = segmentIndex === 0 && relocNum <= 10;
-                const isCriticalRange = isEarlyReloc ||
-                    (relocAddress >= 0x1246 && relocAddress <= 0x124a) ||
-                    (relocAddress >= 0x2b38 && relocAddress <= 0x2b3e);
-                if (isCriticalRange) {
-                    console.log(`[HunkLoader] *** CRITICAL RELOCATION DETECTED ***`);
-                    console.log(`[HunkLoader]   Segment ${segmentIndex} (base 0x${segment.address.toString(16)})`);
-                    console.log(`[HunkLoader]   Relocation offset: 0x${reloc.offset.toString(16)}`);
-                    console.log(`[HunkLoader]   Absolute address: 0x${relocAddress.toString(16)}`);
-                    console.log(`[HunkLoader]   Target segment: ${reloc.targetSegment} (base 0x${targetSegment.address.toString(16)})`);
-                }
-                // Read the current value at the relocation point
-                const byte0 = emulator.readMemory(relocAddress);
-                const byte1 = emulator.readMemory(relocAddress + 1);
-                const byte2 = emulator.readMemory(relocAddress + 2);
-                const byte3 = emulator.readMemory(relocAddress + 3);
-                const currentValue = (byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3;
-                if (isCriticalRange) {
-                    console.log(`[HunkLoader]   BEFORE: Memory at 0x${relocAddress.toString(16)} = 0x${currentValue.toString(16).padStart(8, '0')}`);
-                    console.log(`[HunkLoader]   BEFORE: Bytes = ${byte0.toString(16).padStart(2, '0')} ${byte1.toString(16).padStart(2, '0')} ${byte2.toString(16).padStart(2, '0')} ${byte3.toString(16).padStart(2, '0')}`);
-                }
-                // Add the target segment's base address
-                const newValue = currentValue + targetSegment.address;
-                if (isCriticalRange) {
-                    console.log(`[HunkLoader]   AFTER:  New value = 0x${newValue.toString(16).padStart(8, '0')}`);
-                    console.log(`[HunkLoader]   This will OVERWRITE memory at 0x${relocAddress.toString(16)}!`);
-                }
-                // Write back the relocated address (big-endian)
-                emulator.writeMemory(relocAddress, (newValue >> 24) & 0xFF);
-                emulator.writeMemory(relocAddress + 1, (newValue >> 16) & 0xFF);
-                emulator.writeMemory(relocAddress + 2, (newValue >> 8) & 0xFF);
-                emulator.writeMemory(relocAddress + 3, newValue & 0xFF);
-                if (isCriticalRange) {
-                    // Verify what was written
-                    const verify0 = emulator.readMemory(relocAddress);
-                    const verify1 = emulator.readMemory(relocAddress + 1);
-                    const verify2 = emulator.readMemory(relocAddress + 2);
-                    const verify3 = emulator.readMemory(relocAddress + 3);
-                    console.log(`[HunkLoader]   VERIFY: Bytes = ${verify0.toString(16).padStart(2, '0')} ${verify1.toString(16).padStart(2, '0')} ${verify2.toString(16).padStart(2, '0')} ${verify3.toString(16).padStart(2, '0')}`);
-                    console.log(`[HunkLoader] *** END CRITICAL RELOCATION ***`);
-                }
-            }
-        }
+        // RELOCATIONS NOW APPLIED DURING parse() - No longer needed in load()
+        // Relocations are applied to segment data in parse() before returning HunkFile
+        // This ensures doors that self-initialize registers (like WHO's LEA <data_segment>,A4)
+        // read correctly relocated values instead of zeros.
+        console.log('[HunkLoader] Relocations already applied during parse() - skipping load-time relocation');
         console.log(`[HunkLoader] Load complete. Entry point: 0x${hunkFile.entryPoint.toString(16)}`);
     }
     /**

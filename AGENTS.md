@@ -29,6 +29,8 @@ Be cautious with terminal commands. Before every terminal command, consider care
 
 Every time you are done working, create/update a document handoff.md in the root project directory which always has a (brief) summary of what we've been most recently working on, including my last couple of prompts. The goal is that if the context window gets too crowded, we can restart with a new task, and the new agent can pick up where you left off using the readme (describing the project) and the handoff document (describing what we were most recently working on).
 
+If unsure, ask the user instead of guessing before proceeding 
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.

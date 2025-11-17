@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
+import { config } from '../config';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -177,7 +178,10 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
         nodeNumber: session.nodeId || 0,
         bbsName: 'AmiExpress-Web BBS',
         sysopName: 'Sysop',
-        timeRemaining: 60
+        timeRemaining: 60,
+        doorCommand: doorInfo.command,
+        doorName: doorInfo.name,
+        dataDir: config.get('dataDir')
       }
     } as any);
 

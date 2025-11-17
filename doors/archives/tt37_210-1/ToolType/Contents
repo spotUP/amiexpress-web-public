@@ -1,6 +1,0 @@
-ToolType - A program to make it easier to edit tooltypes in icons.  ToolType will
-           read the tooltypes from an icon file and let you use your favorite text
-           editor to change or add to the tooltypes.  ToolType can be run from
-           shell, Workbench, or set up as an appicon. Includes an option to sort
-           the tooltypes alphabetically.  Version 37.210.  WB 2.0+ required.
-           Binary only.  Author: Michael J Barsoom.

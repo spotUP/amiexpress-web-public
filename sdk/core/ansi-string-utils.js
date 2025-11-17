@@ -9,7 +9,16 @@
  * @module ansi-string-utils
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.formatInBox = exports.measureWidth = exports.substringVisible = exports.truncateVisible = exports.getCenterX = exports.centerVisible = exports.padStartVisible = exports.padEndVisible = exports.visibleLength = exports.stripAnsi = void 0;
+exports.stripAnsi = stripAnsi;
+exports.visibleLength = visibleLength;
+exports.padEndVisible = padEndVisible;
+exports.padStartVisible = padStartVisible;
+exports.centerVisible = centerVisible;
+exports.getCenterX = getCenterX;
+exports.truncateVisible = truncateVisible;
+exports.substringVisible = substringVisible;
+exports.measureWidth = measureWidth;
+exports.formatInBox = formatInBox;
 /**
  * Regular expression to match ANSI escape codes
  * Matches sequences like: \x1b[31m, \x1b[0m, \x1b[1;33m, etc.
@@ -30,7 +39,6 @@ const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
 function stripAnsi(str) {
     return str.replace(ANSI_REGEX, '');
 }
-exports.stripAnsi = stripAnsi;
 /**
  * Get the visible length of a string (excluding ANSI codes)
  *
@@ -47,7 +55,6 @@ exports.stripAnsi = stripAnsi;
 function visibleLength(str) {
     return stripAnsi(str).length;
 }
-exports.visibleLength = visibleLength;
 /**
  * Pad a string to a specific visible width
  * Similar to String.padEnd() but accounts for ANSI codes
@@ -69,7 +76,6 @@ function padEndVisible(str, targetWidth, fillChar = ' ') {
     const paddingNeeded = Math.max(0, targetWidth - currentVisibleWidth);
     return str + fillChar.repeat(paddingNeeded);
 }
-exports.padEndVisible = padEndVisible;
 /**
  * Pad a string on the left to a specific visible width
  * Similar to String.padStart() but accounts for ANSI codes
@@ -91,7 +97,6 @@ function padStartVisible(str, targetWidth, fillChar = ' ') {
     const paddingNeeded = Math.max(0, targetWidth - currentVisibleWidth);
     return fillChar.repeat(paddingNeeded) + str;
 }
-exports.padStartVisible = padStartVisible;
 /**
  * Center a string within a specific visible width
  * Accounts for ANSI codes when calculating padding
@@ -115,7 +120,6 @@ function centerVisible(str, targetWidth, fillChar = ' ') {
     const rightPadding = totalPadding - leftPadding;
     return fillChar.repeat(leftPadding) + str + fillChar.repeat(rightPadding);
 }
-exports.centerVisible = centerVisible;
 /**
  * Calculate the X position to center text on an 80-column screen
  *
@@ -134,7 +138,6 @@ function getCenterX(str, screenWidth = 80) {
     const width = visibleLength(str);
     return Math.max(1, Math.floor((screenWidth - width) / 2) + 1);
 }
-exports.getCenterX = getCenterX;
 /**
  * Truncate a string to a specific visible width
  * Preserves ANSI codes and adds ellipsis if truncated
@@ -180,7 +183,6 @@ function truncateVisible(str, maxWidth, ellipsis = '...') {
     }
     return result + ellipsis;
 }
-exports.truncateVisible = truncateVisible;
 /**
  * Substring with visible character positions
  * Like String.substring() but uses visible character positions
@@ -226,7 +228,6 @@ function substringVisible(str, start, end) {
     }
     return result;
 }
-exports.substringVisible = substringVisible;
 /**
  * Measure the width needed to display text (accounting for ANSI codes)
  * Useful for determining box sizes, alignment, etc.
@@ -246,7 +247,6 @@ exports.substringVisible = substringVisible;
 function measureWidth(lines) {
     return Math.max(...lines.map(line => visibleLength(line)));
 }
-exports.measureWidth = measureWidth;
 /**
  * Format text for display within a fixed-width box
  * Ensures text fits within the box accounting for ANSI codes
@@ -278,4 +278,3 @@ function formatInBox(text, width, align = 'left') {
             return padEndVisible(text, width);
     }
 }
-exports.formatInBox = formatInBox;

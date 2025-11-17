@@ -96,7 +96,7 @@ export class ExecLibrary {
 
   // Message port tracking
   private messagePorts: Map<number, MessagePort> = new Map(); // address -> port
-  private publicPorts: Map<string, number> = new Map(); // name -> address
+  private publicPorts: Map<string, number> = new Map(); // lower-case name -> address
   private nextPortAddress: number = 0x0A0000; // Start at 640KB
 
   // Semaphore tracking
@@ -110,6 +110,7 @@ export class ExecLibrary {
 
   // Door init callback - called when door calls CreatePort (initialization complete)
   private doorInitCallback: (() => void) | null = null;
+  private doorPortAddr: number = 0;
 
   // Standard library addresses (for stubs)
   private readonly EXEC_BASE_ADDR = 0x010000;    // ExecBase at 64KB
@@ -118,6 +119,7 @@ export class ExecLibrary {
   private readonly ICON_LIB_ADDR = 0x040000;      // icon.library at 256KB
   private readonly INTUITION_LIB_ADDR = 0x050000; // intuition.library at 320KB
   private readonly UTILITY_LIB_ADDR = 0x070000;   // utility.library at 448KB
+  private readonly PORT_LIST_OFFSET = 392;
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
@@ -169,6 +171,10 @@ export class ExecLibrary {
    */
   setDoorMessageCallback(callback: (portAddr: number, msgAddr: number) => void): void {
     this.doorMessageCallback = callback;
+  }
+
+  setDoorPortAddress(addr: number): void {
+    this.doorPortAddr = addr;
   }
 
   /**
@@ -284,6 +290,7 @@ export class ExecLibrary {
     this.emulator.writeMemory16(addr + 34, this.execBase.softVer);   // SoftVer
     this.emulator.writeMemory32(addr + 276, this.execBase.thisTask); // ThisTask
     this.emulator.writeMemory32(addr + 378, this.execBase.libList);  // LibList
+    this.initializeExecList(addr + this.PORT_LIST_OFFSET);           // PortList
 
     // V36 additions
     this.emulator.writeMemory32(addr + 568, this.execBase.eclockFrequency); // ex_EClockFrequency
@@ -789,7 +796,7 @@ export class ExecLibrary {
 
     // CORRECT IMPLEMENTATION: Search for port in public registry
     // FindPort() should NOT create ports - it only searches for existing ones
-    const portAddr = this.publicPorts.get(name);
+    const portAddr = this.publicPorts.get(name.toLowerCase());
 
     if (portAddr !== undefined) {
       console.log(`[ExecLibrary]   Found "${name}" at 0x${portAddr.toString(16)}`);
@@ -924,9 +931,6 @@ export class ExecLibrary {
     const name = this.emulator.readString(namePtr);
     console.log(`[ExecLibrary] AddPort(0x${portAddr.toString(16)}) - adding public port "${name}"`);
 
-    // Add to public ports registry (for FindPort lookup)
-    this.publicPorts.set(name, portAddr);
-
     // CRITICAL: Also add to message ports registry (for PutMsg/GetMsg/WaitPort)
     // Read port structure fields
     const sigBit = this.emulator.readMemory(portAddr + 15);    // mp_SigBit
@@ -944,6 +948,9 @@ export class ExecLibrary {
 
     // Update port structure to mark it as public (ln_Type = NT_MSGPORT = 4)
     this.emulator.writeMemory(portAddr + 8, 4);  // NT_MSGPORT
+
+    // Register for FindPort lookups and Exec port list traversal
+    this.registerPublicPort(name, portAddr);
 
     console.log(`[ExecLibrary]   Port "${name}" is now public and registered for messaging`);
   }
@@ -1172,9 +1179,11 @@ export class ExecLibrary {
 
     // Remove from public registry if it has a name
     if (port.name) {
-      this.publicPorts.delete(port.name);
+      this.publicPorts.delete(port.name.toLowerCase());
       console.log(`[ExecLibrary]   Removed public port "${port.name}"`);
     }
+
+    this.removePortFromExecList(portAddr);
 
     // Remove from port registry
     this.messagePorts.delete(portAddr);
@@ -1210,7 +1219,7 @@ export class ExecLibrary {
     this.emulator.writeMemory32(portAddr + 10, nameAddr);
 
     // Add to public registry
-    this.publicPorts.set(name, portAddr);
+    this.registerPublicPort(name, portAddr);
 
     console.log(`[ExecLibrary]   Public port "${name}" created at 0x${portAddr.toString(16)}`);
     return portAddr;
@@ -1234,7 +1243,14 @@ export class ExecLibrary {
   putMsg(portAddr: number, msgAddr: number): void {
     console.log(`[ExecLibrary] PutMsg(port=0x${portAddr.toString(16)}, msg=0x${msgAddr.toString(16)})`);
 
-    const port = this.messagePorts.get(portAddr);
+    let port = this.messagePorts.get(portAddr);
+
+    if (portAddr === this.currentTask.msgPort && this.doorMessageCallback && this.doorPortAddr) {
+      console.warn('[ExecLibrary]   Door posted to its own port - rerouting to AEDoorPort fallback');
+      portAddr = this.doorPortAddr;
+      port = this.messagePorts.get(portAddr);
+    }
+
     if (!port) {
       console.error(`[ExecLibrary]   Port not found: 0x${portAddr.toString(16)}`);
       return;
@@ -1710,6 +1726,86 @@ export class ExecLibrary {
       const long = this.emulator.readMemory32(source + i);
       this.emulator.writeMemory32(dest + i, long);
     }
+  }
+
+  private registerPublicPort(name: string, portAddr: number): void {
+    const normalized = name.toLowerCase();
+    this.publicPorts.set(normalized, portAddr);
+
+    const portEntry = this.messagePorts.get(portAddr);
+    if (portEntry) {
+      portEntry.name = name;
+    }
+
+    this.addPortToExecList(portAddr);
+
+    const listAddr = this.getPortListAddr();
+    const headPtr = this.emulator.readMemory32(listAddr);
+    const tailPred = this.emulator.readMemory32(listAddr + 8);
+    console.log(`[ExecLibrary]   PortList head=0x${headPtr.toString(16)} tailPred=0x${tailPred.toString(16)}`);
+  }
+
+  private getPortListAddr(): number {
+    return this.execBase.address + this.PORT_LIST_OFFSET;
+  }
+
+  private initializeExecList(listAddr: number): void {
+    this.emulator.writeMemory32(listAddr + 0, 0); // lh_Head
+    this.emulator.writeMemory32(listAddr + 4, 0); // lh_Tail (= NULL sentinel)
+    this.emulator.writeMemory32(listAddr + 8, 0); // lh_TailPred (last node)
+    this.emulator.writeMemory(listAddr + 12, 0);  // lh_Type
+    this.emulator.writeMemory(listAddr + 13, 0);  // l_pad
+  }
+
+  private addPortToExecList(portAddr: number): void {
+    const listAddr = this.getPortListAddr();
+    const headAddr = listAddr + 0;
+    const tailPredAddr = listAddr + 8;
+
+    const currentHead = this.emulator.readMemory32(headAddr);
+
+    if (currentHead === 0) {
+      // First node in list
+      this.emulator.writeMemory32(portAddr + 0, 0);    // ln_Succ
+      this.emulator.writeMemory32(portAddr + 4, 0);    // ln_Pred
+      this.emulator.writeMemory32(headAddr, portAddr); // lh_Head
+      this.emulator.writeMemory32(tailPredAddr, portAddr);
+    } else {
+      // Insert at head
+      this.emulator.writeMemory32(portAddr + 0, currentHead);
+      this.emulator.writeMemory32(portAddr + 4, 0);
+      this.emulator.writeMemory32(currentHead + 4, portAddr);
+      this.emulator.writeMemory32(headAddr, portAddr);
+    }
+  }
+
+  private removePortFromExecList(portAddr: number): void {
+    const listAddr = this.getPortListAddr();
+    const headAddr = listAddr + 0;
+    const tailPredAddr = listAddr + 8;
+
+    const succ = this.emulator.readMemory32(portAddr + 0);
+    const pred = this.emulator.readMemory32(portAddr + 4);
+
+    if (pred === 0) {
+      this.emulator.writeMemory32(headAddr, succ);
+    } else {
+      this.emulator.writeMemory32(pred + 0, succ);
+    }
+
+    if (succ !== 0) {
+      this.emulator.writeMemory32(succ + 4, pred);
+    } else {
+      this.emulator.writeMemory32(tailPredAddr, pred);
+    }
+
+    if (this.emulator.readMemory32(headAddr) === 0) {
+      this.emulator.writeMemory32(tailPredAddr, 0);
+    }
+
+    const headPtr = this.emulator.readMemory32(headAddr);
+    const newTailPred = this.emulator.readMemory32(tailPredAddr);
+    console.log(`[ExecLibrary]   PortList updated: head=0x${headPtr.toString(16)} tailPred=0x${newTailPred.toString(16)}`);
   }
 
   /**

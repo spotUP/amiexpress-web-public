@@ -1,6 +1,0 @@
-/* Queue-Handler mount entry */
-
-Handler		= L:Queue-Handler
-StackSize	= 3000
-Priority	= 1
-GlobVec		= -1

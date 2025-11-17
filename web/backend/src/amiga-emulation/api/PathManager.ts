@@ -25,10 +25,10 @@ export class PathManager {
   private initializeStandardAssigns(): void {
     // BBS-specific assigns
     this.assigns.set('doors:', path.join(this.baseDir, 'doors/'));
-    this.assigns.set('bbs:', path.join(this.baseDir, 'BBS/'));
+    this.assigns.set('bbs:', this.baseDir); // Map to project root (Node directories live here)
     this.assigns.set('data:', path.join(this.baseDir, 'data/'));
-    this.assigns.set('screens:', path.join(this.baseDir, 'BBS/Screens/'));
-    this.assigns.set('bulletins:', path.join(this.baseDir, 'BBS/Bulletins/'));
+    this.assigns.set('screens:', path.join(this.baseDir, 'Screens/'));
+    this.assigns.set('bulletins:', path.join(this.baseDir, 'Bulletins/'));
     this.assigns.set('s:', path.join(this.baseDir, 'S/'));
     this.assigns.set('work:', this.baseDir);
     this.assigns.set('sami:', path.join(this.baseDir, 'S/'));

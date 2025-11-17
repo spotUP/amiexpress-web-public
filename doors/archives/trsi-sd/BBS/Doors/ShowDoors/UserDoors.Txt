@@ -1,17 +1,0 @@
-  [33m===========================================================================
-            [35mDOORS MENU [31m- 1994 - DaRk IllUsIoN  B B S - 1994 - [35mDOORS
-  [33m===========================================================================
- 
-            [31m[Ed]............... Edit Any File List/Add Group Logo's
-            [Who].................................... Who is online
-            [V].................................... View an Archive
-            [Shell]................................... Hacker Shell
-            [Info]................................ Infos about User
-            [Fd]............................ Downloads any Filelist
-            [Setter].................... Show ya some Modem Settinx
-            [Fake]................................... NOSNuke v0.21
-            [Send]......................... Send mail to other Node
-            [Wall].............................Show the LogOFF WALL
-            [ZOOM].........................Zoom mailing (if its ON)
-            [SGMain]................................ Security Guide
-

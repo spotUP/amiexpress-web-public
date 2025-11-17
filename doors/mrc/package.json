@@ -1,0 +1,34 @@
+{
+  "name": "mrc-door",
+  "version": "1.0.0",
+  "description": "Multi Relay Chat - Real-time multi-user chat system (runDoor pattern)",
+  "bbsCommand": "MRC",
+  "main": "dist/index.js",
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "chat",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": true,
+  "scripts": {
+    "build": "tsc",
+    "preview": "cd ../.. && npm run preview mrc"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "chat",
+    "mrc",
+    "relay",
+    "multiuser",
+    "runDoor",
+    "reference"
+  ],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../.."
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2"
+  }
+}

@@ -1100,7 +1100,11 @@ io.on('connection', async (socket) => {
     historyCycle: 0 // Current position when navigating history
   };
   setSession(socket.id, session); // Use helper to store by nodeId
-  triggerSamiLogRefresh();
+  try {
+    await triggerSamiLogRefresh();
+  } catch (error) {
+    console.error('[SamiLog] Initial refresh failed:', error);
+  }
 
   // Display complete connection screen via AWAITSCREEN.TXT
   // reference-board BBS layout: everything shown via screen file with MCI codes

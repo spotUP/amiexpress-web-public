@@ -1,8 +1,0 @@
-******** BUG FIXED *******!!!! PLEASE NOTE !!!!
-!**UPDATE TO 1.2.1 (%100)**!
-
-* major compiler bug + minor programmer's bug fixed! Instead of using
-  dice-c i re-started to use Sas-C 6.50.! So... now this one works on
-  68000+ machines too.. Bug Reported by :FisherKing
-  (nnn.. problem was ... donno.. i changed the compiler & FIXED!!?? )
- 

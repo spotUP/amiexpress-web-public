@@ -203,6 +203,13 @@ const DOS_VECTORS: LibraryVector[] = [
     }
   },
   {
+    offset: -948,
+    name: 'PutStr',
+    handler: (emu, lib: DosLibrary) => {
+      return lib.PutStr();
+    }
+  },
+  {
     offset: -54,
     name: 'Input',
     handler: (emu, lib: DosLibrary) => {

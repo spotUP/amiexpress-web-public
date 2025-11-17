@@ -1,0 +1,25 @@
+{
+  "name": "tetris",
+  "version": "1.0.0",
+  "description": "Classic block puzzle game with modern graphics and sound",
+  "main": "dist/tetris.js",
+  "category": "Puzzle Game",
+  "bbsCommand": "TETRIS",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "tetris.ts"
+  },
+  "server": {
+    "entry": "server.ts"
+  },
+  "author": "AmiExpress SDK",
+  "license": "MIT",
+  "scripts": {
+    "start": "npx tsx tetris.ts",
+    "build": "tsc"
+  },
+  "keywords": ["tetris", "puzzle", "game", "bbs", "door"],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../.."
+  }
+}

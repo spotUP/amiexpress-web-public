@@ -892,4 +892,5 @@ export class AEDoorLibrary {
   isWaitingForInput(): boolean {
     return this.activePrompt !== null;
   }
+
 }

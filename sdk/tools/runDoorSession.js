@@ -7,7 +7,7 @@
  * translates raw text input into the KeyEvent objects expected by the SDK.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runDoorWithSession = void 0;
+exports.runDoorWithSession = runDoorWithSession;
 /**
  * Execute a Door instance inside the TypeScript door runtime.
  */
@@ -76,7 +76,6 @@ async function runDoorWithSession(door, doorSession) {
         }
     });
 }
-exports.runDoorWithSession = runDoorWithSession;
 function mapUser(session) {
     const rawUser = session.user || {};
     const bbsSession = session.bbsSession || {};

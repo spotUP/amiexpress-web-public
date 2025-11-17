@@ -22,6 +22,7 @@ import { handleCommand } from '../handlers/command.handler';
 import { exitChat, sendChatMessage, acceptChat } from '../handlers/chat.handler';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
+import { runSamiLogUpdate } from '../services/SamiLogRunner';
 
 /**
  * Register all Socket.IO event handlers for a socket connection
@@ -301,6 +302,12 @@ function registerDisconnectHandler(socket: Socket) {
         console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
       } catch (error) {
         console.error(`[LOGOFF] Error deleting node files:`, error);
+      }
+
+      try {
+        await runSamiLogUpdate(session);
+      } catch (error) {
+        console.error('[LOGOFF] SAmiLog update failed:', error);
       }
     }
 
