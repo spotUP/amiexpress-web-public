@@ -26,7 +26,7 @@ export async function handlePreLoginInput(socket: any, session: BBSSession, data
     console.log('📋 Connection screen viewed, showing ANSI prompt');
     session.subState = LoggedOnSubState.ANSI_PROMPT;
     session.tempData = { inputBuffer: '' }; // Initialize input buffer
-    socket.emit('ansi-output', 'ANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+    socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
     return true;
   }
 

@@ -91,6 +91,7 @@ public
 # Temporary folders
 tmp/
 temp/
+dev/docs/uade/
 
 # SDK Preview Server downloads
 sdk/tools/preview/downloads/

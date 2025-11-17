@@ -8,6 +8,7 @@
 import { spawn, fork } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { resolveCaseInsensitivePath } from '../utils/fs-amiga.util';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
@@ -717,9 +718,16 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     const amigaDoorMgr = getAmigaDoorManager();
     const bbsRoot = amigaDoorMgr.bbsRoot;
 
-    // Build the full path to the door executable
+    // Build the full path to the door executable with case-insensitive resolution
     // door.path is already converted from Amiga paths (e.g., "Doors/AquaBulls/AquaBulls")
-    let doorPath = path.join(bbsRoot, door.path);
+    const normalizedDoorComponents = door.path
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter((component: string) => component.length > 0);
+
+    let doorPath =
+      resolveCaseInsensitivePath(bbsRoot, normalizedDoorComponents) ||
+      path.join(bbsRoot, door.path);
 
     console.log(`[executeAmigaDoor] BBS root: ${bbsRoot}`);
     console.log(`[executeAmigaDoor] Initial door path: ${doorPath}`);
@@ -733,8 +741,8 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       const alternatePaths = [];
 
       // 1. Try with capital D in Doors/ (doors/ → Doors/)
-      if (location.startsWith('doors/')) {
-        alternatePaths.push(path.join(bbsRoot, location.replace(/^doors\//, 'Doors/')));
+      if (/^doors\//i.test(location)) {
+        alternatePaths.push(path.join(bbsRoot, location.replace(/^doors\//i, 'Doors/')));
       }
 
       // 2. Try removing BBS/ prefix (BBS/Doors → Doors)
@@ -743,7 +751,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       }
 
       // 3. Try adding Doors/ prefix if missing
-      if (!location.startsWith('Doors/') && !location.startsWith('doors/')) {
+      if (!/^doors\//i.test(location)) {
         alternatePaths.push(path.join(bbsRoot, 'Doors', location));
       }
 
@@ -760,8 +768,11 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       ];
 
       // Search in Doors/ directory
-      const doorsDir = path.join(bbsRoot, 'Doors');
-      if (fs.existsSync(doorsDir)) {
+      const doorsDir =
+        resolveCaseInsensitivePath(bbsRoot, ['Doors']) ||
+        resolveCaseInsensitivePath(bbsRoot, ['doors']);
+
+      if (doorsDir && fs.existsSync(doorsDir)) {
         try {
           const entries = fs.readdirSync(doorsDir);
           for (const entry of entries) {

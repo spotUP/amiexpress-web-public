@@ -19,6 +19,9 @@ import { Socket as SocketIOSocket } from 'socket.io';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveDoorResourcePath } from '../door-path.util';
+
+const PROJECT_ROOT = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
 interface GLCConfig {
   serverHost: string;
@@ -71,11 +74,114 @@ interface GLCData {
   records: Records;
 }
 
+function getStringField(source: any, candidates: string[], defaultValue: string = ''): string {
+  if (!source) {
+    return defaultValue;
+  }
+  for (const key of candidates) {
+    if (key in source && source[key] !== undefined && source[key] !== null) {
+      return String(source[key]);
+    }
+  }
+  return defaultValue;
+}
+
+function getNumberField(source: any, candidates: string[], defaultValue: number = 0): number {
+  const str = getStringField(source, candidates, '');
+  if (!str) {
+    return defaultValue;
+  }
+  const value = Number(str);
+  return Number.isFinite(value) ? value : defaultValue;
+}
+
+function normalizeCall(call: any): CallData {
+  const normalized: CallData = {
+    Username: getStringField(call, ['Username', 'username', 'UserName', 'USER', 'Handle']),
+    location: getStringField(call, ['location', 'Location', 'Origin', 'City', 'BbsLocation']),
+    Bbsname: getStringField(call, ['Bbsname', 'BbsName', 'bbsname', 'BBS', 'System']),
+    Dateon: getStringField(call, ['Dateon', 'DateOn', 'dateon', 'Date']),
+    TimeOn: getStringField(call, ['TimeOn', 'timeOn', 'timeon', 'LoginTime', 'TimeIn']),
+    TimeOff: getStringField(call, ['TimeOff', 'timeoff', 'LogoutTime', 'TimeOut']),
+    Actions: getStringField(call, ['Actions', 'actions', 'ActionCodes']),
+    Upload: getNumberField(call, ['Upload', 'upload', 'UpKB', 'UpKilobytes', 'UploadBytes']) || 0,
+    Download: getNumberField(call, ['Download', 'download', 'DownKB', 'DownKilobytes', 'DownloadBytes']) || 0
+  };
+  return normalized;
+}
+
+function normalizeDayStats(stats?: any): DayStats {
+  const base: DayStats = {
+    statdate: '',
+    calls: '0',
+    topcps: '0',
+    uploads: '0',
+    downloads: '0'
+  };
+
+  if (!stats) {
+    return base;
+  }
+
+  return {
+    statdate: getStringField(stats, ['statdate', 'StatDate', 'Date']) || base.statdate,
+    calls: getStringField(stats, ['calls', 'Calls']) || base.calls,
+    topcps: getStringField(stats, ['topcps', 'TopCps', 'TopSpeed']) || base.topcps,
+    uploads: getStringField(stats, ['uploads', 'Uploads', 'UploadKB']) || base.uploads,
+    downloads: getStringField(stats, ['downloads', 'Downloads', 'DownloadKB']) || base.downloads
+  };
+}
+
+function normalizeRecords(records?: any): Records {
+  const base: Records = {
+    allcalls: '0',
+    recordcalls: '0',
+    calls: '0',
+    mostcalled: '',
+    calls2: '0',
+    secondmostcalled: '',
+    calls3: '0',
+    thirdmostcalled: ''
+  };
+
+  if (!records) {
+    return base;
+  }
+
+  return {
+    allcalls: getStringField(records, ['allcalls', 'AllCalls']) || base.allcalls,
+    recordcalls: getStringField(records, ['recordcalls', 'RecordCalls']) || base.recordcalls,
+    calls: getStringField(records, ['calls', 'Calls', 'MostCalls']) || base.calls,
+    mostcalled: getStringField(records, ['mostcalled', 'MostCalled', 'TopSystem']) || base.mostcalled,
+    calls2: getStringField(records, ['calls2', 'Calls2', 'SecondCalls']) || base.calls2,
+    secondmostcalled: getStringField(records, ['secondmostcalled', 'SecondMostCalled']) || base.secondmostcalled,
+    calls3: getStringField(records, ['calls3', 'Calls3', 'ThirdCalls']) || base.calls3,
+    thirdmostcalled: getStringField(records, ['thirdmostcalled', 'ThirdMostCalled']) || base.thirdmostcalled
+  };
+}
+
+function normalizeGLCData(raw: any): GLCData {
+  const callsSource = Array.isArray(raw?.calls)
+    ? raw.calls
+    : Array.isArray(raw?.Calls)
+      ? raw.Calls
+      : [];
+
+  return {
+    calls: callsSource.map(normalizeCall),
+    yesterdayStats: normalizeDayStats(raw?.yesterdayStats || raw?.YesterdayStats),
+    previousDayStats: normalizeDayStats(raw?.previousDayStats || raw?.PreviousDayStats),
+    records: normalizeRecords(raw?.records || raw?.Records)
+  };
+}
+
 /**
  * Load GLC configuration
  */
 function loadConfig(): GLCConfig {
-  const configPath = path.join(process.cwd(), 'doors', 'glc-viewer', 'glcviewer.cfg');
+  const configPath =
+    resolveDoorResourcePath('doors', 'glc-viewer', 'glcviewer.cfg') ||
+    path.join(PROJECT_ROOT, 'doors', 'glc-viewer', 'glcviewer.cfg');
 
   const config: GLCConfig = {
     serverHost: process.env.GLC_SERVER_HOST || 'scenewall.bbs.io',
@@ -381,7 +487,8 @@ export async function runDoor(doorSession: any): Promise<void> {
     // Parse JSON
     let glcData: GLCData;
     try {
-      glcData = JSON.parse(jsonText);
+      const parsed = JSON.parse(jsonText);
+      glcData = normalizeGLCData(parsed);
     } catch (err: any) {
       socket.emit('ansi-output', `\x1b[31mError: Could not parse JSON data: ${err.message}\x1b[0m\r\n`);
       return;
