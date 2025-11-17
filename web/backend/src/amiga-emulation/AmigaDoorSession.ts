@@ -25,6 +25,7 @@ export interface DoorConfig {
   doorType?: string;       // Door type: XIM, AIM, SIM, TIM, IIM, MCI, AEM, SUP (default: SIM)
   timeout?: number;        // Max execution time in seconds (default: 300)
   bbsSession?: any;        // BBS session data (user, system, node info)
+  args?: string[];         // Optional CLI arguments (without program name)
 }
 
 export class AmigaDoorSession {
@@ -47,9 +48,11 @@ export class AmigaDoorSession {
   private rtwLoopCount: number = 0; // Track iterations in RTW loop at 0x1158-0x1160
   private rtwInitPCs?: number[]; // Track PCs between 0x11CE and 0x124C to find FindPort call
   private doorPortAddress: number = 0; // AEDoorPort message port address
-  private rtwPortInjected: boolean = false; // Track if we've injected RTW reply port
   private aePortAddress: number = 0; // AEDoorPort2 message port address
   private trapVerified: boolean = false; // Track if we've verified trap instructions in memory
+  private useXimProtocol: boolean = false; // True when door should run via XIM IPC
+  private ximPortsInitialized: boolean = false; // Prevent duplicate XIM port injection
+  private doorReplyPortAddr: number = 0; // Reply port created for door IPC
 
   // Virtual time tracking (8MHz 68000 = 0.125 microseconds per cycle)
   private totalCycles: number = 0;
@@ -78,6 +81,18 @@ export class AmigaDoorSession {
   private lastInterceptedTrap: number = 0; // Last library trap address we intercepted
   private lastInterceptedIteration: number = 0; // Iteration when we intercepted it
   private loggedMoveaStack: boolean = false; // Instrumentation flag for movea.l D0,A7 logging
+  private resolveNodeId(): number {
+    const session = this.config.bbsSession;
+    if (session) {
+      if (typeof session.nodeId === 'number') {
+        return session.nodeId;
+      }
+      if (typeof session.nodeNumber === 'number') {
+        return session.nodeNumber;
+      }
+    }
+    return 0;
+  }
   private dumpInstruction(pc: number, count: number = 8): void {
     if (!this.emulator) {
       return;
@@ -209,13 +224,22 @@ export class AmigaDoorSession {
     this.socket.on('door:input', (data: string) => {
       console.log(`[AmigaDoorSession] 🎹 door:input event received: "${data}" isRunning=${this.isRunning} hasXIM=${!!this.ximProtocol}`);
 
-      if (this.isRunning && this.ximProtocol) {
-        console.log(`[AmigaDoorSession] Received input from user: "${data}"`);
+      if (!this.isRunning) {
+        console.log('[AmigaDoorSession] ❌ Input ignored: door not running');
+        return;
+      }
 
-        // Queue input for door to read via XIM GETKEY command
+      // Route to XIM protocol if active
+      if (this.ximProtocol) {
+        console.log(`[AmigaDoorSession] Forwarding input to XIM queue: "${data}"`);
         this.ximProtocol.queueInput(data);
-      } else {
-        console.log(`[AmigaDoorSession] ❌ Input ignored: isRunning=${this.isRunning} hasXIM=${!!this.ximProtocol}`);
+      }
+
+      // Route to DOS stdin when either no XIM protocol or door isn't waiting on XIM line input
+      const ximWaitingForLine = this.ximProtocol?.isWaitingForLineInput() ?? false;
+      if (this.dosLibrary && (!this.ximProtocol || !ximWaitingForLine)) {
+        console.log(`[AmigaDoorSession] Queueing input for DOS stdin: "${data}"`);
+        this.dosLibrary.queueInput(data);
       }
     });
 
@@ -395,6 +419,7 @@ export class AmigaDoorSession {
 
     // Create the port that door will use to access BBS data
     const portAddr = this.execLibrary.createPublicPort(portName);
+    this.execLibrary.setDoorPortAddress(portAddr);
     console.log(`[AmigaDoorSession] Created ${portName} at 0x${portAddr.toString(16)}`);
 
     // ALSO create simple "AEDoorPort" for doors that don't use node numbers (like ustats)
@@ -409,6 +434,7 @@ export class AmigaDoorSession {
     // They execute as standard CLI commands and output to stdout via DOS Write()
     // But they STILL need AEDoorPort for reading BBS data
     const useXimProtocol = doorType !== 'SIM' && doorType !== 'SUP';
+    this.useXimProtocol = useXimProtocol;
 
     if (useXimProtocol) {
       console.log('[AmigaDoorSession] Creating XIM Protocol handler for async message-based communication...');
@@ -577,7 +603,10 @@ export class AmigaDoorSession {
     // The startup code will parse this into argc/argv
     const nodeId = this.config.bbsSession?.nodeId || 0;
     const progName = path.basename(this.config.executablePath);
-    const argString = `${progName} ${nodeId}`;  // Full command line: "rtw 2"
+    const customArgs = this.config.args && this.config.args.length > 0
+      ? this.config.args
+      : [nodeId.toString()];
+    const argString = [progName, ...customArgs].join(' ').trim();
     const ARG_STRING_ADDR = 0x0F0100;
 
     // Write argument string to memory
@@ -735,6 +764,11 @@ export class AmigaDoorSession {
         }
       }
 
+      // Inject AEDoor/XIM ports immediately after A4 is set up so loops using WaitPort/PutMsg work
+      if (this.useXimProtocol && !this.ximPortsInitialized && pc === 0x1034) {
+        this.injectXimPortsEarly();
+      }
+
       if (foundLocations.length > 0) {
         console.log(`[AmigaDoorSession] Found A0 value (0x${searchValue.toString(16)}) in memory at:`);
         foundLocations.forEach(addr => {
@@ -845,6 +879,54 @@ export class AmigaDoorSession {
     }
 
     return `Unknown (opcode: 0x${opcode.toString(16)})`;
+  }
+
+  /**
+   * Inject AEDoor/XIM ports into the door's data segment (A4-based struct).
+   * Some doors (Bulls) call WaitPort/PutMsg before the standard RTW check at 0x124C,
+   * so we need the ports ready immediately after A4 is initialized.
+   */
+  private injectXimPortsEarly(): void {
+    if (!this.execLibrary || !this.emulator || !this.useXimProtocol || this.ximPortsInitialized) {
+      return;
+    }
+
+    const emulator = this.emulator;
+    const execLibrary = this.execLibrary;
+
+    const a4 = emulator.getRegister(12);
+    if (a4 === 0 || this.aePortAddress === 0) {
+      console.log('[RTW-FIX] Cannot inject ports yet - A4 or AEDoorPort missing');
+      return;
+    }
+
+    console.log(`\n[RTW-FIX] *** INJECTING XIM PORTS ***`);
+    console.log(`[RTW-FIX] A4 (data segment) = 0x${a4.toString(16)}`);
+
+    if (this.doorReplyPortAddr === 0) {
+      this.doorReplyPortAddr = execLibrary.createMsgPort();
+      console.log(`[RTW-FIX] Created reply port at 0x${this.doorReplyPortAddr.toString(16)}`);
+    } else {
+      console.log(`[RTW-FIX] Reusing reply port at 0x${this.doorReplyPortAddr.toString(16)}`);
+    }
+
+    console.log(`[RTW-FIX] BBS door port (AEDoorPort) at 0x${this.aePortAddress.toString(16)}`);
+
+    emulator.writeMemory32(a4 + 0x44C, this.aePortAddress);
+    console.log(`[RTW-FIX] ✓ Injected BBS port into A4+0x44C (0x${(a4 + 0x44C).toString(16)})`);
+
+    emulator.writeMemory32(a4 + 0x450, this.doorReplyPortAddr);
+    emulator.writeMemory32(a4 + 0x474, this.doorReplyPortAddr);
+    console.log(`[RTW-FIX] ✓ Injected reply port into A4+0x450 (0x${(a4 + 0x450).toString(16)})`);
+    console.log(`[RTW-FIX] ✓ Injected reply port into A4+0x474 (0x${(a4 + 0x474).toString(16)})`);
+
+    const verifyBBS = emulator.readMemory32(a4 + 0x44C);
+    const verifyReply = emulator.readMemory32(a4 + 0x474);
+    console.log(`[RTW-FIX] Verification: A4+0x44C (BBS port) = 0x${verifyBBS.toString(16)}`);
+    console.log(`[RTW-FIX] Verification: A4+0x474 (reply port) = 0x${verifyReply.toString(16)}`);
+    console.log(`[RTW-FIX] ✓ XIM door should now enter IPC loop and communicate with BBS!\n`);
+
+    this.ximPortsInitialized = true;
   }
 
   /**
@@ -983,26 +1065,33 @@ export class AmigaDoorSession {
       console.log(`[AmigaDoorSession] Created CLI local variables: RC=0, Result2=0`);
 
       const cliBPTR = cliStructAddr >> 2;
-      // Provide CLI pointer immediately so SAS/C startup can fetch stack defaults
-      this.emulator.writeMemory32(taskAddr + prCliOffset, cliBPTR);
+      // AmiExpress (express.e:4317-4336) leaves pr_CLI NULL until the door finishes initialization.
+      // Bulls checks *(pr_CLI) at A3+0xAC as an "already initialized" flag and skips CreatePort()
+      // if it sees a non-zero pointer. This caused "Couldn't create reply port" errors.
+      // Set pr_CLI = 0 so doors detect the first-run path, then restore the pointer once
+      // CreatePort() runs (see doorInitCallback below).
+      this.emulator.writeMemory32(taskAddr + prCliOffset, 0);
 
       console.log(`[AmigaDoorSession] Created CLI structure at 0x${cliStructAddr.toString(16)}`);
       console.log(`[AmigaDoorSession]   cli_CommandName BSTR: length=${cmdLine.length} at 0x${cmdLineAddr.toString(16)}, data="${cmdLine}"`);
-      console.log(`[AmigaDoorSession]   pr_CLI set to BPTR 0x${cliBPTR.toString(16)} -> 0x${cliStructAddr.toString(16)}`);
+      console.log(`[AmigaDoorSession]   pr_CLI preset to 0 (door will set after CreatePort)`);
 
       // Set up CLI info for GetArgStr() and GetCliProgramName()
       // GetArgStr() should return just the arguments (node number), not the program name
       const argStringAddr = 0x90200;  // Separate from full command line
-      const argString = nodeId.toString();
-      for (let i = 0; i < argString.length; i++) {
-        this.emulator.writeMemory(argStringAddr + i, argString.charCodeAt(i));
+      const cliArgs = this.config.args && this.config.args.length > 0
+        ? this.config.args
+        : [nodeId.toString()];
+      const argStringPlain = cliArgs.join(' ').trim() || nodeId.toString();
+      for (let i = 0; i < argStringPlain.length; i++) {
+        this.emulator.writeMemory(argStringAddr + i, argStringPlain.charCodeAt(i));
       }
-      this.emulator.writeMemory(argStringAddr + argString.length, 0); // Null terminate
+      this.emulator.writeMemory(argStringAddr + argStringPlain.length, 0); // Null terminate
 
       // Tell DOS library about CLI info
       if (this.dosLibrary) {
         this.dosLibrary.setCliInfo(argStringAddr, progName);
-        console.log(`[AmigaDoorSession] Set CLI info: argString="${argString}" at 0x${argStringAddr.toString(16)}, progName="${progName}"`);
+        console.log(`[AmigaDoorSession] Set CLI info: argString="${argStringPlain}" at 0x${argStringAddr.toString(16)}, progName="${progName}"`);
       }
 
       if (this.execLibrary && this.emulator) {
@@ -1013,7 +1102,7 @@ export class AmigaDoorSession {
 
           const currentValue = this.emulator.readMemory32(taskAddr + prCliOffset);
           if (currentValue === 0) {
-            console.log('[AmigaDoorSession] *** Door CreatePort reset pr_CLI - restoring CLI pointer ***');
+            console.log('[AmigaDoorSession] Door CreatePort completed - setting pr_CLI to CLI structure');
             this.emulator.writeMemory32(taskAddr + prCliOffset, cliBPTR);
           }
         });
@@ -1173,38 +1262,9 @@ export class AmigaDoorSession {
         }
 
         // === FIX: Inject reply port AND BBS port RIGHT BEFORE the critical test ===
-        if (pc === 0x124C && !this.rtwPortInjected) {
-          this.rtwPortInjected = true;
-
-          const a4 = this.emulator.getRegister(12);
-          console.log(`\n[RTW-FIX] *** INJECTING RTW PORTS ***`);
-          console.log(`[RTW-FIX] A4 (data segment) = 0x${a4.toString(16)}`);
-
-          // Create a reply port for RTW using this.execLibrary
-          if (this.execLibrary && a4 !== 0 && this.aePortAddress) {
-            const replyPortAddr = this.execLibrary.createMsgPort();
-            console.log(`[RTW-FIX] Created reply port at 0x${replyPortAddr.toString(16)}`);
-            console.log(`[RTW-FIX] BBS door port (AEDoorPort2) at 0x${this.aePortAddress.toString(16)}`);
-
-            // Inject BBS door port at A4+0x44C
-            this.emulator.writeMemory32(a4 + 0x44C, this.aePortAddress);
-            console.log(`[RTW-FIX] ✓ Injected BBS port into A4+0x44C (0x${(a4+0x44C).toString(16)})`);
-
-            // Inject reply port into BOTH locations
-            this.emulator.writeMemory32(a4 + 0x450, replyPortAddr);
-            this.emulator.writeMemory32(a4 + 0x474, replyPortAddr);
-            console.log(`[RTW-FIX] ✓ Injected reply port into A4+0x450 (0x${(a4+0x450).toString(16)})`);
-            console.log(`[RTW-FIX] ✓ Injected reply port into A4+0x474 (0x${(a4+0x474).toString(16)})`);
-
-            // Verify it was written
-            const verifyBBS = this.emulator.readMemory32(a4 + 0x44C);
-            const verifyReply = this.emulator.readMemory32(a4 + 0x474);
-            console.log(`[RTW-FIX] Verification: A4+0x44C (BBS port) = 0x${verifyBBS.toString(16)}`);
-            console.log(`[RTW-FIX] Verification: A4+0x474 (reply port) = 0x${verifyReply.toString(16)}`);
-            console.log(`[RTW-FIX] ✓ RTW should now enter IPC loop and communicate with BBS!\n`);
-          } else {
-            console.log(`[RTW-FIX] ✗ ERROR: A4=${a4}, aePortAddress=${this.aePortAddress}\n`);
-          }
+        if (pc === 0x124C && this.useXimProtocol && !this.ximPortsInitialized) {
+          // Safety fallback: ensure ports exist even if early injection missed somehow
+          this.injectXimPortsEarly();
         }
 
         // === DEBUG: The critical test at PC=0x124C (file 0x278 -> memory 0x124C) ===
