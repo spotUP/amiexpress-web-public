@@ -11,8 +11,10 @@
  * - BPTR 3+ = dynamically allocated file handles
  */
 
+import * as fs from 'fs';
 import { FileHandle } from './FileHandle';
 import { PathManager } from './PathManager';
+import { AmigaFileCache } from './AmigaFileCache';
 
 export class FileManager {
   /** Registry of all open file handles: BPTR → FileHandle */
@@ -27,13 +29,19 @@ export class FileManager {
   /** Base directory for file operations */
   private baseDir: string;
 
-  /** Current working directory (AmigaDOS path) */
-  private currentDir: string = 'doors:';
+  /** Current working directory (AmigaDOS path + resolved system path) */
+  private currentDirAmi: string = 'doors:';
+  private currentDirSysPath: string;
 
-  constructor(baseDir: string, pathManager: PathManager) {
+  /** Shared file cache for read-only Amiga files */
+  private fileCache?: AmigaFileCache;
+
+  constructor(baseDir: string, pathManager: PathManager, fileCache?: AmigaFileCache) {
     this.baseDir = baseDir;
     this.pathManager = pathManager;
+    this.fileCache = fileCache;
     this.initializeStandardHandles();
+    this.currentDirSysPath = this.pathManager.amiToSysPath(this.currentDirAmi, this.baseDir) || this.baseDir;
   }
 
   /**
@@ -119,14 +127,13 @@ export class FileManager {
     }
 
     // Map AmigaDOS path to system path
-    const sysPath = this.pathManager.amiToSysPath(amiPath, this.currentDir);
+    let sysPath = this.pathManager.amiToSysPath(amiPath, this.currentDirSysPath);
     if (!sysPath) {
       console.error(`[FileManager] ❌ Failed to resolve path: "${amiPath}"`);
       return 0; // Failed
     }
 
     // Check if file exists and log it
-    const fs = require('fs');
     const fileExists = fs.existsSync(sysPath);
     if (fileExists) {
       console.log(`[FileManager] ✅ Open: "${amiPath}" -> "${sysPath}" (EXISTS)`);
@@ -147,12 +154,26 @@ export class FileManager {
       return 0; // Failed
     }
 
+    let memoryBuffer: Buffer | undefined;
+    if (fileMode === 'r' && this.fileCache) {
+      const cached = this.fileCache.load(amiPath, this.currentDirSysPath);
+      if (cached && cached.isDirectory) {
+        console.error(`[FileManager] "${amiPath}" points to directory, cannot open as file`);
+        return 0;
+      }
+      if (cached && cached.data) {
+        sysPath = cached.sysPath; // Preserve resolved case
+        memoryBuffer = cached.data;
+      }
+    }
+
     // Create file handle
     const fh = new FileHandle(amiPath, sysPath, {
       needClose: true,
       autoFlush: false,
       isNil: false,
       isConsole: false,
+      memoryBuffer
     });
 
     // Try to open the file
@@ -228,7 +249,11 @@ export class FileManager {
       return { bytesWritten: -1 };
     }
 
-    return fh.write(data);
+    const result = fh.write(data);
+    if (result.bytesWritten > 0 && !fh.isConsole && !fh.isNil) {
+      this.fileCache?.invalidate(fh.amiPath);
+    }
+    return result;
   }
 
   /**
@@ -297,15 +322,25 @@ export class FileManager {
    * Set current working directory
    */
   setCurrentDir(amiPath: string): void {
-    this.currentDir = amiPath;
-    console.log(`[FileManager] Changed directory to: ${amiPath}`);
+    const sysPath = this.pathManager.amiToSysPath(amiPath, this.currentDirSysPath);
+    if (sysPath) {
+      this.currentDirAmi = amiPath;
+      this.currentDirSysPath = sysPath;
+      console.log(`[FileManager] Changed directory to: ${amiPath} (${sysPath})`);
+    } else {
+      console.error(`[FileManager] Failed to change directory to: ${amiPath}`);
+    }
   }
 
   /**
    * Get current working directory
    */
   getCurrentDir(): string {
-    return this.currentDir;
+    return this.currentDirAmi;
+  }
+
+  getCurrentDirSysPath(): string {
+    return this.currentDirSysPath;
   }
 
   /**

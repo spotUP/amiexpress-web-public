@@ -253,7 +253,6 @@ Initialized by PathManager in FileManager constructor:
 
 - Previous Progress: `Documentation/6-Progress/AMIGADOS_FILE_IO_PHASE_3_COMPLETE_20251111.md`
 - Implementation Guide: `Documentation/3-Developers/AMIGAOS_DOS_FILE_IO_IMPLEMENTATION_GUIDE.md`
-- AmigaOS Sources: `dev/docs/OSSource/v40_src/kickstart/dos/`
 - Express.e Door Types: lines 4680-4698
 - Express.e SIM Doors: lines 4280-4282, 4346-4349
 

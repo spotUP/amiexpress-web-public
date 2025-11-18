@@ -255,8 +255,6 @@ Do NOT run servers yourself. Ask user to:
 
 ## References
 
-- AmigaOS v40 Source Code: `dev/docs/OSSource/v40_src/kickstart/dos/`
-- Function Descriptors: `dev/docs/OSSource/v40_src/kickstart/dos/dos_lib.fd`
 - Express.e Door Types: lines 4680-4698
 - Express.e SIM Door Handling: lines 4280-4282, 4346-4349
 - Implementation Guide: `Documentation/3-Developers/AMIGAOS_DOS_FILE_IO_IMPLEMENTATION_GUIDE.md`

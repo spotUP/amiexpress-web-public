@@ -41,6 +41,12 @@ export class FileHandle {
   /** File position for seek operations */
   private position: number = 0;
 
+  /** Optional in-memory buffer (used for cached read-only files) */
+  private readonly memoryBuffer: Buffer | null = null;
+
+  /** True when operating entirely from memory (no filesystem descriptor) */
+  private isMemoryHandle: boolean = false;
+
   constructor(
     amiPath: string,
     sysPath: string,
@@ -49,6 +55,7 @@ export class FileHandle {
       autoFlush?: boolean;
       isNil?: boolean;
       isConsole?: boolean;
+      memoryBuffer?: Buffer;
     } = {}
   ) {
     this.amiPath = amiPath;
@@ -58,6 +65,7 @@ export class FileHandle {
     this.autoFlush = options.autoFlush || false;
     this.isNil = options.isNil || false;
     this.isConsole = options.isConsole || false;
+    this.memoryBuffer = options.memoryBuffer || null;
   }
 
   /**
@@ -65,6 +73,17 @@ export class FileHandle {
    */
   open(mode: 'r' | 'w' | 'rw'): boolean {
     try {
+      if (this.memoryBuffer) {
+        if (mode === 'w' || mode === 'rw') {
+          console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" for writing`);
+          return false;
+        }
+        this.isMemoryHandle = true;
+        this.fd = -3;
+        this.position = 0;
+        return true;
+      }
+
       // NIL device - don't actually open
       if (this.isNil) {
         this.fd = -1; // Special marker for NULL device
@@ -104,6 +123,14 @@ export class FileHandle {
       throw new Error('File not open');
     }
 
+    if (this.isMemoryHandle && this.memoryBuffer) {
+      const available = this.memoryBuffer.length - this.position;
+      const bytesToRead = Math.min(length, available);
+      const slice = this.memoryBuffer.subarray(this.position, this.position + bytesToRead);
+      this.position += bytesToRead;
+      return Buffer.from(slice);
+    }
+
     // NIL device always returns empty
     if (this.isNil) {
       return Buffer.alloc(0);
@@ -135,6 +162,11 @@ export class FileHandle {
       throw new Error('File not open');
     }
 
+    if (this.isMemoryHandle) {
+      console.error('[FileHandle] Attempted write on memory-backed handle');
+      return { bytesWritten: -1 };
+    }
+
     // NIL device - discard data
     if (this.isNil) {
       return { bytesWritten: data.length };
@@ -164,6 +196,19 @@ export class FileHandle {
    * Seek to position in file
    */
   seek(position: number, whence: number): number {
+    if (this.isMemoryHandle && this.memoryBuffer) {
+      const size = this.memoryBuffer.length;
+      if (whence === 0) {
+        this.position = position;
+      } else if (whence === 1) {
+        this.position += position;
+      } else if (whence === 2) {
+        this.position = size + position;
+      }
+      this.position = Math.max(0, Math.min(this.position, size));
+      return this.position;
+    }
+
     if (this.fd === null || this.fd < 0) {
       return -1;
     }
@@ -205,6 +250,7 @@ export class FileHandle {
       }
     }
     this.fd = null;
+    this.isMemoryHandle = false;
   }
 
   /**

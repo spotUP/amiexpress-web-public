@@ -294,6 +294,10 @@ export class AmigaDoorSession {
       console.log('[AmigaDoorSession] Exec system initialized!');
       console.log(`[AmigaDoorSession] ExecBase at 0x${this.execLibrary!.getExecBaseAddress().toString(16)}`);
 
+      if (this.execLibrary) {
+        this.execLibrary.ensurePublicPort('AE.Master');
+      }
+
       // Load the door executable
       console.log('[AmigaDoorSession] Loading door executable...');
       await this.loadDoor();
@@ -495,6 +499,7 @@ export class AmigaDoorSession {
     this.aedoorLibrary = new AEDoorLibrary(
       this.socket,
       this.emulator,
+      this.execLibrary,
       this.config.bbsSession || {}
     );
 
@@ -914,6 +919,12 @@ export class AmigaDoorSession {
 
     emulator.writeMemory32(a4 + 0x44C, this.aePortAddress);
     console.log(`[RTW-FIX] ✓ Injected BBS port into A4+0x44C (0x${(a4 + 0x44C).toString(16)})`);
+
+    emulator.writeMemory32(a4 + 0x57C, this.aePortAddress);
+    console.log(`[RTW-FIX] ✓ ALSO injecting BBS port into A4+0x57C`);
+
+    emulator.writeMemory32(a4 + 0x5B8, this.aePortAddress);
+    console.log(`[RTW-FIX] ✓ ALSO injecting BBS port into A4+0x5B8`);
 
     emulator.writeMemory32(a4 + 0x450, this.doorReplyPortAddr);
     emulator.writeMemory32(a4 + 0x474, this.doorReplyPortAddr);
@@ -1434,8 +1445,8 @@ export class AmigaDoorSession {
           console.log(`[PutMsg-SEND] Message.mn_Length = ${mn_Length}`);
 
           // Check if port exists in ExecLibrary
-          const portName = this.execLibrary.getPortName(a0);
-          const replyPortName = this.execLibrary.getPortName(mn_ReplyPort);
+        const portName = this.execLibrary.getPortName(a0);
+        const replyPortName = this.execLibrary.getPortName(mn_ReplyPort);
 
           console.log(`[PutMsg-SEND] Destination port name: ${portName || 'UNKNOWN'}`);
           console.log(`[PutMsg-SEND] Reply port name: ${replyPortName || 'UNKNOWN'}`);
@@ -1445,8 +1456,69 @@ export class AmigaDoorSession {
           for (let i = 0; i < 16; i++) {
             msgData.push(this.emulator.readMemory(a1 + 0x14 + i));
           }
-          console.log(`[PutMsg-SEND] Message data (first 16 bytes): ${msgData.map(b => `0x${b.toString(16).padStart(2,'0')}`).join(' ')}\n`);
+        console.log(`[PutMsg-SEND] Message data (first 16 bytes): ${msgData.map(b => `0x${b.toString(16).padStart(2,'0')}`).join(' ')}\n`);
+
+        // === DEBUG: Scan A4 for the pointer that matches A0 (helps locate AEDoorPort injection point) ===
+        if (this.emulator && a4 !== 0) {
+          const matches: number[] = [];
+          const bptrMatches: number[] = [];
+          const a0Bptr = a0 >>> 2;
+          for (let offset = 0; offset <= 0x1fff; offset += 4) {
+            const value = this.emulator.readMemory32(a4 + offset);
+            if (value === a0) {
+              matches.push(offset);
+            } else if (value === a0Bptr) {
+              bptrMatches.push(offset);
+            }
+          }
+          if (matches.length > 0) {
+            console.log(`[PutMsg-SEND] A4 matches for A0: ${matches.map(o => '0x' + o.toString(16)).join(', ')}`);
+          }
+          if (bptrMatches.length > 0) {
+            console.log(`[PutMsg-SEND] A4 BPTR matches for A0>>2: ${bptrMatches.map(o => '0x' + o.toString(16)).join(', ')}`);
+          }
+          if (matches.length === 0 && bptrMatches.length === 0) {
+            console.log('[PutMsg-SEND] No match for A0 (or BPTR form) found in A4 range 0x000-0x1fff');
+            const sniffOffsets = [0x44c, 0x450, 0x474, 0x57c, 0x58a, 0x5b8];
+            sniffOffsets.forEach((offset) => {
+              const value = this.emulator!.readMemory32(a4 + offset);
+              console.log(`[PutMsg-SEND]   A4+0x${offset.toString(16)} = 0x${value.toString(16)}`);
+            });
+
+            // As last resort, scan a larger region to find where Bulls stored the port pointer.
+            const globalMatches: number[] = [];
+            const limit = 0x1000000; // scan first 16MB
+            for (let addr = 0; addr < limit; addr += 4) {
+              const value = this.emulator.readMemory32(addr);
+              if (value === a0) {
+                globalMatches.push(addr);
+                if (globalMatches.length >= 5) break;
+              }
+            }
+            if (globalMatches.length > 0) {
+              console.log(`[PutMsg-SEND] Global matches for A0 found at: ${globalMatches.map(a => '0x' + a.toString(16)).join(', ')}`);
+            } else {
+              console.log('[PutMsg-SEND] No global matches for A0 within first 16MB');
+            }
+          }
+
+          // Force Bulls to use the XIM reply port/BBS port just like AEDoor.library would
+          if (this.useXimProtocol) {
+            if (this.doorReplyPortAddr === 0) {
+              this.doorReplyPortAddr = this.execLibrary.createMsgPort();
+              console.log(`[PutMsg-SEND] Created reply port on the fly at 0x${this.doorReplyPortAddr.toString(16)}`);
+            }
+            if (this.doorReplyPortAddr) {
+              this.emulator.writeMemory32(a1 + 0x10, this.doorReplyPortAddr);
+              console.log(`[PutMsg-SEND] ✔ Patched mn_ReplyPort -> 0x${this.doorReplyPortAddr.toString(16)}`);
+            }
+            if (this.aePortAddress) {
+              this.emulator.setRegister(8, this.aePortAddress);
+              console.log(`[PutMsg-SEND] ✔ Redirected A0 to AEDoorPort at 0x${this.aePortAddress.toString(16)}`);
+            }
+          }
         }
+      }
 
         // === DEBUG: Wait() call at PC 0x1176 - RTW waiting for reply signal ===
         if (pc === 0x1176 && this.emulator) {
@@ -1624,8 +1696,9 @@ export class AmigaDoorSession {
           console.log(`[AmigaDoorSession] Iteration ${this.iterationCount}: ${(this.totalCycles / 1000000).toFixed(1)}M cycles, ${totalSeconds.toFixed(2)}s virtual time, PC=0x${pc.toString(16)}`);
 
           // Prevent infinite loops (safety limit)
-          if (this.iterationCount > 100000) {
-            console.log(`[AmigaDoorSession] Door running for 100k iterations - likely stuck in polling loop`);
+          const guardLimit = Number(process.env.AEDOOR_LOOP_LIMIT ?? 100000);
+          if (this.iterationCount > guardLimit) {
+            console.log(`[AmigaDoorSession] Door running for ${guardLimit} iterations - likely stuck in polling loop`);
             console.log(`[AmigaDoorSession] PC=0x${pc.toString(16)}`);
             console.log(`[AmigaDoorSession] Terminating for testing purposes`);
             this.terminate();

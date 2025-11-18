@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { FileManager } from './FileManager';
 import { PathManager } from './PathManager';
+import { AmigaFileCache } from './AmigaFileCache';
 
 /**
  * dos.library - Amiga DOS Library
@@ -48,6 +49,7 @@ interface Lock {
   id: number;
   path: string;          // Real filesystem path
   mode: number;          // ACCESS_READ=-2, ACCESS_WRITE=-1
+  amigaPath: string;     // Original AmigaDOS path (for CurrentDir/fixFilename)
 }
 
 export class DosLibrary {
@@ -61,6 +63,7 @@ export class DosLibrary {
   // NEW: File I/O management system (phase 3)
   private fileManager: FileManager | null = null;
   private pathManager: PathManager | null = null;
+  private fileCache: AmigaFileCache | null = null;
   private useNewFileSystem: boolean = false;  // Feature flag for gradual migration
 
   // Standard file handles
@@ -79,11 +82,14 @@ export class DosLibrary {
   private readonly ERROR_NO_MORE_ENTRIES = 232;
   private readonly ERROR_SEEK_ERROR = 219;  // Seek not possible (console/device)
 
-  // Base path for BBS: logical device
-  private readonly BBS_BASE_PATH = '~/Code/amiexpress-web';
+  // Base paths for logical devices
+  private readonly rootPath: string;
+  private readonly bbsDataPath: string;
 
   // Directory and lock management for door support
-  private currentDirectory: string = this.BBS_BASE_PATH;
+  private currentDirectory: string;
+  private currentDirectoryAmiga: string = 'BBS:';
+  private lastLockPath: string = '';
   private doorDirectory: string = '';  // Set by AmigaDoorSession for PROGDIR: device
   private locks: Map<number, Lock> = new Map();
   private nextLockId: number = 1;
@@ -98,6 +104,11 @@ export class DosLibrary {
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
+    this.rootPath = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+    this.bbsDataPath = path.join(this.rootPath, 'BBS');
+    this.currentDirectory = this.bbsDataPath;
+    this.ensureDirectory(this.bbsDataPath);
+    this.ensureDirectory('/tmp/ram/ENV');
 
     // Initialize standard I/O handles
     this.openFiles.set(this.STDIN_HANDLE, {
@@ -141,8 +152,10 @@ export class DosLibrary {
   enableNewFileSystem(baseDir: string): void {
     console.log('[dos.library] Enabling new file system with FileManager/PathManager');
     this.pathManager = new PathManager(baseDir);
-    this.fileManager = new FileManager(baseDir, this.pathManager);
+    this.fileCache = new AmigaFileCache(this.pathManager);
+    this.fileManager = new FileManager(baseDir, this.pathManager, this.fileCache);
     this.useNewFileSystem = true;
+    this.currentDirectory = this.bbsDataPath;
   }
 
   /**
@@ -157,6 +170,16 @@ export class DosLibrary {
   private resolvePath(amigaPath: string): string | null {
     console.log(`[dos.library] Resolving Amiga path: "${amigaPath}"`);
 
+    if (this.useNewFileSystem && this.pathManager) {
+      const currentDir = this.getCurrentDirectoryForResolution();
+      const normalized = this.normalizeAmigaPath(amigaPath);
+      const resolved = this.pathManager.amiToSysPath(normalized, currentDir);
+      if (resolved) {
+        console.log(`[dos.library] PathManager resolved "${normalized}" -> ${resolved}`);
+        return resolved;
+      }
+    }
+
     // Handle PROGDIR: device - door's own directory
     if (amigaPath.toUpperCase().startsWith('PROGDIR:')) {
       const relativePath = amigaPath.substring(8);
@@ -168,7 +191,7 @@ export class DosLibrary {
     // Handle Doors: device - doors directory root
     if (amigaPath.toUpperCase().startsWith('DOORS:')) {
       const relativePath = amigaPath.substring(6);
-      const resolved = path.join(this.BBS_BASE_PATH, 'Doors', relativePath);
+      const resolved = path.join(this.rootPath, 'doors', relativePath);
       console.log(`[dos.library] Doors: device -> ${resolved}`);
       return resolved;
     }
@@ -176,7 +199,7 @@ export class DosLibrary {
     // Handle BBS: device - BBS system files
     if (amigaPath.toUpperCase().startsWith('BBS:')) {
       const relativePath = amigaPath.substring(4);
-      const resolved = path.join(this.BBS_BASE_PATH, relativePath);
+      const resolved = path.join(this.bbsDataPath, relativePath);
       console.log(`[dos.library] BBS: device -> ${resolved}`);
       return resolved;
     }
@@ -184,7 +207,7 @@ export class DosLibrary {
     // Handle S: device - Amiga system scripts/config (maps to BBS root /S)
     if (amigaPath.toUpperCase().startsWith('S:')) {
       const relativePath = amigaPath.substring(2);
-      const resolved = path.join(this.BBS_BASE_PATH, 'S', relativePath);
+      const resolved = path.join(this.rootPath, 'S', relativePath);
       console.log(`[dos.library] S: device -> ${resolved}`);
       return resolved;
     }
@@ -211,7 +234,52 @@ export class DosLibrary {
 
     // Set current directory to door directory by default
     this.currentDirectory = doorPath;
+    this.currentDirectoryAmiga = 'PROGDIR:';
     console.log(`[dos.library] Current directory set to ${doorPath}`);
+
+    if (this.pathManager) {
+      this.pathManager.setProgDir(doorPath);
+    }
+
+    if (this.fileManager) {
+      this.fileManager.setCurrentDir('progdir:');
+    }
+  }
+
+  private getCurrentDirectoryForResolution(): string {
+    if (this.fileManager) {
+      return this.fileManager.getCurrentDirSysPath();
+    }
+    return this.currentDirectory;
+  }
+
+  private ensureDirectory(dir: string): void {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (error) {
+      console.warn(`[dos.library] ⚠️ Unable to create directory ${dir}:`, error);
+    }
+  }
+
+  /**
+   * UADE compatibility: doors often pass relative filenames after calling
+   * CurrentDir(). Classic AmigaDOS prepends the current directory text so
+   * open() sees an absolute path. We mimic that behavior here so doors like
+   * Bulls see the same semantics even without modifying their strings.
+   */
+  private normalizeAmigaPath(amigaPath: string): string {
+    if (amigaPath.includes(':') || amigaPath.startsWith('/')) {
+      return amigaPath;
+    }
+
+    if (!this.currentDirectoryAmiga) {
+      console.warn('[dos.library] ⚠️ fixFilename: no current directory set, returning relative path unchanged');
+      return amigaPath;
+    }
+
+    console.warn(`[dos.library] ⚠️ fixFilename: prefixing "${amigaPath}" with current dir "${this.currentDirectoryAmiga}"`);
+    const separator = this.currentDirectoryAmiga.endsWith('/') ? '' : '/';
+    return `${this.currentDirectoryAmiga}${separator}${amigaPath}`;
   }
 
   /**
@@ -986,7 +1054,12 @@ export class DosLibrary {
   Lock(): void {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const mode = this.emulator.getRegister(CPURegister.D2);
-    const name = this.readString(namePtr);
+    let name = this.readString(namePtr);
+    const originalName = name;
+
+    if (this.useNewFileSystem) {
+      name = this.normalizeAmigaPath(name);
+    }
 
     const realPath = this.resolvePath(name);
     if (!realPath) {
@@ -1011,9 +1084,11 @@ export class DosLibrary {
     this.locks.set(lockId, {
       id: lockId,
       path: realPath,
-      mode: mode
+      mode: mode,
+      amigaPath: originalName
     });
 
+    this.lastLockPath = originalName;
     console.log(`[dos.library] Lock: Created lock ${lockId} for path ${realPath}`);
     this.emulator.setRegister(CPURegister.D0, lockId);
     this.lastError = this.ERROR_NO_ERROR;
@@ -1313,7 +1388,8 @@ export class DosLibrary {
       this.locks.set(lockId, {
         id: lockId,
         path: realPath,
-        mode: -2  // ACCESS_READ
+        mode: -2,  // ACCESS_READ
+        amigaPath: name
       });
 
       this.emulator.setRegister(CPURegister.D0, lockId);
@@ -1340,6 +1416,7 @@ export class DosLibrary {
     this.locks.set(oldDirLockId, {
       id: oldDirLockId,
       path: this.currentDirectory,
+      amigaPath: this.currentDirectoryAmiga,
       mode: -2  // ACCESS_READ
     });
 
@@ -1371,6 +1448,9 @@ export class DosLibrary {
     // Change current directory
     const oldDir = this.currentDirectory;
     this.currentDirectory = newLock.path;
+    if (newLock.amigaPath) {
+      this.currentDirectoryAmiga = newLock.amigaPath;
+    }
     console.log(`[dos.library] CurrentDir: Changed from ${oldDir} to ${this.currentDirectory}`);
 
     // Return lock for old directory

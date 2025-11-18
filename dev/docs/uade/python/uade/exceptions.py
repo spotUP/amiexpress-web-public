@@ -1,3 +1,0 @@
-
-class ArgumentError(Exception):
-    pass

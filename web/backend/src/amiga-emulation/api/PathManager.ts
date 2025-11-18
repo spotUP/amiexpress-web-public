@@ -20,29 +20,58 @@ export class PathManager {
     this.initializeStandardAssigns();
   }
 
+  private normalizeAssignPath(p: string): string {
+    if (!p.endsWith(path.sep)) {
+      return p + path.sep;
+    }
+    return p;
+  }
+
+  private normalizeComponents(rawPath: string): string[] {
+    const parts = rawPath
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter(component => component.length > 0);
+
+    const normalized: string[] = [];
+    for (const component of parts) {
+      if (component === '.') {
+        continue;
+      }
+      if (component === '..') {
+        normalized.pop();
+        continue;
+      }
+      normalized.push(component);
+    }
+    return normalized;
+  }
+
   /**
    * Initialize standard AmigaDOS assigns
    */
   private initializeStandardAssigns(): void {
     // BBS-specific assigns
-    this.assigns.set('doors:', path.join(this.baseDir, 'doors/'));
-    this.assigns.set('bbs:', this.baseDir); // Map to project root (Node directories live here)
-    this.assigns.set('data:', path.join(this.baseDir, 'data/'));
-    this.assigns.set('screens:', path.join(this.baseDir, 'Screens/'));
-    this.assigns.set('bulletins:', path.join(this.baseDir, 'Bulletins/'));
-    this.assigns.set('s:', path.join(this.baseDir, 'S/'));
-    this.assigns.set('work:', this.baseDir);
-    this.assigns.set('sami:', path.join(this.baseDir, 'S/'));
+    this.assigns.set('doors:', this.normalizeAssignPath(path.join(this.baseDir, 'doors/')));
+    this.assigns.set('bbs:', this.normalizeAssignPath(path.join(this.baseDir, 'BBS/')));
+    this.assigns.set('data:', this.normalizeAssignPath(path.join(this.baseDir, 'data/')));
+    this.assigns.set('screens:', this.normalizeAssignPath(path.join(this.baseDir, 'Screens/')));
+    this.assigns.set('bulletins:', this.normalizeAssignPath(path.join(this.baseDir, 'Bulletins/')));
+    this.assigns.set('s:', this.normalizeAssignPath(path.join(this.baseDir, 'S/')));
+    this.assigns.set('work:', this.normalizeAssignPath(this.baseDir));
+    this.assigns.set('sami:', this.normalizeAssignPath(path.join(this.baseDir, 'S/')));
+    this.assigns.set('env:', this.normalizeAssignPath(path.join('/tmp/ram', 'ENV/')));
+    this.assigns.set('progdir:', this.normalizeAssignPath(this.baseDir));
 
     // Standard AmigaDOS assigns
-    this.assigns.set('sys:', path.join(this.baseDir, 'System/'));
-    this.assigns.set('c:', path.join(this.baseDir, 'System/C/'));
-    this.assigns.set('libs:', path.join(this.baseDir, 'System/Libs/'));
-    this.assigns.set('devs:', path.join(this.baseDir, 'System/Devs/'));
+    this.assigns.set('sys:', this.normalizeAssignPath(path.join(this.baseDir, 'System/')));
+    this.assigns.set('c:', this.normalizeAssignPath(path.join(this.baseDir, 'System/C/')));
+    this.assigns.set('libs:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Libs/')));
+    this.assigns.set('devs:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Devs/')));
 
     // RAM disk and temp
-    this.assigns.set('ram:', '/tmp/ram/');
-    this.assigns.set('t:', '/tmp/');
+    this.assigns.set('ram:', this.normalizeAssignPath('/tmp/ram/'));
+    this.assigns.set('t:', this.normalizeAssignPath('/tmp/'));
 
     console.log('[PathManager] Initialized assigns:');
     for (const [assign, sysPath] of this.assigns) {
@@ -60,8 +89,17 @@ export class PathManager {
     }
     name = name.toLowerCase();
 
-    this.assigns.set(name, sysPath);
+    this.assigns.set(name, this.normalizeAssignPath(sysPath));
     console.log(`[PathManager] Added assign: ${name} => ${sysPath}`);
+  }
+
+  /**
+   * Update PROGDIR: to point at the currently running door directory.
+   */
+  setProgDir(sysPath: string): void {
+    const normalized = this.normalizeAssignPath(sysPath);
+    this.assigns.set('progdir:', normalized);
+    console.log(`[PathManager] PROGDIR: assigned to ${normalized}`);
   }
 
   /**
@@ -113,10 +151,7 @@ export class PathManager {
       if (lowerPath.startsWith(assign)) {
         // Remove assign prefix and append to system path
         const relativePath = amiPath.substring(assign.length);
-        const normalizedComponents = relativePath
-          .replace(/\\/g, '/')
-          .split('/')
-          .filter((component: string) => component.length > 0);
+        const normalizedComponents = this.normalizeComponents(relativePath);
 
         if (normalizedComponents.length === 0) {
           console.log(`[PathManager] Mapped assign root: "${amiPath}" => "${sysPath}"`);
@@ -138,10 +173,7 @@ export class PathManager {
 
     // No assign found - try relative to current directory
     if (currentDir) {
-      const normalizedComponents = amiPath
-        .replace(/\\/g, '/')
-        .split('/')
-        .filter((component: string) => component.length > 0);
+      const normalizedComponents = this.normalizeComponents(amiPath);
 
       const caseInsensitivePath = resolveCaseInsensitivePath(currentDir, normalizedComponents);
       if (caseInsensitivePath) {
@@ -149,16 +181,13 @@ export class PathManager {
         return caseInsensitivePath;
       }
 
-      const fullPath = path.join(currentDir, amiPath);
+      const fullPath = path.join(currentDir, ...normalizedComponents);
       console.log(`[PathManager] Relative path: "${amiPath}" => "${fullPath}"`);
       return fullPath;
     }
 
     // No assign and no current directory - try relative to base
-    const normalizedComponents = amiPath
-      .replace(/\\/g, '/')
-      .split('/')
-      .filter((component: string) => component.length > 0);
+    const normalizedComponents = this.normalizeComponents(amiPath);
 
     const basePath = resolveCaseInsensitivePath(this.baseDir, normalizedComponents);
     if (basePath) {

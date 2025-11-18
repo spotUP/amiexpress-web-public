@@ -776,6 +776,20 @@ export class ExecLibrary {
   }
 
   /**
+   * Helper to release a previously allocated signal bit
+   */
+  private freeSignal(signalBit: number): void {
+    if (signalBit < 0 || signalBit > 31) {
+      return;
+    }
+    const mask = 1 << signalBit;
+    if (this.allocatedSignals & mask) {
+      this.allocatedSignals &= ~mask;
+      console.log(`[ExecLibrary]   Freed signal ${signalBit}, mask=0x${this.allocatedSignals.toString(16)}`);
+    }
+  }
+
+  /**
    * FindPort() - LVO -390 (0xFFFFFE7A)
    *
    * Find a public message port by name.
@@ -998,7 +1012,12 @@ export class ExecLibrary {
     this.emulator.writeMemory(portAddr + 14, 0x02); // PA_SIGNAL
 
     // mp_SigBit (1 byte at offset 15)
-    this.emulator.writeMemory(portAddr + 15, 1); // Signal bit 1
+    let signalBit = this.AllocSignal(-1);
+    if (signalBit < 0) {
+      console.warn('[ExecLibrary]   WARNING: No free signals available, falling back to bit 1');
+      signalBit = 1;
+    }
+    this.emulator.writeMemory(portAddr + 15, signalBit);
 
     // mp_SigTask (4 bytes at offset 16)
     this.emulator.writeMemory32(portAddr + 16, this.currentTask.address);
@@ -1016,7 +1035,7 @@ export class ExecLibrary {
       address: portAddr,
       name: '',  // Private port (no name)
       messages: [],
-      sigBit: 1,
+      sigBit: signalBit,
       sigTask: this.currentTask.address,
       signaled: false
     };
@@ -1185,6 +1204,9 @@ export class ExecLibrary {
 
     this.removePortFromExecList(portAddr);
 
+    // Release signal bit
+    this.freeSignal(port.sigBit);
+
     // Remove from port registry
     this.messagePorts.delete(portAddr);
     console.log(`[ExecLibrary]   Deleted port at 0x${portAddr.toString(16)}`);
@@ -1223,6 +1245,14 @@ export class ExecLibrary {
 
     console.log(`[ExecLibrary]   Public port "${name}" created at 0x${portAddr.toString(16)}`);
     return portAddr;
+  }
+
+  ensurePublicPort(name: string): number {
+    const existing = this.publicPorts.get(name.toLowerCase());
+    if (existing !== undefined) {
+      return existing;
+    }
+    return this.createPublicPort(name);
   }
 
   /**
@@ -1548,16 +1578,23 @@ export class ExecLibrary {
    * In real Amiga, this BLOCKS the calling task until one or more
    * of the specified signals are set by another task/interrupt.
    *
-   * In our emulator, we can't truly block, so we implement a stub
-   * that returns immediately with the signal mask, simulating success.
-   * This allows the door to continue execution.
+   * We cannot truly block the JS event loop, but we can avoid lying to the
+   * caller. When no signals are present we mark the task as waiting and
+   * return 0 so the door keeps polling without thinking a signal fired.
    */
   wait(signalMask: number): number {
     console.log(`[ExecLibrary] Wait(signalMask=0x${signalMask.toString(16)})`);
     console.log(`[ExecLibrary]   Current sigRecvd: 0x${this.currentTask.sigRecvd.toString(16)}`);
 
+    if (signalMask === 0) {
+      console.log('[ExecLibrary]   Wait(0) called, returning immediately');
+      return 0;
+    }
+
+    const mask = signalMask >>> 0;
+
     // Check if any requested signals are already received
-    const receivedSignals = this.currentTask.sigRecvd & signalMask;
+    const receivedSignals = this.currentTask.sigRecvd & mask;
 
     if (receivedSignals !== 0) {
       // Signals already present - return immediately
@@ -1567,23 +1604,22 @@ export class ExecLibrary {
       // Clear the returned signals from sigRecvd
       this.currentTask.sigRecvd &= ~receivedSignals;
       console.log(`[ExecLibrary]   Cleared signals from sigRecvd, new value: 0x${this.currentTask.sigRecvd.toString(16)}`);
+      this.currentTask.sigWait = 0;
+      this.currentTask.state = 0; // TS_READY
 
       return receivedSignals;
     }
 
     // No signals present - in real Amiga, task would block here
-    // In our emulator, we can't truly block, so we mark the task as waiting
-    // and return 0 to indicate "would block"
+    // Mark the task as waiting and return 0 to indicate "still waiting"
     console.log(`[ExecLibrary]   No signals present - task would block on real Amiga`);
-    console.log(`[ExecLibrary]   Setting sigWait=0x${signalMask.toString(16)} (task is now waiting)`);
+    console.log(`[ExecLibrary]   Setting sigWait=0x${mask.toString(16)} (task is now waiting)`);
 
-    this.currentTask.sigWait = signalMask;
+    this.currentTask.sigWait = mask;
     this.currentTask.state = 2; // TS_WAIT
 
-    // In our emulator, we return immediately with the mask
-    // The door's polling loop will continue until Signal() is called
-    console.log(`[ExecLibrary]   Returning mask=0x${signalMask.toString(16)} (emulator: non-blocking)`);
-    return signalMask;
+    console.log('[ExecLibrary]   Returning 0 (no signals yet)');
+    return 0;
   }
 
   /**
@@ -1631,7 +1667,8 @@ export class ExecLibrary {
       if (matchedSignals !== 0) {
         console.log(`[ExecLibrary]   *** SIGNAL MATCH! Matched bits: 0x${matchedSignals.toString(16)} ***`);
         console.log(`[ExecLibrary]   *** Task should wake from Wait() now ***`);
-        // Task will wake when Wait() checks sigRecvd next
+        this.currentTask.sigWait = 0;
+        this.currentTask.state = 0; // TS_READY
       } else {
         console.log(`[ExecLibrary]   No match yet - task still waiting`);
       }
