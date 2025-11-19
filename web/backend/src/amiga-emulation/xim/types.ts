@@ -141,6 +141,11 @@ export interface XIMMessage {
   replyPort: number;    // Door's reply port address
   stringAddr?: number;  // Address of string data (if any)
   string?: string;      // String content (jhMessage.string field)
+  nodeId?: number;
+  lineNumber?: number;
+  signal?: number;
+  task?: number;
+  semaphore?: number;
 }
 
 /**

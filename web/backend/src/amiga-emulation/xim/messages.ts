@@ -4,8 +4,19 @@
  * Handles parsing of jhMessage structure from memory and validation.
  */
 
-import { MoiraEmulator } from '../cpu/MoiraEmulator';
-import { XIMMessage, XIMCommand } from './types';
+import { MoiraEmulator } from "../cpu/MoiraEmulator";
+import { XIMMessage, XIMCommand } from "./types";
+
+const MESSAGE_REPLY_PORT_OFFSET = 14;
+const MESSAGE_STRING_OFFSET = 0x14;
+const MESSAGE_STRING_CAPACITY = 200;
+const MESSAGE_DATA_OFFSET = 0xdc;
+const MESSAGE_COMMAND_OFFSET = 0xe0;
+const MESSAGE_NODE_OFFSET = 0xe4;
+const MESSAGE_LINE_OFFSET = 0xe8;
+const MESSAGE_SIGNAL_OFFSET = 0xec;
+const MESSAGE_TASK_OFFSET = 0xf0;
+const MESSAGE_SEMAPHORE_OFFSET = 0xf4;
 
 export class XIMMessageParser {
   private emulator: MoiraEmulator;
@@ -17,31 +28,60 @@ export class XIMMessageParser {
   /**
    * Parse XIM message from memory
    *
-   * jhMessage structure from axcommon.e (express.e:543-557):
-   * OBJECT jhMessage
-   *   <mn_Node + mn_ReplyPort + mn_Length>  // 20 bytes (standard Message header)
-   *   string[200]: ARRAY OF CHAR            // 200 bytes (offset 20-219)
-   *   data: LONG                            // 4 bytes (offset 220-223)
-   *   command: LONG                         // 4 bytes (offset 224-227)
-   * ENDOBJECT
-   *
-   * CRITICAL: Command is at offset 224, NOT offset 20!
-   * The string field comes FIRST after the message header.
+   * Layout (see Docs/aedoor28/Assembler/Include/AMiX.i):
+   *   0x00: mn_Node (Exec message header, 20 bytes incl. reply/length)
+   *   0x14: string[200]
+   *   0xDC: data (LONG)
+   *   0xE0: command (LONG)
+   *   0xE4: nodeID
+   *   0xE8: lineNum
+   *   0xEC: signal mask
+   *   0xF0: task pointer
+   *   0xF4: semaphore pointer (MultiCom)
+   *   0xF8: filler1
+   *   0xFC: filler2
+   *   0x100: string pointer (extended struct)
+   *   Size: 0x104 bytes
    */
   parseMessage(msgAddr: number): XIMMessage {
-    const replyPort = this.emulator.readMemory32(msgAddr + 14);
-    const command = this.emulator.readMemory32(msgAddr + 224);  // LONG at offset 224
-    const data = this.emulator.readMemory32(msgAddr + 220);     // LONG at offset 220
-    const stringPtr = msgAddr + 20;  // String starts at offset 20
+    const replyPort = this.emulator.readMemory32(
+      msgAddr + MESSAGE_REPLY_PORT_OFFSET
+    );
+    const command = this.emulator.readMemory32(
+      msgAddr + MESSAGE_COMMAND_OFFSET
+    );
+    const data = this.emulator.readMemory32(
+      msgAddr + MESSAGE_DATA_OFFSET
+    );
+    const nodeId = this.emulator.readMemory32(
+      msgAddr + MESSAGE_NODE_OFFSET
+    );
+    const lineNumber = this.emulator.readMemory32(
+      msgAddr + MESSAGE_LINE_OFFSET
+    );
+    const signal = this.emulator.readMemory32(
+      msgAddr + MESSAGE_SIGNAL_OFFSET
+    );
+    const task = this.emulator.readMemory32(msgAddr + MESSAGE_TASK_OFFSET);
+    const semaphore = this.emulator.readMemory32(
+      msgAddr + MESSAGE_SEMAPHORE_OFFSET
+    );
+    const stringPtr = msgAddr + MESSAGE_STRING_OFFSET;
 
-    // Read the string (200 bytes starting at offset 20)
-    const messageString = this.emulator.readString(stringPtr, 200);
+    // Read the string (200 bytes starting at offset 24)
+    const messageString = this.emulator.readString(
+      stringPtr,
+      MESSAGE_STRING_CAPACITY
+    );
 
-    console.log('[XIMMessageParser] Parsed jhMessage:');
+    console.log("[XIMMessageParser] Parsed jhMessage:");
     console.log(`  Address: 0x${msgAddr.toString(16)}`);
     console.log(`  Reply Port: 0x${replyPort.toString(16)}`);
     console.log(`  Command: ${command} (${this.getCommandName(command)})`);
     console.log(`  Data: ${data} (0x${data.toString(16)})`);
+    console.log(`  Node: ${nodeId}, Line: ${lineNumber}`);
+    console.log(`  Signal: ${signal}, Task: 0x${task.toString(16)}`);
+    console.log(`  Semi: 0x${semaphore.toString(16)}`);
     console.log(`  String: "${messageString}"`);
 
     return {
@@ -49,6 +89,12 @@ export class XIMMessageParser {
       command,
       data,
       replyPort,
+      stringAddr: stringPtr,
+      nodeId,
+      lineNumber,
+      signal,
+      task,
+      semaphore,
       string: messageString,
     };
   }

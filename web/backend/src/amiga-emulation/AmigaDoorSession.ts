@@ -91,6 +91,7 @@ export class AmigaDoorSession {
   } = { info: 0, control: 0, handshake: 0, nodeMirror: 0 };
   private bullsPcLogCount: Record<number, number> = {};
   private bullsLastWaitPortReturnPc: number = 0;
+  private bullsMessageDumpCount: number = 0;
   private bullsForceMessagePointer(): void {
     if (!this.isBullsDoor || !this.emulator) {
       return;
@@ -149,11 +150,11 @@ export class AmigaDoorSession {
   private static readonly MESSAGE_STRING_OFFSET = 0x14;
   private static readonly MESSAGE_STRING_CAPACITY = 200;
   private static readonly MESSAGE_DATA_OFFSET = 0xdc;
+  private static readonly MESSAGE_COMMAND_OFFSET = 0xe0;
   private static readonly MESSAGE_NODE_OFFSET = 0xe4;
   private static readonly MESSAGE_REPLY_PORT_OFFSET = 14;
   private static readonly MESSAGE_LENGTH_OFFSET = 18;
-  private static readonly MESSAGE_TOTAL_LENGTH = 0x100;
-  private static readonly MESSAGE_COMMAND_OFFSET = 0xe0;
+  private static readonly MESSAGE_TOTAL_LENGTH = 0x104;
   private static readonly DIF_DATA_PTR_OFFSET = 0x1c;
   private static readonly DIF_STRING_PTR_OFFSET = 0x20;
   private static readonly NODE_STATUS_SIZE = 0x100;
@@ -3583,10 +3584,18 @@ export class AmigaDoorSession {
       return;
     }
 
-    const replyPort = this.emulator.readMemory32(msgAddr + 14);
-    const length = this.emulator.readMemory16(msgAddr + 18);
-    const command = this.emulator.readMemory32(msgAddr + 20);
-    const data = this.emulator.readMemory32(msgAddr + 24);
+    const replyPort = this.emulator.readMemory32(
+      msgAddr + AmigaDoorSession.MESSAGE_REPLY_PORT_OFFSET
+    );
+    const length = this.emulator.readMemory16(
+      msgAddr + AmigaDoorSession.MESSAGE_LENGTH_OFFSET
+    );
+    const command = this.emulator.readMemory32(
+      msgAddr + AmigaDoorSession.MESSAGE_COMMAND_OFFSET
+    );
+    const data = this.emulator.readMemory32(
+      msgAddr + AmigaDoorSession.MESSAGE_DATA_OFFSET
+    );
     let str = "";
     const stringBase =
       msgAddr + AmigaDoorSession.MESSAGE_STRING_OFFSET;
@@ -3764,9 +3773,36 @@ export class AmigaDoorSession {
    *
    * Called by ExecLibrary when door calls PutMsg() to send to AEDoorPort.
    * This is the CORRECT XIM protocol implementation.
-   */
+  */
   private handleDoorMessage(portAddr: number, msgAddr: number): void {
     if (!this.emulator || !this.execLibrary) return;
+
+    if (this.isBullsDoor && this.bullsMessageDumpCount < 5) {
+      const dumpOffsets = [
+        0x10,
+        0x14,
+        0x18,
+        0x1c,
+        0xdc,
+        0xe0,
+        0xe4,
+        0xe8,
+        0xec,
+        0xf0,
+        0xf4,
+        0xf8,
+        0xfc,
+        0x100,
+      ];
+      const dumpParts = dumpOffsets.map((off) => {
+        const val = this.emulator!.readMemory32(msgAddr + off);
+        return `+0x${off.toString(16)}=0x${val.toString(16)}`;
+      });
+      console.log(
+        `[BullsMsgDump] msg=0x${msgAddr.toString(16)} ${dumpParts.join(", ")}`
+      );
+      this.bullsMessageDumpCount++;
+    }
 
     console.log(
       `[AmigaDoorSession] ===============================================`
@@ -3781,17 +3817,31 @@ export class AmigaDoorSession {
     console.log(`[AmigaDoorSession]   Message: 0x${msgAddr.toString(16)}`);
 
     // Parse message structure (same as processDoorMessages)
-    const mn_ReplyPort = this.emulator.readMemory32(msgAddr + 14);
-    const mn_Length = this.emulator.readMemory16(msgAddr + 18);
+    const mn_ReplyPort = this.emulator.readMemory32(
+      msgAddr + AmigaDoorSession.MESSAGE_REPLY_PORT_OFFSET
+    );
+    const mn_Length = this.emulator.readMemory16(
+      msgAddr + AmigaDoorSession.MESSAGE_LENGTH_OFFSET
+    );
 
     // AEDoor message extension (after struct Message)
-    const command = this.emulator.readMemory32(msgAddr + 20);
-    const data = this.emulator.readMemory32(msgAddr + 24);
+    const command = this.emulator.readMemory32(
+      msgAddr + AmigaDoorSession.MESSAGE_COMMAND_OFFSET
+    );
+    const data = this.emulator.readMemory32(
+      msgAddr + AmigaDoorSession.MESSAGE_DATA_OFFSET
+    );
 
-    // Read string (first 128 bytes max)
+    // Read string (first MESSAGE_STRING_CAPACITY bytes max)
     let str = "";
-    for (let i = 0; i < 128; i++) {
-      const ch = this.emulator.readMemory(msgAddr + 28 + i);
+    const stringBase =
+      msgAddr + AmigaDoorSession.MESSAGE_STRING_OFFSET;
+    for (
+      let i = 0;
+      i < AmigaDoorSession.MESSAGE_STRING_CAPACITY;
+      i++
+    ) {
+      const ch = this.emulator.readMemory(stringBase + i);
       if (ch === 0) break;
       str += String.fromCharCode(ch);
     }
@@ -3918,8 +3968,12 @@ export class AmigaDoorSession {
     const mn_Length = this.emulator.readMemory16(msgAddr + 18);
 
     // AEDoor message extension (after struct Message)
-    const command = this.emulator.readMemory32(msgAddr + 20);
-    const data = this.emulator.readMemory32(msgAddr + 24);
+    const command = this.emulator.readMemory32(
+      msgAddr + AmigaDoorSession.MESSAGE_COMMAND_OFFSET
+    );
+    const data = this.emulator.readMemory32(
+      msgAddr + AmigaDoorSession.MESSAGE_DATA_OFFSET
+    );
 
     // Read string (first 128 bytes max)
     let str = "";
