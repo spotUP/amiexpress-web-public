@@ -33,25 +33,25 @@ for arg in "$@"; do
 done
 
 # Display startup mode
-echo -e "${CYAN}${BOLD}"
+printf "%b\n" "${CYAN}${BOLD}"
 echo "╔═══════════════════════════════════════════════════════════════════╗"
 echo "║                    AmiExpress BBS Startup                         ║"
 echo "╚═══════════════════════════════════════════════════════════════════╝"
-echo -e "${RESET}"
+printf "%b\n" "${RESET}"
 
 if [ "$DEBUG_MODE" = true ]; then
-  echo -e "${YELLOW}→ Starting in DEBUG mode (full logs enabled)${RESET}"
+  printf "%b\n" "${YELLOW}→ Starting in DEBUG mode (full logs enabled)${RESET}"
 else
-  echo -e "${CYAN}→ Starting in normal mode (clean door output)${RESET}"
-  echo -e "   ${WHITE}Use --debug to see full debug logs${RESET}"
+  printf "%b\n" "${CYAN}→ Starting in normal mode (clean door output)${RESET}"
+  printf "%b\n" "   ${WHITE}Use --debug to see full debug logs${RESET}"
 fi
 
 if [ "$OPEN_MODE" = "full" ]; then
-  echo -e "${CYAN}→ Will open BBS, Admin/Settings, and SDK Preview in browser${RESET}"
-  echo -e "   ${WHITE}Use --sdk-only to open only SDK${RESET}"
+  printf "%b\n" "${CYAN}→ Will open BBS, Admin/Settings, and SDK Preview in browser${RESET}"
+  printf "%b\n" "   ${WHITE}Use --sdk-only to open only SDK${RESET}"
 else
-  echo -e "${CYAN}→ Will open SDK Preview only in browser${RESET}"
-  echo -e "   ${WHITE}Use --full to open all three apps${RESET}"
+  printf "%b\n" "${CYAN}→ Will open SDK Preview only in browser${RESET}"
+  printf "%b\n" "   ${WHITE}Use --full to open all three apps${RESET}"
 fi
 
 # Get the repository root directory (portable)
@@ -66,21 +66,21 @@ mkdir -p "$LOGS_DIR"
 BACKEND_LOG="$LOGS_DIR/backend.log"
 PREVIEW_LOG="$LOGS_DIR/preview.log"
 
-echo -e "${CYAN}→ Logs will be saved to:${RESET}"
-echo -e "   ${WHITE}$BACKEND_LOG${RESET}"
-echo -e "   ${WHITE}$PREVIEW_LOG${RESET}"
+printf "%b\n" "${CYAN}→ Logs will be saved to:${RESET}"
+printf "%b\n" "   ${WHITE}$BACKEND_LOG${RESET}"
+printf "%b\n" "   ${WHITE}$PREVIEW_LOG${RESET}"
 echo ""
 
 # === ENHANCED SETUP CHECKS ===
-echo -e "${CYAN}→ Checking environment setup...${RESET}"
+printf "%b\n" "${CYAN}→ Checking environment setup...${RESET}"
 echo ""
 
 # Check for .env.local
 if [ ! -f "$REPO_ROOT/.env.local" ]; then
-  echo -e "${YELLOW}[WARNING] .env.local not found${RESET}"
-  echo -e "   ${WHITE}Copying .env.example to .env.local...${RESET}"
+  printf "%b\n" "${YELLOW}[WARNING] .env.local not found${RESET}"
+  printf "%b\n" "   ${WHITE}Copying .env.example to .env.local...${RESET}"
   cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env.local"
-  echo -e "   ${GREEN}[OK] Created .env.local - please review and update if needed${RESET}"
+  printf "%b\n" "   ${GREEN}[OK] Created .env.local - please review and update if needed${RESET}"
   echo ""
 fi
 
@@ -93,28 +93,28 @@ check_and_install_deps() {
   local name=$2
 
   if [ ! -d "$dir/node_modules" ]; then
-    echo -e "${CYAN}→ $name: Installing dependencies (this may take a minute)...${RESET}"
+    printf "%b\n" "${CYAN}→ $name: Installing dependencies (this may take a minute)...${RESET}"
     (cd "$dir" && npm install --include=dev --loglevel=error)
     if [ $? -eq 0 ]; then
-      echo -e "   ${GREEN}[OK] $name dependencies installed${RESET}"
+      printf "%b\n" "   ${GREEN}[OK] $name dependencies installed${RESET}"
     else
-      echo -e "   ${RED}[ERROR] $name dependency installation failed${RESET}"
-      echo -e "   ${WHITE}Try running: cd $dir && npm install --include=dev${RESET}"
+      printf "%b\n" "   ${RED}[ERROR] $name dependency installation failed${RESET}"
+      printf "%b\n" "   ${WHITE}Try running: cd $dir && npm install --include=dev${RESET}"
       exit 1
     fi
   else
     # Check if package.json is newer than node_modules (dependencies changed)
     if [ "$dir/package.json" -nt "$dir/node_modules" ]; then
-      echo -e "${CYAN}→ $name: Dependencies changed, updating...${RESET}"
+      printf "%b\n" "${CYAN}→ $name: Dependencies changed, updating...${RESET}"
       (cd "$dir" && npm install --include=dev --loglevel=error)
       if [ $? -eq 0 ]; then
-        echo -e "   ${GREEN}[OK] $name dependencies updated${RESET}"
+        printf "%b\n" "   ${GREEN}[OK] $name dependencies updated${RESET}"
       else
-        echo -e "   ${RED}[ERROR] $name dependency update failed${RESET}"
+        printf "%b\n" "   ${RED}[ERROR] $name dependency update failed${RESET}"
         exit 1
       fi
     else
-      echo -e "   ${GREEN}[OK] $name dependencies up to date${RESET}"
+      printf "%b\n" "   ${GREEN}[OK] $name dependencies up to date${RESET}"
     fi
   fi
 }
@@ -130,27 +130,27 @@ check_and_install_deps "$REPO_ROOT/web/config-app" "Config App"
 
 # Check SDK dependencies and build
 if [ ! -d "$REPO_ROOT/sdk/node_modules" ]; then
-  echo -e "${CYAN}→ SDK: Installing dependencies (this may take a minute)...${RESET}"
+  printf "%b\n" "${CYAN}→ SDK: Installing dependencies (this may take a minute)...${RESET}"
   (cd "$REPO_ROOT/sdk" && npm install --loglevel=error)
   if [ $? -eq 0 ]; then
-    echo -e "   ${GREEN}[OK] SDK dependencies installed${RESET}"
+    printf "%b\n" "   ${GREEN}[OK] SDK dependencies installed${RESET}"
   else
-    echo -e "   ${RED}[ERROR] SDK dependency installation failed${RESET}"
-    echo -e "   ${WHITE}Try running: cd sdk && npm install${RESET}"
+    printf "%b\n" "   ${RED}[ERROR] SDK dependency installation failed${RESET}"
+    printf "%b\n" "   ${WHITE}Try running: cd sdk && npm install${RESET}"
     exit 1
   fi
 else
-  echo -e "   ${GREEN}[OK] SDK dependencies up to date${RESET}"
+  printf "%b\n" "   ${GREEN}[OK] SDK dependencies up to date${RESET}"
 fi
 
 # Check if SDK is built
-echo -e "${CYAN}→ SDK: Rebuilding to ensure latest changes...${RESET}"
+printf "%b\n" "${CYAN}→ SDK: Rebuilding to ensure latest changes...${RESET}"
 (cd "$REPO_ROOT/sdk" && npm run build --loglevel=error)
 if [ $? -eq 0 ]; then
-  echo -e "   ${GREEN}[OK] SDK built successfully${RESET}"
+  printf "%b\n" "   ${GREEN}[OK] SDK built successfully${RESET}"
 else
-  echo -e "   ${RED}[ERROR] SDK build failed${RESET}"
-  echo -e "   ${WHITE}Try running: cd sdk && npm run build${RESET}"
+  printf "%b\n" "   ${RED}[ERROR] SDK build failed${RESET}"
+  printf "%b\n" "   ${WHITE}Try running: cd sdk && npm run build${RESET}"
   exit 1
 fi
 
@@ -158,23 +158,23 @@ fi
 check_and_install_deps "$REPO_ROOT/packages/terminal" "Terminal Package"
 
 if [ ! -d "$REPO_ROOT/packages/terminal/dist" ] || [ ! -f "$REPO_ROOT/packages/terminal/dist/index.js" ]; then
-  echo -e "${CYAN}→ Terminal Package: Building (first time)...${RESET}"
+  printf "%b\n" "${CYAN}→ Terminal Package: Building (first time)...${RESET}"
   (cd "$REPO_ROOT/packages/terminal" && npm run build --loglevel=error)
   if [ $? -eq 0 ]; then
-    echo -e "   ${GREEN}[OK] Terminal Package built successfully${RESET}"
+    printf "%b\n" "   ${GREEN}[OK] Terminal Package built successfully${RESET}"
   else
-    echo -e "   ${RED}[ERROR] Terminal Package build failed${RESET}"
-    echo -e "   ${WHITE}Try running: cd packages/terminal && npm run build${RESET}"
+    printf "%b\n" "   ${RED}[ERROR] Terminal Package build failed${RESET}"
+    printf "%b\n" "   ${WHITE}Try running: cd packages/terminal && npm run build${RESET}"
     exit 1
   fi
 else
   # Always rebuild to ensure latest changes
-  echo -e "${CYAN}→ Terminal Package: Rebuilding...${RESET}"
+  printf "%b\n" "${CYAN}→ Terminal Package: Rebuilding...${RESET}"
   (cd "$REPO_ROOT/packages/terminal" && npm run build --loglevel=error > /dev/null 2>&1)
   if [ $? -eq 0 ]; then
-    echo -e "   ${GREEN}[OK] Terminal Package rebuilt${RESET}"
+    printf "%b\n" "   ${GREEN}[OK] Terminal Package rebuilt${RESET}"
   else
-    echo -e "   ${YELLOW}[WARNING] Terminal Package rebuild had issues${RESET}"
+    printf "%b\n" "   ${YELLOW}[WARNING] Terminal Package rebuild had issues${RESET}"
   fi
 fi
 
@@ -182,85 +182,85 @@ fi
 check_and_install_deps "$REPO_ROOT/sdk/tools/preview/frontend" "SDK Preview Frontend"
 
 # Always rebuild all frontends for unified deployment (ensures correct base paths)
-echo -e "${CYAN}→ Building all frontends for unified deployment...${RESET}"
-echo -e "   ${WHITE}(This takes 15-30 seconds, please wait...)${RESET}"
+printf "%b\n" "${CYAN}→ Building all frontends for unified deployment...${RESET}"
+printf "%b\n" "   ${WHITE}(This takes 15-30 seconds, please wait...)${RESET}"
 
 # Build BBS Terminal Frontend (/)
-echo -ne "   ${MAGENTA}[1/3]${RESET} Building BBS Terminal... "
+printf "%b" "   ${MAGENTA}[1/3]${RESET} Building BBS Terminal... "
 (cd "$REPO_ROOT/web/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
 BUILD_PID=$!
 while kill -0 $BUILD_PID 2>/dev/null; do
-  echo -n "."
+  printf "."
   sleep 1
 done
 wait $BUILD_PID
 if [ $? -eq 0 ]; then
-  echo -e " ${GREEN}[OK]${RESET}"
+  printf "%b\n" " ${GREEN}[OK]${RESET}"
 else
-  echo -e " ${YELLOW}[WARNING]${RESET}"
+  printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
 fi
 
 # Build Admin Config Frontend (/admin/)
-echo -ne "   ${MAGENTA}[2/3]${RESET} Building Admin Config... "
+printf "%b" "   ${MAGENTA}[2/3]${RESET} Building Admin Config... "
 (cd "$REPO_ROOT/web/config-app" && npm run build --loglevel=error > /dev/null 2>&1) &
 BUILD_PID=$!
 while kill -0 $BUILD_PID 2>/dev/null; do
-  echo -n "."
+  printf "."
   sleep 1
 done
 wait $BUILD_PID
 if [ $? -eq 0 ]; then
-  echo -e " ${GREEN}[OK]${RESET}"
+  printf "%b\n" " ${GREEN}[OK]${RESET}"
 else
-  echo -e " ${YELLOW}[WARNING]${RESET}"
+  printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
 fi
 
 # Build SDK Preview Frontend (/sdk/)
-echo -ne "   ${MAGENTA}[3/3]${RESET} Building SDK Preview... "
+printf "%b" "   ${MAGENTA}[3/3]${RESET} Building SDK Preview... "
 (cd "$REPO_ROOT/sdk/tools/preview/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
 BUILD_PID=$!
 while kill -0 $BUILD_PID 2>/dev/null; do
-  echo -n "."
+  printf "."
   sleep 1
 done
 wait $BUILD_PID
 if [ $? -eq 0 ]; then
-  echo -e " ${GREEN}[OK]${RESET}"
+  printf "%b\n" " ${GREEN}[OK]${RESET}"
 else
-  echo -e " ${YELLOW}[WARNING]${RESET}"
+  printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
 fi
 
-echo -e "   ${GREEN}[OK] All frontends built successfully${RESET}"
+printf "%b\n" "   ${GREEN}[OK] All frontends built successfully${RESET}"
 
 # TypeScript check for backend (quick check only, don't block startup)
-echo -e "${CYAN}→ Running quick TypeScript check...${RESET}"
+printf "%b\n" "${CYAN}→ Running quick TypeScript check...${RESET}"
 (cd "$REPO_ROOT/web/backend" && npx tsc --noEmit > /dev/null 2>&1)
 if [ $? -ne 0 ]; then
-  echo -e "   ${YELLOW}[WARNING] TypeScript errors detected in backend${RESET}"
-  echo -e "   ${WHITE}Run 'cd web/backend && npx tsc --noEmit' to see details${RESET}"
+  printf "%b\n" "   ${YELLOW}[WARNING] TypeScript errors detected in backend${RESET}"
+  printf "%b\n" "   ${WHITE}Run 'cd web/backend && npx tsc --noEmit' to see details${RESET}"
 else
-  echo -e "   ${GREEN}[OK] TypeScript check passed${RESET}"
+  printf "%b\n" "   ${GREEN}[OK] TypeScript check passed${RESET}"
 fi
 
 echo ""
-echo -e "${GREEN}${BOLD}→ Environment setup complete!${RESET}"
+printf "%b\n" "${GREEN}${BOLD}→ Environment setup complete!${RESET}"
 echo ""
 
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1
 
-echo -e "${CYAN}→ Starting servers (unified deployment - all frontends served from backend)...${RESET}"
+printf "%b\n" "${CYAN}→ Starting servers (unified deployment - all frontends served from backend)...${RESET}"
 echo ""
 
 # Trap to kill all servers on exit
-trap 'echo ""; echo -e "${CYAN}→ Stopping servers...${RESET}"; kill $BACKEND_PID $PREVIEW_PID 2>/dev/null; wait; echo -e "${GREEN}[OK] Servers stopped${RESET}"; exit' EXIT INT TERM
+trap 'echo ""; printf "%b\n" "${CYAN}→ Stopping servers...${RESET}"; kill $BACKEND_PID $PREVIEW_PID 2>/dev/null; wait; printf "%b\n" "${GREEN}[OK] Servers stopped${RESET}"; exit' EXIT INT TERM
 
 # Start backend in background (conditionally filter output, always save to log)
 # Backend serves all three frontends from built static files:
 # - BBS Terminal at /
 # - Admin Config at /admin/
 # - SDK Preview at /sdk/
-echo -ne "   ${MAGENTA}[1/2]${RESET} Starting backend... "
+printf "%b" "   ${MAGENTA}[1/2]${RESET} Starting backend... "
 if [ "$DEBUG_MODE" = true ]; then
   # DEBUG MODE: Show all logs and save to file
   (cd "$REPO_ROOT/web/backend" && NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
@@ -271,23 +271,23 @@ fi
 BACKEND_PID=$!
 
 # Start SDK preview backend server in background (handles SDK door preview WebSocket API)
-echo -e "${GREEN}[STARTED]${RESET}"
-echo -ne "   ${MAGENTA}[2/2]${RESET} Starting SDK preview backend... "
+printf "%b\n" "${GREEN}[STARTED]${RESET}"
+printf "%b" "   ${MAGENTA}[2/2]${RESET} Starting SDK preview backend... "
 # DEBUG_OUTPUT controls whether door-handling debug messages are shown
 # In normal mode, door output is clean without debug messages
 # In debug mode, all debug messages are shown
 (cd "$REPO_ROOT/sdk" && DEBUG_OUTPUT="$DEBUG_OUTPUT" node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG") &
 PREVIEW_PID=$!
-echo -e "${GREEN}[STARTED]${RESET}"
+printf "%b\n" "${GREEN}[STARTED]${RESET}"
 
 # Wait for backend to be ready (check port 3001)
 echo ""
-echo -e "${CYAN}→ Waiting for backend to be ready (port 3001)...${RESET}"
+printf "%b\n" "${CYAN}→ Waiting for backend to be ready (port 3001)...${RESET}"
 WAIT_COUNT=0
 MAX_WAIT=60  # 60 seconds max
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
   if lsof -ti:3001 > /dev/null 2>&1; then
-    echo -e "   ${GREEN}[OK] Backend listening on port 3001${RESET}"
+    printf "%b\n" "   ${GREEN}[OK] Backend listening on port 3001${RESET}"
     break
   fi
   sleep 1
@@ -295,10 +295,10 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
 
   # Check if backend crashed
   if ! kill -0 $BACKEND_PID 2>/dev/null; then
-    echo -e " ${RED}[ERROR]${RESET}"
+    printf "%b\n" " ${RED}[ERROR]${RESET}"
     echo ""
-    echo -e "${RED}[ERROR] Backend crashed during startup!${RESET}"
-    echo -e "${WHITE}Check logs/backend.log for details${RESET}"
+    printf "%b\n" "${RED}[ERROR] Backend crashed during startup!${RESET}"
+    printf "%b\n" "${WHITE}Check logs/backend.log for details${RESET}"
     tail -20 "$BACKEND_LOG"
     exit 1
   fi
@@ -306,8 +306,8 @@ done
 
 if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
   echo ""
-  echo -e "${YELLOW}[WARNING] Backend did not start within 60 seconds${RESET}"
-  echo -e "${WHITE}Check logs/backend.log for details${RESET}"
+  printf "%b\n" "${YELLOW}[WARNING] Backend did not start within 60 seconds${RESET}"
+  printf "%b\n" "${WHITE}Check logs/backend.log for details${RESET}"
   exit 1
 fi
 
@@ -315,45 +315,45 @@ fi
 sleep 2
 
 echo ""
-echo -e "${GREEN}${BOLD}"
+printf "%b\n" "${GREEN}${BOLD}"
 echo "======================================================================"
 echo "                   AmiExpress BBS - Servers Running                  "
 echo "======================================================================"
-echo -e "${RESET}"
-echo -e "${CYAN}  UNIFIED DEPLOYMENT (All Frontends Served from Single Backend):${RESET}"
-echo -e "${CYAN}  ----------------------------------------------------------------${RESET}"
+printf "%b\n" "${RESET}"
+printf "%b\n" "${CYAN}  UNIFIED DEPLOYMENT (All Frontends Served from Single Backend):${RESET}"
+printf "%b\n" "${CYAN}  ----------------------------------------------------------------${RESET}"
 echo ""
-echo -e "${GREEN}  [BBS]${RESET}    ${WHITE}http://localhost:3001/${RESET}"
-echo -e "           ${CYAN}Main BBS Terminal Interface${RESET}"
-echo -e "           ${YELLOW}Login: sysop / sysop${RESET}"
+printf "%b\n" "${GREEN}  [BBS]${RESET}    ${WHITE}http://localhost:3001/${RESET}"
+printf "%b\n" "           ${CYAN}Main BBS Terminal Interface${RESET}"
+printf "%b\n" "           ${YELLOW}Login: sysop / sysop${RESET}"
 echo ""
-echo -e "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/${RESET}"
-echo -e "           ${CYAN}Configuration Management Panel${RESET}"
-echo -e "           ${YELLOW}Login: sysop / sysop${RESET}"
+printf "%b\n" "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/${RESET}"
+printf "%b\n" "           ${CYAN}Configuration Management Panel${RESET}"
+printf "%b\n" "           ${YELLOW}Login: sysop / sysop${RESET}"
 echo ""
-echo -e "${BLUE}  [SDK]${RESET}    ${WHITE}http://localhost:3001/sdk/${RESET}"
-echo -e "           ${CYAN}Door Development Preview Tool${RESET}"
-echo -e "           ${YELLOW}(Backend API on port 8080)${RESET}"
+printf "%b\n" "${BLUE}  [SDK]${RESET}    ${WHITE}http://localhost:3001/sdk/${RESET}"
+printf "%b\n" "           ${CYAN}Door Development Preview Tool${RESET}"
+printf "%b\n" "           ${YELLOW}(Backend API on port 8080)${RESET}"
 echo ""
-echo -e "${WHITE}  [API]${RESET}    ${WHITE}http://localhost:3001/api/${RESET}"
-echo -e "           ${CYAN}Backend REST API Server${RESET}"
+printf "%b\n" "${WHITE}  [API]${RESET}    ${WHITE}http://localhost:3001/api/${RESET}"
+printf "%b\n" "           ${CYAN}Backend REST API Server${RESET}"
 echo ""
 if [ "$DEBUG_MODE" = true ]; then
-echo -e "${YELLOW}  [DEBUG] MODE: Full logs visible below${RESET}"
+printf "%b\n" "${YELLOW}  [DEBUG] MODE: Full logs visible below${RESET}"
 echo ""
 fi
-echo -e "${WHITE}  Production URLs: ${CYAN}https://bbs.uprough.net/${RESET}"
-echo -e "                   ${CYAN}https://bbs.uprough.net/admin/${RESET}"
-echo -e "                   ${CYAN}https://bbs.uprough.net/sdk/${RESET}"
+printf "%b\n" "${WHITE}  Production URLs: ${CYAN}https://bbs.uprough.net/${RESET}"
+printf "%b\n" "                   ${CYAN}https://bbs.uprough.net/admin/${RESET}"
+printf "%b\n" "                   ${CYAN}https://bbs.uprough.net/sdk/${RESET}"
 echo ""
-echo -e "${WHITE}  Note: All frontends built and served as static files from backend${RESET}"
-echo -e "${WHITE}        No separate dev servers running for instant startup${RESET}"
+printf "%b\n" "${WHITE}  Note: All frontends built and served as static files from backend${RESET}"
+printf "%b\n" "${WHITE}        No separate dev servers running for instant startup${RESET}"
 echo ""
-echo -e "${RED}  Press Ctrl+C to stop all servers${RESET}"
+printf "%b\n" "${RED}  Press Ctrl+C to stop all servers${RESET}"
 echo ""
-echo -e "${GREEN}${BOLD}"
+printf "%b\n" "${GREEN}${BOLD}"
 echo "======================================================================"
-echo -e "${RESET}"
+printf "%b\n" "${RESET}"
 echo ""
 
 # Open browser tabs based on OPEN_MODE
@@ -364,9 +364,9 @@ SDK_URL="http://localhost:3001/sdk/"
 
 if [ "$OPEN_MODE" = "full" ]; then
   # Open all three tabs: BBS, Admin, SDK
-  echo -e "${GREEN}[LAUNCH]${RESET} Opening BBS at ${CYAN}$BBS_URL${RESET}..."
-  echo -e "${MAGENTA}[CONFIG]${RESET} Opening Admin/Settings at ${CYAN}$ADMIN_URL${RESET}..."
-  echo -e "${BLUE}[SDK]${RESET} Opening SDK Preview at ${CYAN}$SDK_URL${RESET}..."
+  printf "%b\n" "${GREEN}[LAUNCH]${RESET} Opening BBS at ${CYAN}$BBS_URL${RESET}..."
+  printf "%b\n" "${MAGENTA}[CONFIG]${RESET} Opening Admin/Settings at ${CYAN}$ADMIN_URL${RESET}..."
+  printf "%b\n" "${BLUE}[SDK]${RESET} Opening SDK Preview at ${CYAN}$SDK_URL${RESET}..."
 
   # Detect OS and open all three URLs in browser tabs
   if command -v open &> /dev/null; then
@@ -398,14 +398,14 @@ if [ "$OPEN_MODE" = "full" ]; then
     sleep 0.5
     explorer.exe "$SDK_URL" 2>/dev/null &
   else
-    echo -e "${YELLOW}[WARNING] Could not detect browser command. Please open URLs manually:${RESET}"
-    echo -e "   ${CYAN}$BBS_URL${RESET}"
-    echo -e "   ${CYAN}$ADMIN_URL${RESET}"
-    echo -e "   ${CYAN}$SDK_URL${RESET}"
+    printf "%b\n" "${YELLOW}[WARNING] Could not detect browser command. Please open URLs manually:${RESET}"
+    printf "%b\n" "   ${CYAN}$BBS_URL${RESET}"
+    printf "%b\n" "   ${CYAN}$ADMIN_URL${RESET}"
+    printf "%b\n" "   ${CYAN}$SDK_URL${RESET}"
   fi
 else
   # Open SDK only
-  echo -e "${BLUE}[SDK]${RESET} Opening SDK Preview at ${CYAN}$SDK_URL${RESET}..."
+  printf "%b\n" "${BLUE}[SDK]${RESET} Opening SDK Preview at ${CYAN}$SDK_URL${RESET}..."
 
   # Detect OS and open SDK URL in browser
   if command -v open &> /dev/null; then
@@ -421,8 +421,8 @@ else
     # WSL
     explorer.exe "$SDK_URL" 2>/dev/null &
   else
-    echo -e "${YELLOW}[WARNING] Could not detect browser command. Please open URL manually:${RESET}"
-    echo -e "   ${CYAN}$SDK_URL${RESET}"
+    printf "%b\n" "${YELLOW}[WARNING] Could not detect browser command. Please open URL manually:${RESET}"
+    printf "%b\n" "   ${CYAN}$SDK_URL${RESET}"
   fi
 fi
 
