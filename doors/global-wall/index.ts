@@ -1,5 +1,5 @@
 import { Socket as SocketIOSocket } from 'socket.io';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import * as net from 'net';
 import * as http from 'http';
@@ -136,9 +136,29 @@ function parseConfigFile(configFileName: string): GlobalWallConfig {
   return config;
 }
 
+const repoRoot =
+  process.env.BBS_ROOT ||
+  path.resolve(process.cwd(), '..', '..');
+const doorRoot = path.join(repoRoot, 'doors', 'global-wall');
+
+function ensureDoorConfigDir(): void {
+  try {
+    mkdirSync(doorRoot, { recursive: true });
+  } catch (err) {
+    // ignore
+  }
+}
+
+function getDoorConfigPaths(): { progdirCfg: string; localCfg: string } {
+  return {
+    progdirCfg: path.join(doorRoot, 'GWALL.cfg'),
+    localCfg: path.join(repoRoot, 'GWALL.cfg'),
+  };
+}
+
 function loadConfig(): void {
-  const progdirCfg = path.join(process.cwd(), 'doors', 'global-wall', 'GWALL.cfg');
-  const localCfg = path.join(process.cwd(), 'GWALL.cfg');
+  ensureDoorConfigDir();
+  const { progdirCfg, localCfg } = getDoorConfigPaths();
 
   let config = parseConfigFile(progdirCfg);
   if (existsSync(localCfg)) {
@@ -192,7 +212,8 @@ function calculateDisplayLines(): number {
 }
 
 function readSettings(): void {
-  const settingsPath = path.join(process.cwd(), 'doors', 'global-wall', 'GWall.cfg');
+  ensureDoorConfigDir();
+  const settingsPath = path.join(doorRoot, 'GWall.cfg');
 
   if (existsSync(settingsPath)) {
     try {
@@ -211,7 +232,7 @@ function readSettings(): void {
 }
 
 function saveSettings(): void {
-  const settingsPath = path.join(process.cwd(), 'doors', 'global-wall', 'GWall.cfg');
+    const settingsPath = path.join(doorRoot, 'GWall.cfg');
   const content = `${settings.style}\n${settings.mybbsshortcode}\n${settings.coloursettings}\n`;
 
   try {
