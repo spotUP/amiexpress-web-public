@@ -286,6 +286,7 @@ function httpRequest(requestdata: string, tempFile: string | null): Promise<numb
     debugLog('httprequest - starting');
 
     const transport = serverProtocol === 'https' ? https : http;
+    console.debug(`[GLOBALWALL] ${serverProtocol.toUpperCase()} request -> ${options.hostname}:${options.port}${options.path}`);
     const req = transport.request(options, (res) => {
       const chunks: Buffer[] = [];
 
@@ -305,7 +306,9 @@ function httpRequest(requestdata: string, tempFile: string | null): Promise<numb
         }
 
         if (res.statusCode && res.statusCode !== 200) {
-          debugLog(`httprequest - non-200 status: ${res.statusCode}`);
+          const msg = `[GLOBALWALL] Received HTTP status ${res.statusCode}`;
+          console.warn(msg);
+          debugLog(msg);
           resolve(res.statusCode);
           return;
         }
@@ -316,7 +319,9 @@ function httpRequest(requestdata: string, tempFile: string | null): Promise<numb
     });
 
     req.on('error', (err) => {
-      debugLog(`httprequest - error: ${err.message}`);
+      const msg = `[GLOBALWALL] HTTP request error: ${err.message}`;
+      console.warn(msg);
+      debugLog(msg);
       resolve(0);
     });
 
