@@ -329,7 +329,7 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
 // Display menu prompt (displayMenuPrompt equivalent)
 export function displayMenuPrompt(socket: any, session: BBSSession) {
   console.log('📋 displayMenuPrompt called');
-  console.log('  - bbsName:', config.get('bbsName'));
+  console.log('  - bbsName:', config?.get?.('bbsName'));
   console.log('  - currentConf:', session.currentConf);
   console.log('  - currentConfName:', session.currentConfName);
   console.log('  - relConfNum:', session.relConfNum);
@@ -343,7 +343,7 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   }
 
   // Like AmiExpress: Use BBS name, relative conference number, conference name
-  const bbsName = config.get('bbsName');
+  const bbsName = config?.get?.('bbsName') ?? 'AmiExpress Web';
   const timeLeft = Math.floor(session.timeRemaining);
 
   // Check if multiple message bases in conference (like getConfMsgBaseCount in AmiExpress)
