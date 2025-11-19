@@ -1,5 +1,5 @@
 COMMAND=GWALL
-NAME=Global Thermonuclear Wall
+NAME=Global Wall
 TYPE=TS
 PATH=web/backend/src/doors/global-wall
 ACCESS=0
