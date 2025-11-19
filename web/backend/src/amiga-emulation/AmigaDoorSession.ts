@@ -70,6 +70,7 @@ export class AmigaDoorSession {
   private startupMessageSent: boolean = false; // Flag to send startup message only once
   private doorInfoAddr: number = 0;
   private nodeStatusAddr: number = 0;
+  private nodeStatusBlockAddr: number = 0;
   private doorSummaryPtr: number = 0;
   private nodeStatusMessageSent: boolean = false;
   private lastPCs: number[] = []; // Track last 20 PC values for debugging
@@ -158,12 +159,30 @@ export class AmigaDoorSession {
   private static readonly DIF_DATA_PTR_OFFSET = 0x1c;
   private static readonly DIF_STRING_PTR_OFFSET = 0x20;
   private static readonly NODE_STATUS_SIZE = 0x100;
-  private static readonly NODE_STATUS_USERNAME_OFFSET = 0x20;
-  private static readonly NODE_STATUS_LOCATION_OFFSET = 0x60;
-  private static readonly NODE_STATUS_SUMMARY_OFFSET = 0xa0;
-  private static readonly NODE_STATUS_USERNAME_PTR_OFFSET = 0x10;
-  private static readonly NODE_STATUS_LOCATION_PTR_OFFSET = 0x14;
-  private static readonly NODE_STATUS_SUMMARY_PTR_OFFSET = 0x18;
+  private static readonly NODE_STATUS_USERNAME_OFFSET = 0x60;
+  private static readonly NODE_STATUS_LOCATION_OFFSET = 0x78;
+  private static readonly NODE_STATUS_SUMMARY_OFFSET = 0x90;
+  private static readonly NODE_STATUS_SYSOP_OFFSET = 0xa8;
+  private static readonly NODE_STATUS_LAST_CALL_OFFSET = 0xc0;
+  private static readonly NODE_STATUS_RUNNING_OFFSET = 0xd8;
+  private static readonly NODE_STATUS_USERNAME_PTR_OFFSET = 0x40;
+  private static readonly NODE_STATUS_LOCATION_PTR_OFFSET = 0x44;
+  private static readonly NODE_STATUS_SUMMARY_PTR_OFFSET = 0x48;
+  private static readonly NODE_STATUS_SYSOP_PTR_OFFSET = 0x4c;
+  private static readonly NODE_STATUS_LAST_CALL_PTR_OFFSET = 0x50;
+  private static readonly NODE_STATUS_RUNNING_PTR_OFFSET = 0x54;
+  private static readonly NODE_STATUS_RATIO_OFFSET = 0x10;
+  private static readonly NODE_STATUS_RATIO_TYPE_OFFSET = 0x14;
+  private static readonly NODE_STATUS_UPLOADS_OFFSET = 0x18;
+  private static readonly NODE_STATUS_DOWNLOADS_OFFSET = 0x1c;
+  private static readonly NODE_STATUS_BYTES_UPLOAD_OFFSET = 0x20;
+  private static readonly NODE_STATUS_BYTES_DOWNLOAD_OFFSET = 0x24;
+  private static readonly NODE_STATUS_DAILY_BYTES_LIMIT_OFFSET = 0x28;
+  private static readonly NODE_STATUS_DAILY_BYTES_DOWNLOADED_OFFSET = 0x2c;
+  private static readonly NODE_STATUS_TIME_LIMIT_OFFSET = 0x30;
+  private static readonly NODE_STATUS_TIME_USED_OFFSET = 0x34;
+  private static readonly NODE_STATUS_CALLS_OFFSET = 0x38;
+  private static readonly NODE_STATUS_CHAT_FLAG_OFFSET = 0x3c;
   private static readonly MEMF_PUBLIC_CLEAR = 0x10001;
   // Memory change detection (for investigating what door expects)
   private lastMemoryValue: number = 0; // Last value at 0x2001
@@ -3410,10 +3429,16 @@ export class AmigaDoorSession {
     this.emulator.writeMemory32(addr + 0x00, this.aePortAddress);
     this.emulator.writeMemory32(addr + 0x04, this.doorReplyPortAddr);
     this.emulator.writeMemory32(addr + 0x08, messageAddr);
-    this.emulator.writeMemory32(
-      addr + AmigaDoorSession.DIF_DATA_PTR_OFFSET,
-      this.nodeStatusAddr
-    );
+
+    const messageDataAddr =
+      messageAddr + AmigaDoorSession.MESSAGE_DATA_OFFSET;
+    if (this.ensureNodeStatusBlock(messageDataAddr)) {
+      this.emulator.writeMemory32(
+        addr + AmigaDoorSession.DIF_DATA_PTR_OFFSET,
+        messageDataAddr
+      );
+    }
+
     this.emulator.writeMemory32(
       addr + AmigaDoorSession.DIF_STRING_PTR_OFFSET,
       this.doorSummaryPtr
@@ -3487,7 +3512,12 @@ export class AmigaDoorSession {
 
     const nodeId = this.resolveNodeId();
     const secLevel = this.config.bbsSession?.user?.secLevel ?? 100;
-    const minutesLeft = this.config.bbsSession?.user?.timeLeft ?? 30;
+    const sessionMinutes = this.config.bbsSession?.timeRemaining;
+    const rawTimeLimit = this.config.bbsSession?.user?.timeLimit ?? 60;
+    const rawTimeUsed = this.config.bbsSession?.user?.timeUsed ?? 0;
+    const calculatedMinutes = Math.max(0, rawTimeLimit - rawTimeUsed);
+    const minutesLeft =
+      typeof sessionMinutes === "number" ? sessionMinutes : calculatedMinutes;
     const ansiEnabled = this.config.bbsSession?.user?.ansi ? 1 : 0;
     const userName =
       this.config.bbsSession?.user?.username ?? "AmiExpress User";
@@ -3495,10 +3525,84 @@ export class AmigaDoorSession {
       this.config.bbsSession?.user?.location ?? "Remote Connection";
     const bbsName = this.config.bbsSession?.bbsName ?? "AmiExpress-Web";
 
+    const user = this.config.bbsSession?.user;
+    const calls = user?.calls ?? 0;
+    const chatFlag = user?.availableForChat ? 1 : 0;
+    const ratio = Math.round((user?.ratio ?? 0) * 100);
+    const ratioType = user?.ratioType ?? 0;
+    const uploads = user?.uploads ?? 0;
+    const downloads = user?.downloads ?? 0;
+    const bytesUpload = user?.bytesUpload ?? 0;
+    const bytesDownload = user?.bytesDownload ?? 0;
+    const dailyByteLimit = user?.dailyBytesLimit ?? 0;
+    const dailyBytesDownloaded = user?.dailyBytesDld ?? 0;
+    const timeLimit = user?.timeLimit ?? 60;
+    const timeUsed = user?.timeUsed ?? 0;
+    const lastCallText = user?.lastLogin
+      ? new Date(user.lastLogin).toLocaleString("en-US", {
+          timeZone: "UTC",
+          hour12: false,
+        })
+      : "Never";
+    const sysopName = this.config.bbsSession?.sysopName ?? "Sysop";
+    const runningText = `${this.config.bbsSession?.bbsName ?? "AmiExpress Web"} BBS`.substring(
+      0,
+      16
+    );
+
     this.emulator.writeMemory32(this.nodeStatusAddr + 0x00, nodeId);
     this.emulator.writeMemory32(this.nodeStatusAddr + 0x04, secLevel);
     this.emulator.writeMemory32(this.nodeStatusAddr + 0x08, minutesLeft);
     this.emulator.writeMemory32(this.nodeStatusAddr + 0x0c, ansiEnabled);
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_RATIO_OFFSET,
+      ratio
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_RATIO_TYPE_OFFSET,
+      ratioType
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_UPLOADS_OFFSET,
+      uploads
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_DOWNLOADS_OFFSET,
+      downloads
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_BYTES_UPLOAD_OFFSET,
+      bytesUpload
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_BYTES_DOWNLOAD_OFFSET,
+      bytesDownload
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_DAILY_BYTES_LIMIT_OFFSET,
+      dailyByteLimit
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr +
+        AmigaDoorSession.NODE_STATUS_DAILY_BYTES_DOWNLOADED_OFFSET,
+      dailyBytesDownloaded
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_TIME_LIMIT_OFFSET,
+      timeLimit
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_TIME_USED_OFFSET,
+      timeUsed
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_CALLS_OFFSET,
+      calls
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_CHAT_FLAG_OFFSET,
+      chatFlag
+    );
 
     const userAddr =
       this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_USERNAME_OFFSET;
@@ -3506,25 +3610,43 @@ export class AmigaDoorSession {
       this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_LOCATION_OFFSET;
     const summaryAddr =
       this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_SUMMARY_OFFSET;
+    const sysopAddr =
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_SYSOP_OFFSET;
+    const lastCallAddr =
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_LAST_CALL_OFFSET;
+    const runningAddr =
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_RUNNING_OFFSET;
 
-    this.writeStringToMemory(userAddr, userName, 32);
-    this.writeStringToMemory(locationAddr, location, 32);
-    this.writeStringToMemory(summaryAddr, `${bbsName} Node ${nodeId}`, 64);
+    this.writeStringToMemory(userAddr, userName, 24);
+    this.writeStringToMemory(locationAddr, location, 24);
+    this.writeStringToMemory(summaryAddr, `${bbsName} Node ${nodeId}`, 24);
+    this.writeStringToMemory(sysopAddr, sysopName, 24);
+    this.writeStringToMemory(lastCallAddr, lastCallText, 24);
+    this.writeStringToMemory(runningAddr, runningText, 16);
 
     this.emulator.writeMemory32(
-      this.nodeStatusAddr +
-        AmigaDoorSession.NODE_STATUS_USERNAME_PTR_OFFSET,
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_USERNAME_PTR_OFFSET,
       userAddr
     );
     this.emulator.writeMemory32(
-      this.nodeStatusAddr +
-        AmigaDoorSession.NODE_STATUS_LOCATION_PTR_OFFSET,
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_LOCATION_PTR_OFFSET,
       locationAddr
     );
     this.emulator.writeMemory32(
-      this.nodeStatusAddr +
-        AmigaDoorSession.NODE_STATUS_SUMMARY_PTR_OFFSET,
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_SUMMARY_PTR_OFFSET,
       summaryAddr
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_SYSOP_PTR_OFFSET,
+      sysopAddr
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_LAST_CALL_PTR_OFFSET,
+      lastCallAddr
+    );
+    this.emulator.writeMemory32(
+      this.nodeStatusAddr + AmigaDoorSession.NODE_STATUS_RUNNING_PTR_OFFSET,
+      runningAddr
     );
 
     this.emulator.writeMemory32(
@@ -3535,6 +3657,28 @@ export class AmigaDoorSession {
       messageAddr + AmigaDoorSession.MESSAGE_NODE_OFFSET,
       nodeId
     );
+  }
+
+  private ensureNodeStatusBlock(messageDataAddr: number): boolean {
+    if (!this.execLibrary || !this.emulator) {
+      return false;
+    }
+    if (this.nodeStatusBlockAddr === 0) {
+      const addr = this.execLibrary.allocMem(
+        AmigaDoorSession.NODE_STATUS_SIZE,
+        AmigaDoorSession.MEMF_PUBLIC_CLEAR
+      );
+      if (addr === 0) {
+        console.error(
+          "[AmigaDoorSession] Failed to allocate Bulls node status block"
+        );
+        return false;
+      }
+      this.nodeStatusBlockAddr = addr;
+    }
+    this.nodeStatusAddr = this.nodeStatusBlockAddr;
+    this.emulator.writeMemory32(messageDataAddr, this.nodeStatusAddr);
+    return true;
   }
 
   private writeStringToMemory(
