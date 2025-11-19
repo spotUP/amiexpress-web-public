@@ -304,6 +304,12 @@ function httpRequest(requestdata: string, tempFile: string | null): Promise<numb
           }
         }
 
+        if (res.statusCode && res.statusCode !== 200) {
+          debugLog(`httprequest - non-200 status: ${res.statusCode}`);
+          resolve(res.statusCode);
+          return;
+        }
+
         debugLog('httprequest - done');
         resolve(res.statusCode || 0);
       });
