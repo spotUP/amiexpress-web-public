@@ -618,14 +618,9 @@ export class AmigaDoorSession {
 
     console.log("[AmigaDoorSession] Loading Kickstart ROM...");
 
-    // Load Kickstart 3.1 ROM (most compatible)
-    // Path: web/backend/data/amiga-roms/
-    const romPath = path.join(
-      process.cwd(),
-      "web/backend/data/amiga-roms/Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom"
-    );
-    const romData = fs.readFileSync(romPath);
-    this.emulator.loadROM(new Uint8Array(romData));
+    const kickstart = new KickstartRom();
+    const romData = kickstart.getRomData();
+    this.emulator.loadROM(romData);
 
     console.log(
       "[AmigaDoorSession] Kickstart ROM loaded - provides ROM routines"
