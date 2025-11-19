@@ -3846,9 +3846,16 @@ export class AmigaDoorSession {
       str += String.fromCharCode(ch);
     }
 
-    console.log(`[AmigaDoorSession]   Command: ${command}`);
-    console.log(`[AmigaDoorSession]   Data: ${data}`);
-    console.log(`[AmigaDoorSession]   String: "${str}"`);
+    console.log(
+      `[AmigaDoorSession]   XIM command=0x${command.toString(
+        16
+      )} (${command}), data=0x${data.toString(16)}`
+    );
+    if (str.trim().length > 0) {
+      console.log(
+        `[AmigaDoorSession]   XIM string: "${str.replace(/\n/g, "\\n")}"`
+      );
+    }
     console.log(
       `[AmigaDoorSession]   Reply port: 0x${mn_ReplyPort.toString(16)}`
     );
