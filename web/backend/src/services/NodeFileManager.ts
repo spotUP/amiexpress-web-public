@@ -398,7 +398,12 @@ export class NodeFileManager {
     offset += 2;
 
     // baud: INT
-    buffer.writeInt16BE(user.baud || 57600, offset);
+    const rawBaud = user.baud || 57600;
+    const signedBaud = rawBaud & 0xffff;
+    buffer.writeInt16BE(
+      signedBaud > 0x7fff ? signedBaud - 0x10000 : signedBaud,
+      offset
+    );
     offset += 2;
 
     // upCPS2, dnCPS2 (2 LONGs)
