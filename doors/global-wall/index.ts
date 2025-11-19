@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import * as net from 'net';
 import * as http from 'http';
+import * as https from 'https';
 
 // Constants
 const BUFSIZE = 8192;
@@ -61,6 +62,7 @@ interface GlobalWallConfig {
   timeout: number;
   debugLog: string;
   tempFile: string;
+  protocol?: string;
 }
 
 let serverHost = 'scenewall.bbs.io';
@@ -68,6 +70,7 @@ let serverPort = 1541;
 let timeout = 10;
 let debugLogFile = '';
 let tempFile = 'T:jsondata';
+let serverProtocol = 'https';
 
 const colourpresets = ['42626717772363', '32656717772363'];
 let settings: SettingsData;
@@ -126,6 +129,7 @@ function parseConfigFile(configFileName: string): GlobalWallConfig {
           else if (key === 'TIMEOUT') config.timeout = parseInt(value, 10);
           else if (key === 'DEBUGLOG') config.debugLog = value;
           else if (key === 'TEMPFILE') config.tempFile = value;
+          else if (key === 'PROTOCOL') config.protocol = value.toLowerCase();
         }
       }
     } catch (err) {
@@ -168,8 +172,10 @@ function loadConfig(): void {
     if (localConfig.timeout) config.timeout = localConfig.timeout;
     if (localConfig.debugLog) config.debugLog = localConfig.debugLog;
     if (localConfig.tempFile) config.tempFile = localConfig.tempFile;
+    if (localConfig.protocol) config.protocol = localConfig.protocol;
   }
 
+  serverProtocol = config.protocol || 'https';
   serverHost = config.serverHost;
   serverPort = config.serverPort;
   timeout = config.timeout;
@@ -279,7 +285,8 @@ function httpRequest(requestdata: string, tempFile: string | null): Promise<numb
 
     debugLog('httprequest - starting');
 
-    const req = http.request(options, (res) => {
+    const transport = serverProtocol === 'https' ? https : http;
+    const req = transport.request(options, (res) => {
       const chunks: Buffer[] = [];
 
       res.on('data', (chunk: Buffer) => {
