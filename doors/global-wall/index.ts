@@ -275,64 +275,82 @@ function uncleanstr(sourcestring: string): string {
 
 function httpRequest(requestdata: string, tempFile: string | null): Promise<number> {
   return new Promise((resolve) => {
-    const options: http.RequestOptions = {
+    const protocols = serverProtocol === 'https' ? ['https', 'http'] : ['http'];
+    let attempt = 0;
+
+    const makeOptions = (): http.RequestOptions => ({
       hostname: serverHost,
       port: serverPort,
       method: 'GET',
       path: '/',
-      timeout: timeout * 1000
+      timeout: timeout * 1000,
+    });
+
+    const tryRequest = () => {
+      if (attempt >= protocols.length) {
+        resolve(0);
+        return;
+      }
+
+      const protocol = protocols[attempt];
+      const transport = protocol === 'https' ? https : http;
+      const options = makeOptions();
+      console.debug(`[GLOBALWALL] ${protocol.toUpperCase()} request -> ${options.hostname}:${options.port}${options.path}`);
+
+      const req = transport.request(options, (res) => {
+        const chunks: Buffer[] = [];
+
+        res.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+
+        res.on('end', () => {
+          const fullData = Buffer.concat(chunks);
+
+          if (tempFile && res.statusCode === 200) {
+            try {
+              writeFileSync(tempFile, fullData);
+            } catch (err) {
+              console.error('Error writing temp file:', err);
+            }
+          }
+
+          if (res.statusCode && res.statusCode !== 200) {
+            const msg = `[GLOBALWALL] Received HTTP status ${res.statusCode} (${protocol})`;
+            console.warn(msg);
+            debugLog(msg);
+            attempt += 1;
+            tryRequest();
+            return;
+          }
+
+          debugLog('httprequest - done');
+          resolve(res.statusCode || 0);
+        });
+      });
+
+      req.on('error', (err) => {
+        const msg = `[GLOBALWALL] HTTP request error (${protocol}): ${err.message}`;
+        console.warn(msg);
+        debugLog(msg);
+        attempt += 1;
+        tryRequest();
+      });
+
+      req.on('timeout', () => {
+        const msg = `[GLOBALWALL] HTTP request timed out (${protocol})`;
+        console.warn(msg);
+        debugLog(msg);
+        req.destroy();
+        attempt += 1;
+        tryRequest();
+      });
+
+      req.write(requestdata);
+      req.end();
     };
 
-    debugLog('httprequest - starting');
-
-    const transport = serverProtocol === 'https' ? https : http;
-    console.debug(`[GLOBALWALL] ${serverProtocol.toUpperCase()} request -> ${options.hostname}:${options.port}${options.path}`);
-    const req = transport.request(options, (res) => {
-      const chunks: Buffer[] = [];
-
-      res.on('data', (chunk: Buffer) => {
-        chunks.push(chunk);
-      });
-
-      res.on('end', () => {
-        const fullData = Buffer.concat(chunks);
-
-        if (tempFile) {
-          try {
-            writeFileSync(tempFile, fullData);
-          } catch (err) {
-            console.error('Error writing temp file:', err);
-          }
-        }
-
-        if (res.statusCode && res.statusCode !== 200) {
-          const msg = `[GLOBALWALL] Received HTTP status ${res.statusCode}`;
-          console.warn(msg);
-          debugLog(msg);
-          resolve(res.statusCode);
-          return;
-        }
-
-        debugLog('httprequest - done');
-        resolve(res.statusCode || 0);
-      });
-    });
-
-    req.on('error', (err) => {
-      const msg = `[GLOBALWALL] HTTP request error: ${err.message}`;
-      console.warn(msg);
-      debugLog(msg);
-      resolve(0);
-    });
-
-    req.on('timeout', () => {
-      debugLog('httprequest - timeout');
-      req.destroy();
-      resolve(0);
-    });
-
-    req.write(requestdata);
-    req.end();
+    tryRequest();
   });
 }
 
