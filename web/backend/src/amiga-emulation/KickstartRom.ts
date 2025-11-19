@@ -33,9 +33,8 @@ export class KickstartRom {
     const arosRomPaths = Array.from(
       new Set([
         path.join(process.cwd(), 'data/amiga-roms'),
-        path.join(process.cwd(), 'web/backend/data/amiga-roms'),
-        path.join(repoRoot, 'data/amiga-roms'),
         path.join(backendRoot, 'data/amiga-roms'),
+        path.join(repoRoot, 'data/amiga-roms'),
         path.join(__dirname, '../../data/amiga-roms'),
         path.join(__dirname, '../../../data/amiga-roms'),
       ])
@@ -74,9 +73,8 @@ export class KickstartRom {
     const possiblePaths = Array.from(
       new Set([
         path.join(process.cwd(), 'data/amiga-roms', romFilename),
-        path.join(process.cwd(), 'web/backend/data/amiga-roms', romFilename),
-        path.join(repoRoot, 'data/amiga-roms', romFilename),
         path.join(backendRoot, 'data/amiga-roms', romFilename),
+        path.join(repoRoot, 'data/amiga-roms', romFilename),
         path.join(__dirname, '../../data/amiga-roms', romFilename),
         path.join(__dirname, '../../../data/amiga-roms', romFilename),
       ])
