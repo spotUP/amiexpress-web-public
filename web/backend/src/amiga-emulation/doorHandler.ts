@@ -1,7 +1,7 @@
-import { Socket } from 'socket.io';
-import { AmigaDoorSession } from './AmigaDoorSession';
-import * as path from 'path';
-import { config } from '../config';
+import { Socket } from "socket.io";
+import { AmigaDoorSession } from "./AmigaDoorSession";
+import * as path from "path";
+import { config } from "../config";
 
 /**
  * Door Handler - Manages door session lifecycle via Socket.io
@@ -20,72 +20,78 @@ export function setupDoorHandlers(socket: Socket): void {
    * Launch a door
    * Payload: { doorId: string, doorPath?: string }
    */
-  socket.on('door:launch', async (payload: { doorId: string; doorPath?: string }) => {
-    try {
-      console.log(`[DoorHandler] Launch request for door: ${payload.doorId}`);
+  socket.on(
+    "door:launch",
+    async (payload: { doorId: string; doorPath?: string }) => {
+      try {
+        console.log(`[DoorHandler] Launch request for door: ${payload.doorId}`);
 
-      // Check if session already exists
-      if (activeSessions.has(socket.id)) {
-        console.warn(`[DoorHandler] Session already active for socket ${socket.id}`);
-        socket.emit('door:error', { message: 'Door session already active' });
-        return;
-      }
+        // Check if session already exists
+        if (activeSessions.has(socket.id)) {
+          console.warn(
+            `[DoorHandler] Session already active for socket ${socket.id}`
+          );
+          socket.emit("door:error", { message: "Door session already active" });
+          return;
+        }
 
-      // Determine executable path
-      let executablePath: string;
+        // Determine executable path
+        let executablePath: string;
 
-      if (payload.doorPath) {
-        // Use provided path (for testing)
-        executablePath = payload.doorPath;
-      } else {
-        // Look up door by ID
-        // TODO: Implement door registry/database
-        const doorsDir = path.join(config.get('dataDir'), 'Doors');
-        executablePath = path.join(doorsDir, payload.doorId);
-      }
+        if (payload.doorPath) {
+          // Use provided path (for testing)
+          executablePath = payload.doorPath;
+        } else {
+          // Look up door by ID
+          // TODO: Implement door registry/database
+          const doorsDir = path.join(config.get("dataDir"), "Doors");
+          executablePath = path.join(doorsDir, payload.doorId);
+        }
 
-      console.log(`[DoorHandler] Executable path: ${executablePath}`);
+        console.log(`[DoorHandler] Executable path: ${executablePath}`);
 
-      // Create session
-      const session = new AmigaDoorSession(socket, {
-        executablePath,
-        timeout: 600  // 10 minutes
-      });
+        // Create session
+        const session = new AmigaDoorSession(socket, {
+          executablePath,
+          doorType: "XIM",
+          timeout: 600, // 10 minutes
+        });
 
-      activeSessions.set(socket.id, session);
+        activeSessions.set(socket.id, session);
 
-      // Start the door
-      await session.start();
+        // Start the door
+        await session.start();
+      } catch (error) {
+        console.error("[DoorHandler] Error launching door:", error);
+        socket.emit("door:error", {
+          message:
+            error instanceof Error ? error.message : "Failed to launch door",
+        });
 
-    } catch (error) {
-      console.error('[DoorHandler] Error launching door:', error);
-      socket.emit('door:error', {
-        message: error instanceof Error ? error.message : 'Failed to launch door'
-      });
-
-      // Clean up failed session
-      const session = activeSessions.get(socket.id);
-      if (session) {
-        session.terminate();
-        activeSessions.delete(socket.id);
+        // Clean up failed session
+        const session = activeSessions.get(socket.id);
+        if (session) {
+          session.terminate();
+          activeSessions.delete(socket.id);
+        }
       }
     }
-  });
+  );
 
   /**
    * Get door status
    */
-  socket.on('door:status-request', () => {
+  socket.on("door:status-request", () => {
     const session = activeSessions.get(socket.id);
-    socket.emit('door:status', {
-      status: session ? 'running' : 'inactive'
+    socket.emit("door:status", {
+      status: session ? "running" : "inactive",
     });
   });
 
   /**
    * Cleanup on disconnect
    */
-  socket.on('disconnect', () => {
+  socket.on("disconnect", () => {
     console.log(`[DoorHandler] Socket ${socket.id} disconnected`);
     const session = activeSessions.get(socket.id);
     if (session) {
@@ -107,7 +113,9 @@ export function getActiveSessionCount(): number {
  * Terminate all sessions (for shutdown)
  */
 export function terminateAllSessions(): void {
-  console.log(`[DoorHandler] Terminating ${activeSessions.size} active sessions`);
+  console.log(
+    `[DoorHandler] Terminating ${activeSessions.size} active sessions`
+  );
   for (const [socketId, session] of activeSessions) {
     session.terminate();
   }

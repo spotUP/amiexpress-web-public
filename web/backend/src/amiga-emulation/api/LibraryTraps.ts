@@ -951,6 +951,17 @@ export class LibraryTraps {
     // Call the handler with the correct library instance
     // Note: Handler may now modify SP (e.g., StackSwap), but we've already popped the return address
     // Pass returnAddr to handler for functions like Supervisor() that need it
+    if (
+      vector.name === 'WaitPort' &&
+      library &&
+      typeof (library as ExecLibrary).recordWaitPortReturn === 'function'
+    ) {
+      console.log(
+        `[LibraryTraps]   Captured WaitPort return PC 0x${returnAddr.toString(16)}`
+      );
+      (library as ExecLibrary).recordWaitPortReturn(returnAddr);
+    }
+
     const result = (vector.handler as any)(this.emulator, library, returnAddr);
 
     // Set return value in D0

@@ -1,0 +1,57 @@
+{
+  "timestamp": "2025-11-18T15:31:37.381Z",
+  "config": {
+    "executablePath": "~/Code/amiexpress-web/doors/emp_tools/Bulls",
+    "doorType": "XIM",
+    "timeout": 30,
+    "bbsSession": {
+      "user": {
+        "id": "test-user",
+        "username": "TestUser",
+        "location": "Test Location",
+        "secLevel": 100
+      },
+      "nodeId": 0,
+      "nodeNumber": 0,
+      "bbsSession": {
+        "user": {
+          "username": "TestUser",
+          "location": "Test Location",
+          "secLevel": 100
+        },
+        "nodeId": 0,
+        "nodeNumber": 0,
+        "system": {
+          "name": "Test BBS"
+        }
+      }
+    },
+    "args": [
+      "0"
+    ]
+  },
+  "executionTime": 575,
+  "analysis": {
+    "hadOutput": false,
+    "hadWriteCalls": false,
+    "hadAedoorCalls": false,
+    "stuckInLoop": false,
+    "reachedMain": false,
+    "sentStartup": false
+  },
+  "counts": {
+    "writeCalls": 0,
+    "aedoorCalls": 0,
+    "criticalDebug": 0,
+    "milestones": 0,
+    "stuckLoops": 0,
+    "romEntries": 0,
+    "nopEntries": 0
+  },
+  "output": [],
+  "events": [
+    "door:status",
+    "door:status",
+    "door:status"
+  ]
+}

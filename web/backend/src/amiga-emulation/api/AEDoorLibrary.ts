@@ -1,7 +1,7 @@
-import { Socket } from 'socket.io';
-import { MoiraEmulator } from '../cpu/MoiraEmulator';
-import { ExecLibrary } from './ExecLibrary';
-import { XIMCommand } from '../xim/types';
+import { Socket } from "socket.io";
+import { MoiraEmulator } from "../cpu/MoiraEmulator";
+import { ExecLibrary } from "./ExecLibrary";
+import { XIMCommand } from "../xim/types";
 
 interface DoorInterfaceState {
   difaceAddr: number;
@@ -62,7 +62,7 @@ export class AEDoorLibrary {
     socket: Socket,
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
-    sessionData: any,
+    sessionData: any
   ) {
     this.socket = socket;
     this.emulator = emulator;
@@ -76,7 +76,7 @@ export class AEDoorLibrary {
    * Hook terminal input events for Prompt()/GetStr()
    */
   private setupInputHandler(): void {
-    this.socket.on('door:input', (data: string) => {
+    this.socket.on("door:input", (data: string) => {
       if (!this.activePrompt) {
         return;
       }
@@ -108,7 +108,7 @@ export class AEDoorLibrary {
 
     const difaceAddr = this.execLibrary.allocMem(DIFACE_SIZE, MEMF_CLEAR);
     if (difaceAddr === 0) {
-      console.warn('[AEDoorLibrary] CreateComm: AllocMem failed');
+      console.warn("[AEDoorLibrary] CreateComm: AllocMem failed");
       this.emulator.setRegister(0, 0);
       return 0;
     }
@@ -120,7 +120,7 @@ export class AEDoorLibrary {
 
     const replyPortAddr = this.execLibrary.createPort(replyNameAddr, 0);
     if (replyPortAddr === 0) {
-      console.warn('[AEDoorLibrary] CreateComm: CreatePort failed');
+      console.warn("[AEDoorLibrary] CreateComm: CreatePort failed");
       this.execLibrary.freeMem(difaceAddr, DIFACE_SIZE);
       this.emulator.setRegister(0, 0);
       return 0;
@@ -133,10 +133,19 @@ export class AEDoorLibrary {
     this.emulator.writeMemory32(difaceAddr + 0x04, replyPortAddr);
     this.emulator.writeMemory32(difaceAddr + 0x08, messageAddr);
     this.emulator.writeMemory32(difaceAddr + DIFACE_DATA_PTR_OFFSET, dataPtr);
-    this.emulator.writeMemory32(difaceAddr + DIFACE_STRING_PTR_OFFSET, stringPtr);
+    this.emulator.writeMemory32(
+      difaceAddr + DIFACE_STRING_PTR_OFFSET,
+      stringPtr
+    );
 
-    this.emulator.writeMemory32(messageAddr + MESSAGE_REPLY_PORT_OFFSET, replyPortAddr);
-    this.emulator.writeMemory16(messageAddr + MESSAGE_LENGTH_OFFSET, MESSAGE_LENGTH);
+    this.emulator.writeMemory32(
+      messageAddr + MESSAGE_REPLY_PORT_OFFSET,
+      replyPortAddr
+    );
+    this.emulator.writeMemory16(
+      messageAddr + MESSAGE_LENGTH_OFFSET,
+      MESSAGE_LENGTH
+    );
     this.emulator.writeMemory32(messageAddr + MESSAGE_COMMAND_OFFSET, 0);
     this.emulator.writeMemory32(messageAddr + MESSAGE_DATA_OFFSET, 0);
     this.emulator.writeMemory32(messageAddr + MESSAGE_NODE_OFFSET, nodeId);
@@ -156,6 +165,14 @@ export class AEDoorLibrary {
 
     this.interfaces.set(difaceAddr, state);
     this.emulator.setRegister(0, difaceAddr);
+
+    // Send initial ready message to door's reply port
+    // This kicks off the message handshake Bulls is waiting for
+    console.log(
+      `[AEDoorLibrary] CreateComm complete - sending initial ready message to reply port`
+    );
+    this.sendInitialReadyMessage(state);
+
     return difaceAddr;
   }
 
@@ -183,7 +200,9 @@ export class AEDoorLibrary {
     if (!state) return 0;
 
     const command = this.emulator.getRegister(0);
-    const result = this.dispatchCommand(state, command, { useStringPointer: true });
+    const result = this.dispatchCommand(state, command, {
+      useStringPointer: true,
+    });
     this.emulator.setRegister(0, result);
     return result;
   }
@@ -249,7 +268,9 @@ export class AEDoorLibrary {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
-    const dataPtr = this.emulator.readMemory32(state.difaceAddr + DIFACE_DATA_PTR_OFFSET);
+    const dataPtr = this.emulator.readMemory32(
+      state.difaceAddr + DIFACE_DATA_PTR_OFFSET
+    );
     this.emulator.setRegister(0, dataPtr);
     return dataPtr;
   }
@@ -263,7 +284,9 @@ export class AEDoorLibrary {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
-    const stringPtr = this.emulator.readMemory32(state.difaceAddr + DIFACE_STRING_PTR_OFFSET);
+    const stringPtr = this.emulator.readMemory32(
+      state.difaceAddr + DIFACE_STRING_PTR_OFFSET
+    );
     this.emulator.setRegister(0, stringPtr);
     return stringPtr;
   }
@@ -277,12 +300,12 @@ export class AEDoorLibrary {
 
     const maxlen = this.emulator.getRegister(0);
     const promptAddr = this.emulator.getRegister(10);
-    const promptText = promptAddr ? this.readCString(promptAddr, 200) : '';
+    const promptText = promptAddr ? this.readCString(promptAddr, 200) : "";
 
     console.log(`[AEDoorLibrary] Prompt(maxlen=${maxlen}) -> "${promptText}"`);
 
     if (promptText.length > 0) {
-      this.socket.emit('ansi-output', promptText);
+      this.socket.emit("ansi-output", promptText);
     }
 
     this.activePrompt = {
@@ -307,7 +330,7 @@ export class AEDoorLibrary {
     const mode = this.emulator.getRegister(1); // 0 = NOLF, 1 = LF
     let text = this.readCString(stringAddr, state.stringCapacity);
     if (mode) {
-      text += '\r\n';
+      text += "\r\n";
     }
 
     const result = this.dispatchCommand(state, XIMCommand.JH_WRITE, {
@@ -409,7 +432,7 @@ export class AEDoorLibrary {
     if (defaultAddr) {
       const defaultStr = this.readCString(defaultAddr, state.stringCapacity);
       this.writeCString(state.stringPtr, defaultStr, state.stringCapacity);
-      this.socket.emit('ansi-output', defaultStr);
+      this.socket.emit("ansi-output", defaultStr);
     }
 
     this.activePrompt = {
@@ -469,12 +492,79 @@ export class AEDoorLibrary {
   }
 
   /**
+   * Send initial ready message to door's reply port
+   *
+   * After CreateComm, Bulls (and other doors) poll GetMsg waiting for
+   * the BBS to send a message. We send a properly formatted AEDoor message
+   * with JH_REGISTER (1) command as the initial handshake.
+   */
+  private sendInitialReadyMessage(state: DoorInterfaceState): void {
+    // Create properly formatted AEDoor message
+    // struct Message (20 bytes) + AEDoor extension (variable size)
+    const msgSize = 256; // Enough for full AEDoor message structure
+    const msgAddr = this.execLibrary.allocMem(msgSize, MEMF_CLEAR);
+    if (msgAddr === 0) {
+      console.warn("[AEDoorLibrary] Failed to allocate initial message");
+      return;
+    }
+
+    // === Exec Message Structure (20 bytes) ===
+    // mn_Node.ln_Succ (4 bytes) = 0
+    this.emulator.writeMemory32(msgAddr + 0, 0);
+    // mn_Node.ln_Pred (4 bytes) = 0
+    this.emulator.writeMemory32(msgAddr + 4, 0);
+    // mn_Node.ln_Type (1 byte) = NT_MESSAGE (5)
+    this.emulator.writeMemory(msgAddr + 8, 5);
+    // mn_Node.ln_Pri (1 byte) = 0
+    this.emulator.writeMemory(msgAddr + 9, 0);
+    // mn_Node.ln_Name (4 bytes) = 0
+    this.emulator.writeMemory32(msgAddr + 10, 0);
+    // mn_ReplyPort (4 bytes) = state.replyPortAddr
+    this.emulator.writeMemory32(msgAddr + 14, state.replyPortAddr);
+    // mn_Length (2 bytes) = msgSize
+    this.emulator.writeMemory16(msgAddr + 18, msgSize);
+
+    // === AEDoor Message Extension (starts at offset 20) ===
+    // command = JH_REGISTER (1) - tells door to initialize and start
+    this.emulator.writeMemory32(msgAddr + 20, 1); // JH_REGISTER
+    // data = node ID
+    this.emulator.writeMemory32(msgAddr + 24, state.nodeId);
+    // string data = empty for initial registration
+    this.emulator.writeMemory(msgAddr + 28, 0); // null terminator
+
+    console.log(
+      `[AEDoorLibrary] Created properly formatted AEDoor message at 0x${msgAddr.toString(
+        16
+      )}`
+    );
+    console.log(`[AEDoorLibrary]   Command: JH_REGISTER (1)`);
+    console.log(`[AEDoorLibrary]   Node ID: ${state.nodeId}`);
+    console.log(
+      `[AEDoorLibrary]   Reply Port: 0x${state.replyPortAddr.toString(16)}`
+    );
+    console.log(`[AEDoorLibrary]   Message Size: ${msgSize} bytes`);
+
+    // Put message in door's reply port to trigger GetMsg() return
+    this.execLibrary.putMsg(state.replyPortAddr, msgAddr);
+
+    console.log(
+      `[AEDoorLibrary] ✅ Sent initial AEDoor message to door reply port 0x${state.replyPortAddr.toString(
+        16
+      )}`
+    );
+    console.log(
+      `[AEDoorLibrary] Bulls door should now receive JH_REGISTER and enter main processing loop`
+    );
+  }
+
+  /**
    * Resolve node number from registers or session data.
    */
   private resolveNodeId(): number {
-    const sessionNode = typeof this.sessionData?.nodeId === 'number'
-      ? this.sessionData.nodeId
-      : 0;
+    const sessionNode =
+      typeof this.sessionData?.nodeId === "number"
+        ? this.sessionData.nodeId
+        : 0;
 
     const d0 = this.emulator.getRegister(0);
     if (d0 >= 0x30 && d0 <= 0x39) {
@@ -496,7 +586,7 @@ export class AEDoorLibrary {
    * Locate AEDoorPort for this node (falls back to non-numbered port).
    */
   private findBbsPort(nodeId: number): number {
-    const portNames = [`AEDoorPort${nodeId}`, 'AEDoorPort'];
+    const portNames = [`AEDoorPort${nodeId}`, "AEDoorPort"];
     for (const name of portNames) {
       const addr = this.createTempCString(name);
       if (addr === 0) continue;
@@ -541,7 +631,7 @@ export class AEDoorLibrary {
    */
   private readCString(addr: number, maxLength: number): string {
     if (!addr) {
-      return '';
+      return "";
     }
 
     const bytes: number[] = [];
@@ -563,12 +653,14 @@ export class AEDoorLibrary {
   private getStateFromA1(): DoorInterfaceState | null {
     const difaceAddr = this.emulator.getRegister(9); // A1
     if (difaceAddr === 0) {
-      console.warn('[AEDoorLibrary] Missing DIFace pointer in A1');
+      console.warn("[AEDoorLibrary] Missing DIFace pointer in A1");
       return null;
     }
     const state = this.interfaces.get(difaceAddr);
     if (!state) {
-      console.warn(`[AEDoorLibrary] Unknown DIFace 0x${difaceAddr.toString(16)}`);
+      console.warn(
+        `[AEDoorLibrary] Unknown DIFace 0x${difaceAddr.toString(16)}`
+      );
       return null;
     }
     return state;
@@ -577,7 +669,7 @@ export class AEDoorLibrary {
   private dispatchCommand(
     state: DoorInterfaceState,
     command: number,
-    options: { string?: string; data?: number; useStringPointer?: boolean } = {},
+    options: { string?: string; data?: number; useStringPointer?: boolean } = {}
   ): number {
     if (options.string !== undefined) {
       this.writeCString(state.stringPtr, options.string, state.stringCapacity);
@@ -585,12 +677,18 @@ export class AEDoorLibrary {
 
     if (options.useStringPointer) {
       this.emulator.writeMemory32(state.dataPtr, state.stringPtr);
-    } else if (typeof options.data === 'number') {
+    } else if (typeof options.data === "number") {
       this.emulator.writeMemory32(state.dataPtr, options.data);
     }
 
-    this.emulator.writeMemory32(state.messageAddr + MESSAGE_COMMAND_OFFSET, command);
-    this.emulator.writeMemory32(state.messageAddr + MESSAGE_REPLY_PORT_OFFSET, state.replyPortAddr);
+    this.emulator.writeMemory32(
+      state.messageAddr + MESSAGE_COMMAND_OFFSET,
+      command
+    );
+    this.emulator.writeMemory32(
+      state.messageAddr + MESSAGE_REPLY_PORT_OFFSET,
+      state.replyPortAddr
+    );
 
     this.execLibrary.putMsg(state.bbsPortAddr, state.messageAddr);
     const replied = this.waitForReply(state, command);
