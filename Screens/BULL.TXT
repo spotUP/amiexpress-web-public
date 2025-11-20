@@ -2,5 +2,5 @@
 
 Launching Global Last Callers and Global Wall...
 
-~CC_GLCVIEWER||
+~CC_GLCVIEW||
 ~CC_GWALL||
