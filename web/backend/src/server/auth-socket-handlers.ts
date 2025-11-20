@@ -11,9 +11,10 @@ import { nodeFileManager } from '../services/NodeFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity } from '../utils/security.util';
 import { getSessionBySocketId, sessions, userSessions, socketToUser } from './session-manager';
-import { callersLog, displaySystemBulletins } from './database-helpers';
+import { callersLog } from './database-helpers';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { sanitizeInput } from '../utils/input-normalizer.util';
+import { displayScreen, doPause } from '../handlers/screen.handler';
 
 /**
  * Register authentication socket event handlers
@@ -216,8 +217,15 @@ export function registerAuthHandlers(socket: Socket) {
           }
         });
       }
-      // Start the proper AmiExpress flow: bulletins first
-      displaySystemBulletins(socket, session);
+
+      // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
+      const logonDisplayed = await displayScreen(socket, session, 'LOGON');
+      if (logonDisplayed) {
+        doPause(socket, session);
+      }
+
+      // Begin bulletin flow: BULL -> NODE_BULL -> confScan -> CONF_BULL -> MENU
+      session.subState = LoggedOnSubState.DISPLAY_BULL;
       triggerSamiLogRefresh();
     } catch (error) {
       console.error('Socket login error:', error);

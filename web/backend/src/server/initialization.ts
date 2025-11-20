@@ -125,6 +125,7 @@ import { searchFileDescriptions } from './database-helpers';
 // Screen name constants (like express.e SCREEN_* constants)
 const SCREEN_BULL = 'BULL';
 const SCREEN_NODE_BULL = 'NODE_BULL';
+const SCREEN_CONF_BULL = 'CONF_BULL';
 const SCREEN_MENU = 'MENU';
 
 // Global data caches (loaded from database)
@@ -235,7 +236,7 @@ export async function initializeData() {
     setMessageBases(messageBases);
     setDatabase(db);
     setHelpers({ callersLog, loadFlagged, loadHistory });
-    setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, LoggedOnSubState });
+    setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, LoggedOnSubState });
 
     // Load file areas for all conferences
     fileAreas = [];

@@ -11,10 +11,11 @@ import * as path from 'path';
 import type { BBSSession } from '../index';
 import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
-import { sequentialFileManager } from '../services/SequentialFileManager';
+import { sequentialFileManager, formatNumberedFilename } from '../services/SequentialFileManager';
 import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
 import { findCaseInsensitive } from '../utils/fs-amiga.util';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
+import { findSecurityScreen } from '../utils/screen-security.util';
 
 const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG === '1';
 const screenDebug = (...args: any[]) => {
@@ -452,17 +453,21 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   }
 
   // ~SR_ - String Replace / Random File Display (express.e:5531-5560)
-  // Format: ~SR_<path>/<basename> - displays random file from numbered set
-  // Example: ~SR_WORK:bbs/Screens/logoff/logoff displays logoff.1, logoff.2, etc.
-  const srRegex = /~SR_([^|\r\n]+)(\|\|)?/g;
+  // Format: ~<max>SR_<path>/<basename> - displays random file from numbered set (max optional, defaults to 99)
+  // Example: ~SR_WORK:bbs/Screens/logoff/logoff displays 001.logoff.txt, 002.logoff.txt, etc.
+  const srRegex = /~(\d*)SR_([^|\r\n]+)(\|\|)?/g;
   let srMatch;
   while ((srMatch = srRegex.exec(parsed)) !== null) {
-    const basePath = srMatch[1].trim();
+    const maxCountRaw = srMatch[1];
+    const basePath = srMatch[2].trim();
     screenDebug('[MCI] Found ~SR_ random file request:', basePath);
 
-    // Pick a random number (1-99) and try to find the file
-    const randomNum = Math.floor(Math.random() * 99) + 1;
-    const randomFile = `${basePath}.${randomNum}`;
+    // Optional numeric prefix sets the upper bound (default 99 like express.e used)
+    const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
+
+    // Pick a random number (1-maxCount) and format with 3-digit prefix before filename
+    const randomNum = Math.floor(Math.random() * maxCount) + 1;
+    const randomFile = formatNumberedFilename(basePath, randomNum);
 
     screenDebug('[MCI] ~SR_ selected random file:', randomFile);
     filesToDisplay.push(randomFile);
@@ -587,6 +592,8 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   screenDebug(`[loadScreenFile] Conference ID: ${conferenceId}, Node ID: ${nodeId}`);
   screenDebug(`[loadScreenFile] Terminal type: ${session?.terminalType || 'unknown'} (${session?.screenWidth}x${session?.screenHeight})`);
   screenDebug(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
+  const userSecLevel = session?.user?.secLevel ?? 0;
+  const screenBaseNoExt = screenName.replace(/\.[^/.]+$/, ''); // strip extension for security search
 
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
   // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
@@ -703,6 +710,18 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   let attemptNum = 0;
 
   for (const location of searchLocations) {
+    // First, try security-level variants (numbered) like express.e findSecurityScreen()
+    const securityBasePath = path.join(location.dir, screenBaseNoExt);
+    const securityVariant = findSecurityScreen(securityBasePath, userSecLevel);
+    if (securityVariant) {
+      screenDebug(`[loadScreenFile] ✓ Found security screen for ${screenName} at: ${securityVariant}`);
+      try {
+        return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false };
+      } catch (error) {
+        console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
+      }
+    }
+
     for (const filename of filenameVariations) {
       attemptNum++;
       const expectedPath = path.join(location.dir, filename);
@@ -803,7 +822,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   screenDebug(`[displayScreen] User: ${session.user?.name || 'guest'}`);
   screenDebug(`[displayScreen] ========================================`);
 
-  const screenData = loadScreenFile(screenName, session.currentConf, 0, session);
+  const screenData = loadScreenFile(screenName, session.currentConf, session.nodeId || 0, session);
 
   if (screenData) {
     const { content, isPetscii } = screenData;

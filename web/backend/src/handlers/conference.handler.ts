@@ -35,6 +35,7 @@ let loadFlagged: (socket: any, session: BBSSession) => Promise<void>;
 let loadHistory: (session: BBSSession) => Promise<void>;
 let SCREEN_BULL: string;
 let SCREEN_NODE_BULL: string;
+let SCREEN_CONF_BULL: string;
 let LoggedOnSubState: any;
 
 // Injection functions
@@ -63,68 +64,24 @@ export function setHelpers(helpers: {
 export function setConstants(constants: {
   SCREEN_BULL: string;
   SCREEN_NODE_BULL: string;
+  SCREEN_CONF_BULL: string;
   LoggedOnSubState: any;
 }) {
   SCREEN_BULL = constants.SCREEN_BULL;
   SCREEN_NODE_BULL = constants.SCREEN_NODE_BULL;
+  SCREEN_CONF_BULL = constants.SCREEN_CONF_BULL;
   LoggedOnSubState = constants.LoggedOnSubState;
 }
 
 /**
- * Display conference bulletins and trigger conference scan
- * Like express.e:28566-28577 - SCREEN_NODE_BULL + confScan
+ * Display conference bulletins (CONF_BULL)
+ * Like express.e:28566-28577 - final bulletin after confScan
  */
 export async function displayConferenceBulletins(socket: any, session: BBSSession) {
-  // Phase 8: Use authentic screen file system
-  // Express.e:28556 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
-  if (await displayScreen(socket, session, SCREEN_BULL)) {
+  // Express.e:28565 - IF (displayScreen(SCREEN_CONF_BULL)) THEN doPause()
+  if (await displayScreen(socket, session, SCREEN_CONF_BULL)) {
     doPause(socket, session);
   }
-
-  // Express.e:28557 - IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
-  if (await displayScreen(socket, session, SCREEN_NODE_BULL)) {
-    doPause(socket, session);
-  }
-
-  // Conference scan (confScan equivalent - express.e:28564)
-  socket.emit('ansi-output', '\r\n\x1b[32mScanning conferences for new messages...\x1b[0m\r\n');
-
-  // Get user's last scan time (use last login if no scan time stored)
-  const lastScanTime = session.user!.lastScanTime || session.user!.lastLogin || new Date(0);
-
-  // Convert Date to ISO string for SQLite compatibility
-  const lastScanTimeStr = lastScanTime.toISOString();
-
-  // Query for new messages per conference since last scan
-  const newMessagesQuery = await db.query(
-    `SELECT c.id, c.name, COUNT(m.id) as new_count
-     FROM conferences c
-     LEFT JOIN messages m ON m.conferenceid = c.id AND m.timestamp > ?
-     GROUP BY c.id, c.name
-     HAVING COUNT(m.id) > 0
-     ORDER BY c.id`,
-    [lastScanTimeStr]
-  );
-
-  if (newMessagesQuery.rows.length > 0) {
-    socket.emit('ansi-output', '\x1b[32mFound new messages in:\x1b[0m\r\n');
-    newMessagesQuery.rows.forEach((row: any) => {
-      socket.emit('ansi-output', `- ${row.name} conference (${row.new_count} new)\r\n`);
-    });
-  } else {
-    socket.emit('ansi-output', '\x1b[33mNo new messages found.\x1b[0m\r\n');
-  }
-
-  // Update last scan time
-  // TODO: Add lastScanTime column to users table
-  // await db.updateUser(session.user!.id, { lastScanTime: new Date() });
-
-  // Join default conference (joinConf equivalent - express.e:28574)
-  await joinConference(socket, session, session.confRJoin, session.msgBaseRJoin);
-
-  // Express.e:28582-28603 - After conference join, display menu
-  // menuPause is already set to true by joinConference
-  await displayMainMenu(socket, session);
 }
 
 /**

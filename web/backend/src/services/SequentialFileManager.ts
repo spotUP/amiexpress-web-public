@@ -8,6 +8,20 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+/**
+ * Format a numbered filename the way express.e does:
+ * <dir>/<NNN>.<basename>
+ * Example: "Screens/logon.txt" with 3 => "Screens/003.logon.txt"
+ */
+export function formatNumberedFilename(basePath: string, num: number): string {
+  const dir = path.dirname(basePath);
+  const basename = path.basename(basePath);
+  const padded = String(num).padStart(3, '0');
+
+  // path.join('.', '001.foo') returns '001.foo', so '.' is fine for no dir
+  return path.join(dir, `${padded}.${basename}`);
+}
+
 export class SequentialFileManager {
   private counterDir: string;
   private counters: Map<string, number> = new Map();
@@ -96,8 +110,8 @@ export class SequentialFileManager {
     const dirname = path.dirname(basePath);
     const basename = path.basename(basePath);
 
-    // Format: base.N (with 3-digit zero-padded number like express.e)
-    const filename = path.join(dirname, `${basename}.${currentValue}`);
+    // Format: <dir>/<NNN>.<basename> (3-digit zero-padded prefix like express.e)
+    const filename = formatNumberedFilename(path.join(dirname, basename), currentValue);
 
     return {
       number: currentValue,

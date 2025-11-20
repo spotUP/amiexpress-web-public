@@ -874,32 +874,38 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   // Handle substate-specific input
-  if (session.subState === LoggedOnSubState.DISPLAY_BULL ||
-      session.subState === LoggedOnSubState.CONF_SCAN ||
-      session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
-      session.subState === LoggedOnSubState.DISPLAY_MENU) {
+  if (
+    session.subState === LoggedOnSubState.DISPLAY_BULL ||
+    session.subState === LoggedOnSubState.DISPLAY_NODE_BULL ||
+    session.subState === LoggedOnSubState.CONF_SCAN ||
+    session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
+    session.subState === LoggedOnSubState.DISPLAY_MENU
+  ) {
     console.log('📋 In display state, continuing to next state');
     try {
       // Any key continues to next state
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
-        // express.e:28555-28648 flow: BULL → confScan
-        // Import and call performConferenceScan from message-scan.handler
+        // express.e:28555 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
+        const shown = await displayScreen(socket, session, 'BULL');
+        if (shown) doPause(socket, session);
+        session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
+      } else if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
+        // express.e:28557 - IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
+        const shown = await displayScreen(socket, session, 'NODE_BULL');
+        if (shown) doPause(socket, session);
+        session.subState = LoggedOnSubState.CONF_SCAN;
+      } else if (session.subState === LoggedOnSubState.CONF_SCAN) {
+        // express.e:28564 - confScan
         const { performConferenceScan } = require('./message-scan.handler');
         await performConferenceScan(socket, session);
-
-        // Automatically continue to next state without pause
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        await displayConferenceBulletins(socket, session);
-      } else if (session.subState === LoggedOnSubState.CONF_SCAN) {
-        // express.e:28555-28648 flow: confScan → CONF_BULL
-        await displayConferenceBulletins(socket, session);
       } else if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
-        // Like AmiExpress: after command completes, set menuPause=TRUE and display menu
+        // express.e:28565 - IF (displayScreen(SCREEN_CONF_BULL)) THEN doPause()
+        await displayConferenceBulletins(socket, session);
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
-        displayMainMenu(socket, session);
       } else if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
-        // After conference join, display the main menu
-        session.menuPause = true;
+        // express.e:28586+ - show menu
         await displayMainMenu(socket, session);
       }
     } catch (error) {

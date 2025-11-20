@@ -1987,7 +1987,7 @@ async function initializeData() {
     setMessageBases(messageBases);
     setDatabase(db);
     setHelpers({ callersLog, loadFlagged, loadHistory });
-    setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, LoggedOnSubState });
+    setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, LoggedOnSubState });
 
     // Load file areas for all conferences
     fileAreas = [];

@@ -101,9 +101,9 @@ export class ConfigManager {
 
       // Path Settings
       // Project root contains BBS data (Commands/, Conf1/, Doors/, etc.)
-      // Use BBS_DATA_DIR env var if set, otherwise calculate from process.cwd()
-      // process.cwd() is web/backend, so go up 2 levels to get to project root
-      dataDir: process.env.BBS_DATA_DIR || path.resolve(process.cwd(), '../..'),
+      // Use BBS_DATA_DIR env var if set, otherwise calculate relative to this file
+      // (__dirname in dist points to web/backend/dist, so ../../.. reaches repo root)
+      dataDir: process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../..'),
 
       // Time Settings
       timeZone: 'UTC',
