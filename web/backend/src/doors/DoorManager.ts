@@ -754,10 +754,38 @@ export class DoorManager {
    * Display documentation viewer
    */
   private showDocs(): void {
+    if (this.state.docsContent) {
+      this.renderDocsContent();
+      return;
+    }
     if (!this.state.currentDoor) return;
-
-    // Launch interactive archive browser
     this.browseArchive();
+  }
+
+  /**
+   * Render docsContent with simple paging
+   */
+  private renderDocsContent(): void {
+    const content = this.state.docsContent || '';
+    const lines = content.split('\n');
+    const pageSize = 20;
+    const start = this.state.scrollOffset;
+    const end = Math.min(start + pageSize, lines.length);
+
+    this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR LOG ', 80) + '\x1b[0m\r\n\r\n');
+
+    for (let i = start; i < end; i++) {
+      this.socket.emit('ansi-output', `${lines[i]}\r\n`);
+    }
+
+    if (lines.length > pageSize) {
+      const current = Math.floor(this.state.scrollOffset / pageSize) + 1;
+      const total = Math.ceil(lines.length / pageSize);
+      this.socket.emit('ansi-output', `\r\n\x1b[90mPage ${current}/${total}\x1b[0m\r\n`);
+    }
+
+    this.socket.emit('ansi-output', '\r\n\x1b[33m↑/↓\x1b[0m Scroll  \x1b[33mB\x1b[0m Back  \x1b[33mQ\x1b[0m Quit\r\n');
   }
 
   /**

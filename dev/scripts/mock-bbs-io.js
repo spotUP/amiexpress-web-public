@@ -3,14 +3,19 @@
  * Provides basic stdin/stdout helpers via environment variables.
  */
 
-function getMockEnv(user = 'tester', node = '1') {
+const DEFAULT_INPUT = '\r\n';
+
+function getMockEnv(user = 'tester', node = '1', input = DEFAULT_INPUT) {
   return {
     BBS_HARNESS: '1',
     BBS_USER: user,
-    BBS_NODE: node
+    BBS_NODE: node,
+    BBS_INPUT: input,
+    BBS_ANSI: '0'
   };
 }
 
 module.exports = {
-  getMockEnv
+  getMockEnv,
+  DEFAULT_INPUT
 };
