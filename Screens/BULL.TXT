@@ -2,5 +2,4 @@
 
 Launching Global Last Callers and Global Wall...
 
-~CC_GLCVIEW||
-~CC_GWALL||
+~SP.
