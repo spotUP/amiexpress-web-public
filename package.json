@@ -1,6 +1,8 @@
 {
   "scripts": {
-    "dev:doors": "node dev/scripts/watch-doors.js"
+    "dev:doors": "node dev/scripts/watch-doors.js",
+    "door:doctor": "node dev/scripts/door-doctor.js",
+    "door:create": "node dev/scripts/create-door-skeleton.js"
   },
   "dependencies": {
     "socket.io": "^4.8.1",

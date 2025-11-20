@@ -50,6 +50,7 @@ interface DoorManagerState {
   selectedIndex: number;
   doors: DoorInfo[];
   currentDoor?: DoorInfo;
+  lastReloadStatus?: Record<string, string>;
   uploadBuffer?: Buffer;
   uploadFilename?: string;
   docsContent?: string;
@@ -90,6 +91,7 @@ export class DoorManager {
       mode: 'list',
       selectedIndex: 0,
       doors: [],
+      lastReloadStatus: {},
       scrollOffset: 0
     };
 
@@ -488,6 +490,10 @@ export class DoorManager {
     this.socket.emit('ansi-output', `\x1b[0;36mSize:\x1b[0m ${this.formatSize(door.size)}\r\n`);
     this.socket.emit('ansi-output', `\x1b[0;36mDate:\x1b[0m ${door.uploadDate.toLocaleDateString()}\r\n`);
     this.socket.emit('ansi-output', `\x1b[0;36mStatus:\x1b[0m ${door.installed ? '\x1b[32mInstalled\x1b[0m' : '\x1b[31mNot Installed\x1b[0m'}\r\n`);
+    const lastStatus = this.state.lastReloadStatus?.[door.id];
+    if (lastStatus) {
+      this.socket.emit('ansi-output', `\x1b[0;36mLast Reload:\x1b[0m ${lastStatus}\r\n`);
+    }
 
     if (door.author) {
       this.socket.emit('ansi-output', `\x1b[0;36mAuthor:\x1b[0m ${door.author}\r\n`);
@@ -619,6 +625,10 @@ export class DoorManager {
       }
     } catch (err) {
       this.socket.emit('ansi-output', `\x1b[31mBuild step failed: ${(err as Error).message}\x1b[0m\r\n`);
+      this.state.lastReloadStatus = {
+        ...(this.state.lastReloadStatus || {}),
+        [door.id]: `Build failed: ${(err as Error).message}`
+      };
     }
 
     // Reinstall to refresh Commands/BBSCmd and local configs
@@ -637,9 +647,17 @@ export class DoorManager {
       this.state.currentDoor = this.state.doors.find(d => d.name === door.name || (d as any).doorName === (door as any).doorName) || door;
 
       this.socket.emit('ansi-output', '\x1b[32m* Reload complete\x1b[0m\r\n');
+      this.state.lastReloadStatus = {
+        ...(this.state.lastReloadStatus || {}),
+        [door.id]: 'Success'
+      };
       this.showInfo();
     } catch (err) {
       this.socket.emit('ansi-output', `\x1b[31mReload failed: ${(err as Error).message}\x1b[0m\r\n`);
+      this.state.lastReloadStatus = {
+        ...(this.state.lastReloadStatus || {}),
+        [door.id]: `Failed: ${(err as Error).message}`
+      };
     }
   }
 

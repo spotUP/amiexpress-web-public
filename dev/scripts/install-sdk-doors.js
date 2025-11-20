@@ -156,9 +156,26 @@ for (const doorName of doors) {
 
     // Get door metadata
     const bbsCommand = pkg.bbsCommand || doorName.toUpperCase().replace(/-/g, '');
-    const doorType = pkg.doorType || 'TS';
+    const doorType = (pkg.doorType || pkg.type || 'TS').toUpperCase();
     const description = pkg.description || '';
     const access = pkg.accessLevel !== undefined ? pkg.accessLevel : 0;
+
+    // Quick validation: require a supported dev door type
+    const supportedTypes = ['TS', 'JS', 'PY', 'PYTHON', 'AREXX', 'REXX'];
+    if (!supportedTypes.includes(doorType)) {
+      console.error(`   [ERROR] Door ${doorName} has unsupported doorType/type '${doorType}'. Skipping.`);
+      errors++;
+      continue;
+    }
+
+    // Ensure entry point exists
+    const entryPoint = pkg.main || 'dist/index.js';
+    const entryPath = path.join(doorPath, entryPoint);
+    if (!fs.existsSync(entryPath)) {
+      console.error(`   [ERROR] Entry point missing (${entryPoint}) for ${doorName}. Did you run npm run build? Skipping.`);
+      errors++;
+      continue;
+    }
 
     log(`[PACKAGE] ${doorName}`);
     log(`   Command: ${bbsCommand}`);
