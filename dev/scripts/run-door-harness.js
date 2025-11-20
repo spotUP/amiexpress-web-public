@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { getMockEnv } = require('./mock-bbs-io');
 
 function usage() {
   console.error('Usage: run-door-harness <doorName>');
@@ -54,9 +55,7 @@ async function mainRun() {
       const rc = await run(interpreter, [main], {
         env: {
           ...process.env,
-          BBS_HARNESS: '1',
-          BBS_USER: 'tester',
-          BBS_NODE: '1'
+          ...getMockEnv()
         }
       });
       if (rc === 127) {
@@ -83,9 +82,7 @@ async function mainRun() {
       const rc = await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run'], {
         env: {
           ...process.env,
-          BBS_HARNESS: '1',
-          BBS_USER: 'tester',
-          BBS_NODE: '1'
+          ...getMockEnv()
         }
       });
       if (rc === 127) {
@@ -111,9 +108,7 @@ async function mainRun() {
   const rc = await run('node', [entryPath], {
     env: {
       ...process.env,
-      BBS_HARNESS: '1',
-      BBS_USER: 'tester',
-      BBS_NODE: '1'
+      ...getMockEnv()
     }
   });
   process.exit(rc || 0);
