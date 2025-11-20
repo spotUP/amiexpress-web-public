@@ -150,17 +150,17 @@ doorApiRouter.post('/doors/clear-cache', async (req: Request, res: Response) => 
  */
 async function loadDoorManifest(doorId: string): Promise<any | null> {
   try {
-    // Try SDK examples first
-    const sdkPath = path.join(process.cwd(), '../../sdk/doors', doorId, 'package.json');
-    if (fs.existsSync(sdkPath)) {
-      const content = fs.readFileSync(sdkPath, 'utf8');
-      return JSON.parse(content);
-    }
-
-    // Try doors directory
+    // Prefer installed doors/ in the BBS tree so deployments without sdk/ still work.
     const doorsPath = path.join(process.cwd(), '../doors', doorId, 'package.json');
     if (fs.existsSync(doorsPath)) {
       const content = fs.readFileSync(doorsPath, 'utf8');
+      return JSON.parse(content);
+    }
+
+    // Fall back to sdk/doors for dev setups.
+    const sdkPath = path.join(process.cwd(), '../../sdk/doors', doorId, 'package.json');
+    if (fs.existsSync(sdkPath)) {
+      const content = fs.readFileSync(sdkPath, 'utf8');
       return JSON.parse(content);
     }
 
@@ -175,16 +175,16 @@ async function loadDoorManifest(doorId: string): Promise<any | null> {
  * Resolve door path from door ID and entry point
  */
 function resolveDoorPath(doorId: string, entryPoint: string): string {
-  // Try SDK examples first
-  const sdkPath = path.join(process.cwd(), '../../sdk/doors', doorId, entryPoint);
-  if (fs.existsSync(sdkPath)) {
-    return sdkPath;
-  }
-
-  // Try doors directory
+  // Prefer doors directory in the BBS tree
   const doorsPath = path.join(process.cwd(), '../doors', doorId, entryPoint);
   if (fs.existsSync(doorsPath)) {
     return doorsPath;
+  }
+
+  // Fall back to SDK examples (dev)
+  const sdkPath = path.join(process.cwd(), '../../sdk/doors', doorId, entryPoint);
+  if (fs.existsSync(sdkPath)) {
+    return sdkPath;
   }
 
   // Return absolute path if provided
@@ -203,29 +203,7 @@ async function listAvailableDoors(): Promise<any[]> {
   const doors: any[] = [];
 
   // Scan SDK examples
-  const sdkExamplesPath = path.join(process.cwd(), '../../sdk/doors');
-  if (fs.existsSync(sdkExamplesPath)) {
-    const entries = fs.readdirSync(sdkExamplesPath);
-    for (const entry of entries) {
-      const manifestPath = path.join(sdkExamplesPath, entry, 'package.json');
-      if (fs.existsSync(manifestPath)) {
-        try {
-          const content = fs.readFileSync(manifestPath, 'utf8');
-          const manifest = JSON.parse(content);
-          doors.push({
-            id: entry,
-            name: manifest.name || entry,
-            runtime: manifest.runtime || 'server',
-            description: manifest.description || '',
-          });
-        } catch (error) {
-          console.error(`Error loading manifest for ${entry}:`, error);
-        }
-      }
-    }
-  }
-
-  // Scan doors directory
+  // Scan doors directory (preferred for deployments)
   const doorsPath = path.join(process.cwd(), '../doors');
   if (fs.existsSync(doorsPath)) {
     const entries = fs.readdirSync(doorsPath);
@@ -237,6 +215,32 @@ async function listAvailableDoors(): Promise<any[]> {
           const manifest = JSON.parse(content);
 
           // Skip if already added from SDK
+          if (!doors.find(d => d.id === entry)) {
+            doors.push({
+              id: entry,
+              name: manifest.name || entry,
+              runtime: manifest.runtime || 'server',
+              description: manifest.description || '',
+            });
+          }
+        } catch (error) {
+          console.error(`Error loading manifest for ${entry}:`, error);
+        }
+      }
+    }
+  }
+
+  // Scan SDK examples (dev fallback)
+  const sdkExamplesPath = path.join(process.cwd(), '../../sdk/doors');
+  if (fs.existsSync(sdkExamplesPath)) {
+    const entries = fs.readdirSync(sdkExamplesPath);
+    for (const entry of entries) {
+      const manifestPath = path.join(sdkExamplesPath, entry, 'package.json');
+      if (fs.existsSync(manifestPath)) {
+        try {
+          const content = fs.readFileSync(manifestPath, 'utf8');
+          const manifest = JSON.parse(content);
+          // Skip if already present from doors/
           if (!doors.find(d => d.id === entry)) {
             doors.push({
               id: entry,

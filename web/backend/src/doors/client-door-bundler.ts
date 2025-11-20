@@ -82,8 +82,45 @@ export class ClientDoorBundler {
       const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
       const sdkPath = path.join(bbsRoot, 'sdk');
 
+      const resolveSdkPath = (subpath: string): string => {
+        const candidates = [
+          path.join(bbsRoot, 'sdk'),
+          path.join(bbsRoot, 'node_modules', '@amiexpress', 'bbs-door-sdk'),
+          path.join(process.cwd(), '../../sdk')
+        ];
+
+        for (const base of candidates) {
+          const full = path.join(base, subpath);
+          if (fs.existsSync(full)) {
+            return full;
+          }
+        }
+
+        try {
+          const pkgPath = require.resolve('@amiexpress/bbs-door-sdk/package.json', {
+            paths: [bbsRoot, process.cwd()]
+          });
+          const pkgDir = path.dirname(pkgPath);
+          const candidate = path.join(pkgDir, subpath);
+          if (fs.existsSync(candidate)) {
+            return candidate;
+          }
+        } catch {
+          // ignore
+        }
+
+        // Final fallback to expected sdk path
+        return path.join(bbsRoot, 'sdk', subpath);
+      };
+
+      const sdkClient = resolveSdkPath('dist/client/index.js');
+      const sdkServer = resolveSdkPath('dist/server/index.js');
+      const sdkCommon = resolveSdkPath('dist/common/index.js');
+      const sdkNodeModules = path.join(bbsRoot, 'node_modules');
+
       console.log(`[ClientDoorBundler] BBS root: ${bbsRoot}`);
       console.log(`[ClientDoorBundler] SDK path: ${sdkPath}`);
+      console.log(`[ClientDoorBundler] SDK client: ${sdkClient}`);
 
       // Create shim files for Node.js modules
       const fsShimPath = this.createFsShim();
@@ -106,10 +143,10 @@ export class ClientDoorBundler {
         // Resolve SDK imports and Node.js built-ins to shims
         alias: {
           // Use client-only bundle to avoid server dependencies
-          '@amiexpress/bbs-door-sdk': path.join(sdkPath, 'dist/client/index.js'),
-          '@amiexpress/bbs-door-sdk/client': path.join(sdkPath, 'dist/client/index.js'),
-          '@amiexpress/bbs-door-sdk/server': path.join(sdkPath, 'dist/server/index.js'),
-          '@amiexpress/bbs-door-sdk/common': path.join(sdkPath, 'dist/common/index.js'),
+          '@amiexpress/bbs-door-sdk': sdkClient,
+          '@amiexpress/bbs-door-sdk/client': sdkClient,
+          '@amiexpress/bbs-door-sdk/server': sdkServer,
+          '@amiexpress/bbs-door-sdk/common': sdkCommon,
           // Node.js built-in shims for browser
           'fs': fsShimPath,
           'path': pathShimPath,
@@ -119,8 +156,12 @@ export class ClientDoorBundler {
 
         // Additional resolve paths
         nodePaths: [
+          path.dirname(sdkClient),
+          path.dirname(sdkServer),
+          path.dirname(sdkCommon),
           sdkPath,
           path.join(sdkPath, 'node_modules'),
+          sdkNodeModules
         ],
 
         // Don't mark as external - let alias handle them
