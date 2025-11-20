@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "dev:doors": "node dev/scripts/watch-sdk-doors.js"
+    "dev:doors": "node dev/scripts/watch-doors.js"
   },
   "dependencies": {
     "socket.io": "^4.8.1",

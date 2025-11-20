@@ -57,16 +57,23 @@ if (!fs.existsSync(doorsDir)) {
   log(`✓ Created doors/ directory`);
 }
 
-// Get all SDK example doors
-const doors = fs.readdirSync(sdkExamplesDir).filter(name => {
-  const doorPath = path.join(sdkExamplesDir, name);
-  const pkgPath = path.join(doorPath, 'package.json');
-  const isDoor = fs.statSync(doorPath).isDirectory() && fs.existsSync(pkgPath);
+function collectDoors(root) {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root).filter(name => {
+    const doorPath = path.join(root, name);
+    const pkgPath = path.join(doorPath, 'package.json');
+    const isDoor = fs.existsSync(doorPath) && fs.statSync(doorPath).isDirectory() && fs.existsSync(pkgPath);
+    if (!isDoor) return false;
+    if (doorFilter.length > 0 && !doorFilter.includes(name)) return false;
+    return true;
+  });
+}
 
-  if (!isDoor) return false;
-  if (doorFilter.length > 0 && !doorFilter.includes(name)) return false;
-  return true;
-});
+// Prefer actual doors/ tree; fall back to sdk/doors for legacy dev setups
+const doors = Array.from(new Set([
+  ...collectDoors(doorsDir),
+  ...collectDoors(sdkExamplesDir)
+]));
 
 log(`\nFound ${doors.length} SDK example doors:\n`);
 
@@ -139,7 +146,9 @@ function ensureDoorAssets(doorName, targetDoorPath) {
 
 for (const doorName of doors) {
   try {
-    const doorPath = path.join(sdkExamplesDir, doorName);
+    const sourceFromDoors = path.join(doorsDir, doorName);
+    const sourceFromSdk = path.join(sdkExamplesDir, doorName);
+    const doorPath = fs.existsSync(sourceFromDoors) ? sourceFromDoors : sourceFromSdk;
     const pkgPath = path.join(doorPath, 'package.json');
 
     // Read package.json
@@ -177,7 +186,6 @@ for (const doorName of doors) {
       log(`   ✓ Created ${bbsCommand}.info`);
     }
 
-    // Copy door directory to doors/ (avoid symlinks so config can be localised)
     const targetDoorPath = path.join(doorsDir, doorName);
     const targetExists = fs.existsSync(targetDoorPath);
     const targetIsSymlink = targetExists && fs.lstatSync(targetDoorPath).isSymbolicLink();
@@ -187,7 +195,10 @@ for (const doorName of doors) {
       log(`   [INFO] Removed existing symlink doors/${doorName}`);
     }
 
-    if (!targetExists || targetIsSymlink) {
+    // If source is already the doors/ tree, just ensure configs. Otherwise copy from sdk/doors into doors/
+    if (doorPath === targetDoorPath) {
+      log(`   [INFO] Working directly from doors/${doorName}`);
+    } else if (!targetExists || targetIsSymlink) {
       copyRecursive(doorPath, targetDoorPath);
       log(`   ✓ Copied to doors/${doorName}`);
     } else {
