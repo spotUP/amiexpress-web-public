@@ -1,0 +1,7 @@
+BBSCMD=GLOBALWALL
+TYPE=TS
+LOCATION=doors/gwall
+DESCRIPTION=Global Wall - One-liner wall for all BBS users (runDoor pattern)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

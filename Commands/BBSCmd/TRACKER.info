@@ -1,0 +1,7 @@
+BBSCMD=TRACKER
+TYPE=TS
+LOCATION=doors/tracker-door
+DESCRIPTION=Professional music tracker BBS door inspired by Renoise, Protracker, and FastTracker II
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

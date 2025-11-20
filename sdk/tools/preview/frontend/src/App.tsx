@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
-  XTermTerminal,
-  CodeEditor,
+  // Lazy-loaded heavy components moved below
   BuildStatusEnhanced,
   ScreenshotCapture,
   SessionRecorder,
@@ -11,31 +10,21 @@ import {
   Header,
   DoorListEnhanced,
   Settings,
-  EnhancedGameWizard,
   ToastContainer,
   ConnectionBanner,
   KeyboardOverlay,
   CRTEffect,
-  CommandPalette,
   StatusBar,
   QuickActions,
-  SuccessCelebration,
   GradientMesh,
   OnboardingTour,
   HapticFeedback,
-  ThemeSelector,
   EnhancedLoader,
   TerminalTabs,
   CodeMinimap,
-  PerformanceProfiler,
-  GitIntegration,
-  AIPromptPanel,
-  CodeDiffViewer,
-  NFOEditor,
-  FileDizEditor,
 } from './components';
 import { BBSTerminal, type BBSTerminalRef } from './components/BBSTerminal';
-import type { XTermTerminalRef } from './components';
+import type { XTermTerminalRef } from './components/XTermTerminal';
 import { useWebSocket, useLocalStorage, useKeyboardShortcuts } from './hooks';
 import { useToast } from './hooks/useToast';
 import { useSoundEffects } from './components/ui/SoundEffects';
@@ -55,6 +44,65 @@ import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save,
 import type { CommandItem } from './components/ui/CommandPalette';
 import { SDK_API_URL } from './utils/api-config';
 
+// Lazy-load heavyweight/rarely-used components to keep initial bundle smaller
+const XTermTerminal = lazy(() =>
+  import('./components/XTermTerminal').then((m) => ({ default: m.XTermTerminal }))
+);
+const CodeEditor = lazy(() =>
+  import('./components/CodeEditor').then((m) => ({ default: m.CodeEditor }))
+);
+const EnhancedGameWizard = lazy(() =>
+  import('./components/EnhancedGameWizard').then((m) => ({ default: m.EnhancedGameWizard }))
+);
+const CommandPalette = lazy(() =>
+  import('./components/ui/CommandPalette').then((m) => ({ default: m.CommandPalette }))
+);
+const ThemeSelector = lazy(() =>
+  import('./components/ui/ThemeSelector').then((m) => ({ default: m.ThemeSelector }))
+);
+const PerformanceProfiler = lazy(() =>
+  import('./components/ui/PerformanceProfiler').then((m) => ({ default: m.PerformanceProfiler }))
+);
+const GitIntegration = lazy(() =>
+  import('./components/ui/GitIntegration').then((m) => ({ default: m.GitIntegration }))
+);
+const NFOEditor = lazy(() =>
+  import('./components/NFOEditor').then((m) => ({ default: m.NFOEditor }))
+);
+const FileDizEditor = lazy(() =>
+  import('./components/FileDizEditor').then((m) => ({ default: m.FileDizEditor }))
+);
+const AIPromptPanel = lazy(() =>
+  import('./components').then((m) => ({ default: m.AIPromptPanel }))
+);
+const CodeDiffViewer = lazy(() =>
+  import('./components').then((m) => ({ default: m.CodeDiffViewer }))
+);
+const BuildStatusEnhanced = lazy(() =>
+  import('./components').then((m) => ({ default: m.BuildStatusEnhanced }))
+);
+const ReleaseArchive = lazy(() =>
+  import('./components').then((m) => ({ default: m.ReleaseArchive }))
+);
+const DoorInfo = lazy(() =>
+  import('./components').then((m) => ({ default: m.DoorInfo }))
+);
+const SessionRecorder = lazy(() =>
+  import('./components').then((m) => ({ default: m.SessionRecorder }))
+);
+const QuickActionsLazy = lazy(() =>
+  import('./components').then((m) => ({ default: m.QuickActions }))
+);
+const GradientMeshLazy = lazy(() =>
+  import('./components').then((m) => ({ default: m.GradientMesh }))
+);
+const OnboardingTourLazy = lazy(() =>
+  import('./components').then((m) => ({ default: m.OnboardingTour }))
+);
+const CodeMinimapLazy = lazy(() =>
+  import('./components').then((m) => ({ default: m.CodeMinimap }))
+);
+
 const defaultSettings: AppSettings = {
   theme: 'dark',
   editorTheme: 'vs-dark',
@@ -69,6 +117,8 @@ const defaultSettings: AppSettings = {
 function App() {
   // Toast notifications
   const toast = useToast();
+  // Track whether we already fired auto-login this build
+  const [autoLaunchRan, setAutoLaunchRan] = useState(false);
 
   // Sound effects
   const soundEffects = useSoundEffects();
@@ -77,9 +127,8 @@ function App() {
   const [settings, setSettings] = useLocalStorage<AppSettings>('sdk-preview-settings', defaultSettings);
   const [showSettings, setShowSettings] = useState(false);
   const [showGameWizard, setShowGameWizard] = useState(false);
-  const [showKeyboardOverlay, setShowKeyboardOverlay] = useState(false);
+  const [showKeyboardOverlay, setShowKeyboardOverlay] = useState(true);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showSuccessCelebration, setShowSuccessCelebration] = useState(false);
   const [celebrationMessage, setCelebrationMessage] = useState('Success!');
   const [enableCRT, setEnableCRT] = useState(false);
   const [doorsLoading, setDoorsLoading] = useState(false);
@@ -314,6 +363,8 @@ function App() {
           setLogsOutput((prev) => [...prev, `\x1b[36m[INFO] BBS Command: ${bbsCommand}\x1b[0m`]);
           // Auto-switch to Logs tab to show build output
           setActiveTerminalTab('logs');
+          // Reset auto-launch gate for this build
+          setAutoLaunchRan(false);
         }
         break;
 
@@ -337,6 +388,12 @@ function App() {
         break;
 
       case 'auto-launch':
+        if (!autoLaunchRan) {
+          setAutoLaunchRan(true);
+        } else {
+          setLogsOutput((prev) => [...prev, '\x1b[33m[INFO] Auto-launch already ran; skipping duplicate credential send\x1b[0m']);
+          break;
+        }
         // Auto-launch door in BBS terminal after successful build
         console.log('[AUTO-LAUNCH] Door:', message.data.doorId, 'command:', message.data.bbsCommand);
         // Use bbsCommand from message (no slash prefix)
@@ -347,11 +404,64 @@ function App() {
 
         // Send command to BBS terminal
         if (bbsTerminalRef.current) {
-          console.log('[AUTO-LAUNCH] Sending door command to BBS:', doorCommand);
-          // Send each character of the command
-          for (const char of doorCommand) {
-            bbsTerminalRef.current.sendCommand(char);
+          // Build a login + launch sequence if quick connect creds are saved and we don't appear to be already past login
+          const segments: string[] = [];
+          let willSendCreds = false;
+          try {
+            const quickEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
+            const savedUser = localStorage.getItem('bbs_saved_username');
+            const savedPass = localStorage.getItem('bbs_saved_password');
+            // Heuristic: if last BBS output already shows a main menu marker, skip credentials
+            const joinedOutput = bbsOutput.slice(-8).join(' ').toLowerCase();
+            const looksLoggedIn = joinedOutput.includes('ami express') || joinedOutput.includes('main bbs') || joinedOutput.includes('menu');
+
+            if (!looksLoggedIn) {
+              // Always answer ANSI prompt first
+              segments.push('A\r');
+            }
+
+            if (quickEnabled && savedUser && savedPass && !looksLoggedIn) {
+              const username = atob(savedUser);
+              const password = atob(savedPass);
+              // Credentials + enter-through menus
+              segments.push(`${username}\r`, `${password}\r`, '\r', '\r');
+              willSendCreds = true;
+              setLogsOutput((prev) => [
+                ...prev,
+                `\x1b[36m[AUTO] Using saved BBS credentials (${username}) for quick launch\x1b[0m`,
+              ]);
+            } else if (!looksLoggedIn && !quickEnabled) {
+              // No creds; still try to advance past ANSI prompt
+              segments.push('\r', '\r');
+            } else if (looksLoggedIn) {
+              setLogsOutput((prev) => [
+                ...prev,
+                '\x1b[33m[AUTO] Detected BBS menu; skipping auto-login\x1b[0m',
+              ]);
+            }
+          } catch (err) {
+            console.warn('[AUTO-LAUNCH] Unable to read saved credentials', err);
           }
+
+          // Finally send the door command
+          segments.push(doorCommand);
+          setLogsOutput((prev) => [
+            ...prev,
+            `\x1b[36m[AUTO] Sending sequence (${willSendCreds ? 'login + ' : ''}door): ${message.data.bbsCommand || message.data.doorId.toUpperCase()}\x1b[0m`,
+          ]);
+
+          const sendSequence = async () => {
+            for (const chunk of segments) {
+              for (const char of chunk) {
+                bbsTerminalRef.current?.sendCommand(char);
+              }
+              // small delay between segments to allow prompts to appear
+              await new Promise((resolve) => setTimeout(resolve, 150));
+            }
+            console.log('[AUTO-LAUNCH] Sequence sent for door:', message.data.doorId);
+          };
+
+          sendSequence();
         } else {
           console.warn('[WARNING] BBSTerminal ref not available for auto-launch');
           setLogsOutput((prev) => [...prev, `\x1b[33m[WARNING] Cannot auto-launch: BBS terminal not ready\x1b[0m`]);
@@ -366,7 +476,8 @@ function App() {
           `\x1b[32m[CLIENT DOOR] Executing in browser with Web Audio API...\x1b[0m`,
           '',
         ]);
-        try {
+        (async () => {
+          try {
           // Set up window.__BBS__ for the door to use
           // This provides a Socket.IO-compatible interface wrapping the WebSocket
           const sessionId = `client-door-${message.doorId}-${Date.now()}`;
@@ -414,7 +525,14 @@ function App() {
 
           // Execute the bundled code
           // The code will detect window.__BBS__ and use it for communication
-          eval(message.code);
+          const blobUrl = URL.createObjectURL(
+            new Blob([message.code], { type: 'application/javascript' })
+          );
+          try {
+            await import(/* @vite-ignore */ blobUrl);
+          } finally {
+            URL.revokeObjectURL(blobUrl);
+          }
 
           // Set active client door session
           setActiveClientDoorSession(sessionId);
@@ -439,14 +557,15 @@ function App() {
           }, 100);
 
           soundEffects.notification();
-        } catch (err: any) {
-          // Execution errors go to Logs tab
-          setLogsOutput((prev) => [
-            ...prev,
-            `\x1b[31m[CLIENT DOOR] Execution error: ${err.message}\x1b[0m`,
-          ]);
-          soundEffects.error();
-        }
+          } catch (err: any) {
+            // Execution errors go to Logs tab
+            setLogsOutput((prev) => [
+              ...prev,
+              `\x1b[31m[CLIENT DOOR] Execution error: ${err.message}\x1b[0m`,
+            ]);
+            soundEffects.error();
+          }
+        })();
         break;
     }
   }
@@ -1076,7 +1195,11 @@ function App() {
   return (
     <div className="h-screen flex flex-col bg-[#1E1E1E] text-white overflow-hidden">
       {/* Gradient Mesh Background */}
-      {showGradientMesh && <GradientMesh variant="dark" animated={true} />}
+        {showGradientMesh && (
+          <Suspense fallback={null}>
+            <GradientMeshLazy variant="dark" animated={true} />
+          </Suspense>
+        )}
 
       {/* Header with slide-down animation */}
       <div className="animate-slideDown">
@@ -1239,22 +1362,26 @@ function App() {
                           fontSize={settings.terminalFontSize}
                         />
                       ) : (
-                        <XTermTerminal
-                          ref={xtermRef}
-                          output={logsOutput}
-                          onInput={handleTerminalInput}
-                          fontSize={settings.terminalFontSize}
-                        />
+                        <Suspense fallback={<div className="p-4 text-gray-400">Loading terminal...</div>}>
+                          <XTermTerminal
+                            ref={xtermRef}
+                            output={logsOutput}
+                            onInput={handleTerminalInput}
+                            fontSize={settings.terminalFontSize}
+                          />
+                        </Suspense>
                       )}
                     </CRTEffect>
                   </div>
 
                   {/* Session recorder controls */}
-                  <SessionRecorder
-                    recorder={recorder}
-                    doorName={selectedDoor?.name || 'door'}
-                    onPlaybackEvent={handlePlaybackEvent}
-                  />
+                  <Suspense fallback={<div className="p-3 text-gray-400">Loading recorder...</div>}>
+                    <SessionRecorder
+                      recorder={recorder}
+                      doorName={selectedDoor?.name || 'door'}
+                      onPlaybackEvent={handlePlaybackEvent}
+                    />
+                  </Suspense>
                 </div>
               </Panel>
 
@@ -1263,13 +1390,15 @@ function App() {
 
               {/* AI Prompt Panel */}
               <Panel defaultSize={20} minSize={15} maxSize={40}>
-                <AIPromptPanel
-                  selectedDoor={selectedDoor?.id || null}
-                  currentFile={currentFile}
-                  buildErrors={buildStatus.errors}
-                  onApplyCode={handleApplyCode}
-                  onShowDiff={handleShowDiff}
-                />
+                <Suspense fallback={<div className="p-4 text-gray-400">Loading AI tools...</div>}>
+                  <AIPromptPanel
+                    selectedDoor={selectedDoor?.id || null}
+                    currentFile={currentFile}
+                    buildErrors={buildStatus.errors}
+                    onApplyCode={handleApplyCode}
+                    onShowDiff={handleShowDiff}
+                  />
+                </Suspense>
               </Panel>
             </PanelGroup>
           </Panel>
@@ -1395,78 +1524,104 @@ function App() {
                   <div className="flex-1 overflow-hidden">
                     {rightSidebarTab === 'info' && (
                       <div className="h-full overflow-y-auto p-4 animate-fadeIn">
-                        <DoorInfo metadata={doorMetadata} />
+                        <Suspense fallback={<div className="p-4 text-gray-400">Loading info...</div>}>
+                          <DoorInfo metadata={doorMetadata} />
+                        </Suspense>
                       </div>
                     )}
 
                     {rightSidebarTab === 'code' && (
                       <div className="h-full animate-fadeIn" data-tour="code-editor">
-                        <CodeEditor
-                          files={doorFiles}
-                          currentFile={currentFile}
-                          onFileSelect={handleFileSelect}
-                          onFileChange={handleFileChange}
-                          theme={settings.editorTheme}
-                          fontSize={settings.editorFontSize}
-                        />
+                        <div className="flex h-full">
+                          <div className="flex-1 min-w-0">
+                            <Suspense fallback={<div className="p-4 text-gray-400">Loading editor...</div>}>
+                              <CodeEditor
+                                files={doorFiles}
+                                currentFile={currentFile}
+                                onFileSelect={handleFileSelect}
+                                onFileChange={handleFileChange}
+                                theme={settings.editorTheme}
+                                fontSize={settings.editorFontSize}
+                              />
+                            </Suspense>
+                          </div>
+                          <div className="w-32 border-l border-gray-700 hidden xl:flex">
+                            <Suspense fallback={<div className="p-2 text-gray-500 text-xs">Minimap…</div>}>
+                              <CodeMinimapLazy
+                                content={currentFile?.content || ''}
+                                onLineClick={(line) => toast.info('Minimap', `Jump to line ${line + 1}`)}
+                              />
+                            </Suspense>
+                          </div>
+                        </div>
                       </div>
                     )}
 
                     {rightSidebarTab === 'build' && (
                       <div className="h-full animate-fadeIn">
-                        <BuildStatusEnhanced
-                          status={buildStatus}
-                          onErrorClick={handleBuildErrorClick}
-                        />
+                        <Suspense fallback={<div className="p-4 text-gray-400">Loading build status...</div>}>
+                          <BuildStatusEnhanced
+                            status={buildStatus}
+                            onErrorClick={handleBuildErrorClick}
+                          />
+                        </Suspense>
                       </div>
                     )}
 
                     {rightSidebarTab === 'release' && (
                       <div className="h-full overflow-y-auto p-4 animate-fadeIn">
-                        <ReleaseArchive
-                          doorName={selectedDoor?.name || 'door'}
-                          doorId={selectedDoor?.id || ''}
-                          onCreateArchive={handleCreateArchive}
-                        />
+                        <Suspense fallback={<div className="text-gray-400">Loading release tools...</div>}>
+                          <ReleaseArchive
+                            doorName={selectedDoor?.name || 'door'}
+                            doorId={selectedDoor?.id || ''}
+                            onCreateArchive={handleCreateArchive}
+                          />
+                        </Suspense>
                       </div>
                     )}
 
                     {rightSidebarTab === 'git' && (
                       <div className="h-full overflow-y-auto p-4 animate-fadeIn">
-                        <GitIntegration
-                          doorPath={selectedDoor?.id || ''}
-                          onCommit={(message) => {
-                            soundEffects.success();
-                            toast.success('Committed!', message);
-                          }}
-                          onPush={() => {
-                            soundEffects.success();
-                            toast.success('Pushed!', 'Changes pushed to remote');
-                          }}
-                          onPull={() => {
-                            soundEffects.notification();
-                            toast.info('Pulled!', 'Updates pulled from remote');
-                          }}
-                        />
+                        <Suspense fallback={<div className="text-gray-400">Loading git panel...</div>}>
+                          <GitIntegration
+                            doorPath={selectedDoor?.id || ''}
+                            onCommit={(message) => {
+                              soundEffects.success();
+                              toast.success('Committed!', message);
+                            }}
+                            onPush={() => {
+                              soundEffects.success();
+                              toast.success('Pushed!', 'Changes pushed to remote');
+                            }}
+                            onPull={() => {
+                              soundEffects.notification();
+                              toast.info('Pulled!', 'Updates pulled from remote');
+                            }}
+                          />
+                        </Suspense>
                       </div>
                     )}
 
                     {rightSidebarTab === 'performance' && (
                       <div className="h-full animate-fadeIn">
-                        <PerformanceProfiler
-                          metrics={performanceMetrics}
-                          snapshots={performanceSnapshots}
-                          onStartProfiling={handleStartProfiling}
-                          onStopProfiling={handleStopProfiling}
-                          isProfiling={isProfiling}
-                        />
+                        <Suspense fallback={<div className="text-gray-400">Loading profiler...</div>}>
+                          <PerformanceProfiler
+                            metrics={performanceMetrics}
+                            snapshots={performanceSnapshots}
+                            onStartProfiling={handleStartProfiling}
+                            onStopProfiling={handleStopProfiling}
+                            isProfiling={isProfiling}
+                          />
+                        </Suspense>
                       </div>
                     )}
 
                     {rightSidebarTab === 'nfo' && (
                       selectedDoor ? (
                         <div className="h-full animate-fadeIn">
-                          <NFOEditor doorId={selectedDoor.id} className="h-full" />
+                          <Suspense fallback={<div className="p-4 text-gray-400">Loading NFO editor...</div>}>
+                            <NFOEditor doorId={selectedDoor.id} className="h-full" />
+                          </Suspense>
                         </div>
                       ) : (
                         <div className="h-full flex items-center justify-center bg-gray-900 animate-fadeIn">
@@ -1482,7 +1637,9 @@ function App() {
                     {rightSidebarTab === 'file_id_diz' && (
                       selectedDoor ? (
                         <div className="h-full animate-fadeIn">
-                          <FileDizEditor doorId={selectedDoor.id} className="h-full" />
+                          <Suspense fallback={<div className="p-4 text-gray-400">Loading FILE_ID.DIZ editor...</div>}>
+                            <FileDizEditor doorId={selectedDoor.id} className="h-full" />
+                          </Suspense>
                         </div>
                       ) : (
                         <div className="h-full flex items-center justify-center bg-gray-900 animate-fadeIn">
@@ -1513,26 +1670,28 @@ function App() {
 
       {/* Enhanced Game Wizard modal */}
       {showGameWizard && (
-        <EnhancedGameWizard
-          onClose={() => setShowGameWizard(false)}
-          onGameCreated={(doorId) => {
-            // Reload doors list, select the new door, and launch it
-            loadDoors().then(() => {
-              const newDoor = doors.find((d) => d.id === doorId);
-              if (newDoor) {
-                handleDoorSelect(newDoor);
-                // Trigger celebration for game creation!
-                setCelebrationMessage('🎮 Game Created!');
-                setShowSuccessCelebration(true);
-                // Auto-launch the newly created game after a brief delay
-                setTimeout(() => {
-                  handleRunDoor();
-                  toast.success('Game launched!', `${newDoor.name} is now running`);
-                }, 500);
-              }
-            });
-          }}
-        />
+        <Suspense fallback={<div className="p-6 text-gray-200">Loading game wizard...</div>}>
+          <EnhancedGameWizard
+            onClose={() => setShowGameWizard(false)}
+            onGameCreated={(doorId) => {
+              // Reload doors list, select the new door, and launch it
+              loadDoors().then(() => {
+                const newDoor = doors.find((d) => d.id === doorId);
+                if (newDoor) {
+                  handleDoorSelect(newDoor);
+                  // Trigger celebration for game creation!
+                  setCelebrationMessage('🎮 Game Created!');
+                  setShowSuccessCelebration(true);
+                  // Auto-launch the newly created game after a brief delay
+                  setTimeout(() => {
+                    handleRunDoor();
+                    toast.success('Game launched!', `${newDoor.name} is now running`);
+                  }, 500);
+                }
+              });
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Theme Selector Modal */}
@@ -1548,15 +1707,17 @@ function App() {
                 ×
               </button>
             </div>
-            <ThemeSelector
-              currentTheme={settings.theme}
-              onThemeChange={(theme) => {
-                setSettings({ ...settings, theme: theme.id });
-                soundEffects.click();
-                toast.success('Theme changed!', `Switched to ${theme.name}`);
-                setShowThemeSelector(false);
-              }}
-            />
+            <Suspense fallback={<div className="text-gray-200">Loading themes...</div>}>
+              <ThemeSelector
+                currentTheme={settings.theme}
+                onThemeChange={(theme) => {
+                  setSettings({ ...settings, theme: theme.id });
+                  soundEffects.click();
+                  toast.success('Theme changed!', `Switched to ${theme.name}`);
+                  setShowThemeSelector(false);
+                }}
+              />
+            </Suspense>
           </div>
         </div>
       )}
@@ -1564,9 +1725,11 @@ function App() {
       {/* Performance Profiler */}
       {showPerformanceProfiler && (
         <div className="fixed top-4 right-4 z-40">
-          <PerformanceProfiler
-            onClose={() => setShowPerformanceProfiler(false)}
-          />
+          <Suspense fallback={<div className="text-gray-200 p-3 bg-gray-800 rounded">Loading profiler...</div>}>
+            <PerformanceProfiler
+              onClose={() => setShowPerformanceProfiler(false)}
+            />
+          </Suspense>
         </div>
       )}
 
@@ -1585,53 +1748,49 @@ function App() {
       )}
 
       {/* Command Palette */}
-      <CommandPalette
-        isOpen={showCommandPalette}
-        onClose={() => setShowCommandPalette(false)}
-        commands={commandPaletteCommands}
-      />
-
-      {/* Success Celebration */}
-      <SuccessCelebration
-        trigger={showSuccessCelebration}
-        message={celebrationMessage}
-        type="build"
-        onComplete={() => setShowSuccessCelebration(false)}
-      />
+      <Suspense fallback={null}>
+        <CommandPalette
+          isOpen={showCommandPalette}
+          onClose={() => setShowCommandPalette(false)}
+          commands={commandPaletteCommands}
+        />
+      </Suspense>
 
       {/* Quick Actions Floating Button */}
       <div data-tour="quick-actions">
-        <QuickActions
-          position="bottom-right"
-          actions={[
-            {
-              id: 'create',
-              label: 'Create Game',
-              icon: <Wand2 className="w-5 h-5" />,
-              color: 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white',
-              action: () => {
-                setShowGameWizard(true);
-                soundEffects.click();
+        <Suspense fallback={null}>
+          <QuickActionsLazy
+            position="bottom-right"
+            actions={[
+              {
+                id: 'create',
+                label: 'Create Game',
+                icon: <Wand2 className="w-5 h-5" />,
+                color: 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white',
+                action: () => {
+                  setShowGameWizard(true);
+                  soundEffects.click();
+                },
               },
-            },
-            {
-              id: 'run',
-              label: 'Run Door',
-              icon: <Play className="w-5 h-5" />,
-              color: 'bg-green-600 hover:bg-green-700 text-white',
-              action: handleRunDoor,
-            },
-            {
-              id: 'screenshot',
-              label: 'Screenshot',
-              icon: <Camera className="w-5 h-5" />,
-              color: 'bg-gray-600 hover:bg-gray-700 text-white',
-              action: () => {
-                soundEffects.click();
+              {
+                id: 'run',
+                label: 'Run Door',
+                icon: <Play className="w-5 h-5" />,
+                color: 'bg-green-600 hover:bg-green-700 text-white',
+                action: handleRunDoor,
               },
-            },
-          ]}
-        />
+              {
+                id: 'screenshot',
+                label: 'Screenshot',
+                icon: <Camera className="w-5 h-5" />,
+                color: 'bg-gray-600 hover:bg-gray-700 text-white',
+                action: () => {
+                  soundEffects.click();
+                },
+              },
+            ]}
+          />
+        </Suspense>
       </div>
 
       {/* Haptic Feedback Wrapper */}
@@ -1641,18 +1800,20 @@ function App() {
 
       {/* Onboarding Tour */}
       {!showOnboarding && (
-        <OnboardingTour
-          steps={onboardingSteps}
-          onComplete={() => {
-            setShowOnboarding(true);
-            soundEffects.success();
-          }}
-          onSkip={() => {
-            setShowOnboarding(true);
-            soundEffects.click();
-          }}
-          autoStart={true}
-        />
+        <Suspense fallback={null}>
+          <OnboardingTourLazy
+            steps={onboardingSteps}
+            onComplete={() => {
+              setShowOnboarding(true);
+              soundEffects.success();
+            }}
+            onSkip={() => {
+              setShowOnboarding(true);
+              soundEffects.click();
+            }}
+            autoStart={true}
+          />
+        </Suspense>
       )}
 
       {/* Status Bar */}
@@ -1667,21 +1828,23 @@ function App() {
 
       {/* Code Diff Viewer */}
       {showDiffViewer && diffData && (
-        <CodeDiffViewer
-          original={diffData.original}
-          suggested={diffData.suggested}
-          filePath={diffData.filePath}
-          explanation={diffData.explanation}
-          onAccept={() => {
-            handleApplyCode(diffData.suggested, diffData.filePath);
-            setShowDiffViewer(false);
-          }}
-          onReject={() => {
-            setShowDiffViewer(false);
-            toast.info('Changes rejected', 'No modifications were made');
-          }}
-          onClose={() => setShowDiffViewer(false)}
-        />
+        <Suspense fallback={<div className="p-4 text-gray-300">Loading diff...</div>}>
+          <CodeDiffViewer
+            original={diffData.original}
+            suggested={diffData.suggested}
+            filePath={diffData.filePath}
+            explanation={diffData.explanation}
+            onAccept={() => {
+              handleApplyCode(diffData.suggested, diffData.filePath);
+              setShowDiffViewer(false);
+            }}
+            onReject={() => {
+              setShowDiffViewer(false);
+              toast.info('Changes rejected', 'No modifications were made');
+            }}
+            onClose={() => setShowDiffViewer(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

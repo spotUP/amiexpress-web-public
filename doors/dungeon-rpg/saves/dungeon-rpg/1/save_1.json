@@ -1,0 +1,23 @@
+{
+  "slot": 1,
+  "timestamp": "2025-11-09T23:22:47.561Z",
+  "state": {
+    "player": {
+      "x": 15,
+      "y": 8,
+      "hp": 100,
+      "maxHp": 100,
+      "level": 1,
+      "xp": 125,
+      "gold": 110
+    },
+    "enemies": [],
+    "inventory": "{\n  \"items\": [],\n  \"equipment\": []\n}",
+    "quests": "{\n  \"activeQuests\": [],\n  \"completedQuests\": [\n    \"clear_dungeon\"\n  ],\n  \"failedQuests\": [],\n  \"unlockedAchievements\": []\n}",
+    "dialogue": "{\"flags\":[]}"
+  },
+  "progress": 0,
+  "metadata": {
+    "playtime": 0
+  }
+}

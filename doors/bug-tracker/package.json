@@ -1,0 +1,28 @@
+{
+  "name": "bug-tracker",
+  "version": "1.0.0",
+  "description": "Comprehensive bug reporting and tracking system for BBS",
+  "main": "dist/index.js",
+  "bbsCommand": "BUGTRACK",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "ts-node index.ts",
+    "build": "tsc"
+  },
+  "keywords": [
+    "bbs",
+    "bug-tracker",
+    "door"
+  ],
+  "author": "AmiExpress SDK",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2",
+    "ts-node": "^10.9.1"
+  },
+  "runtime": "server"
+}

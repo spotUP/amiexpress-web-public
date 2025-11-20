@@ -1,0 +1,27 @@
+[
+  {
+    "id": "draft_7_1763231660078",
+    "userId": 7,
+    "userName": "sysop",
+    "timestamp": 1763231660078,
+    "lastModified": 1763231720082,
+    "data": {
+      "reporter": "sysop",
+      "reporterId": 7,
+      "status": "New",
+      "priority": "Medium",
+      "attachments": [],
+      "comments": [],
+      "description": "The system crashes when performing [ACTION].\n\nError details:\n[ERROR MESSAGE OR CODE]",
+      "stepsToReproduce": "1. Open/run [COMMAND/DOOR]\n2. Perform [ACTION]\n3. System crashes",
+      "expectedBehavior": "The [COMMAND/DOOR] should complete without crashing",
+      "actualBehavior": "The system crashes with [ERROR]",
+      "tags": [
+        "crash",
+        "critical"
+      ],
+      "category": "Doors"
+    },
+    "formStep": 1
+  }
+]

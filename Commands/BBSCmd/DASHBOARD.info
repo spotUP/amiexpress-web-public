@@ -1,0 +1,7 @@
+BBSCMD=DASHBOARD
+TYPE=TS
+LOCATION=doors/bbs-dashboard
+DESCRIPTION=Comprehensive BBS Dashboard for System Operators
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

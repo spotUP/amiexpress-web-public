@@ -1,0 +1,30 @@
+{
+  "name": "hello-world-door",
+  "version": "1.0.0",
+  "description": "Simple hello world BBS door with mock data",
+  "main": "dist/index.js",
+  "author": "AmiExpress SDK",
+  "license": "MIT",
+  "category": "example",
+  "bbsCommand": "HELLO",
+  "scripts": {
+    "start": "npx tsx index.ts",
+    "dev": "npx tsx --watch index.ts",
+    "build": "tsc"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "example",
+    "hello-world"
+  ],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2",
+    "tsx": "^4.19.2"
+  },
+  "runtime": "server"
+}

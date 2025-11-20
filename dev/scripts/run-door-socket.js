@@ -61,6 +61,13 @@ async function main() {
         timeout: 5000
       });
 
+      const maybeSendEnter = (text) => {
+        if (!text || typeof text !== 'string') return;
+        if (/press any key/i.test(text) || /press enter/i.test(text)) {
+          socket.emit('command', KEY_ENTER);
+        }
+      };
+
       socket.on('connect', () => {
         connected = true;
         console.log(`[socket] connected to ${url}, sending login`);
@@ -73,11 +80,11 @@ async function main() {
         socket.emit('command', KEY_ENTER); // skip any "press any key"
         socket.emit('command', command);
         socket.emit('command', KEY_ENTER);
-        console.log('[socket] command sent, waiting 3s then closing');
+        console.log('[socket] command sent, waiting 8s then closing');
         setTimeout(() => {
           socket.disconnect();
           resolve();
-        }, 3000);
+        }, 8000);
       });
 
       socket.on('connect_error', (err) => {
@@ -88,6 +95,7 @@ async function main() {
       socket.on('ansi-output', (data) => {
         if (typeof data === 'string') {
           process.stdout.write(data);
+          maybeSendEnter(data);
         }
       });
     });

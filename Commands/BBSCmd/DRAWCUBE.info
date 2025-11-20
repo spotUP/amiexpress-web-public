@@ -1,0 +1,7 @@
+BBSCMD=DRAWCUBE
+TYPE=TS
+LOCATION=doors/drawille-cube
+DESCRIPTION=Rotating 3D cube using node-drawille braille graphics
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

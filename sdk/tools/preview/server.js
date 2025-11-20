@@ -51,12 +51,17 @@ console.log(`[DEBUG] DEBUG_OUTPUT: ${DEBUG_OUTPUT} (from env: ${process.env.DEBU
 async function installDoorToBBS(doorId) {
   try {
     const projectRoot = path.resolve(__dirname, '../../..');
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    // Prefer live BBS doors/<doorId>; fall back to legacy sdk/examples if missing
+    const doorsBase = path.join(projectRoot, 'doors');
+    const sdkExamplesBase = path.join(__dirname, '../../examples');
+    const preferredDoorPath = path.join(doorsBase, doorId);
+    const fallbackDoorPath = path.join(sdkExamplesBase, doorId);
+    const doorPath = fs.existsSync(preferredDoorPath) ? preferredDoorPath : fallbackDoorPath;
     const pkgPath = path.join(doorPath, 'package.json');
 
     // Read package.json for door metadata
     if (!fs.existsSync(pkgPath)) {
-      return { success: false, message: 'package.json not found' };
+      return { success: false, message: 'package.json not found (expected in doors/<id> or sdk/examples/<id>)' };
     }
 
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
@@ -87,16 +92,10 @@ async function installDoorToBBS(doorId) {
     fs.writeFileSync(infoPath, infoContent);
     console.log(`✓ Created ${bbsCommand}.info`);
 
-    // Create symlink in doors/ directory
+    // Ensure doors/ exists (door should already live there in dev)
     const doorsDir = path.join(projectRoot, 'doors');
     if (!fs.existsSync(doorsDir)) {
       fs.mkdirSync(doorsDir, { recursive: true });
-    }
-
-    const targetDoorPath = path.join(doorsDir, doorId);
-    if (!fs.existsSync(targetDoorPath)) {
-      fs.symlinkSync(doorPath, targetDoorPath, 'dir');
-      console.log(`✓ Linked to doors/${doorId}`);
     }
 
     // Reload BBS command cache via API
@@ -3134,8 +3133,13 @@ function buildDoor(clientId, doorId) {
           }
 
           // Auto-launch door in BBS terminal after successful build
-          // Read bbsCommand from package.json
-          const doorPath = path.join(__dirname, '../../examples', doorId);
+          // Read bbsCommand from package.json (prefer live doors/<id>, fallback to examples)
+          const projectRoot = path.resolve(__dirname, '../../..');
+          const doorsBase = path.join(projectRoot, 'doors');
+          const sdkExamplesBase = path.join(__dirname, '../../examples');
+          const preferredDoorPath = path.join(doorsBase, doorId);
+          const fallbackDoorPath = path.join(sdkExamplesBase, doorId);
+          const doorPath = fs.existsSync(preferredDoorPath) ? preferredDoorPath : fallbackDoorPath;
           const pkgPath = path.join(doorPath, 'package.json');
           let bbsCommand = doorId.toUpperCase(); // Default fallback
 
@@ -3146,6 +3150,8 @@ function buildDoor(clientId, doorId) {
             } catch (err) {
               console.warn(`[WARNING]  Could not read bbsCommand from ${pkgPath}`);
             }
+          } else {
+            console.warn(`[WARNING]  package.json not found for ${doorId} (looked in ${doorPath})`);
           }
 
           console.log(`[START] Auto-launching door in BBS: ${doorId} (command: ${bbsCommand})`);
