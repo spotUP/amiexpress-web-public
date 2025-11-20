@@ -49,6 +49,7 @@ function checkDoor(root) {
   }
 
   // Type-specific checks
+  const wantRun = process.env.DOCTOR_RUN === '1';
   if (doorType === 'PY' || doorType === 'PYTHON') {
     if (!main.endsWith('.py') && !main.endsWith('.js')) {
       warnings.push('python door main should be a .py file');
@@ -65,12 +66,48 @@ function checkDoor(root) {
         warnings.push(`python compile skipped: ${(err || {}).message || err}`);
       }
     }
+
+    if (wantRun) {
+      // Try to execute the door main with python3 to ensure syntax/runtime sanity
+      try {
+        const interpreter = process.env.PYTHON || 'python3';
+        const res = spawnSync(interpreter, [entryPath], { cwd: root, timeout: 5000 });
+        if (res.error) {
+          warnings.push(`python run skipped: ${res.error.message}`);
+        } else if (res.status !== 0) {
+          errors.push(`python run failed (exit ${res.status}): ${res.stderr.toString().trim() || res.stdout.toString().trim()}`);
+        }
+      } catch (err) {
+        warnings.push(`python run skipped: ${(err || {}).message || err}`);
+      }
+    }
   } else if (doorType === 'AREXX' || doorType === 'REXX') {
     if (!main.toLowerCase().endsWith('.rexx') && !main.toLowerCase().endsWith('.rx')) {
       warnings.push('AREXX door main should be .rexx/.rx script');
     }
     if (!pkg.scripts || !pkg.scripts.run) {
       warnings.push('AREXX door missing npm run "run" script to invoke rexx interpreter');
+    }
+
+    if (wantRun) {
+      const runScript = pkg.scripts && pkg.scripts.run;
+      if (!runScript) {
+        warnings.push('AREXX run skipped: no npm run "run" script');
+      } else {
+        try {
+          const res = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run'], {
+            cwd: root,
+            timeout: 5000
+          });
+          if (res.error) {
+            warnings.push(`AREXX run skipped: ${res.error.message}`);
+          } else if (res.status !== 0) {
+            errors.push(`AREXX run failed (exit ${res.status}): ${res.stderr.toString().trim() || res.stdout.toString().trim()}`);
+          }
+        } catch (err) {
+          warnings.push(`AREXX run skipped: ${(err || {}).message || err}`);
+        }
+      }
     }
   } else if (doorType && !['TS', 'JS'].includes(doorType)) {
     warnings.push(`unrecognized doorType ${doorType}`);
