@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Create a minimal TypeScript door skeleton under doors/<name>
+ * Create a minimal door skeleton under doors/<name>
+ * Supports templates: ts (default), py, rexx
  */
 const fs = require('fs');
 const path = require('path');
@@ -14,8 +15,9 @@ function writeFileSafe(p, content) {
 
 function main() {
   const name = process.argv[2];
+  const template = (process.argv[3] || 'ts').toLowerCase();
   if (!name) {
-    console.error('Usage: create-door-skeleton <name>');
+    console.error('Usage: create-door-skeleton <name> [ts|py|rexx]');
     process.exit(1);
   }
 
@@ -26,42 +28,91 @@ function main() {
     process.exit(1);
   }
 
-  const pkg = {
-    name: name,
-    version: '1.0.0',
-    description: `${name} door`,
-    main: 'dist/index.js',
-    bbsCommand: name.toUpperCase(),
-    doorType: 'TS',
-    scripts: {
-      build: 'tsc'
-    },
-    dependencies: {
-      '@amiexpress/bbs-door-sdk': 'file:../../sdk'
-    },
-    devDependencies: {
-      typescript: '^5.9.3'
-    }
-  };
+  const capital = name.charAt(0).toUpperCase() + name.slice(1);
 
-  const tsconfig = {
-    compilerOptions: {
-      target: 'ES2020',
-      module: 'commonjs',
-      outDir: 'dist',
-      rootDir: '.',
-      esModuleInterop: true,
-      moduleResolution: 'node',
-      resolveJsonModule: true,
-      skipLibCheck: true,
-      types: ['node']
-    },
-    include: ['index.ts']
-  };
+  let pkg = {};
+  let files = {};
 
-  const index = `import { Door, AnsiColor } from '@amiexpress/bbs-door-sdk';
+  if (template === 'py') {
+    pkg = {
+      name,
+      version: '1.0.0',
+      description: `${name} Python door`,
+      main: 'main.py',
+      bbsCommand: name.toUpperCase(),
+      doorType: 'PY',
+      scripts: {
+        run: 'python3 main.py'
+      }
+    };
+    files['main.py'] = `# ${capital} Python door skeleton
+import sys
 
-export default class ${name.charAt(0).toUpperCase() + name.slice(1)}Door extends Door {
+def main():
+    sys.stdout.write("\\u001b[36mHello from ${name}!\\r\\n\\u001b[0m")
+    sys.stdout.write("Press Enter to exit...\\r\\n")
+    sys.stdout.flush()
+    sys.stdin.readline()
+    sys.stdout.write("Goodbye!\\r\\n")
+
+if __name__ == "__main__":
+    main()
+`;
+  } else if (template === 'rexx') {
+    pkg = {
+      name,
+      version: '1.0.0',
+      description: `${name} AREXX door`,
+      main: 'main.rexx',
+      bbsCommand: name.toUpperCase(),
+      doorType: 'AREXX',
+      scripts: {
+        run: 'rexx main.rexx'
+      }
+    };
+    files['main.rexx'] = `/* ${capital} AREXX door skeleton */
+say "\\e[36mHello from ${name}!\\e[0m"
+say "Press Enter to exit..."
+parse pull dummy
+say "Goodbye!"
+`;
+  } else {
+    pkg = {
+      name: name,
+      version: '1.0.0',
+      description: `${name} door`,
+      main: 'dist/index.js',
+      bbsCommand: name.toUpperCase(),
+      doorType: 'TS',
+      scripts: {
+        build: 'tsc'
+      },
+      dependencies: {
+        '@amiexpress/bbs-door-sdk': 'file:../../sdk'
+      },
+      devDependencies: {
+        typescript: '^5.9.3'
+      }
+    };
+
+    const tsconfig = {
+      compilerOptions: {
+        target: 'ES2020',
+        module: 'commonjs',
+        outDir: 'dist',
+        rootDir: '.',
+        esModuleInterop: true,
+        moduleResolution: 'node',
+        resolveJsonModule: true,
+        skipLibCheck: true,
+        types: ['node']
+      },
+      include: ['index.ts']
+    };
+
+    const index = `import { Door, AnsiColor } from '@amiexpress/bbs-door-sdk';
+
+export default class ${capital}Door extends Door {
   async onStart(): Promise<void> {
     this.term.write(AnsiColor.CYAN + 'Hello from ${name}!\\r\\n' + AnsiColor.RESET);
     this.term.write('Press any key to exit...\\r\\n');
@@ -70,16 +121,22 @@ export default class ${name.charAt(0).toUpperCase() + name.slice(1)}Door extends
   }
 }
 `;
+    files['tsconfig.json'] = JSON.stringify(tsconfig, null, 2);
+    files['index.ts'] = index;
+  }
 
   writeFileSafe(path.join(doorRoot, 'package.json'), JSON.stringify(pkg, null, 2));
-  writeFileSafe(path.join(doorRoot, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
-  writeFileSafe(path.join(doorRoot, 'index.ts'), index);
+  Object.entries(files).forEach(([fname, content]) => writeFileSafe(path.join(doorRoot, fname), content));
 
   console.log(`Created door skeleton at ${doorRoot}`);
   console.log('Next steps:');
   console.log(`  cd ${doorRoot}`);
-  console.log('  npm install');
-  console.log('  npm run build');
+  if (template === 'ts') {
+    console.log('  npm install');
+    console.log('  npm run build');
+  } else {
+    console.log('  (install deps if needed)');
+  }
   console.log('  node ../../dev/scripts/install-sdk-doors.js --door', name);
 }
 

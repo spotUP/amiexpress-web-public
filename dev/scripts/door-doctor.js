@@ -33,6 +33,7 @@ function checkDoor(root) {
   const command = pkg.bbsCommand || '';
   const name = pkg.name || '';
   const main = pkg.main || 'dist/index.js';
+  const runScript = pkg.scripts && pkg.scripts.run;
 
   if (!doorType) errors.push('doorType/type missing');
   if (!command) errors.push('bbsCommand missing');
@@ -85,19 +86,23 @@ function checkDoor(root) {
     if (!main.toLowerCase().endsWith('.rexx') && !main.toLowerCase().endsWith('.rx')) {
       warnings.push('AREXX door main should be .rexx/.rx script');
     }
-    if (!pkg.scripts || !pkg.scripts.run) {
+    if (!runScript) {
       warnings.push('AREXX door missing npm run "run" script to invoke rexx interpreter');
     }
 
     if (wantRun) {
-      const runScript = pkg.scripts && pkg.scripts.run;
       if (!runScript) {
         warnings.push('AREXX run skipped: no npm run "run" script');
       } else {
         try {
           const res = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run'], {
             cwd: root,
-            timeout: 5000
+            timeout: 5000,
+            env: {
+              ...process.env,
+              // ensure rexx commands can find the script
+              DOOR_MAIN: main
+            }
           });
           if (res.error) {
             warnings.push(`AREXX run skipped: ${res.error.message}`);
