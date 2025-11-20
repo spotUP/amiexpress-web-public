@@ -1721,16 +1721,6 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
       return manifest;
     }
 
-    // Fall back to SDK examples (dev)
-    const sdkPath = path.join(bbsRoot, 'sdk/doors', doorId, 'package.json');
-    console.log(`[loadDoorManifestForExecution] Trying SDK path: ${sdkPath}`);
-    if (fs.existsSync(sdkPath)) {
-      const content = fs.readFileSync(sdkPath, 'utf8');
-      const manifest = JSON.parse(content);
-      console.log(`[loadDoorManifestForExecution] Found SDK manifest, runtime: ${manifest.runtime || 'not specified'}`);
-      return manifest;
-    }
-
     console.log(`[loadDoorManifestForExecution] No manifest found for ${doorId}`);
     return null;
   } catch (error) {
