@@ -1,7 +1,0 @@
-FROM LIB:c.o "parse.o"+"request.o"+"sercon.o"+"AcpCycle.o"+"StartProcess.o"+"semis.o"+"NodeConfig.o"+"date.o"+"mymenus.o"+"acp208.o"
-TO "ACP"
-LIB LIB:sc.lib LIB:amiga.lib
-SMALLCODE
-SMALLDATA
-NOICONS
-

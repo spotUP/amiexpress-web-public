@@ -1,9 +1,0 @@
-COMMAND=DANNOUNCE
-NAME=Discord Announce Test
-TYPE=TS
-PATH=web/backend/src/doors/discord-announce
-ACCESS=0
-HOT=
-PRIVATE=N
-OVERLOAD=N
-HIDDEN=N

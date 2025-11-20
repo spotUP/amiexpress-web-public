@@ -90,7 +90,13 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   console.log('📋 displayMenuPrompt called');
 
   const config = getConfig();
-  const messageBases = getMessageBases();
+  const messageBases = getMessageBases() || [];
+
+  if (!config || typeof config.get !== 'function') {
+    console.warn('[Menu Prompt] Config not injected; skipping menu prompt render.');
+    session.subState = LoggedOnSubState.READ_COMMAND;
+    return;
+  }
 
   console.log('  - bbsName:', config.get('bbsName'));
   console.log('  - currentConf:', session.currentConf);

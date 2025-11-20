@@ -224,11 +224,11 @@ npm run validate     # Validate door package structure
 - **ALWAYS** test SDK builds before creating PRs: `cd sdk && npm run build`
 - **ALWAYS** test at least 2 example doors build successfully:
   ```bash
-  cd sdk/examples/neo-blessed-demo && npm run build
-  cd sdk/examples/2048-game && npm run build
+  cd sdk/doors/neo-blessed-demo && npm run build
+  cd sdk/doors/2048-game && npm run build
   ```
 - **NEVER** create a PR with broken SDK or example doors
-- Example doors are in `sdk/examples/` directory
+- Example doors are in `sdk/doors/` directory
 
 **CRITICAL - Creating New Doors:**
 - **ALWAYS** use the SDK when creating new doors

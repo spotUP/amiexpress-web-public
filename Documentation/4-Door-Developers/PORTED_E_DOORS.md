@@ -352,7 +352,7 @@ Already installed! Command info file at `Commands/GLCVIEWER.info`.
 **Status**: ✅ COMPLETE (Core Features)
 
 **Original Source**: `dev/docs/AmiExpressEDoorSources/Global Wall/gwall.e` (1,832 lines)
-**TypeScript Port**: `web/backend/src/doors/global-wall/index.ts` (700+ lines)
+**TypeScript Port**: `web/backend/src/doors/gwall/index.ts` (700+ lines)
 **Command**: `GWALL`
 **Type**: TypeScript door (TS)
 
@@ -377,7 +377,7 @@ Global graffiti wall shared across all BBSes using scenewall.bbs.io. Users can r
 
 **Configuration**:
 
-1. Edit `doors/global-wall/GWALL.cfg`:
+1. Edit `doors/gwall/GWALL.cfg`:
 ```
 SERVERHOST=scenewall.bbs.io
 SERVERPORT=1541
@@ -417,7 +417,7 @@ TIMEOUT=5
 **Technical Details**:
 - Uses Node.js http module for API requests
 - JSON parsing with native JavaScript
-- Settings stored in `doors/global-wall/GWall.cfg`
+- Settings stored in `doors/gwall/GWall.cfg`
 - String encoding/decoding for special chars (&#91; etc.)
 - Real-time pagination without reloading door
 

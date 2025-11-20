@@ -120,7 +120,7 @@ sdk/
 │   ├── bbslink-wall/               # BBSLink wall
 │   ├── discord-announce/           # Discord webhook
 │   ├── glc-viewer/                 # GLC file viewer
-│   ├── global-wall/                # Global graffiti
+│   ├── gwall/                # Global graffiti
 │   ├── mrc/                        # Multi-Relay Chat
 │   ├── telnet-connect/             # Telnet client
 │   └── telnet-front/               # Telnet front-end
@@ -392,7 +392,7 @@ npm run pack my-door
 
 - **Main Guide**: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
 - **SDK README**: `sdk/README.md`
-- **Example Doors**: `sdk/examples/*/README.md`
+- **Example Doors**: `sdk/doors/*/README.md`
 - **API Reference**: Coming soon
 
 ## Support

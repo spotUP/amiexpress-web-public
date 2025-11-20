@@ -1694,7 +1694,7 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
     // Try to get door ID from path
     if (door.path) {
       const pathParts = door.path.split('/');
-      // Look for sdk/examples/<doorId> pattern
+      // Look for sdk/doors/<doorId> pattern
       const examplesIndex = pathParts.indexOf('examples');
       if (examplesIndex >= 0 && pathParts[examplesIndex + 1]) {
         doorId = pathParts[examplesIndex + 1];
@@ -1712,7 +1712,7 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
     const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
     // Try SDK examples first
-    const sdkPath = path.join(bbsRoot, 'sdk/examples', doorId, 'package.json');
+    const sdkPath = path.join(bbsRoot, 'sdk/doors', doorId, 'package.json');
     console.log(`[loadDoorManifestForExecution] Trying SDK path: ${sdkPath}`);
     if (fs.existsSync(sdkPath)) {
       const content = fs.readFileSync(sdkPath, 'utf8');

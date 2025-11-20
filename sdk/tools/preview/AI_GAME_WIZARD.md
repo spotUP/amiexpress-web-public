@@ -118,7 +118,7 @@ export GEMINI_API_KEY="..."
   - **Regenerate**: Try again with same settings
   - **Save Game**: Accept and create the door
 - Once saved:
-  - Project created in `sdk/examples/[game-name]/`
+  - Project created in `sdk/doors/[game-name]/`
   - Dependencies auto-installed
   - Game auto-selected in preview
   - Ready to run!
@@ -134,7 +134,7 @@ export GEMINI_API_KEY="..."
 
 ### File Structure
 ```
-sdk/examples/your-game/
+sdk/doors/your-game/
 ├── index.ts          # Main game code (AI-generated)
 ├── package.json      # Dependencies and scripts
 ├── tsconfig.json     # TypeScript configuration
@@ -144,7 +144,7 @@ sdk/examples/your-game/
 
 ### Available Commands
 ```bash
-cd sdk/examples/your-game
+cd sdk/doors/your-game
 
 # Run the game
 npm start

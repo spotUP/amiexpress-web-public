@@ -1,7 +1,0 @@
-BBSCMD=BBSLINKWALL
-TYPE=TS
-LOCATION=doors/bbslink-wall
-DESCRIPTION=BBSLink Wall - One-liner wall (runDoor pattern)
-ACCESS=0
-MULTINODE=YES
-PRIORITY=SAME

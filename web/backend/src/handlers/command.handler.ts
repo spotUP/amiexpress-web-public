@@ -329,7 +329,16 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
 // Display menu prompt (displayMenuPrompt equivalent)
 export function displayMenuPrompt(socket: any, session: BBSSession) {
   console.log('📋 displayMenuPrompt called');
-  console.log('  - bbsName:', config?.get?.('bbsName'));
+  const cfg = config;
+  const msgBases = messageBases || [];
+
+  if (!cfg || typeof cfg.get !== 'function') {
+    console.warn('[Menu Prompt] Config not injected; skipping menu prompt render.');
+    session.subState = LoggedOnSubState.READ_COMMAND;
+    return;
+  }
+
+  console.log('  - bbsName:', cfg.get('bbsName'));
   console.log('  - currentConf:', session.currentConf);
   console.log('  - currentConfName:', session.currentConfName);
   console.log('  - relConfNum:', session.relConfNum);
@@ -343,12 +352,12 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   }
 
   // Like AmiExpress: Use BBS name, relative conference number, conference name
-  const bbsName = config?.get?.('bbsName') ?? 'AmiExpress Web';
+  const bbsName = cfg.get('bbsName') ?? 'AmiExpress Web';
   const timeLeft = Math.floor(session.timeRemaining);
 
   // Check if multiple message bases in conference (like getConfMsgBaseCount in AmiExpress)
-  const msgBasesInConf = messageBases.filter(mb => mb.conferenceId === session.currentConf);
-  const currentMsgBase = messageBases.find(mb => mb.id === session.currentMsgBase);
+  const msgBasesInConf = msgBases.filter(mb => mb.conferenceId === session.currentConf);
+  const currentMsgBase = msgBases.find(mb => mb.id === session.currentMsgBase);
 
   console.log('  - msgBasesInConf.length:', msgBasesInConf.length);
   console.log('  - currentMsgBase found:', !!currentMsgBase);

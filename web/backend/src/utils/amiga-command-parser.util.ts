@@ -231,8 +231,8 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   const name = path.basename(filePath, '.info').toUpperCase();
 
   // Required field: LOCATION
-  const location = tooltypes.get('LOCATION');
-  if (!location) {
+  const locationKey = tooltypes.get('LOCATION') || tooltypes.get('PATH');
+  if (!locationKey) {
     return null;
   }
 
@@ -244,10 +244,15 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   }
 
   // Build command definition
+  const normalizedLocation = locationKey
+    .replace('DOORS:', 'doors/')
+    .replace('Doors:', 'doors/')
+    .replace(':', '/');
+
   const cmd: CommandDefinition = {
     name,
     type,
-    location: location.replace('DOORS:', 'doors/').replace(':', '/'), // Convert Amiga paths to Unix
+    location: normalizedLocation, // Convert Amiga paths to Unix
   };
 
   // Optional fields (express.e:4693-4767)
@@ -365,8 +370,13 @@ export function scanCommandDirectory(
 
         if (cmd) {
           console.log(`      Loaded command: ${cmd.name} → ${cmd.location}`);
-          // Only add if not already found (maintains priority order)
-          if (!commands.has(cmd.name)) {
+
+          const existing = commands.get(cmd.name);
+
+          if (!existing) {
+            commands.set(cmd.name, cmd);
+          } else if (existing.type !== DoorType.TS && cmd.type === DoorType.TS) {
+            console.log(`      Replacing ${cmd.name} with TypeScript door version`);
             commands.set(cmd.name, cmd);
           } else {
             console.log(`      Command ${cmd.name} already loaded (skipping due to priority)`);

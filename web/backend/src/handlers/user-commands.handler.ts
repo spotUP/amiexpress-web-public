@@ -14,6 +14,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { normalizeForComparison } from '../utils/input-normalizer.util';
 import type { BBSSession } from '../index';
 
 interface Conference {
@@ -187,6 +188,14 @@ export async function handleJoinConferenceCommand(
   // For now, we use absolute numbering (not inverse)
 
   // express.e:25140-25150 - Prompt for conference number if invalid
+  const normalizedNameParam = normalizeForComparison(params);
+  if ((newConf < 1 || newConf > _conferences.length) && normalizedNameParam) {
+    const matchedConference = _conferences.find(conf => normalizeForComparison(conf.name) === normalizedNameParam);
+    if (matchedConference) {
+      newConf = matchedConference.id;
+    }
+  }
+
   if (newConf < 1 || newConf > _conferences.length) {
     _displayScreen(socket, session, 'JOINCONF');
 

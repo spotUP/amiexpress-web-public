@@ -30,7 +30,9 @@ export class ConferenceRepository {
       conferenceFileManager.writeConferenceFile(fullConf, slotNumber);
       console.log(`[Database] Synced conference "${conf.name}" to Conf.DB (slot ${slotNumber})`);
     } catch (error) {
-      console.error(`[Database] Failed to sync conference to disk:`, error);
+      if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
+        console.error(`[Database] Failed to sync conference to disk:`, error);
+      }
       // Don't throw - DB insert succeeded
     }
 
@@ -103,7 +105,9 @@ export class ConferenceRepository {
         }
       }
     } catch (error) {
-      console.error(`[Database] Failed to sync updated conference to disk:`, error);
+      if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
+        console.error(`[Database] Failed to sync updated conference to disk:`, error);
+      }
     }
   }
 

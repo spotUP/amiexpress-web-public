@@ -245,7 +245,7 @@ Example: Myrmidon → Swordmaster
 
 ```typescript
 import { Door } from '@amiexpress/sdk';
-import { createFireEmblemGame } from '@amiexpress/sdk/examples/fire-emblem';
+import { createFireEmblemGame } from '@amiexpress/sdk/doors/fire-emblem';
 
 const door = new Door({
   name: 'Fire Emblem: Emblem of Valor',
@@ -265,7 +265,7 @@ door.start();
 
 ```typescript
 import { Door } from '@amiexpress/sdk';
-import { MultiplayerManager, MultiplayerMode } from '@amiexpress/sdk/examples/fire-emblem/multiplayer';
+import { MultiplayerManager, MultiplayerMode } from '@amiexpress/sdk/doors/fire-emblem/multiplayer';
 
 const door = new Door({
   name: 'Fire Emblem: Multiplayer',
@@ -355,7 +355,7 @@ door.start();
 ### File Structure
 
 ```
-sdk/examples/fire-emblem/
+sdk/doors/fire-emblem/
 ├── index.ts           # Main game (campaign)
 ├── multiplayer.ts     # Multiplayer modes
 └── README.md          # This file

@@ -1,6 +1,0 @@
-FROM LIB:c.o "mymenus.o"+"AcpCycle.o"+"parse.o"+"sercon.o"+"StartProcess.o"+"semis.o"+"date.o"+"IconInfo.o"+"acp208.o"
-TO "mymenus"
-LIB LIB:sc.lib LIB:amiga.lib
-NODEBUG
-define ___main=___tinymain
-

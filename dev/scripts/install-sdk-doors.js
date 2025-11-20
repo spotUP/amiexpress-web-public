@@ -3,7 +3,7 @@
  * Install SDK Example Doors to BBS
  *
  * This script:
- * 1. Reads all SDK example doors from sdk/examples/
+ * 1. Reads all SDK example doors from sdk/doors/
  * 2. Generates .info files in Commands/BBSCmd/
  * 3. Copies door source files to doors/
  *
@@ -15,7 +15,7 @@ const path = require('path');
 
 // Paths
 const projectRoot = path.resolve(__dirname, '../..');
-const sdkExamplesDir = path.join(projectRoot, 'sdk/examples');
+const sdkExamplesDir = path.join(projectRoot, 'sdk/doors');
 const commandsDir = path.join(projectRoot, 'Commands/BBSCmd');
 const doorsDir = path.join(projectRoot, 'doors');
 

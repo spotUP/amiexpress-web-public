@@ -1,5 +1,5 @@
 #!/bin/bash
-cd ~/Code/amiexpress-web/sdk/examples
+cd ~/Code/amiexpress-web/sdk/doors
 for dir in */; do
   if [ -f "$dir/tsconfig.json" ]; then
     name=$(basename "$dir")

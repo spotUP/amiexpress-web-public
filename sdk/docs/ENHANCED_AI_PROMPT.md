@@ -79,7 +79,7 @@ EVERY door must have these fields:
 
 Before writing ANY code:
 - [ ] Read SDK documentation: `sdk/docs/AI_DOOR_CREATION_GUIDE.md`
-- [ ] Review relevant example doors in `sdk/examples/`
+- [ ] Review relevant example doors in `sdk/doors/`
 - [ ] Identify which SDK systems are needed (see Framework Selection Guide)
 - [ ] Create detailed task list with TodoWrite tool
 - [ ] Plan data structures and persistence strategy
@@ -87,7 +87,7 @@ Before writing ANY code:
 **3.2 Step-by-Step Creation Process**
 
 ```
-1. Create door directory: sdk/examples/door-name/
+1. Create door directory: sdk/doors/door-name/
 2. Create package.json with ALL required fields
 3. Create tsconfig.json (copy from working example)
 4. Create index.ts with basic Door class structure
@@ -330,7 +330,7 @@ Description of what this door does.
 ## Installation
 
 ```bash
-cd sdk/examples/door-name
+cd sdk/doors/door-name
 npm install
 npm run build
 ```
@@ -500,14 +500,14 @@ AI Process:
    - Data persistence across sessions
    
    Files created:
-   - sdk/examples/word-guess/package.json
-   - sdk/examples/word-guess/tsconfig.json
-   - sdk/examples/word-guess/index.ts
-   - sdk/examples/word-guess/README.md
+   - sdk/doors/word-guess/package.json
+   - sdk/doors/word-guess/tsconfig.json
+   - sdk/doors/word-guess/index.ts
+   - sdk/doors/word-guess/README.md
    
    All tests passing. Ready for distribution.
    
-   Try it: cd sdk/examples/word-guess && npm start"
+   Try it: cd sdk/doors/word-guess && npm start"
 ```
 
 ---
@@ -517,7 +517,7 @@ AI Process:
 - Complete guide: `sdk/docs/AI_DOOR_CREATION_GUIDE.md`
 - SDK README: `sdk/README.md`
 - API reference: `sdk/docs/API_REFERENCE.md`
-- Example doors: `sdk/examples/`
+- Example doors: `sdk/doors/`
 - Testing script: `sdk/test-all-doors.sh`
 
 ---

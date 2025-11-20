@@ -396,7 +396,7 @@ CALL DisposeDoor()
 
 ### Complete Game Example
 
-See `sdk/examples/arexx-game/` for a complete game with:
+See `sdk/doors/arexx-game/` for a complete game with:
 - Player movement
 - Physics simulation
 - Collision detection
@@ -405,11 +405,11 @@ See `sdk/examples/arexx-game/` for a complete game with:
 
 ### ANSI Art Display
 
-See `sdk/examples/arexx-ansi/` for ANSI art viewer
+See `sdk/doors/arexx-ansi/` for ANSI art viewer
 
 ### Physics Demo
 
-See `sdk/examples/arexx-physics/` for bouncing balls demo
+See `sdk/doors/arexx-physics/` for bouncing balls demo
 
 ## Best Practices
 
@@ -531,6 +531,6 @@ If running out of memory on classic Amiga:
 ## Support
 
 For help:
-- Check examples in `sdk/examples/arexx/`
+- Check examples in `sdk/doors/arexx/`
 - See main SDK documentation
 - Report issues on GitHub

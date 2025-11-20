@@ -1,5 +1,0 @@
-BBSCMD=HELLOPYTHON
-TYPE=PYTHON
-LOCATION=doors/hello-python/hello.py
-DESCRIPTION=Python Hello World Door
-ACCESS=1

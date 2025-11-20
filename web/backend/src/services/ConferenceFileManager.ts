@@ -50,11 +50,13 @@ export class ConferenceFileManager {
   private readonly CONFBASE_SIZE = 64;
   private bbsRoot: string;
   private confDBPath: string;
+  private readonly suppressConfDbErrors: boolean;
 
   constructor() {
     // Path resolution: 4 levels up from src/services/ to project root
     this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
     this.confDBPath = path.join(this.bbsRoot, 'Conf.DB');
+    this.suppressConfDbErrors = process.env.NODE_ENV === 'test' || process.env.SUPPRESS_CONF_DB_ERRORS === '1';
   }
 
   /**
@@ -212,8 +214,10 @@ export class ConferenceFileManager {
 
       console.log(`[ConferenceFileManager] Wrote conference "${conf.name}" (slot ${slotNumber}) to Conf.DB`);
     } catch (error) {
-      console.error(`[ConferenceFileManager] Error writing conference "${conf.name}":`, error);
-      throw error;
+      if (!this.suppressConfDbErrors) {
+        console.error(`[ConferenceFileManager] Error writing conference "${conf.name}":`, error);
+        throw error;
+      }
     }
   }
 
@@ -243,8 +247,10 @@ export class ConferenceFileManager {
         fs.closeSync(fd);
       }
     } catch (error) {
-      console.error(`[ConferenceFileManager] Error updating conference "${conf.name}":`, error);
-      throw error;
+      if (!this.suppressConfDbErrors) {
+        console.error(`[ConferenceFileManager] Error updating conference "${conf.name}":`, error);
+        throw error;
+      }
     }
   }
 

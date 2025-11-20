@@ -48,8 +48,8 @@ Navigate directly to: `http://localhost:5173/admin/import`
 
 **Investigation**:
 - SDK server code exists and appears correct
-- `sdk/tools/preview/server.js:315` - `/api/doors` endpoint reads from `sdk/examples/`
-- **18 example doors found** in `sdk/examples/` directory:
+- `sdk/tools/preview/server.js:315` - `/api/doors` endpoint reads from `sdk/doors/`
+- **18 example doors found** in `sdk/doors/` directory:
   - 2048-game
   - bbs-dashboard
   - bbslink, bbslink-wall
@@ -60,7 +60,7 @@ Navigate directly to: `http://localhost:5173/admin/import`
   - dungeon-rpg
   - fire-emblem
   - glc-viewer
-  - global-wall
+- gwall
   - hello-world
   - mrc
   - neo-blessed-demo

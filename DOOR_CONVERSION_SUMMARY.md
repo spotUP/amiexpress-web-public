@@ -75,22 +75,22 @@ Given the scope, I recommend:
 ### Quick Server Runtime Fixes
 ```bash
 # bbs-dashboard
-sed -i 's/"runtime": "client"/"runtime": "server"/' sdk/examples/bbs-dashboard/package.json
+sed -i 's/"runtime": "client"/"runtime": "server"/' sdk/doors/bbs-dashboard/package.json
 
 # neo-blessed-demo
-sed -i 's/"runtime": "client"/"runtime": "server"/' sdk/examples/neo-blessed-demo/package.json
+sed -i 's/"runtime": "client"/"runtime": "server"/' sdk/doors/neo-blessed-demo/package.json
 
 # blessed-contrib-demos
-sed -i 's/"runtime": "client"/"runtime": "server"/' sdk/examples/blessed-contrib-demos/package.json
+sed -i 's/"runtime": "client"/"runtime": "server"/' sdk/doors/blessed-contrib-demos/package.json
 
 # hello-world
-sed -i 's/"runtime": "client"/"runtime": "server"/' sdk/examples/hello-world/package.json
+sed -i 's/"runtime": "client"/"runtime": "server"/' sdk/doors/hello-world/package.json
 ```
 
 ### Dungeon RPG Hybrid Conversion
-1. Create `sdk/examples/dungeon-rpg/server.ts`
-2. Update `sdk/examples/dungeon-rpg/package.json` → hybrid
-3. Update `sdk/examples/dungeon-rpg/index.ts` → use RPC
+1. Create `sdk/doors/dungeon-rpg/server.ts`
+2. Update `sdk/doors/dungeon-rpg/package.json` → hybrid
+3. Update `sdk/doors/dungeon-rpg/index.ts` → use RPC
 
 (Same pattern for fire-emblem and space-shooter)
 

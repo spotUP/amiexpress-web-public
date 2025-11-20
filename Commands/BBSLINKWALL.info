@@ -1,9 +1,0 @@
-COMMAND=BBSLINKWALL
-NAME=BBSLink Graffiti Wall
-TYPE=TS
-PATH=web/backend/src/doors/bbslink-wall
-ACCESS=0
-HOT=
-PRIVATE=N
-OVERLOAD=N
-HIDDEN=N

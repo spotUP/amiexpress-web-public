@@ -1218,7 +1218,7 @@ door.sendAnsi(output, user.id);
 
 - [Neo-Blessed GitHub](https://github.com/embarklabs/neo-blessed)
 - [Blessed Documentation](https://github.com/chjj/blessed)
-- SDK Examples: `/sdk/examples/`
+- SDK Examples: `/sdk/doors/`
 - Ask in BBS Dev Community
 
 ## Summary

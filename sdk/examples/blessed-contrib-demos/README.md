@@ -18,7 +18,7 @@ This door demonstrates the following blessed-contrib widgets:
 ## Installation
 
 ```bash
-cd sdk/examples/blessed-contrib-demos
+cd sdk/doors/blessed-contrib-demos
 npm install
 npm run build
 ```

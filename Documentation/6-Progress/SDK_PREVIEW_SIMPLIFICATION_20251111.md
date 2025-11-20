@@ -212,7 +212,7 @@ npm run build
 
 ### Hello-World Door Build
 ```bash
-cd sdk/examples/hello-world
+cd sdk/doors/hello-world
 npm run build
 # ✅ Built successfully
 # ✅ dist/index.js created

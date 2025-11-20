@@ -1,9 +1,0 @@
-COMMAND=TFRONT
-NAME=Telnet Frontend (Who's Online)
-TYPE=TS
-PATH=web/backend/src/doors/telnet-front
-ACCESS=0
-HOT=
-PRIVATE=N
-OVERLOAD=N
-HIDDEN=N

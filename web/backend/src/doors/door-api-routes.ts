@@ -151,7 +151,7 @@ doorApiRouter.post('/doors/clear-cache', async (req: Request, res: Response) => 
 async function loadDoorManifest(doorId: string): Promise<any | null> {
   try {
     // Try SDK examples first
-    const sdkPath = path.join(process.cwd(), '../../sdk/examples', doorId, 'package.json');
+    const sdkPath = path.join(process.cwd(), '../../sdk/doors', doorId, 'package.json');
     if (fs.existsSync(sdkPath)) {
       const content = fs.readFileSync(sdkPath, 'utf8');
       return JSON.parse(content);
@@ -176,7 +176,7 @@ async function loadDoorManifest(doorId: string): Promise<any | null> {
  */
 function resolveDoorPath(doorId: string, entryPoint: string): string {
   // Try SDK examples first
-  const sdkPath = path.join(process.cwd(), '../../sdk/examples', doorId, entryPoint);
+  const sdkPath = path.join(process.cwd(), '../../sdk/doors', doorId, entryPoint);
   if (fs.existsSync(sdkPath)) {
     return sdkPath;
   }
@@ -193,7 +193,7 @@ function resolveDoorPath(doorId: string, entryPoint: string): string {
   }
 
   // Default to SDK examples
-  return path.join(process.cwd(), '../../sdk/examples', doorId, entryPoint);
+  return path.join(process.cwd(), '../../sdk/doors', doorId, entryPoint);
 }
 
 /**
@@ -203,7 +203,7 @@ async function listAvailableDoors(): Promise<any[]> {
   const doors: any[] = [];
 
   // Scan SDK examples
-  const sdkExamplesPath = path.join(process.cwd(), '../../sdk/examples');
+  const sdkExamplesPath = path.join(process.cwd(), '../../sdk/doors');
   if (fs.existsSync(sdkExamplesPath)) {
     const entries = fs.readdirSync(sdkExamplesPath);
     for (const entry of entries) {

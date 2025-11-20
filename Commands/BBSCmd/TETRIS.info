@@ -1,7 +1,0 @@
-BBSCMD=TETRIS
-TYPE=TS
-LOCATION=doors/tetris
-DESCRIPTION=Classic block puzzle game with modern graphics and sound
-ACCESS=0
-MULTINODE=YES
-PRIORITY=SAME

@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import { Database } from '../database';
+import { sanitizeInput } from '../utils/input-normalizer.util';
 
 export class AuthHandler {
   constructor(private db: Database) {}
@@ -16,14 +17,15 @@ export class AuthHandler {
   async login(req: Request, res: Response): Promise<void> {
     try {
       const { username, password } = req.body;
+      const safeUsername = sanitizeInput(username);
 
-      if (!username || !password) {
+      if (!safeUsername || !password) {
         res.status(400).json({ error: 'Username and password required' });
         return;
       }
 
       // Authenticate user
-      const user = await this.db.getUserByUsername(username);
+      const user = await this.db.getUserByUsername(safeUsername);
       if (!user) {
         res.status(401).json({ error: 'Invalid credentials' });
         return;
@@ -71,14 +73,17 @@ export class AuthHandler {
   async register(req: Request, res: Response): Promise<void> {
     try {
       const { username, realname, location, password } = req.body;
+      const safeUsername = sanitizeInput(username);
+      const safeRealname = sanitizeInput(realname);
 
-      if (!username || !realname || !password) {
+      if (!safeUsername || !safeRealname || !password) {
         res.status(400).json({ error: 'Username, realname, and password required' });
         return;
       }
 
       // Check if user already exists
-      const existingUser = await this.db.getUserByUsername(username);
+      const normalizedRegName = safeUsername;
+      const existingUser = await this.db.getUserByUsername(normalizedRegName);
       if (existingUser) {
         res.status(409).json({ error: 'Username already exists' });
         return;
@@ -89,9 +94,9 @@ export class AuthHandler {
 
       // Create new user with default settings
       const userId = await this.db.createUser({
-        username,
+        username: normalizedRegName,
         passwordHash,
-        realname,
+        realname: safeRealname,
         location: location || '',
         phone: '',
         secLevel: 10, // Default security level

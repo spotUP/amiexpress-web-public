@@ -8,6 +8,31 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+function resolveCaseInsensitivePath(targetPath: string): string | null {
+  if (fs.existsSync(targetPath)) {
+    return targetPath;
+  }
+
+  const dirPath = path.dirname(targetPath);
+  const targetName = path.basename(targetPath);
+
+  try {
+    const entries = fs.readdirSync(dirPath);
+    const match = entries.find(entry => entry.toLowerCase() === targetName.toLowerCase());
+    if (match) {
+      const resolvedPath = path.join(dirPath, match);
+      if (fs.existsSync(resolvedPath)) {
+        return resolvedPath;
+      }
+    }
+  } catch (error) {
+    // Directory may not exist or is unreadable
+    return null;
+  }
+
+  return null;
+}
+
 /**
  * Find security screen file with appropriate security level
  *
@@ -39,10 +64,11 @@ export function findSecurityScreen(
     // For web version, we only support .TXT files (no RIP graphics)
     // express.e:6272-6273
     const securityScreenPath = `${screenDirAndName}${secLevel}.TXT`;
+    const resolvedSecurityPath = resolveCaseInsensitivePath(securityScreenPath);
 
-    if (fs.existsSync(securityScreenPath)) {
-      console.log(`✓ Found security screen: ${securityScreenPath} (level ${secLevel})`);
-      return securityScreenPath;
+    if (resolvedSecurityPath) {
+      console.log(`✓ Found security screen: ${resolvedSecurityPath} (level ${secLevel})`);
+      return resolvedSecurityPath;
     }
 
     // express.e:6274 - Decrement by 5
@@ -52,10 +78,11 @@ export function findSecurityScreen(
   // express.e:6280-6302 - Check non-security screens at end
   // This is the fallback screen with no security level suffix
   const defaultScreenPath = `${screenDirAndName}.TXT`;
+  const resolvedDefaultPath = resolveCaseInsensitivePath(defaultScreenPath);
 
-  if (fs.existsSync(defaultScreenPath)) {
-    console.log(`✓ Found default screen: ${defaultScreenPath}`);
-    return defaultScreenPath;
+  if (resolvedDefaultPath) {
+    console.log(`✓ Found default screen: ${resolvedDefaultPath}`);
+    return resolvedDefaultPath;
   }
 
   // express.e:6304 - No screen found

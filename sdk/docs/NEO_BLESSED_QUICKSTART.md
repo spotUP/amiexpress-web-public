@@ -420,7 +420,7 @@ The SDK includes three comprehensive examples:
 
 To run examples:
 ```bash
-cd sdk/examples/neo-blessed-demo
+cd sdk/doors/neo-blessed-demo
 npm install
 npm start
 ```
@@ -451,7 +451,7 @@ npm start
 ## Next Steps
 
 - Read the full [Neo-Blessed UI Engine Documentation](./NEO_BLESSED_UI.md)
-- Study the example doors in `sdk/examples/`
+- Study the example doors in `sdk/doors/`
 - Experiment with different widgets and layouts
 - Build your own awesome BBS door!
 

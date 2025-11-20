@@ -55,7 +55,7 @@ A comprehensive, feature-rich bug tracking system designed for Bulletin Board Sy
 
 ```bash
 # Navigate to the bug-tracker directory
-cd sdk/examples/bug-tracker
+cd sdk/doors/bug-tracker
 
 # Install dependencies
 npm install

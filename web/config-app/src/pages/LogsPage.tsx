@@ -23,7 +23,9 @@ export function LogsPage() {
   const [logType, setLogType] = useState<LogType>('backend');
   const [lineCount, setLineCount] = useState(500);
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  
+  const [filterTerm, setFilterTerm] = useState('');
+const [searchInput, setSearchInput] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
@@ -63,7 +65,9 @@ export function LogsPage() {
     setSearchTerm(searchInput);
   };
 
-  const handleDownload = () => {
+    const filteredLines = filterTerm ? (logData?.lines || []).reverse().filter(line => line.toLowerCase().includes(filterTerm.toLowerCase())) : (logData?.lines || []).reverse();
+  const highlightedLines = filterTerm ? filteredLines : (logData?.lines || []).reverse();
+const handleDownload = () => {
     if (!logData?.lines) return;
 
     const content = logData.lines.reverse().join('\n');

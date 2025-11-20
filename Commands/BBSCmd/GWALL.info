@@ -1,7 +1,7 @@
 COMMAND=GWALL
 NAME=Global Wall
 TYPE=TS
-PATH=web/backend/src/doors/global-wall
+PATH=doors/gwall
 ACCESS=0
 HOT=
 PRIVATE=N
