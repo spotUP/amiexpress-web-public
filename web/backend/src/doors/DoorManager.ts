@@ -51,6 +51,7 @@ interface DoorManagerState {
   doors: DoorInfo[];
   currentDoor?: DoorInfo;
   lastReloadStatus?: Record<string, string>;
+  lastReloadLog?: Record<string, string>;
   uploadBuffer?: Buffer;
   uploadFilename?: string;
   docsContent?: string;
@@ -92,6 +93,7 @@ export class DoorManager {
       selectedIndex: 0,
       doors: [],
       lastReloadStatus: {},
+      lastReloadLog: {},
       scrollOffset: 0
     };
 
@@ -494,6 +496,10 @@ export class DoorManager {
     if (lastStatus) {
       this.socket.emit('ansi-output', `\x1b[0;36mLast Reload:\x1b[0m ${lastStatus}\r\n`);
     }
+    const lastLog = this.state.lastReloadLog?.[door.id];
+    if (lastLog) {
+      this.socket.emit('ansi-output', `\x1b[0;36mReload Log:\x1b[0m (press L to view)\r\n`);
+    }
 
     if (door.author) {
       this.socket.emit('ansi-output', `\x1b[0;36mAuthor:\x1b[0m ${door.author}\r\n`);
@@ -539,6 +545,9 @@ export class DoorManager {
 
     if (this.supportsHotReload(door)) {
       this.socket.emit('ansi-output', '\x1b[33mR\x1b[0m Reload  ');
+      if (this.state.lastReloadLog?.[door.id]) {
+        this.socket.emit('ansi-output', '\x1b[33mL\x1b[0m Log  ');
+      }
     }
 
     this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
@@ -608,6 +617,14 @@ export class DoorManager {
     this.socket.emit('ansi-output', `\r\n\x1b[33mReloading ${doorName}...\x1b[0m\r\n`);
 
     // Run build if package.json has a build script
+    let buildLog = '';
+    const appendBuildLog = (chunk: Buffer | string) => {
+      buildLog += chunk.toString();
+      if (buildLog.length > 5000) {
+        buildLog = buildLog.slice(buildLog.length - 5000);
+      }
+    };
+
     try {
       const pkgPath = path.join(doorPath, 'package.json');
       if (fs.existsSync(pkgPath)) {
@@ -617,8 +634,10 @@ export class DoorManager {
             this.socket.emit('ansi-output', '\x1b[36m* Running npm run build...\x1b[0m\r\n');
             const proc = spawn('npm', ['run', 'build'], {
               cwd: doorPath,
-              stdio: 'inherit'
+              stdio: ['ignore', 'pipe', 'pipe']
             });
+            proc.stdout?.on('data', data => appendBuildLog(data));
+            proc.stderr?.on('data', data => appendBuildLog(data));
             proc.on('exit', () => resolve());
           });
         }
@@ -629,6 +648,10 @@ export class DoorManager {
         ...(this.state.lastReloadStatus || {}),
         [door.id]: `Build failed: ${(err as Error).message}`
       };
+      this.state.lastReloadLog = {
+        ...(this.state.lastReloadLog || {}),
+        [door.id]: buildLog
+      };
     }
 
     // Reinstall to refresh Commands/BBSCmd and local configs
@@ -637,8 +660,10 @@ export class DoorManager {
         this.socket.emit('ansi-output', '\x1b[36m* Refreshing door registration...\x1b[0m\r\n');
         const proc = spawn('node', [path.join(this.projectRoot, 'dev/scripts/install-sdk-doors.js'), '--door', doorName, '--quiet'], {
           cwd: this.projectRoot,
-          stdio: 'inherit'
+          stdio: ['ignore', 'pipe', 'pipe']
         });
+        proc.stdout?.on('data', data => appendBuildLog(data));
+        proc.stderr?.on('data', data => appendBuildLog(data));
         proc.on('exit', () => resolve());
       });
 
@@ -651,12 +676,20 @@ export class DoorManager {
         ...(this.state.lastReloadStatus || {}),
         [door.id]: 'Success'
       };
+      this.state.lastReloadLog = {
+        ...(this.state.lastReloadLog || {}),
+        [door.id]: buildLog
+      };
       this.showInfo();
     } catch (err) {
       this.socket.emit('ansi-output', `\x1b[31mReload failed: ${(err as Error).message}\x1b[0m\r\n`);
       this.state.lastReloadStatus = {
         ...(this.state.lastReloadStatus || {}),
         [door.id]: `Failed: ${(err as Error).message}`
+      };
+      this.state.lastReloadLog = {
+        ...(this.state.lastReloadLog || {}),
+        [door.id]: buildLog
       };
     }
   }
@@ -1551,6 +1584,15 @@ export class DoorManager {
     // R - Hot reload (TS/Python/AREXX)
     if (key === 'r' && this.supportsHotReload(door)) {
       this.hotReloadDoor(door);
+      return;
+    }
+
+    // L - View last reload log
+    if (key === 'l' && this.supportsHotReload(door) && this.state.lastReloadLog?.[door.id]) {
+      this.state.docsContent = this.state.lastReloadLog?.[door.id] || '';
+      this.state.scrollOffset = 0;
+      this.state.mode = 'docs';
+      this.showDocs();
       return;
     }
 
