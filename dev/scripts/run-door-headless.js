@@ -86,10 +86,25 @@ async function main() {
     throw new Error('Missing credentials: provide --user/--pass or a settings file with username/password');
   }
 
-  console.log(`[headless] Logging in to ${baseUrl} as ${user}`);
-  const token = await login(baseUrl, user, pass);
+  const candidateBaseUrls = [baseUrl];
+  if (baseUrl.includes('3001')) {
+    candidateBaseUrls.push(baseUrl.replace('3001', '8080'));
+  }
+
+  let token = null;
+  let lastErr;
+  for (const url of candidateBaseUrls) {
+    try {
+      console.log(`[headless] Logging in to ${url} as ${user}`);
+      token = await login(url, user, pass);
+      baseUrl = url;
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
   if (!token) {
-    throw new Error('Login failed: no token');
+    throw lastErr || new Error('Login failed: no token');
   }
   console.log('[headless] Login ok, launching command', command);
   await runDoor(baseUrl, token, command);
