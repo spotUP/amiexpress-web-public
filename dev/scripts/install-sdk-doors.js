@@ -49,6 +49,69 @@ let installed = 0;
 let skipped = 0;
 let errors = 0;
 
+function copyRecursive(src, dest) {
+  const stat = fs.statSync(src);
+  if (stat.isDirectory()) {
+    // Skip Node modules to keep installs lean
+    if (path.basename(src).toLowerCase() === 'node_modules') {
+      return;
+    }
+
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+
+    for (const entry of fs.readdirSync(src)) {
+      copyRecursive(path.join(src, entry), path.join(dest, entry));
+    }
+  } else if (stat.isFile()) {
+    fs.copyFileSync(src, dest);
+  }
+}
+
+function ensureGwallConfigs(targetDoorPath) {
+  const shortcode =
+    (process.env.GWALL_BBS_CODE || process.env.GWALL_SHORTCODE || process.env.BBS_SHORTCODE || process.env.BBS_CODE || 'AMI')
+      .trim()
+      .substring(0, 3)
+      .toUpperCase();
+
+  const settingsPath = path.join(targetDoorPath, 'GWall.cfg');
+  const serverPath = path.join(targetDoorPath, 'GWALL.cfg');
+
+  if (!fs.existsSync(settingsPath)) {
+    const content = `4\n${shortcode}\n42626717772363\n`;
+    fs.writeFileSync(settingsPath, content, 'utf8');
+    console.log(`   ✓ Created default GWall.cfg (style/shortcode)`);
+  } else {
+    console.log(`   [INFO] GWall.cfg already present, leaving in place`);
+  }
+
+  if (!fs.existsSync(serverPath)) {
+    const host = process.env.GWALL_HOST || 'scenewall.bbs.io';
+    const port = process.env.GWALL_PORT || '1541';
+    const timeout = process.env.GWALL_TIMEOUT || '10';
+    const content = [
+      '; Global Wall network configuration',
+      `SERVERHOST=${host}`,
+      `SERVERPORT=${port}`,
+      '; timeout for connecting to server (seconds)',
+      `TIMEOUT=${timeout}`,
+      ''
+    ].join('\n');
+    fs.writeFileSync(serverPath, content, 'utf8');
+    console.log(`   ✓ Created default GWALL.cfg (network)`);
+  } else {
+    console.log(`   [INFO] GWALL.cfg already present, leaving in place`);
+  }
+}
+
+function ensureDoorAssets(doorName, targetDoorPath) {
+  if (doorName.toLowerCase() === 'gwall') {
+    ensureGwallConfigs(targetDoorPath);
+  }
+}
+
 for (const doorName of doors) {
   try {
     const doorPath = path.join(sdkExamplesDir, doorName);
@@ -89,15 +152,24 @@ for (const doorName of doors) {
       console.log(`   ✓ Created ${bbsCommand}.info`);
     }
 
-    // Copy door directory to doors/
+    // Copy door directory to doors/ (avoid symlinks so config can be localised)
     const targetDoorPath = path.join(doorsDir, doorName);
-    if (fs.existsSync(targetDoorPath)) {
-      console.log(`   [WARNING]  Door directory already exists in doors/, skipping copy`);
-    } else {
-      // Create symlink instead of copying (more efficient for development)
-      fs.symlinkSync(doorPath, targetDoorPath, 'dir');
-      console.log(`   ✓ Linked to doors/${doorName}`);
+    const targetExists = fs.existsSync(targetDoorPath);
+    const targetIsSymlink = targetExists && fs.lstatSync(targetDoorPath).isSymbolicLink();
+
+    if (targetIsSymlink) {
+      fs.unlinkSync(targetDoorPath);
+      console.log(`   [INFO] Removed existing symlink doors/${doorName}`);
     }
+
+    if (!targetExists || targetIsSymlink) {
+      copyRecursive(doorPath, targetDoorPath);
+      console.log(`   ✓ Copied to doors/${doorName}`);
+    } else {
+      console.log(`   [WARNING]  Door directory already exists in doors/, leaving in place`);
+    }
+
+    ensureDoorAssets(doorName, targetDoorPath);
 
     installed++;
     console.log('');
