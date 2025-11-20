@@ -48,6 +48,34 @@ function checkDoor(root) {
     warnings.push('no build script; dist may go stale');
   }
 
+  // Type-specific checks
+  if (doorType === 'PY' || doorType === 'PYTHON') {
+    if (!main.endsWith('.py') && !main.endsWith('.js')) {
+      warnings.push('python door main should be a .py file');
+    }
+    // Try byte-compiling if requested
+    if (process.env.DOCTOR_COMPILE_PY === '1' && fs.existsSync(entryPath)) {
+      try {
+        const { spawnSync } = require('child_process');
+        const res = spawnSync('python3', ['-m', 'py_compile', entryPath], { cwd: root });
+        if (res.status !== 0) {
+          errors.push(`python compile failed: ${res.stderr.toString().trim() || res.stdout.toString().trim()}`);
+        }
+      } catch (err) {
+        warnings.push(`python compile skipped: ${(err || {}).message || err}`);
+      }
+    }
+  } else if (doorType === 'AREXX' || doorType === 'REXX') {
+    if (!main.toLowerCase().endsWith('.rexx') && !main.toLowerCase().endsWith('.rx')) {
+      warnings.push('AREXX door main should be .rexx/.rx script');
+    }
+    if (!pkg.scripts || !pkg.scripts.run) {
+      warnings.push('AREXX door missing npm run "run" script to invoke rexx interpreter');
+    }
+  } else if (doorType && !['TS', 'JS'].includes(doorType)) {
+    warnings.push(`unrecognized doorType ${doorType}`);
+  }
+
   // Special-case config checks
   if (path.basename(root).toLowerCase() === 'gwall') {
     const cfg1 = path.join(root, 'GWall.cfg');
