@@ -13,6 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { spawn } from 'child_process';
 import { Socket } from 'socket.io';
 import AdmZip from 'adm-zip';
 import { getAmigaDoorManager, DoorArchive } from './amigaDoorManager';
@@ -71,11 +72,13 @@ export class DoorManager {
   private doorsPath: string;
   private archivesPath: string;
   private inputHandler?: (data: string) => void;
+  private projectRoot: string;
 
   constructor(socket: Socket, session?: any) {
     this.socket = socket;
     this.session = session;
     this.doorsPath = path.join(config.get('dataDir'), 'Doors');
+    this.projectRoot = path.resolve(__dirname, '..', '..', '..');
     this.archivesPath = path.join(config.get('dataDir'), 'Doors', 'archives');
 
     // Ensure directories exist
@@ -528,8 +531,116 @@ export class DoorManager {
       this.socket.emit('ansi-output', '\x1b[33mD\x1b[0m Documentation  ');
     }
 
+    if (this.supportsHotReload(door)) {
+      this.socket.emit('ansi-output', '\x1b[33mR\x1b[0m Reload  ');
+    }
+
     this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
+  }
+
+  /**
+   * Determine if a door supports hot reload (TypeScript/Python/AREXX)
+   */
+  private supportsHotReload(door: DoorInfo): boolean {
+    const type = ((door as any).type || door.type || '').toString().toLowerCase();
+    return ['ts', 'typescript', 'js', 'javascript', 'arexx', 'rexx', 'python', 'py'].includes(type);
+  }
+
+  /**
+   * Resolve the working directory for a given door
+   */
+  private resolveDoorPath(door: DoorInfo): string | null {
+    const candidates: string[] = [];
+
+    if ((door as any).resolvedPath) {
+      candidates.push((door as any).resolvedPath);
+    }
+    if ((door as any).location) {
+      candidates.push(path.join(this.projectRoot, (door as any).location));
+    }
+    if ((door as any).doorName) {
+      candidates.push(path.join(this.doorsPath, (door as any).doorName));
+    }
+    if (door.filename) {
+      candidates.push(path.join(this.doorsPath, path.basename(door.filename, path.extname(door.filename))));
+    }
+
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) {
+        const stat = fs.statSync(candidate);
+        if (stat.isDirectory()) {
+          return candidate;
+        }
+        return path.dirname(candidate);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Hot reload a door by rebuilding (if applicable) and re-registering the .info
+   */
+  private async hotReloadDoor(door: DoorInfo): Promise<void> {
+    if (!this.supportsHotReload(door)) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mHot reload is only available for TypeScript/Python/AREXX doors\x1b[0m\r\n');
+      return;
+    }
+
+    const doorPath = this.resolveDoorPath(door);
+    if (!doorPath) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mCould not resolve door path for reload\x1b[0m\r\n');
+      return;
+    }
+
+    const doorName =
+      (door as any).doorName ||
+      (door as any).command ||
+      path.basename(doorPath);
+
+    this.socket.emit('ansi-output', `\r\n\x1b[33mReloading ${doorName}...\x1b[0m\r\n`);
+
+    // Run build if package.json has a build script
+    try {
+      const pkgPath = path.join(doorPath, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        if (pkg.scripts && pkg.scripts.build) {
+          await new Promise<void>((resolve) => {
+            this.socket.emit('ansi-output', '\x1b[36m* Running npm run build...\x1b[0m\r\n');
+            const proc = spawn('npm', ['run', 'build'], {
+              cwd: doorPath,
+              stdio: 'inherit'
+            });
+            proc.on('exit', () => resolve());
+          });
+        }
+      }
+    } catch (err) {
+      this.socket.emit('ansi-output', `\x1b[31mBuild step failed: ${(err as Error).message}\x1b[0m\r\n`);
+    }
+
+    // Reinstall to refresh Commands/BBSCmd and local configs
+    try {
+      await new Promise<void>((resolve) => {
+        this.socket.emit('ansi-output', '\x1b[36m* Refreshing door registration...\x1b[0m\r\n');
+        const proc = spawn('node', [path.join(this.projectRoot, 'dev/scripts/install-sdk-doors.js'), '--door', doorName, '--quiet'], {
+          cwd: this.projectRoot,
+          stdio: 'inherit'
+        });
+        proc.on('exit', () => resolve());
+      });
+
+      // Refresh door list to pick up size/installed flag
+      await this.scanDoors();
+      this.state.currentDoor = this.state.doors.find(d => d.name === door.name || (d as any).doorName === (door as any).doorName) || door;
+
+      this.socket.emit('ansi-output', '\x1b[32m* Reload complete\x1b[0m\r\n');
+      this.showInfo();
+    } catch (err) {
+      this.socket.emit('ansi-output', `\x1b[31mReload failed: ${(err as Error).message}\x1b[0m\r\n`);
+    }
   }
 
   /**
@@ -1416,6 +1527,12 @@ export class DoorManager {
       this.state.scrollOffset = 0;
       this.state.mode = 'docs';
       this.showDocs();
+      return;
+    }
+
+    // R - Hot reload (TS/Python/AREXX)
+    if (key === 'r' && this.supportsHotReload(door)) {
+      this.hotReloadDoor(door);
       return;
     }
 
