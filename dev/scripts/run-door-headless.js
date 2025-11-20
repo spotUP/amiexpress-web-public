@@ -18,8 +18,12 @@ const argv = yargs(hideBin(process.argv))
   .argv;
 
 async function login(baseUrl, username, password) {
-  // Try socket auth endpoint first (common in this codebase)
-  const endpoints = [`${baseUrl}/api/auth/login`, `${baseUrl}/auth/login`, `${baseUrl}/api/login`];
+  // Try common auth endpoints (REST API on /api/auth/login)
+  const endpoints = [
+    `${baseUrl}/api/auth/login`,
+    `${baseUrl}/auth/login`,
+    `${baseUrl}/api/login`
+  ];
   let lastError;
   for (const url of endpoints) {
     try {
@@ -31,6 +35,19 @@ async function login(baseUrl, username, password) {
       lastError = err;
     }
   }
+
+  // Fallback: try admin login route used by the config UI
+  const adminUrl = `${baseUrl}/admin/api/login`;
+  try {
+    const res = await axios.post(adminUrl, { username, password });
+    if (res.data?.token) {
+      return res.data.token;
+    }
+    throw new Error('Admin login response missing token');
+  } catch (err) {
+    lastError = err;
+  }
+
   throw lastError || new Error('Login failed');
 }
 
