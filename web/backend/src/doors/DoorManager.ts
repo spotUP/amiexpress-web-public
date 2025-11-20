@@ -52,6 +52,7 @@ interface DoorManagerState {
   currentDoor?: DoorInfo;
   lastReloadStatus?: Record<string, string>;
   lastReloadLog?: Record<string, string>;
+  filter?: string;
   uploadBuffer?: Buffer;
   uploadFilename?: string;
   docsContent?: string;
@@ -415,7 +416,9 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR MANAGER ', 80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\r\n');
 
-    if (this.state.doors.length === 0) {
+    const doors = this.applyFilter(this.state.filter || '');
+
+    if (doors.length === 0) {
       this.socket.emit('ansi-output', '\x1b[33mNo doors installed.\x1b[0m\r\n\r\n');
     } else {
       this.socket.emit('ansi-output', '\x1b[36mInstalled Doors:\x1b[0m\r\n\r\n');
@@ -423,16 +426,17 @@ export class DoorManager {
       // Calculate visible range (show 15 doors at a time)
       const pageSize = 15;
       const start = this.state.scrollOffset;
-      const end = Math.min(start + pageSize, this.state.doors.length);
+      const end = Math.min(start + pageSize, doors.length);
 
       for (let i = start; i < end; i++) {
-        const door = this.state.doors[i];
+        const door = doors[i];
         const isSelected = i === this.state.selectedIndex;
 
         // Format line
         const status = door.installed ? '\x1b[32m[*]\x1b[0m' : '\x1b[31m[ ]\x1b[0m';
-        const type = door.type === 'typescript' ? 'TS' : door.type === 'amiga' ? 'AMI' : 'ARC';
-        const name = door.name.substring(0, 30).padEnd(30);
+        const type = door.type === 'typescript' ? 'TS' : door.type === 'python' ? 'PY' : door.type === 'arexx' ? 'RX' : door.type === 'amiga' ? 'AMI' : 'ARC';
+        const hot = this.supportsHotReload(door) ? '\x1b[35mH\x1b[0m' : ' ';
+        const name = door.name.substring(0, 24).padEnd(24);
         const size = this.formatSize(door.size);
 
         // Show BBS command if available (for installed doors)
@@ -441,16 +445,16 @@ export class DoorManager {
 
         if (isSelected) {
           // Blue background for selected
-          this.socket.emit('ansi-output', `\x1b[0;37;44m ${status} [${type}] ${commandDisplay} ${name} ${size} \x1b[0m\r\n`);
+          this.socket.emit('ansi-output', `\x1b[0;37;44m ${status} [${type}${hot}] ${commandDisplay} ${name} ${size} \x1b[0m\r\n`);
         } else {
-          this.socket.emit('ansi-output', ` ${status} \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m\r\n`);
+          this.socket.emit('ansi-output', ` ${status} \x1b[33m[${type}${hot}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m\r\n`);
         }
       }
 
       // Show scroll indicator
-      if (this.state.doors.length > pageSize) {
+      if (doors.length > pageSize) {
         const current = Math.floor(this.state.selectedIndex / pageSize) + 1;
-        const total = Math.ceil(this.state.doors.length / pageSize);
+        const total = Math.ceil(doors.length / pageSize);
         this.socket.emit('ansi-output', `\r\n\x1b[90mPage ${current}/${total}\x1b[0m\r\n`);
       }
     }
@@ -461,6 +465,7 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Navigate  ');
     this.socket.emit('ansi-output', '\x1b[33mENTER\x1b[0m Info  ');
     this.socket.emit('ansi-output', '\x1b[33mU\x1b[0m Upload  ');
+    this.socket.emit('ansi-output', '\x1b[33mF\x1b[0m Filter  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
   }
 
@@ -560,6 +565,21 @@ export class DoorManager {
   private supportsHotReload(door: DoorInfo): boolean {
     const type = ((door as any).type || door.type || '').toString().toLowerCase();
     return ['ts', 'typescript', 'js', 'javascript', 'arexx', 'rexx', 'python', 'py'].includes(type);
+  }
+
+  /**
+   * Apply filter term (case-insensitive substring on name/command/type)
+   */
+  private applyFilter(term: string): DoorInfo[] {
+    const t = term.trim().toLowerCase();
+    const all = this.state.doors;
+    if (!t) return all;
+    return all.filter(d => {
+      const name = (d.name || '').toLowerCase();
+      const cmd = ((d as any).command || '').toLowerCase();
+      const type = ((d as any).type || '').toLowerCase();
+      return name.includes(t) || cmd.includes(t) || type.includes(t);
+    });
   }
 
   /**
@@ -1545,12 +1565,36 @@ export class DoorManager {
       return;
     }
 
+    // F - Filter
+    if (key === 'f') {
+      this.promptFilter();
+      return;
+    }
+
     // Q - Quit
     if (key === 'q') {
       this.cleanup();
       this.socket.emit('door-exit');
       return;
     }
+  }
+
+  /**
+   * Prompt for filter term
+   */
+  private promptFilter(): void {
+    this.socket.emit('ansi-output', '\r\n\x1b[0;33mEnter filter (name/cmd/type), or blank to clear:\x1b[0m ');
+
+    const onInput = (data: string) => {
+      this.socket.off('command', onInput);
+      const term = data.trim();
+      this.state.filter = term.length > 0 ? term : undefined;
+      this.state.selectedIndex = 0;
+      this.state.scrollOffset = 0;
+      this.showList();
+    };
+
+    this.socket.once('command', onInput);
   }
 
   /**
