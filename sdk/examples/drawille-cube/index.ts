@@ -14,7 +14,7 @@
  */
 
 const { Door, UIEngine } = require('@amiexpress/bbs-door-sdk');
-const { runDoorWithSession } = require('../../tools/runDoorSession');
+const { runDoorWithSession } = require('@amiexpress/bbs-door-sdk/tools/runDoorSession');
 // @ts-ignore - drawille doesn't have type definitions
 const drawille = require('drawille');
 

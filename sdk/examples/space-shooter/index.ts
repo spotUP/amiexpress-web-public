@@ -6,7 +6,7 @@
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { runDoorWithSession } from '../../tools/runDoorSession';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
 
 interface Player {
   x: number;

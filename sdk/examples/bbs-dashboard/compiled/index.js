@@ -6,7 +6,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runDoor = runDoor;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
-const runDoorSession_1 = require("../../tools/runDoorSession");
+const runDoorSession_1 = require("@amiexpress/bbs-door-sdk/tools/runDoorSession");
 const door = new bbs_door_sdk_1.Door({
     name: 'BBS SysOp Dashboard',
     version: '1.0.0',

@@ -18,8 +18,14 @@
     "start": "npx tsx tetris.ts",
     "build": "tsc"
   },
-  "keywords": ["tetris", "puzzle", "game", "bbs", "door"],
+  "keywords": [
+    "tetris",
+    "puzzle",
+    "game",
+    "bbs",
+    "door"
+  ],
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../.."
+    "@amiexpress/bbs-door-sdk": "file:../../dist"
   }
 }

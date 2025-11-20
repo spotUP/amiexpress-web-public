@@ -19,7 +19,7 @@
     "hello-world"
   ],
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../"
+    "@amiexpress/bbs-door-sdk": "file:../../dist"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

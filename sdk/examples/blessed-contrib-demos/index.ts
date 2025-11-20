@@ -4,7 +4,7 @@
  */
 
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
-import { runDoorWithSession } from '../../tools/runDoorSession';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
 // @ts-ignore - neo-blessed doesn't have complete type definitions
 import * as blessed from 'neo-blessed';
 // @ts-ignore - blessed-contrib doesn't have type definitions

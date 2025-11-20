@@ -28,7 +28,7 @@
   "author": "Demo Scene Community",
   "license": "MIT",
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../",
+    "@amiexpress/bbs-door-sdk": "file:../../dist",
     "tone": "^15.0.4",
     "scribbletune": "^5.1.0"
   },

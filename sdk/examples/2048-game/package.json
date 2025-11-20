@@ -9,11 +9,18 @@
     "start": "ts-node index.ts",
     "build": "tsc"
   },
-  "keywords": ["bbs", "door", "game", "2048", "puzzle", "neo-blessed"],
+  "keywords": [
+    "bbs",
+    "door",
+    "game",
+    "2048",
+    "puzzle",
+    "neo-blessed"
+  ],
   "author": "AmiExpress SDK",
   "license": "MIT",
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../.."
+    "@amiexpress/bbs-door-sdk": "file:../../dist"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

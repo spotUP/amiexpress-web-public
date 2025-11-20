@@ -16,7 +16,7 @@ import {
   AnsiColor,
   BBSUser
 } from '@amiexpress/bbs-door-sdk';
-import { runDoorWithSession } from '../../tools/runDoorSession';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
 import * as fs from 'fs';
 import * as path from 'path';
 
