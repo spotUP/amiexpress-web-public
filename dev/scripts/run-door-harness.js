@@ -51,7 +51,14 @@ async function mainRun() {
   if (doorType === 'PY' || doorType === 'PYTHON') {
     const interpreter = process.env.PYTHON || 'python3';
     try {
-      const rc = await run(interpreter, [main]);
+      const rc = await run(interpreter, [main], {
+        env: {
+          ...process.env,
+          BBS_HARNESS: '1',
+          BBS_USER: 'tester',
+          BBS_NODE: '1'
+        }
+      });
       if (rc === 127) {
         console.error(`python interpreter not found (${interpreter}), skipping PY harness`);
         process.exit(0);
@@ -73,7 +80,14 @@ async function mainRun() {
       process.exit(1);
     }
     try {
-      const rc = await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run']);
+      const rc = await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run'], {
+        env: {
+          ...process.env,
+          BBS_HARNESS: '1',
+          BBS_USER: 'tester',
+          BBS_NODE: '1'
+        }
+      });
       if (rc === 127) {
         console.error('AREXX interpreter/npm not found, skipping RX harness');
         process.exit(0);
@@ -94,7 +108,14 @@ async function mainRun() {
     console.error(`Entry point missing: ${entryPath}`);
     process.exit(1);
   }
-  const rc = await run('node', [entryPath]);
+  const rc = await run('node', [entryPath], {
+    env: {
+      ...process.env,
+      BBS_HARNESS: '1',
+      BBS_USER: 'tester',
+      BBS_NODE: '1'
+    }
+  });
   process.exit(rc || 0);
 }
 
