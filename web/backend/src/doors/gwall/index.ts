@@ -223,21 +223,69 @@ function calculateDisplayLines(): number {
 }
 
 function readSettings(): void {
-  const settingsPath = resolveGwallConfig('GWall.cfg', 'gwall.cfg');
+  const settingsPath = resolveExistingSettingsFile('GWall.cfg', 'gwall.cfg');
 
   if (existsSync(settingsPath)) {
     try {
       const content = readFileSync(settingsPath, 'utf-8');
-      const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const lines = content
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && !l.startsWith(';'));
 
-      if (lines.length > 0) settings.style = parseInt(lines[0], 10);
-      if (lines.length > 1) settings.mybbsshortcode = lines[1].substring(0, 3);
-      if (lines.length > 2) settings.coloursettings = lines[2].substring(0, 14);
+      // Support both the legacy positional format and a simple key=value format.
+      for (const [idx, line] of lines.entries()) {
+        if (line.includes('=')) {
+          const [rawKey, rawValue] = line.split('=');
+          const key = rawKey.trim().toUpperCase();
+          const value = rawValue.trim();
+
+          if (key === 'STYLE') {
+            const parsed = parseInt(value, 10);
+            if (!Number.isNaN(parsed)) settings.style = parsed;
+          } else if (key === 'SHORTCODE' || key === 'BBS' || key === 'MYBBS' || key === 'CODE') {
+            settings.mybbsshortcode = value.substring(0, 3);
+          } else if (key === 'COLOURS' || key === 'COLORS' || key === 'COLOURPRESET') {
+            settings.coloursettings = value.substring(0, 14);
+          }
+        } else {
+          if (idx === 0) {
+            const parsed = parseInt(line, 10);
+            if (!Number.isNaN(parsed)) settings.style = parsed;
+          } else if (idx === 1) {
+            settings.mybbsshortcode = line.substring(0, 3);
+          } else if (idx === 2) {
+            settings.coloursettings = line.substring(0, 14);
+          }
+        }
+      }
     } catch (err) {
       saveSettings();
     }
   } else {
     saveSettings();
+  }
+
+  // Fall back to environment/defaults so the wall can run without manual setup.
+  if (settings.mybbsshortcode === '???') {
+    const envShort =
+      process.env.GWALL_BBS_CODE ||
+      process.env.GWALL_SHORTCODE ||
+      process.env.BBS_SHORTCODE ||
+      process.env.BBS_CODE;
+    if (envShort && envShort.trim().length > 0) {
+      settings.mybbsshortcode = envShort.trim().substring(0, 3);
+    } else {
+      settings.mybbsshortcode = 'AMI';
+    }
+  }
+
+  if (Number.isNaN(settings.style)) {
+    settings.style = DEFAULTSTYLE;
+  }
+
+  if (!settings.coloursettings || settings.coloursettings.length < COLOURPRESETLEN) {
+    settings.coloursettings = colourpresets[0];
   }
 }
 
