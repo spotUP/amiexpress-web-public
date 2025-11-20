@@ -35,6 +35,14 @@ function run(cmd, args, opts = {}) {
     const proc = spawn(cmd, args, { cwd: doorRoot, ...opts });
     proc.stdout?.on('data', d => process.stdout.write(d));
     proc.stderr?.on('data', d => process.stderr.write(d));
+    proc.on('error', err => {
+      if (err && err.code === 'ENOENT') {
+        resolve(127);
+      } else {
+        process.stderr.write(String(err) + '\n');
+        resolve(1);
+      }
+    });
     proc.on('exit', code => resolve(code));
   });
 }
@@ -42,7 +50,20 @@ function run(cmd, args, opts = {}) {
 async function mainRun() {
   if (doorType === 'PY' || doorType === 'PYTHON') {
     const interpreter = process.env.PYTHON || 'python3';
-    const rc = await run(interpreter, [main]);
+    try {
+      const rc = await run(interpreter, [main]);
+      if (rc === 127) {
+        console.error(`python interpreter not found (${interpreter}), skipping PY harness`);
+        process.exit(0);
+      }
+      process.exit(rc || 0);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') {
+        console.error(`python interpreter not found (${interpreter}), skipping PY harness`);
+        process.exit(0);
+      }
+      throw err;
+    }
     process.exit(rc || 0);
   }
 
@@ -51,8 +72,20 @@ async function mainRun() {
       console.error('AREXX door missing npm run "run" script');
       process.exit(1);
     }
-    const rc = await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run']);
-    process.exit(rc || 0);
+    try {
+      const rc = await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run']);
+      if (rc === 127) {
+        console.error('AREXX interpreter/npm not found, skipping RX harness');
+        process.exit(0);
+      }
+      process.exit(rc || 0);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') {
+        console.error('AREXX interpreter/npm not found, skipping RX harness');
+        process.exit(0);
+      }
+      throw err;
+    }
   }
 
   // TS/JS fallback

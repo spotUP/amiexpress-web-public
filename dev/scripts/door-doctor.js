@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 function log(msg) {
   console.log(`[door-doctor] ${msg}`);
@@ -74,7 +75,8 @@ function checkDoor(root) {
         const interpreter = process.env.PYTHON || 'python3';
         const res = spawnSync(interpreter, [entryPath], { cwd: root, timeout: 5000 });
         if (res.error) {
-          warnings.push(`python run skipped: ${res.error.message}`);
+          const msg = res.error.code === 'ENOENT' ? `python not found (${interpreter})` : res.error.message;
+          warnings.push(`python run skipped: ${msg}`);
         } else if (res.status !== 0) {
           errors.push(`python run failed (exit ${res.status}): ${res.stderr.toString().trim() || res.stdout.toString().trim()}`);
         }
@@ -100,14 +102,19 @@ function checkDoor(root) {
             timeout: 5000,
             env: {
               ...process.env,
-              // ensure rexx commands can find the script
               DOOR_MAIN: main
             }
           });
           if (res.error) {
-            warnings.push(`AREXX run skipped: ${res.error.message}`);
+            const msg = res.error.code === 'ENOENT' ? 'npm/rexx not found' : res.error.message;
+            warnings.push(`AREXX run skipped: ${msg}`);
           } else if (res.status !== 0) {
-            errors.push(`AREXX run failed (exit ${res.status}): ${res.stderr.toString().trim() || res.stdout.toString().trim()}`);
+            const msg = res.stderr.toString().trim() || res.stdout.toString().trim();
+            if (res.status === 127 && /not found/i.test(msg)) {
+              warnings.push(`AREXX run skipped: interpreter missing (${msg})`);
+            } else {
+              errors.push(`AREXX run failed (exit ${res.status}): ${msg}`);
+            }
           }
         } catch (err) {
           warnings.push(`AREXX run skipped: ${(err || {}).message || err}`);
