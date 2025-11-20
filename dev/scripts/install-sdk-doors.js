@@ -19,31 +19,56 @@ const sdkExamplesDir = path.join(projectRoot, 'sdk/doors');
 const commandsDir = path.join(projectRoot, 'Commands/BBSCmd');
 const doorsDir = path.join(projectRoot, 'doors');
 
-console.log('[START] Installing SDK Example Doors to BBS...\n');
-console.log(`Project root: ${projectRoot}`);
-console.log(`SDK examples: ${sdkExamplesDir}`);
-console.log(`Commands dir: ${commandsDir}`);
-console.log(`Doors dir: ${doorsDir}\n`);
+const args = process.argv.slice(2);
+const doorFilter = [];
+let quiet = false;
+
+for (let i = 0; i < args.length; i++) {
+  const arg = args[i];
+  if (arg === '--door' || arg === '-d') {
+    const name = args[i + 1];
+    if (name) {
+      doorFilter.push(name);
+      i++;
+    }
+  } else if (arg === '--quiet' || arg === '-q') {
+    quiet = true;
+  }
+}
+
+const log = (...msgs) => {
+  if (!quiet) console.log(...msgs);
+};
+
+log('[START] Installing SDK Example Doors to BBS...\n');
+log(`Project root: ${projectRoot}`);
+log(`SDK examples: ${sdkExamplesDir}`);
+log(`Commands dir: ${commandsDir}`);
+log(`Doors dir: ${doorsDir}\n`);
 
 // Ensure directories exist
 if (!fs.existsSync(commandsDir)) {
   fs.mkdirSync(commandsDir, { recursive: true });
-  console.log(`✓ Created Commands/BBSCmd/ directory`);
+  log(`✓ Created Commands/BBSCmd/ directory`);
 }
 
 if (!fs.existsSync(doorsDir)) {
   fs.mkdirSync(doorsDir, { recursive: true });
-  console.log(`✓ Created doors/ directory`);
+  log(`✓ Created doors/ directory`);
 }
 
 // Get all SDK example doors
 const doors = fs.readdirSync(sdkExamplesDir).filter(name => {
   const doorPath = path.join(sdkExamplesDir, name);
   const pkgPath = path.join(doorPath, 'package.json');
-  return fs.statSync(doorPath).isDirectory() && fs.existsSync(pkgPath);
+  const isDoor = fs.statSync(doorPath).isDirectory() && fs.existsSync(pkgPath);
+
+  if (!isDoor) return false;
+  if (doorFilter.length > 0 && !doorFilter.includes(name)) return false;
+  return true;
 });
 
-console.log(`\nFound ${doors.length} SDK example doors:\n`);
+log(`\nFound ${doors.length} SDK example doors:\n`);
 
 let installed = 0;
 let skipped = 0;
@@ -126,9 +151,9 @@ for (const doorName of doors) {
     const description = pkg.description || '';
     const access = pkg.accessLevel !== undefined ? pkg.accessLevel : 0;
 
-    console.log(`[PACKAGE] ${doorName}`);
-    console.log(`   Command: ${bbsCommand}`);
-    console.log(`   Type: ${doorType}`);
+    log(`[PACKAGE] ${doorName}`);
+    log(`   Command: ${bbsCommand}`);
+    log(`   Type: ${doorType}`);
 
     // Generate .info file content
     const infoContent = [
@@ -145,11 +170,11 @@ for (const doorName of doors) {
     // Write .info file
     const infoPath = path.join(commandsDir, `${bbsCommand}.info`);
     if (fs.existsSync(infoPath)) {
-      console.log(`   [WARNING]  .info file already exists, skipping`);
+      log(`   [WARNING]  .info file already exists, skipping`);
       skipped++;
     } else {
       fs.writeFileSync(infoPath, infoContent);
-      console.log(`   ✓ Created ${bbsCommand}.info`);
+      log(`   ✓ Created ${bbsCommand}.info`);
     }
 
     // Copy door directory to doors/ (avoid symlinks so config can be localised)
@@ -159,20 +184,20 @@ for (const doorName of doors) {
 
     if (targetIsSymlink) {
       fs.unlinkSync(targetDoorPath);
-      console.log(`   [INFO] Removed existing symlink doors/${doorName}`);
+      log(`   [INFO] Removed existing symlink doors/${doorName}`);
     }
 
     if (!targetExists || targetIsSymlink) {
       copyRecursive(doorPath, targetDoorPath);
-      console.log(`   ✓ Copied to doors/${doorName}`);
+      log(`   ✓ Copied to doors/${doorName}`);
     } else {
-      console.log(`   [WARNING]  Door directory already exists in doors/, leaving in place`);
+      log(`   [WARNING]  Door directory already exists in doors/, leaving in place`);
     }
 
     ensureDoorAssets(doorName, targetDoorPath);
 
     installed++;
-    console.log('');
+    log('');
 
   } catch (error) {
     console.error(`   [ERROR] Error: ${error.message}\n`);
@@ -180,14 +205,14 @@ for (const doorName of doors) {
   }
 }
 
-console.log('\n' + '='.repeat(60));
-console.log(`[OK] Installation complete!`);
-console.log(`   Installed: ${installed}`);
-console.log(`   Skipped: ${skipped}`);
-console.log(`   Errors: ${errors}`);
-console.log('='.repeat(60));
+log('\n' + '='.repeat(60));
+log(`[OK] Installation complete!`);
+log(`   Installed: ${installed}`);
+log(`   Skipped: ${skipped}`);
+log(`   Errors: ${errors}`);
+log('='.repeat(60));
 
-if (installed > 0) {
+if (!quiet && installed > 0) {
   console.log('\n⚡ Restart the BBS server to load new commands:');
   console.log('   ./dev/scripts/kill-servers.sh && ./dev/scripts/start-servers.sh\n');
 }

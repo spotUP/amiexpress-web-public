@@ -1,9 +1,13 @@
 {
+  "scripts": {
+    "dev:doors": "node dev/scripts/watch-sdk-doors.js"
+  },
   "dependencies": {
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "chokidar": "^3.6.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
