@@ -468,6 +468,7 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[33mF\x1b[0m Filter  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit  ');
     this.socket.emit('ansi-output', '\x1b[33mL\x1b[0m Logs\r\n');
+    this.socket.emit('ansi-output', '\x1b[90m[H badge = hot reloadable; Filter matches name/cmd/type; L shows last reload log]\x1b[0m\r\n');
   }
 
   /**
