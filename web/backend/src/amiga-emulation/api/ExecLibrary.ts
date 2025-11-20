@@ -187,7 +187,9 @@ export class ExecLibrary {
 
   recordWaitPortReturn(returnAddr: number): void {
     console.log(
-      `[ExecLibrary] Storing WaitPort return address 0x${returnAddr.toString(16)}`
+      `[ExecLibrary] Storing WaitPort return address 0x${returnAddr.toString(
+        16
+      )}`
     );
     this.lastWaitPortReturnAddr = returnAddr;
     if (this.waitPortReturnCallback) {
@@ -661,19 +663,22 @@ export class ExecLibrary {
   handleCall(offset: number): boolean {
     console.log(`[ExecLibrary] handleCall(offset=${offset})`);
 
-    // Handle common Exec.library functions
+    // Handle common Exec.library functions - CORRECTED LVOs from exec.library.lvos.i
     switch (offset) {
-      case -30: // OpenLibrary
-        // OpenLibrary is handled through the main openLibrary method
-        // This is a trap call, so we need to get parameters from registers
-        console.log(`[ExecLibrary]   OpenLibrary trap called`);
-        // The actual OpenLibrary logic is handled in openLibrary() method
-        // which gets called by the trap handler
+      case -552: // _LVOOpenLibrary (CORRECTED from wrong -30)
+        console.log(
+          `[ExecLibrary]   *** OpenLibrary trap called (LVO -552) ***`
+        );
+        const nameAddr = this.emulator.getRegister(12); // A0
+        const version = this.emulator.getRegister(0); // D0
+        const libResult = this.openLibrary(nameAddr, version);
+        this.emulator.setRegister(0, libResult); // Return library base in D0
         return true;
 
-      case -36: // CloseLibrary
-        console.log(`[ExecLibrary]   CloseLibrary trap called`);
-        // Get library address from A1 register
+      case -414: // _LVOCloseLibrary (CORRECTED from wrong -36)
+        console.log(
+          `[ExecLibrary]   *** CloseLibrary trap called (LVO -414) ***`
+        );
         const libAddr = this.emulator.getRegister(13); // A1
         if (libAddr !== 0) {
           this.closeLibrary(libAddr);
@@ -681,50 +686,66 @@ export class ExecLibrary {
         }
         return true;
 
-      case -294: // FindTask
+      case -294: // _LVOFindTask ✓
         console.log(`[ExecLibrary]   FindTask trap called`);
-        // Get name pointer from A1 register
-        const nameAddr = this.emulator.getRegister(13); // A1
-        const result = this.findTask(nameAddr);
-        this.emulator.setRegister(0, result); // Return task address in D0
+        const nameAddr2 = this.emulator.getRegister(13); // A1
+        const result = this.findTask(nameAddr2);
+        this.emulator.setRegister(0, result);
         return true;
 
-      case -198: // AllocMem
+      case -198: // _LVOAllocMem ✓
         console.log(`[ExecLibrary]   AllocMem trap called`);
         const size = this.emulator.getRegister(0); // D0
         const flags = this.emulator.getRegister(1); // D1
         const allocResult = this.allocMem(size, flags);
-        this.emulator.setRegister(0, allocResult); // Return memory address in D0
+        this.emulator.setRegister(0, allocResult);
         return true;
 
-      case -210: // FreeMem
+      case -210: // _LVOFreeMem ✓
         console.log(`[ExecLibrary]   FreeMem trap called`);
         const addr = this.emulator.getRegister(0); // D0
         const freeSize = this.emulator.getRegister(1); // D1
         this.freeMem(addr, freeSize);
-        this.emulator.setRegister(0, 0); // Return 0 (success)
+        this.emulator.setRegister(0, 0);
         return true;
 
-      case -390: // FindPort
+      case -390: // _LVOFindPort ✓
         console.log(`[ExecLibrary]   FindPort trap called`);
         const portNameAddr = this.emulator.getRegister(13); // A1
         const portResult = this.findPort(portNameAddr);
-        this.emulator.setRegister(0, portResult); // Return port address in D0
+        this.emulator.setRegister(0, portResult);
         return true;
 
-      case -306: // SetTaskPri
-        console.log(`[ExecLibrary]   SetTaskPri trap called`);
+      case -300: // _LVOSetTaskPri (CORRECTED from wrong -306)
+        console.log(
+          `[ExecLibrary]   *** SetTaskPri trap called (LVO -300) ***`
+        );
         const taskAddr = this.emulator.getRegister(13); // A1
         const newPri = this.emulator.getRegister(0); // D0
         const priResult = this.setTaskPri(taskAddr, newPri);
-        this.emulator.setRegister(0, priResult); // Return old priority in D0
+        this.emulator.setRegister(0, priResult);
         return true;
 
-      case -330: // AllocSignal
+      case -330: // _LVOAllocSignal ✓
         console.log(`[ExecLibrary]   AllocSignal trap called`);
         const sigNum = this.emulator.getRegister(0); // D0
         const sigResult = this.AllocSignal(sigNum);
-        this.emulator.setRegister(0, sigResult); // Return signal number in D0
+        this.emulator.setRegister(0, sigResult);
+        return true;
+
+      // *** CRITICAL MISSING CASES FOR BULLS ***
+      case -372: // _LVOGetMsg - THIS IS WHAT BULLS IS CALLING!
+        console.log(`[ExecLibrary] *** INTERCEPTED: GetMsg() (LVO -372) ***`);
+        const portAddr = this.emulator.getRegister(12); // A0
+        const msgResult = this.getMsg(portAddr);
+        this.emulator.setRegister(0, msgResult); // Return message in D0
+        return true;
+
+      case -384: // _LVOWaitPort - Door will loop on this
+        console.log(`[ExecLibrary] *** INTERCEPTED: WaitPort() (LVO -384) ***`);
+        const waitPortAddr = this.emulator.getRegister(12); // A0
+        const waitResult = this.waitPort(waitPortAddr);
+        this.emulator.setRegister(0, waitResult);
         return true;
 
       default:
@@ -993,9 +1014,9 @@ export class ExecLibrary {
 
       this.messagePorts.set(portAddr, port);
       console.log(
-        `[ExecLibrary]   Auto-registered port at 0x${portAddr.toString(
-          16
-        )} (${name || "private"})`
+        `[ExecLibrary]   Auto-registered port at 0x${portAddr.toString(16)} (${
+          name || "private"
+        })`
       );
       return port;
     } catch (error) {

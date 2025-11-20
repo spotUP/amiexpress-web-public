@@ -1,0 +1,224 @@
+// LibraryManager.ts
+// Extracted from AmigaDoorSession.ts - Phase 2: Core Library Management
+// Handles Amiga library initialization, traps, and port management
+// 2025-11-20
+
+import { MoiraEmulator } from "./cpu/MoiraEmulator.js";
+import { ExecLibrary } from "./api/ExecLibrary.js";
+import { AEDoorLibrary } from "./api/AEDoorLibrary.js";
+import { DosLibrary } from "./api/DosLibrary.js";
+import { IconLibrary } from "./api/IconLibrary.js";
+import { LibraryTraps } from "./api/LibraryTraps.js";
+import { XIMProtocol } from "./XIMProtocol.js";
+import { DoorConfig, DoorConstants } from "./DoorTypes.js";
+import { Socket } from "socket.io";
+import * as path from "path";
+import * as fs from "fs";
+import { LibraryLoader } from "./loader/LibraryLoader.js";
+
+export class LibraryManager {
+  public execLibrary: ExecLibrary | null = null;
+  public aedoorLibrary: AEDoorLibrary | null = null;
+  public dosLibrary: DosLibrary | null = null;
+  public iconLibrary: IconLibrary | null = null;
+  public libraryTraps: LibraryTraps | null = null;
+  public ximProtocol: XIMProtocol | null = null;
+
+  private emulator: MoiraEmulator;
+  private socket: Socket;
+  private config: DoorConfig;
+  private isBullsDoor: boolean = false;
+  private doorPortAddress: number = 0;
+  private aePortAddress: number = 0;
+  private doorReplyPortAddr: number = 0;
+  private useXimProtocol: boolean = false;
+
+  constructor(emulator: MoiraEmulator, socket: Socket, config: DoorConfig) {
+    this.emulator = emulator;
+    this.socket = socket;
+    this.config = config;
+    this.isBullsDoor = path
+      .basename(config.executablePath)
+      .toLowerCase()
+      .includes("bull");
+  }
+
+  async initialize(): Promise<void> {
+    await this.initializeExec();
+  }
+
+  private async initializeExec(): Promise<void> {
+    console.log("[LibraryManager] Loading Kickstart ROM...");
+
+    const romPath = path.join(
+      process.cwd(),
+      "data/amiga-roms/Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom"
+    );
+    const romData = fs.readFileSync(romPath);
+    this.emulator.loadROM(new Uint8Array(romData));
+
+    console.log(
+      "[LibraryManager] Kickstart ROM loaded - provides ROM routines"
+    );
+
+    console.log("[LibraryManager] Creating ExecBase structure...");
+
+    this.execLibrary = new ExecLibrary(this.emulator);
+    this.execLibrary.initialize();
+    this.execLibrary.setWaitPortReturnCallback((addr: number) => {
+      if (this.isBullsDoor) {
+        // Store for Bulls handling (will be used by BullsDoorHandler)
+        console.log(
+          `[LibraryManager] WaitPort return PC recorded: 0x${addr.toString(16)}`
+        );
+      }
+    });
+
+    if (!this.execLibrary.loadRealAEDoorLibrary()) {
+      console.warn("[LibraryManager] Real AEDoor.library failed to load");
+    }
+
+    const libraryLoader = new LibraryLoader(this.emulator);
+    libraryLoader.addSearchPath(path.join(process.cwd(), "Libs"));
+    this.execLibrary.setLibraryLoader(libraryLoader, true);
+
+    const doorType = this.config.doorType || "SIM";
+    const nodeId = this.config.bbsSession?.nodeId || 0;
+
+    console.log(`[LibraryManager] Door type: ${doorType}`);
+
+    console.log("[LibraryManager] Creating AEDoorPort for BBS data access...");
+
+    const portName = `AEDoorPort${nodeId}`;
+    const portAddr = this.execLibrary.createPublicPort(portName);
+    this.execLibrary.setDoorPortAddress(portAddr);
+    console.log(
+      `[LibraryManager] Created ${portName} at 0x${portAddr.toString(16)}`
+    );
+
+    const simplePortAddr = this.execLibrary.createPublicPort("AEDoorPort");
+    console.log(
+      `[LibraryManager] Created AEDoorPort (simple) at 0x${simplePortAddr.toString(
+        16
+      )}`
+    );
+
+    this.doorPortAddress = portAddr;
+    this.aePortAddress = portAddr;
+
+    const useXimProtocol = doorType !== "SIM" && doorType !== "SUP";
+    this.useXimProtocol = useXimProtocol;
+
+    if (useXimProtocol) {
+      console.log("[LibraryManager] Creating XIM Protocol handler...");
+      this.ximProtocol = new XIMProtocol(
+        this.emulator,
+        this.execLibrary,
+        this.socket,
+        portAddr
+      );
+    } else {
+      console.log(
+        `[LibraryManager] Skipping XIM protocol for ${doorType} door`
+      );
+    }
+
+    console.log("[LibraryManager] Creating DOS.library...");
+
+    this.dosLibrary = new DosLibrary(this.emulator);
+    this.dosLibrary.setInheritedHandles(1, 2);
+
+    const projectRoot =
+      process.env.BBS_ROOT || path.resolve(process.cwd(), "../..");
+    console.log(
+      `[LibraryManager] Enabling FileManager with base directory: ${projectRoot}`
+    );
+    this.dosLibrary.enableNewFileSystem(projectRoot);
+
+    this.dosLibrary.setOutputCallback((text: string) => {
+      console.log(
+        `[LibraryManager] 📤 DOS output callback invoked, emitting ${text.length} bytes to socket`
+      );
+      console.log(`[LibraryManager] 📤 Output text: ${JSON.stringify(text)}`);
+      this.socket.emit("ansi-output", text);
+      console.log(`[LibraryManager] 📤 socket.emit('ansi-output') called`);
+    });
+    console.log("[LibraryManager] DOS.library output callback configured");
+
+    console.log("[LibraryManager] Creating AEDoor.library...");
+
+    this.aedoorLibrary = new AEDoorLibrary(
+      this.socket,
+      this.emulator,
+      this.execLibrary,
+      this.config.bbsSession || {}
+    );
+
+    console.log("[LibraryManager] Creating icon.library...");
+
+    const bbsRoot = path.resolve(process.cwd(), "../..");
+    this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
+
+    console.log("[LibraryManager] Installing library call traps...");
+
+    this.libraryTraps = new LibraryTraps(this.emulator, this.execLibrary);
+
+    this.emulator.setLibraryTrapHandler((pc: number) => {
+      return this.libraryTraps!.handleTrap(pc);
+    });
+
+    this.libraryTraps.installExecVectors();
+
+    this.libraryTraps.setDOSLibrary(this.dosLibrary);
+    this.libraryTraps.setAEDoorLibrary(this.aedoorLibrary);
+    this.libraryTraps.setIconLibrary(this.iconLibrary);
+
+    this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {
+      if (name.toLowerCase() === "dos.library") {
+        console.log(
+          "[LibraryManager] dos.library opened, installing vectors..."
+        );
+        this.libraryTraps!.installDOSVectors();
+      }
+      if (name.toLowerCase() === "aedoor.library") {
+        console.log(
+          "[LibraryManager] AEDoor.library opened, installing vectors..."
+        );
+        this.libraryTraps!.installAEDoorVectors();
+      }
+      if (name.toLowerCase() === "icon.library") {
+        console.log(
+          "[LibraryManager] icon.library opened, installing vectors..."
+        );
+        this.libraryTraps!.installIconVectors();
+      }
+    });
+
+    this.execLibrary.setDoorMessageCallback(
+      (portAddr: number, msgAddr: number) => {
+        // Will be handled by DoorMessageHandler in Phase 5
+        console.log(
+          "[LibraryManager] Door message callback - to be handled by message handler"
+        );
+      }
+    );
+
+    console.log("[LibraryManager] Library system ready");
+  }
+
+  getExecBaseAddress(): number {
+    return this.execLibrary ? this.execLibrary.getExecBaseAddress() : 0;
+  }
+
+  getDoorPortAddress(): number {
+    return this.doorPortAddress;
+  }
+
+  getReplyPortAddress(): number {
+    return this.doorReplyPortAddr;
+  }
+
+  getUseXimProtocol(): boolean {
+    return this.useXimProtocol;
+  }
+}

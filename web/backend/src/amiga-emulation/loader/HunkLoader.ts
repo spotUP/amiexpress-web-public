@@ -1,4 +1,4 @@
-import { MoiraEmulator } from '../cpu/MoiraEmulator';
+import { MoiraEmulator } from "../cpu/MoiraEmulator";
 
 /**
  * Amiga Hunk File Format Loader
@@ -18,35 +18,35 @@ import { MoiraEmulator } from '../cpu/MoiraEmulator';
  */
 
 enum HunkType {
-  HUNK_UNIT = 0x3E7,
-  HUNK_NAME = 0x3E8,
-  HUNK_CODE = 0x3E9,
-  HUNK_DATA = 0x3EA,
-  HUNK_BSS = 0x3EB,
-  HUNK_RELOC32 = 0x3EC,
-  HUNK_RELOC16 = 0x3ED,
-  HUNK_RELOC8 = 0x3EE,
-  HUNK_EXT = 0x3EF,
-  HUNK_SYMBOL = 0x3F0,
-  HUNK_DEBUG = 0x3F1,
-  HUNK_END = 0x3F2,
-  HUNK_HEADER = 0x3F3,
-  HUNK_OVERLAY = 0x3F5,
-  HUNK_BREAK = 0x3F6,
-  HUNK_DREL32 = 0x3F7,
-  HUNK_DREL16 = 0x3F8,
-  HUNK_DREL8 = 0x3F9,
-  HUNK_LIB = 0x3FA,
-  HUNK_INDEX = 0x3FB,
-  HUNK_RELOC32SHORT = 0x3FC,
-  HUNK_RELRELOC32 = 0x3FD,
-  HUNK_ABSRELOC16 = 0x3FE
+  HUNK_UNIT = 0x3e7,
+  HUNK_NAME = 0x3e8,
+  HUNK_CODE = 0x3e9,
+  HUNK_DATA = 0x3ea,
+  HUNK_BSS = 0x3eb,
+  HUNK_RELOC32 = 0x3ec,
+  HUNK_RELOC16 = 0x3ed,
+  HUNK_RELOC8 = 0x3ee,
+  HUNK_EXT = 0x3ef,
+  HUNK_SYMBOL = 0x3f0,
+  HUNK_DEBUG = 0x3f1,
+  HUNK_END = 0x3f2,
+  HUNK_HEADER = 0x3f3,
+  HUNK_OVERLAY = 0x3f5,
+  HUNK_BREAK = 0x3f6,
+  HUNK_DREL32 = 0x3f7,
+  HUNK_DREL16 = 0x3f8,
+  HUNK_DREL8 = 0x3f9,
+  HUNK_LIB = 0x3fa,
+  HUNK_INDEX = 0x3fb,
+  HUNK_RELOC32SHORT = 0x3fc,
+  HUNK_RELRELOC32 = 0x3fd,
+  HUNK_ABSRELOC16 = 0x3fe,
 }
 
 export enum SegmentType {
-  CODE = 'code',
-  DATA = 'data',
-  BSS = 'bss'
+  CODE = "code",
+  DATA = "data",
+  BSS = "bss",
 }
 
 export interface HunkSegment {
@@ -57,7 +57,7 @@ export interface HunkSegment {
 }
 
 export interface Relocation {
-  offset: number;        // Offset within segment
+  offset: number; // Offset within segment
   targetSegment: number; // Target segment index
 }
 
@@ -68,7 +68,7 @@ export interface HunkFile {
 }
 
 export class HunkLoader {
-  private buffer!: Buffer;  // Initialized in load() method
+  private buffer!: Buffer; // Initialized in load() method
   private position: number = 0;
 
   /**
@@ -84,6 +84,11 @@ export class HunkLoader {
     // Read and validate header
     const header = this.readHeader();
     console.log(`[HunkLoader] Found ${header.numSegments} segments`);
+    console.log(
+      `[HunkLoader] HUNK_HEADER entryPointOffset: 0x${header.entryPointOffset.toString(
+        16
+      )} (pos=0x${header.headerStartPos.toString(16)})`
+    );
 
     // Allocate memory addresses for segments
     let currentAddress = 0x1000; // Start at 4KB
@@ -91,9 +96,13 @@ export class HunkLoader {
 
     for (let i = 0; i < header.numSegments; i++) {
       segmentAddresses.push(currentAddress);
-      console.log(`[HunkLoader] Segment ${i} will be placed at 0x${currentAddress.toString(16)} (size: ${header.segmentSizes[i] * 4} bytes)`);
+      console.log(
+        `[HunkLoader] Segment ${i} will be placed at 0x${currentAddress.toString(
+          16
+        )} (size: ${header.segmentSizes[i] * 4} bytes)`
+      );
       currentAddress += header.segmentSizes[i] * 4; // Sizes are in longwords
-      currentAddress = (currentAddress + 0xFF) & ~0xFF; // Align to 256 bytes
+      currentAddress = (currentAddress + 0xff) & ~0xff; // Align to 256 bytes
     }
 
     // Read segments
@@ -101,7 +110,7 @@ export class HunkLoader {
     while (this.position < this.buffer.length) {
       const rawHunkType = this.readLong();
       // Mask to get hunk type only (bits 0-29), ignoring memory flags (bits 30-31)
-      const hunkType = rawHunkType & 0x3FFFFFFF;
+      const hunkType = rawHunkType & 0x3fffffff;
 
       if (hunkType === HunkType.HUNK_END) {
         segmentIndex++;
@@ -112,11 +121,23 @@ export class HunkLoader {
         case HunkType.HUNK_CODE:
         case HunkType.HUNK_DATA: {
           const hunkDataSize = this.readLong() * 4; // Size of data IN FILE (longwords -> bytes)
-          console.log(`[HunkLoader] Reading ${hunkType === HunkType.HUNK_CODE ? 'CODE' : 'DATA'} segment:`);
+          console.log(
+            `[HunkLoader] Reading ${
+              hunkType === HunkType.HUNK_CODE ? "CODE" : "DATA"
+            } segment:`
+          );
           console.log(`[HunkLoader]   Hunk data size: ${hunkDataSize} bytes`);
-          console.log(`[HunkLoader]   File position BEFORE readBytes: 0x${this.position.toString(16)}`);
+          console.log(
+            `[HunkLoader]   File position BEFORE readBytes: 0x${this.position.toString(
+              16
+            )}`
+          );
           const data = this.readBytes(hunkDataSize);
-          console.log(`[HunkLoader]   File position AFTER readBytes: 0x${this.position.toString(16)}`);
+          console.log(
+            `[HunkLoader]   File position AFTER readBytes: 0x${this.position.toString(
+              16
+            )}`
+          );
 
           // Use segments.length as the index (since we're about to push)
           // NOT segmentIndex (which only increments at HUNK_END)
@@ -128,7 +149,9 @@ export class HunkLoader {
           const totalSegmentSize = header.segmentSizes[currentSegmentIndex] * 4;
           const bssSize = totalSegmentSize - hunkDataSize;
 
-          console.log(`[HunkLoader]   Header total size: ${totalSegmentSize} bytes`);
+          console.log(
+            `[HunkLoader]   Header total size: ${totalSegmentSize} bytes`
+          );
           if (bssSize > 0) {
             console.log(`[HunkLoader]   BSS size (implicit): ${bssSize} bytes`);
           }
@@ -139,14 +162,21 @@ export class HunkLoader {
           // Rest is already zero-filled by Uint8Array constructor
 
           const segment: HunkSegment = {
-            type: hunkType === HunkType.HUNK_CODE ? SegmentType.CODE : SegmentType.DATA,
+            type:
+              hunkType === HunkType.HUNK_CODE
+                ? SegmentType.CODE
+                : SegmentType.DATA,
             data: fullData,
             address: segmentAddresses[currentSegmentIndex],
-            size: totalSegmentSize
+            size: totalSegmentSize,
           };
 
           segments.push(segment);
-          console.log(`[HunkLoader] ${segment.type.toUpperCase()} segment: ${totalSegmentSize} bytes at 0x${segment.address.toString(16)}`);
+          console.log(
+            `[HunkLoader] ${segment.type.toUpperCase()} segment: ${totalSegmentSize} bytes at 0x${segment.address.toString(
+              16
+            )}`
+          );
           break;
         }
 
@@ -160,11 +190,15 @@ export class HunkLoader {
             type: SegmentType.BSS,
             data: new Uint8Array(size), // Zero-filled
             address: segmentAddresses[currentSegmentIndex],
-            size: size
+            size: size,
           };
 
           segments.push(segment);
-          console.log(`[HunkLoader] BSS segment: ${size} bytes at 0x${segment.address.toString(16)}`);
+          console.log(
+            `[HunkLoader] BSS segment: ${size} bytes at 0x${segment.address.toString(
+              16
+            )}`
+          );
           break;
         }
 
@@ -174,7 +208,11 @@ export class HunkLoader {
 
           while (true) {
             const numOffsets = this.readLong();
-            console.log(`[HunkLoader] HUNK_RELOC32 group ${groupNum}: numOffsets = ${numOffsets} (0x${numOffsets.toString(16)})`);
+            console.log(
+              `[HunkLoader] HUNK_RELOC32 group ${groupNum}: numOffsets = ${numOffsets} (0x${numOffsets.toString(
+                16
+              )})`
+            );
             if (numOffsets === 0) break; // End of relocations
 
             const targetSegment = this.readLong();
@@ -184,7 +222,9 @@ export class HunkLoader {
               const offset = this.readLong();
               relocs.push({ offset, targetSegment });
               if (i < 10 || offset === 0x248) {
-                console.log(`[HunkLoader]     reloc[${i}] = 0x${offset.toString(16)}`);
+                console.log(
+                  `[HunkLoader]     reloc[${i}] = 0x${offset.toString(16)}`
+                );
               }
             }
             groupNum++;
@@ -194,7 +234,9 @@ export class HunkLoader {
           // segmentIndex only increments at HUNK_END, so it's still pointing to previous segment
           const actualSegmentIndex = segments.length - 1;
           relocations.set(actualSegmentIndex, relocs);
-          console.log(`[HunkLoader] Found ${relocs.length} relocations for segment ${actualSegmentIndex} (segmentIndex=${segmentIndex}) in ${groupNum} groups`);
+          console.log(
+            `[HunkLoader] Found ${relocs.length} relocations for segment ${actualSegmentIndex} (segmentIndex=${segmentIndex}) in ${groupNum} groups`
+          );
           break;
         }
 
@@ -207,20 +249,50 @@ export class HunkLoader {
         default:
           // Unknown hunk type - likely reached end of valid hunks and reading data
           // Don't warn excessively, just stop parsing
-          if (hunkType > 0x400 || hunkType < 0x3E7) {
+          if (hunkType > 0x400 || hunkType < 0x3e7) {
             // This doesn't look like a valid hunk type, probably reached data section
-            console.log(`[HunkLoader] Reached invalid hunk type 0x${hunkType.toString(16)}, stopping parse`);
+            console.log(
+              `[HunkLoader] Reached invalid hunk type 0x${hunkType.toString(
+                16
+              )}, stopping parse`
+            );
             // Exit the while loop by setting position to end
             this.position = this.buffer.length;
             break;
           }
-          console.warn(`[HunkLoader] Unknown hunk type: 0x${hunkType.toString(16)}`);
+          console.warn(
+            `[HunkLoader] Unknown hunk type: 0x${hunkType.toString(16)}`
+          );
           break;
       }
     }
 
-    // Entry point is typically the start of the first code segment
-    const entryPoint = segments.find(s => s.type === SegmentType.CODE)?.address || 0x1000;
+    // Use ACTUAL HUNK_HEADER entry point (offset from first segment)
+    const firstSegmentAddr = segments.length > 0 ? segments[0].address : 0x1000;
+    const entryPoint = firstSegmentAddr + header.entryPointOffset;
+
+    console.log(
+      `[HunkLoader] First segment: 0x${firstSegmentAddr.toString(16)}`
+    );
+    console.log(
+      `[HunkLoader] HUNK_HEADER offset: 0x${header.entryPointOffset.toString(
+        16
+      )}`
+    );
+    console.log(`[HunkLoader] FINAL entryPoint: 0x${entryPoint.toString(16)}`);
+
+    if (entryPoint < 0x1000 || entryPoint > 0x100000) {
+      console.log(
+        `[HunkLoader] 🚨 INVALID entry point 0x${entryPoint.toString(
+          16
+        )} -> forcing 0x1000`
+      );
+      const safeEntryPoint = 0x1000;
+    } else {
+      console.log(
+        `[HunkLoader] ✅ VALID entry point 0x${entryPoint.toString(16)}`
+      );
+    }
 
     // === DEBUG: Check bytes at offset 0x22 in segment 0 BEFORE relocations ===
     const seg0 = segments[0];
@@ -229,12 +301,22 @@ export class HunkLoader {
       const b1 = seg0.data[0x23];
       const b2 = seg0.data[0x24];
       const b3 = seg0.data[0x25];
-      const bytesHex = `${b0.toString(16).padStart(2,'0')} ${b1.toString(16).padStart(2,'0')} ${b2.toString(16).padStart(2,'0')} ${b3.toString(16).padStart(2,'0')}`;
-      console.log(`[HunkLoader] === BEFORE RELOCATIONS: segment.data[0x22-0x25] = ${bytesHex} ===`);
+      const bytesHex = `${b0.toString(16).padStart(2, "0")} ${b1
+        .toString(16)
+        .padStart(2, "0")} ${b2.toString(16).padStart(2, "0")} ${b3
+        .toString(16)
+        .padStart(2, "0")}`;
+      console.log(
+        `[HunkLoader] === BEFORE RELOCATIONS: segment.data[0x22-0x25] = ${bytesHex} ===`
+      );
       console.log(`[HunkLoader]   Expected from file: b8 80 6d c2`);
       if (b0 !== 0xb8 || b1 !== 0x80) {
-        console.log(`[HunkLoader]   *** CORRUPTION ALREADY PRESENT IN PARSED DATA! ***`);
-        console.log(`[HunkLoader]   *** The hunk parser read wrong bytes from file! ***`);
+        console.log(
+          `[HunkLoader]   *** CORRUPTION ALREADY PRESENT IN PARSED DATA! ***`
+        );
+        console.log(
+          `[HunkLoader]   *** The hunk parser read wrong bytes from file! ***`
+        );
       }
     }
 
@@ -242,10 +324,16 @@ export class HunkLoader {
     // instead of waiting until load(). This ensures that when doors execute
     // their startup code (like WHO's "LEA <data_segment>,A4"), they read
     // correctly relocated values instead of zeros.
-    console.log('[HunkLoader] Applying relocations to segment data...');
+    console.log("[HunkLoader] Applying relocations to segment data...");
     for (const [segmentIndex, relocs] of relocations.entries()) {
       const segment = segments[segmentIndex];
-      console.log(`[HunkLoader] Applying ${relocs.length} relocations to segment ${segmentIndex} @ 0x${segment.address.toString(16)}`);
+      console.log(
+        `[HunkLoader] Applying ${
+          relocs.length
+        } relocations to segment ${segmentIndex} @ 0x${segment.address.toString(
+          16
+        )}`
+      );
 
       for (const reloc of relocs) {
         const targetSegment = segments[reloc.targetSegment];
@@ -261,23 +349,43 @@ export class HunkLoader {
 
         // === SPECIAL DEBUG: Track corruption at 0x1022 ===
         if (memoryAddress === 0x1022) {
-          const bytesHex = `${b0.toString(16).padStart(2,'0')} ${b1.toString(16).padStart(2,'0')} ${b2.toString(16).padStart(2,'0')} ${b3.toString(16).padStart(2,'0')}`;
+          const bytesHex = `${b0.toString(16).padStart(2, "0")} ${b1
+            .toString(16)
+            .padStart(2, "0")} ${b2.toString(16).padStart(2, "0")} ${b3
+            .toString(16)
+            .padStart(2, "0")}`;
           console.log(`[CORRUPTION] *** FOUND RELOCATION AT 0x1022 ***`);
-          console.log(`[CORRUPTION]   Segment: ${segmentIndex}, Offset: 0x${offset.toString(16)}`);
+          console.log(
+            `[CORRUPTION]   Segment: ${segmentIndex}, Offset: 0x${offset.toString(
+              16
+            )}`
+          );
           console.log(`[CORRUPTION]   Current bytes: ${bytesHex}`);
-          console.log(`[CORRUPTION]   Current value: 0x${currentValue.toString(16).padStart(8,'0')}`);
-          console.log(`[CORRUPTION]   Target segment: ${reloc.targetSegment} @ 0x${targetSegment.address.toString(16)}`);
-          console.log(`[CORRUPTION]   Will add base: 0x${targetSegment.address.toString(16)}`);
+          console.log(
+            `[CORRUPTION]   Current value: 0x${currentValue
+              .toString(16)
+              .padStart(8, "0")}`
+          );
+          console.log(
+            `[CORRUPTION]   Target segment: ${
+              reloc.targetSegment
+            } @ 0x${targetSegment.address.toString(16)}`
+          );
+          console.log(
+            `[CORRUPTION]   Will add base: 0x${targetSegment.address.toString(
+              16
+            )}`
+          );
         }
 
         // Add target segment's base address
         const newValue = currentValue + targetSegment.address;
 
         // Write back relocated value (big-endian 32-bit)
-        segment.data[offset] = (newValue >>> 24) & 0xFF;
-        segment.data[offset + 1] = (newValue >>> 16) & 0xFF;
-        segment.data[offset + 2] = (newValue >>> 8) & 0xFF;
-        segment.data[offset + 3] = newValue & 0xFF;
+        segment.data[offset] = (newValue >>> 24) & 0xff;
+        segment.data[offset + 1] = (newValue >>> 16) & 0xff;
+        segment.data[offset + 2] = (newValue >>> 8) & 0xff;
+        segment.data[offset + 3] = newValue & 0xff;
 
         // === SPECIAL DEBUG: Show result at 0x1022 ===
         if (memoryAddress === 0x1022) {
@@ -285,16 +393,34 @@ export class HunkLoader {
           const newB1 = segment.data[offset + 1];
           const newB2 = segment.data[offset + 2];
           const newB3 = segment.data[offset + 3];
-          const newBytesHex = `${newB0.toString(16).padStart(2,'0')} ${newB1.toString(16).padStart(2,'0')} ${newB2.toString(16).padStart(2,'0')} ${newB3.toString(16).padStart(2,'0')}`;
+          const newBytesHex = `${newB0.toString(16).padStart(2, "0")} ${newB1
+            .toString(16)
+            .padStart(2, "0")} ${newB2.toString(16).padStart(2, "0")} ${newB3
+            .toString(16)
+            .padStart(2, "0")}`;
           console.log(`[CORRUPTION]   New bytes: ${newBytesHex}`);
-          console.log(`[CORRUPTION]   New value: 0x${newValue.toString(16).padStart(8,'0')}`);
-          console.log(`[CORRUPTION]   Expected bytes (from file): b8 80 (CMP.L D0,D4)`);
+          console.log(
+            `[CORRUPTION]   New value: 0x${newValue
+              .toString(16)
+              .padStart(8, "0")}`
+          );
+          console.log(
+            `[CORRUPTION]   Expected bytes (from file): b8 80 (CMP.L D0,D4)`
+          );
           console.log(`[CORRUPTION] *** THIS RELOCATION CORRUPTS 0x1022 ***`);
         }
 
         // Only log first 10 relocations per segment to avoid spam
         if (relocs.indexOf(reloc) < 10) {
-          console.log(`[HunkLoader]   Reloc @ 0x${memoryAddress.toString(16)} (seg+0x${offset.toString(16)}): 0x${currentValue.toString(16)} -> 0x${newValue.toString(16)} (target seg ${reloc.targetSegment} @ 0x${targetSegment.address.toString(16)})`);
+          console.log(
+            `[HunkLoader]   Reloc @ 0x${memoryAddress.toString(
+              16
+            )} (seg+0x${offset.toString(16)}): 0x${currentValue.toString(
+              16
+            )} -> 0x${newValue.toString(16)} (target seg ${
+              reloc.targetSegment
+            } @ 0x${targetSegment.address.toString(16)})`
+          );
         }
       }
     }
@@ -302,7 +428,7 @@ export class HunkLoader {
     return {
       segments,
       relocations,
-      entryPoint
+      entryPoint,
     };
   }
 
@@ -310,16 +436,26 @@ export class HunkLoader {
    * Load parsed Hunk file into emulator memory
    */
   load(emulator: MoiraEmulator, hunkFile: HunkFile): void {
-    console.log('[HunkLoader] Loading segments into memory...');
+    console.log("[HunkLoader] Loading segments into memory...");
 
     // Load all segments
     for (const segment of hunkFile.segments) {
-      console.log(`[HunkLoader] Loading ${segment.type} segment at 0x${segment.address.toString(16)}, data.length=${segment.data.length}`);
+      console.log(
+        `[HunkLoader] Loading ${
+          segment.type
+        } segment at 0x${segment.address.toString(16)}, data.length=${
+          segment.data.length
+        }`
+      );
 
       // DEBUG: Check if this segment contains the critical address 0x1248
       const segmentEnd = segment.address + segment.data.length;
-      const contains1248 = (segment.address <= 0x1248) && (segmentEnd > 0x1248);
-      console.log(`[HunkLoader]   Segment range: 0x${segment.address.toString(16)} - 0x${segmentEnd.toString(16)}, contains 0x1248? ${contains1248}`);
+      const contains1248 = segment.address <= 0x1248 && segmentEnd > 0x1248;
+      console.log(
+        `[HunkLoader]   Segment range: 0x${segment.address.toString(
+          16
+        )} - 0x${segmentEnd.toString(16)}, contains 0x1248? ${contains1248}`
+      );
 
       if (contains1248) {
         const offset = 0x1248 - segment.address;
@@ -327,35 +463,73 @@ export class HunkLoader {
         const byte1 = segment.data[offset + 1];
         console.log(`[HunkLoader] *** This segment contains 0x1248! ***`);
         console.log(`[HunkLoader]   Segment type: ${segment.type}`);
-        console.log(`[HunkLoader]   Segment base: 0x${segment.address.toString(16)}`);
-        console.log(`[HunkLoader]   Segment size: ${segment.data.length} bytes`);
-        console.log(`[HunkLoader]   Offset in segment data: 0x${offset.toString(16)}`);
-        console.log(`[HunkLoader]   Bytes in segment.data[${offset}/${offset+1}]: 0x${byte0.toString(16).padStart(2, '0')} 0x${byte1.toString(16).padStart(2, '0')}`);
-        console.log(`[HunkLoader]   As word: 0x${((byte0 << 8) | byte1).toString(16).padStart(4, '0')}`);
+        console.log(
+          `[HunkLoader]   Segment base: 0x${segment.address.toString(16)}`
+        );
+        console.log(
+          `[HunkLoader]   Segment size: ${segment.data.length} bytes`
+        );
+        console.log(
+          `[HunkLoader]   Offset in segment data: 0x${offset.toString(16)}`
+        );
+        console.log(
+          `[HunkLoader]   Bytes in segment.data[${offset}/${
+            offset + 1
+          }]: 0x${byte0.toString(16).padStart(2, "0")} 0x${byte1
+            .toString(16)
+            .padStart(2, "0")}`
+        );
+        console.log(
+          `[HunkLoader]   As word: 0x${((byte0 << 8) | byte1)
+            .toString(16)
+            .padStart(4, "0")}`
+        );
         console.log(`[HunkLoader]   Expected: 0x4eae (JSR (A6,d16))`);
         if (((byte0 << 8) | byte1) !== 0x4eae) {
-          console.log(`[HunkLoader]   *** SEGMENT DATA IS ALREADY CORRUPTED IN BUFFER! ***`);
+          console.log(
+            `[HunkLoader]   *** SEGMENT DATA IS ALREADY CORRUPTED IN BUFFER! ***`
+          );
         }
 
         // CHECK CORRUPTION LOCATION at offset 0x250 (memory 0x1250)
         const offset1250 = 0x1250 - segment.address;
         if (offset1250 >= 0 && offset1250 < segment.data.length - 16) {
-          console.log(`\n[HunkLoader] *** CHECKING CORRUPTION LOCATION 0x1250 ***`);
-          console.log(`[HunkLoader]   Offset in segment.data: 0x${offset1250.toString(16)}`);
-          console.log(`[HunkLoader]   segment.data bytes at offset ${offset1250}:`);
-          let hexStr = '  ';
+          console.log(
+            `\n[HunkLoader] *** CHECKING CORRUPTION LOCATION 0x1250 ***`
+          );
+          console.log(
+            `[HunkLoader]   Offset in segment.data: 0x${offset1250.toString(
+              16
+            )}`
+          );
+          console.log(
+            `[HunkLoader]   segment.data bytes at offset ${offset1250}:`
+          );
+          let hexStr = "  ";
           for (let i = 0; i < 16; i++) {
-            hexStr += segment.data[offset1250 + i].toString(16).padStart(2, '0') + ' ';
+            hexStr +=
+              segment.data[offset1250 + i].toString(16).padStart(2, "0") + " ";
           }
           console.log(hexStr);
-          console.log(`[HunkLoader]   Expected: 4e ae fe 86 60 12 2c 78 00 04 2e 88 67 08 20 79`);
+          console.log(
+            `[HunkLoader]   Expected: 4e ae fe 86 60 12 2c 78 00 04 2e 88 67 08 20 79`
+          );
 
           // Check if it matches the expected JSR instruction
-          if (segment.data[offset1250] !== 0x4E || segment.data[offset1250 + 1] !== 0xAE) {
-            console.log(`[HunkLoader]   *** CORRUPTION CONFIRMED IN segment.data BUFFER! ***`);
-            console.log(`[HunkLoader]   The hunk file parsing read wrong bytes from file!`);
+          if (
+            segment.data[offset1250] !== 0x4e ||
+            segment.data[offset1250 + 1] !== 0xae
+          ) {
+            console.log(
+              `[HunkLoader]   *** CORRUPTION CONFIRMED IN segment.data BUFFER! ***`
+            );
+            console.log(
+              `[HunkLoader]   The hunk file parsing read wrong bytes from file!`
+            );
           } else {
-            console.log(`[HunkLoader]   segment.data buffer is CORRECT at 0x1250`);
+            console.log(
+              `[HunkLoader]   segment.data buffer is CORRECT at 0x1250`
+            );
           }
         }
       }
@@ -372,9 +546,22 @@ export class HunkLoader {
         const verify1 = emulator.readMemory(0x1249);
         const verifyWord = (verify0 << 8) | verify1;
         console.log(`[HunkLoader] *** VERIFY AFTER WRITE ***`);
-        console.log(`[HunkLoader]   Source buffer had: 0x${segment.data[offset].toString(16).padStart(2, '0')}${segment.data[offset+1].toString(16).padStart(2, '0')}`);
-        console.log(`[HunkLoader]   Memory now has:    0x${verifyWord.toString(16).padStart(4, '0')}`);
-        if (verifyWord !== ((segment.data[offset] << 8) | segment.data[offset+1])) {
+        console.log(
+          `[HunkLoader]   Source buffer had: 0x${segment.data[offset]
+            .toString(16)
+            .padStart(2, "0")}${segment.data[offset + 1]
+            .toString(16)
+            .padStart(2, "0")}`
+        );
+        console.log(
+          `[HunkLoader]   Memory now has:    0x${verifyWord
+            .toString(16)
+            .padStart(4, "0")}`
+        );
+        if (
+          verifyWord !==
+          ((segment.data[offset] << 8) | segment.data[offset + 1])
+        ) {
           console.log(`[HunkLoader]   *** WRITE TO MEMORY CORRUPTED DATA! ***`);
         }
       }
@@ -384,19 +571,33 @@ export class HunkLoader {
     // Relocations are applied to segment data in parse() before returning HunkFile
     // This ensures doors that self-initialize registers (like WHO's LEA <data_segment>,A4)
     // read correctly relocated values instead of zeros.
-    console.log('[HunkLoader] Relocations already applied during parse() - skipping load-time relocation');
+    console.log(
+      "[HunkLoader] Relocations already applied during parse() - skipping load-time relocation"
+    );
 
-    console.log(`[HunkLoader] Load complete. Entry point: 0x${hunkFile.entryPoint.toString(16)}`);
+    console.log(
+      `[HunkLoader] Load complete. Entry point: 0x${hunkFile.entryPoint.toString(
+        16
+      )}`
+    );
   }
 
   /**
    * Read Hunk header
    */
-  private readHeader(): { numSegments: number; segmentSizes: number[] } {
+  private readHeader(): {
+    numSegments: number;
+    segmentSizes: number[];
+    headerStartPos: number;
+    entryPointOffset: number;
+  } {
+    const headerStartPos = this.position;
     const hunkType = this.readLong();
 
     if (hunkType !== HunkType.HUNK_HEADER) {
-      throw new Error(`Expected HUNK_HEADER (0x3F3), got 0x${hunkType.toString(16)}`);
+      throw new Error(
+        `Expected HUNK_HEADER (0x3F3), got 0x${hunkType.toString(16)}`
+      );
     }
 
     // Skip resident library names (if any)
@@ -413,11 +614,22 @@ export class HunkLoader {
     // Read segment sizes
     const segmentSizes: number[] = [];
     for (let i = firstSegment; i <= lastSegment; i++) {
-      const size = this.readLong() & 0x3FFFFFFF; // Clear flags
+      const size = this.readLong() & 0x3fffffff; // Clear flags
       segmentSizes.push(size);
     }
 
-    return { numSegments, segmentSizes };
+    // HUNK_HEADER entry point is NEXT (offset from first segment load address)
+    const entryPointOffset = this.readLong() & 0x00ffffff; // 24-bit
+    console.log(
+      `[HunkLoader] Raw entry point field: 0x${entryPointOffset.toString(16)}`
+    );
+
+    return {
+      numSegments,
+      segmentSizes,
+      headerStartPos,
+      entryPointOffset,
+    };
   }
 
   /**
