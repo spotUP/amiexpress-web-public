@@ -466,7 +466,8 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[33mENTER\x1b[0m Info  ');
     this.socket.emit('ansi-output', '\x1b[33mU\x1b[0m Upload  ');
     this.socket.emit('ansi-output', '\x1b[33mF\x1b[0m Filter  ');
-    this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
+    this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit  ');
+    this.socket.emit('ansi-output', '\x1b[33mL\x1b[0m Logs\r\n');
   }
 
   /**
@@ -565,6 +566,40 @@ export class DoorManager {
   private supportsHotReload(door: DoorInfo): boolean {
     const type = ((door as any).type || door.type || '').toString().toLowerCase();
     return ['ts', 'typescript', 'js', 'javascript', 'arexx', 'rexx', 'python', 'py'].includes(type);
+  }
+
+  /**
+   * Show a lightweight log summary for the selected door
+   */
+  private showLogPanel(): void {
+    const doors = this.applyFilter(this.state.filter || '');
+    if (doors.length === 0) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mNo doors to show logs for (filter?)\x1b[0m\r\n');
+      return;
+    }
+    const door = doors[Math.max(0, Math.min(this.state.selectedIndex, doors.length - 1))];
+    const log = this.state.lastReloadLog?.[door.id];
+    const status = this.state.lastReloadStatus?.[door.id];
+
+    this.socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR LOG ', 80) + '\x1b[0m\r\n\r\n');
+    this.socket.emit('ansi-output', `\x1b[0;36mDoor:\x1b[0m ${door.name}\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36mStatus:\x1b[0m ${status || 'n/a'}\r\n`);
+    this.socket.emit('ansi-output', '\r\n\x1b[0;33mLast Reload Log:\x1b[0m\r\n');
+    if (!log) {
+      this.socket.emit('ansi-output', '\x1b[90m(no log captured yet)\x1b[0m\r\n');
+    } else {
+      const lines = log.split(/\r?\n/);
+      const tail = lines.slice(-20); // show last 20 lines
+      tail.forEach(line => this.socket.emit('ansi-output', `${line}\r\n`));
+      if (lines.length > tail.length) {
+        this.socket.emit('ansi-output', '\x1b[90m... (truncated)\x1b[0m\r\n');
+      }
+    }
+    this.socket.emit('ansi-output', '\r\n\x1b[33mB\x1b[0m Back    \x1b[33mQ\x1b[0m Quit\r\n');
+    this.state.mode = 'docs';
+    this.state.docsContent = log || '';
+    this.state.scrollOffset = 0;
   }
 
   /**
@@ -1577,6 +1612,12 @@ export class DoorManager {
       this.socket.emit('door-exit');
       return;
     }
+
+    // L - Logs
+    if (key === 'l') {
+      this.showLogPanel();
+      return;
+    }
   }
 
   /**
@@ -1682,6 +1723,13 @@ export class DoorManager {
       this.state.mode = 'info';
       this.state.scrollOffset = 0;
       this.showInfo();
+      return;
+    }
+
+    // Q - quit out of log panel back to list
+    if (key === 'q' && this.state.mode === 'docs') {
+      this.state.mode = 'list';
+      this.showList();
       return;
     }
 
