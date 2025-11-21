@@ -867,6 +867,14 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
     }
 
+    // Auto-pause long screens (e.g., >25 lines like real AmiExpress More prompt)
+    const lineCount = parsed.split(/\r\n|\n/).length;
+    const pageHeight = session?.screenHeight || 25;
+    if (!session.lastScreenHadPause && lineCount >= pageHeight) {
+      parsed += '\r\n(Pause)...More(y/n/ns)?';
+      session.lastScreenHadPause = true;
+    }
+
     // Double-buffered display: Build complete frame buffer before sending
     // This prevents tearing and visible redraws by sending everything atomically
     const frameBuffer =
