@@ -399,9 +399,15 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // If user is responding to a paginated screen prompt, handle that first
   if (session.paginatedScreen) {
     const { handlePaginatedScreenInput } = require('./screen.handler');
-    const handled = await handlePaginatedScreenInput(socket, session, data);
-    if (handled) {
-      return;
+    try {
+      const handled = await handlePaginatedScreenInput(socket, session, data);
+      if (handled) {
+        return;
+      }
+    } catch (error) {
+      console.error('[handleCommand] Error handling paginated screen input:', error);
+      session.paginatedScreen = undefined;
+      session.queuedScreenCommands = [];
     }
   }
 
@@ -896,7 +902,14 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
         console.log('📋 Executing queued screen commands before advancing state');
         const { runQueuedScreenCommands } = require('./screen.handler');
-        await runQueuedScreenCommands(socket, session);
+        try {
+          await runQueuedScreenCommands(socket, session);
+        } catch (error) {
+          console.error('[handleCommand] Error running queued screen commands:', error);
+          session.queuedScreenCommands = [];
+          session.pendingScreenCommand = undefined;
+          session.screenCommandResolver = null;
+        }
         return;
       }
       // Any key continues to next state
