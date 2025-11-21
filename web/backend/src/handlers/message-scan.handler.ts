@@ -196,7 +196,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   // But don't display yet - we'll build a custom scan report
 
   // express.e:28076-28079 - Check MAILSCAN_PROMPT tooltype
-  // For web version, we skip the prompt and always scan
+  // For now we always scan; prompt behavior can be added when frontend supports it
 
   // express.e:28082 - "Scanning conferences for mail..."
   socket.emit('ansi-output', '\r\n' + AnsiUtil.header('Scanning Conferences for Mail') + '\r\n');
