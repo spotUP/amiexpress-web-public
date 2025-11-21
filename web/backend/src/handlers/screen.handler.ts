@@ -825,7 +825,7 @@ export function addAnsiEscapes(content: string): string {
  * @param screenName - Name of screen to display
  * @returns true if screen was displayed successfully, false otherwise
  */
-export async function displayScreen(socket: any, session: BBSSession, screenName: string): Promise<boolean> {
+export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true): Promise<boolean> {
   screenDebug(`[displayScreen] ========================================`);
   screenDebug(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
   screenDebug(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
@@ -875,7 +875,13 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     socket.emit(eventName, frameBuffer);
 
     // Execute any ~XC/~XI commands found in screen file (async, non-blocking)
-    if (commands.length > 0) {
+    if (commands.length > 0 && !runCommands) {
+      // Defer execution until caller triggers it (e.g., after a pause)
+      session.queuedScreenCommands = commands;
+      session.pendingScreenCommand = undefined;
+      session.screenCommandResolver = null;
+      return true;
+    } else if (commands.length > 0) {
       screenDebug(`[displayScreen] ==========================================`);
       screenDebug(`[displayScreen] EXECUTING ${commands.length} COMMANDS FROM SCREEN FILE: ${screenName}`);
       screenDebug(`[displayScreen] Commands:`, commands);
@@ -934,6 +940,42 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
     console.error(`[displayScreen] ========================================`);
     return false;
+  }
+}
+
+/**
+ * Execute any queued screen commands (used when displayScreen was called with runCommands=false)
+ */
+export async function runQueuedScreenCommands(socket: any, session: BBSSession): Promise<void> {
+  const commands = session.queuedScreenCommands || [];
+  if (commands.length === 0) {
+    return;
+  }
+
+  const { handleCommand } = require('./command.handler');
+  session.pendingScreenCommand = new Promise<void>(resolve => {
+    session.screenCommandResolver = resolve;
+  });
+
+  try {
+    for (let i = 0; i < commands.length; i++) {
+      const commandStr = commands[i];
+      screenDebug(`[displayScreen] ------------------------------------------`);
+      screenDebug(`[displayScreen] EXECUTING QUEUED COMMAND ${i + 1}/${commands.length}:`, commandStr);
+      try {
+        await handleCommand(socket, session, commandStr);
+      } catch (error) {
+        console.error(`[displayScreen] ✗ ERROR executing queued command ${commandStr}:`, error);
+      }
+    }
+  } finally {
+    session.queuedScreenCommands = [];
+    session.executingScreenCommand = false;
+    if (session.screenCommandResolver) {
+      session.screenCommandResolver();
+      session.screenCommandResolver = null;
+      session.pendingScreenCommand = undefined;
+    }
   }
 }
 

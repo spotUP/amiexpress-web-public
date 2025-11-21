@@ -280,6 +280,7 @@ export interface BBSSession {
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
   nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163
+  queuedScreenCommands?: string[]; // Deferred screen commands (run after pause key)
   loginRetryCount: number; // Login retry counter - express.e:29461, 29560 (max 5 before disconnect)
   callerNum?: number; // Caller number for this session (total calls to BBS)
 

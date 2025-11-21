@@ -883,6 +883,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   ) {
     console.log('📋 In display state, continuing to next state');
     try {
+      // If a previous screen deferred commands (runCommands=false), run them now on keypress
+      if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
+        console.log('📋 Executing queued screen commands before advancing state');
+        const { runQueuedScreenCommands } = require('./screen.handler');
+        await runQueuedScreenCommands(socket, session);
+        return;
+      }
       // Any key continues to next state
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
         // express.e:28555 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
