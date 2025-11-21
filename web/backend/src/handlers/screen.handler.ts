@@ -407,8 +407,12 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   const ssRegex = /~(?:SS_|2S)([^|\r\n]+)(\|\|)?/g;
   let ssMatch;
   const filesToDisplay: string[] = [];
+
+  const normalizeScreenReference = (screenRef: string): string => {
+    return screenRef.replace(/\.(txt|TXT|rip|RIP)$/g, '');
+  };
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
-    const filename = ssMatch[1].trim();
+    const filename = normalizeScreenReference(ssMatch[1].trim());
     screenDebug('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
     filesToDisplay.push(filename);
     parsed = parsed.replace(ssMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
