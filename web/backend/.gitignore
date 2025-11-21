@@ -8,9 +8,9 @@
 # Moira CPU emulator source (keep only compiled artifacts)
 src/amiga-emulation/cpu/moira-source/
 
-# Test files
-*.test.ts
-*.spec.ts
+# Test files (unit/integration live in tests/, so allow tracked suites there)
+!tests/**/*.test.ts
+!tests/**/*.spec.ts
 
 # Development files
 *.dev.ts
