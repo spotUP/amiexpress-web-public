@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "postinstall": "node ./scripts/build-web-assets.cjs",
     "dev": "npx tsx src/index.ts",
     "build": "npm install",
     "start": "npx tsx src/index.ts",
