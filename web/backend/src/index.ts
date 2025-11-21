@@ -430,13 +430,17 @@ const recentConnections: Map<string, number[]> = new Map();
 const MAX_CONNECTIONS_PER_IP = 5; // Max 5 connections per IP
 const CONNECTION_WINDOW = 60000; // 60 second window
 
+const LOCALHOST_IPS = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+
 function checkConnectionLimit(ip: string): boolean {
-  // Skip rate limiting for localhost in development mode
+  // Always skip rate limiting for loopback/internal addresses
+  if (LOCALHOST_IPS.includes(ip)) {
+    return true;
+  }
+
+  // In development allow everything (already handled above for loopback but keep behaviour)
   if (process.env.NODE_ENV !== 'production') {
-    const localhostIPs = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
-    if (localhostIPs.includes(ip)) {
-      return true; // Allow unlimited connections from localhost in dev
-    }
+    return true;
   }
 
   const now = Date.now();
