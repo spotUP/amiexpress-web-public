@@ -116,18 +116,18 @@ export function registerAuthHandlers(socket: Socket) {
         const refreshToken = await db.generateRefreshToken(user);
 
         // Send tokens to client for future use
-        socket.emit('login-success', {
-          user: {
-            id: user.id,
-            username: user.username,
-            realname: user.realname,
+      socket.emit('login-success', {
+        user: {
+          id: user.id,
+          username: user.username,
+          realname: user.realname,
             secLevel: user.secLevel,
             expert: user.expert,
             ansi: user.ansi
           },
-          token: accessToken,
-          refreshToken: refreshToken
-        });
+        token: accessToken,
+        refreshToken: refreshToken
+      });
       } else {
         socket.emit('login-failed', 'Missing credentials');
         return;
@@ -219,6 +219,16 @@ export function registerAuthHandlers(socket: Socket) {
             ansi: user.ansi
           }
         });
+      }
+
+      // QuickLogon ('Q' at ANSI prompt) skips LOGON/BULL/CONF_BULL and jumps to menu
+      if (session.tempData?.quickLogon) {
+        session.tempData.quickLogon = false;
+        session.menuPause = true;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        const { displayMainMenu } = require('./command-handler/menu');
+        await displayMainMenu(socket, session);
+        return;
       }
 
       // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()

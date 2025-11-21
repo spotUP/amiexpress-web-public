@@ -5,6 +5,7 @@
  */
 
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { startPagination } from './screen.handler';
 
 import type { BBSSession } from '../index';
 
@@ -64,15 +65,23 @@ export function setFileMaintenanceDependencies(deps: {
 // ===== File Area Display =====
 
 // displayFileAreaContents() - Display files in area (express.e:27670-27694)
-export function displayFileAreaContents(socket: any, session: BBSSession, area: any) {
+export function displayFileAreaContents(socket: any, session: BBSSession, area: any, collector?: string[]) {
+  const emit = (msg: string) => {
+    if (collector) {
+      collector.push(msg);
+    } else {
+      socket.emit('ansi-output', msg);
+    }
+  };
+
   // Show "Scanning directory X" message (express.e:27674 or 27683)
-  socket.emit('ansi-output', `Scanning directory ${area.id}, Area: ${area.name}\r\n`);
+  emit(`Scanning directory ${area.id}, Area: ${area.name}\r\n`);
 
   // Get files in this area (like reading DIR file in AmiExpress)
   const areaFiles = fileEntries.filter(file => file.areaId === area.id);
 
   if (areaFiles.length === 0) {
-    socket.emit('ansi-output', '\r\n');
+    emit('\r\n');
     return;
   }
 
@@ -93,15 +102,15 @@ export function displayFileAreaContents(socket: any, session: BBSSession, area: 
     // AmiExpress DIR format (one line per file with description):
     // filename.ext   123K 12/25/95 uploader - Description text here
     const sizePadded = `${sizeKB}K`.padStart(6);
-    socket.emit('ansi-output', `${file.filename.padEnd(13)} ${sizePadded} ${dateStr} ${file.uploader}`);
+    emit(`${file.filename.padEnd(13)} ${sizePadded} ${dateStr} ${file.uploader}`);
 
     if (description) {
-      socket.emit('ansi-output', ` - ${description}`);
+      emit(` - ${description}`);
     }
-    socket.emit('ansi-output', '\r\n');
+    emit('\r\n');
   });
 
-  socket.emit('ansi-output', '\r\n');
+  emit('\r\n');
 }
 
 // displayFileList() - Main file listing function (1:1 with AmiExpress)
@@ -115,19 +124,21 @@ export function displayFileList(socket: any, session: BBSSession, params: string
   // Check for non-stop flag (NS parameter)
   const nonStopDisplay = parsedParams.includes('NS');
 
-  socket.emit('ansi-output', '\r\n');
+  const output: string[] = [];
+  output.push('\r\n');
   if (reverse) {
-    socket.emit('ansi-output', '\x1b[36m-= File Areas (Reverse) =-\x1b[0m\r\n');
+    output.push('\x1b[36m-= File Areas (Reverse) =-\x1b[0m\r\n');
   } else {
-    socket.emit('ansi-output', '\x1b[36m-= File Areas =-\x1b[0m\r\n');
+    output.push('\x1b[36m-= File Areas =-\x1b[0m\r\n');
   }
 
   // Get file areas for current conference (like AmiExpress DIR structure)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
 
   if (currentFileAreas.length === 0) {
-    socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    output.push('No file areas available in this conference.\r\n');
+    output.push('\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    socket.emit('ansi-output', output.join(''));
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -146,10 +157,30 @@ export function displayFileList(socket: any, session: BBSSession, params: string
     }
 
     // Display selected directories
-    displaySelectedFileAreas(socket, session, currentFileAreas, dirSpan, reverse, nonStopDisplay);
+    displaySelectedFileAreas(socket, session, currentFileAreas, dirSpan, reverse, nonStopDisplay, output);
   } else {
     // Interactive directory selection (like getDirSpan prompt)
     displayDirectorySelectionPrompt(socket, session, currentFileAreas, reverse, nonStopDisplay);
+    return;
+  }
+
+  // Emit output with optional pagination (skip paging if NS flag present)
+  const buffer = output.join('');
+  if (nonStopDisplay) {
+    socket.emit('ansi-output', buffer);
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    return;
+  }
+
+  const lines = buffer.replace(/\r\n/g, '\n').split('\n');
+  if (lines.length > 0) {
+    startPagination(socket, session, lines, 'ansi-output', undefined, () => {
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    });
   }
 }
 
@@ -185,7 +216,15 @@ export function displayDirectorySelectionPrompt(socket: any, session: BBSSession
 }
 
 // Display selected file areas
-export function displaySelectedFileAreas(socket: any, session: BBSSession, fileAreas: any[], dirSpan: { startDir: number, dirScan: number }, reverse: boolean, nonStop: boolean) {
+export function displaySelectedFileAreas(
+  socket: any,
+  session: BBSSession,
+  fileAreas: any[],
+  dirSpan: { startDir: number, dirScan: number },
+  reverse: boolean,
+  nonStop: boolean,
+  collector?: string[]
+) {
   let currentDir = reverse ? dirSpan.dirScan : dirSpan.startDir;
   const endDir = reverse ? dirSpan.startDir : dirSpan.dirScan;
   const step = reverse ? -1 : 1;
@@ -194,10 +233,10 @@ export function displaySelectedFileAreas(socket: any, session: BBSSession, fileA
     const areaIndex = currentDir - 1; // Convert to 0-based array index
     if (areaIndex >= 0 && areaIndex < fileAreas.length) {
       const area = fileAreas[areaIndex];
-      displayFileAreaContents(socket, session, area);
+      displayFileAreaContents(socket, session, area, collector);
 
       // If not non-stop, wait for user input between areas
-      if (!nonStop && currentDir !== endDir) {
+      if (!collector && !nonStop && currentDir !== endDir) {
         session.subState = LoggedOnSubState.FILE_LIST_CONTINUE;
         session.tempData = { fileAreas, dirSpan, reverse, nonStop, currentDir: currentDir + step };
         return;
@@ -206,10 +245,12 @@ export function displaySelectedFileAreas(socket: any, session: BBSSession, fileA
     currentDir += step;
   }
 
-  // Finished displaying all areas
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  // Finished displaying all areas (collector path defers final prompt to caller)
+  if (!collector) {
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  }
 }
 
 // ===== File Maintenance (FM command) =====

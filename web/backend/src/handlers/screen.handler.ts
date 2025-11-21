@@ -1014,6 +1014,32 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
 }
 
 /**
+ * Start pagination for arbitrary lines (non-screen MCI output).
+ */
+export function startPagination(
+  socket: any,
+  session: BBSSession,
+  lines: string[],
+  eventName: 'ansi-output' | 'petscii-output' = 'ansi-output',
+  commands?: string[],
+  onComplete?: () => void
+): void {
+  const pageHeight = session?.screenHeight || 25;
+  const pageSize = Math.max(1, pageHeight - 1);
+  session.paginatedScreen = {
+    lines,
+    nextIndex: pageSize,
+    pageSize,
+    eventName,
+    commands,
+    onComplete,
+  };
+  const chunk = lines.slice(0, pageSize).join('\r\n');
+  socket.emit(eventName, chunk + '\r\n(Pause)...More(y/n/ns)?');
+  session.lastScreenHadPause = true;
+}
+
+/**
  * Handle paginated screen input (More(y/n/ns)?)
  * Returns true if handled, false otherwise.
  */
@@ -1042,6 +1068,7 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
     if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
       await runQueuedScreenCommands(socket, session);
     }
+    if (paged.onComplete) paged.onComplete();
     return true;
   }
 
@@ -1067,6 +1094,7 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
     if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
       await runQueuedScreenCommands(socket, session);
     }
+    if (paged.onComplete) paged.onComplete();
   }
 
   return true;

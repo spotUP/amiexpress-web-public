@@ -20,6 +20,7 @@ export enum LoggedOnSubState {
   DISPLAY_LOGON = 'display_logon',
   DISPLAY_BULL = 'display_bull',
   DISPLAY_NODE_BULL = 'display_node_bull',
+  DISPLAY_PAGED_SCREEN = 'display_paged_screen',
   CONF_SCAN = 'conf_scan',
   DISPLAY_CONF_BULL = 'display_conf_bull',
   DISPLAY_MENU = 'display_menu',

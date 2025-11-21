@@ -284,6 +284,14 @@ export interface BBSSession {
   lastScreenHadPause?: boolean; // Whether the last displayed screen contained ~SP.
   loginRetryCount: number; // Login retry counter - express.e:29461, 29560 (max 5 before disconnect)
   callerNum?: number; // Caller number for this session (total calls to BBS)
+  paginatedScreen?: {
+    lines: string[];
+    nextIndex: number;
+    pageSize: number;
+    eventName: 'ansi-output' | 'petscii-output';
+    commands?: string[];
+    onComplete?: () => void;
+  };
 
   // Phase 10: Message Pointer System (express.e:199-200, 4882-4973)
   lastMsgReadConf: number; // Last message manually read (confBase.confYM) - express.e:199
