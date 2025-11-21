@@ -513,13 +513,12 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     parsed = parsed.replace(ccMatch[0], '');
   }
 
-  // ~CR_ - Custom Reset / Prompted Keypress (express.e:5571-5580)
+  // ~CR_ - Prompted keypress (express.e:5571-5580)
   // Format: ~CR_<prompt>|| - displays prompt and waits for keypress
-  // Note: This is interactive and doesn't work in static screen files
-  // Just display the prompt text and remove the wait
   const crRegex = /~CR_([^|]+)\|\|/g;
   parsed = parsed.replace(crRegex, (match, promptText) => {
-    return promptText; // Just show the prompt, no wait
+    hasPause = true;
+    return promptText;
   });
 
   // ~SM_ - Set Mode / Menu Name (express.e:5575-5585)
