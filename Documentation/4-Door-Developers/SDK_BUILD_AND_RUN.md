@@ -42,7 +42,7 @@ Commands/BBSCmd/2048.info:
 
 **c) Create symlink in doors/:**
 ```bash
-doors/2048-game -> sdk/examples/2048-game
+doors/2048-game -> sdk/doors/2048-game
 ```
 
 **d) Reload BBS command cache:**
@@ -81,9 +81,9 @@ Send: "2048\r"
 ### Development (Local)
 ```
 /Users/username/Code/amiexpress-web/
-├── sdk/examples/2048-game/     <- Source door
+├── sdk/doors/2048-game/     <- Source door
 ├── Commands/BBSCmd/2048.info   <- Command definition
-└── doors/2048-game/            <- Symlink to sdk/examples/2048-game
+└── doors/2048-game/            <- Symlink to sdk/doors/2048-game
 ```
 
 ### Production (Render.com)

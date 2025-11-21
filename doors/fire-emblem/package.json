@@ -21,7 +21,7 @@
     "fire-emblem"
   ],
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../"
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -34,5 +34,6 @@
   },
   "server": {
     "entry": "server.ts"
-  }
+  },
+  "doorType": "TS"
 }

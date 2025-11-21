@@ -13,6 +13,7 @@ import { checkSecurity } from '../utils/acs.util';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
+import { normalizeForComparison } from '../utils/input-normalizer.util';
 
 import type { BBSSession } from '../index';
 
@@ -108,6 +109,8 @@ export function handleJoinMessageBaseCommand(socket: any, session: BBSSession, p
     }
   }
 
+  const normalizedNameParam = normalizeForComparison(params);
+
   // Get message bases for current conference - express.e:25205-25210
   const currentConfBases = _messageBases.filter(mb => mb.conferenceId === session.currentConf);
 
@@ -122,6 +125,14 @@ export function handleJoinMessageBaseCommand(socket: any, session: BBSSession, p
   }
 
   const msgBaseCount = currentConfBases.length;
+
+  // Allow specifying message base by name (case-insensitive) before showing prompt
+  if ((newMsgBase < 1 || newMsgBase > msgBaseCount) && normalizedNameParam) {
+    const matchedBase = currentConfBases.find(mb => normalizeForComparison(mb.name) === normalizedNameParam);
+    if (matchedBase) {
+      newMsgBase = currentConfBases.indexOf(matchedBase) + 1;
+    }
+  }
 
   // If no valid message base number, show screen and prompt - express.e:25215-25227
   if (newMsgBase < 1 || newMsgBase > msgBaseCount) {

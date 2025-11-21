@@ -10,6 +10,10 @@ import { getClientDoorBundler } from './client-door-bundler';
 
 export const doorApiRouter = express.Router();
 
+const getBbsRoot = (): string => {
+  return process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+};
+
 /**
  * GET /api/doors/:doorId/bundle.js
  * Serve bundled client door JavaScript
@@ -55,7 +59,7 @@ doorApiRouter.get('/doors/:doorId/bundle.js', async (req: Request, res: Response
 
     // Serve the bundle
     res.setHeader('Content-Type', 'application/javascript');
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Bundle-Hash', bundle.hash);
     res.setHeader('X-Bundle-Size', bundle.size.toString());
 
@@ -150,15 +154,10 @@ doorApiRouter.post('/doors/clear-cache', async (req: Request, res: Response) => 
  */
 async function loadDoorManifest(doorId: string): Promise<any | null> {
   try {
-    // Try SDK examples first
-    const sdkPath = path.join(process.cwd(), '../../sdk/examples', doorId, 'package.json');
-    if (fs.existsSync(sdkPath)) {
-      const content = fs.readFileSync(sdkPath, 'utf8');
-      return JSON.parse(content);
-    }
+    const bbsRoot = getBbsRoot();
 
-    // Try doors directory
-    const doorsPath = path.join(process.cwd(), '../doors', doorId, 'package.json');
+    // Only consider installed doors/ in the BBS tree.
+    const doorsPath = path.join(bbsRoot, 'doors', doorId, 'package.json');
     if (fs.existsSync(doorsPath)) {
       const content = fs.readFileSync(doorsPath, 'utf8');
       return JSON.parse(content);
@@ -175,16 +174,23 @@ async function loadDoorManifest(doorId: string): Promise<any | null> {
  * Resolve door path from door ID and entry point
  */
 function resolveDoorPath(doorId: string, entryPoint: string): string {
-  // Try SDK examples first
-  const sdkPath = path.join(process.cwd(), '../../sdk/examples', doorId, entryPoint);
-  if (fs.existsSync(sdkPath)) {
-    return sdkPath;
-  }
+  const bbsRoot = getBbsRoot();
 
-  // Try doors directory
-  const doorsPath = path.join(process.cwd(), '../doors', doorId, entryPoint);
+  // Only consider doors directory in the BBS tree
+  const doorsPath = path.join(bbsRoot, 'doors', doorId, entryPoint);
+  // Support symlinked door IDs (e.g., tracker -> tracker-door)
+  const doorsPathSymlink = path.join(bbsRoot, 'doors', `${doorId}`, entryPoint);
   if (fs.existsSync(doorsPath)) {
     return doorsPath;
+  }
+  if (fs.existsSync(doorsPathSymlink)) {
+    return doorsPathSymlink;
+  }
+
+  // Fall back to SDK examples (dev)
+  const sdkPath = path.join(bbsRoot, 'sdk/doors', doorId, entryPoint);
+  if (fs.existsSync(sdkPath)) {
+    return sdkPath;
   }
 
   // Return absolute path if provided
@@ -193,7 +199,7 @@ function resolveDoorPath(doorId: string, entryPoint: string): string {
   }
 
   // Default to SDK examples
-  return path.join(process.cwd(), '../../sdk/examples', doorId, entryPoint);
+  return path.join(process.cwd(), '../../sdk/doors', doorId, entryPoint);
 }
 
 /**
@@ -201,32 +207,10 @@ function resolveDoorPath(doorId: string, entryPoint: string): string {
  */
 async function listAvailableDoors(): Promise<any[]> {
   const doors: any[] = [];
+  const bbsRoot = getBbsRoot();
 
-  // Scan SDK examples
-  const sdkExamplesPath = path.join(process.cwd(), '../../sdk/examples');
-  if (fs.existsSync(sdkExamplesPath)) {
-    const entries = fs.readdirSync(sdkExamplesPath);
-    for (const entry of entries) {
-      const manifestPath = path.join(sdkExamplesPath, entry, 'package.json');
-      if (fs.existsSync(manifestPath)) {
-        try {
-          const content = fs.readFileSync(manifestPath, 'utf8');
-          const manifest = JSON.parse(content);
-          doors.push({
-            id: entry,
-            name: manifest.name || entry,
-            runtime: manifest.runtime || 'server',
-            description: manifest.description || '',
-          });
-        } catch (error) {
-          console.error(`Error loading manifest for ${entry}:`, error);
-        }
-      }
-    }
-  }
-
-  // Scan doors directory
-  const doorsPath = path.join(process.cwd(), '../doors');
+  // Scan doors directory (preferred for deployments)
+  const doorsPath = path.join(bbsRoot, 'doors');
   if (fs.existsSync(doorsPath)) {
     const entries = fs.readdirSync(doorsPath);
     for (const entry of entries) {

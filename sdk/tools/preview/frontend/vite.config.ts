@@ -18,5 +18,15 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     assetsDir: 'assets',
+    chunkSizeWarningLimit: 2048,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          xterm: ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-canvas'],
+          monaco: ['@monaco-editor/react'],
+          radix: ['@radix-ui/react-dropdown-menu', '@radix-ui/react-switch', '@radix-ui/react-tabs'],
+        },
+      },
+    },
   }
 })

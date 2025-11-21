@@ -1,0 +1,44 @@
+{
+  "name": "gwall-door",
+  "version": "1.0.0",
+  "description": "Global Wall - One-liner wall for all BBS users (runDoor pattern)",
+  "bbsCommand": "GLOBALWALL",
+  "main": "dist/index.js",
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "utility",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": true,
+  "scripts": {
+    "build": "tsc",
+    "preview": "cd ../.. && npm run preview gwall"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "wall",
+    "oneliner",
+    "global",
+    "runDoor",
+    "reference"
+  ],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../dist",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2"
+  },
+  "files": [
+    "dist",
+    "index.ts",
+    "GWall.cfg",
+    "GWALL.cfg",
+    "FILE_ID.DIZ",
+    "README.TXT",
+    "gwall.info",
+    "tsconfig.json"
+  ]
+}

@@ -1654,7 +1654,7 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
     socket.emit('door:load-client', {
       doorId: door.id,
       sessionId,
-      bundleUrl: `/api/doors/${door.id}/bundle.js`,
+      bundleUrl: `/api/doors/${door.id}/bundle.js?v=${Date.now()}`,
       manifest: {
         name: manifest.name,
         version: manifest.version,
@@ -1694,7 +1694,7 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
     // Try to get door ID from path
     if (door.path) {
       const pathParts = door.path.split('/');
-      // Look for sdk/examples/<doorId> pattern
+      // Look for sdk/doors/<doorId> pattern
       const examplesIndex = pathParts.indexOf('examples');
       if (examplesIndex >= 0 && pathParts[examplesIndex + 1]) {
         doorId = pathParts[examplesIndex + 1];
@@ -1711,17 +1711,7 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
     // Get BBS root (use BBS_ROOT env var or default to project root)
     const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
-    // Try SDK examples first
-    const sdkPath = path.join(bbsRoot, 'sdk/examples', doorId, 'package.json');
-    console.log(`[loadDoorManifestForExecution] Trying SDK path: ${sdkPath}`);
-    if (fs.existsSync(sdkPath)) {
-      const content = fs.readFileSync(sdkPath, 'utf8');
-      const manifest = JSON.parse(content);
-      console.log(`[loadDoorManifestForExecution] Found SDK manifest, runtime: ${manifest.runtime || 'not specified'}`);
-      return manifest;
-    }
-
-    // Try doors directory at BBS root
+    // Prefer installed doors directory at BBS root
     const doorsPath = path.join(bbsRoot, 'doors', doorId, 'package.json');
     console.log(`[loadDoorManifestForExecution] Trying doors path: ${doorsPath}`);
     if (fs.existsSync(doorsPath)) {

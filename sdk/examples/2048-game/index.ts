@@ -417,10 +417,10 @@ export async function runDoor(doorSession: any): Promise<void> {
           height: 8,
           border: { type: 'line' },
           label: ' GAME OVER ',
-          content: '{center}{bold}{red-fg}No more moves!{/red-fg}{/bold}\n\n' +
+          content: `{center}{bold}{red-fg}No more moves!{/red-fg}{/bold}\n\n` +
             `{center}Final Score: {yellow-fg}${state.score}{/yellow-fg}\n\n` +
-            '{center}Press {cyan-fg}N{/cyan-fg} for new game\n' +
-            '{center}or {cyan-fg}Q{/cyan-fg} to quit{/center}`,
+            `{center}Press {cyan-fg}N{/cyan-fg} for new game\n` +
+            `{center}or {cyan-fg}Q{/cyan-fg} to quit{/center}`,
           tags: true,
           style: {
             fg: 'white',

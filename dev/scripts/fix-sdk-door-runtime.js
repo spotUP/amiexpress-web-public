@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '../..');
-const sdkExamplesDir = path.join(projectRoot, 'sdk/examples');
+const sdkExamplesDir = path.join(projectRoot, 'sdk/doors');
 
 console.log('[CONFIG] Fixing SDK door runtime declarations...\n');
 

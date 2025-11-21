@@ -13,6 +13,7 @@ import { testFile, TestResult } from '../utils/file-test.util';
 import { moveUploadedFile, getConferenceDir } from '../utils/file-hold.util';
 import { writeUploadToDirFile } from '../utils/dir-file.util';
 import { updateSysopUploadStats, doUploadNotify } from '../utils/upload-notify.util';
+import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
 import { getSessionBySocketId } from './session-manager';
 import { callersLog } from './database-helpers';
 
@@ -141,6 +142,10 @@ export function registerFileHandlers(socket: Socket) {
       return;
     }
 
+    const currentFilename = sanitizeInput(currentFile.filename);
+    currentFile.filename = currentFilename;
+    const normalizedFilename = normalizeForComparison(currentFilename);
+
     try {
       // Track upload stats
       if (!session.tempData.uploadedFiles) session.tempData.uploadedFiles = 0;
@@ -235,8 +240,8 @@ export function registerFileHandlers(socket: Socket) {
 
       // Check for duplicate file in this area (UNIQUE constraint on filename, areaid)
       const existingFile = await db.query(
-        'SELECT id, filename FROM file_entries WHERE filename = $1 AND areaid = $2',
-        [currentFile.filename, fileArea.id]
+        'SELECT id, filename FROM file_entries WHERE LOWER(filename) = $1 AND areaid = $2',
+        [normalizedFilename, fileArea.id]
       );
 
       if (existingFile.rows.length > 0) {
@@ -397,7 +402,9 @@ export function registerFileHandlers(socket: Socket) {
 
   // Handle file download started - express.e:9475+ (logUDFile for downloads)
   socket.on('file-download-started', async (data: { filename: string; fileId?: number }) => {
-    console.log('[Download] File download started:', data.filename);
+    const requestedFilename = sanitizeInput(data.filename);
+    const normalizedRequestedFilename = normalizeForComparison(data.filename);
+    console.log('[Download] File download started:', requestedFilename);
 
     if (!session.user) {
       console.error('[Download] No user session for download');
@@ -415,15 +422,15 @@ export function registerFileHandlers(socket: Socket) {
         const result = await db.query(
           `SELECT fe.* FROM file_entries fe
            JOIN file_areas fa ON fe.areaid = fa.id
-           WHERE fa.conferenceid = $1 AND fe.filename = $2
+           WHERE fa.conferenceid = $1 AND LOWER(fe.filename) = $2
            LIMIT 1`,
-          [conferenceId, data.filename]
+          [conferenceId, normalizedRequestedFilename]
         );
         fileEntry = result.rows[0];
       }
 
       if (!fileEntry) {
-        console.error('[Download] File not found in database:', data.filename);
+        console.error('[Download] File not found in database:', requestedFilename);
         return;
       }
 

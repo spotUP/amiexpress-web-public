@@ -8,6 +8,13 @@ import { checkSecurity } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { AnsiUtil } from '../utils/ansi.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
+import {
+  loadMsgPointers,
+  updateScanPointer,
+  validatePointers
+} from '../utils/message-pointers.util';
+import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager';
 
 // Dependencies injected from index.ts
 let _db: any = null;
@@ -70,8 +77,15 @@ export function checkConfAccess(user: any, conferenceId: number): boolean {
  * @returns True if should scan for mail
  */
 function checkMailConfScan(conferenceId: number, messageBaseId: number): boolean {
-  // express.e:572-591 - Checks FORCE_NEWSCAN, NO_NEWSCAN tooltypes
-  // For web version, we'll always scan (simplified)
+  const flags = getConferenceToolFlags(conferenceId);
+  if (flags.forceNewscan) {
+    return true;
+  }
+  if (flags.noNewscan) {
+    return false;
+  }
+
+  // express.e:572-591 - would also check per-base flags; default to scanning when no override exists.
   return true;
 }
 
@@ -86,34 +100,71 @@ function checkMailConfScan(conferenceId: number, messageBaseId: number): boolean
 async function countNewMessages(
   userId: string,
   conferenceId: number,
-  messageBaseId: number
-): Promise<{ newPublic: number; newPrivate: number }> {
-  if (!_db) {
-    return { newPublic: 0, newPrivate: 0 };
-  }
+  messageBaseId: number,
+  username: string
+): Promise<{ newPublic: number; newPrivate: number; lastScanned: number; mailStatHigh: number }> {
+  const safeName = (username || '').toLowerCase();
+  let newPublic = 0;
+  let newPrivate = 0;
+  let lastScanned = 0;
+  let mailStatHigh = 0;
 
   try {
-    // Get all messages in this message base
-    const messages = await _db.getMessages(conferenceId, messageBaseId, { limit: 1000 });
+    const mailStat = messageIndexManager.readMailStats(conferenceId);
+    const headers = messageIndexManager.readHeaderFile(conferenceId);
+    const confBase = await loadMsgPointers(userId, conferenceId, messageBaseId);
+    const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
 
-    let newPublic = 0;
-    let newPrivate = 0;
+    const pointer = validated.lastNewReadConf || 0;
+    mailStatHigh = mailStat?.highMsgNum || 0;
+    lastScanned = pointer;
 
-    // For now, we'll consider all messages as "new" if the user hasn't read them
-    // In a full implementation, we would track read message pointers per user
-    for (const msg of messages) {
-      if (msg.isPrivate && (msg.toUser === userId || msg.author === userId)) {
-        newPrivate++;
-      } else if (!msg.isPrivate) {
-        newPublic++;
+    if (headers.length > 0) {
+      for (const header of headers) {
+        if (header.msgNumb <= pointer) {
+          continue;
+        }
+        if (header.status & MsgStatus.DELETED) {
+          continue;
+        }
+
+        lastScanned = Math.max(lastScanned, header.msgNumb);
+
+        const toLower = (header.toName || '').trim().toLowerCase();
+        const fromLower = (header.fromName || '').trim().toLowerCase();
+        const isPrivate = (header.status & MsgStatus.PRIVATE) === MsgStatus.PRIVATE;
+
+        if (isPrivate) {
+          if (safeName && (toLower === safeName || fromLower === safeName)) {
+            newPrivate++;
+          }
+        } else {
+          newPublic++;
+        }
       }
+    } else if (_db) {
+      // Fallback to DB rows when legacy header files are missing
+      const messages = await _db.getMessages(conferenceId, messageBaseId, { limit: 1000 });
+      let msgNum = 0;
+      for (const msg of messages.reverse()) {
+        msgNum++;
+        if (msgNum <= pointer) {
+          continue;
+        }
+        lastScanned = Math.max(lastScanned, msgNum);
+        if (msg.isPrivate && safeName && (msg.toUser?.toLowerCase?.() === safeName || msg.author?.toLowerCase?.() === safeName)) {
+          newPrivate++;
+        } else if (!msg.isPrivate) {
+          newPublic++;
+        }
+      }
+      mailStatHigh = Math.max(mailStatHigh, msgNum);
     }
-
-    return { newPublic, newPrivate };
   } catch (error) {
     console.error(`Error counting messages in conf ${conferenceId} msgbase ${messageBaseId}:`, error);
-    return { newPublic: 0, newPrivate: 0 };
   }
+
+  return { newPublic, newPrivate, lastScanned, mailStatHigh };
 }
 
 /**
@@ -173,9 +224,19 @@ export async function performConferenceScan(socket: any, session: any): Promise<
       }
 
       // Count new messages
-      const counts = await countNewMessages(session.user.id, conference.id, msgBase.id);
+      const counts = await countNewMessages(session.user.id, conference.id, msgBase.id, session.user.username || session.user.name || '');
       confNewPublic += counts.newPublic;
       confNewPrivate += counts.newPrivate;
+
+      // Update the user's auto-scan pointer (express.e saveMsgPointers after MAIL_SCAN)
+      const newPointer = counts.mailStatHigh || counts.lastScanned;
+      if (newPointer > 0) {
+        try {
+          await updateScanPointer(session.user.id, conference.id, msgBase.id, newPointer);
+        } catch (err) {
+          console.error(`[confScan] Failed to update scan pointer for conf ${conference.id} msgBase ${msgBase.id}:`, err);
+        }
+      }
     }
 
     totalNewPublic += confNewPublic;

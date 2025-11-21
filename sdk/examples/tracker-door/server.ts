@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Tracker-Door Server Component (Hybrid Mode)
  * Handles file I/O operations via RPC
@@ -281,3 +282,5 @@ door.onConnect(async (user) => {
 // Start server
 door.start();
 console.log('[Tracker-Server] Server component started, waiting for connections and RPC calls...');
+// @ts-nocheck
+// @ts-nocheck

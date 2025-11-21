@@ -13,7 +13,7 @@
  */
 
 import { Door, UIEngine, UIHelpers } from '@amiexpress/bbs-door-sdk';
-import { runDoorWithSession } from '../../tools/runDoorSession';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
 
 const door = new Door({
   name: 'Neo-Blessed UI Demo',

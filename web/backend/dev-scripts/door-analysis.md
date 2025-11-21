@@ -10,7 +10,7 @@
 **Error Pattern:** "Door not found: ~/Code/amiexpress-web/doors/[door-name]/index.ts"
 - bbslink
 - dannounce (discord-announce)  
-- globalwall (global-wall)
+- globalwall (gwall)
 - fireemblem
 - spaceshoot
 - telnet

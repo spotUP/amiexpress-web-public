@@ -28,8 +28,8 @@ import {
   DialogueSystem,
   HUDBuilder,
   AnsiColor
-} from '../../core/index';
-import { runDoorWithSession } from '../../tools/runDoorSession';
+} from '@amiexpress/bbs-door-sdk';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
 
 import {
   TacticalUnit,

@@ -888,7 +888,7 @@ When creating a door:
 - Provides clear UX
 - Is ready to distribute
 
-Refer to example doors in `sdk/examples/` for complete, working implementations.
+Refer to example doors in `sdk/doors/` for complete, working implementations.
 
 ---
 

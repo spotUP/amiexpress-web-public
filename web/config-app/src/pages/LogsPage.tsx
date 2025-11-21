@@ -63,7 +63,7 @@ export function LogsPage() {
     setSearchTerm(searchInput);
   };
 
-  const handleDownload = () => {
+const handleDownload = () => {
     if (!logData?.lines) return;
 
     const content = logData.lines.reverse().join('\n');

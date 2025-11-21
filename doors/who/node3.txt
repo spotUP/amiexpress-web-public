@@ -1,3 +1,0 @@
-Node: 3
-User: Guest
-Connected: 2025-11-18T08:24:43.716Z

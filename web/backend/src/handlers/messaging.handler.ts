@@ -11,6 +11,7 @@ import { ACSPermission } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
+import { messageIndexManager } from '../services/MessageIndexManager';
 
 // Dependencies (injected)
 let _db: any;
@@ -68,10 +69,26 @@ export async function handleReadMessagesFullCommand(
   console.log('[ENV] Mail - Read');
 
   // Get messages from database for current conference and message base
-  const messages = await _db.getMessages(session.currentConf || 1, session.currentMsgBase || 1, {
+  const confId = session.currentConf || 1;
+  const msgBaseId = session.currentMsgBase || 1;
+  const messages = await _db.getMessages(confId, msgBaseId, {
     privateOnly: false,
     userId: session.user?.username
   });
+
+  // Attach msgNumber from HeaderFile to align with AmiExpress pointers
+  try {
+    const headers = messageIndexManager.readHeaderFile(confId).sort((a, b) => a.msgNumb - b.msgNumb);
+    if (headers.length === messages.length) {
+      // Sort messages ascending by timestamp to align with append order
+      messages.sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime());
+      headers.forEach((h, idx) => {
+        (messages[idx] as any).msgNumber = h.msgNumb;
+      });
+    }
+  } catch (err) {
+    console.error('[handleReadMessagesFullCommand] Failed to map msg numbers from headers:', err);
+  }
 
   if (messages.length === 0) {
     socket.emit('ansi-output', '\r\n');
@@ -87,7 +104,7 @@ export async function handleReadMessagesFullCommand(
   session.tempData = session.tempData || {};
   session.tempData.msgReaderMessages = messages;
   session.tempData.msgReaderIndex = 0;
-  session.tempData.msgReaderHighestRead = session.lastMsgReadConf || 0;
+    session.tempData.msgReaderHighestRead = session.lastMsgReadConf || 0;
 
   // Display first message
   await displaySingleMessage(socket, session, 0);
@@ -100,15 +117,19 @@ export async function handleReadMessagesFullCommand(
 async function displaySingleMessage(socket: any, session: BBSSession, messageIndex: number): Promise<void> {
   const messages = session.tempData.msgReaderMessages;
   const msg = messages[messageIndex];
+  const msgNumber = (msg as any).msgNumber || msg.id;
 
   // Update current index
   session.tempData.msgReaderIndex = messageIndex;
+  if (!session.tempData.msgReaderHighestRead || msgNumber > session.tempData.msgReaderHighestRead) {
+    session.tempData.msgReaderHighestRead = msgNumber;
+  }
 
   // Clear screen - express.e:8891
   socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
   // Display message header - express.e:8898-8936
-  const isNew = msg.id > session.lastNewReadConf;
+  const isNew = msgNumber > (session.lastNewReadConf || 0);
   const newIndicator = isNew ? AnsiUtil.colorize('[NEW] ', 'yellow') : '';
   const privateIndicator = msg.isPrivate ? AnsiUtil.colorize('[PRIVATE] ', 'red') : '';
   const replyIndicator = msg.parentId ? AnsiUtil.colorize('[REPLY] ', 'magenta') : '';
@@ -453,11 +474,12 @@ async function listAllMessages(socket: any, session: BBSSession): Promise<void> 
   socket.emit('ansi-output', '\r\n');
 
   messages.forEach((msg: any, index: number) => {
-    const isNew = msg.id > session.lastNewReadConf;
+    const msgNumber = msg.msgNumber || msg.id;
+    const isNew = msgNumber > (session.lastNewReadConf || 0);
     const newIndicator = isNew ? AnsiUtil.colorize('[NEW] ', 'yellow') : '';
     const privateIndicator = msg.isPrivate ? AnsiUtil.colorize('[P] ', 'red') : '';
 
-    socket.emit('ansi-output', `${String(msg.id).padStart(4)} `);
+    socket.emit('ansi-output', `${String(msgNumber).padStart(4)} `);
     socket.emit('ansi-output', `${msg.author.substring(0, 20).padEnd(20)} `);
     socket.emit('ansi-output', `${newIndicator}${privateIndicator}${msg.subject.substring(0, 40)}\r\n`);
   });

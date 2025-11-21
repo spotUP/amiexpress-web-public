@@ -7,7 +7,17 @@
       "DOM"
     ],
     "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@amiexpress/bbs-door-sdk": ["./node_modules/@amiexpress/bbs-door-sdk/dist/index.d.ts"],
+      "@amiexpress/bbs-door-sdk/*": ["./node_modules/@amiexpress/bbs-door-sdk/dist/*"],
+      "@amiexpress/bbs-door-sdk/client": ["./node_modules/@amiexpress/bbs-door-sdk/dist/client/index.d.ts"],
+      "@amiexpress/bbs-door-sdk/server": ["./node_modules/@amiexpress/bbs-door-sdk/dist/server/index.d.ts"],
+      "@amiexpress/bbs-door-sdk/common": ["./node_modules/@amiexpress/bbs-door-sdk/dist/common/index.d.ts"]
+    },
+    "typeRoots": ["./node_modules/@types"],
     "strict": true,
+    "noImplicitAny": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -22,6 +32,7 @@
   "include": [
     "*.ts",
     "**/*.ts",
+    "types.d.ts",
     "../../core/**/*.ts",
     "../../engines/**/*.ts",
     "../../components/**/*.ts",

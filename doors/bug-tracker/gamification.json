@@ -1,0 +1,32 @@
+[
+  {
+    "userId": 1,
+    "userName": "Preview User",
+    "points": 0,
+    "level": 1,
+    "bugsReported": 0,
+    "bugsFixed": 0,
+    "criticalBugsFound": 0,
+    "commentsPosted": 0,
+    "achievements": [],
+    "achievementUnlockTimes": {},
+    "badges": [],
+    "joinedAt": 1762705453526,
+    "lastActive": 1762705453526
+  },
+  {
+    "userId": 7,
+    "userName": "sysop",
+    "points": 0,
+    "level": 1,
+    "bugsReported": 0,
+    "bugsFixed": 0,
+    "criticalBugsFound": 0,
+    "commentsPosted": 0,
+    "achievements": [],
+    "achievementUnlockTimes": {},
+    "badges": [],
+    "joinedAt": 1763227164419,
+    "lastActive": 1763660416147
+  }
+]

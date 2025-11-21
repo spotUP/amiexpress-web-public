@@ -1,24 +1,33 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { Database } from '../src/database';
 
+declare global {
+  // eslint-disable-next-line no-var
+  var testDb: Database | undefined;
+}
+
+let tempDbDir: string | null = null;
+
 beforeAll(async () => {
-  // Setup test database
-  const testDb = new Database(':memory:');
-  await testDb.initDatabase();
+  tempDbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amiexpress-tests-'));
+  process.env.DATABASE_DIR = tempDbDir;
+  process.env.DATABASE_FILE = 'test.db';
 
-  // Initialize default data
-  await testDb.initializeDefaultData();
+  const testDb = new Database();
+  await testDb.init();
 
-  // Wait much longer for initialization to complete
-  await new Promise(resolve => setTimeout(resolve, 5000));
-
-  // Store in global for tests
-  (global as any).testDb = testDb;
+  global.testDb = testDb;
 }, 60000);
 
 afterAll(async () => {
-  // Cleanup
-  const testDb = (global as any).testDb;
+  const testDb = global.testDb;
   if (testDb) {
     await testDb.close();
+  }
+
+  if (tempDbDir) {
+    fs.rmSync(tempDbDir, { recursive: true, force: true });
   }
 }, 30000);

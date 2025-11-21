@@ -85,7 +85,7 @@ import { ClientDoor } from '@amiexpress/sdk/client';
    ```typescript
    const bundler = new ClientDoorBundler();
    const bundle = await bundler.bundle({
-     doorPath: './sdk/examples/tracker-door/index.ts',
+     doorPath: './sdk/doors/tracker-door/index.ts',
      doorId: 'tracker-door',
      minify: true
    });
@@ -121,9 +121,9 @@ import { ClientDoor } from '@amiexpress/sdk/client';
 **Migrated tracker-door to use ClientDoor with REAL Web Audio:**
 
 **Modified Files:**
-- `sdk/examples/tracker-door/package.json` - Added `runtime: 'client'`
-- `sdk/examples/tracker-door/index.ts` - Changed to ClientDoor
-- `sdk/examples/tracker-door/audio/engine.ts` - **REMOVED WEB-AUDIO-MOCK!**
+- `sdk/doors/tracker-door/package.json` - Added `runtime: 'client'`
+- `sdk/doors/tracker-door/index.ts` - Changed to ClientDoor
+- `sdk/doors/tracker-door/audio/engine.ts` - **REMOVED WEB-AUDIO-MOCK!**
 
 **Before (BROKEN):**
 ```typescript
@@ -374,4 +374,4 @@ Tracker-door will now run with **real Tone.js in the browser**, exactly as it wa
 **Questions or Issues?**
 - Review: `sdk/DUAL_RUNTIME_ARCHITECTURE.md`
 - Code: `sdk/client/index.ts`, `web/backend/src/doors/client-door-bridge.ts`
-- Example: `sdk/examples/tracker-door/`
+- Example: `sdk/doors/tracker-door/`

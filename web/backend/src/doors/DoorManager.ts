@@ -13,6 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { spawn } from 'child_process';
 import { Socket } from 'socket.io';
 import AdmZip from 'adm-zip';
 import { getAmigaDoorManager, DoorArchive } from './amigaDoorManager';
@@ -49,6 +50,9 @@ interface DoorManagerState {
   selectedIndex: number;
   doors: DoorInfo[];
   currentDoor?: DoorInfo;
+  lastReloadStatus?: Record<string, string>;
+  lastReloadLog?: Record<string, string>;
+  filter?: string;
   uploadBuffer?: Buffer;
   uploadFilename?: string;
   docsContent?: string;
@@ -71,11 +75,13 @@ export class DoorManager {
   private doorsPath: string;
   private archivesPath: string;
   private inputHandler?: (data: string) => void;
+  private projectRoot: string;
 
   constructor(socket: Socket, session?: any) {
     this.socket = socket;
     this.session = session;
     this.doorsPath = path.join(config.get('dataDir'), 'Doors');
+    this.projectRoot = path.resolve(__dirname, '..', '..', '..');
     this.archivesPath = path.join(config.get('dataDir'), 'Doors', 'archives');
 
     // Ensure directories exist
@@ -87,6 +93,8 @@ export class DoorManager {
       mode: 'list',
       selectedIndex: 0,
       doors: [],
+      lastReloadStatus: {},
+      lastReloadLog: {},
       scrollOffset: 0
     };
 
@@ -408,7 +416,9 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR MANAGER ', 80) + '\x1b[0m\r\n');
     this.socket.emit('ansi-output', '\r\n');
 
-    if (this.state.doors.length === 0) {
+    const doors = this.applyFilter(this.state.filter || '');
+
+    if (doors.length === 0) {
       this.socket.emit('ansi-output', '\x1b[33mNo doors installed.\x1b[0m\r\n\r\n');
     } else {
       this.socket.emit('ansi-output', '\x1b[36mInstalled Doors:\x1b[0m\r\n\r\n');
@@ -416,16 +426,17 @@ export class DoorManager {
       // Calculate visible range (show 15 doors at a time)
       const pageSize = 15;
       const start = this.state.scrollOffset;
-      const end = Math.min(start + pageSize, this.state.doors.length);
+      const end = Math.min(start + pageSize, doors.length);
 
       for (let i = start; i < end; i++) {
-        const door = this.state.doors[i];
+        const door = doors[i];
         const isSelected = i === this.state.selectedIndex;
 
         // Format line
         const status = door.installed ? '\x1b[32m[*]\x1b[0m' : '\x1b[31m[ ]\x1b[0m';
-        const type = door.type === 'typescript' ? 'TS' : door.type === 'amiga' ? 'AMI' : 'ARC';
-        const name = door.name.substring(0, 30).padEnd(30);
+        const type = door.type === 'typescript' ? 'TS' : door.type === 'python' ? 'PY' : door.type === 'arexx' ? 'RX' : door.type === 'amiga' ? 'AMI' : 'ARC';
+        const hot = this.supportsHotReload(door) ? '\x1b[35mH\x1b[0m' : ' ';
+        const name = door.name.substring(0, 24).padEnd(24);
         const size = this.formatSize(door.size);
 
         // Show BBS command if available (for installed doors)
@@ -434,16 +445,16 @@ export class DoorManager {
 
         if (isSelected) {
           // Blue background for selected
-          this.socket.emit('ansi-output', `\x1b[0;37;44m ${status} [${type}] ${commandDisplay} ${name} ${size} \x1b[0m\r\n`);
+          this.socket.emit('ansi-output', `\x1b[0;37;44m ${status} [${type}${hot}] ${commandDisplay} ${name} ${size} \x1b[0m\r\n`);
         } else {
-          this.socket.emit('ansi-output', ` ${status} \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m\r\n`);
+          this.socket.emit('ansi-output', ` ${status} \x1b[33m[${type}${hot}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m\r\n`);
         }
       }
 
       // Show scroll indicator
-      if (this.state.doors.length > pageSize) {
+      if (doors.length > pageSize) {
         const current = Math.floor(this.state.selectedIndex / pageSize) + 1;
-        const total = Math.ceil(this.state.doors.length / pageSize);
+        const total = Math.ceil(doors.length / pageSize);
         this.socket.emit('ansi-output', `\r\n\x1b[90mPage ${current}/${total}\x1b[0m\r\n`);
       }
     }
@@ -454,7 +465,10 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[33m↑/↓\x1b[0m Navigate  ');
     this.socket.emit('ansi-output', '\x1b[33mENTER\x1b[0m Info  ');
     this.socket.emit('ansi-output', '\x1b[33mU\x1b[0m Upload  ');
-    this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
+    this.socket.emit('ansi-output', '\x1b[33mF\x1b[0m Filter  ');
+    this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit  ');
+    this.socket.emit('ansi-output', '\x1b[33mL\x1b[0m Logs\r\n');
+    this.socket.emit('ansi-output', '\x1b[90m[H badge = hot reloadable; Filter matches name/cmd/type; L shows last reload log]\x1b[0m\r\n');
   }
 
   /**
@@ -485,6 +499,14 @@ export class DoorManager {
     this.socket.emit('ansi-output', `\x1b[0;36mSize:\x1b[0m ${this.formatSize(door.size)}\r\n`);
     this.socket.emit('ansi-output', `\x1b[0;36mDate:\x1b[0m ${door.uploadDate.toLocaleDateString()}\r\n`);
     this.socket.emit('ansi-output', `\x1b[0;36mStatus:\x1b[0m ${door.installed ? '\x1b[32mInstalled\x1b[0m' : '\x1b[31mNot Installed\x1b[0m'}\r\n`);
+    const lastStatus = this.state.lastReloadStatus?.[door.id];
+    if (lastStatus) {
+      this.socket.emit('ansi-output', `\x1b[0;36mLast Reload:\x1b[0m ${lastStatus}\r\n`);
+    }
+    const lastLog = this.state.lastReloadLog?.[door.id];
+    if (lastLog) {
+      this.socket.emit('ansi-output', `\x1b[0;36mReload Log:\x1b[0m (press L to view)\r\n`);
+    }
 
     if (door.author) {
       this.socket.emit('ansi-output', `\x1b[0;36mAuthor:\x1b[0m ${door.author}\r\n`);
@@ -528,18 +550,242 @@ export class DoorManager {
       this.socket.emit('ansi-output', '\x1b[33mD\x1b[0m Documentation  ');
     }
 
+    if (this.supportsHotReload(door)) {
+      this.socket.emit('ansi-output', '\x1b[33mR\x1b[0m Reload  ');
+      if (this.state.lastReloadLog?.[door.id]) {
+        this.socket.emit('ansi-output', '\x1b[33mL\x1b[0m Log  ');
+      }
+    }
+
     this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
+  }
+
+  /**
+   * Determine if a door supports hot reload (TypeScript/Python/AREXX)
+   */
+  private supportsHotReload(door: DoorInfo): boolean {
+    const type = ((door as any).type || door.type || '').toString().toLowerCase();
+    return ['ts', 'typescript', 'js', 'javascript', 'arexx', 'rexx', 'python', 'py'].includes(type);
+  }
+
+  /**
+   * Show a lightweight log summary for the selected door
+   */
+  private showLogPanel(): void {
+    const doors = this.applyFilter(this.state.filter || '');
+    if (doors.length === 0) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mNo doors to show logs for (filter?)\x1b[0m\r\n');
+      return;
+    }
+    const door = doors[Math.max(0, Math.min(this.state.selectedIndex, doors.length - 1))];
+    const log = this.state.lastReloadLog?.[door.id];
+    const status = this.state.lastReloadStatus?.[door.id];
+
+    this.socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR LOG ', 80) + '\x1b[0m\r\n\r\n');
+    this.socket.emit('ansi-output', `\x1b[0;36mDoor:\x1b[0m ${door.name}\r\n`);
+    this.socket.emit('ansi-output', `\x1b[0;36mStatus:\x1b[0m ${status || 'n/a'}\r\n`);
+    this.socket.emit('ansi-output', '\r\n\x1b[0;33mLast Reload Log:\x1b[0m\r\n');
+    if (!log) {
+      this.socket.emit('ansi-output', '\x1b[90m(no log captured yet)\x1b[0m\r\n');
+    } else {
+      const lines = log.split(/\r?\n/);
+      const tail = lines.slice(-20); // show last 20 lines
+      tail.forEach(line => this.socket.emit('ansi-output', `${line}\r\n`));
+      if (lines.length > tail.length) {
+        this.socket.emit('ansi-output', '\x1b[90m... (truncated)\x1b[0m\r\n');
+      }
+    }
+    this.socket.emit('ansi-output', '\r\n\x1b[33mB\x1b[0m Back    \x1b[33mQ\x1b[0m Quit\r\n');
+    this.state.mode = 'docs';
+    this.state.docsContent = log || '';
+    this.state.scrollOffset = 0;
+  }
+
+  /**
+   * Apply filter term (case-insensitive substring on name/command/type)
+   */
+  private applyFilter(term: string): DoorInfo[] {
+    const t = term.trim().toLowerCase();
+    const all = this.state.doors;
+    if (!t) return all;
+    return all.filter(d => {
+      const name = (d.name || '').toLowerCase();
+      const cmd = ((d as any).command || '').toLowerCase();
+      const type = ((d as any).type || '').toLowerCase();
+      return name.includes(t) || cmd.includes(t) || type.includes(t);
+    });
+  }
+
+  /**
+   * Resolve the working directory for a given door
+   */
+  private resolveDoorPath(door: DoorInfo): string | null {
+    const candidates: string[] = [];
+
+    if ((door as any).resolvedPath) {
+      candidates.push((door as any).resolvedPath);
+    }
+    if ((door as any).location) {
+      candidates.push(path.join(this.projectRoot, (door as any).location));
+    }
+    if ((door as any).doorName) {
+      candidates.push(path.join(this.doorsPath, (door as any).doorName));
+    }
+    if (door.filename) {
+      candidates.push(path.join(this.doorsPath, path.basename(door.filename, path.extname(door.filename))));
+    }
+
+    for (const candidate of candidates) {
+      if (candidate && fs.existsSync(candidate)) {
+        const stat = fs.statSync(candidate);
+        if (stat.isDirectory()) {
+          return candidate;
+        }
+        return path.dirname(candidate);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Hot reload a door by rebuilding (if applicable) and re-registering the .info
+   */
+  private async hotReloadDoor(door: DoorInfo): Promise<void> {
+    if (!this.supportsHotReload(door)) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mHot reload is only available for TypeScript/Python/AREXX doors\x1b[0m\r\n');
+      return;
+    }
+
+    const doorPath = this.resolveDoorPath(door);
+    if (!doorPath) {
+      this.socket.emit('ansi-output', '\r\n\x1b[31mCould not resolve door path for reload\x1b[0m\r\n');
+      return;
+    }
+
+    const doorName =
+      (door as any).doorName ||
+      (door as any).command ||
+      path.basename(doorPath);
+
+    this.socket.emit('ansi-output', `\r\n\x1b[33mReloading ${doorName}...\x1b[0m\r\n`);
+
+    // Run build if package.json has a build script
+    let buildLog = '';
+    const appendBuildLog = (chunk: Buffer | string) => {
+      buildLog += chunk.toString();
+      if (buildLog.length > 5000) {
+        buildLog = buildLog.slice(buildLog.length - 5000);
+      }
+    };
+
+    try {
+      const pkgPath = path.join(doorPath, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        if (pkg.scripts && pkg.scripts.build) {
+          await new Promise<void>((resolve) => {
+            this.socket.emit('ansi-output', '\x1b[36m* Running npm run build...\x1b[0m\r\n');
+            const proc = spawn('npm', ['run', 'build'], {
+              cwd: doorPath,
+              stdio: ['ignore', 'pipe', 'pipe']
+            });
+            proc.stdout?.on('data', data => appendBuildLog(data));
+            proc.stderr?.on('data', data => appendBuildLog(data));
+            proc.on('exit', () => resolve());
+          });
+        }
+      }
+    } catch (err) {
+      this.socket.emit('ansi-output', `\x1b[31mBuild step failed: ${(err as Error).message}\x1b[0m\r\n`);
+      this.state.lastReloadStatus = {
+        ...(this.state.lastReloadStatus || {}),
+        [door.id]: `Build failed: ${(err as Error).message}`
+      };
+      this.state.lastReloadLog = {
+        ...(this.state.lastReloadLog || {}),
+        [door.id]: buildLog
+      };
+    }
+
+    // Reinstall to refresh Commands/BBSCmd and local configs
+    try {
+      await new Promise<void>((resolve) => {
+        this.socket.emit('ansi-output', '\x1b[36m* Refreshing door registration...\x1b[0m\r\n');
+        const proc = spawn('node', [path.join(this.projectRoot, 'dev/scripts/install-sdk-doors.js'), '--door', doorName, '--quiet'], {
+          cwd: this.projectRoot,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        proc.stdout?.on('data', data => appendBuildLog(data));
+        proc.stderr?.on('data', data => appendBuildLog(data));
+        proc.on('exit', () => resolve());
+      });
+
+      // Refresh door list to pick up size/installed flag
+      await this.scanDoors();
+      this.state.currentDoor = this.state.doors.find(d => d.name === door.name || (d as any).doorName === (door as any).doorName) || door;
+
+      this.socket.emit('ansi-output', '\x1b[32m* Reload complete\x1b[0m\r\n');
+      this.state.lastReloadStatus = {
+        ...(this.state.lastReloadStatus || {}),
+        [door.id]: 'Success'
+      };
+      this.state.lastReloadLog = {
+        ...(this.state.lastReloadLog || {}),
+        [door.id]: buildLog
+      };
+      this.showInfo();
+    } catch (err) {
+      this.socket.emit('ansi-output', `\x1b[31mReload failed: ${(err as Error).message}\x1b[0m\r\n`);
+      this.state.lastReloadStatus = {
+        ...(this.state.lastReloadStatus || {}),
+        [door.id]: `Failed: ${(err as Error).message}`
+      };
+      this.state.lastReloadLog = {
+        ...(this.state.lastReloadLog || {}),
+        [door.id]: buildLog
+      };
+    }
   }
 
   /**
    * Display documentation viewer
    */
   private showDocs(): void {
+    if (this.state.docsContent) {
+      this.renderDocsContent();
+      return;
+    }
     if (!this.state.currentDoor) return;
-
-    // Launch interactive archive browser
     this.browseArchive();
+  }
+
+  /**
+   * Render docsContent with simple paging
+   */
+  private renderDocsContent(): void {
+    const content = this.state.docsContent || '';
+    const lines = content.split('\n');
+    const pageSize = 20;
+    const start = this.state.scrollOffset;
+    const end = Math.min(start + pageSize, lines.length);
+
+    this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR LOG ', 80) + '\x1b[0m\r\n\r\n');
+
+    for (let i = start; i < end; i++) {
+      this.socket.emit('ansi-output', `${lines[i]}\r\n`);
+    }
+
+    if (lines.length > pageSize) {
+      const current = Math.floor(this.state.scrollOffset / pageSize) + 1;
+      const total = Math.ceil(lines.length / pageSize);
+      this.socket.emit('ansi-output', `\r\n\x1b[90mPage ${current}/${total}\x1b[0m\r\n`);
+    }
+
+    this.socket.emit('ansi-output', '\r\n\x1b[33m↑/↓\x1b[0m Scroll  \x1b[33mB\x1b[0m Back  \x1b[33mQ\x1b[0m Quit\r\n');
   }
 
   /**
@@ -1383,12 +1629,42 @@ export class DoorManager {
       return;
     }
 
+    // F - Filter
+    if (key === 'f') {
+      this.promptFilter();
+      return;
+    }
+
     // Q - Quit
     if (key === 'q') {
       this.cleanup();
       this.socket.emit('door-exit');
       return;
     }
+
+    // L - Logs
+    if (key === 'l') {
+      this.showLogPanel();
+      return;
+    }
+  }
+
+  /**
+   * Prompt for filter term
+   */
+  private promptFilter(): void {
+    this.socket.emit('ansi-output', '\r\n\x1b[0;33mEnter filter (name/cmd/type), or blank to clear:\x1b[0m ');
+
+    const onInput = (data: string) => {
+      this.socket.off('command', onInput);
+      const term = data.trim();
+      this.state.filter = term.length > 0 ? term : undefined;
+      this.state.selectedIndex = 0;
+      this.state.scrollOffset = 0;
+      this.showList();
+    };
+
+    this.socket.once('command', onInput);
   }
 
   /**
@@ -1413,6 +1689,21 @@ export class DoorManager {
     // D - Documentation
     if (key === 'd' && (door.readme || door.nfo)) {
       this.state.docsContent = door.readme || door.nfo || '';
+      this.state.scrollOffset = 0;
+      this.state.mode = 'docs';
+      this.showDocs();
+      return;
+    }
+
+    // R - Hot reload (TS/Python/AREXX)
+    if (key === 'r' && this.supportsHotReload(door)) {
+      this.hotReloadDoor(door);
+      return;
+    }
+
+    // L - View last reload log
+    if (key === 'l' && this.supportsHotReload(door) && this.state.lastReloadLog?.[door.id]) {
+      this.state.docsContent = this.state.lastReloadLog?.[door.id] || '';
       this.state.scrollOffset = 0;
       this.state.mode = 'docs';
       this.showDocs();
@@ -1461,6 +1752,13 @@ export class DoorManager {
       this.state.mode = 'info';
       this.state.scrollOffset = 0;
       this.showInfo();
+      return;
+    }
+
+    // Q - quit out of log panel back to list
+    if (key === 'q' && this.state.mode === 'docs') {
+      this.state.mode = 'list';
+      this.showList();
       return;
     }
 

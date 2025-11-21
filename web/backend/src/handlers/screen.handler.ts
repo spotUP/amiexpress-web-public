@@ -11,10 +11,11 @@ import * as path from 'path';
 import type { BBSSession } from '../index';
 import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
-import { sequentialFileManager } from '../services/SequentialFileManager';
+import { sequentialFileManager, formatNumberedFilename } from '../services/SequentialFileManager';
 import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
 import { findCaseInsensitive } from '../utils/fs-amiga.util';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
+import { findSecurityScreen } from '../utils/screen-security.util';
 
 const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG === '1';
 const screenDebug = (...args: any[]) => {
@@ -57,9 +58,10 @@ export async function parseMciCodes(
   bbsName: string = 'AmiExpress-Web',
   sysopName: string = 'Sysop',
   location: string = 'The Internet'
-): Promise<{ parsed: string; commands: string[] }> {
+): Promise<{ parsed: string; commands: string[]; hasPause: boolean }> {
   let parsed = content;
   const commandsToExecute: string[] = [];
+  let hasPause = false;
 
   // Get user data safely
   const user = session.user || {};
@@ -403,11 +405,18 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Store for async file loading - we'll process these after parsing
   screenDebug('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
   // Support both ~SS_ and ~2S (short form)
-  const ssRegex = /~(?:SS_|2S)([^|\r\n]+)(\|\|)?/g;
+  const ssRegex = /~(?:SS_|2S)([^~|\r\n]+)(\|\|)?/g;
   let ssMatch;
   const filesToDisplay: string[] = [];
+
+  const normalizeScreenReference = (screenRef: string): string => {
+    if (screenRef.includes(':')) {
+      return screenRef;
+    }
+    return screenRef.replace(/\.(txt|TXT|rip|RIP)$/g, '');
+  };
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
-    const filename = ssMatch[1].trim();
+    const filename = normalizeScreenReference(ssMatch[1].trim());
     screenDebug('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
     filesToDisplay.push(filename);
     parsed = parsed.replace(ssMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
@@ -452,17 +461,21 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   }
 
   // ~SR_ - String Replace / Random File Display (express.e:5531-5560)
-  // Format: ~SR_<path>/<basename> - displays random file from numbered set
-  // Example: ~SR_WORK:bbs/Screens/logoff/logoff displays logoff.1, logoff.2, etc.
-  const srRegex = /~SR_([^|\r\n]+)(\|\|)?/g;
+  // Format: ~<max>SR_<path>/<basename> - displays random file from numbered set (max optional, defaults to 99)
+  // Example: ~SR_WORK:bbs/Screens/logoff/logoff displays 001.logoff.txt, 002.logoff.txt, etc.
+  const srRegex = /~(\d*)SR_([^|\r\n]+)(\|\|)?/g;
   let srMatch;
   while ((srMatch = srRegex.exec(parsed)) !== null) {
-    const basePath = srMatch[1].trim();
+    const maxCountRaw = srMatch[1];
+    const basePath = srMatch[2].trim();
     screenDebug('[MCI] Found ~SR_ random file request:', basePath);
 
-    // Pick a random number (1-99) and try to find the file
-    const randomNum = Math.floor(Math.random() * 99) + 1;
-    const randomFile = `${basePath}.${randomNum}`;
+    // Optional numeric prefix sets the upper bound (default 99 like express.e used)
+    const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
+
+    // Pick a random number (1-maxCount) and format with 3-digit prefix before filename
+    const randomNum = Math.floor(Math.random() * maxCount) + 1;
+    const randomFile = formatNumberedFilename(basePath, randomNum);
 
     screenDebug('[MCI] ~SR_ selected random file:', randomFile);
     filesToDisplay.push(randomFile);
@@ -472,6 +485,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // ~SP. - Stop Pause (express.e:5455-5461)
   // Displays pause prompt and waits for keypress
   parsed = parsed.replace(/~SP\./g, () => {
+    hasPause = true;
     // Set session state to wait for keypress
     // Note: In web version, this is just a visual prompt since we can't block
     // The actual pause handling needs to be implemented in the command handler
@@ -553,6 +567,9 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       const embedded = await parseMciCodes(screenData.content, session, bbsName, sysopName, location);
       // Add any commands from embedded file to our command list
       commandsToExecute.push(...embedded.commands);
+      if (embedded.hasPause) {
+        hasPause = true;
+      }
       // Replace placeholder with embedded content
       parsed = parsed.replace(placeholder, embedded.parsed);
     } else {
@@ -562,7 +579,11 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     }
   }
 
-  return { parsed, commands: commandsToExecute };
+  if (session) {
+    session.lastScreenHadPause = hasPause;
+  }
+
+  return { parsed, commands: commandsToExecute, hasPause };
 }
 
 /**
@@ -587,6 +608,10 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   screenDebug(`[loadScreenFile] Conference ID: ${conferenceId}, Node ID: ${nodeId}`);
   screenDebug(`[loadScreenFile] Terminal type: ${session?.terminalType || 'unknown'} (${session?.screenWidth}x${session?.screenHeight})`);
   screenDebug(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
+  const userSecLevel = session?.user?.secLevel ?? 0;
+  const screenBaseNoExt = screenName.replace(/\.[^/.]+$/, ''); // strip extension for security search
+  const isAssignPath = screenName.includes(':');
+  const normalizedName = screenName.toLowerCase();
 
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
   // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
@@ -645,7 +670,8 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   } else if (screenName.includes('/')) {
     // Relative path with slashes - try under dataDir root
     const fsPath = path.join(baseDir, screenName.split('/').join(path.sep));
-    paths.push(fsPath);
+    const resolved = findCaseInsensitive(path.dirname(fsPath), path.basename(fsPath));
+    paths.push(resolved || fsPath);
   }
 
   // Define search directories and filenames to try (case-insensitive, AmigaOS compatible)
@@ -703,6 +729,19 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   let attemptNum = 0;
 
   for (const location of searchLocations) {
+    // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
+    if (!isAssignPath) {
+      const securityBasePath = path.join(location.dir, screenBaseNoExt);
+      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel);
+      if (securityVariant) {
+        screenDebug(`[loadScreenFile] ✓ Found security screen for ${screenName} at: ${securityVariant}`);
+        try {
+          return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false };
+        } catch (error) {
+          console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
+        }
+      }
+    }
     for (const filename of filenameVariations) {
       attemptNum++;
       const expectedPath = path.join(location.dir, filename);
@@ -796,14 +835,14 @@ export function addAnsiEscapes(content: string): string {
  * @param screenName - Name of screen to display
  * @returns true if screen was displayed successfully, false otherwise
  */
-export async function displayScreen(socket: any, session: BBSSession, screenName: string): Promise<boolean> {
+export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true): Promise<boolean> {
   screenDebug(`[displayScreen] ========================================`);
   screenDebug(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
   screenDebug(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
   screenDebug(`[displayScreen] User: ${session.user?.name || 'guest'}`);
   screenDebug(`[displayScreen] ========================================`);
 
-  const screenData = loadScreenFile(screenName, session.currentConf, 0, session);
+  const screenData = loadScreenFile(screenName, session.currentConf, session.nodeId || 0, session);
 
   if (screenData) {
     const { content, isPetscii } = screenData;
@@ -822,6 +861,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       const result = await parseMciCodes(content, session);
       parsed = result.parsed;
       commands = result.commands;
+      session.lastScreenHadPause = result.hasPause;
 
       // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
       parsed = addAnsiEscapes(parsed);
@@ -829,6 +869,34 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
       // First normalize any existing \r\n to \n, then convert all \n to \r\n
       parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+    }
+
+    // Auto-paginate long screens (e.g., >25 lines like real AmiExpress More prompt)
+    const pageHeight = session?.screenHeight || 25;
+    const lines = parsed.split(/\r\n|\n/);
+    const pageSize = Math.max(1, pageHeight - 1); // leave room for prompt line
+    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+
+    const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
+      const chunk = lines.slice(startIdx, endIdx).join('\r\n');
+      const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)?' : '';
+      socket.emit(eventName, chunk + promptLine);
+    };
+
+    if (!session.lastScreenHadPause && lines.length > pageHeight) {
+      session.paginatedScreen = {
+        lines,
+        nextIndex: pageSize,
+        pageSize,
+        eventName,
+        commands,
+      };
+      if (commands.length > 0) {
+        session.queuedScreenCommands = commands;
+      }
+      emitPage(0, pageSize, true);
+      session.lastScreenHadPause = true;
+      return true;
     }
 
     // Double-buffered display: Build complete frame buffer before sending
@@ -841,12 +909,17 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
 
     // Send entire frame in one atomic operation
     // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
-    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
     screenDebug(`[displayScreen] Emitting ${eventName} event`);
     socket.emit(eventName, frameBuffer);
 
     // Execute any ~XC/~XI commands found in screen file (async, non-blocking)
-    if (commands.length > 0) {
+    if (commands.length > 0 && !runCommands) {
+      // Defer execution until caller triggers it (e.g., after a pause)
+      session.queuedScreenCommands = commands;
+      session.pendingScreenCommand = undefined;
+      session.screenCommandResolver = null;
+      return true;
+    } else if (commands.length > 0) {
       screenDebug(`[displayScreen] ==========================================`);
       screenDebug(`[displayScreen] EXECUTING ${commands.length} COMMANDS FROM SCREEN FILE: ${screenName}`);
       screenDebug(`[displayScreen] Commands:`, commands);
@@ -906,6 +979,137 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     console.error(`[displayScreen] ========================================`);
     return false;
   }
+}
+
+/**
+ * Execute any queued screen commands (used when displayScreen was called with runCommands=false)
+ */
+export async function runQueuedScreenCommands(socket: any, session: BBSSession): Promise<void> {
+  const commands = session.queuedScreenCommands || [];
+  if (commands.length === 0) {
+    return;
+  }
+
+  const commandsHash = commands.join('|');
+  if (commandsHash && session.lastScreenCommandsHash === commandsHash) {
+    session.queuedScreenCommands = [];
+    return;
+  }
+  session.lastScreenCommandsHash = commandsHash;
+
+  const { handleCommand } = require('./command.handler');
+  session.pendingScreenCommand = new Promise<void>(resolve => {
+    session.screenCommandResolver = resolve;
+  });
+  session.executingScreenCommand = true;
+
+  try {
+    for (let i = 0; i < commands.length; i++) {
+      const commandStr = commands[i];
+      screenDebug(`[displayScreen] ------------------------------------------`);
+      screenDebug(`[displayScreen] EXECUTING QUEUED COMMAND ${i + 1}/${commands.length}:`, commandStr);
+      try {
+        await handleCommand(socket, session, commandStr);
+      } catch (error) {
+        console.error(`[displayScreen] ✗ ERROR executing queued command ${commandStr}:`, error);
+      }
+    }
+  } finally {
+    session.queuedScreenCommands = [];
+    session.executingScreenCommand = false;
+    if (session.screenCommandResolver) {
+      session.screenCommandResolver();
+      session.screenCommandResolver = null;
+      session.pendingScreenCommand = undefined;
+    }
+  }
+}
+
+/**
+ * Start pagination for arbitrary lines (non-screen MCI output).
+ */
+export function startPagination(
+  socket: any,
+  session: BBSSession,
+  lines: string[],
+  eventName: 'ansi-output' | 'petscii-output' = 'ansi-output',
+  commands?: string[],
+  onComplete?: () => void
+): void {
+  const pageHeight = session?.screenHeight || 25;
+  const pageSize = Math.max(1, pageHeight - 1);
+  session.paginatedScreen = {
+    lines,
+    nextIndex: pageSize,
+    pageSize,
+    eventName,
+    commands,
+    onComplete,
+  };
+  const chunk = lines.slice(0, pageSize).join('\r\n');
+  socket.emit(eventName, chunk + '\r\n(Pause)...More(y/n/ns)?');
+  session.lastScreenHadPause = true;
+}
+
+/**
+ * Handle paginated screen input (More(y/n/ns)?)
+ * Returns true if handled, false otherwise.
+ */
+export async function handlePaginatedScreenInput(socket: any, session: BBSSession, data: string): Promise<boolean> {
+  const paged = session.paginatedScreen;
+  if (!paged) {
+    return false;
+  }
+
+  const key = (data || '').trim().toUpperCase();
+  const yes = key === '' || key === 'Y' || key === '\r' || key === '\n';
+  const no = key === 'N';
+  const noStop = key === 'NS';
+
+  const lines = paged.lines;
+  const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
+    const chunk = lines.slice(startIdx, endIdx).join('\r\n');
+    const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)?' : '';
+    socket.emit(paged.eventName, chunk + promptLine);
+  };
+
+  // NS: dump the rest without further prompts
+  if (noStop) {
+    emitPage(paged.nextIndex, lines.length, false);
+    session.paginatedScreen = undefined;
+    if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
+      await runQueuedScreenCommands(socket, session);
+    }
+    if (paged.onComplete) paged.onComplete();
+    return true;
+  }
+
+  // N: abort remaining pages, do not run queued commands
+  if (no) {
+    session.paginatedScreen = undefined;
+    session.queuedScreenCommands = [];
+    session.pendingScreenCommand = undefined;
+    session.screenCommandResolver = null;
+    return true;
+  }
+
+  // Default: YES / ENTER
+  const start = paged.nextIndex;
+  const end = Math.min(start + paged.pageSize, lines.length);
+  const hasMore = end < lines.length;
+
+  emitPage(start, end, hasMore);
+  paged.nextIndex = end;
+
+  if (!hasMore) {
+    session.paginatedScreen = undefined;
+    if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
+      await runQueuedScreenCommands(socket, session);
+    }
+    if (paged.onComplete) paged.onComplete();
+  }
+
+  return true;
 }
 
 /**

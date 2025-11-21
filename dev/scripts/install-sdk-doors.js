@@ -3,7 +3,7 @@
  * Install SDK Example Doors to BBS
  *
  * This script:
- * 1. Reads all SDK example doors from sdk/examples/
+ * 1. Reads all SDK example doors from sdk/doors/
  * 2. Generates .info files in Commands/BBSCmd/
  * 3. Copies door source files to doors/
  *
@@ -15,43 +15,140 @@ const path = require('path');
 
 // Paths
 const projectRoot = path.resolve(__dirname, '../..');
-const sdkExamplesDir = path.join(projectRoot, 'sdk/examples');
+const sdkExamplesDir = path.join(projectRoot, 'sdk/doors');
 const commandsDir = path.join(projectRoot, 'Commands/BBSCmd');
 const doorsDir = path.join(projectRoot, 'doors');
 
-console.log('[START] Installing SDK Example Doors to BBS...\n');
-console.log(`Project root: ${projectRoot}`);
-console.log(`SDK examples: ${sdkExamplesDir}`);
-console.log(`Commands dir: ${commandsDir}`);
-console.log(`Doors dir: ${doorsDir}\n`);
+const args = process.argv.slice(2);
+const doorFilter = [];
+let quiet = false;
+
+for (let i = 0; i < args.length; i++) {
+  const arg = args[i];
+  if (arg === '--door' || arg === '-d') {
+    const name = args[i + 1];
+    if (name) {
+      doorFilter.push(name);
+      i++;
+    }
+  } else if (arg === '--quiet' || arg === '-q') {
+    quiet = true;
+  }
+}
+
+const log = (...msgs) => {
+  if (!quiet) console.log(...msgs);
+};
+
+log('[START] Installing SDK Example Doors to BBS...\n');
+log(`Project root: ${projectRoot}`);
+log(`SDK examples: ${sdkExamplesDir}`);
+log(`Commands dir: ${commandsDir}`);
+log(`Doors dir: ${doorsDir}\n`);
 
 // Ensure directories exist
 if (!fs.existsSync(commandsDir)) {
   fs.mkdirSync(commandsDir, { recursive: true });
-  console.log(`✓ Created Commands/BBSCmd/ directory`);
+  log(`✓ Created Commands/BBSCmd/ directory`);
 }
 
 if (!fs.existsSync(doorsDir)) {
   fs.mkdirSync(doorsDir, { recursive: true });
-  console.log(`✓ Created doors/ directory`);
+  log(`✓ Created doors/ directory`);
 }
 
-// Get all SDK example doors
-const doors = fs.readdirSync(sdkExamplesDir).filter(name => {
-  const doorPath = path.join(sdkExamplesDir, name);
-  const pkgPath = path.join(doorPath, 'package.json');
-  return fs.statSync(doorPath).isDirectory() && fs.existsSync(pkgPath);
-});
+function collectDoors(root) {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root).filter(name => {
+    const doorPath = path.join(root, name);
+    const pkgPath = path.join(doorPath, 'package.json');
+    const isDoor = fs.existsSync(doorPath) && fs.statSync(doorPath).isDirectory() && fs.existsSync(pkgPath);
+    if (!isDoor) return false;
+    if (doorFilter.length > 0 && !doorFilter.includes(name)) return false;
+    return true;
+  });
+}
 
-console.log(`\nFound ${doors.length} SDK example doors:\n`);
+// Prefer actual doors/ tree; fall back to sdk/doors for legacy dev setups
+const doors = Array.from(new Set([
+  ...collectDoors(doorsDir),
+  ...collectDoors(sdkExamplesDir)
+]));
+
+log(`\nFound ${doors.length} SDK example doors:\n`);
 
 let installed = 0;
 let skipped = 0;
 let errors = 0;
 
+function copyRecursive(src, dest) {
+  const stat = fs.statSync(src);
+  if (stat.isDirectory()) {
+    // Skip Node modules to keep installs lean
+    if (path.basename(src).toLowerCase() === 'node_modules') {
+      return;
+    }
+
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+
+    for (const entry of fs.readdirSync(src)) {
+      copyRecursive(path.join(src, entry), path.join(dest, entry));
+    }
+  } else if (stat.isFile()) {
+    fs.copyFileSync(src, dest);
+  }
+}
+
+function ensureGwallConfigs(targetDoorPath) {
+  const shortcode =
+    (process.env.GWALL_BBS_CODE || process.env.GWALL_SHORTCODE || process.env.BBS_SHORTCODE || process.env.BBS_CODE || 'AMI')
+      .trim()
+      .substring(0, 3)
+      .toUpperCase();
+
+  const settingsPath = path.join(targetDoorPath, 'GWall.cfg');
+  const serverPath = path.join(targetDoorPath, 'GWALL.cfg');
+
+  if (!fs.existsSync(settingsPath)) {
+    const content = `4\n${shortcode}\n42626717772363\n`;
+    fs.writeFileSync(settingsPath, content, 'utf8');
+    console.log(`   ✓ Created default GWall.cfg (style/shortcode)`);
+  } else {
+    console.log(`   [INFO] GWall.cfg already present, leaving in place`);
+  }
+
+  if (!fs.existsSync(serverPath)) {
+    const host = process.env.GWALL_HOST || 'scenewall.bbs.io';
+    const port = process.env.GWALL_PORT || '1541';
+    const timeout = process.env.GWALL_TIMEOUT || '10';
+    const content = [
+      '; Global Wall network configuration',
+      `SERVERHOST=${host}`,
+      `SERVERPORT=${port}`,
+      '; timeout for connecting to server (seconds)',
+      `TIMEOUT=${timeout}`,
+      ''
+    ].join('\n');
+    fs.writeFileSync(serverPath, content, 'utf8');
+    console.log(`   ✓ Created default GWALL.cfg (network)`);
+  } else {
+    console.log(`   [INFO] GWALL.cfg already present, leaving in place`);
+  }
+}
+
+function ensureDoorAssets(doorName, targetDoorPath) {
+  if (doorName.toLowerCase() === 'gwall') {
+    ensureGwallConfigs(targetDoorPath);
+  }
+}
+
 for (const doorName of doors) {
   try {
-    const doorPath = path.join(sdkExamplesDir, doorName);
+    const sourceFromDoors = path.join(doorsDir, doorName);
+    const sourceFromSdk = path.join(sdkExamplesDir, doorName);
+    const doorPath = fs.existsSync(sourceFromDoors) ? sourceFromDoors : sourceFromSdk;
     const pkgPath = path.join(doorPath, 'package.json');
 
     // Read package.json
@@ -59,13 +156,30 @@ for (const doorName of doors) {
 
     // Get door metadata
     const bbsCommand = pkg.bbsCommand || doorName.toUpperCase().replace(/-/g, '');
-    const doorType = pkg.doorType || 'TS';
+    const doorType = (pkg.doorType || pkg.type || 'TS').toUpperCase();
     const description = pkg.description || '';
     const access = pkg.accessLevel !== undefined ? pkg.accessLevel : 0;
 
-    console.log(`[PACKAGE] ${doorName}`);
-    console.log(`   Command: ${bbsCommand}`);
-    console.log(`   Type: ${doorType}`);
+    // Quick validation: require a supported dev door type
+    const supportedTypes = ['TS', 'JS', 'PY', 'PYTHON', 'AREXX', 'REXX'];
+    if (!supportedTypes.includes(doorType)) {
+      console.error(`   [ERROR] Door ${doorName} has unsupported doorType/type '${doorType}'. Skipping.`);
+      errors++;
+      continue;
+    }
+
+    // Ensure entry point exists
+    const entryPoint = pkg.main || 'dist/index.js';
+    const entryPath = path.join(doorPath, entryPoint);
+    if (!fs.existsSync(entryPath)) {
+      console.error(`   [ERROR] Entry point missing (${entryPoint}) for ${doorName}. Did you run npm run build? Skipping.`);
+      errors++;
+      continue;
+    }
+
+    log(`[PACKAGE] ${doorName}`);
+    log(`   Command: ${bbsCommand}`);
+    log(`   Type: ${doorType}`);
 
     // Generate .info file content
     const infoContent = [
@@ -82,25 +196,36 @@ for (const doorName of doors) {
     // Write .info file
     const infoPath = path.join(commandsDir, `${bbsCommand}.info`);
     if (fs.existsSync(infoPath)) {
-      console.log(`   [WARNING]  .info file already exists, skipping`);
+      log(`   [WARNING]  .info file already exists, skipping`);
       skipped++;
     } else {
       fs.writeFileSync(infoPath, infoContent);
-      console.log(`   ✓ Created ${bbsCommand}.info`);
+      log(`   ✓ Created ${bbsCommand}.info`);
     }
 
-    // Copy door directory to doors/
     const targetDoorPath = path.join(doorsDir, doorName);
-    if (fs.existsSync(targetDoorPath)) {
-      console.log(`   [WARNING]  Door directory already exists in doors/, skipping copy`);
-    } else {
-      // Create symlink instead of copying (more efficient for development)
-      fs.symlinkSync(doorPath, targetDoorPath, 'dir');
-      console.log(`   ✓ Linked to doors/${doorName}`);
+    const targetExists = fs.existsSync(targetDoorPath);
+    const targetIsSymlink = targetExists && fs.lstatSync(targetDoorPath).isSymbolicLink();
+
+    if (targetIsSymlink) {
+      fs.unlinkSync(targetDoorPath);
+      log(`   [INFO] Removed existing symlink doors/${doorName}`);
     }
+
+    // If source is already the doors/ tree, just ensure configs. Otherwise copy from sdk/doors into doors/
+    if (doorPath === targetDoorPath) {
+      log(`   [INFO] Working directly from doors/${doorName}`);
+    } else if (!targetExists || targetIsSymlink) {
+      copyRecursive(doorPath, targetDoorPath);
+      log(`   ✓ Copied to doors/${doorName}`);
+    } else {
+      log(`   [WARNING]  Door directory already exists in doors/, leaving in place`);
+    }
+
+    ensureDoorAssets(doorName, targetDoorPath);
 
     installed++;
-    console.log('');
+    log('');
 
   } catch (error) {
     console.error(`   [ERROR] Error: ${error.message}\n`);
@@ -108,14 +233,14 @@ for (const doorName of doors) {
   }
 }
 
-console.log('\n' + '='.repeat(60));
-console.log(`[OK] Installation complete!`);
-console.log(`   Installed: ${installed}`);
-console.log(`   Skipped: ${skipped}`);
-console.log(`   Errors: ${errors}`);
-console.log('='.repeat(60));
+log('\n' + '='.repeat(60));
+log(`[OK] Installation complete!`);
+log(`   Installed: ${installed}`);
+log(`   Skipped: ${skipped}`);
+log(`   Errors: ${errors}`);
+log('='.repeat(60));
 
-if (installed > 0) {
+if (!quiet && installed > 0) {
   console.log('\n⚡ Restart the BBS server to load new commands:');
   console.log('   ./dev/scripts/kill-servers.sh && ./dev/scripts/start-servers.sh\n');
 }

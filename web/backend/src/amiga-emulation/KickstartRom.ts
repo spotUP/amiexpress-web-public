@@ -28,11 +28,17 @@ export class KickstartRom {
   private loadRom(): void {
     // Try AROS ROM first (open-source, can be committed to GitHub)
     // AROS ROM comes in two files: aros-rom.bin (256KB) + aros-ext.bin (256KB) = 512KB
-    const arosRomPaths = [
-      path.join(process.cwd(), 'data/amiga-roms'),                    // From web/backend/
-      path.join(process.cwd(), 'web/backend/data/amiga-roms'),        // From project root
-      path.join(__dirname, '../../data/amiga-roms'),                  // Relative to source
-    ];
+    const repoRoot = path.resolve(__dirname, '../../..');
+    const backendRoot = path.join(repoRoot, 'web/backend');
+    const arosRomPaths = Array.from(
+      new Set([
+        path.join(process.cwd(), 'data/amiga-roms'),
+        path.join(backendRoot, 'data/amiga-roms'),
+        path.join(repoRoot, 'data/amiga-roms'),
+        path.join(__dirname, '../../data/amiga-roms'),
+        path.join(__dirname, '../../../data/amiga-roms'),
+      ])
+    );
 
     // Try loading AROS ROM first
     for (const basePath of arosRomPaths) {
@@ -64,11 +70,15 @@ export class KickstartRom {
     // Fall back to Kickstart 3.1 ROM (copyrighted, only for local dev)
     console.log('[ROM] AROS ROM not found, trying Kickstart ROM...');
     const romFilename = 'Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom';
-    const possiblePaths = [
-      path.join(process.cwd(), 'data/amiga-roms', romFilename),                    // From web/backend/
-      path.join(process.cwd(), 'web/backend/data/amiga-roms', romFilename),        // From project root
-      path.join(__dirname, '../../data/amiga-roms', romFilename),                  // Relative to source
-    ];
+    const possiblePaths = Array.from(
+      new Set([
+        path.join(process.cwd(), 'data/amiga-roms', romFilename),
+        path.join(backendRoot, 'data/amiga-roms', romFilename),
+        path.join(repoRoot, 'data/amiga-roms', romFilename),
+        path.join(__dirname, '../../data/amiga-roms', romFilename),
+        path.join(__dirname, '../../../data/amiga-roms', romFilename),
+      ])
+    );
 
     let romPath: string | null = null;
     for (const testPath of possiblePaths) {

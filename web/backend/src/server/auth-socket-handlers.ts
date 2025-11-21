@@ -11,8 +11,11 @@ import { nodeFileManager } from '../services/NodeFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity } from '../utils/security.util';
 import { getSessionBySocketId, sessions, userSessions, socketToUser } from './session-manager';
-import { callersLog, displaySystemBulletins } from './database-helpers';
+import { callersLog } from './database-helpers';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
+import { sanitizeInput } from '../utils/input-normalizer.util';
+import { displayScreen, doPause } from '../handlers/screen.handler';
+import { runLoginBatches } from '../services/batch-scheduler';
 
 /**
  * Register authentication socket event handlers
@@ -44,10 +47,11 @@ export function registerAuthHandlers(socket: Socket) {
           return;
         }
       } else if (data.username && data.password) {
-        console.log('Socket login attempt with username/password:', data.username);
+        const safeUsername = sanitizeInput(data.username);
+        console.log('Socket login attempt with username/password:', safeUsername);
 
         // express.e:29627-29628 - Empty username counts as retry
-        if (data.username.trim().length === 0) {
+        if (safeUsername.length === 0) {
           session.loginRetryCount++;
           console.log(`Login retry count: ${session.loginRetryCount}/5 (empty username)`);
 
@@ -64,24 +68,24 @@ export function registerAuthHandlers(socket: Socket) {
         }
 
         // express.e:29605-29631 - Check if user exists first, then authenticate
-        const existingUser = await db.getUserByUsername(data.username);
+        const existingUser = await db.getUserByUsername(safeUsername);
 
         if (!existingUser) {
           // User not found - express.e:29608-29622
           // Prompt: "[R]etry your name or [C]ontinue as a new user?"
           console.log('User not found, prompting for new user creation');
           socket.emit('user-not-found', {
-            username: data.username,
-            prompt: data.username.toUpperCase() === 'NEW'
+            username: safeUsername,
+            prompt: safeUsername.toUpperCase() === 'NEW'
               ? '[C]ontinue as a new user? '
-              : `\r\nThe name ${data.username} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
+              : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
           });
           return;
         }
 
         // User exists, authenticate with password
-        console.log('[LOGIN] Authenticating user:', data.username);
-        user = await db.authenticateUser(data.username, data.password);
+        console.log('[LOGIN] Authenticating user:', safeUsername);
+        user = await db.authenticateUser(safeUsername, data.password);
         console.log('[LOGIN] Authentication result:', user ? 'SUCCESS' : 'FAILED');
         if (!user) {
           // express.e:29209 & 29343 - Invalid password message with linebreak
@@ -98,6 +102,9 @@ export function registerAuthHandlers(socket: Socket) {
 
           // express.e:29209 - aePuts('Invalid PassWord\b\n')
           socket.emit('login-failed', 'Invalid PassWord\r\n');
+          // Match express.e: immediately re-prompt for password without asking for username again
+          socket.emit('ansi-output', '\r\nInvalid PassWord\r\n');
+          socket.emit('prompt-password');
           return;
         }
         console.log('[LOGIN] User authenticated successfully, proceeding with login flow');
@@ -110,18 +117,18 @@ export function registerAuthHandlers(socket: Socket) {
         const refreshToken = await db.generateRefreshToken(user);
 
         // Send tokens to client for future use
-        socket.emit('login-success', {
-          user: {
-            id: user.id,
-            username: user.username,
-            realname: user.realname,
+      socket.emit('login-success', {
+        user: {
+          id: user.id,
+          username: user.username,
+          realname: user.realname,
             secLevel: user.secLevel,
             expert: user.expert,
             ansi: user.ansi
           },
-          token: accessToken,
-          refreshToken: refreshToken
-        });
+        token: accessToken,
+        refreshToken: refreshToken
+      });
       } else {
         socket.emit('login-failed', 'Missing credentials');
         return;
@@ -134,6 +141,13 @@ export function registerAuthHandlers(socket: Socket) {
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
+
+      // Run daily batch for this node (once per calendar day, per node) to mirror AmiExpress batch runner
+      try {
+        await runLoginBatches(session.nodeId || 0);
+      } catch (err) {
+        console.error('[LOGIN] Batch scheduler failed:', err);
+      }
 
       // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
       // This fixes the multi-socket connection issue where new sockets get fresh sessions
@@ -214,8 +228,25 @@ export function registerAuthHandlers(socket: Socket) {
           }
         });
       }
-      // Start the proper AmiExpress flow: bulletins first
-      displaySystemBulletins(socket, session);
+
+      // QuickLogon ('Q' at ANSI prompt) skips LOGON/BULL/CONF_BULL and jumps to menu
+      if (session.tempData?.quickLogon) {
+        session.tempData.quickLogon = false;
+        session.menuPause = true;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        const { displayMainMenu } = require('./command-handler/menu');
+        await displayMainMenu(socket, session);
+        return;
+      }
+
+      // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
+      const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
+      if (logonDisplayed && !session.lastScreenHadPause) {
+        doPause(socket, session);
+      }
+
+      // Begin bulletin flow: BULL -> NODE_BULL -> confScan -> CONF_BULL -> MENU
+      session.subState = LoggedOnSubState.DISPLAY_BULL;
       triggerSamiLogRefresh();
     } catch (error) {
       console.error('Socket login error:', error);
@@ -226,10 +257,11 @@ export function registerAuthHandlers(socket: Socket) {
   // Check if username exists (called before password prompt)
   socket.on('check-username', async (data: { username: string }) => {
     try {
-      console.log('🔍 Checking if username exists:', data.username);
+      const safeUsername = sanitizeInput(data.username);
+      console.log('🔍 Checking if username exists:', safeUsername);
 
       // Empty username check
-      if (data.username.trim().length === 0) {
+      if (safeUsername.length === 0) {
         session.loginRetryCount++;
         if (session.loginRetryCount >= 5) {
           socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
@@ -241,16 +273,16 @@ export function registerAuthHandlers(socket: Socket) {
         return;
       }
 
-      const existingUser = await db.getUserByUsername(data.username);
+      const existingUser = await db.getUserByUsername(safeUsername);
 
       if (!existingUser) {
         // User not found - prompt for new user creation
         console.log('User not found, prompting for new user creation');
         socket.emit('user-not-found', {
-          username: data.username,
-          prompt: data.username.toUpperCase() === 'NEW'
+          username: safeUsername,
+          prompt: safeUsername.toUpperCase() === 'NEW'
             ? '[C]ontinue as a new user? '
-            : `\r\nThe name ${data.username} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
+            : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
         });
       } else {
         // User exists - prompt for password
@@ -268,18 +300,19 @@ export function registerAuthHandlers(socket: Socket) {
   socket.on('new-user-response', async (data: { response: string; username: string }) => {
     try {
       const response = data.response.toUpperCase().trim();
+      const safeUsername = sanitizeInput(data.username);
 
       if (response === 'C' || response === '') {
         // Continue as new user - express.e:29646-29651
-        console.log('User chose to create new account:', data.username);
+        console.log('User chose to create new account:', safeUsername);
 
         // Start new user account creation flow
         session.state = BBSState.REGISTERING;
-        session.tempData = { newUsername: data.username };
+        session.tempData = { newUsername: safeUsername };
 
         // Import and call new user handler
         const { startNewUserRegistration } = require('../handlers/new-user.handler');
-        await startNewUserRegistration(socket, session, data.username);
+        await startNewUserRegistration(socket, session, safeUsername);
       } else {
         // express.e:29622 - Retry login increments retry counter
         session.loginRetryCount++;

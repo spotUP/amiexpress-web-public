@@ -175,11 +175,11 @@ door.start();
 
 ## Files Changed
 
-1. `sdk/examples/2048-game/package.json` - Fixed runtime to "server"
-2. `sdk/examples/tetris/package.json` - Added runtime "client"
-3. `sdk/examples/tetris/tetris.ts` - Migrated to ClientDoor
-4. `sdk/examples/tracker-door/package.json` - Migrated to hybrid
-5. `sdk/examples/tracker-door/server.ts` - NEW: Server component with RPC
+1. `sdk/doors/2048-game/package.json` - Fixed runtime to "server"
+2. `sdk/doors/tetris/package.json` - Added runtime "client"
+3. `sdk/doors/tetris/tetris.ts` - Migrated to ClientDoor
+4. `sdk/doors/tracker-door/package.json` - Migrated to hybrid
+5. `sdk/doors/tracker-door/server.ts` - NEW: Server component with RPC
 6. `HYBRID_MODE_IMPLEMENTATION_PLAN.md` - Implementation planning doc
 7. `HYBRID_MODE_IMPLEMENTATION_COMPLETE.md` - This summary
 
@@ -187,14 +187,14 @@ door.start();
 
 ### Test Tetris (Client Door)
 ```bash
-cd sdk/examples/tetris
+cd sdk/doors/tetris
 npm run build
 # Audio should work via Tone.js in browser
 ```
 
 ### Test Tracker-Door (Hybrid Door)
 ```bash
-cd sdk/examples/tracker-door
+cd sdk/doors/tracker-door
 npm run build
 
 # Should compile both:
@@ -207,7 +207,7 @@ npm run build
 
 ### Test 2048-game (Server Door)
 ```bash
-cd sdk/examples/2048-game
+cd sdk/doors/2048-game
 npm run build
 # High score persistence via fs in Node.js
 ```

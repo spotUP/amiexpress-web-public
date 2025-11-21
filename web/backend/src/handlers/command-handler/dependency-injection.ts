@@ -3,6 +3,8 @@
  * Centralized dependency management for command handler
  */
 
+import { ConfigManager } from '../../config';
+
 // Dependencies (injected)
 let db: any;
 let config: any;
@@ -67,7 +69,13 @@ export function setConstants(constants: any) {
 
 // Getters for internal use
 export function getDatabase() { return db; }
-export function getConfig() { return config; }
+export function getConfig() {
+  if (!config) {
+    // Lazy-create to avoid undefined access during early menu render
+    config = new ConfigManager();
+  }
+  return config;
+}
 export function getConferences() { return conferences; }
 export function getMessageBases() { return messageBases; }
 export function getFileAreas() { return fileAreas; }

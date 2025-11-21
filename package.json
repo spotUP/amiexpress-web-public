@@ -1,9 +1,20 @@
 {
+  "scripts": {
+    "dev:doors": "node dev/scripts/watch-doors.js",
+    "door:doctor": "node dev/scripts/door-doctor.js",
+    "door:create": "node dev/scripts/create-door-skeleton.js",
+    "door:doctor:strict": "DOCTOR_RUN=1 DOCTOR_COMPILE_PY=1 node dev/scripts/door-doctor.js",
+    "door:harness": "node dev/scripts/run-door-harness.js",
+    "door:ci": "node dev/scripts/sync-fixture-doors.js && npm run door:doctor:strict && npm run door:harness -- py-hello && npm run door:harness -- rexx-hello"
+  },
   "dependencies": {
+    "axios": "^1.13.2",
     "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "yargs": "^18.0.0"
   },
   "devDependencies": {
+    "chokidar": "^3.6.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

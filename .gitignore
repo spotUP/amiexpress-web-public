@@ -132,6 +132,7 @@ Desktop.ini
 
 # AmiExpress specific - ignore dynamic data but keep screen files
 data/
+!web/backend/data/amiga-roms/
 tracker-data/
 backend/data/*
 !backend/data/bbs/

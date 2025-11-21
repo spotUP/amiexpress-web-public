@@ -280,8 +280,18 @@ export interface BBSSession {
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
   nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163
+  queuedScreenCommands?: string[]; // Deferred screen commands (run after pause key)
+  lastScreenHadPause?: boolean; // Whether the last displayed screen contained ~SP.
   loginRetryCount: number; // Login retry counter - express.e:29461, 29560 (max 5 before disconnect)
   callerNum?: number; // Caller number for this session (total calls to BBS)
+  paginatedScreen?: {
+    lines: string[];
+    nextIndex: number;
+    pageSize: number;
+    eventName: 'ansi-output' | 'petscii-output';
+    commands?: string[];
+    onComplete?: () => void;
+  };
 
   // Phase 10: Message Pointer System (express.e:199-200, 4882-4973)
   lastMsgReadConf: number; // Last message manually read (confBase.confYM) - express.e:199
@@ -333,6 +343,7 @@ export interface BBSSession {
   executingScreenCommand?: boolean; // True while ~CC/~XI command is running
   pendingScreenCommand?: Promise<void>; // Resolves when screen-initiated commands complete
   screenCommandResolver?: (() => void) | null;
+  lastScreenCommandsHash?: string;
 
   // Account editor state (Command 1)
   accountEditorState?: any; // State tracking for account editor
@@ -420,13 +431,17 @@ const recentConnections: Map<string, number[]> = new Map();
 const MAX_CONNECTIONS_PER_IP = 5; // Max 5 connections per IP
 const CONNECTION_WINDOW = 60000; // 60 second window
 
+export const LOCALHOST_IPS = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+
 function checkConnectionLimit(ip: string): boolean {
-  // Skip rate limiting for localhost in development mode
+  // Always skip rate limiting for loopback/internal addresses
+  if (LOCALHOST_IPS.includes(ip)) {
+    return true;
+  }
+
+  // In development allow everything (already handled above for loopback but keep behaviour)
   if (process.env.NODE_ENV !== 'production') {
-    const localhostIPs = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
-    if (localhostIPs.includes(ip)) {
-      return true; // Allow unlimited connections from localhost in dev
-    }
+    return true;
   }
 
   const now = Date.now();
@@ -1987,7 +2002,7 @@ async function initializeData() {
     setMessageBases(messageBases);
     setDatabase(db);
     setHelpers({ callersLog, loadFlagged, loadHistory });
-    setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, LoggedOnSubState });
+    setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, LoggedOnSubState });
 
     // Load file areas for all conferences
     fileAreas = [];

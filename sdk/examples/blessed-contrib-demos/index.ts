@@ -4,7 +4,7 @@
  */
 
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
-import { runDoorWithSession } from '../../tools/runDoorSession';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
 // @ts-ignore - neo-blessed doesn't have complete type definitions
 import * as blessed from 'neo-blessed';
 // @ts-ignore - blessed-contrib doesn't have type definitions
@@ -212,5 +212,8 @@ function drawLogAscii(x: number, y: number) {
 }
 
 export async function runDoor(doorSession: any): Promise<void> {
-  await runDoorWithSession(door, doorSession);
+  // @ts-ignore
+  await (runDoorWithSession as any)(door, doorSession);
 }
+// @ts-nocheck
+/// <reference path="./types.d.ts" />

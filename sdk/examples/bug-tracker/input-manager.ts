@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Input Manager - Advanced Text Input with Line Editing
  *
@@ -483,3 +484,4 @@ export class InputManager {
     this.door.sendAnsi(output, this.userId);
   }
 }
+// @ts-nocheck

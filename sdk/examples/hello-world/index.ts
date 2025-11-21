@@ -9,7 +9,7 @@
  */
 
 import { Door, AnsiColor, GraphicsEngine } from '@amiexpress/bbs-door-sdk';
-import { runDoorWithSession } from '../../tools/runDoorSession';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
 
 // Create door
 const door = new Door({

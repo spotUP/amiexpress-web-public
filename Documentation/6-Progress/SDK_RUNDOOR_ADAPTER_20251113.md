@@ -22,12 +22,12 @@
   }
   ```
 - **Hybrid-only placeholders**:
-  - `sdk/examples/dungeon-rpg/index.ts`
-  - `sdk/examples/tetris/index.ts`
+  - `sdk/doors/dungeon-rpg/index.ts`
+  - `sdk/doors/tetris/index.ts`
   - These display a warning message and return to the menu after a keypress, ensuring the BBS doesn’t abort because of a missing `runDoor()` when invoked via the TS door loader.
 - **Tracker hybrid door**:
   - `/TRACKER` now uses the SDK runtime, which spawns `server.ts` to host RPC calls and show the telnet overview while the browser client handles audio and advanced UI.
 
 ## Testing
-- Attempted `npm run build` inside `sdk/examples/hello-world`; compilation currently fails due to pre-existing issues in the shared SDK (DOM globals such as `window`/`requestAnimationFrame` are missing from the default TypeScript config). No additional regression introduced by this change—the helper is strictly additive.
+- Attempted `npm run build` inside `sdk/doors/hello-world`; compilation currently fails due to pre-existing issues in the shared SDK (DOM globals such as `window`/`requestAnimationFrame` are missing from the default TypeScript config). No additional regression introduced by this change—the helper is strictly additive.
 - Runtime verification to be completed on the live BBS by launching each command (HELLO, DASHBOARD, etc.) now that `runDoor()` exports exist.

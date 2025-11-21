@@ -1,6 +1,6 @@
 BBSCMD=TRACKER
-TYPE=SDK
-LOCATION=doors/tracker-door/server.ts
+TYPE=TS
+LOCATION=doors/tracker-door
 DESCRIPTION=Professional music tracker BBS door inspired by Renoise, Protracker, and FastTracker II
 ACCESS=0
 MULTINODE=YES

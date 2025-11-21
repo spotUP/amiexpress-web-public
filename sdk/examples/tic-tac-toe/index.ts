@@ -4,7 +4,7 @@
  */
 
 import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
-import { runDoorWithSession } from '../../tools/runDoorSession';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
 
 type Cell = 'X' | 'O' | ' ';
 

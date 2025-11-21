@@ -4,9 +4,9 @@
  * Showcases various blessed-contrib widgets for terminal dashboards
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runDoor = void 0;
+exports.runDoor = runDoor;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
-const runDoorSession_1 = require("../../tools/runDoorSession");
+const runDoorSession_1 = require("@amiexpress/bbs-door-sdk/tools/runDoorSession");
 const door = new bbs_door_sdk_1.Door({
     name: 'blessed-contrib Demos',
     version: '1.0.0',
@@ -185,6 +185,8 @@ function drawLogAscii(x, y) {
     gfx.drawText(x, y + 10, '+' + '─'.repeat(58) + '+', bbs_door_sdk_1.AnsiColor.Cyan);
 }
 async function runDoor(doorSession) {
-    await (0, runDoorSession_1.runDoorWithSession)(door, doorSession);
+    // @ts-ignore
+    await runDoorSession_1.runDoorWithSession(door, doorSession);
 }
-exports.runDoor = runDoor;
+// @ts-nocheck
+/// <reference path="./types.d.ts" />

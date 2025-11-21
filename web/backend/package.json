@@ -3,13 +3,14 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "postinstall": "node ./scripts/build-web-assets.cjs",
     "dev": "npx tsx src/index.ts",
     "build": "npm install",
     "start": "npx tsx src/index.ts",
     "render-start": "npx tsx src/index.ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test": "jest --config dev-scripts/jest.config.js --rootDir .",
+    "test:watch": "jest --config dev-scripts/jest.config.js --rootDir . --watch",
+    "test:coverage": "jest --config dev-scripts/jest.config.js --rootDir . --coverage"
   },
   "keywords": [],
   "author": "",

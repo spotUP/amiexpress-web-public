@@ -1,6 +1,6 @@
 BBSCMD=GLCVIEW
 TYPE=TS
-LOCATION=web/backend/src/doors/glc-viewer
+LOCATION=doors/glc-viewer
 DESCRIPTION=GLC Viewer - View BBS login statistics (runDoor pattern)
 ACCESS=0
 MULTINODE=YES

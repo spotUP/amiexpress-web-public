@@ -1,9 +1,0 @@
-COMMAND=GWALL
-NAME=Global Thermonuclear Wall
-TYPE=TS
-PATH=web/backend/src/doors/global-wall
-ACCESS=0
-HOT=
-PRIVATE=N
-OVERLOAD=N
-HIDDEN=N

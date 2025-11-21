@@ -91,7 +91,7 @@ const doorDefinitions = {
   'bbslink': ['BBSLink', 'BBSLINK', 'BBSCMD', 'Play InterBBS games via BBSLink.net'],
   'bbslink-wall': ['BBSLink Wall', 'BBSLINKWALL', 'BBSCMD', 'View BBSLink graffiti wall'],
   'discord-announce': ['Discord Announce', 'DANNOUNCE', 'BBSCMD', 'Announce logins to Discord'],
-  'global-wall': ['Global Wall', 'GWALL', 'BBSCMD', 'Write on the global graffiti wall'],
+  'gwall': ['Global Wall', 'GWALL', 'BBSCMD', 'Write on the global graffiti wall'],
   'telnet-connect': ['Telnet Door', 'TELNET', 'BBSCMD', 'Connect to other BBSes via telnet'],
   'telnet-front': ['Telnet Front', 'TFRONT', 'BBSCMD', 'Telnet frontend door'],
   'mrc': ['MRC Chat', 'MRC', 'BBSCMD', 'Multi-Relay Chat network'],

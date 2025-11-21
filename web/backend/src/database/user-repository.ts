@@ -7,6 +7,7 @@ import * as crypto from 'crypto';
 import { userFileManager } from '../services/UserFileManager';
 import { userDatabaseManager } from '../services/UserDatabaseManager';
 import type { User } from './types';
+import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
 
 // Helper function to map field names to column names
 function fieldToColumn(field: string): string {
@@ -48,6 +49,7 @@ export class UserRepository {
     if (!this.db) throw new Error('Database not initialized');
 
     const id = crypto.randomUUID();
+    const safeUsername = sanitizeInput(userData.username);
     const stmt = this.db.prepare(`
       INSERT INTO users (
         id, username, passwordhash, realname, location, phone, email,
@@ -61,7 +63,7 @@ export class UserRepository {
     `);
 
     stmt.run(
-      id, userData.username, userData.passwordHash, userData.realname,
+      id, safeUsername, userData.passwordHash, userData.realname,
       userData.location, userData.phone, userData.email, userData.secLevel,
       userData.uploads, userData.downloads, userData.bytesUpload, userData.bytesDownload,
       userData.ratio, userData.ratioType, userData.timeTotal, userData.timeLimit,
@@ -108,8 +110,9 @@ export class UserRepository {
   async getUserByUsername(username: string): Promise<User | null> {
     if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM users WHERE username = ?');
-    const user = stmt.get(username) as any;
+    const normalizedUsername = normalizeForComparison(username);
+    const stmt = this.db.prepare('SELECT * FROM users WHERE LOWER(username) = ?');
+    const user = stmt.get(normalizedUsername) as any;
 
     if (!user) return null;
 
@@ -184,12 +187,17 @@ export class UserRepository {
   async updateUser(id: string, updates: Partial<User>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
-    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
+    const sanitizedUpdates = { ...updates };
+    if (typeof sanitizedUpdates.username === 'string') {
+      sanitizedUpdates.username = sanitizeInput(sanitizedUpdates.username);
+    }
+
+    const fields = Object.keys(sanitizedUpdates).filter(key => key !== 'id' && key !== 'created');
     if (fields.length === 0) return;
 
     const setClause = fields.map(f => `${fieldToColumn(f)} = ?`).join(', ');
     const values = fields.map(f => {
-      const value = updates[f as keyof User];
+      const value = sanitizedUpdates[f as keyof User];
       if (value instanceof Date) return Math.floor(value.getTime() / 1000);
       if (typeof value === 'boolean') return value ? 1 : 0;
       return value;

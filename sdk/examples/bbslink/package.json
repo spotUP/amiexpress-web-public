@@ -24,7 +24,7 @@
     "reference"
   ],
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../..",
+    "@amiexpress/bbs-door-sdk": "file:../../dist",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {

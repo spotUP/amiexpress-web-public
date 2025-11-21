@@ -1,3 +1,0 @@
-.key node
-c:cd $debugpath
-c:monam $debug <node>

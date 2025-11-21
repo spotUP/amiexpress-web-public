@@ -1,9 +1,0 @@
-COMMAND=BBSLINK
-NAME=BBSLink InterBBS Games
-TYPE=TS
-PATH=web/backend/src/doors/bbslink
-ACCESS=0
-HOT=
-PRIVATE=N
-OVERLOAD=N
-HIDDEN=N

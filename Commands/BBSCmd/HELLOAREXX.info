@@ -1,5 +1,0 @@
-BBSCMD=HELLOAREXX
-TYPE=AREXX
-LOCATION=doors/hello-arexx/hello.rexx
-DESCRIPTION=ARexx Hello World Door
-ACCESS=1

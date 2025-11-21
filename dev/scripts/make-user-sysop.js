@@ -21,8 +21,13 @@ const colors = {
   cyan: '\x1b[36m'
 };
 
+function normalizeUsername(username) {
+  return username.trim();
+}
+
 function main() {
-  const username = process.argv[2];
+  const rawUsername = process.argv[2];
+  const username = rawUsername ? normalizeUsername(rawUsername) : '';
 
   if (!username) {
     console.log(`${colors.red}Usage: node dev/scripts/make-user-sysop.js <username>${colors.reset}`);
@@ -51,7 +56,7 @@ function main() {
   const db = new Database(dbPath);
 
   // Find user
-  const user = db.prepare('SELECT id, username, seclevel FROM users WHERE username = ?').get(username);
+  const user = db.prepare('SELECT id, username, seclevel FROM users WHERE LOWER(username) = LOWER(?)').get(username);
 
   if (!user) {
     console.log(`${colors.red}✗ User '${username}' not found${colors.reset}`);
@@ -76,8 +81,8 @@ function main() {
 
   // Update security level
   try {
-    db.prepare('UPDATE users SET seclevel = 255 WHERE username = ?').run(username);
-    console.log(`${colors.green}✓ User '${username}' promoted to sysop (secLevel: 255)${colors.reset}`);
+    db.prepare('UPDATE users SET seclevel = 255 WHERE LOWER(username) = LOWER(?)').run(username);
+    console.log(`${colors.green}✓ User '${user.username}' promoted to sysop (secLevel: 255)${colors.reset}`);
     console.log(`\n${colors.cyan}The user can now access configuration API endpoints${colors.reset}\n`);
     process.exit(0);
   } catch (error) {

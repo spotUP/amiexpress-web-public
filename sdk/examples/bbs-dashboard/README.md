@@ -60,7 +60,7 @@ A comprehensive real-time monitoring dashboard for BBS System Operators, built w
 ## Installation
 
 ```bash
-cd sdk/examples/bbs-dashboard
+cd sdk/doors/bbs-dashboard
 npm install
 npm run build
 ```

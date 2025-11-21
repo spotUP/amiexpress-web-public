@@ -12,15 +12,24 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@amiexpress/bbs-door-sdk": ["./node_modules/@amiexpress/bbs-door-sdk/dist/index.d.ts"],
+      "@amiexpress/bbs-door-sdk/*": ["./node_modules/@amiexpress/bbs-door-sdk/dist/*"]
+    },
+    "typeRoots": ["./", "./node_modules/@types"]
   },
   "ts-node": {
+    "transpileOnly": true,
+    "files": true,
     "compilerOptions": {
       "module": "commonjs"
     }
   },
   "include": [
-    "*.ts"
+    "*.ts",
+    "types.d.ts"
   ],
   "exclude": [
     "node_modules",

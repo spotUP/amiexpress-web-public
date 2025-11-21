@@ -15,6 +15,7 @@
 import { Server as NetServer, Socket } from 'net';
 import { EventEmitter } from 'events';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession } from './session-manager';
+import { LOCALHOST_IPS } from '../index';
 import { BBSSession } from '../index';
 import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
@@ -416,6 +417,11 @@ export class TelnetServer extends EventEmitter {
    */
   private handleConnection(socket: Socket): void {
     const remoteAddress = socket.remoteAddress || 'unknown';
+    if (LOCALHOST_IPS.includes(remoteAddress)) {
+      socket.on('error', () => {});
+      socket.destroy();
+      return;
+    }
     console.log(`[Telnet Server] New connection from ${remoteAddress}`);
 
     // Check rate limiting (express.e uses similar connection tracking)

@@ -20,7 +20,7 @@ Successfully activated **21 doors** with full functionality across both Doors/ d
 5. **drawille-cube** - 3D cube visualization using drawille ✅ TESTED
 6. **dungeon-rpg** - Classic dungeon RPG game
 7. **glc-viewer** - GLC file viewer
-8. **global-wall** - Global messaging system
+8. **gwall** - Global messaging system
 9. **mrc** - MRC protocol implementation
 10. **neo-blessed-demo** - Neo-blessed UI demonstrations
 11. **telnet-connect** - Telnet connection utility
@@ -86,7 +86,7 @@ Successfully activated **21 doors** with full functionality across both Doors/ d
   - ✅ Ready for integration
 - **Configuration:** No external configuration required
 
-### 4. Global Wall (`web/backend/src/doors/global-wall`)
+### 4. Global Wall (`web/backend/src/doors/gwall`)
 - **Status:** ✅ COMPILED & READY
 - **Type:** TypeScript module (708 lines)
 - **Features:** Global wall/messaging system
@@ -169,7 +169,7 @@ bash install-and-test-all-doors.sh
 ### Modern Node.js/TypeScript Doors:
 - **Backend Doors:** `web/backend/src/doors/` ✅ 4/4 Activated
 - **Standalone Doors:** `doors/` ✅ 2/6+ Ready
-- **SDK Examples:** `sdk/examples/` ✅ 15/22 Activated
+- **SDK Examples:** `sdk/doors/` ✅ 15/22 Activated
 
 ### Classic Amiga E Doors:
 - `doors/aehydra/`
