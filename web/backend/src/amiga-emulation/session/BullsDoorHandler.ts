@@ -72,10 +72,6 @@ export class BullsDoorHandler {
    */
   initializeBulls(): void {
     console.log("[BullsDoorHandler] Initializing Bulls door specific handlers");
-    console.log(
-      `[BullsDoorHandler] executablePath: ${this.config.executablePath}`
-    );
-    console.log(`[BullsDoorHandler] isBullsDoor(): ${this.isBullsDoor()}`);
 
     // Set up ExecLibrary callback for Bulls
     this.execLibrary.setWaitPortReturnCallback((addr: number) => {
@@ -84,113 +80,6 @@ export class BullsDoorHandler {
         `[BullsDoorHandler] Recorded WaitPort return PC 0x${addr.toString(16)}`
       );
     });
-
-    // CRITICAL FIX: Patch missing LEA $0,A4 relocation
-    if (this.isBullsDoor()) {
-      this.patchBullsLEAInstruction();
-    } else {
-      console.log(
-        "[BullsDoorHandler] Skipping LEA patch - not detected as Bulls door"
-      );
-    }
-  }
-
-  /**
-   * Bulls-specific fix for missing LEA $0,A4 relocation
-   * The Bulls HUNK file is missing a relocation for the LEA instruction at 0x3f0,
-   * which should point to the data segment base (0x5c00) but stays at 0x0
-   */
-  patchBullsLEAInstruction(): void {
-    console.log(
-      "[BullsDoorHandler] *** PATCHING MISSING LEA $0,A4 RELOCATION ***"
-    );
-
-    // Check if A4 is currently 0x0 (indicating the LEA wasn't patched)
-    const a4 = this.emulator.getRegister(12);
-    console.log(`[BullsDoorHandler] Current A4 value: 0x${a4.toString(16)}`);
-
-    if (a4 !== 0) {
-      console.log(
-        `[BullsDoorHandler] A4 already set correctly, no patching needed`
-      );
-      return;
-    }
-
-    // Patch the LEA $0,A4 instruction at memory address 0x13f0
-    // (0x3f0 offset within the code segment that starts at 0x1000)
-    const codeSegmentBase = 0x1000;
-    const leaInstructionAddr = codeSegmentBase + 0x3f0; // 0x13f0
-
-    console.log(
-      `[BullsDoorHandler] Patching LEA instruction at 0x${leaInstructionAddr.toString(
-        16
-      )}`
-    );
-
-    // Read current instruction bytes to verify it's LEA $0,A4
-    const byte0 = this.emulator.readMemory(leaInstructionAddr);
-    const byte1 = this.emulator.readMemory(leaInstructionAddr + 1);
-
-    console.log(
-      `[BullsDoorHandler] Current instruction bytes: 0x${byte0
-        .toString(16)
-        .padStart(2, "0")} 0x${byte1.toString(16).padStart(2, "0")}`
-    );
-
-    // LEA instruction format: 0x41f9 + 4-byte address
-    if (byte0 === 0x41 && byte1 === 0xf9) {
-      // Get data segment base address (should be 0x5c00 based on HUNK analysis)
-      const dataSegmentBase = 0x5c00;
-
-      console.log(
-        `[BullsDoorHandler] Found LEA $0,A4 instruction, patching to 0x${dataSegmentBase.toString(
-          16
-        )}`
-      );
-
-      // Patch the 4-byte address to point to data segment base
-      this.emulator.writeMemory(
-        leaInstructionAddr + 2,
-        (dataSegmentBase >>> 24) & 0xff
-      );
-      this.emulator.writeMemory(
-        leaInstructionAddr + 3,
-        (dataSegmentBase >>> 16) & 0xff
-      );
-      this.emulator.writeMemory(
-        leaInstructionAddr + 4,
-        (dataSegmentBase >>> 8) & 0xff
-      );
-      this.emulator.writeMemory(leaInstructionAddr + 5, dataSegmentBase & 0xff);
-
-      console.log(
-        `[BullsDoorHandler] Patched LEA to load A4 with data segment base: 0x${dataSegmentBase.toString(
-          16
-        )}`
-      );
-      console.log(
-        `[BullsDoorHandler] When Bulls executes this instruction, A4 will be set to 0x${dataSegmentBase.toString(
-          16
-        )}`
-      );
-
-      // Verify the patch by reading back
-      const verifyAddr = this.emulator.readMemory32(leaInstructionAddr + 2);
-      console.log(
-        `[BullsDoorHandler] Verification: instruction now loads 0x${verifyAddr.toString(
-          16
-        )}`
-      );
-    } else {
-      console.log(
-        `[BullsDoorHandler] Expected LEA instruction format (0x41f9) but found different bytes!`
-      );
-      console.log(
-        `[BullsDoorHandler] Unable to patch - this may not be a Bulls door or instruction format has changed`
-      );
-    }
-
-    console.log("[BullsDoorHandler] *** LEA $0,A4 PATCHING COMPLETE ***");
   }
 
   /**
