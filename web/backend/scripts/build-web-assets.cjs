@@ -26,10 +26,27 @@ function run(command, cwd) {
 
 function installDeps(dir) {
   const hasLock = fs.existsSync(path.join(dir, 'package-lock.json'));
+  const commands = [];
+
   if (isCI && hasLock) {
-    run('npm ci --include=dev', dir);
+    commands.push('npm ci --include=dev', 'npm ci');
   } else {
-    run('npm install', dir);
+    commands.push('npm install --include=dev', 'npm install');
+  }
+
+  let lastError = null;
+  for (const cmd of commands) {
+    try {
+      run(cmd, dir);
+      return;
+    } catch (error) {
+      lastError = error;
+      console.warn(`[build-web-assets] Command failed (${cmd}), trying fallback...`);
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
   }
 }
 
