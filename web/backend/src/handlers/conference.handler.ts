@@ -7,6 +7,7 @@
 
 import { displayScreen, doPause } from './screen.handler';
 import { displayMainMenu } from './command-handler/menu';
+import { getMailStatFile, loadMsgPointers, validatePointers } from '../utils/message-pointers.util';
 
 import type { BBSSession } from '../index';
 
@@ -110,6 +111,21 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
   session.currentMsgBase = msgBaseId;
   session.currentConfName = conference.name;
   session.relConfNum = confId; // For simplicity, use absolute conf number as relative
+
+  // Load message pointers for this conference/msg base (express.e joinConf sets lastMsgReadConf/lastNewReadConf)
+  if (session.user) {
+    try {
+      const mailStat = await getMailStatFile(confId, msgBaseId);
+      const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
+      const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
+      session.lastMsgReadConf = validated.lastMsgReadConf || 0;
+      session.lastNewReadConf = validated.lastNewReadConf || 0;
+    } catch (err) {
+      console.error('[joinConference] Failed to load/validate message pointers:', err);
+      session.lastMsgReadConf = 0;
+      session.lastNewReadConf = 0;
+    }
+  }
 
   socket.emit('ansi-output', `\r\n\x1b[32mJoined conference: ${conference.name}\x1b[0m\r\n`);
   socket.emit('ansi-output', `\r\n\x1b[32mCurrent message base: ${messageBase.name}\x1b[0m\r\n`);
