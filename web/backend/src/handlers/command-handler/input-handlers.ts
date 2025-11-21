@@ -159,8 +159,6 @@ import {
 } from "../command-execution.handler";
 
 // Import utilities
-import { AnsiUtil } from "../../utils/ansi.util";
-
 // Import message entry handlers
 import {
   handleMessageToInput,
@@ -181,6 +179,46 @@ import {
 
 // Import from other modules within command-handler
 import { displayMainMenu } from "./menu";
+import { AnsiUtil } from "../../utils/ansi.util";
+
+/**
+ * Translate a single-key shortcut per express.e translateShortcut()
+ * Maps RET/BACK/TAB/ESC/SPACE/DEL and then resolves against session.shortcuts.
+ */
+function translateShortcut(session: BBSSession, raw: string): string {
+  let keyStr = "0";
+  const code = raw.length ? raw.charCodeAt(0) : 0;
+  switch (code) {
+    case 13:
+      keyStr = "RET";
+      break;
+    case 0x7f:
+      keyStr = "DEL";
+      break;
+    case 0x08:
+      keyStr = "BACK";
+      break;
+    case 0x09:
+      keyStr = "TAB";
+      break;
+    case 27:
+      keyStr = "ESC";
+      break;
+    case 32:
+      keyStr = "SPACE";
+      break;
+    default:
+      keyStr = raw.length ? raw[0] : "";
+  }
+
+  if (session.shortcuts && session.shortcuts.size > 0) {
+    const mapped = session.shortcuts.get(keyStr);
+    if (mapped) {
+      return mapped;
+    }
+  }
+  return keyStr;
+}
 
 // Export sysop menu input handler (used by core.ts)
 export async function handleSysopMenuInput(
@@ -439,28 +477,23 @@ async function handleReadCommand(
 
   // Buffer characters until Enter is pressed
   if (data === "\r" || data === "\n") {
-    const input = (session.inputBuffer || "").trim();
+    const input = session.inputBuffer || "";
     session.inputBuffer = "";
 
+    // Add command to history if non-empty
     if (input.length > 0) {
-      // Add command to history
       const { addToHistory } = require("../utils/command-history.util");
       addToHistory(session, input);
-
-      // Store command text and transition to PROCESS_COMMAND
-      (session as any).commandText = input.toUpperCase();
-      session.subState = LoggedOnSubState.PROCESS_COMMAND;
-
-      // Process the command in the next event cycle
-      setTimeout(() => {
-        handleCommand(socket, session, "");
-      }, 0);
-    } else {
-      // Empty command, redisplay menu
-      session.menuPause = true;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      displayMainMenu(socket, session);
     }
+
+    // Store command text and transition to PROCESS_COMMAND (express.e:28617+)
+    (session as any).commandText = input.toUpperCase();
+    session.subState = LoggedOnSubState.PROCESS_COMMAND;
+
+    // Process the command in the next event cycle
+    setTimeout(() => {
+      handleCommand(socket, session, "");
+    }, 0);
   } else if (data === "\x7f" || data === "\b") {
     // Backspace
     if (session.inputBuffer.length > 0) {
@@ -485,25 +518,24 @@ async function handleReadShortcuts(
   console.log("🔥 In READ_SHORTCUTS state, processing single key");
 
   try {
-    // Process single character hotkeys immediately
-    const command = data.trim().toUpperCase();
-    if (command.length > 0) {
+    const translated = translateShortcut(session, data);
+    if (translated && translated.length > 0) {
       const { processCommand } = require("./core");
-      await processCommand(socket, session, command, "");
+      // Like express.e: translateShortcut + processMci + processCommand
+      await processCommand(socket, session, translated, "");
     }
   } catch (error) {
     console.error("Error in shortcut processing:", error);
     socket.emit(
       "ansi-output",
-      "\r\n\x1b[31mShortcut processing error. Returning to menu...\x1b[0m\r\n"
+      "\r\n" + AnsiUtil.errorLine("Shortcut processing error. Returning to menu...") + "\r\n"
     );
-    socket.emit(
-      "ansi-output",
-      "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-    );
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    socket.emit("ansi-output", "\r\n" + AnsiUtil.pressKeyPrompt());
   }
+
+  // express.e: menuPause := FALSE; subState := DISPLAY_MENU
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
@@ -515,14 +547,12 @@ async function handleProcessCommand(socket: any, session: BBSSession) {
     (session as any).commandText
   );
 
-  if ((session as any).commandText) {
-    const parts = (session as any).commandText.split(" ");
-    const command = parts[0];
-    const params = parts.slice(1).join(" ");
+  const commandText = ((session as any).commandText || "").toUpperCase();
 
+  if (commandText) {
     try {
       const { processCommand } = require("./core");
-      const result = await processCommand(socket, session, command, params);
+      const result = await processCommand(socket, session, commandText, "");
 
       if (result === "NOT_ALLOWED") {
         session.menuPause = false;
