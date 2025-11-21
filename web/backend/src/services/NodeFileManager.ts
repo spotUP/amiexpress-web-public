@@ -118,7 +118,7 @@ export class NodeFileManager {
     console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
 
     // Create binary buffer matching E struct layout
-    const buffer = this.userToBuffer(user);
+    const buffer = this.userToBuffer(user, nodeId);
 
     // Write atomically (tmp file + rename)
     const tmpPath = `${filePath}.tmp`;
@@ -232,7 +232,7 @@ export class NodeFileManager {
    *
    * CRITICAL: Must match exact E struct layout from axobjects.e
    */
-  private userToBuffer(user: User): Buffer {
+  private userToBuffer(user: User, nodeId: number = 0): Buffer {
     // Calculate exact size (match E struct)
     const size = 31 + 9 + 30 + 13 + (2 * 13) + (4 * 13) + 10 + (2 * 3) + (4 * 14) + (1 * 6);
     const buffer = Buffer.alloc(size);
@@ -255,7 +255,8 @@ export class NodeFileManager {
     offset += 13;
 
     // slotNumber: INT
-    buffer.writeInt16BE(parseInt(user.id as string) || 0, offset);
+    const slot = Math.min(Math.max(nodeId, 0), 32767);
+    buffer.writeInt16BE(slot, offset);
     offset += 2;
 
     // secStatus: INT
