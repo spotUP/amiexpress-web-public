@@ -15,6 +15,7 @@ import { callersLog } from './database-helpers';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { sanitizeInput } from '../utils/input-normalizer.util';
 import { displayScreen, doPause } from '../handlers/screen.handler';
+import { runLoginBatches } from '../services/batch-scheduler';
 
 /**
  * Register authentication socket event handlers
@@ -140,6 +141,13 @@ export function registerAuthHandlers(socket: Socket) {
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
+
+      // Run daily batch for this node (once per calendar day, per node) to mirror AmiExpress batch runner
+      try {
+        await runLoginBatches(session.nodeId || 0);
+      } catch (err) {
+        console.error('[LOGIN] Batch scheduler failed:', err);
+      }
 
       // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
       // This fixes the multi-socket connection issue where new sockets get fresh sessions
