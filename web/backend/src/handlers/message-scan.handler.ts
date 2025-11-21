@@ -212,6 +212,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
 
     if (!conference) continue;
 
+    const flags = getConferenceToolFlags(confNum);
     // express.e:28086 - Check conference access
     if (!checkConfAccess(session.user, confNum)) {
       console.log(`  Skip conference ${confNum} (${conference.name}) - no access`);
@@ -226,11 +227,13 @@ export async function performConferenceScan(socket: any, session: any): Promise<
     let confNewPublic = 0;
     let confNewPrivate = 0;
     let fileScanForConf = false;
+    let skipMailScanForConf = flags.noNewscan;
 
     for (const msgBase of confMessageBases) {
       // express.e:28093-28094 - Check if should scan this msgbase
-      const scanMail = await checkMailConfScan(confNum, msgBase.id, session.user.id);
+      const scanMail = skipMailScanForConf ? false : await checkMailConfScan(confNum, msgBase.id, session.user.id);
       if (!scanMail) {
+        skipMailScanForConf = true;
         continue;
       }
 
