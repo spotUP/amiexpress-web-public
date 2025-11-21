@@ -990,6 +990,13 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
     return;
   }
 
+  const commandsHash = commands.join('|');
+  if (commandsHash && session.lastScreenCommandsHash === commandsHash) {
+    session.queuedScreenCommands = [];
+    return;
+  }
+  session.lastScreenCommandsHash = commandsHash;
+
   const { handleCommand } = require('./command.handler');
   session.pendingScreenCommand = new Promise<void>(resolve => {
     session.screenCommandResolver = resolve;

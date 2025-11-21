@@ -343,6 +343,7 @@ export interface BBSSession {
   executingScreenCommand?: boolean; // True while ~CC/~XI command is running
   pendingScreenCommand?: Promise<void>; // Resolves when screen-initiated commands complete
   screenCommandResolver?: (() => void) | null;
+  lastScreenCommandsHash?: string;
 
   // Account editor state (Command 1)
   accountEditorState?: any; // State tracking for account editor
