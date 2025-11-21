@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Search, Trash2, Download, Terminal, Filter, Info, ExternalLink } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -23,8 +23,6 @@ export function LogsPage() {
   const [logType, setLogType] = useState<LogType>('backend');
   const [lineCount, setLineCount] = useState(500);
   const [searchTerm, setSearchTerm] = useState('');
-  
-  const [filterTerm, setFilterTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(false);
 
@@ -65,14 +63,6 @@ export function LogsPage() {
     setSearchTerm(searchInput);
   };
 
-  const filteredLines = useMemo(() => {
-    const lines = (logData?.lines || []).slice().reverse();
-    if (!filterTerm) {
-      return lines;
-    }
-    const term = filterTerm.toLowerCase();
-    return lines.filter(line => line.toLowerCase().includes(term));
-  }, [logData?.lines, filterTerm]);
 const handleDownload = () => {
     if (!logData?.lines) return;
 
