@@ -34,7 +34,7 @@ export interface User {
   timesOnToday?: number;  // Alias for callsToday
   messagesPosted?: number;  // Number of messages posted
   newUser: boolean;
-  expert: boolean;
+  expert: string; // "X" or "N" per express.e
   ansi: boolean;
   linesPerScreen: number;
   computer: string;

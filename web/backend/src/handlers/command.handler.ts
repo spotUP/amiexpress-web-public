@@ -211,6 +211,25 @@ export { loadCommands, setCommandExecutionDependencies } from './command-executi
 // Constants (injected)
 let SCREEN_MENU: string = 'MENU';
 
+const displayFlowStates = new Set<LoggedOnSubState>([
+  LoggedOnSubState.DISPLAY_BULL,
+  LoggedOnSubState.DISPLAY_NODE_BULL,
+  LoggedOnSubState.CONF_SCAN,
+  LoggedOnSubState.DISPLAY_CONF_BULL,
+  LoggedOnSubState.DISPLAY_MENU,
+]);
+
+function isDisplayFlowState(subState?: LoggedOnSubState) {
+  return typeof subState !== 'undefined' && displayFlowStates.has(subState);
+}
+
+function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean = false) {
+  session.displayFlowPaused = true;
+  if (forcePrompt || !session.lastScreenHadPause) {
+    doPause(socket, session);
+  }
+}
+
 // Dependency injection setters
 export function setDatabase(database: any) {
   db = database;
@@ -256,6 +275,105 @@ export function setDoors(doorsList: any[]) {
 
 export function setConstants(constants: any) {
   SCREEN_MENU = constants.SCREEN_MENU;
+}
+
+async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
+  try {
+    while (isDisplayFlowState(session.subState)) {
+      // Clear any pending pause once a key arrives
+      if (session.displayFlowPaused) {
+        session.displayFlowPaused = false;
+      }
+
+      // If a previous screen queued commands, execute them before advancing
+      if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
+        const { runQueuedScreenCommands } = require('./screen.handler');
+        try {
+          await runQueuedScreenCommands(socket, session);
+        } catch (error) {
+          console.error('[handleCommand] Error running queued screen commands:', error);
+          session.queuedScreenCommands = [];
+          session.pendingScreenCommand = undefined;
+          session.screenCommandResolver = null;
+        }
+        if (!isDisplayFlowState(session.subState)) {
+          return;
+        }
+        continue;
+      }
+
+      const confNumber = session.currentConf || session.user?.confRJoin || 1;
+      const toolFlags = getConferenceToolFlags(confNumber);
+
+      if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
+        if (!toolFlags.noBulls) {
+          const shown = await displayScreen(socket, session, 'BULL');
+          if (shown) {
+            pauseDisplayFlow(socket, session);
+          }
+        }
+        session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
+        if (session.displayFlowPaused) return;
+        continue;
+      }
+
+      if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
+        if (!toolFlags.noBulls) {
+          const shown = await displayScreen(socket, session, 'NODE_BULL');
+          if (shown) {
+            pauseDisplayFlow(socket, session);
+          }
+        }
+        session.subState = LoggedOnSubState.CONF_SCAN;
+        if (session.displayFlowPaused) return;
+        continue;
+      }
+
+      if (session.subState === LoggedOnSubState.CONF_SCAN) {
+        const { performConferenceScan } = require('./message-scan.handler');
+        await performConferenceScan(socket, session);
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        continue;
+      }
+
+      if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
+        if (!toolFlags.noConfBulls) {
+          const displayed = await displayConferenceBulletins(socket, session);
+          if (displayed) {
+            pauseDisplayFlow(socket, session);
+          }
+        }
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = true;
+        if (session.displayFlowPaused) return;
+        continue;
+      }
+
+      if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
+        const relConfNumber = session.relConfNum || 1;
+        const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
+        const shouldDisplayMenu = ((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus;
+
+        if (shouldDisplayMenu && session.menuPause) {
+          pauseDisplayFlow(socket, session, true);
+          session.menuPause = false;
+          return;
+        }
+
+        await menuDisplayMainMenu(socket, session);
+        return;
+      }
+
+      return;
+    }
+  } catch (error) {
+    console.error('Error in display state handling:', error);
+    socket.emit('ansi-output', '\r\n\x1b[31mAn error occurred. Returning to main menu...\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+  }
 }
 
 // ===== Exported Functions =====
@@ -790,81 +908,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   // Handle substate-specific input
-  if (
-    session.subState === LoggedOnSubState.DISPLAY_BULL ||
-    session.subState === LoggedOnSubState.DISPLAY_NODE_BULL ||
-    session.subState === LoggedOnSubState.CONF_SCAN ||
-    session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
-    session.subState === LoggedOnSubState.DISPLAY_MENU
-  ) {
-    console.log(' In display state, continuing to next state');
-    try {
-      const confNumber = session.currentConf || session.user?.confRJoin || 1;
-      const toolFlags = getConferenceToolFlags(confNumber);
-      // If a previous screen deferred commands (runCommands=false), run them now on keypress
-      if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
-        console.log(' Executing queued screen commands before advancing state');
-        const { runQueuedScreenCommands } = require('./screen.handler');
-        try {
-          await runQueuedScreenCommands(socket, session);
-        } catch (error) {
-          console.error('[handleCommand] Error running queued screen commands:', error);
-          session.queuedScreenCommands = [];
-          session.pendingScreenCommand = undefined;
-          session.screenCommandResolver = null;
-        }
-        // If the queued command changed the subState/state, respect it
-        if (
-          session.subState !== LoggedOnSubState.DISPLAY_BULL &&
-          session.subState !== LoggedOnSubState.DISPLAY_NODE_BULL &&
-          session.subState !== LoggedOnSubState.CONF_SCAN &&
-          session.subState !== LoggedOnSubState.DISPLAY_CONF_BULL &&
-          session.subState !== LoggedOnSubState.DISPLAY_MENU
-        ) {
-          return;
-        }
-      }
-      // Any key continues to next state
-      if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
-        // express.e:28555 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
-        const skipBull = toolFlags.noBulls;
-        if (!skipBull) {
-          const shown = await displayScreen(socket, session, 'BULL');
-          if (shown && !session.lastScreenHadPause) doPause(socket, session);
-        }
-        session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
-      } else if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
-        // express.e:28557 - IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
-        const skipNodeBull = toolFlags.noBulls;
-        if (!skipNodeBull) {
-          const shown = await displayScreen(socket, session, 'NODE_BULL');
-          if (shown && !session.lastScreenHadPause) doPause(socket, session);
-        }
-        session.subState = LoggedOnSubState.CONF_SCAN;
-      } else if (session.subState === LoggedOnSubState.CONF_SCAN) {
-        // express.e:28564 - confScan
-        const { performConferenceScan } = require('./message-scan.handler');
-        await performConferenceScan(socket, session);
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      } else if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
-        // express.e:28565 - IF (displayScreen(SCREEN_CONF_BULL)) THEN doPause()
-        if (!toolFlags.noConfBulls) {
-          await displayConferenceBulletins(socket, session);
-        }
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
-      } else if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
-        // express.e:28586+ - show menu
-        await displayMainMenu(socket, session);
-      }
-    } catch (error) {
-      console.error('Error in display state handling:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mAn error occurred. Returning to main menu...\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
-    }
+  if (isDisplayFlowState(session.subState)) {
+    await advanceDisplayFlow(socket, session);
     return;
   }
 

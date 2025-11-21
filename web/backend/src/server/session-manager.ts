@@ -101,6 +101,7 @@ export function createSession(nodeId: number): BBSSession {
     inputBuffer: '', // Buffer for line-based input
     maskInput: false, // Echo typed characters unless password masking is active
     connectionStart: Date.now(),
+    displayFlowPaused: false, // Whether screen flow is waiting for a pause key
     relConfNum: 0, // Relative conference number
     currentConfName: 'General', // Current conference name (matches ID 4)
     cmdShortcuts: false, // Like AmiExpress - default to line input mode, not hotkeys

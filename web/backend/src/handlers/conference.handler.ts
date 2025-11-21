@@ -5,7 +5,7 @@
  * Based on express.e conference functions.
  */
 
-import { displayScreen, doPause } from './screen.handler';
+import { displayScreen } from './screen.handler';
 import { displayMainMenu } from './command-handler/menu';
 import { getMailStatFile, loadMsgPointers, validatePointers } from '../utils/message-pointers.util';
 
@@ -82,13 +82,10 @@ export function setConstants(constants: {
  * Display conference bulletins (CONF_BULL)
  * Like express.e:28566-28577 - final bulletin after confScan
  */
-export async function displayConferenceBulletins(socket: any, session: BBSSession) {
+export async function displayConferenceBulletins(socket: any, session: BBSSession): Promise<boolean> {
   // Express.e:28565 - IF (displayScreen(SCREEN_CONF_BULL)) THEN doPause()
-  if (await displayScreen(socket, session, getConfScreenName())) {
-    if (!session.lastScreenHadPause) {
-      doPause(socket, session);
-    }
-  }
+  const displayed = await displayScreen(socket, session, getConfScreenName());
+  return displayed;
 }
 
 /**

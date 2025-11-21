@@ -255,6 +255,7 @@ export interface BBSSession {
   cmdShortcuts: boolean; // Like AmiExpress cmdShortcuts - controls hotkey vs line input mode
   shortcuts?: Map<string, string>; // Loaded shortcuts from .keys (matches express.e shortcuts list)
   doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
+  displayFlowPaused?: boolean; // Waiting for keypress to advance BULL/NODE_BULL/CONF_BULL/menu flow
   tempData?: any; // Temporary data storage for complex operations (like file listing)
   flagManager?: any; // File flagging manager for batch downloads
   inDoorManager?: boolean; // Whether user is currently in door manager
