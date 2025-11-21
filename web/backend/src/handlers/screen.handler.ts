@@ -656,7 +656,8 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   } else if (screenName.includes('/')) {
     // Relative path with slashes - try under dataDir root
     const fsPath = path.join(baseDir, screenName.split('/').join(path.sep));
-    paths.push(fsPath);
+    const resolved = findCaseInsensitive(path.dirname(fsPath), path.basename(fsPath));
+    paths.push(resolved || fsPath);
   }
 
   // Define search directories and filenames to try (case-insensitive, AmigaOS compatible)
