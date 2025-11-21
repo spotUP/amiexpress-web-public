@@ -101,6 +101,9 @@ export function registerAuthHandlers(socket: Socket) {
 
           // express.e:29209 - aePuts('Invalid PassWord\b\n')
           socket.emit('login-failed', 'Invalid PassWord\r\n');
+          // Match express.e: immediately re-prompt for password without asking for username again
+          socket.emit('ansi-output', '\r\nInvalid PassWord\r\n');
+          socket.emit('prompt-password');
           return;
         }
         console.log('[LOGIN] User authenticated successfully, proceeding with login flow');
