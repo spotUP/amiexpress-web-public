@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Search, Trash2, Download, Terminal, Filter, Info, ExternalLink } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -25,7 +25,7 @@ export function LogsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [filterTerm, setFilterTerm] = useState('');
-const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
@@ -65,8 +65,14 @@ const [searchInput, setSearchInput] = useState('');
     setSearchTerm(searchInput);
   };
 
-    const filteredLines = filterTerm ? (logData?.lines || []).reverse().filter(line => line.toLowerCase().includes(filterTerm.toLowerCase())) : (logData?.lines || []).reverse();
-  const highlightedLines = filterTerm ? filteredLines : (logData?.lines || []).reverse();
+  const filteredLines = useMemo(() => {
+    const lines = (logData?.lines || []).slice().reverse();
+    if (!filterTerm) {
+      return lines;
+    }
+    const term = filterTerm.toLowerCase();
+    return lines.filter(line => line.toLowerCase().includes(term));
+  }, [logData?.lines, filterTerm]);
 const handleDownload = () => {
     if (!logData?.lines) return;
 
