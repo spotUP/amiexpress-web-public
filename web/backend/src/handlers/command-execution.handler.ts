@@ -277,12 +277,15 @@ async function runCommand(
       priority: commandDef.priority || 'SAME',
       stack: commandDef.stack || 20000,
       resident: commandDef.resident || false,
+      // doorExpertMode flag (EXPERT_MODE presence) express.e:4770
       expertMode: commandDef.expertMode || false,
       // express.e:4295 - MCI_TEXT for MCI type doors
       mciText: commandDef.mciText
     };
 
     try {
+      // Express.e sets doorExpertMode when EXPERT_MODE tooltype is present
+      session.doorExpertMode = Boolean(commandDef.expertMode);
       await _executeDoor(socket, session, doorConfig);
       return RESULT_SUCCESS;
     } catch (error) {

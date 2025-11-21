@@ -61,7 +61,7 @@ export class ImportMappingService {
 
       // User preferences
       newUser: amigaUser.newUser || false,
-      expert: amigaUser.expert || false,
+      expert: amigaUser.expert ? 'X' : 'N',
       ansi: amigaUser.ansi !== false, // Default to true
       linesPerScreen: amigaUser.linesPerScreen || 24,
       computer: amigaUser.computer || 'Amiga',

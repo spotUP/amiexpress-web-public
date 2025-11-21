@@ -277,7 +277,8 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   }
 
   cmd.resident = tooltypes.get('RESIDENT') === 'YES';
-  cmd.expertMode = tooltypes.get('EXPERT_MODE') === 'YES';
+  // EXPRESS.E treats EXPERT_MODE as a flag; presence triggers doorExpertMode
+  cmd.expertMode = tooltypes.has('EXPERT_MODE');
   cmd.trapOn = tooltypes.get('TRAPON') === 'YES';
   cmd.silent = tooltypes.get('SILENT') === 'YES';
   cmd.multiNode = tooltypes.get('MULTINODE') === 'YES';

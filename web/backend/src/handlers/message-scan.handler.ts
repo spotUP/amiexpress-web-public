@@ -12,7 +12,8 @@ import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import {
   loadMsgPointers,
   updateScanPointer,
-  validatePointers
+  validatePointers,
+  getConferenceScanFlags
 } from '../utils/message-pointers.util';
 import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager';
 
@@ -76,7 +77,9 @@ export function checkConfAccess(user: any, conferenceId: number): boolean {
  * @param messageBaseId - Message base ID
  * @returns True if should scan for mail
  */
-function checkMailConfScan(conferenceId: number, messageBaseId: number): boolean {
+const MAIL_SCAN_MASK = 4; // Bit flag for mail scan (matches AmiExpress MAIL_SCAN_MASK)
+
+async function checkMailConfScan(conferenceId: number, messageBaseId: number, userId: string): Promise<boolean> {
   const flags = getConferenceToolFlags(conferenceId);
   if (flags.forceNewscan) {
     return true;
@@ -85,8 +88,14 @@ function checkMailConfScan(conferenceId: number, messageBaseId: number): boolean
     return false;
   }
 
-  // express.e:572-591 - would also check per-base flags; default to scanning when no override exists.
-  return true;
+  // express.e:572-591 - also checks per-base flags (conf_base.handle[0] & MAIL_SCAN_MASK)
+  try {
+    const confBase = await loadMsgPointers(userId, conferenceId, messageBaseId);
+    return (confBase.scanFlags & MAIL_SCAN_MASK) !== 0;
+  } catch (error) {
+    console.error(`[checkMailConfScan] Failed to load conf_base for user ${userId} conf ${conferenceId} msgBase ${messageBaseId}:`, error);
+    return true; // Fallback to scanning if we cannot determine
+  }
 }
 
 /**
@@ -216,10 +225,12 @@ export async function performConferenceScan(socket: any, session: any): Promise<
     const confMessageBases = _messageBases.filter(mb => mb.conferenceId === conference.id);
     let confNewPublic = 0;
     let confNewPrivate = 0;
+    let fileScanForConf = false;
 
     for (const msgBase of confMessageBases) {
       // express.e:28093-28094 - Check if should scan this msgbase
-      if (!checkMailConfScan(confNum, msgBase.id)) {
+      const scanMail = await checkMailConfScan(confNum, msgBase.id, session.user.id);
+      if (!scanMail) {
         continue;
       }
 
@@ -236,6 +247,36 @@ export async function performConferenceScan(socket: any, session: any): Promise<
         } catch (err) {
           console.error(`[confScan] Failed to update scan pointer for conf ${conference.id} msgBase ${msgBase.id}:`, err);
         }
+      }
+
+      // Track if any base has file-scan enabled to decide N-files scan (express.e checkFileConfScan)
+      try {
+        const scanFlags = await getConferenceScanFlags(session.user.id, conference.id, msgBase.id);
+        const FILE_SCAN_MASK = 8; // matches advanced-commands handler
+        if ((scanFlags & FILE_SCAN_MASK) !== 0) {
+          fileScanForConf = true;
+        }
+      } catch (err) {
+        console.error(`[confScan] Failed to read scan flags for conf ${conference.id} msgBase ${msgBase.id}:`, err);
+      }
+    }
+
+    // Mirror express.e checkFileConfScan: if tooltype SHOW_NEW_FILES or per-base FILE_SCAN_MASK, run new files scan
+    const fileFlags = getConferenceToolFlags(confNum);
+    const shouldScanFiles =
+      fileFlags.showNewFiles ||
+      (!fileFlags.noNewFiles && fileScanForConf);
+
+    if (shouldScanFiles) {
+      try {
+        const { runSysCommand } = require('./command-execution.handler');
+        const currentConfBackup = session.currentConf;
+        session.currentConf = conference.id;
+        // "N" with params "S U" (express.e: runSysCommand('N','S U'))
+        await runSysCommand(socket, session, 'N', 'S U');
+        session.currentConf = currentConfBackup;
+      } catch (err) {
+        console.error(`[confScan] Failed to run new-files scan for conf ${conference.id}:`, err);
       }
     }
 

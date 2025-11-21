@@ -125,7 +125,7 @@ function resolveDoorExecutionUser(session: BBSSession): { user: User; isGuest: b
     calls: 0,
     callsToday: 0,
     newUser: true,
-    expert: false,
+    expert: 'N',
     ansi: session.ansiEnabled !== false,
     linesPerScreen,
     computer: 'Unknown',
@@ -740,12 +740,12 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       const location = door.path;
       const alternatePaths = [];
 
-      // 1. Try with capital D in Doors/ (doors/ → Doors/)
+      // 1. Try with capital D in Doors/ (doors/  Doors/)
       if (/^doors\//i.test(location)) {
         alternatePaths.push(path.join(bbsRoot, location.replace(/^doors\//i, 'Doors/')));
       }
 
-      // 2. Try removing BBS/ prefix (BBS/Doors → Doors)
+      // 2. Try removing BBS/ prefix (BBS/Doors  Doors)
       if (location.includes('BBS/Doors/')) {
         alternatePaths.push(path.join(bbsRoot, location.replace('BBS/Doors/', 'Doors/')));
       }
@@ -1013,7 +1013,7 @@ function isAmigaBinary(filePath: string): boolean {
  * express.e equivalent: SystemTagList() execution
  */
 async function executeNativeDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
-  console.log(`🚪 [DOOR] Executing native door: ${door.name} (${door.path})`);
+  console.log(` [DOOR] Executing native door: ${door.name} (${door.path})`);
 
   // Check if door file exists
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
@@ -1025,10 +1025,10 @@ async function executeNativeDoor(socket: any, session: BBSSession, door: Door, d
     return;
   }
 
-  // 🎉 HISTORIC MOMENT: Check if this is an Amiga binary!
+  //  HISTORIC MOMENT: Check if this is an Amiga binary!
   if (isAmigaBinary(doorPath)) {
-    console.log('🚀 [AMIGA DOOR] Detected Amiga binary! Starting 68k emulation...');
-    socket.emit('ansi-output', '\r\n\x1b[36m🚀 Starting Amiga 68000 emulation...\x1b[0m\r\n\r\n');
+    console.log(' [AMIGA DOOR] Detected Amiga binary! Starting 68k emulation...');
+    socket.emit('ansi-output', '\r\n\x1b[36m Starting Amiga 68000 emulation...\x1b[0m\r\n\r\n');
 
     try {
       const amigaSession = new AmigaDoorSession(socket, {
@@ -1135,7 +1135,7 @@ async function executeNativeDoor(socket: any, session: BBSSession, door: Door, d
  * express.e equivalent: Execute() AREXX command
  */
 async function executeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
-  console.log(`🚪 [DOOR] Executing script door: ${door.name} (${door.path})`);
+  console.log(` [DOOR] Executing script door: ${door.name} (${door.path})`);
 
   // Check if door script exists
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
@@ -1575,12 +1575,12 @@ export async function initializeDoors() {
       path: cmdDef.location,                // Path from LOCATION= field
       accessLevel: cmdDef.access || 0,      // ACCESS= level
       enabled: true,
-      type: doorType,                       // TYPE= (XIM, AIM, TS → typescript, etc.)
+      type: doorType,                       // TYPE= (XIM, AIM, TS  typescript, etc.)
       parameters: []
     };
 
     bbsCmdDoors.push(door);
-    console.log(`[initializeDoors] Registered door: ${door.command} → ${door.path} (type: ${doorType})`);
+    console.log(`[initializeDoors] Registered door: ${door.command}  ${door.path} (type: ${doorType})`);
   }
 
   // Hardcoded web doors (these don't have .info files)

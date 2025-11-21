@@ -84,34 +84,27 @@ export function handleAnsiModeCommand(socket: any, session: BBSSession): void {
  */
 export async function handleExpertModeCommand(socket: any, session: BBSSession): Promise<void> {
   // express.e:26113-26122 - Toggle expert mode flag
-  console.log('🔧 [X Command] Before toggle - session.user.expert:', session.user.expert);
+  const before = session.user.expert === 'X';
 
-  if (session.user.expert) {
-    session.user.expert = false;
+  if (before) {
+    session.user.expert = 'N';
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', 'Expert mode disabled\r\n');
     socket.emit('ansi-output', '\r\n');
   } else {
-    session.user.expert = true;
+    session.user.expert = 'X';
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', 'Expert mode enabled\r\n');
     socket.emit('ansi-output', '\r\n');
   }
 
-  console.log('🔧 [X Command] After toggle - session.user.expert:', session.user.expert);
-
   // Save expert mode preference to database
   if (_db) {
-    console.log('🔧 [X Command] Saving to database - user.id:', session.user.id, 'expert:', session.user.expert);
     await _db.updateUser(session.user.id, { expert: session.user.expert });
-    console.log('🔧 [X Command] Database update complete');
-  } else {
-    console.log('⚠️  [X Command] _db not available, cannot save to database!');
   }
 
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.subState = LoggedOnSubState.DISPLAY_MENU;
-  console.log('🔧 [X Command] Setting subState to DISPLAY_MENU');
 }
 
 /**

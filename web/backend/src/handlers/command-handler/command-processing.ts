@@ -5,11 +5,14 @@
  */
 
 import { BBSSession } from '../../index';
-import { CommandResult } from './types';
 import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand
 } from '../command-execution.handler';
+
+const COMMAND_RESULT_SUCCESS = 'SUCCESS';
+const COMMAND_RESULT_FAILURE = 'FAILURE';
+const COMMAND_RESULT_NOT_ALLOWED = 'NOT_ALLOWED';
 
 /**
  * Execute SysCommand (express.e:4807-4811)
@@ -20,9 +23,9 @@ export async function runSysCommand(socket: any, session: BBSSession, command: s
   const result = await execSysCommand(socket, session, command, params);
 
   // Convert numeric result codes to strings for compatibility
-  if (result === 0) return CommandResult.SUCCESS;
-  if (result === -2) return CommandResult.NOT_ALLOWED;
-  return CommandResult.FAILURE;
+  if (result === 0) return COMMAND_RESULT_SUCCESS;
+  if (result === -2) return COMMAND_RESULT_NOT_ALLOWED;
+  return COMMAND_RESULT_FAILURE;
 }
 
 /**
@@ -34,9 +37,9 @@ export async function runBbsCommand(socket: any, session: BBSSession, command: s
   const result = await execBbsCommand(socket, session, command, params);
 
   // Convert numeric result codes to strings for compatibility
-  if (result === 0) return CommandResult.SUCCESS;
-  if (result === -2) return CommandResult.NOT_ALLOWED;
-  return CommandResult.FAILURE;
+  if (result === 0) return COMMAND_RESULT_SUCCESS;
+  if (result === -2) return COMMAND_RESULT_NOT_ALLOWED;
+  return COMMAND_RESULT_FAILURE;
 }
 
 /**
@@ -54,28 +57,28 @@ export async function processCommand(
 
   // Try SysCommand first
   const sysResult = await runSysCommand(socket, session, command, params);
-  if (sysResult === CommandResult.SUCCESS) {
+  if (sysResult === COMMAND_RESULT_SUCCESS) {
     console.log('[CommandPriority] Executed as SysCommand');
-    return CommandResult.SUCCESS;
+    return COMMAND_RESULT_SUCCESS;
   }
-  if (sysResult === CommandResult.NOT_ALLOWED) {
+  if (sysResult === COMMAND_RESULT_NOT_ALLOWED) {
     console.log('[CommandPriority] SysCommand denied by permissions');
-    return CommandResult.NOT_ALLOWED;
+    return COMMAND_RESULT_NOT_ALLOWED;
   }
 
   // Try BbsCommand second
   const bbsResult = await runBbsCommand(socket, session, command, params);
-  if (bbsResult === CommandResult.SUCCESS) {
+  if (bbsResult === COMMAND_RESULT_SUCCESS) {
     console.log('[CommandPriority] Executed as BbsCommand');
-    return CommandResult.SUCCESS;
+    return COMMAND_RESULT_SUCCESS;
   }
-  if (bbsResult === CommandResult.NOT_ALLOWED) {
+  if (bbsResult === COMMAND_RESULT_NOT_ALLOWED) {
     console.log('[CommandPriority] BbsCommand denied by permissions');
-    return CommandResult.NOT_ALLOWED;
+    return COMMAND_RESULT_NOT_ALLOWED;
   }
 
   // Try InternalCommand last
   console.log('[CommandPriority] Trying as InternalCommand');
   await processBBSCommand(socket, session, command, params);
-  return CommandResult.SUCCESS;
+  return COMMAND_RESULT_SUCCESS;
 }

@@ -1077,7 +1077,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
         calls: 0,
         callsToday: 0,
         newUser: true,
-        expert: userData.expert || false,
+        expert: userData.expert === 'X' ? 'X' : 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 0,

@@ -327,7 +327,7 @@ async function displayAccount(socket: any, user: User, page: number): Promise<vo
     socket.emit('ansi-output', ` Time Limit:      ${user.timeLimit} min\r\n`);
 
     socket.emit('ansi-output', AnsiUtil.colorize(' J.', 'yellow'));
-    socket.emit('ansi-output', ` Expert Mode:     ${user.expert ? 'Yes' : 'No'}\r\n`);
+    socket.emit('ansi-output', ` Expert Mode:     ${user.expert === 'X' ? 'Yes' : 'No'}\r\n`);
   } else {
     // Page 1 - Additional info
     socket.emit('ansi-output', AnsiUtil.colorize(' A.', 'yellow'));
@@ -575,15 +575,24 @@ async function handleFieldUpdate(socket: any, session: BBSSession, db: Database,
         user[fieldName] = numVal;
         state.changes = true;
         break;
-      case 'expert':
-      case 'newUser':
+      case 'expert': {
         const boolVal = newValue.toUpperCase();
         if (boolVal !== 'Y' && boolVal !== 'N') {
           throw new Error('Enter Y or N');
         }
-        user[fieldName] = (boolVal === 'Y');
+        user.expert = boolVal === 'Y' ? 'X' : 'N';
         state.changes = true;
         break;
+      }
+      case 'newUser': {
+        const boolVal = newValue.toUpperCase();
+        if (boolVal !== 'Y' && boolVal !== 'N') {
+          throw new Error('Enter Y or N');
+        }
+        user.newUser = boolVal === 'Y';
+        state.changes = true;
+        break;
+      }
     }
 
     // Redisplay account with updated values

@@ -15,6 +15,24 @@ import type { MailStat, ConfBase } from '../types/message-pointers';
 import { DEFAULT_MAIL_STAT, DEFAULT_SCAN_FLAGS } from '../types/message-pointers';
 
 /**
+ * Get scanFlags for a user/conference/msgbase (MAIL/FILE/ZOOM bits).
+ */
+export async function getConferenceScanFlags(
+  userId: string,
+  conferenceId: number,
+  messageBaseId: number
+): Promise<number> {
+  const { rows } = await (db as any).pool.query(
+    `SELECT scan_flags FROM conf_base WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3`,
+    [userId, conferenceId, messageBaseId]
+  );
+  if (rows.length > 0) {
+    return rows[0].scan_flags || 0;
+  }
+  return 0;
+}
+
+/**
  * Get mail statistics for a conference/message base
  * Based on express.e getMailStatFile() - lines 8672-8707
  *

@@ -97,7 +97,7 @@ describe('Integration Tests - User Journeys', () => {
         calls: 1,
         callsToday: 1,
         newUser: false,
-        expert: false,
+        expert: 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 'Test',

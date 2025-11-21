@@ -221,7 +221,7 @@ export async function handleCommand(
           console.log(`[WHO2] NO removed tracking file: ${nodeFile}`);
         }
       }
-    } catch (error) {
+  } catch (error: any) {
       console.error(`[WHO2] Error executing ${data}:`, error);
     }
     return; // Done - don't process further
@@ -274,7 +274,7 @@ export async function handleCommand(
               );
             }
           })
-          .catch((error) => {
+          .catch((error: any) => {
             console.error(
               "[handleCommand] Pending screen command rejected:",
               error
