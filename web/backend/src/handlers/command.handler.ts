@@ -396,6 +396,15 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // NOTE: Door input routing is handled in socket-handlers.ts (checks doorInputHandler)
   // This function should only be called for non-door input
 
+  // If user is responding to a paginated screen prompt, handle that first
+  if (session.paginatedScreen) {
+    const { handlePaginatedScreenInput } = require('./screen.handler');
+    const handled = await handlePaginatedScreenInput(socket, session, data);
+    if (handled) {
+      return;
+    }
+  }
+
   // Special handling for WHO2 helper tools (NI/NO) - these must run without authentication
   // NI (NodeIn) executes on connection, NO (NodeOut) executes on logout
   // They create tracking files that WHO2 door reads to display connected users

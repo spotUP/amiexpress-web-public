@@ -867,12 +867,32 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
     }
 
-    // Auto-pause long screens (e.g., >25 lines like real AmiExpress More prompt)
-    const lineCount = parsed.split(/\r\n|\n/).length;
+    // Auto-paginate long screens (e.g., >25 lines like real AmiExpress More prompt)
     const pageHeight = session?.screenHeight || 25;
-    if (!session.lastScreenHadPause && lineCount >= pageHeight) {
-      parsed += '\r\n(Pause)...More(y/n/ns)?';
+    const lines = parsed.split(/\r\n|\n/);
+    const pageSize = Math.max(1, pageHeight - 1); // leave room for prompt line
+    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+
+    const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
+      const chunk = lines.slice(startIdx, endIdx).join('\r\n');
+      const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)?' : '';
+      socket.emit(eventName, chunk + promptLine);
+    };
+
+    if (!session.lastScreenHadPause && lines.length > pageHeight) {
+      session.paginatedScreen = {
+        lines,
+        nextIndex: pageSize,
+        pageSize,
+        eventName,
+        commands,
+      };
+      if (commands.length > 0) {
+        session.queuedScreenCommands = commands;
+      }
+      emitPage(0, pageSize, true);
       session.lastScreenHadPause = true;
+      return true;
     }
 
     // Double-buffered display: Build complete frame buffer before sending
@@ -885,7 +905,6 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
 
     // Send entire frame in one atomic operation
     // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
-    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
     screenDebug(`[displayScreen] Emitting ${eventName} event`);
     socket.emit(eventName, frameBuffer);
 
@@ -992,6 +1011,65 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
       session.pendingScreenCommand = undefined;
     }
   }
+}
+
+/**
+ * Handle paginated screen input (More(y/n/ns)?)
+ * Returns true if handled, false otherwise.
+ */
+export async function handlePaginatedScreenInput(socket: any, session: BBSSession, data: string): Promise<boolean> {
+  const paged = session.paginatedScreen;
+  if (!paged) {
+    return false;
+  }
+
+  const key = (data || '').trim().toUpperCase();
+  const yes = key === '' || key === 'Y' || key === '\r' || key === '\n';
+  const no = key === 'N';
+  const noStop = key === 'NS';
+
+  const lines = paged.lines;
+  const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
+    const chunk = lines.slice(startIdx, endIdx).join('\r\n');
+    const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)?' : '';
+    socket.emit(paged.eventName, chunk + promptLine);
+  };
+
+  // NS: dump the rest without further prompts
+  if (noStop) {
+    emitPage(paged.nextIndex, lines.length, false);
+    session.paginatedScreen = undefined;
+    if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
+      await runQueuedScreenCommands(socket, session);
+    }
+    return true;
+  }
+
+  // N: abort remaining pages, do not run queued commands
+  if (no) {
+    session.paginatedScreen = undefined;
+    session.queuedScreenCommands = [];
+    session.pendingScreenCommand = undefined;
+    session.screenCommandResolver = null;
+    return true;
+  }
+
+  // Default: YES / ENTER
+  const start = paged.nextIndex;
+  const end = Math.min(start + paged.pageSize, lines.length);
+  const hasMore = end < lines.length;
+
+  emitPage(start, end, hasMore);
+  paged.nextIndex = end;
+
+  if (!hasMore) {
+    session.paginatedScreen = undefined;
+    if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
+      await runQueuedScreenCommands(socket, session);
+    }
+  }
+
+  return true;
 }
 
 /**
