@@ -70,8 +70,9 @@ export function handleQuestionMarkCommand(socket: any, session: BBSSession): voi
 
   // Load .keys and set input mode like the normal menu path
   const resolvedPath = session.lastScreenFilePath;
+  const { hasKeysFileForResolvedPath } = require('./screen.handler');
   const hasKeys =
-    (resolvedPath && _findSecurityScreen(`${resolvedPath}.keys`, session.user?.secLevel || 0)) ||
+    (resolvedPath && hasKeysFileForResolvedPath(resolvedPath)) ||
     _hasKeysFile('MENU', session.currentConf, session.nodeId || 0);
 
   if (hasKeys) {
