@@ -14,6 +14,14 @@ import { db } from '../database';
 import type { MailStat, ConfBase } from '../types/message-pointers';
 import { DEFAULT_MAIL_STAT, DEFAULT_SCAN_FLAGS } from '../types/message-pointers';
 
+function getSqliteDb(): any {
+  const sqlite = (db as any).db;
+  if (!sqlite) {
+    throw new Error('Database not initialized');
+  }
+  return sqlite;
+}
+
 /**
  * Get scanFlags for a user/conference/msgbase (MAIL/FILE/ZOOM bits).
  */
@@ -22,14 +30,12 @@ export async function getConferenceScanFlags(
   conferenceId: number,
   messageBaseId: number
 ): Promise<number> {
-  const { rows } = await (db as any).pool.query(
-    `SELECT scan_flags FROM conf_base WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3`,
-    [userId, conferenceId, messageBaseId]
+  const sqlite = getSqliteDb();
+  const stmt = sqlite.prepare(
+    `SELECT scan_flags FROM conf_base WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`
   );
-  if (rows.length > 0) {
-    return rows[0].scan_flags || 0;
-  }
-  return 0;
+  const row = stmt.get(userId, conferenceId, messageBaseId);
+  return row ? row.scan_flags || 0 : 0;
 }
 
 /**
@@ -49,35 +55,38 @@ export async function getMailStatFile(
   conferenceId: number,
   messageBaseId: number
 ): Promise<MailStat> {
-  const client = await (db as any).pool.connect();
-  try {
-    const result = await client.query(
-      `SELECT lowest_key, high_msg_num, lowest_not_del
-       FROM mail_stats
-       WHERE conference_id = $1 AND message_base_id = $2`,
-      [conferenceId, messageBaseId]
+  const sqlite = getSqliteDb();
+  const select = sqlite.prepare(
+    `SELECT lowest_key, high_msg_num, lowest_not_del
+     FROM mail_stats
+     WHERE conference_id = ? AND message_base_id = ?`
+  );
+  const row = select.get(conferenceId, messageBaseId);
+
+  if (!row) {
+    const insert = sqlite.prepare(
+      `INSERT INTO mail_stats (conference_id, message_base_id, lowest_key, high_msg_num, lowest_not_del)
+       VALUES (?, ?, ?, ?, ?)`
     );
-
-    if (result.rows.length === 0) {
-      // Create default mail stats (express.e:8689-8693)
-      await client.query(
-        `INSERT INTO mail_stats (conference_id, message_base_id, lowest_key, high_msg_num, lowest_not_del)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (conference_id, message_base_id) DO NOTHING`,
-        [conferenceId, messageBaseId, DEFAULT_MAIL_STAT.lowestKey, DEFAULT_MAIL_STAT.highMsgNum, DEFAULT_MAIL_STAT.lowestNotDel]
+    try {
+      insert.run(
+        conferenceId,
+        messageBaseId,
+        DEFAULT_MAIL_STAT.lowestKey,
+        DEFAULT_MAIL_STAT.highMsgNum,
+        DEFAULT_MAIL_STAT.lowestNotDel
       );
-
-      return { ...DEFAULT_MAIL_STAT };
+    } catch {
+      // ignore conflict
     }
-
-    return {
-      lowestKey: result.rows[0].lowest_key,
-      highMsgNum: result.rows[0].high_msg_num,
-      lowestNotDel: result.rows[0].lowest_not_del
-    };
-  } finally {
-    client.release();
+    return { ...DEFAULT_MAIL_STAT };
   }
+
+  return {
+    lowestKey: row.lowest_key,
+    highMsgNum: row.high_msg_num,
+    lowestNotDel: row.lowest_not_del
+  };
 }
 
 /**
@@ -93,12 +102,13 @@ export async function updateHighMsgNum(
   messageBaseId: number,
   newHighMsgNum: number
 ): Promise<void> {
-  await (db as any).pool.query(
+  const sqlite = getSqliteDb();
+  const stmt = sqlite.prepare(
     `UPDATE mail_stats
-     SET high_msg_num = $3
-     WHERE conference_id = $1 AND message_base_id = $2`,
-    [conferenceId, messageBaseId, newHighMsgNum]
+     SET high_msg_num = ?
+     WHERE conference_id = ? AND message_base_id = ?`
   );
+  stmt.run(newHighMsgNum, conferenceId, messageBaseId);
 }
 
 /**
@@ -120,68 +130,65 @@ export async function loadMsgPointers(
   conferenceId: number,
   messageBaseId: number
 ): Promise<ConfBase> {
-  const client = await (db as any).pool.connect();
-  try {
-    const result = await client.query(
-      `SELECT * FROM conf_base
-       WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3`,
-      [userId, conferenceId, messageBaseId]
+  const sqlite = getSqliteDb();
+  const select = sqlite.prepare(
+    `SELECT * FROM conf_base
+     WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`
+  );
+  const row = select.get(userId, conferenceId, messageBaseId);
+
+  if (!row) {
+    const defaultConfBase: ConfBase = {
+      userId,
+      conferenceId,
+      messageBaseId,
+      lastNewReadConf: 0,
+      lastMsgReadConf: 0,
+      scanFlags: DEFAULT_SCAN_FLAGS,
+      messagesPosted: 0,
+      newSinceDate: new Date(),
+      bytesDownload: 0,
+      bytesUpload: 0,
+      upload: 0,
+      downloads: 0
+    };
+
+    const insert = sqlite.prepare(
+      `INSERT INTO conf_base (
+        user_id, conference_id, message_base_id,
+        last_new_read_conf, last_msg_read_conf, scan_flags,
+        messages_posted, new_since_date,
+        bytes_download, bytes_upload, upload, downloads
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
-
-    if (result.rows.length === 0) {
-      // Create default conf_base record
-      const defaultConfBase: ConfBase = {
-        userId,
-        conferenceId,
-        messageBaseId,
-        lastNewReadConf: 0,
-        lastMsgReadConf: 0,
-        scanFlags: DEFAULT_SCAN_FLAGS,
-        messagesPosted: 0,
-        newSinceDate: new Date(),
-        bytesDownload: 0,
-        bytesUpload: 0,
-        upload: 0,
-        downloads: 0
-      };
-
-      await client.query(
-        `INSERT INTO conf_base (
-          user_id, conference_id, message_base_id,
-          last_new_read_conf, last_msg_read_conf, scan_flags,
-          messages_posted, new_since_date,
-          bytes_download, bytes_upload, upload, downloads
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (user_id, conference_id, message_base_id) DO NOTHING`,
-        [
-          userId, conferenceId, messageBaseId,
-          0, 0, DEFAULT_SCAN_FLAGS,
-          0, new Date(),
-          0, 0, 0, 0
-        ]
+    try {
+      insert.run(
+        userId, conferenceId, messageBaseId,
+        0, 0, DEFAULT_SCAN_FLAGS,
+        0, Math.floor(Date.now() / 1000),
+        0, 0, 0, 0
       );
-
-      return defaultConfBase;
+    } catch {
+      // ignore conflict
     }
 
-    const row = result.rows[0];
-    return {
-      userId: row.user_id,
-      conferenceId: row.conference_id,
-      messageBaseId: row.message_base_id,
-      lastNewReadConf: row.last_new_read_conf,
-      lastMsgReadConf: row.last_msg_read_conf,
-      scanFlags: row.scan_flags,
-      messagesPosted: row.messages_posted,
-      newSinceDate: new Date(row.new_since_date),
-      bytesDownload: parseInt(row.bytes_download),
-      bytesUpload: parseInt(row.bytes_upload),
-      upload: row.upload,
-      downloads: row.downloads
-    };
-  } finally {
-    client.release();
+    return defaultConfBase;
   }
+
+  return {
+    userId: row.user_id,
+    conferenceId: row.conference_id,
+    messageBaseId: row.message_base_id,
+    lastNewReadConf: row.last_new_read_conf,
+    lastMsgReadConf: row.last_msg_read_conf,
+    scanFlags: row.scan_flags,
+    messagesPosted: row.messages_posted,
+    newSinceDate: new Date((row.new_since_date || 0) * 1000),
+    bytesDownload: parseInt(row.bytes_download),
+    bytesUpload: parseInt(row.bytes_upload),
+    upload: row.upload,
+    downloads: row.downloads
+  };
 }
 
 /**
@@ -205,32 +212,33 @@ export async function saveMsgPointers(confBase: ConfBase): Promise<void> {
     console.warn(`saveMsgPointers: lastNewReadConf is 0 for conf ${confBase.conferenceId}`);
   }
 
-  await (db as any).pool.query(
+  const sqlite = getSqliteDb();
+  const stmt = sqlite.prepare(
     `UPDATE conf_base SET
-      last_new_read_conf = $4,
-      last_msg_read_conf = $5,
-      scan_flags = $6,
-      messages_posted = $7,
-      new_since_date = $8,
-      bytes_download = $9,
-      bytes_upload = $10,
-      upload = $11,
-      downloads = $12
-     WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3`,
-    [
-      confBase.userId,
-      confBase.conferenceId,
-      confBase.messageBaseId,
-      confBase.lastNewReadConf,
-      confBase.lastMsgReadConf,
-      confBase.scanFlags,
-      confBase.messagesPosted,
-      confBase.newSinceDate,
-      confBase.bytesDownload,
-      confBase.bytesUpload,
-      confBase.upload,
-      confBase.downloads
-    ]
+      last_new_read_conf = ?,
+      last_msg_read_conf = ?,
+      scan_flags = ?,
+      messages_posted = ?,
+      new_since_date = ?,
+      bytes_download = ?,
+      bytes_upload = ?,
+      upload = ?,
+      downloads = ?
+     WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`
+  );
+  stmt.run(
+    confBase.lastNewReadConf,
+    confBase.lastMsgReadConf,
+    confBase.scanFlags,
+    confBase.messagesPosted,
+    Math.floor(confBase.newSinceDate.getTime() / 1000),
+    confBase.bytesDownload,
+    confBase.bytesUpload,
+    confBase.upload,
+    confBase.downloads,
+    confBase.userId,
+    confBase.conferenceId,
+    confBase.messageBaseId
   );
 }
 
@@ -314,13 +322,14 @@ export async function updateReadPointer(
   messageBaseId: number,
   msgNum: number
 ): Promise<void> {
-  await (db as any).pool.query(
+  const sqlite = getSqliteDb();
+  const stmt = sqlite.prepare(
     `UPDATE conf_base
-     SET last_msg_read_conf = $4
-     WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3
-       AND last_msg_read_conf < $4`,
-    [userId, conferenceId, messageBaseId, msgNum]
+     SET last_msg_read_conf = ?
+     WHERE user_id = ? AND conference_id = ? AND message_base_id = ?
+       AND last_msg_read_conf < ?`
   );
+  stmt.run(msgNum, userId, conferenceId, messageBaseId, msgNum);
 }
 
 /**
@@ -338,10 +347,11 @@ export async function updateScanPointer(
   messageBaseId: number,
   msgNum: number
 ): Promise<void> {
-  await (db as any).pool.query(
+  const sqlite = getSqliteDb();
+  const stmt = sqlite.prepare(
     `UPDATE conf_base
-     SET last_new_read_conf = $4
-     WHERE user_id = $1 AND conference_id = $2 AND message_base_id = $3`,
-    [userId, conferenceId, messageBaseId, msgNum]
+     SET last_new_read_conf = ?
+     WHERE user_id = ? AND conference_id = ? AND message_base_id = ?`
   );
+  stmt.run(msgNum, userId, conferenceId, messageBaseId);
 }
