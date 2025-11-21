@@ -464,7 +464,7 @@ export class ImportTransactionService extends EventEmitter {
 
             case 'replace':
               const replaceMapped = this.mapper.mapAmigaUserToModern(amigaUser);
-              await this.db.updateUser(existing.id, replaceMapped);
+              await this.db.updateUser(existing.id, replaceMapped as any);
               imported++;
               break;
 
@@ -485,7 +485,7 @@ export class ImportTransactionService extends EventEmitter {
 
             case 'merge':
               const merged = this.mapper.mergeUserStats(existing, amigaUser);
-              await this.db.updateUser(existing.id, merged);
+              await this.db.updateUser(existing.id, merged as any);
               warnings.push(`Merged stats for user: ${amigaUser.username}`);
               imported++;
               break;

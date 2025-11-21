@@ -26,6 +26,7 @@ let _displayScreen: (socket: any, session: BBSSession, screenName: string) => vo
 let _findSecurityScreen: (basePath: string, secLevel: number) => string | null;
 let _confScreenDir: string;
 let _db: any;
+let _hasKeysFile: any;
 
 /**
  * Set dependencies for display/file commands (called from index.ts)
@@ -35,11 +36,13 @@ export function setDisplayFileCommandsDependencies(deps: {
   findSecurityScreen: typeof _findSecurityScreen;
   confScreenDir: string;
   db: any;
+  hasKeysFile: any;
 }) {
   _displayScreen = deps.displayScreen;
   _findSecurityScreen = deps.findSecurityScreen;
   _confScreenDir = deps.confScreenDir;
   _db = deps.db;
+  _hasKeysFile = deps.hasKeysFile;
 }
 
 /**
@@ -57,13 +60,49 @@ export function setDisplayFileCommandsDependencies(deps: {
  * In normal mode, does nothing (menu is always visible).
  */
 export function handleQuestionMarkCommand(socket: any, session: BBSSession): void {
-  // If in expert mode, show the menu
-  if (session.expertMode) {
-    // Clear screen if needed (handled by displayScreen)
-    _displayScreen(socket, session, 'MENU');
+  const isExpert = session.user?.expert === 'X';
+  if (!isExpert) {
+    return;
   }
 
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  // Display the menu screen even in expert mode (express.e:24594-24599)
+  _displayScreen(socket, session, 'MENU');
+
+  // Load .keys and set input mode like the normal menu path
+  const resolvedPath = session.lastScreenFilePath;
+  const hasKeys =
+    (resolvedPath && _findSecurityScreen(`${resolvedPath}.keys`, session.user?.secLevel || 0)) ||
+    _hasKeysFile('MENU', session.currentConf, session.nodeId || 0);
+
+  if (hasKeys) {
+    session.cmdShortcuts = true;
+    if (!session.shortcuts) {
+      session.shortcuts = new Map();
+    }
+    session.shortcuts.clear();
+    if (resolvedPath) {
+      const path = require('path');
+      const { findCaseInsensitive } = require('../utils/fs-amiga.util');
+      const dir = path.dirname(resolvedPath);
+      const base = path.basename(resolvedPath);
+      const candidate = `${base}.keys`;
+      const keyPath = findCaseInsensitive(dir, candidate);
+      if (keyPath) {
+        const { ShortcutMap } = require('../utils/shortcut.util');
+        const loader = new ShortcutMap();
+        loader.load(keyPath);
+        loader.entries().forEach(([k, v]: [string, string]) => session.shortcuts!.set(k, v));
+      }
+    }
+  } else {
+    session.cmdShortcuts = false;
+    if (session.shortcuts) session.shortcuts.clear();
+  }
+
+  // Prompt and set input state
+  const { displayMenuPrompt } = require('./command-handler/menu');
+  displayMenuPrompt(socket, session);
+  session.subState = session.cmdShortcuts ? LoggedOnSubState.READ_SHORTCUTS : LoggedOnSubState.READ_COMMAND;
 }
 
 /**

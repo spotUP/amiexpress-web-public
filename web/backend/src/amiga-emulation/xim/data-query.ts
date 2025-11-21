@@ -190,12 +190,12 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_EXPERT:
         if (isRead) {
-          const expert = user?.expert ? 'Y' : 'N';
+          const expert = user?.expert === 'X' ? 'X' : 'N';
           this.messageParser.writeString(stringAddr, expert, 200);
           console.log(`  [READ] DT_EXPERT: ${expert}`);
         } else {
           const expertStr = this.messageParser.readString(stringAddr, 1);
-          if (user) user.expert = (expertStr === 'Y' || expertStr === 'y');
+          if (user) user.expert = (expertStr === 'X' || expertStr === 'x') ? 'X' : 'N';
           console.log(`  [WRITE] DT_EXPERT: ${expertStr}`);
         }
         break;

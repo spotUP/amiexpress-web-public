@@ -187,7 +187,7 @@ export class AmigaExportService {
       calls: user.calls || 0,
       callsToday: user.calls_today || 0,
       newUser: user.new_user === 1,
-      expert: user.expert === 1,
+      expert: user.expert === 'X',
       ansi: user.ansi === 1,
       linesPerScreen: user.lines_per_screen || 24,
       computer: user.computer || '',

@@ -82,6 +82,11 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
   // express.e:8187 - displayScreen(SCREEN_LOGOFF)
   // Display Logoff.txt screen file which contains ~XIDOORS:who/No
   console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
+  // Reset shortcuts on exit (express.e:8124)
+  session.cmdShortcuts = false;
+  if (session.shortcuts) session.shortcuts.clear();
+  session.doorExpertMode = false;
+  session.menuPause = true; // ensure next displayMainMenu shows if invoked during logoff edge cases
   const logoffDisplayed = _displayScreen(socket, session, 'Logoff');
 
   if (!logoffDisplayed) {

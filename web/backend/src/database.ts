@@ -2049,7 +2049,7 @@ export class Database {
         calls: 0,
         callsToday: 0,
         newUser: false,
-        expert: false,
+        expert: 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 'Server',

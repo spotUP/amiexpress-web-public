@@ -6,7 +6,8 @@
 
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
-import { displayScreen, hasKeysFile } from '../screen.handler';
+import { displayScreen, doPause, hasKeysFile, hasKeysFileForResolvedPath } from '../screen.handler';
+import { ShortcutMap } from '../../utils/shortcut.util';
 import {
   getConfig,
   getMessageBases,
@@ -17,63 +18,62 @@ import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 
 /**
  * Display main menu (express.e:28586)
- * Like AmiExpress: only display menu if menuPause is TRUE
+ * menuPause controls whether we show a pause prompt before the menu; display is gated by expert/door flags.
  */
 export async function displayMainMenu(socket: any, session: BBSSession) {
-  console.log('displayMainMenu called, current subState:', session.subState, 'menuPause:', session.menuPause);
-
   const processOlmMessageQueue = getProcessOlmMessageQueue();
-  console.log('🔍 processOlmMessageQueue type:', typeof processOlmMessageQueue);
+  const SCREEN_MENU = getScreenMenu();
+  const relConfNumber = session.relConfNum || 1;
+  const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
 
-  // Like AmiExpress: only display menu if menuPause is TRUE
-  if (session.menuPause) {
-    console.log('menuPause is TRUE, displaying menu');
+  const shouldDisplayMenu = ((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus;
 
-    // Clear screen before displaying menu (like AmiExpress does)
-    console.log('Sending screen clear: \\x1b[2J\\x1b[H');
-    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
+  if (shouldDisplayMenu && session.menuPause) {
+    doPause(socket, session);
+  }
 
-    // Like express.e:28594 - process OLM message queue AFTER clearing screen but BEFORE menu
-    // This ensures messages are visible and not immediately erased
-    if (typeof processOlmMessageQueue === 'function') {
-      processOlmMessageQueue(socket, session, true);
-    } else {
-      console.warn('⚠️  processOlmMessageQueue not injected yet, skipping OLM queue processing');
-    }
+  if (shouldDisplayMenu) {
+    const screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
 
-    // Like express.e:6567 - default cmdShortcuts to FALSE (line input mode)
-    session.cmdShortcuts = false;
-
-    // CRITICAL FIX: Correct condition from express.e:28583
-    // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
-    // Note: Database stores expert as BOOLEAN (true/false), not string ("Y"/"N")
-    console.log('🔍 [Menu Display] Checking expert mode:');
-    const relConfNumber = session.relConfNum || 1;
-    const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
-    console.log('  - session.user?.expert:', session.user?.expert);
-    console.log('  - session.doorExpertMode:', session.doorExpertMode);
-    console.log('  - forceMenus tooltype:', forceMenus);
-    console.log('  - Will display menu?', (session.user?.expert === false && !session.doorExpertMode) || forceMenus);
-
-    const SCREEN_MENU = getScreenMenu();
-    if ((session.user?.expert === false && !session.doorExpertMode) || forceMenus) {
-      console.log('Displaying menu screen file');
-      // Phase 8: Use authentic screen file system (express.e:28586 - await displayScreen(SCREEN_MENU))
-      const screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
-
-      // Like express.e:6572-6573 - check for .keys file and set cmdShortcuts accordingly
-      if (screenDisplayed && hasKeysFile(SCREEN_MENU, session.currentConf)) {
-        console.log('✓ .keys file exists, enabling hotkey mode (cmdShortcuts = true)');
+    // Like express.e:6572-6573 - check for .keys file and set cmdShortcuts accordingly
+    if (screenDisplayed) {
+      const resolvedPath = session.lastScreenFilePath;
+      const hasKeys =
+        (resolvedPath && hasKeysFileForResolvedPath(resolvedPath)) ||
+        hasKeysFile(SCREEN_MENU, session.currentConf);
+      if (hasKeys) {
         session.cmdShortcuts = true;
+
+        // Load shortcuts (express.e loadShortcuts)
+        if (!session.shortcuts) {
+          session.shortcuts = new Map();
+        }
+        session.shortcuts.clear();
+        if (resolvedPath) {
+          const path = require('path');
+          const { findCaseInsensitive } = require('../../utils/fs-amiga.util');
+          const dir = path.dirname(resolvedPath);
+          const base = path.basename(resolvedPath);
+          const candidate = `${base}.keys`;
+          const keyPath = findCaseInsensitive(dir, candidate);
+          if (keyPath) {
+            const loader = new ShortcutMap();
+            loader.load(keyPath);
+            loader.entries().forEach(([k, v]) => session.shortcuts!.set(k, v));
+          }
+        }
       } else {
-        console.log('No .keys file, using line input mode (cmdShortcuts = false)');
+        session.cmdShortcuts = false;
+        if (session.shortcuts) session.shortcuts.clear();
       }
     }
-
-    displayMenuPrompt(socket, session);
-  } else {
-    console.log('menuPause is FALSE, NOT displaying menu - staying in command mode');
   }
+
+  if (typeof processOlmMessageQueue === 'function') {
+    processOlmMessageQueue(socket, session, true);
+  }
+
+  displayMenuPrompt(socket, session);
 
   // Reset doorExpertMode after menu display (express.e:28586)
   session.doorExpertMode = false;
@@ -91,7 +91,7 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
  * Shows BBS name, conference info, and time remaining
  */
 export function displayMenuPrompt(socket: any, session: BBSSession) {
-  console.log('📋 displayMenuPrompt called');
+  console.log('[menu] displayMenuPrompt called');
 
   const config = getConfig();
   const messageBases = getMessageBases() || [];
@@ -130,15 +130,15 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
     // Multiple message bases: show "ConfName - MsgBaseName"
     const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
     const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
-    console.log('📋 Sending multi-msgbase prompt:', prompt);
+    console.log(' Sending multi-msgbase prompt:', prompt);
     socket.emit('ansi-output', prompt);
   } else {
     // Single message base: just show conference name
     const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
-    console.log('📋 Sending single-msgbase prompt:', prompt);
+    console.log(' Sending single-msgbase prompt:', prompt);
     socket.emit('ansi-output', prompt);
   }
 
-  console.log('📋 Setting subState to READ_COMMAND');
+  console.log(' Setting subState to READ_COMMAND');
   session.subState = LoggedOnSubState.READ_COMMAND;
 }

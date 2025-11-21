@@ -56,7 +56,7 @@ export class AuthHandler {
           username: user.username,
           realname: user.realname,
           secLevel: user.secLevel,
-          expert: user.expert,
+          expert: user.expert === 'X' ? 'X' : 'N',
           ansi: user.ansi
         }
       });
@@ -115,7 +115,7 @@ export class AuthHandler {
         calls: 1,
         callsToday: 1,
         newUser: true,
-        expert: false,
+        expert: 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 'Unknown',
@@ -154,7 +154,7 @@ export class AuthHandler {
           username: user.username,
           realname: user.realname,
           secLevel: user.secLevel,
-          expert: user.expert,
+          expert: user.expert === 'X' ? 'X' : 'N',
           ansi: user.ansi
         }
       });

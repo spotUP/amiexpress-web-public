@@ -121,7 +121,7 @@ describe('Command Handlers', () => {
         calls: 1,
         callsToday: 1,
         newUser: true,
-        expert: false,
+        expert: 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 'Test',
@@ -182,7 +182,7 @@ describe('Command Handlers', () => {
         calls: 1,
         callsToday: 1,
         newUser: false,
-        expert: false,
+        expert: 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 'Test',
@@ -230,7 +230,7 @@ describe('Command Handlers', () => {
         calls: 1,
         callsToday: 1,
         newUser: false,
-        expert: false, // Initially false
+        expert: 'N', // Initially false
         ansi: true,
         linesPerScreen: 23,
         computer: 'Test',
@@ -251,12 +251,12 @@ describe('Command Handlers', () => {
       });
 
       let user = await db.getUserById(userId);
-      expect(user?.expert).toBe(false);
+      expect(user?.expert).toBe('N');
 
       // Toggle expert mode
-      await db.updateUser(userId, { expert: true });
+      await db.updateUser(userId, { expert: 'X' });
       user = await db.getUserById(userId);
-      expect(user?.expert).toBe(true);
+      expect(user?.expert).toBe('X');
     });
 
     test('should handle S command (Status)', async () => {
@@ -283,7 +283,7 @@ describe('Command Handlers', () => {
         calls: 10,
         callsToday: 2,
         newUser: false,
-        expert: false,
+        expert: 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 'Test',
@@ -346,7 +346,7 @@ describe('Command Handlers', () => {
         calls: 1,
         callsToday: 1,
         newUser: false,
-        expert: false,
+        expert: 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 'Test Computer',
@@ -575,7 +575,7 @@ describe('Command Handlers', () => {
         calls: 1,
         callsToday: 1,
         newUser: false,
-        expert: false,
+        expert: 'N',
         ansi: true,
         linesPerScreen: 23,
         computer: 'Test',

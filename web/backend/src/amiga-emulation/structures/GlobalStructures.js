@@ -298,7 +298,7 @@ class NodeStateGlobals {
         emulator.writeMemory(ansiAddr, ((_c = session.user) === null || _c === void 0 ? void 0 : _c.ansiEnabled) ? 1 : 0);
         // expert flag (CHAR) - expert mode
         const expertAddr = baseAddr + 21;
-        emulator.writeMemory(expertAddr, ((_d = session.user) === null || _d === void 0 ? void 0 : _d.expert) ? 1 : 0);
+        emulator.writeMemory(expertAddr, ((_d = session.user) === null || _d === void 0 ? void 0 : _d.expert) === 'X' ? 1 : 0);
         console.log(`[NodeStateGlobals] Wrote node state at 0x${baseAddr.toString(16)}`);
         console.log(`  currentConf: ${session.currentConference || 0}`);
         console.log(`  node: ${session.nodeId || 1}`);

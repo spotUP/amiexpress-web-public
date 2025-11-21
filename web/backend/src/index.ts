@@ -26,7 +26,7 @@ import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, requireSysop, AuthRequest } from './middleware/auth.middleware';
 import { createConfigRouter } from './api/config-routes';
 import { createImportRouter } from './handlers/import.handler';
-import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences } from './handlers/screen.handler';
+import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences, hasKeysFile } from './handlers/screen.handler';
 import { registerSocketHandlers } from './server/socket-handlers';
 import { sessions, userSessions, socketToUser, setSession } from './server/session-manager';
 import { app } from './server/app';
@@ -228,7 +228,7 @@ import {
 export interface BBSSession {
   state: BBSState;
   subState?: LoggedOnSubState;
-  user?: any; // Will be User from database
+  user?: any; // Will be User from database (expert stored as "X"/"N")
   currentConf: number;
   currentMsgBase: number;
   timeRemaining: number;
@@ -253,6 +253,7 @@ export interface BBSSession {
   currentConfName: string; // Current conference name (like AmiExpress currentConfName)
   currentMenuName?: string; // Current menu name set by ~SM_ MCI code (express.e:5575)
   cmdShortcuts: boolean; // Like AmiExpress cmdShortcuts - controls hotkey vs line input mode
+  shortcuts?: Map<string, string>; // Loaded shortcuts from .keys (matches express.e shortcuts list)
   doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
   tempData?: any; // Temporary data storage for complex operations (like file listing)
   flagManager?: any; // File flagging manager for batch downloads
@@ -282,6 +283,7 @@ export interface BBSSession {
   nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163
   queuedScreenCommands?: string[]; // Deferred screen commands (run after pause key)
   lastScreenHadPause?: boolean; // Whether the last displayed screen contained ~SP.
+  lastScreenFilePath?: string; // Resolved path of last displayed screen (used for .keys lookup)
   loginRetryCount: number; // Login retry counter - express.e:29461, 29560 (max 5 before disconnect)
   callerNum?: number; // Caller number for this session (total calls to BBS)
   paginatedScreen?: {
@@ -1089,6 +1091,7 @@ io.on('connection', async (socket) => {
     relConfNum: 0, // Relative conference number
     currentConfName: 'General', // Current conference name (matches ID 4)
     cmdShortcuts: false, // Like AmiExpress - default to line input mode, not hotkeys
+    shortcuts: new Map(), // Loaded shortcuts from .keys
     doorExpertMode: false, // Like AmiExpress - doors can force menu display (express.e:28583)
 
     // Phase 9: Initialize security fields (express.e:447-455)
@@ -2109,7 +2112,8 @@ async function initializeData() {
       displayScreen,
       findSecurityScreen,
       confScreenDir: path.join(config.get('dataDir'), 'Screens'),
-      db
+      db,
+      hasKeysFile
     });
 
     // Inject dependencies into preference/chat commands handler

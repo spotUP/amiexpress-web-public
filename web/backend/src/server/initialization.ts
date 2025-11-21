@@ -36,7 +36,7 @@ import {
   displaySystemBulletins
 } from './database-helpers';
 import { sessions } from './session-manager';
-import { setConferences, displayScreen, parseMciCodes, addAnsiEscapes, loadScreenFile } from '../handlers/screen.handler';
+import { setConferences, displayScreen, parseMciCodes, addAnsiEscapes, loadScreenFile, hasKeysFile } from '../handlers/screen.handler';
 import {
   setConferences as setConferencesForConferenceHandler,
   setMessageBases,
@@ -343,7 +343,8 @@ export async function initializeData() {
       displayScreen,
       findSecurityScreen,
       confScreenDir: path.join(config.get('dataDir'), 'Screens'),
-      db
+      db,
+      hasKeysFile
     });
 
     // Inject dependencies into preference/chat commands handler

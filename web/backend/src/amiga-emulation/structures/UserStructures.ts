@@ -201,8 +201,8 @@ export class UserStructure {
     // +0xB5: dailyBytesDld (LONG) - daily bytes downloaded
     emulator.writeMemory32(addr + 0xB5, user.dailyBytesDld || 0);
 
-    // +0xB9: expert (CHAR) - expert mode flag
-    emulator.writeMemory(addr + 0xB9, user.expert ? 1 : 0);
+    // +0xB9: expert (CHAR) - expert mode flag ("X" = expert)
+    emulator.writeMemory(addr + 0xB9, user.expert === 'X' ? 1 : 0);
 
     // +0xBA: chatRemain (LONG) - chat time remaining
     emulator.writeMemory32(addr + 0xBA, user.chatRemain || 0);
@@ -276,7 +276,7 @@ export class UserStructure {
     user.bytesUpload = emulator.readMemory32(addr + 0xAD);
     user.dailyBytesLimit = emulator.readMemory32(addr + 0xB1);
     user.dailyBytesDld = emulator.readMemory32(addr + 0xB5);
-    user.expert = emulator.readMemory(addr + 0xB9) !== 0;
+    user.expert = emulator.readMemory(addr + 0xB9) !== 0 ? 'X' : 'N';
     user.chatRemain = emulator.readMemory32(addr + 0xBA);
     user.chatLimit = emulator.readMemory32(addr + 0xBE);
     user.translatorID = emulator.readMemory(addr + 0xD7);

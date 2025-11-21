@@ -86,7 +86,7 @@ export function setNewUserDependencies(deps: NewUserDependencies) {
  * express.e:30003-30050 (newUserAccount)
  */
 export async function startNewUserRegistration(socket: Socket, session: any, username: string) {
-  console.log('📝 [NEW USER] Starting registration for:', username);
+  console.log(' [NEW USER] Starting registration for:', username);
 
   session.state = BBSState.REGISTERING;
   session.inputBuffer = '';
@@ -868,7 +868,7 @@ async function createAccount(socket: Socket, session: any) {
       linesPerScreen: data.linesPerScreen,
       computer: data.computerType,
       ansi: true,
-      expert: false,
+      expert: 'N',
       screenClear: data.screenClear,
       availableForChat: true, // Enable chat by default
       quietNode: false, // Show chat notifications
@@ -946,6 +946,7 @@ async function createAccount(socket: Socket, session: any) {
     session.confRJoin = 1; // Default to General conference
     session.msgBaseRJoin = 1;
     session.cmdShortcuts = false;
+    if (session.shortcuts) session.shortcuts.clear();
 
     // Clean up registration data
     delete session.newUserData;
@@ -966,7 +967,7 @@ async function createAccount(socket: Socket, session: any) {
     socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
     socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
   } catch (error) {
-    console.error('❌ [NEW USER] Account creation error:', error);
+    console.error(' [NEW USER] Account creation error:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError creating account. Please try again.\x1b[0m\r\n');
     session.state = BBSState.AWAIT;
   }

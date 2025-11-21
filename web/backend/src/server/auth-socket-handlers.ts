@@ -214,6 +214,7 @@ export function registerAuthHandlers(socket: Socket) {
       // Like express.e:394 - default cmdShortcuts to FALSE (line input mode)
       // This will be set to TRUE if .keys file exists when displaying menu (express.e:6567-6573)
       session.cmdShortcuts = false;
+      if (session.shortcuts) session.shortcuts.clear();
 
       // If we already sent login-success for username/password, don't send again
       if (data.token) {

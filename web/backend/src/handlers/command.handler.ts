@@ -12,8 +12,9 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // Import from other handlers
-import { displayScreen, doPause, hasKeysFile } from './screen.handler';
+import { displayScreen, doPause } from './screen.handler';
 import { displayConferenceBulletins, joinConference } from './conference.handler';
+import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
 import { displayDoorMenu, executeDoor } from './door.handler';
 import { startSysopPage } from './chat.handler';
 import {
@@ -232,9 +233,9 @@ export function setFileAreas(areas: any[]) {
 }
 
 export function setProcessOlmMessageQueue(fn: any) {
-  console.log('🔧 setProcessOlmMessageQueue called, fn type:', typeof fn);
+  console.log(' setProcessOlmMessageQueue called, fn type:', typeof fn);
   processOlmMessageQueue = fn;
-  console.log('🔧 processOlmMessageQueue set, now type:', typeof processOlmMessageQueue);
+  console.log(' processOlmMessageQueue set, now type:', typeof processOlmMessageQueue);
 }
 
 export function setCheckSecurity(fn: any) {
@@ -258,129 +259,25 @@ export function setConstants(constants: any) {
 }
 
 // ===== Exported Functions =====
+export const displayMainMenu = menuDisplayMainMenu;
+export const displayMenuPrompt = menuDisplayMenuPrompt;
 
-export async function displayMainMenu(socket: any, session: BBSSession) {
-  console.log('displayMainMenu called, current subState:', session.subState, 'menuPause:', session.menuPause);
-  console.log('🔍 processOlmMessageQueue type:', typeof processOlmMessageQueue);
+/**
+ * Return to the menu after command execution when the command did not change state.
+ * menuPauseDefault mirrors express.e: TRUE for line input commands, FALSE for shortcuts.
+ */
+function showMenuAfterCommand(socket: any, session: BBSSession, menuPauseDefault: boolean) {
+  session.commandText = undefined;
 
-  // Like AmiExpress: only display menu if menuPause is TRUE
-  if (session.menuPause) {
-    console.log('menuPause is TRUE, displaying menu');
-
-    // Express.e:28584 - IF (menuPause) THEN doPause()
-    const { doPause } = require('./screen.handler');
-    doPause(socket, session);
-
-    // Clear screen before displaying menu (like AmiExpress does)
-    console.log('Sending screen clear: \\x1b[2J\\x1b[H');
-    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and move cursor to top
-
-    // Like express.e:28594 - process OLM message queue AFTER clearing screen but BEFORE menu
-    // This ensures messages are visible and not immediately erased
-    if (typeof processOlmMessageQueue === 'function') {
-      processOlmMessageQueue(socket, session, true);
-    } else {
-      console.warn('⚠️  processOlmMessageQueue not injected yet, skipping OLM queue processing');
-    }
-
-    // Like express.e:6567 - default cmdShortcuts to FALSE (line input mode)
-    session.cmdShortcuts = false;
-
-    // CRITICAL FIX: Correct condition from express.e:28583
-    // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
-    // Note: Database stores expert as BOOLEAN (true/false), not string ("Y"/"N")
-    console.log('🔍 [Menu Display] Checking expert mode:');
-    const relConfNumber = session.relConfNum || 1;
-    const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
-    console.log('  - session.user?.expert:', session.user?.expert);
-    console.log('  - session.doorExpertMode:', session.doorExpertMode);
-    console.log('  - forceMenus tooltype:', forceMenus);
-    console.log('  - Will display menu?', (session.user?.expert === false && !session.doorExpertMode) || forceMenus);
-
-    if ((session.user?.expert === false && !session.doorExpertMode) || forceMenus) {
-      console.log('Displaying menu screen file');
-      // Phase 8: Use authentic screen file system (express.e:28586 - await displayScreen(SCREEN_MENU))
-      const screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
-
-      // Like express.e:6572-6573 - check for .keys file and set cmdShortcuts accordingly
-      if (screenDisplayed && hasKeysFile(SCREEN_MENU, session.currentConf)) {
-        console.log('✓ .keys file exists, enabling hotkey mode (cmdShortcuts = true)');
-        session.cmdShortcuts = true;
-      } else {
-        console.log('No .keys file, using line input mode (cmdShortcuts = false)');
-      }
-    }
-
-    displayMenuPrompt(socket, session);
-
-    // Reset menuPause after using it (prevents repeated pauses)
-    session.menuPause = false;
-  } else {
-    console.log('menuPause is FALSE, NOT displaying menu - staying in command mode');
-  }
-
-  // Reset doorExpertMode after menu display (express.e:28588)
-  session.doorExpertMode = false;
-
-  // Like AmiExpress: Check cmdShortcuts to determine input mode (express.e:28598-28603)
-  if (session.cmdShortcuts === false) {
-    session.subState = LoggedOnSubState.READ_COMMAND;
-  } else {
-    session.subState = LoggedOnSubState.READ_SHORTCUTS;
-  }
-}
-
-// Display menu prompt (displayMenuPrompt equivalent)
-export function displayMenuPrompt(socket: any, session: BBSSession) {
-  console.log('📋 displayMenuPrompt called');
-  const cfg = config;
-  const msgBases = messageBases || [];
-
-  if (!cfg || typeof cfg.get !== 'function') {
-    console.warn('[Menu Prompt] Config not injected; skipping menu prompt render.');
-    session.subState = LoggedOnSubState.READ_COMMAND;
+  if (session.inDoorManager || session.inSysopMenu) {
     return;
   }
 
-  console.log('  - bbsName:', cfg.get('bbsName'));
-  console.log('  - currentConf:', session.currentConf);
-  console.log('  - currentConfName:', session.currentConfName);
-  console.log('  - relConfNum:', session.relConfNum);
-  console.log('  - currentMsgBase:', session.currentMsgBase);
-  console.log('  - timeRemaining:', session.timeRemaining);
-
-  // Process queued OLM messages before showing prompt - express.e:1464-1473
-  const { processOlmQueue } = require('./olm.handler');
-  if (processOlmQueue) {
-    processOlmQueue(socket, session);
+  if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
+    session.menuPause = menuPauseDefault;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    menuDisplayMainMenu(socket, session);
   }
-
-  // Like AmiExpress: Use BBS name, relative conference number, conference name
-  const bbsName = cfg.get('bbsName') ?? 'AmiExpress Web';
-  const timeLeft = Math.floor(session.timeRemaining);
-
-  // Check if multiple message bases in conference (like getConfMsgBaseCount in AmiExpress)
-  const msgBasesInConf = msgBases.filter(mb => mb.conferenceId === session.currentConf);
-  const currentMsgBase = msgBases.find(mb => mb.id === session.currentMsgBase);
-
-  console.log('  - msgBasesInConf.length:', msgBasesInConf.length);
-  console.log('  - currentMsgBase found:', !!currentMsgBase);
-
-  if (msgBasesInConf.length > 1 && currentMsgBase) {
-    // Multiple message bases: show "ConfName - MsgBaseName"
-    const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
-    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
-    console.log('📋 Sending multi-msgbase prompt:', prompt);
-    socket.emit('ansi-output', prompt);
-  } else {
-    // Single message base: just show conference name
-    const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
-    console.log('📋 Sending single-msgbase prompt:', prompt);
-    socket.emit('ansi-output', prompt);
-  }
-
-  console.log('📋 Setting subState to READ_COMMAND');
-  session.subState = LoggedOnSubState.READ_COMMAND;
 }
 
 // Handle user commands (processCommand equivalent)
@@ -475,7 +372,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       // User pressed key after connection screen (welcome + node list)
       // reference-board BBS layout: everything shown on connect, now just show ANSI prompt
       // express.e:29528 - ANSI prompt
-      console.log('📋 Connection screen viewed, showing ANSI prompt');
+      console.log(' Connection screen viewed, showing ANSI prompt');
       session.subState = LoggedOnSubState.ANSI_PROMPT;
       session.tempData = { inputBuffer: '' }; // Initialize input buffer
       if (session.pendingScreenCommand) {
@@ -504,7 +401,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       if (data === '\r') {
         // Enter pressed - process the buffered input
         const answer = (session.tempData?.inputBuffer || '').toUpperCase();
-        console.log('📋 Graphics prompt response:', answer || '(empty = ANSI)');
+        console.log(' Graphics prompt response:', answer || '(empty = ANSI)');
 
         // express.e:29538-29546 - Check for specific letters in the string
         // Default (empty/just Enter) = ANSI enabled
@@ -532,10 +429,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           session.ansiEnabled = true; // PETSCII needs ANSI codes
           session.tempData.termWidth = 40;
           session.tempData.termHeight = 25;
-          console.log('📋 PETSCII mode enabled: 40x25 terminal');
+          console.log(' PETSCII mode enabled: 40x25 terminal');
         }
 
-        console.log('📋 Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ansiEnabled ? 'ANSI/RIP' : 'None');
+        console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ansiEnabled ? 'ANSI/RIP' : 'None');
 
         // express.e:29551 - Display BBSTITLE screen and immediately show login prompt
         session.tempData.inputBuffer = ''; // Clear buffer
@@ -567,7 +464,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
     if (session.subState === LoggedOnSubState.DISPLAY_BBSTITLE) {
       // User pressed key after BBSTITLE, now ready for login
-      console.log('📋 BBSTITLE viewed, transitioning to login');
+      console.log(' BBSTITLE viewed, transitioning to login');
       session.state = BBSState.LOGON;
       session.subState = undefined;
       socket.emit('ansi-output', '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
@@ -585,7 +482,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     session.state !== BBSState.LOGGEDON &&
     session.state !== BBSState.LOGON &&
     session.state !== BBSState.REGISTERING) {
-    console.log('❌ Not in LOGGEDON/LOGON or REGISTERING state, ignoring command');
+    console.log(' Not in LOGGEDON/LOGON or REGISTERING state, ignoring command');
     console.log('   Current state:', session.state);
     return;
   }
@@ -593,7 +490,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // PRIORITY 1: Handle internode chat mode input - REAL-TIME keystroke transmission
   // When user is in active chat session, transmit each keystroke immediately
   if (session.subState === LoggedOnSubState.CHAT) {
-    console.log('💬 [COMMAND] User in CHAT mode, real-time input');
+    console.log(' [COMMAND] User in CHAT mode, real-time input');
 
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
@@ -627,7 +524,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       // Check for /END or /EXIT command
       if (input.toUpperCase() === '/END' || input.toUpperCase() === '/EXIT') {
-        console.log('💬 [COMMAND] User wants to end chat');
+        console.log(' [COMMAND] User wants to end chat');
         const { handleChatEnd } = require('./internode-chat.handler');
         await handleChatEnd(socket, session);
         return;
@@ -635,7 +532,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       // Check for /HELP command
       if (input.toUpperCase() === '/HELP') {
-        console.log('💬 [COMMAND] User requested help');
+        console.log(' [COMMAND] User requested help');
         socket.emit('ansi-output',
           '\r\n' +
           '\x1b[36mChat Mode Commands:\x1b[0m\r\n' +
@@ -650,7 +547,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       // Regular message - finalize and send to scroll area
       if (input.length > 0) {
-        console.log('💬 [COMMAND] Finalizing message:', input);
+        console.log(' [COMMAND] Finalizing message:', input);
         const { handleChatMessage } = require('./internode-chat.handler');
         await handleChatMessage(socket, session, { message: input });
         session.inputBuffer = ''; // Clear buffer after sending
@@ -686,7 +583,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // PRIORITY 2: Handle group chat room mode input
   // When user is in a chat room, intercept all input
   if (session.subState === LoggedOnSubState.CHAT_ROOM) {
-    console.log('💬 User in CHAT_ROOM mode, handling room input');
+    console.log(' User in CHAT_ROOM mode, handling room input');
     const input = data.trim();
 
     // Check for /LEAVE or /EXIT command
@@ -734,7 +631,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // PRIORITY 3: Handle LIVECHAT user selection
   // When user is selecting from numbered list
   if (session.subState === LoggedOnSubState.LIVECHAT_SELECT_USER) {
-    console.log('💬 [LIVECHAT] User selecting from numbered list');
+    console.log(' [LIVECHAT] User selecting from numbered list');
     const { handleLiveChatSelection } = require('./chat-commands.handler');
     await handleLiveChatSelection(socket, session, data);
     return;
@@ -743,7 +640,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // PRIORITY 4: Handle LIVECHAT invitation Y/n response
   // When user is responding to a chat invitation
   if (session.subState === LoggedOnSubState.LIVECHAT_INVITATION_RESPONSE) {
-    console.log('💬 [LIVECHAT] User responding to invitation with Y/n');
+    console.log(' [LIVECHAT] User responding to invitation with Y/n');
     const { handleLiveChatInvitationResponse } = require('./chat-commands.handler');
     await handleLiveChatInvitationResponse(socket, session, data);
     return;
@@ -752,7 +649,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // PRIORITY 5: Handle OLM node input
   // When user is entering node number for OLM (line-buffered)
   if (session.subState === LoggedOnSubState.OLM_NODE_INPUT) {
-    console.log('📨 [OLM] User entering node number');
+    console.log(' [OLM] User entering node number');
 
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
@@ -786,7 +683,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // PRIORITY 6: Handle OLM message composition
   // When user is composing OLM message (line-buffered like READ_COMMAND)
   if (session.subState === LoggedOnSubState.OLM_COMPOSE) {
-    console.log('📨 [OLM] User composing message');
+    console.log(' [OLM] User composing message');
 
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
@@ -819,7 +716,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // PRIORITY 7-16: Handle New User Registration states (express.e:30115-30310)
   if (session.state === BBSState.REGISTERING) {
-    console.log('📝 [REGISTRATION] Handling input for subState:', session.subState);
+    console.log(' [REGISTRATION] Handling input for subState:', session.subState);
     if (!session.inputBuffer) {
       session.inputBuffer = '';
     }
@@ -900,13 +797,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     session.subState === LoggedOnSubState.DISPLAY_CONF_BULL ||
     session.subState === LoggedOnSubState.DISPLAY_MENU
   ) {
-    console.log('📋 In display state, continuing to next state');
+    console.log(' In display state, continuing to next state');
     try {
       const confNumber = session.currentConf || session.user?.confRJoin || 1;
       const toolFlags = getConferenceToolFlags(confNumber);
       // If a previous screen deferred commands (runCommands=false), run them now on keypress
       if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
-        console.log('📋 Executing queued screen commands before advancing state');
+        console.log(' Executing queued screen commands before advancing state');
         const { runQueuedScreenCommands } = require('./screen.handler');
         try {
           await runQueuedScreenCommands(socket, session);
@@ -916,8 +813,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           session.pendingScreenCommand = undefined;
           session.screenCommandResolver = null;
         }
-        // After queued commands (GLC/GWALL/QuickNew etc.), wait for the next key to move forward
-        return;
+        // If the queued command changed the subState/state, respect it
+        if (
+          session.subState !== LoggedOnSubState.DISPLAY_BULL &&
+          session.subState !== LoggedOnSubState.DISPLAY_NODE_BULL &&
+          session.subState !== LoggedOnSubState.CONF_SCAN &&
+          session.subState !== LoggedOnSubState.DISPLAY_CONF_BULL &&
+          session.subState !== LoggedOnSubState.DISPLAY_MENU
+        ) {
+          return;
+        }
       }
       // Any key continues to next state
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
@@ -965,7 +870,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle file area selection (like getDirSpan in AmiExpress)
    if (session.subState === LoggedOnSubState.FILES_SELECT_AREA) {
-     console.log('📁 In file area selection state');
+     console.log(' In file area selection state');
      const input = data.trim();
      const areaNumber = parseInt(input);
 
@@ -1245,12 +1150,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     // In web upload mode, ignore key presses - wait for file-uploaded event
     // User is interacting with browser file picker, not terminal
     if (session.tempData?.webUploadMode) {
-      console.log('📤 In web upload mode - ignoring key press (waiting for file-uploaded event)');
+      console.log(' In web upload mode - ignoring key press (waiting for file-uploaded event)');
       return;
     }
 
     // In terminal mode, any key press cancels upload
-    console.log('📤 In file upload state - canceling upload');
+    console.log(' In file upload state - canceling upload');
     socket.emit('ansi-output', '\r\n\x1b[33mUpload canceled\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -1455,7 +1360,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle continuation of file listing between areas
   if (session.subState === LoggedOnSubState.FILE_LIST_CONTINUE) {
-    console.log('📄 Continuing file list display');
+    console.log(' Continuing file list display');
     const tempData = session.tempData as {
       fileAreas: any[],
       dirSpan: { startDir: number, dirScan: number },
@@ -1502,7 +1407,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle conference selection
   if (session.subState === LoggedOnSubState.CONFERENCE_SELECT) {
-    console.log('🏛️ In conference selection state');
+    console.log(' In conference selection state');
     const input = data.trim();
 
     // Check if this is message base selection (from JM command)
@@ -1862,7 +1767,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle J (Join Conference) input
   if (session.subState === LoggedOnSubState.JOIN_CONF_INPUT) {
-    console.log('📡 In JOIN_CONF_INPUT state');
+    console.log(' In JOIN_CONF_INPUT state');
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
       session.inputBuffer = '';
@@ -1872,7 +1777,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     if (data === '\r' || data === '\n') {
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
-      console.log('📡 Conference number entered:', input);
+      console.log(' Conference number entered:', input);
 
       // Process conference number
       const confNum = parseInt(input);
@@ -1921,77 +1826,77 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle JM (Join Message Base) input
   if (session.subState === LoggedOnSubState.JM_INPUT) {
-    console.log('📬 In JM input state');
+    console.log(' In JM input state');
     handleJMInput(socket, session, data.trim());
     return;
   }
 
   // Handle RL (Relogon) confirmation
   if (session.subState === LoggedOnSubState.RL_CONFIRM) {
-    console.log('🔄 In RL confirmation state');
+    console.log(' In RL confirmation state');
     handleRelogonConfirm(socket, session, data.trim());
     return;
   }
 
   // Handle CM (Conference Maintenance) menu input
   if (session.subState === LoggedOnSubState.CM_DISPLAY_MENU) {
-    console.log('⚙️  In CM menu state');
+    console.log('  In CM menu state');
     await handleCMInput(socket, session, data.trim());
     return;
   }
 
   // Handle CM numeric inputs (B and C options)
   if (session.subState === LoggedOnSubState.CM_INPUT_HIGH_MSG) {
-    console.log('⚙️  In CM high message input state');
+    console.log('  In CM high message input state');
     await handleCMNumericInput(socket, session, data.trim(), 'HIGH_MSG');
     return;
   }
 
   if (session.subState === LoggedOnSubState.CM_INPUT_LOW_MSG) {
-    console.log('⚙️  In CM low message input state');
+    console.log('  In CM low message input state');
     await handleCMNumericInput(socket, session, data.trim(), 'LOW_MSG');
     return;
   }
 
   // Handle voting booth states
   if (session.subState === LoggedOnSubState.VO_TOPIC_SELECT) {
-    console.log('🗳️  In vote topic selection state');
+    console.log('  In vote topic selection state');
     await handleVoteTopicSelect(socket, session, data.trim());
     return;
   }
 
   if (session.subState === LoggedOnSubState.VO_ANSWER_INPUT) {
-    console.log('🗳️  In vote answer input state');
+    console.log('  In vote answer input state');
     await handleVoteAnswerInput(socket, session, data.trim());
     return;
   }
 
   if (session.subState === LoggedOnSubState.VO_MENU_CHOICE) {
-    console.log('🗳️  In vote menu choice state');
+    console.log('  In vote menu choice state');
     await handleVoteMenuChoice(socket, session, data.trim());
     return;
   }
 
   // Handle message posting workflow (line-based input like login system)
-  console.log('📝 Checking if in POST_MESSAGE_SUBJECT state:', (session.subState as any) === LoggedOnSubState.POST_MESSAGE_SUBJECT);
+  console.log(' Checking if in POST_MESSAGE_SUBJECT state:', (session.subState as any) === LoggedOnSubState.POST_MESSAGE_SUBJECT);
   if ((session.subState as any) === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
-    console.log('📝 ENTERED message subject input handler');
-    console.log('📝 Data received:', JSON.stringify(data), 'type:', typeof data);
-    console.log('📝 Data === "\\r":', data === '\r');
-    console.log('📝 Data === "\\n":', data === '\n');
-    console.log('📝 Data.charCodeAt(0):', data.charCodeAt ? data.charCodeAt(0) : 'no charCodeAt');
+    console.log(' ENTERED message subject input handler');
+    console.log(' Data received:', JSON.stringify(data), 'type:', typeof data);
+    console.log(' Data === "\\r":', data === '\r');
+    console.log(' Data === "\\n":', data === '\n');
+    console.log(' Data.charCodeAt(0):', data.charCodeAt ? data.charCodeAt(0) : 'no charCodeAt');
 
     // Handle line-based input like the login system
     if (data === '\r' || data === '\n') { // Handle both carriage return and newline
-      console.log('📝 ENTER CONDITION MET!');
+      console.log(' ENTER CONDITION MET!');
       // Enter pressed - process the input
       const input = session.inputBuffer.trim();
-      console.log('📝 ENTER PRESSED - Processing input:', JSON.stringify(input), 'length:', input.length);
+      console.log(' ENTER PRESSED - Processing input:', JSON.stringify(input), 'length:', input.length);
 
       // Check if this is private message recipient input
       if (session.tempData?.isPrivate && !session.messageRecipient) {
         if (input.length === 0) {
-          console.log('📝 Recipient is empty, aborting private message posting');
+          console.log(' Recipient is empty, aborting private message posting');
           socket.emit('ansi-output', '\r\nPrivate message posting aborted.\r\n');
           socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
           session.menuPause = false;
@@ -2000,7 +1905,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           session.tempData = undefined;
           return;
         }
-        console.log('📝 Recipient accepted:', JSON.stringify(input), '- now prompting for subject');
+        console.log(' Recipient accepted:', JSON.stringify(input), '- now prompting for subject');
         session.messageRecipient = input;
         socket.emit('ansi-output', '\r\nEnter your message subject (or press Enter to abort): ');
         session.inputBuffer = '';
@@ -2009,14 +1914,14 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       // Check if this is comment to sysop (skip recipient, go directly to subject)
       if (session.tempData?.isCommentToSysop && !session.messageRecipient) {
-        console.log('📝 Comment to sysop - setting recipient to SYSOP');
+        console.log(' Comment to sysop - setting recipient to SYSOP');
         session.messageRecipient = 'SYSOP';
         // Continue with subject input
       }
 
       // Handle subject input
       if (input.length === 0) {
-        console.log('📝 Subject is empty, aborting message posting');
+        console.log(' Subject is empty, aborting message posting');
         socket.emit('ansi-output', '\r\nMessage posting aborted.\r\n');
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
@@ -2025,32 +1930,32 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         session.tempData = undefined;
         return;
       }
-      console.log('📝 Subject accepted:', JSON.stringify(input), '- moving to message body input');
+      console.log(' Subject accepted:', JSON.stringify(input), '- moving to message body input');
       session.messageSubject = input;
       socket.emit('ansi-output', '\r\nEnter your message (press Enter twice to finish):\r\n> ');
       session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
       session.inputBuffer = '';
-      console.log('📝 Changed state to POST_MESSAGE_BODY');
+      console.log(' Changed state to POST_MESSAGE_BODY');
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         socket.emit('ansi-output', '\b \b'); // Erase character from terminal
-        console.log('📝 Backspace - buffer now:', JSON.stringify(session.inputBuffer));
+        console.log(' Backspace - buffer now:', JSON.stringify(session.inputBuffer));
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') { // Only printable characters
       // Regular character - add to buffer and echo
       session.inputBuffer += data;
       socket.emit('ansi-output', data);
-      console.log('📝 Added character to buffer, current buffer:', JSON.stringify(session.inputBuffer));
+      console.log(' Added character to buffer, current buffer:', JSON.stringify(session.inputBuffer));
     } else {
-      console.log('📝 Ignoring non-printable character:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
+      console.log(' Ignoring non-printable character:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
     }
-    console.log('📝 EXITING message subject handler');
+    console.log(' EXITING message subject handler');
     return;
   }
 
   if ((session.subState as any) === LoggedOnSubState.POST_MESSAGE_BODY) {
-    console.log('📝 In message body input state, received:', JSON.stringify(data));
+    console.log(' In message body input state, received:', JSON.stringify(data));
 
     // Handle line-based input for message body
     if (data === '\r' || data === '\n') {
@@ -2463,7 +2368,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   if (session.subState === LoggedOnSubState.READ_COMMAND) {
-    console.log('✅ In READ_COMMAND state, reading line input');
+    console.log(' In READ_COMMAND state, reading line input');
     // Express.e:28619-28633 - Read command text using lineInput (line-buffered)
 
     // Initialize inputBuffer if needed
@@ -2528,7 +2433,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
         // Store command text in session for PROCESS_COMMAND state
         session.commandText = input.toUpperCase();
-        console.log('📝 Command text stored:', session.commandText);
+        console.log(' Command text stored:', session.commandText);
         // Transition to PROCESS_COMMAND (express.e:28638)
         session.subState = LoggedOnSubState.PROCESS_COMMAND;
         // Process the command in the next event cycle
@@ -2538,7 +2443,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       } else {
         // express.e:28228 - Empty command, just redisplay menu
         // IF StrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
-        console.log('📝 Empty command, redisplaying menu');
+        console.log(' Empty command, redisplaying menu');
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         displayMainMenu(socket, session);
@@ -2559,21 +2464,58 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
-    console.log('🔥 In READ_SHORTCUTS state, processing single key');
     try {
-      // Process single character hotkeys immediately
-      // IMPORTANT: Use processCommand() to respect the command priority system:
-      // 1. SYSCMD, 2. BBSCMD (doors), 3. Internal commands (express.e:28228)
-      const command = data.trim().toUpperCase();
-      if (command.length > 0) {
-        processCommand(socket, session, command, '').catch(error => {
-          console.error('Error processing shortcut command:', error);
-          socket.emit('ansi-output', '\r\n\x1b[31mError processing command. Please try again.\x1b[0m\r\n');
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        });
+      const keyRaw = data.trim();
+      if (keyRaw.length === 0) return;
+
+      const translateKey = (val: string): string => {
+        const ch = val.length > 0 ? val.charAt(0) : '';
+        const code = ch.charCodeAt(0);
+        switch (code) {
+          case 13:
+            return 'RET';
+          case 127:
+            return 'DEL';
+          case 8:
+            return 'BACK';
+          case 9:
+            return 'TAB';
+          case 27:
+            return 'ESC';
+          case 32:
+            return 'SPACE';
+          default:
+            return ch.toUpperCase();
+        }
+      };
+
+      const key = translateKey(keyRaw);
+
+      // Translate shortcut via loaded .keys map (express.e translateShortcut)
+      let translated = '';
+      if (session.shortcuts && session.shortcuts.size > 0) {
+        const lookup = session.shortcuts.get(key);
+        if (lookup) {
+          translated = lookup;
+        }
       }
+
+      const commandToRun = translated || key;
+      session.commandText = commandToRun.toUpperCase();
+      session.subState = LoggedOnSubState.PROCESS_COMMAND;
+
+      try {
+        await processCommand(socket, session, commandToRun, '');
+      } catch (error) {
+        console.error('Error processing shortcut command:', error);
+        socket.emit('ansi-output', '\r\n\x1b[31mError processing command. Please try again.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        return;
+      }
+
+      showMenuAfterCommand(socket, session, false);
     } catch (error) {
       console.error('Error in shortcut processing:', error);
       socket.emit('ansi-output', '\r\n\x1b[31mShortcut processing error. Returning to menu...\x1b[0m\r\n');
@@ -2583,13 +2525,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
   } else if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
     // Express.e:28639-28642 - Process the command with priority system
-    console.log('⚙️ In PROCESS_COMMAND state, executing command:', session.commandText);
+    console.log(' In PROCESS_COMMAND state, executing command:', session.commandText);
     if (session.commandText) {
       const parts = session.commandText.split(' ');
       const command = parts[0];
       const params = parts.slice(1).join(' ');
       try {
-        // Express.e:28244-28256 - Command priority: SysCommand → BbsCommand → InternalCommand
+        // Express.e:28244-28256 - Command priority: SysCommand  BbsCommand  InternalCommand
         const result = await processCommand(socket, session, command, params);
         if (result === 'NOT_ALLOWED') {
           // Permission denied - already handled
@@ -2608,43 +2550,17 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
     // After processing: Check if command changed subState (commands like R set DISPLAY_CONF_BULL to wait for keypress)
     // If subState was changed by command, respect it. Otherwise, go to DISPLAY_MENU (express.e:28641-28642)
-    session.commandText = undefined; // Clear command text
-    console.log('🔍 [AFTER COMMAND] subState is:', session.subState);
-    console.log('🔍 [AFTER COMMAND] PROCESS_COMMAND const is:', LoggedOnSubState.PROCESS_COMMAND);
-    console.log('🔍 [AFTER COMMAND] inDoorManager:', session.inDoorManager);
-
-    // Skip menu display if Door Manager is active
-    if (session.inDoorManager) {
-      console.log('✅ [AFTER COMMAND] Door Manager is active - NOT showing menu');
-      return;
-    }
-
-    // Skip menu display if Sysop Menu is active
-    if (session.inSysopMenu) {
-      console.log('✅ [AFTER COMMAND] Sysop Menu is active - NOT showing menu');
-      return;
-    }
-
-    if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
-      console.log('⚠️ [AFTER COMMAND] subState is still PROCESS_COMMAND, showing menu');
-      // Command didn't change state, so default to showing menu
-      session.menuPause = true;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      displayMainMenu(socket, session);
-    } else {
-      console.log('✅ [AFTER COMMAND] subState was changed to:', session.subState, '- NOT showing menu');
-    }
-    // If command changed subState (e.g., to DISPLAY_CONF_BULL), let handleCommand handle it on next input
+    showMenuAfterCommand(socket, session, true);
     return;
   } else if (session.subState === LoggedOnSubState.USER_STATS_MENU) {
     // Handle user stats menu input (F=Font, Q=Quit)
-    console.log('📊 In USER_STATS_MENU state, processing input');
+    console.log(' In USER_STATS_MENU state, processing input');
     const { handleUserStatsMenuInput } = require('./user-commands.handler');
     handleUserStatsMenuInput(socket, session, data);
     return;
   } else if (session.subState === LoggedOnSubState.FONT_SELECTION) {
     // Handle font selection input (1-8 or Q)
-    console.log('🔤 In FONT_SELECTION state, buffering input');
+    console.log(' In FONT_SELECTION state, buffering input');
 
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
@@ -2667,13 +2583,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
     return;
   } else {
-    console.log('❌ Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
+    console.log(' Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
   }
   console.log('=== handleCommand end ===\n');
 }
 
 // Command Priority System - Express.e:28228-28282
-// Priority order: SysCommand → BbsCommand → InternalCommand
+// Priority order: SysCommand  BbsCommand  InternalCommand
 
 // Check for System Command (express.e:4813-4819)
 export async function runSysCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
@@ -2806,12 +2722,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'LIVECHAT': // Modern Real-Time Internode Chat (Enhancement)
-      console.log('🔥 BEFORE calling handleLiveChatCommand, params:', params);
+      console.log(' BEFORE calling handleLiveChatCommand, params:', params);
       try {
         await handleLiveChatCommand(socket, session, params);
-        console.log('✅ AFTER calling handleLiveChatCommand successfully');
+        console.log(' AFTER calling handleLiveChatCommand successfully');
       } catch (error) {
-        console.error('❌ ERROR in handleLiveChatCommand:', error);
+        console.error(' ERROR in handleLiveChatCommand:', error);
         throw error;
       }
       return;
@@ -2860,7 +2776,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleWriteUserParamsCommand(socket, session);
       return;
 
-    // WHO command removed - should use BBSCMD door instead (WHO.info → DOORS:RTW/RTW)
+    // WHO command removed - should use BBSCMD door instead (WHO.info  DOORS:RTW/RTW)
     // See express.e:26094-26103 - calls who(0) which launches door
     // case 'WHO': // Node Information (internalCommandWHO) - express.e:26094-26103
     //   handleWhoCommand(socket, session);
@@ -3051,7 +2967,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
           return;
         }
 
-        socket.emit('ansi-output', '\r\n\x1b[36m🚀 Starting GetAnswer (8KB XIM door)...\x1b[0m\r\n\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[36m Starting GetAnswer (8KB XIM door)...\x1b[0m\r\n\r\n');
 
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,

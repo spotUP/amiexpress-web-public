@@ -588,7 +588,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
 
 /**
  * Load screen file from disk
- * Searches in priority order: Conference → Node → Global BBS screens
+ * Searches in priority order: Conference  Node  Global BBS screens
  * Like express.e await displayScreen() - loads from BBS:Node{X}/Screens/ or BBS:Conf{X}/Screens/
  *
  * @param screenName - Name of screen file (without .TXT extension)
@@ -596,7 +596,12 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
  * @param nodeId - Node ID (default 0)
  * @returns Screen file content or null if not found
  */
-export function loadScreenFile(screenName: string, conferenceId?: number, nodeId: number = 0, session?: BBSSession): { content: string; isPetscii: boolean } | null {
+export function loadScreenFile(
+  screenName: string,
+  conferenceId?: number,
+  nodeId: number = 0,
+  session?: BBSSession
+): { content: string; isPetscii: boolean; filePath: string } | null {
   // BBS directory structure matches original Amiga AmiExpress
   // Use dataDir from config which points to project root
   const { config } = require('../config');
@@ -734,9 +739,9 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
       const securityVariant = findSecurityScreen(securityBasePath, userSecLevel);
       if (securityVariant) {
-        screenDebug(`[loadScreenFile] ✓ Found security screen for ${screenName} at: ${securityVariant}`);
+        screenDebug(`[loadScreenFile]  Found security screen for ${screenName} at: ${securityVariant}`);
         try {
-          return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false };
+          return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false, filePath: securityVariant };
         } catch (error) {
           console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
         }
@@ -750,22 +755,22 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
       // Try case-insensitive match
       const foundPath = findCaseInsensitive(location.dir, filename);
       if (foundPath) {
-        screenDebug(`[loadScreenFile] ✓ Found screen ${screenName} at: ${foundPath}`);
+        screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${foundPath}`);
         try {
           // Check if this is a PETSCII .seq file
-          if (isPetsciiSeqFile(foundPath)) {
-            screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
-            try {
-              const petsciiBuffer = fs.readFileSync(foundPath);
-              const content = convertPetsciiToPetMe64(petsciiBuffer);
-              return { content, isPetscii: true };
-            } catch (error) {
-              console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
+            if (isPetsciiSeqFile(foundPath)) {
+              screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
+              try {
+                const petsciiBuffer = fs.readFileSync(foundPath);
+                const content = convertPetsciiToPetMe64(petsciiBuffer);
+                return { content, isPetscii: true, filePath: foundPath };
+              } catch (error) {
+                console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
+              }
+            } else {
+              // Regular text file
+              return { content: fs.readFileSync(foundPath, 'utf-8'), isPetscii: false, filePath: foundPath };
             }
-          } else {
-            // Regular text file
-            return { content: fs.readFileSync(foundPath, 'utf-8'), isPetscii: false };
-          }
         } catch (error) {
           console.error(`[loadScreenFile]     (error reading file: ${(error as Error).message})`);
         }
@@ -782,20 +787,20 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
     screenDebug(`[loadScreenFile]   [${attemptNum}] ${filePath}`);
     try {
       if (fs.existsSync(filePath)) {
-        screenDebug(`[loadScreenFile] ✓ Found screen ${screenName} at: ${filePath}`);
+        screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${filePath}`);
         // Check if this is a PETSCII .seq file
         if (isPetsciiSeqFile(filePath)) {
           screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
           try {
             const petsciiBuffer = fs.readFileSync(filePath);
             const content = convertPetsciiToPetMe64(petsciiBuffer);
-            return { content, isPetscii: true };
+            return { content, isPetscii: true, filePath };
           } catch (error) {
             console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
           }
         } else {
           // Regular text file
-          return { content: fs.readFileSync(filePath, 'utf-8'), isPetscii: false };
+          return { content: fs.readFileSync(filePath, 'utf-8'), isPetscii: false, filePath };
         }
       } else {
         screenDebug(`[loadScreenFile]     (not found)`);
@@ -805,7 +810,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
     }
   }
 
-  console.warn(`[loadScreenFile] ✗ Screen file not found: ${screenName}`);
+  console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
   console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
   return null;
 }
@@ -842,11 +847,23 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   screenDebug(`[displayScreen] User: ${session.user?.name || 'guest'}`);
   screenDebug(`[displayScreen] ========================================`);
 
+  const isMenuScreen = screenName.toUpperCase() === 'MENU';
+
+  // Express.e:6567 - reset cmdShortcuts before attempting to load the menu screen
+  if (isMenuScreen) {
+    session.cmdShortcuts = false;
+    if ((session as any).shortcuts && typeof (session as any).shortcuts.clear === 'function') {
+      (session as any).shortcuts.clear();
+    }
+  }
+
   const screenData = loadScreenFile(screenName, session.currentConf, session.nodeId || 0, session);
 
   if (screenData) {
-    const { content, isPetscii } = screenData;
-    screenDebug(`[displayScreen] ✓ Screen loaded successfully: ${screenName}`);
+    const { content, isPetscii, filePath } = screenData;
+    // Express.e:6567  MENU resets cmdShortcuts/shortcuts before checking for .keys
+    session.lastScreenFilePath = filePath;
+    screenDebug(`[displayScreen]  Screen loaded successfully: ${screenName}`);
     screenDebug(`[displayScreen] Content length: ${content.length} bytes`);
     screenDebug(`[displayScreen] PETSCII: ${isPetscii ? 'YES' : 'NO'}`);
 
@@ -944,9 +961,9 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
             try {
               screenDebug(`[displayScreen] Calling handleCommand with:`, commandStr);
               const result = await handleCommand(socket, session, commandStr);
-              screenDebug(`[displayScreen] ✓ Command completed:`, commandStr, 'Result:', result);
+              screenDebug(`[displayScreen]  Command completed:`, commandStr, 'Result:', result);
             } catch (error) {
-              console.error(`[displayScreen] ✗ ERROR executing command ${commandStr}:`, error);
+              console.error(`[displayScreen]  ERROR executing command ${commandStr}:`, error);
               console.error(`[displayScreen] Error stack:`, (error as Error).stack);
             }
           }
@@ -973,10 +990,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Screen not found - return false silently (matches express.e behavior)
     // Caller decides whether to show error or skip
     console.error(`[displayScreen] ========================================`);
-    console.error(`[displayScreen] ✗ SCREEN FILE NOT FOUND: ${screenName}`);
+    console.error(`[displayScreen]  SCREEN FILE NOT FOUND: ${screenName}`);
     console.error(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
     console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
     console.error(`[displayScreen] ========================================`);
+    session.lastScreenFilePath = undefined;
     return false;
   }
 }
@@ -1011,7 +1029,7 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
       try {
         await handleCommand(socket, session, commandStr);
       } catch (error) {
-        console.error(`[displayScreen] ✗ ERROR executing queued command ${commandStr}:`, error);
+        console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, error);
       }
     }
   } finally {
@@ -1147,12 +1165,30 @@ export function hasKeysFile(screenName: string, conferenceId?: number, nodeId: n
   // Check each path in order
   for (const filePath of paths) {
     if (fs.existsSync(filePath)) {
-      screenDebug(`✓ Found .keys file: ${filePath}`);
+      screenDebug(` Found .keys file: ${filePath}`);
       return true;
     }
   }
 
   screenDebug(`No .keys file found for screen: ${screenName}`);
+  return false;
+}
+
+/**
+ * Check for .keys alongside the resolved screen file path (security-aware)
+ * Mirrors express.e: after findSecurityScreen/displayFile, append ".keys" to that path.
+ */
+export function hasKeysFileForResolvedPath(resolvedPath: string): boolean {
+  if (!resolvedPath) return false;
+  const dir = path.dirname(resolvedPath);
+  const base = path.basename(resolvedPath);
+  const candidate = `${base}.keys`;
+  const found = findCaseInsensitive(dir, candidate);
+  if (found) {
+    screenDebug(` Found .keys file for resolved path: ${found}`);
+    return true;
+  }
+  screenDebug(`No .keys file found for resolved path: ${resolvedPath}`);
   return false;
 }
 
@@ -1164,7 +1200,8 @@ export function hasKeysFile(screenName: string, conferenceId?: number, nodeId: n
  * @param session - Current BBS session (for future enhancements)
  */
 export function doPause(socket: any, session: BBSSession): void {
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  // Express.e:5143 - "(Pause)...Space To Resume:"
+  socket.emit('ansi-output', '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
   // Note: Actual key wait is handled by client sending keypress event
   // This just displays the prompt
 }

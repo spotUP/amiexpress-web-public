@@ -185,14 +185,14 @@ class XIMDataQueryHandler {
                 break;
             case types_1.XIMCommand.DT_EXPERT:
                 if (isRead) {
-                    const expert = (user === null || user === void 0 ? void 0 : user.expert) ? 'Y' : 'N';
+                    const expert = (user === null || user === void 0 ? void 0 : user.expert) === 'X' ? 'X' : 'N';
                     this.messageParser.writeString(stringAddr, expert, 200);
                     console.log(`  [READ] DT_EXPERT: ${expert}`);
                 }
                 else {
                     const expertStr = this.messageParser.readString(stringAddr, 1);
                     if (user)
-                        user.expert = (expertStr === 'Y' || expertStr === 'y');
+                        user.expert = (expertStr === 'X' || expertStr === 'x') ? 'X' : 'N';
                     console.log(`  [WRITE] DT_EXPERT: ${expertStr}`);
                 }
                 break;
