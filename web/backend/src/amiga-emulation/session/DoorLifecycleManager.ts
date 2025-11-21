@@ -485,19 +485,19 @@ export class DoorLifecycleManager {
       )}M cycles, ${totalSeconds.toFixed(2)}s virtual, ${elapsed}ms real)`
     );
     console.log(`[DoorLifecycleManager] 📊 PC: 0x${pc.toString(16)}`);
-    console.log(
-      `[DoorLifecycleManager] 📊 Write calls: ${this.executionState.writeCallCount}, AEDoor calls: ${this.executionState.aedoorCallCount}`
-    );
+    // console.log(
+    //   `[DoorLifecycleManager] 📊 Write calls: ${this.executionState.writeCallCount}, AEDoor calls: ${this.executionState.aedoorCallCount}`
+    // );
 
-    // Memory check at progress milestones
-    try {
-      const mem2001 = this.emulator.readMemory32(0x2001);
-      console.log(
-        `[DoorLifecycleManager] 📊 memory[0x2001]: 0x${mem2001.toString(16)}`
-      );
-    } catch (e) {
-      console.log(`[DoorLifecycleManager] 📊 memory[0x2001]: ERROR ${e}`);
-    }
+    // // Memory check at progress milestones
+    // try {
+    //   const mem2001 = this.emulator.readMemory32(0x2001);
+    //   console.log(
+    //     `[DoorLifecycleManager] 📊 memory[0x2001]: 0x${mem2001.toString(16)}`
+    //   );
+    // } catch (e) {
+    //   console.log(`[DoorLifecycleManager] 📊 memory[0x2001]: ERROR ${e}`);
+    // }
   }
 
   private async handleGuardLimit(): Promise<void> {

@@ -1,9 +1,9 @@
-import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
-import * as fs from 'fs';
-import * as path from 'path';
-import { FileManager } from './FileManager';
-import { PathManager } from './PathManager';
-import { AmigaFileCache } from './AmigaFileCache';
+import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
+import * as fs from "fs";
+import * as path from "path";
+import { FileManager } from "./FileManager";
+import { PathManager } from "./PathManager";
+import { AmigaFileCache } from "./AmigaFileCache";
 
 /**
  * dos.library - Amiga DOS Library
@@ -26,30 +26,30 @@ import { AmigaFileCache } from './AmigaFileCache';
  */
 
 // Amiga DOS mode constants (from dos/dos.h)
-const MODE_OLDFILE = 1005;    // Open existing file for reading
-const MODE_NEWFILE = 1006;    // Create new file or overwrite existing
-const MODE_READWRITE = 1004;  // Open existing file for read/write
+const MODE_OLDFILE = 1005; // Open existing file for reading
+const MODE_NEWFILE = 1006; // Create new file or overwrite existing
+const MODE_READWRITE = 1004; // Open existing file for read/write
 
 // Seek modes (from dos/dos.h)
-const OFFSET_BEGINNING = -1;  // Seek from start of file
-const OFFSET_CURRENT = 0;     // Seek from current position
-const OFFSET_END = 1;         // Seek from end of file
+const OFFSET_BEGINNING = -1; // Seek from start of file
+const OFFSET_CURRENT = 0; // Seek from current position
+const OFFSET_END = 1; // Seek from end of file
 
 interface FileHandle {
   id: number;
   name: string;
-  mode: number;          // MODE_OLDFILE, MODE_NEWFILE, etc.
+  mode: number; // MODE_OLDFILE, MODE_NEWFILE, etc.
   position: number;
   isConsole: boolean;
-  buffer?: Buffer;       // File contents in memory
-  realPath?: string;     // Actual filesystem path
+  buffer?: Buffer; // File contents in memory
+  realPath?: string; // Actual filesystem path
 }
 
 interface Lock {
   id: number;
-  path: string;          // Real filesystem path
-  mode: number;          // ACCESS_READ=-2, ACCESS_WRITE=-1
-  amigaPath: string;     // Original AmigaDOS path (for CurrentDir/fixFilename)
+  path: string; // Real filesystem path
+  mode: number; // ACCESS_READ=-2, ACCESS_WRITE=-1
+  amigaPath: string; // Original AmigaDOS path (for CurrentDir/fixFilename)
 }
 
 interface ReadArgsTemplateEntry {
@@ -101,22 +101,22 @@ interface ReadArgsInputInfo {
 export class DosLibrary {
   private emulator: MoiraEmulator;
   private openFiles: Map<number, FileHandle> = new Map();
-  private nextFileId: number = 4;  // Start after STDIN/STDOUT/STDERR
+  private nextFileId: number = 4; // Start after STDIN/STDOUT/STDERR
   private outputCallback: ((data: string) => void) | null = null;
-  private inputBuffer: string = '';
+  private inputBuffer: string = "";
   private lastError: number = 0;
 
   // NEW: File I/O management system (phase 3)
   private fileManager: FileManager | null = null;
   private pathManager: PathManager | null = null;
   private fileCache: AmigaFileCache | null = null;
-  private useNewFileSystem: boolean = false;  // Feature flag for gradual migration
+  private useNewFileSystem: boolean = false; // Feature flag for gradual migration
 
   // Standard file handles
   private readonly STDIN_HANDLE = 1;
   private readonly STDOUT_HANDLE = 2;
   private readonly STDERR_HANDLE = 3;
-  private readonly NIL_HANDLE = 99;  // Special handle for NIL: device
+  private readonly NIL_HANDLE = 99; // Special handle for NIL: device
 
   // DOS error codes
   private readonly ERROR_NO_ERROR = 0;
@@ -126,7 +126,7 @@ export class DosLibrary {
   private readonly ERROR_READ_PROTECTED = 204;
   private readonly ERROR_WRITE_PROTECTED = 214;
   private readonly ERROR_NO_MORE_ENTRIES = 232;
-  private readonly ERROR_SEEK_ERROR = 219;  // Seek not possible (console/device)
+  private readonly ERROR_SEEK_ERROR = 219; // Seek not possible (console/device)
   private readonly ERROR_BAD_TEMPLATE = 114;
   private readonly ERROR_BAD_NUMBER = 115;
   private readonly ERROR_REQUIRED_ARG_MISSING = 116;
@@ -141,9 +141,9 @@ export class DosLibrary {
 
   // Directory and lock management for door support
   private currentDirectory: string;
-  private currentDirectoryAmiga: string = 'BBS:';
-  private lastLockPath: string = '';
-  private doorDirectory: string = '';  // Set by AmigaDoorSession for PROGDIR: device
+  private currentDirectoryAmiga: string = "BBS:";
+  private lastLockPath: string = "";
+  private doorDirectory: string = ""; // Set by AmigaDoorSession for PROGDIR: device
   private locks: Map<number, Lock> = new Map();
   private nextLockId: number = 1;
 
@@ -152,8 +152,8 @@ export class DosLibrary {
   private dirIteratorIndex: Map<number, number> = new Map();
 
   // CLI support (for GetArgStr, GetProgramName)
-  private argStringPtr: number = 0;     // Pointer to argument string
-  private programName: string = '';     // Program name
+  private argStringPtr: number = 0; // Pointer to argument string
+  private programName: string = ""; // Program name
   private readonly READARGS_DEFAULT_BUFFER_SIZE = 4096;
   private readonly READARGS_HEAP_BASE = 0x140000;
   private readArgsHeapPtr: number = this.READARGS_HEAP_BASE;
@@ -162,45 +162,46 @@ export class DosLibrary {
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
-    this.rootPath = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
-    this.bbsDataPath = path.join(this.rootPath, 'BBS');
+    this.rootPath =
+      process.env.BBS_ROOT || path.resolve(process.cwd(), "../..");
+    this.bbsDataPath = path.join(this.rootPath, "BBS");
     this.currentDirectory = this.bbsDataPath;
     this.ensureDirectory(this.bbsDataPath);
-    this.ensureDirectory('/tmp/ram/ENV');
+    this.ensureDirectory("/tmp/ram/ENV");
     this.readArgsHeapPtr = this.READARGS_HEAP_BASE;
 
     // Initialize standard I/O handles
     this.openFiles.set(this.STDIN_HANDLE, {
       id: this.STDIN_HANDLE,
-      name: 'STDIN',
+      name: "STDIN",
       mode: MODE_OLDFILE,
       position: 0,
-      isConsole: true
+      isConsole: true,
     });
 
     this.openFiles.set(this.STDOUT_HANDLE, {
       id: this.STDOUT_HANDLE,
-      name: 'STDOUT',
+      name: "STDOUT",
       mode: MODE_NEWFILE,
       position: 0,
-      isConsole: true
+      isConsole: true,
     });
 
     this.openFiles.set(this.STDERR_HANDLE, {
       id: this.STDERR_HANDLE,
-      name: 'STDERR',
+      name: "STDERR",
       mode: MODE_NEWFILE,
       position: 0,
-      isConsole: true
+      isConsole: true,
     });
 
     // NIL: device (like /dev/null)
     this.openFiles.set(this.NIL_HANDLE, {
       id: this.NIL_HANDLE,
-      name: 'NIL:',
+      name: "NIL:",
       mode: MODE_OLDFILE,
       position: 0,
-      isConsole: false
+      isConsole: false,
     });
   }
 
@@ -209,10 +210,16 @@ export class DosLibrary {
    * Called by AmigaDoorSession during initialization
    */
   enableNewFileSystem(baseDir: string): void {
-    console.log('[dos.library] Enabling new file system with FileManager/PathManager');
+    console.log(
+      "[dos.library] Enabling new file system with FileManager/PathManager"
+    );
     this.pathManager = new PathManager(baseDir);
     this.fileCache = new AmigaFileCache(this.pathManager);
-    this.fileManager = new FileManager(baseDir, this.pathManager, this.fileCache);
+    this.fileManager = new FileManager(
+      baseDir,
+      this.pathManager,
+      this.fileCache
+    );
     this.useNewFileSystem = true;
     this.currentDirectory = this.bbsDataPath;
   }
@@ -234,13 +241,15 @@ export class DosLibrary {
       const normalized = this.normalizeAmigaPath(amigaPath);
       const resolved = this.pathManager.amiToSysPath(normalized, currentDir);
       if (resolved) {
-        console.log(`[dos.library] PathManager resolved "${normalized}" -> ${resolved}`);
+        console.log(
+          `[dos.library] PathManager resolved "${normalized}" -> ${resolved}`
+        );
         return resolved;
       }
     }
 
     // Handle PROGDIR: device - door's own directory
-    if (amigaPath.toUpperCase().startsWith('PROGDIR:')) {
+    if (amigaPath.toUpperCase().startsWith("PROGDIR:")) {
       const relativePath = amigaPath.substring(8);
       const resolved = path.join(this.doorDirectory, relativePath);
       console.log(`[dos.library] PROGDIR: device -> ${resolved}`);
@@ -248,15 +257,15 @@ export class DosLibrary {
     }
 
     // Handle Doors: device - doors directory root
-    if (amigaPath.toUpperCase().startsWith('DOORS:')) {
+    if (amigaPath.toUpperCase().startsWith("DOORS:")) {
       const relativePath = amigaPath.substring(6);
-      const resolved = path.join(this.rootPath, 'doors', relativePath);
+      const resolved = path.join(this.rootPath, "doors", relativePath);
       console.log(`[dos.library] Doors: device -> ${resolved}`);
       return resolved;
     }
 
     // Handle BBS: device - BBS system files
-    if (amigaPath.toUpperCase().startsWith('BBS:')) {
+    if (amigaPath.toUpperCase().startsWith("BBS:")) {
       const relativePath = amigaPath.substring(4);
       const resolved = path.join(this.bbsDataPath, relativePath);
       console.log(`[dos.library] BBS: device -> ${resolved}`);
@@ -264,22 +273,24 @@ export class DosLibrary {
     }
 
     // Handle S: device - Amiga system scripts/config (maps to BBS root /S)
-    if (amigaPath.toUpperCase().startsWith('S:')) {
+    if (amigaPath.toUpperCase().startsWith("S:")) {
       const relativePath = amigaPath.substring(2);
-      const resolved = path.join(this.rootPath, 'S', relativePath);
+      const resolved = path.join(this.rootPath, "S", relativePath);
       console.log(`[dos.library] S: device -> ${resolved}`);
       return resolved;
     }
 
     // Handle absolute paths
-    if (amigaPath.startsWith('/')) {
+    if (amigaPath.startsWith("/")) {
       console.log(`[dos.library] Absolute path -> ${amigaPath}`);
       return amigaPath;
     }
 
     // Handle relative paths - resolve from current directory
     const resolved = path.join(this.currentDirectory, amigaPath);
-    console.log(`[dos.library] Relative path from ${this.currentDirectory} -> ${resolved}`);
+    console.log(
+      `[dos.library] Relative path from ${this.currentDirectory} -> ${resolved}`
+    );
     return resolved;
   }
 
@@ -293,7 +304,7 @@ export class DosLibrary {
 
     // Set current directory to door directory by default
     this.currentDirectory = doorPath;
-    this.currentDirectoryAmiga = 'PROGDIR:';
+    this.currentDirectoryAmiga = "PROGDIR:";
     console.log(`[dos.library] Current directory set to ${doorPath}`);
 
     if (this.pathManager) {
@@ -301,7 +312,7 @@ export class DosLibrary {
     }
 
     if (this.fileManager) {
-      this.fileManager.setCurrentDir('progdir:');
+      this.fileManager.setCurrentDir("progdir:");
     }
   }
 
@@ -316,7 +327,10 @@ export class DosLibrary {
     try {
       fs.mkdirSync(dir, { recursive: true });
     } catch (error) {
-      console.warn(`[dos.library] ⚠️ Unable to create directory ${dir}:`, error);
+      console.warn(
+        `[dos.library] ⚠️ Unable to create directory ${dir}:`,
+        error
+      );
     }
   }
 
@@ -327,17 +341,21 @@ export class DosLibrary {
    * Bulls see the same semantics even without modifying their strings.
    */
   private normalizeAmigaPath(amigaPath: string): string {
-    if (amigaPath.includes(':') || amigaPath.startsWith('/')) {
+    if (amigaPath.includes(":") || amigaPath.startsWith("/")) {
       return amigaPath;
     }
 
     if (!this.currentDirectoryAmiga) {
-      console.warn('[dos.library] ⚠️ fixFilename: no current directory set, returning relative path unchanged');
+      console.warn(
+        "[dos.library] ⚠️ fixFilename: no current directory set, returning relative path unchanged"
+      );
       return amigaPath;
     }
 
-    console.warn(`[dos.library] ⚠️ fixFilename: prefixing "${amigaPath}" with current dir "${this.currentDirectoryAmiga}"`);
-    const separator = this.currentDirectoryAmiga.endsWith('/') ? '' : '/';
+    console.warn(
+      `[dos.library] ⚠️ fixFilename: prefixing "${amigaPath}" with current dir "${this.currentDirectoryAmiga}"`
+    );
+    const separator = this.currentDirectoryAmiga.endsWith("/") ? "" : "/";
     return `${this.currentDirectoryAmiga}${separator}${amigaPath}`;
   }
 
@@ -378,7 +396,9 @@ export class DosLibrary {
         console.log(`[dos.library] Open (FileManager) returned BPTR: ${bptr}`);
       } else {
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-        console.error(`[dos.library] Open (FileManager) failed for "${filename}"`);
+        console.error(
+          `[dos.library] Open (FileManager) failed for "${filename}"`
+        );
       }
       return bptr;
     }
@@ -390,10 +410,11 @@ export class DosLibrary {
     // Check if filename starts with "con:" (case-insensitive) - handles all console specifications
     // Examples: "", "*", "CON:", "CONSOLE:", "con:10/10/320/80/Output/auto/close/wait"
     // Empty string "" means current console (standard output)
-    const isConsoleDevice = filename === '' ||
-                           filename === '*' ||
-                           filename.toUpperCase() === 'CONSOLE:' ||
-                           filename.toUpperCase().startsWith('CON:');
+    const isConsoleDevice =
+      filename === "" ||
+      filename === "*" ||
+      filename.toUpperCase() === "CONSOLE:" ||
+      filename.toUpperCase().startsWith("CON:");
 
     if (isConsoleDevice) {
       // Explicitly opened console - allocate a new handle (not the standard stdout)
@@ -406,11 +427,13 @@ export class DosLibrary {
         position: 0,
         isConsole: true,
         buffer: undefined,
-        realPath: undefined
+        realPath: undefined,
       });
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(`[dos.library] Open: Console device "${filename}" -> handle ${fileId}`);
-    } else if (filename === 'NIL:' || filename === 'NIL') {
+      console.log(
+        `[dos.library] Open: Console device "${filename}" -> handle ${fileId}`
+      );
+    } else if (filename === "NIL:" || filename === "NIL") {
       // NIL: device - allocate a new handle
       fileId = this.nextFileId++;
       this.openFiles.set(fileId, {
@@ -420,7 +443,7 @@ export class DosLibrary {
         position: 0,
         isConsole: false,
         buffer: undefined,
-        realPath: undefined
+        realPath: undefined,
       });
       this.lastError = this.ERROR_NO_ERROR;
       console.log(`[dos.library] Open: NIL: device -> handle ${fileId}`);
@@ -429,7 +452,9 @@ export class DosLibrary {
       const realPath = this.resolvePath(filename);
 
       if (!realPath) {
-        console.error(`[dos.library] Open: Failed to resolve path "${filename}"`);
+        console.error(
+          `[dos.library] Open: Failed to resolve path "${filename}"`
+        );
         fileId = 0;
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       } else {
@@ -446,13 +471,17 @@ export class DosLibrary {
               // Load entire file into memory
               buffer = fs.readFileSync(realPath);
               fileId = this.nextFileId++;
-              console.log(`[dos.library] Open: File opened for reading (${buffer.length} bytes) -> handle ${fileId}`);
+              console.log(
+                `[dos.library] Open: File opened for reading (${buffer.length} bytes) -> handle ${fileId}`
+              );
             }
           } else if (mode === MODE_NEWFILE) {
             // Write mode - create new file or truncate existing
             buffer = Buffer.alloc(0);
             fileId = this.nextFileId++;
-            console.log(`[dos.library] Open: File opened for writing -> handle ${fileId}`);
+            console.log(
+              `[dos.library] Open: File opened for writing -> handle ${fileId}`
+            );
           } else {
             console.error(`[dos.library] Open: Unknown mode ${mode}`);
             fileId = 0;
@@ -468,12 +497,15 @@ export class DosLibrary {
               position: 0,
               isConsole: false,
               buffer: buffer,
-              realPath: realPath
+              realPath: realPath,
             });
             this.lastError = this.ERROR_NO_ERROR;
           }
         } catch (error) {
-          console.error(`[dos.library] Open: Error opening file ${realPath}:`, error);
+          console.error(
+            `[dos.library] Open: Error opening file ${realPath}:`,
+            error
+          );
           fileId = 0;
           this.lastError = this.ERROR_OBJECT_NOT_FOUND;
         }
@@ -504,19 +536,23 @@ export class DosLibrary {
     // V47+ behavior: Close(0) does nothing and returns success
     if (handle === 0) {
       console.log(`[dos.library] Close(0): No-op, returning success`);
-      return -1;  // DOSTRUE
+      return -1; // DOSTRUE
     }
 
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
       const success = this.fileManager.close(handle);
       if (success) {
-        console.log(`[dos.library] Close (FileManager) succeeded for handle ${handle}`);
-        return -1;  // DOSTRUE
+        console.log(
+          `[dos.library] Close (FileManager) succeeded for handle ${handle}`
+        );
+        return -1; // DOSTRUE
       } else {
-        console.error(`[dos.library] Close (FileManager) failed for handle ${handle}`);
+        console.error(
+          `[dos.library] Close (FileManager) failed for handle ${handle}`
+        );
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-        return 0;  // DOSFALSE
+        return 0; // DOSFALSE
       }
     }
 
@@ -524,15 +560,17 @@ export class DosLibrary {
 
     // Standard handles should not be closed
     if (handle <= 3 || handle === this.NIL_HANDLE) {
-      console.log(`[dos.library] Close: Standard handle ${handle}, returning success without closing`);
-      return -1;  // DOSTRUE
+      console.log(
+        `[dos.library] Close: Standard handle ${handle}, returning success without closing`
+      );
+      return -1; // DOSTRUE
     }
 
     const fileHandle = this.openFiles.get(handle);
     if (!fileHandle) {
       console.error(`[dos.library] Close: Invalid handle ${handle}`);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      return 0;  // DOSFALSE
+      return 0; // DOSFALSE
     }
 
     // Save previous IoErr value (will restore on success)
@@ -540,18 +578,32 @@ export class DosLibrary {
     let success = true;
 
     // Console handles and NIL: don't need to flush to disk
-    if (fileHandle.isConsole || fileHandle.name === 'NIL:' || fileHandle.name === 'NIL') {
-      console.log(`[dos.library] Close: Console/NIL handle ${handle}, closing without disk flush`);
+    if (
+      fileHandle.isConsole ||
+      fileHandle.name === "NIL:" ||
+      fileHandle.name === "NIL"
+    ) {
+      console.log(
+        `[dos.library] Close: Console/NIL handle ${handle}, closing without disk flush`
+      );
       // Console output is already flushed via Write(), just close the handle
     } else {
       // Regular file - flush buffer to disk if it was opened for writing
-      if (fileHandle.mode === MODE_NEWFILE || fileHandle.mode === MODE_READWRITE) {
+      if (
+        fileHandle.mode === MODE_NEWFILE ||
+        fileHandle.mode === MODE_READWRITE
+      ) {
         if (fileHandle.realPath && fileHandle.buffer) {
           try {
             fs.writeFileSync(fileHandle.realPath, fileHandle.buffer);
-            console.log(`[dos.library] Close: Wrote ${fileHandle.buffer.length} bytes to ${fileHandle.realPath}`);
+            console.log(
+              `[dos.library] Close: Wrote ${fileHandle.buffer.length} bytes to ${fileHandle.realPath}`
+            );
           } catch (error) {
-            console.error(`[dos.library] Close: Error writing file ${fileHandle.realPath}:`, error);
+            console.error(
+              `[dos.library] Close: Error writing file ${fileHandle.realPath}:`,
+              error
+            );
             this.lastError = this.ERROR_WRITE_PROTECTED;
             success = false;
             // NOTE: Still deallocate handle below (per spec)
@@ -566,12 +618,16 @@ export class DosLibrary {
     if (success) {
       // On success: restore IoErr() to previous value (per spec)
       this.lastError = previousIoErr;
-      console.log(`[dos.library] Close: File closed successfully, IoErr restored to ${previousIoErr}`);
-      return -1;  // DOSTRUE
+      console.log(
+        `[dos.library] Close: File closed successfully, IoErr restored to ${previousIoErr}`
+      );
+      return -1; // DOSTRUE
     } else {
       // On failure: IoErr already set above
-      console.log(`[dos.library] Close: Failed but handle deallocated, IoErr=${this.lastError}`);
-      return 0;  // DOSFALSE
+      console.log(
+        `[dos.library] Close: Failed but handle deallocated, IoErr=${this.lastError}`
+      );
+      return 0; // DOSFALSE
     }
   }
 
@@ -587,7 +643,11 @@ export class DosLibrary {
     const bufferAddr = this.emulator.getRegister(CPURegister.D2);
     const length = this.emulator.getRegister(CPURegister.D3);
 
-    console.log(`[dos.library] Read(handle=${handle}, buffer=0x${bufferAddr.toString(16)}, length=${length})`);
+    console.log(
+      `[dos.library] Read(handle=${handle}, buffer=0x${bufferAddr.toString(
+        16
+      )}, length=${length})`
+    );
 
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
@@ -600,7 +660,9 @@ export class DosLibrary {
       }
 
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(`[dos.library] Read (FileManager) returned: ${bytesRead} bytes`);
+      console.log(
+        `[dos.library] Read (FileManager) returned: ${bytesRead} bytes`
+      );
       return bytesRead;
     }
 
@@ -610,14 +672,19 @@ export class DosLibrary {
       const bytesToRead = Math.min(length, this.inputBuffer.length);
 
       for (let i = 0; i < bytesToRead; i++) {
-        this.emulator.writeMemory(bufferAddr + i, this.inputBuffer.charCodeAt(i));
+        this.emulator.writeMemory(
+          bufferAddr + i,
+          this.inputBuffer.charCodeAt(i)
+        );
       }
 
       // Remove read data from buffer
       this.inputBuffer = this.inputBuffer.substring(bytesToRead);
 
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(`[dos.library] Read returned: ${bytesToRead} bytes from STDIN`);
+      console.log(
+        `[dos.library] Read returned: ${bytesToRead} bytes from STDIN`
+      );
       return bytesToRead;
     }
 
@@ -647,7 +714,9 @@ export class DosLibrary {
     const available = fileHandle.buffer.length - fileHandle.position;
     const bytesToRead = Math.min(length, available);
 
-    console.log(`[dos.library] Read: position=${fileHandle.position}, available=${available}, requested=${length}, reading=${bytesToRead}`);
+    console.log(
+      `[dos.library] Read: position=${fileHandle.position}, available=${available}, requested=${length}, reading=${bytesToRead}`
+    );
 
     // Copy bytes from file buffer to emulator memory
     for (let i = 0; i < bytesToRead; i++) {
@@ -659,7 +728,9 @@ export class DosLibrary {
     fileHandle.position += bytesToRead;
 
     this.lastError = this.ERROR_NO_ERROR;
-    console.log(`[dos.library] Read returned: ${bytesToRead} bytes (position now ${fileHandle.position})`);
+    console.log(
+      `[dos.library] Read returned: ${bytesToRead} bytes (position now ${fileHandle.position})`
+    );
     return bytesToRead;
   }
 
@@ -687,7 +758,9 @@ export class DosLibrary {
       const result = this.fileManager.write(handle, dataBuffer);
 
       if (result.bytesWritten < 0) {
-        console.error(`[dos.library] Write (FileManager) failed for handle ${handle}`);
+        console.error(
+          `[dos.library] Write (FileManager) failed for handle ${handle}`
+        );
         this.lastError = this.ERROR_WRITE_PROTECTED;
         return -1;
       }
@@ -695,28 +768,40 @@ export class DosLibrary {
       // If console output, send to callback
       if (result.consoleData) {
         const text = result.consoleData.toString();
-        console.log(`[dos.library] Write (FileManager): Console output (${length} bytes): ${JSON.stringify(text)}`);
+        console.log(
+          `[dos.library] Write (FileManager): Console output (${length} bytes): ${JSON.stringify(
+            text
+          )}`
+        );
         if (this.outputCallback) {
           this.outputCallback(text);
         }
       }
 
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(`[dos.library] Write (FileManager) returned: ${result.bytesWritten} bytes`);
+      console.log(
+        `[dos.library] Write (FileManager) returned: ${result.bytesWritten} bytes`
+      );
       return result.bytesWritten;
     }
 
     // LEGACY: Old implementation (backward compatibility)
     // Check if this is a console/stdout/stderr handle
     const fileHandle = this.openFiles.get(handle);
-    const isConsoleHandle = (handle === this.STDOUT_HANDLE || handle === this.STDERR_HANDLE ||
-                            (fileHandle && fileHandle.isConsole));
+    const isConsoleHandle =
+      handle === this.STDOUT_HANDLE ||
+      handle === this.STDERR_HANDLE ||
+      (fileHandle && fileHandle.isConsole);
 
     if (isConsoleHandle) {
       const text = String.fromCharCode(...bytes);
 
       // DEBUG: Log WHO2 door output
-      console.log(`[dos.library] Write: Console output (${length} bytes): ${JSON.stringify(text)}`);
+      console.log(
+        `[dos.library] Write: Console output (${length} bytes): ${JSON.stringify(
+          text
+        )}`
+      );
 
       // Send to output callback
       if (this.outputCallback) {
@@ -731,13 +816,17 @@ export class DosLibrary {
     }
 
     // Check if it's NIL: device (discards output)
-    const isNilDevice = (handle === this.NIL_HANDLE ||
-                        (fileHandle && fileHandle.name &&
-                         (fileHandle.name === 'NIL:' || fileHandle.name === 'NIL')));
+    const isNilDevice =
+      handle === this.NIL_HANDLE ||
+      (fileHandle &&
+        fileHandle.name &&
+        (fileHandle.name === "NIL:" || fileHandle.name === "NIL"));
 
     if (isNilDevice) {
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(`[dos.library] Write: NIL: device -> ${length} bytes discarded`);
+      console.log(
+        `[dos.library] Write: NIL: device -> ${length} bytes discarded`
+      );
       return length;
     }
 
@@ -749,8 +838,13 @@ export class DosLibrary {
     }
 
     // Check if file is writable
-    if (fileHandle.mode !== MODE_NEWFILE && fileHandle.mode !== MODE_READWRITE) {
-      console.error(`[dos.library] Write: File not opened for writing (mode=${fileHandle.mode})`);
+    if (
+      fileHandle.mode !== MODE_NEWFILE &&
+      fileHandle.mode !== MODE_READWRITE
+    ) {
+      console.error(
+        `[dos.library] Write: File not opened for writing (mode=${fileHandle.mode})`
+      );
       this.lastError = this.ERROR_WRITE_PROTECTED;
       return -1;
     }
@@ -762,7 +856,9 @@ export class DosLibrary {
       return -1;
     }
 
-    console.log(`[dos.library] Write: Writing ${length} bytes at position ${fileHandle.position}`);
+    console.log(
+      `[dos.library] Write: Writing ${length} bytes at position ${fileHandle.position}`
+    );
 
     // Expand buffer if necessary
     const neededSize = fileHandle.position + length;
@@ -781,7 +877,9 @@ export class DosLibrary {
     fileHandle.position += length;
 
     this.lastError = this.ERROR_NO_ERROR;
-    console.log(`[dos.library] Write returned: ${length} bytes (position now ${fileHandle.position})`);
+    console.log(
+      `[dos.library] Write returned: ${length} bytes (position now ${fileHandle.position})`
+    );
     return length;
   }
 
@@ -789,8 +887,8 @@ export class DosLibrary {
   // Per AmigaDOS spec: "Input() is used to identify the initial input stream allocated when
   // the program was initiated. Never close the filehandle returned by Input!"
   // XIM/AIM doors expect standard console I/O, so we default to STDIN/STDOUT
-  private inheritedInput: number = 1;   // STDIN_HANDLE
-  private inheritedOutput: number = 2;  // STDOUT_HANDLE
+  private inheritedInput: number = 1; // STDIN_HANDLE
+  private inheritedOutput: number = 2; // STDOUT_HANDLE
 
   /**
    * Set inherited stdin/stdout handles for the process
@@ -799,7 +897,9 @@ export class DosLibrary {
   setInheritedHandles(input: number, output: number): void {
     this.inheritedInput = input;
     this.inheritedOutput = output;
-    console.log(`[dos.library] Set inherited handles: Input=${input}, Output=${output}`);
+    console.log(
+      `[dos.library] Set inherited handles: Input=${input}, Output=${output}`
+    );
   }
 
   /**
@@ -819,7 +919,9 @@ export class DosLibrary {
     }
 
     // LEGACY: Old implementation
-    console.log(`[dos.library] Input() returning inherited handle ${this.inheritedInput}`);
+    console.log(
+      `[dos.library] Input() returning inherited handle ${this.inheritedInput}`
+    );
     return this.inheritedInput;
   }
 
@@ -840,7 +942,9 @@ export class DosLibrary {
     }
 
     // LEGACY: Old implementation
-    console.log(`[dos.library] Output() returning inherited handle ${this.inheritedOutput}`);
+    console.log(
+      `[dos.library] Output() returning inherited handle ${this.inheritedOutput}`
+    );
     return this.inheritedOutput;
   }
 
@@ -850,7 +954,11 @@ export class DosLibrary {
    */
   IoErr(): number {
     if (this.lastError !== 0) {
-      console.log(`[dos.library] 🔴 IoErr() = ${this.lastError} (${this.getErrorMessage(this.lastError)})`);
+      console.log(
+        `[dos.library] 🔴 IoErr() = ${this.lastError} (${this.getErrorMessage(
+          this.lastError
+        )})`
+      );
     }
     return this.lastError;
   }
@@ -872,16 +980,21 @@ export class DosLibrary {
     const now = new Date();
 
     // Calculate days since Jan 1, 1978
-    const epoch = new Date('1978-01-01T00:00:00Z');
-    const daysSinceEpoch = Math.floor((now.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24));
+    const epoch = new Date("1978-01-01T00:00:00Z");
+    const daysSinceEpoch = Math.floor(
+      (now.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
+    );
 
     // Calculate minutes past midnight
     const minutesPastMidnight = now.getHours() * 60 + now.getMinutes();
 
     // Calculate ticks past minute (50 ticks/sec)
-    const ticksPastMinute = now.getSeconds() * 50 + Math.floor(now.getMilliseconds() / 20);
+    const ticksPastMinute =
+      now.getSeconds() * 50 + Math.floor(now.getMilliseconds() / 20);
 
-    console.log(`[dos.library] DateStamp() days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute}`);
+    console.log(
+      `[dos.library] DateStamp() days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute}`
+    );
 
     // Write DateStamp structure (3 x 32-bit longs, big-endian)
     this.writeLong(dateStampPtr, daysSinceEpoch);
@@ -905,7 +1018,11 @@ export class DosLibrary {
 
     // Set delay expiration time
     this.delayUntil = Date.now() + milliseconds;
-    console.log(`[dos.library] Execution will pause until ${new Date(this.delayUntil).toISOString()}`);
+    console.log(
+      `[dos.library] Execution will pause until ${new Date(
+        this.delayUntil
+      ).toISOString()}`
+    );
   }
 
   // Track when delay should end
@@ -937,7 +1054,9 @@ export class DosLibrary {
     const offset = rawOffset | 0;
     const mode = rawMode | 0;
 
-    console.log(`[dos.library] Seek(handle=${handle}, offset=${offset}, mode=${mode})`);
+    console.log(
+      `[dos.library] Seek(handle=${handle}, offset=${offset}, mode=${mode})`
+    );
 
     if (this.useNewFileSystem && this.fileManager) {
       let whence = 0;
@@ -956,13 +1075,15 @@ export class DosLibrary {
       const oldPos = this.fileManager.tell(handle);
       const newPos = this.fileManager.seek(handle, offset, whence);
       if (newPos < 0) {
-        console.error('[dos.library] Seek(FileManager): seek failed');
+        console.error("[dos.library] Seek(FileManager): seek failed");
         this.lastError = this.ERROR_OBJECT_IN_USE;
         return -1;
       }
 
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(`[dos.library] Seek(FileManager): moved from ${oldPos} to ${newPos}`);
+      console.log(
+        `[dos.library] Seek(FileManager): moved from ${oldPos} to ${newPos}`
+      );
       return oldPos;
     }
 
@@ -985,7 +1106,9 @@ export class DosLibrary {
         // Consoles/NIL don't have a meaningful end; treat as no-op
         newPos = oldPos;
       } else {
-        console.error(`[dos.library] Seek: Invalid mode ${mode} for console handle`);
+        console.error(
+          `[dos.library] Seek: Invalid mode ${mode} for console handle`
+        );
         this.lastError = this.ERROR_OBJECT_IN_USE;
         return -1;
       }
@@ -996,7 +1119,9 @@ export class DosLibrary {
 
       fileHandle.position = newPos;
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(`[dos.library] Seek: Console/NIL handle ${handle} moved from ${oldPos} to ${newPos}`);
+      console.log(
+        `[dos.library] Seek: Console/NIL handle ${handle} moved from ${oldPos} to ${newPos}`
+      );
       return oldPos;
     }
 
@@ -1033,7 +1158,9 @@ export class DosLibrary {
     fileHandle.position = newPosition;
 
     this.lastError = this.ERROR_NO_ERROR;
-    console.log(`[dos.library] Seek: Moved from ${oldPosition} to ${newPosition}`);
+    console.log(
+      `[dos.library] Seek: Moved from ${oldPosition} to ${newPosition}`
+    );
     return oldPosition;
   }
 
@@ -1050,7 +1177,9 @@ export class DosLibrary {
 
     const realPath = this.resolvePath(filename);
     if (!realPath) {
-      console.error(`[dos.library] DeleteFile: Failed to resolve path "${filename}"`);
+      console.error(
+        `[dos.library] DeleteFile: Failed to resolve path "${filename}"`
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return;
@@ -1066,7 +1195,9 @@ export class DosLibrary {
 
     // Check if it's a directory (DeleteFile should only delete files)
     if (fs.statSync(realPath).isDirectory()) {
-      console.error(`[dos.library] DeleteFile: Cannot delete directory with DeleteFile: ${realPath}`);
+      console.error(
+        `[dos.library] DeleteFile: Cannot delete directory with DeleteFile: ${realPath}`
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_IN_USE;
       return;
@@ -1077,10 +1208,13 @@ export class DosLibrary {
       fs.unlinkSync(realPath);
       console.log(`[dos.library] DeleteFile: Deleted file ${realPath}`);
 
-      this.emulator.setRegister(CPURegister.D0, -1);  // DOSTRUE
+      this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
       this.lastError = this.ERROR_NO_ERROR;
     } catch (error) {
-      console.error(`[dos.library] DeleteFile: Error deleting file ${realPath}:`, error);
+      console.error(
+        `[dos.library] DeleteFile: Error deleting file ${realPath}:`,
+        error
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_WRITE_PROTECTED;
     }
@@ -1098,7 +1232,9 @@ export class DosLibrary {
     const oldName = this.readString(oldNamePtr);
     const newName = this.readString(newNamePtr);
 
-    console.log(`[dos.library] Rename("${oldName}", "${newName}") - STUB, returning success`);
+    console.log(
+      `[dos.library] Rename("${oldName}", "${newName}") - STUB, returning success`
+    );
 
     // Stub: always return success
     this.emulator.setRegister(CPURegister.D0, -1);
@@ -1124,7 +1260,11 @@ export class DosLibrary {
     const realPath = this.resolvePath(name);
     if (!realPath) {
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      console.log(`[dos.library] 🔒 Lock("${name}") - ❌ Failed to resolve path [IoErr=${this.lastError}: ${this.getErrorMessage(this.lastError)}]`);
+      console.log(
+        `[dos.library] 🔒 Lock("${name}") - ❌ Failed to resolve path [IoErr=${
+          this.lastError
+        }: ${this.getErrorMessage(this.lastError)}]`
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       return;
     }
@@ -1132,12 +1272,18 @@ export class DosLibrary {
     // Check if path exists
     if (!fs.existsSync(realPath)) {
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      console.log(`[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ⚠️  NOT FOUND [IoErr=${this.lastError}: ${this.getErrorMessage(this.lastError)}]`);
+      console.log(
+        `[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ⚠️  NOT FOUND [IoErr=${
+          this.lastError
+        }: ${this.getErrorMessage(this.lastError)}]`
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       return;
     }
 
-    console.log(`[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ✅ EXISTS`);
+    console.log(
+      `[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ✅ EXISTS`
+    );
 
     // Create lock
     const lockId = this.nextLockId++;
@@ -1145,11 +1291,13 @@ export class DosLibrary {
       id: lockId,
       path: realPath,
       mode: mode,
-      amigaPath: originalName
+      amigaPath: originalName,
     });
 
     this.lastLockPath = originalName;
-    console.log(`[dos.library] Lock: Created lock ${lockId} for path ${realPath}`);
+    console.log(
+      `[dos.library] Lock: Created lock ${lockId} for path ${realPath}`
+    );
     this.emulator.setRegister(CPURegister.D0, lockId);
     this.lastError = this.ERROR_NO_ERROR;
   }
@@ -1185,7 +1333,11 @@ export class DosLibrary {
   DupLock(): void {
     const lock = this.emulator.getRegister(CPURegister.D1);
 
-    console.log(`[dos.library] DupLock(lock=0x${lock.toString(16)}) - STUB, returning same lock`);
+    console.log(
+      `[dos.library] DupLock(lock=0x${lock.toString(
+        16
+      )}) - STUB, returning same lock`
+    );
 
     // Return the same lock value
     this.emulator.setRegister(CPURegister.D0, lock);
@@ -1207,7 +1359,9 @@ export class DosLibrary {
     const lockId = this.emulator.getRegister(CPURegister.D1);
     const fibPtr = this.emulator.getRegister(CPURegister.D2);
 
-    console.log(`[dos.library] Examine(lock=${lockId}, fib=0x${fibPtr.toString(16)})`);
+    console.log(
+      `[dos.library] Examine(lock=${lockId}, fib=0x${fibPtr.toString(16)})`
+    );
 
     const lock = this.locks.get(lockId);
     if (!lock) {
@@ -1249,8 +1403,10 @@ export class DosLibrary {
 
       // fib_Date (12 bytes DateStamp)
       const mtime = stats.mtime;
-      const epoch = new Date('1978-01-01T00:00:00Z');
-      const days = Math.floor((mtime.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24));
+      const epoch = new Date("1978-01-01T00:00:00Z");
+      const days = Math.floor(
+        (mtime.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
+      );
       const minutes = mtime.getHours() * 60 + mtime.getMinutes();
       const ticks = mtime.getSeconds() * 50;
 
@@ -1259,22 +1415,31 @@ export class DosLibrary {
       this.writeLong(fibPtr + 140, ticks);
 
       // fib_Comment (80 bytes BCPL string)
-      this.writeBCPLString(fibPtr + 144, '', 79);
+      this.writeBCPLString(fibPtr + 144, "", 79);
 
-      console.log(`[dos.library] Examine: ${fileName} (${stats.isDirectory() ? 'dir' : 'file'}, ${stats.size} bytes)`);
+      console.log(
+        `[dos.library] Examine: ${fileName} (${
+          stats.isDirectory() ? "dir" : "file"
+        }, ${stats.size} bytes)`
+      );
 
       // Initialize directory iterator for this lock if it's a directory
       if (stats.isDirectory()) {
         const files = fs.readdirSync(lock.path);
         this.dirIterators.set(lockId, files);
         this.dirIteratorIndex.set(lockId, 0);
-        console.log(`[dos.library] Examine: Initialized directory iterator (${files.length} entries)`);
+        console.log(
+          `[dos.library] Examine: Initialized directory iterator (${files.length} entries)`
+        );
       }
 
-      this.emulator.setRegister(CPURegister.D0, -1);  // DOSTRUE
+      this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
       this.lastError = this.ERROR_NO_ERROR;
     } catch (error) {
-      console.error(`[dos.library] Examine: Error examining path ${lock.path}:`, error);
+      console.error(
+        `[dos.library] Examine: Error examining path ${lock.path}:`,
+        error
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
     }
@@ -1290,7 +1455,9 @@ export class DosLibrary {
     const lockId = this.emulator.getRegister(CPURegister.D1);
     const fibPtr = this.emulator.getRegister(CPURegister.D2);
 
-    console.log(`[dos.library] ExNext(lock=${lockId}, fib=0x${fibPtr.toString(16)})`);
+    console.log(
+      `[dos.library] ExNext(lock=${lockId}, fib=0x${fibPtr.toString(16)})`
+    );
 
     const lock = this.locks.get(lockId);
     if (!lock) {
@@ -1308,7 +1475,10 @@ export class DosLibrary {
         this.dirIterators.set(lockId, files);
         this.dirIteratorIndex.set(lockId, 0);
       } catch (error) {
-        console.error(`[dos.library] ExNext: Error reading directory ${lock.path}:`, error);
+        console.error(
+          `[dos.library] ExNext: Error reading directory ${lock.path}:`,
+          error
+        );
         this.emulator.setRegister(CPURegister.D0, 0);
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
         return;
@@ -1364,8 +1534,10 @@ export class DosLibrary {
 
       // fib_Date (12 bytes DateStamp)
       const mtime = stats.mtime;
-      const epoch = new Date('1978-01-01T00:00:00Z');
-      const days = Math.floor((mtime.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24));
+      const epoch = new Date("1978-01-01T00:00:00Z");
+      const days = Math.floor(
+        (mtime.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
+      );
       const minutes = mtime.getHours() * 60 + mtime.getMinutes();
       const ticks = mtime.getSeconds() * 50;
 
@@ -1374,17 +1546,24 @@ export class DosLibrary {
       this.writeLong(fibPtr + 140, ticks);
 
       // fib_Comment (80 bytes BCPL string)
-      this.writeBCPLString(fibPtr + 144, '', 79);
+      this.writeBCPLString(fibPtr + 144, "", 79);
 
-      console.log(`[dos.library] ExNext: ${fileName} (${stats.isDirectory() ? 'dir' : 'file'}, ${stats.size} bytes)`);
+      console.log(
+        `[dos.library] ExNext: ${fileName} (${
+          stats.isDirectory() ? "dir" : "file"
+        }, ${stats.size} bytes)`
+      );
 
       // Increment iterator
       this.dirIteratorIndex.set(lockId, index + 1);
 
-      this.emulator.setRegister(CPURegister.D0, -1);  // DOSTRUE
+      this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
       this.lastError = this.ERROR_NO_ERROR;
     } catch (error) {
-      console.error(`[dos.library] ExNext: Error reading file ${filePath}:`, error);
+      console.error(
+        `[dos.library] ExNext: Error reading file ${filePath}:`,
+        error
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
     }
@@ -1400,7 +1579,11 @@ export class DosLibrary {
     const lock = this.emulator.getRegister(CPURegister.D1);
     const infoPtr = this.emulator.getRegister(CPURegister.D2);
 
-    console.log(`[dos.library] Info(lock=0x${lock.toString(16)}, info=0x${infoPtr.toString(16)}) - STUB`);
+    console.log(
+      `[dos.library] Info(lock=0x${lock.toString(
+        16
+      )}, info=0x${infoPtr.toString(16)}) - STUB`
+    );
 
     // Stub: fill in minimal InfoData structure
     for (let i = 0; i < 36; i++) {
@@ -1424,7 +1607,9 @@ export class DosLibrary {
 
     const realPath = this.resolvePath(name);
     if (!realPath) {
-      console.error(`[dos.library] CreateDir: Failed to resolve path "${name}"`);
+      console.error(
+        `[dos.library] CreateDir: Failed to resolve path "${name}"`
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return;
@@ -1432,7 +1617,9 @@ export class DosLibrary {
 
     // Check if directory already exists
     if (fs.existsSync(realPath)) {
-      console.error(`[dos.library] CreateDir: Path already exists: ${realPath}`);
+      console.error(
+        `[dos.library] CreateDir: Path already exists: ${realPath}`
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_IN_USE;
       return;
@@ -1448,14 +1635,17 @@ export class DosLibrary {
       this.locks.set(lockId, {
         id: lockId,
         path: realPath,
-        mode: -2,  // ACCESS_READ
-        amigaPath: name
+        mode: -2, // ACCESS_READ
+        amigaPath: name,
       });
 
       this.emulator.setRegister(CPURegister.D0, lockId);
       this.lastError = this.ERROR_NO_ERROR;
     } catch (error) {
-      console.error(`[dos.library] CreateDir: Error creating directory ${realPath}:`, error);
+      console.error(
+        `[dos.library] CreateDir: Error creating directory ${realPath}:`,
+        error
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_WRITE_PROTECTED;
     }
@@ -1477,12 +1667,14 @@ export class DosLibrary {
       id: oldDirLockId,
       path: this.currentDirectory,
       amigaPath: this.currentDirectoryAmiga,
-      mode: -2  // ACCESS_READ
+      mode: -2, // ACCESS_READ
     });
 
     if (lockId === 0) {
       // D1=0 means "just get current directory lock, don't change"
-      console.log(`[dos.library] CurrentDir: Returning current directory lock ${oldDirLockId} for ${this.currentDirectory}`);
+      console.log(
+        `[dos.library] CurrentDir: Returning current directory lock ${oldDirLockId} for ${this.currentDirectory}`
+      );
       this.emulator.setRegister(CPURegister.D0, oldDirLockId);
       this.lastError = this.ERROR_NO_ERROR;
       return;
@@ -1498,8 +1690,13 @@ export class DosLibrary {
     }
 
     // Verify the lock points to a directory
-    if (!fs.existsSync(newLock.path) || !fs.statSync(newLock.path).isDirectory()) {
-      console.error(`[dos.library] CurrentDir: Lock ${lockId} does not point to a directory: ${newLock.path}`);
+    if (
+      !fs.existsSync(newLock.path) ||
+      !fs.statSync(newLock.path).isDirectory()
+    ) {
+      console.error(
+        `[dos.library] CurrentDir: Lock ${lockId} does not point to a directory: ${newLock.path}`
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return;
@@ -1511,7 +1708,9 @@ export class DosLibrary {
     if (newLock.amigaPath) {
       this.currentDirectoryAmiga = newLock.amigaPath;
     }
-    console.log(`[dos.library] CurrentDir: Changed from ${oldDir} to ${this.currentDirectory}`);
+    console.log(
+      `[dos.library] CurrentDir: Changed from ${oldDir} to ${this.currentDirectory}`
+    );
 
     // Return lock for old directory
     this.emulator.setRegister(CPURegister.D0, oldDirLockId);
@@ -1552,11 +1751,13 @@ export class DosLibrary {
     const returnCode = this.emulator.getRegister(CPURegister.D1);
 
     console.log(`[dos.library] Exit(returnCode=${returnCode})`);
-    console.log(`[dos.library] Setting PC to exit trap address 0xFFFF00 to terminate door`);
+    console.log(
+      `[dos.library] Setting PC to exit trap address 0xFFFF00 to terminate door`
+    );
 
     // Set PC to exit trap address - this signals the emulation loop to terminate
-    const EXIT_TRAP_ADDRESS = 0xFFFF00;
-    this.emulator.setRegister(16, EXIT_TRAP_ADDRESS);  // PC = exit trap
+    const EXIT_TRAP_ADDRESS = 0xffff00;
+    this.emulator.setRegister(16, EXIT_TRAP_ADDRESS); // PC = exit trap
 
     console.log(`[dos.library] Door will now exit cleanly`);
   }
@@ -1585,7 +1786,9 @@ export class DosLibrary {
   UnLoadSeg(): void {
     const segList = this.emulator.getRegister(CPURegister.D1);
 
-    console.log(`[dos.library] UnLoadSeg(segList=0x${segList.toString(16)}) - STUB`);
+    console.log(
+      `[dos.library] UnLoadSeg(segList=0x${segList.toString(16)}) - STUB`
+    );
 
     this.emulator.setRegister(CPURegister.D0, -1);
     this.lastError = this.ERROR_NO_ERROR;
@@ -1600,7 +1803,9 @@ export class DosLibrary {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-    console.log(`[dos.library] DeviceProc("${name}") - STUB, returning fake MsgPort`);
+    console.log(
+      `[dos.library] DeviceProc("${name}") - STUB, returning fake MsgPort`
+    );
 
     // Return fake MsgPort address
     this.emulator.setRegister(CPURegister.D0, 0x4000);
@@ -1617,7 +1822,7 @@ export class DosLibrary {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const commentPtr = this.emulator.getRegister(CPURegister.D2);
     const name = this.readString(namePtr);
-    const comment = commentPtr ? this.readString(commentPtr) : '';
+    const comment = commentPtr ? this.readString(commentPtr) : "";
 
     console.log(`[dos.library] SetComment("${name}", "${comment}") - STUB`);
 
@@ -1636,7 +1841,9 @@ export class DosLibrary {
     const protect = this.emulator.getRegister(CPURegister.D2);
     const name = this.readString(namePtr);
 
-    console.log(`[dos.library] SetProtection("${name}", 0x${protect.toString(16)}) - STUB`);
+    console.log(
+      `[dos.library] SetProtection("${name}", 0x${protect.toString(16)}) - STUB`
+    );
 
     this.emulator.setRegister(CPURegister.D0, -1);
     this.lastError = this.ERROR_NO_ERROR;
@@ -1702,7 +1909,9 @@ export class DosLibrary {
    * This is the same string passed in A0 on startup from CLI.
    */
   GetArgStr(): void {
-    console.log(`[dos.library] GetArgStr() returning 0x${this.argStringPtr.toString(16)}`);
+    console.log(
+      `[dos.library] GetArgStr() returning 0x${this.argStringPtr.toString(16)}`
+    );
     this.emulator.setRegister(CPURegister.D0, this.argStringPtr);
   }
 
@@ -1720,14 +1929,20 @@ export class DosLibrary {
     const bufPtr = this.emulator.getRegister(CPURegister.D1);
     const bufLen = this.emulator.getRegister(CPURegister.D2);
 
-    console.log(`[dos.library] GetCliProgramName(buf=0x${bufPtr.toString(16)}, len=${bufLen})`);
+    console.log(
+      `[dos.library] GetCliProgramName(buf=0x${bufPtr.toString(
+        16
+      )}, len=${bufLen})`
+    );
 
     if (this.programName.length === 0) {
       // No program name set - return empty string and failure
       this.emulator.writeMemory(bufPtr, 0);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = 212; // ERROR_OBJECT_WRONG_TYPE
-      console.log(`[dos.library] GetCliProgramName: No CLI structure, returning failure`);
+      console.log(
+        `[dos.library] GetCliProgramName: No CLI structure, returning failure`
+      );
       return;
     }
 
@@ -1740,7 +1955,12 @@ export class DosLibrary {
 
     this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
     this.lastError = this.ERROR_NO_ERROR;
-    console.log(`[dos.library] GetCliProgramName: Returned "${this.programName.substring(0, copyLen)}"`);
+    console.log(
+      `[dos.library] GetCliProgramName: Returned "${this.programName.substring(
+        0,
+        copyLen
+      )}"`
+    );
   }
 
   /**
@@ -1749,7 +1969,11 @@ export class DosLibrary {
   setCliInfo(argStringPtr: number, programName: string): void {
     this.argStringPtr = argStringPtr;
     this.programName = programName;
-    console.log(`[dos.library] CLI info set: argString=0x${argStringPtr.toString(16)}, progName="${programName}"`);
+    console.log(
+      `[dos.library] CLI info set: argString=0x${argStringPtr.toString(
+        16
+      )}, progName="${programName}"`
+    );
   }
 
   /**
@@ -1758,18 +1982,20 @@ export class DosLibrary {
    * D2 = timeout (microseconds)
    * Returns: D0 = -1 (TRUE) if char available, 0 (FALSE) otherwise
    */
-  WaitForChar(): void {
+  WaitForChar(): number {
     const fileHandle = this.emulator.getRegister(CPURegister.D1);
     const timeout = this.emulator.getRegister(CPURegister.D2);
 
-    console.log(`[dos.library] WaitForChar(fh=${fileHandle}, timeout=${timeout})`);
+    console.log(
+      `[dos.library] WaitForChar(fh=${fileHandle}, timeout=${timeout})`
+    );
 
     // For console/stdin, check if input buffer has data
     if (fileHandle === this.STDIN_HANDLE || fileHandle === this.STDOUT_HANDLE) {
       const hasData = this.inputBuffer.length > 0;
       this.emulator.setRegister(CPURegister.D0, hasData ? -1 : 0);
       console.log(`[dos.library] WaitForChar: Console, hasData=${hasData}`);
-      return;
+      return -1;
     }
 
     // For regular files, character is always available (file in memory)
@@ -1778,19 +2004,22 @@ export class DosLibrary {
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE - invalid handle
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       console.log(`[dos.library] WaitForChar: Invalid file handle`);
-      return;
+      return -1;
     }
 
     if (file.isConsole) {
       const hasData = this.inputBuffer.length > 0;
       this.emulator.setRegister(CPURegister.D0, hasData ? -1 : 0);
-      console.log(`[dos.library] WaitForChar: Console file, hasData=${hasData}`);
+      console.log(
+        `[dos.library] WaitForChar: Console file, hasData=${hasData}`
+      );
     } else {
       // File: check if position < file size
       const atEOF = !file.buffer || file.position >= file.buffer.length;
       this.emulator.setRegister(CPURegister.D0, atEOF ? 0 : -1);
       console.log(`[dos.library] WaitForChar: Regular file, atEOF=${atEOF}`);
     }
+    return this.emulator.getRegister(CPURegister.D0);
   }
 
   /**
@@ -1816,7 +2045,11 @@ export class DosLibrary {
         const char = this.inputBuffer.charCodeAt(0);
         this.inputBuffer = this.inputBuffer.substring(1);
         this.emulator.setRegister(CPURegister.D0, char);
-        console.log(`[dos.library] FGetC: Console, read char ${char} ('${String.fromCharCode(char)}')`);
+        console.log(
+          `[dos.library] FGetC: Console, read char ${char} ('${String.fromCharCode(
+            char
+          )}')`
+        );
       } else {
         this.emulator.setRegister(CPURegister.D0, -1); // EOF
         console.log(`[dos.library] FGetC: Console buffer empty, returning EOF`);
@@ -1834,7 +2067,11 @@ export class DosLibrary {
 
     const char = file.buffer[file.position++];
     this.emulator.setRegister(CPURegister.D0, char);
-    console.log(`[dos.library] FGetC: Read char ${char} ('${String.fromCharCode(char)}') at pos ${file.position - 1}`);
+    console.log(
+      `[dos.library] FGetC: Read char ${char} ('${String.fromCharCode(
+        char
+      )}') at pos ${file.position - 1}`
+    );
   }
 
   /**
@@ -1845,7 +2082,7 @@ export class DosLibrary {
    */
   FPutC(): void {
     const fileHandle = this.emulator.getRegister(CPURegister.D1);
-    const char = this.emulator.getRegister(CPURegister.D2) & 0xFF;
+    const char = this.emulator.getRegister(CPURegister.D2) & 0xff;
     console.log(`[dos.library] FPutC(fh=${fileHandle}, char=${char})`);
 
     const file = this.openFiles.get(fileHandle);
@@ -1875,7 +2112,9 @@ export class DosLibrary {
     file.position = file.buffer.length;
 
     this.emulator.setRegister(CPURegister.D0, char);
-    console.log(`[dos.library] FPutC: Wrote char to file, new size=${file.buffer.length}`);
+    console.log(
+      `[dos.library] FPutC: Wrote char to file, new size=${file.buffer.length}`
+    );
   }
 
   /**
@@ -1890,7 +2129,11 @@ export class DosLibrary {
     const bufAddr = this.emulator.getRegister(CPURegister.D2);
     const bufLen = this.emulator.getRegister(CPURegister.D3);
 
-    console.log(`[dos.library] FGets(fh=${fileHandle}, buf=0x${bufAddr.toString(16)}, len=${bufLen})`);
+    console.log(
+      `[dos.library] FGets(fh=${fileHandle}, buf=0x${bufAddr.toString(
+        16
+      )}, len=${bufLen})`
+    );
 
     if (bufLen === 0) {
       this.emulator.setRegister(CPURegister.D0, 0); // NULL
@@ -1901,12 +2144,18 @@ export class DosLibrary {
 
     // New FileManager-based implementation
     if (this.useNewFileSystem && this.fileManager) {
-      console.log(`[dos.library] FGets(FileManager) fh=${fileHandle} buf=0x${bufAddr.toString(16)} len=${bufLen}`);
+      console.log(
+        `[dos.library] FGets(FileManager) fh=${fileHandle} buf=0x${bufAddr.toString(
+          16
+        )} len=${bufLen}`
+      );
       const fh = this.fileManager.getHandle(fileHandle);
       if (!fh) {
         this.emulator.setRegister(CPURegister.D0, 0);
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-        console.log(`[dos.library] FGets: Invalid BPTR ${fileHandle}, returning NULL`);
+        console.log(
+          `[dos.library] FGets: Invalid BPTR ${fileHandle}, returning NULL`
+        );
         return;
       }
 
@@ -1921,7 +2170,7 @@ export class DosLibrary {
         const byte = chunk[0];
         this.emulator.writeMemory(bufAddr + bytesRead, byte);
         bytesRead++;
-        if (byte === 0x0A) {
+        if (byte === 0x0a) {
           break;
         }
       }
@@ -1929,16 +2178,23 @@ export class DosLibrary {
       if (bytesRead === 0) {
         this.emulator.setRegister(CPURegister.D0, 0);
         this.lastError = this.ERROR_NO_ERROR;
-        console.log('[dos.library] FGets: EOF (FileManager), returning NULL');
+        console.log("[dos.library] FGets: EOF (FileManager), returning NULL");
         return;
       }
 
       this.emulator.writeMemory(bufAddr + bytesRead, 0);
       this.emulator.setRegister(CPURegister.D0, bufAddr);
       const line = Buffer.from(
-        Array.from({ length: bytesRead }, (_, i) => this.emulator.readMemory(bufAddr + i))
-      ).toString('latin1');
-      console.log(`[dos.library] FGets (FileManager): Read ${bytesRead} bytes: "${line.replace(/\n/g, '\\n')}"`);
+        Array.from({ length: bytesRead }, (_, i) =>
+          this.emulator.readMemory(bufAddr + i)
+        )
+      ).toString("latin1");
+      console.log(
+        `[dos.library] FGets (FileManager): Read ${bytesRead} bytes: "${line.replace(
+          /\n/g,
+          "\\n"
+        )}"`
+      );
       this.lastError = this.ERROR_NO_ERROR;
       return;
     }
@@ -1969,7 +2225,8 @@ export class DosLibrary {
       bytesRead++;
 
       // Stop at newline (newline IS included in buffer)
-      if (byte === 0x0A) { // '\n'
+      if (byte === 0x0a) {
+        // '\n'
         break;
       }
     }
@@ -1978,10 +2235,17 @@ export class DosLibrary {
     this.emulator.writeMemory(bufAddr + bytesRead, 0);
 
     this.emulator.setRegister(CPURegister.D0, bufAddr); // Return buffer pointer
-    const line = String.fromCharCode(...Array.from({ length: bytesRead }, (_, i) =>
-      this.emulator.readMemory(bufAddr + i)
-    ));
-    console.log(`[dos.library] FGets: Read ${bytesRead} bytes: "${line.replace(/\n/g, '\\n')}"`);
+    const line = String.fromCharCode(
+      ...Array.from({ length: bytesRead }, (_, i) =>
+        this.emulator.readMemory(bufAddr + i)
+      )
+    );
+    console.log(
+      `[dos.library] FGets: Read ${bytesRead} bytes: "${line.replace(
+        /\n/g,
+        "\\n"
+      )}"`
+    );
   }
 
   /**
@@ -2019,7 +2283,7 @@ export class DosLibrary {
     if (!file.buffer) {
       file.buffer = Buffer.alloc(0);
     }
-    const strBuf = Buffer.from(str, 'binary');
+    const strBuf = Buffer.from(str, "binary");
     file.buffer = Buffer.concat([file.buffer, strBuf]);
     file.position = file.buffer.length;
 
@@ -2035,30 +2299,34 @@ export class DosLibrary {
   PutStr(): number {
     const strAddr = this.emulator.getRegister(CPURegister.D1);
     if (!strAddr) {
-      console.warn('[dos.library] PutStr: NULL string pointer');
+      console.warn("[dos.library] PutStr: NULL string pointer");
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return -1;
     }
 
     const str = this.readString(strAddr, 4096);
     const preview = str.length > 120 ? `${str.slice(0, 117)}...` : str;
-    console.log(`[dos.library] PutStr("${preview.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}")`);
+    console.log(
+      `[dos.library] PutStr("${preview
+        .replace(/\r/g, "\\r")
+        .replace(/\n/g, "\\n")}")`
+    );
 
     if (this.useNewFileSystem && this.fileManager) {
       const stdoutBptr = this.fileManager.getStdoutBptr();
-      const data = Buffer.from(str, 'binary');
+      const data = Buffer.from(str, "binary");
       const result = this.fileManager.write(stdoutBptr, data);
 
       if (result.bytesWritten < 0) {
-        console.error('[dos.library] PutStr: FileManager write failed');
+        console.error("[dos.library] PutStr: FileManager write failed");
         this.lastError = this.ERROR_WRITE_PROTECTED;
         return -1;
       }
 
       if (result.consoleData && this.outputCallback) {
-        this.outputCallback(result.consoleData.toString('binary'));
+        this.outputCallback(result.consoleData.toString("binary"));
       } else if (!result.consoleData) {
-        console.log('[dos.library] PutStr: Output redirected to file/device');
+        console.log("[dos.library] PutStr: Output redirected to file/device");
       }
 
       this.lastError = this.ERROR_NO_ERROR;
@@ -2069,7 +2337,7 @@ export class DosLibrary {
     const stdout = this.openFiles.get(handle);
 
     if (!stdout) {
-      console.error('[dos.library] PutStr: Invalid stdout handle');
+      console.error("[dos.library] PutStr: Invalid stdout handle");
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return -1;
     }
@@ -2078,13 +2346,13 @@ export class DosLibrary {
       if (this.outputCallback) {
         this.outputCallback(str);
       } else {
-        console.warn('[dos.library] PutStr: No output callback set');
+        console.warn("[dos.library] PutStr: No output callback set");
       }
     } else {
       if (!stdout.buffer) {
         stdout.buffer = Buffer.alloc(0);
       }
-      const strBuf = Buffer.from(str, 'binary');
+      const strBuf = Buffer.from(str, "binary");
       stdout.buffer = Buffer.concat([stdout.buffer, strBuf]);
       stdout.position = stdout.buffer.length;
     }
@@ -2107,12 +2375,16 @@ export class DosLibrary {
     const blockLen = this.emulator.getRegister(CPURegister.D3);
     const numBlocks = this.emulator.getRegister(CPURegister.D4);
 
-    console.log(`[dos.library] FRead(fh=${fileHandle}, buf=0x${bufAddr.toString(16)}, blocklen=${blockLen}, blocks=${numBlocks})`);
+    console.log(
+      `[dos.library] FRead(fh=${fileHandle}, buf=0x${bufAddr.toString(
+        16
+      )}, blocklen=${blockLen}, blocks=${numBlocks})`
+    );
 
     if (blockLen <= 0 || numBlocks <= 0) {
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_NO_ERROR;
-      console.log('[dos.library] FRead: Invalid block length or count');
+      console.log("[dos.library] FRead: Invalid block length or count");
       return;
     }
 
@@ -2121,7 +2393,7 @@ export class DosLibrary {
       if (!fh) {
         this.emulator.setRegister(CPURegister.D0, 0);
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-        console.log('[dos.library] FRead (FileManager): Invalid BPTR');
+        console.log("[dos.library] FRead (FileManager): Invalid BPTR");
         return;
       }
 
@@ -2135,7 +2407,9 @@ export class DosLibrary {
           }
           this.emulator.setRegister(CPURegister.D0, blocksRead);
           this.lastError = this.ERROR_NO_ERROR;
-          console.log(`[dos.library] FRead (FileManager): EOF after ${blocksRead} blocks`);
+          console.log(
+            `[dos.library] FRead (FileManager): EOF after ${blocksRead} blocks`
+          );
           return;
         }
 
@@ -2147,7 +2421,11 @@ export class DosLibrary {
 
       this.emulator.setRegister(CPURegister.D0, blocksRead);
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(`[dos.library] FRead (FileManager): Read ${blocksRead} blocks (${blocksRead * blockLen} bytes)`);
+      console.log(
+        `[dos.library] FRead (FileManager): Read ${blocksRead} blocks (${
+          blocksRead * blockLen
+        } bytes)`
+      );
       return;
     }
 
@@ -2178,7 +2456,9 @@ export class DosLibrary {
         if (file.position >= file.buffer.length) {
           // EOF reached mid-block
           this.emulator.setRegister(CPURegister.D0, blocksRead);
-          console.log(`[dos.library] FRead: EOF mid-block, read ${blocksRead} complete blocks`);
+          console.log(
+            `[dos.library] FRead: EOF mid-block, read ${blocksRead} complete blocks`
+          );
           return;
         }
 
@@ -2190,7 +2470,11 @@ export class DosLibrary {
     }
 
     this.emulator.setRegister(CPURegister.D0, blocksRead);
-    console.log(`[dos.library] FRead: Read ${blocksRead} blocks (${blocksRead * bytesPerBlock} bytes)`);
+    console.log(
+      `[dos.library] FRead: Read ${blocksRead} blocks (${
+        blocksRead * bytesPerBlock
+      } bytes)`
+    );
   }
 
   /**
@@ -2207,7 +2491,11 @@ export class DosLibrary {
     const blockLen = this.emulator.getRegister(CPURegister.D3);
     const numBlocks = this.emulator.getRegister(CPURegister.D4);
 
-    console.log(`[dos.library] FWrite(fh=${fileHandle}, buf=0x${bufAddr.toString(16)}, blocklen=${blockLen}, blocks=${numBlocks})`);
+    console.log(
+      `[dos.library] FWrite(fh=${fileHandle}, buf=0x${bufAddr.toString(
+        16
+      )}, blocklen=${blockLen}, blocks=${numBlocks})`
+    );
 
     const file = this.openFiles.get(fileHandle);
     if (!file) {
@@ -2249,7 +2537,9 @@ export class DosLibrary {
     file.position = file.buffer.length;
 
     this.emulator.setRegister(CPURegister.D0, numBlocks);
-    console.log(`[dos.library] FWrite: Wrote ${numBlocks} blocks (${totalBytes} bytes)`);
+    console.log(
+      `[dos.library] FWrite: Wrote ${numBlocks} blocks (${totalBytes} bytes)`
+    );
   }
 
   /**
@@ -2287,7 +2577,7 @@ export class DosLibrary {
       if (!file.buffer) {
         file.buffer = Buffer.alloc(0);
       }
-      const formattedBuf = Buffer.from(formatted, 'binary');
+      const formattedBuf = Buffer.from(formatted, "binary");
       file.buffer = Buffer.concat([file.buffer, formattedBuf]);
       file.position = file.buffer.length;
     }
@@ -2318,7 +2608,9 @@ export class DosLibrary {
     }
 
     this.emulator.setRegister(CPURegister.D0, formatted.length);
-    console.log(`[dos.library] VPrintf: Wrote ${formatted.length} bytes to Output()`);
+    console.log(
+      `[dos.library] VPrintf: Wrote ${formatted.length} bytes to Output()`
+    );
   }
 
   /**
@@ -2326,16 +2618,16 @@ export class DosLibrary {
    * Supports: %s (string), %ld/%d (decimal), %lx/%x (hex), %c (char)
    */
   private formatString(fmt: string, argvAddr: number): string {
-    let result = '';
+    let result = "";
     let argIndex = 0;
 
     for (let i = 0; i < fmt.length; i++) {
-      if (fmt[i] === '%' && i + 1 < fmt.length) {
+      if (fmt[i] === "%" && i + 1 < fmt.length) {
         const spec = fmt[i + 1];
         let longFormat = false;
 
         // Check for 'l' prefix (e.g., %ld, %lx)
-        if (spec === 'l' && i + 2 < fmt.length) {
+        if (spec === "l" && i + 2 < fmt.length) {
           longFormat = true;
           i++; // Skip 'l'
         }
@@ -2343,7 +2635,7 @@ export class DosLibrary {
         const actualSpec = longFormat ? fmt[i + 1] : spec;
 
         switch (actualSpec) {
-          case 's': {
+          case "s": {
             // String pointer
             const strPtr = this.emulator.readMemory32(argvAddr + argIndex * 4);
             const str = this.readString(strPtr);
@@ -2352,17 +2644,17 @@ export class DosLibrary {
             i++;
             break;
           }
-          case 'd': {
+          case "d": {
             // Decimal integer
             const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
             // Handle as signed
-            const signed = value > 0x7FFFFFFF ? value - 0x100000000 : value;
+            const signed = value > 0x7fffffff ? value - 0x100000000 : value;
             result += signed.toString(10);
             argIndex++;
             i++;
             break;
           }
-          case 'x': {
+          case "x": {
             // Hexadecimal
             const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
             result += value.toString(16);
@@ -2370,17 +2662,17 @@ export class DosLibrary {
             i++;
             break;
           }
-          case 'c': {
+          case "c": {
             // Character
             const value = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            result += String.fromCharCode(value & 0xFF);
+            result += String.fromCharCode(value & 0xff);
             argIndex++;
             i++;
             break;
           }
           default:
             // Unknown format, just output as-is
-            result += '%' + (longFormat ? 'l' : '') + actualSpec;
+            result += "%" + (longFormat ? "l" : "") + actualSpec;
             i++;
             break;
         }
@@ -2411,10 +2703,10 @@ export class DosLibrary {
    * Helper: Write 32-bit long to memory (big-endian)
    */
   private writeLong(address: number, value: number): void {
-    this.emulator.writeMemory(address, (value >> 24) & 0xFF);
-    this.emulator.writeMemory(address + 1, (value >> 16) & 0xFF);
-    this.emulator.writeMemory(address + 2, (value >> 8) & 0xFF);
-    this.emulator.writeMemory(address + 3, value & 0xFF);
+    this.emulator.writeMemory(address, (value >> 24) & 0xff);
+    this.emulator.writeMemory(address + 1, (value >> 16) & 0xff);
+    this.emulator.writeMemory(address + 2, (value >> 8) & 0xff);
+    this.emulator.writeMemory(address + 3, value & 0xff);
   }
 
   /**
@@ -2449,7 +2741,9 @@ export class DosLibrary {
     this.emulator.writeMemory(address + str.length, 0);
   }
 
-  private getOrCreateReadArgsContext(rdargsAddr: number): ReadArgsContextInfo | null {
+  private getOrCreateReadArgsContext(
+    rdargsAddr: number
+  ): ReadArgsContextInfo | null {
     if (rdargsAddr !== 0) {
       const existing = this.readArgsContexts.get(rdargsAddr);
       if (existing) {
@@ -2473,7 +2767,9 @@ export class DosLibrary {
     let ownsBuffer = false;
 
     if (bufferPtr === 0 || bufferSize === 0) {
-      bufferPtr = this.allocateReadArgsBufferInternal(this.READARGS_DEFAULT_BUFFER_SIZE);
+      bufferPtr = this.allocateReadArgsBufferInternal(
+        this.READARGS_DEFAULT_BUFFER_SIZE
+      );
       if (bufferPtr === 0) {
         return null;
       }
@@ -2498,26 +2794,34 @@ export class DosLibrary {
 
   private parseReadArgsTemplate(template: string): ReadArgsTemplateEntry[] {
     return template
-      .split(',')
+      .split(",")
       .map((entry) => entry.trim())
       .filter((entry) => entry.length > 0)
       .map((entry) => {
-        const [namePart, ...modifierParts] = entry.split('/');
-        const modifiers = modifierParts.map((m) => m.trim().toUpperCase()).filter(Boolean);
-        const aliasParts = namePart.split('=').map((part) => part.trim()).filter(Boolean);
-        const canonical = aliasParts.length > 0 ? aliasParts[aliasParts.length - 1] : '';
+        const [namePart, ...modifierParts] = entry.split("/");
+        const modifiers = modifierParts
+          .map((m) => m.trim().toUpperCase())
+          .filter(Boolean);
+        const aliasParts = namePart
+          .split("=")
+          .map((part) => part.trim())
+          .filter(Boolean);
+        const canonical =
+          aliasParts.length > 0 ? aliasParts[aliasParts.length - 1] : "";
         const aliases = aliasParts.slice(0, -1);
-        const namesUpper = [canonical, ...aliases].filter(Boolean).map((n) => n.toUpperCase());
+        const namesUpper = [canonical, ...aliases]
+          .filter(Boolean)
+          .map((n) => n.toUpperCase());
         return {
           displayName: canonical || entry,
           namesUpper,
-          required: modifiers.includes('A'),
-          isSwitch: modifiers.includes('S'),
-          isKeyword: modifiers.includes('K'),
-          isNumeric: modifiers.includes('N'),
-          isMultiple: modifiers.includes('M'),
-          isRest: modifiers.includes('F'),
-          isToggle: modifiers.includes('T'),
+          required: modifiers.includes("A"),
+          isSwitch: modifiers.includes("S"),
+          isKeyword: modifiers.includes("K"),
+          isNumeric: modifiers.includes("N"),
+          isMultiple: modifiers.includes("M"),
+          isRest: modifiers.includes("F"),
+          isToggle: modifiers.includes("T"),
         } as ReadArgsTemplateEntry;
       });
   }
@@ -2534,10 +2838,14 @@ export class DosLibrary {
 
     if (this.argStringPtr !== 0) {
       const cli = this.readString(this.argStringPtr, 1024);
-      return { input: cli.trim(), sourcePtr: this.argStringPtr, length: cli.length };
+      return {
+        input: cli.trim(),
+        sourcePtr: this.argStringPtr,
+        length: cli.length,
+      };
     }
 
-    return { input: '', sourcePtr: 0, length: 0 };
+    return { input: "", sourcePtr: 0, length: 0 };
   }
 
   private readFixedString(address: number, length: number): string {
@@ -2554,14 +2862,14 @@ export class DosLibrary {
 
   private tokenizeReadArgsInput(input: string): ReadArgsTokenResult {
     const tokens: ReadArgsToken[] = [];
-    let current = '';
+    let current = "";
     let inQuotes = false;
     let escapeNext = false;
 
     const flushToken = () => {
       const trimmed = current.trim();
       if (trimmed.length > 0) {
-        const eqIndex = trimmed.indexOf('=');
+        const eqIndex = trimmed.indexOf("=");
         const token: ReadArgsToken = {
           raw: trimmed,
           value: eqIndex >= 0 ? trimmed.slice(eqIndex + 1) : trimmed,
@@ -2571,11 +2879,11 @@ export class DosLibrary {
         if (eqIndex > 0) {
           token.key = trimmed.slice(0, eqIndex);
           token.keyUpper = token.key.toUpperCase();
-          token.normalizedValue = (token.value || '').toUpperCase();
+          token.normalizedValue = (token.value || "").toUpperCase();
         }
         tokens.push(token);
       }
-      current = '';
+      current = "";
     };
 
     for (let i = 0; i < input.length; i++) {
@@ -2585,7 +2893,7 @@ export class DosLibrary {
         escapeNext = false;
         continue;
       }
-      if (ch === '\\' && inQuotes) {
+      if (ch === "\\" && inQuotes) {
         escapeNext = true;
         continue;
       }
@@ -2613,7 +2921,7 @@ export class DosLibrary {
     requireKeyword: boolean,
     templateNames: Set<string>,
     consumedTokens: Set<number>
-  ): string | 'NEED_VALUE' | null {
+  ): string | "NEED_VALUE" | null {
     for (let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
       if (token.consumed || !token.keyUpper) {
@@ -2638,9 +2946,14 @@ export class DosLibrary {
       if (entry.namesUpper.includes(token.normalizedValue)) {
         token.consumed = true;
         consumedTokens.add(i);
-        const nextToken = this.findNextValueToken(tokens, i + 1, templateNames, consumedTokens);
+        const nextToken = this.findNextValueToken(
+          tokens,
+          i + 1,
+          templateNames,
+          consumedTokens
+        );
         if (!nextToken) {
-          return 'NEED_VALUE';
+          return "NEED_VALUE";
         }
         return nextToken.value;
       }
@@ -2697,10 +3010,10 @@ export class DosLibrary {
     }
     let base = 10;
     let str = trimmed;
-    if (str.startsWith('$')) {
+    if (str.startsWith("$")) {
       base = 16;
       str = str.slice(1);
-    } else if (str.startsWith('0x') || str.startsWith('0X')) {
+    } else if (str.startsWith("0x") || str.startsWith("0X")) {
       base = 16;
       str = str.slice(2);
     }
@@ -2708,10 +3021,13 @@ export class DosLibrary {
     if (Number.isNaN(parsed)) {
       return null;
     }
-    return (parsed << 0);
+    return parsed << 0;
   }
 
-  private allocateStringStorage(context: ReadArgsContext, value: string): number | null {
+  private allocateStringStorage(
+    context: ReadArgsContext,
+    value: string
+  ): number | null {
     const addr = this.allocateFromReadArgsContext(context, value.length + 1);
     if (!addr) {
       return null;
@@ -2720,7 +3036,10 @@ export class DosLibrary {
     return addr;
   }
 
-  private allocateNumberStorage(context: ReadArgsContext, num: number): number | null {
+  private allocateNumberStorage(
+    context: ReadArgsContext,
+    num: number
+  ): number | null {
     const addr = this.allocateFromReadArgsContext(context, 4);
     if (!addr) {
       return null;
@@ -2729,11 +3048,17 @@ export class DosLibrary {
     return addr;
   }
 
-  private allocatePointerArray(context: ReadArgsContext, count: number): number | null {
+  private allocatePointerArray(
+    context: ReadArgsContext,
+    count: number
+  ): number | null {
     return this.allocateFromReadArgsContext(context, count * 4);
   }
 
-  private allocateFromReadArgsContext(context: ReadArgsContext, size: number): number | null {
+  private allocateFromReadArgsContext(
+    context: ReadArgsContext,
+    size: number
+  ): number | null {
     const aligned = (size + 3) & ~3;
     if (context.bufferPtr === 0 || context.bufferSize === 0) {
       const bufferPtr = this.allocateReadArgsBufferInternal(
@@ -2802,7 +3127,11 @@ export class DosLibrary {
     const bufAddr = this.emulator.getRegister(CPURegister.D2);
     const bufLen = this.emulator.getRegister(CPURegister.D3);
 
-    console.log(`[dos.library] NameFromLock(lock=${lock.toString(16)}, buf=${bufAddr.toString(16)}, len=${bufLen})`);
+    console.log(
+      `[dos.library] NameFromLock(lock=${lock.toString(
+        16
+      )}, buf=${bufAddr.toString(16)}, len=${bufLen})`
+    );
 
     // If lock is NULL, return "SYS:"
     if (lock === 0) {
@@ -2820,7 +3149,9 @@ export class DosLibrary {
     // Look up lock in our locks map
     const lockInfo = this.locks.get(lock);
     if (!lockInfo) {
-      console.log(`[dos.library] NameFromLock: Lock ${lock.toString(16)} not found`);
+      console.log(
+        `[dos.library] NameFromLock: Lock ${lock.toString(16)} not found`
+      );
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE
       return;
@@ -2850,7 +3181,11 @@ export class DosLibrary {
     const bufAddr = this.emulator.getRegister(CPURegister.D2);
     const bufLen = this.emulator.getRegister(CPURegister.D3);
 
-    console.log(`[dos.library] NameFromFH(fh=${fileHandle.toString(16)}, buf=${bufAddr.toString(16)}, len=${bufLen})`);
+    console.log(
+      `[dos.library] NameFromFH(fh=${fileHandle.toString(
+        16
+      )}, buf=${bufAddr.toString(16)}, len=${bufLen})`
+    );
 
     const file = this.openFiles.get(fileHandle);
     if (!file) {
@@ -2888,7 +3223,7 @@ export class DosLibrary {
     // Find last '/' or ':'
     let lastSep = -1;
     for (let i = path.length - 1; i >= 0; i--) {
-      if (path[i] === '/' || path[i] === ':') {
+      if (path[i] === "/" || path[i] === ":") {
         lastSep = i;
         break;
       }
@@ -2898,7 +3233,11 @@ export class DosLibrary {
     const offset = lastSep + 1;
     const resultAddr = pathAddr + offset;
 
-    console.log(`[dos.library] FilePart returned offset ${offset}, addr=${resultAddr.toString(16)}`);
+    console.log(
+      `[dos.library] FilePart returned offset ${offset}, addr=${resultAddr.toString(
+        16
+      )}`
+    );
     this.emulator.setRegister(CPURegister.D0, resultAddr);
   }
 
@@ -2920,7 +3259,7 @@ export class DosLibrary {
     // Find last '/'
     let lastSlash = -1;
     for (let i = path.length - 1; i >= 0; i--) {
-      if (path[i] === '/') {
+      if (path[i] === "/") {
         lastSlash = i;
         break;
       }
@@ -2929,7 +3268,11 @@ export class DosLibrary {
     if (lastSlash >= 0) {
       // Return pointer to the '/'
       const resultAddr = pathAddr + lastSlash;
-      console.log(`[dos.library] PathPart returned offset ${lastSlash}, addr=${resultAddr.toString(16)}`);
+      console.log(
+        `[dos.library] PathPart returned offset ${lastSlash}, addr=${resultAddr.toString(
+          16
+        )}`
+      );
       this.emulator.setRegister(CPURegister.D0, resultAddr);
       return;
     }
@@ -2937,7 +3280,7 @@ export class DosLibrary {
     // No '/', find last ':'
     let lastColon = -1;
     for (let i = path.length - 1; i >= 0; i--) {
-      if (path[i] === ':') {
+      if (path[i] === ":") {
         lastColon = i;
         break;
       }
@@ -2946,7 +3289,11 @@ export class DosLibrary {
     // Return pointer after the ':' or to beginning
     const offset = lastColon + 1;
     const resultAddr = pathAddr + offset;
-    console.log(`[dos.library] PathPart returned offset ${offset}, addr=${resultAddr.toString(16)}`);
+    console.log(
+      `[dos.library] PathPart returned offset ${offset}, addr=${resultAddr.toString(
+        16
+      )}`
+    );
     this.emulator.setRegister(CPURegister.D0, resultAddr);
   }
 
@@ -2986,7 +3333,9 @@ export class DosLibrary {
       message = errorMsg;
     }
 
-    console.log(`[dos.library] Fault(code=${code}, header="${header}") -> "${message}"`);
+    console.log(
+      `[dos.library] Fault(code=${code}, header="${header}") -> "${message}"`
+    );
 
     // Truncate if necessary
     if (message.length >= bufLen) {
@@ -3022,7 +3371,9 @@ export class DosLibrary {
       message = `${errorMsg}\n`;
     }
 
-    console.log(`[dos.library] PrintFault(code=${code}, header="${header}") -> "${message}"`);
+    console.log(
+      `[dos.library] PrintFault(code=${code}, header="${header}") -> "${message}"`
+    );
 
     // Write to Output() stream (stdout)
     if (this.outputCallback) {
@@ -3063,7 +3414,7 @@ export class DosLibrary {
       225: "Function not implemented",
       226: "Bad number",
       232: "No default directory",
-      233: "Seek error beyond end of file"
+      233: "Seek error beyond end of file",
     };
 
     return errorMessages[code] || `Error code ${code}`;
@@ -3092,14 +3443,16 @@ export class DosLibrary {
    * /M = Multiple strings
    * /F = Rest of line
    * /T = Toggle switch
-  */
+   */
   ReadArgs(): void {
     const templateAddr = this.emulator.getRegister(CPURegister.D1);
     const arrayAddr = this.emulator.getRegister(CPURegister.D2);
     let rdargsAddr = this.emulator.getRegister(CPURegister.D3);
 
     if (templateAddr === 0 || arrayAddr === 0) {
-      console.log('[dos.library] ReadArgs() - Invalid template or array pointer');
+      console.log(
+        "[dos.library] ReadArgs() - Invalid template or array pointer"
+      );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_BAD_TEMPLATE;
       return;
@@ -3114,7 +3467,9 @@ export class DosLibrary {
 
     const entries = this.parseReadArgsTemplate(template);
     if (entries.length === 0) {
-      console.log('[dos.library] ReadArgs() - No template entries, returning existing RDArgs');
+      console.log(
+        "[dos.library] ReadArgs() - No template entries, returning existing RDArgs"
+      );
       this.emulator.setRegister(CPURegister.D0, rdargsAddr);
       this.lastError = this.ERROR_NO_ERROR;
       return;
@@ -3219,12 +3574,12 @@ export class DosLibrary {
         consumedTokens
       );
 
-      if (namedValue === 'NEED_VALUE') {
+      if (namedValue === "NEED_VALUE") {
         fail(this.ERROR_KEY_NEEDS_ARG, `${entry.displayName} missing value`);
         return;
       }
 
-      if (namedValue && namedValue !== 'NEED_VALUE') {
+      if (namedValue && namedValue !== "NEED_VALUE") {
         stringValue = namedValue;
       } else if (!entry.isKeyword) {
         const positional = this.consumePositionalValue(
@@ -3240,7 +3595,10 @@ export class DosLibrary {
       if (stringValue !== null && entry.isNumeric) {
         const parsed = this.parseReadArgsNumber(stringValue);
         if (parsed === null) {
-          fail(this.ERROR_BAD_NUMBER, `Invalid number for ${entry.displayName}`);
+          fail(
+            this.ERROR_BAD_NUMBER,
+            `Invalid number for ${entry.displayName}`
+          );
           return;
         }
         numericValue = parsed;
@@ -3251,14 +3609,20 @@ export class DosLibrary {
         if (entry.isNumeric && numericValue !== null) {
           const ptr = this.allocateNumberStorage(context, numericValue);
           if (!ptr) {
-            fail(this.ERROR_LINE_TOO_LONG, 'Insufficient buffer for numeric value');
+            fail(
+              this.ERROR_LINE_TOO_LONG,
+              "Insufficient buffer for numeric value"
+            );
             return;
           }
           setArrayValue(i, ptr);
         } else {
           const ptr = this.allocateStringStorage(context, stringValue);
           if (!ptr) {
-            fail(this.ERROR_LINE_TOO_LONG, 'Insufficient buffer for string value');
+            fail(
+              this.ERROR_LINE_TOO_LONG,
+              "Insufficient buffer for string value"
+            );
             return;
           }
           setArrayValue(i, ptr);
@@ -3282,14 +3646,20 @@ export class DosLibrary {
           multiStrings.length + 1
         );
         if (!ptrArray) {
-          fail(this.ERROR_LINE_TOO_LONG, 'Insufficient buffer for multi arguments');
+          fail(
+            this.ERROR_LINE_TOO_LONG,
+            "Insufficient buffer for multi arguments"
+          );
           return;
         }
         let offset = 0;
         for (const value of multiStrings) {
           const ptr = this.allocateStringStorage(context, value);
           if (!ptr) {
-            fail(this.ERROR_LINE_TOO_LONG, 'Insufficient buffer for multi value');
+            fail(
+              this.ERROR_LINE_TOO_LONG,
+              "Insufficient buffer for multi value"
+            );
             return;
           }
           this.emulator.writeMemory32(ptrArray + offset, ptr);
@@ -3307,7 +3677,9 @@ export class DosLibrary {
     if (missing.length > 0) {
       fail(
         this.ERROR_REQUIRED_ARG_MISSING,
-        `Missing required arguments: ${missing.map((m) => m.displayName).join(', ')}`
+        `Missing required arguments: ${missing
+          .map((m) => m.displayName)
+          .join(", ")}`
       );
       return;
     }
@@ -3319,7 +3691,7 @@ export class DosLibrary {
       console.log(
         `[dos.library] ReadArgs() - ignoring extra tokens: ${leftovers
           .map((t) => t.raw)
-          .join(' ')}`
+          .join(" ")}`
       );
     }
 
@@ -3348,7 +3720,9 @@ export class DosLibrary {
     const context = this.readArgsContexts.get(rdargsAddr);
     if (!context) {
       console.log(
-        `[dos.library] FreeArgs() - no tracked context for 0x${rdargsAddr.toString(16)}`
+        `[dos.library] FreeArgs() - no tracked context for 0x${rdargsAddr.toString(
+          16
+        )}`
       );
       this.lastError = this.ERROR_NO_ERROR;
       return;
@@ -3400,11 +3774,13 @@ export class DosLibrary {
     const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 18);
     const dat_StrDay = this.emulator.readMemory32(datetimeAddr + 22);
 
-    console.log(`[dos.library] DateToStr(days=${ds_Days}, minute=${ds_Minute}, tick=${ds_Tick}, format=${dat_Format})`);
+    console.log(
+      `[dos.library] DateToStr(days=${ds_Days}, minute=${ds_Minute}, tick=${ds_Tick}, format=${dat_Format})`
+    );
 
     // Convert Amiga days (since 1978-01-01) to JavaScript Date
-    const epoch = new Date('1978-01-01T00:00:00Z');
-    const dateMs = epoch.getTime() + (ds_Days * 24 * 60 * 60 * 1000);
+    const epoch = new Date("1978-01-01T00:00:00Z");
+    const dateMs = epoch.getTime() + ds_Days * 24 * 60 * 60 * 1000;
     const date = new Date(dateMs);
 
     const year = date.getFullYear() % 100; // 2-digit year
@@ -3415,37 +3791,71 @@ export class DosLibrary {
     const minutes = ds_Minute % 60;
     const seconds = Math.floor(ds_Tick / 50);
 
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
 
     let dateStr: string;
 
     // Format date based on dat_Format
     switch (dat_Format) {
       case 0: // FORMAT_DOS (dd-mmm-yy)
-        dateStr = `${day.toString().padStart(2, '0')}-${monthNames[month - 1]}-${year.toString().padStart(2, '0')}`;
+        dateStr = `${day.toString().padStart(2, "0")}-${
+          monthNames[month - 1]
+        }-${year.toString().padStart(2, "0")}`;
         break;
       case 1: // FORMAT_INT (yy-mm-dd)
-        dateStr = `${year.toString().padStart(2, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        dateStr = `${year.toString().padStart(2, "0")}-${month
+          .toString()
+          .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
         break;
       case 2: // FORMAT_USA (mm-dd-yy)
-        dateStr = `${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}-${year.toString().padStart(2, '0')}`;
+        dateStr = `${month.toString().padStart(2, "0")}-${day
+          .toString()
+          .padStart(2, "0")}-${year.toString().padStart(2, "0")}`;
         break;
       case 3: // FORMAT_CDN (dd-mm-yy)
-        dateStr = `${day.toString().padStart(2, '0')}-${month.toString().padStart(2, '0')}-${year.toString().padStart(2, '0')}`;
+        dateStr = `${day.toString().padStart(2, "0")}-${month
+          .toString()
+          .padStart(2, "0")}-${year.toString().padStart(2, "0")}`;
         break;
       default:
-        dateStr = `${day.toString().padStart(2, '0')}-${monthNames[month - 1]}-${year.toString().padStart(2, '0')}`;
+        dateStr = `${day.toString().padStart(2, "0")}-${
+          monthNames[month - 1]
+        }-${year.toString().padStart(2, "0")}`;
     }
 
     // Format time (HH:MM:SS)
-    const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const timeStr = `${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
     // Day of week names
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayNames = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
     const dayStr = dayNames[date.getDay()];
 
-    console.log(`[dos.library] DateToStr() -> date="${dateStr}", time="${timeStr}", day="${dayStr}"`);
+    console.log(
+      `[dos.library] DateToStr() -> date="${dateStr}", time="${timeStr}", day="${dayStr}"`
+    );
 
     // Write strings to buffers
     if (dat_StrDate) {
@@ -3479,12 +3889,18 @@ export class DosLibrary {
     const dirname = this.readString(dirnameAddr);
     const filename = this.readString(filenameAddr);
 
-    console.log(`[dos.library] AddPart(dirname="${dirname}", filename="${filename}", size=${size})`);
+    console.log(
+      `[dos.library] AddPart(dirname="${dirname}", filename="${filename}", size=${size})`
+    );
 
     // If filename contains : it's a fully qualified path - replace dirname entirely
-    if (filename.includes(':')) {
+    if (filename.includes(":")) {
       if (filename.length + 1 > size) {
-        console.log(`[dos.library] AddPart() - buffer overflow (need ${filename.length + 1}, have ${size})`);
+        console.log(
+          `[dos.library] AddPart() - buffer overflow (need ${
+            filename.length + 1
+          }, have ${size})`
+        );
         this.emulator.setRegister(CPURegister.D0, 0); // FALSE
         this.lastError = 120; // ERROR_LINE_TOO_LONG
         return;
@@ -3499,8 +3915,8 @@ export class DosLibrary {
     let result = dirname;
 
     // Add separator if needed
-    if (result.length > 0 && !result.endsWith('/') && !result.endsWith(':')) {
-      result += '/';
+    if (result.length > 0 && !result.endsWith("/") && !result.endsWith(":")) {
+      result += "/";
     }
 
     // Append filename
@@ -3508,7 +3924,11 @@ export class DosLibrary {
 
     // Check buffer overflow
     if (result.length + 1 > size) {
-      console.log(`[dos.library] AddPart() - buffer overflow (need ${result.length + 1}, have ${size})`);
+      console.log(
+        `[dos.library] AddPart() - buffer overflow (need ${
+          result.length + 1
+        }, have ${size})`
+      );
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE
       this.lastError = 120; // ERROR_LINE_TOO_LONG
       return;
@@ -3530,9 +3950,15 @@ export class DosLibrary {
   handleCall(offset: number): boolean {
     // SPECIAL: Handle non-standard offset -28 that some doors call
     if (offset === -28) {
-      console.log(`[dos.library] WARNING: Offset -28 is NOT a standard dos.library function!`);
-      console.log(`[dos.library] This may indicate an offset calculation error.`);
-      console.log(`[dos.library] Returning success anyway to let door proceed.`);
+      console.log(
+        `[dos.library] WARNING: Offset -28 is NOT a standard dos.library function!`
+      );
+      console.log(
+        `[dos.library] This may indicate an offset calculation error.`
+      );
+      console.log(
+        `[dos.library] Returning success anyway to let door proceed.`
+      );
       this.emulator.setRegister(CPURegister.D0, -1); // Return success
       return true;
     }
@@ -3730,17 +4156,17 @@ export class DosLibrary {
    * RTW calls this to check for RC and Result2 local variables.
    */
   public FindVar(): void {
-    const nameAddr = this.emulator.getRegister(8);  // A0
-    const type = this.emulator.getRegister(1);      // D1
+    const nameAddr = this.emulator.getRegister(8); // A0
+    const type = this.emulator.getRegister(1); // D1
     const name = this.emulator.readString(nameAddr);
 
     console.log(`[dos.library] FindVar("${name}", type=${type})`);
 
     // For local variables (type=0 or GVF_LOCAL_ONLY), search CLI local vars
-    if ((type & 0xFF) === 0) {
+    if ((type & 0xff) === 0) {
       // Get current CLI structure from pr_CLI
-      const taskAddr = 0x70000;  // Current task
-      const prCliOffset = 0xAC;
+      const taskAddr = 0x70000; // Current task
+      const prCliOffset = 0xac;
       const cliBPTR = this.emulator.readMemory32(taskAddr + prCliOffset);
 
       if (cliBPTR === 0) {
@@ -3750,7 +4176,7 @@ export class DosLibrary {
       }
 
       const cliAddr = cliBPTR << 2;
-      const localVarsBPTR = this.emulator.readMemory32(cliAddr + 0x5C); // cli_LocalVars
+      const localVarsBPTR = this.emulator.readMemory32(cliAddr + 0x5c); // cli_LocalVars
 
       if (localVarsBPTR === 0) {
         console.log(`[dos.library]   No local variables list`);
@@ -3763,14 +4189,19 @@ export class DosLibrary {
       // Walk the list to find the variable
       let nodeAddr = this.emulator.readMemory32(localVarsListAddr + 0); // lh_Head
 
-      while (nodeAddr !== 0 && nodeAddr !== (localVarsListAddr + 4)) { // Not NULL and not Tail
+      while (nodeAddr !== 0 && nodeAddr !== localVarsListAddr + 4) {
+        // Not NULL and not Tail
         const nodeNameAddr = this.emulator.readMemory32(nodeAddr + 10); // ln_Name
 
         if (nodeNameAddr !== 0) {
           const nodeName = this.emulator.readString(nodeNameAddr);
 
           if (nodeName === name) {
-            console.log(`[dos.library]   Found local variable "${name}" at 0x${nodeAddr.toString(16)}`);
+            console.log(
+              `[dos.library]   Found local variable "${name}" at 0x${nodeAddr.toString(
+                16
+              )}`
+            );
             this.emulator.setRegister(0, nodeAddr);
             return;
           }
