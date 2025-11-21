@@ -75,6 +75,7 @@ export class AudioEngine {
     const rowDuration = 60 / this.bpm / this.ticksPerRow;
 
     const scheduleRow = (row: number) => {
+      if (!this.playing) return;
       for (let ch = 0; ch < pattern.channels; ch++) {
         const key = `${row}:${ch}`;
         const noteData = pattern.data.get(key);
@@ -175,6 +176,14 @@ export class AudioEngine {
     this.playing = false;
     this.channels.forEach(ch => ch.stopAll());
     this.currentRow = 0;
+  }
+
+  isPlaying(): boolean {
+    return this.playing;
+  }
+
+  getCurrentRow(): number {
+    return this.currentRow;
   }
 
   /**

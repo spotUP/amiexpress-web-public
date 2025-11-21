@@ -26,6 +26,6 @@
     "door"
   ],
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../dist"
+    "@amiexpress/bbs-door-sdk": "file:../../sdk/dist"
   }
 }

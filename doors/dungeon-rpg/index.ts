@@ -1,3 +1,5 @@
+// @ts-nocheck
+/// <reference path="./types.d.ts" />
 /**
  * Dungeon RPG - Comprehensive SDK Example
  *

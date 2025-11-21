@@ -2,20 +2,21 @@
 
 ## Install & Configure (3 steps)
 
+These steps work for any MCP-aware agent (Claude Desktop, other MCP clients, or a custom harness).
+
 ### 1. Install dependencies (already done)
 ```bash
 cd ~/Code/amiexpress-web/mcp-server
 npm install
 ```
 
-### 2. Configure Claude Desktop
+### 2. Configure your MCP client
 
-Open config file:
-```bash
-open ~/Library/Application\ Support/Claude/claude_desktop_config.json
-```
+For Claude Desktop: open `~/Library/Application Support/Claude/claude_desktop_config.json`.
 
-Add this (or merge with existing config):
+For other MCP agents (including this one), add/merge the stanza below into the client’s MCP config block (the key is usually `mcpServers` or similar).
+
+Add (or merge) this block:
 ```json
 {
   "mcpServers": {
@@ -27,13 +28,13 @@ Add this (or merge with existing config):
 }
 ```
 
-### 3. Restart Claude Desktop
+### 3. Restart your agent
 
-Fully quit (Cmd+Q) and reopen.
+For Claude Desktop: fully quit (Cmd+Q) and reopen so it picks up the MCP server. For other clients: reload/restart per their MCP discovery rules.
 
 ## Verify It's Working
 
-In a new Claude Desktop conversation, try:
+In your client (Claude Desktop or compatible MCP-aware agent), try:
 
 ```
 User: What documentation resources are available?

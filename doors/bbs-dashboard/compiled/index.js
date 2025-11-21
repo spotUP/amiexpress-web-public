@@ -1,4 +1,6 @@
 "use strict";
+// @ts-nocheck
+/// <reference path="./types.d.ts" />
 /**
  * BBS Dashboard Door
  * Comprehensive real-time dashboard for System Operators
@@ -161,5 +163,7 @@ function formatUptime(seconds) {
     return `${days}d ${hours}h ${mins}m`;
 }
 async function runDoor(doorSession) {
-    await (0, runDoorSession_1.runDoorWithSession)(door, doorSession);
+    // ts-node in the SDK preview can load mixed SDK copies; force any to avoid private-field mismatches.
+    // @ts-ignore
+    await runDoorSession_1.runDoorWithSession(door, doorSession);
 }

@@ -13,6 +13,7 @@ import {
   getProcessOlmMessageQueue,
   getScreenMenu
 } from './dependency-injection';
+import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 
 /**
  * Display main menu (express.e:28586)
@@ -47,12 +48,15 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
     // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
     // Note: Database stores expert as BOOLEAN (true/false), not string ("Y"/"N")
     console.log('🔍 [Menu Display] Checking expert mode:');
+    const relConfNumber = session.relConfNum || 1;
+    const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
     console.log('  - session.user?.expert:', session.user?.expert);
     console.log('  - session.doorExpertMode:', session.doorExpertMode);
-    console.log('  - Will display menu?', (session.user?.expert === false && !session.doorExpertMode));
+    console.log('  - forceMenus tooltype:', forceMenus);
+    console.log('  - Will display menu?', (session.user?.expert === false && !session.doorExpertMode) || forceMenus);
 
     const SCREEN_MENU = getScreenMenu();
-    if ((session.user?.expert === false && !session.doorExpertMode) /* TODO: || FORCE_MENUS check */) {
+    if ((session.user?.expert === false && !session.doorExpertMode) || forceMenus) {
       console.log('Displaying menu screen file');
       // Phase 8: Use authentic screen file system (express.e:28586 - await displayScreen(SCREEN_MENU))
       const screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);

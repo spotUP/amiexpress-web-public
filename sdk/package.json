@@ -27,6 +27,10 @@
     "./tools/runDoorSession": {
       "types": "./dist/tools/runDoorSession.d.ts",
       "default": "./dist/tools/runDoorSession.js"
+    },
+    "./engines/tactical/tactical-combat-engine": {
+      "types": "./dist/engines/tactical/tactical-combat-engine.d.ts",
+      "default": "./dist/engines/tactical/tactical-combat-engine.js"
     }
   },
   "scripts": {

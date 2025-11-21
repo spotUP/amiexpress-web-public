@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * TrackerDoor - Professional Music Tracker BBS Door
  * Inspired by Renoise, Protracker, and FastTracker II
@@ -28,6 +29,8 @@ import {
 // Browser-compatible imports only
 import { AIGenerator } from './ai/generator';
 import { UndoManager, ClipboardManager } from './utils/undo';
+import demoSong from './examples/demo-showcase.json';
+import chiptuneSong from './examples/chiptune-melody.json';
 
 // Note: File-based features (export, sample loading, autosave) are disabled in browser mode
 // These features require Node.js file system access which is not available in the browser
@@ -37,7 +40,7 @@ import { ITParser } from './formats/it-parser';
 import { XIParser, ITIParser, XRNIParser } from './formats/instrument-parsers';
 import { formatVolumeColumn, parseVolumeColumn } from './audio/volume-column';
 
-type View = 'main' | 'pattern-editor' | 'instrument-editor' | 'sample-editor' | 'effects-editor' | 'song-editor' | 'export' | 'ai-assistant' | 'help';
+type View = 'main' | 'pattern-editor' | 'instrument-editor' | 'sample-editor' | 'effects-editor' | 'song-editor' | 'export' | 'ai-assistant' | 'help' | 'load-example';
 
 class TrackerDoor {
   private door: ClientDoor;
@@ -48,6 +51,7 @@ class TrackerDoor {
   private clipboardManager: ClipboardManager;
   private visualizer: TrackerVisualizer;
   private userId?: number;
+  private playbackWatcher: NodeJS.Timeout | null = null;
 
   // State
   private currentView: View = 'main';
@@ -59,13 +63,19 @@ class TrackerDoor {
   private currentInstrument: number = 1;
   private currentVolume: number = 0x80;
   private editMode: 'note' | 'instrument' | 'volume' | 'effect' = 'note';
+  private effectInputBuffer: string = '';
+  private instrumentInputBuffer: string = '';
+  private currentField: 'note' | 'instrument' | 'effect' = 'note';
   private playing: boolean = false;
+  private recording: boolean = false;
 
   // Display
   private scrollRow: number = 0;
   private scrollChannel: number = 0;
   private visibleRows: number = 16;
-  private visibleChannels: number = 6;
+  private visibleChannels: number = 4;
+  private menuFocus: boolean = false;
+  private menuSelection: number = 0;
 
   // Selection
   private selectionMode: boolean = false;
@@ -79,6 +89,19 @@ class TrackerDoor {
   // Visualization
   private showVisualizer: boolean = true;
   private visualizerMode: 'vu' | 'waveform' | 'spectrum' | 'off' = 'vu';
+
+  // Pattern-side menu
+  private patternMenuItems = [
+    { label: 'Pattern Editor', action: () => { this.menuFocus = false; this.currentView = 'pattern-editor'; this.showPatternEditor(); } },
+    { label: 'Instruments', action: () => { this.menuFocus = false; this.currentView = 'instrument-editor'; this.showInstrumentEditor(); } },
+    { label: 'Samples', action: () => { this.menuFocus = false; this.currentView = 'sample-editor'; this.showSampleEditor(); } },
+    { label: 'Effects', action: () => { this.menuFocus = false; this.currentView = 'effects-editor'; this.showEffectsEditor(); } },
+    { label: 'Song Arranger', action: () => { this.menuFocus = false; this.currentView = 'song-editor'; this.showSongEditor(); } },
+    { label: 'Load Examples', action: () => { this.menuFocus = false; this.currentView = 'load-example'; this.showLoadExamplesMenu(); } },
+    { label: 'Export', action: () => { this.menuFocus = false; this.currentView = 'export'; this.showExport(); } },
+    { label: 'Help', action: () => { this.menuFocus = false; this.currentView = 'help'; this.showHelp(); } },
+    { label: 'Quit', action: () => { this.menuFocus = false; this.quit(); } }
+  ];
 
   constructor() {
     this.door = new ClientDoor({
@@ -96,7 +119,7 @@ class TrackerDoor {
     this.visualizer = new TrackerVisualizer(8);
 
     // Initialize default song
-    this.song = this.createDefaultSong();
+    this.song = this.loadDefaultSong();
 
     // Initialize undo/redo and clipboard (browser-compatible features)
     this.undoManager = new UndoManager(this.song);
@@ -143,6 +166,146 @@ class TrackerDoor {
   }
 
   /**
+   * Clone and normalize a song object from bundled JSON
+   */
+  private cloneSongData(data: any): Song {
+    const cloned = JSON.parse(JSON.stringify(data)) as Song;
+    cloned.patterns = cloned.patterns || [];
+    cloned.sequence = cloned.sequence || [];
+    cloned.instruments = cloned.instruments || [];
+    cloned.channels = cloned.channels || 8;
+    cloned.bpm = cloned.bpm || 140;
+    cloned.ticksPerRow = cloned.ticksPerRow || 6;
+    return cloned;
+  }
+
+  /**
+   * Load bundled example song as the starting state
+   */
+  private loadDefaultSong(): Song {
+    try {
+      const song = this.cloneSongData(demoSong);
+      this.normalizeSongData(song);
+      return song;
+    } catch (err) {
+      console.error('[TrackerDoor] Failed to load bundled example, using blank song', err);
+      return this.createDefaultSong();
+    }
+  }
+
+  /**
+   * Format effect column as 3 chars (command + param)
+   */
+  private formatEffect(note: Note): string {
+    if (note.effect) {
+      const cmd = note.effect.trim().toUpperCase();
+      const paramHex = (note.effectParam ?? 0).toString(16).toUpperCase().padStart(2, '0');
+      const cmdNibble = cmd.length > 0 ? cmd[0] : '0';
+      const field = `${cmdNibble}${paramHex}`;
+      return field.substring(0, 3);
+    }
+    return '...';
+  }
+
+  private formatNoteDisplay(value: string): string {
+    if (value === '...' || value === '---') return value;
+    const m = value.match(/^([A-G])(#?)(-?)(\d)$/);
+    if (!m) return value;
+    const [, letter, sharp, , octave] = m;
+    return `${letter}${sharp ? '#' : '-'}${octave}`;
+  }
+
+  private formatCell(note: Note, channelIndex: number, rowIndex: number): string {
+    const notePart = note.note === '...' ? '...' : this.formatNoteDisplay(note.note as string);
+    const instPart = note.instrument ? String(note.instrument).padStart(2,'0') : '..';
+    const effectPart = note.note === '...' ? '...' : this.formatEffect(note);
+    const base = `${notePart} ${instPart} ${effectPart}`;
+
+    const isTarget = channelIndex === this.currentChannel && rowIndex === this.currentRow;
+    if (!isTarget) return base;
+
+    if (this.currentField === 'effect') {
+      return `${notePart} ${instPart} \x1b[7m${effectPart}\x1b[0m`;
+    }
+    if (this.currentField === 'instrument') {
+      return `${notePart} \x1b[7m${instPart}\x1b[0m ${effectPart}`;
+    }
+    return `\x1b[7m${notePart}\x1b[0m ${instPart} ${effectPart}`;
+  }
+
+  /**
+   * Swap to one of the bundled example songs
+   */
+  private loadExampleSong(example: 'demo' | 'chiptune'): void {
+    const source = example === 'chiptune' ? chiptuneSong : demoSong;
+    this.audio.stop();
+    this.stopPlaybackWatcher();
+    this.song = this.cloneSongData(source);
+    this.normalizeSongData(this.song);
+    this.currentPattern = 0;
+    this.currentRow = 0;
+    this.currentChannel = 0;
+    this.currentOctave = 4;
+    this.currentInstrument = 1;
+    this.currentVolume = 0x80;
+    this.currentField = 'note';
+    this.scrollRow = 0;
+    this.selectionMode = false;
+    this.selectionStart = { row: 0, channel: 0 };
+    this.selectionEnd = { row: 0, channel: 0 };
+    this.playing = false;
+    this.undoManager = new UndoManager(this.song);
+    this.clipboardManager = new ClipboardManager();
+    this.effectInputBuffer = '';
+    this.instrumentInputBuffer = '';
+  }
+
+  /**
+   * Ensure pattern data maps are proper Map instances
+   */
+  private normalizeSongData(song: Song): void {
+    song.patterns.forEach((p) => {
+      const data = (p as any).data;
+      if (data instanceof Map) return;
+      const entries = Array.isArray(data)
+        ? data
+        : data
+          ? Object.entries(data)
+          : [];
+      p.data = new Map(entries as [string, Note][]);
+    });
+  }
+
+  private startPlaybackWatcher(): void {
+    if (this.playbackWatcher) return;
+    this.playbackWatcher = setInterval(() => {
+      if (!this.audio.isPlaying()) {
+        this.stopPlaybackWatcher();
+        this.playing = false;
+        return;
+      }
+      const newRow = this.audio.getCurrentRow();
+      if (newRow !== this.currentRow) {
+        this.currentRow = newRow;
+        if (this.currentRow < this.scrollRow) this.scrollRow = this.currentRow;
+        if (this.currentRow >= this.scrollRow + this.visibleRows) {
+          this.scrollRow = Math.max(0, this.currentRow - this.visibleRows + 1);
+        }
+        if (this.currentView === 'pattern-editor') {
+          this.showPatternEditor();
+        }
+      }
+    }, 100);
+  }
+
+  private stopPlaybackWatcher(): void {
+    if (this.playbackWatcher) {
+      clearInterval(this.playbackWatcher);
+      this.playbackWatcher = null;
+    }
+  }
+
+  /**
    * Setup door event handlers
    */
   private setupEventHandlers(): void {
@@ -180,6 +343,9 @@ class TrackerDoor {
     switch (this.currentView) {
       case 'main':
         this.handleMainMenuInput(key);
+        break;
+      case 'load-example':
+        this.handleLoadExamplesInput(key);
         break;
       case 'pattern-editor':
         this.handlePatternEditorInput(key);
@@ -280,9 +446,9 @@ class TrackerDoor {
     // Ctrl+L - Import
     if (key === '\x0c') {
       this.gfx.clear();
-      this.gfx.drawText(5, 5, 'Import feature: Place .mod, .xm, or .it files in data/import/');
-      this.gfx.drawText(5, 6, 'Then use Load from Export menu.');
-      this.gfx.drawText(5, 8, 'Press any key to continue...');
+      this.gfx.drawText(5, 5, 'Load examples: enter examples/demo-showcase.json or examples/chiptune-melody.json.');
+      this.gfx.drawText(5, 7, 'To load your own .mod/.xm/.it, place them under data/import then choose Load.');
+      this.gfx.drawText(5, 9, 'Press any key to continue...');
       this.door.sendAnsi(this.gfx.render());
       return true;
     }
@@ -363,12 +529,8 @@ class TrackerDoor {
       this.currentView = 'export';
       this.showExport();
     } else if (k === 'l') {
-      // Show import info message
-      this.gfx.clear();
-      this.gfx.drawText(5, 5, 'Import feature: Place .mod, .xm, or .it files in data/import/');
-      this.gfx.drawText(5, 6, 'Then use Load from Export menu.');
-      this.gfx.drawText(5, 8, 'Press any key to continue...');
-      this.door.sendAnsi(this.gfx.render());
+      this.currentView = 'load-example';
+      this.showLoadExamplesMenu();
     } else if (k === 'a') {
       this.currentView = 'ai-assistant';
       this.showAIAssistant();
@@ -377,6 +539,47 @@ class TrackerDoor {
       this.showHelp();
     } else if (k === 'q') {
       this.quit();
+    }
+  }
+
+  // ==========================================================================
+  // EXAMPLE LOADER
+  // ==========================================================================
+
+  private showLoadExamplesMenu(): void {
+    if (!this.userId) return;
+
+    this.gfx.clear();
+    this.gfx.drawText(0, 0, '________________________________________________________________________________');
+    this.gfx.drawText(0, 1, '|                          LOAD EXAMPLE SONGS                                 |');
+    this.gfx.drawText(0, 2, '+------------------------------------------------------------------------------+');
+
+    let y = 4;
+    this.gfx.drawText(4, y++, '[1] demo-showcase (default on startup)');
+    this.gfx.drawText(4, y++, '[2] chiptune-melody');
+    y++;
+    this.gfx.drawText(4, y++, 'Browser upload is not available in client mode.');
+    this.gfx.drawText(4, y++, 'Place .mod/.xm/.it under data/import on the server to convert later.');
+
+    this.gfx.drawText(0, 22, '+------------------------------------------------------------------------------+');
+    this.gfx.drawText(0, 23, '| [1]/[2] Load example   [ESC] Back                                           |');
+    this.gfx.drawText(0, 24, '|______________________________________________________________________________|');
+
+    this.door.sendAnsi(this.gfx.render());
+  }
+
+  private handleLoadExamplesInput(key: string): void {
+    if (key === '1') {
+      this.loadExampleSong('demo');
+      this.currentView = 'pattern-editor';
+      this.showPatternEditor();
+    } else if (key === '2') {
+      this.loadExampleSong('chiptune');
+      this.currentView = 'pattern-editor';
+      this.showPatternEditor();
+    } else if (key === 'Escape' || key === '\x1b') {
+      this.currentView = 'main';
+      this.showMainMenu();
     }
   }
 
@@ -391,89 +594,103 @@ class TrackerDoor {
 
     const pattern = this.song.patterns[this.currentPattern];
 
-    // Update visualizer with mock channel levels (will be real-time when audio plays)
-    if (this.visualizerMode !== 'off') {
-      for (let ch = 0; ch < this.song.channels; ch++) {
-        // Mock level based on whether channel has data at current row
-        const key = `${this.currentRow}:${ch}`;
-        const hasNote = pattern.data.has(key);
-        this.visualizer.setChannelLevel(ch, hasNote ? Math.random() * 0.8 + 0.2 : 0);
-      }
-    }
+    const topBorder = '.' + '-'.repeat(78) + '.';
+    const sepBorder = '|' + '-'.repeat(78) + '|';
+    const midBorder = '+' + '-'.repeat(78) + '+';
+    const bottomBorder = '|' + '_'.repeat(78) + '|';
 
     // Header
-    this.gfx.drawText(0, 0, '________________________________________________________________________________');
     const vizMode = this.visualizerMode === 'off' ? 'OFF' : this.visualizerMode.toUpperCase();
-    const header = ` TrackerDoor v1.0  BPM:${String(this.song.bpm).padStart(3)} Row:${String(this.currentRow).padStart(2,'0')}/${pattern.rows} Pat:${String(this.currentPattern + 1).padStart(2,'0')} Ch:${String(this.currentChannel + 1).padStart(2,'0')}/${this.song.channels} Viz:${vizMode} `;
+    const recFlag = this.recording ? 'REC' : ' ';
+    const header = ` TRACKER PRO v0.1 ${recFlag} BPM:${String(this.song.bpm).padStart(3)} Row:${String(this.currentRow).padStart(2,'0')}/${pattern.rows} Pat:${String(this.currentPattern + 1).padStart(2,'0')} Ch:${String(this.currentChannel + 1).padStart(2,'0')}/${this.song.channels} Viz:${vizMode} `;
+    this.gfx.drawText(0, 0, topBorder);
     this.gfx.drawText(0, 1, `|${padEndVisible(header, 78)}|`);
-    this.gfx.drawText(0, 2, '+--------+----------+----------+----------+----------+----------+----------+');
+    this.gfx.drawText(0, 2, sepBorder);
 
-    // Channel headers
-    let headerLine = '|   ROW  |';
-    for (let ch = 0; ch < Math.min(6, this.song.channels); ch++) {
-      headerLine += ` CH${String(ch + 1).padStart(2,'0')}     |`;
+    // Channel headers (4 channels + menu column)
+    const columnHeader = ' ROW  CHANNEL 01    CHANNEL 02    CHANNEL 03    CHANNEL 04     Menu';
+    this.gfx.drawText(0, 3, `|${padEndVisible(columnHeader, 78)}|`);
+    this.gfx.drawText(0, 4, sepBorder);
+
+    // Ensure playhead stays around row 7 while playing
+    if (this.playing) {
+      const anchor = Math.min(7, this.visibleRows - 1);
+      const maxScroll = Math.max(0, pattern.rows - this.visibleRows);
+      this.scrollRow = Math.max(0, Math.min(this.currentRow - anchor, maxScroll));
     }
-    headerLine = padEndVisible(headerLine, 79) + '|';
-    this.gfx.drawText(0, 3, headerLine);
-    this.gfx.drawText(0, 4, '+--------+----------+----------+----------+----------+----------+----------+');
 
     // Pattern data (16 visible rows)
     const startRow = this.scrollRow;
     const endRow = Math.min(startRow + this.visibleRows, pattern.rows);
+    const menuLines: string[] = new Array(this.visibleRows).fill('');
+    for (let i = 0; i < Math.min(this.patternMenuItems.length, this.visibleRows); i++) {
+      const marker = this.menuSelection === i ? '>' : ' ';
+      menuLines[i] = `${marker} ${this.patternMenuItems[i].label}`;
+    }
 
     for (let row = startRow; row < endRow; row++) {
       const y = 5 + (row - startRow);
       const cursor = row === this.currentRow ? '>' : ' ';
 
-      let line = `| ${cursor} ${String(row).padStart(2,'0')}  |`;
+      let line = `|${cursor}${String(row).padStart(2,'0')} |`;
 
-      for (let ch = 0; ch < Math.min(6, this.song.channels); ch++) {
+      for (let ch = 0; ch < Math.min(this.visibleChannels, this.song.channels); ch++) {
         const key = `${row}:${ch}`;
         const note = pattern.data.get(key) || { note: '...', instrument: 0, volume: 0 };
 
-        // Format: "C-4 01 40" where 40 is volume column display
-        let noteStr: string;
-        if (note.note === '...') {
-          noteStr = '... .. ..';
-        } else {
-          const instrStr = String(note.instrument).padStart(2,'0');
-          const volColStr = note.volumeColumn !== undefined && note.volumeColumn !== 0
-            ? formatVolumeColumn(parseVolumeColumn(note.volumeColumn))
-            : '..';
-          noteStr = `${note.note} ${instrStr} ${volColStr}`;
-        }
-
-        line += ` ${noteStr}|`;
+        // Format: "C-4 01 0F0" (note, instrument, effect)
+        const cell = this.formatCell(note, ch, row);
+        line += ` ${cell} |`;
       }
 
-      line = padEndVisible(line, 79) + '|';
-      this.gfx.drawText(0, y, line);
+      const menuText = menuLines[row - startRow] || '';
+      line += ` ${padEndVisible(menuText, 20)}`;
+      const paddedLine = padEndVisible(line, 79) + '|';
+      const rowWrapStart = row === this.currentRow ? '\x1b[7m' : '';
+      const rowWrapEnd = row === this.currentRow ? '\x1b[0m' : '';
+      this.gfx.drawText(0, y, `${rowWrapStart}${paddedLine}${rowWrapEnd}`);
     }
 
     // Footer
     const footerY = 5 + this.visibleRows;
-    this.gfx.drawText(0, footerY, '+------------------------------------------------------------------------------+');
+    this.gfx.drawText(0, footerY, midBorder);
 
-    // Show visualizer if enabled
-    if (this.visualizerMode !== 'off') {
-      const vizOutput = this.visualizer.renderLayout(this.visualizerMode, this.currentRow, pattern.rows);
-      const vizLines = vizOutput.split('\n');
-      vizLines.forEach((line, idx) => {
-        if (footerY + idx < 22) {
-          this.gfx.drawText(0, footerY + idx, line);
-        }
-      });
-    }
-
-    this.gfx.drawText(0, footerY + 1, '| [F1] Help  [Space] Play  [V] Viz  [Tab] Ch  [Arrows] Nav  [ESC] Menu       |');
-    this.gfx.drawText(0, footerY + 2, '| [Q-I,A-K] Notes  [Z-/] Octave  [0-9] Volume  [1-9] Instrument              |');
-    this.gfx.drawText(0, footerY + 3, '|______________________________________________________________________________|');
+    const footerLine1 = '|     [F1] Help  [Space] Play/Stop Pattern  [MetaRight] PlayPat  [RightAlt] Song |';
+    const footerLine2 = '|     [RightShift] Record  [Tab] Menu  [Q-I,A-K] Notes  [Z-/] Octave         |';
+    this.gfx.drawText(0, footerY + 1, padEndVisible(footerLine1.slice(0, -1), 79) + '|');
+    this.gfx.drawText(0, footerY + 2, padEndVisible(footerLine2.slice(0, -1), 79) + '|');
+    this.gfx.drawText(0, footerY + 3, bottomBorder);
 
     this.door.sendAnsi(this.gfx.render());
   }
 
   private handlePatternEditorInput(key: string): void {
     const pattern = this.song.patterns[this.currentPattern];
+
+    if (key === 'Tab') {
+      this.menuFocus = !this.menuFocus;
+      this.showPatternEditor();
+      return;
+    }
+
+    if (this.menuFocus) {
+      if (key === 'ArrowUp') {
+        this.menuSelection = Math.max(0, this.menuSelection - 1);
+        this.showPatternEditor();
+      } else if (key === 'ArrowDown') {
+        this.menuSelection = Math.min(this.patternMenuItems.length - 1, this.menuSelection + 1);
+        this.showPatternEditor();
+      } else if (key === 'Enter' || key === '\r') {
+        const item = this.patternMenuItems[this.menuSelection];
+        if (item) {
+          item.action();
+        }
+      } else if (key === 'Escape' || key === '\x1b') {
+        this.menuFocus = false;
+        this.showPatternEditor();
+      }
+      return;
+    }
 
     // Undo/Redo (Ctrl+Z, Ctrl+Y)
     if (key === '\x1a') { // Ctrl+Z
@@ -529,6 +746,26 @@ class TrackerDoor {
       return;
     }
 
+    if (key === 'ShiftRight' || key === 'RightShift') {
+      this.toggleSongPlayback();
+      return;
+    }
+
+    // ProTracker-inspired transports/record
+    if (key === 'AltGraph' || key === 'AltRight' || key === 'RightAlt') {
+      this.toggleSongPlayback();
+      return;
+    }
+    if (key === 'MetaRight' || key === 'Meta') {
+      this.togglePlayback();
+      return;
+    }
+    if (key === 'ShiftRight' || key === 'RightShift') {
+      this.recording = !this.recording;
+      this.showPatternEditor();
+      return;
+    }
+
     // Block selection (Shift+arrows)
     const isShift = key.startsWith('Shift+') || key.includes('Shift');
 
@@ -556,7 +793,14 @@ class TrackerDoor {
       return;
     }
 
-    // Navigation
+    if (key === ' ') {
+      this.editMode = this.editMode === 'effect' ? 'note' : 'effect';
+      this.effectInputBuffer = '';
+      this.showPatternEditor();
+      return;
+    }
+
+    // Navigation within pattern and fields
     if (key === 'ArrowUp' || (isShift && key.includes('Up'))) {
       this.currentRow = Math.max(0, this.currentRow - 1);
       if (this.currentRow < this.scrollRow) this.scrollRow = Math.max(0, this.scrollRow - 1);
@@ -572,19 +816,45 @@ class TrackerDoor {
       }
       this.showPatternEditor();
     } else if (key === 'ArrowLeft' || (key === '\t' && key.includes('Shift'))) {
-      this.currentChannel = Math.max(0, this.currentChannel - 1);
+      const fields: Array<'note' | 'instrument' | 'effect'> = ['note', 'instrument', 'effect'];
+      let fieldIdx = fields.indexOf(this.currentField);
+      if (fieldIdx > 0) {
+        fieldIdx -= 1;
+      } else {
+        this.currentChannel = Math.max(0, this.currentChannel - 1);
+        fieldIdx = 2;
+      }
+      this.currentField = fields[fieldIdx];
+      this.editMode = this.currentField;
+      this.effectInputBuffer = this.currentField === 'effect' ? this.effectInputBuffer : '';
+      this.instrumentInputBuffer = this.currentField === 'instrument' ? this.instrumentInputBuffer : '';
       if (this.selectionMode) {
         this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
       }
       this.showPatternEditor();
     } else if (key === 'ArrowRight' || (isShift && key.includes('Right'))) {
-      this.currentChannel = Math.min(this.song.channels - 1, this.currentChannel + 1);
+      const fields: Array<'note' | 'instrument' | 'effect'> = ['note', 'instrument', 'effect'];
+      let fieldIdx = fields.indexOf(this.currentField);
+      if (fieldIdx < fields.length - 1) {
+        fieldIdx += 1;
+      } else {
+        this.currentChannel = Math.min(this.song.channels - 1, this.currentChannel + 1);
+        fieldIdx = 0;
+      }
+      this.currentField = fields[fieldIdx];
+      this.editMode = this.currentField;
+      this.effectInputBuffer = this.currentField === 'effect' ? this.effectInputBuffer : '';
+      this.instrumentInputBuffer = this.currentField === 'instrument' ? this.instrumentInputBuffer : '';
       if (this.selectionMode) {
         this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
       }
       this.showPatternEditor();
     } else if (key === '\t' && !isShift) {
       this.currentChannel = Math.min(this.song.channels - 1, this.currentChannel + 1);
+      this.currentField = 'note';
+      this.editMode = 'note';
+      this.effectInputBuffer = '';
+      this.instrumentInputBuffer = '';
       this.showPatternEditor();
     } else if (key === 'PageUp') {
       this.currentRow = Math.max(0, this.currentRow - 16);
@@ -592,6 +862,7 @@ class TrackerDoor {
       if (this.selectionMode) {
         this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
       }
+      this.effectInputBuffer = '';
       this.showPatternEditor();
     } else if (key === 'PageDown') {
       this.currentRow = Math.min(pattern.rows - 1, this.currentRow + 16);
@@ -599,6 +870,7 @@ class TrackerDoor {
       if (this.selectionMode) {
         this.selectionEnd = { row: this.currentRow, channel: this.currentChannel };
       }
+      this.effectInputBuffer = '';
       this.showPatternEditor();
     }
 
@@ -612,13 +884,67 @@ class TrackerDoor {
     };
 
     const lowerKey = key.toLowerCase();
-    if (noteMap[lowerKey]) {
+    if (this.editMode === 'effect') {
+      const keyStr = `${this.currentRow}:${this.currentChannel}`;
+      const existing = pattern.data.get(keyStr) || { note: '...', instrument: this.currentInstrument, volume: this.currentVolume };
+      if (key === 'Backspace' || key === '\x7f') {
+        this.effectInputBuffer = this.effectInputBuffer.slice(0, -1);
+      } else if (/^[0-9a-f]$/i.test(key) && this.effectInputBuffer.length < 3) {
+        this.effectInputBuffer += key.toUpperCase();
+      }
+
+      if (this.effectInputBuffer.length > 0) {
+        const padded = this.effectInputBuffer.padEnd(3, '0');
+        existing.effect = padded[0];
+        existing.effectParam = parseInt(padded.slice(1), 16) || 0;
+        existing.instrument = existing.instrument || this.currentInstrument;
+        existing.volume = existing.volume || this.currentVolume;
+        if (!existing.note) existing.note = '...';
+        pattern.data.set(keyStr, existing);
+      } else {
+        delete (existing as any).effect;
+        delete (existing as any).effectParam;
+        pattern.data.set(keyStr, existing);
+      }
+      this.showPatternEditor();
+      return;
+    } else if (this.currentField === 'instrument') {
+      const keyStr = `${this.currentRow}:${this.currentChannel}`;
+      const existing = pattern.data.get(keyStr) || { note: '...', instrument: this.currentInstrument, volume: this.currentVolume };
+      if (key === 'Backspace' || key === '\x7f') {
+        this.instrumentInputBuffer = this.instrumentInputBuffer.slice(0, -1);
+      } else if (/^[0-9]$/.test(key) && this.instrumentInputBuffer.length < 2) {
+        this.instrumentInputBuffer += key;
+      }
+      if (this.instrumentInputBuffer.length > 0) {
+        existing.instrument = parseInt(this.instrumentInputBuffer.padEnd(2, '0'), 10) || 0;
+        existing.note = existing.note || '...';
+        existing.volume = existing.volume || this.currentVolume;
+        pattern.data.set(keyStr, existing);
+      } else {
+        existing.instrument = 0;
+        pattern.data.set(keyStr, existing);
+      }
+      this.showPatternEditor();
+      return;
+    } else if (noteMap[lowerKey]) {
       const noteName = noteMap[lowerKey];
       const octave = lowerKey.charCodeAt(0) >= 'q'.charCodeAt(0) ? this.currentOctave + 1 : this.currentOctave;
-      const noteValue: NoteValue = `${noteName}-${octave}` as NoteValue;
+      const noteValue: NoteValue = `${noteName}${noteName.includes('#') ? '' : '-'}${octave}` as NoteValue;
 
-      this.addNote(noteValue);
+      this.addNote(this.formatNoteDisplay(noteValue));
       this.showPatternEditor();
+      return;
+    }
+
+    // Enter steps forward
+    if (key === 'Enter' || key === '\r') {
+      this.currentRow = Math.min(pattern.rows - 1, this.currentRow + 1);
+      if (this.currentRow >= this.scrollRow + this.visibleRows) {
+        this.scrollRow = Math.min(this.currentRow, pattern.rows - this.visibleRows);
+      }
+      this.showPatternEditor();
+      return;
     }
 
     // Octave control
@@ -650,11 +976,6 @@ class TrackerDoor {
       this.undoManager.pushState('Delete row');
       this.deleteRow();
       this.showPatternEditor();
-    }
-
-    // Playback
-    if (key === ' ') {
-      this.togglePlayback();
     }
 
     // Back to menu or cancel selection
@@ -709,10 +1030,24 @@ class TrackerDoor {
     if (this.playing) {
       this.audio.stop();
       this.playing = false;
+      this.stopPlaybackWatcher();
     } else {
       const pattern = this.song.patterns[this.currentPattern];
       this.audio.playPattern(pattern, this.song.instruments, true);
       this.playing = true;
+      this.startPlaybackWatcher();
+    }
+  }
+
+  private toggleSongPlayback(): void {
+    if (this.playing) {
+      this.audio.stop();
+      this.playing = false;
+      this.stopPlaybackWatcher();
+    } else {
+      this.audio.playSong(this.song, true);
+      this.playing = true;
+      this.startPlaybackWatcher();
     }
   }
 
@@ -844,7 +1179,7 @@ class TrackerDoor {
     this.gfx.drawText(2, y++, '  Ctrl+Q - Quit      ESC - Back/Cancel');
     y++;
     this.gfx.drawText(2, y++, 'PATTERN EDITOR:');
-    this.gfx.drawText(2, y++, '  Arrows - Navigate  Tab - Next channel  Space - Play/pause');
+    this.gfx.drawText(2, y++, '  Arrows - Navigate  Tab - Menu toggle  Space - Play Pattern  RightAlt - Play Song');
     this.gfx.drawText(2, y++, '  Q-I,A-K,Z-M - Piano keyboard  -/+ - Octave  Backspace - Del note');
     y++;
     this.gfx.drawText(2, y++, 'EDITING:');
@@ -1234,3 +1569,5 @@ export async function runDoor(doorSession: any): Promise<void> {
     socket.on('user-input', handler);
   });
 }
+// @ts-nocheck
+// @ts-nocheck

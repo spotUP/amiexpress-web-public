@@ -17,14 +17,14 @@ import {
   TacticalCombatEngine,
   ClassSystem,
   AnsiColor
-} from '../../core/index';
+} from '@amiexpress/bbs-door-sdk';
 
 import {
   TacticalUnit,
   TacticalMap,
   Position,
   CombatResult
-} from '../../engines/tactical/tactical-combat-engine';
+} from '@amiexpress/bbs-door-sdk/engines/tactical/tactical-combat-engine';
 
 /**
  * Multiplayer game modes

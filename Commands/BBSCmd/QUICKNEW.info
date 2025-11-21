@@ -1,0 +1,7 @@
+BBSCMD=QUICKNEW
+TYPE=TS
+LOCATION=doors/quicknew
+DESCRIPTION=QuickNew (TS) - generate reference-board-style quick new file list
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

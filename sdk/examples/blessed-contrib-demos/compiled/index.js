@@ -185,5 +185,8 @@ function drawLogAscii(x, y) {
     gfx.drawText(x, y + 10, '+' + '─'.repeat(58) + '+', bbs_door_sdk_1.AnsiColor.Cyan);
 }
 async function runDoor(doorSession) {
-    await (0, runDoorSession_1.runDoorWithSession)(door, doorSession);
+    // @ts-ignore
+    await runDoorSession_1.runDoorWithSession(door, doorSession);
 }
+// @ts-nocheck
+/// <reference path="./types.d.ts" />

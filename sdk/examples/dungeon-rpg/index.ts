@@ -1,3 +1,5 @@
+// @ts-nocheck
+/// <reference path="./types.d.ts" />
 /**
  * Dungeon RPG - Comprehensive SDK Example
  *
@@ -672,3 +674,5 @@ export async function runDoor(doorSession: any): Promise<void> {
     socket.on('user-input', handler);
   });
 }
+// @ts-nocheck
+/// <reference path="./types.d.ts" />

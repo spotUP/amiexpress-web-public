@@ -167,6 +167,7 @@ import {
   loadCommands,
   setCommandExecutionDependencies
 } from './command-execution.handler';
+import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 
 // Import security/ACS system
 import { ACSCode } from '../constants/acs-codes';
@@ -289,11 +290,14 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
     // Express.e:28583 - IF ((loggedOnUser.expert="N") AND (doorExpertMode=FALSE)) OR (checkToolTypeExists(TOOLTYPE_CONF,currentConf,'FORCE_MENUS'))
     // Note: Database stores expert as BOOLEAN (true/false), not string ("Y"/"N")
     console.log('🔍 [Menu Display] Checking expert mode:');
+    const relConfNumber = session.relConfNum || 1;
+    const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
     console.log('  - session.user?.expert:', session.user?.expert);
     console.log('  - session.doorExpertMode:', session.doorExpertMode);
-    console.log('  - Will display menu?', (session.user?.expert === false && !session.doorExpertMode));
+    console.log('  - forceMenus tooltype:', forceMenus);
+    console.log('  - Will display menu?', (session.user?.expert === false && !session.doorExpertMode) || forceMenus);
 
-    if ((session.user?.expert === false && !session.doorExpertMode) /* TODO: || FORCE_MENUS check */) {
+    if ((session.user?.expert === false && !session.doorExpertMode) || forceMenus) {
       console.log('Displaying menu screen file');
       // Phase 8: Use authentic screen file system (express.e:28586 - await displayScreen(SCREEN_MENU))
       const screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
@@ -898,6 +902,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   ) {
     console.log('📋 In display state, continuing to next state');
     try {
+      const confNumber = session.currentConf || session.user?.confRJoin || 1;
+      const toolFlags = getConferenceToolFlags(confNumber);
       // If a previous screen deferred commands (runCommands=false), run them now on keypress
       if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
         console.log('📋 Executing queued screen commands before advancing state');
@@ -910,18 +916,25 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           session.pendingScreenCommand = undefined;
           session.screenCommandResolver = null;
         }
+        // After queued commands (GLC/GWALL/QuickNew etc.), wait for the next key to move forward
         return;
       }
       // Any key continues to next state
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
         // express.e:28555 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
-        const shown = await displayScreen(socket, session, 'BULL');
-        if (shown && !session.lastScreenHadPause) doPause(socket, session);
+        const skipBull = toolFlags.noBulls;
+        if (!skipBull) {
+          const shown = await displayScreen(socket, session, 'BULL');
+          if (shown && !session.lastScreenHadPause) doPause(socket, session);
+        }
         session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
       } else if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
         // express.e:28557 - IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
-        const shown = await displayScreen(socket, session, 'NODE_BULL');
-        if (shown && !session.lastScreenHadPause) doPause(socket, session);
+        const skipNodeBull = toolFlags.noBulls;
+        if (!skipNodeBull) {
+          const shown = await displayScreen(socket, session, 'NODE_BULL');
+          if (shown && !session.lastScreenHadPause) doPause(socket, session);
+        }
         session.subState = LoggedOnSubState.CONF_SCAN;
       } else if (session.subState === LoggedOnSubState.CONF_SCAN) {
         // express.e:28564 - confScan
@@ -930,7 +943,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       } else if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
         // express.e:28565 - IF (displayScreen(SCREEN_CONF_BULL)) THEN doPause()
-        await displayConferenceBulletins(socket, session);
+        if (!toolFlags.noConfBulls) {
+          await displayConferenceBulletins(socket, session);
+        }
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
       } else if (session.subState === LoggedOnSubState.DISPLAY_MENU) {

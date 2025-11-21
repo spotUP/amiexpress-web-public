@@ -2835,6 +2835,9 @@ function selectDoor(clientId, doorId) {
     // Set current door
     client.currentDoor = doorId;
 
+    // Resolve BBS command (prefer explicit package field, otherwise derive from door id)
+    const bbsCommand = (pkg.bbsCommand || doorId || '').toUpperCase();
+
     // Send metadata
     client.ws.send(
       JSON.stringify({
@@ -2851,6 +2854,7 @@ function selectDoor(clientId, doorId) {
           totalSize,
           lastModified,
           dependencies: pkg.dependencies || {},
+          bbsCommand,
         },
       })
     );

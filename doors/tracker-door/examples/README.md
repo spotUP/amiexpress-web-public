@@ -6,10 +6,14 @@ This directory contains example songs demonstrating TrackerDoor features.
 
 To load these example songs in TrackerDoor:
 
-1. Launch the tracker: `npm run dev`
-2. Press `L` to Load a song
-3. Navigate to the `examples/` directory
-4. Select a song file
+1. Open the tracker in the browser BBS.
+2. Press `L` (Load) from the main menu or press `Ctrl+L` in the pattern view.
+3. When prompted to pick a file, enter the path to one of these example JSON files, e.g.:
+   - `examples/demo-showcase.json`
+   - `examples/chiptune-melody.json`
+4. The song will load into the current session.
+
+To save the current song, use the Export/Save flow in the tracker and provide a filename (you can also save into the `examples/` folder if you want a new preset there).
 
 ## Example Files
 

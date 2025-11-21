@@ -29,6 +29,7 @@ export interface BundleResult {
  * Handles bundling of doors for browser execution
  */
 export class ClientDoorBundler {
+  private static readonly CACHE_VERSION = 'process-widget-shim-v5';
   private cacheDir: string;
   private bundleCache: Map<string, BundleResult> = new Map();
 
@@ -127,6 +128,120 @@ export class ClientDoorBundler {
       const pathShimPath = this.createPathShim();
       const eventsShimPath = this.createEventsShim();
       const osShimPath = this.createOsShim();
+      const netShimPath = this.createNetShim();
+      const childProcessShimPath = this.createChildProcessShim();
+      const utilShimPath = this.createUtilShim();
+      const assertShimPath = this.createAssertShim();
+      const zlibShimPath = this.createZlibShim();
+      const termJsShimPath = this.createTermJsShim();
+      const ptyShimPath = this.createPtyShim();
+      const blessedColorsShimPath = this.createBlessedColorsShim();
+      const processShimPath = this.createProcessShim();
+      const widgetNodeShimPath = this.createWidgetNodeShim();
+
+      const aliasMap: Record<string, string> = {
+        '@amiexpress/bbs-door-sdk': sdkClient,
+        '@amiexpress/bbs-door-sdk/client': sdkClient,
+        '@amiexpress/bbs-door-sdk/server': sdkServer,
+        '@amiexpress/bbs-door-sdk/common': sdkCommon,
+        fs: fsShimPath,
+        path: pathShimPath,
+        events: eventsShimPath,
+        os: osShimPath,
+        net: netShimPath,
+        child_process: childProcessShimPath,
+        util: utilShimPath,
+        assert: assertShimPath,
+        zlib: zlibShimPath,
+        'term.js': termJsShimPath,
+        'pty.js': ptyShimPath,
+        'blessed/lib/colors': blessedColorsShimPath,
+        process: processShimPath,
+        './widgets/node': widgetNodeShimPath,
+      };
+
+      const aliasPlugin: esbuild.Plugin = {
+        name: 'client-door-alias',
+        setup(build) {
+          build.onResolve({ filter: /^(fs|path|events|os|net|child_process|util|assert|zlib|term\.js|pty\.js|blessed\/lib\/colors|process|@amiexpress\/bbs-door-sdk(?:\/(client|server|common))?)$/ }, (args) => {
+            const replacement = aliasMap[args.path];
+            if (replacement) {
+              return { path: replacement };
+            }
+            if (args.path.endsWith('/widgets/node')) {
+              return { path: widgetNodeShimPath };
+            }
+            return null;
+          });
+
+          build.onResolve({ filter: /^\.\/widgets\/node$/ }, () => {
+            return { path: widgetNodeShimPath };
+          });
+
+          build.onResolve({ filter: /^\.\/widgets\/node\.js$/ }, () => {
+            return { path: widgetNodeShimPath };
+          });
+        }
+      };
+
+      const processBanner = `
+        var process = (typeof process !== 'undefined') ? process : {
+          env: {},
+          cwd: () => '/',
+          platform: 'browser',
+          nextTick: (fn) => {
+            if (typeof queueMicrotask === 'function') {
+              queueMicrotask(fn);
+            } else {
+              setTimeout(fn, 0);
+            }
+          },
+          argv: [],
+          version: '0.0.0-browser',
+          versions: {}
+        };
+      `;
+
+      const widgetFixPlugin: esbuild.Plugin = {
+        name: 'neo-blessed-widget-fix',
+        setup(build) {
+          build.onLoad({ filter: /neo-blessed\/lib\/widget\.js$/ }, async (args) => {
+            const source = await fs.promises.readFile(args.path, 'utf8');
+            let patched = source.replace(/globRequire_widgets\(\s*["']\.\/widgets\/["'] \+ file\s*\)/g, 'globRequire_widgets("./widgets/" + file + ".js")');
+
+            patched = patched.replace(
+              /widget\[name\]\s*=\s*widget\[file\]\s*=\s*globRequire_widgets\(["']\.\/widgets\/["'] \+ file \+ ["']\.js["']\);\s*/g,
+              `try {
+        widget[name] = widget[file] = globRequire_widgets("./widgets/" + file + ".js");
+      } catch (err) {
+        if (file === 'node') {
+          try {
+            widget[name] = widget[file] = globRequire_widgets("./widgets/node.js");
+          } catch (err3) {
+            widget[name] = widget[file] = () => ({});
+          }
+        } else if (file === 'node.js') {
+          try {
+            widget[name] = widget[file] = globRequire_widgets("./widgets/node.js");
+          } catch (err2) {
+            widget[name] = widget[file] = () => ({});
+          }
+        } else {
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[neo-blessed] missing widget module', file, err);
+          }
+          widget[name] = widget[file] = () => ({});
+        }
+      }
+      `
+            );
+            return {
+              contents: patched,
+              loader: 'js',
+            };
+          });
+        }
+      };
 
       // Bundle with esbuild
       const result = await esbuild.build({
@@ -152,6 +267,10 @@ export class ClientDoorBundler {
           'path': pathShimPath,
           'events': eventsShimPath,
           'os': osShimPath,
+          'net': netShimPath,
+          'child_process': childProcessShimPath,
+          'util': utilShimPath,
+          'assert': assertShimPath,
         },
 
         // Additional resolve paths
@@ -175,6 +294,10 @@ export class ClientDoorBundler {
           '__filename': '"/bbs/doors/index.js"',
         },
 
+        banner: {
+          js: processBanner,
+        },
+
         // Enable JSX if needed
         loader: {
           '.ts': 'ts',
@@ -188,6 +311,8 @@ export class ClientDoorBundler {
 
         // Log level
         logLevel: 'info',
+
+        plugins: [aliasPlugin, widgetFixPlugin],
       });
 
       // Read bundled code
@@ -284,6 +409,350 @@ export default {
     };
   },
 };
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create net module shim for browser
+   */
+  private createNetShim(): string {
+    const shimPath = path.join(this.cacheDir, 'net-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// net shim for browser
+const createConnection = (..._args) => {
+  throw new Error('net module is not available in the browser');
+};
+const connect = createConnection;
+
+export { createConnection, connect };
+export default { createConnection, connect };
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create child_process shim for browser
+   */
+  private createChildProcessShim(): string {
+    const shimPath = path.join(this.cacheDir, 'child-process-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// child_process shim for browser
+const notAvailable = (fn = 'child_process') => {
+  throw new Error(fn + ' is not available in the browser');
+};
+
+const spawn = (..._args) => {
+  notAvailable('spawn');
+  return null;
+};
+
+const spawnSync = (..._args) => {
+  return { pid: 0, output: [], stdout: '', stderr: '', status: 1, signal: null, error: new Error('spawnSync is not available in the browser') };
+};
+
+const exec = (..._args) => {
+  notAvailable('exec');
+  return null;
+};
+
+const execSync = (..._args) => {
+  notAvailable('execSync');
+  return '';
+};
+
+export { spawn, spawnSync, exec, execSync };
+export default { spawn, spawnSync, exec, execSync };
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create util shim for browser
+   */
+  private createUtilShim(): string {
+    const shimPath = path.join(this.cacheDir, 'util-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// util shim for browser
+function inherits(ctor, superCtor) {
+  if (!superCtor) return;
+  ctor.super_ = superCtor;
+  ctor.prototype = Object.create(superCtor.prototype, {
+    constructor: { value: ctor, writable: true, configurable: true }
+  });
+}
+
+function format(...args) {
+  try {
+    return args.map((a) => String(a)).join(' ');
+  } catch {
+    return '';
+  }
+}
+
+function promisify(fn) {
+  return (...args) => new Promise((resolve, reject) => {
+    try {
+      fn(...args, (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+function callbackify(fn) {
+  return (...args) => {
+    const cb = args.pop();
+    Promise.resolve(fn(...args)).then((res) => cb(null, res)).catch((err) => cb(err));
+  };
+}
+
+function inspect(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+const util = { inherits, format, promisify, callbackify, inspect, types: {} };
+
+export { inherits, format, promisify, callbackify, inspect };
+export default util;
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create assert shim for browser
+   */
+  private createAssertShim(): string {
+    const shimPath = path.join(this.cacheDir, 'assert-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// assert shim for browser
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message || 'Assertion failed');
+  }
+}
+
+assert.ok = assert;
+assert.strictEqual = (a, b, message) => {
+  if (a !== b) {
+    throw new Error(message || \`\${a} !== \${b}\`);
+  }
+};
+assert.equal = assert.strictEqual;
+assert.fail = (message) => { throw new Error(message || 'Assertion failed'); };
+
+export default assert;
+export { assert };
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create zlib shim for browser
+   */
+  private createZlibShim(): string {
+    const shimPath = path.join(this.cacheDir, 'zlib-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// zlib shim for browser
+const notAvailable = (fn = 'zlib') => {
+  throw new Error(fn + ' is not available in the browser');
+};
+
+const inflate = (..._args) => notAvailable('inflate');
+const deflate = (..._args) => notAvailable('deflate');
+const inflateSync = (..._args) => notAvailable('inflateSync');
+const deflateSync = (..._args) => notAvailable('deflateSync');
+
+export { inflate, deflate, inflateSync, deflateSync };
+export default { inflate, deflate, inflateSync, deflateSync };
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create term.js shim for browser
+   */
+  private createTermJsShim(): string {
+    const shimPath = path.join(this.cacheDir, 'termjs-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      const existing = fs.readFileSync(shimPath, 'utf8');
+      if (!existing.includes('module.exports')) {
+        return shimPath;
+      }
+    }
+
+    const shimCode = `
+// term.js shim for browser
+const termFactory = (_opts = {}) => {
+  return {
+    write: () => {},
+    destroy: () => {},
+    on: () => {},
+    once: () => {},
+    off: () => {},
+    resize: () => {},
+  };
+};
+
+export default termFactory;
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create pty.js shim for browser
+   */
+  private createPtyShim(): string {
+    const shimPath = path.join(this.cacheDir, 'pty-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// pty.js shim for browser
+const fork = (_cmd, _args, _opts) => {
+  return {
+    on: () => {},
+    write: () => {},
+    destroy: () => {},
+    resize: () => {},
+    kill: () => {},
+  };
+};
+
+export { fork };
+export default { fork };
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create blessed colors shim for browser
+   */
+  private createBlessedColorsShim(): string {
+    const shimPath = path.join(this.cacheDir, 'blessed-colors-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// blessed colors shim for browser
+const colors = {
+  match: () => 0,
+  convert: () => 0,
+};
+
+export default colors;
+export { colors };
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create process shim for browser
+   */
+  private createProcessShim(): string {
+    const shimPath = path.join(this.cacheDir, 'process-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// Minimal process shim for browser
+const process = {
+  env: {},
+  cwd: () => '/',
+  platform: 'browser',
+  nextTick: (fn) => {
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(fn);
+    } else {
+      setTimeout(fn, 0);
+    }
+  },
+  argv: [],
+  version: '0.0.0-browser',
+  versions: {},
+};
+
+export default process;
+export { process };
+`;
+
+    fs.writeFileSync(shimPath, shimCode, 'utf8');
+    return shimPath;
+  }
+
+  /**
+   * Create widget node shim for neo-blessed
+   */
+  private createWidgetNodeShim(): string {
+    const shimPath = path.join(this.cacheDir, 'widget-node-shim.js');
+
+    if (fs.existsSync(shimPath)) {
+      return shimPath;
+    }
+
+    const shimCode = `
+// neo-blessed widget node shim for browser
+export default {};
 `;
 
     fs.writeFileSync(shimPath, shimCode, 'utf8');
@@ -474,7 +943,7 @@ export default {
    * Get cache key for a bundle
    */
   private getCacheKey(doorPath: string, minify: boolean, sourcemap: boolean): string {
-    return `${doorPath}:${minify}:${sourcemap}`;
+    return `${ClientDoorBundler.CACHE_VERSION}:${doorPath}:${minify}:${sourcemap}`;
   }
 
   /**

@@ -71,6 +71,16 @@ interface GLCData {
   records: Records;
 }
 
+function padStat(value: unknown, width: number): string {
+  const str = value === null || value === undefined ? '' : String(value);
+  return str.padStart(width, ' ');
+}
+
+function padField(value: unknown, width: number): string {
+  const str = value === null || value === undefined ? '' : String(value);
+  return str.padStart(width, ' ');
+}
+
 /**
  * Load GLC configuration
  */
@@ -354,7 +364,7 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
     const stat2 = `\x1b[35mSTATUS \x1b[32m${data.previousDayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.calls, 3)}\x1b[34m] \x1b[1;33mTOP-CPS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.topcps, 5)}\x1b[34m]  \x1b[1;33mUL \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.uploads, 7)} \x1b[1;33mKB\x1b[0;34m]  \x1b[1;33mDL \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.downloads, 7)} \x1b[1;33mKB\x1b[0;34m]\r\n`;
     socket.emit('ansi-output', stat2);
 
-    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${data.records.recordcalls.padStart(3)}\x1b[34m] \x1b[35mMOST CALLED SYSTEM  \x1b[34m[\x1b[36m${data.records.calls.padStart(3)}\x1b[34m]\x1b[35m: \x1b[32m${data.records.mostcalled.substring(0, 21).padEnd(21)}\r\n`;
+    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padField(data.records.recordcalls,3)}\x1b[34m] \x1b[35mMOST CALLED SYSTEM  \x1b[34m[\x1b[36m${padField(data.records.calls,3)}\x1b[34m]\x1b[35m: \x1b[32m${data.records.mostcalled.substring(0, 21).padEnd(21)}\r\n`;
     socket.emit('ansi-output', records);
   }
 
@@ -366,7 +376,7 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
     const stat2 = `\x1b[35mSTATUS \x1b[32m${data.previousDayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.calls, 3)}\x1b[34m]                    \x1b[37m2\x1b[0;34m[\x1b[36m${padStat(data.records.calls2, 7)}\x1b[34m] \x1b[37m${data.records.secondmostcalled.substring(0, 20).padEnd(20)}\r\n`;
     socket.emit('ansi-output', stat2);
 
-    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${data.records.recordcalls.padStart(3)}\x1b[34m]   \x1b[35mCALLED SYSTEMS   \x1b[37m3\x1b[0;34m[\x1b[36m${data.records.calls3.padStart(7)}\x1b[34m] \x1b[37m${data.records.thirdmostcalled.substring(0, 20).padEnd(20)}\r\n`;
+    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padField(data.records.recordcalls,3)}\x1b[34m]   \x1b[35mCALLED SYSTEMS   \x1b[37m3\x1b[0;34m[\x1b[36m${padField(data.records.calls3,7)}\x1b[34m] \x1b[37m${data.records.thirdmostcalled.substring(0, 20).padEnd(20)}\r\n`;
     socket.emit('ansi-output', records);
   }
 

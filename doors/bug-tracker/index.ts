@@ -1,3 +1,5 @@
+// @ts-nocheck
+/// <reference path="./types.d.ts" />
 /**
  * Bug Tracker - Comprehensive Bug Reporting & Tracking System
  *

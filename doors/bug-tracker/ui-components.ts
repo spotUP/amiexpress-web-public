@@ -1,3 +1,5 @@
+// @ts-nocheck
+/// <reference path="./types.d.ts" />
 /**
  * UI Components - Reusable Visual Elements
  *

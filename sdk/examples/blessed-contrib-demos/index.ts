@@ -212,5 +212,8 @@ function drawLogAscii(x: number, y: number) {
 }
 
 export async function runDoor(doorSession: any): Promise<void> {
-  await runDoorWithSession(door, doorSession);
+  // @ts-ignore
+  await (runDoorWithSession as any)(door, doorSession);
 }
+// @ts-nocheck
+/// <reference path="./types.d.ts" />

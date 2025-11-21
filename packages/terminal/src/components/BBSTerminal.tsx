@@ -62,6 +62,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const newUserPromptUsername = useRef<string>('');
   const passwordMode = useRef<boolean>(false);
   const doorActive = useRef<boolean>(false);
+  const doorReadyMap = useRef<Record<string, boolean>>({});
+  const doorMessageBuffer = useRef<Record<string, any[]>>({});
+  const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
   const normalFont = useRef<string>('mosoul, "Courier New", monospace');
 
@@ -203,6 +206,42 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       onDisconnect?.(reason);
     });
 
+    const dispatchDoorMessage = (sessionId: string, message: any) => {
+      if (typeof window === 'undefined') return;
+      window.dispatchEvent(new CustomEvent('bbs:door:message', {
+        detail: { sessionId, message }
+      }));
+    };
+
+    const flushDoorMessages = (sessionId: string) => {
+      const pending = doorMessageBuffer.current[sessionId];
+      if (!pending?.length) {
+        return;
+      }
+      pending.forEach((message) => dispatchDoorMessage(sessionId, message));
+      doorMessageBuffer.current[sessionId] = [];
+    };
+
+    const handleDoorMessageEvent = (eventName: string, ...args: any[]) => {
+      if (!eventName.startsWith('door:message:')) {
+        return;
+      }
+      const sessionId = eventName.replace('door:message:', '');
+      const message = args[0];
+
+      if (doorReadyMap.current[sessionId]) {
+        dispatchDoorMessage(sessionId, message);
+        return;
+      }
+
+      if (!doorMessageBuffer.current[sessionId]) {
+        doorMessageBuffer.current[sessionId] = [];
+      }
+      doorMessageBuffer.current[sessionId].push(message);
+    };
+
+    socket.onAny(handleDoorMessageEvent);
+
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
       const currentFont = term.options.fontFamily;
@@ -312,6 +351,81 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       doorActive.current = active;
     });
 
+    socket.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
+      console.log(`[ClientDoor] Loading door: ${data.doorId}`);
+
+      const doorName = data.manifest?.name || data.doorId;
+      term.write(`\r\n\x1b[36mLoading ${doorName}...\x1b[0m\r\n`);
+      doorActive.current = true;
+      doorReadyMap.current[data.sessionId] = false;
+      if (!doorMessageBuffer.current[data.sessionId]) {
+        doorMessageBuffer.current[data.sessionId] = [];
+      }
+
+      // Expose BBS connection to client doors
+      (window as any).__BBS__ = {
+        socket,
+        sessionId: data.sessionId,
+        backendUrl: finalBackendUrl
+      };
+
+      // Ensure we do not keep stale scripts around
+      const scriptId = `door-${data.doorId}`;
+      const existingScript = document.getElementById(scriptId);
+      if (existingScript) {
+        existingScript.remove();
+      }
+
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = data.bundleUrl.startsWith('http')
+        ? data.bundleUrl
+        : `${finalBackendUrl}${data.bundleUrl}`;
+      script.type = 'text/javascript';
+
+      script.onload = () => {
+        console.log(`[ClientDoor] Bundle loaded successfully: ${data.doorId}`);
+        term.write('\x1b[32m[OK] Door bundle loaded\x1b[0m\r\n');
+        doorReadyMap.current[data.sessionId] = true;
+        flushDoorMessages(data.sessionId);
+      };
+
+      script.onerror = (error) => {
+        console.error(`[ClientDoor] Failed to load bundle:`, error);
+        term.write('\r\n\x1b[31mError loading door bundle\x1b[0m\r\n');
+        doorActive.current = false;
+        delete (window as any).__BBS__;
+        const failedScript = document.getElementById(scriptId);
+        if (failedScript && failedScript.parentNode) {
+          failedScript.parentNode.removeChild(failedScript);
+        }
+        delete doorScripts.current[data.sessionId];
+        delete doorReadyMap.current[data.sessionId];
+        delete doorMessageBuffer.current[data.sessionId];
+      };
+
+      doorScripts.current[data.sessionId] = script;
+      document.body.appendChild(script);
+    });
+
+    socket.on('door:unload-client', (data: { doorId: string; sessionId?: string }) => {
+      const scriptId = `door-${data.doorId}`;
+      const script = document.getElementById(scriptId) || doorScripts.current[data.sessionId || ''] || null;
+      if (script && script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+      if (data.sessionId) {
+        delete doorScripts.current[data.sessionId];
+        delete doorReadyMap.current[data.sessionId];
+        delete doorMessageBuffer.current[data.sessionId];
+      }
+      if ((window as any).__BBS__?.sessionId === data.sessionId) {
+        delete (window as any).__BBS__;
+      }
+      doorActive.current = false;
+      term.write(`\r\n\x1b[32mDoor closed\x1b[0m\r\n`);
+    });
+
     socket.on('set-font', (fontName: string) => {
       console.log('[Font] Received set-font event:', fontName);
       const fontMetrics: Record<string, { size: number; lineHeight: number }> = {
@@ -419,9 +533,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Cleanup
     return () => {
       socket.disconnect();
+      socket.offAny(handleDoorMessageEvent);
       term.dispose();
       terminalInstance.current = null;
       socketRef.current = null;
+      doorReadyMap.current = {};
+      doorMessageBuffer.current = {};
+      doorScripts.current = {};
     };
   }, [fontSize, backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
 

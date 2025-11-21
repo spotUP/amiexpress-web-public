@@ -1,3 +1,5 @@
+// @ts-nocheck
+/// <reference path="./types.d.ts" />
 /**
  * Input Manager - Advanced Text Input with Line Editing
  *

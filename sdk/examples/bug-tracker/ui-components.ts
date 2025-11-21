@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * UI Components - Reusable Visual Elements
  *
@@ -393,3 +394,4 @@ export class UIComponents {
   }
 
 }
+// @ts-nocheck

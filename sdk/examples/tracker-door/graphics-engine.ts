@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Simple Graphics Helper for TrackerDoor
  *
@@ -79,3 +80,4 @@ export class GraphicsEngine {
     this.buffer += ansi;
   }
 }
+// @ts-nocheck

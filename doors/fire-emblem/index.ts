@@ -40,7 +40,7 @@ import {
   TerrainType,
   Position,
   UnitClass
-} from '../../engines/tactical/tactical-combat-engine';
+} from '@amiexpress/bbs-door-sdk/engines/tactical/tactical-combat-engine';
 
 /**
  * Game difficulty settings

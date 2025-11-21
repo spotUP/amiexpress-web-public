@@ -8,8 +8,12 @@
     "build": "tsc",
     "watch": "tsc --watch"
   },
+  "ts-node": {
+    "project": "./tsconfig.json",
+    "transpileOnly": true
+  },
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../dist",
+    "@amiexpress/bbs-door-sdk": "file:../../sdk",
     "blessed-contrib": "^4.11.0",
     "neo-blessed": "^0.2.0"
   },

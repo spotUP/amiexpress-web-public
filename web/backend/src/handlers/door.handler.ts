@@ -1654,7 +1654,7 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
     socket.emit('door:load-client', {
       doorId: door.id,
       sessionId,
-      bundleUrl: `/api/doors/${door.id}/bundle.js`,
+      bundleUrl: `/api/doors/${door.id}/bundle.js?v=${Date.now()}`,
       manifest: {
         name: manifest.name,
         version: manifest.version,

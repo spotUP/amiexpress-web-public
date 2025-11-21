@@ -567,6 +567,9 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       const embedded = await parseMciCodes(screenData.content, session, bbsName, sysopName, location);
       // Add any commands from embedded file to our command list
       commandsToExecute.push(...embedded.commands);
+      if (embedded.hasPause) {
+        hasPause = true;
+      }
       // Replace placeholder with embedded content
       parsed = parsed.replace(placeholder, embedded.parsed);
     } else {
@@ -608,6 +611,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   const userSecLevel = session?.user?.secLevel ?? 0;
   const screenBaseNoExt = screenName.replace(/\.[^/.]+$/, ''); // strip extension for security search
   const isAssignPath = screenName.includes(':');
+  const normalizedName = screenName.toLowerCase();
 
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
   // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
@@ -990,6 +994,7 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
   session.pendingScreenCommand = new Promise<void>(resolve => {
     session.screenCommandResolver = resolve;
   });
+  session.executingScreenCommand = true;
 
   try {
     for (let i = 0; i < commands.length; i++) {

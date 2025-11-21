@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, lazy, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
   // Lazy-loaded heavy components moved below
@@ -40,7 +40,7 @@ import {
   ConnectionStatus,
   SessionEvent,
 } from './types';
-import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles, Layout, Monitor, Code2, Columns, File, FileText } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles, Layout, Monitor, Code2, Columns, File, FileText, Copy, Trash2 } from 'lucide-react';
 import type { CommandItem } from './components/ui/CommandPalette';
 import { SDK_API_URL } from './utils/api-config';
 
@@ -185,12 +185,17 @@ function App() {
     'Use keyboard shortcuts for quick actions (Ctrl+, for settings).',
     '',
   ]);
-  const [logsOutput, setLogsOutput] = useState<string[]>([
+  const initialLogs = useRef<string[]>([
     '\x1b[36m=== SDK Logs ===\x1b[0m',
     '',
     'Build and debug output will appear here.',
     '',
   ]);
+  const [logsOutput, setLogsOutput] = useState<string[]>(initialLogs.current);
+
+  const resetLogs = useCallback(() => {
+    setLogsOutput(initialLogs.current);
+  }, []);
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTermTerminalRef>(null);
   const bbsTerminalRef = useRef<BBSTerminalRef>(null);
@@ -1362,14 +1367,43 @@ function App() {
                           fontSize={settings.terminalFontSize}
                         />
                       ) : (
-                        <Suspense fallback={<div className="p-4 text-gray-400">Loading terminal...</div>}>
-                          <XTermTerminal
-                            ref={xtermRef}
-                            output={logsOutput}
-                            onInput={handleTerminalInput}
-                            fontSize={settings.terminalFontSize}
-                          />
-                        </Suspense>
+                      <Suspense fallback={<div className="p-4 text-gray-400">Loading terminal...</div>}>
+                        <div className="h-full flex flex-col gap-2">
+                          <div className="flex justify-end gap-2 px-2 pt-1">
+                            <button
+                              onClick={() => {
+                                const text = logsOutput
+                                  .map((line) => line.replace(/\x1b\[[0-9;]*m/g, ''))
+                                  .join('\n');
+                                navigator.clipboard
+                                  .writeText(text)
+                                  .catch((err) => console.error('Copy failed', err));
+                              }}
+                              className="p-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 inline-flex items-center gap-1 text-xs"
+                              title="Copy build log"
+                            >
+                              <Copy className="w-4 h-4" />
+                              <span className="hidden sm:inline">Copy</span>
+                            </button>
+                            <button
+                              onClick={resetLogs}
+                              className="p-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 inline-flex items-center gap-1 text-xs"
+                              title="Clear build log"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span className="hidden sm:inline">Clear</span>
+                            </button>
+                          </div>
+                          <div className="flex-1 min-h-0">
+                            <XTermTerminal
+                              ref={xtermRef}
+                              output={logsOutput}
+                              onInput={handleTerminalInput}
+                              fontSize={settings.terminalFontSize}
+                            />
+                          </div>
+                        </div>
+                      </Suspense>
                       )}
                     </CRTEffect>
                   </div>

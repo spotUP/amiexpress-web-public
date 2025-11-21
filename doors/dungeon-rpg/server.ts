@@ -35,7 +35,7 @@ const door = new ServerDoor({
 /**
  * RPC: Save game state
  */
-door.onRPC('saveGame', async (params) => {
+door.onRPC('saveGame', async (params: any) => {
   const { userId, slot, state } = params;
 
   if (!userId || typeof slot !== 'number' || !state) {
@@ -60,7 +60,7 @@ door.onRPC('saveGame', async (params) => {
 /**
  * RPC: Load game state
  */
-door.onRPC('loadGame', async (params) => {
+door.onRPC('loadGame', async (params: any) => {
   const { userId, slot } = params;
 
   if (!userId || typeof slot !== 'number') {
@@ -82,7 +82,7 @@ door.onRPC('loadGame', async (params) => {
 /**
  * RPC: List available save slots
  */
-door.onRPC('listSaves', async (params) => {
+door.onRPC('listSaves', async (params: any) => {
   const { userId } = params;
 
   if (!userId) {
@@ -118,7 +118,7 @@ door.onRPC('listSaves', async (params) => {
 });
 
 // For telnet/SSH connections, provide text-based fallback
-door.onConnect(async (user) => {
+door.onConnect(async (user: any) => {
   const gfx = new GraphicsEngine({ width: 80, height: 24 });
 
   // Text-based info screen
@@ -141,7 +141,7 @@ door.onConnect(async (user) => {
   door.send(rendered, user.id);
 
   // Handle input
-  door.onInput((inputUser, keyEvent) => {
+  door.onInput((inputUser: any, keyEvent: any) => {
     if (inputUser.id !== user.id) return;
 
     const key = keyEvent.key.toLowerCase();
