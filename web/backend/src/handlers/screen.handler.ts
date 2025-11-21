@@ -404,11 +404,14 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Store for async file loading - we'll process these after parsing
   screenDebug('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
   // Support both ~SS_ and ~2S (short form)
-  const ssRegex = /~(?:SS_|2S)([^|\r\n]+)(\|\|)?/g;
+  const ssRegex = /~(?:SS_|2S)([^~|\r\n]+)(\|\|)?/g;
   let ssMatch;
   const filesToDisplay: string[] = [];
 
   const normalizeScreenReference = (screenRef: string): string => {
+    if (screenRef.includes(':')) {
+      return screenRef;
+    }
     return screenRef.replace(/\.(txt|TXT|rip|RIP)$/g, '');
   };
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
@@ -598,6 +601,7 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   screenDebug(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
   const userSecLevel = session?.user?.secLevel ?? 0;
   const screenBaseNoExt = screenName.replace(/\.[^/.]+$/, ''); // strip extension for security search
+  const isAssignPath = screenName.includes(':');
 
   // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
   // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
@@ -715,18 +719,19 @@ export function loadScreenFile(screenName: string, conferenceId?: number, nodeId
   let attemptNum = 0;
 
   for (const location of searchLocations) {
-    // First, try security-level variants (numbered) like express.e findSecurityScreen()
-    const securityBasePath = path.join(location.dir, screenBaseNoExt);
-    const securityVariant = findSecurityScreen(securityBasePath, userSecLevel);
-    if (securityVariant) {
-      screenDebug(`[loadScreenFile] ✓ Found security screen for ${screenName} at: ${securityVariant}`);
-      try {
-        return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false };
-      } catch (error) {
-        console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
+    // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
+    if (!isAssignPath) {
+      const securityBasePath = path.join(location.dir, screenBaseNoExt);
+      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel);
+      if (securityVariant) {
+        screenDebug(`[loadScreenFile] ✓ Found security screen for ${screenName} at: ${securityVariant}`);
+        try {
+          return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false };
+        } catch (error) {
+          console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
+        }
       }
     }
-
     for (const filename of filenameVariations) {
       attemptNum++;
       const expectedPath = path.join(location.dir, filename);
