@@ -785,6 +785,26 @@ export function loadScreenFile(
     const filePath = paths[i];
     attemptNum++;
     screenDebug(`[loadScreenFile]   [${attemptNum}] ${filePath}`);
+
+    // For assign paths (bbs:, node:), also honor security-numbered variants (LOGON20.TXT, etc.)
+    if (isAssignPath) {
+      const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
+      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel);
+      if (secPath) {
+        screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
+        try {
+          if (isPetsciiSeqFile(secPath)) {
+            const petsciiBuffer = fs.readFileSync(secPath);
+            const content = convertPetsciiToPetMe64(petsciiBuffer);
+            return { content, isPetscii: true, filePath: secPath };
+          }
+          return { content: fs.readFileSync(secPath, 'utf-8'), isPetscii: false, filePath: secPath };
+        } catch (error) {
+          console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
+        }
+      }
+    }
+
     try {
       if (fs.existsSync(filePath)) {
         screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${filePath}`);
