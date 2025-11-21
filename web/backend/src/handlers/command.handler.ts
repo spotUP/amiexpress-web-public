@@ -894,12 +894,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
         // express.e:28555 - IF (displayScreen(SCREEN_BULL)) THEN doPause()
         const shown = await displayScreen(socket, session, 'BULL');
-        if (shown) doPause(socket, session);
+        if (shown && !session.lastScreenHadPause) doPause(socket, session);
         session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
       } else if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
         // express.e:28557 - IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
         const shown = await displayScreen(socket, session, 'NODE_BULL');
-        if (shown) doPause(socket, session);
+        if (shown && !session.lastScreenHadPause) doPause(socket, session);
         session.subState = LoggedOnSubState.CONF_SCAN;
       } else if (session.subState === LoggedOnSubState.CONF_SCAN) {
         // express.e:28564 - confScan

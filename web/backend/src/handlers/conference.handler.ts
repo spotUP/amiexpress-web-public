@@ -84,7 +84,9 @@ export function setConstants(constants: {
 export async function displayConferenceBulletins(socket: any, session: BBSSession) {
   // Express.e:28565 - IF (displayScreen(SCREEN_CONF_BULL)) THEN doPause()
   if (await displayScreen(socket, session, getConfScreenName())) {
-    doPause(socket, session);
+    if (!session.lastScreenHadPause) {
+      doPause(socket, session);
+    }
   }
 }
 

@@ -220,7 +220,7 @@ export function registerAuthHandlers(socket: Socket) {
 
       // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
       const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
-      if (logonDisplayed) {
+      if (logonDisplayed && !session.lastScreenHadPause) {
         doPause(socket, session);
       }
 

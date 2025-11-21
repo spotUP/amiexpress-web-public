@@ -58,9 +58,10 @@ export async function parseMciCodes(
   bbsName: string = 'AmiExpress-Web',
   sysopName: string = 'Sysop',
   location: string = 'The Internet'
-): Promise<{ parsed: string; commands: string[] }> {
+): Promise<{ parsed: string; commands: string[]; hasPause: boolean }> {
   let parsed = content;
   const commandsToExecute: string[] = [];
+  let hasPause = false;
 
   // Get user data safely
   const user = session.user || {};
@@ -484,6 +485,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // ~SP. - Stop Pause (express.e:5455-5461)
   // Displays pause prompt and waits for keypress
   parsed = parsed.replace(/~SP\./g, () => {
+    hasPause = true;
     // Set session state to wait for keypress
     // Note: In web version, this is just a visual prompt since we can't block
     // The actual pause handling needs to be implemented in the command handler
@@ -574,7 +576,11 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     }
   }
 
-  return { parsed, commands: commandsToExecute };
+  if (session) {
+    session.lastScreenHadPause = hasPause;
+  }
+
+  return { parsed, commands: commandsToExecute, hasPause };
 }
 
 /**
@@ -851,6 +857,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       const result = await parseMciCodes(content, session);
       parsed = result.parsed;
       commands = result.commands;
+      session.lastScreenHadPause = result.hasPause;
 
       // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
       parsed = addAnsiEscapes(parsed);
