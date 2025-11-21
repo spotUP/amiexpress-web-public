@@ -31,5 +31,6 @@
     "typescript": "^5.2.2",
     "tsx": "^4.19.2"
   },
-  "runtime": "server"
+  "runtime": "server",
+  "doorType": "TS"
 }

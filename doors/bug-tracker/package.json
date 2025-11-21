@@ -24,5 +24,6 @@
     "typescript": "^5.2.2",
     "ts-node": "^10.9.1"
   },
-  "runtime": "server"
+  "runtime": "server",
+  "doorType": "TS"
 }

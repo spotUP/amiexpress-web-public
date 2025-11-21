@@ -27,5 +27,6 @@
   ],
   "dependencies": {
     "@amiexpress/bbs-door-sdk": "file:../../sdk/dist"
-  }
+  },
+  "doorType": "TS"
 }
