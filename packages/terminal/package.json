@@ -8,8 +8,7 @@
     "dist"
   ],
   "scripts": {
-    "prebuild": "npm install",
-    "prepare": "npm run build",
+    "postinstall": "npm run build",
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist"
