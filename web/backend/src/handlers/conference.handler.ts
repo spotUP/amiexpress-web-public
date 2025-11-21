@@ -38,6 +38,10 @@ let SCREEN_NODE_BULL: string;
 let SCREEN_CONF_BULL: string;
 let LoggedOnSubState: any;
 
+function getConfScreenName(): string {
+  return typeof SCREEN_CONF_BULL !== 'undefined' ? SCREEN_CONF_BULL : 'CONF_BULL';
+}
+
 // Injection functions
 export function setConferences(confs: Conference[]) {
   conferences = confs;
@@ -79,7 +83,7 @@ export function setConstants(constants: {
  */
 export async function displayConferenceBulletins(socket: any, session: BBSSession) {
   // Express.e:28565 - IF (displayScreen(SCREEN_CONF_BULL)) THEN doPause()
-  if (await displayScreen(socket, session, SCREEN_CONF_BULL)) {
+  if (await displayScreen(socket, session, getConfScreenName())) {
     doPause(socket, session);
   }
 }
