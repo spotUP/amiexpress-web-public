@@ -163,6 +163,7 @@ export class BatchDownloadHandler {
     if (session.flagManager) {
       session.flagManager.clearAll();
       socket.emit('ansi-output', '\r\n\x1b[33mAll flags cleared.\x1b[0m\r\n');
+      await session.flagManager.save();
     }
 
     session.subState = LoggedOnSubState.DISPLAY_MENU;

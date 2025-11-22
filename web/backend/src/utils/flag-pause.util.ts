@@ -90,8 +90,10 @@ export async function flagPause(
 
           // Flag the file
           const flagManager = session.flagManager || new FileFlagManager('', 0, session.nodeId || 0);
+          session.flagManager = flagManager;
           if (filename) {
             flagManager.addFlag(filename, session.currentConf);
+            await flagManager.save();
             socket.emit('ansi-output', `\r\n\x1b[32mFlagged: ${filename}\x1b[0m\r\n`);
           } else {
             // Prompt for filename
@@ -100,6 +102,7 @@ export async function flagPause(
               socket.off('line-input', filenameHandler);
               if (filenameInput.trim()) {
                 flagManager.addFlag(filenameInput.trim(), session.currentConf);
+                flagManager.save();
                 socket.emit('ansi-output', `\x1b[32mFlagged: ${filenameInput.trim()}\x1b[0m\r\n`);
               }
               // Clear prompt lines

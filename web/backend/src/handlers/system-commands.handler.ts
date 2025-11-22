@@ -16,6 +16,8 @@ import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import type { BBSSession } from '../index';
+import { FileFlagManager } from '../utils/file-flag.util';
+import { config } from '../config';
 
 // Injected dependencies
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
@@ -44,14 +46,25 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
     auto = ParamsUtil.hasFlag(parsedParams, 'Y');
   }
 
+  // Ensure flag manager exists (Partdownload/flagged slot files)
+  if (!session.flagManager) {
+    const dataDir = config.get('dataDir');
+    const slot = session.user?.slotNumber || 0;
+    session.flagManager = new FileFlagManager(dataDir, slot, session.nodeId || 0);
+  }
+
   if (!auto) {
     // express.e:25057-25064 - Check for partial uploads and flagged files
     // partUploadOK() - For web version, we don't have partial uploads
     // checkFlagged() - Check if user has flagged files for download
 
-    if (session.flaggedFiles && session.flaggedFiles.length > 0) {
+    const flaggedCount = session.flagManager?.getCount
+      ? session.flagManager.getCount()
+      : (session.flaggedFiles ? session.flaggedFiles.length : 0);
+
+    if (flaggedCount > 0) {
       socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.warningLine(`You have ${session.flaggedFiles.length} flagged file(s) for download.`));
+      socket.emit('ansi-output', AnsiUtil.warningLine(`You have ${flaggedCount} flagged file(s) for download.`));
       socket.emit('ansi-output', '\r\n');
       socket.emit('ansi-output', AnsiUtil.complexPrompt([
         { text: 'Download them now? ', color: 'white' },
@@ -96,6 +109,13 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.successLine('Thank you for calling ' + (session.user?.bbsName || 'AmiExpress BBS')));
     socket.emit('ansi-output', '\r\n');
+  }
+
+  // Persist flagged list (express.e saveFlagged) before dropping carrier
+  try {
+    session.flagManager?.save();
+  } catch (err) {
+    console.error('[LOGOFF] Failed to save flagged files:', err);
   }
 
   socket.emit('ansi-output', AnsiUtil.colorize('Disconnecting...', 'yellow') + '\r\n');

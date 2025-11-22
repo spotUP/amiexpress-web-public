@@ -663,36 +663,23 @@ export async function getNextTopicNumber(conferenceId: number): Promise<number> 
 
 /**
  * Load flagged files for user (express.e:2757)
- * In express.e, reads from BBS:Partdownload/flagged{slot} and dump{slot}
- * For web version, we store in database but maintain exact behavior
+ * Reads from Partdownload/flagged{slot} using FileFlagManager (express.e:2765+)
  */
 export async function loadFlagged(socket: any, session: BBSSession) {
   try {
-    // Initialize flaggedFiles list if not exists
-    if (!session.tempData) {
-      session.tempData = {};
+    // Ensure flag manager exists for this session
+    if (!session.flagManager) {
+      const { FileFlagManager } = require('../utils/file-flag.util');
+      const { config } = require('../config');
+      const dataDir = config.get('dataDir');
+      const slot = session.user?.slotNumber || 0;
+      session.flagManager = new FileFlagManager(dataDir, slot, session.nodeId || 0);
     }
-    if (!session.tempData.flaggedFiles) {
-      session.tempData.flaggedFiles = [];
-    }
 
-    // Load user's flagged files from database
-    // Format: array of {confNum: number, fileName: string}
-    const result = await db.query(
-      'SELECT conf_num, file_name FROM flagged_files WHERE user_id = ?',
-      [session.user!.id]
-    );
+    await session.flagManager.load();
 
-    // Add to session (like express.e's addFlagItem)
-    result.rows.forEach(row => {
-      session.tempData.flaggedFiles.push({
-        confNum: row.conf_num,
-        fileName: row.file_name
-      });
-    });
-
-    // Like express.e:2795 - display notification if files exist
-    if (session.tempData.flaggedFiles.length > 0) {
+    const flagCount = session.flagManager.getCount();
+    if (flagCount > 0) {
       socket.emit('ansi-output', '\r\n** Flagged File(s) Exist **\r\n');
       socket.emit('ansi-output', '\x07'); // sendBELL()
     }

@@ -109,6 +109,7 @@ export class AlterFlagsHandler {
   ): Promise<number> {
     const manager = session.flagManager;
     if (!manager) return 0;
+    let changed = false;
 
     // Show current flags if no input provided - express.e:12596
     if (!inputStr) {
@@ -162,9 +163,15 @@ export class AlterFlagsHandler {
       if (upperInput[0] === '*') {
         // Clear all - express.e:12620
         manager.clearAll();
+        changed = true;
       } else {
         // Clear specific file - express.e:12620
-        manager.removeFlag(clearInput, session.currentConf || -1);
+        const removed = manager.removeFlag(clearInput, session.currentConf || -1);
+        changed = changed || removed;
+      }
+
+      if (changed) {
+        await manager.save();
       }
 
       return 1; // Continue prompting
@@ -197,6 +204,8 @@ export class AlterFlagsHandler {
 
     if (result > 0) {
       // Files added - express.e:12641
+      changed = true;
+      await manager.save();
       return 2; // File(s) added, return to prompt
     } else {
       // No files added (already flagged) - express.e:12643
@@ -235,6 +244,7 @@ export class AlterFlagsHandler {
         } else if (input.trim().length > 0) {
           manager.removeFlag(input.trim(), session.currentConf || -1);
         }
+        await manager.save();
       }
 
       // Continue prompting
@@ -246,6 +256,7 @@ export class AlterFlagsHandler {
       const manager = session.flagManager;
       if (manager && input.trim().length > 0) {
         manager.addFlag(input.trim(), session.currentConf || -1);
+        await manager.save();
       }
 
       // Continue prompting
@@ -315,6 +326,9 @@ export class AlterFlagsHandler {
         socket.emit('ansi-output', '\x1b[31mSorry filename not found!\x1b[0m\r\n');
       } else {
         socket.emit('ansi-output', `\x1b[32mFlagged ${flaggedCount} file(s) from ${filename} onwards.\x1b[0m\r\n`);
+        if (flaggedCount > 0) {
+          await manager.save();
+        }
       }
 
     } catch (error) {
