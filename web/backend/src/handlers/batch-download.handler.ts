@@ -132,6 +132,13 @@ export class BatchDownloadHandler {
     if (answer !== 'Y' && answer !== 'YES') {
       socket.emit('ansi-output', '\r\n\x1b[33mBatch download cancelled.\x1b[0m\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
+      if (session.tempData?.pendingGoodbye) {
+        const { handleGoodbyeCommand } = require('./system-commands.handler');
+        const pendingParams = session.tempData.pendingGoodbyeParams || 'Y';
+        delete session.tempData.pendingGoodbye;
+        delete session.tempData.pendingGoodbyeParams;
+        handleGoodbyeCommand(socket, session, pendingParams);
+      }
       return;
     }
 
@@ -167,6 +174,15 @@ export class BatchDownloadHandler {
     }
 
     session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+    // If this batch was triggered from goodbye, continue the logoff flow automatically
+    if (session.tempData?.pendingGoodbye) {
+      const { handleGoodbyeCommand } = require('./system-commands.handler');
+      const pendingParams = session.tempData.pendingGoodbyeParams || 'Y';
+      delete session.tempData.pendingGoodbye;
+      delete session.tempData.pendingGoodbyeParams;
+      handleGoodbyeCommand(socket, session, pendingParams);
+    }
   }
 
   /**

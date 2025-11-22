@@ -63,6 +63,10 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
       : (session.flaggedFiles ? session.flaggedFiles.length : 0);
 
     if (flaggedCount > 0) {
+      session.tempData = session.tempData || {};
+      session.tempData.pendingGoodbye = true;
+       // Reuse batch download confirmation state machine
+      session.tempData.waitingForBatchConfirm = true;
       socket.emit('ansi-output', '\r\n');
       socket.emit('ansi-output', AnsiUtil.warningLine(`You have ${flaggedCount} flagged file(s) for download.`));
       socket.emit('ansi-output', '\r\n');
