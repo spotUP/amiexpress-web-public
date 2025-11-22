@@ -269,14 +269,24 @@ export async function runDoor(doorSession: any): Promise<void> {
     const stats = collectStats(entries, numDays);
     const linesWithStats = applyPlaceholders(block.lines, stats, numDays);
 
-    for (const line of linesWithStats) {
-      output.push(line);
+    const hasStats =
+      stats.files > 0 ||
+      stats.fakes > 0 ||
+      stats.megs > 0 ||
+      stats.prevFiles > 0 ||
+      stats.prevFakes > 0 ||
+      stats.prevMegs > 0;
+
+    if (hasStats) {
+      for (const line of linesWithStats) {
+        output.push(line);
+      }
+      output.push('');
     }
-    output.push('');
 
     const renderedFiles = renderFiles(entries, numDays, parsed.displayMode, parsed.prefixNormal, parsed.prefixDeleted);
-    output.push(...renderedFiles);
     if (renderedFiles.length > 0) {
+      output.push(...renderedFiles);
       output.push(''); // spacer
     }
   }
