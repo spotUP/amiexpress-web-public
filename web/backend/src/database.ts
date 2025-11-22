@@ -333,9 +333,9 @@ export class Database {
       const confInfo = this.db.prepare('PRAGMA table_info(conferences)').all() as any[];
       const confColumns = confInfo.map(col => col.name);
 
-      const addConfColumn = (name: string, ddl: string) => {
+      const addConfColumn = (name: string, definition: string) => {
         if (!confColumns.includes(name)) {
-          this.db.exec(`ALTER TABLE conferences ADD COLUMN ${ddl}`);
+          this.db.exec(`ALTER TABLE conferences ADD COLUMN ${name} ${definition}`);
           console.log(`✓ Added ${name} column to conferences`);
         }
       };
