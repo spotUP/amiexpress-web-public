@@ -282,7 +282,6 @@ export async function runDoor(doorSession: any): Promise<void> {
   }
 
   output.push(footer());
-  output.push('~SP.');
 
   socket.emit('ansi-output', output.join('\r\n'));
 }
