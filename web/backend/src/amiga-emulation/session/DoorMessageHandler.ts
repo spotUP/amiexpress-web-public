@@ -448,11 +448,8 @@ export class DoorMessageHandler {
       case GETKEY:
         // Get user input - this requires pausing execution
         console.log(`[DoorMessageHandler]   GETKEY: Request for user input`);
-        console.log(
-          `[DoorMessageHandler]   TODO: Implement input handling (pause execution, wait for key)`
-        );
-        // For now, just reply with Enter key (0x0D)
-        this.emulator.writeMemory32(msgAddr + 24, 0x0d);
+        // Pause the CPU loop and wait for a key from the client
+        this.waitForKeypress(msgAddr, replyPortAddr);
         break;
 
       default:
@@ -472,6 +469,32 @@ export class DoorMessageHandler {
         16
       )}`
     );
+  }
+
+  /**
+   * Suspend execution and wait for a keypress from the socket, then resume.
+   */
+  private waitForKeypress(msgAddr: number, replyPortAddr: number): void {
+    const handler = (data: { keyCode?: number; char?: string }) => {
+      // Prefer explicit keyCode; fallback to first char code or Enter
+      const code =
+        typeof data.keyCode === "number"
+          ? data.keyCode
+          : data.char?.charCodeAt(0) ?? 0x0d;
+
+      this.emulator.writeMemory32(msgAddr + 24, code);
+      this.execLibrary.putMsg(replyPortAddr, msgAddr, {
+        suppressDoorCallback: true,
+      });
+      this.socket.off("door:keypress", handler);
+      this.socket.off("keypress", handler);
+      console.log(`[DoorMessageHandler]   Resumed door with key 0x${code.toString(16)}`);
+    };
+
+    // Listen for keypress events from the client; support both legacy and door-specific
+    this.socket.on("door:keypress", handler);
+    this.socket.on("keypress", handler);
+    this.socket.emit("door:await-key");
   }
 
   /**

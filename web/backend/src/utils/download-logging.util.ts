@@ -8,6 +8,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { User } from '../types';
+import { getACSConfig, LevelFlags } from './acs.util';
+import { config } from '../config';
 
 /**
  * Log download activity
@@ -22,7 +24,8 @@ export async function logDownload(
   user: User,
   filename: string,
   fileSize: number,
-  isFree: boolean = false
+  isFree: boolean = false,
+  nodeId: number = 0
 ): Promise<void> {
 
   const username = user.username || 'Unknown';
@@ -38,11 +41,11 @@ export async function logDownload(
 
   // Write to UDLog file if logging is enabled
   // express.e:9489 - udLog(tempStr)
-  await writeToUDLog(message);
+  await writeToUDLog(message, nodeId);
 
   // Write to CallersLog
   // express.e:9488 - callersLog(tempStr)
-  await writeToCallersLog(username, message);
+  await writeToCallersLog(username, message, nodeId);
 }
 
 /**
@@ -58,7 +61,8 @@ export async function logUpload(
   user: User,
   filename: string,
   fileSize: number,
-  isResume: boolean = false
+  isResume: boolean = false,
+  nodeId: number = 0
 ): Promise<void> {
 
   const username = user.username || 'Unknown';
@@ -71,25 +75,27 @@ export async function logUpload(
 
   console.log(`[UPLOAD] ${message}`);
 
-  await writeToUDLog(message);
-  await writeToCallersLog(username, message);
+  await writeToUDLog(message, nodeId);
+  await writeToCallersLog(username, message, nodeId);
 }
 
 /**
  * Write to UDLog (Upload/Download log)
  * Port from express.e:9520-9540 udLog()
  */
-async function writeToUDLog(message: string): Promise<void> {
+async function writeToUDLog(message: string, nodeId: number): Promise<void> {
+  if (!getACSConfig().acLvl[LevelFlags.DO_UD_LOG]) return;
   try {
-    // In web version, we use a logs directory instead of Amiga-style Node paths
-    const logDir = path.join(process.cwd(), 'logs');
+    const dataDir = config.get('dataDir');
+    const nodeDir = path.join(dataDir, `Node${nodeId || 0}`);
+    const logDir = fs.existsSync(nodeDir) ? nodeDir : path.join(process.cwd(), 'logs');
 
     // Create logs directory if it doesn't exist
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true });
     }
 
-    const logFile = path.join(logDir, 'udlog.txt');
+    const logFile = path.join(logDir, 'UDLog');
 
     // Append to log file
     fs.appendFileSync(logFile, message + '\n');
@@ -102,15 +108,18 @@ async function writeToUDLog(message: string): Promise<void> {
  * Write to CallersLog
  * Port from express.e:9493-9518 callersLog()
  */
-async function writeToCallersLog(username: string, message: string): Promise<void> {
+async function writeToCallersLog(username: string, message: string, nodeId: number): Promise<void> {
+  if (!getACSConfig().acLvl[LevelFlags.DO_CALLERSLOG]) return;
   try {
-    const logDir = path.join(process.cwd(), 'logs');
+    const dataDir = config.get('dataDir');
+    const nodeDir = path.join(dataDir, `Node${nodeId || 0}`);
+    const logDir = fs.existsSync(nodeDir) ? nodeDir : path.join(process.cwd(), 'logs');
 
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true });
     }
 
-    const logFile = path.join(logDir, 'callerslog.txt');
+    const logFile = path.join(logDir, 'CallersLog');
 
     // Append to log file
     fs.appendFileSync(logFile, `${username}: ${message}\n`);
@@ -125,5 +134,5 @@ async function writeToCallersLog(username: string, message: string): Promise<voi
  */
 export async function logDivider(): Promise<void> {
   const divider = '**************************************************************';
-  await writeToUDLog(divider);
+  await writeToUDLog(divider, 0);
 }

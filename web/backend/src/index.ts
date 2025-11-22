@@ -282,6 +282,7 @@ export interface BBSSession {
   loginTime: number; // Login timestamp for session time tracking
   nodeStartTime: number; // Node start time for uptime display
   nodeId: number; // Virtual node number (1, 2, 3...) for multi-node emulation - express.e:163
+  conferences?: import('./database/types').Conference[]; // Cached conference accounting stats (express.e confBases)
   queuedScreenCommands?: string[]; // Deferred screen commands (run after pause key)
   lastScreenHadPause?: boolean; // Whether the last displayed screen contained ~SP.
   lastScreenFilePath?: string; // Resolved path of last displayed screen (used for .keys lookup)

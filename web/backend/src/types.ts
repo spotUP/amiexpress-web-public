@@ -57,6 +57,13 @@ export interface User {
   bytesAvailableForDownload?: number;  // Calculated available download bytes
   lastDownloadTime?: Date;  // Last download timestamp
   newSinceDate?: Date;  // Date for "new files since" marker
+  // Credit accounts (prepaid download bypass)
+  creditDays?: number;
+  creditAmount?: number;
+  creditStartDate?: number;
+  creditTotalToDate?: number;
+  creditTotalDate?: number;
+  creditTracking?: number;
   baud?: number;  // Connection baud rate (for web = 57600)
   alias?: string;  // User alias/handle
   securityFlags?: string;

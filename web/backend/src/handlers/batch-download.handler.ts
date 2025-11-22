@@ -11,6 +11,8 @@ import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
+import { checkDownloadRatios, updateDownloadStats as applyDownloadStats, creditAccountTrackDownloads } from '../utils/download-ratios.util';
+import { ConferenceRepository } from '../database/conference-repository';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -57,6 +59,7 @@ export class BatchDownloadHandler {
     let successCount = 0;
     let failCount = 0;
     const downloadList: any[] = [];
+    const ratioRequests: { size: number; isFree?: boolean; conference?: number }[] = [];
 
     // Validate and prepare each file - express.e:15671+
     for (const flagItem of flaggedFiles) {
@@ -67,26 +70,38 @@ export class BatchDownloadHandler {
       );
 
       if (!fileInfo) {
-        socket.emit('ansi-output', `\x1b[31m✗ File not found: ${flagItem.fileName}\x1b[0m\r\n`);
+        socket.emit('ansi-output', `\x1b[31m[X] File not found: ${flagItem.fileName}\x1b[0m\r\n`);
         failCount++;
         continue;
       }
 
-      // Check ratio for this file
-      const canDownload = await this.checkDownloadRatios(session, fileInfo.size);
-      if (!canDownload) {
-        socket.emit('ansi-output', `\x1b[31m✗ Insufficient quota for: ${flagItem.fileName}\x1b[0m\r\n`);
-        failCount++;
-        continue;
-      }
-
+      const isFree = this.isFreeDownload(fileInfo);
+      fileInfo.isFree = isFree;
       downloadList.push(fileInfo);
-      socket.emit('ansi-output', `\x1b[32m✓ Queued: ${flagItem.fileName} (${fileInfo.size} bytes)\x1b[0m\r\n`);
+      ratioRequests.push({
+        size: fileInfo.size,
+        isFree,
+        conference: flagItem.confNum
+      });
+      socket.emit('ansi-output', `\x1b[32m[OK] Queued: ${flagItem.fileName} (${fileInfo.size} bytes)\x1b[0m\r\n`);
       successCount++;
     }
 
     if (downloadList.length === 0) {
       socket.emit('ansi-output', '\r\n\x1b[31mNo files available for download.\x1b[0m\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // Global ratio/byte gating (express.e:19823+)
+    const ratioCheck = await checkDownloadRatios(
+      session.user,
+      ratioRequests,
+      await this.loadConferences(session),
+      checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING)
+    );
+    if (!ratioCheck.canDownload) {
+      socket.emit('ansi-output', `\r\n\x1b[31m${ratioCheck.errorMessage}\x1b[0m\r\n`);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -157,13 +172,15 @@ export class BatchDownloadHandler {
         path: fileInfo.fullPath
       });
 
-      socket.emit('ansi-output', `\x1b[32m→ Downloading: ${fileInfo.name}\x1b[0m\r\n`);
+      socket.emit('ansi-output', `\x1b[32m-> Downloading: ${fileInfo.name}\x1b[0m\r\n`);
 
       // Update download statistics for each file
-      await this.updateDownloadStats(session, fileInfo);
+      const isFree = this.isFreeDownload(fileInfo);
+      await this.updateDownloadStats(session, fileInfo, isFree);
+      await this.updateConferenceDownloadStats(session, fileInfo, isFree);
     }
 
-    socket.emit('ansi-output', `\r\n\x1b[32m✓ Batch download complete! ${downloadList.length} file(s) queued.\x1b[0m\r\n`);
+    socket.emit('ansi-output', `\r\n\x1b[32m[OK] Batch download complete! ${downloadList.length} file(s) queued.\x1b[0m\r\n`);
     socket.emit('ansi-output', '\x1b[36mCheck your browser downloads.\x1b[0m\r\n');
 
     // Clear flags after successful batch download - express.e:20249
@@ -183,6 +200,18 @@ export class BatchDownloadHandler {
       delete session.tempData.pendingGoodbyeParams;
       handleGoodbyeCommand(socket, session, pendingParams);
     }
+  }
+
+  /**
+   * Determine if a file is flagged as free download
+   */
+  private static isFreeDownload(fileInfo: any): boolean {
+    if (!fileInfo) return false;
+    if (fileInfo.isFree === true) return true;
+    if (typeof fileInfo.comment === 'string' && fileInfo.comment.toUpperCase().startsWith('F')) {
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -220,72 +249,73 @@ export class BatchDownloadHandler {
   }
 
   /**
-   * Check download ratios and limits
-   */
-  private static async checkDownloadRatios(
-    session: BBSSession,
-    fileSize: number
-  ): Promise<boolean> {
-    const user = session.user;
-    if (!user) return false;
-
-    // Check if user has OVERRIDE_TIMELIMIT permission
-    if (checkSecurity(user, ACSPermission.OVERRIDE_TIMELIMIT)) {
-      return true; // Sysop can always download
-    }
-
-    // Check daily byte limit
-    const dailyLimit = user.todaysBytesLimit || 0;
-    const dailyDownloaded = user.dailyBytesDld || 0;
-
-    if (dailyLimit > 0) {
-      const remaining = dailyLimit - dailyDownloaded;
-      if (fileSize > remaining) {
-        return false;
-      }
-    }
-
-    // Check ratio requirements
-    const ratio = user.ratio || 0;
-    const secLibrary = user.secLibrary || 0;
-
-    if (ratio > 0 && secLibrary > 0) {
-      // Calculate available download bytes based on uploads
-      const uploadBytes = user.bytesUpload || 0;
-      const downloadBytes = user.bytesDownload || 0;
-      const allowedDownload = (uploadBytes * ratio) - downloadBytes;
-
-      if (fileSize > allowedDownload) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
    * Update download statistics
    */
   private static async updateDownloadStats(
     session: BBSSession,
-    fileInfo: any
+    fileInfo: any,
+    isFree: boolean = false
   ): Promise<void> {
     const user = session.user;
     if (!user) return;
 
-    // Update user statistics
-    user.downloads = (user.downloads || 0) + 1;
-    user.bytesDownload = (user.bytesDownload || 0) + fileInfo.size;
-    user.dailyBytesDld = (user.dailyBytesDld || 0) + fileInfo.size;
+    await applyDownloadStats(user, fileInfo.size, isFree);
 
     // Save to database
     const db = require('../database').db;
     await db.updateUser(user.id, {
       downloads: user.downloads,
       bytesDownload: user.bytesDownload,
-      dailyBytesDld: user.dailyBytesDld
+      dailyBytesDld: user.dailyBytesDld,
+      bytesAvailableForDownload: user.bytesAvailableForDownload,
+      lastDownloadTime: user.lastDownloadTime
     });
 
     console.log(`[BATCH DOWNLOAD] User ${user.username} downloaded ${fileInfo.name} (${fileInfo.size} bytes)`);
+  }
+
+  private static async updateConferenceDownloadStats(
+    session: BBSSession,
+    fileInfo: any,
+    isFree: boolean = false
+  ): Promise<void> {
+    const user = session.user;
+    if (!user) return;
+    if (!checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING)) return;
+    if (isFree) return;
+    if (!creditAccountTrackDownloads(user)) return;
+
+    try {
+      const conferences = await this.loadConferences(session);
+      const target = conferences?.find(c => c.id === fileInfo.confNum);
+      if (!target) return;
+
+      target.downloads = (target.downloads || 0) + 1;
+      target.bytesDownload = (target.bytesDownload || 0) + (fileInfo.size || 0);
+
+      const rawDb = (require('../database').db as any).db ?? require('../database').db;
+      const repo = new ConferenceRepository(rawDb);
+      await repo.updateConference(target.id, {
+        downloads: target.downloads,
+        bytesDownload: target.bytesDownload
+      });
+    } catch (err) {
+      console.error('[BATCH DOWNLOAD] Failed to persist conference download stats', err);
+    }
+  }
+
+  private static async loadConferences(session: BBSSession) {
+    if (session.conferences && Array.isArray(session.conferences)) {
+      return session.conferences;
+    }
+    try {
+      const repo = new ConferenceRepository(require('../database').db);
+      const confs = await repo.getConferences();
+      session.conferences = confs;
+      return confs;
+    } catch (err) {
+      console.error('[BATCH DOWNLOAD] Failed to load conferences for accounting', err);
+      return undefined;
+    }
   }
 }

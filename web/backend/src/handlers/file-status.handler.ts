@@ -9,8 +9,10 @@ import { Socket } from 'socket.io';
 import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity } from '../utils/acs.util';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
+import { ConferenceRepository } from '../database/conference-repository';
+import { checkConfAccess } from './message-scan.handler';
 
 /**
  * FS Command - File Status
@@ -55,7 +57,9 @@ export class FileStatusHandler {
     if (!user) return;
 
     // Get system configuration
-    const totalConferences = 3; // TODO: Get from config
+    const repo = new ConferenceRepository(require('../database').db);
+    const conferences = await repo.getConferences();
+    const totalConferences = conferences.length || 0;
     const currentConf = session.currentConf || 1;
 
     // Check if user has conference accounting access
@@ -66,8 +70,7 @@ export class FileStatusHandler {
     socket.emit('ansi-output', '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n');
 
-    // TODO: Check sopt.toggles[TOGGLES_CREDITBYKB] for KB vs Bytes display
-    const creditByKB = false; // Default to bytes for now
+    const creditByKB = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true;
 
     if (creditByKB) {
       socket.emit('ansi-output', '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio\x1b[0m\r\n');
@@ -87,39 +90,44 @@ export class FileStatusHandler {
         continue;
       }
 
-      // TODO: Check conference access with checkConfAccess()
+      if (!checkConfAccess(user, confNum)) {
+        continue;
+      }
+
+      const confStats = conferences.find(c => c.id === confNum);
+      const useConfStats = hasConfAccounting && !!confStats;
 
       // Format uploads
-      const uploadsCount = user.uploads || 0;
-      const uploadBytes = user.bytesUpload || 0;
+      const uploadsCount = useConfStats ? (confStats?.uploads || 0) : (user.uploads || 0);
+      const uploadBytes = useConfStats ? (confStats?.bytesUpload || 0) : (user.bytesUpload || 0);
       const uploadBytesStr = creditByKB
         ? this.formatKBytes(uploadBytes)
         : this.formatBytes(uploadBytes);
 
       // Format downloads
-      const downloadsCount = user.downloads || 0;
-      const downloadBytes = user.bytesDownload || 0;
+      const downloadsCount = useConfStats ? (confStats?.downloads || 0) : (user.downloads || 0);
+      const downloadBytes = useConfStats ? (confStats?.bytesDownload || 0) : (user.bytesDownload || 0);
       const downloadBytesStr = creditByKB
         ? this.formatKBytes(downloadBytes)
         : this.formatBytes(downloadBytes);
 
       // Calculate available bytes - express.e:24174-24178
-      const todaysBytesLimit = user.todaysBytesLimit || 0;
+      const todaysBytesLimit = (user.dailyBytesLimit ?? user.byteLimit) || 0;
       const dailyBytesDld = user.dailyBytesDld || 0;
       let bytesAvailStr: string;
 
       if (todaysBytesLimit === 0) {
         bytesAvailStr = 'Infinite';
       } else {
-        const bytesAvail = todaysBytesLimit - dailyBytesDld;
+        const bytesAvail = Math.max(0, todaysBytesLimit - dailyBytesDld);
         bytesAvailStr = creditByKB
           ? this.formatKBytes(bytesAvail)
           : this.formatBytes(bytesAvail);
       }
 
       // Get ratio - express.e:24181-24187
-      const ratio = user.ratio || 0;
-      const secLibrary = user.secLibrary || 0;
+      const ratio = useConfStats ? (confStats?.ratio || 0) : (user.ratio || (user as any).secLibrary || 0);
+      const secLibrary = ratio;
 
       // Determine color - highlight current conference - express.e:24165
       const color = (confNum === currentConf) ? '33' : '0'; // 33=yellow, 0=white

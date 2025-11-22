@@ -13,8 +13,21 @@ export class ConferenceRepository {
   async createConference(conf: Omit<Conference, 'id' | 'created' | 'updated'>): Promise<number> {
     if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('INSERT INTO conferences (name, description) VALUES (?, ?)');
-    const result = stmt.run(conf.name, conf.description);
+    const stmt = this.db.prepare(`
+      INSERT INTO conferences (
+        name, description, ratio, ratiotype, uploads, downloads, bytesupload, bytesdownload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      conf.name,
+      conf.description ?? null,
+      conf.ratio ?? 0,
+      conf.ratioType ?? 0,
+      conf.uploads ?? 0,
+      conf.downloads ?? 0,
+      conf.bytesUpload ?? 0,
+      conf.bytesDownload ?? 0
+    );
     const confId = result.lastInsertRowid as number;
 
     // CRITICAL: Write to Conf.DB for Amiga door compatibility
@@ -24,6 +37,12 @@ export class ConferenceRepository {
       const fullConf: Conference = {
         ...conf,
         id: confId,
+        ratio: conf.ratio ?? 0,
+        ratioType: conf.ratioType ?? 0,
+        uploads: conf.uploads ?? 0,
+        downloads: conf.downloads ?? 0,
+        bytesUpload: conf.bytesUpload ?? 0,
+        bytesDownload: conf.bytesDownload ?? 0,
         created: new Date(),
         updated: new Date()
       };
@@ -48,6 +67,12 @@ export class ConferenceRepository {
       id: row.id,
       name: row.name,
       description: row.description,
+      ratio: Number(row.ratio) || 0,
+      ratioType: Number(row.ratiotype) || 0,
+      uploads: Number(row.uploads) || 0,
+      downloads: Number(row.downloads) || 0,
+      bytesUpload: Number(row.bytesupload) || 0,
+      bytesDownload: Number(row.bytesdownload) || 0,
       created: new Date(row.created * 1000),
       updated: new Date(row.updated * 1000)
     }));
@@ -64,6 +89,12 @@ export class ConferenceRepository {
       id: row.id,
       name: row.name,
       description: row.description,
+      ratio: Number(row.ratio) || 0,
+      ratioType: Number(row.ratiotype) || 0,
+      uploads: Number(row.uploads) || 0,
+      downloads: Number(row.downloads) || 0,
+      bytesUpload: Number(row.bytesupload) || 0,
+      bytesDownload: Number(row.bytesdownload) || 0,
       created: new Date(row.created * 1000),
       updated: new Date(row.updated * 1000)
     };
@@ -92,6 +123,12 @@ export class ConferenceRepository {
           id: row.id,
           name: row.name,
           description: row.description,
+          ratio: Number(row.ratio) || 0,
+          ratioType: Number(row.ratiotype) || 0,
+          uploads: Number(row.uploads) || 0,
+          downloads: Number(row.downloads) || 0,
+          bytesUpload: Number(row.bytesupload) || 0,
+          bytesDownload: Number(row.bytesdownload) || 0,
           created: new Date(row.created * 1000),
           updated: new Date(row.updated * 1000)
         };

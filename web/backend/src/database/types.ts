@@ -65,6 +65,13 @@ export interface User {
   bytesAvailableForDownload?: number;  // Calculated available download bytes
   lastDownloadTime?: Date;  // Last download timestamp
   newSinceDate?: Date;  // Date for "new files since" marker
+  // Credit accounts (prepaid download bypass)
+  creditDays?: number;
+  creditAmount?: number;
+  creditStartDate?: number;
+  creditTotalToDate?: number;
+  creditTotalDate?: number;
+  creditTracking?: number;
   baud?: number;  // Connection baud rate (for web = 57600)
   alias?: string;  // User alias/handle
   securityFlags?: string;
@@ -127,6 +134,13 @@ export interface Conference {
   id: number;
   name: string;
   description: string;
+  // Per-conference accounting (express.e confBase)
+  ratio?: number;             // secLibrary for this conference
+  ratioType?: number;         // secBoard for this conference (0=bytes,1=bytes+files,2=files)
+  uploads?: number;           // upload count in this conference
+  downloads?: number;         // download count in this conference
+  bytesUpload?: number;       // uploaded bytes in this conference
+  bytesDownload?: number;     // downloaded bytes in this conference
   created: Date;
   updated: Date;
 }

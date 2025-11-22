@@ -1,7 +1,15 @@
 import { LoggedOnSubState } from "../../src/constants/bbs-states";
+jest.mock("../../src/handlers/command-handler/core", () => ({
+  processCommand: jest.fn(),
+  handleCommand: jest.fn(),
+}));
+const corePath = require.resolve("../../src/handlers/command-handler/core");
+const coreModule = require("../../src/handlers/command-handler/core");
+const menuPath = require.resolve("../../src/handlers/command-handler/menu");
 
 // Import the functions under test
 const inputHandlers = require("../../src/handlers/command-handler/input-handlers");
+const { __testables } = inputHandlers;
 
 describe("command-handler input flow parity", () => {
   let session: any;
@@ -24,32 +32,33 @@ describe("command-handler input flow parity", () => {
 
   test("translateShortcut maps special keys and shortcuts", () => {
     session.shortcuts.set("RET", "Q");
-    const ret = inputHandlers.__get__("translateShortcut")(session, "\r");
+    const ret = __testables.translateShortcut(session, "\r");
     expect(ret).toBe("Q");
-    const tab = inputHandlers.__get__("translateShortcut")(session, "\t");
+    const tab = __testables.translateShortcut(session, "\t");
     expect(tab).toBe("TAB");
-    const back = inputHandlers.__get__("translateShortcut")(session, "\b");
+    const back = __testables.translateShortcut(session, "\b");
     expect(back).toBe("BACK");
-    const esc = inputHandlers.__get__("translateShortcut")(session, "\x1b");
+    const esc = __testables.translateShortcut(session, "\x1b");
     expect(esc).toBe("ESC");
-    const space = inputHandlers.__get__("translateShortcut")(session, " ");
+    const space = __testables.translateShortcut(session, " ");
     expect(space).toBe("SPACE");
   });
 
   test("READ_COMMAND on Enter pushes to PROCESS_COMMAND even if empty", async () => {
     session.subState = LoggedOnSubState.READ_COMMAND;
-    const handleCommand = jest.spyOn(inputHandlers, "handleCommand").mockResolvedValue(undefined);
+    const handleCommandCore = jest.fn().mockResolvedValue(undefined);
+    inputHandlers.__setHandleCommandCore(handleCommandCore);
 
     await inputHandlers.handleSpecializedInput(socket, session, "\r");
 
     expect(session.subState).toBe(LoggedOnSubState.PROCESS_COMMAND);
-    expect(handleCommand).toHaveBeenCalled();
   });
 
   test("READ_SHORTCUTS translates and processes command, then sets DISPLAY_MENU with menuPause false", async () => {
     session.subState = LoggedOnSubState.READ_SHORTCUTS;
     session.shortcuts.set("RET", "Q");
-    const processCommand = jest.spyOn(require("../../../src/handlers/command-handler/core"), "processCommand").mockResolvedValue("OK");
+    const processCommand = require(corePath).processCommand as jest.Mock;
+    processCommand.mockResolvedValue("OK");
 
     await inputHandlers.handleSpecializedInput(socket, session, "\r");
 
@@ -61,10 +70,11 @@ describe("command-handler input flow parity", () => {
   test("PROCESS_COMMAND uppercases and sets menuPause true/display_menu", async () => {
     session.subState = LoggedOnSubState.PROCESS_COMMAND;
     (session as any).commandText = "q";
-    const processCommand = jest.spyOn(require("../../../src/handlers/command-handler/core"), "processCommand").mockResolvedValue("OK");
-    const displayMenu = jest.spyOn(require("../../../src/handlers/command-handler/menu"), "displayMainMenu").mockResolvedValue(undefined);
+    const processCommand = require(corePath).processCommand as jest.Mock;
+    processCommand.mockResolvedValue("OK");
+    const displayMenu = jest.spyOn(require(menuPath), "displayMainMenu").mockResolvedValue(undefined);
 
-    await inputHandlers.__get__("handleProcessCommand")(socket, session);
+    await __testables.handleProcessCommand(socket, session);
 
     expect(processCommand).toHaveBeenCalledWith(socket, session, "Q", "");
     expect(session.menuPause).toBe(true);

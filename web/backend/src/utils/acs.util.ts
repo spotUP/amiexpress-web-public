@@ -90,7 +90,15 @@ export interface ACSConfig {
 
 // Default configuration
 let acsConfig: ACSConfig = {
-  acLvl: new Array(51).fill(0),      // Initialize with 51 elements (0-50)
+  acLvl: (() => {
+    const arr = new Array(51).fill(0);
+    // Defaults mirroring express.e tooltypes: enable callers/UD logs by default
+    arr[LevelFlags.DO_CALLERSLOG] = 1;
+    arr[LevelFlags.DO_UD_LOG] = 1;
+    // Bulletins enabled by default unless explicitly disabled
+    arr[LevelFlags.BULLETINS] = 1;
+    return arr;
+  })(),
   toggles: new Array(20).fill(false), // Initialize with 20 elements (0-19)
   overrideDefaultAccess: false,
   userSpecificAccess: false

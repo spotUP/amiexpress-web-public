@@ -11,6 +11,10 @@ declare global {
 let tempDbDir: string | null = null;
 
 beforeAll(async () => {
+  if (process.env.SKIP_DB_INIT === '1') {
+    return;
+  }
+
   tempDbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amiexpress-tests-'));
   process.env.DATABASE_DIR = tempDbDir;
   process.env.DATABASE_FILE = 'test.db';
@@ -22,6 +26,8 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
+  if (process.env.SKIP_DB_INIT === '1') return;
+
   const testDb = global.testDb;
   if (testDb) {
     await testDb.close();

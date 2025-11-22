@@ -8,13 +8,14 @@
  */
 
 import { Socket } from 'socket.io';
-import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity } from '../utils/acs.util';
-import { checkDownloadRatios, updateDownloadStats } from '../utils/download-ratios.util';
+import { checkDownloadRatios, updateDownloadStats, creditAccountTrackDownloads } from '../utils/download-ratios.util';
 import { logDownload } from '../utils/download-logging.util';
 import { ACSPermission } from '../constants/acs-permissions';
+import { ConferenceRepository } from '../database/conference-repository';
+import { config } from '../config';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -134,16 +135,23 @@ export class DownloadHandler {
       socket.emit('ansi-output', '\r\n\x1b[36mChecking...\x1b[0m\r\n');
     }
 
-    // Calculate total size for ratio check
-    const totalSize = fileList.reduce((sum, file) => sum + file.size, 0);
-
     // Check ratio requirements - express.e:20085-20095, 19823+
-    const ratioCheck = await checkDownloadRatios(session.user, totalSize);
+    const ratioCheck = await checkDownloadRatios(
+      session.user,
+      fileList.map(f => ({
+        size: f.size,
+        isFree: this.isFreeDownload(f),
+        conference: f.confNum
+      })),
+      await this.loadConferences(session),
+      checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING)
+    );
     if (!ratioCheck.canDownload) {
       socket.emit('ansi-output', `\r\n\x1b[31m${ratioCheck.errorMessage}\x1b[0m\r\n`);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return 'FAILURE';
     }
+    const totalSize = fileList.reduce((sum, file) => sum + file.size, 0);
 
     // Display file list
     socket.emit('ansi-output', `\r\n\x1b[32mFiles to download (${fileList.length}):\x1b[0m\r\n`);
@@ -254,12 +262,11 @@ export class DownloadHandler {
       // express.e:12740 - IF((fBlock.comment[0]="F") OR (freeDownloads))
       const isFree = this.isFreeDownload(fileInfo);
 
-      await logDownload(session.user, fileInfo.name, fileInfo.size, isFree);
+      await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
 
-      // Update user download statistics (only if not free)
-      if (!isFree) {
-        await updateDownloadStats(session.user, fileInfo.size);
-      }
+      await updateDownloadStats(session.user, fileInfo.size, isFree);
+      await this.persistDownloadStats(session);
+      await this.updateConferenceDownloadStats(session, fileInfo, isFree);
     }
 
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -296,12 +303,11 @@ export class DownloadHandler {
       // Log download activity
       if (session.user) {
         const isFree = this.isFreeDownload(fileInfo);
-        await logDownload(session.user, fileInfo.name, fileInfo.size, isFree);
+        await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
 
-        // Update stats (only if not free)
-        if (!isFree) {
-          await updateDownloadStats(session.user, fileInfo.size);
-        }
+        await updateDownloadStats(session.user, fileInfo.size, isFree);
+        await this.persistDownloadStats(session);
+        await this.updateConferenceDownloadStats(session, fileInfo, isFree);
       }
     }
 
@@ -423,79 +429,6 @@ export class DownloadHandler {
 
     return true;
   }
-
-  /**
-   * Check download ratios and limits
-   * Port from express.e:19825+ (checkRatiosAndTime)
-   */
-  private static async checkDownloadRatios(
-    session: BBSSession,
-    fileSize: number
-  ): Promise<boolean> {
-    const user = session.user;
-    if (!user) return false;
-
-    // Check if user has OVERRIDE_TIMELIMIT permission
-    if (checkSecurity(user, ACSPermission.OVERRIDE_TIMELIMIT)) {
-      return true; // Sysop can always download
-    }
-
-    // Check daily byte limit - express.e:19856
-    const dailyLimit = user.todaysBytesLimit || 0;
-    const dailyDownloaded = user.dailyBytesDld || 0;
-
-    if (dailyLimit > 0) {
-      const remaining = dailyLimit - dailyDownloaded;
-      if (fileSize > remaining) {
-        return false;
-      }
-    }
-
-    // Check ratio requirements - express.e:19868-19885
-    const ratio = user.ratio || 0;
-    const secLibrary = user.secLibrary || 0;
-
-    if (ratio > 0 && secLibrary > 0) {
-      // Calculate available download bytes based on uploads
-      const uploadBytes = user.bytesUpload || 0;
-      const downloadBytes = user.bytesDownload || 0;
-      const allowedDownload = (uploadBytes * ratio) - downloadBytes;
-
-      if (fileSize > allowedDownload) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * Update download statistics
-   * Port from express.e:9475+ (logUDFile)
-   */
-  private static async updateDownloadStats(
-    session: BBSSession,
-    fileInfo: any
-  ): Promise<void> {
-    const user = session.user;
-    if (!user) return;
-
-    // Update user statistics
-    user.downloads = (user.downloads || 0) + 1;
-    user.bytesDownload = (user.bytesDownload || 0) + fileInfo.size;
-    user.dailyBytesDld = (user.dailyBytesDld || 0) + fileInfo.size;
-
-    // Save to database
-    const db = require('../database').db;
-    await db.updateUser(user.id, {
-      downloads: user.downloads,
-      bytesDownload: user.bytesDownload,
-      dailyBytesDld: user.dailyBytesDld
-    });
-
-    console.log(`[DOWNLOAD STATS] User ${user.username} downloaded ${fileInfo.name} (${fileInfo.size} bytes)`);
-  }
-
   /**
    * Check if file is marked as free download
    * Port from express.e:12740 - IF((fBlock.comment[0]="F") OR (freeDownloads))
@@ -509,5 +442,77 @@ export class DownloadHandler {
     // TODO: Check if conference has FREEDOWNLOADS tooltype enabled
     // For now, only check comment marker
     return false;
+  }
+
+  /**
+   * Persist updated download counters to the database
+   */
+  private static async persistDownloadStats(session: BBSSession): Promise<void> {
+    const user = session.user;
+    if (!user) return;
+
+    try {
+      const db = require('../database').db;
+      if (db?.updateUser) {
+        await db.updateUser(user.id, {
+          downloads: user.downloads,
+          bytesDownload: user.bytesDownload,
+          dailyBytesDld: user.dailyBytesDld,
+          bytesAvailableForDownload: user.bytesAvailableForDownload,
+          lastDownloadTime: user.lastDownloadTime
+        });
+      }
+    } catch (err) {
+      console.error('[DOWNLOAD] Failed to persist download stats', err);
+    }
+  }
+
+  /**
+   * Persist per-conference download statistics (ACS_CONFERENCE_ACCOUNTING path)
+   */
+  private static async updateConferenceDownloadStats(
+    session: BBSSession,
+    fileInfo: any,
+    isFree: boolean = false
+  ): Promise<void> {
+    const user = session.user;
+    if (!user) return;
+    if (!checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING)) return;
+    if (isFree) return;
+    if (!creditAccountTrackDownloads(user)) return;
+
+    try {
+      // Load conferences from DB (or session cache)
+      const conferences = await this.loadConferences(session);
+      const target = conferences?.find(c => c.id === fileInfo.confNum);
+      if (!target) return;
+
+      target.downloads = (target.downloads || 0) + 1;
+      target.bytesDownload = (target.bytesDownload || 0) + (fileInfo.size || 0);
+
+      const rawDb = (require('../database').db as any).db ?? require('../database').db;
+      const repo = new ConferenceRepository(rawDb);
+      await repo.updateConference(target.id, {
+        downloads: target.downloads,
+        bytesDownload: target.bytesDownload
+      });
+    } catch (err) {
+      console.error('[DOWNLOAD] Failed to persist conference download stats', err);
+    }
+  }
+
+  private static async loadConferences(session: BBSSession) {
+    if (session.conferences && Array.isArray(session.conferences)) {
+      return session.conferences;
+    }
+    try {
+      const repo = new ConferenceRepository(require('../database').db);
+      const confs = await repo.getConferences();
+      session.conferences = confs;
+      return confs;
+    } catch (err) {
+      console.error('[DOWNLOAD] Failed to load conferences for accounting', err);
+      return undefined;
+    }
   }
 }

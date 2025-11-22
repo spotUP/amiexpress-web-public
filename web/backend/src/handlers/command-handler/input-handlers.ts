@@ -602,6 +602,12 @@ async function handleProcessCommand(socket: any, session: BBSSession) {
   }
 }
 
+// Expose internals for tests
+export const __testables = {
+  translateShortcut,
+  handleProcessCommand,
+};
+
 /**
  * Re-export function from core for circular dependency resolution
  */
@@ -610,6 +616,20 @@ export async function handleCommand(
   session: BBSSession,
   data: string
 ) {
-  const { handleCommand: handleCommandCore } = await import("./core");
-  await handleCommandCore(socket, session, data);
+  // Lazy-load to avoid circular import issues; cache once per process
+  const mod: any = cachedCore || require("./core");
+  cachedCore = mod;
+  const fn = mod?.handleCommand;
+  if (typeof fn !== "function") {
+    console.error("command-handler/core.handleCommand not available");
+    return;
+  }
+  await fn(socket, session, data);
+}
+
+let cachedCore: any = null;
+
+// Allow tests to inject a mock core handler without touching the require path
+export function __setHandleCommandCore(mock: any) {
+  cachedCore = { handleCommand: mock };
 }

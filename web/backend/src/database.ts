@@ -328,6 +328,25 @@ export class Database {
         console.log('✓ Added http_port column');
       }
 
+      // Conferences table migrations (per-conference accounting)
+      console.log('Checking for missing columns in conferences table...');
+      const confInfo = this.db.prepare('PRAGMA table_info(conferences)').all() as any[];
+      const confColumns = confInfo.map(col => col.name);
+
+      const addConfColumn = (name: string, ddl: string) => {
+        if (!confColumns.includes(name)) {
+          this.db.exec(`ALTER TABLE conferences ADD COLUMN ${ddl}`);
+          console.log(`✓ Added ${name} column to conferences`);
+        }
+      };
+
+      addConfColumn('ratio', 'INTEGER DEFAULT 0');
+      addConfColumn('ratiotype', 'INTEGER DEFAULT 0');
+      addConfColumn('uploads', 'INTEGER DEFAULT 0');
+      addConfColumn('downloads', 'INTEGER DEFAULT 0');
+      addConfColumn('bytesupload', 'INTEGER DEFAULT 0');
+      addConfColumn('bytesdownload', 'INTEGER DEFAULT 0');
+
       if (!systemConfigColumns.includes('telnet_port')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN telnet_port INTEGER DEFAULT 2323 CHECK (telnet_port >= 1 AND telnet_port <= 65535)');
         console.log('✓ Added telnet_port column');
@@ -422,6 +441,12 @@ export class Database {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL UNIQUE,
           description TEXT,
+          ratio INTEGER DEFAULT 0,
+          ratiotype INTEGER DEFAULT 0,
+          uploads INTEGER DEFAULT 0,
+          downloads INTEGER DEFAULT 0,
+          bytesupload INTEGER DEFAULT 0,
+          bytesdownload INTEGER DEFAULT 0,
           created INTEGER DEFAULT (strftime('%s', 'now')),
           updated INTEGER DEFAULT (strftime('%s', 'now'))
         )

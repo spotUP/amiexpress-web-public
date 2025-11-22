@@ -13,6 +13,8 @@ import { testFile, TestResult } from '../utils/file-test.util';
 import { moveUploadedFile, getConferenceDir } from '../utils/file-hold.util';
 import { writeUploadToDirFile } from '../utils/dir-file.util';
 import { updateSysopUploadStats, doUploadNotify } from '../utils/upload-notify.util';
+import { ConferenceRepository } from '../database/conference-repository';
+import { creditAccountTrackUploads } from '../utils/download-ratios.util';
 import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
 import { getSessionBySocketId } from './session-manager';
 import { callersLog } from './database-helpers';
@@ -290,19 +292,38 @@ export function registerFileHandlers(socket: Socket) {
 
       // Update user stats in users table (for backward compatibility)
       // Use SQL arithmetic to avoid JavaScript number overflow for bytesUpload (BIGINT)
-      await db.query(`
-        UPDATE users
-        SET uploads = uploads + 1,
-            bytesupload = bytesupload + $1,
-            updated = CURRENT_TIMESTAMP
-        WHERE id = $2
-      `, [data.size, session.user!.id]);
+      const trackUploads = creditAccountTrackUploads(session.user!);
+      if (trackUploads) {
+        await db.query(`
+          UPDATE users
+          SET uploads = uploads + 1,
+              bytesupload = bytesupload + $1,
+              updated = CURRENT_TIMESTAMP
+          WHERE id = $2
+        `, [data.size, session.user!.id]);
 
-      // Update user_stats table (for ratio calculations)
-      await db.query(
-        'UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2',
-        [data.size, session.user!.id]
-      );
+        await db.query(
+          'UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2',
+          [data.size, session.user!.id]
+        );
+      }
+
+      // Update per-conference upload stats (express.e:19530+)
+      try {
+        const conferences = await loadConferences(session, db);
+        const target = conferences?.find((c: any) => c.id === session.currentConf);
+        if (target && trackUploads) {
+          target.uploads = (target.uploads || 0) + 1;
+          target.bytesUpload = (target.bytesUpload || 0) + data.size;
+          const repo = new ConferenceRepository(db);
+          await repo.updateConference(target.id, {
+            uploads: target.uploads,
+            bytesUpload: target.bytesUpload
+          });
+        }
+      } catch (err) {
+        console.error('[Upload] Failed to persist conference upload stats', err);
+      }
 
       // Log file upload (express.e:9493 callersLog)
       await callersLog(session.user!.id, session.user!.username, 'Uploaded file', currentFile.filename);
@@ -479,4 +500,19 @@ export function registerFileHandlers(socket: Socket) {
       console.error('[Download] Error updating statistics:', error);
     }
   });
+
+  async function loadConferences(session: any, database: any) {
+    if (session.conferences && Array.isArray(session.conferences)) {
+      return session.conferences;
+    }
+    try {
+      const repo = new ConferenceRepository(database);
+      const confs = await repo.getConferences();
+      session.conferences = confs;
+      return confs;
+    } catch (err) {
+      console.error('[Upload] Failed to load conferences for accounting', err);
+      return undefined;
+    }
+  }
 }

@@ -2,6 +2,7 @@ import { Socket } from "socket.io";
 import { AmigaDoorSession } from "./AmigaDoorSession";
 import * as path from "path";
 import { config } from "../config";
+import * as fs from "fs";
 
 /**
  * Door Handler - Manages door session lifecycle via Socket.io
@@ -42,10 +43,16 @@ export function setupDoorHandlers(socket: Socket): void {
           // Use provided path (for testing)
           executablePath = payload.doorPath;
         } else {
-          // Look up door by ID
-          // TODO: Implement door registry/database
+          // Look up door by ID using Commands/BBSCmd and default Doors path
           const doorsDir = path.join(config.get("dataDir"), "Doors");
-          executablePath = path.join(doorsDir, payload.doorId);
+          const resolved = resolveDoorPath(payload.doorId, doorsDir);
+          if (!resolved) {
+            socket.emit("door:error", {
+              message: `Door ${payload.doorId} not found (expected ${doorsDir}/${payload.doorId})`,
+            });
+            return;
+          }
+          executablePath = resolved;
         }
 
         console.log(`[DoorHandler] Executable path: ${executablePath}`);
@@ -120,4 +127,31 @@ export function terminateAllSessions(): void {
     session.terminate();
   }
   activeSessions.clear();
+}
+
+/**
+ * Resolve a door executable path by ID.
+ * Mirrors AmiExpress behavior of looking under Doors/ and preferring a binary
+ * matching the door ID inside its directory if present.
+ */
+function resolveDoorPath(doorId: string, doorsDir: string): string | null {
+  const directPath = path.join(doorsDir, doorId);
+  if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
+    return directPath;
+  }
+
+  const dirPath = path.join(doorsDir, doorId);
+  if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+    const candidate = path.join(dirPath, doorId);
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return candidate;
+    }
+
+    // Fallback: any file in the directory
+    const entries = fs.readdirSync(dirPath);
+    const file = entries.find((f) => fs.statSync(path.join(dirPath, f)).isFile());
+    if (file) return path.join(dirPath, file);
+  }
+
+  return null;
 }
