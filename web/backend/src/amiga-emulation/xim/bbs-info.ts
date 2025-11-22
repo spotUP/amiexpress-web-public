@@ -114,7 +114,7 @@ export class XIMBBSInfoHandler {
         break;
 
       case XIMCommand.BB_CONFLOCAL:
-        value = this.bbsSession?.conferencePath || '/BBS/Conf01';
+        value = this.bbsSession?.conferencePath || '/BBS/Conf1';
         console.log(`[XIMBBSInfo] BB_CONFLOCAL: "${value}"`);
         break;
 

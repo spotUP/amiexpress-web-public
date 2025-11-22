@@ -16,7 +16,7 @@ import * as fs from 'fs/promises';
  * 1. NumULs - Conference-level upload counter
  * 2. SysopStats/NumULs_# - Sysop stats (normal vs HOLD)
  *
- * @param conferencePath Path to conference directory (e.g., BBS/Conf01)
+ * @param conferencePath Path to conference directory (e.g., BBS/Conf1)
  * @param conferenceId Conference ID (1, 2, 3, etc.)
  * @param bbsDataPath Base BBS data path
  * @param isHold Whether this upload went to HOLD directory

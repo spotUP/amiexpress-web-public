@@ -11,11 +11,11 @@
  *   Commands/             - Command definitions
  *     BBSCmd/             - BBS commands (door .info files)
  *     SysCmd/             - System commands
- *   Conf01/               - Conference 1 (General)
+ *   Conf1/                - Conference 1 (General)
  *     Bulletins/          - Conference bulletins
  *     Files/              - Conference file areas
  *     Messages/           - Conference messages
- *   Conf02/               - Conference 2
+ *   Conf2/                - Conference 2
  *   ...
  * Doors/                  - External door programs
  *   DoorName/             - Individual door directory
@@ -90,12 +90,12 @@ export class BBSPaths {
   }
 
   /**
-   * Get conference directory (BBS/Conf##/)
+   * Get conference directory (BBS/Conf#/)
    * @param confNum Conference number (1-99)
    * @returns Path to conference directory
    */
   conference(confNum: number): string {
-    const confName = `Conf${String(confNum).padStart(2, '0')}`;
+    const confName = `Conf${confNum}`;
     return path.join(this.bbs(), confName);
   }
 

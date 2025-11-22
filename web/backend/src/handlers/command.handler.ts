@@ -277,7 +277,25 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_BODY:
-      await handleMessageBodyInput(socket, session, data);
+      // Line-input editor: buffer characters, echo locally, submit on Enter
+      if (!session.inputBuffer) {
+        session.inputBuffer = '';
+      }
+
+      if (data === '\r' || data === '\n') {
+        const line = session.inputBuffer;
+        session.inputBuffer = '';
+        socket.emit('ansi-output', '\r\n'); // Move to the next line like express.e
+        await handleMessageBodyInput(socket, session, line);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer.length > 0) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          socket.emit('ansi-output', '\b \b'); // Erase last char visibly
+        }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer += data;
+        socket.emit('ansi-output', data); // Echo printable characters
+      }
       return;
     case LoggedOnSubState.POST_MESSAGE_DELETE_LINE:
       await handleMessageDeleteLineInput(socket, session, data);

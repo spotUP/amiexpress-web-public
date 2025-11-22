@@ -12,7 +12,7 @@ import * as fs from 'fs/promises';
  * Get HOLD directory path for a conference
  * Express.e:19405 - StringF(tempstr2,'\sHOLD/\s',currentConfDir,str)
  *
- * @param conferencePath Path to conference directory (e.g., BBS/Conf01)
+ * @param conferencePath Path to conference directory (e.g., BBS/Conf1)
  * @returns Full path to HOLD directory
  */
 export function getHoldDir(conferencePath: string): string {
@@ -146,7 +146,7 @@ async function updateHeldTracking(
  *
  * @param conferenceId Conference ID (1, 2, 3, etc.)
  * @param bbsDataPath Base BBS data path
- * @returns Path to conference directory (e.g., BBS/Conf01)
+ * @returns Path to conference directory (e.g., BBS/Conf1)
  */
 export function getConferenceDir(conferenceId: number, bbsDataPath: string): string {
   const confNum = conferenceId.toString().padStart(2, '0');

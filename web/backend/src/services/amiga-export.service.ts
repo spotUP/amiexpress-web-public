@@ -360,8 +360,8 @@ export class AmigaExportService {
     const bulletinsDir = path.join(exportDir, 'Bulletins');
     await fs.mkdir(bulletinsDir, { recursive: true });
 
-    // Copy bulletin files from BBS/Conf01/Bulletins
-    const sourceBulletinsDir = path.join(process.cwd(), 'data', 'bbs', 'BBS', 'Conf01', 'Bulletins');
+    // Copy bulletin files from BBS/Conf1/Bulletins
+    const sourceBulletinsDir = path.join(process.cwd(), 'data', 'bbs', 'BBS', 'Conf1', 'Bulletins');
 
     try {
       const files = await fs.readdir(sourceBulletinsDir);

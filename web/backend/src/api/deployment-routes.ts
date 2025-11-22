@@ -274,7 +274,7 @@ async function checkFileSystem() {
 
   const optionalDirs = [
     'data/bbs/BBS/Screens',
-    'data/bbs/BBS/Conf01',
+    'data/bbs/BBS/Conf1',
   ];
 
   const missingRequired: string[] = [];

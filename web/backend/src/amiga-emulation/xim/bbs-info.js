@@ -84,7 +84,7 @@ class XIMBBSInfoHandler {
                 console.log(`[XIMBBSInfo] BB_CONFNAME: "${value}"`);
                 break;
             case types_1.XIMCommand.BB_CONFLOCAL:
-                value = ((_b = this.bbsSession) === null || _b === void 0 ? void 0 : _b.conferencePath) || '/BBS/Conf01';
+                value = ((_b = this.bbsSession) === null || _b === void 0 ? void 0 : _b.conferencePath) || '/BBS/Conf1';
                 console.log(`[XIMBBSInfo] BB_CONFLOCAL: "${value}"`);
                 break;
             case types_1.XIMCommand.BB_LOCAL:

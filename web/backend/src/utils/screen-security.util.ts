@@ -95,7 +95,7 @@ export function findSecurityScreen(
  * Wrapper around findSecurityScreen for bulletin-specific paths
  *
  * @param baseDir - Base BBS directory
- * @param conferenceDir - Conference directory name (e.g., "Conf01")
+ * @param conferenceDir - Conference directory name (e.g., "Conf1")
  * @param bulletinNumber - Bulletin number (1, 2, 3, etc.)
  * @param userSecLevel - User's security level
  * @returns Full path to bulletin file, or null

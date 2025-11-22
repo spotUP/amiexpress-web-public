@@ -1,0 +1,126 @@
+
+AmiKick.7z   P    23M  12-26-17  Amiga Kickstart ROMS Complete - TOSEC v0.04
+TOS.ZIP.001  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       01/14
+TOS.ZIP.002  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       02/14
+TOS.ZIP.003  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       03/14
+TOS.ZIP.004  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       04/14
+TOS.ZIP.005  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       05/14
+TOS.ZIP.006  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       06/14
+TOS.ZIP.007  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       07/14
+TOS.ZIP.008  p    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       08/14
+TOS.ZIP.009  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       09/14
+TOS.ZIP.010  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                       10/14
+TOS.ZIP.011  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                      11/14
+TOS.ZIP.012  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                      12/14
+TOS.ZIP.013  P    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                      13/14
+TOS.ZIP.014  p    94M  01-31-18  Commodore Amiga Applications Tosec v0.23_CM
+                                                                      14/14
+TOSEC023.TXT P 177176  01-31-18  Commodore Amiga Applications Tosec INFO
+TS1-INDX.ZIP P 100596  03-28-18  - - -- ------------------------------ --- --
+                                                B A M I G A
+                                            S E C T O R   O N E
+                                        <-- THE  ADF COLLECTION -->
+                                     12.000+ Floppy disks Preserved
+                                                                  INDEX FILE
+                                 - - -- ------------------------------ --- --
+BS1-01.ZIP   P   75MB  03-28-18  - - -- ------------------------------ --- --
+                                                B A M I G A
+                                            S E C T O R   O N E
+                                        <-- THE  ADF COLLECTION -->
+                                      12.000+ Floppy disks Preserved
+                                                                     [01/81]
+                                 - - -- ------------------------------ --- --
+BS1-02.ZIP   P   82MB  03-28-18  BS1 - THE ADF COLLECTION             [02/81]
+BS1-03.ZIP   P   49MB  03-28-18  BS1 - THE ADF COLLECTION             [03/81]
+BS1-04.ZIP   P   59MB  03-28-18  BS1 - THE ADF COLLECTION             [04/81]
+BS1-05.ZIP   P   56MB  03-28-18  BS1 - THE ADF COLLECTION             [05/81]
+BS1-06.ZIP   P   53MB  03-28-18  BS1 - THE ADF COLLECTION             [06/81]
+BS1-07.ZIP   P   71MB  03-28-18  BS1 - THE ADF COLLECTION             [07/81]
+BS1-08.ZIP   P   73MB  03-28-18  BS1 - THE ADF COLLECTION             [08/81]
+BS1-09.ZIP   P   61MB  03-28-18  BS1 - THE ADF COLLECTION             [09/81]
+BS1-10.ZIP   P   64MB  03-28-18  BS1 - THE ADF COLLECTION             [10/81]
+BS1-11.ZIP   P   69MB  03-28-18  BS1 - THE ADF COLLECTION             [11/81]
+BS1-12.ZIP   P   73MB  03-28-18  BS1 - THE ADF COLLECTION             [12/81]
+BS1-13.ZIP   P   77MB  03-28-18  BS1 - THE ADF COLLECTION             [13/81]
+BS1-14.ZIP   P   65MB  03-28-18  BS1 - THE ADF COLLECTION             [14/81]
+BS1-15.ZIP   P   99MB  03-28-18  BS1 - THE ADF COLLECTION             [15/81]
+BS1-16.ZIP   P   94M  03-28-18  BS1 - THE ADF COLLECTION             [16/81]
+BS1-17.ZIP   P  108MB  03-28-18  BS1 - THE ADF COLLECTION             [17/81]
+BS1-18.ZIP   P   54MB  03-28-18  BS1 - THE ADF COLLECTION             [18/81]
+BS1-19.ZIP   P   51MB  03-28-18  BS1 - THE ADF COLLECTION             [19/81]
+BS1-20.ZIP   P   60MB  03-28-18  BS1 - THE ADF COLLECTION             [20/81]
+BS1-21.ZIP   P   87MB  03-28-18  BS1 - THE ADF COLLECTION             [21/81]
+BS1-22.ZIP   P   40MB  03-28-18  BS1 - THE ADF COLLECTION             [22/81]
+BS1-23.ZIP   p   61MB  03-28-18  BS1 - THE ADF COLLECTION             [23/81]
+BS1-24.ZIP   P   89MB  03-28-18  BS1 - THE ADF COLLECTION             [24/81]
+BS1-25.ZIP   P   70MB  03-28-18  BS1 - THE ADF COLLECTION             [25/81]
+BS1-26.ZIP   P   57MB  03-28-18  BS1 - THE ADF COLLECTION             [26/81]
+BS1-27.ZIP   P   69MB  03-28-18  BS1 - THE ADF COLLECTION             [27/81]
+BS1-28.ZIP   P   78MB  03-28-18  BS1 - THE ADF COLLECTION             [28/81]
+BS1-29.ZIP   P   74MB  03-28-18  BS1 - THE ADF COLLECTION             [29/81]
+BS1-30.ZIP   P   46MB  03-28-18  BS1 - THE ADF COLLECTION             [30/81]
+BS1-31.ZIP   P   74MB  03-28-18  BS1 - THE ADF COLLECTION             [31/81]
+BS1-32.ZIP   P   56MB  03-28-18  BS1 - THE ADF COLLECTION             [32/81]
+BS1-33.ZIP   P   68MB  03-28-18  BS1 - THE ADF COLLECTION             [33/81]
+BS1-34.ZIP   P   47MB  03-28-18  BS1 - THE ADF COLLECTION             [34/81]
+BS1-35.ZIP   P   45MB  03-28-18  BS1 - THE ADF COLLECTION             [35/81]
+BS1-36.ZIP   P   50MB  03-28-18  BS1 - THE ADF COLLECTION             [36/81]
+BS1-37.ZIP   P   73MB  03-28-18  BS1 - THE ADF COLLECTION             [37/81]
+BS1-38.ZIP   P   45MB  03-28-18  BS1 - THE ADF COLLECTION             [38/81]
+BS1-39.ZIP   P   58MB  03-28-18  BS1 - THE ADF COLLECTION             [39/81]
+BS1-40.ZIP   P   51MB  03-28-18  BS1 - THE ADF COLLECTION             [40/81]
+BS1-41.ZIP   P   63MB  03-28-18  BS1 - THE ADF COLLECTION             [41/81]
+BS1-42.ZIP   P   65MB  03-28-18  BS1 - THE ADF COLLECTION             [42/81]
+BS1-43.ZIP   P   64MB  03-28-18  BS1 - THE ADF COLLECTION             [43/81]
+BS1-44.ZIP   P   74MB  03-28-18  BS1 - THE ADF COLLECTION             [44/81]
+BS1-45.ZIP   P   64MB  03-28-18  BS1 - THE ADF COLLECTION             [45/81]
+BS1-46.ZIP   P   59MB  03-28-18  BS1 - THE ADF COLLECTION             [46/81]
+BS1-47.ZIP   P   73MB  03-28-18  BS1 - THE ADF COLLECTION             [47/81]
+BS1-48.ZIP   P   86MB  03-28-18  BS1 - THE ADF COLLECTION             [48/81]
+BS1-49.ZIP   P   45MB  03-28-18  BS1 - THE ADF COLLECTION             [49/81]
+BS1-50.ZIP   P   63MB  03-28-18  BS1 - THE ADF COLLECTION             [50/81]
+BS1-51.ZIP   P   53MB  03-28-18  BS1 - THE ADF COLLECTION             [51/81]
+BS1-52.ZIP   P   83MB  03-28-18  BS1 - THE ADF COLLECTION             [52/81]
+BS1-53.ZIP   P   61MB  03-28-18  BS1 - THE ADF COLLECTION             [53/81]
+BS1-54.ZIP   P   72MB  03-28-18  BS1 - THE ADF COLLECTION             [54/81]
+BS1-55.ZIP   P   91MB  03-28-18  BS1 - THE ADF COLLECTION             [55/81]
+BS1-56.ZIP   P   77MB  03-28-18  BS1 - THE ADF COLLECTION             [56/81]
+BS1-57.ZIP   P   54MB  03-28-18  BS1 - THE ADF COLLECTION             [57/81]
+BS1-58.ZIP   P   53MB  03-28-18  BS1 - THE ADF COLLECTION             [58/81]
+BS1-59.ZIP   P   78MB  03-28-18  BS1 - THE ADF COLLECTION             [59/81]
+BS1-60.ZIP   P   78MB  03-28-18  BS1 - THE ADF COLLECTION             [60/81]
+BS1-61.ZIP   P   64MB  03-28-18  BS1 - THE ADF COLLECTION             [61/81]
+BS1-62.ZIP   P   74MB  03-28-18  BS1 - THE ADF COLLECTION             [62/81]
+BS1-63.ZIP   P   84MB  03-28-18  BS1 - THE ADF COLLECTION             [63/81]
+BS1-64.ZIP   P   54MB  03-28-18  BS1 - THE ADF COLLECTION             [64/81]
+BS1-65.ZIP   P   71MB  03-28-18  BS1 - THE ADF COLLECTION             [65/81]
+BS1-66.ZIP   P   77MB  03-28-18  BS1 - THE ADF COLLECTION             [66/81]
+BS1-67.ZIP   P   61MB  03-28-18  BS1 - THE ADF COLLECTION             [67/81]
+BS1-68.ZIP   P   78MB  03-28-18  BS1 - THE ADF COLLECTION             [68/81]
+BS1-69.ZIP   P   66MB  03-28-18  BS1 - THE ADF COLLECTION             [69/81]
+BS1-70.ZIP   P   46MB  03-28-18  BS1 - THE ADF COLLECTION             [70/81]
+BS1-71.ZIP   P   73MB  03-28-18  BS1 - THE ADF COLLECTION             [71/81]
+BS1-72.ZIP   P   56MB  03-28-18  BS1 - THE ADF COLLECTION             [72/81]
+BS1-73.ZIP   P   90MB  03-28-18  BS1 - THE ADF COLLECTION             [73/81]
+BS1-74.ZIP   P   69MB  03-28-18  BS1 - THE ADF COLLECTION             [74/81]
+BS1-75.ZIP   P   85MB  03-28-18  BS1 - THE ADF COLLECTION             [75/81]
+BS1-76.ZIP   P   82MB  03-28-18  BS1 - THE ADF COLLECTION             [76/81]
+BS1-77.ZIP   P   75MB  03-28-18  BS1 - THE ADF COLLECTION             [77/81]
+BS1-78.ZIP   P   85MB  03-28-18  BS1 - THE ADF COLLECTION             [78/81]
+BS1-79.ZIP   P   84MB  03-28-18  BS1 - THE ADF COLLECTION             [79/81]
+BS1-80.ZIP   P   95MB  03-28-18  BS1 - THE ADF COLLECTION             [80/81]
+BS1-81.ZIP   P  109MB  03-28-18  BS1 - THE ADF COLLECTION             [81/81]
+TAI-EGS2.DMS N 860343  01-17-18  EGS V7 [AGA/ECS/PICCOLO-SD64]     [2/4]

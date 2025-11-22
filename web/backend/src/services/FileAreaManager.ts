@@ -51,15 +51,15 @@ export class FileAreaManager {
 
   constructor() {
     // Path resolution: 4 levels up from src/services/ to project root
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    // and then into the BBS/ assign directory
+    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..', 'BBS');
   }
 
   /**
    * Get the Files directory path for a conference
    */
   private getFilesDir(confNumber: number): string {
-    const confStr = String(confNumber).padStart(2, '0');
-    return path.join(this.bbsRoot, `Conf${confStr}`, 'Files');
+    return path.join(this.bbsRoot, `Conf${confNumber}`, 'Files');
   }
 
   /**
@@ -310,7 +310,7 @@ export class FileAreaManager {
   initializeFileAreaDirs(): void {
     console.log('[FileAreaManager] Initializing file area directories...');
 
-    // Create directories for Conf01 through Conf10 if they don't exist
+    // Create directories for Conf1 through Conf10 if they don't exist
     for (let i = 1; i <= 10; i++) {
       this.ensureFilesDir(i);
     }
