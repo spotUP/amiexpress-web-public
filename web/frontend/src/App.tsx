@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Terminal from './components/terminal/Terminal';
 import GamePromptWizard from './components/wizard/GamePromptWizard';
 import ImportExport from './components/admin/ImportExport';
+import SystemStatus from './components/admin/SystemStatus';
 import './App.css';
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
         <Route path="/wizard" element={<GamePromptWizard />} />
         <Route path="/door-wizard" element={<GamePromptWizard />} />
         <Route path="/admin/import" element={<ImportExport />} />
+        <Route path="/system" element={<SystemStatus />} />
       </Routes>
     </Router>
   );

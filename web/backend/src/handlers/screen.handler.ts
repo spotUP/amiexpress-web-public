@@ -689,8 +689,11 @@ export function loadScreenFile(
     const confIndex = conferences.findIndex(c => c.id === conferenceId);
     if (confIndex !== -1) {
       const relConfNum = confIndex + 1; // Convert to 1-based
-      const confScreensDir = path.join(baseDir, `Conf${String(relConfNum).padStart(2, '0')}`, 'Screens');
-      searchLocations.push({ dir: confScreensDir, desc: `Conf${String(relConfNum).padStart(2, '0')}/Screens` });
+      const paddedConfName = `Conf${String(relConfNum).padStart(2, '0')}`;
+      const confScreensDir = path.join(baseDir, paddedConfName, 'Screens');
+      searchLocations.push({ dir: confScreensDir, desc: `${paddedConfName}/Screens` });
+      const bbsConfScreensDir = path.join(baseDir, 'BBS', `Conf${relConfNum}`, 'Screens');
+      searchLocations.push({ dir: bbsConfScreensDir, desc: `BBS/Conf${relConfNum}/Screens` });
     }
   }
 
