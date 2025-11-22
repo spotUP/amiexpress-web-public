@@ -36,6 +36,33 @@ export function setConferences(confs: Conference[]) {
   conferences = confs;
 }
 
+function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {
+  const names = [`Conf${relConfNum}`];
+  const padded = `Conf${String(relConfNum).padStart(2, '0')}`;
+  if (!names.includes(padded)) {
+    names.push(padded);
+  }
+
+  const results: Array<{ dir: string; desc: string }> = [];
+  const seen = new Set<string>();
+
+  for (const name of names) {
+    const bbsDir = path.join(baseDir, 'BBS', name, 'Screens');
+    if (!seen.has(bbsDir)) {
+      results.push({ dir: bbsDir, desc: `BBS/${name}/Screens` });
+      seen.add(bbsDir);
+    }
+
+    const rootDir = path.join(baseDir, name, 'Screens');
+    if (!seen.has(rootDir)) {
+      results.push({ dir: rootDir, desc: `${name}/Screens` });
+      seen.add(rootDir);
+    }
+  }
+
+  return results;
+}
+
 /**
  * Parse MCI codes in screen content
  * Replaces AmiExpress MCI variables like %B, %CF, %U, etc.
@@ -689,11 +716,10 @@ export function loadScreenFile(
     const confIndex = conferences.findIndex(c => c.id === conferenceId);
     if (confIndex !== -1) {
       const relConfNum = confIndex + 1; // Convert to 1-based
-      const paddedConfName = `Conf${String(relConfNum).padStart(2, '0')}`;
-      const confScreensDir = path.join(baseDir, paddedConfName, 'Screens');
-      searchLocations.push({ dir: confScreensDir, desc: `${paddedConfName}/Screens` });
-      const bbsConfScreensDir = path.join(baseDir, 'BBS', `Conf${relConfNum}`, 'Screens');
-      searchLocations.push({ dir: bbsConfScreensDir, desc: `BBS/Conf${relConfNum}/Screens` });
+      const candidateDirs = getConferenceScreensCandidates(baseDir, relConfNum);
+      candidateDirs.forEach(candidate => {
+        searchLocations.push({ dir: candidate.dir, desc: candidate.desc });
+      });
     }
   }
 
@@ -1171,8 +1197,11 @@ export function hasKeysFile(screenName: string, conferenceId?: number, nodeId: n
     const confIndex = conferences.findIndex(c => c.id === conferenceId);
     if (confIndex !== -1) {
       const relConfNum = confIndex + 1; // Convert to 1-based
-      const confPath = path.join(baseDir, `Conf${String(relConfNum).padStart(2, '0')}`, 'Screens', `${screenName}.keys`);
-      paths.push(confPath);
+      const candidateDirs = getConferenceScreensCandidates(baseDir, relConfNum);
+      for (const candidate of candidateDirs) {
+        const confPath = path.join(candidate.dir, `${screenName}.keys`);
+        paths.push(confPath);
+      }
     }
   }
 

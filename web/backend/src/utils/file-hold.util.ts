@@ -149,8 +149,8 @@ async function updateHeldTracking(
  * @returns Path to conference directory (e.g., BBS/Conf1)
  */
 export function getConferenceDir(conferenceId: number, bbsDataPath: string): string {
-  const confNum = conferenceId.toString().padStart(2, '0');
-  return path.join(bbsDataPath, 'BBS', `Conf${confNum}`);
+  const confName = `Conf${conferenceId}`;
+  return path.join(bbsDataPath, 'BBS', confName);
 }
 
 /**

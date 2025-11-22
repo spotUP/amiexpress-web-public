@@ -216,6 +216,15 @@ export function parseCmdFile(filePath: string): CommandDefinition | null {
   return null;
 }
 
+function getConferenceDirNames(confNumber: number): string[] {
+  const names = [`Conf${confNumber}`];
+  const padded = `Conf${String(confNumber).padStart(2, '0')}`;
+  if (!names.includes(padded)) {
+    names.push(padded);
+  }
+  return names;
+}
+
 /**
  * Load command definition from .info file
  * Implements express.e:4630-4820 command loading logic
@@ -337,7 +346,10 @@ export function scanCommandDirectory(
 
   if (commandType === CommandType.BBSCMD) {
     if (conferenceId) {
-      searchPaths.push(path.join(baseDir, `Conf${String(conferenceId).padStart(2, '0')}`, 'Commands', 'BBSCmd'));
+      for (const confName of getConferenceDirNames(conferenceId)) {
+        searchPaths.push(path.join(baseDir, 'BBS', confName, 'Commands', 'BBSCmd'));
+        searchPaths.push(path.join(baseDir, confName, 'Commands', 'BBSCmd'));
+      }
     }
     if (nodeId) {
       searchPaths.push(path.join(baseDir, `Node${nodeId}`, 'Commands', 'BBSCmd'));
@@ -345,7 +357,10 @@ export function scanCommandDirectory(
     searchPaths.push(path.join(baseDir, 'Commands', 'BBSCmd'));
   } else if (commandType === CommandType.SYSCMD) {
     if (conferenceId) {
-      searchPaths.push(path.join(baseDir, `Conf${String(conferenceId).padStart(2, '0')}`, 'Commands', 'SysCmd'));
+      for (const confName of getConferenceDirNames(conferenceId)) {
+        searchPaths.push(path.join(baseDir, 'BBS', confName, 'Commands', 'SysCmd'));
+        searchPaths.push(path.join(baseDir, confName, 'Commands', 'SysCmd'));
+      }
     }
     if (nodeId) {
       searchPaths.push(path.join(baseDir, `Node${nodeId}`, 'Commands', 'SysCmd'));

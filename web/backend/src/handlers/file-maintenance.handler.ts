@@ -27,6 +27,7 @@ import { parseDirFile, DirFileEntry } from '../utils/dir-file-reader.util';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
+import { getConferenceDir } from '../utils/file-hold.util';
 
 import type { BBSSession } from '../index';
 
@@ -307,7 +308,6 @@ export class FileMaintenanceHandler {
     const flagFileList: string[] = ctx.flagFileList || [];
     const bbsDataPath = _config.get('dataDir');
     const confNum = session.currentConf || 1;
-    const { getConferenceDir } = require('../utils/file-hold.util');
 
     if (dirs.length === 0) {
       socket.emit('ansi-output', '\r\nFile maintenance complete.\r\n');
@@ -591,7 +591,6 @@ export class FileMaintenanceHandler {
 
     const bbsDataPath = _config.get('dataDir');
     const confNum = session.currentConf || 1;
-    const { getConferenceDir } = require('../utils/file-hold.util');
     const conferencePath = getConferenceDir(confNum, bbsDataPath);
     const destMeta = this.getDirMeta(conferencePath, destDir, ctx.maxDirs);
     const destPath = destMeta.path;
@@ -660,7 +659,7 @@ export class FileMaintenanceHandler {
 
   private static async buildFileCandidates(confNum: number, filename: string, dirNum?: number): Promise<string[]> {
     const dataDir = _config.get('dataDir');
-    const confPath = path.join(dataDir, 'BBS', `Conf${String(confNum).padStart(2, '0')}`);
+    const confPath = getConferenceDir(confNum, dataDir);
     const list: string[] = [];
 
     // HOLD / LCFILES

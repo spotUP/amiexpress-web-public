@@ -70,8 +70,8 @@ export class MessageIndexManager {
    * Get path to MsgBase directory for a conference
    */
   private getMsgBaseDir(confNumber: number): string {
-    const confName = `Conf${String(confNumber).padStart(2, '0')}`;
-    return path.join(this.bbsRoot, confName, 'MsgBase');
+    const confName = `Conf${confNumber}`;
+    return path.join(this.bbsRoot, 'BBS', confName, 'MsgBase');
   }
 
   /**

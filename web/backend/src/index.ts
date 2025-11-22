@@ -837,7 +837,7 @@ app.get('/api/download/:fileId', async (req: Request, res: Response) => {
     // Determine file path
     // Files can be in: active directory, private directory, or hold directory
     // Try to find the file in these locations
-    const conferencePath = path.join(config.get('dataDir'), 'BBS', `Conf${String(fileEntry.conferenceId || 1).padStart(2, '0')}`);
+    const conferencePath = getConferenceDir(fileEntry.conferenceId || 1, config.get('dataDir'));
 
     let filePath: string | null = null;
     const possiblePaths = [

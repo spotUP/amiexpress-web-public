@@ -16,6 +16,7 @@ import { ConferenceRepository } from '../database/conference-repository';
 import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getConferenceDir } from '../utils/file-hold.util';
 
 /**
  * Batch Download Handler
@@ -230,7 +231,7 @@ export class BatchDownloadHandler {
     confNum: number,
     filename: string
   ): Promise<any | null> {
-    const confPath = path.join(dataDir, 'BBS', `Conf${String(confNum).padStart(2, '0')}`);
+    const confPath = getConferenceDir(confNum, dataDir);
 
     // Search through all DIR# directories
     for (let dirNum = 1; dirNum <= 20; dirNum++) {

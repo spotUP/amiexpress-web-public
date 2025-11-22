@@ -19,6 +19,7 @@ import { ConferenceRepository } from '../database/conference-repository';
 import { config } from '../config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getConferenceDir } from '../utils/file-hold.util';
 
 /**
  * Download Handler
@@ -340,7 +341,7 @@ export class DownloadHandler {
     confNum: number,
     pattern: string
   ): Promise<any[]> {
-    const confPath = path.join(dataDir, 'BBS', `Conf${String(confNum).padStart(2, '0')}`);
+    const confPath = getConferenceDir(confNum, dataDir);
     const matchingFiles: any[] = [];
     const hasWildcard = this.hasWildcards(pattern);
 

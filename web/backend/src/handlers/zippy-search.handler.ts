@@ -18,6 +18,7 @@ import * as readline from 'readline';
 import { isNewFileEntry } from '../utils/dir-file-reader.util';
 import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
 import { getMaxDirs } from '../utils/max-dirs.util';
+import { getConferenceDir } from '../utils/file-hold.util';
 
 /**
  * Zippy Search Handler
@@ -161,7 +162,7 @@ export class ZippySearchHandler {
     // Loop through directories - express.e:26180-26207
     if (searchString.length > 0) {
       for (let dirNum = startDir; dirNum <= endDir; dirNum++) {
-        const confPath = path.join(config.get('dataDir'), 'BBS', `Conf${String(session.currentConf || 1).padStart(2, '0')}`);
+        const confPath = getConferenceDir(session.currentConf || 1, config.get('dataDir'));
 
         let dirFilePath: string;
 

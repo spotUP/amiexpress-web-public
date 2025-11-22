@@ -37,9 +37,8 @@ export function setBulletinDependencies(
  * @param session - BBS session
  * @param baseDir - BBS base directory
  */
-function displayBullHelpScreen(socket: any, session: any, baseDir: string): void {
+function displayBullHelpScreen(socket: any, session: any, baseDir: string, conferenceDir: string): void {
   // express.e:24618-24620 - Find and display BullHelp screen
-  const conferenceDir = `Conf${String(session.currentConf || 1).padStart(2, '0')}`;
   const userSecLevel = session.user?.secLevel || 0;
 
   const bullHelpPath = findBullHelpFile(baseDir, conferenceDir, userSecLevel);
@@ -93,11 +92,11 @@ function displayBulletin(
   socket: any,
   session: any,
   baseDir: string,
+  conferenceDir: string,
   bulletinNumber: number,
   nonStop: boolean = false
 ): boolean {
   // express.e:24636-24640 - Find and display bulletin file
-  const conferenceDir = `Conf${String(session.currentConf || 1).padStart(2, '0')}`;
   const userSecLevel = session.user?.secLevel || 0;
 
   const bulletinPath = findBulletinFile(baseDir, conferenceDir, bulletinNumber, userSecLevel);
@@ -163,10 +162,11 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
 
   // BBS directory structure
   const { config } = require('../config');
-  const baseDir = config.getConfig().dataDir;
+  const dataDir = config.getConfig().dataDir;
+  const baseDir = path.join(dataDir, 'BBS');
 
   // express.e:24616-24622 - Check if Bulletins/BullHelp.txt exists
-  const conferenceDir = `Conf${String(session.currentConf || 1).padStart(2, '0')}`;
+  const conferenceDir = `Conf${session.currentConf || 1}`;
   const bullHelpCheckPath = path.join(baseDir, conferenceDir, 'Screens', 'Bulletins', 'BullHelp.txt');
 
   if (!fs.existsSync(bullHelpCheckPath)) {
@@ -185,7 +185,7 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   // If bulletin number provided, display it directly
   if (bulletinNumber !== null) {
     // express.e:24636-24640 - Display bulletin
-    displayBulletin(socket, session, baseDir, bulletinNumber, nonStopDisplayFlag);
+  displayBulletin(socket, session, baseDir, conferenceDir, bulletinNumber, nonStopDisplayFlag);
 
     // express.e:24643-24646 - Jump back to inputAgain (prompt for another bulletin)
     // For now, just return to menu - we'll implement the loop in future iteration
@@ -194,7 +194,7 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   }
 
   // express.e:24629-24633 - No params provided, show help and prompt
-  displayBullHelpScreen(socket, session, baseDir);
+  displayBullHelpScreen(socket, session, baseDir, conferenceDir);
 
   // express.e:24635-24636 - Prompt for bulletin number
   socket.emit('ansi-output', '\r\n');
@@ -231,8 +231,10 @@ export function handleBulletinInput(socket: any, session: any, input: string): v
   // express.e:24642 - Handle ? (show help again)
   if (trimmedInput === '?') {
     const { config } = require('../config');
-    const baseDir = config.getConfig().dataDir;
-    displayBullHelpScreen(socket, session, baseDir);
+    const dataDir = config.getConfig().dataDir;
+    const baseDir = path.join(dataDir, 'BBS');
+    const conferenceDir = `Conf${session.currentConf || 1}`;
+    displayBullHelpScreen(socket, session, baseDir, conferenceDir);
 
     // Prompt again
     socket.emit('ansi-output', '\r\n');
@@ -251,8 +253,10 @@ export function handleBulletinInput(socket: any, session: any, input: string): v
 
   if (bulletinNumber !== null) {
     const { config } = require('../config');
-    const baseDir = config.getConfig().dataDir;
-    displayBulletin(socket, session, baseDir, bulletinNumber, nonStopDisplayFlag);
+    const dataDir = config.getConfig().dataDir;
+    const baseDir = path.join(dataDir, 'BBS');
+    const conferenceDir = `Conf${session.currentConf || 1}`;
+    displayBulletin(socket, session, baseDir, conferenceDir, bulletinNumber, nonStopDisplayFlag);
 
     // Prompt for another bulletin (express.e:24643 - JUMP inputAgain)
     socket.emit('ansi-output', '\r\n');

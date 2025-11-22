@@ -17,6 +17,7 @@ import * as path from 'path';
 import * as readline from 'readline';
 import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
 import { getMaxDirs } from '../utils/max-dirs.util';
+import { getConferenceDir } from '../utils/file-hold.util';
 
 /**
  * View File Handler
@@ -254,7 +255,7 @@ export class ViewFileHandler {
     confNum: number,
     filename: string
   ): Promise<any | null> {
-    const confPath = path.join(dataDir, 'BBS', `Conf${String(confNum).padStart(2, '0')}`);
+    const confPath = getConferenceDir(confNum, dataDir);
 
     // Search through all DIR# directories
     for (let dirNum = 1; dirNum <= 20; dirNum++) {
