@@ -213,15 +213,15 @@ function registerCommandHandler(socket: Socket) {
     console.log('[socket-handlers] doorInputHandler type:', typeof session.doorInputHandler);
     console.log('[socket-handlers] doorInputHandler exists:', !!session.doorInputHandler);
 
-    if (session.inDoorManager) {
+    if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
       if (session.doorInputHandler) {
         console.log('[socket-handlers] ✓ Calling doorInputHandler (door is active)');
         session.doorInputHandler(data);
         return;
       } else {
-        console.log('[socket-handlers] ⚠️  WARNING: inDoorManager is true but no doorInputHandler set!');
-        console.log('[socket-handlers] This means door cleanup failed - falling through to BBS handler');
-        // Fall through to normal command handling
+        console.log('[socket-handlers] ⚠️ inDoorManager/DOOR_RUNNING but no doorInputHandler; clearing door state and falling through');
+        session.inDoorManager = false;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
       }
     }
     console.log('[socket-handlers] ✗ NOT in door or no handler - routing to BBS command handler');

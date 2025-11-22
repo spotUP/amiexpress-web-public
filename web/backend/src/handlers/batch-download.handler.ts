@@ -9,10 +9,11 @@ import { Socket } from 'socket.io';
 import { config } from '../config';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity } from '../utils/acs.util';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { checkDownloadRatios, updateDownloadStats as applyDownloadStats, creditAccountTrackDownloads } from '../utils/download-ratios.util';
 import { ConferenceRepository } from '../database/conference-repository';
+import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -98,7 +99,8 @@ export class BatchDownloadHandler {
       session.user,
       ratioRequests,
       await this.loadConferences(session),
-      checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING)
+      checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING),
+      getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
     );
     if (!ratioCheck.canDownload) {
       socket.emit('ansi-output', `\r\n\x1b[31m${ratioCheck.errorMessage}\x1b[0m\r\n`);
@@ -210,6 +212,12 @@ export class BatchDownloadHandler {
     if (fileInfo.isFree === true) return true;
     if (typeof fileInfo.comment === 'string' && fileInfo.comment.toUpperCase().startsWith('F')) {
       return true;
+    }
+    if (fileInfo.confNum) {
+      const flags = getConferenceToolFlags(fileInfo.confNum);
+      if (flags.freeDownloads) {
+        return true;
+      }
     }
     return false;
   }

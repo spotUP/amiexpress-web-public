@@ -175,11 +175,12 @@ export async function handleCommand(
   console.log("data:", JSON.stringify(data));
   console.log("session.state:", session.state);
   console.log("session.subState:", session.subState);
+  const trimmedScreenCommand = (data || "").trim();
   const isAwaitScreenRunning =
     (session as any).pendingScreenCommand &&
     (session as any).executingScreenCommand;
-  const allowScreenCommand = !!(session as any).executingScreenCommand;
-  const trimmedScreenCommand = (data || "").trim();
+  const allowScreenCommand =
+    !!((session as any).executingScreenCommand && trimmedScreenCommand.length > 1);
   const isScreenDoorsPath = /^DOORS:/i.test(trimmedScreenCommand);
   if (allowScreenCommand) {
     console.log(

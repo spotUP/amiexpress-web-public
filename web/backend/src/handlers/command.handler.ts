@@ -24,10 +24,16 @@ import {
   displayNewFiles,
   displayUploadInterface,
   displayDownloadInterface,
-  startFileUpload
+  startFileUpload,
+  startFileDownload,
+  handleFileDownload,
+  displayFileAreaContents,
+  handleFileDeleteConfirmation,
+  handleFileMoveConfirmation
 } from './file.handler';
 import {
-  displayAccountEditingMenu
+  displayAccountEditingMenu,
+  displayUserList
 } from './account.handler';
 import {
   handleBulletinCommand,
@@ -223,6 +229,115 @@ function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
 }
 
+async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
+  switch (session.subState) {
+    case LoggedOnSubState.POST_MESSAGE_TO:
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        await handleMessageToInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          socket.emit('ansi-output', '\b \b');
+        }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data;
+        socket.emit('ansi-output', data);
+      }
+      return;
+    case LoggedOnSubState.POST_MESSAGE_SUBJECT:
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        await handleMessageSubjectInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          socket.emit('ansi-output', '\b \b');
+        }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data;
+        socket.emit('ansi-output', data);
+      }
+      return;
+    case LoggedOnSubState.POST_MESSAGE_PRIVATE:
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        await handleMessagePrivateInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          socket.emit('ansi-output', '\b \b');
+        }
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data;
+        socket.emit('ansi-output', data);
+      }
+      return;
+    case LoggedOnSubState.POST_MESSAGE_BODY:
+      await handleMessageBodyInput(socket, session, data);
+      return;
+    case LoggedOnSubState.POST_MESSAGE_DELETE_LINE:
+      await handleMessageDeleteLineInput(socket, session, data);
+      return;
+    case LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM:
+      await handleMessageDeleteConfirm(socket, session, data.trim());
+      return;
+    case LoggedOnSubState.POST_MESSAGE_EDIT_LINE:
+      await handleMessageEditLineInput(socket, session, data);
+      return;
+    case LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT:
+      await handleMessageEditLineContent(socket, session, data);
+      return;
+    case LoggedOnSubState.POST_MESSAGE_ATTACH_FILE:
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        await handleMessageAttachFileInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data;
+      }
+      return;
+    case LoggedOnSubState.POST_MESSAGE_ATTACH_DELETE_CONFIRM:
+      await handleMessageAttachDeleteConfirm(socket, session, data.trim());
+      return;
+    case LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH:
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        await handleMessageReplaceSearchInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data;
+      }
+      return;
+    case LoggedOnSubState.POST_MESSAGE_REPLACE_WITH:
+      if (data === '\r' || data === '\n') {
+        const input = (session.inputBuffer || '').trim();
+        session.inputBuffer = '';
+        await handleMessageReplaceWithInput(socket, session, input);
+      } else if (data === '\x7f' || data === '\b') {
+        if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
+      } else if (data.length === 1 && data >= ' ' && data <= '~') {
+        session.inputBuffer = (session.inputBuffer || '') + data;
+      }
+      return;
+    case LoggedOnSubState.POST_MESSAGE_INSERT_LINE:
+      await handleMessageInsertLineInput(socket, session, data.trim());
+      return;
+    case LoggedOnSubState.POST_MESSAGE_INSERT_TEXT:
+      await handleMessageInsertTextInput(socket, session, data);
+      return;
+    default:
+      return;
+  }
+}
+
 function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean = false) {
   session.displayFlowPaused = true;
   if (forcePrompt || !session.lastScreenHadPause) {
@@ -404,12 +519,63 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   console.log('data:', JSON.stringify(data));
   console.log('session.state:', session.state);
   console.log('session.subState:', session.subState);
-  const isAwaitScreenRunning = session.pendingScreenCommand && session.executingScreenCommand;
-  const allowScreenCommand = !!session.executingScreenCommand;
   const trimmedScreenCommand = (data || '').trim();
+  const isAwaitScreenRunning = session.pendingScreenCommand && session.executingScreenCommand;
+  const allowScreenCommand = !!(session.executingScreenCommand && trimmedScreenCommand.length > 1);
   const isScreenDoorsPath = /^DOORS:/i.test(trimmedScreenCommand);
   if (allowScreenCommand) {
     console.log('[handleCommand] Executing screen-initiated command (state bypass enabled)');
+  }
+
+  // Highest priority: message entry states must never fall through to menu/command handling
+  const messageSubStates = new Set<string>([
+    LoggedOnSubState.POST_MESSAGE_TO,
+    LoggedOnSubState.POST_MESSAGE_SUBJECT,
+    LoggedOnSubState.POST_MESSAGE_PRIVATE,
+    LoggedOnSubState.POST_MESSAGE_BODY,
+    LoggedOnSubState.POST_MESSAGE_DELETE_LINE,
+    LoggedOnSubState.POST_MESSAGE_DELETE_CONFIRM,
+    LoggedOnSubState.POST_MESSAGE_EDIT_LINE,
+    LoggedOnSubState.POST_MESSAGE_EDIT_LINE_CONTENT,
+    LoggedOnSubState.POST_MESSAGE_SAVE,
+    LoggedOnSubState.POST_MESSAGE_ATTACH_FILE,
+    LoggedOnSubState.POST_MESSAGE_ATTACH_DELETE_CONFIRM,
+    LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE,
+    LoggedOnSubState.POST_MESSAGE_REPLACE_SEARCH,
+    LoggedOnSubState.POST_MESSAGE_REPLACE_WITH,
+    LoggedOnSubState.POST_MESSAGE_INSERT_LINE,
+    LoggedOnSubState.POST_MESSAGE_INSERT_TEXT
+  ]);
+
+  if (messageSubStates.has(session.subState as string)) {
+    await handleMessageEntryInput(socket, session, data);
+    return;
+  }
+
+  // If a message entry session is active but subState was lost/reset, force it back
+  const messageEntry = session.tempData?.messageEntry;
+  if (messageEntry && !messageSubStates.has(session.subState as string)) {
+    // Recover to the correct message-entry substate based on progress
+    if (!messageEntry.toUser) {
+      session.subState = LoggedOnSubState.POST_MESSAGE_TO;
+    } else if (!messageEntry.subject) {
+      session.subState = LoggedOnSubState.POST_MESSAGE_SUBJECT;
+    } else if (typeof messageEntry.isPrivate === 'undefined') {
+      session.subState = LoggedOnSubState.POST_MESSAGE_PRIVATE;
+    } else {
+      session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    }
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+  }
+
+  // If a door is active but has lost its handler, clear door state so BBS input resumes
+  if (session.inDoorManager && !session.doorInputHandler) {
+    session.inDoorManager = false;
+    if (session.subState === LoggedOnSubState.DOOR_RUNNING) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    }
   }
 
   // NOTE: Door input routing is handled in socket-handlers.ts (checks doorInputHandler)
@@ -960,15 +1126,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
          session.tempData = undefined;
          return;
-       }
+      }
 
-       // Start file download
-       // TODO: Implement handleFileDownload function
-       // handleFileDownload(socket, session, fileNumber);
-       socket.emit('ansi-output', '\r\n\x1b[33mFile download not yet implemented.\x1b[0m\r\n');
-       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-       return;
-     }
+      // Start file download
+      handleFileDownload(socket, session, fileNumber);
+      return;
+    }
 
     // Handle file area selection for upload/download
      if (isNaN(areaNumber) || areaNumber === 0) {
@@ -997,15 +1160,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       startFileUpload(socket, session, selectedArea);
     } else if (session.tempData?.downloadMode) {
       // Start download process for selected area
-      // TODO: Implement startFileDownload function
-      // startFileDownload(socket, session, selectedArea);
-      socket.emit('ansi-output', '\r\n\x1b[33mFile download not yet implemented.\x1b[0m\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      startFileDownload(socket, session, selectedArea);
     } else {
       // Display files in selected area (like displayIt in AmiExpress)
-      // TODO: Implement displayFileAreaContents function
-      // displayFileAreaContents(socket, session, selectedArea);
-      socket.emit('ansi-output', '\r\n\x1b[33mFile listing not yet implemented.\x1b[0m\r\n');
+      displayFileAreaContents(socket, session, selectedArea);
+      session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     }
     return;
@@ -1322,84 +1481,33 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle file maintenance operations
   if (session.tempData?.operation === 'delete_files') {
-    // TODO: Implement handleFileDeleteConfirmation function
-    // await handleFileDeleteConfirmation(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mFile delete confirmation not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    await handleFileDeleteConfirmation(socket, session, data.trim());
     return;
   }
 
   if (session.tempData?.operation === 'move_files') {
-    // TODO: Implement handleFileMoveConfirmation function
-    // await handleFileMoveConfirmation(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mFile move confirmation not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    await handleFileMoveConfirmation(socket, session, data.trim());
     return;
   }
 
-  // Handle account editing operations
+  // Handle account editing operations (delegate to account editor menu)
   if (session.tempData?.accountEditingMenu) {
-    // TODO: Implement handleAccountEditing function
-    // handleAccountEditing(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mAccount editing not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    await handleAccountEditingCommand(socket, session);
     return;
   }
 
   if (session.tempData?.editUserAccount) {
-    // TODO: Implement handleEditUserAccount function
-    // handleEditUserAccount(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mEdit user account not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    await handleAccountEditingCommand(socket, session);
     return;
   }
 
   if (session.tempData?.viewUserStats) {
-    // TODO: Implement handleViewUserStats function
-    // handleViewUserStats(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mView user stats not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    await handleAccountEditingCommand(socket, session);
     return;
   }
 
-  if (session.tempData?.changeSecLevel) {
-    // TODO: Implement handleChangeSecLevel function
-    // handleChangeSecLevel(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mChange sec level not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-    return;
-  }
-
-  if (session.tempData?.toggleUserFlags) {
-    // TODO: Implement handleToggleUserFlags function
-    // handleToggleUserFlags(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mToggle user flags not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-    return;
-  }
-
-  if (session.tempData?.deleteUserAccount) {
-    // TODO: Implement handleDeleteUserAccount function
-    // handleDeleteUserAccount(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mDelete user account not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
-    return;
-  }
-
-  if (session.tempData?.searchUsers) {
-    // TODO: Implement handleSearchUsers function
-    // handleSearchUsers(socket, session, data.trim());
-    socket.emit('ansi-output', '\r\n\x1b[33mSearch users not yet implemented.\x1b[0m\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+  if (session.tempData?.changeSecLevel || session.tempData?.toggleUserFlags || session.tempData?.deleteUserAccount || session.tempData?.searchUsers) {
+    await handleAccountEditingCommand(socket, session);
     return;
   }
 
@@ -1428,9 +1536,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         return;
       } else {
         // Continue to next page
-        // TODO: Implement displayUserList function
-        // displayUserList(socket, session, tempData.userListPage, tempData.searchTerm);
-        socket.emit('ansi-output', '\r\nUser list display not yet implemented.\r\n');
+        displayUserList(socket, session, tempData.userListPage, tempData.searchTerm);
         return;
       }
     }
@@ -2166,6 +2272,34 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  if (session.subState === LoggedOnSubState.FM_CONFIRM_DELETE) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await FileMaintenanceHandler.handleConfirmDeleteInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.FM_MOVE_DEST_INPUT) {
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await FileMaintenanceHandler.handleMoveDestInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+    }
+    return;
+  }
+
   // CF Command (Conference Flags) Input Handlers
   // express.e:24672-24841
 
@@ -2412,6 +2546,15 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Safety: if shortcuts mode is active but no shortcuts are loaded or the flag is off,
+  // fall back to normal line input (prevents unwanted single-key triggering).
+  if (
+    session.subState === LoggedOnSubState.READ_SHORTCUTS &&
+    (!session.cmdShortcuts || !session.shortcuts || session.shortcuts.size === 0)
+  ) {
+    session.subState = LoggedOnSubState.READ_COMMAND;
+  }
+
   if (session.subState === LoggedOnSubState.READ_COMMAND) {
     console.log(' In READ_COMMAND state, reading line input');
     // Express.e:28619-28633 - Read command text using lineInput (line-buffered)
@@ -2509,65 +2652,56 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
-    try {
-      const keyRaw = data.trim();
-      if (keyRaw.length === 0) return;
-
-      const translateKey = (val: string): string => {
-        const ch = val.length > 0 ? val.charAt(0) : '';
-        const code = ch.charCodeAt(0);
-        switch (code) {
-          case 13:
-            return 'RET';
-          case 127:
-            return 'DEL';
-          case 8:
-            return 'BACK';
-          case 9:
-            return 'TAB';
-          case 27:
-            return 'ESC';
-          case 32:
-            return 'SPACE';
-          default:
-            return ch.toUpperCase();
-        }
-      };
-
-      const key = translateKey(keyRaw);
-
-      // Translate shortcut via loaded .keys map (express.e translateShortcut)
-      let translated = '';
-      if (session.shortcuts && session.shortcuts.size > 0) {
-        const lookup = session.shortcuts.get(key);
-        if (lookup) {
-          translated = lookup;
-        }
-      }
-
-      const commandToRun = translated || key;
-      session.commandText = commandToRun.toUpperCase();
-      session.subState = LoggedOnSubState.PROCESS_COMMAND;
-
-      try {
-        await processCommand(socket, session, commandToRun, '');
-      } catch (error) {
-        console.error('Error processing shortcut command:', error);
-        socket.emit('ansi-output', '\r\n\x1b[31mError processing command. Please try again.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        return;
-      }
-
-      showMenuAfterCommand(socket, session, false);
-    } catch (error) {
-      console.error('Error in shortcut processing:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mShortcut processing error. Returning to menu...\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    // readChar equivalent: single-key input, translate, process command, then return to menu
+    if (!session.cmdShortcuts || !session.shortcuts || session.shortcuts.size === 0) {
+      session.subState = LoggedOnSubState.READ_COMMAND;
+      await handleCommand(socket, session, data);
+      return;
     }
+
+    const keyRaw = data.length > 0 ? data[0] : '';
+    if (!keyRaw) {
+      return;
+    }
+
+    const translateKey = (val: string): string => {
+      const ch = val.length > 0 ? val.charAt(0) : '';
+      const code = ch.charCodeAt(0);
+      switch (code) {
+        case 13:
+          return 'RET';
+        case 127:
+          return 'DEL';
+        case 8:
+          return 'BACK';
+        case 9:
+          return 'TAB';
+        case 27:
+          return 'ESC';
+        case 32:
+          return 'SPACE';
+        default:
+          return ch.toUpperCase();
+      }
+    };
+
+    const key = translateKey(keyRaw);
+    let translated = '';
+    if (session.shortcuts && session.shortcuts.size > 0) {
+      const lookup = session.shortcuts.get(key);
+      if (lookup) {
+        translated = lookup;
+      }
+    }
+
+    const commandToRun = translated || key;
+    // Execute shortcut command and return to menu
+    session.commandText = commandToRun.toUpperCase();
+    session.subState = LoggedOnSubState.PROCESS_COMMAND;
+    await processCommand(socket, session, commandToRun, '');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
   } else if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
     // Express.e:28639-28642 - Process the command with priority system
     console.log(' In PROCESS_COMMAND state, executing command:', session.commandText);
@@ -2698,14 +2832,10 @@ export async function processCommand(socket: any, session: BBSSession, command: 
 
 // Process BBS commands (processInternalCommand equivalent)
 export async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
-  console.log('processBBSCommand called with command:', JSON.stringify(command));
-
   // Clear screen before showing command output (authentic BBS behavior)
-  console.log('Command processing: clearing screen for command output');
   socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
   // Map commands to internalCommandX functions from AmiExpress
-  console.log('Entering switch statement for command:', command);
   switch (command) {
     case 'D': // Download File(s) (internalCommandD) - express.e:24853-24857
       const { DownloadHandler } = require('./download.handler');
@@ -2959,7 +3089,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
 
     case '?': // Show Menu in Expert Mode (internalCommandQuestionMark) - express.e:24594-24599
-      handleQuestionMarkCommand(socket, session);
+      await handleQuestionMarkCommand(socket, session);
       return;
 
     case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089-25111

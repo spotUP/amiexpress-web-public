@@ -1,4 +1,9 @@
+jest.mock('../src/utils/conference-tooltypes.util', () => ({
+  getConferenceToolFlags: () => ({ freeDownloads: true })
+}));
+
 import { checkDownloadRatios, updateDownloadStats } from '../src/utils/download-ratios.util';
+import { DownloadHandler } from '../src/handlers/download.handler';
 import { User } from '../src/types';
 
 function makeUser(overrides: Partial<User> = {}): User {
@@ -138,5 +143,26 @@ describe('checkDownloadRatios', () => {
     expect(user.downloads).toBe(2); // unchanged
     expect(user.bytesDownload).toBe(100);
     expect(user.dailyBytesDld).toBe(75); // daily always increments
+  });
+
+  it('applies CREDITBYKB scaling to daily limit (KB rounding)', async () => {
+    const user = makeUser({ dailyBytesLimit: 2048, dailyBytesDld: 0 });
+    // 2049 bytes would fail if treated as bytes; with CREDITBYKB it rounds down to 2KB and should pass.
+    const result = await checkDownloadRatios(user, [{ size: 2049 }], undefined, false, true);
+    expect(result.canDownload).toBe(true);
+  });
+
+  it('fails daily allowance when CREDITBYKB scaling still exceeded', async () => {
+    const user = makeUser({ dailyBytesLimit: 2048, dailyBytesDld: 0 });
+    // 4096 bytes → 4KB vs 2KB allowance even with scaling, so should fail.
+    const result = await checkDownloadRatios(user, [{ size: 4096 }], undefined, false, true);
+    expect(result.canDownload).toBe(false);
+    expect(result.errorMessage).toMatch(/daily byte allowance/i);
+  });
+
+  it('treats conference FREEDOWNLOADS as free (no ratio hit)', () => {
+    const handler: any = DownloadHandler;
+    const fileInfo = { confNum: 1, comment: '', size: 1000 };
+    expect(handler.isFreeDownload(fileInfo)).toBe(true);
   });
 });

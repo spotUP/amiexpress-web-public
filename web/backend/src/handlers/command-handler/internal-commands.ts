@@ -109,16 +109,12 @@ import { handleUserStatsCommand } from '../user-commands.handler';
  * Maps commands to internalCommandX functions from AmiExpress
  */
 export async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
-  console.log('processBBSCommand called with command:', JSON.stringify(command));
-
   // Clear screen before showing command output (authentic BBS behavior)
-  console.log('Command processing: clearing screen for command output');
   socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
   const doors = getDoors();
 
   // Map commands to internalCommandX functions from AmiExpress
-  console.log('Entering switch statement for command:', command);
   switch (command) {
     case 'D': // Download File(s) (internalCommandD) - express.e:24853-24857
       const { DownloadHandler } = require('../download.handler');
@@ -368,7 +364,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
 
     case '?': // Show Menu in Expert Mode (internalCommandQuestionMark) - express.e:24594-24599
-      handleQuestionMarkCommand(socket, session);
+      await handleQuestionMarkCommand(socket, session);
       return;
 
     case '^': // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089-25111

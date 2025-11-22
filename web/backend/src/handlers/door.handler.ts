@@ -17,6 +17,13 @@ import { config } from '../config';
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
 
+function disableShortcuts(session: BBSSession) {
+  session.cmdShortcuts = false;
+  if (session.shortcuts && typeof session.shortcuts.clear === 'function') {
+    session.shortcuts.clear();
+  }
+}
+
 interface Door {
   id: string;
   name: string;
@@ -168,8 +175,7 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
       return;
     }
 
-    socket.emit('ansi-output', `\r\n\x1b[36mStarting ${doorInfo.name || doorInfo.command}...\x1b[0m\r\n\r\n`);
-
+    disableShortcuts(session);
     // Create AmigaDoorSession
     const amigaSession = new AmigaDoorSession(socket, {
       executablePath: doorInfo.resolvedPath,
@@ -336,8 +342,6 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
   };
   doorSessions.push(doorSession);
 
-  socket.emit('ansi-output', `\r\n\x1b[32mStarting ${door.name}...\x1b[0m\r\n`);
-
   // Log door execution
   callersLog(isGuest ? null : doorUser.id, doorUser.username, 'Executed door', door.name);
   callersLogManager.logDoor(nodeId, door.name);
@@ -459,6 +463,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       return;
     }
 
+    disableShortcuts(session);
     console.log(`[executeTypeScriptDoor] Door module loaded, calling runDoor()`);
 
     // Set door active flag - this blocks command handler but door can still receive events
@@ -532,6 +537,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 async function executeSDKDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
   console.log(`[executeSDKDoor] Starting SDK door: ${door.name}`);
   console.log(`[executeSDKDoor] Door path: ${door.path}`);
+  disableShortcuts(session);
 
   try {
     // Build absolute path to door
@@ -734,6 +740,7 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
 async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doorSession: DoorSession) {
   console.log(`[executeAmigaDoor] Starting Amiga door: ${door.name} (${door.type})`);
   console.log(`[executeAmigaDoor] Path: ${door.path}`);
+  disableShortcuts(session);
 
   try {
     // Get the BBS root from AmigaDoorManager (same location where doors are installed)
@@ -931,6 +938,7 @@ async function executeMciDoor(socket: any, session: BBSSession, door: Door, door
  * Execute web-compatible door (ported AmiExpress doors)
  */
 async function executeWebDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
+  disableShortcuts(session);
   switch (door.id) {
     case 'sal':
       await executeSAmiLogDoor(socket, session, door, doorSession);
@@ -1037,6 +1045,7 @@ function isAmigaBinary(filePath: string): boolean {
  */
 async function executeNativeDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
   console.log(` [DOOR] Executing native door: ${door.name} (${door.path})`);
+  disableShortcuts(session);
 
   // Check if door file exists
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
@@ -1051,7 +1060,6 @@ async function executeNativeDoor(socket: any, session: BBSSession, door: Door, d
   //  HISTORIC MOMENT: Check if this is an Amiga binary!
   if (isAmigaBinary(doorPath)) {
     console.log(' [AMIGA DOOR] Detected Amiga binary! Starting 68k emulation...');
-    socket.emit('ansi-output', '\r\n\x1b[36m Starting Amiga 68000 emulation...\x1b[0m\r\n\r\n');
 
     try {
       const amigaSession = new AmigaDoorSession(socket, {
@@ -1083,9 +1091,6 @@ async function executeNativeDoor(socket: any, session: BBSSession, door: Door, d
     BBS_DOOR_NAME: door.name,
     BBS_NODE: '1' // Node number for multi-node support
   };
-
-  // Execute Node.js script
-  socket.emit('ansi-output', `\r\n\x1b[36mLaunching ${door.name}...\x1b[0m\r\n\r\n`);
 
   try {
     const doorProcess = spawn('node', [doorPath, ...(door.parameters || [])], {
@@ -1159,6 +1164,7 @@ async function executeNativeDoor(socket: any, session: BBSSession, door: Door, d
  */
 async function executeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
   console.log(` [DOOR] Executing script door: ${door.name} (${door.path})`);
+  disableShortcuts(session);
 
   // Check if door script exists
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
@@ -1180,9 +1186,6 @@ async function executeScriptDoor(socket: any, session: BBSSession, door: Door, d
     BBS_DOOR_NAME: door.name,
     BBS_NODE: '1'
   };
-
-  // Execute shell script
-  socket.emit('ansi-output', `\r\n\x1b[36mLaunching ${door.name}...\x1b[0m\r\n\r\n`);
 
   try {
     // Determine shell based on script extension
@@ -1273,6 +1276,7 @@ async function executeScriptDoor(socket: any, session: BBSSession, door: Door, d
 async function executePythonDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
   console.log(`[executePythonDoor] Starting Python door: ${door.name}`);
   console.log(`[executePythonDoor] Door path: ${door.path}`);
+  disableShortcuts(session);
 
   // Check if door script exists
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
@@ -1325,8 +1329,6 @@ async function executePythonDoor(socket: any, session: BBSSession, door: Door, d
     BBS_TIME_REMAINING: timeRemaining.toString(),
     BBS_TIME_ONLINE: Math.floor((Date.now() - session.loginTime) / 60000).toString()
   };
-
-  socket.emit('ansi-output', `\r\n\x1b[36mLaunching Python door: ${door.name}...\x1b[0m\r\n\r\n`);
 
   try {
     // Execute Python script
@@ -1421,6 +1423,7 @@ async function executePythonDoor(socket: any, session: BBSSession, door: Door, d
 async function executeARexxDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
   console.log(`[executeARexxDoor] Starting ARexx door: ${door.name}`);
   console.log(`[executeARexxDoor] Door path: ${door.path}`);
+  disableShortcuts(session);
 
   // Check if door script exists
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
@@ -1431,8 +1434,6 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
     doorSession.status = 'error';
     return;
   }
-
-  socket.emit('ansi-output', `\r\n\x1b[36mLaunching ARexx door: ${door.name}...\x1b[0m\r\n\r\n`);
 
   try {
     // Import ARexx engine from arexx.ts

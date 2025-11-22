@@ -31,6 +31,8 @@ Every time you are done working, create/update a document handoff.md in the root
 
 If unsure, ask the user instead of guessing before proceeding 
 
+When asked to debug or solve a bug, always read the backend log first and use it to drive the investigation before making changes.
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.

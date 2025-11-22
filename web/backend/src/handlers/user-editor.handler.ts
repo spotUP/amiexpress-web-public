@@ -254,13 +254,46 @@ async function handleBulkAccountEditor(socket: any, session: BBSSession, db: Dat
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Bulk Account Editor'));
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Bulk editing not yet implemented.\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  socket.emit('ansi-output', 'Enter security level (0-255) to assign to all new accounts, or press ENTER to skip: ');
 
-  // Return to menu after keypress
-  session.inputCallback = async () => {
-    await handleAccountEditorMenu(socket, session, db);
+  // Store state for bulk operation
+  session.subState = LoggedOnSubState.ACCOUNT_EDITOR_BULK;
+  session.inputCallback = async (input: string) => {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      socket.emit('ansi-output', '\r\nNo bulk changes applied.\r\n');
+      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+      session.inputCallback = async () => {
+        await handleAccountEditorMenu(socket, session, db);
+      };
+      return;
+    }
+
+    const level = parseInt(trimmed, 10);
+    if (isNaN(level) || level < 0 || level > 255) {
+      socket.emit('ansi-output', '\r\n\x1b[31mInvalid security level.\x1b[0m\r\n');
+      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+      session.inputCallback = async () => {
+        await handleAccountEditorMenu(socket, session, db);
+      };
+      return;
+    }
+
+    try {
+      const newUsers = await db.getUsers({ newUser: true });
+      for (const user of newUsers) {
+        await db.updateUser(user.id, { secLevel: level });
+      }
+      socket.emit('ansi-output', `\r\nUpdated ${newUsers.length} new account(s) to level ${level}.\r\n`);
+    } catch (err) {
+      console.error('Bulk update error:', err);
+      socket.emit('ansi-output', '\r\n\x1b[31mError applying bulk changes.\x1b[0m\r\n');
+    }
+
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.inputCallback = async () => {
+      await handleAccountEditorMenu(socket, session, db);
+    };
   };
 }
 

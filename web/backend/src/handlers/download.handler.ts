@@ -10,10 +10,11 @@
 import { Socket } from 'socket.io';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity } from '../utils/acs.util';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { checkDownloadRatios, updateDownloadStats, creditAccountTrackDownloads } from '../utils/download-ratios.util';
 import { logDownload } from '../utils/download-logging.util';
 import { ACSPermission } from '../constants/acs-permissions';
+import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import { ConferenceRepository } from '../database/conference-repository';
 import { config } from '../config';
 import * as fs from 'fs';
@@ -144,7 +145,8 @@ export class DownloadHandler {
         conference: f.confNum
       })),
       await this.loadConferences(session),
-      checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING)
+      checkSecurity(session.user, ACSPermission.CONFERENCE_ACCOUNTING),
+      getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
     );
     if (!ratioCheck.canDownload) {
       socket.emit('ansi-output', `\r\n\x1b[31m${ratioCheck.errorMessage}\x1b[0m\r\n`);
@@ -439,8 +441,14 @@ export class DownloadHandler {
       return true;
     }
 
-    // TODO: Check if conference has FREEDOWNLOADS tooltype enabled
-    // For now, only check comment marker
+    // Conference-level FREEDOWNLOADS tooltype
+    if (fileInfo.confNum) {
+      const flags = getConferenceToolFlags(fileInfo.confNum);
+      if (flags.freeDownloads) {
+        return true;
+      }
+    }
+
     return false;
   }
 

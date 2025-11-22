@@ -26,7 +26,19 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
   const relConfNumber = session.relConfNum || 1;
   const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
 
+  // Reset shortcuts before menu logic (express.e:6567)
+  session.cmdShortcuts = false;
+  if (session.shortcuts?.clear) {
+    session.shortcuts.clear();
+  }
+
   const shouldDisplayMenu = ((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus;
+
+  // Default to line input unless a MENU.keys is loaded below
+  session.cmdShortcuts = false;
+  if (session.shortcuts?.clear) {
+    session.shortcuts.clear();
+  }
 
   if (shouldDisplayMenu && session.menuPause) {
     doPause(socket, session);
@@ -35,37 +47,25 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
   if (shouldDisplayMenu) {
     const screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
 
-    // Like express.e:6572-6573 - check for .keys file and set cmdShortcuts accordingly
+    // Load MENU .keys if present (express.e:6567-6573)
+    session.cmdShortcuts = false;
+    if (session.shortcuts) session.shortcuts.clear();
+
     if (screenDisplayed) {
       const resolvedPath = session.lastScreenFilePath;
-      const hasKeys =
-        (resolvedPath && hasKeysFileForResolvedPath(resolvedPath)) ||
-        hasKeysFile(SCREEN_MENU, session.currentConf);
-      if (hasKeys) {
-        session.cmdShortcuts = true;
-
-        // Load shortcuts (express.e loadShortcuts)
-        if (!session.shortcuts) {
-          session.shortcuts = new Map();
+      if (resolvedPath) {
+        const keysPath = `${resolvedPath}.keys`;
+        const fs = require('fs');
+        if (fs.existsSync(keysPath)) {
+          const loader = new ShortcutMap();
+          loader.load(keysPath);
+          loader.entries().forEach(([k, v]: [string, string]) => session.shortcuts!.set(k, v));
+          session.cmdShortcuts = true;
         }
-        session.shortcuts.clear();
-        if (resolvedPath) {
-          const path = require('path');
-          const { findCaseInsensitive } = require('../../utils/fs-amiga.util');
-          const dir = path.dirname(resolvedPath);
-          const base = path.basename(resolvedPath);
-          const candidate = `${base}.keys`;
-          const keyPath = findCaseInsensitive(dir, candidate);
-          if (keyPath) {
-            const loader = new ShortcutMap();
-            loader.load(keyPath);
-            loader.entries().forEach(([k, v]) => session.shortcuts!.set(k, v));
-          }
-        }
-      } else {
-        session.cmdShortcuts = false;
-        if (session.shortcuts) session.shortcuts.clear();
       }
+    } else {
+      session.cmdShortcuts = false;
+      if (session.shortcuts) session.shortcuts.clear();
     }
   }
 

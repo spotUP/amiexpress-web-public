@@ -53,46 +53,70 @@ async function runProgram(progPath: string, args: string[], redirectPath?: strin
   const isTs = ext === '.ts';
   const isJs = ext === '.js';
 
+  // For native binaries, ensure execute permission; otherwise skip with warning
+  if (!isTs && !isJs) {
+    try {
+      const mode = fs.statSync(progPath).mode;
+      if ((mode & 0o111) === 0) {
+        console.warn(`[BatchScheduler] Skipping ${progPath} (not executable)`);
+        return;
+      }
+    } catch {
+      console.warn(`[BatchScheduler] Skipping ${progPath} (stat failed)`);
+      return;
+    }
+  }
+
   await new Promise<void>((resolve) => {
-    const child = isTs
-      ? spawn('node', ['-r', 'ts-node/register/transpile-only', progPath, ...args], {
-          cwd: path.dirname(progPath),
-          env: { ...process.env, TS_NODE_TRANSPILE_ONLY: 'true' },
-        })
-      : isJs
-      ? spawn('node', [progPath, ...args], {
-          cwd: path.dirname(progPath),
-          env: process.env,
-        })
-      : spawn(progPath, args, {
-          cwd: path.dirname(progPath),
-          env: process.env,
-        });
+    try {
+      const child = isTs
+        ? spawn('node', ['-r', 'ts-node/register/transpile-only', progPath, ...args], {
+            cwd: path.dirname(progPath),
+            env: { ...process.env, TS_NODE_TRANSPILE_ONLY: 'true' },
+          })
+        : isJs
+        ? spawn('node', [progPath, ...args], {
+            cwd: path.dirname(progPath),
+            env: process.env,
+          })
+        : spawn(progPath, args, {
+            cwd: path.dirname(progPath),
+            env: process.env,
+          });
 
-    let output = '';
-    child.stdout.on('data', chunk => {
-      output += chunk.toString();
-    });
-    child.stderr.on('data', chunk => {
-      output += chunk.toString();
-    });
+      let output = '';
+      child.stdout.on('data', chunk => {
+        output += chunk.toString();
+      });
+      child.stderr.on('data', chunk => {
+        output += chunk.toString();
+      });
 
-    child.on('close', code => {
-      if (code !== 0) {
-        console.error(`[BatchScheduler] Program ${progPath} exited with code ${code}`);
-      }
-      if (redirectPath && output.length > 0) {
-        try {
-          const resolved = resolveAssign(redirectPath);
-          const dir = path.dirname(resolved);
-          fs.mkdirSync(dir, { recursive: true });
-          fs.writeFileSync(resolved, output, 'utf-8');
-        } catch (err) {
-          console.error('[BatchScheduler] Failed to write output:', err);
+      child.on('error', err => {
+        console.warn(`[BatchScheduler] Failed to start ${progPath}: ${err.message}`);
+        resolve();
+      });
+
+      child.on('close', code => {
+        if (code !== 0) {
+          console.warn(`[BatchScheduler] Program ${progPath} exited with code ${code}`);
         }
-      }
+        if (redirectPath && output.length > 0) {
+          try {
+            const resolved = resolveAssign(redirectPath);
+            const dir = path.dirname(resolved);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(resolved, output, 'utf-8');
+          } catch (err) {
+            console.error('[BatchScheduler] Failed to write output:', err);
+          }
+        }
+        resolve();
+      });
+    } catch (err: any) {
+      console.warn(`[BatchScheduler] Error spawning ${progPath}: ${err.message || err}`);
       resolve();
-    });
+    }
   });
 }
 

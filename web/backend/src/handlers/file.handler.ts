@@ -391,7 +391,7 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
 
   // Log deletion
   filesToDelete.forEach((file: any) => {
-    callersLog(session.user!.id, session.user!.username, 'Deleted file', file.filename);
+    callersLog(session.user!.id, session.user!.username, 'Deleted file', `${file.filename} (${file.areaname || ''})`);
   });
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
@@ -520,9 +520,9 @@ export async function handleFileMoveConfirmation(socket: any, session: BBSSessio
 
   socket.emit('ansi-output', `\r\n\x1b[32mMoved ${filesToMove.length} file(s) to ${tempData.destArea.name} successfully.\x1b[0m\r\n`);
 
-  // Log move
+  // Log move with destination
   filesToMove.forEach((file: any) => {
-    callersLog(session.user!.id, session.user!.username, 'Moved file', `${file.filename} to ${tempData.destArea.name}`);
+    callersLog(session.user!.id, session.user!.username, 'Moved file', `${file.filename} -> ${tempData.destArea.name}`);
   });
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');

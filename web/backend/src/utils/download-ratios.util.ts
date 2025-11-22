@@ -62,7 +62,8 @@ export async function checkDownloadRatios(
   user: User | undefined,
   requests: DownloadRequest[] | number,
   conferences?: Conference[],
-  conferenceAccountingEnabled: boolean = false
+  conferenceAccountingEnabled: boolean = false,
+  creditByKb: boolean = false
 ): Promise<{
   canDownload: boolean;
   errorMessage?: string;
@@ -84,20 +85,24 @@ export async function checkDownloadRatios(
   }
 
   const nonFree = requestList.filter(r => !r.isFree);
-  const requestedBytes = nonFree.reduce((sum, r) => sum + Math.max(0, r.size || 0), 0);
+  const scale = creditByKb ? 1024 : 1;
+  const toUnits = (value: number) => Math.floor(Math.max(0, value || 0) / scale);
+
+  const requestedBytes = nonFree.reduce((sum, r) => sum + toUnits(r.size || 0), 0);
   const requestedFiles = nonFree.length;
-  const totalRequestedBytes = requestList.reduce((sum, r) => sum + Math.max(0, r.size || 0), 0);
+  const totalRequestedBytes = requestList.reduce((sum, r) => sum + toUnits(r.size || 0), 0);
 
   // Get user stats
   const uploads = user.uploads || 0;
   const downloads = user.downloads || 0;
-  const bytesUpload = (user.bytesUpload ?? (user as any).uploadBytes) || 0;
-  const bytesDownload = (user.bytesDownload ?? (user as any).downloadBytes) || 0;
+  const bytesUpload = toUnits((user.bytesUpload ?? (user as any).uploadBytes) || 0);
+  const bytesDownload = toUnits((user.bytesDownload ?? (user as any).downloadBytes) || 0);
 
   // Daily allowance (bytesADL in express.e)
   const dailyLimit = user.dailyBytesLimit ?? user.byteLimit ?? 0;
-  const dailyDownloaded = user.dailyBytesDld || 0;
-  const bytesADL = dailyLimit > 0 ? Math.max(0, dailyLimit - dailyDownloaded) : MAX_INT;
+  const dailyDownloaded = toUnits(user.dailyBytesDld || 0);
+  const limitUnits = toUnits(dailyLimit);
+  const bytesADL = dailyLimit > 0 ? Math.max(0, limitUnits - dailyDownloaded) : MAX_INT;
   if (dailyLimit > 0 && totalRequestedBytes > bytesADL) {
     return {
       canDownload: false,
@@ -121,7 +126,7 @@ export async function checkDownloadRatios(
       if (req.isFree) {
         perConfTotals[confNum].freeFiles += 1;
       } else {
-        perConfTotals[confNum].bytes += req.size || 0;
+        perConfTotals[confNum].bytes += toUnits(req.size || 0);
         perConfTotals[confNum].files += 1;
       }
     }
@@ -134,8 +139,8 @@ export async function checkDownloadRatios(
       const conf = conferences.find(c => c.id === confId);
       const cRatio = conf?.ratio ?? ratioValue;
       const cRatioType = conf?.ratioType ?? ratioType;
-      const cBytesUpload = conf?.bytesUpload ?? bytesUpload;
-      const cBytesDownload = conf?.bytesDownload ?? bytesDownload;
+      const cBytesUpload = toUnits(conf?.bytesUpload ?? bytesUpload);
+      const cBytesDownload = toUnits(conf?.bytesDownload ?? bytesDownload);
       const cUploads = conf?.uploads ?? uploads;
       const cDownloads = conf?.downloads ?? downloads;
 

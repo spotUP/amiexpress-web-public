@@ -13,6 +13,7 @@ export interface ConferenceToolFlags {
   forceMenus: boolean;
   noBulls: boolean;
   noConfBulls: boolean;
+  freeDownloads: boolean;
 }
 
 const defaultFlags: ConferenceToolFlags = {
@@ -23,6 +24,7 @@ const defaultFlags: ConferenceToolFlags = {
   forceMenus: false,
   noBulls: false,
   noConfBulls: false,
+  freeDownloads: false,
 };
 
 const conferenceTooltypeCache = new Map<number, ConferenceToolFlags>();
@@ -46,6 +48,7 @@ function readFlagsFromDb(confNumber: number): Partial<ConferenceToolFlags> {
       noNewFiles: Boolean(confConfig.no_new_files),
       noBulls: Boolean((confConfig as any).no_bulls),
       noConfBulls: Boolean((confConfig as any).no_conf_bulls),
+      freeDownloads: Boolean((confConfig as any).free_downloads),
     };
   } catch (error) {
     console.error(`[ConferenceTooltypes] Error reading DB config for conference ${confNumber}:`, error);
@@ -91,6 +94,7 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
       forceMenus: flagSet.has('FORCE_MENUS'),
       noBulls: flagSet.has('NO_BULLS'),
       noConfBulls: flagSet.has('NO_CONF_BULLS'),
+      freeDownloads: flagSet.has('FREEDOWNLOADS'),
     };
   } catch (error) {
     console.error(`[ConferenceTooltypes] Error parsing Conf${confNumber}.info:`, error);

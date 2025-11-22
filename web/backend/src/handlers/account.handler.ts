@@ -237,21 +237,152 @@ export function handleViewUserStats(socket: any, session: BBSSession, username: 
 
 // handleChangeSecLevel() - Change user security level
 export function handleChangeSecLevel(socket: any, session: BBSSession, input: string) {
-  // This would need multi-step input: username, then new level
-  socket.emit('ansi-output', '\r\n\x1b[32mSecurity level editing not fully implemented yet.\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  session.tempData = undefined;
+  const { db } = require('../database');
+  const trimmed = input.trim();
+
+  // Step 1: ask for username
+  if (!session.tempData?.changeSecUser) {
+    if (!trimmed) {
+      socket.emit('ansi-output', '\r\n\x1b[31mUsername is required.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+      return;
+    }
+
+    db.getUserByUsername(trimmed).then((user: any) => {
+      if (!user) {
+        socket.emit('ansi-output', '\r\n\x1b[31mUser not found.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        session.tempData = undefined;
+        return;
+      }
+      socket.emit('ansi-output', `\r\nCurrent level for ${user.username}: ${user.secLevel}\r\n`);
+      socket.emit('ansi-output', 'Enter new security level (0-255): ');
+      session.tempData = { changeSecUser: user };
+      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+    }).catch((err: any) => {
+      console.error('Error loading user for sec level change:', err);
+      socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+    });
+    return;
+  }
+
+  // Step 2: apply new level
+  const newLevel = parseInt(trimmed, 10);
+  if (isNaN(newLevel) || newLevel < 0 || newLevel > 255) {
+    socket.emit('ansi-output', '\r\n\x1b[31mInvalid security level.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+    return;
+  }
+
+  const user = session.tempData.changeSecUser;
+  db.updateUser(user.id, { secLevel: newLevel }).then(() => {
+    socket.emit('ansi-output', `\r\n\x1b[32mUpdated ${user.username} to level ${newLevel}.\x1b[0m\r\n`);
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+  }).catch((err: any) => {
+    console.error('Error updating security level:', err);
+    socket.emit('ansi-output', '\r\n\x1b[31mError updating security level.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+  });
 }
 
 // handleToggleUserFlags() - Toggle user flags (expert, ansi, etc.)
 export function handleToggleUserFlags(socket: any, session: BBSSession, input: string) {
-  socket.emit('ansi-output', '\r\n\x1b[32mUser flag editing not fully implemented yet.\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  session.tempData = undefined;
+  const { db } = require('../database');
+  const trimmed = input.trim();
+
+  if (!session.tempData?.toggleFlagsUser) {
+    if (!trimmed) {
+      socket.emit('ansi-output', '\r\n\x1b[31mUsername is required.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+      return;
+    }
+
+    db.getUserByUsername(trimmed).then((user: any) => {
+      if (!user) {
+        socket.emit('ansi-output', '\r\n\x1b[31mUser not found.\x1b[0m\r\n');
+        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+        session.tempData = undefined;
+        return;
+      }
+
+      socket.emit('ansi-output', `\r\nUser: ${user.username}\r\n`);
+      socket.emit('ansi-output', `Expert mode (Y/N) [${user.expert === 'X' ? 'Y' : 'N'}]: `);
+      session.tempData = { toggleFlagsUser: user, awaitingAnsi: false };
+      session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+    }).catch((err: any) => {
+      console.error('Error loading user for flag toggle:', err);
+      socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = undefined;
+    });
+    return;
+  }
+
+  // If expert not set yet, interpret as expert input then ask ANSI
+  const user = session.tempData.toggleFlagsUser;
+  if (session.tempData.awaitingAnsi === false) {
+    const val = trimmed.toUpperCase();
+    if (val !== 'Y' && val !== 'N' && val !== '') {
+      socket.emit('ansi-output', '\r\n\x1b[31mEnter Y or N.\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Expert mode (Y/N): ');
+      return;
+    }
+    if (val) {
+      user.expert = val === 'Y' ? 'X' : 'N';
+    }
+    socket.emit('ansi-output', `ANSI (Y/N) [${user.ansi ? 'Y' : 'N'}]: `);
+    session.tempData.awaitingAnsi = true;
+    session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+    return;
+  }
+
+  const val = trimmed.toUpperCase();
+  if (val && val !== 'Y' && val !== 'N') {
+    socket.emit('ansi-output', '\r\n\x1b[31mEnter Y or N.\x1b[0m\r\n');
+    socket.emit('ansi-output', 'ANSI (Y/N): ');
+    return;
+  }
+  if (val) {
+    user.ansi = val === 'Y';
+  }
+
+  db.updateUser(user.id, { expert: user.expert, ansi: user.ansi }).then(() => {
+    socket.emit('ansi-output', '\r\n\x1b[32mUser flags updated.\x1b[0m\r\n');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+  }).catch((err: any) => {
+    console.error('Error updating user flags:', err);
+    socket.emit('ansi-output', '\r\n\x1b[31mError updating user flags.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+  });
 }
 
 // handleDeleteUserAccount() - Delete user account
@@ -316,13 +447,37 @@ export async function handleDeleteUserAccount(socket: any, session: BBSSession, 
 
 // handleSearchUsers() - Search users by various criteria
 export function handleSearchUsers(socket: any, session: BBSSession, searchTerm: string) {
-  socket.emit('ansi-output', `\r\n\x1b[36m-= Searching for "${searchTerm}" =-\x1b[0m\r\n`);
-  socket.emit('ansi-output', 'Searching...\r\n\r\n');
+  const { db } = require('../database');
+  const term = searchTerm.trim();
+  if (!term) {
+    socket.emit('ansi-output', '\r\n\x1b[31mSearch term is required.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+    return;
+  }
 
-  // For now, just show a message that search is not fully implemented
-  socket.emit('ansi-output', '\x1b[32mUser search not fully implemented yet.\x1b[0m\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-  session.tempData = undefined;
+  socket.emit('ansi-output', `\r\n\x1b[36m-= Searching for "${term}" =-\x1b[0m\r\n\r\n`);
+
+  db.getUsers({ limit: 50, search: term }).then((users: any[]) => {
+    if (!users || users.length === 0) {
+      socket.emit('ansi-output', 'No matching users found.\r\n');
+    } else {
+      users.forEach((user: any) => {
+        socket.emit('ansi-output', `${user.username.padEnd(16)} ${user.realname?.padEnd(20) || ''.padEnd(20)} ${user.location?.padEnd(15) || ''.padEnd(15)} lvl:${String(user.secLevel).padStart(3)}\r\n`);
+      });
+    }
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+  }).catch((err: any) => {
+    console.error('Error searching users:', err);
+    socket.emit('ansi-output', '\r\n\x1b[31mError searching users.\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.tempData = undefined;
+  });
 }

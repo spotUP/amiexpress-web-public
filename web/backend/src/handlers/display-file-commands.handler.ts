@@ -59,21 +59,20 @@ export function setDisplayFileCommandsDependencies(deps: {
  * In expert mode, displays the menu screen.
  * In normal mode, does nothing (menu is always visible).
  */
-export function handleQuestionMarkCommand(socket: any, session: BBSSession): void {
+export async function handleQuestionMarkCommand(socket: any, session: BBSSession): Promise<void> {
   const isExpert = session.user?.expert === 'X';
   if (!isExpert) {
     return;
   }
 
   // Display the menu screen even in expert mode (express.e:24594-24599)
-  _displayScreen(socket, session, 'MENU');
+  await _displayScreen(socket, session, 'MENU');
 
   // Load .keys and set input mode like the normal menu path
   const resolvedPath = session.lastScreenFilePath;
   const { hasKeysFileForResolvedPath } = require('./screen.handler');
-  const hasKeys =
-    (resolvedPath && hasKeysFileForResolvedPath(resolvedPath)) ||
-    _hasKeysFile('MENU', session.currentConf, session.nodeId || 0);
+  // MENU should not use hotkeys; ignore any .keys
+  const hasKeys = false;
 
   if (hasKeys) {
     session.cmdShortcuts = true;

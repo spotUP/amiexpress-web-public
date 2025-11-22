@@ -1,67 +1,0 @@
-
-[7C[36mNuKeD uSeR iN CoNFeReNCe : [37m-\\// LaNd Of HoMe \\//-
-
-[36m Nr.   [35m NaMe/HaNDLe           [34m LoCaTioN         [31mFiLeS   BYTeS      [33mLaST FaKe
-[32m----[37m|[32m------------------[37m|[32m-----------------------[37m|[32m-----[37m|[32m----------[37m|[32m-------------
-[36m  1[32m. [35m[-ÆT&T-&-Hµnter-][1C [34m^o^ MYSTIC ELITE TRADE[1C [31m   34   12259455  [33mBATMAN2.DMS
-[36m  2[32m. [35mSPAFLES[11C [34m<<SKID ROW>> <<BELGICA[1C [31m   12   10050136  [33mPDX-STS5.DMS
-[36m  3[32m. [35mPEACEMAKER[8C [34mABOVE THE LAW[10C [31m   25    8864084  [33mTRSI_BL.DMS
-[36m  4[32m. [35mMr.Return[9C [34mX×÷ ALiENGROUP^1993 ÷×[1C [31m    6    3873479  [33manthroxb.dms
-[36m  5[32m. [35mACTION[12C [34m - A|þha F|¡ghT -[6C [31m    8    3644120  [33mOTL-AC3.DMS
-[36m  6[32m. [35m(-FaZ! & tERMi-)[2C [34m-> JUST 2 PLAYBoYS! <-[1C [31m    7    3511683  [33mAFL-ARGH.DMS
-[36m  7[32m. [35mSTONI[13C [34mBerlin[17C [31m    7    3362607  [33msos_mel.dms
-[36m  8[32m. [35mBEAViS[12C [34m^O^ALPHA FLiGHT^O^[5C [31m    8    3220370  [33mpgp20.lha
-[36m  9[32m. [35mmr.deicide[8C [34mA·L·I·E·N·G·R·O·U·P[4C [31m   22    3070903  [33mBAUDB21.LHA
-[36m 10[32m. [35malphatron[9C [34mBerlin[17C [31m    6    2914815  [33mAEPRO104.DMS
-[36m 11[32m. [35mscorpio[11C [34m-*- Skid Row -*-[7C [31m    6    2562307  [33mCD255_3.DMS
-[36m 12[32m. [35mPhoenix[11C [34mBerlin 42, Deutschland[1C [31m    1    2535505  [33mamiwrite.lha
-[36m 13[32m. [35mSieGeL/MsT[8C [34m(MYSTiC/X-DeSiGN)[6C [31m    4    2270043  [33mreal1002.dms
-[36m 14[32m. [35mAxe/Mystic[8C [34m-^o^- M·Y·S·T·i·C -^o^[1C [31m    4    2073677  [33megpl29_1.dms
-[36m 15[32m. [35mSTEVE[13C [34mCRYING FIELDS BBS[6C [31m    3    2041464  [33mPDX-SIE1.DMS
-[36m 16[32m. [35mBLUE BIRD[9C [34m.:.MYSTIC.:.[11C [31m    4    1875878  [33mSR_PT6-2.DMS
-[36m 17[32m. [35mAndi/mst[10C [34m(Mystic /X-DeSiGn)[5C [31m   16    1823148  [33mNFILES21.lha
-[36m 18[32m. [35m$nØW[14C [34m5th DYNASTY[12C [31m    2    1600272  [33m-Z-STDU1.DMS
-[36m 19[32m. [35mEaSy RiDeR[8C [34m²±° M Y S T I C °±²[4C [31m    1    1551714  [33mMST-CFHD.LHA
-[36m 20[32m. [35mJAX[15C [34m/\ T\X/IN PE/\KS /\[4C [31m    3    1518786  [33mm!mword.lha
-[36m 21[32m. [35mxt 7[14C [34m-=- INDEPENDENT -=-[4C [31m    2    1430161  [33mCLAR31_2.DMS
-[36m 22[32m. [35mMikey[13C [34moOo¡=TNF-CREW=¡oOo[5C [31m    3    1410244  [33mresou1.dms
-[36m 23[32m. [35mARGON/MST[9C [34m···> mYSTIc <···[7C [31m    3    1345835  [33msr_bril3.dms
-[36m 24[32m. [35mSTEVIE B.[9C [34mPOWER BOX II[11C [31m    1    1318820  [33mdrgprog1.zip
-[36m 25[32m. [35mCarcass[11C [34mAt Home....[12C [31m    2    1297438  [33mHCC-KMHD.LHA
-[36m 26[32m. [35mGeNTLeMaN[9C [34m--]-^>MYST¿C<^-[--[5C [31m    2    1253838  [33mfcaga1.dms
-[36m 27[32m. [35mBlackstaff[8C [34mBerlin[17C [31m    3    1111621  [33mh&zt3_1.dms
-[36m 28[32m. [35mSTEELER[11C [34mBerlin,D[15C [31m    5     966969  [33mbugmine4.dms
-[36m 29[32m. [35m/Y\C ReN[10C [34m\>^</ FAITH^TOUR'¶³ \>[1C [31m    2     939318  [33mKEF_ANI.LHA
-[36m 30[32m. [35mBrain[13C [34m>>> Fate Gate <<<[6C [31m    2     920670  [33ml&p-am2.dms
-[36m 31[32m. [35mHUMANOiD & RU$tY[2C [34mMST÷ACiD SLAM÷TLS[6C [31m    3     871481  [33mBROWSER.LHA
-[36m 32[32m. [35mGhostlight[8C [34m-* Airbrush Rules *-[3C [31m    2     868427  [33msr_bril3.dms
-[36m 33[32m. [35mPowers[12C [34m[X]-POWER BOX II-[X][3C [31m    2     865368  [33mmns_bls2.dms
-[36m 34[32m. [35mSeCaM[13C [34mNoRTH STaR LaND[8C [31m    1     815253  [33m-Z-GOB36.DMS
-[36m 35[32m. [35mICe[15C [34mgOTHAMcITY/LTX/PGS[5C [31m    1     764765  [33mCLS_DH2F.DMS
-[36m 36[32m. [35mracks one[9C [34m==(¯¯FªAªI¿T¿H®®)==[4C [31m    2     762998  [33mad-1990.dms
-[36m 37[32m. [35mSvEN tHE CREAToR[2C [34m·­> 5th dYNASTY <­·[4C [31m    1     744912  [33mDCS-DCP.DMS
-[36m 38[32m. [35m/X\ARVEL[10C [34m  (-)ea\/en$ G/\tE[5C [31m    1     711306  [33mMIDI2.LHA
-[36m 39[32m. [35mdR.dRE![11C [34m-=====Faith=====-[6C [31m    2     697910  [33mSAS6VOL1.TXT
-[36m 40[32m. [35mSNEABER^SNOWMAN[3C [34m·»÷®÷Å÷Ð÷¿÷Å÷N÷Ç÷£÷«·[2C [31m    1     663291  [33m4WD-TGH.DMS
-[36m 41[32m. [35mANDY/MTN[10C [34m~~ FASTWAY ~~[10C [31m    1     656875  [33mMST_NMP.DMS
-[36m 42[32m. [35mgee[15C [34m._-\SKYLIGHT/-_.[7C [31m    1     457058  [33mHYPNOSIS.DMS
-[36m 43[32m. [35m°JABBA.&.EDE°[5C [34m-*- mYsTiC -*-[9C [31m    1     421511  [33ms_st3_1.dms
-[36m 44[32m. [35mDelta-X[11C [34mHøB/GerMaNy[12C [31m    2     330787  [33mcj-ANSW.txt
-[36m 45[32m. [35mFoxx'n'Lynxx[6C [34m«-» THe SiLENTS «-»[4C [31m    5     308174  [33mLogoffCheck.
-[36m 46[32m. [35mHook[14C [34mINDEPENDENT[12C [31m    2     305437  [33mIPL_SKA.DMS
-[36m 47[32m. [35mAtomiX[12C [34m.-> N.A.S.A <-.[8C [31m    1     235216  [33mMST-VW27.lha
-[36m 48[32m. [35mTHE SiLENCER/TRSi[1C [34m[«« TRiSTAR REDSECT0R [1C [31m    1     110948  [33mMAXNCOMM.LHA
-[36m 49[32m. [35mCee Jay[11C [34m[·M·¥·S·T·¿·Ç··9·³·][3C [31m    2      71471  [33mcj-answ2.txt
-[36m 50[32m. [35mVano[14C [34mTorremolinos, Spain[4C [31m    1      34433  [33mfastser.lzh
-[36m 51[32m. [35mdeathrider[8C [34m -^· M·Y·S·T·¿·C ·^-[3C [31m    1      29544  [33mGB68000.LHA
-[36m 52[32m. [35mAirworx[11C [34m ­­> 5th DYNaSTY <­­[3C [31m    2      27126  [33mFriend.TXT
-[36m 53[32m. [35mFlatlined[9C [34m----CrAzY------[8C [31m    1      23624  [33mBFJRCOMM.CAP
-[36m 54[32m. [35moUtLiNe[11C [34mGO-WEST[16C [31m    1      17933  [33mab2code.txt
-[36m 55[32m. [35mSlasher/Devils[4C [34m[DeViLs.GeRmAnY][7C [31m    1       5520  [33mbbslist.join
-[36m 56[32m. [35mFuZzY/MsT[9C [34m(MySTiC /X-DeSiGN)[5C [31m    1       3644  [33mblitzdisk
-[32m------------------------------------------------------------------------------
-[5C[31m  244 [37mFiLe(S) WiTH a BYTeAMouNT oF [31m  97424372 [37mBYTeS WeRe FaKeD!
-[32m------------------------------------------------------------------------------
-[14C[36mBK-BuLLCReaToR [33mV1.00 [36mBY [33mS¡eGeL/MsT [37m([36mMYSTiC[37m/[36mX-DeSiGN[37m)[0m
-
-

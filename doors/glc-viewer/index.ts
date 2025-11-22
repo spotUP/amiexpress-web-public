@@ -81,6 +81,43 @@ function padField(value: unknown, width: number): string {
   return str.padStart(width, ' ');
 }
 
+function stripAnsi(input: string): string {
+  return input.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function truncateAnsi(input: string, maxCols: number): string {
+  let visible = 0;
+  let out = '';
+  let i = 0;
+
+  const line = input.replace(/\r?\n$/, '');
+
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === '\x1b' && line[i + 1] === '[') {
+      const end = line.indexOf('m', i);
+      if (end === -1) break;
+      out += line.slice(i, end + 1);
+      i = end + 1;
+      continue;
+    }
+
+    if (visible >= maxCols) break;
+
+    out += ch;
+    visible += 1;
+    i += 1;
+  }
+
+  return out;
+}
+
+function emitTrimmedLine(socket: SocketIOSocket, text: string, maxCols: number = 80): void {
+  const visibleLen = stripAnsi(text).replace(/\r?\n$/, '').length;
+  const payload = visibleLen > maxCols ? truncateAnsi(text, maxCols) : text.replace(/\r?\n$/, '');
+  socket.emit('ansi-output', `${payload}\r\n`);
+}
+
 /**
  * Load GLC configuration
  */
@@ -344,8 +381,8 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
     const uploadDisplay = upload.length > 8 ? 'LOTS' : upload;
     const downloadDisplay = download.length > 8 ? 'LOTS' : download;
 
-    const line = `\x1b[36m${username}\x1b[34m:\x1b[32m${locationOrBBS}\x1b[34m:\x1b[37m${dateon}\x1b[34m:\x1b[37m${timeon}-${timeoff}\x1b[34m:\x1b[36m${actions}\x1b[34m:\x1b[37m${uploadDisplay.padStart(4)}\x1b[34m:\x1b[37m${downloadDisplay.padStart(4)}\r\n`;
-    socket.emit('ansi-output', line);
+    const line = `\x1b[36m${username}\x1b[34m:\x1b[32m${locationOrBBS}\x1b[34m:\x1b[37m${dateon}\x1b[34m:\x1b[37m${timeon}-${timeoff}\x1b[34m:\x1b[36m${actions}\x1b[34m:\x1b[37m${uploadDisplay.padStart(4)}\x1b[34m:\x1b[37m${downloadDisplay.padStart(4)}`;
+    emitTrimmedLine(socket, line);
   }
 
   socket.emit('ansi-output', '\x1b[34m------------------^---------------------^-----^-----------^----------^----^----\r\n');
@@ -358,26 +395,26 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
 
   // Statistics - Style 1 or 2 (side by side days)
   if (style === 1 || style === 2) {
-    const stat1 = `\x1b[35mSTATUS \x1b[32m${data.yesterdayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.calls,3)}\x1b[34m] \x1b[1;33mTOP-CPS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.topcps,5)}\x1b[34m]  \x1b[1;33mUL \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.uploads,7)} \x1b[1;33mKB\x1b[0;34m]  \x1b[1;33mDL \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.downloads,7)} \x1b[1;33mKB\x1b[0;34m]\r\n`;
-    socket.emit('ansi-output', stat1);
+    const stat1 = `\x1b[35mSTATUS \x1b[32m${data.yesterdayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.calls,3)}\x1b[34m] \x1b[1;33mTOP-CPS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.topcps,5)}\x1b[34m] \x1b[1;33mUL \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.uploads,7)} \x1b[1;33mKB\x1b[0;34m] \x1b[1;33mDL \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.downloads,7)} \x1b[1;33mKB\x1b[0;34m]`;
+    emitTrimmedLine(socket, stat1);
 
-    const stat2 = `\x1b[35mSTATUS \x1b[32m${data.previousDayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.calls, 3)}\x1b[34m] \x1b[1;33mTOP-CPS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.topcps, 5)}\x1b[34m]  \x1b[1;33mUL \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.uploads, 7)} \x1b[1;33mKB\x1b[0;34m]  \x1b[1;33mDL \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.downloads, 7)} \x1b[1;33mKB\x1b[0;34m]\r\n`;
-    socket.emit('ansi-output', stat2);
+    const stat2 = `\x1b[35mSTATUS \x1b[32m${data.previousDayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.calls, 3)}\x1b[34m] \x1b[1;33mTOP-CPS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.topcps, 5)}\x1b[34m] \x1b[1;33mUL \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.uploads, 7)} \x1b[1;33mKB\x1b[0;34m] \x1b[1;33mDL \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.downloads, 7)} \x1b[1;33mKB\x1b[0;34m]`;
+    emitTrimmedLine(socket, stat2);
 
-    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padField(data.records.recordcalls,3)}\x1b[34m] \x1b[35mMOST CALLED SYSTEM  \x1b[34m[\x1b[36m${padField(data.records.calls,3)}\x1b[34m]\x1b[35m: \x1b[32m${data.records.mostcalled.substring(0, 21).padEnd(21)}\r\n`;
-    socket.emit('ansi-output', records);
+    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padField(data.records.recordcalls,3)}\x1b[34m] \x1b[35mMOST CALLED SYSTEM \x1b[34m[\x1b[36m${padField(data.records.calls,3)}\x1b[34m]\x1b[35m: \x1b[32m${data.records.mostcalled.substring(0, 21).padEnd(21)}`;
+    emitTrimmedLine(socket, records);
   }
 
   // Statistics - Style 3 or 4 (with top 3 systems)
   if (style === 3 || style === 4) {
-    const stat1 = `\x1b[35mSTATUS \x1b[32m${data.yesterdayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.calls,3)}\x1b[34m]     \x1b[35mTOP 3 MOST     \x1b[37m1\x1b[0;34m[\x1b[36m${padStat(data.records.calls,7)}\x1b[34m] \x1b[37m${data.records.mostcalled.substring(0, 20).padEnd(20)}\r\n`;
-    socket.emit('ansi-output', stat1);
+    const stat1 = `\x1b[35mSTATUS \x1b[32m${data.yesterdayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.yesterdayStats.calls,3)}\x1b[34m] \x1b[35mTOP 3 MOST \x1b[37m1\x1b[0;34m[\x1b[36m${padStat(data.records.calls,7)}\x1b[34m] \x1b[37m${data.records.mostcalled.substring(0, 20).padEnd(20)}`;
+    emitTrimmedLine(socket, stat1);
 
-    const stat2 = `\x1b[35mSTATUS \x1b[32m${data.previousDayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.calls, 3)}\x1b[34m]                    \x1b[37m2\x1b[0;34m[\x1b[36m${padStat(data.records.calls2, 7)}\x1b[34m] \x1b[37m${data.records.secondmostcalled.substring(0, 20).padEnd(20)}\r\n`;
-    socket.emit('ansi-output', stat2);
+    const stat2 = `\x1b[35mSTATUS \x1b[32m${data.previousDayStats.statdate.padEnd(8)}\x1b[35m: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padStat(data.previousDayStats.calls, 3)}\x1b[34m] \x1b[37m2\x1b[0;34m[\x1b[36m${padStat(data.records.calls2, 7)}\x1b[34m] \x1b[37m${data.records.secondmostcalled.substring(0, 20).padEnd(20)}`;
+    emitTrimmedLine(socket, stat2);
 
-    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padField(data.records.recordcalls,3)}\x1b[34m]   \x1b[35mCALLED SYSTEMS   \x1b[37m3\x1b[0;34m[\x1b[36m${padField(data.records.calls3,7)}\x1b[34m] \x1b[37m${data.records.thirdmostcalled.substring(0, 20).padEnd(20)}\r\n`;
-    socket.emit('ansi-output', records);
+    const records = `\x1b[35mALLTIME RECORDS: \x1b[1;33mCALLS \x1b[0;34m[\x1b[36m${padField(data.records.recordcalls,3)}\x1b[34m] \x1b[35mCALLED SYSTEMS \x1b[37m3\x1b[0;34m[\x1b[36m${padField(data.records.calls3,7)}\x1b[34m] \x1b[37m${data.records.thirdmostcalled.substring(0, 20).padEnd(20)}`;
+    emitTrimmedLine(socket, records);
   }
 
   socket.emit('ansi-output', '\x1b[34m-------------------------------------------------------------------------------\x1b[0m\r\n');
@@ -391,8 +428,6 @@ export async function runDoor(doorSession: any): Promise<void> {
 
   try {
     const config = loadConfig();
-
-    socket.emit('ansi-output', '\r\n\x1b[36mFetching Global Last Callers data...\x1b[0m\r\n');
 
     // Fetch JSON data
     const jsonText = await fetchGLCData(config);

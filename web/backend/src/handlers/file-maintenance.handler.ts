@@ -22,8 +22,11 @@ import { checkSecurity } from '../utils/acs.util';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { FileFlagManager } from '../utils/file-flag.util';
+import { parseDirSpan, getDirSpanPrompt, DirSpan } from '../utils/dir-span.util';
+import { parseDirFile, DirFileEntry } from '../utils/dir-file-reader.util';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 
 import type { BBSSession } from '../index';
 
@@ -40,6 +43,9 @@ interface FileEntry {
   checked: string;
 }
 
+const HOLD_ACCESS_LEVEL = 201; // express.e default holdAccessLevel
+const MAX_DESC_LINES = 15;     // express.e max_desclines default
+
 // Dependencies injected from index.ts
 let _db: any;
 let _config: any;
@@ -48,7 +54,8 @@ let _callersLog: any;
 export function setFileMaintenanceDependencies(deps: {
   db: any;
   config: any;
-  callersLog: any;
+  callersLog?: any;
+  fileAreas?: any[];
 }) {
   _db = deps.db;
   _config = deps.config;
@@ -222,15 +229,16 @@ export class FileMaintenanceHandler {
   ): Promise<void> {
 
     // express.e:24960 - getDirSpan() - Get directory range to search
-    const { getDirSpanPrompt } = require('../utils/dir-file-reader.util');
-    const dirSpan = getDirSpanPrompt(maxDirs, false); // false = no HOLD access for normal users
+    const hasHoldAccess = this.canAccessHold(session);
+    const dirPrompt = getDirSpanPrompt(maxDirs, hasHoldAccess);
 
-    socket.emit('ansi-output', `Enter directory range to search (1-${maxDirs}) or ALL: `);
+    socket.emit('ansi-output', dirPrompt);
 
     session.tempData.fmContext = {
       step: 'get_dir_span',
       flagFileList,
-      maxDirs
+      maxDirs,
+      hasHoldAccess
     };
     session.subState = LoggedOnSubState.FM_DIRSPAN_INPUT;
   }
@@ -244,32 +252,44 @@ export class FileMaintenanceHandler {
     session: BBSSession,
     input: string
   ): Promise<void> {
-    const trimmed = input.trim().toUpperCase();
-    const { flagFileList, maxDirs } = session.tempData.fmContext;
+    const { flagFileList, maxDirs, hasHoldAccess } = session.tempData.fmContext;
+    const trimmed = input.trim();
 
     socket.emit('ansi-output', '\r\n');
 
-    let startDir = 1;
-    let endDir = maxDirs;
-
-    // Parse directory range
-    if (trimmed === 'ALL' || trimmed === '') {
-      // Use all directories
-    } else if (trimmed.includes('-')) {
-      const parts = trimmed.split('-');
-      startDir = parseInt(parts[0]) || 1;
-      endDir = parseInt(parts[1]) || maxDirs;
-    } else {
-      startDir = endDir = parseInt(trimmed) || 1;
+    if (trimmed.length === 0) {
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = {};
+      return;
     }
 
-    // Validate range
-    if (startDir < 1) startDir = 1;
-    if (endDir > maxDirs) endDir = maxDirs;
-    if (startDir > endDir) [startDir, endDir] = [endDir, startDir];
+    const dirSpan: DirSpan = parseDirSpan(trimmed, maxDirs, hasHoldAccess);
 
-    // express.e:24968-25035 - Loop through directories and search for files
-    await this.scanDirectories(socket, session, flagFileList, startDir, endDir, maxDirs);
+    if (!dirSpan.success) {
+      if (dirSpan.error) {
+        socket.emit('ansi-output', AnsiUtil.errorLine(dirSpan.error));
+      }
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = {};
+      return;
+    }
+
+    const dirList = this.buildDirList(dirSpan);
+
+    session.tempData.fmContext = {
+      flagFileList,
+      maxDirs,
+      hasHoldAccess,
+      dirSpan,
+      dirList,
+      dirIndex: 0,
+      resumePos: 0,
+      useFlagged: session.tempData.fmUseFlagged || false
+    };
+
+    await this.scanDirectories(socket, session);
   }
 
   /**
@@ -279,64 +299,90 @@ export class FileMaintenanceHandler {
   private static async scanDirectories(
     socket: any,
     session: BBSSession,
-    flagFileList: string[],
-    startDir: number,
-    endDir: number,
-    maxDirs: number
+    startDirIndex: number = 0,
+    resumePos: number = 0
   ): Promise<void> {
-
+    const ctx = session.tempData.fmContext || {};
+    const dirs: number[] = ctx.dirList || [];
+    const flagFileList: string[] = ctx.flagFileList || [];
     const bbsDataPath = _config.get('dataDir');
     const confNum = session.currentConf || 1;
-    const { readDirFile } = require('../utils/dir-file-reader.util');
     const { getConferenceDir } = require('../utils/file-hold.util');
 
-    // express.e:24970-25033 - Loop through each directory
-    for (let dirNum = startDir; dirNum <= endDir; dirNum++) {
+    if (dirs.length === 0) {
+      socket.emit('ansi-output', '\r\nFile maintenance complete.\r\n');
+      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.tempData = {};
+      return;
+    }
+
+    for (let dirIdx = startDirIndex; dirIdx < dirs.length; dirIdx++) {
+      const dirNum = dirs[dirIdx];
       const conferencePath = getConferenceDir(confNum, bbsDataPath);
-      const dirFilePath = path.join(conferencePath, `DIR${dirNum}`);
+      const dirMeta = this.getDirMeta(conferencePath, dirNum, ctx.maxDirs);
+      const dirFilePath = dirMeta.path;
 
       // express.e:24972-24991 - Display scanning message
-      socket.emit('ansi-output', AnsiUtil.colorize(`Scanning directory ${dirNum}\r\n`, 'yellow'));
+      socket.emit('ansi-output', AnsiUtil.colorize(`Scanning directory ${dirMeta.label}\r\n`, 'yellow'));
       session.tempData.lineCount = (session.tempData.lineCount || 0) + 1;
 
-      // Read DIR file
       if (!fs.existsSync(dirFilePath)) {
+        resumePos = 0;
         continue;
       }
 
-      const entries = await readDirFile(dirFilePath);
+      const dirContent = fs.readFileSync(dirFilePath, 'utf-8');
+      const dirLines = dirContent.split(/\r?\n/);
+      const entries = parseDirFile(dirContent);
 
-      // express.e:24995-25031 - Search for matching files
-      let matchPos = 0;
+      let matchPos = dirIdx === startDirIndex ? resumePos : 0;
+
       while (matchPos < entries.length) {
-        const result = await this.maintenanceFileSearch(
-          socket,
-          session,
-          dirFilePath,
-          dirNum,
-          entries,
-          flagFileList,
-          matchPos
+        const entry = entries[matchPos];
+        if (!entry || !entry.filename) {
+          matchPos++;
+          continue;
+        }
+
+        const matches = flagFileList.some(pattern =>
+          this.wildcardMatch(entry.filename.toUpperCase(), pattern.toUpperCase())
         );
 
-        if (result.stat === 'NOT_FOUND') {
-          break; // No more matches in this directory
+        if (!matches) {
+          matchPos++;
+          continue;
         }
 
-        if (result.stat === 'QUIT') {
-          // User quit, exit completely
-          socket.emit('ansi-output', '\r\n');
-          session.menuPause = true;
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.tempData = {};
-          return;
-        }
+        await this.displayMatch(socket, session, entry, dirMeta.isHold, matchPos, dirMeta.label, dirLines);
 
-        matchPos = result.nextMatchPos;
+        session.tempData.fmContext = {
+          ...ctx,
+          dirList: dirs,
+          dirIndex: dirIdx,
+          resumePos: matchPos + 1,
+          step: 'get_action',
+          dirNum,
+          dirFilePath,
+          dirLines,
+          currentFile: entry,
+          flagFileList,
+          useFlagged: ctx.useFlagged || false,
+          hasHoldAccess: ctx.hasHoldAccess || false,
+          maxDirs: ctx.maxDirs,
+          dirSpan: ctx.dirSpan,
+          isHold: dirMeta.isHold,
+          viewAllowed: this.canViewFile(session, dirMeta.isHold)
+        };
+
+        session.subState = LoggedOnSubState.FM_ACTION_INPUT;
+        return; // Await user action
       }
+
+      resumePos = 0;
     }
 
-    // express.e:25036 - All directories scanned
     socket.emit('ansi-output', '\r\nFile maintenance complete.\r\n');
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = false;
@@ -344,73 +390,396 @@ export class FileMaintenanceHandler {
     session.tempData = {};
   }
 
-  /**
-   * Search for files matching patterns in directory
-   * express.e:24997-25031 (maintenanceFileSearch)
-   *
-   * Returns: { stat: 'FOUND' | 'NOT_FOUND' | 'QUIT', nextMatchPos: number }
-   */
-  private static async maintenanceFileSearch(
+  private static getDirMeta(conferencePath: string, dirNum: number, maxDirs?: number) {
+    const isHold = dirNum === -1;
+    const isLcFiles = dirNum === 0;
+    const label = isHold ? 'HOLD' : isLcFiles ? 'LCFILES' : dirNum === maxDirs ? `${dirNum} (Upload)` : `${dirNum}`;
+    const dirPath = isHold
+      ? path.join(conferencePath, 'hold', 'held')
+      : isLcFiles
+        ? path.join(conferencePath, 'LCFILES', 'LCFILES')
+        : path.join(conferencePath, `DIR${dirNum}`);
+
+    return { path: dirPath, label, isHold };
+  }
+
+  private static buildDirList(span: DirSpan): number[] {
+    if (span.startDir === -1 && span.endDir === -1) {
+      return [-1];
+    }
+
+    const list: number[] = [];
+    for (let i = span.startDir; i <= span.endDir; i++) {
+      list.push(i);
+    }
+    return list;
+  }
+
+  private static canAccessHold(session: BBSSession): boolean {
+    const level = session.user?.secLevel || 0;
+    return level >= HOLD_ACCESS_LEVEL || checkSecurity(session.user, ACSPermission.HOLD_ACCESS);
+  }
+
+  private static async displayMatch(
     socket: any,
     session: BBSSession,
-    dirFilePath: string,
-    dirNum: number,
-    entries: any[],
-    flagFileList: string[],
-    startPos: number
-  ): Promise<{ stat: string; nextMatchPos: number }> {
+    entry: DirFileEntry,
+    isHold: boolean,
+    matchPos: number,
+    dirLabel: string,
+    dirLines: string[]
+  ) {
+    socket.emit('ansi-output', '\r\n');
 
-    // Search for next matching file starting from startPos
-    for (let i = startPos; i < entries.length; i++) {
-      const entry = entries[i];
-      if (!entry.filename) continue;
+    const descLines = entry.rawLines.slice(0, 1 + MAX_DESC_LINES);
+    descLines.forEach(line => socket.emit('ansi-output', `${line}\r\n`));
+    socket.emit('ansi-output', '\r\n');
 
-      // Check if filename matches any pattern in flagFileList
-      const matches = flagFileList.some(pattern =>
-        this.wildcardMatch(entry.filename.toUpperCase(), pattern.toUpperCase())
-      );
+    const viewAllowed = this.canViewFile(session, isHold);
+    const prompt = viewAllowed
+      ? '\x1b[32m(\x1b[33mC\x1b[32m)\x1b[36montinue, \x1b[32m(\x1b[33mD\x1b[32m)\x1b[36melete, \x1b[32m(\x1b[33mM\x1b[32m)\x1b[36move, \x1b[32m(\x1b[33mV\x1b[32m)\x1b[36miew, \x1b[32m(\x1b[33mQ\x1b[32m)\x1b[36muit\x1b[0m? '
+      : '\x1b[32m(\x1b[33mC\x1b[32m)\x1b[36montinue, \x1b[32m(\x1b[33mD\x1b[32m)\x1b[36melete, \x1b[32m(\x1b[33mM\x1b[32m)\x1b[36move, \x1b[32m(\x1b[33mQ\x1b[32m)\x1b[36muit\x1b[0m? ';
+    socket.emit('ansi-output', prompt);
 
-      if (matches) {
-        // Found a match! Display file info and prompt for action
-        socket.emit('ansi-output', '\r\n');
-        socket.emit('ansi-output', AnsiUtil.colorize(`File: ${entry.filename}`, 'cyan'));
-        socket.emit('ansi-output', `  (${entry.size || 0} bytes)\r\n`);
-        if (entry.description) {
-          socket.emit('ansi-output', `  ${entry.description}\r\n`);
+    session.tempData.fmContext = {
+      ...(session.tempData.fmContext || {}),
+      dirLabel,
+      matchPos,
+      viewAllowed,
+      dirLines
+    };
+  }
+
+  private static canViewFile(session: BBSSession, isHold: boolean): boolean {
+    if (isHold) {
+      return false;
+    }
+    return checkSecurity(session.user, ACSPermission.VIEW_A_FILE);
+  }
+
+  private static async afterAction(
+    socket: any,
+    session: BBSSession,
+    nextPos: number
+  ): Promise<void> {
+    const ctx = session.tempData.fmContext || {};
+    if (ctx.useFlagged) {
+      socket.emit('ansi-output', 'Remove from flagged list ');
+      socket.emit('ansi-output', AnsiUtil.colorize('(Y/n)', 'green') + '? ');
+      session.tempData.fmContext = { ...ctx, step: 'ask_remove_flag', nextPos };
+      session.subState = LoggedOnSubState.FM_REMOVE_FLAG_INPUT;
+      return;
+    }
+
+    await this.continueSearch(socket, session, nextPos);
+  }
+
+  private static async redisplayPrompt(
+    socket: any,
+    session: BBSSession
+  ): Promise<void> {
+    const ctx = session.tempData.fmContext || {};
+    const prompt = ctx.viewAllowed
+      ? '\x1b[32m(\x1b[33mC\x1b[32m)\x1b[36montinue, \x1b[32m(\x1b[33mD\x1b[32m)\x1b[36melete, \x1b[32m(\x1b[33mM\x1b[32m)\x1b[36move, \x1b[32m(\x1b[33mV\x1b[32m)\x1b[36miew, \x1b[32m(\x1b[33mQ\x1b[32m)\x1b[36muit\x1b[0m? '
+      : '\x1b[32m(\x1b[33mC\x1b[32m)\x1b[36montinue, \x1b[32m(\x1b[33mD\x1b[32m)\x1b[36melete, \x1b[32m(\x1b[33mM\x1b[32m)\x1b[36move, \x1b[32m(\x1b[33mQ\x1b[32m)\x1b[36muit\x1b[0m? ';
+    socket.emit('ansi-output', prompt);
+  }
+
+  private static async promptDeleteConfirmation(
+    socket: any,
+    session: BBSSession
+  ): Promise<void> {
+    socket.emit('ansi-output', AnsiUtil.colorize('Are you sure you want to delete this file', 'red'));
+    socket.emit('ansi-output', ' (Y/n)? ');
+    session.subState = LoggedOnSubState.FM_CONFIRM_DELETE;
+  }
+
+  static async handleConfirmDeleteInput(
+    socket: any,
+    session: BBSSession,
+    input: string
+  ): Promise<void> {
+    const ctx = session.tempData.fmContext || {};
+    const nextPos = ctx.nextPos ?? (ctx.matchPos ?? 0) + 1;
+    const answer = input.trim().toUpperCase();
+    socket.emit('ansi-output', '\r\n');
+
+    if (answer === 'Y' || answer === 'YES' || answer === '') {
+      await this.performDelete(socket, session, ctx);
+      await this.afterAction(socket, session, nextPos);
+      return;
+    }
+
+    await this.continueSearch(socket, session, nextPos);
+  }
+
+  private static async promptMoveDestination(
+    socket: any,
+    session: BBSSession
+  ): Promise<void> {
+    socket.emit('ansi-output', 'Enter destination directory number: ');
+    session.subState = LoggedOnSubState.FM_MOVE_DEST_INPUT;
+  }
+
+  static async handleMoveDestInput(
+    socket: any,
+    session: BBSSession,
+    input: string
+  ): Promise<void> {
+    const ctx = session.tempData.fmContext || {};
+    const maxDirs = ctx.maxDirs || 0;
+    const destDir = parseInt(input.trim(), 10);
+    const nextPos = ctx.nextPos ?? (ctx.matchPos ?? 0) + 1;
+
+    socket.emit('ansi-output', '\r\n');
+
+    if (isNaN(destDir) || destDir < 1 || (maxDirs && destDir > maxDirs)) {
+      socket.emit('ansi-output', AnsiUtil.errorLine('Invalid destination directory'));
+      await this.redisplayPrompt(socket, session);
+      session.subState = LoggedOnSubState.FM_ACTION_INPUT;
+      return;
+    }
+
+    await this.performMove(socket, session, ctx, destDir);
+    await this.afterAction(socket, session, nextPos);
+  }
+
+  private static async performDelete(
+    socket: any,
+    session: BBSSession,
+    ctx: any
+  ): Promise<void> {
+    const { dirFilePath, currentFile } = ctx;
+    if (!dirFilePath || !currentFile) {
+      socket.emit('ansi-output', AnsiUtil.errorLine('Missing file context'));
+      return;
+    }
+
+    if (!fs.existsSync(dirFilePath)) {
+      socket.emit('ansi-output', AnsiUtil.errorLine('Directory list not found'));
+      return;
+    }
+
+    const lines = fs.readFileSync(dirFilePath, 'utf-8').split(/\r?\n/);
+    const start = currentFile.lineNumber ?? 0;
+    const end = start + (currentFile.rawLines?.length || 1);
+    const updated = [...lines.slice(0, start), ...lines.slice(end)];
+
+    fs.writeFileSync(dirFilePath, updated.join('\r\n'), 'utf-8');
+
+    await this.deletePhysicalFile(session, currentFile.filename, ctx.dirNum);
+    await this.deleteDbEntries(session.currentConf || 1, currentFile.filename);
+
+    if (_callersLog) {
+      _callersLog(session.user?.id || null, session.user?.username || 'unknown', 'Deleted file', currentFile.filename, session.nodeId || 1);
+    }
+
+    socket.emit('ansi-output', AnsiUtil.successLine('Delete operation complete'));
+  }
+
+  private static async performMove(
+    socket: any,
+    session: BBSSession,
+    ctx: any,
+    destDir: number
+  ): Promise<void> {
+    const { dirFilePath, currentFile } = ctx;
+    if (!dirFilePath || !currentFile) {
+      socket.emit('ansi-output', AnsiUtil.errorLine('Missing file context'));
+      return;
+    }
+
+    const bbsDataPath = _config.get('dataDir');
+    const confNum = session.currentConf || 1;
+    const { getConferenceDir } = require('../utils/file-hold.util');
+    const conferencePath = getConferenceDir(confNum, bbsDataPath);
+    const destMeta = this.getDirMeta(conferencePath, destDir, ctx.maxDirs);
+    const destPath = destMeta.path;
+
+    const srcLines = fs.readFileSync(dirFilePath, 'utf-8').split(/\r?\n/);
+    const start = currentFile.lineNumber ?? 0;
+    const end = start + (currentFile.rawLines?.length || 1);
+    const entryLines = srcLines.slice(start, end);
+    const remaining = [...srcLines.slice(0, start), ...srcLines.slice(end)];
+
+    fs.writeFileSync(dirFilePath, remaining.join('\r\n'), 'utf-8');
+
+    const destLines = fs.existsSync(destPath)
+      ? fs.readFileSync(destPath, 'utf-8').split(/\r?\n/)
+      : [];
+
+    const merged = destLines.concat(entryLines);
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.writeFileSync(destPath, merged.join('\r\n'), 'utf-8');
+
+    await this.movePhysicalFile(session, currentFile.filename, ctx.dirNum, destDir);
+    await this.moveDbEntry(session.currentConf || 1, currentFile.filename, destDir);
+
+    if (_callersLog) {
+      _callersLog(session.user?.id || null, session.user?.username || 'unknown', 'Moved file', `${currentFile.filename} -> ${destDir}`, session.nodeId || 1);
+    }
+
+    socket.emit('ansi-output', AnsiUtil.successLine(`Move operation successful to directory ${destDir}`));
+  }
+
+  private static async deletePhysicalFile(session: BBSSession, filename: string, dirNum?: number) {
+    const confNum = session.currentConf || 1;
+    const dataDir = _config.get('dataDir');
+    const candidates = await this.buildFileCandidates(confNum, filename, dirNum);
+
+    for (const filePath of candidates) {
+      try {
+        await fsp.unlink(filePath);
+        return;
+      } catch {
+        // Try next candidate
+      }
+    }
+  }
+
+  private static async movePhysicalFile(session: BBSSession, filename: string, srcDir?: number, destDir?: number) {
+    const confNum = session.currentConf || 1;
+    const dataDir = _config.get('dataDir');
+    const candidates = await this.buildFileCandidates(confNum, filename, srcDir);
+    const destBase = await this.getUploadBase(confNum);
+    if (!destBase) {
+      return;
+    }
+    const destPath = path.join(destBase, filename);
+
+    for (const srcPath of candidates) {
+      try {
+        await fsp.mkdir(path.dirname(destPath), { recursive: true });
+        await fsp.rename(srcPath, destPath);
+        return;
+      } catch {
+        // Try next candidate
+      }
+    }
+  }
+
+  private static async buildFileCandidates(confNum: number, filename: string, dirNum?: number): Promise<string[]> {
+    const dataDir = _config.get('dataDir');
+    const confPath = path.join(dataDir, 'BBS', `Conf${String(confNum).padStart(2, '0')}`);
+    const list: string[] = [];
+
+    // HOLD / LCFILES
+    list.push(path.join(confPath, 'HOLD', filename));
+    list.push(path.join(confPath, 'LCFILES', filename));
+
+    // DIR-specific folder (best-effort)
+    if (dirNum && dirNum > 0) {
+      list.push(path.join(confPath, `DIR${dirNum}`, filename));
+    }
+
+    // Configured download/upload paths
+    const paths = await this.getConfiguredPaths(['DLPATH', 'ULPATH']);
+    for (const p of paths) {
+      const base = path.isAbsolute(p) ? p : path.join(dataDir, p);
+      list.push(path.join(base, filename));
+    }
+
+    return list;
+  }
+
+  private static async getConfiguredPaths(keys: Array<'DLPATH' | 'ULPATH'>): Promise<string[]> {
+    if (!_db?.query) return [];
+    const results: string[] = [];
+
+    for (const key of keys) {
+      try {
+        const rows = await _db.query(`SELECT value FROM system_config WHERE key LIKE '${key}.%'`);
+        for (const row of rows.rows || []) {
+          if (row.value) {
+            results.push(row.value);
+          }
         }
-        socket.emit('ansi-output', '\r\n');
-
-        // express.e:25012-25027 - Prompt for action
-        socket.emit('ansi-output', AnsiUtil.colorize('[D]', 'green'));
-        socket.emit('ansi-output', 'elete, ');
-        socket.emit('ansi-output', AnsiUtil.colorize('[M]', 'green'));
-        socket.emit('ansi-output', 'ove, ');
-        socket.emit('ansi-output', AnsiUtil.colorize('[V]', 'green'));
-        socket.emit('ansi-output', 'iew, ');
-        socket.emit('ansi-output', AnsiUtil.colorize('[Q]', 'green'));
-        socket.emit('ansi-output', 'uit, or ');
-        socket.emit('ansi-output', AnsiUtil.colorize('[Enter]', 'green'));
-        socket.emit('ansi-output', ' to skip? ');
-
-        // Store context for action input
-        session.tempData.fmContext = {
-          step: 'get_action',
-          dirFilePath,
-          dirNum,
-          entries,
-          flagFileList,
-          currentFile: entry,
-          matchPos: i
-        };
-        session.subState = LoggedOnSubState.FM_ACTION_INPUT;
-
-        // Return indication that we need user input
-        return { stat: 'AWAITING_INPUT', nextMatchPos: i };
+      } catch (error) {
+        console.error(`[FM] Failed to read ${key} paths:`, error);
       }
     }
 
-    // No more matches found
-    return { stat: 'NOT_FOUND', nextMatchPos: entries.length };
+    return results;
+  }
+
+  private static async getUploadBase(confNum: number): Promise<string | null> {
+    const dataDir = _config.get('dataDir');
+    const paths = await this.getConfiguredPaths(['ULPATH']);
+    if (paths.length === 0) {
+      return null;
+    }
+    const base = paths[0];
+    return path.isAbsolute(base) ? base : path.join(dataDir, base);
+  }
+
+  private static async deleteDbEntries(confNum: number, filename: string): Promise<void> {
+    if (!_db?.query) return;
+    try {
+      const match = await _db.query(
+        `
+        SELECT fe.id
+        FROM file_entries fe
+        JOIN file_areas fa ON fe.areaid = fa.id
+        WHERE fa.conferenceid = $1 AND UPPER(fe.filename) = UPPER($2)
+        `,
+        [confNum, filename]
+      );
+
+      for (const row of match.rows || []) {
+        await _db.query('DELETE FROM file_entries WHERE id = $1', [row.id]);
+      }
+    } catch (error) {
+      console.error('[FM] Failed to delete DB entries:', error);
+    }
+  }
+
+  private static async moveDbEntry(confNum: number, filename: string, destDir: number): Promise<void> {
+    if (!_db?.query) return;
+    const destAreaId = await this.getAreaIdByDirIndex(confNum, destDir);
+    if (!destAreaId) return;
+
+    try {
+      const match = await _db.query(
+        `
+        SELECT fe.id
+        FROM file_entries fe
+        JOIN file_areas fa ON fe.areaid = fa.id
+        WHERE fa.conferenceid = $1 AND UPPER(fe.filename) = UPPER($2)
+        ORDER BY fe.uploaddate DESC
+        LIMIT 1
+        `,
+        [confNum, filename]
+      );
+
+      if (match.rows && match.rows.length > 0) {
+        const id = match.rows[0].id;
+        await _db.query('UPDATE file_entries SET areaid = $1 WHERE id = $2', [destAreaId, id]);
+      }
+    } catch (error) {
+      console.error('[FM] Failed to move DB entry:', error);
+    }
+  }
+
+  private static async getAreaIdByDirIndex(confNum: number, dirIndex: number): Promise<number | null> {
+    if (!_db?.query) return null;
+    if (!dirIndex || dirIndex < 1) return null;
+    try {
+      const res = await _db.query(
+        `
+        SELECT id FROM file_areas
+        WHERE conferenceid = $1
+        ORDER BY id
+        OFFSET $2 LIMIT 1
+        `,
+        [confNum, dirIndex - 1]
+      );
+      if (res.rows && res.rows.length > 0) {
+        return res.rows[0].id;
+      }
+    } catch (error) {
+      console.error('[FM] Failed to map dir to area:', error);
+    }
+    return null;
   }
 
   /**
@@ -422,45 +791,46 @@ export class FileMaintenanceHandler {
     session: BBSSession,
     input: string
   ): Promise<void> {
-    const action = input.trim().toUpperCase();
-    const ctx = session.tempData.fmContext;
-    const { currentFile, dirNum, dirFilePath, entries, flagFileList, matchPos } = ctx;
+    const ctx = session.tempData.fmContext || {};
+    const action = input.trim().toUpperCase() || 'C';
+    const continuePos = (ctx.matchPos ?? 0) + 1;
 
     socket.emit('ansi-output', '\r\n');
 
-    // express.e:25013-25027 - Handle action
-    if (action === 'D') {
-      // Delete file
-      await this.maintenanceFileDelete(socket, session, currentFile, dirNum);
-    } else if (action === 'M') {
-      // Move file
-      await this.maintenanceFileMove(socket, session, currentFile, dirNum);
-    } else if (action === 'V') {
-      // View file
-      await this.viewFile(socket, session, currentFile);
-    } else if (action === 'Q') {
-      // Quit
-      socket.emit('ansi-output', '\r\n');
+    if (action === 'Q') {
       session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = {};
       return;
-    } else if (action === '') {
-      // Skip to next file
     }
 
-    // express.e:25028-25030 - Ask if user wants to remove from flagged list
-    if (session.tempData.fmUseFlagged && action !== '') {
-      socket.emit('ansi-output', 'Remove from flagged list ');
-      socket.emit('ansi-output', AnsiUtil.colorize('(Y/n)', 'green') + '? ');
-
-      session.tempData.fmContext.step = 'ask_remove_flag';
-      session.subState = LoggedOnSubState.FM_REMOVE_FLAG_INPUT;
+    if (action === 'D') {
+      const nextPos = ctx.matchPos ?? 0;
+      session.tempData.fmContext = { ...ctx, step: 'confirm_delete', nextPos };
+      await this.promptDeleteConfirmation(socket, session);
       return;
     }
 
-    // Continue searching from next position
-    await this.continueSearch(socket, session, matchPos + 1);
+    if (action === 'M') {
+      const nextPos = ctx.matchPos ?? 0;
+      session.tempData.fmContext = { ...ctx, step: 'get_move_dest', nextPos };
+      await this.promptMoveDestination(socket, session);
+      return;
+    }
+
+    if (action === 'V') {
+      if (!ctx.viewAllowed) {
+        socket.emit('ansi-output', AnsiUtil.errorLine('View option is not available for this directory'));
+        await this.redisplayPrompt(socket, session);
+        return;
+      }
+      await this.viewFile(socket, session, ctx.currentFile);
+      await this.afterAction(socket, session, continuePos);
+      return;
+    }
+
+    // Default: Continue
+    await this.afterAction(socket, session, continuePos);
   }
 
   /**
@@ -473,19 +843,19 @@ export class FileMaintenanceHandler {
     input: string
   ): Promise<void> {
     const response = input.trim().toUpperCase();
-    const ctx = session.tempData.fmContext;
-    const { currentFile, matchPos } = ctx;
+    const ctx = session.tempData.fmContext || {};
+    const currentFile = ctx.currentFile;
+    const nextPos = ctx.nextPos ?? (ctx.matchPos ?? 0) + 1;
 
     socket.emit('ansi-output', '\r\n');
 
-    if (response === 'Y' || response === 'YES' || response === '') {
+    if (currentFile && (response === 'Y' || response === 'YES' || response === '')) {
       const flagManager = new FileFlagManager('', 0, 0);
       flagManager.removeFlag(currentFile.filename, session.currentConf);
       socket.emit('ansi-output', AnsiUtil.successLine(`Removed ${currentFile.filename} from flagged list`));
     }
 
-    // Continue searching
-    await this.continueSearch(socket, session, matchPos + 1);
+    await this.continueSearch(socket, session, nextPos);
   }
 
   /**
@@ -496,74 +866,10 @@ export class FileMaintenanceHandler {
     session: BBSSession,
     nextPos: number
   ): Promise<void> {
-    const ctx = session.tempData.fmContext;
-    const { dirFilePath, dirNum, entries, flagFileList } = ctx;
-
-    const result = await this.maintenanceFileSearch(
-      socket,
-      session,
-      dirFilePath,
-      dirNum,
-      entries,
-      flagFileList,
-      nextPos
-    );
-
-    if (result.stat === 'NOT_FOUND') {
-      // Continue to next directory
-      // This will be handled by scanDirectories loop
-      session.menuPause = true;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.tempData = {};
-    }
-  }
-
-  /**
-   * Delete file from database and filesystem
-   * express.e:22627+ (maintenanceFileDelete)
-   */
-  private static async maintenanceFileDelete(
-    socket: any,
-    session: BBSSession,
-    file: any,
-    dirNum: number
-  ): Promise<void> {
-    // Check permissions
-    const userLevel = session.user?.secLevel || 0;
-    if (userLevel < 200 && file.uploader?.toLowerCase() !== session.user?.username.toLowerCase()) {
-      socket.emit('ansi-output', AnsiUtil.errorLine('You do not have permission to delete this file'));
-      return;
-    }
-
-    // Confirm deletion
-    socket.emit('ansi-output', AnsiUtil.colorize('Are you sure you want to delete this file', 'red'));
-    socket.emit('ansi-output', ' (Y/n)? ');
-
-    session.tempData.fmContext.step = 'confirm_delete';
-    session.subState = LoggedOnSubState.FM_CONFIRM_DELETE;
-  }
-
-  /**
-   * Move file to different directory
-   * express.e:22780+ (maintenanceFileMove)
-   */
-  private static async maintenanceFileMove(
-    socket: any,
-    session: BBSSession,
-    file: any,
-    dirNum: number
-  ): Promise<void> {
-    // Check permissions
-    const userLevel = session.user?.secLevel || 0;
-    if (userLevel < 200) {
-      socket.emit('ansi-output', AnsiUtil.errorLine('You do not have permission to move files'));
-      return;
-    }
-
-    socket.emit('ansi-output', 'Enter destination directory number: ');
-
-    session.tempData.fmContext.step = 'get_move_dest';
-    session.subState = LoggedOnSubState.FM_MOVE_DEST_INPUT;
+    const ctx = session.tempData.fmContext || {};
+    session.tempData.fmContext = { ...ctx, resumePos: nextPos };
+    const dirIdx = ctx.dirIndex || 0;
+    await this.scanDirectories(socket, session, dirIdx, nextPos);
   }
 
   /**

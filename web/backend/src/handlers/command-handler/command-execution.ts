@@ -430,7 +430,7 @@ export async function processBBSCommand(
       return;
 
     case "?": // Show Menu in Expert Mode (internalCommandQuestionMark) - express.e:24594-24599
-      handleQuestionMarkCommand(socket, session);
+      await handleQuestionMarkCommand(socket, session);
       return;
 
     case "^": // Upload Hat / Help Files (internalCommandUpHat) - express.e:25089-25111

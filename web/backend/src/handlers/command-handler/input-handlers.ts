@@ -407,10 +407,17 @@ async function handleRemainingStates(
   data: string
 ) {
   // Handle basic state transitions
+  if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
+    // Force line input mode to avoid hotkeys
+    session.subState = LoggedOnSubState.READ_COMMAND;
+    session.cmdShortcuts = false;
+    if (session.shortcuts?.clear) {
+      session.shortcuts.clear();
+    }
+  }
+
   if (session.subState === LoggedOnSubState.READ_COMMAND) {
     await handleReadCommand(socket, session, data);
-  } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
-    await handleReadShortcuts(socket, session, data);
   } else if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
     await handleProcessCommand(socket, session);
   } else {

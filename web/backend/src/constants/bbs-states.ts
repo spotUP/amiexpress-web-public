@@ -113,6 +113,7 @@ export enum LoggedOnSubState {
   ACCOUNT_EDITOR_MENU = 'account_editor_menu',              // Main menu input
   ACCOUNT_EDITOR_SEARCH_NAME = 'account_editor_search_name', // Search by name input
   ACCOUNT_EDITOR_EDIT = 'account_editor_edit',              // Single-char editing (editInfo)
+  ACCOUNT_EDITOR_BULK = 'account_editor_bulk',              // Bulk account editor input
 
   // Chat operations
   CHAT_PAGE_SYSOP = 'chat_page_sysop',
