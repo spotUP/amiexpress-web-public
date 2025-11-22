@@ -77,6 +77,10 @@ describe('message scan mail parity', () => {
     );
   }
 
+  async function setScanFlags(scanFlags: number) {
+    await resetPointers(scanFlags);
+  }
+
   test('scans new public and private mail and advances pointer to mailStat high', async () => {
     const { tmpRoot, messageIndexManager, MsgStatus, performConferenceScan, pointers } = setupMailScan();
     await resetPointers();
@@ -205,6 +209,149 @@ describe('message scan mail parity', () => {
     expect(before.lastNewReadConf).toBe(0);
     expect(after.lastNewReadConf).toBe(2);
     expect(session.lastScanNewPrivate).toBe(1);
+
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+});
+
+describe('file scan gating parity', () => {
+  let db: any;
+  let sysop: any;
+  let originalBbsRoot: string | undefined;
+
+  beforeAll(async () => {
+    db = (global as any).testDb;
+    if (!db) {
+      throw new Error('Test database not initialized');
+    }
+    sysop = await db.getUserByUsername('sysop');
+    if (!sysop) {
+      throw new Error('sysop user missing');
+    }
+    originalBbsRoot = process.env.BBS_ROOT;
+  });
+
+  afterEach(() => {
+    jest.resetModules();
+    process.env.BBS_ROOT = originalBbsRoot;
+    jest.restoreAllMocks();
+  });
+
+  function setup(toolFlags: Record<string, boolean> = {}) {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'amix-file-'));
+    process.env.BBS_ROOT = tmpRoot;
+    jest.resetModules();
+
+    const tooltypes = require('../src/utils/conference-tooltypes.util');
+    jest.spyOn(tooltypes, 'getConferenceToolFlags').mockImplementation(() => ({
+      forceNewscan: false,
+      noNewscan: false,
+      showNewFiles: false,
+      noNewFiles: false,
+      forceMenus: false,
+      noBulls: false,
+      noConfBulls: false,
+      ...toolFlags
+    }));
+
+    const { performConferenceScan, setMessageScanDependencies } = require('../src/handlers/message-scan.handler');
+    setMessageScanDependencies(
+      db,
+      jest.fn(),
+      jest.fn(),
+      jest.fn(),
+      jest.fn(),
+      [{ id: 1, name: 'Conf1' }],
+      [{ id: 1, conferenceId: 1, name: 'General' }]
+    );
+
+    const { messageIndexManager, MsgStatus } = require('../src/services/MessageIndexManager');
+    return { tmpRoot, performConferenceScan, messageIndexManager, MsgStatus };
+  }
+
+  async function setScanFlags(flags: number) {
+    await db.run(
+      `INSERT OR IGNORE INTO conf_base (user_id, conference_id, message_base_id, scan_flags)
+       VALUES (?, 1, 1, ?)`,
+      [sysop.id, flags]
+    );
+    await db.run(
+      `UPDATE conf_base SET scan_flags = ? WHERE user_id = ? AND conference_id = 1 AND message_base_id = 1`,
+      [flags, sysop.id]
+    );
+  }
+
+  test('per-base FILE_SCAN_MASK triggers new files scan', async () => {
+    const { tmpRoot, performConferenceScan, messageIndexManager, MsgStatus } = setup();
+    await setScanFlags(ScanFlags.FILE_SCAN | ScanFlags.MAIL_SCAN);
+    messageIndexManager.initializeMessageIndex(1);
+    messageIndexManager.appendMessageHeader(1, {
+      status: MsgStatus.NORMAL,
+      msgNumb: 1,
+      toName: 'ALL',
+      fromName: 'SYSOP',
+      subject: 'Seed',
+      msgDate: 0,
+      recv: 0,
+      extMsgNum: 0
+    });
+
+    const runSysCommand = jest.spyOn(require('../src/handlers/command-execution.handler'), 'runSysCommand').mockResolvedValue(undefined);
+    const socket = { emit: jest.fn() };
+    const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };
+
+    await performConferenceScan(socket, session);
+    expect(runSysCommand).toHaveBeenCalledWith(socket, session, 'N', 'S U');
+
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test('NO_NEW_FILES tooltype suppresses new files scan even when enabled per-base', async () => {
+    const { tmpRoot, performConferenceScan, messageIndexManager, MsgStatus } = setup({ noNewFiles: true });
+    await setScanFlags(ScanFlags.FILE_SCAN | ScanFlags.MAIL_SCAN);
+    messageIndexManager.initializeMessageIndex(1);
+    messageIndexManager.appendMessageHeader(1, {
+      status: MsgStatus.NORMAL,
+      msgNumb: 1,
+      toName: 'ALL',
+      fromName: 'SYSOP',
+      subject: 'Seed',
+      msgDate: 0,
+      recv: 0,
+      extMsgNum: 0
+    });
+
+    const runSysCommand = jest.spyOn(require('../src/handlers/command-execution.handler'), 'runSysCommand').mockResolvedValue(undefined);
+    const socket = { emit: jest.fn() };
+    const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };
+
+    await performConferenceScan(socket, session);
+    expect(runSysCommand).not.toHaveBeenCalled();
+
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test('SHOW_NEW_FILES forces new files scan even when FILE_SCAN is off', async () => {
+    const { tmpRoot, performConferenceScan, messageIndexManager, MsgStatus } = setup({ showNewFiles: true });
+    await setScanFlags(ScanFlags.MAIL_SCAN); // FILE_SCAN off
+    messageIndexManager.initializeMessageIndex(1);
+    messageIndexManager.appendMessageHeader(1, {
+      status: MsgStatus.NORMAL,
+      msgNumb: 1,
+      toName: 'ALL',
+      fromName: 'SYSOP',
+      subject: 'Seed',
+      msgDate: 0,
+      recv: 0,
+      extMsgNum: 0
+    });
+
+    const runSysCommand = jest.spyOn(require('../src/handlers/command-execution.handler'), 'runSysCommand').mockResolvedValue(undefined);
+    const socket = { emit: jest.fn() };
+    const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };
+
+    await performConferenceScan(socket, session);
+    expect(runSysCommand).toHaveBeenCalledWith(socket, session, 'N', 'S U');
 
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
