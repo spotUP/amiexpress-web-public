@@ -493,23 +493,33 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     delete session.inDoorManager;
     console.log(`[executeTypeScriptDoor] Cleared inDoorManager`);
 
+    // Reset menu input mode (express.e returns to MENU with shortcuts off)
+    session.cmdShortcuts = false;
+    if (session.shortcuts?.clear) {
+      session.shortcuts.clear();
+    }
+
     // Notify frontend that door is stopped
     socket.emit('door:status', { status: 'stopped' });
     console.log(`[executeTypeScriptDoor] Sent door:status: stopped`);
 
-    // Return to menu
+    // Return to menu and pause before showing
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.menuPause = false;
 
   } catch (error) {
     console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error);
 
     // Clear door active flag on error
     delete session.inDoorManager;
+    session.cmdShortcuts = false;
+    if (session.shortcuts?.clear) {
+      session.shortcuts.clear();
+    }
 
     socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 }
@@ -695,11 +705,24 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
 
     console.log('[executeSDKDoor] Door execution completed');
 
+    // Reset flags and return to menu
+    delete session.inDoorManager;
+    session.cmdShortcuts = false;
+    if (session.shortcuts?.clear) {
+      session.shortcuts.clear();
+    }
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+
   } catch (error) {
     console.error('[executeSDKDoor] Error:', error);
     socket.emit('ansi-output', `\r\n\x1b[31mError executing SDK door: ${(error as Error).message}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
+    session.cmdShortcuts = false;
+    if (session.shortcuts?.clear) {
+      session.shortcuts.clear();
+    }
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 }

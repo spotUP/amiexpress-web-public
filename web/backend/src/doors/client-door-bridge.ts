@@ -387,12 +387,16 @@ export class ClientDoorBridge {
     // Remove from sessions
     this.sessions.delete(sessionId);
 
-    // Clear BBS session flag
+    // Clear BBS session flag and reset menu input mode
     delete session.bbsSession.inDoorManager;
+    if ((session.bbsSession as any).shortcuts?.clear) {
+      (session.bbsSession as any).shortcuts.clear();
+    }
+    (session.bbsSession as any).cmdShortcuts = false;
 
-    // Return to menu
+    // Return to menu with pause
     session.bbsSession.subState = (session.bbsSession as any).LoggedOnSubState?.DISPLAY_MENU;
-    session.bbsSession.menuPause = false;
+    session.bbsSession.menuPause = true;
 
     console.log(`[ClientDoorBridge] Session ${sessionId} ended`);
   }
