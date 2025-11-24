@@ -1147,6 +1147,14 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     console.error(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
     console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
     console.error(`[displayScreen] ========================================`);
+    try {
+      const targetSocket = (session as any).socket;
+      if (targetSocket) {
+        targetSocket.emit('ansi-output', `\r\n\x1b[31mScreen not found: ${screenName}\x1b[0m\r\n`);
+      }
+    } catch (_) {
+      /* ignore */
+    }
     session.lastScreenFilePath = undefined;
     return false;
   }
