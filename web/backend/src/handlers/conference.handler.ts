@@ -109,6 +109,19 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
   session.currentMsgBase = msgBaseId;
   session.currentConfName = conference.name;
   session.relConfNum = confId; // For simplicity, use absolute conf number as relative
+  session.confRJoin = confId;
+  session.msgBaseRJoin = msgBaseId;
+  if (session.user) {
+    session.user.confRJoin = confId;
+    session.user.autoRejoin = confId;
+    session.user.msgBaseRJoin = msgBaseId;
+    try {
+      const { db } = require('../database');
+      await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });
+    } catch (err) {
+      console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
+    }
+  }
 
   // Load message pointers for this conference/msg base (express.e joinConf sets lastMsgReadConf/lastNewReadConf)
   if (session.user) {
