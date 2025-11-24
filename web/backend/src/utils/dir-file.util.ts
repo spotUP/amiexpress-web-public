@@ -13,7 +13,7 @@ import { formatFileSize, formatUploadDate } from './file-upload.util';
  * Get DIR file path based on upload status
  * Express.e:19473-19489
  *
- * @param conferencePath Path to conference directory (e.g., BBS/Conf1)
+ * @param conferencePath Path to conference directory (e.g., Conf1)
  * @param status File status (active, hold, lcfiles)
  * @param maxDirs Maximum DIR file number (for normal uploads)
  * @returns Full path to DIR file

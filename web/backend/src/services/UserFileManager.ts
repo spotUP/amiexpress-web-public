@@ -130,15 +130,19 @@ export class UserFileManager {
     // __dirname when compiled is /dist/services, so go 4 levels up: dist -> backend -> web -> amiexpress-web
     // But with tsx it's /src/services, so also 4 levels up: src -> backend -> web -> amiexpress-web
     this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
-    this.userDataPath = path.join(this.bbsRoot, 'user.data');
-    this.userKeysPath = path.join(this.bbsRoot, 'user.keys');
-    this.userMiscPath = path.join(this.bbsRoot, 'user.misc');
+    this.userDataPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.data'));
+    this.userKeysPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.keys'));
+    this.userMiscPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.misc'));
 
     console.log('[UserFileManager] Initialized');
     console.log(`  BBS root: ${this.bbsRoot}`);
     console.log(`  user.data: ${this.userDataPath}`);
     console.log(`  user.keys: ${this.userKeysPath}`);
     console.log(`  user.misc: ${this.userMiscPath}`);
+  }
+ 
+  private normalizeTargetPath(targetPath: string): string {
+    return path.resolve(targetPath);
   }
 
   /**
@@ -475,6 +479,7 @@ export class UserFileManager {
    */
   public writeUserFiles(user: User, slotNumber: number): void {
     try {
+      this.ensureUserFilesReady();
       // Convert to file structs
       const userStruct = this.userToFileStruct(user, slotNumber);
       const keysStruct = this.userToKeysStruct(user, slotNumber);
@@ -503,6 +508,7 @@ export class UserFileManager {
    */
   public readUserDataFile(): UserFileStruct[] {
     try {
+      this.ensureUserFilesReady();
       if (!fs.existsSync(this.userDataPath)) {
         console.log('[UserFileManager] user.data does not exist, returning empty array');
         return [];
@@ -533,6 +539,7 @@ export class UserFileManager {
    */
   public updateUserDataFile(user: User, slotNumber: number): void {
     try {
+      this.ensureUserFilesReady();
       // Convert to file structs
       const userStruct = this.userToFileStruct(user, slotNumber);
       const keysStruct = this.userToKeysStruct(user, slotNumber);
@@ -599,23 +606,43 @@ export class UserFileManager {
    */
   public initializeUserFiles(): void {
     try {
-      // Create empty files if they don't exist
-      if (!fs.existsSync(this.userDataPath)) {
-        fs.writeFileSync(this.userDataPath, Buffer.alloc(0));
-        console.log('[UserFileManager] Created empty user.data');
-      }
-      if (!fs.existsSync(this.userKeysPath)) {
-        fs.writeFileSync(this.userKeysPath, Buffer.alloc(0));
-        console.log('[UserFileManager] Created empty user.keys');
-      }
-      if (!fs.existsSync(this.userMiscPath)) {
-        fs.writeFileSync(this.userMiscPath, Buffer.alloc(0));
-        console.log('[UserFileManager] Created empty user.misc');
-      }
+      this.ensureBinaryFile(this.userDataPath, 'user.data');
+      this.ensureBinaryFile(this.userKeysPath, 'user.keys');
+      this.ensureBinaryFile(this.userMiscPath, 'user.misc');
     } catch (error) {
       console.error('[UserFileManager] Error initializing user files:', error);
       throw error;
     }
+  }
+
+  private ensureBinaryFile(filePath: string, label: string): void {
+    try {
+      if (fs.existsSync(filePath)) {
+        const stats = fs.lstatSync(filePath);
+        if (stats.isDirectory()) {
+          const backupPath = `${filePath}.dir-backup`;
+          if (fs.existsSync(backupPath)) {
+            fs.rmSync(backupPath, { recursive: true, force: true });
+          }
+          fs.renameSync(filePath, backupPath);
+          console.warn(`[UserFileManager] ${label} was a directory, moved to ${backupPath}`);
+        }
+      }
+
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, Buffer.alloc(0));
+        console.log(`[UserFileManager] Created empty ${label}`);
+      }
+    } catch (error) {
+      console.error(`[UserFileManager] Error ensuring ${label}:`, error);
+      throw error;
+    }
+  }
+
+  private ensureUserFilesReady(): void {
+    this.ensureBinaryFile(this.userDataPath, 'user.data');
+    this.ensureBinaryFile(this.userKeysPath, 'user.keys');
+    this.ensureBinaryFile(this.userMiscPath, 'user.misc');
   }
 }
 

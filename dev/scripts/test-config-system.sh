@@ -34,7 +34,7 @@ fi
 # Step 1: Verify database tables
 echo -e "\n${CYAN}=== Step 1: Verify Database Tables ===${NC}\n"
 
-node dev/scripts/verify-config-tables.js
+npx ts-node -P dev/scripts/tsconfig.json dev/scripts/verify-config-tables.ts
 VERIFY_EXIT=$?
 
 if [ $VERIFY_EXIT -ne 0 ]; then
@@ -47,7 +47,7 @@ fi
 echo -e "\n${CYAN}=== Step 2: Setup Test Sysop User ===${NC}\n"
 
 # First run the API test to create the user
-node dev/scripts/test-config-api.js > /tmp/config-test-initial.log 2>&1
+npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-config-api.ts > /tmp/config-test-initial.log 2>&1
 INITIAL_EXIT=$?
 
 # Check if it failed due to permissions
@@ -55,7 +55,7 @@ if grep -q "doesn't have sysop privileges" /tmp/config-test-initial.log; then
     echo -e "${YELLOW}Test user needs sysop privileges${NC}"
     echo -e "Elevating user 'testsysop' to sysop level..."
 
-    node dev/scripts/make-user-sysop.js testsysop
+    npx ts-node -P dev/scripts/tsconfig.json dev/scripts/make-user-sysop.ts testsysop
     SYSOP_EXIT=$?
 
     if [ $SYSOP_EXIT -ne 0 ]; then
@@ -67,7 +67,7 @@ fi
 # Step 3: Run full API tests
 echo -e "\n${CYAN}=== Step 3: Run Configuration API Tests ===${NC}\n"
 
-node dev/scripts/test-config-api.js
+npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-config-api.ts
 TEST_EXIT=$?
 
 # Summary

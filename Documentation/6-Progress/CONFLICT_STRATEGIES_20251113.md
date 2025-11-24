@@ -83,7 +83,7 @@ return {
 3. **Merge Strategy** - Combine data from both sources (take higher statistics)
 
 **Implementation**:
-Created comprehensive test script: `dev/scripts/test-all-conflict-strategies.js`
+Created comprehensive test script: `dev/scripts/test-all-conflict-strategies.ts`
 
 **Test Script Features**:
 - Tests all 4 items in one run (real name fix + 3 conflict strategies)
@@ -108,12 +108,12 @@ For each strategy:
 
 ## Comprehensive Test Script
 
-**Location**: `~/Code/amiexpress-web/dev/scripts/test-all-conflict-strategies.js`
+**Location**: `~/Code/amiexpress-web/dev/scripts/test-all-conflict-strategies.ts`
 
 **Usage**:
 ```bash
 # After server restart, run:
-node dev/scripts/test-all-conflict-strategies.js
+npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-conflict-strategies.ts
 ```
 
 **Tests Performed**:
@@ -200,7 +200,7 @@ TEST SUMMARY
 
 ### Files Created
 
-1. **`dev/scripts/test-all-conflict-strategies.js`** (442 lines)
+1. **`dev/scripts/test-all-conflict-strategies.ts`** (442 lines)
    - Comprehensive test for all 4 remaining issues
    - Database verification queries
    - Color-coded output
@@ -222,7 +222,7 @@ TEST SUMMARY
 
 2. **Run comprehensive test** - Verify all fixes
    ```bash
-   node dev/scripts/test-all-conflict-strategies.js
+   npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-conflict-strategies.ts
    ```
 
 ### After Testing

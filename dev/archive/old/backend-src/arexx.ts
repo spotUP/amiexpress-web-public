@@ -695,7 +695,7 @@ class BBSFunctions {
 
         await fs.writeFile(path.join(dropPath, 'DOOR.SYS'), doorSysContent, 'utf-8');
       } else {
-        // DORINFO1.DEF format (RBBS/QuickBBS-style)
+        // DORINFO1.DEF format (RBBS QuickBBS-style)
         const dorinfoContent = [
           'AmiExpress Web',                           // BBS name
           'Sysop',                                    // Sysop name

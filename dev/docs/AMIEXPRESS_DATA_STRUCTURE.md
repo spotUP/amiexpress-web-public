@@ -2,14 +2,14 @@
 
 **Reference Data from Real AmiExpress BBS Installation**
 
-This document describes the actual directory structure used by AmiExpress BBS, based on the example data in `~/Code/AmiExpress-Web/Example_BBS/`. This is the **authoritative reference** for understanding how to properly install and configure doors.
+This document describes the actual directory structure used by AmiExpress BBS, based on the example data in `~/Code/AmiExpress-Web/Example_`. This is the **authoritative reference** for understanding how to properly install and configure doors.
 
 ## Critical Discovery: Door Installation Structure
 
 **IMPORTANT:** Our earlier door installation code was WRONG. Doors are NOT installed to a single flat directory. The proper structure is:
 
 ```
-Example_BBS/
+Example_
 ├── Commands/              ← Command definitions (door menu entries)
 │   └── BBSCmd/           ← BBS user commands
 │       └── *.info        ← Door command definition files
@@ -24,10 +24,10 @@ Example_BBS/
 
 ## Complete Directory Structure
 
-### Root Level (Example_BBS/)
+### Root Level (Example_)
 
 ```
-Example_BBS/
+Example_
 ├── Access/               # Access level definitions
 ├── Commands/             # Command definitions *** CRITICAL FOR DOORS ***
 │   ├── BBSCmd/          # BBS user commands (door entries here)
@@ -58,7 +58,7 @@ Example_BBS/
 
 ### Command Definition Files
 
-**Location:** `Example_BBS/Commands/BBSCmd/[CommandName].info`
+**Location:** `Example_Commands/BBSCmd/[CommandName].info`
 
 Each door has a `.info` file that defines the menu command.
 
@@ -82,13 +82,13 @@ PRIORITY=SAME
 
 ### Door Program Files
 
-**Location:** `Example_BBS/Doors/[DoorName]/`
+**Location:** `Example_Doors/[DoorName]/`
 
-Each door is installed in its own subdirectory under `Example_BBS/Doors/`.
+Each door is installed in its own subdirectory under `Example_Doors/`.
 
 **Example: AquaScan Door**
 ```
-Example_BBS/Doors/AquaScan/
+Example_Doors/AquaScan/
 ├── AquaScan.000          # 68000 executable (34KB)
 ├── AquaScan.020          # 68020 executable (33KB)
 ├── AquaScan.Doc          # Documentation (22KB)
@@ -102,7 +102,7 @@ Example_BBS/Doors/AquaScan/
 
 **Example: FileDescription Door**
 ```
-Example_BBS/Doors/FileDescription/
+Example_Doors/FileDescription/
 ├── FileDescription000.x      # 68000 executable
 ├── FileDescription020.x      # 68020 executable
 ├── FileDescription.Config    # Configuration
@@ -126,18 +126,18 @@ Example_BBS/Doors/FileDescription/
 | NSU | FileDescription | (Name single upload) |
 | SENT | ? | ? |
 
-All doors are in: `Example_BBS/Doors/[DoorName]/`
+All doors are in: `Example_Doors/[DoorName]/`
 
 ## AmigaDOS Assigns (Path Mappings)
 
 AmiExpress uses AmigaDOS logical assigns for paths:
 
 ```
-BBS:     → Example_BBS/                    (BBS data root)
-DOORS:   → Example_BBS/Doors/              (Door programs)
-SCREENS: → Example_BBS/Screens/            (Screen files)
-NODE0:   → Example_BBS/Node0/              (Node 0 data)
-NODE1:   → Example_BBS/Node1/              (Node 1 data)
+BBS:     → Example_                    (BBS data root)
+DOORS:   → Example_Doors/              (Door programs)
+SCREENS: → Example_Screens/            (Screen files)
+NODE0:   → Example_Node0/              (Node 0 data)
+NODE1:   → Example_Node1/              (Node 1 data)
 ...
 ```
 
@@ -147,7 +147,7 @@ LOCATION=Doors:AquaScan/AquaScan.000
          └────┘ └──────────────────┘
          Assign  Relative Path
 
-Resolves to: Example_BBS/Doors/AquaScan/AquaScan.000
+Resolves to: Example_Doors/AquaScan/AquaScan.000
 ```
 
 ## Conference Structure
@@ -195,16 +195,16 @@ Look for:
 ```bash
 # Command definition file
 Archive:Commands/BBSCmd/SCAN.info
-  → Example_BBS/Commands/BBSCmd/SCAN.info
+  → Example_Commands/BBSCmd/SCAN.info
 
 # Door program and support files
 Archive:Doors/AquaScan/*
-  → Example_BBS/Doors/AquaScan/*
+  → Example_Doors/AquaScan/*
 ```
 
 ### 4. Update Door Registry
 
-Parse `.info` files in `Example_BBS/Commands/BBSCmd/` to build door list:
+Parse `.info` files in `Example_Commands/BBSCmd/` to build door list:
 - Read LOCATION to find door executable
 - Read TYPE to determine door type
 - Read ACCESS to check permissions
@@ -227,7 +227,7 @@ archive.lha/
 ### Pattern 2: BBS Structure
 ```
 archive.lha/
-├── BBS/
+├── 
 │   ├── Commands/
 │   │   └── BBSCmd/
 │   │       └── SCAN.info  → Commands/BBSCmd/
@@ -259,8 +259,8 @@ backend/doors/[DoorName]/
 
 This is WRONG. Should extract to proper BBS structure:
 ```
-backend/data/bbs/Example_BBS/Commands/BBSCmd/
-backend/data/bbs/Example_BBS/Doors/[DoorName]/
+backend/data/bbs/Example_Commands/BBSCmd/
+backend/data/bbs/Example_Doors/[DoorName]/
 ```
 
 ### Required Changes
@@ -304,11 +304,11 @@ backend/data/bbs/Example_BBS/Doors/[DoorName]/
 To detect installed doors:
 
 ```typescript
-1. Scan Example_BBS/Commands/BBSCmd/*.info
+1. Scan Example_Commands/BBSCmd/*.info
 2. For each .info file:
    a. Parse file to extract metadata
    b. Read LOCATION field
-   c. Resolve Doors: assign to Example_BBS/Doors/
+   c. Resolve Doors: assign to Example_Doors/
    d. Check if executable exists
    e. Add to door list with metadata
 3. Return complete door list
@@ -316,9 +316,9 @@ To detect installed doors:
 
 **Example:**
 ```
-Found: Example_BBS/Commands/BBSCmd/SCAN.info
+Found: Example_Commands/BBSCmd/SCAN.info
 Parse: LOCATION=Doors:AquaScan/AquaScan.000
-Resolve: Example_BBS/Doors/AquaScan/AquaScan.000
+Resolve: Example_Doors/AquaScan/AquaScan.000
 Check: Executable exists? YES
 Add: { name: "SCAN", door: "AquaScan", path: "...", type: "XIM" }
 ```
@@ -330,12 +330,12 @@ Add: { name: "SCAN", door: "AquaScan", path: "...", type: "XIM" }
    - Doors contain actual programs and data
 
 2. ✓ **Each door gets its own directory**
-   - `Example_BBS/Doors/AquaScan/`
-   - `Example_BBS/Doors/FileDescription/`
+   - `Example_Doors/AquaScan/`
+   - `Example_Doors/FileDescription/`
    - NOT a flat structure!
 
 3. ✓ **AmigaDOS assigns are path mappings**
-   - `Doors:` → `Example_BBS/Doors/`
+   - `Doors:` → `Example_Doors/`
    - Must be resolved when reading `.info` files
 
 4. ✓ **Door scanning reads command definitions**
@@ -360,7 +360,7 @@ Add: { name: "SCAN", door: "AquaScan", path: "...", type: "XIM" }
 
 ## Reference Files
 
-- Example Data: `~/Code/AmiExpress-Web/Example_BBS/`
+- Example Data: `~/Code/AmiExpress-Web/Example_`
 - Door Archives: `~/Code/AmiExpress-Web/backend/doors/archives/`
 - Example Sources: `~/Code/AmiExpress-Web/backend/doors/with source/`
 

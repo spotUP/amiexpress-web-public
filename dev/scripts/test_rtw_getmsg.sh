@@ -9,4 +9,4 @@ echo "  - RTW polling loop behavior"
 echo "  - AllocSignal() calls"
 echo ""
 
-node dev/scripts/test_rtw_polling.js 2>&1 | grep -E "(GetMsg|AllocSignal|RTW-POLL|Signal\(|Wait\()" | head -100
+npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test_rtw_polling.ts 2>&1 | grep -E "(GetMsg|AllocSignal|RTW-POLL|Signal\(|Wait\()" | head -100

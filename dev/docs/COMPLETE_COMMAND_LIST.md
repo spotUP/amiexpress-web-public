@@ -158,7 +158,7 @@ Commands follow express.e:28228-28256 priority:
 5. ✅ Conference dependency injection added
 
 ### Files Modified:
-- `backend/BBS/Node0/Screens/JoinConf.TXT`
+- `backend/Node0/Screens/JoinConf.TXT`
 - `backend/backend/src/handlers/command.handler.ts`
 - `backend/backend/src/handlers/messaging.handler.ts`
 - `backend/backend/src/index.ts`

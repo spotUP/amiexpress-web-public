@@ -51,6 +51,7 @@ const SCREEN_NONEWATBAUD = 'NoNewAtBaud';
 const SCREEN_NEWUSERPW = 'NewUserPw';
 const SCREEN_GUESTLOGON = 'GuestLogon';
 const SCREEN_JOIN = 'JOIN';
+
 import {
   displayConferenceBulletins,
   joinConference,
@@ -257,6 +258,8 @@ export interface BBSSession {
   doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
   displayFlowPaused?: boolean; // Waiting for keypress to advance BULL/NODE_BULL/CONF_BULL/menu flow
   tempData?: any; // Temporary data storage for complex operations (like file listing)
+  pendingDisplayInputs?: string[];
+  replayingDisplayInputs?: boolean;
   flagManager?: any; // File flagging manager for batch downloads
   inDoorManager?: boolean; // Whether user is currently in door manager
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
@@ -1074,7 +1077,7 @@ io.on('connection', async (socket) => {
   const session: BBSSession = {
     state: BBSState.AWAIT,
     subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
-    currentConf: 1, // Start in General conference (ID 1) → BBS/Conf1/
+    currentConf: 1, // Start in General conference (ID 1) → Conf1/
     currentMsgBase: 1, // Start in Main message base (ID 1)
     timeRemaining: 60, // 60 minutes default
     lastActivity: sessionStart,

@@ -61,7 +61,7 @@ The AmiExpress-Web project has been successfully reorganized to match the authen
 ### Phase 5: Cleanup ✅
 1. **Removed Old Locations**
    - Deleted root-level .sh scripts (moved to dev/scripts/)
-   - Removed empty BBS/ directory
+   - Removed empty  directory
    - Archived old/, src/ to dev/archive/
 
 2. **Created Backup**
@@ -95,7 +95,7 @@ amiexpress-web/
 │
 ├── [Source Code & Reference]
 │   ├── AmiExpress-Sources/ (historical reference)
-│   └── reference-boardBBS/ (real BBS reference)
+│   └── reference-board (real BBS reference)
 │
 ├── [Modern Web Application - NEW]
 │   └── web/

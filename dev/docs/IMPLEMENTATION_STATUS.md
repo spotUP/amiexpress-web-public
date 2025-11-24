@@ -115,10 +115,10 @@ BBS.CMD   → Loaded access level 50, XIM door type
 **Files:**
 - `handlers/bulletin.handler.ts` - Bulletin reading system
 - `utils/screen-security.util.ts` - Security-level screen lookup
-- `backend/BBS/Conf01/Screens/Bulletins/BullHelp.txt`
-- `backend/BBS/Conf01/Screens/Bulletins/Bull1.txt` - Welcome
-- `backend/BBS/Conf01/Screens/Bulletins/Bull2.txt` - News
-- `backend/BBS/Conf01/Screens/Bulletins/Bull3.txt` - Rules
+- `backend/Conf01/Screens/Bulletins/BullHelp.txt`
+- `backend/Conf01/Screens/Bulletins/Bull1.txt` - Welcome
+- `backend/Conf01/Screens/Bulletins/Bull2.txt` - News
+- `backend/Conf01/Screens/Bulletins/Bull3.txt` - Rules
 
 **Security Variant System:**
 ```

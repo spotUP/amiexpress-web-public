@@ -294,13 +294,13 @@ Edit BBS screens to personalize your BBS:
 
 ```bash
 # Main menu screen
-nano data/bbs/BBS/Screens/MENU.TXT
+nano data/bbs/Screens/MENU.TXT
 
 # Login screen
-nano data/bbs/BBS/Screens/LOGON.TXT
+nano data/bbs/Screens/LOGON.TXT
 
 # Bulletin board
-nano data/bbs/BBS/Screens/BBSTITLE.TXT
+nano data/bbs/Screens/BBSTITLE.TXT
 ```
 
 **Use ANSI codes or plain ASCII art**
@@ -309,7 +309,7 @@ nano data/bbs/BBS/Screens/BBSTITLE.TXT
 
 ```bash
 # Create today's bulletin
-nano data/bbs/BBS/Conf01/Bulletins/$(date +%Y%m%d)_WELCOME.TXT
+nano data/bbs/Conf01/Bulletins/$(date +%Y%m%d)_WELCOME.TXT
 ```
 
 Example bulletin:

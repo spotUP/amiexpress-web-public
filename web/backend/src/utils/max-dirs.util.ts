@@ -20,19 +20,22 @@ import { getConferenceDir } from './file-hold.util';
  */
 export async function getMaxDirs(confNum: number, bbsDataPath: string): Promise<number> {
   const conferencePath = getConferenceDir(confNum, bbsDataPath);
-
-  // Scan for DIR files (DIR1, DIR2, DIR3, ...)
-  let maxDirs = 0;
-  for (let i = 1; i <= 20; i++) {
-    const dirPath = path.join(conferencePath, `DIR${i}`);
-    if (fs.existsSync(dirPath)) {
-      maxDirs = i;
-    } else {
-      break;
+  try {
+    const entries = await fs.promises.readdir(conferencePath);
+    let maxDirs = 0;
+    for (const entry of entries) {
+      const match = entry.match(/^[Dd][Ii][Rr](\d+)$/);
+      if (match) {
+        const dirNum = parseInt(match[1], 10);
+        if (!Number.isNaN(dirNum)) {
+          maxDirs = Math.max(maxDirs, dirNum);
+        }
+      }
     }
+    return maxDirs;
+  } catch (error) {
+    return 0;
   }
-
-  return maxDirs;
 }
 
 /**

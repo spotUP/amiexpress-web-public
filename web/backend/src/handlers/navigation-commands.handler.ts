@@ -15,6 +15,7 @@ import { ACSPermission } from '../constants/acs-permissions';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { finalizeCommand } from '../utils/command-response.util';
 
 import type { BBSSession } from '../index';
 
@@ -82,7 +83,7 @@ export function handleTimeCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
+  session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
@@ -111,9 +112,7 @@ export async function handleNewFilesCommand(socket: any, session: BBSSession, pa
     socket.emit('ansi-output', AnsiUtil.headerBox('New Files'));
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.warningLine('New files display not yet implemented'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    finalizeCommand(socket, session, 'New files placeholder displayed');
   }
 }
 

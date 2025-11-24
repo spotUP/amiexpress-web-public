@@ -8,6 +8,7 @@
  * - D: Download files (internalCommandD - express.e:24853-24857)
  */
 
+import * as fs from 'fs';
 import { checkSecurity } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { AnsiUtil } from '../utils/ansi.util';
@@ -15,6 +16,7 @@ import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { normalizeForComparison } from '../utils/input-normalizer.util';
+import { finalizeCommand } from '../utils/command-response.util';
 import type { BBSSession } from '../index';
 
 interface Conference {
@@ -63,6 +65,35 @@ export function setUserCommandsDependencies(deps: {
   _displayDownloadInterface = deps.displayDownloadInterface;
 }
 
+function shouldShowJoinConferenceList(screenPath?: string): boolean {
+  if (!screenPath) {
+    return true;
+  }
+
+  try {
+    const stats = fs.statSync(screenPath);
+    return stats.size < 200;
+  } catch {
+    return true;
+  }
+}
+
+function displayConferenceList(socket: any, session: BBSSession): void {
+  if (_conferences.length === 0) {
+    socket.emit('ansi-output', '\r\nNo conferences configured.\r\n');
+    return;
+  }
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.headerBox('AVAILABLE CONFERENCES'));
+  const currentConfId = session.currentConf;
+
+  _conferences.forEach((conf, index) => {
+    const indicator = conf.id === currentConfId ? ' <- Current' : '';
+    socket.emit('ansi-output', ` ${String(index + 1).padStart(2)}. ${conf.name}${indicator}\r\n`);
+  });
+}
+
 /**
  * Handle S command - Display user statistics
  * 1:1 port from express.e:25540-25568 internalCommandS()
@@ -81,6 +112,7 @@ export function handleUserStatsCommand(socket: any, session: BBSSession): void {
 
   // express.e:25546 - aePuts('\b\n')
   socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.headerBox('USER STATISTICS'));
 
   // Display user statistics (express.e:25548-25568)
   const user = session.user;
@@ -133,9 +165,8 @@ export function handleUserStatsCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize('[F]', 'cyan') + ' Change Font\r\n');
   socket.emit('ansi-output', AnsiUtil.colorize('[Q]', 'cyan') + ' Return to Menu\r\n');
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('Selection: ', 'yellow'));
-
-  session.subState = LoggedOnSubState.USER_STATS_MENU;
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
@@ -197,7 +228,12 @@ export async function handleJoinConferenceCommand(
   }
 
   if (newConf < 1 || newConf > _conferences.length) {
-    _displayScreen(socket, session, 'JOINCONF');
+    const joinScreenDisplayed = await _displayScreen(socket, session, 'JOINCONF');
+    const showList = !joinScreenDisplayed || shouldShowJoinConferenceList(session.lastScreenFilePath);
+
+    if (showList) {
+      displayConferenceList(socket, session);
+    }
 
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.complexPrompt([
@@ -207,7 +243,7 @@ export async function handleJoinConferenceCommand(
     ]));
 
     // Set state to wait for conference number input
-    session.subState = 'JOIN_CONF_INPUT' as any;
+    session.subState = LoggedOnSubState.JOIN_CONF_INPUT;
     session.inputBuffer = '';
     return;
   }

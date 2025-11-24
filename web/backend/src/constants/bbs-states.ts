@@ -140,6 +140,8 @@ export enum LoggedOnSubState {
   NEW_USER_COMPUTER = 'new_user_computer',  // Computer type
   NEW_USER_SCREEN_CLEAR = 'new_user_screen_clear', // Screen clear preference
   NEW_USER_CONFIRM = 'new_user_confirm',    // Confirm all details
+  NEW_USER_REALNAME = 'new_user_realname',  // Real name prompt after summary
+  NEW_USER_SEXAGE = 'new_user_sexage',      // Sex,age prompt (after extra email)
   NEW_USER_SCRIPT = 'new_user_script',      // Node questionnaire prompts
   NEW_USER_SCRIPT_CONFIRM = 'new_user_script_confirm', // Confirm questionnaire answers
 

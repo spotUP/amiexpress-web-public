@@ -87,7 +87,7 @@ Initial test script had incorrect API parameters:
 This caused all tests to default to "skip" strategy, resulting in "Users imported: 0"
 
 ### Fix Applied
-**File**: `dev/scripts/test-all-conflict-strategies.js`
+**File**: `dev/scripts/test-all-conflict-strategies.ts`
 **Lines**: 137-146
 
 ```javascript
@@ -152,12 +152,12 @@ Commands merged: 94
 ### Test Environment
 - Archive: `/tmp/reference-boardbbs-test.zip` (29MB reference-boardBBS data)
 - Backend: Port 3001 (running)
-- Test script: `dev/scripts/test-all-conflict-strategies.js` (442 lines)
+- Test script: `dev/scripts/test-all-conflict-strategies.ts` (442 lines)
 
 ### Test Execution
 ```bash
 NODE_PATH=~/Code/amiexpress-web/web/backend/node_modules \
-  node dev/scripts/test-all-conflict-strategies.js
+  npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-conflict-strategies.ts
 ```
 
 ### Results Summary
@@ -210,8 +210,8 @@ The import system writes to **TWO separate storage systems**:
 **Change**: `realName,` → `realname: realName,`
 **Reason**: Match lowercase database schema field name
 
-### 2. test-all-conflict-strategies.js
-**Location**: `dev/scripts/test-all-conflict-strategies.js`
+### 2. test-all-conflict-strategies.ts
+**Location**: `dev/scripts/test-all-conflict-strategies.ts`
 **Lines**: 137-146
 **Changes**:
 - Removed `strategy` field (not recognized by API)
@@ -223,7 +223,7 @@ The import system writes to **TWO separate storage systems**:
 
 ## Files Created
 
-### 1. test-all-conflict-strategies.js (442 lines)
+### 1. test-all-conflict-strategies.ts (442 lines)
 Comprehensive test script for all 4 remaining issues:
 - Test 1: Real name fix verification
 - Test 2: Replace conflict strategy
@@ -249,7 +249,7 @@ Binary file parser to verify real name fix:
 
 ### Changes Made
 - **1 line changed** in `amiga-parser.service.ts` (real name fix)
-- **10 lines changed** in `test-all-conflict-strategies.js` (API parameters)
+- **10 lines changed** in `test-all-conflict-strategies.ts` (API parameters)
 - **442 lines created** in test script
 - **40 lines created** in verification script
 - **500+ lines created** in documentation
@@ -423,7 +423,7 @@ To re-run all tests:
 
 # Run comprehensive test
 NODE_PATH=~/Code/amiexpress-web/web/backend/node_modules \
-  node dev/scripts/test-all-conflict-strategies.js
+  npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-conflict-strategies.ts
 
 # Verify real name in binary files
 node /tmp/check-realname.js

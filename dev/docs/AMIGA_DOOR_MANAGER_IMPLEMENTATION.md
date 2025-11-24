@@ -11,9 +11,9 @@ This document describes the new AmigaDoorManager module that implements 1:1 comp
 Implemented proper AmigaDOS logical assign resolution:
 
 ```typescript
-Doors:AquaScan/AquaScan.000  →  /path/to/BBS/Doors/AquaScan/AquaScan.000
-BBS:Screens/Welcome          →  /path/to/BBS/Screens/Welcome
-NODE0:work/temp.txt          →  /path/to/BBS/Node0/work/temp.txt
+Doors:AquaScan/AquaScan.000  →  /path/to/Doors/AquaScan/AquaScan.000
+BBS:Screens/Welcome          →  /path/to/Screens/Welcome
+NODE0:work/temp.txt          →  /path/to/Node0/work/temp.txt
 ```
 
 **Supported Assigns:**
@@ -54,7 +54,7 @@ PRIORITY=SAME
 - Flat directory structure
 
 **NEW WAY (CORRECT):**
-- Scans `BBS/Commands/BBSCmd/*.info` for door definitions
+- Scans `Commands/BBSCmd/*.info` for door definitions
 - Parses .info files to extract metadata
 - Resolves AmigaDOS assigns to find executables
 - Checks if door executable exists
@@ -71,7 +71,7 @@ backend/doors/[DoorName]/
 
 **NEW WAY (CORRECT):**
 ```
-backend/data/bbs/BBS/
+backend/data/bbs/
 ├── Commands/BBSCmd/
 │   └── SCAN.info          ← Command definition
 └── Doors/
@@ -86,7 +86,7 @@ backend/data/bbs/BBS/
 Created proper BBS directory structure:
 
 ```
-backend/data/bbs/BBS/
+backend/data/bbs/
 ├── Commands/
 │   ├── BBSCmd/          # User commands
 │   └── SYSCmd/          # Sysop commands
@@ -136,7 +136,7 @@ const result = await manager.installDoor('/path/to/door.lha');
 
 Handles:
 - ZIP and LHA archives
-- BBS/ subdirectory structure
+-  subdirectory structure
 - Flat archive structure
 - Mixed archive structure
 - Multiple .info files
@@ -146,7 +146,7 @@ Handles:
 Resolves AmigaDOS path to physical path
 ```typescript
 const path = manager.resolveAssign('Doors:AquaScan/AquaScan.000');
-// Returns: "/full/path/to/BBS/Doors/AquaScan/AquaScan.000"
+// Returns: "/full/path/to/Doors/AquaScan/AquaScan.000"
 ```
 
 #### parseInfoFile(infoPath)
@@ -226,7 +226,7 @@ interface DoorArchive {
 - Update door installation endpoint
 
 ### 2. Test with Real Archives
-- Test with CAL-WEEK.LHA from Example_BBS/
+- Test with CAL-WEEK.LHA from Example_
 - Test with other door archives from `backend/doors/archives/`
 - Verify .info files are parsed correctly
 - Verify door executables are found
@@ -257,7 +257,7 @@ async function displayDoorManager(socket: any, session: BBSSession) {
 ✓ Resolves AmigaDOS assigns
 ✓ Installs to Commands/BBSCmd/ and Doors/[Name]/
 ✓ Supports ZIP and LHA archives
-✓ Handles BBS/ subdirectory structure
+✓ Handles  subdirectory structure
 ✓ Checks executable existence
 
 ### Not Yet Implemented
@@ -274,10 +274,10 @@ async function displayDoorManager(socket: any, session: BBSSession) {
 - `~/Code/AmiExpress-Web/backend/src/doors/amigaDoorManager.ts`
 
 **BBS Structure:**
-- `~/Code/AmiExpress-Web/backend/data/bbs/BBS/`
+- `~/Code/AmiExpress-Web/backend/data/bbs/`
 
 **Reference Data:**
-- `~/Code/AmiExpress-Web/Example_BBS/`
+- `~/Code/AmiExpress-Web/Example_`
 
 **Archives:**
 - `~/Code/AmiExpress-Web/backend/doors/archives/`

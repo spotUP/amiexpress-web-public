@@ -214,7 +214,7 @@ createUser() {
 
 ### Real reference-boardBBS (Amiga):
 ```
-reference-boardBBS/
+reference-board
 ├── user.data (464 bytes - ~2 users)
 ├── user.keys (112 bytes - ~2 users)
 ├── user.misc (134,912 bytes - many users with stats)
@@ -357,7 +357,7 @@ Total:                     4 comprehensive docs
 - **express.e:8677, 11809** - MailStats operations
 
 ### Real Data Reference:
-- `~/Code/amiexpress-web/reference-boardBBS/` - Real Amiga BBS data
+- `~/Code/amiexpress-web/reference-board` - Real Amiga BBS data
 
 ---
 

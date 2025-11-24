@@ -104,6 +104,7 @@ export async function handleExpertModeCommand(socket: any, session: BBSSession):
   }
 
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 

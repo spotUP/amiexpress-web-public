@@ -29,6 +29,10 @@ export async function flagPause(
   session: Session,
   count: number = 1
 ): Promise<boolean> {
+  if (!session.tempData) {
+    session.tempData = {};
+  }
+
   // Increment line count if not in non-stop mode
   // express.e:28029
   if (!session.tempData.nonStopDisplayFlag) {
@@ -51,80 +55,90 @@ export async function flagPause(
 
     // Wait for user input
     return new Promise((resolve) => {
-      const inputHandler = async (input: string) => {
-        socket.off('line-input', inputHandler);
+      const registerListener = (handler: (input: string) => Promise<void> | void) => {
+        let timeoutId: NodeJS.Timeout | null = null;
 
+        const wrapped = async (input: string) => {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+          socket.off('line-input', wrapped);
+          try {
+            await handler(input);
+          } catch (error) {
+            console.error('[flagPause] line-input handler error:', error);
+            resolve(true);
+          }
+        };
+
+        timeoutId = setTimeout(() => {
+          socket.off('line-input', wrapped);
+          resolve(true);
+        }, 500);
+
+        socket.once('line-input', wrapped);
+      };
+
+      const promptAgain = () => {
+        socket.emit('ansi-output', prompt);
+        registerListener(handleInput);
+      };
+
+      const handleInput = async (input: string) => {
         const response = input.trim().toUpperCase();
 
-        // Y or Enter - continue
-        // express.e:28038
         if (response === '' || response === 'Y') {
-          // Clear prompt line
           socket.emit('ansi-output', '\x1b[1A\x1b[K');
           resolve(true);
           return;
         }
 
-        // N - stop
-        // express.e:28044
         if (response === 'N') {
           socket.emit('ansi-output', '\r\n');
           resolve(false);
           return;
         }
 
-        // NS - non-stop mode
-        // express.e:28045
         if (response === 'NS') {
           session.tempData.nonStopDisplayFlag = true;
-          // Clear prompt line
           socket.emit('ansi-output', '\x1b[1A\x1b[K');
           resolve(true);
           return;
         }
 
-        // F [filename] - flag files
-        // express.e:28053
         if (response.startsWith('F')) {
           const filename = response.substring(1).trim();
-
-          // Flag the file
           const flagManager = session.flagManager || new FileFlagManager('', 0, session.nodeId || 0);
           session.flagManager = flagManager;
+
           if (filename) {
             flagManager.addFlag(filename, session.currentConf);
             await flagManager.save();
             socket.emit('ansi-output', `\r\n\x1b[32mFlagged: ${filename}\x1b[0m\r\n`);
-          } else {
-            // Prompt for filename
-            socket.emit('ansi-output', '\r\nFilename to flag: ');
-            const filenameHandler = (filenameInput: string) => {
-              socket.off('line-input', filenameHandler);
-              if (filenameInput.trim()) {
-                flagManager.addFlag(filenameInput.trim(), session.currentConf);
-                flagManager.save();
-                socket.emit('ansi-output', `\x1b[32mFlagged: ${filenameInput.trim()}\x1b[0m\r\n`);
-              }
-              // Clear prompt lines
-              socket.emit('ansi-output', '\x1b[A\x1b[K');
-              resolve(true);
-            };
-            socket.once('line-input', filenameHandler);
+            socket.emit('ansi-output', '\x1b[A\x1b[K');
+            resolve(true);
             return;
           }
 
-          // Clear prompt line
-          socket.emit('ansi-output', '\x1b[A\x1b[K');
-          resolve(true);
+          socket.emit('ansi-output', '\r\nFilename to flag: ');
+          registerListener(async (filenameInput: string) => {
+            const trimmed = filenameInput.trim();
+            if (trimmed) {
+              flagManager.addFlag(trimmed, session.currentConf);
+              await flagManager.save();
+              socket.emit('ansi-output', `\x1b[32mFlagged: ${trimmed}\x1b[0m\r\n`);
+            }
+            socket.emit('ansi-output', '\x1b[A\x1b[K');
+            resolve(true);
+          });
           return;
         }
 
-        // Invalid input - show prompt again
         socket.emit('ansi-output', prompt);
-        socket.once('line-input', inputHandler);
+        registerListener(handleInput);
       };
 
-      socket.once('line-input', inputHandler);
+      promptAgain();
     });
   }
 
@@ -136,6 +150,9 @@ export async function flagPause(
  * Initialize pause state for a session
  */
 export function initPauseState(session: Session): void {
+  if (!session.tempData) {
+    session.tempData = {};
+  }
   session.tempData.lineCount = 0;
   session.tempData.nonStopDisplayFlag = false;
 }
@@ -144,6 +161,9 @@ export function initPauseState(session: Session): void {
  * Reset line count (for new screen/section)
  */
 export function resetLineCount(session: Session): void {
+  if (!session.tempData) {
+    session.tempData = {};
+  }
   session.tempData.lineCount = 0;
 }
 
@@ -151,5 +171,8 @@ export function resetLineCount(session: Session): void {
  * Set non-stop mode
  */
 export function setNonStopMode(session: Session, enabled: boolean): void {
+  if (!session.tempData) {
+    session.tempData = {};
+  }
   session.tempData.nonStopDisplayFlag = enabled;
 }

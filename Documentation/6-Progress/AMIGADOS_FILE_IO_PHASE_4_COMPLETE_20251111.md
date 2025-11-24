@@ -29,7 +29,7 @@ this.dosLibrary.enableNewFileSystem(projectRoot);
 1. **Base Directory Path**: `path.resolve(process.cwd(), '../..')`
    - Backend runs from `web/backend/`
    - Need to go up 2 levels to reach project root (`~/Code/amiexpress-web/`)
-   - Project root contains `doors/`, `BBS/`, `data/` directories
+   - Project root contains `doors/`, ``, `data/` directories
 
 2. **Activation Point**: After DosLibrary creation, before any door execution
    - Ensures FileManager is ready before binary loads
@@ -107,7 +107,7 @@ npx tsc --noEmit
    [AmigaDoorSession] Enabling FileManager with base directory: ~/Code/amiexpress-web
    [PathManager] Initialized assigns:
      doors: => ~/Code/amiexpress-web/doors/
-     bbs: => ~/Code/amiexpress-web/BBS/
+     bbs: => ~/Code/amiexpress-web/
      ...
    [FileManager] Initialized standard handles:
      BPTR 1 (stdin):  [FH:'stdin'...]
@@ -208,10 +208,10 @@ Initialized by PathManager in FileManager constructor:
 | Assign | System Path |
 |--------|-------------|
 | `doors:` | `/path/to/doors/` |
-| `bbs:` | `/path/to/BBS/` |
+| `bbs:` | `/path/to/` |
 | `data:` | `/path/to/data/` |
-| `screens:` | `/path/to/BBS/Screens/` |
-| `bulletins:` | `/path/to/BBS/Bulletins/` |
+| `screens:` | `/path/to/Screens/` |
+| `bulletins:` | `/path/to/Bulletins/` |
 | `sys:` | `/path/to/System/` |
 | `c:` | `/path/to/System/C/` |
 | `libs:` | `/path/to/System/Libs/` |

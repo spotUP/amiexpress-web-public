@@ -43,8 +43,7 @@ export class MessageFileManager {
 
   constructor() {
     // Path resolution: 4 levels up from src/services/ to project root
-    // and then into the BBS/ assign directory
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..', 'BBS');
+    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
   }
 
   /**

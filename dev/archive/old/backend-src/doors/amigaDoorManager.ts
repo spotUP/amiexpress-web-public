@@ -7,7 +7,7 @@
  * - Installs doors to proper BBS directory structure
  * - Parses .info files for door metadata
  *
- * Reference: Example_BBS/ directory structure
+ * Reference: Example_BBS directory structure
  */
 
 import * as fs from 'fs';
@@ -105,7 +105,7 @@ export class AmigaDoorManager {
 
   /**
    * Resolve AmigaDOS path to physical path
-   * Example: "Doors:AquaScan/AquaScan.000" → "/path/to/BBS/Doors/AquaScan/AquaScan.000"
+   * Example: "Doors:AquaScan/AquaScan.000" → "/path/to/Doors/AquaScan/AquaScan.000"
    * Case-insensitive to handle both "Doors:" and "DOORS:"
    */
   resolveAssign(amigaPath: string): string {
@@ -345,7 +345,7 @@ export class AmigaDoorManager {
       const files: string[] = [];
 
       // Parse unlzx output format
-      // Example: "    49  100%  27-Sep-1994 BBS/Commands/BBS.CMD"
+      // Example: "    49  100%  27-Sep-1994 Commands/BBS.CMD"
       for (const line of lines) {
         // Look for lines with file information (size, ratio, date, filename)
         const match = line.match(/^\s+\d+\s+\d+%\s+\d+-\w+-\d+\s+(.+)$/);
@@ -411,7 +411,7 @@ export class AmigaDoorManager {
       // Determine if this is a TypeScript door
       // TypeScript doors have:
       // 1. package.json file, OR
-      // 2. .ts/.js files in root (not in BBS/ subdirectory)
+      // 2. .ts/.js files in root (not in the BBS subdirectory)
       const hasPackageJson = packageJson !== null;
       const hasRootTypeScript = files.some(f => {
         const name = f.toLowerCase();
@@ -582,7 +582,7 @@ export class AmigaDoorManager {
       for (const infoFile of infoFiles) {
         const relativePath = path.relative(tempDir, infoFile);
 
-        // Determine if archive has BBS/ structure
+        // Determine if archive has the BBS structure
         const hasBBSStructure = relativePath.match(/^BBS[/\\]Commands[/\\]BBSCmd[/\\]/i);
 
         // Destination for .info file
@@ -610,7 +610,7 @@ export class AmigaDoorManager {
         // Find door files in archive
         let doorSourceDir: string;
         if (hasBBSStructure) {
-          // Archive has BBS/Doors/[DoorName]/ structure
+          // Archive has the BBS Doors/[DoorName]/ structure
           doorSourceDir = path.join(tempDir, 'BBS', 'Doors', doorName);
         } else {
           // Flat or mixed structure - look for door files

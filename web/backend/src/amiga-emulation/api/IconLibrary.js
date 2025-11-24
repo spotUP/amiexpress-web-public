@@ -62,7 +62,7 @@ class IconLibrary {
             console.log(`[icon.library]   Translated DOORS: -> ${name}`);
         }
         else if (name.startsWith('BBS:')) {
-            name = 'backend/BBS/' + name.substring(4);
+            name = name.substring(4);
             console.log(`[icon.library]   Translated BBS: -> ${name}`);
         }
         else if (name.startsWith('SYS:')) {

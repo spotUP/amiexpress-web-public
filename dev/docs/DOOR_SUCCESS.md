@@ -220,7 +220,7 @@ Need to create complete mapping of offsets to functions. Check:
 ### 3. Test More Doors
 
 Currently tested: `WeekConfTop.XIM`
-Need to test: Other doors in `backend/BBS/Doors/` directory
+Need to test: Other doors in `backend/Doors/` directory
 
 ### 4. Handle Door I/O
 

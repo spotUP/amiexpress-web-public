@@ -8,6 +8,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 
 // Door/Command types from axenums.e:15
@@ -347,8 +348,12 @@ export function scanCommandDirectory(
   if (commandType === CommandType.BBSCMD) {
     if (conferenceId) {
       for (const confName of getConferenceDirNames(conferenceId)) {
-        searchPaths.push(path.join(baseDir, 'BBS', confName, 'Commands', 'BBSCmd'));
-        searchPaths.push(path.join(baseDir, confName, 'Commands', 'BBSCmd'));
+        const legacyPath = path.join(baseDir, 'BBS', confName, 'Commands', 'BBSCmd');
+        const rootPath = path.join(baseDir, confName, 'Commands', 'BBSCmd');
+        searchPaths.push(rootPath);
+        if (existsSync(legacyPath)) {
+          searchPaths.push(legacyPath);
+        }
       }
     }
     if (nodeId) {
@@ -358,8 +363,12 @@ export function scanCommandDirectory(
   } else if (commandType === CommandType.SYSCMD) {
     if (conferenceId) {
       for (const confName of getConferenceDirNames(conferenceId)) {
-        searchPaths.push(path.join(baseDir, 'BBS', confName, 'Commands', 'SysCmd'));
-        searchPaths.push(path.join(baseDir, confName, 'Commands', 'SysCmd'));
+        const legacyPath = path.join(baseDir, 'BBS', confName, 'Commands', 'SysCmd');
+        const rootPath = path.join(baseDir, confName, 'Commands', 'SysCmd');
+        searchPaths.push(rootPath);
+        if (existsSync(legacyPath)) {
+          searchPaths.push(legacyPath);
+        }
       }
     }
     if (nodeId) {

@@ -12,7 +12,7 @@ import * as fs from 'fs/promises';
  * Get HOLD directory path for a conference
  * Express.e:19405 - StringF(tempstr2,'\sHOLD/\s',currentConfDir,str)
  *
- * @param conferencePath Path to conference directory (e.g., BBS/Conf1)
+ * @param conferencePath Path to conference directory (e.g., Conf1)
  * @returns Full path to HOLD directory
  */
 export function getHoldDir(conferencePath: string): string {
@@ -145,12 +145,24 @@ async function updateHeldTracking(
  * Get conference directory path from conference ID
  *
  * @param conferenceId Conference ID (1, 2, 3, etc.)
- * @param bbsDataPath Base BBS data path
- * @returns Path to conference directory (e.g., BBS/Conf1)
+ * @param bbsDataPath Base data path
+ * @returns Path to conference directory (e.g., Conf1)
  */
+function getConferenceName(conferenceId: number): string {
+  return `Conf${conferenceId}`;
+}
+
+export function getRootConferenceDir(conferenceId: number, bbsDataPath: string): string {
+  return path.join(bbsDataPath, getConferenceName(conferenceId));
+}
+
 export function getConferenceDir(conferenceId: number, bbsDataPath: string): string {
-  const confName = `Conf${conferenceId}`;
-  return path.join(bbsDataPath, 'BBS', confName);
+  return getRootConferenceDir(conferenceId, bbsDataPath);
+}
+
+export function getConferenceDirCandidates(conferenceId: number, bbsDataPath: string): string[] {
+  const rootDir = getRootConferenceDir(conferenceId, bbsDataPath);
+  return [rootDir];
 }
 
 /**

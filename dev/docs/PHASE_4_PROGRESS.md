@@ -298,7 +298,7 @@ async function getUserStats(userId)
 
 ### Future Work (Phase 5+):
 
-- Implement .cmd file system for BBS/Sys commands
+- Implement .cmd file system for Sys commands
 - Implement security/access control (checkSecurity, checkConfAccess)
 - Implement native/script door execution
 - Implement actual file transfer with real file reading

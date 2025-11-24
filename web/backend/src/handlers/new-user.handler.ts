@@ -34,6 +34,12 @@ let autoValidationPassword = '';
 let autoValidationSecLevel = 50;
 let cachedComputerChoices: string[] | null = null;
 
+interface SecurityPolicy {
+  minLength: number;
+  minStrength: number;
+  strictPolicy: boolean;
+}
+
 interface ScriptStep {
   type: 'text' | 'prompt';
   content: string;
@@ -90,6 +96,17 @@ export async function startNewUserRegistration(socket: Socket, session: any, use
 
   session.state = BBSState.REGISTERING;
   session.inputBuffer = '';
+  session.cmdShortcuts = false;
+  if (session.shortcuts && typeof session.shortcuts.clear === 'function') {
+    session.shortcuts.clear();
+  }
+  // Clear any leftover display/menu state so we stay in line-input mode
+  session.commandText = undefined;
+  session.paginatedScreen = undefined;
+  session.queuedScreenCommands = [];
+  session.pendingDisplayInputs = [];
+  session.replayingDisplayInputs = false;
+  session.menuPause = false;
 
   if (await showScreen(socket, session, screenConfig.NONEWUSERS)) {
     doPause(socket, session);
@@ -106,7 +123,7 @@ export async function startNewUserRegistration(socket: Socket, session: any, use
   // express.e:30047 - Create new account structure
   // Initialize registration data
   session.newUserData = {
-    username: username === 'NEW' ? '' : username,
+    username: '', // Always re-prompt for handle like express.e
     location: '',
     phone: '',
     email: '',
@@ -141,7 +158,7 @@ export async function startNewUserRegistration(socket: Socket, session: any, use
  * Prompt for name - express.e:30115-30168 (jLoop1)
  */
 function promptForName(socket: Socket, session: any) {
-  socket.emit('ansi-output', `\r\nHandle: `);
+  socket.emit('ansi-output', `\r\nEnter your Name: `);
 }
 
 /**
@@ -329,14 +346,20 @@ async function beginRegistrationPrompts(socket: Socket, session: any, username: 
     session.newUserData.introShown = true;
   }
 
-  if (username.toUpperCase() === 'NEW' || username.trim() === '') {
-    session.subState = LoggedOnSubState.NEW_USER_NAME;
-    promptForName(socket, session);
-  } else {
-    session.newUserData.username = username;
-    session.subState = LoggedOnSubState.NEW_USER_LOCATION;
-    promptForLocation(socket, session);
+  // Reset any pagination/shortcut state before line prompts
+  session.paginatedScreen = undefined;
+  session.queuedScreenCommands = [];
+  session.pendingScreenCommand = undefined;
+  session.screenCommandResolver = null;
+  session.cmdShortcuts = false;
+  if (session.shortcuts && typeof session.shortcuts.clear === 'function') {
+    session.shortcuts.clear();
   }
+  session.inputBuffer = '';
+
+  // Always ask for handle first (express.e jLoop1)
+  session.subState = LoggedOnSubState.NEW_USER_NAME;
+  promptForName(socket, session);
 }
 
 async function showScreen(socket: Socket, session: any, screenName?: string): Promise<boolean> {
@@ -421,6 +444,48 @@ function promptForPassword(socket: Socket, session: any) {
   socket.emit('ansi-output', 'Enter a PassWord: ');
 }
 
+function getSecurityPolicy(): SecurityPolicy {
+  const defaults: SecurityPolicy = { minLength: 4, minStrength: 0, strictPolicy: false };
+  try {
+    if (db && typeof db.getConfigRepository === 'function') {
+      const repo = db.getConfigRepository();
+      if (repo && typeof repo.getSystemConfig === 'function') {
+        const sys = repo.getSystemConfig();
+        return {
+          minLength: typeof sys?.min_password_length === 'number' ? sys.min_password_length : defaults.minLength,
+          minStrength: typeof sys?.min_password_strength === 'number' ? sys.min_password_strength : defaults.minStrength,
+          strictPolicy: Boolean(sys?.strict_password_policy)
+        };
+      }
+    }
+  } catch (error) {
+    console.warn('[NEW USER] Unable to load security policy from config:', error);
+  }
+  return defaults;
+}
+
+function passwordMeetsStrength(password: string, minStrength: number): boolean {
+  if (minStrength <= 0) return true;
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSymbol = /[^A-Za-z0-9]/.test(password);
+  const classes = [hasLower, hasUpper, hasDigit, hasSymbol].filter(Boolean).length;
+
+  switch (minStrength) {
+    case 1:
+      return classes >= 2;
+    case 2:
+      return classes >= 3;
+    case 3:
+      return classes >= 4;
+    case 4:
+      return classes >= 4 && password.length >= 12;
+    default:
+      return true;
+  }
+}
+
 /**
  * Handle password input - express.e:30203-30234
  */
@@ -433,6 +498,19 @@ export async function handlePasswordInput(socket: Socket, session: any, input: s
     setPasswordMask(socket, session, false);
     session.subState = LoggedOnSubState.NEW_USER_EMAIL;
     promptForEmail(socket, session);
+    return;
+  }
+
+  const policy = getSecurityPolicy();
+  if (password.length < policy.minLength) {
+    socket.emit('ansi-output', `\r\n\x1b[31mPassword too short, must be at least ${policy.minLength} characters.\x1b[0m\r\n\r\n`);
+    promptForPassword(socket, session);
+    return;
+  }
+
+  if (!passwordMeetsStrength(password, policy.minStrength)) {
+    socket.emit('ansi-output', '\r\n\x1b[31mPassword too weak. Use mixed case, numbers, and symbols.\x1b[0m\r\n\r\n');
+    promptForPassword(socket, session);
     return;
   }
 
@@ -544,8 +622,8 @@ function promptForScreenClear(socket: Socket, session: any) {
 export async function handleScreenClearInput(socket: Socket, session: any, input: string) {
   const response = input.trim().toUpperCase();
 
-  // Empty input or Y/YES = Yes (default is Yes)
-  session.newUserData.screenClear = response === '' || response === 'Y' || response === 'YES';
+  // reference-board default: No; only Y/YES enables
+  session.newUserData.screenClear = response === 'Y' || response === 'YES';
 
   if (session.newUserData.screenClear) {
     socket.emit('ansi-output', 'Yes..\r\n\r\n');
@@ -605,6 +683,29 @@ export async function handleConfirmInput(socket: Socket, session: any, input: st
     return;
   }
 
+  // Proceed to real name / email / sex,age prompts per reference-board sequence
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', 'What is your real name: ');
+  session.subState = LoggedOnSubState.NEW_USER_REALNAME;
+  session.inputBuffer = '';
+}
+
+export async function handleRealnameInput(socket: Socket, session: any, input: string) {
+  const realname = input.trim();
+  session.newUserData.realname = realname;
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', 'What is your sex,age: ');
+  session.subState = LoggedOnSubState.NEW_USER_SEXAGE;
+  session.inputBuffer = '';
+}
+
+export async function handleSexAgeInput(socket: Socket, session: any, input: string) {
+  const sexAge = input.trim();
+  session.newUserData.sexAge = sexAge;
+  session.inputBuffer = '';
+  socket.emit('ansi-output', '\r\n\r\nNow to the tricky part... . .\r\n\r\n');
+
+  // After sex/age, proceed to questionnaire or account creation
   await continueRegistrationFlow(socket, session);
 }
 
@@ -645,8 +746,20 @@ export async function handleAutoValidationInput(socket: Socket, session: any, in
 
 export async function handleQuestionnaireAnswer(socket: Socket, session: any, input: string) {
   const questionnaire: QuestionnaireState | undefined = session.newUserData.questionnaire;
-  if (!questionnaire || typeof questionnaire.awaitingPromptIndex !== 'number') {
+  if (!questionnaire) {
+    await continueRegistrationFlow(socket, session);
+    return;
+  }
+
+  if (typeof questionnaire.awaitingPromptIndex !== 'number') {
+    // Re-enter questionnaire loop cleanly
+    session.subState = LoggedOnSubState.NEW_USER_SCRIPT;
     await advanceQuestionnaire(socket, session);
+    // If still no awaiting prompt and we've exhausted steps, move to confirm
+    if (typeof questionnaire.awaitingPromptIndex !== 'number' && questionnaire.currentIndex >= questionnaire.steps.length) {
+      session.subState = LoggedOnSubState.NEW_USER_SCRIPT_CONFIRM;
+      socket.emit('ansi-output', '\r\nIs the above Correct? (Y/n) ');
+    }
     return;
   }
 
@@ -658,6 +771,7 @@ export async function handleQuestionnaireAnswer(socket: Socket, session: any, in
   });
   questionnaire.transcript.push(`${promptStep.content} ${response}`);
   questionnaire.awaitingPromptIndex = undefined;
+  session.inputBuffer = '';
 
   await advanceQuestionnaire(socket, session);
 }
@@ -726,11 +840,12 @@ async function advanceQuestionnaire(socket: Socket, session: any): Promise<void>
     questionnaire.currentIndex++;
     if (step.type === 'text') {
       questionnaire.transcript.push(step.content);
-      socket.emit('ansi-output', `${step.content}\r\n`);
+      socket.emit('ansi-output', `${step.content}\r\n\r\n`);
       continue;
     }
     questionnaire.awaitingPromptIndex = questionnaire.currentIndex - 1;
     socket.emit('ansi-output', `${step.content} `);
+    session.inputBuffer = '';
     return;
   }
 

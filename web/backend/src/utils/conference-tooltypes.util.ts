@@ -22,8 +22,8 @@ const defaultFlags: ConferenceToolFlags = {
   showNewFiles: false,
   noNewFiles: false,
   forceMenus: false,
-  noBulls: false,
-  noConfBulls: false,
+  noBulls: true,
+  noConfBulls: true,
   freeDownloads: false,
 };
 
@@ -41,15 +41,30 @@ function readFlagsFromDb(confNumber: number): Partial<ConferenceToolFlags> {
       return {};
     }
 
-    return {
-      forceNewscan: Boolean(confConfig.force_newscan),
-      noNewscan: Boolean(confConfig.no_newscan),
-      showNewFiles: Boolean(confConfig.show_new_files),
-      noNewFiles: Boolean(confConfig.no_new_files),
-      noBulls: Boolean((confConfig as any).no_bulls),
-      noConfBulls: Boolean((confConfig as any).no_conf_bulls),
-      freeDownloads: Boolean((confConfig as any).free_downloads),
-    };
+    const result: Partial<ConferenceToolFlags> = {};
+    if (confConfig.force_newscan) {
+      result.forceNewscan = true;
+    }
+    if (confConfig.no_newscan) {
+      result.noNewscan = true;
+    }
+    if (confConfig.show_new_files) {
+      result.showNewFiles = true;
+    }
+    if (confConfig.no_new_files) {
+      result.noNewFiles = true;
+    }
+    if ((confConfig as any).no_bulls) {
+      result.noBulls = true;
+    }
+    if ((confConfig as any).no_conf_bulls) {
+      result.noConfBulls = true;
+    }
+    if ((confConfig as any).free_downloads) {
+      result.freeDownloads = true;
+    }
+
+    return result;
   } catch (error) {
     console.error(`[ConferenceTooltypes] Error reading DB config for conference ${confNumber}:`, error);
     return {};
@@ -86,16 +101,33 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
       }
     }
 
-    return {
-      forceNewscan: flagSet.has('FORCE_NEWSCAN'),
-      noNewscan: flagSet.has('NO_NEWSCAN'),
-      showNewFiles: flagSet.has('SHOW_NEW_FILES'),
-      noNewFiles: flagSet.has('NO_NEW_FILES'),
-      forceMenus: flagSet.has('FORCE_MENUS'),
-      noBulls: flagSet.has('NO_BULLS'),
-      noConfBulls: flagSet.has('NO_CONF_BULLS'),
-      freeDownloads: flagSet.has('FREEDOWNLOADS'),
-    };
+    const result: Partial<ConferenceToolFlags> = {};
+    if (flagSet.has('FORCE_NEWSCAN')) {
+      result.forceNewscan = true;
+    }
+    if (flagSet.has('NO_NEWSCAN')) {
+      result.noNewscan = true;
+    }
+    if (flagSet.has('SHOW_NEW_FILES')) {
+      result.showNewFiles = true;
+    }
+    if (flagSet.has('NO_NEW_FILES')) {
+      result.noNewFiles = true;
+    }
+    if (flagSet.has('FORCE_MENUS')) {
+      result.forceMenus = true;
+    }
+    if (flagSet.has('NO_BULLS')) {
+      result.noBulls = true;
+    }
+    if (flagSet.has('NO_CONF_BULLS')) {
+      result.noConfBulls = true;
+    }
+    if (flagSet.has('FREEDOWNLOADS')) {
+      result.freeDownloads = true;
+    }
+
+    return result;
   } catch (error) {
     console.error(`[ConferenceTooltypes] Error parsing Conf${confNumber}.info:`, error);
     return {};

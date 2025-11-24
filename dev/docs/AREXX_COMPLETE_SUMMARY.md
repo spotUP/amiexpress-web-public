@@ -164,7 +164,7 @@ The AREXX scripting engine for AmiExpress Web is **100% complete** with all majo
 
 **Drop File Formats Supported:**
 - `DOOR.SYS` - PCBoard-style drop file
-- `DORINFO1.DEF` - RBBS/QuickBBS-style drop file
+- `DORINFO1.DEF` - RQuickBBS-style drop file
 
 ---
 

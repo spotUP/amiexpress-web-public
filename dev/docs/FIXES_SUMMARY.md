@@ -9,13 +9,13 @@
 ### 1. JOINCONF Screen Mismatch (CRITICAL)
 **Problem:** JOINCONF screen displayed 4 conferences but database only had 3, causing crashes when users entered "4"
 
-**Fix:** Updated `/backend/BBS/Node0/Screens/JoinConf.TXT` to show exactly 3 conferences:
+**Fix:** Updated `/backend/Node0/Screens/JoinConf.TXT` to show exactly 3 conferences:
 - General
 - Tech Support
 - Announcements
 
 **Files Modified:**
-- `backend/BBS/Node0/Screens/JoinConf.TXT`
+- `backend/Node0/Screens/JoinConf.TXT`
 
 ---
 

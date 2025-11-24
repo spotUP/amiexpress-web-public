@@ -228,7 +228,9 @@ function registerCommandHandler(socket: Socket) {
     console.log('[socket-handlers]   inDoorManager:', session.inDoorManager);
     console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
 
-    handleCommand(socket, session, data);
+    for (const char of data) {
+      handleCommand(socket, session, char);
+    }
     console.log('=== COMMAND PROCESSED ===\n');
   });
 

@@ -160,7 +160,7 @@ function processMciCodes(content: string, session: BBSSession): string {
  */
 export function loadScreen(screenName: string, session: BBSSession): string | null {
   // BBS directory structure matches original Amiga AmiExpress (express.e uses cmds.bbsLoc)
-  // Base path is backend/BBS/ which contains Node0/, Conf##/, Screens/, etc.
+  // Base path is backend/BBS which contains Node0/, Conf##/, Screens/, etc.
   // Note: When running from backend/backend/src, we need to go up one level to reach backend/BBS
   const basePath = path.join(process.cwd(), '..', 'BBS');
   const nodeScreenPath = path.join(basePath, `Node${session.nodeNumber || 0}`, 'Screens', `${screenName}.TXT`);

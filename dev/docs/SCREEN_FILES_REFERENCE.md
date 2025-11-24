@@ -8,15 +8,15 @@ Screen files are text files with ANSI escape codes and color formatting that dis
 
 ## File Locations
 
-- **Node Screens**: `backend/data/bbs/BBS/Node0/Screens/`
-- **BBS Root Screens**: `backend/data/bbs/BBS/Screens/`
-- **Conference Screens**: `backend/data/bbs/BBS/Conf01/Screens/`
+- **Node Screens**: `backend/data/bbs/Node0/Screens/`
+- **BBS Root Screens**: `backend/data/bbs/Screens/`
+- **Conference Screens**: `backend/data/bbs/Conf01/Screens/`
 
 ## Complete Screen File List
 
 ### Node Screens (15 files)
 
-Located in: `backend/data/bbs/BBS/Node0/Screens/`
+Located in: `backend/data/bbs/Node0/Screens/`
 
 | File | Screen Constant | Purpose | MCI Codes Used |
 |------|----------------|---------|----------------|
@@ -38,7 +38,7 @@ Located in: `backend/data/bbs/BBS/Node0/Screens/`
 
 ### BBS Root Screens (6 files)
 
-Located in: `backend/data/bbs/BBS/Screens/`
+Located in: `backend/data/bbs/Screens/`
 
 | File | Screen Constant | Purpose | MCI Codes Used |
 |------|----------------|---------|----------------|
@@ -51,7 +51,7 @@ Located in: `backend/data/bbs/BBS/Screens/`
 
 ### Conference Screens (6 files)
 
-Located in: `backend/data/bbs/BBS/Conf01/Screens/`
+Located in: `backend/data/bbs/Conf01/Screens/`
 
 | File | Screen Constant | Purpose | MCI Codes Used |
 |------|----------------|---------|----------------|

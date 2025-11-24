@@ -269,18 +269,17 @@ npm run lint         # ESLint validation
 ```
 
 **BBS Integration Tests:**
-- **All Commands**: `node dev/scripts/test-all-commands.js`
+- **All Commands**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-commands.ts`
 - **Quick All Commands**: `./dev/scripts/test-all-commands-quick.sh`
-- **Interactive Test**: `node dev/scripts/test-command-interactive.js`
-- **Door Install Test**: `node dev/scripts/test-door-install.js`
+- **Interactive Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-command-interactive.ts`
+- **Door Install Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-door-install.ts`
 - **Example Doors**: `./dev/scripts/test-example-doors.sh` (or `--clean` to remove node_modules first)
-- **Deep Dive Test**: `node dev/scripts/test-deep-dive.js`
-- **Simple Test**: `node dev/scripts/test-simple.js`
-- **BBS Comprehensive**: `node dev/scripts/test-bbs-comprehensive.js`
-- **Config API Test**: `node dev/scripts/test-config-api.js`
-- **Config Verification**: `node dev/scripts/verify-config-tables.js`
-- **Import Testing**: `node dev/scripts/test-import-execution.js`
-- **User Parsing**: `node dev/scripts/test-user-parsing.js`
+- **Deep Dive Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-deep-dive.ts`
+- **Simple Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-simple.ts`
+- **BBS Comprehensive**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-bbs-comprehensive.ts`
+- **Config API Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-config-api.ts`
+- **Import Testing**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-import-execution.ts`
+- **User Parsing**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-user-parsing.ts`
 - See `Documentation/3-Developers/TESTING.md` for complete protocol
 - **CRITICAL**: Always use test scripts instead of manual testing
 
@@ -507,8 +506,8 @@ import { AmigaCommandParser } from './utils/amiga-command-parser.util';  // .inf
 - Docs: `Documentation/` directory
 - Scripts: `Scripts/` directory
 - Dev scripts: `dev/scripts/` directory
-- Main menu: `backend/BBS/Screens/MENU.TXT`
-- Bulletins: `backend/data/bbs/BBS/Conf01/Bulletins/YYYYMMDD_CHANGELOG.TXT`
+- Main menu: `backend/Screens/MENU.TXT`
+- Bulletins: `backend/data/bbs/Conf01/Bulletins/YYYYMMDD_CHANGELOG.TXT`
 
 ## Screen Display Flow (express.e:28555-28648)
 BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
@@ -545,8 +544,8 @@ BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
 - Conflict resolution strategies for duplicate data
 - Supports AmiExpress/!X binary user files and configuration
 - See `Documentation/1-Users/IMPORT_USER_GUIDE.md`
-- Test: `node dev/scripts/test-import-execution.js`
-- User parsing: `node dev/scripts/test-user-parsing.js`
+- Test: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-import-execution.ts`
+- User parsing: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-user-parsing.ts`
 
 ## NO STUBS OR TODOs
 - NEVER leave stub implementations that break functionality

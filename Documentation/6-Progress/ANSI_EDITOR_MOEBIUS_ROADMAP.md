@@ -403,7 +403,7 @@ Transform our BBS door ANSI editor into a Moebius-equivalent terminal-based edit
 
 ### 10.1 BBS Gallery Integration
 - [ ] **Browse BBS screens** (gallery modal)
-  - List all screens in BBS/Screens/
+  - List all screens in Screens/
   - Preview thumbnails (ASCII art)
   - Load directly into editor
 - [ ] **Save to BBS gallery**

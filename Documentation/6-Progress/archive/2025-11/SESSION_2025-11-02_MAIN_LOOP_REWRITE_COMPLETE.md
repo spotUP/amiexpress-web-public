@@ -130,7 +130,7 @@ To verify the fix works:
 
 ```bash
 # Simple output test
-timeout 15 npx tsx Scripts/test-who-door.js 2>&1 | grep "OUTPUT"
+timeout 15 npx tsx Scripts/test-who-door.ts 2>&1 | grep "OUTPUT"
 
 # Success criteria: Should see only ONE line of output, not two:
 [OUTPUT] /X DooR by SPY/MST\n

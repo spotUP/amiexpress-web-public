@@ -16,6 +16,7 @@ import { readDirFile, getDirFilePath, getHoldDirFilePath, DirFileEntry } from '.
 import { parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../utils/dir-span.util';
 import { FileFlagManager } from '../utils/file-flag.util';
 import { ParamsUtil } from '../utils/params.util';
+import { AnsiUtil } from '../utils/ansi.util';
 import { config } from '../config';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
@@ -59,20 +60,12 @@ export class FileListingHandler {
       // User specified directory in params
       dirSpan = parseDirSpan(parsedParams[0], maxDirs, this.canAccessHold(session));
     } else {
-      // Prompt user for directory (express.e:27646-27647)
-      // Display FILEHELP screen if available
-      await displayScreen(socket, session, 'FILEHELP'); // Don't pause for file help
-
-      const prompt = getDirSpanPrompt(maxDirs, this.canAccessHold(session));
-      socket.emit('ansi-output', prompt);
-
-      // Set state to wait for directory input
-      session.subState = LoggedOnSubState.FILE_LIST_DIR_INPUT;
-      session.tempData.fileListParams = {
-        reverse,
-        hasNonStop
+      // Default to entire conference directories when no params provided
+      dirSpan = {
+        startDir: 1,
+        endDir: maxDirs,
+        success: true
       };
-      return;
     }
 
     // Check if directory parse was successful
@@ -94,6 +87,11 @@ export class FileListingHandler {
       hasNonStop,
       maxDirs
     );
+
+    // Always return to menu after listing
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 
   /**
@@ -132,6 +130,11 @@ export class FileListingHandler {
       hasNonStop || false,
       maxDirs
     );
+
+    // Always return to menu after listing
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 
   /**
@@ -154,6 +157,10 @@ export class FileListingHandler {
     if (hasNonStop) {
       setNonStopMode(session, true);
     }
+    session.menuPause = false;
+
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.headerBox('FILE LISTING'));
 
     // Determine loop direction
     let currentDir: number;
@@ -238,7 +245,8 @@ export class FileListingHandler {
       }
     }
 
-    // Return to menu
+    // Return to menu prompt (single redraw handled centrally)
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 

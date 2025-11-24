@@ -8,6 +8,7 @@
 import { displayScreen } from './screen.handler';
 import { displayMainMenu } from './command-handler/menu';
 import { getMailStatFile, loadMsgPointers, validatePointers } from '../utils/message-pointers.util';
+import { finalizeCommand } from '../utils/command-response.util';
 
 import type { BBSSession } from '../index';
 
@@ -124,15 +125,14 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
     }
   }
 
-  socket.emit('ansi-output', `\r\n\x1b[32mJoined conference: ${conference.name}\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\r\n\x1b[32mCurrent message base: ${messageBase.name}\x1b[0m\r\n`);
-
   // Log conference join (express.e:9493 callersLog)
   if (session.user) {
     await callersLog(session.user.id, session.user.username, 'Joined conference', conference.name);
   }
 
   // Like express.e:28576-28577 - load flagged files and command history
+  const finalMessage = `Conference joined: ${conference.name} (Base: ${messageBase.name})`;
+  finalizeCommand(socket, session, finalMessage);
   await loadFlagged(socket, session);
   await loadHistory(session);
 

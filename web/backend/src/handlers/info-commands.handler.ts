@@ -15,6 +15,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { db } from '../database';
 import bcrypt from 'bcryptjs';
+import { finalizeCommand } from '../utils/command-response.util';
 
 import type { BBSSession } from '../index';
 
@@ -42,6 +43,7 @@ export function setInfoCommandsDependencies(deps: {
  * @param session - Current BBS session
  */
 export function handleVersionCommand(socket: any, session: BBSSession): void {
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('AmiExpress Web Version Information'));
   socket.emit('ansi-output', '\r\n');
@@ -83,9 +85,8 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', '\r\n');
 
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
@@ -107,6 +108,8 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
     });
     return;
   }
+
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
   console.log('[ENV] Doors');
 
@@ -156,9 +159,8 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
   }
 
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
@@ -180,6 +182,8 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
     });
     return;
   }
+
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
   console.log('[ENV] Doors');
 
@@ -230,9 +234,8 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
   }
 
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**

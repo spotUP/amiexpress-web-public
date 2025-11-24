@@ -472,7 +472,7 @@ The system uses `extractAndReadDiz()` function which:
 ### Upload Directory Structure
 
 ```
-backend/data/bbs/BBS/
+backend/data/bbs/
 ├── Node0/
 │   ├── Playpen/           ← Initial upload location
 │   └── WorkDir/           ← DIZ extraction temporary location

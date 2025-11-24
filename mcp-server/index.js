@@ -797,9 +797,14 @@ ${formatted}`
   }
 
   async run() {
+    // Only connect to stdio transport when stdin is not a TTY (i.e., launched by MCP client)
+    if (process.stdin.isTTY) {
+      console.error('[MCP] Stdin is a TTY; stdio transport not started. Launch via MCP client.');
+      return;
+    }
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('AmiExpress Docs MCP Server running on stdio');
   }
 }
 

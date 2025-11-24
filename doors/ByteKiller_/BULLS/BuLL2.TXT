@@ -1,0 +1,24 @@
+
+[11C[36mNuKeD uSeR iN CoNFeReNCe : [37mCoNsOlE PaRaDiSe
+
+[36m Nr.   [35m NaMe/HaNDLe           [34m LoCaTioN         [31mFiLeS   BYTeS      [33mLaST FaKe
+[32m----[37m|[32m------------------[37m|[32m-----------------------[37m|[32m-----[37m|[32m----------[37m|[32m-------------
+[36m  1[32m. [35mthe bat[11C [34mberlin,BRD[13C [31m    3   11081605  [33mprivater.zip
+[36m  2[32m. [35m(-FaZ! & tERMi-)[2C [34m-> JUST 2 PLAYBoYS! <-[1C [31m    6    5241160  [33mSR_SNCSP.LZH
+[36m  3[32m. [35mPEACEMAKER[8C [34mABOVE THE LAW[10C [31m    6    2799377  [33mM-CYBERK.LZH
+[36m  4[32m. [35mCDM[15C [34m- pOinT oF nO RepEAt -[1C [31m    3    2266143  [33mpld-shin.lzh
+[36m  5[32m. [35mdefjay[12C [34mSCOOPEX![15C [31m    2    1528733  [33mscxmig29.lzh
+[36m  6[32m. [35mRe/Y\o[12C [34m(Mystic /X-DeSiGn)[5C [31m    1    1006675  [33mrmk-fstr.lzh
+[36m  7[32m. [35mBrain[13C [34m>>> Fate Gate <<<[6C [31m    1     878765  [33mpdx-jyut.lzh
+[36m  8[32m. [35mBEAViS[12C [34m^O^ALPHA FLiGHT^O^[5C [31m    2     670661  [33msonicwin.lzh
+[36m  9[32m. [35mScOoTeR[11C [34m-=ð( iNdEpEnDeNt )ð=-[2C [31m    1     647662  [33mrd_drakk.lzh
+[36m 10[32m. [35mDreamdancer[7C [34m])} PROGRESS {([[7C [31m    1     624284  [33mrmk-gsmk.lzh
+[36m 11[32m. [35mBONK[14C [34mStahlsund[14C [31m    1     447047  [33msidmania.dms
+[36m 12[32m. [35m/Y\C ReN[10C [34m\>^</ FAITH^TOUR'¶³ \>[1C [31m    1     447037  [33mATX_BALL.LHA
+[36m 13[32m. [35moUtLiNe[11C [34m.o0 AbOvE ThE Law 0o.[2C [31m    1     267098  [33msnesdox1.zip
+[32m------------------------------------------------------------------------------
+[5C[31m   29 [37mFiLe(S) WiTH a BYTeAMouNT oF [31m  27906247 [37mBYTeS WeRe FaKeD!
+[32m------------------------------------------------------------------------------
+[14C[36mBK-BuLLCReaToR [33mV1.00 [36mBY [33mS¡eGeL/MsT [37m([36mMYSTiC[37m/[36mX-DeSiGN[37m)[0m
+
+

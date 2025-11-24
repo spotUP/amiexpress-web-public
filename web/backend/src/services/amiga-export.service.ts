@@ -360,7 +360,7 @@ export class AmigaExportService {
     const bulletinsDir = path.join(exportDir, 'Bulletins');
     await fs.mkdir(bulletinsDir, { recursive: true });
 
-    // Copy bulletin files from BBS/Conf1/Bulletins
+    // Copy bulletin files from Conf1/Bulletins
     const sourceBulletinsDir = path.join(process.cwd(), 'data', 'bbs', 'BBS', 'Conf1', 'Bulletins');
 
     try {
@@ -390,7 +390,7 @@ export class AmigaExportService {
     const screensDir = path.join(exportDir, 'Screens');
     await fs.mkdir(screensDir, { recursive: true });
 
-    // Copy screen files from BBS/Screens
+    // Copy screen files from Screens
     const sourceScreensDir = path.join(process.cwd(), 'data', 'bbs', 'BBS', 'Screens');
 
     try {

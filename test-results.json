@@ -1,0 +1,102 @@
+{
+  "timestamp": "2025-11-24T00:45:06.937Z",
+  "summary": {
+    "passed": 10,
+    "failed": 13,
+    "total": 23
+  },
+  "passed": [
+    "J 1: Successfully joined conference 1",
+    "J 2: Successfully joined conference 2",
+    "J 4: Invalid conference correctly shows access error",
+    "X toggle on: Expert mode toggled",
+    "< (Prev Conf): Moved to previous conference",
+    ">> (Next MB): Moved to next message base",
+    "<< (Prev MB): Moved to previous message base",
+    "R (Read): Read messages command works",
+    "T (Time): Time command works",
+    "VER: Version command works"
+  ],
+  "failed": [
+    "X toggle off: No response from expert mode toggle",
+    "> (Next Conf): Failed to move to next conference",
+    "E (Enter): Enter message command failed",
+    "MS (Mail Scan): Mail scan command failed",
+    "F (File List): File list command failed",
+    "FR (Raw List): File list raw command failed",
+    "FS (Status): File status command failed",
+    "N (New Files): New files command failed",
+    "S (Stats): Statistics command failed",
+    "? (Help): Help command failed",
+    "W (Who): Who command failed",
+    "WHO: WHO command failed",
+    "WHD (Detailed): WHO detailed command failed"
+  ],
+  "issues": [
+    {
+      "test": "X toggle off",
+      "description": "No response from expert mode toggle",
+      "severity": "error"
+    },
+    {
+      "test": "> (Next Conf)",
+      "description": "Failed to move to next conference",
+      "severity": "error"
+    },
+    {
+      "test": "E (Enter)",
+      "description": "Enter message command failed",
+      "severity": "error"
+    },
+    {
+      "test": "MS (Mail Scan)",
+      "description": "Mail scan command failed",
+      "severity": "error"
+    },
+    {
+      "test": "F (File List)",
+      "description": "File list command failed",
+      "severity": "error"
+    },
+    {
+      "test": "FR (Raw List)",
+      "description": "File list raw command failed",
+      "severity": "error"
+    },
+    {
+      "test": "FS (Status)",
+      "description": "File status command failed",
+      "severity": "error"
+    },
+    {
+      "test": "N (New Files)",
+      "description": "New files command failed",
+      "severity": "error"
+    },
+    {
+      "test": "S (Stats)",
+      "description": "Statistics command failed",
+      "severity": "error"
+    },
+    {
+      "test": "? (Help)",
+      "description": "Help command failed",
+      "severity": "error"
+    },
+    {
+      "test": "W (Who)",
+      "description": "Who command failed",
+      "severity": "error"
+    },
+    {
+      "test": "WHO",
+      "description": "WHO command failed",
+      "severity": "error"
+    },
+    {
+      "test": "WHD (Detailed)",
+      "description": "WHO detailed command failed",
+      "severity": "error"
+    }
+  ]
+}

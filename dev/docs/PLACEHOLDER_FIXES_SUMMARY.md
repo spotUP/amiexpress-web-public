@@ -47,7 +47,7 @@ Systematically checked all commands for "not yet implemented" placeholder messag
 - Fixed `[W] Who's Online` (was incorrectly [O])
 
 **Files Modified:**
-- `backend/BBS/Screens/MENU.TXT`
+- `backend/Screens/MENU.TXT`
 
 ---
 
@@ -182,7 +182,7 @@ These features have placeholder messages but require significant implementation 
    - Added displayUploadInterface injection to user commands
    - Added displayDownloadInterface injection to user commands
 
-4. `backend/BBS/Screens/MENU.TXT`
+4. `backend/Screens/MENU.TXT`
    - Fixed [E] Post (was incorrectly [A])
    - Moved [A] Alter Flags to FILES section
    - Added [MS], [T], [X], [<][>]

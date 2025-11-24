@@ -7,7 +7,7 @@
 
 ## Summary
 
-Successfully debugged why Amiga doors execute but produce no output. Created standalone test script that bypasses BBS/database for rapid iteration. **Root cause:** Door lacks proper ExecBase/library setup, so it calls its own code instead of BBS library functions.
+Successfully debugged why Amiga doors execute but produce no output. Created standalone test script that bypasses database for rapid iteration. **Root cause:** Door lacks proper ExecBase/library setup, so it calls its own code instead of BBS library functions.
 
 ---
 

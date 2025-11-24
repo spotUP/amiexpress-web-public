@@ -13,7 +13,7 @@ export interface BBSConfig {
   port: number;
 
   // Path Settings
-  dataDir: string; // BBS data directory (contains BBS/, Node0/, etc.)
+  dataDir: string; // Data directory (contains Node0/, Node1/, Conf#, etc.)
 
   // Time Settings
   timeZone: string;

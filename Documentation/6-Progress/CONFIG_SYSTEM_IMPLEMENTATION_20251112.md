@@ -144,7 +144,7 @@ app.use('/api/config', authenticateToken(db), requireSysop(), configRouter);
 - ✅ Regular users denied (403)
 - ✅ Audit trail captures all context
 
-#### 6. Test Suite (test-config-api.js + helpers)
+#### 6. Test Suite (test-config-api.ts + helpers)
 **Comprehensive Testing - 23 tests, 100% pass rate**
 
 **Test Coverage:**
@@ -188,9 +188,9 @@ Audit Log:
 ```
 
 **Test Scripts Created:**
-- `test-config-api.js` - Full API endpoint testing
-- `verify-config-tables.js` - Database structure verification
-- `make-user-sysop.js` - Helper for user elevation
+- `test-config-api.ts` - Full API endpoint testing
+- `verify-config-tables.ts` - Database structure verification
+- `make-user-sysop.ts` - Helper for user elevation
 - `test-config-system.sh` - Master test suite runner
 
 ## Files Created/Modified
@@ -200,9 +200,9 @@ Audit Log:
 web/backend/src/database/config-repository.ts       (1,100+ lines)
 web/backend/src/services/config.service.ts          (1,000+ lines)
 web/backend/src/api/config-routes.ts                (700+ lines)
-dev/scripts/test-config-api.js                      (250+ lines)
-dev/scripts/verify-config-tables.js                 (150+ lines)
-dev/scripts/make-user-sysop.js                      (80+ lines)
+dev/scripts/test-config-api.ts                      (250+ lines)
+npx ts-node -P dev/scripts/tsconfig.json dev/scripts/verify-config-tables.ts
+dev/scripts/make-user-sysop.ts                      (80+ lines)
 dev/scripts/test-config-system.sh                   (60+ lines)
 ```
 
@@ -468,7 +468,7 @@ Testing:             Vitest + Playwright
 - **config-repository.ts**: Data access layer
 - **config.service.ts**: Business logic and validation
 - **config-routes.ts**: REST API endpoints
-- **test-config-api.js**: API test suite
+- **test-config-api.ts**: API test suite
 
 ### Commands
 ```bash
@@ -476,13 +476,13 @@ Testing:             Vitest + Playwright
 ./dev/scripts/start-servers.sh
 
 # Run tests
-node dev/scripts/test-config-api.js
+npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-config-api.ts
 
 # Verify database
-cd web/backend && NODE_PATH=./node_modules node ../../dev/scripts/verify-config-tables.js
+cd web/backend && NODE_PATH=./node_modules npx ts-node -P dev/scripts/tsconfig.json ../../dev/scripts/verify-config-tables.ts
 
 # Make user sysop
-cd web/backend && NODE_PATH=./node_modules node ../../dev/scripts/make-user-sysop.js <username>
+cd web/backend && NODE_PATH=./node_modules npx ts-node -P dev/scripts/tsconfig.json dev/scripts/make-user-sysop.ts <username>
 
 # TypeScript check
 cd web/backend && npx tsc --noEmit

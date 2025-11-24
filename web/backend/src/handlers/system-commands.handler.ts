@@ -18,6 +18,7 @@ import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import type { BBSSession } from '../index';
 import { FileFlagManager } from '../utils/file-flag.util';
 import { config } from '../config';
+import { finalizeCommand } from '../utils/command-response.util';
 
 // Injected dependencies
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
@@ -169,6 +170,8 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
   const parsedParams = ParamsUtil.parse(params);
   const nonStopDisplay = ParamsUtil.hasFlag(parsedParams, 'NS');
 
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+
   // express.e:25083 - Find help file
   // StringF(tempstr,'\sBBSHelp',cmds.bbsLoc)
   const helpBasePath = 'BBSHelp';
@@ -180,19 +183,14 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
     // express.e:25085 - displayFile(screen)
     _displayScreen(socket, session, helpScreenPath);
 
-    if (!nonStopDisplay) {
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    }
   } else {
     // express.e:25087 - Help unavailable message
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.errorLine('Sorry Help is unavailable at this time.'));
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   }
 
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  finalizeCommand(socket, session, 'Help information displayed');
 }
 
 /**

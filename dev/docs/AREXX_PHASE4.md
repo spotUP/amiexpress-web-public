@@ -476,7 +476,7 @@ User comment       # 28. User comment
 42                 # 30. Messages left
 ```
 
-**DORINFO1.DEF (RBBS/QuickBBS-style) - 14 lines:**
+**DORINFO1.DEF (RQuickBBS-style) - 14 lines:**
 ```
 AmiExpress Web     # 1.  BBS name
 Sysop              # 2.  Sysop name

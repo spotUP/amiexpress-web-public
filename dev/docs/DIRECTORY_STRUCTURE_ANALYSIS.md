@@ -12,7 +12,7 @@ This document compares the real AmiExpress BBS structure (reference-boardBBS) wi
 
 ### Root Level Directories
 ```
-reference-boardBBS/
+reference-board
 ├── Access/              # User access level definitions
 ├── AmiTCP/              # TCP/IP stack configuration
 ├── AmiXnet/             # Network configuration
@@ -86,7 +86,7 @@ amiexpress-web/
 ├── AmiTCP/              ✓ Matches
 ├── AmiXnet/             ✓ Matches
 ├── backend/             ⚠️ Modern web backend
-├── BBS/                 ⚠️ Empty directory
+├──                  ⚠️ Empty directory
 ├── Bulletins/           ✓ Matches
 ├── client/              ⚠️ Modern web client
 ├── Commands/            ✓ Matches
@@ -154,7 +154,7 @@ amiexpress-web/
 - DirX directories
 
 ### 4. Miscellaneous Directories
-- `BBS/` - Currently empty, purpose unclear
+- `` - Currently empty, purpose unclear
 - `old/` - Archive directory (acceptable)
 - `unlzx/` - Extraction utility (could move to Utils/)
 - `AmiExpress-Sources/` - Source code (keep at root for historical reference)
@@ -186,7 +186,7 @@ amiexpress-web/
 5. Move `Scripts/` → `dev/scripts/`
 
 ### Phase 4: Clean Up Miscellaneous
-1. Evaluate `BBS/` directory - remove if truly unused
+1. Evaluate `` directory - remove if truly unused
 2. Consider moving `unlzx/` → `Utils/unlzx/`
 3. Keep `old/` for archives
 4. Keep `AmiExpress-Sources/` at root for reference

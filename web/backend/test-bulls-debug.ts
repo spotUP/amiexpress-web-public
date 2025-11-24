@@ -80,8 +80,8 @@ async function testBullsDoor() {
     path.join(__dirname, "../../doors/emp_tools/Bulls"),
     path.join(__dirname, "../doors/emp_tools/Bulls"),
     path.join(__dirname, "doors/emp_tools/bulls"),
-    path.join(__dirname, "BBS/Doors/emp_tools/bulls"),
-    path.join(__dirname, "BBS/Doors/Bulls/Bulls"),
+    path.join(__dirname, "Doors/emp_tools/bulls"),
+    path.join(__dirname, "Doors/Bulls/Bulls"),
     path.join(__dirname, "../doors/emp_tools/bulls"),
   ];
 

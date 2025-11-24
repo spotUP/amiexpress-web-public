@@ -198,8 +198,8 @@ check_file_structure() {
         "web/backend/src"
         "web/frontend/src"
         "doors"
-        "data/bbs/BBS/Screens"
-        "data/bbs/BBS/Conf01"
+        "data/bbs/Screens"
+        "data/bbs/Conf1"
     )
 
     for dir in "${dirs[@]}"; do

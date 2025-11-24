@@ -49,7 +49,7 @@ The project has been analyzed against a real AmiExpress BBS (reference-boardBBS)
 
 ### Authentic AmiExpress BBS (reference-boardBBS)
 ```
-reference-boardBBS/
+reference-board
 ├── Access/              ✓ Have this
 ├── AmiTCP/              ✓ Have this  
 ├── AmiXnet/             ✓ Have this
@@ -86,7 +86,7 @@ amiexpress-web/
 │   └── unlzx/
 └── [Source Code Archives]            ✓ Keep at root
     ├── AmiExpress-Sources/
-    └── reference-boardBBS/
+    └── reference-board
 ```
 
 ---

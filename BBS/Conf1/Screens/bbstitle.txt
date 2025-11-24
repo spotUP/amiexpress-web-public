@@ -1,1 +1,0 @@
-~SS_bbs:screens/reference-board/007.reference-board.txt

@@ -80,7 +80,7 @@ batch_capable → batch_upload + batch_download
 
 ### 3. reference-boardBBS Production Analysis ✅
 
-**Source:** `~/Code/amiexpress-web/Source/Documentation/reference-boardBBS/`
+**Source:** `~/Code/amiexpress-web/Source/Documentation/reference-board`
 
 **Files Analyzed:**
 - `Conf5.info` - Conference with FORCE_NEWSCAN, NDIRS=1, DLPATH/ULPATH
@@ -119,7 +119,7 @@ batch_capable → batch_upload + batch_download
 
 ### 5. Database Migration ✅
 
-**Script Created:** `dev/scripts/migrate-conference-fields.js`
+**Script Created:** `dev/scripts/migrate-conference-fields.ts`
 
 **Execution Result:**
 ```
@@ -181,7 +181,7 @@ export interface ConferenceConfig {
 - Boolean conversion for INTEGER fields
 - Proper type mapping
 
-**Seed Script** (`dev/scripts/seed-config-data.js` line 28):
+**Seed Script** (`dev/scripts/seed-config-data.ts` line 28):
 - Updated INSERT to include all 9 new fields
 - Sensible defaults:
   - use_username: 1 (enabled by default)
@@ -215,8 +215,8 @@ cd web/config-app && npx tsc --noEmit
 2. `Documentation/6-Progress/CONFIG_APP_COMPLETE_20251112.md` - NEW (this file)
 
 ### Scripts
-3. `dev/scripts/migrate-conference-fields.js` - NEW (database migration)
-4. `dev/scripts/seed-config-data.js` - UPDATED (added 9 new fields)
+3. `dev/scripts/migrate-conference-fields.ts` - NEW (database migration)
+4. `dev/scripts/seed-config-data.ts` - UPDATED (added 9 new fields)
 
 ### Backend
 5. `web/backend/src/database/types.ts` - UPDATED (added 9 fields to ConferenceConfig)

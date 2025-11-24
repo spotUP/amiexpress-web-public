@@ -279,7 +279,7 @@ export class FileFlagManager {
    * Port from express.e:2765+ loadFlagged() path logic
    */
   private getFlaggedFilePath(): string {
-    // Format: BBS/Partdownload/flagged{slotNumber}
+    // Format: Partdownload/flagged{slotNumber}
     // Note: express.e has ownPartFiles flag that includes node number, we'll simplify
     return path.join(this.bbsDataPath, 'Partdownload', `flagged${this.userSlot}`);
   }

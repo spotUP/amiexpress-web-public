@@ -775,10 +775,6 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
         alternatePaths.push(path.join(bbsRoot, location.replace(/^doors\//i, 'Doors/')));
       }
 
-      // 2. Try removing BBS/ prefix (BBS/Doors  Doors)
-      if (location.includes('BBS/Doors/')) {
-        alternatePaths.push(path.join(bbsRoot, location.replace('BBS/Doors/', 'Doors/')));
-      }
 
       // 3. Try adding Doors/ prefix if missing
       if (!/^doors\//i.test(location)) {

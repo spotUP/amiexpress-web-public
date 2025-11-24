@@ -1,25 +1,0 @@
- [34m.____ [36m____________/\______________________/\________   ___________ [34m________.
- |[35mSk!n[36m/     ______/     /     /     ______/[37m/ [36m\__    [37m_[36m\__\___    [37m_ [36m/[37ms      . [34m|
-[0m[3m [0m[34m|[37m|  [36m_\____     \/_____     [37m.[36m/\____     \/[37m.   [36m\/    [37m/[36m/     /    [37m/[36m/        [37m| [34m|
-[0m[3m [0m[34m|[37m. [36m/     /     /     /    [37m/[36m/     /    [37m/[36m/     /    [37mo[36m/   ________/         [37m: [34m|
-[0m[3m [0m[34m| [36m/     /    [37m/[36m/     /     /     /    [37mo[36m/     /     /     /|[37m.     [31m[44mCOMMANDS[40m [37m. [34m|
-[0m[3m [0m[34m:[36m/     /    [37m.[36m/     /     /     /     /     /     /     /_|[37m|          :.    [34m|
-[0m[3m [0m[36m/___________/__________ /___________/\__________/______ /|[34m__________[37m:::[34m____|
-[0m[3m [0m                      [36m\/                              \/             [37m.Y
- 
- [34m[[33mU[34m] [37m- [32mUPLOAD FILE(S)         [34m[[33mD[34m] [37m- [32mDOWNLOAD FILE(S)   [34m[[33mRZ[34m] [37m- [32mZMODEM UPLOAD
- [34m[[33mN[34m] [37m- [32mSHOW NEW FILES         [34m[[33mF[34m] [37m- [32mSHOW FILELIST      [34m[[33mA[34m]  [37m- [32mALTER FILEFLAG
- [34m[[33mZ[34m] [37m- [32mZIPPY SEARCH           [34m[[33mCF[34m][37m- [32mCONFERENCE FLAGS   [34m[[33mFS[34m] [37m- [32mFULL CONF STATS
- [34m[[33mC[34m] [37m- [32mLEAVE MSG TO SYSOP     [34m[[33mE[34m] [37m- [32mLEAVE MSG TO USER  [34m[[33mR[34m]  [37m- [32mREAD NEW MSG'S
- [34m[[33mS[34m] [37m- [32mSHOW STATUS            [34m[[33mW[34m] [37m- [32mCHANGE SETTINGS    [34m[[33mV[34m]  [37m- [32mVIEW TXT/LHA FILE
- [34m[[33mH[34m] [37m- [32mSHOW HELP PAGE         [34m[[33mX[34m] [37m- [32mMENU ON/OFF        [34m[[33mM[34m]  [37m- [32mC[33mO[34mL[35mO[36mR [37mO[31mN[32m/[33mO[34mF[35mF
- [34m[[33mT[34m] [37m- [32mSHOW LOCAL TIME (CET)  [34m[[33mO[34m] [37m- [32mPAGE SYSOP         [34m[[33mG[34m]  [37m- [32mLOG OFF
- [34m[[33m?[34m] [37m- [32mSHOW MENU              [34m[[33mJ[34m] [37m- [32mJOIN CONFERENCE    [34m[[33mED[34m] [37m- [32mEDIT DESCRIPTION
- [34m[[33m<[34m] [37m- [32mPREVIOUS CONFERENCE    [34m[[33m>[34m] [37m- [32mNEXT CONFERENCE    [34m[[33mRL[34m] [37m- [32mRELOGON
- [34m[[33mSENT[34m] [37m- [32mAUTO SIGN           [34m[[33mOLM[34m] [37m- [32mON LINE MESSAGE  [34m[[33mQUEST[34m] [37m- [32mQUESTIONNAIRE
- 
- [34m[[33mEX![34m] [37m- [32mEXORCIST             [34m[[33m0[34m] [37m- [32mSHELL ACCESS       [34m[[33m1[34m] [37m- [32mACCOUNT EDITING
- [34m[[33m2[34m] [37m- [32mVIEW CALLERSLOG        [34m[[33m3[34m] [37m- [32mDésactivated       [34m[[33m4[34m] [37m- [32mDésactivated
- [34m[[33m5[34m] [37m- [32mVIEW DIRECTORY         [34m[[33mDS[34m][37m- [32mSYSOP DOWNLOAD     [34m[[33mVS[34m][37m- [32mSYSOP VIEW
-[34m________________________________________________________________________________
-

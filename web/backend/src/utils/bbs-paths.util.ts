@@ -4,9 +4,8 @@
  * Consolidates all duplicate path construction logic for AmiExpress BBS directory structure.
  * This eliminates 80-120 lines of duplicate path.join() calls across the codebase.
  *
- * AmiExpress BBS Directory Structure (from express.e):
+ * AmiExpress directory layout (from express.e):
  *
- * BBS/                     - Main BBS directory
  *   Screens/              - Display screens (MENU.TXT, LOGON.TXT, etc.)
  *   Commands/             - Command definitions
  *     BBSCmd/             - BBS commands (door .info files)
@@ -32,7 +31,7 @@
 import * as path from 'path';
 
 /**
- * BBSPaths - Centralized path manager for BBS directory structure
+ * BBSPaths - Centralized path manager for AmiExpress directory structure
  *
  * Usage:
  *   const paths = new BBSPaths('/path/to/bbs');
@@ -44,63 +43,63 @@ export class BBSPaths {
   constructor(private bbsRoot: string) {}
 
   /**
-   * Get BBS root directory
+   * Get base directory
    */
   root(): string {
     return this.bbsRoot;
   }
 
   /**
-   * Get BBS/ directory
+   * Get base directory
    */
   bbs(): string {
-    return path.join(this.bbsRoot, 'BBS');
+    return this.root();
   }
 
   /**
-   * Get BBS/Screens/ directory or specific screen file
+   * Get Screens/ directory or specific screen file
    * @param filename Optional screen filename (e.g., 'MENU.TXT', 'LOGON.TXT')
    */
   screen(filename?: string): string {
-    const screensDir = path.join(this.bbs(), 'Screens');
+    const screensDir = path.join(this.root(), 'Screens');
     return filename ? path.join(screensDir, filename) : screensDir;
   }
 
   /**
-   * Get BBS/Commands/ directory or specific subdirectory
+   * Get Commands/ directory or specific subdirectory
    * @param subdir Optional subdirectory ('BBSCmd', 'SysCmd')
    */
   commands(subdir?: string): string {
-    const commandsDir = path.join(this.bbs(), 'Commands');
+    const commandsDir = path.join(this.root(), 'Commands');
     return subdir ? path.join(commandsDir, subdir) : commandsDir;
   }
 
   /**
-   * Get BBS/Commands/BBSCmd/ directory (door command definitions)
+   * Get Commands/BBSCmd/ directory (door command definitions)
    */
   bbsCommands(): string {
     return this.commands('BBSCmd');
   }
 
   /**
-   * Get BBS/Commands/SysCmd/ directory (system command definitions)
+   * Get Commands/SysCmd/ directory (system command definitions)
    */
   sysCommands(): string {
     return this.commands('SysCmd');
   }
 
   /**
-   * Get conference directory (BBS/Conf#/)
+   * Get conference directory (Conf#/)
    * @param confNum Conference number (1-99)
    * @returns Path to conference directory
    */
   conference(confNum: number): string {
     const confName = `Conf${confNum}`;
-    return path.join(this.bbs(), confName);
+    return path.join(this.root(), confName);
   }
 
   /**
-   * Get conference bulletins directory (BBS/Conf##/Bulletins/)
+   * Get conference bulletins directory (Conf##/Bulletins/)
    * @param confNum Conference number
    */
   conferenceBulletins(confNum: number): string {
@@ -108,7 +107,7 @@ export class BBSPaths {
   }
 
   /**
-   * Get conference files directory (BBS/Conf##/Files/)
+   * Get conference files directory (Conf##/Files/)
    * @param confNum Conference number
    */
   conferenceFiles(confNum: number): string {
@@ -116,7 +115,7 @@ export class BBSPaths {
   }
 
   /**
-   * Get conference messages directory (BBS/Conf##/Messages/)
+   * Get conference messages directory (Conf##/Messages/)
    * @param confNum Conference number
    */
   conferenceMessages(confNum: number): string {
@@ -128,7 +127,7 @@ export class BBSPaths {
    * @param doorName Optional door name (e.g., 'AquaBulls', 'WhatIs')
    */
   doors(doorName?: string): string {
-    const doorsDir = path.join(this.bbsRoot, 'Doors');
+    const doorsDir = path.join(this.root(), 'Doors');
     return doorName ? path.join(doorsDir, doorName) : doorsDir;
   }
 

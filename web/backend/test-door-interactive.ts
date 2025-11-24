@@ -52,7 +52,7 @@ async function testInteractiveDoor() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
 
-  const doorPath = path.join(__dirname, 'BBS/Doors/WeekConfTop/WeekConfTop.XIM');
+  const doorPath = path.join(__dirname, 'Doors/WeekConfTop/WeekConfTop.XIM');
 
   console.log('[Test] Door path:', doorPath);
   console.log('[Test] Creating door session...');

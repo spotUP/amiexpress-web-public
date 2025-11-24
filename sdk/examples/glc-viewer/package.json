@@ -2,7 +2,7 @@
   "name": "glc-viewer-door",
   "version": "1.0.0",
   "description": "GLC Viewer - View BBS login statistics (runDoor pattern)",
-  "bbsCommand": "GLCVIEW",
+    "bbsCommand": "GLCVIEWER",
   "main": "dist/index.js",
   "author": "AmiExpress Team",
   "license": "MIT",

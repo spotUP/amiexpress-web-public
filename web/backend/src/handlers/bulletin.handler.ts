@@ -29,19 +29,50 @@ export function setBulletinDependencies(
   _addAnsiEscapes = addAnsiEscapes;
 }
 
+function buildBulletinBaseDirs(dataDir: string): string[] {
+  // reference-board layout stores Bulletins directly under the dataDir/Conf#/Bulletins
+  // Avoid creating or probing legacy dataDir/BBS to prevent empty BBS/ dirs
+  return [dataDir];
+}
+
+function findBullHelpAcross(baseDirs: string[], conferenceDir: string, userSecLevel: number): string | null {
+  for (const baseDir of baseDirs) {
+    const candidate = findBullHelpFile(baseDir, conferenceDir, userSecLevel);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function findBulletinAcross(
+  baseDirs: string[],
+  conferenceDir: string,
+  bulletinNumber: number,
+  userSecLevel: number
+): string | null {
+  for (const baseDir of baseDirs) {
+    const candidate = findBulletinFile(baseDir, conferenceDir, bulletinNumber, userSecLevel);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 /**
  * Display bulletin help screen
  * Shows list of available bulletins
  *
  * @param socket - Socket.io socket
  * @param session - BBS session
- * @param baseDir - BBS base directory
+ * @param baseDirs - Candidate base directories to search (root + legacy BBS)
  */
-function displayBullHelpScreen(socket: any, session: any, baseDir: string, conferenceDir: string): void {
+function displayBullHelpScreen(socket: any, session: any, baseDirs: string[], conferenceDir: string): void {
   // express.e:24618-24620 - Find and display BullHelp screen
   const userSecLevel = session.user?.secLevel || 0;
 
-  const bullHelpPath = findBullHelpFile(baseDir, conferenceDir, userSecLevel);
+  const bullHelpPath = findBullHelpAcross(baseDirs, conferenceDir, userSecLevel);
 
   if (bullHelpPath) {
     // Load and display the file
@@ -83,7 +114,7 @@ function displayBullHelpScreen(socket: any, session: any, baseDir: string, confe
  *
  * @param socket - Socket.io socket
  * @param session - BBS session
- * @param baseDir - BBS base directory
+ * @param baseDirs - Candidate base directories to search (root + legacy BBS)
  * @param bulletinNumber - Bulletin number to display
  * @param nonStop - If true, disable pause prompts
  * @returns True if bulletin was displayed, false otherwise
@@ -91,7 +122,7 @@ function displayBullHelpScreen(socket: any, session: any, baseDir: string, confe
 function displayBulletin(
   socket: any,
   session: any,
-  baseDir: string,
+  baseDirs: string[],
   conferenceDir: string,
   bulletinNumber: number,
   nonStop: boolean = false
@@ -99,7 +130,7 @@ function displayBulletin(
   // express.e:24636-24640 - Find and display bulletin file
   const userSecLevel = session.user?.secLevel || 0;
 
-  const bulletinPath = findBulletinFile(baseDir, conferenceDir, bulletinNumber, userSecLevel);
+  const bulletinPath = findBulletinAcross(baseDirs, conferenceDir, bulletinNumber, userSecLevel);
 
   if (bulletinPath) {
     // Load and display the file
@@ -163,13 +194,10 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   // BBS directory structure
   const { config } = require('../config');
   const dataDir = config.getConfig().dataDir;
-  const baseDir = path.join(dataDir, 'BBS');
-
-  // express.e:24616-24622 - Check if Bulletins/BullHelp.txt exists
+  const baseDirs = buildBulletinBaseDirs(dataDir);
   const conferenceDir = `Conf${session.currentConf || 1}`;
-  const bullHelpCheckPath = path.join(baseDir, conferenceDir, 'Screens', 'Bulletins', 'BullHelp.txt');
 
-  if (!fs.existsSync(bullHelpCheckPath)) {
+  if (!findBullHelpAcross(baseDirs, conferenceDir, session.user?.secLevel || 0)) {
     // express.e:24619-24620 - myError(ERR_NO_BULLS)
     ErrorHandler.sendError(socket, 'No bulletins are available.', {
       nextState: LoggedOnSubState.DISPLAY_MENU
@@ -185,7 +213,7 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   // If bulletin number provided, display it directly
   if (bulletinNumber !== null) {
     // express.e:24636-24640 - Display bulletin
-  displayBulletin(socket, session, baseDir, conferenceDir, bulletinNumber, nonStopDisplayFlag);
+    displayBulletin(socket, session, baseDirs, conferenceDir, bulletinNumber, nonStopDisplayFlag);
 
     // express.e:24643-24646 - Jump back to inputAgain (prompt for another bulletin)
     // For now, just return to menu - we'll implement the loop in future iteration
@@ -194,7 +222,7 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   }
 
   // express.e:24629-24633 - No params provided, show help and prompt
-  displayBullHelpScreen(socket, session, baseDir, conferenceDir);
+  displayBullHelpScreen(socket, session, baseDirs, conferenceDir);
 
   // express.e:24635-24636 - Prompt for bulletin number
   socket.emit('ansi-output', '\r\n');
@@ -232,9 +260,9 @@ export function handleBulletinInput(socket: any, session: any, input: string): v
   if (trimmedInput === '?') {
     const { config } = require('../config');
     const dataDir = config.getConfig().dataDir;
-    const baseDir = path.join(dataDir, 'BBS');
+    const baseDirs = buildBulletinBaseDirs(dataDir);
     const conferenceDir = `Conf${session.currentConf || 1}`;
-    displayBullHelpScreen(socket, session, baseDir, conferenceDir);
+    displayBullHelpScreen(socket, session, baseDirs, conferenceDir);
 
     // Prompt again
     socket.emit('ansi-output', '\r\n');
@@ -254,9 +282,9 @@ export function handleBulletinInput(socket: any, session: any, input: string): v
   if (bulletinNumber !== null) {
     const { config } = require('../config');
     const dataDir = config.getConfig().dataDir;
-    const baseDir = path.join(dataDir, 'BBS');
+    const baseDirs = buildBulletinBaseDirs(dataDir);
     const conferenceDir = `Conf${session.currentConf || 1}`;
-    displayBulletin(socket, session, baseDir, conferenceDir, bulletinNumber, nonStopDisplayFlag);
+    displayBulletin(socket, session, baseDirs, conferenceDir, bulletinNumber, nonStopDisplayFlag);
 
     // Prompt for another bulletin (express.e:24643 - JUMP inputAgain)
     socket.emit('ansi-output', '\r\n');

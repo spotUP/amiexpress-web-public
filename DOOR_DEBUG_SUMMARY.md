@@ -3,7 +3,7 @@
 ## 🎯 Problem Solved: Bulls Door ROM Jump Issue
 
 ### Root Cause Identified
-**Bulls door was executing 50,000+ iterations at PC=0xf24404 (ROM range) executing NOP instructions**, confirming it was **jumping into ROM memory instead of entering proper BBS/XIM execution mode**.
+**Bulls door was executing 50,000+ iterations at PC=0xf24404 (ROM range) executing NOP instructions**, confirming it was **jumping into ROM memory instead of entering proper XIM execution mode**.
 
 **Key Discovery**: Bulls door follows a **different initialization pattern** than RTW/WHO doors - it **doesn't call CreateComm()** and instead **jumps directly to ROM memory**, requiring **early intervention** before the ROM jump occurs.
 

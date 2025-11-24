@@ -97,6 +97,9 @@ dev/docs/uade/
 sdk/tools/preview/downloads/
 sdk/tools/preview/public-react/
 
+# MCP/NDK (large, untracked)
+Docs/NDK3.2R4/ReleaseNotes/
+
 # Editor directories and files
 # Allow VS Code configuration for SDK game development
 .vscode/*

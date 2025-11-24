@@ -116,10 +116,10 @@ BBS.CMD parsing:
 **Files Created:**
 - `utils/screen-security.util.ts` (117 lines)
 - `handlers/bulletin.handler.ts` (273 lines)
-- `backend/BBS/Conf01/Screens/Bulletins/BullHelp.txt`
-- `backend/BBS/Conf01/Screens/Bulletins/Bull1.txt` - Welcome
-- `backend/BBS/Conf01/Screens/Bulletins/Bull2.txt` - News
-- `backend/BBS/Conf01/Screens/Bulletins/Bull3.txt` - Rules
+- `backend/Conf01/Screens/Bulletins/BullHelp.txt`
+- `backend/Conf01/Screens/Bulletins/Bull1.txt` - Welcome
+- `backend/Conf01/Screens/Bulletins/Bull2.txt` - News
+- `backend/Conf01/Screens/Bulletins/Bull3.txt` - Rules
 
 **Files Modified:**
 - `command.handler.ts` (integrated B command)
@@ -423,10 +423,10 @@ constants/acs-permissions.ts        - ~150 lines
 
 ### New Content (4 files)
 ```
-BBS/Conf01/Screens/Bulletins/BullHelp.txt - 40 lines
-BBS/Conf01/Screens/Bulletins/Bull1.txt    - 50 lines
-BBS/Conf01/Screens/Bulletins/Bull2.txt    - 47 lines
-BBS/Conf01/Screens/Bulletins/Bull3.txt    - 42 lines
+Conf01/Screens/Bulletins/BullHelp.txt - 40 lines
+Conf01/Screens/Bulletins/Bull1.txt    - 50 lines
+Conf01/Screens/Bulletins/Bull2.txt    - 47 lines
+Conf01/Screens/Bulletins/Bull3.txt    - 42 lines
 ```
 
 **Total New Files:** 11

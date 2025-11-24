@@ -185,14 +185,14 @@ git checkout web/backend/src/amiga-emulation/AmigaDoorSession.ts
 - ✅ **Door Session**: Complete lifecycle management with input/output handling
 
 **Testing Status**:
-- Created test-rtw-simple.js for WHO door testing
+- Created test-rtw-simple.ts for WHO door testing
 - Command routing verified: WHO → DOORS:RTW/RTW
 - Infrastructure complete, execution flow needs debugging
 - All core components operational
 
 **Files Modified**:
 1. mcp-server/index.js - Fixed NDK autodocs path (line 548)
-2. Scripts/test-rtw-simple.js - Created WHO door test script
+2. Scripts/test-rtw-simple.ts - Created WHO door test script
 3. Documentation/6-Progress/CURRENT_STATUS.md - Updated status
 
 **Impact**:

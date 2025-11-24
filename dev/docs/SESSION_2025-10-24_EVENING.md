@@ -140,7 +140,7 @@ Scripts/deployment/deploy.sh
   - Fixed Render deployment error handling
 
 .vercelignore
-  - Added reference-boardBBS/, old/, Scripts/
+  - Added reference-board, old/, Scripts/
   - Fixed 100MB deployment limit issue
 
 CLAUDE.md
@@ -200,7 +200,7 @@ Conference Number (1-3):
 ```
 
 **What needs investigation:**
-- ANSI screen file exists at: `backend/BBS/Node0/Screens/JoinConf.TXT`
+- ANSI screen file exists at: `backend/Node0/Screens/JoinConf.TXT`
 - File contains correct conference list
 - Code calls `displayScreen(socket, session, 'JOINCONF')`
 - Possible ANSI rendering issue or output buffering problem
@@ -313,7 +313,7 @@ render workspace set
 4. **Test**: Upload a file, verify webhook fires in Discord
 
 ### If Fixing JOINCONF Display Issue
-1. **Read**: `backend/BBS/Node0/Screens/JoinConf.TXT` - Screen content
+1. **Read**: `backend/Node0/Screens/JoinConf.TXT` - Screen content
 2. **Check**: `backend/src/handlers/user-commands.handler.ts:193` - Display call
 3. **Debug**: Add logging to screen display function
 4. **Test**: Join conference, verify screen shows

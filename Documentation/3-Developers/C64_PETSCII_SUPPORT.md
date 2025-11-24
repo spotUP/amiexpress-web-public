@@ -122,7 +122,7 @@ When `terminalType === 'modern'`:
 
 ```bash
 # Create PETSCII file from text (40 column wrap)
-fold -w 40 MENU.TXT | node dev/scripts/convert-to-petscii.js > Screens/MENU_C64.seq
+fold -w 40 MENU.TXT | npx ts-node -P dev/scripts/tsconfig.json dev/scripts/convert-to-petscii.ts > Screens/MENU_C64.seq
 ```
 
 ---

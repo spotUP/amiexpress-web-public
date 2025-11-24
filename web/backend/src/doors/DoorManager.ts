@@ -714,7 +714,9 @@ export class DoorManager {
     try {
       await new Promise<void>((resolve) => {
         this.socket.emit('ansi-output', '\x1b[36m* Refreshing door registration...\x1b[0m\r\n');
-        const proc = spawn('node', [path.join(this.projectRoot, 'dev/scripts/install-sdk-doors.js'), '--door', doorName, '--quiet'], {
+        const tsNodeProject = path.join(this.projectRoot, 'dev/scripts/tsconfig.json');
+        const installDoorScript = path.join(this.projectRoot, 'dev/scripts/install-sdk-doors.ts');
+        const proc = spawn('npx', ['ts-node', '-P', tsNodeProject, installDoorScript, '--door', doorName, '--quiet'], {
           cwd: this.projectRoot,
           stdio: ['ignore', 'pipe', 'pipe']
         });

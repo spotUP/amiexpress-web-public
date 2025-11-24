@@ -27,6 +27,11 @@ import type {
   AmigaScreen,
 } from '../types/amiga-import';
 
+interface ConferenceConfigEntry {
+  name?: string;
+  location?: string;
+}
+
 export class AmigaParserService {
   private infoParser: InfoFileParser;
   private userFileManager: UserFileManager;
@@ -307,6 +312,7 @@ export class AmigaParserService {
    */
   async parseConferences(bbsPath: string): Promise<AmigaConference[]> {
     const conferences: AmigaConference[] = [];
+    const configMap = await this.parseConferenceConfig(bbsPath);
 
     // Scan for Conf* directories
     const entries = await fs.readdir(bbsPath, { withFileTypes: true });
@@ -321,9 +327,10 @@ export class AmigaParserService {
     for (const confDir of confDirs) {
       const confNumber = parseInt(confDir.name.match(/\d+/)?.[0] || '0', 10);
       const confPath = path.join(bbsPath, confDir.name);
+      const metadata = configMap.get(confNumber);
 
       try {
-        const conference = await this.parseConference(confPath, confNumber);
+        const conference = await this.parseConference(confPath, confNumber, metadata);
         conferences.push(conference);
       } catch (error: any) {
         console.error(`[AmigaParser] Error parsing ${confDir.name}:`, error.message);
@@ -336,12 +343,16 @@ export class AmigaParserService {
   /**
    * Parse a single conference directory
    */
-  async parseConference(confPath: string, confNumber: number): Promise<AmigaConference> {
+  async parseConference(
+    confPath: string,
+    confNumber: number,
+    metadata?: ConferenceConfigEntry
+  ): Promise<AmigaConference> {
     console.log(`[AmigaParser] Parsing conference ${confNumber}...`);
 
     const conference: AmigaConference = {
       number: confNumber,
-      database: await this.parseConferenceDB(confPath, confNumber),
+      database: await this.parseConferenceDB(confPath, confNumber, metadata),
       menu: await this.readTextFile(path.join(confPath, 'Menu.txt')),
       fileAreas: await this.parseFileAreas(confPath),
       messageBases: [], // TODO: Implement message base parsing
@@ -354,14 +365,18 @@ export class AmigaParserService {
    * Parse conference database (Conf.DB)
    * TODO: Reverse engineer binary format
    */
-  async parseConferenceDB(confPath: string, confNumber: number): Promise<ConferenceDatabase> {
+  async parseConferenceDB(
+    confPath: string,
+    confNumber: number,
+    metadata?: ConferenceConfigEntry
+  ): Promise<ConferenceDatabase> {
     const dbPath = path.join(confPath, 'Conf.DB');
 
     if (!(await this.fileExists(dbPath))) {
       console.warn(`[AmigaParser] Conf.DB not found in conference ${confNumber}`);
       return {
         conferenceNumber: confNumber,
-        conferenceName: `Conference ${confNumber}`,
+        conferenceName: metadata?.name || `Conference ${confNumber}`,
         accessLevel: 10,
         flags: 0,
         type: 'BOTH',
@@ -375,12 +390,48 @@ export class AmigaParserService {
     // For now, return placeholder with conference number
     return {
       conferenceNumber: confNumber,
-      conferenceName: `Conference ${confNumber}`,
+      conferenceName: metadata?.name || `Conference ${confNumber}`,
       accessLevel: 10,
       flags: 0,
       type: 'BOTH',
       rawData: buffer,
     };
+  }
+
+  private async parseConferenceConfig(bbsPath: string): Promise<Map<number, ConferenceConfigEntry>> {
+    const configPath = path.join(bbsPath, 'ConfConfig.info');
+    const result = new Map<number, ConferenceConfigEntry>();
+
+    if (!(await this.fileExists(configPath))) {
+      return result;
+    }
+
+    try {
+      const buffer = await fs.readFile(configPath);
+      const parsed = this.infoParser.parse(buffer);
+
+      for (const [key, value] of parsed.toolTypes.entries()) {
+        const normalized = key.toUpperCase().trim();
+        const match = normalized.match(/^(NAME|LOCATION)\.(\d+)$/);
+        if (!match) continue;
+        const confIndex = parseInt(match[2], 10);
+        if (Number.isNaN(confIndex)) continue;
+
+        const entry = result.get(confIndex) || {};
+
+        if (match[1] === 'NAME') {
+          entry.name = value.trim();
+        } else if (match[1] === 'LOCATION') {
+          entry.location = value.trim();
+        }
+
+        result.set(confIndex, entry);
+      }
+    } catch (error: any) {
+      console.error('[AmigaParser] Error parsing ConfConfig.info:', error.message);
+    }
+
+    return result;
   }
 
   /**

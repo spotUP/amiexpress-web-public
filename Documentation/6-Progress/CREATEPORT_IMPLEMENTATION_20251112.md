@@ -236,7 +236,7 @@ tail -f logs/backend.log | grep "CreatePort"
 ```bash
 # Current test script gets stuck at login prompts
 # Needs to be updated to auto-answer initial setup questions
-node dev/scripts/test_b_door.js
+npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test_b_door.ts
 ```
 
 **Expected Success Indicators**:

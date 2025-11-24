@@ -1,3 +1,7 @@
+import * as path from 'path';
+import * as fs from 'fs';
+import { findCaseInsensitive } from './fs-amiga.util';
+
 /**
  * DIR File Reader Utility
  * Port from express.e - Reads and parses classic BBS DIR files
@@ -213,13 +217,10 @@ export function formatDirEntry(entry: DirFileEntry): string {
  * Read DIR file from disk
  */
 export async function readDirFile(dirFilePath: string): Promise<DirFileEntry[]> {
-  const fs = require('fs').promises;
-
   try {
-    const content = await fs.readFile(dirFilePath, 'utf-8');
+    const content = await fs.promises.readFile(dirFilePath, 'utf-8');
     return parseDirFile(content);
   } catch (error) {
-    // File doesn't exist or can't be read
     return [];
   }
 }
@@ -228,7 +229,11 @@ export async function readDirFile(dirFilePath: string): Promise<DirFileEntry[]> 
  * Get DIR file path for a conference and directory number
  */
 export function getDirFilePath(conferencePath: string, dirNumber: number): string {
-  const path = require('path');
+  const lookup = findCaseInsensitive(conferencePath, `Dir${dirNumber}`);
+  if (lookup) {
+    return lookup;
+  }
+
   return path.join(conferencePath, `DIR${dirNumber}`);
 }
 
@@ -236,6 +241,5 @@ export function getDirFilePath(conferencePath: string, dirNumber: number): strin
  * Get HOLD directory file path
  */
 export function getHoldDirFilePath(conferencePath: string): string {
-  const path = require('path');
   return path.join(conferencePath, 'hold', 'held');
 }

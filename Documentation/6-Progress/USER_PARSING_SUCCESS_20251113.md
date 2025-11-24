@@ -154,7 +154,7 @@ reference-boardBBS test files:
 ### Test Environment
 - **Archive**: `/tmp/reference-boardbbs-test.zip` (29MB)
 - **Backend**: Port 3001
-- **Test script**: `dev/scripts/test-user-parsing.js`
+- **Test script**: `dev/scripts/test-user-parsing.ts`
 
 ### Backend Logs
 ```

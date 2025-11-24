@@ -36,7 +36,7 @@ amiexpress-web/
 │
 ├── [Source Code & Archives - Keep at Root]
 │   ├── AmiExpress-Sources/ (historical reference)
-│   └── reference-boardBBS/ (real BBS reference)
+│   └── reference-board (real BBS reference)
 │
 ├── [Modern Web Application - NEW CONTAINER]
 │   └── web/
@@ -53,7 +53,7 @@ amiexpress-web/
 │       │   └── unlzx/        (moved from ./unlzx)
 │       └── archive/
 │           ├── old/          (moved from ./old)
-│           └── BBS/          (empty dir, can remove)
+│           └──           (empty dir, can remove)
 │
 └── [Root Level Files - Stay at Root]
     ├── .env, .env.example, .env.local
@@ -117,7 +117,7 @@ amiexpress-web/
 ### Phase 5: Cleanup (SAFE)
 1. Move `unlzx/` → `dev/tools/unlzx/`
 2. Move `old/` → `dev/archive/old/`
-3. Evaluate and remove `BBS/` if unused
+3. Evaluate and remove `` if unused
 4. Update .gitignore for new structure
 
 ## Risk Assessment

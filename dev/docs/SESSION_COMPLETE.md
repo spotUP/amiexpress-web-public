@@ -15,7 +15,7 @@ You asked me to proceed until all commands work as expected.
 1. **JOINCONF Screen Crash** - FIXED ✅
    - Problem: Screen showed 4 conferences, database had 3
    - Solution: Updated screen to match database
-   - File: `backend/BBS/Node0/Screens/JoinConf.TXT`
+   - File: `backend/Node0/Screens/JoinConf.TXT`
 
 2. **JOIN_CONF_INPUT Handler Crash** - FIXED ✅
    - Problem: `ReferenceError: AnsiUtil is not defined`
@@ -110,7 +110,7 @@ You asked me to proceed until all commands work as expected.
 
 ## Files Modified (4 main files)
 
-1. `backend/BBS/Node0/Screens/JoinConf.TXT`
+1. `backend/Node0/Screens/JoinConf.TXT`
 2. `backend/backend/src/handlers/command.handler.ts`
 3. `backend/backend/src/handlers/messaging.handler.ts`
 4. `backend/backend/src/index.ts`

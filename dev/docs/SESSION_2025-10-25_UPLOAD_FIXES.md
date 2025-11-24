@@ -40,7 +40,7 @@ ON CONFLICT (nodeid) DO UPDATE SET...
 **Fix:**
 ```typescript
 // Added to BBSConfig interface
-dataDir: string; // BBS data directory (contains BBS/, Node0/, etc.)
+dataDir: string; // BBS data directory (contains , Node0/, etc.)
 
 // Added default value
 dataDir: process.env.BBS_DATA_DIR || process.cwd()
@@ -430,7 +430,7 @@ When restarting this session:
 - Playpen: `/opt/render/project/src/backend/Node0/Playpen`
 - WorkDir: `/opt/render/project/src/backend/Node0/WorkDir`
 - BBS Data: `/opt/render/project/src/backend/BBS`
-- Conference 1: `/opt/render/project/src/backend/BBS/Conf01`
+- Conference 1: `/opt/render/project/src/backend/Conf01`
 
 ---
 

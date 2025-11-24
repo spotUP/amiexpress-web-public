@@ -56,7 +56,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const socketRef = useRef<Socket | null>(null);
 
   // Login state tracking
-  const loginState = useRef<'waiting' | 'username' | 'password' | 'new-user-prompt' | 'registering' | 'loggedin'>('waiting');
+  const loginState = useRef<'waiting' | 'username' | 'password' | 'new-user-prompt' | 'registering' | 'loggedin' | 'checking-username'>('waiting');
   const username = useRef<string>('');
   const password = useRef<string>('');
   const newUserPromptUsername = useRef<string>('');
@@ -340,6 +340,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('prompt-password', () => {
       loginState.current = 'password';
+      password.current = '';
       term.write('Password: ');
     });
 
@@ -454,34 +455,42 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       // Handle login input locally
-      if (loginState.current === 'username' || loginState.current === 'password') {
+      if (loginState.current === 'checking-username') {
+        return;
+      }
+
+      if (loginState.current === 'username') {
         if (key === '\r') {
-          if (loginState.current === 'username') {
-            console.log('🔐 Username entered:', username.current);
-            term.write('\r\nPassword: ');
-            loginState.current = 'password';
-          } else if (loginState.current === 'password') {
-            console.log('🔐 Password entered, sending login');
-            socket.emit('login', { username: username.current, password: password.current });
-            loginState.current = 'loggedin';
-            term.write('\r\n');
-          }
+          console.log('🔐 Username entered:', username.current);
+          socket.emit('check-username', { username: username.current });
+          loginState.current = 'checking-username';
+          term.write('\r\n');
         } else if (key === '\x7f' || key === '\b') {
-          if (loginState.current === 'username' && username.current.length > 0) {
+          if (username.current.length > 0) {
             username.current = username.current.slice(0, -1);
             term.write('\b \b');
-          } else if (loginState.current === 'password' && password.current.length > 0) {
+          }
+        } else if (key.length === 1 && key >= ' ') {
+          username.current += key;
+          term.write(key);
+        }
+        return;
+      }
+
+      if (loginState.current === 'password') {
+        if (key === '\r') {
+          console.log('🔐 Password entered, sending login');
+          socket.emit('login', { username: username.current, password: password.current });
+          loginState.current = 'loggedin';
+          term.write('\r\n');
+        } else if (key === '\x7f' || key === '\b') {
+          if (password.current.length > 0) {
             password.current = password.current.slice(0, -1);
             term.write('\b \b');
           }
         } else if (key.length === 1 && key >= ' ') {
-          if (loginState.current === 'username') {
-            username.current += key;
-            term.write(key);
-          } else if (loginState.current === 'password') {
-            password.current += key;
-            term.write(passwordMode.current ? key : '*');
-          }
+          password.current += key;
+          term.write(passwordMode.current ? key : '*');
         }
         return;
       }

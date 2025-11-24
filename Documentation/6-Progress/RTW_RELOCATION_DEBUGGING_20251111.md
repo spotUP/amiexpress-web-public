@@ -69,7 +69,7 @@ Once we see the corruption logs, we can determine:
 ## Testing Instructions
 
 1. **Start servers**: `./dev/scripts/start-servers.sh`
-2. **Run RTW test**: `node dev/scripts/test_rtw.js`
+2. **Run RTW test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test_rtw.ts`
    - OR connect to BBS and run `RTW` command
 3. **Check logs**: `grep -A20 "CORRUPTION" logs/backend.log`
 

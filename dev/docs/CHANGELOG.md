@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added debug logging to track webhook sends
   - Script now requires `render login` and `render workspace set`
 - **Frontend deployment exceeding 100MB limit**
-  - Added `reference-boardBBS/`, `old/`, and `Scripts/` to `.vercelignore`
+  - Added `reference-board`, `old/`, and `Scripts/` to `.vercelignore`
   - Reduced deployment size significantly
 
 ### Technical Details

@@ -108,7 +108,7 @@ This session focused on three major areas:
 
 **Deployment Size Breakdown:**
 - `src/`: 1.2MB (TypeScript source)
-- `BBS/`: 296KB (BBS data)
+- ``: 296KB (BBS data)
 - `package files`: 268KB
 - `bin/`: 52KB (runtime scripts)
 - `doors/`: 36KB (active doors only)

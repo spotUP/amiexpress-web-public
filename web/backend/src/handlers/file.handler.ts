@@ -6,6 +6,8 @@
 
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { startPagination } from './screen.handler';
+import { AnsiUtil } from '../utils/ansi.util';
+import { finalizeCommand } from '../utils/command-response.util';
 
 import type { BBSSession } from '../index';
 
@@ -602,7 +604,8 @@ export async function handleFileSearch(socket: any, session: BBSSession, params:
 // ===== File Status (FS command) =====
 
 export async function displayFileStatus(socket: any, session: BBSSession, params: string) {
-  socket.emit('ansi-output', '\x1b[36m-= File Status =-\x1b[0m\r\n');
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.headerBox('FILE STATUS'));
 
   // Parse parameters to determine scope (like fileStatus(opt) in AmiExpress)
   const parsedParams = parseParams(params);
@@ -676,14 +679,15 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
 
   if (areas.length === 0) {
     socket.emit('ansi-output', '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    finalizeCommand(socket, session, 'New files unavailable');
     return;
   }
 
   // Display new files from database
   await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay);
+
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 // Display new files from database - express.e:28115+ myNewFiles()
@@ -760,11 +764,8 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
   }
 
   if (!nonStop) {
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    socket.emit('ansi-output', '\r\n');
   }
-
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
 
 export function displayNewFilesInDirectories(socket: any, session: BBSSession, searchDate: Date, dirSpan: { startDir: number, dirScan: number }, nonStop: boolean) {

@@ -222,7 +222,7 @@ All functions properly set error codes:
 ## Testing
 
 ### Test File Created
-Location: `~/Code/amiexpress-web/web/backend/data/bbs/BBS/Node1/test-file-io.txt`
+Location: `~/Code/amiexpress-web/web/backend/data/bbs/Node1/test-file-io.txt`
 Size: 49 bytes
 Purpose: Verify doors can open and read files
 
@@ -387,7 +387,7 @@ Created:  Docs/DOS_FILE_IO_IMPLEMENTATION.md
 Created:  Docs/DOOR_FILE_IO_USAGE.md
 Created:  Docs/CHANGELOG_2025-11-01_FILE_IO.md
 Created:  test-dos-file-io.js
-Created:  web/backend/data/bbs/BBS/Node1/test-file-io.txt
+Created:  web/backend/data/bbs/Node1/test-file-io.txt
 ```
 
 ## Verification Checklist

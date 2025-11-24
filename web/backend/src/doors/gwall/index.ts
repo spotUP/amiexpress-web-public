@@ -329,17 +329,34 @@ function uncleanstr(sourcestring: string): string {
     .replace(/\\u001b/g, '');
 }
 
-function httpRequest(requestdata: string, tempFile: string | null): Promise<number> {
+function httpRequest(
+  requestPath: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  tempFile: string | null,
+  body?: string,
+  extraHeaders: Record<string, string> = {}
+): Promise<number> {
   return new Promise((resolve) => {
+    const headers: Record<string, string> = {
+      Host: serverHost,
+      Connection: 'close',
+      ...extraHeaders
+    };
+
+    if (body && !headers['Content-Length']) {
+      headers['Content-Length'] = Buffer.byteLength(body).toString();
+    }
+
     const options: http.RequestOptions = {
       hostname: serverHost,
       port: serverPort,
-      method: 'GET',
-      path: '/',
-      timeout: timeout * 1000
+      method,
+      path: requestPath,
+      timeout: timeout * 1000,
+      headers
     };
 
-    debugLog('httprequest - starting');
+    debugLog(`httprequest - starting ${method} ${requestPath}`);
 
     const req = http.request(options, (res) => {
       const chunks: Buffer[] = [];
@@ -359,7 +376,7 @@ function httpRequest(requestdata: string, tempFile: string | null): Promise<numb
           }
         }
 
-        debugLog('httprequest - done');
+        debugLog(`httprequest - done (${res.statusCode})`);
         resolve(res.statusCode || 0);
       });
     });
@@ -375,14 +392,16 @@ function httpRequest(requestdata: string, tempFile: string | null): Promise<numb
       resolve(0);
     });
 
-    req.write(requestdata);
+    if (body) {
+      req.write(body);
+    }
     req.end();
   });
 }
 
 async function getwalljson(pagenum: number, maxitems: number, tempfile: string): Promise<number> {
-  const getcmd = `GET /GlobalWall/api/WallItems?itemCount=${maxitems}&pagenum=${pagenum} HTTP/1.0\r\nHost:${serverHost}\r\n\r\n`;
-  return await httpRequest(getcmd, tempfile);
+  const requestPath = `/GlobalWall/api/WallItems?itemCount=${maxitems}&pagenum=${pagenum}`;
+  return await httpRequest(requestPath, 'GET', tempfile);
 }
 
 async function postcomment(username: string, bbsname: string, comment: string): Promise<void> {
@@ -397,9 +416,9 @@ async function postcomment(username: string, bbsname: string, comment: string): 
     bbsshortcode: settings.mybbsshortcode
   });
 
-  const senddata = `POST /GlobalWall/api/WallItems HTTP/1.0\r\nHost:${serverHost}\r\nContent-Type: application/json\r\nContent-Length: ${linedata.length}\r\n\r\n${linedata}`;
-
-  await httpRequest(senddata, null);
+  await httpRequest('/GlobalWall/api/WallItems', 'POST', null, linedata, {
+    'Content-Type': 'application/json'
+  });
 }
 
 async function putcomment(lineid: string, username: string, bbsname: string, comment: string, bbsshortcode: string): Promise<void> {
@@ -415,14 +434,13 @@ async function putcomment(lineid: string, username: string, bbsname: string, com
     bbsshortcode: cleanCode || null
   });
 
-  const senddata = `PUT /GlobalWall/api/WallItems/${lineid} HTTP/1.0\r\nHost:${serverHost}\r\nContent-Type: application/json\r\nContent-Length: ${linedata.length}\r\n\r\n${linedata}`;
-
-  await httpRequest(senddata, null);
+  await httpRequest(`/GlobalWall/api/WallItems/${lineid}`, 'PUT', null, linedata, {
+    'Content-Type': 'application/json'
+  });
 }
 
 async function deletecomment(lineid: string): Promise<void> {
-  const senddata = `DELETE /GlobalWall/api/WallItems/${lineid} HTTP/1.0\r\nHost:${serverHost}\r\n\r\n`;
-  await httpRequest(senddata, null);
+  await httpRequest(`/GlobalWall/api/WallItems/${lineid}`, 'DELETE', null);
 }
 
 function decodejson(jsondata: string): void {
@@ -469,33 +487,21 @@ function sendStr(socket: SocketIOSocket, textLine: string): void {
 }
 
 function sendCLS(socket: SocketIOSocket): void {
-  socket.emit('ansi-output', '\x0c');
+  socket.emit('ansi-output', '\x1b[2J\x1b[H\x0c');
 }
 
-async function getChar(socket: SocketIOSocket, echoChar: boolean): Promise<string> {
-  return new Promise((resolve) => {
-    const handleInput = (data: string) => {
-      socket.off('user-input', handleInput);
-      const key = data.trim().toUpperCase();
-      if (echoChar) {
-        transmit(socket, key);
-      }
-      resolve(key);
-    };
-    socket.on('user-input', handleInput);
-  });
+async function getDoorKey(bbs: any, promptText?: string, echoChar = false): Promise<string> {
+  const raw = await bbs.getKey(promptText || undefined);
+  const key = (raw || '').charAt(0).toUpperCase();
+  if (echoChar && key) {
+    bbs.write(key);
+  }
+  return key;
 }
 
-async function query(socket: SocketIOSocket, promptText: string, maxlen: number): Promise<string> {
-  return new Promise((resolve) => {
-    sendStr(socket, promptText + ' ');
-
-    const handleInput = (data: string) => {
-      socket.off('user-input', handleInput);
-      resolve(data.trim().substring(0, maxlen));
-    };
-    socket.on('user-input', handleInput);
-  });
+async function queryLine(bbs: any, promptText: string, maxlen: number): Promise<string> {
+  const line = await bbs.getLine(promptText, maxlen);
+  return (line || '').trim().substring(0, maxlen);
 }
 
 // Display functions for 4 styles - implementing headers/footers
@@ -516,38 +522,52 @@ function footer2(socket: SocketIOSocket, sysopmode: boolean): void {
 }
 
 function header3(socket: SocketIOSocket, sysopmode: boolean): void {
-  transmit(socket, `${settings.gridcolour}|------- -  -  - --- - --- ----------------------- ---------- -----------------|`);
-  if (sysopmode) {
-    transmit(socket, `${settings.gridcolour}| ${settings.sysoptitlecolour}SysOp Menu                                                                      ${settings.gridcolour}|`);
-  } else {
-    transmit(socket, `${settings.gridcolour}| ${settings.titlecolour}*** GLOBAL THERMONUCLEAR WALL ***                                              ${settings.gridcolour}|`);
-  }
-  transmit(socket, `${settings.gridcolour}|------- -  -  - --- - --- ----------------------- ---------- -----------------|`);
-  transmit(socket, `${settings.gridcolour}| ${settings.headingcolour}Id ${settings.gridcolour}| ${settings.headingcolour}BBC ${settings.gridcolour}| ${settings.headingcolour}Username        ${settings.gridcolour}| ${settings.headingcolour}Comment                                        ${settings.gridcolour}|`);
-  transmit(socket, `${settings.gridcolour}|----|----|-----------------|-----------------------------------------------|`);
+  const sysopStr = sysopmode ? `[${settings.sysoptitlecolour}sYSOP mODE${settings.gridcolour}]` : '____________';
+
+  transmit(socket, `${settings.gridcolour}   __________`);
+  transmit(
+    socket,
+    `${settings.gridcolour} __\\        /_________________________________________${sysopStr}${settings.gridcolour}____________`
+  );
+  transmit(socket, `${settings.gridcolour}|   \\      /                                                                  |`);
+  transmit(
+    socket,
+    `${settings.gridcolour}|    \\    /    ${settings.titlecolour}gLOBAL tHERMONUCLEAR WALL${settings.gridcolour}                                      |`
+  );
+  transmit(socket, `${settings.gridcolour}|_____\\  /____________________________________________________________________|`);
+  transmit(socket, `${settings.gridcolour}       \\/`);
+  transmit(socket, `${settings.gridcolour} _____________________________________________________________________________`);
+  transmit(
+    socket,
+    `${settings.gridcolour}|${settings.headingcolour}cOMMENt${settings.gridcolour}\x1b[60C${settings.headingcolour}hANDLE${settings.gridcolour}|${settings.headingcolour}bBS${settings.gridcolour}|`
+  );
+  transmit(socket, `${settings.gridcolour}|------- -  -  - --- - --- ----------------------- ---------- ------------^---|`);
 }
 
 function footer3(socket: SocketIOSocket, sysopmode: boolean): void {
-  transmit(socket, `${settings.gridcolour}\`----------- -- ----- - --    - -- --  ---- - -----        - -- -------- -- --'`);
+  transmit(
+    socket,
+    `${settings.gridcolour}\`-----[${settings.authorcolour}REbEL/QTX${settings.gridcolour}]----- - --    - -- --  -- - --         - -- [${settings.authorcolour}oRdYNe/NVX${settings.gridcolour}]-----''\x1b[0m`
+  );
 }
 
 function header4(socket: SocketIOSocket, sysopmode: boolean): void {
-  transmit(socket, `${settings.gridcolour}�------- -  -  - --- - --- ----------------------- ---------- ----------------�`);
-  if (sysopmode) {
-    transmit(socket, `${settings.gridcolour}� ${settings.sysoptitlecolour}SysOp Menu                                                                      ${settings.gridcolour}�`);
-  } else {
-    transmit(socket, `${settings.gridcolour}� ${settings.titlecolour}*** GLOBAL THERMONUCLEAR WALL ***                                              ${settings.gridcolour}�`);
-  }
-  transmit(socket, `${settings.gridcolour}�------- -  -  - --- - --- ----------------------- ---------- ----------------�`);
-  transmit(socket, `${settings.gridcolour}� ${settings.headingcolour}Id ${settings.gridcolour}� ${settings.headingcolour}BBC ${settings.gridcolour}� ${settings.headingcolour}Username        ${settings.gridcolour}� ${settings.headingcolour}Comment                                        ${settings.gridcolour}�`);
-  transmit(socket, `${settings.gridcolour}�----�----�-----------------�-----------------------------------------------�`);
+  header3(socket, sysopmode);
 }
 
 function footer4(socket: SocketIOSocket, sysopmode: boolean): void {
-  transmit(socket, `${settings.gridcolour}\`----------- -- ----- - --    - -- --  ---- - -----        - -- -------- -- --'`);
+  transmit(
+    socket,
+    `${settings.gridcolour}\`----[${settings.authorcolour}REbEL/QTX${settings.gridcolour}]-----\x1b[2C-\x1b[1C---\x1b[2C---[${settings.showbbskeycolour}K\x1b[1CsHOWS\x1b[1CbBS\x1b[1CkEY${settings.gridcolour}]----\x1b[1C-\x1b[2C----\x1b[1C---[${settings.authorcolour}oRdYNe${settings.gridcolour}]-\x1b[1C--''\x1b[0m`
+  );
 }
 
 function displaywalldata(socket: SocketIOSocket, displaylines: number, displayids: boolean): void {
+  if (settings.style === 3 || settings.style === 4) {
+    displayCustomWall(socket, displaylines, displayids);
+    return;
+  }
+
   const style = settings.style;
   let seperator1 = '�';
   let seperator2 = '�';
@@ -571,8 +591,77 @@ function displaywalldata(socket: SocketIOSocket, displaylines: number, displayid
   }
 }
 
+function stripAnsiCodes(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function visibleLength(text: string): number {
+  return stripAnsiCodes(text).length;
+}
+
+function truncateAnsi(str: string, maxLen: number): string {
+  let visible = 0;
+  let out = '';
+  let i = 0;
+
+  while (i < str.length) {
+    const ch = str[i];
+    if (ch === '\x1b' && str[i + 1] === '[') {
+      const end = str.indexOf('m', i);
+      if (end === -1) break;
+      out += str.slice(i, end + 1);
+      i = end + 1;
+      continue;
+    }
+
+    if (visible >= maxLen) break;
+    out += ch;
+    visible += 1;
+    i += 1;
+  }
+
+  return out;
+}
+
+function padAnsi(str: string, maxLen: number): string {
+  const truncated = truncateAnsi(str, maxLen);
+  const paddingLength = Math.max(0, maxLen - visibleLength(truncated));
+  return truncated + ' '.repeat(paddingLength);
+}
+
+function displayCustomWall(socket: SocketIOSocket, displaylines: number, displayids: boolean): void {
+  for (let i = 0; i < Math.min(displaylines, wallItems.length); i++) {
+    const item = wallItems[i];
+    const rawComment = (item.comment || '').replace(/\r?\n/g, ' ');
+    const commentBase = displayids ? `${item.id}: ${rawComment}` : rawComment;
+    const usernameAnsi = item.username || '';
+    const usernameField = padAnsi(usernameAnsi, 12);
+    const maxCommentLen = Math.max(0, 72 - visibleLength(usernameField));
+    const commentField = padAnsi(commentBase, maxCommentLen);
+    const bbscode = (item.bbsshortcode || '???').substring(0, 3);
+    const line = `${settings.gridcolour}|${settings.commentdefaultcolour}${commentField}${settings.gridcolour} -${settings.authorcolour}${usernameField}${settings.gridcolour}¦${settings.bbsshortcodecolour}${bbscode}${settings.gridcolour}|`;
+    transmit(socket, line);
+  }
+}
+
+function showBBSKey(socket: SocketIOSocket): void {
+  transmit(socket, `${settings.gridcolour}.------- -  -  - --- - --- ----------------------- ---------- ----------------.`);
+  if (bbsList.length === 0) {
+    transmit(socket, `${settings.gridcolour}  Ś ${settings.bbskeymaincolour}???: No BBS data available${settings.gridcolour} Ś`);
+  } else {
+    for (const item of bbsList) {
+      const code = (item.bbsShortCode || '???').padEnd(3);
+      const name = (item.bbsName || 'Unknown').substring(0, 40);
+      transmit(
+        socket,
+        `${settings.gridcolour}  Ś ${settings.bbskeymaincolour}${code}: ${name.padEnd(52, ' ')}${settings.gridcolour} Ś`
+      );
+    }
+  }
+  transmit(socket, `${settings.gridcolour}\`----- ----- - --------- ------------------------------- -- ---------------- -''`);
+}
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user } = doorSession;
+  const { socket, user, bbs } = doorSession;
 
   // Initialize settings
   settings = {
@@ -610,16 +699,16 @@ export async function runDoor(doorSession: any): Promise<void> {
 
   // Check if configured
   if (settings.mybbsshortcode === '???') {
-    const accesslevel = user.secStatus || 0;
-    if (accesslevel >= settings.sysoplevel) {
-      transmit(socket, '');
-      transmit(socket, '\x1b[0mThe wall has not yet been configured, performing initial setup');
-      const newcode = await query(socket, 'Enter the 3 digit code to use for your bbs:', 3);
-      if (newcode.length === 3) {
-        settings.mybbsshortcode = newcode;
-        saveSettings();
-      }
-    } else {
+      const accesslevel = user.secStatus || 0;
+      if (accesslevel >= settings.sysoplevel) {
+        transmit(socket, '');
+        transmit(socket, '\x1b[0mThe wall has not yet been configured, performing initial setup');
+        const newcode = await queryLine(bbs, '\x1b[0mEnter the 3 digit code to use for your bbs:\x1b[0m ', 3);
+        if (newcode.length === 3) {
+          settings.mybbsshortcode = newcode;
+          saveSettings();
+        }
+      } else {
       transmit(socket, '');
       transmit(socket, '\x1b[0mThe wall has not been configured, please advice your sysop to configure this wall');
       transmit(socket, '');
@@ -676,9 +765,8 @@ export async function runDoor(doorSession: any): Promise<void> {
     }
 
     transmit(socket, '');
-    sendStr(socket, `${settings.textcolour}pUSH tHE bUTTON ? [${settings.textcolourYN}y${settings.textcolour}/${settings.textcolourYN}N${settings.textcolourYN}]\x1b[0m `);
-
-    inputBuffer = await getChar(socket, true);
+    const pushPrompt = `${settings.textcolour}pUSH tHE bUTTON ? [${settings.textcolourYN}y${settings.textcolour}/${settings.textcolourYN}N${settings.textcolourYN}]\x1b[0m `;
+    inputBuffer = await getDoorKey(bbs, pushPrompt, true);
     transmit(socket, '\x1b[0m');
 
     if (inputBuffer === 'S') {
@@ -693,10 +781,8 @@ export async function runDoor(doorSession: any): Promise<void> {
     }
 
     if (inputBuffer === 'K') {
-      // Show BBS key - not fully implemented
-      transmit(socket, '');
-      transmit(socket, '\x1b[0mBBS Key display not yet implemented');
-      transmit(socket, '');
+      showBBSKey(socket);
+      continue;
     } else if (inputBuffer === 'B') {
       pagenum++;
       redo = true;
@@ -720,7 +806,7 @@ export async function runDoor(doorSession: any): Promise<void> {
 
   debugLog('get user comment');
 
-  const comment = await query(socket, 'Enter your comment:', 56);
+  const comment = await queryLine(bbs, `${settings.textcolour}Enter your comment:\x1b[0m `, 56);
   if (comment.length === 0) {
     transmit(socket, '');
     transmit(socket, '\x1b[0myou forgot to enter something...');
@@ -731,9 +817,8 @@ export async function runDoor(doorSession: any): Promise<void> {
   debugLog('get anon details');
 
   transmit(socket, '');
-  sendStr(socket, `${settings.textcolour}sTAY aNONYMOUS? [${settings.textcolourYN}y${settings.textcolour}/${settings.textcolourYN}N${settings.textcolour}]\x1b[0m `);
-
-  const anonInput = await getChar(socket, true);
+  const anonPrompt = `${settings.textcolour}sTAY aNONYMOUS? [${settings.textcolourYN}y${settings.textcolour}/${settings.textcolourYN}N${settings.textcolour}]\x1b[0m `;
+  const anonInput = await getDoorKey(bbs, anonPrompt, true);
 
   let username = user.username || 'guest';
   const bbsname = process.env.BBS_NAME || 'AmiExpress-Web';
@@ -750,7 +835,7 @@ export async function runDoor(doorSession: any): Promise<void> {
     transmit(socket, `${settings.gridcolour}�     \x1b[37m[W]HITE ${settings.gridcolour}- \x1b[31m[R]ED ${settings.gridcolour}- \x1b[33m[Y]ELLOW ${settings.gridcolour}- \x1b[34m[D]ARKBLUE ${settings.gridcolour}- \x1b[35m[P]INK ${settings.gridcolour}- \x1b[36m[C]YAN ${settings.gridcolour}- \x1b[32m[G]REEN${settings.gridcolour}     �`);
     transmit(socket, `${settings.gridcolour}\`----------- -- ----- - --    - -- --  ---- - -----        - -- -------- -- --'\x1b[0m`);
 
-    const colourInput = await getChar(socket, true);
+    const colourInput = await getDoorKey(bbs, undefined, true);
 
     if (colourInput === 'W' || colourInput === '7') colour = '7';
     else if (colourInput === 'R' || colourInput === '1') colour = '1';

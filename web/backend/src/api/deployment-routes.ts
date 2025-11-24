@@ -273,8 +273,8 @@ async function checkFileSystem() {
   ];
 
   const optionalDirs = [
-    'data/bbs/BBS/Screens',
-    'data/bbs/BBS/Conf1',
+    'data/bbs/Screens',
+    'data/bbs/Conf1',
   ];
 
   const missingRequired: string[] = [];

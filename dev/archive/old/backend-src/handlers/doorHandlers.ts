@@ -181,7 +181,7 @@ export async function displayDoorManager(socket: Socket, session: BBSSession) {
       const files: string[] = [];
 
       // Parse lha output format: [type] spaces uid/gid spaces size ratio date name
-      // Example: [generic]  *****/*****      49 100.0% Sep 27  1994 BBS/Commands/BBS.CMD
+      // Example: [generic]  *****/*****      49 100.0% Sep 27  1994 Commands/BBS.CMD
       for (const line of lines) {
         // Match lines starting with [type]
         if (line.match(/^\[[\w-]+\]/)) {

@@ -179,7 +179,7 @@ Pattern: `{SETTING}.{NUMBER}={value}`
 | `LOCATION.n` | Path | Additional base locations | Numbered |
 
 **Location Path Logic:**
-- If contains `:` → Full path (e.g., `SYS:BBS/Messages/`)
+- If contains `:` → Full path (e.g., `SYS:Messages/`)
 - No `:` → Relative to conference location
 - Default: `{ConfLocation}/MsgBase/`
 

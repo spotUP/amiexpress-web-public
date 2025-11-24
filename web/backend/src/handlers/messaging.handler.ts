@@ -11,6 +11,7 @@ import { ACSPermission } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
+import { finalizeCommand } from '../utils/command-response.util';
 import { messageIndexManager } from '../services/MessageIndexManager';
 
 // Dependencies (injected)
@@ -94,9 +95,7 @@ export async function handleReadMessagesFullCommand(
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.colorize('No messages in this area.', 'yellow'));
     socket.emit('ansi-output', '\r\n\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    finalizeCommand(socket, session, 'No messages to read');
     return;
   }
 

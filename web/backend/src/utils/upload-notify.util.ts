@@ -7,6 +7,21 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
+
+function resolveSysopStatsDir(bbsDataPath: string): string {
+  const rootDir = path.join(bbsDataPath, 'SysopStats');
+  if (existsSync(rootDir)) {
+    return rootDir;
+  }
+
+  const legacyDir = path.join(bbsDataPath, 'BBS', 'SysopStats');
+  if (existsSync(legacyDir)) {
+    return legacyDir;
+  }
+
+  return rootDir;
+}
 
 /**
  * Update upload statistics for sysop tracking
@@ -16,7 +31,7 @@ import * as fs from 'fs/promises';
  * 1. NumULs - Conference-level upload counter
  * 2. SysopStats/NumULs_# - Sysop stats (normal vs HOLD)
  *
- * @param conferencePath Path to conference directory (e.g., BBS/Conf1)
+ * @param conferencePath Path to conference directory (e.g., Conf1)
  * @param conferenceId Conference ID (1, 2, 3, etc.)
  * @param bbsDataPath Base BBS data path
  * @param isHold Whether this upload went to HOLD directory
@@ -52,7 +67,7 @@ export async function updateSysopUploadStats(
 
     // Update SysopStats counter (express.e:18770-18790)
     // Tracks uploads for sysop review (normal vs HOLD)
-    const sysopStatsDir = path.join(bbsDataPath, 'BBS', 'SysopStats');
+    const sysopStatsDir = resolveSysopStatsDir(bbsDataPath);
     await fs.mkdir(sysopStatsDir, { recursive: true });
 
     let statsFilename = `NumULs_${conferenceId}`;
@@ -156,7 +171,7 @@ export async function getUploadStatsSummary(
   const summary: string[] = [];
 
   try {
-    const sysopStatsDir = path.join(bbsDataPath, 'BBS', 'SysopStats');
+    const sysopStatsDir = resolveSysopStatsDir(bbsDataPath);
 
     for (const confId of conferenceIds) {
       let normalCount = 0;

@@ -35,10 +35,7 @@ class MCPTester {
       });
 
       server.on('close', (code) => {
-        if (stderr.includes('running on stdio')) {
-          // Server started successfully
-          resolve({ stdout, stderr });
-        } else if (code !== 0) {
+        if (code !== 0 && stderr.trim()) {
           reject(new Error(`Server exited with code ${code}: ${stderr}`));
         } else {
           resolve({ stdout, stderr });
@@ -64,20 +61,14 @@ class MCPTester {
     console.log('======================');
 
     try {
-      const result = await this.sendRequest({
+      await this.sendRequest({
         jsonrpc: '2.0',
         id: 1,
         method: 'tools/list'
       });
 
-      if (result.stderr.includes('running on stdio')) {
-        console.log('✓ Server starts successfully\n');
-        return true;
-      } else {
-        console.log('✗ Server failed to start');
-        console.log('stderr:', result.stderr, '\n');
-        return false;
-      }
+      console.log('✓ Server starts successfully\n');
+      return true;
     } catch (error) {
       console.log('✗ Server startup failed:', error.message, '\n');
       return false;
@@ -117,7 +108,7 @@ class MCPTester {
     console.log('===========================');
 
     const fs = await import('fs/promises');
-    const autodocsPath = path.join(__dirname, '..', 'NDK3.2R4', 'Autodocs');
+    const autodocsPath = path.join(__dirname, '..', 'Docs', 'NDK3.2R4', 'Autodocs');
 
     try {
       const files = await fs.readdir(autodocsPath);

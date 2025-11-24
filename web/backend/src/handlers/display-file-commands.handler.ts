@@ -18,6 +18,7 @@ import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
 import path from 'path';
 import fs from 'fs';
+import { finalizeCommand } from '../utils/command-response.util';
 
 import type { BBSSession } from '../index';
 
@@ -62,47 +63,14 @@ export function setDisplayFileCommandsDependencies(deps: {
 export async function handleQuestionMarkCommand(socket: any, session: BBSSession): Promise<void> {
   const isExpert = session.user?.expert === 'X';
   if (!isExpert) {
+    finalizeCommand(socket, session, 'Menu already visible');
     return;
   }
 
   // Display the menu screen even in expert mode (express.e:24594-24599)
   await _displayScreen(socket, session, 'MENU');
 
-  // Load .keys and set input mode like the normal menu path
-  const resolvedPath = session.lastScreenFilePath;
-  const { hasKeysFileForResolvedPath } = require('./screen.handler');
-  // MENU should not use hotkeys; ignore any .keys
-  const hasKeys = false;
-
-  if (hasKeys) {
-    session.cmdShortcuts = true;
-    if (!session.shortcuts) {
-      session.shortcuts = new Map();
-    }
-    session.shortcuts.clear();
-    if (resolvedPath) {
-      const path = require('path');
-      const { findCaseInsensitive } = require('../utils/fs-amiga.util');
-      const dir = path.dirname(resolvedPath);
-      const base = path.basename(resolvedPath);
-      const candidate = `${base}.keys`;
-      const keyPath = findCaseInsensitive(dir, candidate);
-      if (keyPath) {
-        const { ShortcutMap } = require('../utils/shortcut.util');
-        const loader = new ShortcutMap();
-        loader.load(keyPath);
-        loader.entries().forEach(([k, v]: [string, string]) => session.shortcuts!.set(k, v));
-      }
-    }
-  } else {
-    session.cmdShortcuts = false;
-    if (session.shortcuts) session.shortcuts.clear();
-  }
-
-  // Prompt and set input state
-  const { displayMenuPrompt } = require('./command-handler/menu');
-  displayMenuPrompt(socket, session);
-  session.subState = session.cmdShortcuts ? LoggedOnSubState.READ_SHORTCUTS : LoggedOnSubState.READ_COMMAND;
+  finalizeCommand(socket, session, 'Expert menu refreshed');
 }
 
 /**
@@ -166,6 +134,7 @@ async function displayFileList(socket: any, session: BBSSession, params: string,
   const parsedParams = ParamsUtil.parse(params);
   const nonStop = ParamsUtil.hasFlag(parsedParams, 'NS');
 
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
   socket.emit('ansi-output', '\r\n');
 
   // Get file areas for current conference - express.e:27642
@@ -174,9 +143,7 @@ async function displayFileList(socket: any, session: BBSSession, params: string,
 
   if (fileAreas.length === 0) {
     socket.emit('ansi-output', AnsiUtil.errorLine('No file areas available in this conference.'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    finalizeCommand(socket, session, 'File areas unavailable');
     return;
   }
 
@@ -257,12 +224,8 @@ async function displayFileList(socket: any, session: BBSSession, params: string,
     currentArea += increment;
   }
 
-  // Final prompt
-  if (!nonStop) {
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  }
-
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  const summary = reverse ? 'Raw file listing complete' : 'File listing complete';
+  finalizeCommand(socket, session, summary);
 }
 
 /**

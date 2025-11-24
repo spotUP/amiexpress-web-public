@@ -8,7 +8,28 @@ import { messageFileManager } from '../services/MessageFileManager';
 import type { Conference, MessageBase } from './types';
 
 export class ConferenceRepository {
-  constructor(private db: any) {}
+  private readonly db: any;
+
+  constructor(db: any) {
+    if (!db) {
+      throw new Error('Database not initialized');
+    }
+
+    if (db && db.db && typeof db.db.prepare === 'function') {
+      this.db = db.db;
+    } else if (typeof db.prepare === 'function') {
+      this.db = db;
+    } else if (db.getDatabase && typeof db.getDatabase === 'function') {
+      const raw = db.getDatabase();
+      if (raw && typeof raw.prepare === 'function') {
+        this.db = raw;
+      } else {
+        throw new Error('Invalid database object provided to ConferenceRepository');
+      }
+    } else {
+      throw new Error('Invalid database object provided to ConferenceRepository');
+    }
+  }
 
   async createConference(conf: Omit<Conference, 'id' | 'created' | 'updated'>): Promise<number> {
     if (!this.db) throw new Error('Database not initialized');
@@ -60,6 +81,8 @@ export class ConferenceRepository {
 
   async getConferences(): Promise<Conference[]> {
     if (!this.db) throw new Error('Database not initialized');
+
+    console.log('[ConferenceRepository] getConferences this.db type:', !!this.db, typeof this.db, this.db && this.db.constructor && this.db.constructor.name);
 
     const stmt = this.db.prepare('SELECT * FROM conferences ORDER BY id');
     const rows = stmt.all() as any[];

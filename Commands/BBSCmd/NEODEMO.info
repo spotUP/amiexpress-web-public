@@ -1,7 +1,0 @@
-BBSCMD=NEODEMO
-TYPE=TS
-LOCATION=doors/neo-blessed-demo
-DESCRIPTION=Comprehensive demonstration of neo-blessed UI capabilities
-ACCESS=0
-MULTINODE=YES
-PRIORITY=SAME

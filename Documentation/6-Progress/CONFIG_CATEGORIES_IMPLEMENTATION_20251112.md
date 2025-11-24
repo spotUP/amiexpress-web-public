@@ -41,7 +41,7 @@ Successfully implemented **6 of 9** user-requested configuration categories from
 - Extended `SystemConfig` with 16 new server fields
 
 #### 2. Database Migration
-**Script**: `dev/scripts/migrate-new-config-categories.js`
+**Script**: `dev/scripts/migrate-new-config-categories.ts`
 **Status**: ✅ Executed Successfully
 
 **Tables Created**:
@@ -61,7 +61,7 @@ Successfully implemented **6 of 9** user-requested configuration categories from
 - System: quiet_join, convert_to_mb, reg_key
 
 #### 3. Data Seeding
-**Script**: `dev/scripts/seed-new-config-categories.js`
+**Script**: `dev/scripts/seed-new-config-categories.ts`
 **Status**: ✅ Executed Successfully
 
 **Data Populated**:
@@ -178,8 +178,8 @@ MAX_PASSWORD_FAILS=3
 2. `Documentation/6-Progress/CONFIG_CATEGORIES_IMPLEMENTATION_20251112.md` - NEW (This file)
 
 ### Scripts
-3. `dev/scripts/migrate-new-config-categories.js` - NEW (Database migration)
-4. `dev/scripts/seed-new-config-categories.js` - NEW (Data seeding)
+3. `dev/scripts/migrate-new-config-categories.ts` - NEW (Database migration)
+4. `dev/scripts/seed-new-config-categories.ts` - NEW (Data seeding)
 
 ### Backend
 5. `web/backend/src/database/types.ts` - UPDATED (Added 6 new interfaces + extended SystemConfig)

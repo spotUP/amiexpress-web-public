@@ -304,10 +304,10 @@ Port from express.e:19825+ (checkRatiosAndTime):
 ### File Searching
 Searches conference directories in order:
 ```
-BBS/Conf01/Dir1/filename
-BBS/Conf01/Dir2/filename
+Conf01/Dir1/filename
+Conf01/Dir2/filename
 ...
-BBS/Conf01/Dir20/filename
+Conf01/Dir20/filename
 ```
 Returns first match with file info (size, path, conf number, dir number).
 

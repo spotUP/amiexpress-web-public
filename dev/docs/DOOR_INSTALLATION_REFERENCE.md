@@ -9,7 +9,7 @@ Our current door installation code is **COMPLETELY WRONG**. It extracts doors to
 ## The Correct Structure
 
 ```
-Example_BBS/
+Example_
 ├── Commands/
 │   └── BBSCmd/
 │       └── SCAN.info          ← Command definition (menu entry)
@@ -32,15 +32,15 @@ PRIORITY=SAME
 ```
 
 **Key Point:** `LOCATION=Doors:AquaScan/AquaScan.000`
-- `Doors:` is an AmigaDOS assign pointing to `Example_BBS/Doors/`
+- `Doors:` is an AmigaDOS assign pointing to `Example_Doors/`
 - The path is `Doors:AquaScan/AquaScan.000`
-- This resolves to `Example_BBS/Doors/AquaScan/AquaScan.000`
+- This resolves to `Example_Doors/AquaScan/AquaScan.000`
 
 ## Correct Installation Steps
 
 ### 1. Create BBS Structure (if not exists)
 ```
-backend/data/bbs/Example_BBS/
+backend/data/bbs/Example_
 ├── Commands/BBSCmd/
 └── Doors/
 ```
@@ -60,7 +60,7 @@ backend/temp/door-install/[archive-name]/
 **Command Definition:**
 ```
 [temp]/SCAN.info
-  → Example_BBS/Commands/BBSCmd/SCAN.info
+  → Example_Commands/BBSCmd/SCAN.info
 ```
 
 **Door Program and Data:**
@@ -69,23 +69,23 @@ backend/temp/door-install/[archive-name]/
 [temp]/AquaScan.020
 [temp]/AquaScanConfig
 [temp]/...
-  → Example_BBS/Doors/AquaScan/AquaScan.000
-  → Example_BBS/Doors/AquaScan/AquaScan.020
-  → Example_BBS/Doors/AquaScan/AquaScanConfig
-  → Example_BBS/Doors/AquaScan/...
+  → Example_Doors/AquaScan/AquaScan.000
+  → Example_Doors/AquaScan/AquaScan.020
+  → Example_Doors/AquaScan/AquaScanConfig
+  → Example_Doors/AquaScan/...
 ```
 
-### 5. Handle BBS/ Subdirectory (if present)
+### 5. Handle  Subdirectory (if present)
 
-Some archives have a `BBS/` subdirectory:
+Some archives have a `` subdirectory:
 ```
 archive.lha/
-└── BBS/
-    ├── Commands/BBSCmd/*.info  → Example_BBS/Commands/BBSCmd/
-    └── Doors/[Name]/*          → Example_BBS/Doors/[Name]/
+└── 
+    ├── Commands/BBSCmd/*.info  → Example_Commands/BBSCmd/
+    └── Doors/[Name]/*          → Example_Doors/[Name]/
 ```
 
-Strip the `BBS/` prefix and install to proper locations.
+Strip the `` prefix and install to proper locations.
 
 ## Scanning for Installed Doors
 
@@ -97,8 +97,8 @@ const files = fs.readdirSync(doorsPath);
 
 **CORRECT Way:**
 ```typescript
-// 1. Scan Example_BBS/Commands/BBSCmd/*.info
-const infoFiles = fs.readdirSync('Example_BBS/Commands/BBSCmd');
+// 1. Scan Example_Commands/BBSCmd/*.info
+const infoFiles = fs.readdirSync('Example_Commands/BBSCmd');
 
 // 2. For each .info file:
 for (const infoFile of infoFiles) {
@@ -109,8 +109,8 @@ for (const infoFile of infoFiles) {
   // Example: "Doors:AquaScan/AquaScan.000"
   const location = metadata.LOCATION;
 
-  // Resolve Doors: assign to Example_BBS/Doors/
-  const doorPath = location.replace('Doors:', 'Example_BBS/Doors/');
+  // Resolve Doors: assign to Example_Doors/
+  const doorPath = location.replace('Doors:', 'Example_Doors/');
 
   // Check if executable exists
   if (fs.existsSync(doorPath)) {
@@ -130,49 +130,49 @@ for (const infoFile of infoFiles) {
 
 | Assign | Maps To | Purpose |
 |--------|---------|---------|
-| `BBS:` | `Example_BBS/` | BBS data root |
-| `Doors:` | `Example_BBS/Doors/` | Door programs |
-| `Screens:` | `Example_BBS/Screens/` | Display screens |
-| `NODE0:` | `Example_BBS/Node0/` | Node 0 data |
+| `BBS:` | `Example_` | BBS data root |
+| `Doors:` | `Example_Doors/` | Door programs |
+| `Screens:` | `Example_Screens/` | Display screens |
+| `NODE0:` | `Example_Node0/` | Node 0 data |
 
 **Example Resolution:**
 ```
 LOCATION=Doors:AquaScan/AquaScan.000
          ↓
-Example_BBS/Doors/AquaScan/AquaScan.000
+Example_Doors/AquaScan/AquaScan.000
 ```
 
-## Real Examples from Example_BBS/
+## Real Examples from Example_
 
 ### Installed Doors:
 1. **AquaScan** (File scanner)
    - Command: `SCAN.info`
    - Location: `Doors:AquaScan/AquaScan.000`
-   - Directory: `Example_BBS/Doors/AquaScan/`
+   - Directory: `Example_Doors/AquaScan/`
 
 2. **FileDescription** (File description editor)
    - Commands: `F.info`, `FR.info`, `CS.info`, `N.info`, `NSU.info`
    - Location: Multiple executables
-   - Directory: `Example_BBS/Doors/FileDescription/`
+   - Directory: `Example_Doors/FileDescription/`
 
 3. **DLT_FileCheck** (File checker)
-   - Directory: `Example_BBS/Doors/DLT_FileCheck/`
+   - Directory: `Example_Doors/DLT_FileCheck/`
 
 4. **ExeCheck** (Executable checker)
-   - Directory: `Example_BBS/Doors/ExeCheck/`
+   - Directory: `Example_Doors/ExeCheck/`
 
 5. **Mapus** (File viewer/editor)
-   - Directory: `Example_BBS/Doors/Mapus/`
+   - Directory: `Example_Doors/Mapus/`
 
 6. **ZipCheck** (ZIP file checker)
-   - Directory: `Example_BBS/Doors/ZipCheck/`
+   - Directory: `Example_Doors/ZipCheck/`
 
 7. **FullScreenEditor** (Message editor)
-   - Directory: `Example_BBS/Doors/FullScreenEditor/`
+   - Directory: `Example_Doors/FullScreenEditor/`
 
 ## Implementation Checklist
 
-- [ ] Create `backend/data/bbs/Example_BBS/` structure
+- [ ] Create `backend/data/bbs/Example_` structure
 - [ ] Create `Commands/BBSCmd/` subdirectory
 - [ ] Create `Doors/` subdirectory
 - [ ] Rewrite extraction to use temp directory
@@ -194,13 +194,13 @@ Example_BBS/Doors/AquaScan/AquaScan.000
 Use the example data to verify correct structure:
 ```bash
 # Check structure matches
-diff -r Example_BBS/ backend/data/bbs/Example_BBS/
+diff -r Example_ backend/data/bbs/Example_
 
 # Verify .info files are in Commands/BBSCmd/
-ls backend/data/bbs/Example_BBS/Commands/BBSCmd/*.info
+ls backend/data/bbs/Example_Commands/BBSCmd/*.info
 
 # Verify doors are in Doors/[Name]/
-ls -d backend/data/bbs/Example_BBS/Doors/*/
+ls -d backend/data/bbs/Example_Doors/*/
 ```
 
 ## See Also

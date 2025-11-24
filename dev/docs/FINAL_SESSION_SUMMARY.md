@@ -74,7 +74,7 @@
   - Added `[MS] Mail Scan`, `[T] Time Left`, `[X] eXpert Mode`
   - Added `[<][>] Prev/Next` navigation
   - Fixed `[W] Who's Online` (was incorrectly [O])
-- **File:** `BBS/Screens/MENU.TXT`
+- **File:** `Screens/MENU.TXT`
 
 ### 10. Dependency Injection Fixes ✅
 - Conferences dependency for command handler
@@ -115,8 +115,8 @@
 ## 📁 Files Modified (Total: 8)
 
 ### Screen Files:
-1. `backend/BBS/Node0/Screens/JoinConf.TXT` - Conference list
-2. `backend/BBS/Screens/MENU.TXT` - Menu corrections
+1. `backend/Node0/Screens/JoinConf.TXT` - Conference list
+2. `backend/Screens/MENU.TXT` - Menu corrections
 
 ### Handler Files:
 3. `backend/backend/src/handlers/command.handler.ts` - Core fixes

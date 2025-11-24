@@ -53,7 +53,7 @@ export class PathManager {
   private initializeStandardAssigns(): void {
     // BBS-specific assigns
     this.assigns.set('doors:', this.normalizeAssignPath(path.join(this.baseDir, 'doors/')));
-    this.assigns.set('bbs:', this.normalizeAssignPath(path.join(this.baseDir, 'BBS/')));
+    this.assigns.set('bbs:', this.normalizeAssignPath(this.baseDir));
     this.assigns.set('data:', this.normalizeAssignPath(path.join(this.baseDir, 'data/')));
     this.assigns.set('screens:', this.normalizeAssignPath(path.join(this.baseDir, 'Screens/')));
     this.assigns.set('bulletins:', this.normalizeAssignPath(path.join(this.baseDir, 'Bulletins/')));

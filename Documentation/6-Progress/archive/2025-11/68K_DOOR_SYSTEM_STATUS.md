@@ -189,7 +189,7 @@ The 68K binary door system is **COMPLETE** with all infrastructure components op
 
 ### WHO Doors (RTW)
 
-**Configuration:** `reference-boardBBS/Commands/BBSCmd/WHO.info`
+**Configuration:** `reference-boardCommands/BBSCmd/WHO.info`
 ```
 ACCESS=20
 LOCATION=DOORS:RTW/RTW
@@ -224,14 +224,14 @@ TYPE=XIM
 
 ### Test Scripts
 
-**`Scripts/test-rtw-simple.js`** - Basic WHO door test
+**`Scripts/test-rtw-simple.ts`** - Basic WHO door test
 - Connects to BBS
 - Logs in as sysop
 - Launches WHO command
 - Monitors door output
 - Verifies execution
 
-**`Scripts/test-who-door.js`** - Puppeteer-based WHO test
+**`Scripts/test-who-door.ts`** - Puppeteer-based WHO test
 - Full browser automation
 - Terminal interaction
 - Screenshot capture

@@ -127,29 +127,32 @@ This directory contains scripts for developing, testing, and deploying AmiExpres
 
 ## Testing Scripts
 
+> Scripts in this directory are TypeScript. Run them with `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/<script>.ts`.
+
 ### Comprehensive Testing
 
-- `test-all-commands.js` - Test all BBS commands
+- `test-all-commands.ts` - Test all BBS commands
 - `test-all-commands-quick.sh` - Quick command tests
-- `test-bbs-comprehensive.js` - Full system test
-- `test-command-interactive.js` - Interactive tester
+- `test-bbs-comprehensive.ts` - Full system test
+- `test-command-interactive.ts` - Interactive tester
 
 ### Specialized Testing
 
-- `test-door-install.js` - Door testing
+- `test-door-install.ts` - Door testing
 - `test-example-doors.sh` - SDK example validation
-- `test-deep-dive.js` - Deep system analysis
-- `test-simple.js` - Quick smoke test
+- `test-deep-dive.ts` - Deep system analysis
+- `test-simple.ts` - Quick smoke test
 
 ### Import/Export Testing
 
-- `test-import-execution.js` - Import functionality
-- `test-user-parsing.js` - User file parsing
+- `test-import-execution.ts` - Import functionality
+- `test-user-parsing.ts` - User file parsing
+- `convert-to-petscii.ts` - Helper to create PETSCII `.seq` screens from ANSI content
 
 ### Configuration Testing
 
-- `test-config-api.js` - Config API tests
-- `verify-config-tables.js` - Database schema validation
+- `test-config-api.ts` - Config API tests
+- `verify-config-tables.ts` - Database schema validation
 
 ---
 
@@ -196,7 +199,7 @@ This directory contains scripts for developing, testing, and deploying AmiExpres
 | **Health check** | `./dev/scripts/health-check.sh` |
 | **Pre-deploy check** | `./dev/scripts/pre-deploy-check.sh` |
 | **Deploy** | `./dev/scripts/push-and-deploy.sh` |
-| **Test all** | `node dev/scripts/test-all-commands.js` |
+| **Test all** | `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-commands.ts` |
 
 ---
 

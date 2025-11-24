@@ -4,6 +4,7 @@
  */
 
 import { db } from '../database';
+import { getRootConferenceDir } from './file-hold.util';
 
 // checkForFile() - express.e:18408-18453
 // Returns true if file exists (duplicate), false if safe to upload
@@ -42,13 +43,31 @@ export async function checkForFile(
   // Check LCFILES directory (express.e:18424-18428)
   if (bbsDataPath) {
     const confNum = currentConf.toString().padStart(2, '0');
-    const lcfilesPath = path.join(bbsDataPath, 'BBS', `Conf${confNum}`, 'LCFILES', filename);
-    try {
-      await fs.access(lcfilesPath);
-      console.log(`[checkForFile] Duplicate found in LCFILES: ${filename}`);
-      return true; // File exists in LCFILES
-    } catch {
-      // File doesn't exist in LCFILES, continue checking
+    const rootLcfilesPath = path.join(
+      getRootConferenceDir(currentConf, bbsDataPath),
+      'LCFILES',
+      filename
+    );
+    const fallbackLcfilesPath = path.join(
+      bbsDataPath,
+      'BBS',
+      `Conf${confNum}`,
+      'LCFILES',
+      filename
+    );
+    const lcfilesPaths = [rootLcfilesPath];
+    if (fallbackLcfilesPath !== rootLcfilesPath) {
+      lcfilesPaths.push(fallbackLcfilesPath);
+    }
+
+    for (const candidatePath of lcfilesPaths) {
+      try {
+        await fs.access(candidatePath);
+        console.log(`[checkForFile] Duplicate found in LCFILES: ${filename}`);
+        return true; // File exists in LCFILES
+      } catch {
+        // File doesn't exist in this LCFILES candidate, continue checking
+      }
     }
 
     // Check DLPATH.1, DLPATH.2, etc. from config (express.e:18431-18439)

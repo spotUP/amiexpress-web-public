@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { getRootConferenceDir } from '../utils/file-hold.util';
 
 /**
  * MessageIndexManager - Manages AmiExpress message index files
@@ -70,8 +71,8 @@ export class MessageIndexManager {
    * Get path to MsgBase directory for a conference
    */
   private getMsgBaseDir(confNumber: number): string {
-    const confName = `Conf${confNumber}`;
-    return path.join(this.bbsRoot, 'BBS', confName, 'MsgBase');
+    const conferenceDir = getRootConferenceDir(confNumber, this.bbsRoot);
+    return path.join(conferenceDir, 'MsgBase');
   }
 
   /**

@@ -80,11 +80,11 @@ class XIMBBSInfoHandler {
                 console.log(`[XIMBBSInfo] BB_CONFNAME: "${value}"`);
                 break;
             case types_1.XIMCommand.BB_CONFLOCAL:
-                value = this.bbsSession?.conferencePath || '/BBS/Conf01';
+                value = this.bbsSession?.conferencePath || '/Conf1';
                 console.log(`[XIMBBSInfo] BB_CONFLOCAL: "${value}"`);
                 break;
             case types_1.XIMCommand.BB_LOCAL:
-                value = this.bbsSession?.bbsPath || '/BBS';
+                value = this.bbsSession?.bbsPath || '/';
                 console.log(`[XIMBBSInfo] BB_LOCAL: "${value}"`);
                 break;
             case types_1.XIMCommand.BB_CONFNUM:

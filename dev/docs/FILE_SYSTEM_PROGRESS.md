@@ -66,7 +66,7 @@ filename     P  123K  23-Oct-25  description line 1
 
 **Storage Format:**
 ```
-# File: BBS/Partdownload/flagged{slotNumber}
+# File: Partdownload/flagged{slotNumber}
 confNum filename
 confNum filename
 ...
@@ -372,7 +372,7 @@ System: Return to menu
 
 ### Conference Structure
 ```
-BBS/
+
   Conf01/
     DIR1        - Directory 1 files
     DIR2        - Directory 2 files
@@ -584,7 +584,7 @@ Progress: 5/18 file system items completed
 - DIR files: Pre-formatted file listings
 - Status markers: P/F/N/D integrity indicators
 - Flagging: Mark files for batch download
-- Conference structure: BBS/Conf##/DIR#
+- Conference structure: Conf##/DIR#
 - Directory spanning: U/A/H/# range selection
 
 ---

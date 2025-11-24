@@ -24,6 +24,23 @@ export function registerAuthHandlers(socket: Socket) {
   const session = getSessionBySocketId(socket.id);
   if (!session) return;
 
+  const getMaxPasswordFails = () => {
+    try {
+      if (db && typeof db.getConfigRepository === 'function') {
+        const repo = db.getConfigRepository();
+        if (repo && typeof repo.getSystemConfig === 'function') {
+          const sys = repo.getSystemConfig();
+          if (typeof sys?.max_password_fails === 'number') {
+            return sys.max_password_fails;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[AUTH] Unable to load max_password_fails from config:', error);
+    }
+    return 5;
+  };
+
   // Handle login with JWT token or username/password
   socket.on('login', async (data: { token?: string; username?: string; password?: string }) => {
     try {
@@ -46,17 +63,17 @@ export function registerAuthHandlers(socket: Socket) {
           socket.emit('login-failed', 'User not found');
           return;
         }
-      } else if (data.username && data.password) {
+      } else if (data.username && typeof data.password === 'string') {
         const safeUsername = sanitizeInput(data.username);
         console.log('Socket login attempt with username/password:', safeUsername);
 
         // express.e:29627-29628 - Empty username counts as retry
         if (safeUsername.length === 0) {
           session.loginRetryCount++;
-          console.log(`Login retry count: ${session.loginRetryCount}/5 (empty username)`);
+          const maxFails = getMaxPasswordFails();
+          console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (empty username)`);
 
-          // express.e:29633-29637 - Check if too many errors
-          if (session.loginRetryCount >= 5) {
+          if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
             console.log('Too many login errors, disconnecting');
             socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
             setTimeout(() => socket.disconnect(), 500);
@@ -68,11 +85,10 @@ export function registerAuthHandlers(socket: Socket) {
         }
 
         // express.e:29605-29631 - Check if user exists first, then authenticate
+        const passwordValue = data.password ?? '';
         const existingUser = await db.getUserByUsername(safeUsername);
 
         if (!existingUser) {
-          // User not found - express.e:29608-29622
-          // Prompt: "[R]etry your name or [C]ontinue as a new user?"
           console.log('User not found, prompting for new user creation');
           socket.emit('user-not-found', {
             username: safeUsername,
@@ -83,17 +99,34 @@ export function registerAuthHandlers(socket: Socket) {
           return;
         }
 
-        // User exists, authenticate with password
+        if (passwordValue.length === 0) {
+          // Empty password counts as invalid attempt (express.e re-prompts with error)
+          session.loginRetryCount++;
+          const maxFails = getMaxPasswordFails();
+          console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (empty password)`);
+
+          if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
+            console.log('Too many login errors, disconnecting');
+            socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+            setTimeout(() => socket.disconnect(), 500);
+            return;
+          }
+
+          socket.emit('ansi-output', '\r\nInvalid PassWord\r\n');
+          socket.emit('prompt-password');
+          return;
+        }
+
         console.log('[LOGIN] Authenticating user:', safeUsername);
-        user = await db.authenticateUser(safeUsername, data.password);
+        user = await db.authenticateUser(safeUsername, passwordValue);
         console.log('[LOGIN] Authentication result:', user ? 'SUCCESS' : 'FAILED');
         if (!user) {
           // express.e:29209 & 29343 - Invalid password message with linebreak
           session.loginRetryCount++;
-          console.log(`Login retry count: ${session.loginRetryCount}/5 (invalid password)`);
+          const maxFails = getMaxPasswordFails();
+          console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (invalid password)`);
 
-          // express.e:29633-29637 - Check if too many errors
-          if (session.loginRetryCount >= 5) {
+          if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
             console.log('Too many login errors, disconnecting');
             socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
             setTimeout(() => socket.disconnect(), 500);
@@ -260,8 +293,8 @@ export function registerAuthHandlers(socket: Socket) {
   // Check if username exists (called before password prompt)
   socket.on('check-username', async (data: { username: string }) => {
     try {
-      const safeUsername = sanitizeInput(data.username);
-      console.log('🔍 Checking if username exists:', safeUsername);
+        const safeUsername = sanitizeInput(data.username);
+        console.log('🔍 Checking if username exists:', safeUsername);
 
       // Empty username check
       if (safeUsername.length === 0) {
@@ -276,16 +309,18 @@ export function registerAuthHandlers(socket: Socket) {
         return;
       }
 
-      const existingUser = await db.getUserByUsername(safeUsername);
+        const existingUser = await db.getUserByUsername(safeUsername);
 
       if (!existingUser) {
-        // User not found - prompt for new user creation
+        // User not found - prompt for new user creation (express.e:29622-29651)
         console.log('User not found, prompting for new user creation');
+        const prompt =
+          safeUsername.toUpperCase() === 'NEW'
+            ? '[C]ontinue as a new user? '
+            : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n[R]etry your name or [C]ontinue as a new user?\r\n\r\n`;
         socket.emit('user-not-found', {
           username: safeUsername,
-          prompt: safeUsername.toUpperCase() === 'NEW'
-            ? '[C]ontinue as a new user? '
-            : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
+          prompt
         });
       } else {
         // User exists - prompt for password

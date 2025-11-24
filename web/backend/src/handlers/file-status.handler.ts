@@ -11,8 +11,10 @@ import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
-import { ConferenceRepository } from '../database/conference-repository';
+import { db } from '../database';
 import { checkConfAccess } from './message-scan.handler';
+import { finalizeCommand } from '../utils/command-response.util';
+import { AnsiUtil } from '../utils/ansi.util';
 
 /**
  * FS Command - File Status
@@ -37,7 +39,7 @@ export class FileStatusHandler {
 
     // Call fileStatus(0) - express.e:24874
     await this.displayFileStatus(socket, session, false);
-
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 
@@ -57,8 +59,7 @@ export class FileStatusHandler {
     if (!user) return;
 
     // Get system configuration
-    const repo = new ConferenceRepository(require('../database').db);
-    const conferences = await repo.getConferences();
+    const conferences = await db.getConferences();
     const totalConferences = conferences.length || 0;
     const currentConf = session.currentConf || 1;
 
@@ -66,6 +67,7 @@ export class FileStatusHandler {
     const hasConfAccounting = checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING);
 
     // Display header - express.e:24151-24157
+    socket.emit('ansi-output', '\x1b[2J\x1b[H');
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n');

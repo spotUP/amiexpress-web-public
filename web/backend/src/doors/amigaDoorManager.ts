@@ -7,7 +7,7 @@
  * - Installs doors to proper BBS directory structure
  * - Parses .info files for door metadata
  *
- * Reference: Example_BBS/ directory structure
+ * Reference: Example_BBS directory structure
  */
 
 import * as fs from 'fs';
@@ -119,7 +119,7 @@ export class AmigaDoorManager {
 
   /**
    * Resolve AmigaDOS path to physical path
-   * Example: "Doors:AquaScan/AquaScan.000" → "/path/to/BBS/Doors/AquaScan/AquaScan.000"
+   * Example: "Doors:AquaScan/AquaScan.000" → "/path/to/Doors/AquaScan/AquaScan.000"
    * Case-insensitive to handle both "Doors:" and "DOORS:"
    */
   resolveAssign(amigaPath: string): string {
@@ -885,12 +885,9 @@ export class AmigaDoorManager {
         const relativePath = path.relative(tempDir, infoFile);
 
         // Detect archive structure patterns:
-        // 1. BBS/Commands/BBSCmd/ (full BBS structure)
-        // 2. Commands/BBSCmd/ (standard door structure)
-        // 3. Archive-name/Commands/BBSCmd/ (archive root + standard structure)
-        const hasBBSStructure = relativePath.match(/^BBS[/\\]Commands[/\\]BBSCmd[/\\]/i);
-        const hasStandardStructure = relativePath.match(/Commands[/\\]BBSCmd[/\\]/i);
-        const hasCommandsDir = hasStandardStructure || hasBBSStructure;
+        // 1. Commands/BBSCmd/ (standard door structure)
+        // 2. Archive-name/Commands/BBSCmd/ (archive root + standard structure)
+        const hasCommandsDir = relativePath.match(/Commands[/\\]BBSCmd[/\\]/i);
 
         // Only process .info files that are in Commands/BBSCmd/ directory
         if (!hasCommandsDir) {
@@ -913,7 +910,7 @@ export class AmigaDoorManager {
 
         // Find corresponding door in Doors/ directory
         // Look for Doors/[DoorName]/ where DoorName matches or contains the command
-        const doorsPattern = hasBBSStructure ? 'BBS/Doors' : 'Doors';
+        const doorsPattern = 'Doors';
         const doorsDirMatch = extractedFiles.find(f => {
           const rel = path.relative(tempDir, f);
           return rel.match(new RegExp(`${doorsPattern}[/\\\\]([^/\\\\]+)[/\\\\]`, 'i'));
@@ -924,21 +921,21 @@ export class AmigaDoorManager {
 
         if (doorsDirMatch) {
           // Extract door name from path: "Doors/AquaBulls/..." → "AquaBulls"
-          const rel = path.relative(tempDir, doorsDirMatch);
-          const match = rel.match(new RegExp(`${doorsPattern}[/\\\\]([^/\\\\]+)[/\\\\]`, 'i'));
-          if (match) {
-            doorName = match[1];
-            const doorPathPrefix = hasBBSStructure ? path.join(tempDir, 'BBS', 'Doors') : path.join(tempDir, 'Doors');
+            const rel = path.relative(tempDir, doorsDirMatch);
+            const match = rel.match(new RegExp(`${doorsPattern}[/\\\\]([^/\\\\]+)[/\\\\]`, 'i'));
+            if (match) {
+              doorName = match[1];
+              const doorPathPrefix = path.join(tempDir, 'Doors');
 
-            // Handle archive root prefix (e.g., "otl-ab10/Doors/")
-            const archiveRootDoors = extractedFiles.find(f => f.match(/Doors[/\\]/));
-            if (archiveRootDoors) {
-              const parts = path.relative(tempDir, archiveRootDoors).split(path.sep);
-              if (parts.length > 2 && parts[0] !== 'BBS' && parts[0] !== 'Doors') {
-                // Has archive root prefix
-                doorSourceDir = path.join(tempDir, parts[0], 'Doors', doorName);
-              } else {
-                doorSourceDir = path.join(doorPathPrefix, doorName);
+              // Handle archive root prefix (e.g., "otl-ab10/Doors/")
+              const archiveRootDoors = extractedFiles.find(f => f.match(/Doors[/\\]/));
+              if (archiveRootDoors) {
+                const parts = path.relative(tempDir, archiveRootDoors).split(path.sep);
+                if (parts.length > 2 && parts[0] !== 'Doors') {
+                  // Has archive root prefix
+                  doorSourceDir = path.join(tempDir, parts[0], 'Doors', doorName);
+                } else {
+                  doorSourceDir = path.join(doorPathPrefix, doorName);
               }
             } else {
               doorSourceDir = path.join(doorPathPrefix, doorName);
@@ -1222,8 +1219,8 @@ let managerInstance: AmigaDoorManager | null = null;
 
 export function getAmigaDoorManager(bbsRoot?: string): AmigaDoorManager {
   if (!managerInstance) {
-    // BBS directory structure matches original Amiga AmiExpress
-    // The data directory contains Doors/, BBS/Commands/, and other BBS directories
+    // Directory structure mirrors classic AmiExpress layout
+    // The data directory contains Doors/, Commands/, and other legacy directories
     // Use config's dataDir to support persistent disk storage
     const root = bbsRoot || config.get('dataDir');
     managerInstance = new AmigaDoorManager(root);
