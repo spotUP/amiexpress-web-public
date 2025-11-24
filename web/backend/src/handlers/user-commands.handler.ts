@@ -229,12 +229,8 @@ export async function handleJoinConferenceCommand(
   }
 
   if (newConf < 1 || newConf > _conferences.length) {
-    const joinScreenDisplayed = await _displayScreen(socket, session, 'JOINCONF');
-    const showList = !joinScreenDisplayed || shouldShowJoinConferenceList(session.lastScreenFilePath);
-
-    if (showList) {
-      displayConferenceList(socket, session);
-    }
+    // AmiExpress shows only the JOINCONF screen and prompt (no auto list dump).
+    await _displayScreen(socket, session, 'JOINCONF');
 
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.complexPrompt([
