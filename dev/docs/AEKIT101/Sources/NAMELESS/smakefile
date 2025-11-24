@@ -1,0 +1,27 @@
+#
+# Licensed material.  Program property of Lattice, Inc.
+# All rights reserved.
+#
+
+OBJFILES=AEHelp.o
+EXEFILE=AEHelp
+LIBFILES=sc:AE.Includes/amiconsasc.o,LIB:sc.lib,LIB:amiga.lib
+
+SC=SC:c/sc
+SCFLAGS=STREQ
+ASM=SC:c/asm
+LINK=SC:c/slink
+
+.c.o: 
+        $(SC) $(SCFLAGS) $*
+
+.a.o:
+        $(ASM) $* -o $*.o
+
+.h.o:
+        delete $*.o
+        $(SC) $(SCFLAGS) $*
+
+$(EXEFILE):     $(OBJFILES)
+                $(LINK) LIB:c.o, $(OBJFILES) TO $(EXEFILE) LIB $(LIBFILES)
+

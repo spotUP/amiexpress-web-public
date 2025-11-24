@@ -58,32 +58,32 @@ export class InfoFileParser {
       // Convert buffer to string (ISO-8859-1 encoding for Amiga)
       const content = buffer.toString('latin1');
 
-      // Find all tool type strings (key=value format)
-      // They appear as null-terminated strings in the file
-      const regex = /([A-Z_][A-Z0-9_]*)=([^\x00]*)/gi;
-      let match;
+      // Tooltypes are null-terminated strings; iterate explicitly to mimic icon.library FindToolType.
+      const entries = content.split('\x00');
+      for (const rawEntry of entries) {
+        const entry = rawEntry.trim();
+        if (!entry) continue;
 
-      while ((match = regex.exec(content)) !== null) {
-        const key = match[1];
-        let value = match[2].trim();
+        // Parenthesized tooltypes are commented out
+        if (entry.startsWith('(') && entry.endsWith(')')) {
+          continue;
+        }
 
-        // Remove trailing null bytes and control characters
+        const eqIdx = entry.indexOf('=');
+        if (eqIdx < 1) continue;
+
+        const key = entry.slice(0, eqIdx).trim();
+        let value = entry.slice(eqIdx + 1).trim();
+
+        // Remove trailing control chars
         value = value.replace(/[\x00-\x1F]+$/, '');
+        if (!key || value.length === 0) continue;
 
-        // Skip empty values
-        if (value.length === 0) {
-          continue;
-        }
+        // Case-insensitive keys; preserve first occurrence like FindToolType
+        const normalizedKey = key.toUpperCase();
+        if (toolTypes.has(normalizedKey)) continue;
 
-        // Handle parenthesized values (commented out options)
-        // (SMTP_HOST=smtp.sendgrid.net) vs SMTP_HOST=smtp.gmail.com
-        const isCommented = value.startsWith('(') && value.endsWith(')');
-        if (isCommented) {
-          // Strip parentheses but don't store commented values
-          continue;
-        }
-
-        toolTypes.set(key, value);
+        toolTypes.set(normalizedKey, value);
       }
     } catch (error: any) {
       console.error('[InfoFileParser] Tool type extraction error:', error.message);

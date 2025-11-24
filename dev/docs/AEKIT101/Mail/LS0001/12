@@ -1,0 +1,28 @@
+
+hai do you or anyone have the COMPLETE Conf.DB info structure coz i need it
+now! I have been asking for it for over a month now and i don't want to
+have to 'hack' it...
+
+and is it already possible to check an users Ansi Status in c or rexx?
+
+tnx in advance!!
+
+--- /XNet v4.4 (NL0004.LS0001,4,EEL-13.0021)
+* Origin: NL0004 [LaST ouTPoST] +31-72-157682/201182 [Holland]
+ ----( EMPiRE @ NL0004 )----------------------------------------------
+
+Here ya go.....
+
+struct ConfBase
+{
+  char Handle[31];
+  ULONG NewSinceDate, ConfRead,ConfYM;
+  ULONG Bytes_Download,Bytes_Upload;
+  ULONG LastEMail,Daily_Bytes_Dld;
+  USHORT Upload,Downloads,RatioType,Ratio,Messages_Posted;
+  UWORD Access;
+  UWORD Active;
+};
+
+--- /XNet v4.5 (716001.LS0001,33,TPT-12.0016)
+* Origin:  -=U.S. /X NET Mail Hub=-  The Edge! BBS - 1-(716)-655-4940 -

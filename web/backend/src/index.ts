@@ -15,6 +15,7 @@ import { callersLogManager } from './services/CallersLogManager';
 import { doorDropFileManager } from './services/DoorDropFileManager';
 import { triggerSamiLogRefresh } from './services/SamiLogService';
 import { conferenceFileManager } from './services/ConferenceFileManager';
+import { loadConfConfig } from './services/conf-config.service';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 export { BBSState, LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
@@ -1996,9 +1997,27 @@ async function initializeData() {
       conferences = await db.getConferences();
     }
 
-    // Mirror AmiExpress Conf.DB handles to enforce real conference names/count (reference-board truth)
+    // Pull conference names/count from ConfConfig.info (express.e populates confNames/confDirs from this file)
+    const bbsRoot = process.env.BBS_ROOT || config.get('dataDir');
+    const confConfig = loadConfConfig(bbsRoot);
+    if (confConfig) {
+      const limit = Math.min(conferences.length, confConfig.confCount);
+      if (conferences.length < confConfig.confCount) {
+        console.warn(`[Conference Init] ConfConfig declares ${confConfig.confCount} conferences but DB has ${conferences.length}; using first ${limit}`);
+      }
+
+      const overlay: any[] = [];
+      for (let i = 0; i < limit; i++) {
+        const entry = confConfig.entries[i];
+        overlay.push({ ...conferences[i], name: entry.name });
+      }
+
+      conferences = overlay;
+    }
+
+    // Fallback: mirror AmiExpress Conf.DB handles if ConfConfig.info is absent
     const confDbHeaders = conferenceFileManager.getAllConferenceHeaders();
-    if (confDbHeaders.length > 0) {
+    if (!confConfig && confDbHeaders.length > 0) {
       const limit = Math.min(conferences.length, confDbHeaders.length);
       for (let i = 0; i < limit; i++) {
         conferences[i] = { ...conferences[i], name: confDbHeaders[i].name || conferences[i].name };
