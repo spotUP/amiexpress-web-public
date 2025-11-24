@@ -61,7 +61,8 @@ export class InfoFileParser {
       // Tooltypes are null-terminated strings; iterate explicitly to mimic icon.library FindToolType.
       const entries = content.split('\x00');
       for (const rawEntry of entries) {
-        const entry = rawEntry.trim();
+        // Strip leading/trailing control chars (icon library stores length bytes)
+        const entry = rawEntry.replace(/^[\x00-\x1F]+/, '').trim();
         if (!entry) continue;
 
         // Parenthesized tooltypes are commented out
