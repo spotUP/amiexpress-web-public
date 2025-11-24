@@ -49,9 +49,10 @@ export async function flagPause(
     session.tempData.lineCount = 0;
 
     // If a pause prompt is already active, wait for it instead of spawning another
-    if (session.tempData.flagPausePromise) {
+    if (session.tempData.flagPausePromise || session.tempData.flagPauseActive) {
       return session.tempData.flagPausePromise;
     }
+    session.tempData.flagPauseActive = true;
 
     // Display pause prompt
     // express.e:28034
@@ -78,6 +79,7 @@ export async function flagPause(
         if (response === '' || response === 'Y') {
           socket.emit('ansi-output', '\x1b[1A\x1b[K');
           session.tempData.flagPausePromise = undefined;
+          session.tempData.flagPauseActive = false;
           resolve(true);
           return;
         }
@@ -85,6 +87,7 @@ export async function flagPause(
         if (response === 'N') {
           socket.emit('ansi-output', '\r\n');
           session.tempData.flagPausePromise = undefined;
+          session.tempData.flagPauseActive = false;
           resolve(false);
           return;
         }
@@ -93,6 +96,7 @@ export async function flagPause(
           session.tempData.nonStopDisplayFlag = true;
           socket.emit('ansi-output', '\x1b[1A\x1b[K');
           session.tempData.flagPausePromise = undefined;
+          session.tempData.flagPauseActive = false;
           resolve(true);
           return;
         }
@@ -121,6 +125,7 @@ export async function flagPause(
             }
             socket.emit('ansi-output', '\x1b[A\x1b[K');
             session.tempData.flagPausePromise = undefined;
+            session.tempData.flagPauseActive = false;
             resolve(true);
           });
           return;
