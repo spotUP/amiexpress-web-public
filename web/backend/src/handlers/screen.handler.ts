@@ -458,19 +458,17 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   screenDebug('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
   // Support both ~SS_ and ~2S (short form)
   const ssRegex = /~(?:SS_|2S)([^~|\r\n]+)(\|\|)?/g;
-  let ssMatch;
   const filesToDisplay: string[] = [];
 
-  const normalizeScreenReference = (screenRef: string): string => {
-    // Keep provided extensions; only trim whitespace/terminators.
-    return screenRef.trim();
-  };
-  while ((ssMatch = ssRegex.exec(parsed)) !== null) {
-    const filename = normalizeScreenReference(ssMatch[1].trim());
+  // Keep provided extensions; only trim whitespace/terminators.
+  const normalizeScreenReference = (screenRef: string): string => screenRef.trim();
+
+  parsed = parsed.replace(ssRegex, (_match, ref) => {
+    const filename = normalizeScreenReference(ref.trim());
     screenDebug('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
     filesToDisplay.push(filename);
-    parsed = parsed.replace(ssMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
-  }
+    return `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
+  });
   screenDebug('[MCI DEBUG] Total ~SS_ MCI codes found in screen:', filesToDisplay.length);
 
   // ~SX_ - String Exact / Sequential File Display (express.e:5505-5530)
