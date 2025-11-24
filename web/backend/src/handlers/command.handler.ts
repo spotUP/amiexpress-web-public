@@ -2717,7 +2717,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // express.e:28228 - Empty command, just redisplay menu
         console.log(' Empty command, redisplaying menu');
         session.menuPause = false;
+        // Immediately display the menu/prompt instead of waiting for another key
         session.subState = LoggedOnSubState.DISPLAY_MENU;
+        await menuDisplayMainMenu(socket, session);
       }
     } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
       // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
