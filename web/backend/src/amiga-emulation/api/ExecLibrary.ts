@@ -823,15 +823,26 @@ export class ExecLibrary {
       }
       candidates.push(path.join(process.cwd(), "Libs", "AEDoor.library"));
 
-      const libPath = candidates.find(p => fs.existsSync(p));
-      console.log(`[ExecLibrary] Loading real AEDoor.library, candidates:`, candidates);
+    const libPath = candidates.find(p => fs.existsSync(p));
+    console.log(`[ExecLibrary] Loading real AEDoor.library, candidates:`, candidates);
 
-      if (!libPath) {
-        console.log(`[ExecLibrary] ERROR: AEDoor.library not found in candidates`);
-        return false;
+    if (!libPath) {
+      const msg = `[ExecLibrary] ERROR: AEDoor.library not found in candidates`;
+      console.log(msg);
+      // If we have a BBS session socket, notify sysop in terminal
+      try {
+        const globalAny: any = global as any;
+        const session = globalAny?.currentBbsSession;
+        if (session?.socket) {
+          session.socket.emit('ansi-output', `\r\n\x1b[31m${msg}\x1b[0m\r\n`);
+        }
+      } catch (_) {
+        /* ignore */
       }
+      return false;
+    }
 
-      console.log(`[ExecLibrary] Using AEDoor.library from: ${libPath}`);
+    console.log(`[ExecLibrary] Using AEDoor.library from: ${libPath}`);
 
       const binary = fs.readFileSync(libPath);
       console.log(
