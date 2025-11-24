@@ -14,6 +14,7 @@ import { nodeFileManager } from './services/NodeFileManager';
 import { callersLogManager } from './services/CallersLogManager';
 import { doorDropFileManager } from './services/DoorDropFileManager';
 import { triggerSamiLogRefresh } from './services/SamiLogService';
+import { conferenceFileManager } from './services/ConferenceFileManager';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 export { BBSState, LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
@@ -1993,6 +1994,17 @@ async function initializeData() {
     if (conferences.length === 0) {
       await db.initializeDefaultData();
       conferences = await db.getConferences();
+    }
+
+    // Mirror AmiExpress Conf.DB handles to enforce real conference names/count (reference-board truth)
+    const confDbHeaders = conferenceFileManager.getAllConferenceHeaders();
+    if (confDbHeaders.length > 0) {
+      const limit = Math.min(conferences.length, confDbHeaders.length);
+      for (let i = 0; i < limit; i++) {
+        conferences[i] = { ...conferences[i], name: confDbHeaders[i].name || conferences[i].name };
+      }
+      // Trim any surplus seeded conferences beyond Conf.DB count
+      conferences = conferences.slice(0, confDbHeaders.length);
     }
 
     // Inject conferences into screen handler

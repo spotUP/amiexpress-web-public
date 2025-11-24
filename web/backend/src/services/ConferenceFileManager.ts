@@ -200,6 +200,45 @@ export class ConferenceFileManager {
   }
 
   /**
+   * Read all conference headers (handles) from Conf.DB.
+   * Returns an array of slots with name/active flags; used to mirror
+   * the real AmiExpress conference list into the web DB.
+   */
+  getAllConferenceHeaders(): { slot: number; name: string; active: number }[] {
+    try {
+      if (!fs.existsSync(this.confDBPath)) {
+        return [];
+      }
+
+      const stat = fs.statSync(this.confDBPath);
+      if (stat.size === 0 || stat.size % this.CONFBASE_SIZE !== 0) {
+        return [];
+      }
+
+      const count = Math.floor(stat.size / this.CONFBASE_SIZE);
+      const headers: { slot: number; name: string; active: number }[] = [];
+
+      for (let slot = 0; slot < count; slot++) {
+        const record = this.readConferenceFile(slot);
+        if (!record) continue;
+
+        const name = (record.handle || '').trim();
+        const active = record.active || 0;
+        if (name.length === 0) continue;
+
+        headers.push({ slot, name, active });
+      }
+
+      return headers;
+    } catch (error) {
+      if (!this.suppressConfDbErrors) {
+        console.error('[ConferenceFileManager] Error reading Conf.DB headers:', error);
+      }
+      return [];
+    }
+  }
+
+  /**
    * Write conference to Conf.DB (append new conference)
    */
   writeConferenceFile(conf: Conference, slotNumber: number): void {
