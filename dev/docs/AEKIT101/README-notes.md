@@ -92,8 +92,16 @@ Source drop `/dev/docs/AEKIT101` contains the original AmiExpress 2.20 door inte
 - BB_PURGELINE* must clear serial buffers between inputs; BB_DROPDTR should drop telnet/WebSocket cleanly.
 - BB_LOGONTYPE / NODE_* values inform doors about local/remote state and carrier rate; populate from session/protocol.
 
-## Gaps/todos
-- Confirm numeric widths: ints in JHMessage are 32-bit; String is 200 bytes. endian = big-endian 68K for wire? (align bridge accordingly).
-- BB_CONFNUM doc says 0–8; reference-board uses more—verify express.e handling for higher confs.
-- Editor_struct/BYPASS_CSI_CHECK/SENTBY semantics not documented—need express.e/doors source scan.
-- ACS file access and ConfDB helpers require precise on-disk struct compatibility (see DoorHeader.h and confBase struct in axobjects.e).
+## Gaps resolved
+- JHMessage layout/endianness: all ints are 32-bit native 68K, big-endian; String is fixed 200 bytes. Align emulation bridge to big-endian reads/writes; padding matches Amiga exec message layout (mn_Length includes whole struct).
+- BB_CONFNUM range: DoorHeader and glue use GET_CONFNUM (536) with Data=conf index and Filler1/Filler2 for name/location; not limited to 0–8—use cmds.numConf (ConfConfig NCONFS) for bounds, 1-based like conf dirs. BB_CONFNUM (510) returns current conf number; treat as full range, not 0–8.
+- showgfile ACS search: security is rounded down in steps of 5 (e.g., 255→255, 254→250 … down to 5) and probes `<base><sec>.txt`, `<base><sec>.txt.gr`, `<base><sec>.GR1`, then base .txt/.txt.gr/.GR1.
+- Pausing: sendmessage wraps at 79 chars, tracks LineNum, auto-pauses after 22 lines with hotkey “press <RETURN> to continue”, then clears the pause line.
+- Date/time: UnixTimeOffset 252482400 bridges Unix epoch↔Amiga DateStamp; DateToString/TimeToString use FORMAT_USA via DateToStr.
+- Net transfers: NetUpload/NetDownload mirror ZMODEMRECEIVE/ZMODEMSEND return codes (1 success, 0 fail, -2 carrier drop); BatchDownload uses BATCHZMODEMSEND with Filler1 pointer.
+- Non-stop display: JH_SF_NSF/JH_SG_NSF (not in DoorHeader) display files without pause; QUICK_KEY/JH_CK provide raw key presence/polling.
+- Account/ConfDB helpers: LOAD_/SAVE_/APPEND_ACCOUNT use Data=user slot, Filler1/Filler2 as struct pointers; LOAD_/SAVE_CONFDB use NodeID=conf, Filler1=data; GET_CONFNUM fills conf name/location via Filler1/Filler2, Data=conf index.
+
+## Still open (need express.e/door sources)
+- EDITOR_STRUCT (546), BYPASS_CSI_CHECK (547), SENTBY (548) not described; requires express.e trace.
+- ACP custom commands beyond listed system ones; confirm door usage before emulating.
