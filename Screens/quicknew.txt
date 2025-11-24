@@ -1,56 +1,9 @@
-
-[32mLast 07 Days Files in [33m>> Amiga Warez! <<[34m :      [0m([35mFiles[33m: [36m66[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m86.3[0m)
-[35mYesterdays Statistics [0m: [32m48 [36mFiles[33m, [32m00 [36mFakes[33m, [32m55.3 [36mMegs [33m![0m
+[32mLast 07 Days Files in [33m>> General Files <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m0.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m0.0 [36mMegs [33m![0m
 
-     [0mPIXY10R6.LHA  [0mACON140.LHA   [0mSNP54127.LHA  [0mBK-S10UX.NFO  [0mBK-S10UC.ZIP  
-     [0mBK-S10UH.LHA  [0mBK-S10U3.DMS  [0mBK-S10U2.DMS  [0mBK-S10U1.DMS  [0mBK-S10UP.LHA  
-     [0mFTN-MUMO.DMS  [0mTRSI-CLB.DMS  [0mTRSI-CLB.LHA  [0mTRSI-CLB.NFO  [0mTRSI-CLB.ZIP  
-     [0mSIDDP109.LHA  [0mLSMLM200.LHA  [0mLSML4200.LHA  [0mLSLMR200.LHA  [0mMIR-CNLP.DMS  
-     [0mKYVOS160.ZIP  [0mJ-TNF104.DMS  [0mJ-TNF104.LHA  [0mFIX-MMPV.DMS  [0mACON132.LHA   
-     [0mXASH3D11.LHA  [0m3DOC150.LHA   [0mILL-AXPV.ZIP  [0mP-EVDM11.LHA  [0mP-SDI12.LHA   
-     [0mDM-MMA10.LHA  [0mAMIM3531.LHA  [0mAMIDR138.LHA  [0mAMIDA138.LHA  [0mLHAR1141.LHA  
-     [0mLHAM1141.LHA  [0mLHA41141.LHA  [0mLHAX1141.LHA  [0mTREEM221.LHA  [0mBW-CB137.LHA  
-     [0mB-DR090.LHA   [0mAMIA3531.LHA  [0mAMIC3531.LHA  [0mF1GP25SG.LHA  [0mWHIFF417.LHA  
-     [0mWP-CJU12.LHA  [0mWP-CJ12E.LHA  [0mWP-CAB11.LHA  [0mWP-CBG10.LHA  [0mJ-HS09D.DMS   
-     [0mWP-PUC10.LHA  [0mJ-HS09H.LHA   [0mFIX-CCCL.DMS  [0mDEARK171.LHA  [0mFIX-MTFF.DMS  
-     [0mAST-DS04.DMS  [0mAMSL3525.LHA  [0mAMSL4525.LHA  [0mSLSDK525.LHA  [0mTESTP662.ZIP  
-     [0mSHWMEM32.LHA  [0mODUNA928.LHA  [0mODUNR928.LHA  [0mP96DV361.LHA  [0mP96DD361.LHA  
-     [0mREDP0959.LHA  
+[32mLast 07 Days Files in [33m>> Utilities <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m0.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m0.0 [36mMegs [33m![0m
 
-[32mLast 07 Days Files in [33m>> Abandoned Applications <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-[32mLast 07 Days Files in [33m>> /X Section <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-[32mLast 07 Days Files in [33m>> C64 <<[34m :        [0m([35mFiles[33m: [36m07[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.1[0m)
-[35mYesterdays Statistics [0m: [32m12 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.3 [36mMegs [33m![0m
-
-     [0mCFN-DRJ4.ZIP  [0mMSA-CSNK.ZIP  [0mTEDI-MIR.ZIP  [0mEX-MPGY2.ZIP  [0mLXT-BFC1.ZIP  
-     [0mLXT-BFF1.ZIP  [0mLXT-JURL.ZIP  
-
-[32mLast 07 Days Files in [33m>> Scene Stuff <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-[32mLast 07 Days Files in  [33m Chip Tunes <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-[32mLast 07 Days Files in [33m>> Requests <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-[32mLast 07 Days Files in [33m>> TOCEC Apps <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-[32mLast 07 Days Files in [33m>> ASCII & ANSI <<[34m :        [0m([35mFiles[33m: [36m01[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-     [0mDKD-APLT.LHA  
-
-[32mLast 07 Days Files in [33m>> Demo Dungeon Dir1 <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-[32mLast 07 Days Files in [33m>> Demo Dungeon Dir2 <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
-[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
-
-[44;33m  QuickNew V2.2 by Calypso/GOD & REbEL/QTX[36m Date : 10-19-25  [35m Time : 10:42:18  
+[44;33m  QuickNew V2.2 (Web)[36m Date : 11-24-25  [35m Time : 17:22:00  
 [0m
+~SP.

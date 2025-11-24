@@ -31,6 +31,9 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
   if (session.shortcuts?.clear) {
     session.shortcuts.clear();
   }
+  // Clear any leftover pagination/pause state so the next keypress is not consumed
+  session.paginatedScreen = undefined;
+  session.lastScreenHadPause = false;
 
   const shouldDisplayMenu = ((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus;
 
