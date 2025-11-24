@@ -504,7 +504,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     // Save user account (express.e:25838)
     await db.updateUser(session.user.id, session.user);
     session.inputBuffer = '';
-    session.menuPause = false;
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }

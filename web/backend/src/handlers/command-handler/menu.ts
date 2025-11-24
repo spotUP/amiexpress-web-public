@@ -19,8 +19,9 @@ import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 /**
  * Display main menu (express.e:28586)
  * menuPause controls whether we show a pause prompt before the menu; display is gated by expert/door flags.
+ * forceMenuDisplay bypasses expert-mode suppression (used by ? command).
  */
-export async function displayMainMenu(socket: any, session: BBSSession) {
+export async function displayMainMenu(socket: any, session: BBSSession, forceMenuDisplay: boolean = false) {
   const processOlmMessageQueue = getProcessOlmMessageQueue();
   const SCREEN_MENU = getScreenMenu();
   const relConfNumber = session.relConfNum || 1;
@@ -35,7 +36,7 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
   session.paginatedScreen = undefined;
   session.lastScreenHadPause = false;
 
-  const shouldDisplayMenu = ((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus;
+  const shouldDisplayMenu = forceMenuDisplay || (((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus);
 
   // Default to line input unless a MENU.keys is loaded below
   session.cmdShortcuts = false;

@@ -72,7 +72,7 @@ export async function handleQuestionMarkCommand(socket: any, session: BBSSession
 
   // In expert mode, explicitly redraw the menu and reset input state.
   session.menuPause = false;
-  await displayMainMenu(socket, session);
+  await displayMainMenu(socket, session, true);
 }
 
 /**
