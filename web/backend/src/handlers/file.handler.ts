@@ -170,8 +170,8 @@ export function displayFileList(socket: any, session: BBSSession, params: string
   const buffer = output.join('');
   if (nonStopDisplay) {
     socket.emit('ansi-output', buffer);
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     return;
   }
@@ -250,8 +250,8 @@ export function displaySelectedFileAreas(
   // Finished displaying all areas (collector path defers final prompt to caller)
   if (!collector) {
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 }
 
@@ -288,8 +288,8 @@ export async function displayFileMaintenance(socket: any, session: BBSSession, p
   }
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 // handleFileDelete() - Delete files (FM D command)
@@ -397,8 +397,8 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
   });
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
   session.tempData = undefined;
 }
 

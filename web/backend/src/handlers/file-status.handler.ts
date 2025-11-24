@@ -39,6 +39,7 @@ export class FileStatusHandler {
 
     // Call fileStatus(0) - express.e:24874
     await this.displayFileStatus(socket, session, false);
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
