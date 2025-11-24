@@ -86,7 +86,10 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', '\r\n');
 
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = true;
+  // Return to menu without an extra pause; the next keypress should redraw the menu once.
+  session.menuPause = false;
+  session.paginatedScreen = undefined;
+  session.lastScreenHadPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
@@ -161,7 +164,9 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = true;
+  session.menuPause = false;
+  session.paginatedScreen = undefined;
+  session.lastScreenHadPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
@@ -237,7 +242,9 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = true;
+  session.menuPause = false;
+  session.paginatedScreen = undefined;
+  session.lastScreenHadPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
