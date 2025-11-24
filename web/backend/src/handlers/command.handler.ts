@@ -564,6 +564,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   console.log('data:', JSON.stringify(data));
   console.log('session.state:', session.state);
   console.log('session.subState:', session.subState);
+  // If the menu was just displayed and user types a non-Enter key, immediately
+  // drop into READ_COMMAND so the first keystroke is not discarded.
+  if (
+    session.subState === LoggedOnSubState.DISPLAY_MENU &&
+    data !== '\r' &&
+    data !== '\n'
+  ) {
+    session.subState = LoggedOnSubState.READ_COMMAND;
+  }
+
   const trimmedScreenCommand = (data || '').trim();
   const isAwaitScreenRunning = session.pendingScreenCommand && session.executingScreenCommand;
   const allowScreenCommand = !!(session.executingScreenCommand && trimmedScreenCommand.length > 1);
