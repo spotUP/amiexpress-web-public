@@ -149,13 +149,11 @@ export async function handlePreviousConferenceCommand(socket: any, session: BBSS
   }
 
   // express.e:24540-24544 - Join conference or prompt if none found
-  if (newConf < 1) {
-    // No previous conference found - prompt for conference selection
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.warningLine('No previous conference available'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+ if (newConf < 1) {
+    // Mirror express.e: fall back to J prompt when no previous conference
+    const { handleJoinConferenceCommand } = require('./user-commands.handler');
+    await handleJoinConferenceCommand(socket, session, '');
+    return;
   } else {
     // Get first message base in conference
     const confMessageBases = _messageBases.filter(mb => mb.conferenceId === newConf);
@@ -195,12 +193,10 @@ export async function handleNextConferenceCommand(socket: any, session: BBSSessi
 
   // express.e:24559-24563 - Join conference or prompt if none found
   if (newConf > numConferences) {
-    // No next conference found - prompt for conference selection
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.warningLine('No next conference available'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // Mirror express.e: fall back to J prompt when no next conference
+    const { handleJoinConferenceCommand } = require('./user-commands.handler');
+    await handleJoinConferenceCommand(socket, session, '');
+    return;
   } else {
     // Get first message base in conference
     const confMessageBases = _messageBases.filter(mb => mb.conferenceId === newConf);
@@ -232,12 +228,10 @@ export async function handlePreviousMessageBaseCommand(socket: any, session: BBS
 
   // express.e:24572-24576 - Join previous message base or prompt
   if (newIndex < 0) {
-    // No previous message base - prompt for selection
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.warningLine('No previous message base available'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // Mirror express.e: fall back to JM prompt
+    const { handleJoinMessageBaseCommand } = require('./message-commands.handler');
+    handleJoinMessageBaseCommand(socket, session, '');
+    return;
   } else {
     const newMsgBase = confMessageBases[newIndex];
     await _joinConference(socket, session, currentConfId, newMsgBase.id);
@@ -266,12 +260,10 @@ export async function handleNextMessageBaseCommand(socket: any, session: BBSSess
 
   // express.e:24586-24590 - Join next message base or prompt
   if (newIndex >= confMessageBases.length) {
-    // No next message base - prompt for selection
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.warningLine('No next message base available'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // Mirror express.e: fall back to JM prompt
+    const { handleJoinMessageBaseCommand } = require('./message-commands.handler');
+    handleJoinMessageBaseCommand(socket, session, '');
+    return;
   } else {
     const newMsgBase = confMessageBases[newIndex];
     await _joinConference(socket, session, currentConfId, newMsgBase.id);
