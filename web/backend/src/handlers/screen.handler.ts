@@ -808,13 +808,18 @@ export function loadScreenFile(
     return Array.from(variants);
   };
 
-  const filenameVariations = session?.petsciiMode ? (
-    isC64Client ? [
-      ...addPetsciiVariants(`${screenName}_C64`)
-    ] : [
-      ...addPetsciiVariants(screenName)
-    ]
-  ) : addAnsiVariants(screenName);
+  const filenameVariations = (() => {
+    // Special-case BBSTITLE: try .TXT first to avoid noisy extensionless probes
+    if (screenName.toUpperCase() === 'BBSTITLE') {
+      return session?.petsciiMode
+        ? [...addPetsciiVariants(screenName)]
+        : ['BBSTITLE.TXT', 'BBSTITLE.txt', 'BBSTITLE'];
+    }
+    if (session?.petsciiMode) {
+      return isC64Client ? addPetsciiVariants(`${screenName}_C64`) : addPetsciiVariants(screenName);
+    }
+    return addAnsiVariants(screenName);
+  })();
 
   // Try each location with case-insensitive matching
   screenDebug(`[loadScreenFile] Trying ${searchLocations.length} location(s) with case-insensitive matching:`);
