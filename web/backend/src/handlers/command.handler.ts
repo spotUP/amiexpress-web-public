@@ -1145,6 +1145,15 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   // Handle substate-specific input
+  // If menu is waiting to display but the user typed a real key, drop to READ_COMMAND
+  if (
+    session.subState === LoggedOnSubState.DISPLAY_MENU &&
+    data !== '\r' &&
+    data !== '\n'
+  ) {
+    session.subState = LoggedOnSubState.READ_COMMAND;
+  }
+
   if (isDisplayFlowState(session.subState)) {
     console.log('[handleCommand] Display flow branch, subState=', session.subState);
     await advanceDisplayFlow(socket, session);
