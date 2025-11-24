@@ -244,6 +244,11 @@ export async function handleJoinConferenceCommand(
     ]));
 
     // Set state to wait for conference number input
+    // Disable MENU.keys single-key mode so numeric entry is not treated as shortcuts.
+    session.cmdShortcuts = false;
+    if (session.shortcuts) {
+      session.shortcuts.clear();
+    }
     session.subState = LoggedOnSubState.JOIN_CONF_INPUT;
     session.inputBuffer = '';
     return;
