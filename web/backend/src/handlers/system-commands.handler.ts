@@ -95,7 +95,7 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
 
   // Set session state to logoff
   session.state = BBSState.AWAIT;
-  session.subState = 'logoff' as any;
+  session.subState = LoggedOnSubState.LOGOFF;
 
   // express.e:8187 - displayScreen(SCREEN_LOGOFF)
   // Display Logoff.txt screen file which contains ~XIDOORS:who/No

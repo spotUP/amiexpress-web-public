@@ -19,6 +19,7 @@ import { ParamsUtil } from '../utils/params.util';
 import path from 'path';
 import fs from 'fs';
 import { finalizeCommand } from '../utils/command-response.util';
+import { displayMainMenu } from './command-handler/menu';
 
 import type { BBSSession } from '../index';
 
@@ -63,14 +64,15 @@ export function setDisplayFileCommandsDependencies(deps: {
 export async function handleQuestionMarkCommand(socket: any, session: BBSSession): Promise<void> {
   const isExpert = session.user?.expert === 'X';
   if (!isExpert) {
-    finalizeCommand(socket, session, 'Menu already visible');
+    // In non-expert mode the menu is already visible; nothing to do.
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
-  // Display the menu screen even in expert mode (express.e:24594-24599)
-  await _displayScreen(socket, session, 'MENU');
-
-  finalizeCommand(socket, session, 'Expert menu refreshed');
+  // In expert mode, explicitly redraw the menu and reset input state.
+  session.menuPause = false;
+  await displayMainMenu(socket, session);
 }
 
 /**

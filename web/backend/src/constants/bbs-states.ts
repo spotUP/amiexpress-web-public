@@ -23,6 +23,7 @@ export enum LoggedOnSubState {
   DISPLAY_PAGED_SCREEN = 'display_paged_screen',
   CONF_SCAN = 'conf_scan',
   DISPLAY_CONF_BULL = 'display_conf_bull',
+  LOGOFF = 'logoff',
   DISPLAY_MENU = 'display_menu',
   READ_COMMAND = 'read_command',
   READ_SHORTCUTS = 'read_shortcuts',

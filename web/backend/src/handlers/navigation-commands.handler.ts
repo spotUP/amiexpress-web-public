@@ -82,8 +82,7 @@ export function handleTimeCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize(timeString, 'cyan'));
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = true;
+  session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 

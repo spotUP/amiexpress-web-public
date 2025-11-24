@@ -85,6 +85,7 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', '\r\n');
 
+  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
@@ -159,6 +160,7 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
   }
 
   socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
@@ -234,6 +236,7 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
   }
 
   socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
@@ -493,6 +496,8 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     socket.emit('ansi-output', '\r\n');
     // Save user account (express.e:25838)
     await db.updateUser(session.user.id, session.user);
+    session.inputBuffer = '';
+    session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }

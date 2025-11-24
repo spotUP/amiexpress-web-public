@@ -686,6 +686,7 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
   // Display new files from database
   await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay);
 
+  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }

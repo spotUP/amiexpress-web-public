@@ -89,6 +89,7 @@ export class FileListingHandler {
     );
 
     // Always return to menu after listing
+    (session as any).flagPauseHandler = undefined;
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -132,6 +133,7 @@ export class FileListingHandler {
     );
 
     // Always return to menu after listing
+    (session as any).flagPauseHandler = undefined;
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.subState = LoggedOnSubState.DISPLAY_MENU;

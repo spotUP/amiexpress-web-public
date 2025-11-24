@@ -15,6 +15,7 @@ import { checkSecurity } from '../utils/acs.util';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { ParamsUtil } from '../utils/params.util';
+import { displayMainMenu } from './command-handler/menu';
 
 import type { BBSSession } from '../index';
 
@@ -103,9 +104,10 @@ export async function handleExpertModeCommand(socket: any, session: BBSSession):
     await _db.updateUser(session.user.id, { expert: session.user.expert });
   }
 
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = true;
+  // Return directly to the menu (express.e does not add an extra pause here)
+  session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
+  await displayMainMenu(socket, session);
 }
 
 /**

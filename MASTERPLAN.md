@@ -105,4 +105,11 @@ Goal: deliver a production-ready, reference-board-compatible 1:1 port of AmiExpr
 - [ ] Freeze plan status and document completion in `handoff.md`.
 
 ## Active Status
-- No items completed yet in this masterplan. Update this file with strikethroughs as tasks are finished.
+- Progress this session:
+  - `?` command now redraws the menu (expert mode) without extra text; non-expert returns to menu state.
+  - VER/WHO/WHD now emit a press-key prompt and return to the menu; New Files now emits a press-key prompt before menu return.
+  - X toggle now immediately redraws the menu without an extra pause; T returns to menu without requiring a second keypress.
+  - S now pauses with a key prompt; W exits to the menu on a single Enter (no extra pause); file listing pauses now hook into normal `command` input (no auto-timeout).
+  - ~SS_ now strips extensions (quicknew.txt no longer becomes quicknew.txt.txt), so embedded screen files should render.
+  - WORK: assign now maps to dataDir and drops a leading "bbs" path component, so paths like WORK:bbs/Screens/logoff/002.logoff resolve to the real Screens/logoff directory.
+  - Deviation inventory still pending; remaining command/state/MCI/new-user tasks stay open.

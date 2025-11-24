@@ -597,6 +597,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // If we are already logged off/awaiting and at logoff prompt, ignore stray input
+  if (session.state === BBSState.AWAIT && session.subState === LoggedOnSubState.LOGOFF) {
+    return;
+  }
+
   // If a message entry session is active but subState was lost/reset, force it back
   const messageEntry = session.tempData?.messageEntry;
   if (messageEntry && !messageSubStates.has(session.subState as string)) {
@@ -2692,7 +2697,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       } else {
         // express.e:28228 - Empty command, just redisplay menu
         console.log(' Empty command, redisplaying menu');
-        session.menuPause = true;
+        session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
       }
     } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
@@ -2865,6 +2870,11 @@ export async function runBbsCommand(socket: any, session: BBSSession, command: s
 
 // Process command with priority system (express.e:28229-28257)
 export async function processCommand(socket: any, session: BBSSession, command: string, params: string): Promise<string> {
+  // Ignore command processing if no longer logged on (e.g., after logoff)
+  if (session.state !== BBSState.LOGGEDON) {
+    return 'IGNORED';
+  }
+
   console.log(`[CommandPriority] Processing command: ${command} with params: ${params}`);
 
   // Handle sysop menu input routing

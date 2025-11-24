@@ -85,6 +85,8 @@ export class ConfigManager {
     console.log('[ConfigManager] Initialized with dataDir:', this.config.dataDir);
     console.log('[ConfigManager] process.cwd():', process.cwd());
     console.log('[ConfigManager] BBS_DATA_DIR env:', process.env.BBS_DATA_DIR || '(not set)');
+    // Emit a dedicated startup line for ops logs
+    console.log(`[CONFIG_DEBUG] dataDir=${this.config.dataDir}`);
   }
 
   private getDefaultConfig(): BBSConfig {

@@ -165,6 +165,7 @@ export function handleUserStatsCommand(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize('[F]', 'cyan') + ' Change Font\r\n');
   socket.emit('ansi-output', AnsiUtil.colorize('[Q]', 'cyan') + ' Return to Menu\r\n');
   socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }

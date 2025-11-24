@@ -56,27 +56,9 @@ export async function flagPause(
     // Wait for user input
     return new Promise((resolve) => {
       const registerListener = (handler: (input: string) => Promise<void> | void) => {
-        let timeoutId: NodeJS.Timeout | null = null;
-
-        const wrapped = async (input: string) => {
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
-          socket.off('line-input', wrapped);
-          try {
-            await handler(input);
-          } catch (error) {
-            console.error('[flagPause] line-input handler error:', error);
-            resolve(true);
-          }
-        };
-
-        timeoutId = setTimeout(() => {
-          socket.off('line-input', wrapped);
-          resolve(true);
-        }, 500);
-
-        socket.once('line-input', wrapped);
+        // We rely on normal command handling; store handler on session so callers can
+        // manually invoke it if they intercept input.
+        (session as any).flagPauseHandler = handler;
       };
 
       const promptAgain = () => {

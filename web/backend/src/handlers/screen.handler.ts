@@ -462,10 +462,8 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   const filesToDisplay: string[] = [];
 
   const normalizeScreenReference = (screenRef: string): string => {
-    if (screenRef.includes(':')) {
-      return screenRef;
-    }
-    return screenRef.replace(/\.(txt|TXT|rip|RIP)$/g, '');
+    // Keep provided extensions; only trim whitespace/terminators.
+    return screenRef.trim();
   };
   while ((ssMatch = ssRegex.exec(parsed)) !== null) {
     const filename = normalizeScreenReference(ssMatch[1].trim());
@@ -683,6 +681,9 @@ export function loadScreenFile(
     if (assignLower === 'bbs') {
       // bbs: maps to the root dataDir (not dataDir/BBS)
       basePath = baseDir;
+    } else if (assignLower === 'work') {
+      // WORK: is typically the data volume; map to dataDir
+      basePath = baseDir;
     } else if (assignLower.startsWith('node')) {
       const nodeNum = assign.match(/\d+/)?.[0] || '0';
       basePath = path.join(baseDir, `Node${nodeNum}`);
@@ -698,6 +699,12 @@ export function loadScreenFile(
     const fs = require('fs');
     let currentPath = basePath;
     const pathComponents = relativePath.split('/').filter(c => c.length > 0);
+    // If WORK: points at the data root and the first component is "bbs" (from Amiga paths),
+    // drop that component so we resolve to dataDir/Screens/...
+    if (assignLower === 'work' && pathComponents.length > 0 && pathComponents[0].toLowerCase() === 'bbs') {
+      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' from WORK: path ${relativePath}`);
+      pathComponents.shift();
+    }
     let resolved = true;
 
     for (const component of pathComponents) {
@@ -722,66 +729,94 @@ export function loadScreenFile(
     }
 
     const petsciiPath = resolvePetsciiPath(currentPath, !!session?.petsciiMode);
-    paths.push(petsciiPath);
+    // Strip a leading "bbs" path component universally to avoid creating BBS/ dirs
+    const normalized = petsciiPath.replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
+    if (normalized !== petsciiPath) {
+      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${petsciiPath} -> ${normalized}`);
+    }
+    paths.push(normalized);
     screenDebug(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${currentPath} (${resolved ? 'found' : 'not found'})`);
   } else if (screenName.includes('/')) {
-    // Relative path with slashes - try under dataDir root
-    const fsPath = path.join(baseDir, screenName.split('/').join(path.sep));
+    // Relative path with slashes - treat as dataDir-relative (no extra "Screens" prefix)
+    const fsPath = path.join(baseDir, ...screenName.split('/'));
     const resolved = findCaseInsensitive(path.dirname(fsPath), path.basename(fsPath));
-    paths.push(resolved || fsPath);
+    const normalized = (resolved || fsPath).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
+    if (normalized !== (resolved || fsPath)) {
+      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fsPath)} -> ${normalized}`);
+    }
+    paths.push(normalized);
   }
 
   // Define search directories and filenames to try (case-insensitive, AmigaOS compatible)
   // We try multiple filename variations: FILENAME.TXT, filename.txt, Filename.txt, etc.
   const searchLocations: Array<{ dir: string; desc: string }> = [];
+  const hasSlash = screenName.includes('/');
 
-  // Try conference-specific screen first (if provided)
-  // express.e uses confScreenDir which points to Conf directory
-  if (conferenceId) {
-    // Find the relative conference number (1-based position in conferences array)
-    const confIndex = conferences.findIndex(c => c.id === conferenceId);
-    if (confIndex !== -1) {
-      const relConfNum = confIndex + 1; // Convert to 1-based
-      const candidateDirs = getConferenceScreensCandidates(baseDir, relConfNum);
-      candidateDirs.forEach(candidate => {
-        searchLocations.push({ dir: candidate.dir, desc: candidate.desc });
-      });
+  // Only populate default search locations when no explicit path/assign is given.
+  if (!isAssignPath && !hasSlash) {
+    // Try conference-specific screen first (if provided)
+    // express.e uses confScreenDir which points to Conf directory
+    if (conferenceId) {
+      // Find the relative conference number (1-based position in conferences array)
+      const confIndex = conferences.findIndex(c => c.id === conferenceId);
+      if (confIndex !== -1) {
+        const relConfNum = confIndex + 1; // Convert to 1-based
+        const candidateDirs = getConferenceScreensCandidates(baseDir, relConfNum);
+        candidateDirs.forEach(candidate => {
+          searchLocations.push({ dir: candidate.dir, desc: candidate.desc });
+        });
+      }
     }
+
+    // Try node-specific screens - express.e:6580 uses nodeScreenDir which is Node0/ itself
+    // Screens can be directly in Node0/ OR in Node0/Screens/ subdirectory
+    const nodeDir = path.join(baseDir, `Node${nodeId}`);
+    searchLocations.push({ dir: nodeDir, desc: `Node${nodeId}` });
+    searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens` });
+
+    // Then try default BBS screens
+    searchLocations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
   }
-
-  // Try node-specific screens - express.e:6580 uses nodeScreenDir which is Node0/ itself
-  // Screens can be directly in Node0/ OR in Node0/Screens/ subdirectory
-  const nodeDir = path.join(baseDir, `Node${nodeId}`);
-  searchLocations.push({ dir: nodeDir, desc: `Node${nodeId}` });
-  searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens` });
-
-  // Then try default BBS screens
-  searchLocations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
 
   // Possible filename variations (case-insensitive search will handle actual matching)
   // In PETSCII mode, prefer .seq files over .TXT files
   // For real C64 clients (terminalType === 'c64'), prioritize _C64.seq variants
   const isC64Client = session?.terminalType === 'c64';
+  // Preserve explicit extensions; build variant lists depending on ANSI vs PETSCII
+  const addAnsiVariants = (name: string) => {
+    const variants = new Set<string>();
+    variants.add(name);
+    variants.add(`${name}.TXT`);
+    variants.add(`${name}.txt`);
+    variants.add(`${name}.logoff`);
+    variants.add(`${name}.logoff.txt`);
+    variants.add(`${name}.LOGOFF.TXT`);
+    return Array.from(variants);
+  };
+
+  const addPetsciiVariants = (name: string) => {
+    const variants = new Set<string>();
+    // Prefer PETSCII .seq first
+    variants.add(`${name}.seq`);
+    variants.add(`${name}.SEQ`);
+    // Also allow explicit name as-is (in case a .txt was provided)
+    variants.add(name);
+    // Fall back to ANSI text if no .seq exists
+    variants.add(`${name}.TXT`);
+    variants.add(`${name}.txt`);
+    variants.add(`${name}.logoff`);
+    variants.add(`${name}.logoff.txt`);
+    variants.add(`${name}.LOGOFF.TXT`);
+    return Array.from(variants);
+  };
+
   const filenameVariations = session?.petsciiMode ? (
     isC64Client ? [
-      `${screenName}_C64.seq`,  // C64-specific variant (40x25 layout) - HIGHEST PRIORITY for real C64
-      `${screenName}_C64.SEQ`,
-      `${screenName}.seq`,      // Standard PETSCII file
-      `${screenName}.SEQ`,
-      `${screenName}.TXT`,      // Fallback to ANSI
-      `${screenName}.txt`,
+      ...addPetsciiVariants(`${screenName}_C64`)
     ] : [
-      `${screenName}.seq`,  // PETSCII sequence files (C64/C128 format) - for modern terminals with PetMe64 font
-      `${screenName}.SEQ`,
-      `${screenName}.TXT`,  // Fallback to ANSI if no PETSCII version exists
-      `${screenName}.txt`,
+      ...addPetsciiVariants(screenName)
     ]
-  ) : [
-    `${screenName}.TXT`,  // MENU.TXT - PREFERRED in ANSI mode
-    `${screenName}.txt`,  // MENU.txt, menu.txt, Menu.txt (all matched case-insensitively)
-    `${screenName}.seq`,  // PETSCII sequence files (C64/C128 format)
-    `${screenName}.SEQ`,  // PETSCII sequence files (uppercase)
-  ];
+  ) : addAnsiVariants(screenName);
 
   // Try each location with case-insensitive matching
   screenDebug(`[loadScreenFile] Trying ${searchLocations.length} location(s) with case-insensitive matching:`);
@@ -840,7 +875,7 @@ export function loadScreenFile(
     attemptNum++;
     screenDebug(`[loadScreenFile]   [${attemptNum}] ${filePath}`);
 
-    // For assign paths (bbs:, node:), also honor security-numbered variants (LOGON20.TXT, etc.)
+    // For assign paths (bbs:, node:, work:), also honor security-numbered variants (LOGON20.TXT, etc.)
     if (isAssignPath) {
       const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
       const secPath = findSecurityScreen(baseWithoutExt, userSecLevel);
@@ -973,23 +1008,19 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     let parsed: string;
     let commands: any[] = [];
 
-    if (isPetscii) {
-      // PETSCII content is already fully converted - skip MCI/ANSI processing
-      parsed = content;
-    } else {
-      // Parse MCI codes (now returns parsed content + commands to execute)
-      const result = await parseMciCodes(content, session);
-      parsed = result.parsed;
-      commands = result.commands;
-      session.lastScreenHadPause = result.hasPause;
+    // Always parse MCI so ~SS_ and other codes work even in PETSCII screens
+    const result = await parseMciCodes(content, session);
+    parsed = result.parsed;
+    commands = result.commands;
+    session.lastScreenHadPause = result.hasPause;
 
-      // Add ESC prefix to bare ANSI sequences (Amiga screen files don't have ESC prefix)
+    // Add ESC prefix to bare ANSI sequences only for ANSI paths
+    if (!isPetscii) {
       parsed = addAnsiEscapes(parsed);
-
-      // Convert Unix line endings (\n) to BBS line endings (\r\n) for proper terminal display
-      // First normalize any existing \r\n to \n, then convert all \n to \r\n
-      parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
     }
+
+    // Normalize line endings for terminal display
+    parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
 
     // Auto-paginate long screens (e.g., >25 lines like real AmiExpress More prompt)
     const pageHeight = session?.screenHeight || 25;
