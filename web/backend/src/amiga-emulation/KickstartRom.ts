@@ -96,6 +96,16 @@ export class KickstartRom {
       });
       console.error('[ROM] Kickstart ROM:');
       possiblePaths.forEach(p => console.error(`  - ${p}`));
+      // Emit to BBS terminal if session socket is available
+      try {
+        const globalAny: any = global as any;
+        const session = globalAny?.currentBbsSession;
+        if (session?.socket) {
+          session.socket.emit('ansi-output', '\r\n\x1b[31mNo Amiga ROM found. Please install AROS ROM (free) or Kickstart ROM (commercial).\x1b[0m\r\n');
+        }
+      } catch (_) {
+        /* ignore */
+      }
       throw new Error(`No Amiga ROM found. Please install AROS ROM (free) or Kickstart ROM (commercial).`);
     }
 
