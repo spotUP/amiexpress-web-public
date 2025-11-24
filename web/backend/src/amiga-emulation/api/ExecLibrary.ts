@@ -811,15 +811,27 @@ export class ExecLibrary {
    */
   loadRealAEDoorLibrary(): boolean {
     try {
-      const libPath = path.join(process.cwd(), "Libs", "AEDoor.library");
-      console.log(`[ExecLibrary] Loading real AEDoor.library from: ${libPath}`);
+      // Try multiple candidate locations (dataDir/Libs, repo root Libs, cwd Libs)
+      const candidates: string[] = [];
+      try {
+        const { config } = require("../../config");
+        const dataDir = config.getConfig().dataDir;
+        candidates.push(path.join(dataDir, "Libs", "AEDoor.library"));
+        candidates.push(path.join(path.resolve(dataDir, ".."), "Libs", "AEDoor.library"));
+      } catch (err) {
+        // config not available in some test contexts; ignore
+      }
+      candidates.push(path.join(process.cwd(), "Libs", "AEDoor.library"));
 
-      if (!fs.existsSync(libPath)) {
-        console.log(
-          `[ExecLibrary] ERROR: AEDoor.library not found at ${libPath}`
-        );
+      const libPath = candidates.find(p => fs.existsSync(p));
+      console.log(`[ExecLibrary] Loading real AEDoor.library, candidates:`, candidates);
+
+      if (!libPath) {
+        console.log(`[ExecLibrary] ERROR: AEDoor.library not found in candidates`);
         return false;
       }
+
+      console.log(`[ExecLibrary] Using AEDoor.library from: ${libPath}`);
 
       const binary = fs.readFileSync(libPath);
       console.log(
