@@ -133,6 +133,8 @@ export async function flagPause(
           return;
         }
 
+        // Invalid input: re-prompt without clearing promise
+        socket.emit('ansi-output', '\r\n');
         socket.emit('ansi-output', prompt);
         registerListener(handleInput);
       };
