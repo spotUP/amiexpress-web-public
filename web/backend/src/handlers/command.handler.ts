@@ -564,13 +564,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   console.log('data:', JSON.stringify(data));
   console.log('session.state:', session.state);
   console.log('session.subState:', session.subState);
-  // If the menu was just displayed and user types a non-Enter key, immediately
-  // drop into READ_COMMAND so the first keystroke is not discarded.
-  if (
-    session.subState === LoggedOnSubState.DISPLAY_MENU &&
-    data !== '\r' &&
-    data !== '\n'
-  ) {
+  // If the menu was just displayed and the user pressed *anything* (including Enter),
+  // drop into READ_COMMAND so the keystroke is handled instead of being eaten by the
+  // display-flow loop. We only keep DISPLAY_MENU when handleCommand is invoked with
+  // an empty string (internal advanceDisplayFlow tick).
+  if (session.subState === LoggedOnSubState.DISPLAY_MENU && data !== '') {
     session.subState = LoggedOnSubState.READ_COMMAND;
   }
 
@@ -1145,12 +1143,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   }
 
   // Handle substate-specific input
-  // If menu is waiting to display but the user typed a real key, drop to READ_COMMAND
-  if (
-    session.subState === LoggedOnSubState.DISPLAY_MENU &&
-    data !== '\r' &&
-    data !== '\n'
-  ) {
+  // If menu is waiting to display and the user pressed any key (including Enter),
+  // immediately drop to READ_COMMAND so input is not lost to the display flow loop.
+  if (session.subState === LoggedOnSubState.DISPLAY_MENU && data !== '') {
     session.subState = LoggedOnSubState.READ_COMMAND;
   }
 
