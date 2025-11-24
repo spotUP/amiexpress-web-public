@@ -56,10 +56,17 @@ export async function flagPause(
     // Display pause prompt
     // express.e:28034
     const prompt = '\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32m(\x1b[33mf\x1b[32m)\x1b[36mlags, More\x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m/\x1b[33mns\x1b[32m)\x1b[0m? ';
+    let resolveFn: (val: boolean) => void;
+    const pausePromise = new Promise<boolean>((resolve) => {
+      resolveFn = resolve;
+    });
+    // Store promise immediately to avoid double prompt if flagPause is re-entered before setup finishes
+    session.tempData.flagPausePromise = pausePromise;
+
     socket.emit('ansi-output', prompt);
 
     // Wait for user input
-    session.tempData.flagPausePromise = new Promise((resolve) => {
+    const registerInput = () => {
       const registerListener = (handler: (input: string) => Promise<void> | void) => {
         // We rely on normal command handling; store handler on session so callers can
         // manually invoke it if they intercept input.
@@ -78,14 +85,14 @@ export async function flagPause(
         if (response === '' || response === 'Y') {
           socket.emit('ansi-output', '\x1b[1A\x1b[K');
           session.tempData.flagPausePromise = undefined;
-          resolve(true);
+          resolveFn!(true);
           return;
         }
 
         if (response === 'N') {
           socket.emit('ansi-output', '\r\n');
           session.tempData.flagPausePromise = undefined;
-          resolve(false);
+          resolveFn!(false);
           return;
         }
 
@@ -93,7 +100,7 @@ export async function flagPause(
           session.tempData.nonStopDisplayFlag = true;
           socket.emit('ansi-output', '\x1b[1A\x1b[K');
           session.tempData.flagPausePromise = undefined;
-          resolve(true);
+          resolveFn!(true);
           return;
         }
 
@@ -121,7 +128,7 @@ export async function flagPause(
             }
             socket.emit('ansi-output', '\x1b[A\x1b[K');
             session.tempData.flagPausePromise = undefined;
-            resolve(true);
+            resolveFn!(true);
           });
           return;
         }
@@ -131,8 +138,10 @@ export async function flagPause(
       };
 
       promptAgain();
-    });
-    return session.tempData.flagPausePromise;
+    };
+
+    registerInput();
+    return pausePromise;
   }
 
   // No pause needed
