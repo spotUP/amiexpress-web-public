@@ -36,32 +36,52 @@ export function setConferences(confs: Conference[]) {
   conferences = confs;
 }
 
-function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {
-  const names = [`Conf${relConfNum}`];
-  const padded = `Conf${String(relConfNum).padStart(2, '0')}`;
-  if (!names.includes(padded)) {
-    names.push(padded);
+function resolvePetsciiPath(originalPath: string, petsciiEnabled: boolean): string {
+  if (!petsciiEnabled) return originalPath;
+  if (isPetsciiSeqFile(originalPath)) return originalPath;
+  const parsed = path.parse(originalPath);
+  const seqCandidate = findCaseInsensitive(parsed.dir, `${parsed.name}.seq`);
+  if (seqCandidate) {
+    screenDebug(`[loadScreenFile] PETSCII variant preferred: ${originalPath} -> ${seqCandidate}`);
+    return seqCandidate;
   }
+  return originalPath;
+}
+
+function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {
+  // reference-board data uses unpadded ConfX; avoid padded variants to prevent Conf01 creation
+  const names: string[] = [`Conf${relConfNum}`];
 
   const results: Array<{ dir: string; desc: string }> = [];
   const seen = new Set<string>();
 
   for (const name of names) {
-    const bbsDir = path.join(baseDir, 'BBS', name, 'Screens');
-    if (!seen.has(bbsDir)) {
-      results.push({ dir: bbsDir, desc: `BBS/${name}/Screens` });
-      seen.add(bbsDir);
+    const confRootDir = path.join(baseDir, name);
+    if (!seen.has(confRootDir)) {
+      results.push({ dir: confRootDir, desc: `${name}` });
+      seen.add(confRootDir);
+    }
+    const confScreensDir = path.join(baseDir, name, 'Screens');
+    if (!seen.has(confScreensDir)) {
+      results.push({ dir: confScreensDir, desc: `${name}/Screens` });
+      seen.add(confScreensDir);
     }
 
-    const rootDir = path.join(baseDir, name, 'Screens');
-    if (!seen.has(rootDir)) {
-      results.push({ dir: rootDir, desc: `${name}/Screens` });
-      seen.add(rootDir);
-    }
   }
 
   return results;
 }
+
+// Screens that should start with a full clear (express.e shows a blank frame first)
+const SCREENS_REQUIRE_CLEAR = new Set([
+  'AWAITSCREEN',
+  'BBSTITLE',
+  'LOGON',
+  'BULL',
+  'NODE_BULL',
+  'CONF_BULL',
+  'MENU',
+]);
 
 /**
  * Parse MCI codes in screen content
@@ -336,6 +356,11 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   parsed = parsed.replace(/~SP\|/g, ' ');  // SP - Space
   parsed = parsed.replace(/~CR\|/g, '\r\n');  // CR - Carriage Return
   parsed = parsed.replace(/~NS\|/g, '');  // NS - No Space (nothing)
+  // Some screens use bare ~SP (no delimiter) to pause; strip and mark pause
+  parsed = parsed.replace(/~SP(\s|$)/g, () => {
+    hasPause = true;
+    return '';
+  });
 
   // Color codes (c0-c7, b0-b7/z0-z7, n1-n9) (express.e:5651-5735)
   // Foreground colors (c0-c7)
@@ -696,7 +721,8 @@ export function loadScreenFile(
       }
     }
 
-    paths.push(currentPath);
+    const petsciiPath = resolvePetsciiPath(currentPath, !!session?.petsciiMode);
+    paths.push(petsciiPath);
     screenDebug(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${currentPath} (${resolved ? 'found' : 'not found'})`);
   } else if (screenName.includes('/')) {
     // Relative path with slashes - try under dataDir root
@@ -785,20 +811,20 @@ export function loadScreenFile(
       if (foundPath) {
         screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${foundPath}`);
         try {
-          // Check if this is a PETSCII .seq file
-            if (isPetsciiSeqFile(foundPath)) {
-              screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
-              try {
-                const petsciiBuffer = fs.readFileSync(foundPath);
-                const content = convertPetsciiToPetMe64(petsciiBuffer);
-                return { content, isPetscii: true, filePath: foundPath };
-              } catch (error) {
-                console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
-              }
-            } else {
-              // Regular text file
-              return { content: fs.readFileSync(foundPath, 'utf-8'), isPetscii: false, filePath: foundPath };
+          const fileToUse = resolvePetsciiPath(foundPath, !!session?.petsciiMode);
+          const isPetsciiFile = isPetsciiSeqFile(fileToUse);
+          if (isPetsciiFile) {
+            screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
+            try {
+              const petsciiBuffer = fs.readFileSync(fileToUse);
+              const content = convertPetsciiToPetMe64(petsciiBuffer);
+              return { content, isPetscii: true, filePath: fileToUse };
+            } catch (error) {
+              console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             }
+          } else {
+            return { content: fs.readFileSync(fileToUse, 'utf-8'), isPetscii: false, filePath: fileToUse };
+          }
         } catch (error) {
           console.error(`[loadScreenFile]     (error reading file: ${(error as Error).message})`);
         }
@@ -834,21 +860,20 @@ export function loadScreenFile(
     }
 
     try {
-      if (fs.existsSync(filePath)) {
-        screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${filePath}`);
-        // Check if this is a PETSCII .seq file
-        if (isPetsciiSeqFile(filePath)) {
+      const candidatePath = resolvePetsciiPath(filePath, !!session?.petsciiMode);
+      if (fs.existsSync(candidatePath)) {
+        screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${candidatePath}`);
+        if (isPetsciiSeqFile(candidatePath)) {
           screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
           try {
-            const petsciiBuffer = fs.readFileSync(filePath);
+            const petsciiBuffer = fs.readFileSync(candidatePath);
             const content = convertPetsciiToPetMe64(petsciiBuffer);
-            return { content, isPetscii: true, filePath };
+            return { content, isPetscii: true, filePath: candidatePath };
           } catch (error) {
             console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
           }
         } else {
-          // Regular text file
-          return { content: fs.readFileSync(filePath, 'utf-8'), isPetscii: false, filePath };
+          return { content: fs.readFileSync(candidatePath, 'utf-8'), isPetscii: false, filePath: candidatePath };
         }
       } else {
         screenDebug(`[loadScreenFile]     (not found)`);
@@ -860,6 +885,35 @@ export function loadScreenFile(
 
   console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
   console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
+
+  if (screenName.toUpperCase() === 'AWAITSCREEN') {
+    const nodeFallbackDir = path.join(baseDir, 'Node1');
+
+    // Prefer ANSI text fallback for the await screen
+    const ansiFallback = findCaseInsensitive(nodeFallbackDir, 'bbstitle.txt') || findCaseInsensitive(nodeFallbackDir, 'bbstitle.TXT');
+    if (ansiFallback) {
+      try {
+        const content = fs.readFileSync(ansiFallback, 'utf-8');
+        screenDebug(`[loadScreenFile]  Using ANSI fallback screen ${ansiFallback}`);
+        return { content, isPetscii: false, filePath: ansiFallback };
+      } catch (error) {
+        console.error(`[loadScreenFile]     (error reading ANSI fallback screen: ${(error as Error).message})`);
+      }
+    }
+
+    const petsciiFallback = findCaseInsensitive(nodeFallbackDir, 'bbstitle.seq');
+    if (petsciiFallback) {
+      try {
+        const buffer = fs.readFileSync(petsciiFallback);
+        const content = convertPetsciiToPetMe64(buffer);
+        screenDebug(`[loadScreenFile]  Using PETSCII fallback screen ${petsciiFallback}`);
+        return { content, isPetscii: true, filePath: petsciiFallback };
+      } catch (error) {
+        console.error(`[loadScreenFile]     (error reading fallback screen: ${(error as Error).message})`);
+      }
+    }
+  }
+
   return null;
 }
 
@@ -896,6 +950,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   screenDebug(`[displayScreen] ========================================`);
 
   const isMenuScreen = screenName.toUpperCase() === 'MENU';
+  const shouldClear = SCREENS_REQUIRE_CLEAR.has(screenName.toUpperCase());
 
   // Express.e:6567 - reset cmdShortcuts before attempting to load the menu screen
   if (isMenuScreen) {
@@ -945,7 +1000,8 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
       const chunk = lines.slice(startIdx, endIdx).join('\r\n');
       const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)?' : '';
-      socket.emit(eventName, chunk + promptLine);
+      const prefix = shouldClear && startIdx === 0 ? '\x1b[2J\x1b[H' : '';
+      socket.emit(eventName, prefix + chunk + promptLine);
     };
 
     if (!session.lastScreenHadPause && lines.length > pageHeight) {
@@ -967,6 +1023,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Double-buffered display: Build complete frame buffer before sending
     // This prevents tearing and visible redraws by sending everything atomically
     const frameBuffer =
+      (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
       HIDE_CURSOR +      // Hide cursor
       '\x1b[H' +         // Move cursor to home (1,1)
       parsed +           // Screen content
@@ -976,6 +1033,20 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
     screenDebug(`[displayScreen] Emitting ${eventName} event`);
     socket.emit(eventName, frameBuffer);
+
+    // If screen requested a pause (e.g., ~SP), set a minimal pagination state
+    // so a keypress is required before continuing, without printing the raw MCI
+    if (session.lastScreenHadPause) {
+      session.paginatedScreen = {
+        lines: [''], // no additional content, just hold for a key
+        nextIndex: 1,
+        pageSize: 1,
+        eventName,
+        commands,
+      };
+      socket.emit(eventName, '\r\n(Pause)...Space To Resume: ');
+      return true;
+    }
 
     // Execute any ~XC/~XI commands found in screen file (async, non-blocking)
     if (commands.length > 0 && !runCommands) {

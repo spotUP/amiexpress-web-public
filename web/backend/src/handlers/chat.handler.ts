@@ -158,8 +158,10 @@ export function completePaging(socket: any, session: BBSSession, chatSession: Ch
   chatSession.status = 'paging'; // Wait for sysop response
 
   // Return to menu (like the end of ccom())
+  session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
-  displayMainMenu(socket, session);
+  // Let the main loop render the menu to avoid double draws
+  return;
 }
 
 /**
@@ -222,8 +224,9 @@ export function exitChat(socket: any, session: BBSSession) {
   socket.emit('ansi-output', '\r\n\x1b[32mChat session ended.\r\n');
 
   // Return to normal operation
+  session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
-  displayMainMenu(socket, session);
+  return;
 }
 
 /**

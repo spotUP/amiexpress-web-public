@@ -196,6 +196,8 @@ import {
   handleMessageInsertTextInput
 } from './message-entry.handler';
 
+import { finalizeCommand } from '../utils/command-response.util';
+
 // Import utilities
 import { AnsiUtil } from '../utils/ansi.util';
 
@@ -224,6 +226,7 @@ const displayFlowStates = new Set<LoggedOnSubState>([
   LoggedOnSubState.DISPLAY_CONF_BULL,
   LoggedOnSubState.DISPLAY_MENU,
 ]);
+console.log('[command.handler] displayFlowStates:', Array.from(displayFlowStates));
 
 function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
@@ -357,9 +360,12 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
 }
 
 function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean = false) {
-  session.displayFlowPaused = true;
-  if (forcePrompt || !session.lastScreenHadPause) {
+  // Honor express.e doPause between screens in the display flow
+  const { doPause } = require('./screen.handler');
+  try {
     doPause(socket, session);
+  } catch (error) {
+    console.error('[pauseDisplayFlow] Error during pause:', error);
   }
 }
 
@@ -414,10 +420,6 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
   try {
     while (isDisplayFlowState(session.subState)) {
       // Clear any pending pause once a key arrives
-      if (session.displayFlowPaused) {
-        session.displayFlowPaused = false;
-      }
-
       // If a previous screen queued commands, execute them before advancing
       if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
         const { runQueuedScreenCommands } = require('./screen.handler');
@@ -446,7 +448,6 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
           }
         }
         session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
-        if (session.displayFlowPaused) return;
         continue;
       }
 
@@ -458,13 +459,14 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
           }
         }
         session.subState = LoggedOnSubState.CONF_SCAN;
-        if (session.displayFlowPaused) return;
         continue;
       }
 
       if (session.subState === LoggedOnSubState.CONF_SCAN) {
         const { performConferenceScan } = require('./message-scan.handler');
         await performConferenceScan(socket, session);
+        // express.e: confScan uses nonStopMail flag but returns to DISPLAY_CONF_BULL
+        session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         continue;
       }
@@ -476,9 +478,25 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
             pauseDisplayFlow(socket, session);
           }
         }
+        // express.e: join default conference/message base without triggering mail scan again
+        const confToJoin = session.user?.confRJoin || 1;
+        const msgBaseToJoin = session.user?.msgBaseRJoin || 1;
+        if (!session.currentConf) {
+          session.currentConf = confToJoin;
+        }
+        if (!session.currentMsgBase) {
+          session.currentMsgBase = msgBaseToJoin;
+        }
+        session.blockOLM = false;
+        try {
+          const { loadFlagged, loadHistory } = require('../server/database-helpers');
+          await loadFlagged(socket, session);
+          await loadHistory(session);
+        } catch (error) {
+          console.error('[display flow] Error loading flagged/history:', error);
+        }
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
-        if (session.displayFlowPaused) return;
         continue;
       }
 
@@ -488,9 +506,18 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
         const shouldDisplayMenu = ((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus;
 
         if (shouldDisplayMenu && session.menuPause) {
-          pauseDisplayFlow(socket, session, true);
+          // express.e: menuPause triggers a pause before menu display
+          const { doPause } = require('./screen.handler');
+          doPause(socket, session);
           session.menuPause = false;
-          return;
+        }
+
+        // express.e: checkScreenClear + displayScreen(MENU) when menu is shown
+        if (shouldDisplayMenu) {
+          const { checkScreenClear } = require('./screen.handler');
+          if (typeof checkScreenClear === 'function') {
+            checkScreenClear(socket, session);
+          }
         }
 
         await menuDisplayMainMenu(socket, session);
@@ -506,7 +533,7 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
-  }
+ }
 }
 
 // ===== Exported Functions =====
@@ -1022,6 +1049,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     if (!session.inputBuffer) {
       session.inputBuffer = '';
     }
+    // Ensure shortcut mode is disabled during registration
+    session.cmdShortcuts = false;
+    if (session.shortcuts && typeof session.shortcuts.clear === 'function') {
+      session.shortcuts.clear();
+    }
 
     // Buffer characters until Enter is pressed
     if (data === '\r' || data === '\n') {
@@ -1067,6 +1099,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         case LoggedOnSubState.NEW_USER_CONFIRM:
           await newUserHandler.handleConfirmInput(socket, session, input);
           break;
+        case LoggedOnSubState.NEW_USER_REALNAME:
+          await newUserHandler.handleRealnameInput(socket, session, input);
+          break;
+        case LoggedOnSubState.NEW_USER_SEXAGE:
+          await newUserHandler.handleSexAgeInput(socket, session, input);
+          break;
         case LoggedOnSubState.NEW_USER_SCRIPT:
           await newUserHandler.handleQuestionnaireAnswer(socket, session, input);
           break;
@@ -1093,6 +1131,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle substate-specific input
   if (isDisplayFlowState(session.subState)) {
+    console.log('[handleCommand] Display flow branch, subState=', session.subState);
     await advanceDisplayFlow(socket, session);
     return;
   }
@@ -1549,14 +1588,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = data.trim().toUpperCase();
       if (input === 'Q') {
         socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
+        session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        displayMainMenu(socket, session);
-        return;
-      } else {
-        // Continue to next page
-        displayUserList(socket, session, tempData.userListPage, tempData.searchTerm);
         return;
       }
+      // Continue to next page
+      displayUserList(socket, session, tempData.userListPage, tempData.searchTerm);
+      return;
     }
 
     if (tempData.isNewFiles && tempData.searchDate) {
@@ -1585,9 +1623,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       if (isNaN(msgBaseId) || msgBaseId === 0) {
         // Empty input or invalid - return to menu
         socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
+        session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.tempData = undefined;
-        displayMainMenu(socket, session);
         return;
       }
 
@@ -1617,8 +1655,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     if (isNaN(relConfNum) || relConfNum === 0) {
       // Empty input or invalid - return to menu
       socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
+      session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
-      displayMainMenu(socket, session);
       return;
     }
 
@@ -1947,6 +1985,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
       console.log(' Conference number entered:', input);
+
+      if (input.length === 0) {
+        finalizeCommand(socket, session, 'Conference join cancelled');
+        return;
+      }
 
       // Process conference number
       const confNum = parseInt(input);
@@ -2648,11 +2691,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         }, 0);
       } else {
         // express.e:28228 - Empty command, just redisplay menu
-        // IF StrLen(cmdtext)=0 THEN RETURN RESULT_SUCCESS
         console.log(' Empty command, redisplaying menu');
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        displayMainMenu(socket, session);
       }
     } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
       // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
@@ -2745,9 +2786,12 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         return;
       }
     }
-    // After processing: Check if command changed subState (commands like R set DISPLAY_CONF_BULL to wait for keypress)
-    // If subState was changed by command, respect it. Otherwise, go to DISPLAY_MENU (express.e:28641-28642)
-    showMenuAfterCommand(socket, session, true);
+    // After processing: If still in PROCESS_COMMAND, fall back to menu (express.e:28641-28642)
+    if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
+      showMenuAfterCommand(socket, session, true);
+      return;
+    }
+    // Otherwise honor the command-changed subState (e.g., pause or door); menu loop will pick it up.
     return;
   } else if (session.subState === LoggedOnSubState.USER_STATS_MENU) {
     // Handle user stats menu input (F=Font, Q=Quit)
@@ -2779,8 +2823,17 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       session.inputBuffer += data;
     }
     return;
-  } else {
-    console.log(' Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
+   } else {
+    if (
+      session.subState === LoggedOnSubState.DISPLAY_MENU ||
+      session.subState === LoggedOnSubState.ACCOUNT_EDITOR_MENU
+    ) {
+      session.subState = LoggedOnSubState.READ_COMMAND;
+    } else {
+      console.log(' Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
+      console.log('=== handleCommand end ===\n');
+      return;
+    }
   }
   console.log('=== handleCommand end ===\n');
 }
@@ -3139,7 +3192,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
           delete session.inDoorManager;
         }
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = false;
+        session.menuPause = true;
       }
       return;
     }
@@ -3156,7 +3209,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
         if (!fs.existsSync(doorPath)) {
           socket.emit('ansi-output', '\r\n\x1b[31mGetAnswer door not found!\x1b[0m\r\n');
           session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = false;
+          session.menuPause = true;
           return;
         }
 
@@ -3171,14 +3224,14 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         socket.emit('ansi-output', '\r\n\x1b[32mGetAnswer door session completed.\x1b[0m\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = false;
+        session.menuPause = true;
       } catch (error) {
         console.error('[GA] Fatal error:', error);
         socket.emit('ansi-output', '\r\n\x1b[31mError starting GetAnswer door:\x1b[0m\r\n');
         socket.emit('ansi-output', `${(error as Error).message}\r\n`);
         socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = false;
+        session.menuPause = true;
       }
       return;
     }
@@ -3210,13 +3263,13 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         socket.emit('ansi-output', '\r\n\x1b[32mMultiTop door session completed.\x1b[0m\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = false;
+        session.menuPause = true;
       } catch (error) {
         console.error('[MULTITOP] Fatal error:', error);
         socket.emit('ansi-output', '\r\n\x1b[31mError starting MultiTop door:\x1b[0m\r\n');
         socket.emit('ansi-output', `${(error as Error).message}\r\n`);
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = false;
+        session.menuPause = true;
       }
       return;
     }

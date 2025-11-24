@@ -42,10 +42,12 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
 
   if (shouldDisplayMenu && session.menuPause) {
     doPause(socket, session);
+    session.menuPause = false;
   }
 
+  let screenDisplayed = false;
   if (shouldDisplayMenu) {
-    const screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
+    screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
 
     // Load MENU .keys if present (express.e:6567-6573)
     session.cmdShortcuts = false;
@@ -63,27 +65,26 @@ export async function displayMainMenu(socket: any, session: BBSSession) {
           session.cmdShortcuts = true;
         }
       }
-    } else {
-      session.cmdShortcuts = false;
-      if (session.shortcuts) session.shortcuts.clear();
     }
   }
+
+  // express.e: after menu display, reset doorExpertMode and emit newline
+  session.doorExpertMode = false;
+  socket.emit('ansi-output', '\b\n');
 
   if (typeof processOlmMessageQueue === 'function') {
     processOlmMessageQueue(socket, session, true);
   }
 
-  displayMenuPrompt(socket, session);
-
   // Reset doorExpertMode after menu display (express.e:28586)
   session.doorExpertMode = false;
 
+  // Always show menu prompt (express.e calls displayMenuPrompt regardless of expert/menu display)
+  displayMenuPrompt(socket, session);
+
   // Like AmiExpress: Check cmdShortcuts to determine input mode (express.e:28598-28603)
-  if (session.cmdShortcuts === false) {
-    session.subState = LoggedOnSubState.READ_COMMAND;
-  } else {
-    session.subState = LoggedOnSubState.READ_SHORTCUTS;
-  }
+  // After prompt, choose input mode based on MENU.keys
+  session.subState = session.cmdShortcuts ? LoggedOnSubState.READ_SHORTCUTS : LoggedOnSubState.READ_COMMAND;
 }
 
 /**
@@ -98,7 +99,6 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
 
   if (!config || typeof config.get !== 'function') {
     console.warn('[Menu Prompt] Config not injected; skipping menu prompt render.');
-    session.subState = LoggedOnSubState.READ_COMMAND;
     return;
   }
 
@@ -139,6 +139,4 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
     socket.emit('ansi-output', prompt);
   }
 
-  console.log(' Setting subState to READ_COMMAND');
-  session.subState = LoggedOnSubState.READ_COMMAND;
 }

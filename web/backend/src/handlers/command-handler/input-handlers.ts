@@ -599,7 +599,7 @@ async function handleProcessCommand(socket: any, session: BBSSession) {
     // Command didn't change state, so default to showing menu
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    displayMainMenu(socket, session);
+    return;
   } else {
     console.log(
       "✅ [AFTER COMMAND] subState was changed to:",
