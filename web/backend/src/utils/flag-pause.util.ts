@@ -63,8 +63,6 @@ export async function flagPause(
     // Store promise immediately to avoid double prompt if flagPause is re-entered before setup finishes
     session.tempData.flagPausePromise = pausePromise;
 
-    socket.emit('ansi-output', prompt);
-
     // Wait for user input
     const registerInput = () => {
       const registerListener = (handler: (input: string) => Promise<void> | void) => {
