@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { notifySysop } from '../utils/sysop-alert.util.js';
 
 export class KickstartRom {
   private romData: Uint8Array | null = null;
@@ -100,9 +101,10 @@ export class KickstartRom {
       try {
         const globalAny: any = global as any;
         const session = globalAny?.currentBbsSession;
-        if (session?.socket) {
-          session.socket.emit('ansi-output', '\r\n\x1b[31mNo Amiga ROM found. Please install AROS ROM (free) or Kickstart ROM (commercial).\x1b[0m\r\n');
-        }
+      notifySysop(
+        session,
+        'No Amiga ROM found. Please install AROS ROM (free) or Kickstart ROM (commercial).'
+      );
       } catch (_) {
         /* ignore */
       }

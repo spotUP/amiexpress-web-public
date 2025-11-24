@@ -31,6 +31,7 @@ export class BullsDoorHandler {
   private bullsMessageDumpCount: number = 0;
   private bullsInputScript: string[] = ["\r\n", "1\r\n", "Q\r\n"];
   private bullsScriptIndex: number = 0;
+  private handshakeValueLog: number | null = null;
 
   // Shared references (managed by parent)
   private doorInfoAddr: number = 0;
@@ -278,6 +279,9 @@ export class BullsDoorHandler {
           16
         )} set 0x6c28 -> 0x${infoPtr.toString(16)}`
       );
+      if (infoPtr === 0 && this.bullsInfoBufferAddr !== 0) {
+        this.emulator.writeMemory32(a4 + 0x6c28, this.bullsInfoBufferAddr);
+      }
     }
 
     const controlPtr = this.emulator.readMemory32(a4 + 0x6c24);
@@ -288,6 +292,11 @@ export class BullsDoorHandler {
           16
         )} set 0x6c24 -> 0x${controlPtr.toString(16)}`
       );
+      // If door cleared the control pointer, restore it so XIM can keep working
+      if (controlPtr === 0 && this.bullsControlBlockAddr !== 0) {
+        this.emulator.writeMemory32(a4 + 0x6c24, this.bullsControlBlockAddr);
+        this.syncBullsHandshakeTarget(a4);
+      }
     }
 
     const handshakePtr = this.emulator.readMemory32(a4 + 0x6c40);
@@ -298,6 +307,14 @@ export class BullsDoorHandler {
           16
         )} set 0x6c40 -> 0x${handshakePtr.toString(16)}`
       );
+      if (handshakePtr === 0 && this.bullsInfoBufferAddr !== 0) {
+        const target = this.emulator.readMemory32(
+          this.bullsInfoBufferAddr + 0xe0
+        );
+        if (target !== 0) {
+          this.emulator.writeMemory32(a4 + 0x6c40, target);
+        }
+      }
     }
 
     const nodeMirror = this.emulator.readMemory32(a4 + 0x6c2c);
@@ -483,22 +500,27 @@ export class BullsDoorHandler {
           )}`
         );
       }
+      // Ensure handshake fields stay in "host ready" state
+      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xdc, 0xff);
+      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xe0, 0x1);
+      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xe4, 0xff);
+
       const handshakeValue = this.emulator.readMemory32(
         this.bullsInfoBufferAddr + 0xdc
       );
-      if (handshakeValue !== 0xff) {
-        const handshakeLine = `[BullsDoorHandler] handshake 0xdc=0x${handshakeValue.toString(
-          16
-        )}`;
-        if (handshakeLine !== this.bullsHandshakeLog) {
-          this.bullsHandshakeLog = handshakeLine;
-          console.log(handshakeLine);
-        }
-      } else if (
-        this.bullsHandshakeLog &&
-        this.bullsHandshakeLog.includes("handshake")
-      ) {
-        this.bullsHandshakeLog = null;
+      if (handshakeValue !== this.handshakeValueLog) {
+        this.handshakeValueLog = handshakeValue;
+        const controlPtr = this.emulator.readMemory32(a4 + 0x6c24);
+        const infoPtr = this.emulator.readMemory32(a4 + 0x6c28);
+        const replyPtr = this.emulator.readMemory32(a4 + 0x6c1c);
+        const bbsPort = this.emulator.readMemory32(a4 + 0x44c);
+        console.log(
+          `[BullsDoorHandler] handshake 0xdc=0x${handshakeValue.toString(
+            16
+          )} ctrl=0x${controlPtr.toString(16)} info=0x${infoPtr.toString(
+            16
+          )} reply=0x${replyPtr.toString(16)} bbsPort=0x${bbsPort.toString(16)}`
+        );
       }
     }
   }

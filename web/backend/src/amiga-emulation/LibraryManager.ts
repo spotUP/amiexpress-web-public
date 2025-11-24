@@ -89,7 +89,10 @@ export class LibraryManager {
 
     console.log("[LibraryManager] Creating AEDoorPort for BBS data access...");
 
-    const portName = `AEDoorPort${nodeId}`;
+    // Amiga doors (including Bulls) call FindPort("AEDoorPort<n>") with 1-based node numbers.
+    // Our session nodeId may be 0-based; normalize to 1-based for public port naming.
+    const amigaNodeId = nodeId === 0 ? 1 : nodeId;
+    const portName = `AEDoorPort${amigaNodeId}`;
     const portAddr = this.execLibrary.createPublicPort(portName);
     this.execLibrary.setDoorPortAddress(portAddr);
     console.log(
@@ -102,6 +105,16 @@ export class LibraryManager {
         16
       )}`
     );
+    // Also register the raw nodeId variant if different, to satisfy any 0-based lookups.
+    if (nodeId !== amigaNodeId) {
+      const zeroBasedName = `AEDoorPort${nodeId}`;
+      const zeroBasedAddr = this.execLibrary.createPublicPort(zeroBasedName);
+      console.log(
+        `[LibraryManager] Created ${zeroBasedName} at 0x${zeroBasedAddr.toString(
+          16
+        )}`
+      );
+    }
 
     this.doorPortAddress = portAddr;
     this.aePortAddress = portAddr;

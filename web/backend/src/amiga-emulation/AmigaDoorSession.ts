@@ -182,6 +182,15 @@ export class AmigaDoorSession {
       );
       this.socket.emit("door:status", { status: "initializing" });
 
+      // Expose current BBS session globally so low-level loaders (Kickstart/AEDoor) can
+      // emit terminal warnings when critical assets are missing.
+      try {
+        const globalAny: any = global as any;
+        globalAny.currentBbsSession = this.config.bbsSession;
+      } catch (_) {
+        /* ignore */
+      }
+
       // Initialize emulator (16MB for full 24-bit address space)
       this.emulator = new MoiraEmulator(16 * 1024 * 1024);
       await this.emulator.initialize();
@@ -250,7 +259,8 @@ export class AmigaDoorSession {
         this.config,
         this.bullsHandler,
         this.libraryManager,
-        this.doorLoader
+        this.doorLoader,
+        this.messageHandler
       );
       this.lifecycleManager.setLibraryTraps(this.sharedState.libraryTraps);
       this.lifecycleManager.setXIMProtocol(this.sharedState.ximProtocol);
@@ -417,6 +427,16 @@ export class AmigaDoorSession {
     console.log("[AmigaDoorSession] 🔄 Terminating refactored door session...");
 
     this.isRunning = false;
+
+    // Clear global session pointer if we set it
+    try {
+      const globalAny: any = global as any;
+      if (globalAny.currentBbsSession === this.config.bbsSession) {
+        globalAny.currentBbsSession = undefined;
+      }
+    } catch (_) {
+      /* ignore */
+    }
 
     // Terminate through Lifecycle Manager
     if (this.lifecycleManager) {

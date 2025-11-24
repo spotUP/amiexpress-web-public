@@ -11,6 +11,7 @@
 import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
 import * as path from "path";
+import { notifySysop } from "../../utils/sysop-alert.util";
 
 /**
  * ExecBase structure (616 bytes for V36+)
@@ -829,13 +830,10 @@ export class ExecLibrary {
     if (!libPath) {
       const msg = `[ExecLibrary] ERROR: AEDoor.library not found in candidates`;
       console.log(msg);
-      // If we have a BBS session socket, notify sysop in terminal
       try {
         const globalAny: any = global as any;
         const session = globalAny?.currentBbsSession;
-        if (session?.socket) {
-          session.socket.emit('ansi-output', `\r\n\x1b[31m${msg}\x1b[0m\r\n`);
-        }
+        notifySysop(session, msg);
       } catch (_) {
         /* ignore */
       }
@@ -1187,7 +1185,8 @@ export class ExecLibrary {
 
     // CORRECT IMPLEMENTATION: Search for port in public registry
     // FindPort() should NOT create ports - it only searches for existing ones
-    const portAddr = this.publicPorts.get(name.toLowerCase());
+    const normalized = name.toLowerCase();
+    let portAddr = this.publicPorts.get(normalized);
 
     if (portAddr !== undefined) {
       console.log(
@@ -1832,12 +1831,13 @@ export class ExecLibrary {
 
     // If this is an AEDoorPort, invoke callback for trap-based message processing
     // ONLY invoke for messages TO AEDoorPort (name check), not reply ports
-    const isAEDoorPort = port.name?.startsWith("AEDoorPort");
+    const isAEDoorPort = port.name?.toLowerCase().startsWith("aedoorport");
     const isDoorTaskPort = originalPortAddr === this.currentTask.msgPort;
+    const isBullsReplyPort = port.name?.toLowerCase().startsWith("doorreplyport");
     if (
       !suppressDoorCallback &&
       this.doorMessageCallback &&
-      (isAEDoorPort || isDoorTaskPort)
+      (isAEDoorPort || isDoorTaskPort || isBullsReplyPort)
     ) {
       const label = isAEDoorPort ? port.name ?? "AEDoorPort" : "Door Task Port";
       console.log(

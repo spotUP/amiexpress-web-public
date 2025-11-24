@@ -9,6 +9,7 @@ import { ExecLibrary } from "./api/ExecLibrary.js";
 import { DoorConfig } from "./DoorTypes.js";
 import * as fs from "fs";
 import * as path from "path";
+import { notifySysop } from "../utils/sysop-alert.util.js";
 
 export class DoorLoader {
   private emulator: MoiraEmulator;
@@ -35,7 +36,21 @@ export class DoorLoader {
    */
   async loadDoor(): Promise<void> {
     // Read door binary
-    const binary = fs.readFileSync(this.config.executablePath);
+    let binary: Buffer;
+    try {
+      binary = fs.readFileSync(this.config.executablePath);
+    } catch (error) {
+      console.error(
+        `[DoorLoader] ERROR reading door executable: ${
+          (error as Error).message
+        }`
+      );
+      notifySysop(
+        this.config.bbsSession,
+        `[DoorLoader] Door file missing: ${this.config.executablePath}`
+      );
+      throw error;
+    }
     console.log(`[DoorLoader] Door binary size: ${binary.length} bytes`);
 
     // Parse Amiga HUNK format

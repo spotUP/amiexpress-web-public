@@ -11,6 +11,7 @@ import { BullsDoorHandler } from "./BullsDoorHandler.js";
 import { DoorConfig, DoorConstants } from "../DoorTypes.js";
 import { LibraryManager } from "../LibraryManager.js";
 import { DoorLoader } from "../DoorLoader.js";
+import { DoorMessageHandler } from "./DoorMessageHandler.js";
 
 export interface ExecutionState {
   iterationCount: number;
@@ -53,6 +54,7 @@ export class DoorLifecycleManager {
   private bullsHandler: BullsDoorHandler;
   private libraryManager: LibraryManager;
   private doorLoader: DoorLoader;
+  private messageHandler: DoorMessageHandler | null = null;
 
   // Execution state
   private executionState: ExecutionState;
@@ -77,7 +79,8 @@ export class DoorLifecycleManager {
     config: DoorConfig,
     bullsHandler: BullsDoorHandler,
     libraryManager: LibraryManager,
-    doorLoader: DoorLoader
+    doorLoader: DoorLoader,
+    messageHandler: DoorMessageHandler | null
   ) {
     this.emulator = emulator;
     this.socket = socket;
@@ -85,6 +88,7 @@ export class DoorLifecycleManager {
     this.bullsHandler = bullsHandler;
     this.libraryManager = libraryManager;
     this.doorLoader = doorLoader;
+    this.messageHandler = messageHandler;
 
     this.lifecycleConfig = {
       timeout: config.timeout || 300,
@@ -227,9 +231,14 @@ export class DoorLifecycleManager {
       return;
     }
 
+    // If we haven't injected the Bulls reply/data pointers yet, retry once A4 is valid.
+    const a4 = this.emulator.getRegister(12);
+    if (!this.bullsHandler.hasBullsReplyPortBeenInjected() && a4 !== 0) {
+      this.bullsHandler.injectBullsReplyPort();
+    }
+
     // 🔥 CRITICAL BULLS FIX: Force A4=0x0984 when stuck at PC=0x6C24 main loop
     if (pc === 0x6c24) {
-      const a4 = this.emulator.getRegister(12);
       if (a4 === 0) {
         console.log(
           `[DoorLifecycleManager] 🔥 PC=0x6c24 A4=0x0 → FORCING A4=0x0984`
@@ -242,6 +251,7 @@ export class DoorLifecycleManager {
     this.bullsHandler.logBullsPcState(pc);
     this.bullsHandler.logBullsHandshakeState(pc);
     this.bullsHandler.monitorBullsPointers(pc);
+    this.bullsHandler.refreshBullsDoorPointers();
 
     // Bulls ROM return handling
     if (
@@ -290,6 +300,8 @@ export class DoorLifecycleManager {
     );
     this.executionState.startupMessageSent = true;
     await this.sendStartupMessage();
+    // Simulate an initial Enter key so Bulls can proceed past CLI prompts if it needs stdin
+    this.ximProtocol?.queueInput("\r");
     this.bullsHandler.injectBullsReplyPort();
   }
 
@@ -639,11 +651,24 @@ export class DoorLifecycleManager {
   }
 
   private async sendStartupMessage(): Promise<void> {
-    // Placeholder - would delegate to message handler
     console.log(
       "[DoorLifecycleManager] === SENDING STARTUP MESSAGE TO DOOR ==="
     );
     this.executionState.startupMessageSent = true;
+    if (this.messageHandler) {
+      try {
+        this.messageHandler.sendStartupMessage();
+      } catch (err) {
+        console.error(
+          "[DoorLifecycleManager] Error sending startup message:",
+          err
+        );
+      }
+    } else {
+      console.warn(
+        "[DoorLifecycleManager] No DoorMessageHandler available for startup message"
+      );
+    }
   }
 
   private forceROMReturn(): boolean {

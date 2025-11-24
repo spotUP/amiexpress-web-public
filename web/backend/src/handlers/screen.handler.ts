@@ -16,6 +16,7 @@ import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
 import { findCaseInsensitive } from '../utils/fs-amiga.util';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
+import { notifySysop } from '../utils/sysop-alert.util';
 
 const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG === '1';
 const screenDebug = (...args: any[]) => {
@@ -1147,14 +1148,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     console.error(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
     console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
     console.error(`[displayScreen] ========================================`);
-    try {
-      const targetSocket = (session as any).socket;
-      if (targetSocket) {
-        targetSocket.emit('ansi-output', `\r\n\x1b[31mScreen not found: ${screenName}\x1b[0m\r\n`);
-      }
-    } catch (_) {
-      /* ignore */
-    }
+    notifySysop(session, `Screen not found: ${screenName}`);
     session.lastScreenFilePath = undefined;
     return false;
   }
