@@ -2042,15 +2042,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       const firstMsgBaseId = confMessageBases[0].id;
       await joinConference(socket, session, confId, firstMsgBaseId);
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
+        socket.emit('ansi-output', '\b \b');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer = (session.inputBuffer || '') + data;
-      // Client handles character echo
+      socket.emit('ansi-output', data);
     }
     return;
   }

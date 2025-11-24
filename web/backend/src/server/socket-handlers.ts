@@ -212,11 +212,14 @@ function registerCommandHandler(socket: Socket) {
       // Handle backspace
       if (data === '\x7f' || data === '\b') {
         (session as any).flagPauseBuffer = ((session as any).flagPauseBuffer as string).slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
         return;
       }
 
       // Append printable characters
       (session as any).flagPauseBuffer += data;
+        // Echo the character so the user sees input
+        socket.emit('ansi-output', data);
       return;
     }
 

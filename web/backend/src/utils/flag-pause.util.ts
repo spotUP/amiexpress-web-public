@@ -59,6 +59,7 @@ export async function flagPause(
         // We rely on normal command handling; store handler on session so callers can
         // manually invoke it if they intercept input.
         (session as any).flagPauseHandler = handler;
+        (session as any).flagPauseBuffer = '';
       };
 
       const promptAgain = () => {

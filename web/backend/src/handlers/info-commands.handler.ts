@@ -506,6 +506,8 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     session.inputBuffer = '';
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
+    const { displayMainMenu } = require('./command-handler/menu');
+    await displayMainMenu(socket, session, false);
     return;
   }
 
