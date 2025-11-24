@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 
 import { config } from '../config';
 import { findCaseInsensitive } from '../utils/fs-amiga.util';
+import { writeQuickNewScreen } from '../utils/quicknew-generator';
 
 function resolveAssign(p: string): string {
   const lower = p.toLowerCase();
@@ -143,6 +144,17 @@ async function executeLine(rawLine: string): Promise<void> {
   const program = parts[0].toLowerCase();
   if (program === '.key' || program === 'key') {
     // Reserved directive in AmiExpress batch files; ignore in this implementation
+    return;
+  }
+
+  // Special-case QuickNew: regenerate quicknew screen from DB if the door is missing
+  if (program.includes('quicknew')) {
+    try {
+      await writeQuickNewScreen(1);
+      console.log('[BatchScheduler] QuickNew screen regenerated (conf 1)');
+    } catch (err: any) {
+      console.warn('[BatchScheduler] QuickNew generation failed:', err?.message || err);
+    }
     return;
   }
 
