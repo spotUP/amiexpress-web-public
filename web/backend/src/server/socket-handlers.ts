@@ -218,8 +218,8 @@ function registerCommandHandler(socket: Socket) {
 
       // Append printable characters
       (session as any).flagPauseBuffer += data;
-        // Echo the character so the user sees input
-        socket.emit('ansi-output', data);
+      // Echo the character so the user sees input
+      socket.emit('ansi-output', data);
       return;
     }
 

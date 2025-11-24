@@ -48,13 +48,18 @@ export async function flagPause(
 
     session.tempData.lineCount = 0;
 
+    // If a pause prompt is already active, wait for it instead of spawning another
+    if (session.tempData.flagPausePromise) {
+      return session.tempData.flagPausePromise;
+    }
+
     // Display pause prompt
     // express.e:28034
     const prompt = '\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32m(\x1b[33mf\x1b[32m)\x1b[36mlags, More\x1b[32m(\x1b[33mY\x1b[32m/\x1b[33mn\x1b[32m/\x1b[33mns\x1b[32m)\x1b[0m? ';
     socket.emit('ansi-output', prompt);
 
     // Wait for user input
-    return new Promise((resolve) => {
+    session.tempData.flagPausePromise = new Promise((resolve) => {
       const registerListener = (handler: (input: string) => Promise<void> | void) => {
         // We rely on normal command handling; store handler on session so callers can
         // manually invoke it if they intercept input.
@@ -72,12 +77,14 @@ export async function flagPause(
 
         if (response === '' || response === 'Y') {
           socket.emit('ansi-output', '\x1b[1A\x1b[K');
+          session.tempData.flagPausePromise = undefined;
           resolve(true);
           return;
         }
 
         if (response === 'N') {
           socket.emit('ansi-output', '\r\n');
+          session.tempData.flagPausePromise = undefined;
           resolve(false);
           return;
         }
@@ -85,6 +92,7 @@ export async function flagPause(
         if (response === 'NS') {
           session.tempData.nonStopDisplayFlag = true;
           socket.emit('ansi-output', '\x1b[1A\x1b[K');
+          session.tempData.flagPausePromise = undefined;
           resolve(true);
           return;
         }
@@ -112,6 +120,7 @@ export async function flagPause(
               socket.emit('ansi-output', `\x1b[32mFlagged: ${trimmed}\x1b[0m\r\n`);
             }
             socket.emit('ansi-output', '\x1b[A\x1b[K');
+            session.tempData.flagPausePromise = undefined;
             resolve(true);
           });
           return;
@@ -123,6 +132,7 @@ export async function flagPause(
 
       promptAgain();
     });
+    return session.tempData.flagPausePromise;
   }
 
   // No pause needed
