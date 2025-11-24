@@ -188,6 +188,38 @@ function registerCommandHandler(socket: Socket) {
       return;
     }
 
+    // Intercept pause prompts (flagPause) before any other handling
+    if ((session as any).flagPauseHandler) {
+      // Accumulate line input for pause prompts
+      if (!(session as any).flagPauseBuffer) {
+        (session as any).flagPauseBuffer = '';
+      }
+
+      // Treat CR/LF as submission
+      if (data === '\r' || data === '\n') {
+        const handler = (session as any).flagPauseHandler;
+        const buffer = (session as any).flagPauseBuffer;
+        // Clear buffer before invoking handler; handler may register a new one
+        (session as any).flagPauseBuffer = '';
+        // If handler persists, clear it after invocation
+        handler(buffer);
+        if ((session as any).flagPauseHandler === handler) {
+          (session as any).flagPauseHandler = undefined;
+        }
+        return;
+      }
+
+      // Handle backspace
+      if (data === '\x7f' || data === '\b') {
+        (session as any).flagPauseBuffer = ((session as any).flagPauseBuffer as string).slice(0, -1);
+        return;
+      }
+
+      // Append printable characters
+      (session as any).flagPauseBuffer += data;
+      return;
+    }
+
     console.log('Session state:', session.state, 'subState:', session.subState);
     console.log('Input buffer:', JSON.stringify(session.inputBuffer));
 
