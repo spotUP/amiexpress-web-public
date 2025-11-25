@@ -4,6 +4,7 @@ import { CanvasAddon } from '@xterm/addon-canvas';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
+import Zmodem from 'zmodem.js/src/zmodem_browser';
 
 interface BBSTerminalProps {
   /** BBS backend URL (defaults to auto-detect based on environment) */
@@ -27,6 +28,8 @@ export interface BBSTerminalRef {
   sendCommand: (command: string) => void;
   getSocket: () => Socket | null;
   getTerminal: () => Terminal | null;
+  startDownload: (amigaPath: string) => Promise<void>;
+  startUpload: (amigaPath: string, file: File) => Promise<void>;
 }
 
 /**
@@ -67,6 +70,98 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
   const normalFont = useRef<string>('mosoul, "Courier New", monospace');
+  const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
+    direction: null,
+    paths: [],
+  });
+  const zmodemSentry = useRef<any | null>(null);
+  const zmodemSession = useRef<any | null>(null);
+  const pendingUploadFiles = useRef<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const resetZmodem = () => {
+    zmodemSession.current = null;
+    zmodemSentry.current = null;
+    transferState.current = { direction: null, paths: [] };
+    pendingUploadFiles.current = [];
+  };
+
+  const sendPendingFiles = (session?: any) => {
+    const active = session || zmodemSession.current;
+    if (!active) return;
+    if (!pendingUploadFiles.current.length) {
+      terminalInstance.current?.writeln?.('\r\nNo upload file queued.\r\n');
+      active.close?.();
+      return;
+    }
+    Zmodem.Browser.send_files(active, pendingUploadFiles.current, {})
+      .then(() => active.close?.())
+      .catch((err: any) => console.error('[ZMODEM] send_files failed:', err));
+  };
+
+  const handleZmodemDetection = (detection: any) => {
+    let zsession: any;
+    try {
+      zsession = detection.confirm();
+    } catch (err) {
+      console.error('[ZMODEM] Detection confirm failed:', err);
+      return;
+    }
+
+    zmodemSession.current = zsession;
+
+    zsession.on('session_end', () => {
+      resetZmodem();
+    });
+
+    if (zsession.type === 'receive') {
+      zsession.on('offer', (xfer: any) => {
+        const details = xfer.get_details ? xfer.get_details() : {};
+        const name = details.name || 'download.bin';
+        xfer.accept()
+          .then(() => {
+            const payloads = xfer.get_payloads ? xfer.get_payloads() : [];
+            Zmodem.Browser.save_to_disk(payloads, name);
+          })
+          .catch((err: any) => {
+            console.error('[ZMODEM] Accept failed:', err);
+          });
+      });
+      zsession.start();
+    } else if (zsession.type === 'send') {
+      sendPendingFiles(zsession);
+    }
+  };
+
+  const beginZmodem = (direction: 'upload' | 'download', paths?: string[]) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    transferState.current = { direction, paths: paths || [] };
+    const sender = (octets: any) => {
+      socket.emit('transfer-raw:data', new Uint8Array(octets));
+    };
+
+    zmodemSentry.current = new Zmodem.Sentry({
+      to_terminal: () => {
+        // Suppress raw noise in UI; ZMODEM takes over the channel.
+      },
+      on_detect: handleZmodemDetection,
+      on_retract: () => {},
+      sender,
+    });
+
+    socket.emit('transfer-raw:start', { direction });
+
+    if (direction === 'upload') {
+      try {
+        const hdr = Zmodem.Header.build('ZRQINIT');
+        sender(new Uint8Array(hdr.to_hex()));
+      } catch (err) {
+        console.error('[ZMODEM] Failed to send ZRQINIT from client:', err);
+      }
+    }
+  };
 
   // Expose methods to parent components
   useImperativeHandle(ref, () => ({
@@ -80,6 +175,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     },
     getSocket: () => socketRef.current,
     getTerminal: () => terminalInstance.current,
+    startDownload: async (_amigaPath: string) => {
+      console.warn('[Terminal] Downloads start from the BBS. Awaiting transfer-raw:init.');
+    },
+    startUpload: async (_amigaPath: string, file: File) => {
+      pendingUploadFiles.current = [file];
+      if (zmodemSession.current && zmodemSession.current.type === 'send') {
+        sendPendingFiles(zmodemSession.current);
+      }
+    },
   }));
 
   useEffect(() => {
@@ -196,6 +300,29 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       onConnectionError?.(error);
+    });
+
+    socket.on('transfer-raw:init', (payload: any) => {
+      beginZmodem(payload?.direction || 'download', payload?.paths || []);
+    });
+
+    socket.on('transfer-raw:data', (data: ArrayBuffer | Uint8Array) => {
+      if (!zmodemSentry.current) return;
+      const view =
+        data instanceof ArrayBuffer
+          ? new Uint8Array(data)
+          : data instanceof Uint8Array
+            ? data
+            : new Uint8Array(data as any);
+      zmodemSentry.current.consume(view);
+    });
+
+    socket.on('transfer-raw:complete', () => {
+      resetZmodem();
+    });
+
+    socket.on('transfer-raw:cancelled', () => {
+      resetZmodem();
     });
 
     socket.on('disconnect', (reason: string) => {
@@ -549,6 +676,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       doorReadyMap.current = {};
       doorMessageBuffer.current = {};
       doorScripts.current = {};
+      transferState.current = { direction: null, paths: [] };
     };
   }, [fontSize, backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
 

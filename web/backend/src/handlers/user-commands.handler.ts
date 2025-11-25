@@ -18,6 +18,10 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 import { normalizeForComparison } from '../utils/input-normalizer.util';
 import { finalizeCommand } from '../utils/command-response.util';
 import type { BBSSession } from '../index';
+import { BBSPaths } from '../utils/bbs-paths.util';
+import { ZmodemTransferManager, TransferTransport } from '../services/zmodem-transfer.service';
+import { flaggedFilesManager } from '../services/FlaggedFilesManager';
+import * as path from 'path';
 
 interface Conference {
   id: number;
@@ -63,6 +67,121 @@ export function setUserCommandsDependencies(deps: {
   _displayScreen = deps.displayScreen;
   _displayUploadInterface = deps.displayUploadInterface;
   _displayDownloadInterface = deps.displayDownloadInterface;
+}
+
+function getTransferTransport(session: BBSSession): TransferTransport {
+  const transportType: TransferTransport['type'] =
+    (session as any).connectionType === 'ssh'
+      ? 'ssh'
+      : (session as any).connectionType === 'telnet'
+        ? 'telnet'
+        : 'web';
+
+  const send =
+    (session as any).transferRawSend ||
+    ((buf: Buffer) => {
+      /* socket layer will be provided */
+    });
+
+  return { type: transportType, send };
+}
+
+function startZmodemUpload(socket: any, session: BBSSession): void {
+  const bbsRoot =
+    (session as any).bbsPath ||
+    process.env.BBS_DATA_DIR ||
+    path.resolve(process.cwd());
+  const paths = new BBSPaths(bbsRoot);
+  const playpen = paths.node(session.nodeId || 0).playpen();
+
+  try {
+    const fs = require('fs');
+    fs.mkdirSync(playpen, { recursive: true });
+  } catch (err) {
+    console.error('[ZMODEM] Failed to ensure playpen:', err);
+  }
+
+  const transport = getTransferTransport(session);
+  if (!transport.send) {
+    transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+  }
+
+  const manager = new ZmodemTransferManager({
+    session,
+    transport,
+    direction: 'upload',
+    paths: [playpen],
+    onComplete: (ok, detail) => {
+      const list = (detail?.received || []).map((p) => path.basename(p)).join(', ');
+      socket.emit(
+        'ansi-output',
+        `\r\n${ok ? 'Upload complete' : 'Upload aborted'}${list ? `: ${list}` : ''}\r\n`
+      );
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.menuPause = true;
+    },
+  });
+
+  (session as any).transferRawActive = true;
+  (session as any).transferRawSink = (buf: Buffer) => manager.handleInput(buf);
+  (session as any).transferRawSend = transport.send;
+  (session as any).transferManager = manager;
+
+  if (transport.type === 'web') {
+    socket.emit('transfer-raw:init', {
+      direction: 'upload',
+      paths: [playpen],
+    });
+  } else {
+    socket.emit('ansi-output', `\r\nReady to receive via ZMODEM. Send with rz now.\r\n`);
+  }
+
+  manager.start();
+}
+
+function startZmodemDownload(socket: any, session: BBSSession, files: string[]): void {
+  if (!files || files.length === 0) {
+    socket.emit('ansi-output', '\r\nNo files available for download.\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  const transport = getTransferTransport(session);
+  if (!transport.send) {
+    transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+  }
+
+  const manager = new ZmodemTransferManager({
+    session,
+    transport,
+    direction: 'download',
+    paths: files,
+    onComplete: (ok, detail) => {
+      const list = (detail?.sent || files).map((p) => path.basename(p)).join(', ');
+      socket.emit(
+        'ansi-output',
+        `\r\n${ok ? 'Download complete' : 'Download aborted'}${list ? `: ${list}` : ''}\r\n`
+      );
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.menuPause = true;
+    },
+  });
+
+  (session as any).transferRawActive = true;
+  (session as any).transferRawSink = (buf: Buffer) => manager.handleInput(buf);
+  (session as any).transferRawSend = transport.send;
+  (session as any).transferManager = manager;
+
+  if (transport.type === 'web') {
+    socket.emit('transfer-raw:init', {
+      direction: 'download',
+      paths: files,
+    });
+  } else {
+    socket.emit('ansi-output', `\r\nStarting ZMODEM send... (sz)\r\n`);
+  }
+
+  manager.start();
 }
 
 function shouldShowJoinConferenceList(screenPath?: string): boolean {
@@ -304,11 +423,8 @@ export function handleUploadCommand(socket: any, session: BBSSession): void {
   // express.e:25649 - setEnvStat(ENV_UPLOADING)
   console.log('[ENV] Uploading');
 
-  // express.e:25651-25655 - Background file check (web version doesn't need this)
-  // express.e:25656 - stat:=uploadaFile(0,cmdcode,FALSE)
-
-  // Display upload interface (calls displayUploadInterface from file.handler.ts)
-  _displayUploadInterface(socket, session, '');
+  // Start a ZMODEM receive into the node playpen (mirrors uploadaFile -> fileReceive path).
+  startZmodemUpload(socket, session);
 }
 
 /**
@@ -327,8 +443,15 @@ export function handleDownloadCommand(socket: any, session: BBSSession, params: 
   // express.e:24855 - setEnvStat(ENV_DOWNLOADING)
   console.log('[ENV] Downloading');
 
+  // If user has flagged files, send them via ZMODEM; otherwise fall back to download interface.
+  const userId = session.user?.id;
+  const flagged = userId ? flaggedFilesManager.getFiles(userId) : [];
+  if (flagged && flagged.length > 0) {
+    startZmodemDownload(socket, session, flagged.map((f) => f.filePath));
+    return;
+  }
+
   // express.e:24856 - beginDLF(cmdcode,params)
-  // Display download interface (calls displayDownloadInterface from file.handler.ts)
   _displayDownloadInterface(socket, session, params);
 }
 

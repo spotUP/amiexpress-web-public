@@ -10,6 +10,9 @@ import { ACSPermission } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
+import { BBSPaths } from '../utils/bbs-paths.util';
+import { ZmodemTransferManager, TransferTransport } from '../services/zmodem-transfer.service';
+import * as path from 'path';
 
 // Dependencies (injected)
 let _setEnvStat: any;
@@ -96,37 +99,65 @@ export function handleZmodemUploadCommand(socket: any, session: BBSSession): voi
   socket.emit('ansi-output', 'This command starts an immediate Zmodem upload.\r\n');
   socket.emit('ansi-output', '\r\n');
 
-  // Original AmiExpress (express.e:25612-25618):
-  // - Checks if BGFILECHECK is enabled for remote logon
-  // - Calls uploadaFile(1, cmdcode, FALSE) where 1 = Zmodem protocol
-  // - Returns RESULT_GOODBYE if modem should hang up
-  // Web version: Show file area selection
-
-  // Check if there are file directories to upload to
-  const uploadFileAreas = _fileAreas.filter((area: any) => area.conferenceId === session.currentConf);
-  if (uploadFileAreas.length === 0) {
-    socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
+  // Start ZMODEM receive directly into the node playpen (matches express.e uploadaFile -> fileReceive path).
+  const bbsRoot =
+    (session as any).bbsPath ||
+    process.env.BBS_DATA_DIR ||
+    path.resolve(process.cwd());
+  const paths = new BBSPaths(bbsRoot);
+  const playpen = paths.node(session.nodeId || 0).playpen();
+  try {
+    const fs = require('fs');
+    fs.mkdirSync(playpen, { recursive: true });
+  } catch (err) {
+    console.error('[ZMODEM] Failed to ensure playpen:', err);
   }
 
-  socket.emit('ansi-output', 'Available file areas:\r\n');
-  uploadFileAreas.forEach((area: any, index: number) => {
-    socket.emit('ansi-output', `${index + 1}. ${area.name} - ${area.description}\r\n`);
+  const transportType: TransferTransport['type'] =
+    (session as any).connectionType === 'ssh'
+      ? 'ssh'
+      : (session as any).connectionType === 'telnet'
+        ? 'telnet'
+        : 'web';
+
+  const sender =
+    (session as any).transferRawSend ||
+    ((buf: Buffer) => socket.emit('transfer-raw:data', buf));
+
+  const manager = new ZmodemTransferManager({
+    session,
+    transport: {
+      type: transportType,
+      send: sender,
+    },
+    direction: 'upload',
+    paths: [playpen],
+    onComplete: (ok, detail) => {
+      const list = (detail?.received || []).map((p) => path.basename(p)).join(', ');
+      socket.emit(
+        'ansi-output',
+        `\r\n${ok ? 'Upload complete' : 'Upload aborted'}${list ? `: ${list}` : ''}\r\n`
+      );
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.menuPause = true;
+    },
   });
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.complexPrompt([
-    { text: 'Select file area ', color: 'white' },
-    { text: `(1-${uploadFileAreas.length})`, color: 'cyan' },
-    { text: ' or press Enter to cancel: ', color: 'white' }
-  ]));
+  (session as any).transferRawActive = true;
+  (session as any).transferRawSink = (buf: Buffer) => manager.handleInput(buf);
+  (session as any).transferRawSend = sender;
+  (session as any).transferManager = manager;
 
-  session.subState = LoggedOnSubState.FILE_AREA_SELECT;
-  session.tempData = { rzUploadMode: true, fileAreas: uploadFileAreas };
+  if (transportType === 'web') {
+    socket.emit('transfer-raw:init', {
+      direction: 'upload',
+      paths: [playpen],
+    });
+  } else {
+    socket.emit('ansi-output', `\r\nReady to receive via ZMODEM. Send with rz now.\r\n`);
+  }
+
+  manager.start();
 }
 
 /**
