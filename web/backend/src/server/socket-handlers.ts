@@ -23,6 +23,9 @@ import { exitChat, sendChatMessage, acceptChat } from '../handlers/chat.handler'
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { runSamiLogUpdate } from '../services/SamiLogRunner';
+import { BBSPaths } from '../utils/bbs-paths.util';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Register all Socket.IO event handlers for a socket connection
@@ -188,6 +191,15 @@ function registerCommandHandler(socket: Socket) {
       return;
     }
 
+    // If raw transfer mode is active, bypass normal command handling
+    if ((session as any).transferRawActive) {
+      const sink = (session as any).transferRawSink;
+      if (sink) {
+        sink(Buffer.from(data, 'latin1'));
+      }
+      return;
+    }
+
     // Intercept pause prompts (flagPause) before any other handling
     if ((session as any).flagPauseHandler) {
       // Accumulate line input for pause prompts
@@ -267,6 +279,139 @@ function registerCommandHandler(socket: Socket) {
       handleCommand(socket, session, char);
     }
     console.log('=== COMMAND PROCESSED ===\n');
+  });
+
+  // Binary transfer scaffold (upload/download via socket chunks)
+  socket.on('transfer:start', (payload: any, ack?: (resp: any) => void) => {
+    const session = getSession(socket.id);
+    if (!session) {
+      ack?.({ status: 'error', message: 'no session' });
+      return;
+    }
+
+    cleanupTransfer(session);
+
+    const direction = (payload?.direction || '').toLowerCase();
+    const amigaPath = payload?.path || '';
+    const resolved = resolveTransferPath(session, amigaPath);
+    if (!resolved) {
+      ack?.({ status: 'error', message: 'invalid path' });
+      return;
+    }
+
+    if (direction === 'upload') {
+      try {
+        const stream = fs.createWriteStream(resolved);
+        stream.on('error', (err) => {
+          cleanupTransfer(session);
+          socket.emit('transfer:error', { message: err.message });
+        });
+        (session as any).transfer = { direction, path: resolved, stream };
+        ack?.({ status: 'ready', path: resolved });
+      } catch (err: any) {
+        ack?.({ status: 'error', message: err?.message || 'upload init failed' });
+      }
+      return;
+    }
+
+    if (direction === 'download') {
+      if (!fs.existsSync(resolved)) {
+        ack?.({ status: 'error', message: 'file not found' });
+        return;
+      }
+      ack?.({ status: 'ready', path: resolved });
+      try {
+        const stream = fs.createReadStream(resolved);
+        stream.on('data', (chunk) => socket.emit('transfer:data', chunk));
+        stream.on('end', () => {
+          socket.emit('transfer:end', { path: resolved });
+          cleanupTransfer(session);
+        });
+        stream.on('error', (err) => {
+          socket.emit('transfer:error', { message: err.message });
+          cleanupTransfer(session);
+        });
+        (session as any).transfer = { direction, path: resolved, stream };
+      } catch (err: any) {
+        socket.emit('transfer:error', { message: err?.message || 'download failed' });
+        cleanupTransfer(session);
+      }
+      return;
+    }
+
+    ack?.({ status: 'error', message: 'invalid direction' });
+  });
+
+  socket.on('transfer:data', (data: Buffer) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+    const transfer = (session as any).transfer;
+    if (!transfer || transfer.direction !== 'upload' || !transfer.stream) return;
+    transfer.stream.write(data);
+  });
+
+  socket.on('transfer:end', () => {
+    const session = getSession(socket.id);
+    if (!session) return;
+    const transfer = (session as any).transfer;
+    if (transfer?.direction === 'upload' && transfer.stream) {
+      transfer.stream.end();
+      socket.emit('transfer:complete', { path: transfer.path });
+    }
+    cleanupTransfer(session);
+  });
+
+  socket.on('transfer:cancel', () => {
+    const session = getSession(socket.id);
+    if (!session) return;
+    cleanupTransfer(session);
+    socket.emit('transfer:cancelled');
+  });
+
+  // Raw transfer bridge for future ZMODEM: bypass cooked ANSI and feed raw bytes
+  socket.on('transfer-raw:start', (payload: any, ack?: (resp: any) => void) => {
+    const session = getSession(socket.id);
+    if (!session) {
+      ack?.({ status: 'error', message: 'no session' });
+      return;
+    }
+    (session as any).transferRawActive = true;
+    if (!(session as any).transferRawSend) {
+      (session as any).transferRawSend = (buf: Buffer) => socket.emit('transfer-raw:data', buf);
+    }
+    ack?.({ status: 'ready' });
+  });
+
+  socket.on('transfer-raw:data', (data: Buffer) => {
+    const session = getSession(socket.id);
+    if (!session || !(session as any).transferRawActive) return;
+    const sink = (session as any).transferRawSink || (session as any).serialInputHook;
+    if (sink) {
+      sink(Buffer.from(data));
+    }
+  });
+
+  socket.on('transfer-raw:end', () => {
+    const session = getSession(socket.id);
+    if (!session) return;
+    if ((session as any).transferManager?.cancel) {
+      (session as any).transferManager.cancel();
+    }
+    cleanupTransfer(session);
+    (session as any).transferRawActive = false;
+    (session as any).transferRawSink = undefined;
+    socket.emit('transfer-raw:complete');
+  });
+
+  socket.on('transfer-raw:cancel', () => {
+    const session = getSession(socket.id);
+    if (!session) return;
+    if ((session as any).transferManager?.cancel) {
+      (session as any).transferManager.cancel();
+    }
+    (session as any).transferRawActive = false;
+    (session as any).transferRawSink = undefined;
+    socket.emit('transfer-raw:cancelled');
   });
 
   // Handle special chat commands
@@ -377,6 +522,44 @@ function registerDisconnectHandler(socket: Socket) {
 
     triggerSamiLogRefresh();
   });
+}
+
+function resolveTransferPath(session: any, amigaPath: string): string | null {
+  try {
+    const bbsRoot =
+      session?.bbsPath ||
+      config.get('dataDir') ||
+      process.env.BBS_DATA_DIR ||
+      path.resolve(process.cwd());
+    const paths = new BBSPaths(bbsRoot);
+    const nodeId = session?.nodeId || 0;
+    if (!amigaPath || amigaPath.length === 0) {
+      const playpen = paths.node(nodeId).playpen();
+      fs.mkdirSync(playpen, { recursive: true });
+      return path.join(playpen, `transfer_${Date.now()}.bin`);
+    }
+    return paths.resolveAmigaPath(amigaPath, nodeId, undefined);
+  } catch (err) {
+    console.error('[socket-handlers] resolveTransferPath failed:', err);
+    return null;
+  }
+}
+
+function cleanupTransfer(session: any) {
+  const transfer = session?.transfer;
+  if (!transfer) return;
+  try {
+    if (transfer.stream && typeof transfer.stream.destroy === 'function') {
+      transfer.stream.destroy();
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  session.transfer = undefined;
+  session.transferRawActive = false;
+  session.transferRawSink = undefined;
+  session.transferManager = undefined;
+  session.transferRawSend = undefined;
 }
 
 export default registerSocketHandlers;

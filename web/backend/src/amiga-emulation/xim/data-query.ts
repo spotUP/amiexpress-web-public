@@ -6,7 +6,8 @@
  */
 
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
-import { XIMMessage, XIMCommand, BBSSessionData } from './types';
+import { DoorConstants } from '../DoorTypes';
+import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 
@@ -15,17 +16,20 @@ export class XIMDataQueryHandler {
   private execLibrary: ExecLibrary;
   private messageParser: XIMMessageParser;
   private bbsSession: BBSSessionData;
+  private state: XIMState;
 
   constructor(
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
     messageParser: XIMMessageParser,
-    bbsSession: BBSSessionData
+    bbsSession: BBSSessionData,
+    state: XIMState
   ) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
     this.messageParser = messageParser;
     this.bbsSession = bbsSession;
+    this.state = state;
   }
 
   /**
@@ -40,12 +44,12 @@ export class XIMDataQueryHandler {
     console.log(`  msg.data (direction): ${msg.data} (${msg.data !== 0 ? 'READ' : 'WRITE'})`);
 
     // CRITICAL FIX: string[200] is embedded in jhMessage at offset 20, NOT a pointer
-    // jhMessage structure: header(20) + string[200](20-219) + data(220-223) + command(224-227)
-    const stringAddr = msg.msgAddr + 20;
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
     console.log(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`);
 
     const isRead = msg.data !== 0;
     const user = this.bbsSession?.user;
+    let replyData = 1;
 
     switch (msg.command) {
       case XIMCommand.DT_NAME:
@@ -379,21 +383,28 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_CONFACCESS:
         if (isRead) {
-          const confAccess = user?.confAccess || '';
+          const confAccess =
+            this.state.confAccess || user?.confAccess || '';
           this.messageParser.writeString(stringAddr, confAccess, 10);
           console.log(`  [READ] DT_CONFACCESS: "${confAccess}"`);
         } else {
           const newAccess = this.messageParser.readString(stringAddr, 10);
           if (user) user.confAccess = newAccess;
+          this.state.confAccess = newAccess;
           console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}"`);
         }
         break;
 
       case XIMCommand.DT_LANGUAGE:
         if (isRead) {
-          const language = user?.language || 'txt';
+          const language = this.state.language || 'txt';
           this.messageParser.writeString(stringAddr, language, 200);
           console.log(`  [READ] DT_LANGUAGE: "${language}"`);
+        } else {
+          const newLang = this.messageParser.readString(stringAddr, 200);
+          this.state.language = newLang || 'txt';
+          if (user) (user as any).language = newLang;
+          console.log(`  [WRITE] DT_LANGUAGE: "${newLang}"`);
         }
         break;
 
@@ -407,12 +418,12 @@ export class XIMDataQueryHandler {
         break;
 
       case XIMCommand.DT_MSGCODE:
-        this.emulator.writeMemory32(msg.msgAddr + 22, 0);
+        replyData = 0;
         console.log('  DT_MSGCODE: 0');
         break;
 
       case XIMCommand.DT_FILECODE:
-        this.emulator.writeMemory32(msg.msgAddr + 22, 0);
+        replyData = 0;
         console.log('  DT_FILECODE: 0');
         break;
 
@@ -448,22 +459,52 @@ export class XIMDataQueryHandler {
       case XIMCommand.DT_ADDBIT:
       case XIMCommand.DT_REMBIT:
       case XIMCommand.DT_QUERYBIT:
-        console.log(`  [TODO] ${this.messageParser.getCommandName(msg.command)}`);
-        this.emulator.writeMemory32(msg.msgAddr + 22, 0);
+        {
+          const bitMask = msg.data;
+          const currentFlags = user?.userFlags ?? 0;
+          let updated = currentFlags;
+
+          if (msg.command === XIMCommand.DT_ADDBIT) {
+            updated = currentFlags | bitMask;
+            if (user) user.userFlags = updated;
+            replyData = updated;
+            console.log(
+              `  [WRITE] DT_ADDBIT: mask=0x${bitMask.toString(
+                16
+              )}, flags=0x${updated.toString(16)}`
+            );
+          } else if (msg.command === XIMCommand.DT_REMBIT) {
+            updated = currentFlags & ~bitMask;
+            if (user) user.userFlags = updated;
+            replyData = updated;
+            console.log(
+              `  [WRITE] DT_REMBIT: mask=0x${bitMask.toString(
+                16
+              )}, flags=0x${updated.toString(16)}`
+            );
+          } else {
+            replyData = (currentFlags & bitMask) !== 0 ? 1 : 0;
+            console.log(
+              `  [READ] DT_QUERYBIT: mask=0x${bitMask.toString(
+                16
+              )}, result=${replyData}`
+            );
+          }
+        }
         break;
 
       default:
         console.log(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
     }
 
-    this.sendReply(msg, 1);
+    this.reply(msg, replyData);
   }
 
   /**
    * Send reply to door
    */
-  private sendReply(msg: XIMMessage, data: number): void {
-    this.emulator.writeMemory32(msg.msgAddr + 22, data);
+  private reply(msg: XIMMessage, data: number): void {
+    this.messageParser.writeData(msg.msgAddr, data);
     this.execLibrary.replyMsg(msg.msgAddr);
   }
 }

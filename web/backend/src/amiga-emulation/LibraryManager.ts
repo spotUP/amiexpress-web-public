@@ -148,15 +148,30 @@ export class LibraryManager {
     );
     this.dosLibrary.enableNewFileSystem(projectRoot);
 
-    this.dosLibrary.setOutputCallback((text: string) => {
-      console.log(
-        `[LibraryManager] 📤 DOS output callback invoked, emitting ${text.length} bytes to socket`
-      );
-      console.log(`[LibraryManager] 📤 Output text: ${JSON.stringify(text)}`);
+    this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
+      const bbsSession: any = this.config.bbsSession || {};
+      if (bbsSession.transferRawActive) {
+        this.socket.emit('transfer-raw:echo', buf);
+        return;
+      }
+      const text = buf.toString('latin1');
       this.socket.emit("ansi-output", text);
-      console.log(`[LibraryManager] 📤 socket.emit('ansi-output') called`);
+    });
+    this.dosLibrary.setOutputCallback((text: string) => {
+      const bbsSession: any = this.config.bbsSession || {};
+      if (bbsSession.transferRawActive) {
+        this.socket.emit('transfer-raw:echo', Buffer.from(text, 'latin1'));
+        return;
+      }
+      this.socket.emit("ansi-output", text);
     });
     console.log("[LibraryManager] DOS.library output callback configured");
+
+    // Expose raw input hook to the session so socket-handlers can feed transfer-raw data
+    const bbsSession: any = this.config.bbsSession || {};
+    bbsSession.serialInputHook = (data: Buffer) => {
+      this.dosLibrary?.queueInput(data);
+    };
 
     console.log("[LibraryManager] Creating AEDoor.library...");
 

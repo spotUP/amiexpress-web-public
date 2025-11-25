@@ -13,6 +13,7 @@ import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { config } from '../config';
+import { BBSState } from '../index';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -22,6 +23,67 @@ function disableShortcuts(session: BBSSession) {
   if (session.shortcuts && typeof session.shortcuts.clear === 'function') {
     session.shortcuts.clear();
   }
+}
+
+function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode: number; command?: string }) {
+  switch (acp.code) {
+    case -1: // ACP_CONTROLCOMMAND
+      // No-op placeholder
+      break;
+    case 1: // ACP_SysopLogin
+      session.quietFlag = false;
+      break;
+    case 2: // ACP_InstantLogin
+      session.quietFlag = false;
+      break;
+    case 3: // ACP_AEShell
+      session.quietFlag = false;
+      break;
+    case 4: // ACP_ToggleChat
+      session.quietFlag = !session.quietFlag;
+      break;
+    case 5: // ACP_ExitNode
+      session.state = BBSState.AWAIT;
+      session.subState = LoggedOnSubState.LOGOFF;
+      break;
+    case 6: // ACP_LocalLogin
+      session.quietFlag = false;
+      break;
+    case 7: // ACP_ReserveNode
+      session.quietFlag = true;
+      break;
+    case 8: // ACP_Accounts
+      session.quietFlag = false;
+      break;
+    case 9: // ACP_InitModem
+      session.quietFlag = false;
+      break;
+    case 10: // ACP_NodeOffHook
+      session.quietFlag = true;
+      break;
+    case 11: // ACP_QuietNode
+      session.quietFlag = true;
+      break;
+    case 12: // ACP_NodeConfig
+      session.quietFlag = true;
+      break;
+    case 13: // ACP_NodeChat
+      session.quietFlag = false;
+      break;
+    case 14: // ACP_SaveWin
+      session.quietFlag = false;
+      break;
+    case 15: // ACP_NRAMS
+      session.quietFlag = false;
+      break;
+    case 19: // ACP_CUSTOMCOMMAND
+      // No-op placeholder
+      break;
+    default:
+      // For other ACP codes, we simply record the request on the session
+      break;
+  }
+  (session as any).acpLastAction = { ...acp, timestamp: Date.now() };
 }
 
 interface Door {
@@ -195,6 +257,70 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     await amigaSession.start();
 
     console.log(`[launchAmigaDoor] Door session completed: ${doorInfo.command}`);
+
+    // Capture any return/chain/PRV/ACP requests from the door
+    if (typeof (amigaSession as any).getExitState === 'function') {
+      const exitState = (amigaSession as any).getExitState();
+      const ximState = exitState?.ximState || {};
+      if (ximState.returnCommand) {
+        (session as any).returnCommand = ximState.returnCommand;
+        console.log(`[launchAmigaDoor] RETURNCOMMAND requested: ${ximState.returnCommand}`);
+      }
+      if (ximState.chainCommand) {
+        (session as any).chainCommand = ximState.chainCommand;
+        console.log(`[launchAmigaDoor] CHAIN requested: ${ximState.chainCommand}`);
+      }
+      if (ximState.prvCommand) {
+        (session as any).prvCommand = ximState.prvCommand;
+        console.log(`[launchAmigaDoor] PRV_COMMAND requested: ${ximState.prvCommand}`);
+      }
+      if ((exitState as any).bbsSession?.acpCommand) {
+        (session as any).acpCommand = (exitState as any).bbsSession.acpCommand;
+        console.log(
+          `[launchAmigaDoor] ACP_COMMAND requested: ${
+            (exitState as any).bbsSession.acpCommand.command || ''
+          } (code=${(exitState as any).bbsSession.acpCommand.code}, target=${(exitState as any).bbsSession.acpCommand.targetNode})`
+        );
+      }
+
+      // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP
+      try {
+        const { handleCommand } = require('./command.handler');
+        const runCommand = async (cmd?: string) => {
+          if (cmd && cmd.trim().length > 0) {
+            await handleCommand(socket, session, cmd.trim());
+          }
+        };
+
+        if ((session as any).chainCommand) {
+          const cmd = (session as any).chainCommand;
+          (session as any).chainCommand = undefined;
+          (session as any).returnCommand = undefined;
+          (session as any).prvCommand = undefined;
+          (session as any).acpCommand = undefined;
+          await runCommand(cmd);
+        } else {
+          if ((session as any).returnCommand) {
+            const cmd = (session as any).returnCommand;
+            (session as any).returnCommand = undefined;
+            await runCommand(cmd);
+          }
+          if ((session as any).prvCommand) {
+            const cmd = (session as any).prvCommand;
+            (session as any).prvCommand = undefined;
+            await runCommand(cmd);
+          }
+          const acp = (session as any).acpCommand;
+          if (acp && acp.command) {
+            (session as any).acpCommand = undefined;
+            await runCommand(acp.command);
+            applyAcpSideEffect(session, acp);
+          }
+        }
+      } catch (err) {
+        console.warn('[launchAmigaDoor] Failed to auto-run pending door commands:', err);
+      }
+    }
 
     // Return to menu
     session.subState = LoggedOnSubState.DISPLAY_MENU;

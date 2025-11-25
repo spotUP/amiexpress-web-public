@@ -7,7 +7,7 @@
 
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
-import { XIMMessage, XIMCommand, BBSSessionData } from './types';
+import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 
@@ -17,19 +17,22 @@ export class XIMBBSInfoHandler {
   private socket: Socket;
   private messageParser: XIMMessageParser;
   private bbsSession: BBSSessionData;
+  private state: XIMState;
 
   constructor(
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
     socket: Socket,
     messageParser: XIMMessageParser,
-    bbsSession: BBSSessionData
+    bbsSession: BBSSessionData,
+    state: XIMState
   ) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
     this.socket = socket;
     this.messageParser = messageParser;
     this.bbsSession = bbsSession;
+    this.state = state;
   }
 
   /**
@@ -37,16 +40,13 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3486-3487)
    */
   handleBBSName(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
     const bbsName = this.bbsSession?.bbsName || 'AmiExpress-Web';
 
     console.log(`[XIMBBSInfo] JH_BBSNAME: "${bbsName}"`);
 
-    if (stringAddr !== 0) {
-      this.messageParser.writeString(stringAddr, bbsName, 41);
-    }
+    this.messageParser.writeMessageString(msg.msgAddr, bbsName.slice(0, 41));
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -54,16 +54,16 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3488-3489)
    */
   handleSysopName(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
     const sysopName = this.bbsSession?.sysopName || 'Sysop';
 
     console.log(`[XIMBBSInfo] JH_SYSOP: "${sysopName}"`);
 
-    if (stringAddr !== 0) {
-      this.messageParser.writeString(stringAddr, sysopName, 41);
-    }
+    this.messageParser.writeMessageString(
+      msg.msgAddr,
+      sysopName.slice(0, 41)
+    );
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -71,16 +71,13 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3808-3810)
    */
   handleExpressVersion(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
     const version = 'v5.6';
 
     console.log(`[XIMBBSInfo] EXPRESS_VERSION: "${version}"`);
 
-    if (stringAddr !== 0) {
-      this.messageParser.writeString(stringAddr, version, 200);
-    }
+    this.messageParser.writeMessageString(msg.msgAddr, version);
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -88,23 +85,35 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3801-3803)
    */
   handleNodeID(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
     const nodeId = this.bbsSession?.nodeId || 0;
 
     console.log(`[XIMBBSInfo] BB_NODEID: ${nodeId}`);
 
-    if (stringAddr !== 0) {
-      this.messageParser.writeString(stringAddr, nodeId.toString(), 200);
-    }
+    this.messageParser.writeMessageString(msg.msgAddr, nodeId.toString());
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle BB_STATUS (ONLINE/OFFLINE)
+   */
+  handleStatus(msg: XIMMessage): void {
+    const status =
+      this.bbsSession?.user && this.bbsSession.user.username
+        ? 'ONLINE'
+        : 'OFFLINE';
+
+    console.log(`[XIMBBSInfo] BB_STATUS: ${status}`);
+
+    this.messageParser.writeMessageString(msg.msgAddr, status);
+    this.reply(msg, 1);
   }
 
   /**
    * Handle BB_* BBS Info commands
    */
   handleBBSInfo(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
+    const isRead = msg.data !== 0;
     let value = '';
 
     switch (msg.command) {
@@ -131,15 +140,28 @@ export class XIMBBSInfoHandler {
       case XIMCommand.BB_LOGONTYPE:
         const logonType = this.bbsSession?.logonType || 3;
         console.log(`[XIMBBSInfo] BB_LOGONTYPE: ${logonType}`);
-        this.sendReply(msg, logonType);
+        this.reply(msg, logonType);
         return;
     }
 
-    if (stringAddr !== 0 && value) {
-      this.messageParser.writeString(stringAddr, value, 200);
+    if (isRead && value) {
+      this.messageParser.writeMessageString(msg.msgAddr, value);
+    } else if (!isRead && msg.string) {
+      // Accept updated values (write mode)
+      switch (msg.command) {
+        case XIMCommand.BB_CONFNAME:
+          this.bbsSession.conferenceName = msg.string;
+          break;
+        case XIMCommand.BB_CONFLOCAL:
+          this.bbsSession.conferencePath = msg.string;
+          break;
+        case XIMCommand.BB_LOCAL:
+          this.bbsSession.bbsPath = msg.string;
+          break;
+      }
     }
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -173,8 +195,8 @@ export class XIMBBSInfoHandler {
         break;
     }
 
-    this.emulator.writeMemory32(msg.msgAddr + 22, value);
-    this.sendReply(msg, 1);
+    this.messageParser.writeData(msg.msgAddr, value);
+    this.reply(msg, 1);
   }
 
   /**
@@ -201,7 +223,7 @@ export class XIMBBSInfoHandler {
         break;
     }
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -213,7 +235,8 @@ export class XIMBBSInfoHandler {
 
     console.log(`[XIMBBSInfo] BB_NONSTOPTEXT: ${enable ? 'Enable' : 'Disable'} non-stop text`);
 
-    this.sendReply(msg, 1);
+    this.state.nonStopText = enable;
+    this.reply(msg, 1);
   }
 
   /**
@@ -221,20 +244,23 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3877-3883)
    */
   handleLineCount(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
-
     console.log('[XIMBBSInfo] BB_LINECOUNT');
 
-    if (msg.data !== 0) {
-      const lineCount = 0;
-      this.messageParser.writeString(stringAddr, lineCount.toString(), 200);
+    const isRead = msg.data !== 0;
+
+    if (isRead) {
+      const lineCount = this.state.lineCount;
+      this.messageParser.writeMessageString(msg.msgAddr, lineCount.toString());
       console.log(`  [READ] Line count: ${lineCount}`);
-    } else {
-      const newCount = this.messageParser.readString(stringAddr);
-      console.log(`  [WRITE] Set line count: ${newCount}`);
+    } else if (msg.string) {
+      const parsed = parseInt(msg.string.trim(), 10);
+      if (!Number.isNaN(parsed)) {
+        this.state.lineCount = parsed;
+        console.log(`  [WRITE] Set line count: ${parsed}`);
+      }
     }
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -242,22 +268,21 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3779-3793)
    */
   handlePConf(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
-    const confNum = parseInt(this.messageParser.readString(stringAddr));
+    const confNum = parseInt(msg.string || '');
 
     console.log(`[XIMBBSInfo] ${msg.command === XIMCommand.BB_PCONFNAME ? 'BB_PCONFNAME' : 'BB_PCONFLOCAL'}`);
     console.log(`  Conference number: ${confNum}`);
 
     if (confNum < 1 || confNum > 9) {
-      this.messageParser.writeString(stringAddr, 'ERROR', 10);
+      this.messageParser.writeMessageString(msg.msgAddr, 'ERROR');
       console.log('  [ERROR] Invalid conference number');
     } else {
       const value = msg.command === XIMCommand.BB_PCONFNAME ? `Conference ${confNum}` : `/bbs/conf${confNum}`;
-      this.messageParser.writeString(stringAddr, value, 200);
+      this.messageParser.writeMessageString(msg.msgAddr, value);
       console.log(`  [RESULT] ${value}`);
     }
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -265,15 +290,13 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3794-3800)
    */
   handleMainLine(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
-
     console.log('[XIMBBSInfo] BB_MAINLINE - Get main command line');
 
     const mainLine = this.bbsSession?.currentCommand || '';
-    this.messageParser.writeString(stringAddr, mainLine, 200);
+    this.messageParser.writeMessageString(msg.msgAddr, mainLine);
     console.log(`  Command line: "${mainLine}"`);
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -281,13 +304,12 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3804-3805)
    */
   handleCallersLog(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
-    const logText = this.messageParser.readString(stringAddr);
+    const logText = msg.string || '';
 
     console.log('[XIMBBSInfo] BB_CALLERSLOG - Write to callers log');
     console.log(`  Log text: "${logText}"`);
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -295,13 +317,12 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3806-3807)
    */
   handleUDLog(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
-    const logText = this.messageParser.readString(stringAddr);
+    const logText = msg.string || '';
 
     console.log('[XIMBBSInfo] BB_UDLOG - Write to U/D log');
     console.log(`  Log text: "${logText}"`);
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -310,8 +331,8 @@ export class XIMBBSInfoHandler {
   handleTaskPri(msg: XIMMessage): void {
     console.log('[XIMBBSInfo] BB_TASKPRI - Task priority query');
 
-    this.emulator.writeMemory32(msg.msgAddr + 22, 0);
-    this.sendReply(msg, 1);
+    this.messageParser.writeData(msg.msgAddr, 0);
+    this.reply(msg, 1);
   }
 
   /**
@@ -321,14 +342,14 @@ export class XIMBBSInfoHandler {
     console.log(`[XIMBBSInfo] ${msg.command === XIMCommand.BB_CHATFLAG ? 'BB_CHATFLAG' : 'BB_CHATSET'} - Chat status`);
 
     if (msg.command === XIMCommand.BB_CHATFLAG) {
-      this.emulator.writeMemory32(msg.msgAddr + 22, 0);
+      this.messageParser.writeData(msg.msgAddr, 0);
       console.log('  Chat flag: 0 (no chat)');
     } else {
       const chatEnabled = msg.data !== 0;
       console.log(`  Set chat: ${chatEnabled ? 'enabled' : 'disabled'}`);
     }
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -339,7 +360,8 @@ export class XIMBBSInfoHandler {
     console.log('[XIMBBSInfo] BB_DROPDTR - Drop DTR (hangup)');
     console.log('  [TODO] Implement actual disconnect');
 
-    this.sendReply(msg, 1);
+    this.state.carrierDropped = true;
+    this.reply(msg, 1);
   }
 
   /**
@@ -349,15 +371,15 @@ export class XIMBBSInfoHandler {
   handleGetTask(msg: XIMMessage): void {
     console.log('[XIMBBSInfo] BB_GETTASK - Get task pointer');
 
-    this.emulator.writeMemory32(msg.msgAddr + 22, 0);
-    this.sendReply(msg, 1);
+    this.messageParser.writeData(msg.msgAddr, 0);
+    this.reply(msg, 1);
   }
 
   /**
    * Send reply to door
    */
-  private sendReply(msg: XIMMessage, data: number): void {
-    this.emulator.writeMemory32(msg.msgAddr + 22, data);
+  private reply(msg: XIMMessage, data: number): void {
+    this.messageParser.writeData(msg.msgAddr, data);
     this.execLibrary.replyMsg(msg.msgAddr);
   }
 }

@@ -7,17 +7,23 @@
  * - Input queue management
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
-import { XIMMessage } from './types';
+import { DoorConstants } from '../DoorTypes';
+import { BBSSessionData, XIMMessage, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
+import { BBSPaths } from '../../utils/bbs-paths.util';
 
 export class XIMIOHandler {
   private emulator: MoiraEmulator;
   private execLibrary: ExecLibrary;
   private socket: Socket;
   private messageParser: XIMMessageParser;
+  private bbsSession: BBSSessionData;
+  private state: XIMState;
   private inputQueue: string[] = [];
   private keyState: Record<string, boolean> = {}; // Simultaneous key state tracking
 
@@ -25,24 +31,37 @@ export class XIMIOHandler {
   private waitingForLineInput: boolean = false;
   private lineInputMessage: XIMMessage | null = null;
   private lineInputBuffer: string = '';
+  private lineInputMaxLen: number = DoorConstants.MESSAGE_STRING_CAPACITY;
+
+  // Hotkey/pause state
+  private waitingForHotkey: boolean = false;
+  private hotkeyMessage: XIMMessage | null = null;
+  private waitingForPause: boolean = false;
+  private pauseReply: { msg: XIMMessage; data: number } | null = null;
 
   constructor(
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
     socket: Socket,
-    messageParser: XIMMessageParser
+    messageParser: XIMMessageParser,
+    state: XIMState,
+    bbsSession: BBSSessionData
   ) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
     this.socket = socket;
     this.messageParser = messageParser;
+    this.state = state;
+    this.bbsSession = bbsSession || {};
   }
 
   /**
    * Check if waiting for line input from user
    */
   isWaitingForLineInput(): boolean {
-    return this.waitingForLineInput;
+    return (
+      this.waitingForLineInput || this.waitingForHotkey || this.waitingForPause
+    );
   }
 
   /**
@@ -74,31 +93,56 @@ export class XIMIOHandler {
   queueInput(data: string): void {
     console.log(`[XIMIOHandler] Queuing input: "${data}"`);
 
-    // If waiting for line input, handle specially
-    if (this.waitingForLineInput) {
-      for (const char of data) {
+    if (this.state.carrierDropped) {
+      console.warn('[XIMIOHandler] Carrier already dropped, ignoring input');
+      return;
+    }
+
+    for (const char of data) {
+      if (this.waitingForPause && this.pauseReply) {
+        console.log('[XIMIOHandler] Pause acknowledged, resuming output');
+        this.finishPause();
+        continue;
+      }
+
+      if (this.waitingForHotkey && this.hotkeyMessage) {
+        this.completeHotkey(char);
+        continue;
+      }
+
+      if (this.waitingForLineInput) {
         if (char === '\r' || char === '\n') {
-          // User pressed Enter - complete the line input
-          console.log(`[XIMIOHandler] Enter pressed, completing line input: "${this.lineInputBuffer}"`);
+          console.log(
+            `[XIMIOHandler] Enter pressed, completing line input: "${this.lineInputBuffer}"`
+          );
           this.completeLineInput();
-          return;
-        } else if (char === '\b' || char === '\x7f') {
-          // Backspace - remove last character
+          continue;
+        }
+
+        if (char === '\b' || char === '\x7f') {
           if (this.lineInputBuffer.length > 0) {
             this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
-            console.log(`[XIMIOHandler] Backspace, buffer now: "${this.lineInputBuffer}"`);
+            console.log(
+              `[XIMIOHandler] Backspace, buffer now: "${this.lineInputBuffer}"`
+            );
           }
-        } else {
-          // Normal character - add to buffer
-          this.lineInputBuffer += char;
-          console.log(`[XIMIOHandler] Character added, buffer now: "${this.lineInputBuffer}"`);
+          continue;
         }
+
+        if (this.lineInputBuffer.length < this.lineInputMaxLen) {
+          this.lineInputBuffer += char;
+          console.log(
+            `[XIMIOHandler] Character added, buffer now: "${this.lineInputBuffer}"`
+          );
+        }
+        continue;
       }
-    } else {
-      // Not waiting for line input - queue for GETKEY
-      for (const char of data) {
-        this.inputQueue.push(char);
-      }
+
+      // Not waiting for special input - queue for GETKEY/quick key
+      this.inputQueue.push(char);
+    }
+
+    if (!this.waitingForLineInput) {
       console.log(`[XIMIOHandler] Input queue size: ${this.inputQueue.length}`);
     }
   }
@@ -108,24 +152,31 @@ export class XIMIOHandler {
    * From E sources (express.e:3425)
    */
   handleLineInput(msg: XIMMessage): void {
-    const promptAddr = msg.data;
-
     console.log('[XIMIOHandler] Door requesting line input');
 
-    // Display prompt if provided
-    if (promptAddr !== 0) {
-      const prompt = this.messageParser.readString(promptAddr);
-      if (prompt.length > 0) {
-        console.log(`[XIMIOHandler] Prompt: "${prompt}"`);
-        this.socket.emit('ansi-output', prompt);
-      }
+    if (this.state.carrierDropped) {
+      this.reply(msg, -1, '');
+      return;
     }
 
-    // Don't reply immediately - wait for user to type line and press Enter
-    console.log('[XIMIOHandler] Waiting for user to type line and press Enter...');
+    const maxLen = Math.min(
+      msg.data && msg.data > 0 ? msg.data : DoorConstants.MESSAGE_STRING_CAPACITY,
+      DoorConstants.MESSAGE_STRING_CAPACITY
+    );
+    const defaultText = this.getMessageString(msg).slice(0, maxLen);
+
+    if (defaultText.length > 0) {
+      this.socket.emit('ansi-output', defaultText);
+    }
+
     this.waitingForLineInput = true;
     this.lineInputMessage = msg;
-    this.lineInputBuffer = '';
+    this.lineInputBuffer = defaultText;
+    this.lineInputMaxLen = maxLen;
+
+    console.log(
+      `[XIMIOHandler] Waiting for user to type line (max ${maxLen} chars)`
+    );
   }
 
   /**
@@ -138,28 +189,22 @@ export class XIMIOHandler {
     }
 
     const msg = this.lineInputMessage;
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 22 + 4);
+    const result = this.lineInputBuffer.slice(0, this.lineInputMaxLen);
 
-    console.log(`[XIMIOHandler] Completing line input with: "${this.lineInputBuffer}"`);
+    console.log(
+      `[XIMIOHandler] Completing line input with: "${result}"`
+    );
 
-    if (stringAddr !== 0) {
-      // Write the buffered line to memory
-      for (let i = 0; i < this.lineInputBuffer.length; i++) {
-        this.emulator.writeMemory(stringAddr + i, this.lineInputBuffer.charCodeAt(i));
-      }
-      // Null terminate
-      this.emulator.writeMemory(stringAddr + this.lineInputBuffer.length, 0);
+    this.messageParser.writeMessageString(msg.msgAddr, result);
 
-      console.log(`[XIMIOHandler] Wrote ${this.lineInputBuffer.length} characters to memory at 0x${stringAddr.toString(16)}`);
-    }
-
-    // Reply with success (1)
-    this.sendReply(msg, 1);
+    // Reply with success (1) unless carrier dropped
+    this.reply(msg, this.state.carrierDropped ? -1 : 1);
 
     // Reset state
     this.waitingForLineInput = false;
     this.lineInputMessage = null;
     this.lineInputBuffer = '';
+    this.lineInputMaxLen = DoorConstants.MESSAGE_STRING_CAPACITY;
 
     console.log('[XIMIOHandler] Line input completed, waiting for next command');
   }
@@ -169,22 +214,18 @@ export class XIMIOHandler {
    * From E sources (express.e:1085)
    */
   handleWrite(msg: XIMMessage): void {
-    const stringAddr = msg.data;
-    let text = '';
-    let bytesWritten = 0;
+    const text = this.getMessageString(msg);
+    const addNewline = msg.data === 1;
 
-    if (stringAddr !== 0) {
-      text = this.messageParser.readString(stringAddr);
-      console.log('[XIMIOHandler] Door writing to terminal:', JSON.stringify(text));
+    console.log(
+      '[XIMIOHandler] Door writing to terminal:',
+      JSON.stringify(text)
+    );
 
-      console.log(`🔊 [XIM OUTPUT] Emitting ${text.length} chars: "${text.substring(0, 80)}"`);
-      this.socket.emit('ansi-output', text);
-      bytesWritten = text.length;
+    const bytesWritten = this.emitText(text, addNewline, true);
 
-      console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
-    }
-
-    this.sendReply(msg, bytesWritten);
+    console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
+    this.reply(msg, bytesWritten);
   }
 
   /**
@@ -192,14 +233,6 @@ export class XIMIOHandler {
    * From E sources (express.e:3811)
    */
   handleGetKey(msg: XIMMessage): void {
-    const stringAddr = msg.data;
-
-    if (stringAddr === 0) {
-      console.log('[XIMIOHandler] GETKEY: No string buffer provided');
-      this.sendReply(msg, 0);
-      return;
-    }
-
     // Check if we have queued input
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
@@ -207,20 +240,20 @@ export class XIMIOHandler {
 
       console.log(`[XIMIOHandler] GETKEY: Returning key '${char}' (0x${charCode.toString(16)})`);
 
-      // Write "1<char>\0" to string buffer (E sources format)
-      this.emulator.writeMemory(stringAddr, 0x31);      // '1' - key available
-      this.emulator.writeMemory(stringAddr + 1, charCode); // the key character
-      this.emulator.writeMemory(stringAddr + 2, 0);     // null terminator
+      // Write "1<char>\0" to embedded string buffer (E sources format)
+      this.messageParser.writeMessageString(
+        msg.msgAddr,
+        String.fromCharCode(0x31, charCode)
+      );
 
-      this.sendReply(msg, 1);
+      this.reply(msg, 1);
     } else {
       console.log('[XIMIOHandler] GETKEY: No input queued');
 
       // Write "0\0" to string buffer
-      this.emulator.writeMemory(stringAddr, 0x30);      // '0' - no key
-      this.emulator.writeMemory(stringAddr + 1, 0);     // null terminator
+      this.messageParser.writeMessageString(msg.msgAddr, '0');
 
-      this.sendReply(msg, 0);
+      this.reply(msg, 0);
     }
   }
 
@@ -229,20 +262,13 @@ export class XIMIOHandler {
    * From E sources (express.e:3406-3411)
    */
   handleSendMessage(msg: XIMMessage): void {
-    const text = msg.string || '';
+    const text = this.getMessageString(msg);
 
     console.log(`[XIMIOHandler] JH_SM: "${text}"`);
 
-    if (text) {
-      this.socket.emit('ansi-output', text);
-    }
+    this.emitText(text, msg.data !== 0, true);
 
-    if (msg.data !== 0) {
-      this.socket.emit('ansi-output', '\r\n');
-      console.log('[XIMIOHandler] JH_SM: Added newline (msg.data non-zero)');
-    }
-
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -250,23 +276,30 @@ export class XIMIOHandler {
    * From E sources (express.e:3418-3424)
    */
   handlePromptMessage(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
-    const maxLength = msg.data;
+    const prompt = this.getMessageString(msg);
+    const maxLength = Math.min(
+      msg.data && msg.data > 0 ? msg.data : DoorConstants.MESSAGE_STRING_CAPACITY,
+      DoorConstants.MESSAGE_STRING_CAPACITY
+    );
 
-    console.log('[XIMIOHandler] JH_PM: Prompt message with line input');
-
-    if (stringAddr !== 0) {
-      const prompt = this.messageParser.readString(stringAddr);
-      if (prompt.length > 0) {
-        console.log(`[XIMIOHandler] JH_PM: Prompt: "${prompt}"`);
-        this.socket.emit('ansi-output', prompt);
-      }
+    if (this.state.carrierDropped) {
+      this.reply(msg, -1, '');
+      return;
     }
 
-    console.log(`[XIMIOHandler] JH_PM: Waiting for user input (max ${maxLength} chars)...`);
+    console.log('[XIMIOHandler] JH_PM: Prompt message with line input');
+    if (prompt.length > 0) {
+      console.log(`[XIMIOHandler] JH_PM: Prompt: "${prompt}"`);
+      this.socket.emit('ansi-output', prompt);
+    }
+
+    console.log(
+      `[XIMIOHandler] JH_PM: Waiting for user input (max ${maxLength} chars)...`
+    );
     this.waitingForLineInput = true;
     this.lineInputMessage = msg;
     this.lineInputBuffer = '';
+    this.lineInputMaxLen = maxLength;
   }
 
   /**
@@ -274,35 +307,50 @@ export class XIMIOHandler {
    * From E sources (express.e:3436-3447)
    */
   handleHotkey(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
+    const prompt = this.getMessageString(msg);
 
     console.log('[XIMIOHandler] JH_HK: Hotkey input request');
 
-    if (stringAddr !== 0) {
-      const prompt = this.messageParser.readString(stringAddr);
-      if (prompt.length > 0) {
-        console.log(`[XIMIOHandler] JH_HK: Prompt: "${prompt}"`);
-        this.socket.emit('ansi-output', prompt);
-      }
+    if (prompt.length > 0) {
+      console.log(`[XIMIOHandler] JH_HK: Prompt: "${prompt}"`);
+      this.socket.emit('ansi-output', prompt);
+    }
+
+    if (this.state.carrierDropped) {
+      this.reply(msg, -1, '');
+      return;
     }
 
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
-      const charCode = char.charCodeAt(0);
-
-      console.log(`[XIMIOHandler] JH_HK: Got hotkey '${char}' (0x${charCode.toString(16)})`);
-
-      if (stringAddr !== 0) {
-        this.emulator.writeMemory(stringAddr, charCode);
-        this.emulator.writeMemory(stringAddr + 1, 0);
-      }
-
-      this.emulator.writeMemory16(msg.msgAddr + 20, 1);
-      this.sendReply(msg, 1);
-    } else {
-      console.log('[XIMIOHandler] JH_HK: No input available (timeout)');
-      this.sendReply(msg, -1);
+      console.log(
+        `[XIMIOHandler] JH_HK: Got hotkey '${char}' (0x${char
+          .charCodeAt(0)
+          .toString(16)})`
+      );
+      this.reply(msg, 1, char);
+      return;
     }
+
+    this.waitingForHotkey = true;
+    this.hotkeyMessage = msg;
+  }
+
+  /**
+   * Complete a pending hotkey prompt
+   */
+  private completeHotkey(char: string): void {
+    if (!this.hotkeyMessage) {
+      return;
+    }
+
+    const msg = this.hotkeyMessage;
+    const keyChar = char.length > 0 ? char[0] : '';
+
+    this.reply(msg, this.state.carrierDropped ? -1 : 1, keyChar);
+
+    this.waitingForHotkey = false;
+    this.hotkeyMessage = null;
   }
 
   /**
@@ -314,20 +362,14 @@ export class XIMIOHandler {
 
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
-      const charCode = char.charCodeAt(0);
-
-      this.emulator.writeMemory16(msg.msgAddr + 20, charCode);
-      this.emulator.writeMemory32(msg.msgAddr + 22, 1);
-
-      console.log(`  [READ] Extended hotkey: '${char}' (code ${charCode})`);
+      this.messageParser.writeMessageString(msg.msgAddr, char);
+      console.log(`  [READ] Extended hotkey: '${char}'`);
+      this.reply(msg, 1);
     } else {
-      this.emulator.writeMemory16(msg.msgAddr + 20, -1);
-      this.emulator.writeMemory32(msg.msgAddr + 22, -1);
-
+      this.messageParser.writeMessageString(msg.msgAddr, '');
       console.log('  [TIMEOUT] No input available');
+      this.reply(msg, -1);
     }
-
-    this.sendReply(msg, 1);
   }
 
   /**
@@ -339,20 +381,14 @@ export class XIMIOHandler {
 
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
-      const charCode = char.charCodeAt(0);
-
-      this.emulator.writeMemory16(msg.msgAddr + 20, charCode);
-      this.emulator.writeMemory32(msg.msgAddr + 22, 1);
-
-      console.log(`  [READ] Key available: '${char}' (code ${charCode})`);
+      this.messageParser.writeMessageString(msg.msgAddr, char);
+      console.log(`  [READ] Key available: '${char}'`);
     } else {
-      this.emulator.writeMemory16(msg.msgAddr + 20, 0);
-      this.emulator.writeMemory32(msg.msgAddr + 22, 1);
-
       console.log('  [NO INPUT] No key available');
+      this.messageParser.writeMessageString(msg.msgAddr, '');
     }
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -362,22 +398,16 @@ export class XIMIOHandler {
   handleQuickKey(msg: XIMMessage): void {
     console.log('[XIMIOHandler] QUICK_KEY - Quick key input');
 
-    if (this.inputQueue.length > 0) {
-      const char = this.inputQueue.shift()!;
-      const charCode = char.charCodeAt(0);
+    const char = this.inputQueue.shift();
+    const charCode = typeof char === 'string' ? char.charCodeAt(0) : -1;
 
-      this.emulator.writeMemory32(msg.msgAddr + 22, charCode);
-      this.emulator.writeMemory16(msg.msgAddr + 20, 1);
-
+    if (char) {
       console.log(`  [READ] Quick key: '${char}' (code ${charCode})`);
     } else {
-      this.emulator.writeMemory32(msg.msgAddr + 22, -1);
-      this.emulator.writeMemory16(msg.msgAddr + 20, 1);
-
       console.log('  [TIMEOUT] No input available');
     }
 
-    this.sendReply(msg, 1);
+    this.reply(msg, charCode);
   }
 
   /**
@@ -385,23 +415,11 @@ export class XIMIOHandler {
    * From E sources (express.e:3395-3400)
    */
   handleConsoleOutput(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
+    const text = this.getMessageString(msg);
 
-    if (stringAddr === 0) {
-      console.log('[XIMIOHandler] JH_CO: No string address provided');
-      this.sendReply(msg, 0);
-      return;
-    }
+    this.emitText(text, msg.data !== 0, true);
 
-    const text = this.messageParser.readString(stringAddr);
-    this.socket.emit('ansi-output', text);
-
-    if (msg.data !== 0) {
-      this.socket.emit('ansi-output', '\r\n');
-      console.log('[XIMIOHandler] JH_CO: Added newline');
-    }
-
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -409,25 +427,114 @@ export class XIMIOHandler {
    * From E sources (express.e:3401-3405)
    */
   handleSerialOutput(msg: XIMMessage): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
+    const text = this.getMessageString(msg);
 
-    if (stringAddr === 0) {
-      console.log('[XIMIOHandler] JH_SO: No string address provided');
-      this.sendReply(msg, 0);
+    console.log(`[XIMIOHandler] JH_SO (Serial): "${text}"`);
+
+    this.emitText(text, msg.data !== 0, true);
+
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle JH_SG (Show GFile with ACS/language lookup)
+   */
+  handleShowGFile(msg: XIMMessage): void {
+    const partName = this.getMessageString(msg).trim();
+    const forceNonStop = msg.data === 1;
+
+    if (!partName) {
+      this.reply(msg, 0);
       return;
     }
 
-    const text = this.messageParser.readString(stringAddr);
-    console.log(`[XIMIOHandler] JH_SO (Serial): "${text}"`);
+    const resolvedBase = this.resolvePath(partName);
+    const parsed = path.parse(resolvedBase);
+    const baseWithoutExt = path.join(parsed.dir, parsed.name);
+    const language = (this.state.language || '').trim();
+    const secLevel = this.bbsSession?.user?.secLevel ?? 0;
 
-    this.socket.emit('ansi-output', text);
+    const candidates = this.buildGFileCandidates(
+      baseWithoutExt,
+      parsed.ext,
+      language,
+      secLevel
+    );
 
-    if (msg.data !== 0) {
-      this.socket.emit('ansi-output', '\r\n');
-      console.log('[XIMIOHandler] JH_SO: Added newline');
+    const target = this.findFirstExisting(candidates);
+    if (!target) {
+      console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
+      this.reply(msg, 0);
+      return;
     }
 
-    this.sendReply(msg, 1);
+    const displayed = this.displayTextFile(target, forceNonStop, msg);
+    if (!displayed) {
+      this.reply(msg, 0);
+      return;
+    }
+
+    if (!this.waitingForPause) {
+      this.reply(msg, 1);
+    }
+  }
+
+  /**
+   * Handle JH_SF (Show File - full path)
+   */
+  handleShowFile(msg: XIMMessage): void {
+    const targetPath = this.getMessageString(msg).trim();
+    const forceNonStop = msg.data === 1;
+
+    if (!targetPath) {
+      this.reply(msg, 0);
+      return;
+    }
+
+    const resolved = this.resolvePath(targetPath);
+    const parsed = path.parse(resolved);
+    const candidates =
+      parsed.ext && parsed.ext.length > 0
+        ? [resolved]
+        : [
+            `${resolved}.txt`,
+            `${resolved}.TXT`,
+            `${resolved}.txt.gr`,
+            `${resolved}.GR1`,
+          ];
+
+    const target = this.findFirstExisting(candidates);
+    if (!target) {
+      console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
+      this.reply(msg, 0);
+      return;
+    }
+
+    const displayed = this.displayTextFile(target, forceNonStop, msg);
+    if (!displayed) {
+      this.reply(msg, 0);
+      return;
+    }
+
+    if (!this.waitingForPause) {
+      this.reply(msg, 1);
+    }
+  }
+
+  /**
+   * Handle DISPLAY_FILE (non-stop file display)
+   */
+  handleDisplayFileNonStop(msg: XIMMessage): void {
+    const patched: XIMMessage = { ...msg, data: 1 };
+    this.handleShowFile(patched);
+  }
+
+  /**
+   * Handle CHECK_TO_DISPLAY (non-stop gfile/ACS search)
+   */
+  handleCheckToDisplay(msg: XIMMessage): void {
+    const patched: XIMMessage = { ...msg, data: 1 };
+    this.handleShowGFile(patched);
   }
 
   /**
@@ -472,7 +579,7 @@ export class XIMIOHandler {
     }
 
     console.log(`[XIMIOHandler] PG_UD: Returning ${resultData}`);
-    this.sendReply(msg, resultData);
+    this.reply(msg, resultData);
   }
 
   /**
@@ -481,7 +588,6 @@ export class XIMIOHandler {
    * Returns string user information based on msg.data field
    */
   handleUserString(msg: XIMMessage, bbsSession: any): void {
-    const stringAddr = this.emulator.readMemory32(msg.msgAddr + 26);
     let resultString = '';
 
     console.log(`[XIMIOHandler] PG_US: Request type ${msg.data}`);
@@ -536,12 +642,12 @@ export class XIMIOHandler {
 
     console.log(`[XIMIOHandler] PG_US: Returning "${resultString}"`);
 
-    // Write string to memory
-    if (stringAddr !== 0) {
-      this.messageParser.writeString(stringAddr, resultString, 80);
-    }
+    this.messageParser.writeMessageString(
+      msg.msgAddr,
+      resultString.substring(0, 80)
+    );
 
-    this.sendReply(msg, 1);
+    this.reply(msg, 1);
   }
 
   /**
@@ -556,16 +662,250 @@ export class XIMIOHandler {
   }
 
   /**
+   * Emit text to the terminal with optional wrapping and pagination.
+   * Returns the number of characters sent (approximate).
+   */
+  private emitText(
+    text: string,
+    addNewline: boolean,
+    trackLines: boolean,
+    autoPause: boolean = false,
+    pendingMsg?: XIMMessage
+  ): number {
+    let normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if (addNewline) {
+      normalized += '\n';
+    }
+
+    const rawLines = normalized.split('\n');
+    const hasTrailingNewline = normalized.endsWith('\n');
+    let bytesSent = 0;
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      const isLastLine = i === rawLines.length - 1;
+      const shouldAddLineBreak = !isLastLine || hasTrailingNewline;
+      const segments = this.wrapLine(line, this.state.lineWrap);
+
+      for (let s = 0; s < segments.length; s++) {
+        const segment = segments[s];
+        const isLastSegment = s === segments.length - 1;
+        const suffix = isLastSegment && !shouldAddLineBreak ? '' : '\r\n';
+        const output = `${segment}${suffix}`;
+
+        this.socket.emit('ansi-output', output);
+        bytesSent += output.length;
+
+        if (trackLines) {
+          this.state.lineCount += 1;
+
+          if (
+            autoPause &&
+            !this.state.nonStopText &&
+            pendingMsg &&
+            this.state.lineCount >= this.state.pauseLines
+          ) {
+            this.waitingForPause = true;
+            this.pauseReply = { msg: pendingMsg, data: 1 };
+            this.socket.emit(
+              'ansi-output',
+              '\r\npress <RETURN> to continue\r\n'
+            );
+            return bytesSent;
+          }
+        }
+      }
+    }
+
+    return bytesSent;
+  }
+
+  /**
+   * Simple fixed-width wrapper for a single line (no line breaks)
+   */
+  private wrapLine(line: string, width: number): string[] {
+    if (line.length <= width) {
+      return [line];
+    }
+
+    const parts: string[] = [];
+    let remaining = line;
+    while (remaining.length > width) {
+      parts.push(remaining.slice(0, width));
+      remaining = remaining.slice(width);
+    }
+    parts.push(remaining);
+    return parts;
+  }
+
+  private getMessageString(msg: XIMMessage): string {
+    if (msg.string && msg.string.length > 0) {
+      return msg.string;
+    }
+    if (msg.stringPtr) {
+      const ptrStr = this.messageParser.readString(
+        msg.stringPtr,
+        DoorConstants.MESSAGE_STRING_CAPACITY
+      );
+      if (ptrStr) {
+        return ptrStr;
+      }
+    }
+    return '';
+  }
+
+  /**
+   * Display a text file with optional pagination
+   */
+  private displayTextFile(
+    filePath: string,
+    forceNonStop: boolean,
+    msg: XIMMessage
+  ): boolean {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const autoPause = !forceNonStop;
+      this.emitText(content, false, true, autoPause, msg);
+      return true;
+    } catch (err) {
+      console.error(`[XIMIOHandler] Failed to display file ${filePath}:`, err);
+      return false;
+    }
+  }
+
+  /**
+   * Resolve an Amiga-style path (BBS:, NODE#:, DOORS:) to host filesystem
+   */
+  private resolvePath(amigaPath: string): string {
+    const paths = new BBSPaths(this.getBbsRoot());
+    return paths.resolveAmigaPath(
+      amigaPath,
+      this.bbsSession?.nodeId ?? 0,
+      undefined
+    );
+  }
+
+  private getBbsRoot(): string {
+    return (
+      this.bbsSession?.bbsPath ||
+      process.env.BBS_DATA_DIR ||
+      path.resolve(process.cwd())
+    );
+  }
+
+  private findFirstExisting(candidates: string[]): string | null {
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Build candidate list for showgfile ACS/language search
+   */
+  private buildGFileCandidates(
+    basePath: string,
+    explicitExt: string,
+    language: string,
+    secLevel: number
+  ): string[] {
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+    const add = (p: string) => {
+      const normalized = path.normalize(p);
+      if (!seen.has(normalized)) {
+        seen.add(normalized);
+        candidates.push(normalized);
+      }
+    };
+
+    const lang = language?.trim();
+    const langExts =
+      lang && lang.toLowerCase() !== 'txt'
+        ? [`.${lang}`, `.${lang}.gr`]
+        : [];
+
+    const baseExts =
+      explicitExt && explicitExt.length > 0
+        ? [explicitExt]
+        : ['.txt', '.txt.gr', '.GR1'];
+
+    const exts = [...langExts, ...baseExts];
+
+    const rounded =
+      secLevel >= 5 ? secLevel - (secLevel % 5) : Math.max(secLevel, 0);
+    for (let level = rounded; level >= 5; level -= 5) {
+      for (const ext of exts) {
+        add(`${basePath}${level}${ext}`);
+      }
+    }
+
+    for (const ext of exts) {
+      add(`${basePath}${ext}`);
+    }
+
+    return candidates;
+  }
+
+  /**
+   * Finish a pending pause prompt.
+   */
+  private finishPause(): void {
+    if (!this.pauseReply) {
+      return;
+    }
+
+    const { msg, data } = this.pauseReply;
+
+    this.waitingForPause = false;
+    this.pauseReply = null;
+    this.state.lineCount = 0;
+
+    this.reply(msg, data);
+  }
+
+  /**
    * Send reply to door via ReplyMsg
    */
-  private sendReply(msg: XIMMessage, data: number): void {
+  private reply(msg: XIMMessage, data: number, stringValue?: string): void {
     console.log('[XIMIOHandler] Sending reply to door:');
     console.log(`  Message: 0x${msg.msgAddr.toString(16)}`);
     console.log(`  Data: ${data}`);
 
-    this.emulator.writeMemory32(msg.msgAddr + 22, data);
+    if (typeof stringValue === 'string') {
+      this.messageParser.writeMessageString(msg.msgAddr, stringValue);
+    }
+    this.messageParser.writeData(msg.msgAddr, data);
     this.execLibrary.replyMsg(msg.msgAddr);
 
     console.log('[XIMIOHandler] Reply sent via ReplyMsg');
+  }
+
+  /**
+   * Mark carrier drop for input commands
+   */
+  markCarrierDropped(): void {
+    this.state.carrierDropped = true;
+
+    if (this.waitingForLineInput && this.lineInputMessage) {
+      this.reply(this.lineInputMessage, -1, '');
+      this.waitingForLineInput = false;
+      this.lineInputMessage = null;
+      this.lineInputBuffer = '';
+    }
+
+    if (this.waitingForHotkey && this.hotkeyMessage) {
+      this.reply(this.hotkeyMessage, -1, '');
+      this.waitingForHotkey = false;
+      this.hotkeyMessage = null;
+    }
+
+    if (this.waitingForPause && this.pauseReply) {
+      this.reply(this.pauseReply.msg, -1);
+      this.waitingForPause = false;
+      this.pauseReply = null;
+    }
   }
 }

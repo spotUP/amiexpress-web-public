@@ -262,6 +262,10 @@ export interface BBSSession {
   tempData?: any; // Temporary data storage for complex operations (like file listing)
   pendingDisplayInputs?: string[];
   replayingDisplayInputs?: boolean;
+  transferRawActive?: boolean; // When true, bypass cooked command handling for raw transfer (ZMODEM)
+  transferRawSink?: ((buf: Buffer) => void) | null; // Handler for inbound raw data during transfers
+  transferRawSend?: ((buf: Buffer) => void) | null; // Sender for raw bytes to the remote terminal
+  transferManager?: any; // Active transfer manager (e.g., ZMODEM)
   flagManager?: any; // File flagging manager for batch downloads
   inDoorManager?: boolean; // Whether user is currently in door manager
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
@@ -955,8 +959,25 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
     }
   };
 
+  const attachTransferSender = () => {
+    if (connection.session) {
+      (connection.session as any).connectionType = type;
+      (connection.session as any).transferRawSend = (buf: Buffer) => connection.write(buf);
+    }
+  };
+  attachTransferSender();
+  connection.on('ready', attachTransferSender);
+
   // Handle incoming data (user input)
   connection.on('data', async (data: Buffer) => {
+    if (connection.session?.transferRawActive) {
+      const sink = (connection.session as any).transferRawSink || (connection.session as any).transferManager?.handleInput;
+      if (sink) {
+        sink(Buffer.from(data));
+        return;
+      }
+    }
+
     // Convert telnet/SSH data to string
     // Use 'binary' encoding to preserve raw bytes, then convert to UTF-8
     const input = data.toString('utf-8');

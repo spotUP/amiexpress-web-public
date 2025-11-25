@@ -103,7 +103,9 @@ export class DosLibrary {
   private openFiles: Map<number, FileHandle> = new Map();
   private nextFileId: number = 4; // Start after STDIN/STDOUT/STDERR
   private outputCallback: ((data: string) => void) | null = null;
+  private outputRawCallback: ((data: Buffer) => void) | null = null;
   private inputBuffer: string = "";
+  private rawInputBuffers: Buffer[] = [];
   private lastError: number = 0;
 
   // NEW: File I/O management system (phase 3)
@@ -367,11 +369,23 @@ export class DosLibrary {
   }
 
   /**
+   * Set raw callback for stdout/stderr output (binary-safe)
+   */
+  setOutputRawCallback(callback: (data: Buffer) => void): void {
+    this.outputRawCallback = callback;
+  }
+
+  /**
    * Queue input data from user
    */
-  queueInput(data: string): void {
-    console.log(`[dos.library] queueInput: ${JSON.stringify(data)}`);
-    this.inputBuffer += data;
+  queueInput(data: string | Buffer): void {
+    console.log(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(data) : `<buffer ${data.length}>`}`);
+    if (Buffer.isBuffer(data)) {
+      this.rawInputBuffers.push(data);
+      this.inputBuffer += data.toString('latin1');
+    } else {
+      this.inputBuffer += data;
+    }
   }
 
   /**
@@ -773,7 +787,9 @@ export class DosLibrary {
             text
           )}`
         );
-        if (this.outputCallback) {
+        if (this.outputRawCallback) {
+          this.outputRawCallback(result.consoleData);
+        } else if (this.outputCallback) {
           this.outputCallback(text);
         }
       }
@@ -794,7 +810,8 @@ export class DosLibrary {
       (fileHandle && fileHandle.isConsole);
 
     if (isConsoleHandle) {
-      const text = String.fromCharCode(...bytes);
+      const rawBuf = Buffer.from(bytes);
+      const text = rawBuf.toString('latin1');
 
       // DEBUG: Log WHO2 door output
       console.log(
@@ -803,8 +820,10 @@ export class DosLibrary {
         )}`
       );
 
-      // Send to output callback
-      if (this.outputCallback) {
+      // Send to output callback (raw preferred)
+      if (this.outputRawCallback) {
+        this.outputRawCallback(rawBuf);
+      } else if (this.outputCallback) {
         console.log(`[dos.library] Write: Sending to socket callback`);
         this.outputCallback(text);
       } else {

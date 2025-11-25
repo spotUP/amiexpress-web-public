@@ -162,12 +162,18 @@ export class AmigaDoorSession {
     // Handle disconnection
     this.socket.on("disconnect", () => {
       console.log("[AmigaDoorSession] Socket disconnected, terminating door");
+      if (this.sharedState.ximProtocol) {
+        this.sharedState.ximProtocol.markCarrierDropped();
+      }
       this.terminate();
     });
 
     // Handle explicit termination request
     this.socket.on("door:terminate", () => {
       console.log("[AmigaDoorSession] Termination requested by user");
+      if (this.sharedState.ximProtocol) {
+        this.sharedState.ximProtocol.markCarrierDropped();
+      }
       this.terminate();
     });
   }
@@ -471,6 +477,17 @@ export class AmigaDoorSession {
    */
   getExecutionState() {
     return this.lifecycleManager?.getExecutionState() || null;
+  }
+
+  /**
+   * Get exit-related state (return/chain/PRV/ACP) captured from XIM
+   */
+  getExitState() {
+    const ximState = this.sharedState.ximProtocol?.getStateSnapshot();
+    return {
+      ximState,
+      bbsSession: this.config.bbsSession,
+    };
   }
 
   /**

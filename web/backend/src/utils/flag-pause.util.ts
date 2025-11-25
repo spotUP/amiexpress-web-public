@@ -112,7 +112,7 @@ export async function flagPause(
             await flagManager.save();
             socket.emit('ansi-output', `\r\n\x1b[32mFlagged: ${filename}\x1b[0m\r\n`);
             socket.emit('ansi-output', '\x1b[A\x1b[K');
-            resolve(true);
+            resolveFn!(true);
             return;
           }
 

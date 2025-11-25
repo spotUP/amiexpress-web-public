@@ -15,7 +15,7 @@
 import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { ExecLibrary } from './api/ExecLibrary';
 import { Socket } from 'socket.io';
-import { XIMCommand, BBSSessionData } from './xim/types';
+import { XIMCommand, BBSSessionData, XIMState } from './xim/types';
 import { XIMMessageParser } from './xim/messages';
 import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
@@ -31,6 +31,7 @@ export class XIMProtocol {
   private doorPort: number;
   private doorReplyPort: number = 0;
   private bbsSession: BBSSessionData;
+  private state: XIMState;
 
   // Specialized handlers
   private messageParser: XIMMessageParser;
@@ -51,13 +52,56 @@ export class XIMProtocol {
     this.socket = socket;
     this.doorPort = doorPort;
     this.bbsSession = bbsSession || {};
+    this.state = {
+      registered: false,
+      shuttingDown: false,
+      nonStopText: !!this.bbsSession?.nonStopText,
+      lineCount: this.bbsSession?.lineCount ?? 0,
+      lineWrap: this.bbsSession?.lineWrap ?? 79,
+      pauseLines: this.bbsSession?.pauseLines ?? 22,
+      language: this.bbsSession?.language || 'txt',
+      confAccess:
+        this.bbsSession?.confAccess || this.bbsSession?.user?.confAccess || '',
+      carrierDropped: false,
+      returnCommand: this.bbsSession?.returnCommand,
+      prvCommand: undefined,
+      chainCommand: undefined,
+      logonType: this.bbsSession?.logonType,
+    };
 
     // Initialize specialized handlers
     this.messageParser = new XIMMessageParser(emulator);
-    this.ioHandler = new XIMIOHandler(emulator, execLibrary, socket, this.messageParser);
-    this.dataQueryHandler = new XIMDataQueryHandler(emulator, execLibrary, this.messageParser, this.bbsSession);
-    this.bbsInfoHandler = new XIMBBSInfoHandler(emulator, execLibrary, socket, this.messageParser, this.bbsSession);
-    this.systemCommandsHandler = new XIMSystemCommandsHandler(emulator, execLibrary, socket, this.messageParser, this.bbsSession);
+    this.ioHandler = new XIMIOHandler(
+      emulator,
+      execLibrary,
+      socket,
+      this.messageParser,
+      this.state,
+      this.bbsSession
+    );
+    this.dataQueryHandler = new XIMDataQueryHandler(
+      emulator,
+      execLibrary,
+      this.messageParser,
+      this.bbsSession,
+      this.state
+    );
+    this.bbsInfoHandler = new XIMBBSInfoHandler(
+      emulator,
+      execLibrary,
+      socket,
+      this.messageParser,
+      this.bbsSession,
+      this.state
+    );
+    this.systemCommandsHandler = new XIMSystemCommandsHandler(
+      emulator,
+      execLibrary,
+      socket,
+      this.messageParser,
+      this.bbsSession,
+      this.state
+    );
 
     console.log('[XIMProtocol] Initialized');
     console.log(`  Door Port: 0x${doorPort.toString(16)}`);
@@ -105,6 +149,14 @@ export class XIMProtocol {
   }
 
   /**
+   * Mark carrier drop so pending input commands can fail with Data=-1
+   */
+  markCarrierDropped(): void {
+    this.state.carrierDropped = true;
+    this.ioHandler.markCarrierDropped();
+  }
+
+  /**
    * Parse XIM message from memory
    */
   parseMessage(msgAddr: number) {
@@ -125,6 +177,20 @@ export class XIMProtocol {
    */
   handleMessage(msg: any): void {
     console.log(`[XIMProtocol] Handling command: ${this.messageParser.getCommandName(msg.command)}`);
+
+    if (!this.state.registered && msg.command !== XIMCommand.JH_REGISTER) {
+      console.warn('[XIMProtocol] Ignoring command before JH_REGISTER handshake');
+      this.messageParser.writeData(msg.msgAddr, 0);
+      this.execLibrary.replyMsg(msg.msgAddr);
+      return;
+    }
+
+    if (this.state.shuttingDown && msg.command !== XIMCommand.JH_SHUTDOWN) {
+      console.warn('[XIMProtocol] Door requested commands after shutdown, replying with 0');
+      this.messageParser.writeData(msg.msgAddr, 0);
+      this.execLibrary.replyMsg(msg.msgAddr);
+      return;
+    }
 
     // I/O Commands - handled by XIMIOHandler
     if (this.isIOCommand(msg.command)) {
@@ -166,6 +232,8 @@ export class XIMProtocol {
       XIMCommand.JH_SMPTR,
       XIMCommand.JH_PM,
       XIMCommand.JH_HK,
+      XIMCommand.JH_SG,
+      XIMCommand.JH_SF,
       XIMCommand.JH_ExtHK,
       XIMCommand.JH_FetchKey,
       XIMCommand.JH_CO,
@@ -173,6 +241,8 @@ export class XIMProtocol {
       XIMCommand.JH_20,
       XIMCommand.QUICK_KEY,
       XIMCommand.GETKEY,
+      XIMCommand.DISPLAY_FILE,
+      XIMCommand.CHECK_TO_DISPLAY,
       XIMCommand.PG_SM,
       XIMCommand.PG_UD,
       XIMCommand.PG_US,
@@ -203,6 +273,22 @@ export class XIMProtocol {
 
       case XIMCommand.JH_HK:
         this.ioHandler.handleHotkey(msg);
+        break;
+
+      case XIMCommand.JH_SG:
+        this.ioHandler.handleShowGFile(msg);
+        break;
+
+      case XIMCommand.JH_SF:
+        this.ioHandler.handleShowFile(msg);
+        break;
+
+      case XIMCommand.DISPLAY_FILE:
+        this.ioHandler.handleDisplayFileNonStop(msg);
+        break;
+
+      case XIMCommand.CHECK_TO_DISPLAY:
+        this.ioHandler.handleCheckToDisplay(msg);
         break;
 
       case XIMCommand.JH_ExtHK:
@@ -264,6 +350,7 @@ export class XIMProtocol {
       XIMCommand.JH_SYSOP,
       XIMCommand.EXPRESS_VERSION,
       XIMCommand.BB_NODEID,
+      XIMCommand.BB_STATUS,
       XIMCommand.BB_CONFNAME,
       XIMCommand.BB_CONFLOCAL,
       XIMCommand.BB_LOCAL,
@@ -310,6 +397,10 @@ export class XIMProtocol {
 
       case XIMCommand.BB_NODEID:
         this.bbsInfoHandler.handleNodeID(msg);
+        break;
+
+      case XIMCommand.BB_STATUS:
+        this.bbsInfoHandler.handleStatus(msg);
         break;
 
       case XIMCommand.BB_CONFNAME:
@@ -390,6 +481,22 @@ export class XIMProtocol {
       XIMCommand.JH_SF,
       XIMCommand.JH_EF,
       XIMCommand.JH_FLAGFILE,
+      XIMCommand.ZMODEMSEND,
+      XIMCommand.ZMODEMRECEIVE,
+      XIMCommand.BATCHZMODEMSEND,
+      XIMCommand.ACP_COMMAND,
+      XIMCommand.LOAD_ACCOUNT,
+      XIMCommand.SAVE_ACCOUNT,
+      XIMCommand.LOAD_CONFDB,
+      XIMCommand.SAVE_CONFDB,
+      XIMCommand.GET_CONFNUM,
+      XIMCommand.SEARCH_ACCOUNT,
+      XIMCommand.APPEND_ACCOUNT,
+      XIMCommand.LAST_ACCOUNTNUM,
+      XIMCommand.EXT_LOAD_ACCOUNT,
+      XIMCommand.EXT_SAVE_ACCOUNT,
+      XIMCommand.NETUPLOAD,
+      XIMCommand.NETDOWNLOAD,
       XIMCommand.RAWARROW,
       XIMCommand.RETURNCOMMAND,
       XIMCommand.RETURNCOMMAND2,
@@ -438,6 +545,23 @@ export class XIMProtocol {
         this.systemCommandsHandler.handleFlagFile(msg);
         break;
 
+      case XIMCommand.ZMODEMSEND:
+        this.systemCommandsHandler.handleZmodemSend(msg);
+        break;
+
+      case XIMCommand.ZMODEMRECEIVE:
+        this.systemCommandsHandler.handleZmodemReceive(msg);
+        break;
+
+      case XIMCommand.BATCHZMODEMSEND:
+        this.systemCommandsHandler.handleBatchZmodemSend(msg);
+        break;
+
+      case XIMCommand.NETUPLOAD:
+      case XIMCommand.NETDOWNLOAD:
+        this.systemCommandsHandler.handleNetTransfer(msg);
+        break;
+
       case XIMCommand.RAWARROW:
         this.systemCommandsHandler.handleRawArrow(msg);
         break;
@@ -466,6 +590,23 @@ export class XIMProtocol {
       case XIMCommand.PRV_GROUP:
         this.systemCommandsHandler.handlePrvGroup(msg);
         break;
+
+      case XIMCommand.ACP_COMMAND:
+        this.systemCommandsHandler.handleAcpCommand(msg);
+        break;
+
+      case XIMCommand.LOAD_ACCOUNT:
+      case XIMCommand.EXT_LOAD_ACCOUNT:
+      case XIMCommand.SAVE_ACCOUNT:
+      case XIMCommand.EXT_SAVE_ACCOUNT:
+      case XIMCommand.LOAD_CONFDB:
+      case XIMCommand.SAVE_CONFDB:
+      case XIMCommand.GET_CONFNUM:
+      case XIMCommand.SEARCH_ACCOUNT:
+      case XIMCommand.APPEND_ACCOUNT:
+      case XIMCommand.LAST_ACCOUNTNUM:
+        this.systemCommandsHandler.handleAccountOrConf(msg);
+        break;
     }
   }
 
@@ -473,7 +614,14 @@ export class XIMProtocol {
    * Send reply to door via ReplyMsg
    */
   private sendReply(msg: any, data: number): void {
-    this.emulator.writeMemory32(msg.msgAddr + 22, data);
+    this.messageParser.writeData(msg.msgAddr, data);
     this.execLibrary.replyMsg(msg.msgAddr);
+  }
+
+  /**
+   * Get a snapshot of XIM state for host usage after door exit
+   */
+  getStateSnapshot(): XIMState {
+    return { ...this.state };
   }
 }

@@ -11,7 +11,9 @@ import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
 export class AmiExpressLibrary {
   private emulator: MoiraEmulator;
   private outputCallback: ((data: string) => void) | null = null;
+  private outputRawCallback: ((data: Buffer) => void) | null = null;
   private inputQueue: string[] = [];
+  private rawInputQueue: Buffer[] = [];
   private session: any; // Session data from BBS
 
   // AEDoor.library interface structure
@@ -59,12 +61,22 @@ export class AmiExpressLibrary {
     this.outputCallback = callback;
   }
 
+  setOutputRawCallback(callback: (data: Buffer) => void): void {
+    this.outputRawCallback = callback;
+  }
+
   /**
    * Queue input from user
    */
-  queueInput(data: string): void {
-    this.inputQueue.push(data);
-    console.log(`[AmiExpress Library] Input queued: "${data}"`);
+  queueInput(data: string | Buffer): void {
+    if (Buffer.isBuffer(data)) {
+      this.rawInputQueue.push(data);
+      this.inputQueue.push(data.toString('latin1'));
+      console.log(`[AmiExpress Library] Raw input queued: <buffer ${data.length}>`);
+    } else {
+      this.inputQueue.push(data);
+      console.log(`[AmiExpress Library] Input queued: "${data}"`);
+    }
   }
 
   /**
@@ -244,12 +256,21 @@ export class AmiExpressLibrary {
         console.warn(`[AmiExpress]    CODE: 0x1000-0x38E8, DATA: 0x3900-0x3A78`);
       }
 
-      // Read string from memory
-      const text = this.readString(stringPtr);
+      // Read string from memory as raw bytes
+      const bytes: number[] = [];
+      for (let i = 0; i < 0x1000; i++) {
+        const b = this.emulator.readMemory(stringPtr + i);
+        if (b === 0) break;
+        bytes.push(b);
+      }
+      const rawBuf = Buffer.from(bytes);
+      const text = rawBuf.toString('latin1');
       console.log(`[AmiExpress] aePuts() output: "${text}"`);
 
-      // Send to terminal
-      if (this.outputCallback) {
+      // Send to terminal (raw preferred)
+      if (this.outputRawCallback) {
+        this.outputRawCallback(rawBuf);
+      } else if (this.outputCallback) {
         this.outputCallback(text);
       }
     } catch (error) {
