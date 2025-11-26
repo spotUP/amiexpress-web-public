@@ -9,6 +9,7 @@ import { ExecLibrary } from "../api/ExecLibrary.js";
 import { XIMProtocol, XIMCommand } from "../XIMProtocol.js";
 import { BullsDoorHandler } from "./BullsDoorHandler.js";
 import { DoorConfig, DoorConstants } from "../DoorTypes.js";
+import { logDoorMessage } from "../../utils/door-logging.util";
 
 export interface MessageProcessingConfig {
   suppressCallbacks: boolean;
@@ -66,6 +67,9 @@ export class DoorMessageHandler {
   // Setter methods for dependencies and shared state
   setXIMProtocol(ximProtocol: XIMProtocol | null): void {
     this.ximProtocol = ximProtocol;
+    if (this.ximProtocol) {
+      this.ximProtocol.setMessageLogger(logDoorMessage);
+    }
   }
 
   setSharedState(state: {

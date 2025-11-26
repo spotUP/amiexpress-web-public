@@ -15,7 +15,7 @@
 import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { ExecLibrary } from './api/ExecLibrary';
 import { Socket } from 'socket.io';
-import { XIMCommand, BBSSessionData, XIMState } from './xim/types';
+import { XIMCommand, BBSSessionData, XIMState, XIMMessage } from './xim/types';
 import { XIMMessageParser } from './xim/messages';
 import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
@@ -39,6 +39,7 @@ export class XIMProtocol {
   private dataQueryHandler: XIMDataQueryHandler;
   private bbsInfoHandler: XIMBBSInfoHandler;
   private systemCommandsHandler: XIMSystemCommandsHandler;
+  private messageLogger: ((msg: XIMMessage) => void) | null = null;
 
   constructor(
     emulator: MoiraEmulator,
@@ -111,6 +112,10 @@ export class XIMProtocol {
     }
   }
 
+  setMessageLogger(logger: (msg: XIMMessage) => void): void {
+    this.messageLogger = logger;
+  }
+
   /**
    * Check if waiting for line input from user
    */
@@ -175,8 +180,10 @@ export class XIMProtocol {
    * Handle incoming XIM message from door
    * Routes to appropriate specialized handler based on command type
    */
-  handleMessage(msg: any): void {
+  handleMessage(msg: XIMMessage): void {
     console.log(`[XIMProtocol] Handling command: ${this.messageParser.getCommandName(msg.command)}`);
+
+    this.messageLogger?.(msg);
 
     // Handle registration/shutdown ahead of other handlers to avoid PG_* collisions
     if (msg.command === XIMCommand.JH_REGISTER) {
