@@ -69,6 +69,13 @@ export class XIMSystemCommandsHandler {
     const lineLen =
       typeof rawLineLen === 'number' && rawLineLen > 0 ? rawLineLen : 29;
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
+    const nodeId =
+      (this.bbsSession?.nodeId as number) ||
+      (this.bbsSession as any)?.nodeNumber ||
+      1;
+    this.messageParser.writeData(msg.msgAddr, nodeId);
+    this.messageParser.writeNodeId(msg.msgAddr, nodeId);
+    this.messageParser.writeLineNumber(msg.msgAddr, 0);
     // Ensure length is sane; otherwise echo the message back untouched.
     const parsed = this.messageParser.parseMessage(msg.msgAddr);
     if (this.emulator.readMemory16(msg.msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET) === 0) {

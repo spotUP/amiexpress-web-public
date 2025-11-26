@@ -21,13 +21,20 @@ function sanitizeString(value: string | undefined | null): string {
     .replace(/\x1b/g, '\\x1b');
 }
 
-export function logDoorMessage(msg: XIMMessage) {
+export function logDoorMessage(msg: XIMMessage, commandName?: string) {
   const timestamp = new Date().toISOString();
-  const commandName = XIMCommand[msg.command] ?? `CMD_${msg.command}`;
+  const resolvedName =
+    commandName ??
+    XIMCommand[msg.command] ??
+    `CMD_${msg.command.toString(16).padStart(2, '0')}`;
   const nodeInfo = msg.nodeId !== undefined ? ` node=${msg.nodeId}` : '';
   const basePrefix = `[DoorMsg] ${timestamp}${nodeInfo}`;
 
-  ensureDoorLogLine(`${basePrefix} msg request: ${msg.command} (${commandName})`);
+  ensureDoorLogLine(
+    `${basePrefix} msg request: ${msg.command} (${resolvedName})`
+  );
   ensureDoorLogLine(`${basePrefix} data: ${msg.data}`);
-  ensureDoorLogLine(`${basePrefix} string: ${sanitizeString(msg.string)}`);
+  ensureDoorLogLine(
+    `${basePrefix} string: ${sanitizeString(msg.string)}`
+  );
 }

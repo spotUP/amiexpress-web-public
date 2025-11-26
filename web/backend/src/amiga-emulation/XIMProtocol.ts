@@ -39,7 +39,7 @@ export class XIMProtocol {
   private dataQueryHandler: XIMDataQueryHandler;
   private bbsInfoHandler: XIMBBSInfoHandler;
   private systemCommandsHandler: XIMSystemCommandsHandler;
-  private messageLogger: ((msg: XIMMessage) => void) | null = null;
+  private messageLogger: ((msg: XIMMessage, commandName?: string) => void) | null = null;
 
   constructor(
     emulator: MoiraEmulator,
@@ -112,7 +112,7 @@ export class XIMProtocol {
     }
   }
 
-  setMessageLogger(logger: (msg: XIMMessage) => void): void {
+  setMessageLogger(logger: (msg: XIMMessage, commandName?: string) => void): void {
     this.messageLogger = logger;
   }
 
@@ -183,7 +183,8 @@ export class XIMProtocol {
   handleMessage(msg: XIMMessage): void {
     console.log(`[XIMProtocol] Handling command: ${this.messageParser.getCommandName(msg.command)}`);
 
-    this.messageLogger?.(msg);
+    const humanName = this.messageParser.getCommandName(msg.command);
+    this.messageLogger?.(msg, humanName);
 
     // Handle registration/shutdown ahead of other handlers to avoid PG_* collisions
     if (msg.command === XIMCommand.JH_REGISTER) {

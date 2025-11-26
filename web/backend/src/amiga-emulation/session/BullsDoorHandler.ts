@@ -804,6 +804,7 @@ export class BullsDoorHandler {
     this.ensureBullsInfoBuffer(a4);
 
     if (this.bullsControlBlockAddr !== 0) {
+      const nodeId = this.resolveNodeId() || 1;
       this.emulator.writeMemory32(a4 + 0x6c24, this.bullsControlBlockAddr);
       if (this.bullsInfoBufferAddr !== 0) {
         this.emulator.writeMemory32(a4 + 0x6c28, this.bullsInfoBufferAddr);
@@ -816,8 +817,8 @@ export class BullsDoorHandler {
       }
       if (this.emulator) {
         this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xe0, 1);
-        this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xdc, 2);
-        this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xe4, 0xff);
+        this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xdc, nodeId);
+        this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xe4, nodeId);
         this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xe8, 0);
         const fields = [];
         for (let offset = 0xe0; offset <= 0xe8; offset += 4) {
@@ -872,9 +873,10 @@ export class BullsDoorHandler {
       this.emulator.readString(a4 + 0x61e, 0x40) || "BULLS DATA READY";
     this.writeStringToMemory(infoAddr + 0x14, summaryText, 0x100);
 
+    const nodeId = this.resolveNodeId() || 1;
     this.emulator.writeMemory32(infoAddr + 0xe0, 1);
-    this.emulator.writeMemory32(infoAddr + 0xdc, 2);
-    this.emulator.writeMemory32(infoAddr + 0xe4, 0xff);
+    this.emulator.writeMemory32(infoAddr + 0xdc, nodeId);
+    this.emulator.writeMemory32(infoAddr + 0xe4, nodeId);
     this.emulator.writeMemory32(infoAddr + 0xe8, 0);
     this.emulator.writeMemory32(infoAddr + 0xf8, infoAddr + 0x14);
     this.emulator.writeMemory32(infoAddr + 0xfc, infoAddr + 0x14);
