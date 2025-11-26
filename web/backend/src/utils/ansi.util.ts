@@ -154,11 +154,18 @@ export class AnsiUtil {
   }
 
   /**
+   * Strip SGR color codes (used when ANSI is disabled for plain terminals)
+   */
+  static stripAnsiForPlainText(text: string): string {
+    // Match sequences like \x1b[0m or \x1b[1;31m but do not touch cursor movement or positioning.
+    return text.replace(/\x1b\[[0-9;]*m/g, '');
+  }
+
+  /**
    * Strip CSI SGR color codes (only the color/formatting sequences)
    */
   static stripColorCodes(text: string): string {
-    // Match sequences like \x1b[0m or \x1b[1;31m
-    return text.replace(/\x1b\[[0-9;]*m/g, '');
+    return this.stripAnsiForPlainText(text);
   }
 
   /**

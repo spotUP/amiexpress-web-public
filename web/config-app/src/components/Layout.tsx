@@ -1,5 +1,4 @@
-import { ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import {
   Settings,
   Server,
@@ -21,11 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-interface LayoutProps {
-  children: ReactNode;
-}
-
-export function Layout({ children }: LayoutProps) {
+export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -34,23 +29,25 @@ export function Layout({ children }: LayoutProps) {
     navigate('/login');
   };
 
+  const ADMIN_BASE = '/admin';
+
   const navLinks = [
-    { to: '/system', icon: Settings, label: 'System Config' },
-    { to: '/nodes', icon: Server, label: 'Nodes' },
-    { to: '/users', icon: User, label: 'Users' },
-    { to: '/conferences', icon: MessageSquare, label: 'Conferences' },
-    { to: '/doors', icon: DoorOpen, label: 'Doors' },
-    { to: '/security', icon: Shield, label: 'Security' },
-    { to: '/drives', icon: HardDrive, label: 'Drives' },
-    { to: '/computers', icon: Monitor, label: 'Computers' },
-    { to: '/screen-types', icon: Eye, label: 'Screen Types' },
-    { to: '/file-checkers', icon: FileCheck, label: 'File Checkers' },
-    { to: '/languages', icon: Languages, label: 'Languages' },
-    { to: '/protocols', icon: Download, label: 'Protocols' },
-    { to: '/deployment', icon: Activity, label: 'Deployment' },
-    { to: '/import-export', icon: ArrowUpDown, label: 'Import/Export' },
-    { to: '/logs', icon: FileText, label: 'System Logs' },
-    { to: '/audit', icon: History, label: 'Audit Log' },
+    { to: `${ADMIN_BASE}/system`, icon: Settings, label: 'System Config' },
+    { to: `${ADMIN_BASE}/nodes`, icon: Server, label: 'Nodes' },
+    { to: `${ADMIN_BASE}/users`, icon: User, label: 'Users' },
+    { to: `${ADMIN_BASE}/conferences`, icon: MessageSquare, label: 'Conferences' },
+    { to: `${ADMIN_BASE}/doors`, icon: DoorOpen, label: 'Doors' },
+    { to: `${ADMIN_BASE}/security`, icon: Shield, label: 'Security' },
+    { to: `${ADMIN_BASE}/drives`, icon: HardDrive, label: 'Drives' },
+    { to: `${ADMIN_BASE}/computers`, icon: Monitor, label: 'Computers' },
+    { to: `${ADMIN_BASE}/screen-types`, icon: Eye, label: 'Screen Types' },
+    { to: `${ADMIN_BASE}/file-checkers`, icon: FileCheck, label: 'File Checkers' },
+    { to: `${ADMIN_BASE}/languages`, icon: Languages, label: 'Languages' },
+    { to: `${ADMIN_BASE}/protocols`, icon: Download, label: 'Protocols' },
+    { to: `${ADMIN_BASE}/deployment`, icon: Activity, label: 'Deployment' },
+    { to: `${ADMIN_BASE}/import-export`, icon: ArrowUpDown, label: 'Import/Export' },
+    { to: `${ADMIN_BASE}/logs`, icon: FileText, label: 'System Logs' },
+    { to: `${ADMIN_BASE}/audit`, icon: History, label: 'Audit Log' },
   ];
 
   return (
@@ -110,7 +107,7 @@ export function Layout({ children }: LayoutProps) {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <div className="container mx-auto p-8">
-          {children}
+          <Outlet />
         </div>
       </main>
     </div>

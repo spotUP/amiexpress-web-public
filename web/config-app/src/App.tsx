@@ -40,34 +40,33 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route
-        path="/*"
+        path="/admin/*"
         element={
           <PrivateRoute>
-            <Layout>
-              <Routes>
-                <Route index element={<Navigate to="/system" replace />} />
-                <Route path="system" element={<SystemConfigPage />} />
-                <Route path="nodes" element={<NodesPage />} />
-                <Route path="users" element={<UsersPage />} />
-                <Route path="conferences" element={<ConferencesPage />} />
-                <Route path="doors" element={<DoorsPage />} />
-                <Route path="languages" element={<LanguagesPage />} />
-                <Route path="protocols" element={<ProtocolsPage />} />
-                <Route path="security" element={<SecurityPage />} />
-                <Route path="drives" element={<DrivesPage />} />
-                <Route path="computers" element={<ComputersPage />} />
-                <Route path="screen-types" element={<ScreenTypesPage />} />
-                <Route path="file-checkers" element={<FileCheckersPage />} />
-                <Route path="deployment" element={<DeploymentPage />} />
-                <Route path="import-export" element={<ImportExportPage />} />
-                <Route path="audit" element={<AuditLogPage />} />
-                <Route path="logs" element={<LogsPage />} />
-                <Route path="batches" element={<BatchEditorPage />} />
-              </Routes>
-            </Layout>
+            <Layout />
           </PrivateRoute>
         }
-      />
+      >
+        <Route index element={<Navigate to="system" replace />} />
+        <Route path="system" element={<SystemConfigPage />} />
+        <Route path="nodes" element={<NodesPage />} />
+        <Route path="users" element={<UsersPage />} />
+        <Route path="conferences" element={<ConferencesPage />} />
+        <Route path="doors" element={<DoorsPage />} />
+        <Route path="languages" element={<LanguagesPage />} />
+        <Route path="protocols" element={<ProtocolsPage />} />
+        <Route path="security" element={<SecurityPage />} />
+        <Route path="drives" element={<DrivesPage />} />
+        <Route path="computers" element={<ComputersPage />} />
+        <Route path="screen-types" element={<ScreenTypesPage />} />
+        <Route path="file-checkers" element={<FileCheckersPage />} />
+        <Route path="deployment" element={<DeploymentPage />} />
+        <Route path="import-export" element={<ImportExportPage />} />
+        <Route path="audit" element={<AuditLogPage />} />
+        <Route path="logs" element={<LogsPage />} />
+        <Route path="batches" element={<BatchEditorPage />} />
+        <Route path="*" element={<Navigate to="system" replace />} />
+      </Route>
     </Routes>
   );
 }

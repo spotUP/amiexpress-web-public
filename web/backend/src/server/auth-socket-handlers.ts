@@ -32,7 +32,7 @@ export function registerAuthHandlers(socket: Socket) {
     sock.emit = ((event: string, ...args: any[]) => {
       if (event === 'ansi-output' && (sess.ansiMode === false || sess.user?.ansi === false)) {
         const filtered = args.map((arg) =>
-          typeof arg === 'string' ? AnsiUtil.stripColorCodes(arg) : arg
+          typeof arg === 'string' ? AnsiUtil.stripAnsiForPlainText(arg) : arg
         );
         return originalEmit(event, ...filtered);
       }
