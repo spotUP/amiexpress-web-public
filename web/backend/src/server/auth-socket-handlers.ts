@@ -15,6 +15,7 @@ import { getSessionBySocketId, sessions, userSessions, socketToUser } from './se
 import { callersLog } from './database-helpers';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { sanitizeInput } from '../utils/input-normalizer.util';
+import { ipBanManager } from '../security/ip-ban-manager';
 import { displayScreen, doPause } from '../handlers/screen.handler';
 import { runLoginBatches } from '../services/batch-scheduler';
 
@@ -31,7 +32,7 @@ export function registerAuthHandlers(socket: Socket) {
     sock.emit = ((event: string, ...args: any[]) => {
       if (event === 'ansi-output' && (sess.ansiMode === false || sess.user?.ansi === false)) {
         const filtered = args.map((arg) =>
-          typeof arg === 'string' ? AnsiUtil.stripAnsi(arg) : arg
+          typeof arg === 'string' ? AnsiUtil.stripColorCodes(arg) : arg
         );
         return originalEmit(event, ...filtered);
       }
@@ -65,6 +66,15 @@ export function registerAuthHandlers(socket: Socket) {
       // that transitions from AWAIT → LOGON. The authentication itself is the real security check.
 
       let user;
+      const remoteAddress = session?.remoteAddress || (socket as any).handshake?.address || 'unknown';
+      const handleFailure = () => {
+        const stillAllowed = ipBanManager.recordFailure(remoteAddress);
+        if (!stillAllowed) {
+          socket.emit('ansi-output', '\r\nToo many invalid attempts. Please wait a few minutes and try again.\r\n');
+          socket.disconnect();
+        }
+        return stillAllowed;
+      };
 
       // Check if login is with JWT token or username/password
       if (data.token) {
@@ -97,6 +107,7 @@ export function registerAuthHandlers(socket: Socket) {
           }
 
           socket.emit('login-failed', 'Username cannot be empty');
+          if (!handleFailure()) return;
           return;
         }
 
@@ -112,6 +123,7 @@ export function registerAuthHandlers(socket: Socket) {
               ? '[C]ontinue as a new user? '
               : `\r\nThe name ${safeUsername} is not used on this BBS.\r\n\r\n[R]etry your name or [C]ontinue as a new user? `
           });
+          if (!handleFailure()) return;
           return;
         }
 
@@ -130,6 +142,7 @@ export function registerAuthHandlers(socket: Socket) {
 
           socket.emit('ansi-output', '\r\nInvalid PassWord\r\n');
           socket.emit('prompt-password');
+          if (!handleFailure()) return;
           return;
         }
 
@@ -154,12 +167,14 @@ export function registerAuthHandlers(socket: Socket) {
           // Match express.e: immediately re-prompt for password without asking for username again
           socket.emit('ansi-output', '\r\nInvalid PassWord\r\n');
           socket.emit('prompt-password');
+          if (!handleFailure()) return;
           return;
         }
         console.log('[LOGIN] User authenticated successfully, proceeding with login flow');
 
         // Reset retry counter on successful login
         session.loginRetryCount = 0;
+        ipBanManager.resetFailures(remoteAddress);
 
         // Generate JWT tokens for this session
         const accessToken = await db.generateAccessToken(user);

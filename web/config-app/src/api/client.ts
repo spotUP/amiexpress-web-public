@@ -1,4 +1,4 @@
-import type { ApiResponse } from '../types';
+import type { ApiResponse, User } from '../types';
 
 const API_BASE = '/api';
 const AUTH_BASE = '/auth';
@@ -62,6 +62,10 @@ class ApiClient {
       this.setToken(response.accessToken);
     }
     return { token: response.accessToken, user: response.user };
+  }
+
+  async me() {
+    return this.request<{ user: User }>(`${AUTH_BASE}/me`);
   }
 
   async logout() {

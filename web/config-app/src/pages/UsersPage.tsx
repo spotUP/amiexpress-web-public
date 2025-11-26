@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataGrid, type DataGridColumn } from '../components/DataGrid';
 
 interface BbsUser {
   id: string;
@@ -217,6 +218,74 @@ export function UsersPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageUsers = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  const columns: DataGridColumn<BbsUser>[] = [
+    {
+      key: 'username',
+      header: 'Username',
+      sortable: true,
+      render: (user) => <span className="text-bbs-text font-mono">{user.username}</span>,
+    },
+    {
+      key: 'secLevel',
+      header: 'SecLvl',
+      sortable: true,
+      render: (user) => <span className={getSecurityLevelColor(user.secLevel)}>{user.secLevel}</span>,
+    },
+    {
+      key: 'realname',
+      header: 'Real Name',
+      render: (user) => <span className="text-bbs-text truncate">{user.realname || '—'}</span>,
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      render: (user) => <span className="text-bbs-text truncate">{user.email || '—'}</span>,
+    },
+    {
+      key: 'calls',
+      header: 'Calls',
+      sortable: true,
+      render: (user) => <span className="text-bbs-text">{user.calls}</span>,
+    },
+    {
+      key: 'files',
+      header: 'Files (U/D)',
+      className: 'text-sm',
+      render: (user) => (
+        <span className="text-bbs-text">
+          {user.uploads} / {user.downloads}
+        </span>
+      ),
+    },
+    {
+      key: 'time',
+      header: 'Time',
+      render: (user) => <span className="text-bbs-text">{user.timeLimit} min</span>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (user) => (
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handleEdit(user)}
+            className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
+          >
+            <Edit2 size={14} />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={() => handleDelete(user)}
+            className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs flex items-center space-x-1"
+          >
+            <Trash2 size={14} />
+            <span>Del</span>
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div>
       <div className="mb-8 flex justify-between items-center">
@@ -245,89 +314,42 @@ export function UsersPage() {
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
-        <div className="min-w-full">
-          <div className="grid grid-cols-8 gap-3 font-semibold text-bbs-text border-b border-bbs-border pb-2 text-sm">
-            <button
-              className="text-left"
-              onClick={() => {
-                setSortKey('username');
-                setSortDir(sortKey === 'username' && sortDir === 'asc' ? 'desc' : 'asc');
-              }}
-            >
-              Username {sortKey === 'username' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-            </button>
-            <button
-              className="text-left"
-              onClick={() => {
-                setSortKey('secLevel');
-                setSortDir(sortKey === 'secLevel' && sortDir === 'asc' ? 'desc' : 'asc');
-              }}
-            >
-              SecLvl {sortKey === 'secLevel' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-            </button>
-            <span>Real Name</span>
-            <span>Email</span>
-            <span>Calls</span>
-            <span>Files (U/D)</span>
-            <span>Time</span>
-            <span>Actions</span>
-          </div>
+      <DataGrid
+        columns={columns}
+        rows={pageUsers}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={(key) => {
+          setSortKey(key as typeof sortKey);
+          setSortDir(sortKey === key && sortDir === 'asc' ? 'desc' : 'asc');
+        }}
+        emptyMessage="No users found."
+        getRowKey={(row) => row.id}
+      />
 
-          {pageUsers.map((user) => (
-            <div key={user.id} className="grid grid-cols-8 gap-3 items-center py-2 border-b border-bbs-border text-sm">
-              <div className="text-bbs-text font-mono">{user.username}</div>
-              <div className={`${getSecurityLevelColor(user.secLevel)}`}>{user.secLevel}</div>
-              <div className="text-bbs-text truncate">{user.realname || '—'}</div>
-              <div className="text-bbs-text truncate">{user.email || '—'}</div>
-              <div className="text-bbs-text">{user.calls}</div>
-              <div className="text-bbs-text">{user.uploads} / {user.downloads}</div>
-              <div className="text-bbs-text">{user.timeLimit} min</div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handleEdit(user)}
-                  className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
-                >
-                  <Edit2 size={14} />
-                  <span>Edit</span>
-                </button>
-                <button
-                  onClick={() => handleDelete(user)}
-                  className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs flex items-center space-x-1"
-                >
-                  <Trash2 size={14} />
-                  <span>Del</span>
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {pageUsers.length === 0 && (
-            <div className="text-center text-bbs-muted py-6">No users found.</div>
-          )}
+      <div className="flex justify-between items-center mt-4">
+        <div className="text-sm text-bbs-muted">
+          Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} of{' '}
+          {filtered.length}
         </div>
-
-        <div className="flex justify-between items-center mt-4">
-          <div className="text-sm text-bbs-muted">
-            Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} of {filtered.length}
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="btn-secondary px-3 py-1 disabled:opacity-50"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="text-sm text-bbs-text">{page} / {totalPages}</span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="btn-secondary px-3 py-1 disabled:opacity-50"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="btn-secondary px-3 py-1 disabled:opacity-50"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="text-sm text-bbs-text">
+            {page} / {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="btn-secondary px-3 py-1 disabled:opacity-50"
+          >
+            <ChevronRight size={14} />
+          </button>
         </div>
       </div>
 
@@ -354,7 +376,9 @@ export function UsersPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label htmlFor="username" className="label">Username *</label>
+                  <label htmlFor="username" className="label">
+                    Username *
+                  </label>
                   <input
                     id="username"
                     type="text"
@@ -364,7 +388,9 @@ export function UsersPage() {
                     required
                     disabled={!!editingUser}
                   />
-                  {editingUser && <p className="text-xs text-bbs-muted mt-1">Username cannot be changed</p>}
+                  {editingUser && (
+                    <p className="text-xs text-bbs-muted mt-1">Username cannot be changed</p>
+                  )}
                 </div>
 
                 <div>
@@ -383,7 +409,9 @@ export function UsersPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="realname" className="label">Real Name</label>
+                  <label htmlFor="realname" className="label">
+                    Real Name
+                  </label>
                   <input
                     id="realname"
                     type="text"
@@ -394,7 +422,9 @@ export function UsersPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="email" className="label">Email</label>
+                  <label htmlFor="email" className="label">
+                    Email
+                  </label>
                   <input
                     id="email"
                     type="email"
@@ -405,7 +435,9 @@ export function UsersPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="location" className="label">Location</label>
+                  <label htmlFor="location" className="label">
+                    Location
+                  </label>
                   <input
                     id="location"
                     type="text"
@@ -416,7 +448,9 @@ export function UsersPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="phone" className="label">Phone</label>
+                  <label htmlFor="phone" className="label">
+                    Phone
+                  </label>
                   <input
                     id="phone"
                     type="text"
@@ -427,28 +461,38 @@ export function UsersPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="secLevel" className="label">Security Level *</label>
+                  <label htmlFor="secLevel" className="label">
+                    Security Level *
+                  </label>
                   <input
                     id="secLevel"
                     type="number"
                     min="0"
                     max="255"
                     value={formData.secLevel}
-                    onChange={(e) => setFormData({ ...formData, secLevel: parseInt(e.target.value) })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, secLevel: parseInt(e.target.value, 10) })
+                    }
                     className="input-field w-full"
                     required
                   />
-                  <p className="text-xs text-bbs-muted mt-1">0-255 (255=Sysop, 200=Co-Sysop, 100=Privileged)</p>
+                  <p className="text-xs text-bbs-muted mt-1">
+                    0-255 (255=Sysop, 200=Co-Sysop, 100=Privileged)
+                  </p>
                 </div>
 
                 <div>
-                  <label htmlFor="timeLimit" className="label">Time Limit (min) *</label>
+                  <label htmlFor="timeLimit" className="label">
+                    Time Limit (min) *
+                  </label>
                   <input
                     id="timeLimit"
                     type="number"
                     min="0"
                     value={formData.timeLimit}
-                    onChange={(e) => setFormData({ ...formData, timeLimit: parseInt(e.target.value) })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, timeLimit: parseInt(e.target.value, 10) })
+                    }
                     className="input-field w-full"
                     required
                   />
@@ -484,7 +528,11 @@ export function UsersPage() {
                   className="btn-primary"
                   disabled={createMutation.isPending || updateMutation.isPending}
                 >
-                  {createMutation.isPending || updateMutation.isPending ? 'Saving...' : editingUser ? 'Update User' : 'Create User'}
+                  {createMutation.isPending || updateMutation.isPending
+                    ? 'Saving...'
+                    : editingUser
+                      ? 'Update User'
+                      : 'Create User'}
                 </button>
               </div>
             </form>

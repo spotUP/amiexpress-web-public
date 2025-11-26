@@ -1,10 +1,13 @@
-import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import Zmodem from 'zmodem.js/src/zmodem_browser';
+
+const SHARED_AUTH_TOKEN_KEY = 'authToken';
+const BBS_AUTH_TOKEN_KEY = 'bbs_auth_token';
 
 interface BBSTerminalProps {
   /** BBS backend URL (defaults to auto-detect based on environment) */
@@ -90,6 +93,49 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       transferTimeout.current = null;
     }
   };
+
+  const getStoredSharedToken = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    return (
+      localStorage.getItem(SHARED_AUTH_TOKEN_KEY) ||
+      localStorage.getItem(BBS_AUTH_TOKEN_KEY)
+    );
+  }, []);
+
+  const attemptTokenLogin = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket) return false;
+    if (loginState.current === 'loggedin' || loginState.current === 'registering') {
+      return false;
+    }
+
+    const token = getStoredSharedToken();
+    if (token) {
+      console.log('[AutoLogin] Reusing shared auth token');
+      socket.emit('login', { token });
+      loginState.current = 'checking-username';
+      return true;
+    }
+    return false;
+  }, [getStoredSharedToken]);
+
+  useEffect(() => {
+    if (!attemptTokenLogin()) {
+      loginState.current = 'waiting';
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === SHARED_AUTH_TOKEN_KEY ||
+        event.key === BBS_AUTH_TOKEN_KEY
+      ) {
+        attemptTokenLogin();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [attemptTokenLogin]);
 
   const cancelTransfer = () => {
     const socket = socketRef.current;
@@ -470,6 +516,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
 
     socket.on('prompt-login', () => {
+      if (attemptTokenLogin()) {
+        return;
+      }
+
       if (!handleAutoLogin()) {
         term.write('Username: ');
         loginState.current = 'username';
@@ -479,8 +529,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('login-success', (data: any) => {
       console.log('Login successful:', data);
       if (data && data.token) {
-        localStorage.setItem('bbs_auth_token', data.token);
+        localStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
+        localStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key: SHARED_AUTH_TOKEN_KEY,
+            newValue: data.token,
+            oldValue: null,
+          })
+        );
       }
+      loginState.current = 'loggedin';
 
       const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
       if (autoLoginEnabled && newUserPromptUsername.current) {

@@ -1,6 +1,31 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { apiClient } from '../api/client';
 import type { User } from '../types';
+
+const AUTH_USER_STORAGE_KEY = 'amiexpress-config-user';
+
+const readStoredUser = (): User | null => {
+  if (typeof window === 'undefined') return null;
+  const stored = localStorage.getItem(AUTH_USER_STORAGE_KEY);
+  if (!stored) return null;
+
+  try {
+    return JSON.parse(stored) as User;
+  } catch (error) {
+    console.warn('Unable to parse stored config user', error);
+    localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+    return null;
+  }
+};
+
+const persistUser = (user: User | null) => {
+  if (typeof window === 'undefined') return;
+  if (user) {
+    localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+  }
+};
 
 interface AuthContextType {
   user: User | null;
@@ -13,26 +38,63 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => readStoredUser());
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Check if user is already logged in on mount
+  const refreshUserFromToken = useCallback(async () => {
     const token = apiClient.getToken();
-    if (token) {
-      // In a real app, you'd validate the token with the backend
-      // For now, we'll just mark as not loading
+    if (!token) {
+      setUser(null);
+      persistUser(null);
       setIsLoading(false);
-    } else {
+      return;
+    }
+
+    apiClient.setToken(token);
+
+    try {
+      const { user: fetched } = await apiClient.me();
+      setUser(fetched);
+      persistUser(fetched);
+    } catch (error) {
+      apiClient.logout();
+      setUser(null);
+      persistUser(null);
+    } finally {
       setIsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    refreshUserFromToken();
+  }, [refreshUserFromToken]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== 'authToken') {
+        return;
+      }
+      // If token cleared, log out locally; otherwise refresh user info
+    if (!event.newValue) {
+      apiClient.logout();
+      setUser(null);
+      persistUser(null);
+      return;
+    }
+    apiClient.setToken(event.newValue);
+    refreshUserFromToken();
+  };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [refreshUserFromToken]);
 
   const login = async (username: string, password: string) => {
     try {
       const data = await apiClient.login(username, password);
       if (data?.user) {
         setUser(data.user);
+        persistUser(data.user);
       }
     } catch (error) {
       throw error;
@@ -41,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     apiClient.logout();
+    persistUser(null);
     setUser(null);
   };
 

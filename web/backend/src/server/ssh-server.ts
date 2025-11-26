@@ -19,6 +19,7 @@ import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession
 import { BBSSession } from '../index';
 import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
+import { ipBanManager } from '../security/ip-ban-manager';
 
 /**
  * SSH Connection
@@ -249,6 +250,12 @@ export class SSHServerImpl extends EventEmitter {
   private handleConnection(client: Connection): void {
     const remoteAddress = (client as any)._sock?.remoteAddress || 'unknown';
     console.log(`[SSH Server] New connection from ${remoteAddress}`);
+
+    if (!ipBanManager.allowConnection(remoteAddress)) {
+      console.warn(`[SSH Server] Connection from ${remoteAddress} blocked (suspicious activity).`);
+      client.end();
+      return;
+    }
 
     // Check rate limiting
     if (!checkConnectionLimit(remoteAddress)) {

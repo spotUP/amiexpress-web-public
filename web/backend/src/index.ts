@@ -598,6 +598,9 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Authentication endpoints
 app.post('/auth/login', (req: Request, res: Response) => authHandler.login(req, res));
+app.get('/auth/me', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+  authHandler.me(req as AuthRequest, res)
+);
 app.post('/auth/register', (req: Request, res: Response) => authHandler.register(req, res));
 app.post('/auth/refresh', (req: Request, res: Response) => authHandler.refresh(req, res));
 

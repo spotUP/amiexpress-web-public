@@ -2,9 +2,12 @@
 export interface User {
   id: number;
   username: string;
-  email: string;
+  email?: string;
   secLevel: number;
-  created_at: Date;
+  created_at?: string;
+  realname?: string;
+  expert?: string;
+  ansi?: boolean;
 }
 
 // Authentication

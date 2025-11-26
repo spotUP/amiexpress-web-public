@@ -6,9 +6,24 @@
 import { Request, Response } from 'express';
 import { Database } from '../database';
 import { sanitizeInput } from '../utils/input-normalizer.util';
+import { AuthRequest } from '../middleware/auth.middleware';
 
 export class AuthHandler {
   constructor(private db: Database) {}
+
+  private toPublicUser(user: any) {
+    if (!user) return null;
+    return {
+      id: user.id,
+      username: user.username,
+      realname: user.realname,
+      secLevel: user.secLevel,
+      expert: user.expert === 'X' ? 'X' : 'N',
+      ansi: typeof user.ansi === 'boolean' ? user.ansi : true,
+      email: user.email,
+      created_at: user.created_at
+    };
+  }
 
   /**
    * POST /auth/login
@@ -37,6 +52,11 @@ export class AuthHandler {
         return;
       }
 
+      if (user.secLevel < 255) {
+        res.status(403).json({ error: 'Sysop access required' });
+        return;
+      }
+
       // Update last login
       await this.db.updateUser(user.id, {
         lastLogin: new Date(),
@@ -48,20 +68,38 @@ export class AuthHandler {
       const accessToken = await this.db.generateAccessToken(user);
       const refreshToken = await this.db.generateRefreshToken(user);
 
+      const publicUser = this.toPublicUser(user);
       res.json({
         accessToken,
         refreshToken,
-        user: {
-          id: user.id,
-          username: user.username,
-          realname: user.realname,
-          secLevel: user.secLevel,
-          expert: user.expert === 'X' ? 'X' : 'N',
-          ansi: user.ansi
-        }
+        user: publicUser
       });
     } catch (error) {
       console.error('Login error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * GET /auth/me
+   * Return the authenticated user's info
+   */
+  async me(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user?.userId) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const user = await this.db.getUserById(req.user.userId);
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      res.json({ user: this.toPublicUser(user) });
+    } catch (error) {
+      console.error('Me error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -149,14 +187,7 @@ export class AuthHandler {
       res.status(201).json({
         accessToken,
         refreshToken,
-        user: {
-          id: user.id,
-          username: user.username,
-          realname: user.realname,
-          secLevel: user.secLevel,
-          expert: user.expert === 'X' ? 'X' : 'N',
-          ansi: user.ansi
-        }
+        user: this.toPublicUser(user)
       });
     } catch (error) {
       console.error('Registration error:', error);

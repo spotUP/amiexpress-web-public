@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback, lazy, Suspense, FormEvent } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
   // Lazy-loaded heavy components moved below
@@ -192,6 +192,99 @@ function App() {
     '',
   ]);
   const [logsOutput, setLogsOutput] = useState<string[]>(initialLogs.current);
+
+  const BBS_API_URL =
+    import.meta.env.VITE_BBS_API_URL ||
+    (import.meta.env.DEV
+      ? 'http://localhost:3001'
+      : `${window.location.protocol}//${window.location.hostname}:3001`);
+
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+
+  const checkAuth = useCallback(async () => {
+    setIsAuthReady(false);
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setIsAuthenticated(false);
+      setIsAuthReady(true);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BBS_API_URL}/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Session expired');
+      }
+
+      const data = await response.json();
+      if (data?.user) {
+        if (typeof data.user.secLevel === 'number' && data.user.secLevel < 255) {
+          throw new Error('Sysop access required');
+        }
+        setIsAuthenticated(true);
+        setAuthError(null);
+      } else {
+        throw new Error('Invalid auth response');
+      }
+    } catch (error) {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('bbs_auth_token');
+      setIsAuthenticated(false);
+      setAuthError(error instanceof Error ? error.message : 'Authentication failed');
+    } finally {
+      setIsAuthReady(true);
+    }
+  }, [BBS_API_URL]);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'authToken') {
+        checkAuth();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [checkAuth]);
+
+  const handleAuthLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAuthError(null);
+    setIsAuthReady(false);
+    try {
+      const response = await fetch(`${BBS_API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      if (data.accessToken) {
+        localStorage.setItem('authToken', data.accessToken);
+        localStorage.setItem('bbs_auth_token', data.accessToken);
+      }
+      await checkAuth();
+      setLoginForm({ username: '', password: '' });
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Login failed');
+      setIsAuthReady(true);
+    }
+  };
 
   const resetLogs = useCallback(() => {
     setLogsOutput(initialLogs.current);
@@ -1879,6 +1972,61 @@ function App() {
             onClose={() => setShowDiffViewer(false)}
           />
         </Suspense>
+      )}
+
+      {!isAuthReady && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 text-white">
+          <div className="bg-[#111212] rounded-lg p-6 border border-white/10 shadow-xl text-center">
+            <p className="text-lg font-semibold mb-2">Checking shared sysop session...</p>
+            <p className="text-sm text-white/70">
+              Please wait while we validate your AmiExpress authentication.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isAuthReady && !isAuthenticated && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <form
+            onSubmit={handleAuthLogin}
+            className="w-full max-w-sm bg-[#1a1c1f] border border-white/10 rounded-xl p-6 shadow-2xl text-white"
+          >
+            <h2 className="text-2xl font-semibold mb-4">Sysop Login Required</h2>
+            <p className="text-xs uppercase tracking-wide text-white/60 mb-4">
+              This preview requires a sysop token from the AmiExpress BBS.
+            </p>
+            {authError && (
+              <div className="mb-3 text-sm text-red-400 bg-red-900/20 rounded px-3 py-2">
+                {authError}
+              </div>
+            )}
+            <label className="block text-xs text-white/60 mb-2">Username</label>
+            <input
+              type="text"
+              value={loginForm.username}
+              onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+              className="w-full mb-3 px-3 py-2 bg-white/5 border border-white/10 rounded focus:outline-none focus:border-bbs-accent"
+              placeholder="Sysop username"
+              required
+            />
+            <label className="block text-xs text-white/60 mb-2">Password</label>
+            <input
+              type="password"
+              value={loginForm.password}
+              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+              className="w-full mb-4 px-3 py-2 bg-white/5 border border-white/10 rounded focus:outline-none focus:border-bbs-accent"
+              placeholder="Password"
+              required
+            />
+            <button
+              type="submit"
+              className="w-full px-3 py-2 bg-bbs-accent rounded text-sm font-semibold transition hover:bg-bbs-accent/80 disabled:opacity-50"
+              disabled={!loginForm.username || !loginForm.password}
+            >
+              Log in to AmiExpress
+            </button>
+          </form>
+        </div>
       )}
     </div>
   );

@@ -19,6 +19,7 @@ import { LOCALHOST_IPS } from '../index';
 import { BBSSession } from '../index';
 import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
+import { ipBanManager } from '../security/ip-ban-manager';
 
 // Telnet IAC (Interpret As Command) constants - express.e:2389-2508
 const IAC = 255;  // Interpret As Command
@@ -423,6 +424,13 @@ export class TelnetServer extends EventEmitter {
       return;
     }
     console.log(`[Telnet Server] New connection from ${remoteAddress}`);
+
+    if (!ipBanManager.allowConnection(remoteAddress)) {
+      console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (suspicious activity)`);
+      socket.write('Too many requests. Try again later.\r\n');
+      socket.end();
+      return;
+    }
 
     // Check rate limiting (express.e uses similar connection tracking)
     if (!checkConnectionLimit(remoteAddress)) {

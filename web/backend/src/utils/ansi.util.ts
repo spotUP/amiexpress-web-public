@@ -154,6 +154,14 @@ export class AnsiUtil {
   }
 
   /**
+   * Strip CSI SGR color codes (only the color/formatting sequences)
+   */
+  static stripColorCodes(text: string): string {
+    // Match sequences like \x1b[0m or \x1b[1;31m
+    return text.replace(/\x1b\[[0-9;]*m/g, '');
+  }
+
+  /**
    * Pad text to right with spaces (ANSI-aware)
    * @param text - Text to pad (may contain ANSI codes)
    * @param width - Target visible width
