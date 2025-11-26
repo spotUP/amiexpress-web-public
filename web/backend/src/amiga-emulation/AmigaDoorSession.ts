@@ -8,8 +8,8 @@ import { MoiraEmulator } from "./cpu/MoiraEmulator.js";
 import { KickstartRom } from "./KickstartRom.js";
 import { HunkLoader } from "./loader/HunkLoader.js";
 import { XIMProtocol } from "./XIMProtocol.js";
-import * as fs from "fs";
 import * as path from "path";
+import { appendFileSync } from "fs";
 
 import { DoorConfig } from "./DoorTypes.js";
 import { LibraryManager } from "./LibraryManager.js";
@@ -83,11 +83,22 @@ export class AmigaDoorSession {
       timeout: 300, // 5 minutes default
       ...config,
     };
+    if (!this.config.doorId) {
+      const fromSession = this.config.bbsSession?.doorCommand;
+      if (fromSession) {
+        this.config.doorId = String(fromSession).trim().toUpperCase();
+      } else {
+        this.config.doorId = path.basename(this.config.executablePath).charAt(0).toUpperCase();
+      }
+    }
 
     console.log(
       `[AmigaDoorSession] Initializing refactored session for: ${path.basename(
         this.config.executablePath
       )}`
+    );
+    this.logDoorEvent(
+      `START door=${path.basename(this.config.executablePath)} path=${this.config.executablePath}`
     );
 
     // Set up socket event handlers
@@ -193,6 +204,9 @@ export class AmigaDoorSession {
       try {
         const globalAny: any = global as any;
         globalAny.currentBbsSession = this.config.bbsSession;
+        if (this.config.doorId) {
+          globalAny.currentBbsSession.doorId = this.config.doorId;
+        }
       } catch (_) {
         /* ignore */
       }
@@ -209,6 +223,9 @@ export class AmigaDoorSession {
         this.config
       );
       await this.initializeLibraries();
+
+      // Provide a CLI structure so doors see a real pr_CLI (matches /X SystemTagList)
+      this.setupCliEnvironment();
 
       // Initialize Door Loader (Phase 3)
       this.doorLoader = new DoorLoader(
@@ -296,8 +313,16 @@ export class AmigaDoorSession {
 
       // Start the lifecycle management
       await this.lifecycleManager.startLifecycle();
+      this.logDoorEvent(
+        `END door=${path.basename(this.config.executablePath)} status=ok`
+      );
     } catch (error) {
       console.error("[AmigaDoorSession] Error starting door:", error);
+      this.logDoorEvent(
+        `END door=${path.basename(this.config.executablePath)} status=error msg=${
+          error instanceof Error ? error.message : error
+        }`
+      );
       this.socket.emit("door:error", {
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -417,6 +442,133 @@ export class AmigaDoorSession {
   }
 
   /**
+   * Create a minimal CLI structure and attach it to pr_CLI, matching
+   * the /X SystemTagList environment (node number as arg, program name).
+   * This lets doors detect they're running from CLI and call Cli(), FindVar(), etc.
+   */
+  private setupCliEnvironment(): void {
+    if (!this.emulator || !this.sharedState.execLibrary || !this.sharedState.dosLibrary) {
+      return;
+    }
+
+    const taskAddr = 0x70000; // Current task address used by ExecLibrary
+    const prCliOffset = 0xac; // pr_CLI offset inside struct Process
+    const cliStructAddr = 0x90000;
+    const cmdLineAddr = 0x90100; // BSTR (length byte + text)
+    const argStringAddr = 0x90200; // args only (no program name)
+    const localVarsListAddr = 0x90300;
+    const rcVarAddr = 0x90320;
+    const rcNameAddr = 0x90340;
+    const result2VarAddr = 0x90360;
+    const result2NameAddr = 0x90380;
+
+    const progName = path.basename(this.config.executablePath);
+    const nodeId =
+      this.config.bbsSession?.nodeId ??
+      this.config.bbsSession?.nodeNumber ??
+      0;
+
+    // Full command line BSTR (program + node)
+    const cmdLine = `${progName.toUpperCase()} ${nodeId}`;
+    this.emulator.writeMemory(cmdLineAddr, cmdLine.length);
+    for (let i = 0; i < cmdLine.length; i++) {
+      this.emulator.writeMemory(cmdLineAddr + 1 + i, cmdLine.charCodeAt(i));
+    }
+    this.emulator.writeMemory(cmdLineAddr + 1 + cmdLine.length, 0);
+
+    // CLI structure (partial) – offsets per dos/dosextens.h
+    this.emulator.writeMemory32(cliStructAddr + 0x00, 0); // cli_Result2
+    this.emulator.writeMemory32(cliStructAddr + 0x04, 0); // cli_SetName
+    this.emulator.writeMemory32(cliStructAddr + 0x08, 0); // cli_CommandDir
+    this.emulator.writeMemory32(cliStructAddr + 0x0c, 0); // cli_ReturnCode
+    this.emulator.writeMemory32(cliStructAddr + 0x10, cmdLineAddr >> 2); // cli_CommandName (BPTR to BSTR)
+    this.emulator.writeMemory32(cliStructAddr + 0x14, 0); // cli_FailLevel
+    this.emulator.writeMemory32(cliStructAddr + 0x18, 0); // cli_Prompt
+    this.emulator.writeMemory32(cliStructAddr + 0x1c, 0); // cli_StandardInput
+    this.emulator.writeMemory32(cliStructAddr + 0x20, 0); // cli_CurrentInput
+    this.emulator.writeMemory32(cliStructAddr + 0x24, 0); // cli_CommandFile
+    this.emulator.writeMemory32(cliStructAddr + 0x28, -1); // cli_Interactive (TRUE)
+    this.emulator.writeMemory32(cliStructAddr + 0x2c, 0); // cli_Background
+    this.emulator.writeMemory32(cliStructAddr + 0x30, 0); // cli_CurrentOutput
+    this.emulator.writeMemory32(cliStructAddr + 0x34, 4096); // cli_DefaultStack
+    this.emulator.writeMemory32(cliStructAddr + 0x38, 0); // cli_StandardOutput
+    this.emulator.writeMemory32(cliStructAddr + 0x3c, 0); // cli_Module
+    this.emulator.writeMemory32(cliStructAddr + 0x40, 0); // cli_CurrentDir
+    this.emulator.writeMemory32(cliStructAddr + 0x44, 0); // cli_DirLen
+    this.emulator.writeMemory32(cliStructAddr + 0x48, 0); // cli_DirBuf
+    this.emulator.writeMemory32(cliStructAddr + 0x4c, 0); // cli_PathList
+    this.emulator.writeMemory32(cliStructAddr + 0x50, 0); // cli_ReturnAddr
+    this.emulator.writeMemory32(cliStructAddr + 0x54, 0); // cli_Pid
+    this.emulator.writeMemory32(cliStructAddr + 0x58, 0); // cli_NumArgs
+
+    // LocalVars MinList with RC=0 and Result2=0 so FindVar("RC"/"Result2") works
+    this.emulator.writeMemory32(localVarsListAddr + 0, localVarsListAddr + 4); // lh_Head -> Tail
+    this.emulator.writeMemory32(localVarsListAddr + 4, 0); // lh_Tail = NULL
+    this.emulator.writeMemory32(localVarsListAddr + 8, localVarsListAddr); // lh_TailPred -> Head
+
+    this.emulator.writeString(rcNameAddr, "RC");
+    this.emulator.writeMemory32(rcVarAddr + 0, 0); // ln_Succ (patched below)
+    this.emulator.writeMemory32(rcVarAddr + 4, 0); // ln_Pred
+    this.emulator.writeMemory(rcVarAddr + 8, 0); // ln_Type
+    this.emulator.writeMemory(rcVarAddr + 9, 0); // ln_Pri
+    this.emulator.writeMemory32(rcVarAddr + 10, rcNameAddr); // ln_Name
+    this.emulator.writeMemory32(rcVarAddr + 14, 0); // lv_Value
+    this.emulator.writeMemory32(rcVarAddr + 18, 0); // lv_Len
+
+    this.emulator.writeString(result2NameAddr, "Result2");
+    this.emulator.writeMemory32(result2VarAddr + 0, 0); // ln_Succ
+    this.emulator.writeMemory32(result2VarAddr + 4, rcVarAddr); // ln_Pred -> RC
+    this.emulator.writeMemory(result2VarAddr + 8, 0); // ln_Type
+    this.emulator.writeMemory(result2VarAddr + 9, 0); // ln_Pri
+    this.emulator.writeMemory32(result2VarAddr + 10, result2NameAddr); // ln_Name
+    this.emulator.writeMemory32(result2VarAddr + 14, 0); // lv_Value
+    this.emulator.writeMemory32(result2VarAddr + 18, 0); // lv_Len
+
+    // Link RC -> Result2 and head -> RC
+    this.emulator.writeMemory32(rcVarAddr + 0, result2VarAddr);
+    this.emulator.writeMemory32(localVarsListAddr + 0, rcVarAddr);
+
+    this.emulator.writeMemory32(cliStructAddr + 0x5c, localVarsListAddr >> 2); // cli_LocalVars (BPTR)
+
+    const cliBPTR = cliStructAddr >> 2;
+    this.emulator.writeMemory32(taskAddr + prCliOffset, cliBPTR);
+
+    console.log(
+      `[AmigaDoorSession] Created CLI struct at 0x${cliStructAddr.toString(
+        16
+      )} (pr_CLI=0x${cliBPTR.toString(16)})`
+    );
+    console.log(
+      `[AmigaDoorSession]   Command BSTR len=${cmdLine.length} at 0x${cmdLineAddr.toString(
+        16
+      )} "${cmdLine}"`
+    );
+
+    // Set CLI info for dos.library helpers (GetArgStr, GetCliProgramName)
+    const cliArgs =
+      this.config.args && this.config.args.length > 0
+        ? this.config.args
+        : [nodeId.toString()];
+    const argStringPlain = cliArgs.join(" ").trim() || nodeId.toString();
+    for (let i = 0; i < argStringPlain.length; i++) {
+      this.emulator.writeMemory(argStringAddr + i, argStringPlain.charCodeAt(i));
+    }
+    this.emulator.writeMemory(argStringAddr + argStringPlain.length, 0);
+    this.sharedState.dosLibrary.setCliInfo(argStringAddr, progName);
+
+    // Restore pr_CLI if a door CreatePort() overwrites it
+    this.sharedState.execLibrary.setDoorInitCallback(() => {
+      const currentValue = this.emulator?.readMemory32(taskAddr + prCliOffset) ?? 0;
+      if (currentValue === 0) {
+        this.emulator?.writeMemory32(taskAddr + prCliOffset, cliBPTR);
+        console.log(
+          "[AmigaDoorSession] pr_CLI was cleared during CreatePort; restored CLI pointer"
+        );
+      }
+    });
+  }
+
+  /**
    * Send startup message through Message Handler - REFACTORED
    */
   private sendStartupMessage(): void {
@@ -517,6 +669,20 @@ export class AmigaDoorSession {
   resume(): void {
     if (this.lifecycleManager) {
       this.lifecycleManager.resume();
+    }
+  }
+
+  /**
+   * Append door events to backend.log so admin log view shows 68k door activity.
+   */
+  private logDoorEvent(message: string): void {
+    try {
+      const projectRoot = path.resolve(process.cwd(), "../..");
+      const logFile = path.join(projectRoot, "logs", "door-68k.log");
+      const line = `[DoorLog] ${new Date().toISOString()} ${message}\n`;
+      appendFileSync(logFile, line, { encoding: "utf8" });
+    } catch (err) {
+      console.error("[AmigaDoorSession] Failed to write door log:", err);
     }
   }
 }

@@ -337,6 +337,8 @@ printf "%b\n" "           ${YELLOW}(Backend API on port 8080)${RESET}"
 echo ""
 printf "%b\n" "${WHITE}  [API]${RESET}    ${WHITE}http://localhost:3001/api/${RESET}"
 printf "%b\n" "           ${CYAN}Backend REST API Server${RESET}"
+printf "%b\n" "${WHITE}  [TELNET]${RESET} ${WHITE}telnet localhost ${TELNET_PORT:-64128}${RESET}"
+printf "%b\n" "${WHITE}  [SSH]${RESET}    ${WHITE}ssh -p ${SSH_PORT:-31337} user@localhost${RESET}"
 echo ""
 if [ "$DEBUG_MODE" = true ]; then
 printf "%b\n" "${YELLOW}  [DEBUG] MODE: Full logs visible below${RESET}"

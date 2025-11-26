@@ -10,6 +10,7 @@ import { db } from '../database';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity } from '../utils/security.util';
+import { AnsiUtil } from '../utils/ansi.util';
 import { getSessionBySocketId, sessions, userSessions, socketToUser } from './session-manager';
 import { callersLog } from './database-helpers';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
@@ -23,6 +24,21 @@ import { runLoginBatches } from '../services/batch-scheduler';
 export function registerAuthHandlers(socket: Socket) {
   const session = getSessionBySocketId(socket.id);
   if (!session) return;
+
+  const installAnsiFilter = (sock: Socket, sess: any) => {
+    if ((sock as any)._ansiFilterInstalled) return;
+    const originalEmit = sock.emit.bind(sock);
+    sock.emit = ((event: string, ...args: any[]) => {
+      if (event === 'ansi-output' && (sess.ansiMode === false || sess.user?.ansi === false)) {
+        const filtered = args.map((arg) =>
+          typeof arg === 'string' ? AnsiUtil.stripAnsi(arg) : arg
+        );
+        return originalEmit(event, ...filtered);
+      }
+      return originalEmit(event, ...args);
+    }) as any;
+    (sock as any)._ansiFilterInstalled = true;
+  };
 
   const getMaxPasswordFails = () => {
     try {
@@ -174,6 +190,8 @@ export function registerAuthHandlers(socket: Socket) {
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
+      session.ansiMode = user.ansi;
+      installAnsiFilter(socket, session);
 
       // Run daily batch for this node (once per calendar day, per node) to mirror AmiExpress batch runner
       try {
@@ -277,7 +295,8 @@ export function registerAuthHandlers(socket: Socket) {
 
       // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
       const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
-      if (logonDisplayed && !session.lastScreenHadPause) {
+      // If the screen didn't set up its own pause, add one so the user can read it
+      if (logonDisplayed && !session.paginatedScreen) {
         doPause(socket, session);
       }
 

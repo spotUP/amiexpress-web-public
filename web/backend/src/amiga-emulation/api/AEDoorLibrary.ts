@@ -166,13 +166,6 @@ export class AEDoorLibrary {
     this.interfaces.set(difaceAddr, state);
     this.emulator.setRegister(0, difaceAddr);
 
-    // Send initial ready message to door's reply port
-    // This kicks off the message handshake Bulls is waiting for
-    console.log(
-      `[AEDoorLibrary] CreateComm complete - sending initial ready message to reply port`
-    );
-    this.sendInitialReadyMessage(state);
-
     return difaceAddr;
   }
 

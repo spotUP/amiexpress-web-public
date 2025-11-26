@@ -177,6 +177,12 @@ export function setSession(socketId: string, session: BBSSession): void {
 
   // Store the session: nodeId → session
   sessions.set(nodeId.toString(), session);
+
+  // Also map user → session if logged in
+  const userId = (session as any).user?.id || (session as any).user?.userId;
+  if (userId) {
+    userSessions.set(String(userId), session);
+  }
 }
 
 /**

@@ -1,0 +1,9 @@
+FileID          "BVDBG"
+Name            "BullView Debug"
+Type            TS
+Location        TS:bullview-debug
+Command         BVDBG
+HotKey          BV
+MenuName        "BullView Debug"
+Description     "Debug BullView XIM handshake"
+HotKeyDescription "BullView Debug"

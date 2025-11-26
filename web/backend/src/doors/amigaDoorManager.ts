@@ -16,6 +16,7 @@ import * as crypto from 'crypto';
 import { getAmigaAssignPaths } from '../utils/bbs-paths.util';
 import { loadCommands } from '../handlers/command-execution.handler';
 import { config } from '../config';
+import { parseInfoFile as parseToolTypes } from '../utils/amiga-command-parser.util';
 
 /**
  * AmigaDOS Assign Definitions
@@ -49,6 +50,18 @@ export interface DoorInfo {
   priority?: string;         // PRIORITY= setting
   multinode?: boolean;       // MULTINODE= YES/NO
   name?: string;             // NAME= field (optional)
+  resident?: boolean;        // RESIDENT=YES/NO
+  expertMode?: boolean;      // EXPERT_MODE flag
+  trapOn?: boolean;          // TRAPON=YES/NO
+  silent?: boolean;          // SILENT=YES/NO
+  quickMode?: boolean;       // QUICKMODE=YES/NO
+  logInputs?: boolean;       // LOG_INPUTS=YES/NO
+  scriptCheck?: boolean;     // SCRIPTCHECK=YES/NO
+  banner?: string;           // BANNER= filename
+  mimicVer?: string;         // MIMICVER= version string
+  passParameters?: number;   // PASS_PARAMETERS=#
+  internal?: string;         // INTERNAL= command redirection
+  toolTypes?: Record<string, string>; // All parsed tooltypes (uppercased keys)
   description?: string;      // Description from archive
   installed: boolean;        // Whether door executable exists
   doorName?: string;         // Extracted door name from path
@@ -143,48 +156,70 @@ export class AmigaDoorManager {
    */
   parseInfoFile(infoPath: string): Partial<DoorInfo> | null {
     try {
-      const content = fs.readFileSync(infoPath);
-      const text = content.toString('latin1'); // Use latin1 to preserve binary data
+      const tooltypes = parseToolTypes(infoPath);
+      if (!tooltypes || tooltypes.size === 0) {
+        return null;
+      }
 
       const metadata: Partial<DoorInfo> = {
         command: path.basename(infoPath, '.info'),
+        toolTypes: Object.fromEntries(tooltypes.entries()),
       };
 
-      // Extract fields using regex (case-insensitive)
-      const locationMatch = text.match(/LOCATION=([^\x00\r\n]+)/i);
-      if (locationMatch) {
-        metadata.location = locationMatch[1].trim();
+      // Core fields
+      const location = tooltypes.get('LOCATION') || tooltypes.get('PATH');
+      if (location) {
+        metadata.location = location.trim();
         metadata.resolvedPath = this.resolveAssign(metadata.location);
       }
 
-      const accessMatch = text.match(/ACCESS=(\d+)/i);
-      if (accessMatch) {
-        metadata.access = parseInt(accessMatch[1], 10);
+      const access = tooltypes.get('ACCESS');
+      if (access) {
+        metadata.access = parseInt(access, 10);
       }
 
-      const typeMatch = text.match(/TYPE=([A-Z]+)/i);
-      if (typeMatch) {
-        metadata.type = typeMatch[1].trim();
+      const typeValue = tooltypes.get('TYPE');
+      metadata.type = typeValue ? typeValue.trim().toUpperCase() : 'SIM';
+
+      const stack = tooltypes.get('STACK');
+      if (stack) {
+        metadata.stack = parseInt(stack, 10);
       }
 
-      const stackMatch = text.match(/STACK=(\d+)/i);
-      if (stackMatch) {
-        metadata.stack = parseInt(stackMatch[1], 10);
+      const priority = tooltypes.get('PRIORITY');
+      if (priority) {
+        metadata.priority = priority.trim();
       }
 
-      const priorityMatch = text.match(/PRIORITY=([A-Z]+)/i);
-      if (priorityMatch) {
-        metadata.priority = priorityMatch[1].trim();
+      const multinode = tooltypes.get('MULTINODE');
+      if (multinode) {
+        metadata.multinode = multinode.toUpperCase() === 'YES';
       }
 
-      const multinodeMatch = text.match(/MULTINODE=(YES|NO)/i);
-      if (multinodeMatch) {
-        metadata.multinode = multinodeMatch[1].toUpperCase() === 'YES';
+      const name = tooltypes.get('NAME');
+      if (name) {
+        metadata.name = name.trim();
       }
 
-      const nameMatch = text.match(/NAME=([^\x00\r\n]+)/i);
-      if (nameMatch) {
-        metadata.name = nameMatch[1].trim();
+      // Optional flags / behavior switches
+      metadata.resident = tooltypes.get('RESIDENT')?.toUpperCase() === 'YES';
+      metadata.expertMode = tooltypes.has('EXPERT_MODE');
+      metadata.trapOn = tooltypes.get('TRAPON')?.toUpperCase() === 'YES';
+      metadata.silent = tooltypes.get('SILENT')?.toUpperCase() === 'YES';
+      metadata.quickMode = tooltypes.get('QUICKMODE')?.toUpperCase() === 'YES';
+      metadata.logInputs = tooltypes.get('LOG_INPUTS')?.toUpperCase() === 'YES';
+      metadata.scriptCheck = tooltypes.get('SCRIPTCHECK')?.toUpperCase() === 'YES';
+      metadata.banner = tooltypes.get('BANNER')?.trim();
+      metadata.mimicVer = tooltypes.get('MIMICVER')?.trim();
+
+      const passParams = tooltypes.get('PASS_PARAMETERS');
+      if (passParams) {
+        metadata.passParameters = parseInt(passParams, 10);
+      }
+
+      const internal = tooltypes.get('INTERNAL');
+      if (internal) {
+        metadata.internal = internal.trim();
       }
 
       // Extract door name from location path
@@ -216,13 +251,11 @@ export class AmigaDoorManager {
     console.log(`[scanInstalledDoors] BBS Root: ${this.bbsRoot}`);
     console.log(`[scanInstalledDoors] Commands Path: ${commandsPath}`);
 
-    // Ensure directory exists
     if (!fs.existsSync(commandsPath)) {
       console.log(`[scanInstalledDoors] Commands directory does not exist: ${commandsPath}`);
       return doors;
     }
 
-    // Read all .info files
     const files = fs.readdirSync(commandsPath);
     const infoFiles = files.filter(f => f.toLowerCase().endsWith('.info'));
 
@@ -231,7 +264,8 @@ export class AmigaDoorManager {
 
     for (const infoFile of infoFiles) {
       const infoPath = path.join(commandsPath, infoFile);
-      console.log(`\n[scanInstalledDoors] --- Processing ${infoFile} ---`);
+      console.log(`
+[scanInstalledDoors] --- Processing ${infoFile} ---`);
       console.log(`[scanInstalledDoors] Info file path: ${infoPath}`);
 
       const metadata = this.parseInfoFile(infoPath);
@@ -245,54 +279,9 @@ export class AmigaDoorManager {
         console.log(`[scanInstalledDoors]   Access Level: ${metadata.access}`);
         console.log(`[scanInstalledDoors]   Door Name: ${metadata.doorName}`);
 
-        // Check if door executable exists
-        console.log(`[scanInstalledDoors] Checking if executable exists at: ${metadata.resolvedPath}`);
         const executableExists = fs.existsSync(metadata.resolvedPath);
+        console.log(`[scanInstalledDoors] Checking if executable exists at: ${metadata.resolvedPath}`);
         console.log(`[scanInstalledDoors] Executable exists: ${executableExists}`);
-
-        if (!executableExists) {
-          console.log(`[scanInstalledDoors] ⚠️  EXECUTABLE NOT FOUND!`);
-          console.log(`[scanInstalledDoors] Expected path: ${metadata.resolvedPath}`);
-
-          // Try to find the door directory
-          const doorDir = path.dirname(metadata.resolvedPath);
-          console.log(`[scanInstalledDoors] Checking parent directory: ${doorDir}`);
-
-          if (fs.existsSync(doorDir)) {
-            console.log(`[scanInstalledDoors] Directory exists, listing contents:`);
-            try {
-              const dirContents = fs.readdirSync(doorDir);
-              dirContents.forEach(item => {
-                const itemPath = path.join(doorDir, item);
-                const stat = fs.statSync(itemPath);
-                console.log(`[scanInstalledDoors]   - ${item} (${stat.isDirectory() ? 'DIR' : 'FILE'})`);
-              });
-            } catch (err) {
-              console.log(`[scanInstalledDoors] Error reading directory: ${err}`);
-            }
-          } else {
-            console.log(`[scanInstalledDoors] ⚠️  Parent directory does not exist!`);
-
-            // Check Doors directory
-            const doorsDir = this.assigns['Doors:'];
-            console.log(`[scanInstalledDoors] Checking Doors directory: ${doorsDir}`);
-            if (fs.existsSync(doorsDir)) {
-              console.log(`[scanInstalledDoors] Doors directory exists, listing contents:`);
-              try {
-                const doorsContents = fs.readdirSync(doorsDir);
-                doorsContents.forEach(item => {
-                  const itemPath = path.join(doorsDir, item);
-                  const stat = fs.statSync(itemPath);
-                  console.log(`[scanInstalledDoors]   - ${item} (${stat.isDirectory() ? 'DIR' : 'FILE'})`);
-                });
-              } catch (err) {
-                console.log(`[scanInstalledDoors] Error reading Doors directory: ${err}`);
-              }
-            } else {
-              console.log(`[scanInstalledDoors] ⚠️  Doors directory does not exist!`);
-            }
-          }
-        }
 
         doors.push({
           command: metadata.command || path.basename(infoFile, '.info'),
@@ -304,22 +293,31 @@ export class AmigaDoorManager {
           priority: metadata.priority,
           multinode: metadata.multinode,
           name: metadata.name,
+          resident: metadata.resident,
+          expertMode: metadata.expertMode,
+          trapOn: metadata.trapOn,
+          silent: metadata.silent,
+          quickMode: metadata.quickMode,
+          logInputs: metadata.logInputs,
+          scriptCheck: metadata.scriptCheck,
+          banner: metadata.banner,
+          mimicVer: metadata.mimicVer,
+          passParameters: metadata.passParameters,
+          internal: metadata.internal,
+          toolTypes: metadata.toolTypes,
           doorName: metadata.doorName,
           installed: executableExists,
         });
 
         console.log(`[scanInstalledDoors] Added door to list: ${metadata.command} (${executableExists ? 'INSTALLED' : 'NOT INSTALLED'})`);
       } else {
-        console.log(`[scanInstalledDoors] ⚠️  Failed to parse metadata or missing location/resolvedPath:`);
-        console.log(`[scanInstalledDoors]   metadata: ${metadata ? 'exists' : 'null'}`);
-        if (metadata) {
-          console.log(`[scanInstalledDoors]   location: ${metadata.location || 'MISSING'}`);
-          console.log(`[scanInstalledDoors]   resolvedPath: ${metadata.resolvedPath || 'MISSING'}`);
-        }
+        console.log(`[scanInstalledDoors] Failed to parse metadata or missing location/resolvedPath:`);
+        console.log(`[scanInstalledDoors]   metadata: ${metadata} `);
       }
     }
 
-    console.log(`\n[scanInstalledDoors] ========== SCAN COMPLETE ==========`);
+    console.log(`
+[scanInstalledDoors] ========== SCAN COMPLETE ==========`);
     console.log(`[scanInstalledDoors] Total doors found: ${doors.length}`);
     return doors;
   }

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   Database,
@@ -12,6 +13,7 @@ import {
   Users,
   MessageSquare
 } from 'lucide-react';
+import { apiClient } from '../api/client';
 
 interface HealthCheck {
   status: 'ok' | 'warning' | 'error';
@@ -70,82 +72,21 @@ interface DatabaseStats {
 
 export function DeploymentPage() {
   const [activeTab, setActiveTab] = useState<'health' | 'system' | 'database'>('health');
-  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
-  const [databaseStats, setDatabaseStats] = useState<DatabaseStats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadHealthStatus();
-    loadSystemInfo();
-    loadDatabaseStats();
-  }, []);
+  const healthQuery = useQuery({
+    queryKey: ['deployment-health'],
+    queryFn: () => apiClient.getDeploymentHealth() as Promise<HealthStatus>,
+  });
 
-  const loadHealthStatus = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const systemInfoQuery = useQuery({
+    queryKey: ['deployment-system-info'],
+    queryFn: () => apiClient.getDeploymentSystemInfo() as Promise<SystemInfo>,
+  });
 
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/deployment/health', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch health status');
-      }
-
-      const data = await response.json();
-      setHealthStatus(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadSystemInfo = async () => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/deployment/system-info', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch system info');
-      }
-
-      const data = await response.json();
-      setSystemInfo(data);
-    } catch (err: any) {
-      console.error('Failed to load system info:', err);
-    }
-  };
-
-  const loadDatabaseStats = async () => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/deployment/database-stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch database stats');
-      }
-
-      const data = await response.json();
-      setDatabaseStats(data);
-    } catch (err: any) {
-      console.error('Failed to load database stats:', err);
-    }
-  };
+  const databaseStatsQuery = useQuery({
+    queryKey: ['deployment-database-stats'],
+    queryFn: () => apiClient.getDeploymentDatabaseStats() as Promise<DatabaseStats>,
+  });
 
   const formatUptime = (seconds: number): string => {
     const days = Math.floor(seconds / 86400);
@@ -194,8 +135,9 @@ export function DeploymentPage() {
   };
 
   const renderHealthTab = () => {
+    const healthStatus = healthQuery.data;
     if (!healthStatus) {
-      return <div className="text-center py-8 text-bbs-muted">Loading health status...</div>;
+      return <div className="text-center py-8 text-bbs-muted">{healthQuery.isLoading ? 'Loading health status...' : 'No data available'}</div>;
     }
 
     return (
@@ -213,11 +155,11 @@ export function DeploymentPage() {
               </div>
             </div>
             <button
-              onClick={loadHealthStatus}
+              onClick={() => healthQuery.refetch()}
               className="flex items-center space-x-2 px-4 py-2 bg-bbs-primary hover:bg-bbs-primary/80 rounded transition-colors"
-              disabled={loading}
+              disabled={healthQuery.isFetching}
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${healthQuery.isFetching ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
             </button>
           </div>
@@ -253,8 +195,9 @@ export function DeploymentPage() {
   };
 
   const renderSystemTab = () => {
+    const systemInfo = systemInfoQuery.data;
     if (!systemInfo) {
-      return <div className="text-center py-8 text-bbs-muted">Loading system information...</div>;
+      return <div className="text-center py-8 text-bbs-muted">{systemInfoQuery.isLoading ? 'Loading system information...' : 'No data available'}</div>;
     }
 
     return (
@@ -369,8 +312,9 @@ export function DeploymentPage() {
   };
 
   const renderDatabaseTab = () => {
+    const databaseStats = databaseStatsQuery.data;
     if (!databaseStats) {
-      return <div className="text-center py-8 text-bbs-muted">Loading database statistics...</div>;
+      return <div className="text-center py-8 text-bbs-muted">{databaseStatsQuery.isLoading ? 'Loading database statistics...' : 'No data available'}</div>;
     }
 
     if (!databaseStats.exists) {
@@ -463,6 +407,8 @@ export function DeploymentPage() {
       </div>
     );
   };
+
+  const error = (healthQuery.error as Error)?.message || (systemInfoQuery.error as Error)?.message || (databaseStatsQuery.error as Error)?.message;
 
   return (
     <div className="space-y-6">

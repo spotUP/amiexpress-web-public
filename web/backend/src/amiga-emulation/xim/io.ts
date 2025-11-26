@@ -310,6 +310,7 @@ export class XIMIOHandler {
     const prompt = this.getMessageString(msg);
 
     console.log('[XIMIOHandler] JH_HK: Hotkey input request');
+    this.state.lineCount = 0;
 
     if (prompt.length > 0) {
       console.log(`[XIMIOHandler] JH_HK: Prompt: "${prompt}"`);
@@ -323,6 +324,7 @@ export class XIMIOHandler {
 
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
+      this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
       console.log(
         `[XIMIOHandler] JH_HK: Got hotkey '${char}' (0x${char
           .charCodeAt(0)
@@ -347,6 +349,7 @@ export class XIMIOHandler {
     const msg = this.hotkeyMessage;
     const keyChar = char.length > 0 ? char[0] : '';
 
+    this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
     this.reply(msg, this.state.carrierDropped ? -1 : 1, keyChar);
 
     this.waitingForHotkey = false;
@@ -362,10 +365,12 @@ export class XIMIOHandler {
 
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
+      this.messageParser.writeCommand(msg.msgAddr, char.charCodeAt(0));
       this.messageParser.writeMessageString(msg.msgAddr, char);
       console.log(`  [READ] Extended hotkey: '${char}'`);
       this.reply(msg, 1);
     } else {
+      this.messageParser.writeCommand(msg.msgAddr, 0);
       this.messageParser.writeMessageString(msg.msgAddr, '');
       console.log('  [TIMEOUT] No input available');
       this.reply(msg, -1);
@@ -381,9 +386,11 @@ export class XIMIOHandler {
 
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
+      this.messageParser.writeCommand(msg.msgAddr, char.charCodeAt(0));
       this.messageParser.writeMessageString(msg.msgAddr, char);
       console.log(`  [READ] Key available: '${char}'`);
     } else {
+      this.messageParser.writeCommand(msg.msgAddr, 0);
       console.log('  [NO INPUT] No key available');
       this.messageParser.writeMessageString(msg.msgAddr, '');
     }
@@ -400,6 +407,7 @@ export class XIMIOHandler {
 
     const char = this.inputQueue.shift();
     const charCode = typeof char === 'string' ? char.charCodeAt(0) : -1;
+    this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
 
     if (char) {
       console.log(`  [READ] Quick key: '${char}' (code ${charCode})`);
@@ -736,6 +744,15 @@ export class XIMIOHandler {
     }
     parts.push(remaining);
     return parts;
+  }
+
+  /**
+   * Determine XIM port code (CONSOLE_PORT=1, SERIAL_PORT=2)
+   */
+  private getXimPort(): number {
+    const logonType = this.bbsSession?.logonType;
+    // Treat non-local (numeric logonType 1) connections as serial
+    return logonType === 1 ? 2 : 1;
   }
 
   private getMessageString(msg: XIMMessage): string {

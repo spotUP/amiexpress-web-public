@@ -159,12 +159,10 @@ export class DoorLoader {
    */
   private setupStack(): void {
     // Set SP and push exit address LAST
-    // CRITICAL: Stack must be where door's StackSwapStruct expects it
-    // Doors have compiled-in stack addresses, typically around 0xFE000
-    // This matches what the WHO door's StackSwapStruct contains (0xFD000-0xFE000)
-    // Allocate at standard Amiga location used by CLI programs
-    const initialSP = 0xfe000; // Standard CLI stack location
-    const finalSP = 0xfdffc; // 4-byte aligned (0xFDFFC % 4 = 0)
+    // CRITICAL: Stack must be where door's StackSwapStruct expects it.
+    const initialSP = 0xfe000; // Standard CLI stack top
+    const stackSize = Math.max(4096, this.config.stack || 8192); // default 8K, min 4K
+    const finalSP = (initialSP - stackSize) & ~3; // 4-byte aligned
 
     // Push exit address to stack (for when door does RTS)
     // According to AmigaDOS docs: "Assembly programs should place a return code in D0,

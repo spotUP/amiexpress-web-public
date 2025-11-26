@@ -348,13 +348,52 @@ export class Database {
       addConfColumn('bytesdownload', 'INTEGER DEFAULT 0');
 
       if (!systemConfigColumns.includes('telnet_port')) {
-        this.db.exec('ALTER TABLE system_config ADD COLUMN telnet_port INTEGER DEFAULT 2323 CHECK (telnet_port >= 1 AND telnet_port <= 65535)');
+        this.db.exec('ALTER TABLE system_config ADD COLUMN telnet_port INTEGER DEFAULT 64128 CHECK (telnet_port >= 1 AND telnet_port <= 65535)');
         console.log('✓ Added telnet_port column');
       }
 
       if (!systemConfigColumns.includes('ssh_port')) {
-        this.db.exec('ALTER TABLE system_config ADD COLUMN ssh_port INTEGER DEFAULT 2222 CHECK (ssh_port >= 1 AND ssh_port <= 65535)');
+        this.db.exec('ALTER TABLE system_config ADD COLUMN ssh_port INTEGER DEFAULT 31337 CHECK (ssh_port >= 1 AND ssh_port <= 65535)');
         console.log('✓ Added ssh_port column');
+      }
+
+      if (!systemConfigColumns.includes('default_time_limit')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN default_time_limit INTEGER DEFAULT -1');
+        console.log('✓ Added default_time_limit column');
+      }
+
+      if (!systemConfigColumns.includes('max_session_time')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN max_session_time INTEGER DEFAULT -1');
+        console.log('✓ Added max_session_time column');
+      }
+
+      // One-time migration: set legacy time limits to unlimited (-1) if still on defaults
+      try {
+        const cfg = this.db.prepare('SELECT default_time_limit, max_session_time, telnet_port, ssh_port, max_nodes FROM system_config WHERE id = 1').get() as any;
+        if (cfg) {
+          if (cfg.default_time_limit === 60) {
+            this.db.exec('UPDATE system_config SET default_time_limit = -1 WHERE id = 1');
+            console.log('✓ Migrated default_time_limit to unlimited (-1)');
+          }
+          if (cfg.max_session_time === 120) {
+            this.db.exec('UPDATE system_config SET max_session_time = -1 WHERE id = 1');
+            console.log('✓ Migrated max_session_time to unlimited (-1)');
+          }
+          if (cfg.telnet_port === 2323) {
+            this.db.exec('UPDATE system_config SET telnet_port = 64128 WHERE id = 1');
+            console.log('✓ Migrated telnet_port to 64128');
+          }
+          if (cfg.ssh_port === 2222) {
+            this.db.exec('UPDATE system_config SET ssh_port = 31337 WHERE id = 1');
+            console.log('✓ Migrated ssh_port to 31337');
+          }
+          if (cfg.max_nodes === 8) {
+            this.db.exec('UPDATE system_config SET max_nodes = 255 WHERE id = 1');
+            console.log('✓ Migrated max_nodes to 255');
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not run time-limit migration:', err);
       }
 
       if (!systemConfigColumns.includes('quiet_join')) {
@@ -370,6 +409,72 @@ export class Database {
       if (!systemConfigColumns.includes('reg_key')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN reg_key TEXT DEFAULT \'\'');
         console.log('✓ Added reg_key column');
+      }
+
+      // New user defaults (security/time/flags)
+      if (!systemConfigColumns.includes('new_user_sec_level')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_sec_level INTEGER DEFAULT 10 CHECK (new_user_sec_level >= 1 AND new_user_sec_level <= 255)');
+        console.log('✓ Added new_user_sec_level column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_time_limit')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_time_limit INTEGER DEFAULT 60 CHECK (new_user_time_limit >= 1 AND new_user_time_limit <= 1440)');
+        console.log('✓ Added new_user_time_limit column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_chat_limit')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_chat_limit INTEGER DEFAULT 30 CHECK (new_user_chat_limit >= 0 AND new_user_chat_limit <= 1440)');
+        console.log('✓ Added new_user_chat_limit column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_lines_per_screen')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_lines_per_screen INTEGER DEFAULT 23 CHECK (new_user_lines_per_screen >= 10 AND new_user_lines_per_screen <= 100)');
+        console.log('✓ Added new_user_lines_per_screen column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_expert')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_expert INTEGER DEFAULT 0');
+        console.log('✓ Added new_user_expert column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_ansi')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_ansi INTEGER DEFAULT 1');
+        console.log('✓ Added new_user_ansi column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_protocol')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_protocol TEXT DEFAULT \'ZMODEM\'');
+        console.log('✓ Added new_user_protocol column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_screen_type')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_screen_type TEXT DEFAULT \'ANSI\'');
+        console.log('✓ Added new_user_screen_type column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_editor')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_editor TEXT DEFAULT \'FULL\'');
+        console.log('✓ Added new_user_editor column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_conf_access')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_conf_access TEXT DEFAULT \'XXX\'');
+        console.log('✓ Added new_user_conf_access column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_available_chat')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_available_chat INTEGER DEFAULT 1');
+        console.log('✓ Added new_user_available_chat column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_quiet_node')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_quiet_node INTEGER DEFAULT 0');
+        console.log('✓ Added new_user_quiet_node column');
+      }
+
+      if (!systemConfigColumns.includes('new_user_auto_rejoin')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_auto_rejoin INTEGER DEFAULT 1');
+        console.log('✓ Added new_user_auto_rejoin column');
       }
 
       console.log('All migrations completed successfully');
@@ -879,9 +984,24 @@ export class Database {
           confirm_deletions INTEGER DEFAULT 1,
 
           -- Session Settings
-          default_time_limit INTEGER DEFAULT 60,
-          max_session_time INTEGER DEFAULT 120,
+          default_time_limit INTEGER DEFAULT -1,
+          max_session_time INTEGER DEFAULT -1,
           idle_timeout INTEGER DEFAULT 10,
+
+          -- New User Defaults
+          new_user_sec_level INTEGER DEFAULT 10 CHECK (new_user_sec_level >= 1 AND new_user_sec_level <= 255),
+          new_user_time_limit INTEGER DEFAULT 60 CHECK (new_user_time_limit >= 1 AND new_user_time_limit <= 1440),
+          new_user_chat_limit INTEGER DEFAULT 30 CHECK (new_user_chat_limit >= 0 AND new_user_chat_limit <= 1440),
+          new_user_lines_per_screen INTEGER DEFAULT 23 CHECK (new_user_lines_per_screen >= 10 AND new_user_lines_per_screen <= 100),
+          new_user_expert INTEGER DEFAULT 0,
+          new_user_ansi INTEGER DEFAULT 1,
+          new_user_protocol TEXT DEFAULT 'ZMODEM',
+          new_user_screen_type TEXT DEFAULT 'ANSI',
+          new_user_editor TEXT DEFAULT 'FULL',
+          new_user_conf_access TEXT DEFAULT 'XXX',
+          new_user_available_chat INTEGER DEFAULT 1,
+          new_user_quiet_node INTEGER DEFAULT 0,
+          new_user_auto_rejoin INTEGER DEFAULT 1,
 
           -- Display Settings
           ansi_enabled INTEGER DEFAULT 1,
@@ -896,7 +1016,7 @@ export class Database {
           max_conferences INTEGER DEFAULT 32,
           max_message_bases INTEGER DEFAULT 256,
           max_file_areas INTEGER DEFAULT 256,
-          max_nodes INTEGER DEFAULT 8,
+          max_nodes INTEGER DEFAULT 255,
 
           -- File Management
           file_check_enabled INTEGER DEFAULT 1,
@@ -926,8 +1046,8 @@ export class Database {
           http_port INTEGER DEFAULT 80 CHECK (http_port >= 1 AND http_port <= 65535),
 
           -- BBS Server Ports
-          telnet_port INTEGER DEFAULT 2323 CHECK (telnet_port >= 1 AND telnet_port <= 65535),
-          ssh_port INTEGER DEFAULT 2222 CHECK (ssh_port >= 1 AND ssh_port <= 65535),
+          telnet_port INTEGER DEFAULT 64128 CHECK (telnet_port >= 1 AND telnet_port <= 65535),
+          ssh_port INTEGER DEFAULT 31337 CHECK (ssh_port >= 1 AND ssh_port <= 65535),
 
           -- System Behavior
           quiet_join INTEGER DEFAULT 0,

@@ -65,6 +65,16 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   import('./preference-socket-handlers').then(({ registerPreferenceHandlers }) => registerPreferenceHandlers(socket));
 }
 
+function logDoorDebug(message: string) {
+  try {
+    const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
+    const line = `[DoorDebug] ${new Date().toISOString()} ${message}\n`;
+    fs.appendFileSync(logPath, line, { encoding: 'utf8' });
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Initialize session and assign to node
  */
@@ -96,6 +106,7 @@ function registerCommandHandler(socket: Socket) {
     if (!session) return;
 
     console.log('[socket-handlers] door:input received:', JSON.stringify(data));
+    logDoorDebug(`SOCKET door:input data=${JSON.stringify(data)} node=${session.nodeId} state=${session.subState} door=${(session as any).doorId || ''}`);
 
     if (session.inDoorManager && session.doorInputHandler) {
       console.log('[socket-handlers] Calling doorInputHandler from door:input');
@@ -259,24 +270,33 @@ function registerCommandHandler(socket: Socket) {
     console.log('[socket-handlers] inDoorManager:', session.inDoorManager);
     console.log('[socket-handlers] doorInputHandler type:', typeof session.doorInputHandler);
     console.log('[socket-handlers] doorInputHandler exists:', !!session.doorInputHandler);
+    logDoorDebug(
+      `CMD data=${JSON.stringify(data)} node=${session.nodeId} inDoor=${session.inDoorManager} subState=${session.subState} handler=${!!session.doorInputHandler}`
+    );
 
     if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
       if (session.doorInputHandler) {
         console.log('[socket-handlers] ✓ Calling doorInputHandler (door is active)');
+        logDoorDebug(`CMD->door handler dispatch`);
         session.doorInputHandler(data);
         return;
       } else {
         console.log('[socket-handlers] ⚠️ inDoorManager/DOOR_RUNNING but no doorInputHandler; clearing door state and falling through');
-        session.inDoorManager = false;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        logDoorDebug(`WARN missing handler while door active; ignoring input to avoid relaunch`);
+        return;
       }
     }
     console.log('[socket-handlers] ✗ NOT in door or no handler - routing to BBS command handler');
     console.log('[socket-handlers]   inDoorManager:', session.inDoorManager);
     console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
 
-    for (const char of data) {
-      handleCommand(socket, session, char);
+    // Preserve escape sequences (arrow keys, etc.) as single inputs for history/navigation
+    if (data.startsWith('\x1b[') && data.length >= 2) {
+      handleCommand(socket, session, data);
+    } else {
+      for (const char of data) {
+        handleCommand(socket, session, char);
+      }
     }
     console.log('=== COMMAND PROCESSED ===\n');
   });

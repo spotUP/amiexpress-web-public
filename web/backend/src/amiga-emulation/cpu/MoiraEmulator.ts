@@ -55,6 +55,13 @@ export class MoiraEmulator {
   constructor(private memorySize: number = 16 * 1024 * 1024) {} // 16MB for full 24-bit address space (Amiga standard)
 
   /**
+   * Check whether the underlying WASM CPU has been instantiated.
+   */
+  isInitialized(): boolean {
+    return this.cpu !== null;
+  }
+
+  /**
    * Check if CPU is blocked in Wait() call
    */
   isWaitingForSignal(): boolean {

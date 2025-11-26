@@ -27,6 +27,7 @@ import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.ut
 import { AuthHandler } from './handlers/auth.handler';
 import { authenticateToken, requireSysop, AuthRequest } from './middleware/auth.middleware';
 import { createConfigRouter } from './api/config-routes';
+import { createBatchRouter } from './api/batch-routes';
 import { createImportRouter } from './handlers/import.handler';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences, hasKeysFile } from './handlers/screen.handler';
 import { registerSocketHandlers } from './server/socket-handlers';
@@ -417,23 +418,11 @@ const io = new Server(server, {
 
 const port = process.env.PORT || config.get('port');
 
-// Create telnet and SSH servers for native BBS client connections
-const telnetPort = parseInt(process.env.TELNET_PORT || '2323');
-const sshPort = parseInt(process.env.SSH_PORT || '2222');
-const telnetServer = new TelnetServer(telnetPort);
-
-// Load SSH host keys using SSHKeyUtil
-let sshHostKeys: Buffer[] = [];
-const hostKey = SSHKeyUtil.loadHostKey();
-if (hostKey) {
-  sshHostKeys = [hostKey];
-} else {
-  console.warn('[SSH] No SSH host key found. SSH server will not accept connections.');
-  console.warn('[SSH] Generate a key via the admin configuration portal or by running:');
-  console.warn('[SSH]   ssh-keygen -t rsa -b 4096 -f data/ssh/ssh_host_rsa_key -N ""');
-}
-
-const sshServer = new SSHServerImpl(sshPort, sshHostKeys);
+// Create telnet and SSH servers for native BBS client connections (configured at runtime)
+let telnetPort = parseInt(process.env.TELNET_PORT || '64128');
+let sshPort = parseInt(process.env.SSH_PORT || '31337');
+let telnetServer: TelnetServer | null = null;
+let sshServer: SSHServerImpl | null = null;
 
 // Store active sessions (in production, use Redis/database)
 // NOTE: sessions, userSessions, and socketToUser are imported from session-manager module
@@ -615,6 +604,10 @@ app.post('/auth/refresh', (req: Request, res: Response) => authHandler.refresh(r
 // Configuration API - Sysop-only routes
 const configRouter = createConfigRouter(db);
 app.use('/api/config', authenticateToken(db), requireSysop(), configRouter);
+
+// Batch editor API - Sysop-only
+const batchRouter = createBatchRouter();
+app.use('/api/batches', authenticateToken(db), requireSysop(), batchRouter);
 
 // Import/Export API - Sysop-only routes
 const importRouter = createImportRouter(db);
@@ -1056,14 +1049,9 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
 }
 
 // Set up telnet server event handlers
-telnetServer.on('connection', (connection: TelnetConnection) => {
-  setupTelnetSSHHandler(connection, 'telnet');
-});
+// Attach telnet connection handler when server is created (later in startup)
 
-// Set up SSH server event handlers
-sshServer.on('connection', (connection: SSHConnection) => {
-  setupTelnetSSHHandler(connection, 'ssh');
-});
+// SSH connection handlers are attached when the SSH server is created (startup section)
 
 io.on('connection', async (socket) => {
   const clientIp = socket.handshake.address;
@@ -2301,6 +2289,21 @@ async function initializeData() {
     // Bind to 0.0.0.0 for cloud deployments (Render, etc)
     const host = process.env.HOST || '0.0.0.0';
 
+    // Load system config for port overrides (env takes precedence)
+    try {
+      const sysConfig = db.getConfigRepository().getSystemConfig();
+      if (sysConfig) {
+        if (!process.env.TELNET_PORT && sysConfig.telnet_port) {
+          telnetPort = sysConfig.telnet_port;
+        }
+        if (!process.env.SSH_PORT && sysConfig.ssh_port) {
+          sshPort = sysConfig.ssh_port;
+        }
+      }
+    } catch (err) {
+      console.warn('[CONFIG] Unable to load system config for ports, using defaults/env:', err);
+    }
+
     // Start HTTP/Socket.IO server
     server.listen(port, host, () => {
       console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
@@ -2309,6 +2312,10 @@ async function initializeData() {
 
     // Start telnet server
     try {
+      telnetServer = new TelnetServer(telnetPort);
+      telnetServer.on('connection', (connection: TelnetConnection) => {
+        setupTelnetSSHHandler(connection, 'telnet');
+      });
       await telnetServer.start();
       console.log(`[OK] Telnet Server ready on port ${telnetPort}`);
       console.log(`[TELNET] Connect: telnet localhost ${telnetPort}`);
@@ -2319,6 +2326,20 @@ async function initializeData() {
 
     // Start SSH server
     try {
+      let sshHostKeys: Buffer[] = [];
+      const hostKey = SSHKeyUtil.loadHostKey();
+      if (hostKey) {
+        sshHostKeys = [hostKey];
+      } else {
+        console.warn('[SSH] No SSH host key found. SSH server will not accept connections.');
+        console.warn('[SSH] Generate a key via the admin configuration portal or by running:');
+        console.warn('[SSH]   ssh-keygen -t rsa -b 4096 -f data/ssh/ssh_host_rsa_key -N \"\"');
+      }
+
+      sshServer = new SSHServerImpl(sshPort, sshHostKeys);
+      sshServer.on('connection', (connection: SSHConnection) => {
+        setupTelnetSSHHandler(connection, 'ssh');
+      });
       await sshServer.start();
       console.log(`[OK] SSH Server ready on port ${sshPort}`);
       console.log(`[SSH] Connect: ssh -p ${sshPort} user@localhost`);

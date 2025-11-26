@@ -1011,9 +1011,6 @@ export class ExecLibrary {
     }
 
     try {
-      const mpFlags = this.emulator.readMemory(portAddr + 14);
-      const sigBitRaw = this.emulator.readMemory(portAddr + 15);
-      const sigTaskRaw = this.emulator.readMemory32(portAddr + 16);
       const namePtr = this.emulator.readMemory32(portAddr + 10);
       let name = "";
       if (namePtr) {
@@ -1024,12 +1021,37 @@ export class ExecLibrary {
         }
       }
 
+      // Initialize MsgPort structure to sane defaults (NT_MSGPORT, PA_SIGNAL)
+      this.emulator.writeMemory32(portAddr + 0, 0); // ln_Succ
+      this.emulator.writeMemory32(portAddr + 4, 0); // ln_Pred
+      this.emulator.writeMemory(portAddr + 8, 4); // ln_Type = NT_MSGPORT
+      this.emulator.writeMemory(portAddr + 9, 0); // ln_Pri
+      this.emulator.writeMemory32(portAddr + 10, namePtr); // ln_Name
+      this.emulator.writeMemory(portAddr + 14, 0x02); // mp_Flags = PA_SIGNAL
+
+      // Allocate a signal bit; fall back to bit 1
+      let sigBit = this.AllocSignal(-1);
+      if (sigBit < 0 || sigBit > 31) {
+        sigBit = 1;
+      }
+      this.emulator.writeMemory(portAddr + 15, sigBit);
+
+      // Set SigTask to current door task
+      this.emulator.writeMemory32(portAddr + 16, this.currentTask.address);
+
+      // Empty message list
+      this.emulator.writeMemory32(portAddr + 20, portAddr + 24); // lh_Head -> Tail
+      this.emulator.writeMemory32(portAddr + 24, 0); // lh_Tail
+      this.emulator.writeMemory32(portAddr + 28, portAddr + 20); // lh_TailPred -> Head
+      this.emulator.writeMemory(portAddr + 32, 0); // lh_Type
+      this.emulator.writeMemory(portAddr + 33, 0); // l_pad
+
       const port: MessagePort = {
         address: portAddr,
         name,
         messages: [],
-        sigBit: typeof sigBitRaw === "number" ? sigBitRaw : 0,
-        sigTask: sigTaskRaw || this.currentTask.address,
+        sigBit,
+        sigTask: this.currentTask.address,
         signaled: false,
       };
 
@@ -1037,7 +1059,7 @@ export class ExecLibrary {
       console.log(
         `[ExecLibrary]   Auto-registered port at 0x${portAddr.toString(16)} (${
           name || "private"
-        })`
+        }), sigBit=${sigBit}, sigTask=0x${this.currentTask.address.toString(16)}`
       );
       return port;
     } catch (error) {
@@ -1186,7 +1208,35 @@ export class ExecLibrary {
     // CORRECT IMPLEMENTATION: Search for port in public registry
     // FindPort() should NOT create ports - it only searches for existing ones
     const normalized = name.toLowerCase();
-    let portAddr = this.publicPorts.get(normalized);
+    let portAddr = normalized.length
+      ? this.publicPorts.get(normalized)
+      : undefined;
+
+    // Compatibility: some doors pass an empty string; fall back to AEDoorPort
+    if (portAddr === undefined || portAddr === 0) {
+      const globalAny: any = global as any;
+      const nodeId =
+        globalAny?.currentBbsSession?.nodeId ??
+        globalAny?.currentBbsSession?.nodeNumber ??
+        1;
+      const candidates = [
+        `AEDoorPort${nodeId}`,
+        "AEDoorPort1",
+        "AEDoorPort",
+      ];
+      for (const candidate of candidates) {
+        const addr = this.publicPorts.get(candidate.toLowerCase());
+        if (addr !== undefined) {
+          console.log(
+            `[ExecLibrary]   Fallback matched "${candidate}" at 0x${addr.toString(
+              16
+            )}`
+          );
+          portAddr = addr;
+          break;
+        }
+      }
+    }
 
     if (portAddr !== undefined) {
       console.log(
@@ -1210,6 +1260,19 @@ export class ExecLibrary {
 
     console.log(`[ExecLibrary]   Port "${name}" not found - returning NULL`);
     return 0;
+  }
+
+  /**
+   * Helper: find a public port whose name starts with the given prefix (case-insensitive).
+   */
+  private getPublicPortByPrefix(prefix: string): number | undefined {
+    const lower = prefix.toLowerCase();
+    for (const [name, addr] of this.publicPorts.entries()) {
+      if (name.startsWith(lower)) {
+        return addr;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -1755,6 +1818,28 @@ export class ExecLibrary {
       )}, msg=0x${msgAddr.toString(16)})`
     );
 
+    // Bulls debug: log port name and key fields for doors
+    if ((global as any).currentBbsSession?.doorId === 'B') {
+      try {
+        const namePtr = this.emulator.readMemory32(portAddr);
+        const portName = namePtr
+          ? this.emulator.readString(namePtr, 32)
+          : '<noname>';
+        const cmd = this.emulator.readMemory32(msgAddr + 0xe0);
+        const data = this.emulator.readMemory32(msgAddr + 0xdc);
+        const node = this.emulator.readMemory32(msgAddr + 0xe4);
+        console.log(
+          `[ExecLibrary][Bulls] PutMsg port=${portName} msg=0x${msgAddr.toString(
+            16
+          )} cmd=0x${cmd.toString(16)} data=0x${data.toString(
+            16
+          )} node=0x${node.toString(16)}`
+        );
+      } catch (_) {
+        /* ignore */
+      }
+    }
+
     const originalPortAddr = portAddr;
     let port: MessagePort | undefined = this.messagePorts.get(portAddr);
 
@@ -1775,6 +1860,8 @@ export class ExecLibrary {
       );
       return;
     }
+
+    // Bulls: avoid rerouting to allow the door's chosen port to be honored.
 
     // CRITICAL: Set message type to NT_MESSAGE (5) as per autodocs
     // Message.mn_Node.ln_Type is at offset 8
@@ -1938,8 +2025,11 @@ export class ExecLibrary {
       return 0;
     }
 
-    // MESSAGE FOUND! Remove from queue and return it (mirrors Exec behavior where WaitPort returns the message)
-    const msgAddr = port.messages.shift() as number;
+    // MESSAGE FOUND! Return the head message without removing it.
+    // Real WaitPort waits on the signal and returns the first message; GetMsg removes it.
+    const msgAddr = port.messages[0];
+    // Clear signaled bit like Exec's Wait would do
+    port.signaled = false;
     console.log(
       `[ExecLibrary] ===============================================`
     );

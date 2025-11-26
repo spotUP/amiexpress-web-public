@@ -66,6 +66,7 @@ export interface CommandDefinition {
   internal?: string;        // Internal command (express.e:4711)
   passParameters?: number;  // Pass parameters mode (express.e:4712)
   mciText?: string;         // MCI text for MCI type doors (express.e:4295)
+  toolTypes?: Record<string, string>; // All parsed tooltypes (uppercased keys)
 }
 
 /**
@@ -98,6 +99,11 @@ export function parseInfoFile(filePath: string): Map<string, string> {
 
         // Skip empty lines and non-tooltype lines
         if (!trimmed || !trimmed.includes('=')) {
+          continue;
+        }
+
+        // Commented-out tooltypes are wrapped in parentheses; skip them
+        if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
           continue;
         }
 
@@ -240,6 +246,9 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   // Extract command name from filename (remove .info extension)
   const name = path.basename(filePath, '.info').toUpperCase();
 
+  // Preserve all tooltypes for downstream consumers (uppercased keys)
+  const toolTypeObject = Object.fromEntries(tooltypes.entries());
+
   // Required field: LOCATION
   const locationKey = tooltypes.get('LOCATION') || tooltypes.get('PATH');
   if (!locationKey) {
@@ -263,6 +272,7 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     name,
     type,
     location: normalizedLocation, // Convert Amiga paths to Unix
+    toolTypes: toolTypeObject,
   };
 
   // Optional fields (express.e:4693-4767)

@@ -280,7 +280,18 @@ async function runCommand(
       // doorExpertMode flag (EXPERT_MODE presence) express.e:4770
       expertMode: commandDef.expertMode || false,
       // express.e:4295 - MCI_TEXT for MCI type doors
-      mciText: commandDef.mciText
+      mciText: commandDef.mciText,
+      quickMode: commandDef.quickMode,
+      silent: commandDef.silent,
+      trapOn: commandDef.trapOn,
+      multiNode: commandDef.multiNode,
+      logInputs: commandDef.logInputs,
+      scriptCheck: commandDef.scriptCheck,
+      banner: commandDef.banner,
+      mimicVer: commandDef.mimicVer,
+      passParameters: commandDef.passParameters,
+      internal: commandDef.internal,
+      toolTypes: commandDef.toolTypes
     };
 
     try {

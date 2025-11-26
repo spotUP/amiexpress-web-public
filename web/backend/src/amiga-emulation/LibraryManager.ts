@@ -128,7 +128,8 @@ export class LibraryManager {
         this.emulator,
         this.execLibrary,
         this.socket,
-        portAddr
+        portAddr,
+        this.config.bbsSession
       );
     } else {
       console.log(
@@ -184,7 +185,8 @@ export class LibraryManager {
 
     console.log("[LibraryManager] Creating icon.library...");
 
-    const bbsRoot = path.resolve(process.cwd(), "../..");
+    const bbsRoot = projectRoot;
+    this.ensureAnswerFiles(bbsRoot);
     this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
 
     console.log("[LibraryManager] Installing library call traps...");
@@ -232,6 +234,28 @@ export class LibraryManager {
     );
 
     console.log("[LibraryManager] Library system ready");
+  }
+
+  private ensureAnswerFiles(bbsRoot: string): void {
+    try {
+      const nodeId = this.config.bbsSession?.nodeId ?? 1;
+      const amigaNodeId = nodeId === 0 ? 1 : nodeId;
+      const nodeDir = path.join(bbsRoot, `Node${amigaNodeId}`);
+
+      const dirs = [
+        path.join(bbsRoot, "Answers"),
+        path.join(nodeDir, "Answers"),
+        path.join(nodeDir, "TempAns"),
+      ];
+
+      for (const dir of dirs) {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+      }
+    } catch (error) {
+      console.warn("[LibraryManager] Failed to ensure Answers directories", error);
+    }
   }
 
   getExecBaseAddress(): number {

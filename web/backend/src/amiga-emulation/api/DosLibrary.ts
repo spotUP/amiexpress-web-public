@@ -161,6 +161,7 @@ export class DosLibrary {
   private readArgsHeapPtr: number = this.READARGS_HEAP_BASE;
   private readArgsContexts: Map<number, ReadArgsContext> = new Map();
   private readArgsBufferPool: number[] = [];
+  private readonly doorFileLogPath: string;
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
@@ -205,6 +206,21 @@ export class DosLibrary {
       position: 0,
       isConsole: false,
     });
+
+    this.doorFileLogPath = path.join(this.rootPath, "logs", "door-68k.log");
+  }
+
+  /**
+   * Append a filesystem debug line to backend.log for 68k door debugging.
+   */
+  private logDoorFile(message: string): void {
+    try {
+      const logFile = path.join(this.rootPath, "logs", "backend.log");
+      const line = `[DoorFile] ${new Date().toISOString()} ${message}\n`;
+      fs.appendFileSync(logFile, line, { encoding: "utf8" });
+    } catch {
+      /* ignore logging failures */
+    }
   }
 
   /**
@@ -408,11 +424,13 @@ export class DosLibrary {
       if (bptr > 0) {
         this.lastError = this.ERROR_NO_ERROR;
         console.log(`[dos.library] Open (FileManager) returned BPTR: ${bptr}`);
+        this.logDoorFile(`OPEN fm ok handle=${bptr} ami="${filename}" mode=${mode}`);
       } else {
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
         console.error(
           `[dos.library] Open (FileManager) failed for "${filename}"`
         );
+        this.logDoorFile(`OPEN fm fail ami="${filename}" mode=${mode}`);
       }
       return bptr;
     }
@@ -447,6 +465,9 @@ export class DosLibrary {
       console.log(
         `[dos.library] Open: Console device "${filename}" -> handle ${fileId}`
       );
+      this.logDoorFile(
+        `OPEN ok ami="${filename}" handle=${fileId} mode=${mode} console=true`
+      );
     } else if (filename === "NIL:" || filename === "NIL") {
       // NIL: device - allocate a new handle
       fileId = this.nextFileId++;
@@ -461,6 +482,7 @@ export class DosLibrary {
       });
       this.lastError = this.ERROR_NO_ERROR;
       console.log(`[dos.library] Open: NIL: device -> handle ${fileId}`);
+      this.logDoorFile(`OPEN ok ami="NIL:" handle=${fileId} mode=${mode} nil=true`);
     } else {
       // Real file - resolve path and attempt to open
       const realPath = this.resolvePath(filename);
@@ -471,6 +493,7 @@ export class DosLibrary {
         );
         fileId = 0;
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        this.logDoorFile(`OPEN fail ami="${filename}" reason=resolve`);
       } else {
         try {
           let buffer: Buffer | undefined;
@@ -481,12 +504,16 @@ export class DosLibrary {
               console.error(`[dos.library] Open: File not found: ${realPath}`);
               fileId = 0;
               this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+              this.logDoorFile(`OPEN fail ami="${filename}" real="${realPath}" reason=notfound`);
             } else {
               // Load entire file into memory
               buffer = fs.readFileSync(realPath);
               fileId = this.nextFileId++;
               console.log(
                 `[dos.library] Open: File opened for reading (${buffer.length} bytes) -> handle ${fileId}`
+              );
+              this.logDoorFile(
+                `OPEN ok ami="${filename}" real="${realPath}" handle=${fileId} mode=${mode} bytes=${buffer.length}`
               );
             }
           } else if (mode === MODE_NEWFILE) {
@@ -496,10 +523,14 @@ export class DosLibrary {
             console.log(
               `[dos.library] Open: File opened for writing -> handle ${fileId}`
             );
+            this.logDoorFile(
+              `OPEN ok ami="${filename}" real="${realPath}" handle=${fileId} mode=${mode} bytes=0`
+            );
           } else {
             console.error(`[dos.library] Open: Unknown mode ${mode}`);
             fileId = 0;
             this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+            this.logDoorFile(`OPEN fail ami="${filename}" real="${realPath}" reason=mode${mode}`);
           }
 
           if (fileId > 0) {
@@ -514,6 +545,9 @@ export class DosLibrary {
               realPath: realPath,
             });
             this.lastError = this.ERROR_NO_ERROR;
+            this.logDoorFile(
+              `OPEN ok ami="${filename}" real="${realPath}" handle=${fileId} mode=${mode} bytes=${buffer?.length ?? 0}`
+            );
           }
         } catch (error) {
           console.error(
@@ -522,6 +556,9 @@ export class DosLibrary {
           );
           fileId = 0;
           this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+          this.logDoorFile(
+            `OPEN fail ami="${filename}" real="${realPath}" reason=exception`
+          );
         }
       }
     }
@@ -546,6 +583,7 @@ export class DosLibrary {
     const handle = this.emulator.getRegister(CPURegister.D1);
 
     console.log(`[dos.library] Close(handle=${handle})`);
+    this.logDoorFile(`CLOSE handle=${handle}`);
 
     // V47+ behavior: Close(0) does nothing and returns success
     if (handle === 0) {
@@ -577,6 +615,7 @@ export class DosLibrary {
       console.log(
         `[dos.library] Close: Standard handle ${handle}, returning success without closing`
       );
+      this.logDoorFile(`CLOSE ok handle=${handle} standard=true`);
       return -1; // DOSTRUE
     }
 
@@ -600,6 +639,7 @@ export class DosLibrary {
       console.log(
         `[dos.library] Close: Console/NIL handle ${handle}, closing without disk flush`
       );
+      this.logDoorFile(`CLOSE ok handle=${handle} ami="${fileHandle.name}" consoleOrNil=true`);
       // Console output is already flushed via Write(), just close the handle
     } else {
       // Regular file - flush buffer to disk if it was opened for writing
@@ -612,6 +652,9 @@ export class DosLibrary {
             fs.writeFileSync(fileHandle.realPath, fileHandle.buffer);
             console.log(
               `[dos.library] Close: Wrote ${fileHandle.buffer.length} bytes to ${fileHandle.realPath}`
+            );
+            this.logDoorFile(
+              `CLOSE ok handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath}" bytes=${fileHandle.buffer.length}`
             );
           } catch (error) {
             console.error(
@@ -635,12 +678,14 @@ export class DosLibrary {
       console.log(
         `[dos.library] Close: File closed successfully, IoErr restored to ${previousIoErr}`
       );
+      this.logDoorFile(`CLOSE ok handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}"`);
       return -1; // DOSTRUE
     } else {
       // On failure: IoErr already set above
       console.log(
         `[dos.library] Close: Failed but handle deallocated, IoErr=${this.lastError}`
       );
+      this.logDoorFile(`CLOSE fail handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}" ioErr=${this.lastError}`);
       return 0; // DOSFALSE
     }
   }
@@ -662,6 +707,7 @@ export class DosLibrary {
         16
       )}, length=${length})`
     );
+    this.logDoorFile(`READ handle=${handle} len=${length}`);
 
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
@@ -714,6 +760,7 @@ export class DosLibrary {
     if (handle === this.NIL_HANDLE) {
       this.lastError = this.ERROR_NO_ERROR;
       console.log(`[dos.library] Read: NIL: device -> 0 bytes`);
+      this.logDoorFile(`READ handle=${handle} ami="NIL:" bytes=0 nil=true`);
       return 0;
     }
 
@@ -745,6 +792,9 @@ export class DosLibrary {
     console.log(
       `[dos.library] Read returned: ${bytesToRead} bytes (position now ${fileHandle.position})`
     );
+    this.logDoorFile(
+      `READ handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}" bytes=${bytesToRead}`
+    );
     return bytesToRead;
   }
 
@@ -759,6 +809,7 @@ export class DosLibrary {
     const handle = this.emulator.getRegister(CPURegister.D1);
     const bufferAddr = this.emulator.getRegister(CPURegister.D2);
     const length = this.emulator.getRegister(CPURegister.D3);
+    this.logDoorFile(`WRITE handle=${handle} len=${length}`);
 
     // Read data from emulated memory
     const bytes: number[] = [];
@@ -771,11 +822,12 @@ export class DosLibrary {
       const dataBuffer = Buffer.from(bytes);
       const result = this.fileManager.write(handle, dataBuffer);
 
-      if (result.bytesWritten < 0) {
+    if (result.bytesWritten < 0) {
         console.error(
           `[dos.library] Write (FileManager) failed for handle ${handle}`
         );
         this.lastError = this.ERROR_WRITE_PROTECTED;
+        this.logDoorFile(`WRITE fm fail handle=${handle} len=${length}`);
         return -1;
       }
 
@@ -798,6 +850,7 @@ export class DosLibrary {
       console.log(
         `[dos.library] Write (FileManager) returned: ${result.bytesWritten} bytes`
       );
+      this.logDoorFile(`WRITE fm handle=${handle} bytes=${result.bytesWritten}`);
       return result.bytesWritten;
     }
 
@@ -831,6 +884,7 @@ export class DosLibrary {
       }
 
       this.lastError = this.ERROR_NO_ERROR;
+      this.logDoorFile(`WRITE handle=${handle} ami="${fileHandle?.name ?? "*"}" bytes=${length} console=true`);
       return length;
     }
 
@@ -865,6 +919,9 @@ export class DosLibrary {
         `[dos.library] Write: File not opened for writing (mode=${fileHandle.mode})`
       );
       this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.logDoorFile(
+        `WRITE fail handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}" reason=notwritable mode=${fileHandle.mode}`
+      );
       return -1;
     }
 
@@ -898,6 +955,9 @@ export class DosLibrary {
     this.lastError = this.ERROR_NO_ERROR;
     console.log(
       `[dos.library] Write returned: ${length} bytes (position now ${fileHandle.position})`
+    );
+    this.logDoorFile(
+      `WRITE handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}" bytes=${length}`
     );
     return length;
   }

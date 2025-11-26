@@ -26,12 +26,109 @@ export class BullsDoorHandler {
     handshake: number;
     nodeMirror: number;
   } = { info: 0, control: 0, handshake: 0, nodeMirror: 0 };
+  private lastA4: number = 0;
+  private iterationLimitPatched = false;
   private bullsPcLogCount: Record<number, number> = {};
   private bullsLastWaitPortReturnPc: number = 0;
   private bullsMessageDumpCount: number = 0;
   private bullsInputScript: string[] = ["\r\n", "1\r\n", "Q\r\n"];
   private bullsScriptIndex: number = 0;
   private handshakeValueLog: number | null = null;
+  private pcWatchpoints: number[] = [0x1fca, 0x22ea, 0x2308, 0x2340, 0x234c];
+  private pcLogLimit: number = 10;
+
+  /**
+   * Called each iteration (wired from lifecycle manager) to monitor Bulls loop PCs.
+   */
+  monitorPc(iteration: number): void {
+    const pc = this.emulator.getRegister(16); // PC
+    if (iteration % 10000 === 0) {
+      console.log(
+        `[BullsDoorHandler][PCMonitor] iter=${iteration} pc=0x${pc.toString(
+          16
+        )}`
+      );
+    }
+    if (this.pcWatchpoints.includes(pc)) {
+      const count = this.bullsPcLogCount[pc] || 0;
+      if (count < this.pcLogLimit) {
+        const d0 = this.emulator.getRegister(0);
+        const d1 = this.emulator.getRegister(1);
+        const d2 = this.emulator.getRegister(2);
+        let d7 = this.emulator.getRegister(7);
+        const a4 = this.emulator.getRegister(12);
+        this.lastA4 = a4;
+        // Inspect the message buffer Bulls is using (d0)
+        let msgCmd = 0;
+        let msgData = 0;
+        let msgNode = 0;
+        try {
+          msgCmd = this.emulator.readMemory32(d0 + DoorConstants.MESSAGE_COMMAND_OFFSET);
+          msgData = this.emulator.readMemory32(d0 + DoorConstants.MESSAGE_DATA_OFFSET);
+          msgNode = this.emulator.readMemory32(d0 + DoorConstants.MESSAGE_NODE_OFFSET);
+        } catch {
+          /* ignore */
+        }
+        console.log(
+          `[BullsDoorHandler][PCMonitor] iter=${iteration} pc=0x${pc.toString(
+            16
+          )} d0=0x${d0.toString(16)} d1=0x${d1.toString(
+            16
+          )} d2=0x${d2.toString(16)} d7=0x${d7.toString(
+            16
+          )} a4=0x${a4.toString(16)} msgCmd=0x${msgCmd.toString(
+            16
+          )} msgData=0x${msgData.toString(16)} msgNode=0x${msgNode.toString(16)}`
+        );
+        this.bullsPcLogCount[pc] = count + 1;
+      }
+    }
+  }
+
+  /** Expose Bulls pointer watch addresses so other components can mirror replies. */
+  getPointerWatch(): {
+    info: number;
+    control: number;
+    handshake: number;
+    nodeMirror: number;
+    a4?: number;
+  } {
+    return { ...this.bullsPointerWatch, a4: this.lastA4 };
+  }
+
+  /** Force-write cmd/data/node into a given AEDoor message buffer if nonzero. */
+  writeMirror(buf: number, cmd: number, data: number, node: number): void {
+    if (!buf) return;
+    try {
+      this.emulator.writeMemory32(buf + DoorConstants.MESSAGE_COMMAND_OFFSET, cmd);
+      this.emulator.writeMemory32(buf + DoorConstants.MESSAGE_DATA_OFFSET, data);
+      this.emulator.writeMemory32(buf + DoorConstants.MESSAGE_NODE_OFFSET, node);
+    } catch (err) {
+      console.warn('[BullsDoorHandler] Failed to mirror reply into 0x' + buf.toString(16), err);
+    }
+  }
+
+  private setupPcWatchpoints(): void {
+    if (!this.emulator) return;
+    // Simple instruction hook: log when PC hits watchpoints
+    const originalHandleIllegal = (this.emulator as any).handleIllegalInstruction?.bind(
+      this.emulator
+    );
+    (this.emulator as any).handleIllegalInstruction = (pc: number) => {
+      if (this.pcWatchpoints.includes(pc)) {
+        const d0 = this.emulator.readMemory32(0);
+        console.log(
+          `[BullsDoorHandler][PCWatch] pc=0x${pc.toString(
+            16
+          )} d0=0x${d0.toString(16)}`
+        );
+      }
+      if (originalHandleIllegal) {
+        return originalHandleIllegal(pc);
+      }
+      return false;
+    };
+  }
 
   // Shared references (managed by parent)
   private doorInfoAddr: number = 0;
@@ -49,6 +146,9 @@ export class BullsDoorHandler {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
     this.config = config;
+
+    // Instrument known Bulls loop PCs to dump state if we get stuck.
+    this.setupPcWatchpoints();
   }
 
   // Setter methods for shared state
@@ -81,6 +181,17 @@ export class BullsDoorHandler {
         `[BullsDoorHandler] Recorded WaitPort return PC 0x${addr.toString(16)}`
       );
     });
+
+    // Loosen safety limits to observe IPC
+    if (!this.iterationLimitPatched && (this.config as any)?.sharedState?.lifecycleManager) {
+      try {
+        (this.config as any).sharedState.lifecycleManager.setIterationLimit(500000); // 10x
+        this.iterationLimitPatched = true;
+        console.log('[BullsDoorHandler] Increased iteration limit to 500000 for Bulls debugging');
+      } catch (e) {
+        console.log('[BullsDoorHandler] Unable to patch iteration limit', e);
+      }
+    }
   }
 
   /**
@@ -546,6 +657,13 @@ export class BullsDoorHandler {
   }
 
   /**
+   * Force-send a startup message to Bulls if it never registers.
+   */
+  forceStartupMessage(execLibrary: ExecLibrary): void {
+    // Placeholder for future implementation if needed
+  }
+
+  /**
    * Check if this is a Bulls door
    */
   isBullsDoor(): boolean {
@@ -585,14 +703,18 @@ export class BullsDoorHandler {
       }
       this.doorInfoAddr = addr;
 
-      if (this.doorReplyPortAddr === 0) {
-        this.doorReplyPortAddr = this.execLibrary.createMsgPort();
-      }
+      // Use a named public port so ExecLibrary can recognize Bulls reply traffic
+      // and invoke the doorMessageCallback even when Bulls sends to its own port.
+      this.doorReplyPortAddr = this.execLibrary.ensurePublicPort(replyName);
     }
 
     const addr = this.doorInfoAddr;
     const messageAddr = addr + DoorConstants.DOOR_INFO_MESSAGE_OFFSET;
     this.nodeStatusAddr = messageAddr + DoorConstants.MESSAGE_DATA_OFFSET;
+    // Ensure the reply port remains registered/public so PutMsg to it triggers callbacks.
+    if (this.doorReplyPortAddr !== 0) {
+      this.doorReplyPortAddr = this.execLibrary.ensurePublicPort(replyName);
+    }
     console.log(
       `[BullsDoorHandler] DoorInfo block prepared at 0x${addr.toString(
         16
@@ -630,9 +752,32 @@ export class BullsDoorHandler {
       messageAddr + DoorConstants.MESSAGE_LENGTH_OFFSET,
       DoorConstants.MESSAGE_TOTAL_LENGTH
     );
+    // Initialize a neutral JH_REGISTER message in the door info block
+    const nodeId = this.resolveNodeId() || 1;
+    this.emulator.writeMemory32(messageAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, 1);
+    this.emulator.writeMemory32(messageAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
+    this.emulator.writeMemory32(messageAddr + DoorConstants.MESSAGE_NODE_OFFSET, nodeId);
+    const strPtr = messageAddr + DoorConstants.MESSAGE_STRING_OFFSET;
     this.emulator.writeMemory32(
-      messageAddr + DoorConstants.MESSAGE_COMMAND_OFFSET,
-      0
+      messageAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET,
+      strPtr
+    );
+    // Mirror to filler1/filler2 to match Bulls expectations.
+    this.emulator.writeMemory32(
+      messageAddr + DoorConstants.MESSAGE_FILLER1_OFFSET,
+      strPtr
+    );
+    this.emulator.writeMemory32(
+      messageAddr + DoorConstants.MESSAGE_FILLER2_OFFSET,
+      strPtr
+    );
+    const seedCmd = this.emulator.readMemory32(messageAddr + DoorConstants.MESSAGE_COMMAND_OFFSET);
+    const seedData = this.emulator.readMemory32(messageAddr + DoorConstants.MESSAGE_DATA_OFFSET);
+    const seedNode = this.emulator.readMemory32(messageAddr + DoorConstants.MESSAGE_NODE_OFFSET);
+    console.log(
+      `[BullsDoorHandler][Seed] msg=0x${messageAddr.toString(
+        16
+      )} cmd=${seedCmd} data=${seedData} node=${seedNode}`
     );
   }
 

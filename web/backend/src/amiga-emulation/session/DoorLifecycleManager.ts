@@ -6,6 +6,8 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator.js";
 import { Socket } from "socket.io";
 import { LibraryTraps } from "../api/LibraryTraps.js";
+import * as fs from "fs";
+import * as path from "path";
 import { XIMProtocol } from "../XIMProtocol.js";
 import { BullsDoorHandler } from "./BullsDoorHandler.js";
 import { DoorConfig, DoorConstants } from "../DoorTypes.js";
@@ -72,6 +74,9 @@ export class DoorLifecycleManager {
     function: string;
   }> = [];
   private lastPCs: number[] = [];
+  private traceRegs: boolean = false;
+  private traceInterval: number = 500;
+  private traceLogPath: string = "";
 
   constructor(
     emulator: MoiraEmulator,
@@ -98,6 +103,15 @@ export class DoorLifecycleManager {
     };
 
     this.executionState = this.initializeExecutionState();
+
+    this.traceRegs = process.env.DOOR_TRACE_REGS === "1";
+    this.traceInterval = Number(process.env.DOOR_TRACE_INTERVAL ?? 500);
+    try {
+      const root = path.resolve(process.cwd(), "../..");
+      this.traceLogPath = path.join(root, "logs", "door-68k.log");
+    } catch {
+      this.traceLogPath = "";
+    }
   }
 
   private initializeExecutionState(): ExecutionState {
@@ -261,15 +275,6 @@ export class DoorLifecycleManager {
       await this.handleBullsRomReturn(pc);
     }
 
-    // Bulls early startup message
-    if (!this.executionState.startupMessageSent) {
-      await this.handleBullsStartup(pc);
-    }
-
-    // Bulls polling detection
-    if (this.detectBullsPolling(pc)) {
-      this.handleBullsPolling(pc);
-    }
   }
 
   private async handleBullsRomReturn(pc: number): Promise<void> {
@@ -406,6 +411,10 @@ export class DoorLifecycleManager {
     }
 
     this.executionState.iterationCount++;
+    // Bulls-specific PC monitor
+    if (this.bullsHandler) {
+      this.bullsHandler.monitorPc(this.executionState.iterationCount);
+    }
     await new Promise((resolve) => setImmediate(resolve));
   }
 
@@ -460,17 +469,45 @@ export class DoorLifecycleManager {
       await this.logProgress();
     }
 
-    // Prevent infinite loops (safety limit)
-    if (
-      this.executionState.iterationCount > this.lifecycleConfig.loopGuardLimit
-    ) {
-      await this.handleGuardLimit();
-      return;
+    const isWaitingForInput =
+      this.ximProtocol?.isWaitingForLineInput() ?? false;
+
+    if (this.traceRegs && this.traceLogPath) {
+      if (this.executionState.iterationCount % this.traceInterval === 0) {
+        try {
+          const pc = this.emulator.getRegister(16);
+      const d0 = this.emulator.getRegister(0);
+      const d1 = this.emulator.getRegister(1);
+      const a0 = this.emulator.getRegister(8);
+      const a1 = this.emulator.getRegister(9);
+      const line = `[DoorRegs] ${new Date().toISOString()} iter=${this.executionState.iterationCount} pc=0x${pc.toString(
+        16
+      )} d0=0x${d0.toString(16)} d1=0x${d1.toString(
+        16
+      )} a0=0x${a0.toString(16)} a1=0x${a1.toString(16)}\n`;
+          fs.appendFileSync(this.traceLogPath, line, { encoding: "utf8" });
+        } catch {
+          /* ignore trace errors */
+        }
+      }
+    }
+
+    // Prevent infinite loops (safety limit). When the door is waiting for user
+    // input, extend the guard to give time for keystrokes to arrive.
+    if (this.executionState.iterationCount > this.lifecycleConfig.loopGuardLimit) {
+      if (isWaitingForInput) {
+        // Extend guard and continue looping to allow user input.
+        this.lifecycleConfig.loopGuardLimit += 50000;
+        console.log(
+          `[DoorLifecycleManager] Extending loop guard while waiting for input -> ${this.lifecycleConfig.loopGuardLimit}`
+        );
+      } else {
+        await this.handleGuardLimit();
+        return;
+      }
     }
 
     // Yield to event loop for responsiveness
-    const isWaitingForInput =
-      this.ximProtocol?.isWaitingForLineInput() ?? false;
     if (isWaitingForInput) {
       if (this.executionState.iterationCount % 10 === 0) {
         await new Promise((resolve) => setImmediate(resolve));

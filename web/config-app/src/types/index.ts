@@ -40,9 +40,24 @@ export interface SystemConfig {
   confirm_deletions: boolean;
 
   // Session Settings
-  default_time_limit: number;
-  max_session_time: number;
+  default_time_limit: number; // -1 unlimited
+  max_session_time: number;   // -1 unlimited
   idle_timeout: number;
+
+  // New User Defaults
+  new_user_sec_level: number;
+  new_user_time_limit: number;
+  new_user_chat_limit: number;
+  new_user_lines_per_screen: number;
+  new_user_expert: boolean;
+  new_user_ansi: boolean;
+  new_user_protocol: string;
+  new_user_screen_type: string;
+  new_user_editor: string;
+  new_user_conf_access: string;
+  new_user_available_chat: boolean;
+  new_user_quiet_node: boolean;
+  new_user_auto_rejoin: boolean;
 
   // Display Settings
   ansi_enabled: boolean;

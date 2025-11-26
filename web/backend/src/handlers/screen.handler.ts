@@ -535,10 +535,8 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Displays pause prompt and waits for keypress
   parsed = parsed.replace(/~SP\./g, () => {
     hasPause = true;
-    // Set session state to wait for keypress
-    // Note: In web version, this is just a visual prompt since we can't block
-    // The actual pause handling needs to be implemented in the command handler
-    return '\r\n\x1b[0;36m[Press any key to continue]\x1b[0m';
+    // Pause is enforced by pagination; no extra inline prompt to avoid duplicates
+    return '';
   });
 
   // ~CR. - Character Read (express.e:5462-5468)
@@ -815,6 +813,11 @@ export function loadScreenFile(
       return session?.petsciiMode
         ? [...addPetsciiVariants(screenName)]
         : ['BBSTITLE.TXT', 'BBSTITLE.txt', 'BBSTITLE'];
+    }
+    if (screenName.toUpperCase() === 'AWAITSCREEN') {
+      return session?.petsciiMode
+        ? [...addPetsciiVariants(screenName)]
+        : ['AWAITSCREEN.TXT', 'AWAITSCREEN.txt'];
     }
     if (session?.petsciiMode) {
       return isC64Client ? addPetsciiVariants(`${screenName}_C64`) : addPetsciiVariants(screenName);
@@ -1250,6 +1253,7 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
   if (noStop) {
     emitPage(paged.nextIndex, lines.length, false);
     session.paginatedScreen = undefined;
+    session.menuPause = false;
     if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
       await runQueuedScreenCommands(socket, session);
     }
@@ -1260,6 +1264,7 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
   // N: abort remaining pages, do not run queued commands
   if (no) {
     session.paginatedScreen = undefined;
+    session.menuPause = false;
     session.queuedScreenCommands = [];
     session.pendingScreenCommand = undefined;
     session.screenCommandResolver = null;
@@ -1276,6 +1281,7 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
 
   if (!hasMore) {
     session.paginatedScreen = undefined;
+    session.menuPause = false;
     if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
       await runQueuedScreenCommands(socket, session);
     }
@@ -1357,9 +1363,19 @@ export function hasKeysFileForResolvedPath(resolvedPath: string): boolean {
  * @param socket - Socket.io socket for sending output
  * @param session - Current BBS session (for future enhancements)
  */
-export function doPause(socket: any, session: BBSSession): void {
+export function doPause(socket: any, session: BBSSession, onComplete?: () => void): void {
   // Express.e:5143 - "(Pause)...Space To Resume:"
   socket.emit('ansi-output', '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
-  // Note: Actual key wait is handled by client sending keypress event
-  // This just displays the prompt
+
+  // Install a minimal pagination gate so the next keypress is required before
+  // the display flow continues (matches express.e pause semantics).
+  session.paginatedScreen = {
+    lines: [''],
+    nextIndex: 1,
+    pageSize: 1,
+    eventName: 'ansi-output',
+    commands: [],
+    onComplete,
+  };
+  session.lastScreenHadPause = true;
 }

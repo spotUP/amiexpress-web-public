@@ -78,20 +78,39 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const zmodemSession = useRef<any | null>(null);
   const pendingUploadFiles = useRef<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const transferTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const resetZmodem = () => {
     zmodemSession.current = null;
     zmodemSentry.current = null;
     transferState.current = { direction: null, paths: [] };
     pendingUploadFiles.current = [];
+    if (transferTimeout.current) {
+      clearTimeout(transferTimeout.current);
+      transferTimeout.current = null;
+    }
+  };
+
+  const cancelTransfer = () => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    if (!transferState.current.direction) return;
+    socket.emit('transfer-raw:cancel');
+    terminalInstance.current?.writeln?.('\r\nTransfer cancelled.\r\n');
+    resetZmodem();
   };
 
   const sendPendingFiles = (session?: any) => {
     const active = session || zmodemSession.current;
     if (!active) return;
     if (!pendingUploadFiles.current.length) {
-      terminalInstance.current?.writeln?.('\r\nNo upload file queued.\r\n');
-      active.close?.();
+      terminalInstance.current?.writeln?.('\r\nSelect a file to upload...\r\n');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+        fileInputRef.current.click();
+      } else {
+        active.close?.();
+      }
       return;
     }
     Zmodem.Browser.send_files(active, pendingUploadFiles.current, {})
@@ -99,7 +118,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       .catch((err: any) => console.error('[ZMODEM] send_files failed:', err));
   };
 
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    pendingUploadFiles.current = files;
+    if (!files.length) {
+      terminalInstance.current?.writeln?.('\r\nUpload cancelled.\r\n');
+      zmodemSession.current?.close?.();
+      return;
+    }
+    if (zmodemSession.current && zmodemSession.current.type === 'send') {
+      sendPendingFiles(zmodemSession.current);
+    }
+  };
+
   const handleZmodemDetection = (detection: any) => {
+    if (transferTimeout.current) {
+      clearTimeout(transferTimeout.current);
+      transferTimeout.current = null;
+    }
     let zsession: any;
     try {
       zsession = detection.confirm();
@@ -154,6 +190,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.emit('transfer-raw:start', { direction });
 
     if (direction === 'upload') {
+      // Auto-cancel after 30s if no negotiation/file selection
+      if (transferTimeout.current) {
+        clearTimeout(transferTimeout.current);
+      }
+      transferTimeout.current = setTimeout(() => {
+        terminalInstance.current?.writeln?.('\r\nUpload timed out. Cancelling.\r\n');
+        socket.emit('transfer-raw:cancel');
+        resetZmodem();
+      }, 30000);
+
       try {
         const hdr = Zmodem.Header.build('ZRQINIT');
         sender(new Uint8Array(hdr.to_hex()));
@@ -241,6 +287,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       (isDevelopment ? 'http://localhost:3001' : (import.meta as any).env?.VITE_API_URL || 'https://amiexpress-backend.onrender.com');
 
     console.log('🔌 BBS Terminal: Connecting to:', finalBackendUrl);
+
+    // Keyboard cancel for transfers (Esc)
+    const handleKeyDown = (ev: KeyboardEvent) => {
+      if (transferState.current.direction && ev.key === 'Escape') {
+        ev.preventDefault();
+        cancelTransfer();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
 
     // Connect to BBS backend
     const socket = io(finalBackendUrl, {
@@ -677,6 +732,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       doorMessageBuffer.current = {};
       doorScripts.current = {};
       transferState.current = { direction: null, paths: [] };
+      window.removeEventListener('keydown', handleKeyDown);
+      if (transferTimeout.current) {
+        clearTimeout(transferTimeout.current);
+        transferTimeout.current = null;
+      }
     };
   }, [fontSize, backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
 
@@ -708,6 +768,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           position: 'relative',
           outline: 'none'
         }}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleFileInputChange}
       />
     </div>
   );

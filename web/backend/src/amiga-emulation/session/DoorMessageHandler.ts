@@ -29,6 +29,7 @@ export class DoorMessageHandler {
   private messageConfig: MessageProcessingConfig;
   private lastMessageDump: number = 0;
   private messageCount: number = 0;
+  private firstNonRegisterSeen: boolean = false;
 
   // Shared references (managed by parent)
   private doorReplyPortAddr: number = 0;
@@ -58,6 +59,8 @@ export class DoorMessageHandler {
       maxMessageSize: 1000,
       bufferSize: 256,
     };
+
+    this.firstNonRegisterSeen = false;
   }
 
   // Setter methods for dependencies and shared state
@@ -246,7 +249,7 @@ export class DoorMessageHandler {
   handleDoorMessage(portAddr: number, msgAddr: number): void {
     this.messageCount++;
 
-    // Bulls-specific message dumping for debugging
+    // Bulls-specific dumping for debugging (first few messages only).
     if (this.bullsHandler.isBullsDoor() && this.lastMessageDump < 5) {
       this.dumpBullsMessage(msgAddr);
     }
@@ -338,6 +341,25 @@ export class DoorMessageHandler {
         16
       )} ${dumpParts.join(", ")}`
     );
+    // Log first non-register command to see where Bulls goes after handshake.
+    if (!this.firstNonRegisterSeen) {
+      const cmd = this.emulator.readMemory32(
+        msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET
+      );
+      if (cmd !== 1) {
+        this.firstNonRegisterSeen = true;
+        const data = this.emulator.readMemory32(
+          msgAddr + DoorConstants.MESSAGE_DATA_OFFSET
+        );
+        const str = this.emulator.readString(
+          msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
+          DoorConstants.MESSAGE_STRING_CAPACITY
+        );
+        console.log(
+          `[DoorMessageHandler][BullsFirstCmd] cmd=${cmd} data=${data} str="${str}"`
+        );
+      }
+    }
     this.lastMessageDump++;
   }
 

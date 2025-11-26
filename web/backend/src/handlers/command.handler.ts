@@ -359,14 +359,27 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
   }
 }
 
-function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean = false) {
+function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean = false): boolean {
+  // If a screen already installed a pause (e.g., ~SP or pagination), honor it
+  if (session.paginatedScreen) {
+    return true;
+  }
+
   // Honor express.e doPause between screens in the display flow
   const { doPause } = require('./screen.handler');
   try {
-    doPause(socket, session);
+    doPause(socket, session, () => {
+      // Resume the display flow after the pause completes
+      setImmediate(() => advanceDisplayFlow(socket, session));
+    });
+    // If a pause was installed, stop advancing until the user presses a key
+    if (session.paginatedScreen) {
+      return true;
+    }
   } catch (error) {
     console.error('[pauseDisplayFlow] Error during pause:', error);
   }
+  return false;
 }
 
 // Dependency injection setters
@@ -443,8 +456,9 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
         if (!toolFlags.noBulls) {
           const shown = await displayScreen(socket, session, 'BULL');
-          if (shown) {
-            pauseDisplayFlow(socket, session);
+          if (shown && pauseDisplayFlow(socket, session)) {
+            session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
+            return;
           }
         }
         session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
@@ -454,8 +468,9 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
       if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
         if (!toolFlags.noBulls) {
           const shown = await displayScreen(socket, session, 'NODE_BULL');
-          if (shown) {
-            pauseDisplayFlow(socket, session);
+          if (shown && pauseDisplayFlow(socket, session)) {
+            session.subState = LoggedOnSubState.CONF_SCAN;
+            return;
           }
         }
         session.subState = LoggedOnSubState.CONF_SCAN;
@@ -474,8 +489,10 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
       if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
         if (!toolFlags.noConfBulls) {
           const displayed = await displayConferenceBulletins(socket, session);
-          if (displayed) {
-            pauseDisplayFlow(socket, session);
+          if (displayed && pauseDisplayFlow(socket, session)) {
+            // Keep next state queued for when pause finishes
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            return;
           }
         }
         // express.e: join default conference/message base without triggering mail scan again
@@ -645,6 +662,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     try {
       const handled = await handlePaginatedScreenInput(socket, session, data);
       if (handled) {
+        // If pagination finished and we're still in a display-flow state, resume it
+        if (!session.paginatedScreen && isDisplayFlowState(session.subState)) {
+          await advanceDisplayFlow(socket, session);
+        }
         return;
       }
     } catch (error) {
@@ -3244,10 +3265,62 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,
-          timeout: 600
+          timeout: 600,
+          stack: 4096
         });
 
+        const logDoorDebug = (message: string) => {
+          try {
+            const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
+            const line = `[DoorDebug] ${new Date().toISOString()} ${message}\n`;
+            fs.appendFileSync(logPath, line, { encoding: 'utf8' });
+          } catch (err) {
+            console.error('[GA] Failed to log door debug:', err);
+          }
+        };
+
+        // Route user keystrokes to the door while it runs
+        session.inDoorManager = true;
+        session.subState = LoggedOnSubState.DOOR_RUNNING;
+        session.doorInputHandler = (data: string) => {
+          try {
+            const shared: any = (amigaSession as any).sharedState || {};
+            logDoorDebug(`KEY door=GA data=${JSON.stringify(data)}`);
+            if (shared.ximProtocol) {
+              shared.ximProtocol.queueInput(data);
+            }
+            if (shared.dosLibrary && !(shared.ximProtocol?.isWaitingForLineInput?.() ?? false)) {
+              shared.dosLibrary.queueInput(data);
+            }
+          } catch (err) {
+            console.error('[GA] Error routing door input:', err);
+          }
+        };
+        try {
+          const { setSession, userSessions } = await import('../server/session-manager');
+          setSession(socket.id, session);
+          if ((session as any).user?.id) {
+            userSessions.set((session as any).user.id, session);
+          }
+        } catch (err) {
+          console.error('[GA] Failed to persist session for door input:', err);
+        }
+
         await amigaSession.start();
+
+        // Restore state after door exit
+        session.inDoorManager = false;
+        delete session.doorInputHandler;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        try {
+          const { setSession, userSessions } = await import('../server/session-manager');
+          setSession(socket.id, session);
+          if ((session as any).user?.id) {
+            userSessions.set((session as any).user.id, session);
+          }
+        } catch (_) {
+          /* ignore */
+        }
 
         socket.emit('ansi-output', '\r\n\x1b[32mGetAnswer door session completed.\x1b[0m\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -3257,6 +3330,10 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
         socket.emit('ansi-output', '\r\n\x1b[31mError starting GetAnswer door:\x1b[0m\r\n');
         socket.emit('ansi-output', `${(error as Error).message}\r\n`);
         socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
+        session.inDoorManager = false;
+        delete session.doorInputHandler;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
       }

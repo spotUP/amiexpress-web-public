@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { Save, Key, Trash2, RefreshCw } from 'lucide-react';
+import { Key, Trash2, RefreshCw } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { SystemConfig } from '../types';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
 
 export function SystemConfigPage() {
@@ -11,6 +11,9 @@ export function SystemConfigPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isGeneratingKey, setIsGeneratingKey] = useState(false);
   const [isDeletingKey, setIsDeletingKey] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+  const skipNextSave = useRef(true);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['systemConfig'],
@@ -27,22 +30,62 @@ export function SystemConfigPage() {
   const mutation = useMutation({
     mutationFn: (updates: Partial<SystemConfig>) =>
       apiClient.updateSystemConfig(updates),
-    onSuccess: () => {
+    onSuccess: (resp) => {
       queryClient.invalidateQueries({ queryKey: ['systemConfig'] });
-      showSuccess('System configuration updated successfully');
+      if (resp?.data) {
+        reset(resp.data as any);
+      }
+      setAutoSaveStatus('saved');
+      showSuccess('System configuration saved');
     },
     onError: (error: Error) => {
+      setAutoSaveStatus('error');
       showError(`Failed to update configuration: ${error.message}`);
     },
   });
 
-  const { register, handleSubmit, formState: { isDirty } } = useForm<SystemConfig>({
-    values: data?.data || undefined,
+  const { register, watch, reset } = useForm<SystemConfig>({
+    values: {
+      language_base: 'Languages',
+      default_language: 'English',
+      max_nodes: 255,
+      telnet_port: 64128,
+      ssh_port: 31337,
+      ...data?.data
+    },
   });
 
-  const onSubmit = (formData: SystemConfig) => {
-    mutation.mutate(formData);
-  };
+  useEffect(() => {
+    if (data?.data) {
+      reset(data.data);
+      skipNextSave.current = true;
+    }
+  }, [data, reset]);
+
+  useEffect(() => {
+    const subscription = watch((value) => {
+      if (!data?.data) return;
+      if (skipNextSave.current) {
+        skipNextSave.current = false;
+        return;
+      }
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+      }
+      setAutoSaveStatus('saving');
+      autoSaveTimer.current = setTimeout(() => {
+        const { created_at, updated_at, ...updates } = value as any;
+        mutation.mutate(updates);
+      }, 800);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+      }
+    };
+  }, [watch, mutation, data]);
 
   const handleGenerateSSHKey = async () => {
     if (sshKeyData?.data?.exists) {
@@ -110,10 +153,18 @@ export function SystemConfigPage() {
     <div>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-bbs-accent mb-2">System Configuration</h1>
-        <p className="text-bbs-muted">Global BBS settings and parameters</p>
+        <div className="flex items-center space-x-3">
+          <p className="text-bbs-muted">Global BBS settings and parameters</p>
+          <span className="text-xs text-bbs-muted">
+            {autoSaveStatus === 'saving' && 'Saving...'}
+            {autoSaveStatus === 'saved' && 'Saved'}
+            {autoSaveStatus === 'error' && 'Save failed'}
+            {autoSaveStatus === 'idle' && 'Auto-save ready'}
+          </span>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
         {/* Basic Information */}
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Basic Information</h2>
@@ -212,24 +263,34 @@ export function SystemConfigPage() {
               <label htmlFor="min_password_strength" className="label">
                 Minimum Password Strength
               </label>
-              <input
+              <select
                 id="min_password_strength"
-                type="number"
-                {...register('min_password_strength', { min: 0, max: 4, valueAsNumber: true })}
+                {...register('min_password_strength', { valueAsNumber: true })}
                 className="input-field w-full"
-              />
+              >
+                <option value={0}>0 - No check</option>
+                <option value={1}>1 - Weak</option>
+                <option value={2}>2 - Medium</option>
+                <option value={3}>3 - Strong</option>
+                <option value={4}>4 - Very strong</option>
+              </select>
             </div>
 
             <div>
               <label htmlFor="max_password_fails" className="label">
                 Max Password Fails
               </label>
-              <input
+              <select
                 id="max_password_fails"
-                type="number"
-                {...register('max_password_fails', { min: -1, valueAsNumber: true })}
+                {...register('max_password_fails', { valueAsNumber: true })}
                 className="input-field w-full"
-              />
+              >
+                <option value={-1}>Unlimited (-1)</option>
+                <option value={3}>3 attempts</option>
+                <option value={5}>5 attempts</option>
+                <option value={10}>10 attempts</option>
+                <option value={20}>20 attempts</option>
+              </select>
             </div>
 
             <div>
@@ -293,24 +354,32 @@ export function SystemConfigPage() {
               <label htmlFor="default_time_limit" className="label">
                 Default Time Limit (minutes)
               </label>
-              <input
-                id="default_time_limit"
-                type="number"
-                {...register('default_time_limit', { min: 1, max: 1440, valueAsNumber: true })}
-                className="input-field w-full"
-              />
+              <div className="flex space-x-2">
+                <input
+                  id="default_time_limit"
+                  type="number"
+                  placeholder="-1 for unlimited"
+                  {...register('default_time_limit', { min: -1, max: 1440, valueAsNumber: true })}
+                  className="input-field w-full"
+                />
+                <span className="text-xs text-bbs-muted self-center">-1 = unlimited</span>
+              </div>
             </div>
 
             <div>
               <label htmlFor="max_session_time" className="label">
                 Max Session Time (minutes)
               </label>
-              <input
-                id="max_session_time"
-                type="number"
-                {...register('max_session_time', { min: 1, max: 1440, valueAsNumber: true })}
-                className="input-field w-full"
-              />
+              <div className="flex space-x-2">
+                <input
+                  id="max_session_time"
+                  type="number"
+                  placeholder="-1 for unlimited"
+                  {...register('max_session_time', { min: -1, max: 1440, valueAsNumber: true })}
+                  className="input-field w-full"
+                />
+                <span className="text-xs text-bbs-muted self-center">-1 = unlimited</span>
+              </div>
             </div>
 
             <div>
@@ -327,22 +396,173 @@ export function SystemConfigPage() {
           </div>
         </div>
 
+        {/* New User Defaults */}
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">New User Defaults</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="new_user_sec_level" className="label">
+                Default Security Level
+              </label>
+              <input
+                id="new_user_sec_level"
+                type="number"
+                {...register('new_user_sec_level', { min: 1, max: 255, valueAsNumber: true, value: 30 })}
+                className="input-field w-full"
+              />
+            </div>
+            <div>
+              <label htmlFor="new_user_time_limit" className="label">
+                Default Daily Time (minutes)
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  id="new_user_time_limit"
+                  type="number"
+                  placeholder="-1 for unlimited"
+                  {...register('new_user_time_limit', { min: -1, max: 1440, valueAsNumber: true, value: -1 })}
+                  className="input-field w-full"
+                />
+                <span className="text-xs text-bbs-muted self-center">-1 = unlimited</span>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="new_user_chat_limit" className="label">
+                Chat Time Limit (minutes)
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  id="new_user_chat_limit"
+                  type="number"
+                  placeholder="-1 for unlimited"
+                  {...register('new_user_chat_limit', { min: -1, max: 1440, valueAsNumber: true, value: -1 })}
+                  className="input-field w-full"
+                />
+                <span className="text-xs text-bbs-muted self-center">-1 = unlimited</span>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="new_user_lines_per_screen" className="label">
+                Lines Per Screen
+              </label>
+              <input
+                id="new_user_lines_per_screen"
+                type="number"
+                {...register('new_user_lines_per_screen', { min: 10, max: 100, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+            </div>
+            <div>
+              <label htmlFor="new_user_protocol" className="label">
+                Default Protocol
+              </label>
+              <input
+                id="new_user_protocol"
+                type="text"
+                {...register('new_user_protocol')}
+                className="input-field w-full"
+                placeholder="ZMODEM"
+              />
+            </div>
+            <div>
+              <label htmlFor="new_user_screen_type" className="label">
+                Default Screen Type
+              </label>
+              <input
+                id="new_user_screen_type"
+                type="text"
+                {...register('new_user_screen_type')}
+                className="input-field w-full"
+                placeholder="ANSI"
+              />
+            </div>
+            <div>
+              <label htmlFor="new_user_editor" className="label">
+                Default Editor
+              </label>
+              <input
+                id="new_user_editor"
+                type="text"
+                {...register('new_user_editor')}
+                className="input-field w-full"
+                placeholder="FULL"
+              />
+            </div>
+            <div>
+              <label htmlFor="new_user_conf_access" className="label">
+                Default Conference Access
+              </label>
+              <input
+                id="new_user_conf_access"
+                type="text"
+                {...register('new_user_conf_access')}
+                className="input-field w-full"
+                placeholder="XXX"
+              />
+              <p className="text-xs text-bbs-muted mt-1">ACS string applied to new accounts</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <input
+                id="new_user_expert"
+                type="checkbox"
+                {...register('new_user_expert')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="new_user_expert" className="text-sm text-bbs-text">
+                Start new users in Expert mode
+              </label>
+            </div>
+            <div className="flex items-center space-x-3">
+              <input
+                id="new_user_ansi"
+                type="checkbox"
+                {...register('new_user_ansi')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="new_user_ansi" className="text-sm text-bbs-text">
+                Enable ANSI by default
+              </label>
+            </div>
+            <div className="flex items-center space-x-3">
+              <input
+                id="new_user_available_chat"
+                type="checkbox"
+                {...register('new_user_available_chat')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="new_user_available_chat" className="text-sm text-bbs-text">
+                Allow chat by default
+              </label>
+            </div>
+            <div className="flex items-center space-x-3">
+              <input
+                id="new_user_quiet_node"
+                type="checkbox"
+                {...register('new_user_quiet_node')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="new_user_quiet_node" className="text-sm text-bbs-text">
+                Quiet node (no join beeps)
+              </label>
+            </div>
+            <div className="flex items-center space-x-3">
+              <input
+                id="new_user_auto_rejoin"
+                type="checkbox"
+                {...register('new_user_auto_rejoin')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="new_user_auto_rejoin" className="text-sm text-bbs-text">
+                Auto rejoin last conference
+              </label>
+            </div>
+          </div>
+        </div>
+
         {/* Display Settings */}
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Display Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="color_scheme" className="label">
-                Color Scheme
-              </label>
-              <input
-                id="color_scheme"
-                type="text"
-                {...register('color_scheme')}
-                className="input-field w-full"
-              />
-            </div>
-
             <div className="flex items-center space-x-3">
               <input
                 id="ansi_enabled"
@@ -375,26 +595,28 @@ export function SystemConfigPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="language_base" className="label">
-                Language Base Path
+                Language Base
               </label>
-              <input
+              <select
                 id="language_base"
-                type="text"
                 {...register('language_base')}
                 className="input-field w-full"
-              />
+              >
+                <option value="Languages">Languages</option>
+              </select>
             </div>
 
             <div>
               <label htmlFor="default_language" className="label">
                 Default Language
               </label>
-              <input
+              <select
                 id="default_language"
-                type="text"
                 {...register('default_language')}
                 className="input-field w-full"
-              />
+              >
+                <option value="English">English</option>
+              </select>
             </div>
           </div>
         </div>
@@ -425,6 +647,7 @@ export function SystemConfigPage() {
                 {...register('max_message_bases', { min: 1, max: 1024, valueAsNumber: true })}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Up to 1024; lower this if you want a tighter cap.</p>
             </div>
 
             <div>
@@ -437,6 +660,7 @@ export function SystemConfigPage() {
                 {...register('max_file_areas', { min: 1, max: 1024, valueAsNumber: true })}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Supports up to 1024 file areas.</p>
             </div>
 
             <div>
@@ -446,9 +670,10 @@ export function SystemConfigPage() {
               <input
                 id="max_nodes"
                 type="number"
-                {...register('max_nodes', { min: 1, max: 8, valueAsNumber: true })}
+                {...register('max_nodes', { min: 1, max: 255, valueAsNumber: true })}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Supports up to 255 nodes.</p>
             </div>
           </div>
         </div>
@@ -509,6 +734,7 @@ export function SystemConfigPage() {
                 {...register('smtp_server')}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Hostname of your SMTP relay (e.g., smtp.example.com).</p>
             </div>
 
             <div>
@@ -521,6 +747,7 @@ export function SystemConfigPage() {
                 {...register('smtp_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Typical: 25, 465 (SSL), or 587 (STARTTLS).</p>
             </div>
 
             <div>
@@ -545,6 +772,7 @@ export function SystemConfigPage() {
                 {...register('smtp_password')}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Leave empty to keep existing credentials.</p>
             </div>
 
             <div>
@@ -623,6 +851,7 @@ export function SystemConfigPage() {
                 {...register('ftp_host')}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Bind address for FTP (blank = all interfaces).</p>
             </div>
 
             <div>
@@ -635,6 +864,7 @@ export function SystemConfigPage() {
                 {...register('ftp_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Default 21; change if another service uses it.</p>
             </div>
 
             <div>
@@ -678,6 +908,7 @@ export function SystemConfigPage() {
                 {...register('http_host')}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Bind address for HTTP (blank = all interfaces).</p>
             </div>
 
             <div>
@@ -690,6 +921,7 @@ export function SystemConfigPage() {
                 {...register('http_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
+              <p className="text-xs text-bbs-muted mt-1">Default 3001 in this stack; adjust if port conflicts arise.</p>
             </div>
 
             <div className="flex items-center space-x-3">
@@ -721,7 +953,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
               />
               <p className="text-xs text-bbs-muted mt-1">
-                Default: 2323
+                Default 2323; change if another service binds this port or if you’re behind NAT.
               </p>
             </div>
 
@@ -736,7 +968,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
               />
               <p className="text-xs text-bbs-muted mt-1">
-                Default: 2222
+                Default 2222; open/forward this if you expect remote SSH logins.
               </p>
             </div>
           </div>
@@ -950,17 +1182,6 @@ export function SystemConfigPage() {
           </div>
         </div>
 
-        {/* Submit Button */}
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={!isDirty || mutation.isPending}
-            className="btn-primary flex items-center space-x-2"
-          >
-            <Save size={20} />
-            <span>{mutation.isPending ? 'Saving...' : 'Save Changes'}</span>
-          </button>
-        </div>
       </form>
     </div>
   );

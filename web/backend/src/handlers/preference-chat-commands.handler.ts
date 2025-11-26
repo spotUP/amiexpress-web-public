@@ -51,16 +51,28 @@ export function setPreferenceChatCommandsDependencies(deps: {
  * Toggles ANSI color output for the current session.
  */
 export function handleAnsiModeCommand(socket: any, session: BBSSession): void {
-  if (session.ansiMode) {
-    session.ansiMode = false;
+  const before = session.user?.ansi ?? session.ansiMode ?? true;
+  const next = !before;
+
+  session.ansiMode = next;
+  if (session.user) {
+    session.user.ansi = next;
+  }
+
+  if (!next) {
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', 'Ansi Color Off\r\n');
     socket.emit('ansi-output', '\r\n');
   } else {
-    session.ansiMode = true;
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.successLine('Ansi Color On'));
     socket.emit('ansi-output', '\r\n');
+  }
+
+  if (_db && session.user?.id) {
+    _db.updateUser(session.user.id, { ansi: next }).catch(() => {
+      /* ignore persistence errors here */
+    });
   }
 
   socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());

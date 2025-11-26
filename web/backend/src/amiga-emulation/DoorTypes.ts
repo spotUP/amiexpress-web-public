@@ -7,7 +7,23 @@ export interface DoorConfig {
   doorType?: string; // Door type: XIM, AIM, SIM, TIM, IIM, MCI, AEM, SUP (default: SIM)
   timeout?: number; // Max execution time in seconds (default: 300)
   bbsSession?: any; // BBS session data (user, system, node info)
+  doorId?: string; // Optional door identifier (info name/shortcut)
   args?: string[]; // Optional CLI arguments (without program name)
+  stack?: number; // Optional stack size (bytes) from .info (STACK tooltype)
+  priority?: string; // Optional priority setting
+  resident?: boolean;
+  expertMode?: boolean;
+  trapOn?: boolean;
+  silent?: boolean;
+  quickMode?: boolean;
+  multiNode?: boolean;
+  logInputs?: boolean;
+  scriptCheck?: boolean;
+  banner?: string;
+  mimicVer?: string;
+  passParameters?: number;
+  internal?: string;
+  toolTypes?: Record<string, string>;
 }
 
 export class DoorConstants {
@@ -28,7 +44,7 @@ export class DoorConstants {
   static readonly MESSAGE_FILLER3_OFFSET = 0x104;
   static readonly MESSAGE_REPLY_PORT_OFFSET = 14;
   static readonly MESSAGE_LENGTH_OFFSET = 18;
-  static readonly MESSAGE_TOTAL_LENGTH = 0x108;
+  static readonly MESSAGE_TOTAL_LENGTH = 0x104;
   static readonly DIF_DATA_PTR_OFFSET = 0x1c;
   static readonly DIF_STRING_PTR_OFFSET = 0x20;
   static readonly NODE_STATUS_SIZE = 0x100;

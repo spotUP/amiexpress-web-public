@@ -4,7 +4,7 @@ import { RefreshCw, Search, Trash2, Download, Terminal, Filter, Info, ExternalLi
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 
-type LogType = 'backend' | 'frontend' | 'error' | 'access';
+type LogType = 'backend' | 'frontend' | 'error' | 'access' | 'door68k';
 type Environment = 'local' | 'render' | 'railway' | 'fly' | 'heroku' | 'vercel';
 
 interface LogData {
@@ -212,6 +212,7 @@ const handleDownload = () => {
               <option value="frontend">Frontend</option>
               <option value="error">Error</option>
               <option value="access">Access</option>
+              <option value="door68k">68K Doors</option>
             </select>
           </div>
 

@@ -86,6 +86,8 @@ export async function generateQuickNewScreen(confId: number, daysBack = 7): Prom
   }
 
   const output: string[] = [];
+  // Clear the screen before rendering QuickNew to match classic behavior
+  output.push('\x1b[2J\x1b[H');
 
   if (sections.length === 0) {
     output.push('No file areas available.');

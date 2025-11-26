@@ -18,6 +18,7 @@ import * as path from 'path';
 import { LoggedOnSubState, BBSState } from '../constants/bbs-states';
 import { displayScreen, doPause } from './screen.handler';
 import { config } from '../config';
+import { ConfigService } from '../services/config.service';
 
 // Dependencies (injected from index.ts)
 let db: any;
@@ -33,6 +34,7 @@ let newUserAccessPassword = '';
 let autoValidationPassword = '';
 let autoValidationSecLevel = 50;
 let cachedComputerChoices: string[] | null = null;
+let configService: ConfigService | null = null;
 
 interface SecurityPolicy {
   minLength: number;
@@ -73,6 +75,7 @@ interface NewUserDependencies {
 export function setNewUserDependencies(deps: NewUserDependencies) {
   db = deps.db;
   sessions = deps.sessions;
+  configService = new ConfigService(db as any);
   if (deps.screens) {
     screenConfig = { ...screenConfig, ...deps.screens };
   }
@@ -956,6 +959,37 @@ function getNodeDirectory(session: any): string {
   return path.join(baseDir, 'Node0');
 }
 
+async function getNewUserDefaults() {
+  try {
+    if (!configService && db) {
+      configService = new ConfigService(db as any);
+    }
+    const systemConfig = configService ? await configService.getSystemConfig() : null;
+    if (!systemConfig) {
+      return null;
+    }
+
+    return {
+      secLevel: systemConfig.new_user_sec_level,
+      timeLimit: systemConfig.new_user_time_limit,
+      chatLimit: systemConfig.new_user_chat_limit,
+      linesPerScreen: systemConfig.new_user_lines_per_screen,
+      expert: systemConfig.new_user_expert,
+      ansi: systemConfig.new_user_ansi,
+      protocol: systemConfig.new_user_protocol,
+      screenType: systemConfig.new_user_screen_type,
+      editor: systemConfig.new_user_editor,
+      confAccess: systemConfig.new_user_conf_access,
+      availableForChat: systemConfig.new_user_available_chat,
+      quietNode: systemConfig.new_user_quiet_node,
+      autoRejoin: systemConfig.new_user_auto_rejoin
+    };
+  } catch (error) {
+    console.warn('[NEW USER] Failed to load system defaults for new users:', error);
+    return null;
+  }
+}
+
 /**
  * Create the user account in database
  */
@@ -970,6 +1004,21 @@ async function createAccount(socket: Socket, session: any) {
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.hash(data.password, 10);
 
+    const defaults = await getNewUserDefaults();
+    const defaultSecLevel = defaults?.secLevel ?? 10;
+    const defaultTimeLimit = defaults?.timeLimit ?? 60;
+    const defaultChatLimit = defaults?.chatLimit ?? 30;
+    const defaultLines = defaults?.linesPerScreen ?? 23;
+    const expertFlag = defaults?.expert ? 'X' : 'N';
+    const ansiFlag = defaults?.ansi !== false;
+    const protocol = defaults?.protocol || 'ZMODEM';
+    const screenType = defaults?.screenType || 'ANSI';
+    const editor = defaults?.editor || 'FULL';
+    const confAccess = defaults?.confAccess || 'XXX';
+    const availableForChat = defaults?.availableForChat !== false;
+    const quietNode = defaults?.quietNode || false;
+    const autoRejoin = defaults?.autoRejoin !== false ? 1 : 0;
+
     // Create user in database
     const now = new Date();
     const newUserId = await db.createUser({
@@ -979,16 +1028,16 @@ async function createAccount(socket: Socket, session: any) {
       location: data.location,
       phone: data.phone,
       email: data.email,
-      secLevel: data.autoValidated ? autoValidationSecLevel : 10,
-      linesPerScreen: data.linesPerScreen,
+      secLevel: data.autoValidated ? autoValidationSecLevel : defaultSecLevel,
+      linesPerScreen: data.linesPerScreen || defaultLines,
       computer: data.computerType,
-      ansi: true,
-      expert: 'N',
+      ansi: ansiFlag,
+      expert: expertFlag,
       screenClear: data.screenClear,
-      availableForChat: true, // Enable chat by default
-      quietNode: false, // Show chat notifications
-      autoRejoin: 1, // Auto-rejoin conference on login
-      confAccess: 'XXX', // Access to all 3 default conferences
+      availableForChat,
+      quietNode,
+      autoRejoin,
+      confAccess,
       newUser: !data.autoValidated, // Auto-validated users skip new user flags
       firstLogin: now,
       lastLogin: now,
@@ -1000,15 +1049,15 @@ async function createAccount(socket: Socket, session: any) {
       ratio: 0,
       ratioType: 0,
       timeTotal: 0,
-      timeLimit: 60, // 60 minutes default
+      timeLimit: defaultTimeLimit,
       timeUsed: 0,
-      chatLimit: 30,
+      chatLimit: defaultChatLimit,
       chatUsed: 0,
       calls: 1, // First call
       callsToday: 1,
-      screenType: 'ANSI',
-      protocol: 'ZMODEM',
-      editor: 'FULL',
+      screenType,
+      protocol,
+      editor,
       zoomType: 'NONE',
       areaName: '',
       uuCP: false,

@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Monitor, Edit2, Trash2, Plus } from 'lucide-react';
+import { Monitor, Edit2, Trash2, Plus, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -14,11 +15,42 @@ interface ComputerType {
 
 export function ComputersPage() {
   const queryClient = useQueryClient();
-  const { showSuccess, confirm } = useNotification();
+  const { showSuccess, showError, confirm } = useNotification();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editing, setEditing] = useState<ComputerType | null>(null);
+  const [formData, setFormData] = useState<Omit<ComputerType, 'id' | 'created_at' | 'updated_at'>>({
+    computer_number: 1,
+    computer_name: '',
+    enabled: true,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ['computers'],
     queryFn: () => apiClient.getComputerTypes(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: Omit<ComputerType, 'id' | 'created_at' | 'updated_at'>) =>
+      apiClient.createComputerType(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computers'] });
+      showSuccess('Computer type created successfully');
+      setIsModalOpen(false);
+      setEditing(null);
+    },
+    onError: (error: Error) => showError(`Failed to create computer type: ${error.message}`),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: number; updates: Partial<ComputerType> }) =>
+      apiClient.updateComputerType(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computers'] });
+      showSuccess('Computer type updated successfully');
+      setIsModalOpen(false);
+      setEditing(null);
+    },
+    onError: (error: Error) => showError(`Failed to update computer type: ${error.message}`),
   });
 
   const deleteMutation = useMutation({
@@ -42,6 +74,40 @@ export function ComputersPage() {
     }
   };
 
+  const handleAdd = () => {
+    const nextNumber = (data?.data?.reduce((max: number, c: ComputerType) => Math.max(max, c.computer_number), 0) || 0) + 1;
+    setFormData({
+      computer_number: nextNumber,
+      computer_name: '',
+      enabled: true
+    });
+    setEditing(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEdit = (computer: ComputerType) => {
+    setFormData({
+      computer_number: computer.computer_number,
+      computer_name: computer.computer_name,
+      enabled: computer.enabled
+    });
+    setEditing(computer);
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editing) {
+      updateMutation.mutate({ id: editing.id, updates: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
+  const handleToggle = (computer: ComputerType) => {
+    updateMutation.mutate({ id: computer.id, updates: { enabled: !computer.enabled } });
+  };
+
   if (isLoading) {
     return <div className="text-bbs-text">Loading computer types...</div>;
   }
@@ -55,7 +121,7 @@ export function ComputersPage() {
           <h1 className="text-3xl font-bold text-bbs-accent mb-2">Computer Types</h1>
           <p className="text-bbs-muted">Manage computer type selections (TOOLTYPE_COMPUTERLIST)</p>
         </div>
-        <button className="btn-primary flex items-center space-x-2">
+        <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
           <Plus size={20} />
           <span>Add Computer Type</span>
         </button>
@@ -68,15 +134,18 @@ export function ComputersPage() {
               <div className="p-2 bg-bbs-primary rounded">
                 <Monitor className="text-bbs-accent" size={20} />
               </div>
-              <div
-                className={`px-2 py-1 rounded text-xs ${
+              <button
+                onClick={() => handleToggle(computer)}
+                className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
                   computer.enabled
                     ? 'bg-green-500/20 text-green-500'
                     : 'bg-bbs-muted/20 text-bbs-muted'
                 }`}
+                title="Toggle availability"
               >
-                {computer.enabled ? 'Enabled' : 'Disabled'}
-              </div>
+                {computer.enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                <span>{computer.enabled ? 'Enabled' : 'Disabled'}</span>
+              </button>
             </div>
 
             <h3 className="text-lg font-semibold text-bbs-text mb-2">{computer.computer_name}</h3>
@@ -89,7 +158,10 @@ export function ComputersPage() {
             </div>
 
             <div className="flex space-x-2">
-              <button className="btn-secondary flex-1 flex items-center justify-center space-x-2">
+              <button
+                onClick={() => handleEdit(computer)}
+                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
+              >
                 <Edit2 size={16} />
                 <span>Edit</span>
               </button>
@@ -107,6 +179,67 @@ export function ComputersPage() {
       {computers.length === 0 && (
         <div className="card text-center text-bbs-muted">
           No computer types configured. Add computer types for user selection during signup.
+        </div>
+      )}
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-bbs-surface border border-bbs-primary rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-semibold text-bbs-text mb-4">
+              {editing ? 'Edit Computer Type' : 'Add Computer Type'}
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="computer_name" className="label">Name</label>
+                <input
+                  id="computer_name"
+                  type="text"
+                  value={formData.computer_name}
+                  onChange={(e) => setFormData({ ...formData, computer_name: e.target.value })}
+                  className="input-field w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="computer_number" className="label">Number</label>
+                <input
+                  id="computer_number"
+                  type="number"
+                  value={formData.computer_number}
+                  onChange={(e) => setFormData({ ...formData, computer_number: Number(e.target.value) })}
+                  className="input-field w-full"
+                  min={1}
+                />
+              </div>
+              <div className="flex items-center space-x-3">
+                <input
+                  id="computer_enabled"
+                  type="checkbox"
+                  checked={formData.enabled}
+                  onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="computer_enabled" className="text-sm text-bbs-text">
+                  Enabled
+                </label>
+              </div>
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditing(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  {editing ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

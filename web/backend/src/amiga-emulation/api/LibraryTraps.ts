@@ -16,6 +16,7 @@ import { ExecLibrary } from "./ExecLibrary";
 import { AEDoorLibrary } from "./AEDoorLibrary";
 import { DosLibrary } from "./DosLibrary";
 import { IconLibrary } from "./IconLibrary";
+import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 
 /**
  * Library function vector entry
@@ -714,8 +715,12 @@ export class LibraryTraps {
       this.offsetMap.get(vector.offset)!.push(vector);
       this.offsetLibraryMap.get(vector.offset)!.push(this.execLibrary);
 
+      const name =
+        vector.name ||
+        EXEC_LVO_MAP[vector.offset] ||
+        `exec@${vector.offset.toString(16)}`;
       console.log(
-        `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
+        `  [${name}] Vector at 0x${trapAddr.toString(16)} (offset ${
           vector.offset
         })`
       );
@@ -766,8 +771,12 @@ export class LibraryTraps {
       this.offsetMap.get(vector.offset)!.push(vector);
       this.offsetLibraryMap.get(vector.offset)!.push(this.dosLibrary);
 
+      const name =
+        vector.name ||
+        DOS_LVO_MAP[vector.offset] ||
+        `dos@${vector.offset.toString(16)}`;
       console.log(
-        `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
+        `  [${name}] Vector at 0x${trapAddr.toString(16)} (offset ${
           vector.offset
         })`
       );

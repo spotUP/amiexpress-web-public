@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Shield, Plus, ToggleLeft, ToggleRight, X, Trash2 } from 'lucide-react';
+import { Shield, Plus, ToggleLeft, ToggleRight, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
@@ -31,7 +31,7 @@ export function SecurityPage() {
     enabled: true,
   });
   const queryClient = useQueryClient();
-  const { showSuccess, showError, confirm } = useNotification();
+  const { showSuccess, showError } = useNotification();
 
   const { data, isLoading } = useQuery({
     queryKey: ['security', selectedLevel],
@@ -63,17 +63,6 @@ export function SecurityPage() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => apiClient.deleteSecurityAccess(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['security', selectedLevel] });
-      showSuccess('ACS flag deleted successfully');
-    },
-    onError: (error: Error) => {
-      showError(`Failed to delete ACS flag: ${error.message}`);
-    },
-  });
-
   const handleToggle = (access: SecurityLevelAccess) => {
     updateMutation.mutate({ id: access.id, enabled: !access.enabled });
   };
@@ -91,18 +80,7 @@ export function SecurityPage() {
     });
   };
 
-  const handleDelete = async (access: SecurityLevelAccess) => {
-    const confirmed = await confirm({
-      title: 'Delete ACS Flag',
-      message: `Are you sure you want to delete ACS flag "${access.acs_flag}"?`,
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      type: 'danger'
-    });
-    if (confirmed) {
-      deleteMutation.mutate(access.id);
-    }
-  };
+  // Delete flow removed; toggles control state
 
   if (isLoading) {
     return <div className="text-bbs-text">Loading security access flags...</div>;
@@ -180,12 +158,6 @@ export function SecurityPage() {
                 >
                   {access.enabled ? 'Enabled' : 'Disabled'}
                 </div>
-                <button
-                  onClick={() => handleDelete(access)}
-                  className="text-bbs-muted hover:text-bbs-accent transition-colors p-2"
-                >
-                  <Trash2 size={16} />
-                </button>
               </div>
             </div>
           ))}

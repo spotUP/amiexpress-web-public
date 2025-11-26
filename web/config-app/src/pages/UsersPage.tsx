@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { User as UserIcon, Edit2, Trash2, Plus, X, Shield } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -38,6 +38,11 @@ interface UserFormData {
 export function UsersPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<'username' | 'secLevel' | 'calls' | 'uploads' | 'downloads'>('username');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<BbsUser | null>(null);
   const [formData, setFormData] = useState<UserFormData>({
@@ -175,19 +180,42 @@ export function UsersPage() {
     return 'text-bbs-muted';
   };
 
-  const getSecurityLevelLabel = (level: number) => {
-    if (level >= 255) return 'Sysop';
-    if (level >= 200) return 'Co-Sysop';
-    if (level >= 100) return 'Privileged';
-    if (level >= 50) return 'User';
-    return 'Limited';
-  };
-
   if (isLoading) {
     return <div className="text-bbs-text">Loading users...</div>;
   }
 
   const users = (data?.data || []) as BbsUser[];
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    let list = users;
+    if (term) {
+      list = list.filter(
+        (u) =>
+          u.username.toLowerCase().includes(term) ||
+          (u.realname || '').toLowerCase().includes(term) ||
+          (u.email || '').toLowerCase().includes(term)
+      );
+    }
+    list = [...list].sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      switch (sortKey) {
+        case 'secLevel':
+          return (a.secLevel - b.secLevel) * dir;
+        case 'calls':
+          return (a.calls - b.calls) * dir;
+        case 'uploads':
+          return (a.uploads - b.uploads) * dir;
+        case 'downloads':
+          return (a.downloads - b.downloads) * dir;
+        default:
+          return a.username.localeCompare(b.username) * dir;
+      }
+    });
+    return list;
+  }, [users, search, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageUsers = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div>
@@ -196,86 +224,112 @@ export function UsersPage() {
           <h1 className="text-3xl font-bold text-bbs-accent mb-2">User Management</h1>
           <p className="text-bbs-muted">Manage BBS user accounts and permissions</p>
         </div>
-        <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
-          <Plus size={20} />
-          <span>Add User</span>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {users.map((user: BbsUser) => (
-          <div key={user.id} className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-bbs-primary rounded">
-                  <UserIcon className="text-bbs-accent" size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-bbs-text">{user.username}</h3>
-                  {user.realname && <p className="text-xs text-bbs-muted">{user.realname}</p>}
-                </div>
-              </div>
-              <div className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${getSecurityLevelColor(user.secLevel)} bg-bbs-secondary`}>
-                <Shield size={14} />
-                <span>{getSecurityLevelLabel(user.secLevel)}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm mb-4">
-              {user.email && (
-                <div className="flex justify-between">
-                  <span className="text-bbs-muted">Email:</span>
-                  <span className="text-bbs-text text-xs">{user.email}</span>
-                </div>
-              )}
-              {user.location && (
-                <div className="flex justify-between">
-                  <span className="text-bbs-muted">Location:</span>
-                  <span className="text-bbs-text text-xs">{user.location}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Security Level:</span>
-                <span className="text-bbs-text">{user.secLevel}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Time Limit:</span>
-                <span className="text-bbs-text">{user.timeLimit} min</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Calls:</span>
-                <span className="text-bbs-text">{user.calls}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Files:</span>
-                <span className="text-bbs-text">{user.uploads}↑ / {user.downloads}↓</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleEdit(user)}
-                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-              >
-                <Edit2 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => handleDelete(user)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center bg-bbs-background border border-bbs-border rounded px-2">
+            <Search size={16} className="text-bbs-muted" />
+            <input
+              type="text"
+              placeholder="Search username, real name, email"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="bg-transparent focus:outline-none px-2 py-1 text-sm text-bbs-text"
+            />
           </div>
-        ))}
+          <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
+            <Plus size={20} />
+            <span>Add User</span>
+          </button>
+        </div>
       </div>
 
-      {users.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No users found. Add users to provide access to the BBS.
+      <div className="card overflow-x-auto">
+        <div className="min-w-full">
+          <div className="grid grid-cols-8 gap-3 font-semibold text-bbs-text border-b border-bbs-border pb-2 text-sm">
+            <button
+              className="text-left"
+              onClick={() => {
+                setSortKey('username');
+                setSortDir(sortKey === 'username' && sortDir === 'asc' ? 'desc' : 'asc');
+              }}
+            >
+              Username {sortKey === 'username' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+            </button>
+            <button
+              className="text-left"
+              onClick={() => {
+                setSortKey('secLevel');
+                setSortDir(sortKey === 'secLevel' && sortDir === 'asc' ? 'desc' : 'asc');
+              }}
+            >
+              SecLvl {sortKey === 'secLevel' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+            </button>
+            <span>Real Name</span>
+            <span>Email</span>
+            <span>Calls</span>
+            <span>Files (U/D)</span>
+            <span>Time</span>
+            <span>Actions</span>
+          </div>
+
+          {pageUsers.map((user) => (
+            <div key={user.id} className="grid grid-cols-8 gap-3 items-center py-2 border-b border-bbs-border text-sm">
+              <div className="text-bbs-text font-mono">{user.username}</div>
+              <div className={`${getSecurityLevelColor(user.secLevel)}`}>{user.secLevel}</div>
+              <div className="text-bbs-text truncate">{user.realname || '—'}</div>
+              <div className="text-bbs-text truncate">{user.email || '—'}</div>
+              <div className="text-bbs-text">{user.calls}</div>
+              <div className="text-bbs-text">{user.uploads} / {user.downloads}</div>
+              <div className="text-bbs-text">{user.timeLimit} min</div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => handleEdit(user)}
+                  className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
+                >
+                  <Edit2 size={14} />
+                  <span>Edit</span>
+                </button>
+                <button
+                  onClick={() => handleDelete(user)}
+                  className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs flex items-center space-x-1"
+                >
+                  <Trash2 size={14} />
+                  <span>Del</span>
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {pageUsers.length === 0 && (
+            <div className="text-center text-bbs-muted py-6">No users found.</div>
+          )}
         </div>
-      )}
+
+        <div className="flex justify-between items-center mt-4">
+          <div className="text-sm text-bbs-muted">
+            Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} of {filtered.length}
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="btn-secondary px-3 py-1 disabled:opacity-50"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-sm text-bbs-text">{page} / {totalPages}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="btn-secondary px-3 py-1 disabled:opacity-50"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Add/Edit Modal */}
       {isModalOpen && (

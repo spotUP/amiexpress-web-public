@@ -22,6 +22,7 @@ export class XIMSystemCommandsHandler {
   private messageParser: XIMMessageParser;
   private bbsSession: BBSSessionData;
   private state: XIMState;
+  private bullsHandler: any;
   private transferRawActive = false;
 
   constructor(
@@ -38,6 +39,14 @@ export class XIMSystemCommandsHandler {
     this.messageParser = messageParser;
     this.bbsSession = bbsSession;
     this.state = state;
+
+    try {
+      // Lazy import to avoid circular refs
+      const { BullsDoorHandler } = require('../session/BullsDoorHandler.js');
+      this.bullsHandler = (global as any).bullsHandlerInstance || null;
+    } catch {
+      this.bullsHandler = null;
+    }
   }
 
   /**
@@ -47,14 +56,39 @@ export class XIMSystemCommandsHandler {
   handleRegister(msg: XIMMessage): void {
     console.log('[XIMSystem] Door registering with BBS');
 
+    // Ensure string pointers are valid (express.e seeds msg.msgString before replying)
+    const strPtr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    this.messageParser.writeStringPointer(msg.msgAddr, strPtr);
+    this.messageParser.writeFiller1(msg.msgAddr, strPtr);
+    this.messageParser.writeFiller2(msg.msgAddr, strPtr);
+    // express.e: msg.command := userLineLen (screen height)
+    const rawLineLen =
+      this.bbsSession?.user?.lineLength ??
+      this.bbsSession?.pauseLines ??
+      this.bbsSession?.lineWrap;
+    const lineLen =
+      typeof rawLineLen === 'number' && rawLineLen > 0 ? rawLineLen : 29;
+    this.messageParser.writeCommand(msg.msgAddr, lineLen);
+    // Ensure length is sane; otherwise echo the message back untouched.
+    const parsed = this.messageParser.parseMessage(msg.msgAddr);
+    if (this.emulator.readMemory16(msg.msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET) === 0) {
+      this.emulator.writeMemory16(msg.msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET, DoorConstants.MESSAGE_TOTAL_LENGTH);
+    }
+    const parsedFinal = this.messageParser.parseMessage(msg.msgAddr);
+    console.log(
+      `[XIMSystem][RegisterReply] cmd=${parsedFinal.command} data=${parsedFinal.data} node=${parsedFinal.nodeId} strPtr=0x${(parsedFinal as any).stringPtr?.toString(
+        16
+      )} str="${parsedFinal.string}"`
+    );
+
     this.state.registered = true;
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
 
-    // Reply with terminal line length (80 columns)
-    this.reply(msg, 80);
+    // Reply without mutating Data/Node/String fields; express.e reuses the door's message buffer
+    this.execLibrary.replyMsg(msg.msgAddr);
 
-    console.log('[XIMSystem] Registration acknowledged, line length=80');
+    console.log(`[XIMSystem] Registration acknowledged`);
   }
 
   /**
@@ -174,8 +208,7 @@ export class XIMSystemCommandsHandler {
   handleSignalBit(msg: XIMMessage): void {
     console.log('[XIMSystem] JH_SIGBIT - Query signal bits');
 
-    this.messageParser.writeData(msg.msgAddr, 0);
-    this.reply(msg, 1);
+    this.reply(msg, 0);
   }
 
   /**
@@ -261,11 +294,18 @@ export class XIMSystemCommandsHandler {
   /**
    * Send reply to door
    */
-  private reply(msg: XIMMessage, data: number, stringValue?: string): void {
+  private reply(
+    msg: XIMMessage,
+    data: number,
+    stringValue?: string,
+    writeDataField: boolean = true
+  ): void {
     if (typeof stringValue === 'string') {
       this.messageParser.writeMessageString(msg.msgAddr, stringValue);
     }
-    this.messageParser.writeData(msg.msgAddr, data);
+    if (writeDataField) {
+      this.messageParser.writeData(msg.msgAddr, data);
+    }
     this.execLibrary.replyMsg(msg.msgAddr);
   }
 

@@ -450,6 +450,42 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Deployment & health
+  async getDeploymentHealth() {
+    return this.request(`${API_BASE}/deployment/health`);
+  }
+
+  async getDeploymentSystemInfo() {
+    return this.request(`${API_BASE}/deployment/system-info`);
+  }
+
+  async getDeploymentDatabaseStats() {
+    return this.request(`${API_BASE}/deployment/database-stats`);
+  }
+
+  // Batches
+  async getBatches() {
+    return this.request<ApiResponse>(`${API_BASE}/batches`);
+  }
+
+  async getBatch(name: string) {
+    return this.request<ApiResponse>(`${API_BASE}/batches/${name}`);
+  }
+
+  async saveBatch(name: string, content: string) {
+    return this.request<ApiResponse>(`${API_BASE}/batches/${name}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async validateBatch(name: string, content: string) {
+    return this.request(`${API_BASE}/batches/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ name, content }),
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

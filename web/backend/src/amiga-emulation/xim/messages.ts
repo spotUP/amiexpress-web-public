@@ -169,6 +169,16 @@ export class XIMMessageParser {
   }
 
   /**
+   * Write Command (msg->Command)
+   */
+  writeCommand(msgAddr: number, value: number): void {
+    this.emulator.writeMemory32(
+      msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET,
+      value
+    );
+  }
+
+  /**
    * Write LineNum (msg->LineNum)
    */
   writeLineNumber(msgAddr: number, value: number): void {

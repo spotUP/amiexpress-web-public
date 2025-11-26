@@ -178,10 +178,19 @@ export class XIMProtocol {
   handleMessage(msg: any): void {
     console.log(`[XIMProtocol] Handling command: ${this.messageParser.getCommandName(msg.command)}`);
 
-    if (!this.state.registered && msg.command !== XIMCommand.JH_REGISTER) {
+    // Handle registration/shutdown ahead of other handlers to avoid PG_* collisions
+    if (msg.command === XIMCommand.JH_REGISTER) {
+      this.systemCommandsHandler.handleRegister(msg);
+      return;
+    }
+    if (!this.state.registered) {
       console.warn('[XIMProtocol] Ignoring command before JH_REGISTER handshake');
       this.messageParser.writeData(msg.msgAddr, 0);
       this.execLibrary.replyMsg(msg.msgAddr);
+      return;
+    }
+    if (msg.command === XIMCommand.JH_SHUTDOWN) {
+      this.systemCommandsHandler.handleShutdown(msg);
       return;
     }
 

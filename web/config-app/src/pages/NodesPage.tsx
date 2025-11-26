@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Edit2, Trash2, Save, X } from 'lucide-react';
+import { Edit2, Trash2, Save, X, Plus } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { NodeConfig } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -10,10 +10,15 @@ export function NodesPage() {
   const { showSuccess, confirm } = useNotification();
   const [editingNode, setEditingNode] = useState<number | null>(null);
   const [formData, setFormData] = useState<Partial<NodeConfig>>({});
+  const [newNodeNumber, setNewNodeNumber] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['nodes'],
     queryFn: () => apiClient.getNodeConfigs(),
+  });
+  const { data: systemConfig } = useQuery({
+    queryKey: ['systemConfig'],
+    queryFn: () => apiClient.getSystemConfig(),
   });
 
   const updateMutation = useMutation({
@@ -31,6 +36,15 @@ export function NodesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] });
       showSuccess('Node configuration deleted successfully');
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (nodeNumber: number) => apiClient.createNodeConfig({ node_number: nodeNumber }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] });
+      showSuccess('Node created');
+      setNewNodeNumber(null);
     },
   });
 
@@ -68,6 +82,11 @@ export function NodesPage() {
   }
 
   const nodes = data?.data || [];
+  const existingNumbers = new Set<number>(nodes.map((n: NodeConfig) => n.node_number));
+  const maxNodes = Math.max(1, Math.min(255, systemConfig?.data?.max_nodes || 8));
+  const missingNodes = Array.from({ length: maxNodes }, (_, i) => i + 1).filter(
+    (n) => !existingNumbers.has(n)
+  );
 
   return (
     <div>
@@ -75,6 +94,29 @@ export function NodesPage() {
         <div>
           <h1 className="text-3xl font-bold text-bbs-accent mb-2">Node Configuration</h1>
           <p className="text-bbs-muted">Configure individual BBS nodes (1-8)</p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <select
+            value={newNodeNumber ?? ''}
+            onChange={(e) => setNewNodeNumber(parseInt(e.target.value) || null)}
+            className="input-field"
+            disabled={missingNodes.length === 0}
+          >
+            <option value="">Select node</option>
+            {missingNodes.map((n) => (
+              <option key={n} value={n}>
+                Add Node {n}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => newNodeNumber && createMutation.mutate(newNodeNumber)}
+            disabled={!newNodeNumber}
+            className="btn-primary flex items-center space-x-2 disabled:opacity-50"
+          >
+            <Plus size={16} />
+            <span>Add Node</span>
+          </button>
         </div>
       </div>
 

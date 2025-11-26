@@ -18,6 +18,16 @@ import { BBSState } from '../index';
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
 
+function logDoorDebug(message: string) {
+  try {
+    const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
+    const line = `[DoorDebug] ${new Date().toISOString()} ${message}\n`;
+    fs.appendFileSync(logPath, line, { encoding: 'utf8' });
+  } catch (err) {
+    console.error('[DoorDebug] Failed to log door debug:', err);
+  }
+}
+
 function disableShortcuts(session: BBSSession) {
   session.cmdShortcuts = false;
   if (session.shortcuts && typeof session.shortcuts.clear === 'function') {
@@ -98,6 +108,21 @@ interface Door {
   conferenceId?: number;
   parameters?: string[];
   mciText?: string;  // For MCI type doors (express.e:4293-4297)
+  stack?: number;
+  priority?: string;
+  resident?: boolean;
+  expertMode?: boolean;
+  trapOn?: boolean;
+  silent?: boolean;
+  quickMode?: boolean;
+  multiNode?: boolean;
+  logInputs?: boolean;
+  scriptCheck?: boolean;
+  banner?: string;
+  mimicVer?: string;
+  passParameters?: number;
+  internal?: string;
+  toolTypes?: Record<string, string>;
 }
 
 interface DoorSession {
@@ -242,6 +267,8 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     const amigaSession = new AmigaDoorSession(socket, {
       executablePath: doorInfo.resolvedPath,
       timeout: 600,
+      doorId: doorInfo.command || doorInfo.id,
+      stack: doorInfo.stack,
       bbsSession: {
         user: session.user,
         nodeNumber: session.nodeId || 0,
@@ -250,11 +277,52 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
         timeRemaining: 60,
         doorCommand: doorInfo.command,
         doorName: doorInfo.name,
-        dataDir: config.get('dataDir')
+        dataDir: config.get('dataDir'),
+        doorId: doorInfo.command || doorInfo.id
       }
     } as any);
 
+    // Wire user input into the Amiga door while it runs
+    session.inDoorManager = true;
+    session.subState = LoggedOnSubState.DOOR_RUNNING;
+    session.doorInputHandler = (data: string) => {
+      try {
+        const shared: any = (amigaSession as any).sharedState || {};
+        logDoorDebug(`KEY door=${doorInfo.command || doorInfo.id || 'UNK'} data=${JSON.stringify(data)}`);
+        if (shared.ximProtocol) {
+          shared.ximProtocol.queueInput(data);
+        }
+        if (shared.dosLibrary && !(shared.ximProtocol?.isWaitingForLineInput?.() ?? false)) {
+          shared.dosLibrary.queueInput(data);
+        }
+      } catch (err) {
+        console.error('[launchAmigaDoor] Error routing door input:', err);
+      }
+    };
+    // Persist session state so socket-handlers sees the door flags/handler
+    try {
+      const { setSession, userSessions } = require('../server/session-manager');
+      setSession(socket.id, session);
+      if ((session as any).user?.id) {
+        userSessions.set((session as any).user.id, session);
+      }
+    } catch (err) {
+      console.error('[launchAmigaDoor] Unable to persist session for door input:', err);
+    }
+
     await amigaSession.start();
+    session.inDoorManager = false;
+    delete session.doorInputHandler;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    try {
+      const { setSession, userSessions } = require('../server/session-manager');
+      setSession(socket.id, session);
+      if ((session as any).user?.id) {
+        userSessions.set((session as any).user.id, session);
+      }
+    } catch (_) {
+      /* ignore */
+    }
 
     console.log(`[launchAmigaDoor] Door session completed: ${doorInfo.command}`);
 
@@ -985,7 +1053,22 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       executablePath: doorPath,
       doorType: doorType,
       timeout: 300, // 5 minutes
-      bbsSession: session // Use session's actual nodeId assigned by getNextAvailableNodeId()
+      bbsSession: session, // Use session's actual nodeId assigned by getNextAvailableNodeId()
+      stack: door.stack,
+      priority: door.priority,
+      resident: door.resident,
+      expertMode: door.expertMode,
+      trapOn: door.trapOn,
+      silent: door.silent,
+      quickMode: door.quickMode,
+      multiNode: door.multiNode,
+      logInputs: door.logInputs,
+      scriptCheck: door.scriptCheck,
+      banner: door.banner,
+      mimicVer: door.mimicVer,
+      passParameters: door.passParameters,
+      internal: door.internal,
+      toolTypes: door.toolTypes
     };
 
     // Create AmigaDoorSession to run the native Amiga executable
@@ -1722,7 +1805,22 @@ export async function initializeDoors() {
       accessLevel: cmdDef.access || 0,      // ACCESS= level
       enabled: true,
       type: doorType,                       // TYPE= (XIM, AIM, TS  typescript, etc.)
-      parameters: []
+      parameters: [],
+      stack: cmdDef.stack,
+      priority: cmdDef.priority,
+      resident: cmdDef.resident,
+      expertMode: cmdDef.expertMode,
+      trapOn: cmdDef.trapOn,
+      silent: cmdDef.silent,
+      quickMode: cmdDef.quickMode,
+      multiNode: cmdDef.multiNode,
+      logInputs: cmdDef.logInputs,
+      scriptCheck: cmdDef.scriptCheck,
+      banner: cmdDef.banner,
+      mimicVer: cmdDef.mimicVer,
+      passParameters: cmdDef.passParameters,
+      internal: cmdDef.internal,
+      toolTypes: cmdDef.toolTypes
     };
 
     bbsCmdDoors.push(door);

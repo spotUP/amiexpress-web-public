@@ -422,10 +422,52 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,
-          timeout: 600
+          timeout: 600,
+          bbsSession: session
         });
 
+        // Route live input to the door (mirror launchAmigaDoor behavior)
+        session.inDoorManager = true;
+        session.subState = LoggedOnSubState.DOOR_RUNNING;
+        session.doorInputHandler = (data: string) => {
+          try {
+            const shared: any = (amigaSession as any).sharedState || {};
+            if (shared.ximProtocol) {
+              shared.ximProtocol.queueInput(data);
+            }
+            if (shared.dosLibrary && !(shared.ximProtocol?.isWaitingForLineInput?.() ?? false)) {
+              shared.dosLibrary.queueInput(data);
+            }
+          } catch (err) {
+            console.error('[GA] Error routing door input:', err);
+          }
+        };
+        // Persist session so socket-handlers sees doorInputHandler
+        try {
+          const { setSession, userSessions } = require('../../server/session-manager');
+          setSession(socket.id, session);
+          if ((session as any).user?.id) {
+            userSessions.set((session as any).user.id, session);
+          }
+        } catch (err) {
+          console.error('[GA] Unable to persist session for door input:', err);
+        }
+
         await amigaSession.start();
+
+        // Cleanup door input handling
+        session.inDoorManager = false;
+        delete session.doorInputHandler;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        try {
+          const { setSession, userSessions } = require('../../server/session-manager');
+          setSession(socket.id, session);
+          if ((session as any).user?.id) {
+            userSessions.set((session as any).user.id, session);
+          }
+        } catch (err) {
+          console.error('[GA] Unable to persist session after door:', err);
+        }
 
         socket.emit('ansi-output', '\r\n\x1b[32mGetAnswer door session completed.\x1b[0m\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;

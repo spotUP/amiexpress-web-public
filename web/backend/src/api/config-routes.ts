@@ -1049,6 +1049,22 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
     try {
       const context = getRequestContext(req);
       const { password, ...userData } = req.body;
+      const systemConfig = await configService.getSystemConfig();
+      const defaults = {
+        secLevel: systemConfig.new_user_sec_level,
+        timeLimit: systemConfig.new_user_time_limit,
+        chatLimit: systemConfig.new_user_chat_limit,
+        linesPerScreen: systemConfig.new_user_lines_per_screen,
+        expert: systemConfig.new_user_expert,
+        ansi: systemConfig.new_user_ansi,
+        protocol: systemConfig.new_user_protocol,
+        screenType: systemConfig.new_user_screen_type,
+        editor: systemConfig.new_user_editor,
+        confAccess: systemConfig.new_user_conf_access,
+        availableForChat: systemConfig.new_user_available_chat,
+        quietNode: systemConfig.new_user_quiet_node,
+        autoRejoin: systemConfig.new_user_auto_rejoin
+      };
 
       // Hash password
       const bcrypt = require('bcrypt');
@@ -1061,7 +1077,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
         location: userData.location || '',
         phone: userData.phone || '',
         email: userData.email || '',
-        secLevel: userData.secLevel || 10,
+        secLevel: userData.secLevel ?? defaults.secLevel ?? 10,
         uploads: 0,
         downloads: 0,
         bytesUpload: 0,
@@ -1069,26 +1085,26 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
         ratio: 0,
         ratioType: 0,
         timeTotal: 0,
-        timeLimit: userData.timeLimit || 60,
+        timeLimit: userData.timeLimit ?? defaults.timeLimit ?? 60,
         timeUsed: 0,
-        chatLimit: 0,
+        chatLimit: userData.chatLimit ?? defaults.chatLimit ?? 0,
         chatUsed: 0,
         firstLogin: new Date(),
         calls: 0,
         callsToday: 0,
         newUser: true,
-        expert: userData.expert === 'X' ? 'X' : 'N',
-        ansi: true,
-        linesPerScreen: 23,
-        computer: 0,
-        screenType: 0,
-        protocol: '',
-        editor: '',
+        expert: userData.expert === 'X' ? 'X' : (defaults.expert ? 'X' : 'N'),
+        ansi: userData.ansi ?? defaults.ansi ?? true,
+        linesPerScreen: userData.linesPerScreen ?? defaults.linesPerScreen ?? 23,
+        computer: userData.computer ?? 0,
+        screenType: userData.screenType ?? defaults.screenType ?? '',
+        protocol: userData.protocol ?? defaults.protocol ?? '',
+        editor: userData.editor ?? defaults.editor ?? '',
         zoomType: 0,
-        availableForChat: true,
-        quietNode: false,
-        autoRejoin: 1,
-        confAccess: '1',
+        availableForChat: userData.availableForChat ?? defaults.availableForChat ?? true,
+        quietNode: userData.quietNode ?? defaults.quietNode ?? false,
+        autoRejoin: userData.autoRejoin ?? (defaults.autoRejoin ? 1 : 0),
+        confAccess: userData.confAccess || defaults.confAccess || '1',
         areaName: '',
         uuCP: false,
         topUploadCPS: 0,
@@ -1242,8 +1258,10 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
   router.get('/logs', async (req: Request, res: Response) => {
     try {
       const { type = 'backend', lines = '500', search = '' } = req.query;
-      const fs = await import('fs').then(m => m.promises);
+      const fsModule = await import('fs');
+      const fs = fsModule.promises;
       const path = await import('path');
+      const readline = await import('readline');
 
       const maxLines = Math.min(parseInt(lines as string, 10) || 500, 5000);
       const logType = type as string;
@@ -1256,6 +1274,9 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
         case 'backend':
           logFile = path.join(projectRoot, 'logs', 'backend.log');
           break;
+        case 'door68k':
+          logFile = path.join(projectRoot, 'logs', 'door-68k.log');
+          break;
         case 'frontend':
           logFile = path.join(projectRoot, 'logs', 'frontend.log');
           break;
@@ -1267,6 +1288,13 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
           break;
         default:
           throw new Error(`Invalid log type: ${logType}`);
+      }
+
+      // Ensure the log file exists so the UI doesn’t error on first view
+      try {
+        await fs.access(logFile);
+      } catch {
+        await fs.writeFile(logFile, '', 'utf-8');
       }
 
       // Detect hosting environment
@@ -1312,26 +1340,50 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
         });
       }
 
-      // Read log file
-      const content = await fs.readFile(logFile, 'utf-8');
-      let lines_array = content.split('\n').filter(line => line.trim());
-
-      // Apply search filter
       const searchTerm = (search as string).toLowerCase();
-      if (searchTerm) {
-        lines_array = lines_array.filter(line =>
-          line.toLowerCase().includes(searchTerm)
-        );
-      }
 
-      // Get last N lines
-      const totalLines = lines_array.length;
-      const logLines = lines_array.slice(-maxLines).reverse();
+      // Stream the file to avoid loading multi-GB logs into memory
+      const loadLogLines = async () => {
+        const matched: string[] = [];
+        let totalLines = 0;
+
+        const stream = fsModule.createReadStream(logFile, { encoding: 'utf-8' });
+        const rl = readline.createInterface({
+          input: stream,
+          crlfDelay: Infinity
+        });
+
+        try {
+          for await (const line of rl) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            if (searchTerm && !trimmed.toLowerCase().includes(searchTerm)) {
+              continue;
+            }
+            totalLines++;
+            matched.push(trimmed);
+            if (matched.length > maxLines) {
+              matched.shift();
+            }
+          }
+        } finally {
+          rl.close();
+          stream.close();
+        }
+
+        return {
+          lines: matched.reverse(),
+          totalLines,
+          displayedLines: matched.length
+        };
+      };
+
+      const { lines: logLines, totalLines, displayedLines } = await loadLogLines();
 
       sendResponse(res, {
         lines: logLines,
         totalLines,
-        displayedLines: logLines.length,
+        displayedLines,
         logType,
         searchTerm: searchTerm || undefined
       });
@@ -1357,6 +1409,9 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       switch (logType) {
         case 'backend':
           logFile = path.join(projectRoot, 'logs', 'backend.log');
+          break;
+        case 'door68k':
+          logFile = path.join(projectRoot, 'logs', 'door-68k.log');
           break;
         case 'frontend':
           logFile = path.join(projectRoot, 'logs', 'frontend.log');

@@ -49,9 +49,24 @@ export const SystemConfigSchema = z.object({
   confirm_deletions: z.boolean().optional(),
 
   // Session Settings
-  default_time_limit: z.number().int().min(1).max(1440).optional(),
-  max_session_time: z.number().int().min(1).max(1440).optional(),
+  default_time_limit: z.number().int().min(-1).max(1440).optional(),
+  max_session_time: z.number().int().min(-1).max(1440).optional(),
   idle_timeout: z.number().int().min(1).max(60).optional(),
+
+  // New User Defaults
+  new_user_sec_level: z.number().int().min(1).max(255).optional(),
+  new_user_time_limit: z.number().int().min(1).max(1440).optional(),
+  new_user_chat_limit: z.number().int().min(0).max(1440).optional(),
+  new_user_lines_per_screen: z.number().int().min(10).max(100).optional(),
+  new_user_expert: z.boolean().optional(),
+  new_user_ansi: z.boolean().optional(),
+  new_user_protocol: z.string().max(50).optional(),
+  new_user_screen_type: z.string().max(50).optional(),
+  new_user_editor: z.string().max(50).optional(),
+  new_user_conf_access: z.string().max(50).optional(),
+  new_user_available_chat: z.boolean().optional(),
+  new_user_quiet_node: z.boolean().optional(),
+  new_user_auto_rejoin: z.boolean().optional(),
 
   // Display Settings
   ansi_enabled: z.boolean().optional(),
@@ -66,7 +81,7 @@ export const SystemConfigSchema = z.object({
   max_conferences: z.number().int().min(1).max(256).optional(),
   max_message_bases: z.number().int().min(1).max(1024).optional(),
   max_file_areas: z.number().int().min(1).max(1024).optional(),
-  max_nodes: z.number().int().min(1).max(8).optional(),
+  max_nodes: z.number().int().min(1).max(255).optional(),
 
   // File Management
   file_check_enabled: z.boolean().optional(),
@@ -113,7 +128,7 @@ export const SystemConfigSchema = z.object({
 });
 
 export const NodeConfigSchema = z.object({
-  node_number: z.number().int().min(1).max(8),
+  node_number: z.number().int().min(1).max(255),
   node_start: z.string().max(200).optional(),
   priority: z.number().int().min(-1).max(20).optional(),
   capitol_files: z.boolean().optional(),
@@ -1004,8 +1019,12 @@ export class ConfigService {
     const validated = SecurityLevelAccessSchema.partial().parse(updates);
 
     // Get old values
-    const allAccess = await this.configRepo.getAllSecurityAccessForLevel(0); // Get all
-    const oldAccess = allAccess.find(a => a.id === id);
+    // Pull from the specific level first; fall back to all
+    const level = updates.security_level ?? undefined;
+    const scopedAccess = level !== undefined
+      ? await this.configRepo.getAllSecurityAccessForLevel(level)
+      : await this.configRepo.getAllSecurityAccessForLevel(0);
+    const oldAccess = scopedAccess.find((a: any) => a.id === id);
     if (!oldAccess) {
       throw new Error(`Security access ${id} not found`);
     }
@@ -1014,7 +1033,10 @@ export class ConfigService {
     const success = this.configRepo.updateSecurityAccess(id, validated);
 
     if (success) {
-      const newAccess = allAccess.find(a => a.id === id);
+      const refreshed = level !== undefined
+        ? await this.configRepo.getAllSecurityAccessForLevel(level)
+        : await this.configRepo.getAllSecurityAccessForLevel(0);
+      const newAccess = refreshed.find((a: any) => a.id === id);
       // Log change
       this.configRepo.logConfigChange(
         'security_level_access',
