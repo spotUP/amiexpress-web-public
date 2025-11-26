@@ -85,6 +85,37 @@ export class BullsDoorHandler {
     }
   }
 
+  /**
+   * Mirror the register reply fields into Bulls control/info buffers so the door
+   * sees the updated command/data/node values after ReplyMsg.
+   */
+  mirrorRegisterReply(msg: {
+    command: number;
+    data: number;
+    nodeId?: number;
+    string?: string;
+    msgAddr?: number;
+  }): void {
+    const node = msg.nodeId ?? this.resolveNodeId() ?? 1;
+    if (this.bullsControlBlockAddr) {
+      this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xe0, msg.command);
+      this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xdc, msg.data ?? node);
+      this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xe4, node);
+      this.emulator.writeMemory32(this.bullsControlBlockAddr + 0xe8, 0);
+    }
+    if (this.bullsInfoBufferAddr) {
+      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xe0, msg.command);
+      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xdc, msg.data ?? node);
+      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xe4, node);
+      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xe8, 0);
+    }
+    if (msg.msgAddr) {
+      this.emulator.writeMemory32(msg.msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, msg.command);
+      this.emulator.writeMemory32(msg.msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, msg.data ?? node);
+      this.emulator.writeMemory32(msg.msgAddr + DoorConstants.MESSAGE_NODE_OFFSET, node);
+    }
+  }
+
   /** Expose Bulls pointer watch addresses so other components can mirror replies. */
   getPointerWatch(): {
     info: number;
