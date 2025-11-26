@@ -190,3 +190,6 @@ ssh_host_rsa_key*
 # Large binaries (keep local only)
 amiexpress.hdf
 vAmiga.app/
+
+dev/docs/radare2
+
