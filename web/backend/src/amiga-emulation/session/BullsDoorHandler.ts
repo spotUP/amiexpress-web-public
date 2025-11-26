@@ -220,9 +220,9 @@ export class BullsDoorHandler {
     // Loosen safety limits to observe IPC
     if (!this.iterationLimitPatched && (this.config as any)?.sharedState?.lifecycleManager) {
       try {
-        (this.config as any).sharedState.lifecycleManager.setIterationLimit(500000); // 10x
+        (this.config as any).sharedState.lifecycleManager.setIterationLimit(5000000); // much higher for Bulls
         this.iterationLimitPatched = true;
-        console.log('[BullsDoorHandler] Increased iteration limit to 500000 for Bulls debugging');
+        console.log('[BullsDoorHandler] Increased iteration limit to 5000000 for Bulls debugging');
       } catch (e) {
         console.log('[BullsDoorHandler] Unable to patch iteration limit', e);
       }

@@ -16,6 +16,7 @@ import { MoiraEmulator } from './cpu/MoiraEmulator';
 import { ExecLibrary } from './api/ExecLibrary';
 import { Socket } from 'socket.io';
 import { XIMCommand, BBSSessionData, XIMState, XIMMessage } from './xim/types';
+import { DoorConstants } from './DoorTypes';
 import { XIMMessageParser } from './xim/messages';
 import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
@@ -194,6 +195,19 @@ export class XIMProtocol {
       this.messageParser.writeLineNumber(msg.msgAddr, 0);
       const normalized = this.messageParser.parseMessage(msg.msgAddr);
       msg = { ...msg, data: normalized.data, nodeId: normalized.nodeId, lineNumber: normalized.lineNumber };
+      // Keep a copy of the register msg around in case the door polls again
+      this.emulator.writeMemory32(
+        msg.msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET,
+        normalized.command
+      );
+      this.emulator.writeMemory32(
+        msg.msgAddr + DoorConstants.MESSAGE_DATA_OFFSET,
+        normalized.data
+      );
+      this.emulator.writeMemory32(
+        msg.msgAddr + DoorConstants.MESSAGE_NODE_OFFSET,
+        normalized.nodeId ?? nodeId
+      );
     }
 
     const humanName = this.messageParser.getCommandName(msg.command);
