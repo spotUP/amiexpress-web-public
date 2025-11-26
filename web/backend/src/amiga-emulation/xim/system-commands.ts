@@ -87,6 +87,9 @@ export class XIMSystemCommandsHandler {
         16
       )} str="${parsedFinal.string}"`
     );
+    console.log(
+      `[XIMSystem][RegisterReply][dbg] wrote nodeId=${nodeId} data=${nodeId} lineLen=${lineLen}`
+    );
 
     this.state.registered = true;
     this.state.shuttingDown = false;
