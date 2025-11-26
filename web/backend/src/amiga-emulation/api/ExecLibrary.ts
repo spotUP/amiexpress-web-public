@@ -2021,8 +2021,32 @@ export class ExecLibrary {
 
     // Check if port has messages
     if (port.messages.length === 0) {
+      // Bulls workaround: mirror messages from Bulls reply port into this port if empty
+      try {
+        const bulls = (global as any).bullsHandlerInstance;
+        const bullsPort = bulls?.doorReplyPortAddr;
+        if (bulls && bullsPort && portAddr !== bullsPort) {
+          const bullsPortEntry = this.messagePorts.get(bullsPort);
+          if (bullsPortEntry && bullsPortEntry.messages.length > 0) {
+            bullsPortEntry.messages.forEach((msgAddr) => {
+              if (!port.messages.includes(msgAddr)) {
+                port.messages.push(msgAddr);
+              }
+            });
+            console.log(
+              `[ExecLibrary][Bulls] Mirrored ${bullsPortEntry.messages.length} message(s) from 0x${bullsPort.toString(
+                16
+              )} to 0x${portAddr.toString(16)}`
+            );
+          }
+        }
+      } catch {
+        // ignore
+      }
       // No message - would block on real Amiga, we return 0
-      return 0;
+      if (port.messages.length === 0) {
+        return 0;
+      }
     }
 
     // MESSAGE FOUND! Return the head message without removing it.
