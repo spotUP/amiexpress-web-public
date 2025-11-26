@@ -2025,7 +2025,8 @@ export class ExecLibrary {
       try {
         const bulls = (global as any).bullsHandlerInstance;
         const bullsPort = bulls?.doorReplyPortAddr;
-        if (bulls && bullsPort && portAddr !== bullsPort) {
+        if (bulls && bullsPort) {
+          // If caller is waiting on a different port, mirror Bulls messages into it
           const bullsPortEntry = this.messagePorts.get(bullsPort);
           if (bullsPortEntry && bullsPortEntry.messages.length > 0) {
             bullsPortEntry.messages.forEach((msgAddr) => {
