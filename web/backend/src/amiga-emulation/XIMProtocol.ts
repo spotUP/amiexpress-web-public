@@ -183,6 +183,19 @@ export class XIMProtocol {
   handleMessage(msg: XIMMessage): void {
     console.log(`[XIMProtocol] Handling command: ${this.messageParser.getCommandName(msg.command)}`);
 
+    // Normalize JH_REGISTER to carry the active node before logging/handling
+    if (msg.command === XIMCommand.JH_REGISTER) {
+      const nodeId =
+        (this.bbsSession?.nodeId as number) ||
+        (this.bbsSession as any)?.nodeNumber ||
+        1;
+      this.messageParser.writeData(msg.msgAddr, nodeId);
+      this.messageParser.writeNodeId(msg.msgAddr, nodeId);
+      this.messageParser.writeLineNumber(msg.msgAddr, 0);
+      const normalized = this.messageParser.parseMessage(msg.msgAddr);
+      msg = { ...msg, data: normalized.data, nodeId: normalized.nodeId, lineNumber: normalized.lineNumber };
+    }
+
     const humanName = this.messageParser.getCommandName(msg.command);
     this.messageLogger?.(msg, humanName);
 
