@@ -159,6 +159,7 @@ export class BullsDoorHandler {
     doorReplyPortAddr: number;
     aePortAddress: number;
     sentInitialMessage: boolean;
+    doorPortAddress?: number;
   }): void {
     this.doorInfoAddr = state.doorInfoAddr;
     this.nodeStatusAddr = state.nodeStatusAddr;
@@ -166,6 +167,9 @@ export class BullsDoorHandler {
     this.doorReplyPortAddr = state.doorReplyPortAddr;
     this.aePortAddress = state.aePortAddress;
     this.sentInitialMessage = state.sentInitialMessage;
+    if (state.doorPortAddress) {
+      this.aePortAddress = state.doorPortAddress;
+    }
   }
 
   /**
@@ -755,7 +759,7 @@ export class BullsDoorHandler {
     // Initialize a neutral JH_REGISTER message in the door info block
     const nodeId = this.resolveNodeId() || 1;
     this.emulator.writeMemory32(messageAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, 1);
-    this.emulator.writeMemory32(messageAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
+    this.emulator.writeMemory32(messageAddr + DoorConstants.MESSAGE_DATA_OFFSET, nodeId);
     this.emulator.writeMemory32(messageAddr + DoorConstants.MESSAGE_NODE_OFFSET, nodeId);
     const strPtr = messageAddr + DoorConstants.MESSAGE_STRING_OFFSET;
     this.emulator.writeMemory32(
