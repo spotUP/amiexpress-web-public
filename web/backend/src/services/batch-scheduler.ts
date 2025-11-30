@@ -180,6 +180,22 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     return;
   }
 
+  // Special-case QuickNew (68K) to generate screens:quicknew.txt with higher loop limit
+  if (program.includes('quicknew/quicknew')) {
+    const doorPath = resolveAssign('doors:quicknew/quicknew');
+    const args = amigaArgs; // e.g., quicknew.config1 <days>
+    const nodeNum = nodeId || 1;
+    if (doorPath) {
+      const envOverrides = {
+        AEDOOR_STDOUT: 'screens:quicknew.txt',
+        AEDOOR_LOOP_LIMIT: '2000000',
+      };
+      await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath), undefined, envOverrides);
+      console.log('[BatchScheduler] Ran QuickNew with stdout redirected to screens:quicknew.txt');
+    }
+    return;
+  }
+
   // Special-case SlickTop (68K) to generate bull11
   if (program.includes('slicktop/slicktop')) {
     const doorPath = resolveAssign('doors:slicktop/slicktop');
@@ -260,7 +276,14 @@ export async function runLogoffBatches(nodeId: number): Promise<void> {
     await runBatchFile(candidate, nodeId || 1);
   }
 }
-function runAmigaDoorViaRunner(doorPath: string, nodeId: number, args: string[] = [], cwd?: string, redirectPath?: string): Promise<void> {
+function runAmigaDoorViaRunner(
+  doorPath: string,
+  nodeId: number,
+  args: string[] = [],
+  cwd?: string,
+  redirectPath?: string,
+  envOverrides?: Record<string, string>
+): Promise<void> {
   const appRootPath = path.resolve(__dirname, '../../../..');
   const dataDir = config.getConfig().dataDir;
   const bbsRoot = process.env.BBS_ROOT || dataDir || path.resolve(process.cwd(), '..');
@@ -328,7 +351,7 @@ function runAmigaDoorViaRunner(doorPath: string, nodeId: number, args: string[] 
 
     const child: any = require('child_process').spawn(command, execArgs, {
       cwd: cwd || path.dirname(doorPath),
-      env: { ...process.env, TS_NODE_TRANSPILE_ONLY: 'true' },
+      env: { ...process.env, ...envOverrides, TS_NODE_TRANSPILE_ONLY: 'true' },
     });
     let output = '';
     child.stdout?.on('data', (chunk: Buffer) => {
