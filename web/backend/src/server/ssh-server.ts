@@ -80,7 +80,9 @@ export class SSHConnection extends EventEmitter {
         this.terminalWidth = info.cols || 80;
         this.terminalHeight = info.rows || 24;
         console.log(`[SSH] PTY requested: ${this.terminalWidth}x${this.terminalHeight}`);
-        accept();
+        if (typeof accept === 'function') {
+          accept();
+        }
       });
 
       session.on('window-change', (accept: () => void, reject: () => void, info: any) => {
@@ -89,7 +91,9 @@ export class SSHConnection extends EventEmitter {
         this.terminalHeight = info.rows || 24;
         console.log(`[SSH] Window resize: ${this.terminalWidth}x${this.terminalHeight}`);
         this.emit('window-size', this.terminalWidth, this.terminalHeight);
-        accept();
+        if (typeof accept === 'function') {
+          accept();
+        }
       });
 
       session.on('shell', (accept: () => void, reject: () => void) => {

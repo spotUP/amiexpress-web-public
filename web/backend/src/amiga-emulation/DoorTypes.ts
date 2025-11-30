@@ -11,6 +11,7 @@ export interface DoorConfig {
   args?: string[]; // Optional CLI arguments (without program name)
   cwd?: string; // Working directory for the door (defaults to door directory)
   assigns?: Record<string, string>; // Amiga assigns (BBS:, Doors:, NodeX:, etc.)
+  env?: Record<string, string>; // Environment variables accessible via FindVar/CLI
   stack?: number; // Optional stack size (bytes) from .info (STACK tooltype)
   priority?: string; // Optional priority setting
   resident?: boolean;

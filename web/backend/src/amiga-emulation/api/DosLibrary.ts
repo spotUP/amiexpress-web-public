@@ -116,6 +116,13 @@ export class DosLibrary {
   // Debug: optionally exit after first DOS Open to capture paths in tight loops
   private exitAfterFirstOpen: boolean = process.env.AEDOOR_EXIT_AFTER_OPEN === "1";
   private firstOpenSeen: boolean = false;
+  private envNormalizedMap: Map<string, string> = new Map();
+  private envVarCache: Map<string, number> = new Map();
+  private readonly envVarStructPointer: number = 0x94000;
+  private readonly envStringPointer: number = 0x96000;
+  private envVarStructNext: number;
+  private envStringNext: number;
+  private readonly envVarStructSize: number = 0x40;
 
   // Standard file handles
   private readonly STDIN_HANDLE = 1;
@@ -175,6 +182,8 @@ export class DosLibrary {
     this.ensureDirectory(this.bbsDataPath);
     this.ensureDirectory("/tmp/ram/ENV");
     this.readArgsHeapPtr = this.READARGS_HEAP_BASE;
+    this.envVarStructNext = this.envVarStructPointer;
+    this.envStringNext = this.envStringPointer;
 
     // Initialize standard I/O handles
     this.openFiles.set(this.STDIN_HANDLE, {
@@ -254,6 +263,73 @@ export class DosLibrary {
     } catch {
       /* ignore */
     }
+  }
+
+  /**
+   * Seed environment variables that doors can read via FindVar.
+   */
+  setEnvironment(env?: Record<string, string | undefined>): void {
+    this.envNormalizedMap.clear();
+    this.envVarCache.clear();
+    this.envVarStructNext = this.envVarStructPointer;
+    this.envStringNext = this.envStringPointer;
+
+    if (!env) {
+      return;
+    }
+
+    for (const [rawName, rawValue] of Object.entries(env)) {
+      if (typeof rawValue !== "string") {
+        continue;
+      }
+      const trimmed = rawName.trim();
+      if (!trimmed) {
+        continue;
+      }
+      this.envNormalizedMap.set(trimmed.toLowerCase(), rawValue);
+    }
+  }
+
+  private getEnvVarValue(name: string): string | undefined {
+    const trimmed = name.trim().toLowerCase();
+    if (!trimmed) {
+      return undefined;
+    }
+    return this.envNormalizedMap.get(trimmed);
+  }
+
+  private ensureEnvVarNode(name: string, value: string): number {
+    const normalized = name.trim().toLowerCase();
+    const existing = this.envVarCache.get(normalized);
+    if (existing) {
+      return existing;
+    }
+    const structAddr = this.envVarStructNext;
+    this.envVarStructNext += this.envVarStructSize;
+
+    const nameAddr = this.writeEnvString(name);
+    const valueAddr = this.writeEnvString(value);
+
+    this.emulator.writeMemory32(structAddr + 0, 0); // ln_Succ
+    this.emulator.writeMemory32(structAddr + 4, 0); // ln_Pred
+    this.emulator.writeMemory(structAddr + 8, 0); // ln_Type
+    this.emulator.writeMemory(structAddr + 9, 0); // ln_Pri
+    this.emulator.writeMemory32(structAddr + 10, nameAddr); // ln_Name
+    this.emulator.writeMemory32(structAddr + 14, valueAddr); // lv_Value
+    this.emulator.writeMemory32(structAddr + 18, value.length); // lv_Len
+
+    this.envVarCache.set(normalized, structAddr);
+    console.log(
+      `[dos.library]   Env variable "${name}" registered -> "${value}"`
+    );
+    return structAddr;
+  }
+
+  private writeEnvString(text: string): number {
+    const addr = this.envStringNext;
+    this.emulator.writeString(addr, text);
+    this.envStringNext += text.length + 1;
+    return addr;
   }
 
   /**
@@ -4191,8 +4267,9 @@ export class DosLibrary {
 
     console.log(`[dos.library] FindVar("${name}", type=${type})`);
 
-    // For local variables (type=0 or GVF_LOCAL_ONLY), search CLI local vars
+    let localSearchAttempted = false;
     if ((type & 0xff) === 0) {
+      localSearchAttempted = true;
       // Get current CLI structure from pr_CLI
       const taskAddr = 0x70000; // Current task
       const prCliOffset = 0xac;
@@ -4200,46 +4277,50 @@ export class DosLibrary {
 
       if (cliBPTR === 0) {
         console.log(`[dos.library]   No CLI structure found`);
-        this.emulator.setRegister(0, 0);
-        return;
-      }
+      } else {
+        const cliAddr = cliBPTR << 2;
+        const localVarsBPTR = this.emulator.readMemory32(cliAddr + 0x5c); // cli_LocalVars
 
-      const cliAddr = cliBPTR << 2;
-      const localVarsBPTR = this.emulator.readMemory32(cliAddr + 0x5c); // cli_LocalVars
+        if (localVarsBPTR === 0) {
+          console.log(`[dos.library]   No local variables list`);
+        } else {
+          const localVarsListAddr = localVarsBPTR << 2;
+          // Walk the list to find the variable
+          let nodeAddr = this.emulator.readMemory32(localVarsListAddr + 0); // lh_Head
 
-      if (localVarsBPTR === 0) {
-        console.log(`[dos.library]   No local variables list`);
-        this.emulator.setRegister(0, 0);
-        return;
-      }
+          while (nodeAddr !== 0 && nodeAddr !== localVarsListAddr + 4) {
+            // Not NULL and not Tail
+            const nodeNameAddr = this.emulator.readMemory32(nodeAddr + 10); // ln_Name
 
-      const localVarsListAddr = localVarsBPTR << 2;
+            if (nodeNameAddr !== 0) {
+              const nodeName = this.emulator.readString(nodeNameAddr);
 
-      // Walk the list to find the variable
-      let nodeAddr = this.emulator.readMemory32(localVarsListAddr + 0); // lh_Head
+              if (nodeName === name) {
+                console.log(
+                  `[dos.library]   Found local variable "${name}" at 0x${nodeAddr.toString(
+                    16
+                  )}`
+                );
+                this.emulator.setRegister(0, nodeAddr);
+                return;
+              }
+            }
 
-      while (nodeAddr !== 0 && nodeAddr !== localVarsListAddr + 4) {
-        // Not NULL and not Tail
-        const nodeNameAddr = this.emulator.readMemory32(nodeAddr + 10); // ln_Name
-
-        if (nodeNameAddr !== 0) {
-          const nodeName = this.emulator.readString(nodeNameAddr);
-
-          if (nodeName === name) {
-            console.log(
-              `[dos.library]   Found local variable "${name}" at 0x${nodeAddr.toString(
-                16
-              )}`
-            );
-            this.emulator.setRegister(0, nodeAddr);
-            return;
+            // Move to next node
+            nodeAddr = this.emulator.readMemory32(nodeAddr + 0); // ln_Succ
           }
         }
-
-        // Move to next node
-        nodeAddr = this.emulator.readMemory32(nodeAddr + 0); // ln_Succ
       }
+    }
 
+    const envValue = this.getEnvVarValue(name);
+    if (envValue !== undefined) {
+      const envNode = this.ensureEnvVarNode(name, envValue);
+      this.emulator.setRegister(0, envNode);
+      return;
+    }
+
+    if (localSearchAttempted) {
       console.log(`[dos.library]   Variable "${name}" not found`);
       this.emulator.setRegister(0, 0);
       return;

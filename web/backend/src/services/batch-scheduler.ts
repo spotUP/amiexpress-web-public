@@ -353,12 +353,20 @@ function runAmigaDoorViaRunner(
       cwd: cwd || path.dirname(doorPath),
       env: { ...process.env, ...envOverrides, TS_NODE_TRANSPILE_ONLY: 'true' },
     });
+    const MAX_OUTPUT_LENGTH = 256 * 1024; // keep last 256 KB
     let output = '';
+    const appendOutput = (chunk: Buffer) => {
+      const text = chunk.toString();
+      output += text;
+      if (output.length > MAX_OUTPUT_LENGTH) {
+        output = output.slice(output.length - MAX_OUTPUT_LENGTH);
+      }
+    };
     child.stdout?.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
+      appendOutput(chunk);
     });
     child.stderr?.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
+      appendOutput(chunk);
     });
 
     child.on('error', (err: any) => {

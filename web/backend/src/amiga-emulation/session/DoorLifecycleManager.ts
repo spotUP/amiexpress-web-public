@@ -247,6 +247,7 @@ export class DoorLifecycleManager {
 
         // === STEP 2: Get current PC and handle Bulls-specific logic ===
         const pc = this.emulator.getRegister(16);
+        this.recordProgressByPc(pc);
         // Track recent PCs for crash diagnostics
         this.lastPCs.push(pc);
         if (this.lastPCs.length > 8) {
@@ -1204,6 +1205,15 @@ export class DoorLifecycleManager {
       if (this.executionState.iterationCount % 1000 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
       }
+    }
+  }
+
+  private recordProgressByPc(pc: number): void {
+    // SAmiLog3 busy loop lives around 0x5c90-0x5d10; count it as progress so the guard
+    // doesn't kill a door that is still actively spinning.
+    if (pc >= 0x5c90 && pc <= 0x5d10) {
+      this.executionState.lastProgressIteration = this.executionState.iterationCount;
+      this.executionState.lastProgressTime = Date.now();
     }
   }
 

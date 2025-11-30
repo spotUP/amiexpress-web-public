@@ -200,6 +200,10 @@ import { finalizeCommand } from '../utils/command-response.util';
 
 // Import utilities
 import { AnsiUtil } from '../utils/ansi.util';
+import { nodeFileManager } from '../services/NodeFileManager';
+import { callersLogManager } from '../services/CallersLogManager';
+import { runLoginBatches } from '../services/batch-scheduler';
+import { initializeSecurity } from '../utils/security.util';
 
 // Dependencies (injected)
 let db: any;
@@ -805,7 +809,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // Immediately transition to login state (no key press required)
         session.state = BBSState.LOGON;
         session.subState = undefined;
-        socket.emit('ansi-output', '\r\n\r\n');
+        session.tempData = session.tempData || {};
+        session.tempData.loginPhase = 'username';
+        socket.emit('ansi-output', '\r\n\r\nUsername: ');
         socket.emit('prompt-login'); // Tell frontend to show login form
         return;
       } else if (data === '\x7f' || data === '\b') {
@@ -830,8 +836,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       console.log(' BBSTITLE viewed, transitioning to login');
       session.state = BBSState.LOGON;
       session.subState = undefined;
+      session.tempData = session.tempData || {};
+      session.tempData.loginPhase = 'username';
       socket.emit('ansi-output', '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
       socket.emit('ansi-output', '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', 'Username: ');
       socket.emit('prompt-login'); // Tell frontend to show login form
       return;
     }
@@ -847,6 +856,143 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     session.state !== BBSState.REGISTERING) {
     console.log(' Not in LOGGEDON/LOGON or REGISTERING state, ignoring command');
     console.log('   Current state:', session.state);
+    return;
+  }
+
+  // LOGIN FLOW (telnet/SSH): line-buffered username/password when in LOGON state
+  // Frontend socket clients use prompt-login events; telnet/SSH need server-side buffering.
+  if (session.state === BBSState.LOGON) {
+    // Ensure tempData exists
+    session.tempData = session.tempData || {};
+    const phase = session.tempData.loginPhase || 'username';
+
+    // Helper to append to buffer
+    const appendChar = (ch: string) => {
+      session.tempData.inputBuffer = (session.tempData.inputBuffer || '') + ch;
+    };
+
+    // Backspace handling
+    if (data === '\x7f' || data === '\b') {
+      if (session.tempData?.inputBuffer?.length) {
+        session.tempData.inputBuffer = session.tempData.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+      }
+      return;
+    }
+
+    // Enter key ends the current phase input
+    if (data === '\r' || data === '\n') {
+      const input = session.tempData.inputBuffer || '';
+      session.tempData.inputBuffer = '';
+
+      if (phase === 'username') {
+        // Store username, ask for password
+        session.tempData.loginUsername = input.trim();
+        session.tempData.loginPhase = 'password';
+        socket.emit('ansi-output', '\r\nPassword: ');
+        return;
+      }
+
+      if (phase === 'password') {
+        const username = (session.tempData.loginUsername || '').trim();
+        const password = input;
+
+        if (!username) {
+          socket.emit('ansi-output', '\r\nUsername: ');
+          session.tempData.loginPhase = 'username';
+          return;
+        }
+
+        // Authenticate using existing auth handler logic
+        try {
+          const dbModule: any = await import('../database');
+          const dbLocal: any = db || dbModule.db || dbModule;
+          const user = await dbLocal.authenticateUser(username, password);
+          if (!user) {
+            socket.emit('ansi-output', '\r\nInvalid PassWord\r\nUsername: ');
+            session.tempData.loginPhase = 'username';
+            session.tempData.loginUsername = '';
+            return;
+          }
+
+          // Successful login: mirror auth-socket-handlers.ts login flow
+          session.loginRetryCount = 0;
+          session.state = BBSState.LOGGEDON;
+          session.subState = LoggedOnSubState.DISPLAY_BULL;
+          session.user = user;
+          session.ansiMode = user.ansi;
+          // Install ANSI filter to strip codes for ANSI-disabled terminals
+          if (!(socket as any)._ansiFilterInstalled) {
+            const originalEmit = socket.emit.bind(socket);
+            socket.emit = ((event: string, ...args: any[]) => {
+              if (event === 'ansi-output' && (session.ansiMode === false || session.user?.ansi === false)) {
+                const filtered = args.map((arg) =>
+                  typeof arg === 'string' ? AnsiUtil.stripAnsiForPlainText(arg) : arg
+                );
+                return originalEmit(event, ...filtered);
+              }
+              return originalEmit(event, ...args);
+            }) as any;
+            (socket as any)._ansiFilterInstalled = true;
+          }
+
+          // Update last login and node files
+          await dbLocal.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
+          const nodeId = session.nodeId || 0;
+          try {
+            nodeFileManager.writeNodeUserFile(nodeId, user);
+            nodeFileManager.writeNodeUserKeysFile(nodeId, user);
+            console.log(`[LOGIN] Node files created for node ${nodeId}: ${user.username}`);
+            callersLogManager.logLogin(nodeId, user.username);
+          } catch (error) {
+            console.error(`[LOGIN] Error writing node files:`, error);
+          }
+
+          // Run login batches
+          try {
+            await runLoginBatches(nodeId);
+          } catch (err) {
+            console.error('[LOGIN] Batch scheduler failed:', err);
+          }
+
+          // Initialize security and track stats
+          initializeSecurity(session);
+          try {
+            const { systemStats } = await import('../services/SystemStatsService');
+            await systemStats.incrementCalls(user.id);
+          } catch (error) {
+            console.error('[SystemStats] Error tracking login:', error);
+          }
+
+          // Welcome and transition to main menu
+          socket.emit('ansi-output', '\r\n\x1b[32mLogin successful.\x1b[0m\r\n');
+          const { displayScreen } = require('./screen.handler');
+          await displayScreen(socket, session, 'LOGON');
+          session.state = BBSState.LOGGEDON;
+          session.subState = LoggedOnSubState.DISPLAY_BULL;
+        } catch (err: any) {
+          console.error('[LOGIN] Error during telnet/ssh login:', err?.message || err);
+          socket.emit('ansi-output', '\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\nUsername: ');
+          session.tempData.loginPhase = 'username';
+          session.tempData.loginUsername = '';
+        }
+        return;
+      }
+
+      return;
+    }
+
+    // Collect printable characters for current phase
+    if (data.length === 1 && data >= ' ' && data <= '~') {
+      appendChar(data);
+      // Echo only for username; mask password
+      if (phase === 'password') {
+        socket.emit('ansi-output', '*');
+      } else {
+        socket.emit('ansi-output', data);
+      }
+    }
+
     return;
   }
 

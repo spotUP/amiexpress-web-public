@@ -156,6 +156,7 @@ export class LibraryManager {
     console.log("[LibraryManager] Creating DOS.library...");
 
     this.dosLibrary = new DosLibrary(this.emulator);
+    this.dosLibrary.setEnvironment(this.config.env);
     this.dosLibrary.setInheritedHandles(1, 2);
 
     console.log(

@@ -79,11 +79,20 @@ export class AmigaDoorSession {
 
   constructor(socket: Socket, config: DoorConfig) {
     this.socket = socket;
+    const baseEnv = config.env ?? process.env;
+    const normalizedEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(baseEnv ?? {})) {
+      if (typeof value === "string") {
+        normalizedEnv[key] = value;
+      }
+    }
+
     this.config = {
       timeout: 300, // 5 minutes default
       ...config,
       cwd: config.cwd || path.dirname(config.executablePath),
       assigns: config.assigns || {},
+      env: normalizedEnv,
     };
     if (!this.config.doorId) {
       const fromSession = this.config.bbsSession?.doorCommand;
@@ -556,6 +565,7 @@ export class AmigaDoorSession {
       this.emulator.writeMemory(argStringAddr + i, argStringPlain.charCodeAt(i));
     }
     this.emulator.writeMemory(argStringAddr + argStringPlain.length, 0);
+    console.log(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
     this.sharedState.dosLibrary.setCliInfo(argStringAddr, progName);
 
     // Restore pr_CLI if a door CreatePort() overwrites it

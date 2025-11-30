@@ -13,6 +13,7 @@ interface RunnerOptions {
   timeRemaining?: number;
   assigns?: Record<string, string>;
   toolTypes?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
 }
 
 async function runDoor(opts: RunnerOptions) {
@@ -59,10 +60,10 @@ async function runDoor(opts: RunnerOptions) {
     user,
   };
 
-  const amigaSession = new AmigaDoorSession(
-    // Null socket interface; AmigaDoorSession only emits events—mock with no-ops
-    {
-      emit: () => {},
+    const amigaSession = new AmigaDoorSession(
+      // Null socket interface; AmigaDoorSession only emits events—mock with no-ops
+      {
+        emit: () => {},
       on: () => {},
     } as any,
     {
@@ -73,6 +74,7 @@ async function runDoor(opts: RunnerOptions) {
       doorId: opts.doorId,
       cwd: opts.cwd || path.dirname(opts.execPath),
       assigns: opts.assigns || {},
+      env: opts.env,
       toolTypes: opts.toolTypes || {},
     } as any
   );
@@ -121,6 +123,7 @@ async function main() {
       cwd,
       assigns: assignsArg,
       toolTypes: Object.keys(toolTypesArg).length ? toolTypesArg : { DISABLE_GUARD: 'true' }, // allow batch doors to run longer if needed
+      env: process.env,
     });
     process.exit(0);
   } catch (err: any) {

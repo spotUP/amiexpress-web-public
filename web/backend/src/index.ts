@@ -1039,7 +1039,6 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
     connection.write('\x1b[0;37mWelcome to AmiExpress BBS\x1b[0m\r\n');
     connection.write(`\x1b[33mConnected via ${type.toUpperCase()} on node ${connection.nodeId}\x1b[0m\r\n`);
     connection.write('\x1b[36m' + '='.repeat(50) + '\x1b[0m\r\n\r\n');
-    connection.write('Login: ');
   };
 
   // For SSH: Wait for 'ready' event before sending welcome
