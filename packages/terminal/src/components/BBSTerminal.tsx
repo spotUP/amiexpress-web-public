@@ -516,13 +516,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
 
     socket.on('prompt-login', () => {
-      if (attemptTokenLogin()) {
-        return;
-      }
+      // Reset any prior login attempt so manual entry always works
+      username.current = '';
+      password.current = '';
+      loginState.current = 'waiting';
 
+      // Try quick-connect credentials; otherwise fall back to manual prompt
       if (!handleAutoLogin()) {
-        term.write('Username: ');
         loginState.current = 'username';
+        term.write('Username: ');
       }
     });
 
@@ -563,6 +565,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         localStorage.removeItem('bbs_saved_password');
         term.write('\r\n\x1b[33m[Quick Connect] Saved credentials cleared due to login failure\x1b[0m\r\n');
       }
+      // Always return to manual prompt so input is accepted
+      loginState.current = 'username';
+      username.current = '';
+      password.current = '';
+      term.write('\r\nUsername: ');
     });
 
     socket.on('user-not-found', (data: { username: string; prompt: string }) => {
