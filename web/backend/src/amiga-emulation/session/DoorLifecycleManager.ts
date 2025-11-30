@@ -565,6 +565,29 @@ export class DoorLifecycleManager {
       !(pc >= dosWindowLow && pc <= dosWindowHigh) &&
       !stubWindows.some((w) => pc >= w.low && pc <= w.high)
     ) {
+      // If the PC landed inside the current stack bounds, assume a post-exit RTS into the stack
+      // and treat it as a clean termination rather than a crash.
+      const stackLower =
+        (this.libraryManager as any)?.execLibrary?.getStackLower?.() ?? null;
+      const stackUpper =
+        (this.libraryManager as any)?.execLibrary?.getStackUpper?.() ?? null;
+      if (
+        stackLower !== null &&
+        stackUpper !== null &&
+        pc >= stackLower &&
+        pc <= stackUpper + 0x100
+      ) {
+        console.log(
+          `[DoorLifecycleManager] PC reached stack region after exit (pc=0x${pc.toString(
+            16
+          )} stack=[0x${stackLower.toString(16)}-0x${stackUpper.toString(
+            16
+          )}]) - treating as clean termination`
+        );
+        this.terminate();
+        return true;
+      }
+
       const sp = this.emulator.getRegister(15);
       const d0 = this.emulator.getRegister(0);
       const d1 = this.emulator.getRegister(1);
