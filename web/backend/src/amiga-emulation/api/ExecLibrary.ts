@@ -643,6 +643,8 @@ export class ExecLibrary {
         libAddr = this.GRAPHICS_LIB_ADDR;
         libVersion = 36;
         libRevision = 0;
+        // Minimal graphics.library stub: fill jump table with RTS
+        this.fillStubJumpTable(libAddr, 64);
         break;
 
       case "utility.library":
@@ -1085,6 +1087,20 @@ export class ExecLibrary {
   getLibraryBase(name: string): number {
     const lib = this.libraries.get(name);
     return lib ? lib.address : 0;
+  }
+
+  /**
+   * Fill a stub jump table with RTS instructions (offsets are negative words from base)
+   * Ensures unimplemented calls return cleanly.
+   */
+  private fillStubJumpTable(baseAddr: number, entryCount: number): void {
+    // Jump table lives in the negative space before the library base; each entry is 6 bytes
+    let offset = -entryCount * 6;
+    for (let i = 0; i < entryCount; i++) {
+      const entryAddr = baseAddr + offset;
+      this.emulator.writeMemory16(entryAddr, 0x4e75); // RTS
+      offset += 6;
+    }
   }
 
   private autoRegisterPort(portAddr: number): MessagePort | null {
