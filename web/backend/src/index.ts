@@ -952,7 +952,11 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
     },
     off: (event: string, handler: (...args: any[]) => void) => {
       connection.off(event, handler);
-    }
+    },
+    // Allow handlers (logoff) to terminate the underlying transport cleanly
+    disconnect: () => connection.close(),
+    end: () => connection.close(),
+    destroy: () => connection.close()
   };
 
   const attachTransferSender = () => {
