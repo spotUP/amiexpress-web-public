@@ -517,15 +517,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('prompt-login', () => {
       // If we're already in the middle of manual login, don't duplicate the prompt
-      if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'checking-username') {
+      if (
+        loginState.current === 'username' ||
+        loginState.current === 'password' ||
+        loginState.current === 'checking-username'
+      ) {
         return;
       }
 
-      // Reset any prior login attempt so manual entry always works
+      // Reset any prior login attempt so manual entry always works.
+      // Backend already sent the visible prompt via ansi-output.
       username.current = '';
       password.current = '';
       loginState.current = 'username';
-      term.write('Username: ');
     });
 
     socket.on('login-success', (data: any) => {
@@ -565,11 +569,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         localStorage.removeItem('bbs_saved_password');
         term.write('\r\n\x1b[33m[Quick Connect] Saved credentials cleared due to login failure\x1b[0m\r\n');
       }
-      // Always return to manual prompt so input is accepted
+      // Always return to manual prompt so input is accepted; prompt text comes from backend
       loginState.current = 'username';
       username.current = '';
       password.current = '';
-      term.write('\r\nUsername: ');
     });
 
     socket.on('user-not-found', (data: { username: string; prompt: string }) => {
@@ -580,7 +583,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('retry-login', () => {
-      term.write('\r\n\r\nUsername: ');
       loginState.current = 'username';
       username.current = '';
       password.current = '';
