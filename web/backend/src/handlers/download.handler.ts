@@ -16,6 +16,7 @@ import { logDownload } from '../utils/download-logging.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import { ConferenceRepository } from '../database/conference-repository';
+import { db } from '../database';
 import { config } from '../config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -78,11 +79,34 @@ export class DownloadHandler {
     session: BBSSession,
     params: string
   ): Promise<string> {
+    let filenameInput = params.trim();
+    const fileList: any[] = [];
+
+    // If user has flagged files and no filename was provided, use the flagged list
+    if (!filenameInput && Array.isArray(session.flaggedFiles) && session.flaggedFiles.length > 0) {
+      const areaIds = Array.from(new Set(session.flaggedFiles.map((f: any) => f.areaid || f.areaId).filter(Boolean)));
+      const areaPathMap = await this.loadAreaPaths(areaIds);
+      session.flaggedFiles.forEach((f: any) => {
+        const name = f.filename || f.fileName || f.name;
+        const areaId = f.areaid || f.areaId || f.dirNum || 0;
+        const confNum = f.conferenceid || f.confNum || session.currentConf || 1;
+        const basePath = areaPathMap.get(areaId);
+        const fullPath = basePath ? path.join(basePath, name) : undefined;
+        if (!name || !fullPath) {
+          return;
+        }
+        fileList.push({
+          name,
+          size: f.size || f.filesize || 0,
+          confNum,
+          dirNum: areaId,
+          fullPath
+        });
+      });
+    }
 
     // Parse parameters or prompt for filename(s)
-    let filenameInput = params.trim();
-
-    if (!filenameInput) {
+    if (!filenameInput && fileList.length === 0) {
       // No filename provided - prompt user - express.e:20135+
       socket.emit('ansi-output', '\r\n\x1b[36mFilename(s) to download (space-separated): \x1b[0m');
       session.subState = LoggedOnSubState.DOWNLOAD_FILENAME_INPUT;
@@ -90,40 +114,38 @@ export class DownloadHandler {
       return 'SUCCESS';
     }
 
-    // express.e:20037-20055 - Parse multiple filenames (space-separated)
-    // Split by spaces to get individual filenames
-    const filenames = filenameInput.split(/\s+/).filter(f => f.length > 0);
-    console.log(`[DOWNLOAD] Processing ${filenames.length} filename(s):`, filenames);
+    if (filenameInput) {
+      // express.e:20037-20055 - Parse multiple filenames (space-separated)
+      const filenames = filenameInput.split(/\s+/).filter(f => f.length > 0);
+      console.log(`[DOWNLOAD] Processing ${filenames.length} filename(s):`, filenames);
 
-    // Build file list (express.e:20037-20090 - addFlagItems logic)
-    const fileList: any[] = [];
+      for (const filename of filenames) {
+        // Validate filename - express.e:20136-20155
+        if (!this.isValidFilename(filename)) {
+          socket.emit('ansi-output', `\r\n\x1b[31mInvalid filename: ${filename}\x1b[0m\r\n`);
+          continue;
+        }
 
-    for (const filename of filenames) {
-      // Validate filename - express.e:20136-20155
-      if (!this.isValidFilename(filename)) {
-        socket.emit('ansi-output', `\r\n\x1b[31mInvalid filename: ${filename}\x1b[0m\r\n`);
-        continue;
+        // Check if wildcards are used without permission - express.e:20140-20145
+        if (this.hasWildcards(filename) && !checkSecurity(session.user, ACSPermission.FILE_EXPANSION)) {
+          socket.emit('ansi-output', `\r\n\x1b[31mYou may not include wildcards: ${filename}\x1b[0m\r\n`);
+          continue;
+        }
+
+        // Search for files matching this pattern (handles wildcards)
+        const matchingFiles = await this.findFilesInConference(
+          config.get('dataDir'),
+          session.currentConf || 1,
+          filename
+        );
+
+        if (matchingFiles.length === 0) {
+          socket.emit('ansi-output', `\r\n\x1b[31mFile not found: ${filename}\x1b[0m\r\n`);
+          continue;
+        }
+
+        fileList.push(...matchingFiles);
       }
-
-      // Check if wildcards are used without permission - express.e:20140-20145
-      if (this.hasWildcards(filename) && !checkSecurity(session.user, ACSPermission.FILE_EXPANSION)) {
-        socket.emit('ansi-output', `\r\n\x1b[31mYou may not include wildcards: ${filename}\x1b[0m\r\n`);
-        continue;
-      }
-
-      // Search for files matching this pattern (handles wildcards)
-      const matchingFiles = await this.findFilesInConference(
-        config.get('dataDir'),
-        session.currentConf || 1,
-        filename
-      );
-
-      if (matchingFiles.length === 0) {
-        socket.emit('ansi-output', `\r\n\x1b[31mFile not found: ${filename}\x1b[0m\r\n`);
-        continue;
-      }
-
-      fileList.push(...matchingFiles);
     }
 
     if (fileList.length === 0) {
@@ -333,6 +355,46 @@ export class DownloadHandler {
   }
 
   /**
+   * Load area paths for the given area IDs
+   */
+  private static async loadAreaPaths(areaIds: number[]): Promise<Map<number, string>> {
+    const map = new Map<number, string>();
+    if (!areaIds.length) return map;
+    const placeholders = areaIds.map(() => '?').join(',');
+    const result = await db.query(`SELECT id, path FROM file_areas WHERE id IN (${placeholders})`, areaIds);
+    result.rows.forEach((row: any) => {
+      map.set(row.id, row.path);
+    });
+    return map;
+  }
+
+  /**
+   * Find files via database (file_entries + file_areas)
+   */
+  private static async findFilesInDatabase(confNum: number, pattern: string): Promise<any[]> {
+    const hasWildcard = this.hasWildcards(pattern);
+    const matcher = hasWildcard
+      ? pattern.replace(/\*/g, '%').replace(/\?/g, '_').replace(/#/g, '_')
+      : pattern;
+
+    const sql = `
+      SELECT fe.filename, fe.size, fe.areaid, fa.path, fa.conferenceid
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fa.conferenceid = ?
+        AND UPPER(fe.filename) ${hasWildcard ? 'LIKE' : '='} UPPER(?)
+    `;
+    const rows = (await db.query(sql, [confNum, matcher])).rows;
+    return rows.map((r: any) => ({
+      name: r.filename,
+      size: r.size || 0,
+      confNum: r.conferenceid || confNum,
+      dirNum: r.areaid,
+      fullPath: r.path ? path.join(r.path, r.filename) : undefined
+    })).filter((r: any) => !!r.fullPath);
+  }
+
+  /**
    * Find files in conference directories (supports wildcards)
    * Port from express.e:20068-20090 - wildcard matching logic
    */
@@ -341,6 +403,13 @@ export class DownloadHandler {
     confNum: number,
     pattern: string
   ): Promise<any[]> {
+    // Prefer database-backed file listings (paths from file_areas)
+    const dbMatches = await this.findFilesInDatabase(confNum, pattern);
+    if (dbMatches.length > 0) {
+      return dbMatches;
+    }
+
+    // Fallback to legacy Dir# scanning
     const confPath = getConferenceDir(confNum, dataDir);
     const matchingFiles: any[] = [];
     const hasWildcard = this.hasWildcards(pattern);
