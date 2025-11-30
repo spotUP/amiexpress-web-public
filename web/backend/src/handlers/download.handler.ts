@@ -20,6 +20,7 @@ import { db } from '../database';
 import { config } from '../config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { FileFlagManager } from '../utils/file-flag.util';
 import { getConferenceDir } from '../utils/file-hold.util';
 
 /**
@@ -83,26 +84,46 @@ export class DownloadHandler {
     const fileList: any[] = [];
 
     // If user has flagged files and no filename was provided, use the flagged list
-    if (!filenameInput && Array.isArray(session.flaggedFiles) && session.flaggedFiles.length > 0) {
-      const areaIds = Array.from(new Set(session.flaggedFiles.map((f: any) => f.areaid || f.areaId).filter(Boolean)));
-      const areaPathMap = await this.loadAreaPaths(areaIds);
-      session.flaggedFiles.forEach((f: any) => {
-        const name = f.filename || f.fileName || f.name;
-        const areaId = f.areaid || f.areaId || f.dirNum || 0;
-        const confNum = f.conferenceid || f.confNum || session.currentConf || 1;
-        const basePath = areaPathMap.get(areaId);
-        const fullPath = basePath ? path.join(basePath, name) : undefined;
-        if (!name || !fullPath) {
-          return;
-        }
-        fileList.push({
-          name,
-          size: f.size || f.filesize || 0,
-          confNum,
-          dirNum: areaId,
-          fullPath
+    if (!filenameInput) {
+      const flagged: { confNum: number; filename: string }[] = [];
+
+      if (session.flagManager instanceof FileFlagManager && session.flagManager.getCount() > 0) {
+        session.flagManager.getAll().forEach((f) => {
+          flagged.push({ confNum: f.confNum, filename: f.filename });
         });
-      });
+      }
+
+      if (Array.isArray(session.tempData?.flaggedFiles)) {
+        session.tempData.flaggedFiles.forEach((f: any) => {
+          if (f?.fileName) {
+            flagged.push({ confNum: f.confNum, filename: f.fileName });
+          }
+        });
+      }
+
+      if (Array.isArray((session as any).flaggedFiles)) {
+        (session as any).flaggedFiles.forEach((f: any) => {
+          const name = f.filename || f.fileName || f.name;
+          if (name) {
+            flagged.push({ confNum: f.confNum || f.conferenceid || f.conf || -1, filename: name });
+          }
+        });
+      }
+
+      if (flagged.length > 0) {
+        const dataDir = config.get('dataDir');
+        for (const flag of flagged) {
+          const confNum = flag.confNum > 0 ? flag.confNum : (session.currentConf || 1);
+          const matches = await this.findFilesInConference(
+            dataDir,
+            confNum,
+            flag.filename
+          );
+          if (matches.length > 0) {
+            fileList.push(...matches);
+          }
+        }
+      }
     }
 
     // Parse parameters or prompt for filename(s)
