@@ -868,13 +868,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     session.tempData = session.tempData || {};
     const phase = session.tempData.loginPhase || 'username';
 
+    // Telnet often appends NUL to CR; normalize before key handling
+    const cleanData = typeof data === 'string' ? data.replace(/\0/g, '') : data;
+
     // Helper to append to buffer
     const appendChar = (ch: string) => {
       session.tempData.inputBuffer = (session.tempData.inputBuffer || '') + ch;
     };
 
     // Backspace handling
-    if (data === '\x7f' || data === '\b') {
+    if (cleanData === '\x7f' || cleanData === '\b') {
       if (session.tempData?.inputBuffer?.length) {
         session.tempData.inputBuffer = session.tempData.inputBuffer.slice(0, -1);
         socket.emit('ansi-output', '\b \b');
@@ -883,7 +886,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
 
     // Enter key ends the current phase input
-    if (data === '\r' || data === '\n') {
+    if (cleanData === '\r' || cleanData === '\n' || cleanData === '\r\n') {
       const input = session.tempData.inputBuffer || '';
       session.tempData.inputBuffer = '';
 
@@ -985,13 +988,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
 
     // Collect printable characters for current phase
-    if (data.length === 1 && data >= ' ' && data <= '~') {
-      appendChar(data);
+    if (cleanData.length === 1 && cleanData >= ' ' && cleanData <= '~') {
+      appendChar(cleanData);
       // Echo only for username; mask password
       if (phase === 'password') {
         socket.emit('ansi-output', '*');
       } else {
-        socket.emit('ansi-output', data);
+        socket.emit('ansi-output', cleanData);
       }
     }
 
