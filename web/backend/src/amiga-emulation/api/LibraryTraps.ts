@@ -410,6 +410,14 @@ const DOS_VECTORS: LibraryVector[] = [
       return 0;
     },
   },
+  {
+    offset: -744,
+    name: "DateToStr",
+    handler: (emu, lib: DosLibrary) => {
+      lib.DateToStr();
+      return emu.getRegister(0);
+    },
+  },
 ];
 
 /**
