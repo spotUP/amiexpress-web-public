@@ -38,6 +38,8 @@ export interface ExecutionState {
   startTime: number | null;
   progressCheckCountGlobal: number;
   loopStartPC: number;
+  lastProgressIteration: number;
+  lastProgressTime: number;
 }
 
 export interface LifecycleConfig {
@@ -46,6 +48,7 @@ export interface LifecycleConfig {
   cycleTarget: number;
   debugLevel: "minimal" | "normal" | "verbose" | "comprehensive";
   disableGuard?: boolean;
+  progressTimeoutMs: number;
 }
 
 export class DoorLifecycleManager {
@@ -113,6 +116,7 @@ export class DoorLifecycleManager {
       debugLevel: (process.env.AEDOOR_DEBUG_LEVEL as any) || "normal",
       // Allow env override so we can re-enable the guard for debugging tight loops
       disableGuard: disableGuardEnv ? disableGuardEnv === "1" : true,
+      progressTimeoutMs: Number(process.env.AEDOOR_PROGRESS_TIMEOUT_MS ?? 5000),
     };
     console.log(
       `[DoorLifecycleManager] Config: loopGuard=${this.lifecycleConfig.loopGuardLimit} disableGuard=${this.lifecycleConfig.disableGuard} timeout=${this.lifecycleConfig.timeout}`
@@ -161,6 +165,8 @@ export class DoorLifecycleManager {
       startTime: null,
       progressCheckCountGlobal: 0,
       loopStartPC: 0,
+      lastProgressIteration: 0,
+      lastProgressTime: Date.now(),
     };
   }
 
@@ -717,6 +723,8 @@ export class DoorLifecycleManager {
     }
 
     this.executionState.iterationCount++;
+    this.executionState.lastProgressIteration = this.executionState.iterationCount;
+    this.executionState.lastProgressTime = Date.now();
     // Bulls-specific PC monitor
     if (this.bullsHandler) {
       this.bullsHandler.monitorPc(this.executionState.iterationCount);
@@ -1162,13 +1170,25 @@ export class DoorLifecycleManager {
 
     // Prevent infinite loops (safety limit). When the door is waiting for user
     // input, extend the guard to give time for keystrokes to arrive.
-    if (!this.lifecycleConfig.disableGuard && this.executionState.iterationCount > this.lifecycleConfig.loopGuardLimit) {
+    const iterationsSinceProgress =
+      this.executionState.iterationCount -
+      this.executionState.lastProgressIteration;
+    const timeSinceProgress =
+      Date.now() - this.executionState.lastProgressTime;
+    const guardTriggered =
+      !this.lifecycleConfig.disableGuard &&
+      iterationsSinceProgress > this.lifecycleConfig.loopGuardLimit &&
+      timeSinceProgress > this.lifecycleConfig.progressTimeoutMs;
+
+    if (guardTriggered) {
       if (isWaitingForInput) {
         // Extend guard and continue looping to allow user input.
         this.lifecycleConfig.loopGuardLimit += 50000;
         console.log(
           `[DoorLifecycleManager] Extending loop guard while waiting for input -> ${this.lifecycleConfig.loopGuardLimit}`
         );
+        this.executionState.lastProgressIteration = this.executionState.iterationCount;
+        this.executionState.lastProgressTime = Date.now();
       } else {
         await this.handleGuardLimit();
         return;
@@ -1225,6 +1245,14 @@ export class DoorLifecycleManager {
       `[DoorLifecycleManager] 🛑 Last PC: 0x${this.emulator
         .getRegister(16)
         .toString(16)}`
+    );
+    console.log(
+      `[DoorLifecycleManager] 🛑 Iterations since last progress: ${
+        this.executionState.iterationCount -
+        this.executionState.lastProgressIteration
+      }, ms since progress: ${
+        Date.now() - this.executionState.lastProgressTime
+      }`
     );
     console.log(
       `[DoorLifecycleManager] 🛑 Total cycles: ${this.executionState.totalCycles}`

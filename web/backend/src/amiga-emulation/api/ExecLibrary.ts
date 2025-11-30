@@ -637,6 +637,7 @@ export class ExecLibrary {
         libAddr = this.INTUITION_LIB_ADDR;
         libVersion = 36;
         libRevision = 0;
+        this.fillStubJumpTable(libAddr, 64);
         break;
 
       case "graphics.library":
@@ -651,6 +652,7 @@ export class ExecLibrary {
         libAddr = this.UTILITY_LIB_ADDR;
         libVersion = 37;
         libRevision = 0;
+        this.fillStubJumpTable(libAddr, 64);
         break;
 
       default:
