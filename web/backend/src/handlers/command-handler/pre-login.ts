@@ -95,6 +95,16 @@ async function handleAnsiPromptInput(socket: any, session: BBSSession, data: str
     // express.e:29551 - Display BBSTITLE screen and immediately show login prompt
     session.tempData.inputBuffer = ''; // Clear buffer
     await displayScreen(socket, session, 'BBSTITLE');
+    if (session.pendingScreenCommand) {
+      session.pendingScreenCommand.then(() => {
+        if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
+          socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+        }
+      }).catch((error: any) => {
+        console.error('[handlePreLogin] Pending screen command rejected:', error);
+        socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+      });
+    }
 
     // Immediately transition to login state (no key press required)
     session.state = BBSState.LOGON;
