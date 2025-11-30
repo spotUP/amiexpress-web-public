@@ -1019,6 +1019,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     screenDebug(`[displayScreen]  Screen loaded successfully: ${screenName}`);
     screenDebug(`[displayScreen] Content length: ${content.length} bytes`);
     screenDebug(`[displayScreen] PETSCII: ${isPetscii ? 'YES' : 'NO'}`);
+    screenDebug(`[displayScreen] Render event: ${screenName} (node ${session.nodeId || 0})`);
 
     let parsed: string;
     let commands: any[] = [];
