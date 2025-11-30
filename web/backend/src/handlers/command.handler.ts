@@ -763,9 +763,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         console.log('[handleCommand] ANSI prompt input ignored until screen command completes');
         return;
       }
+      // Telnet often sends CR followed by NUL; strip NULs for control handling.
+      const cleanData = data.replace(/\0/g, '');
       // express.e:29530-29546 - Line input for ANSI prompt (not single keypress!)
       // Buffer input until Enter is pressed
-      if (data === '\r') {
+      if (cleanData === '\r' || cleanData === '\n' || cleanData === '\r\n') {
         // Enter pressed - process the buffered input
         const answer = (session.tempData?.inputBuffer || '').toUpperCase();
         console.log(' Graphics prompt response:', answer || '(empty = ANSI)');

@@ -418,11 +418,6 @@ export class TelnetServer extends EventEmitter {
    */
   private handleConnection(socket: Socket): void {
     const remoteAddress = socket.remoteAddress || 'unknown';
-    if (LOCALHOST_IPS.includes(remoteAddress)) {
-      socket.on('error', () => {});
-      socket.destroy();
-      return;
-    }
     console.log(`[Telnet Server] New connection from ${remoteAddress}`);
 
     if (!ipBanManager.allowConnection(remoteAddress)) {
