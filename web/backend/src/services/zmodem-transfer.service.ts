@@ -66,7 +66,8 @@ export class ZmodemTransferManager {
     try {
       this.sentry.consume(data);
     } catch (err) {
-      console.error('[ZMODEM] Sentry consume failed:', err);
+      const preview = data.slice(0, 32).toString('hex');
+      console.error('[ZMODEM] Sentry consume failed:', err, 'data(hex)=', preview);
       this.finish(false);
     }
   }
@@ -78,13 +79,11 @@ export class ZmodemTransferManager {
     this.active = true;
     this.session.transferRawActive = true;
     (this.session as any).transferManager = this;
-    if (this.direction === 'download') {
-      try {
-        const hdr = Zmodem.Header.build('ZRQINIT');
-        this.transport.send(Buffer.from(hdr.to_hex()));
-      } catch (err) {
-        console.error('[ZMODEM] Failed to send ZRQINIT:', err);
-      }
+    try {
+      const hdr = Zmodem.Header.build('ZRQINIT');
+      this.transport.send(Buffer.from(hdr.to_hex()));
+    } catch (err) {
+      console.error('[ZMODEM] Failed to send ZRQINIT:', err);
     }
   }
 
