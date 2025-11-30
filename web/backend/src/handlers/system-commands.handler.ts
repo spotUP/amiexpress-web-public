@@ -128,7 +128,14 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
   // Emit disconnect event to close connection (give time for screen to display and door to run)
   setTimeout(() => {
     socket.emit('force-disconnect', { reason: 'User logged off' });
-    socket.disconnect(true);
+    // socket may be a socket.io client or a raw telnet/ssh socket
+    if (typeof (socket as any).disconnect === 'function') {
+      (socket as any).disconnect(true);
+    } else if (typeof (socket as any).end === 'function') {
+      (socket as any).end();
+    } else if (typeof (socket as any).destroy === 'function') {
+      (socket as any).destroy();
+    }
   }, 2000);
 }
 
