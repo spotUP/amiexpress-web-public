@@ -516,16 +516,16 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
 
     socket.on('prompt-login', () => {
+      // If we're already in the middle of manual login, don't duplicate the prompt
+      if (loginState.current === 'username' || loginState.current === 'password' || loginState.current === 'checking-username') {
+        return;
+      }
+
       // Reset any prior login attempt so manual entry always works
       username.current = '';
       password.current = '';
-      loginState.current = 'waiting';
-
-      // Try quick-connect credentials; otherwise fall back to manual prompt
-      if (!handleAutoLogin()) {
-        loginState.current = 'username';
-        term.write('Username: ');
-      }
+      loginState.current = 'username';
+      term.write('Username: ');
     });
 
     socket.on('login-success', (data: any) => {
