@@ -20,6 +20,7 @@ import { BBSSession } from '../index';
 import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 import { ipBanManager } from '../security/ip-ban-manager';
+import { LoggedOnSubState } from '../constants/bbs-states';
 
 // Telnet IAC (Interpret As Command) constants - express.e:2389-2508
 const IAC = 255;  // Interpret As Command
@@ -476,6 +477,11 @@ export class TelnetServer extends EventEmitter {
 
     // Emit connection event
     this.emit('connection', connection);
+
+    // Skip waiting for an initial keypress; show ANSI prompt immediately for telnet clients
+    connection.session.subState = LoggedOnSubState.ANSI_PROMPT;
+    connection.session.tempData = { inputBuffer: '' };
+    connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
   }
 
   /**
