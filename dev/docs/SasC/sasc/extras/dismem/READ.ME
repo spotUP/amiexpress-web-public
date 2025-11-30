@@ -1,0 +1,54 @@
+DISMEM - disassemble absolute code
+
+===========================================================================
+The programs and documentation in this distribution are 
+
+   Copyright (c) 1993, Doug Walker, Cary, NC, USA
+   All Rights Reserved
+
+This software is freely redistributable on a non-profit basis.  Please
+contact the author for appropriate permissions if it is used in commercial
+products.
+
+THIS SOFTWARE IS PROVIDED ON AN AS-IS BASIS.  USE IT AT YOUR OWN RISK.  The
+author will not be liable for any damages, direct or indirect, from the use
+of this software.
+
+===========================================================================
+
+DISMEM is a utility that lets you get a disassembly of absolute hexadecimal
+data.  It uses the ASM and OMD utilities that come with SAS/C Version 6.
+It requires AmigaDOS 2.0 or higher.
+
+DISMEM takes only a filename;  it disassembles the data in the file and
+puts the result in "filename.omd".
+
+DISMEM can be used to disassemble data in an ABSLINK output file.  ABSLINK
+is provided in the directory SC:EXTRAS/ABSLINK.
+
+The following algorithm is used:
+
+   1. Open a temporary file.  Write an assemblable header to it, of the
+      form
+   
+         section text,code
+   
+   2. For each longword of data in the input file, write a statement to
+      the temporary file of the form
+      
+         dc.l $<value>
+       
+
+   3. Write an END statement, of the form
+   
+         END
+
+   4. Invoke SC:C/ASM on the temporary file
+
+   5. Invoke SC:C/OMD on the resulting object file
+
+OK, it's pretty hokey, but it gets the job done.  A decent REXX programmer
+probably could have done it in REXX, but it only took me 15 minutes to
+write and debug in C.
+
+--Doug

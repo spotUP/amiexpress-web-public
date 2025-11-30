@@ -113,6 +113,9 @@ export class DosLibrary {
   private pathManager: PathManager | null = null;
   private fileCache: AmigaFileCache | null = null;
   private useNewFileSystem: boolean = false; // Feature flag for gradual migration
+  // Debug: optionally exit after first DOS Open to capture paths in tight loops
+  private exitAfterFirstOpen: boolean = process.env.AEDOOR_EXIT_AFTER_OPEN === "1";
+  private firstOpenSeen: boolean = false;
 
   // Standard file handles
   private readonly STDIN_HANDLE = 1;
@@ -227,11 +230,11 @@ export class DosLibrary {
    * Enable the new file system with FileManager and PathManager
    * Called by AmigaDoorSession during initialization
    */
-  enableNewFileSystem(baseDir: string): void {
+  enableNewFileSystem(baseDir: string, pathManager?: PathManager): void {
     console.log(
       "[dos.library] Enabling new file system with FileManager/PathManager"
     );
-    this.pathManager = new PathManager(baseDir);
+    this.pathManager = pathManager || new PathManager(baseDir);
     this.fileCache = new AmigaFileCache(this.pathManager);
     this.fileManager = new FileManager(
       baseDir,
@@ -240,6 +243,17 @@ export class DosLibrary {
     );
     this.useNewFileSystem = true;
     this.currentDirectory = this.bbsDataPath;
+    try {
+      const assigns = this.pathManager.getAssigns();
+      const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
+      const lines = [`[PathManager] Assigns at init:`];
+      for (const [k, v] of assigns) {
+        lines.push(`  ${k} => ${v}`);
+      }
+      fs.appendFileSync(logPath, lines.join('\n') + '\n', { encoding: 'utf8' });
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -405,6 +419,88 @@ export class DosLibrary {
   }
 
   /**
+   * Read a single byte from a handle, respecting the new FileManager path first.
+   */
+  private readByteFromHandle(handle: number): { byte: number; eof: boolean } {
+    if (this.useNewFileSystem && this.fileManager) {
+      const data = this.fileManager.read(handle, 1);
+      if (data.length === 0) {
+        return { byte: 0, eof: true };
+      }
+      return { byte: data[0], eof: false };
+    }
+
+    if (handle === this.STDIN_HANDLE) {
+      if (this.inputBuffer.length === 0) {
+        return { byte: 0, eof: true };
+      }
+      const ch = this.inputBuffer.charCodeAt(0);
+      this.inputBuffer = this.inputBuffer.substring(1);
+      return { byte: ch, eof: false };
+    }
+
+    const fh = this.openFiles.get(handle);
+    if (!fh) {
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return { byte: 0, eof: true };
+    }
+
+    if (handle === this.NIL_HANDLE) {
+      return { byte: 0, eof: true };
+    }
+
+    if (!fh.buffer) {
+      this.lastError = this.ERROR_READ_PROTECTED;
+      return { byte: 0, eof: true };
+    }
+
+    if (fh.position >= fh.buffer.length) {
+      return { byte: 0, eof: true };
+    }
+
+    const byte = fh.buffer[fh.position];
+    fh.position += 1;
+    return { byte, eof: false };
+  }
+
+  /**
+   * Write raw bytes to a handle using the new FileManager path first.
+   */
+  private writeBytesToHandle(handle: number, data: Buffer): { bytes: number; consoleData?: Buffer } {
+    if (this.useNewFileSystem && this.fileManager) {
+      const result = this.fileManager.write(handle, data);
+      return { bytes: result.bytesWritten, consoleData: result.consoleData };
+    }
+
+    const fileHandle = this.openFiles.get(handle);
+    const isConsoleHandle =
+      handle === this.STDOUT_HANDLE ||
+      handle === this.STDERR_HANDLE ||
+      (fileHandle && fileHandle.isConsole);
+
+    if (isConsoleHandle) {
+      return { bytes: data.length, consoleData: data };
+    }
+
+    if (!fileHandle || !fileHandle.buffer) {
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return { bytes: -1 };
+    }
+
+    // Expand buffer if necessary
+    const neededSize = fileHandle.position + data.length;
+    if (fileHandle.buffer.length < neededSize) {
+      const newBuffer = Buffer.alloc(neededSize);
+      fileHandle.buffer.copy(newBuffer);
+      fileHandle.buffer = newBuffer;
+    }
+
+    data.copy(fileHandle.buffer, fileHandle.position);
+    fileHandle.position += data.length;
+    return { bytes: data.length };
+  }
+
+  /**
    * Open - Open a file
    * D1 = filename (pointer to BCPL string or C string)
    * D2 = access mode (MODE_OLDFILE=1005, MODE_NEWFILE=1006, MODE_READWRITE=1004)
@@ -417,6 +513,7 @@ export class DosLibrary {
     const filename = this.readString(namePtr);
 
     console.log(`[dos.library] Open(filename="${filename}", mode=${mode})`);
+    this.logDoorFile(`OPEN req ami="${filename}" mode=${mode}`);
 
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
@@ -431,6 +528,15 @@ export class DosLibrary {
           `[dos.library] Open (FileManager) failed for "${filename}"`
         );
         this.logDoorFile(`OPEN fm fail ami="${filename}" mode=${mode}`);
+      }
+      if (this.exitAfterFirstOpen && !this.firstOpenSeen) {
+        this.firstOpenSeen = true;
+        try {
+          this.logDoorFile(`EXIT_AFTER_FIRST_OPEN ami="${filename}" bptr=${bptr}`);
+        } catch {
+          /* ignore */
+        }
+        this.emulator.pause();
       }
       return bptr;
     }
@@ -809,6 +915,26 @@ export class DosLibrary {
     const handle = this.emulator.getRegister(CPURegister.D1);
     const bufferAddr = this.emulator.getRegister(CPURegister.D2);
     const length = this.emulator.getRegister(CPURegister.D3);
+    const pc = this.emulator.getRegister(CPURegister.PC);
+    const sp = this.emulator.getRegister(CPURegister.A7);
+
+    if (length <= 0) {
+      const preview: number[] = [];
+      try {
+        for (let i = 0; i < 16; i++) {
+          preview.push(this.emulator.readMemory(bufferAddr + i));
+        }
+      } catch {
+        /* ignore preview failures */
+      }
+      this.logDoorFile(
+        `WRITE zero pc=0x${pc.toString(16)} sp=0x${sp.toString(
+          16
+        )} d1=${handle} d2=0x${bufferAddr.toString(
+          16
+        )} d3=${length} preview=[${preview.map((b) => b.toString(16)).join(" ")}]`
+      );
+    }
     this.logDoorFile(`WRITE handle=${handle} len=${length}`);
 
     // Read data from emulated memory
@@ -1241,6 +1367,216 @@ export class DosLibrary {
       `[dos.library] Seek: Moved from ${oldPosition} to ${newPosition}`
     );
     return oldPosition;
+  }
+
+  /**
+   * FGetC - Get a single character from a file (V36+)
+   * Returns: character (0-255) or -1 on EOF/error
+   */
+  FGetC(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    const result = this.readByteFromHandle(handle);
+    if (result.eof) {
+      this.lastError = this.ERROR_NO_MORE_ENTRIES;
+      return -1;
+    }
+    this.lastError = this.ERROR_NO_ERROR;
+    return result.byte;
+  }
+
+  /**
+   * FPutC - Write a single character to a file (V36+)
+   * Returns: character written or -1 on error
+   */
+  FPutC(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    const ch = this.emulator.getRegister(CPURegister.D2) & 0xff;
+    const buffer = Buffer.from([ch]);
+    const result = this.writeBytesToHandle(handle, buffer);
+    if (result.bytes < 0) {
+      this.lastError = this.ERROR_WRITE_PROTECTED;
+      return -1;
+    }
+
+    if (result.consoleData) {
+      const text = result.consoleData.toString("latin1");
+      if (this.outputRawCallback) {
+        this.outputRawCallback(result.consoleData);
+      } else if (this.outputCallback) {
+        this.outputCallback(text);
+      }
+    }
+
+    this.lastError = this.ERROR_NO_ERROR;
+    return ch;
+  }
+
+  /**
+   * FGets - Read a line from a file (V36+)
+   * Returns: buffer pointer or 0 on EOF/error
+   */
+  FGets(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    const bufPtr = this.emulator.getRegister(CPURegister.D2);
+    const maxLen = this.emulator.getRegister(CPURegister.D3);
+
+    if (bufPtr === 0 || maxLen <= 1) {
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return 0;
+    }
+
+    let bytesRead = 0;
+    while (bytesRead < maxLen - 1) {
+      const { byte, eof } = this.readByteFromHandle(handle);
+      if (eof) {
+        break;
+      }
+      this.emulator.writeMemory(bufPtr + bytesRead, byte);
+      bytesRead++;
+      if (byte === 0x0a) {
+        break;
+      }
+    }
+
+    this.emulator.writeMemory(bufPtr + bytesRead, 0);
+
+    if (bytesRead === 0) {
+      this.lastError = this.ERROR_NO_MORE_ENTRIES;
+      return 0;
+    }
+
+    this.lastError = this.ERROR_NO_ERROR;
+    return bufPtr;
+  }
+
+  /**
+   * FPuts - Write a null-terminated string to a file (V36+)
+   * Returns: length written or -1 on error
+   */
+  FPuts(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    const strPtr = this.emulator.getRegister(CPURegister.D2);
+    const str = this.readString(strPtr);
+    const buffer = Buffer.from(str, "latin1");
+    const result = this.writeBytesToHandle(handle, buffer);
+
+    if (result.bytes < 0) {
+      this.lastError = this.ERROR_WRITE_PROTECTED;
+      return -1;
+    }
+
+    if (result.consoleData) {
+      const text = result.consoleData.toString("latin1");
+      if (this.outputRawCallback) {
+        this.outputRawCallback(result.consoleData);
+      } else if (this.outputCallback) {
+        this.outputCallback(text);
+      }
+    }
+
+    this.lastError = this.ERROR_NO_ERROR;
+    return buffer.length;
+  }
+
+  /**
+   * FRead - Block read helper (V36+)
+   * Returns: number of blocks read
+   */
+  FRead(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    const bufPtr = this.emulator.getRegister(CPURegister.D2);
+    const blockLen = this.emulator.getRegister(CPURegister.D3);
+    const blocks = this.emulator.getRegister(CPURegister.D4);
+    const totalBytes = blockLen * blocks;
+
+    this.emulator.setRegister(CPURegister.D1, handle);
+    this.emulator.setRegister(CPURegister.D2, bufPtr);
+    this.emulator.setRegister(CPURegister.D3, totalBytes);
+    const bytesRead = this.Read();
+
+    const blocksRead =
+      blockLen > 0 ? Math.floor(Math.max(0, bytesRead) / blockLen) : 0;
+    this.lastError = this.ERROR_NO_ERROR;
+    return blocksRead;
+  }
+
+  /**
+   * FWrite - Block write helper (V36+)
+   * Returns: number of blocks written
+   */
+  FWrite(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    const bufPtr = this.emulator.getRegister(CPURegister.D2);
+    const blockLen = this.emulator.getRegister(CPURegister.D3);
+    const blocks = this.emulator.getRegister(CPURegister.D4);
+    const totalBytes = blockLen * blocks;
+
+    this.emulator.setRegister(CPURegister.D1, handle);
+    this.emulator.setRegister(CPURegister.D2, bufPtr);
+    this.emulator.setRegister(CPURegister.D3, totalBytes);
+    const bytesWritten = this.Write();
+
+    if (bytesWritten < 0) {
+      this.lastError = this.ERROR_WRITE_PROTECTED;
+      return 0;
+    }
+
+    const blocksWritten =
+      blockLen > 0 ? Math.floor(bytesWritten / blockLen) : 0;
+    this.lastError = this.ERROR_NO_ERROR;
+    return blocksWritten;
+  }
+
+  /**
+   * UnGetC - Push a character back onto the stream (V36+)
+   * Returns: character pushed back or -1 on error
+   */
+  UnGetC(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    const ch = this.emulator.getRegister(CPURegister.D2) & 0xff;
+
+    if (this.useNewFileSystem && this.fileManager) {
+      const pos = this.fileManager.seek(handle, -1, 1);
+      if (pos < 0) {
+        this.lastError = this.ERROR_SEEK_ERROR;
+        return -1;
+      }
+      this.lastError = this.ERROR_NO_ERROR;
+      return ch;
+    }
+
+    const fh = this.openFiles.get(handle);
+    if (!fh || fh.position === 0) {
+      this.lastError = this.ERROR_SEEK_ERROR;
+      return -1;
+    }
+
+    fh.position -= 1;
+    if (fh.buffer) {
+      fh.buffer[fh.position] = ch;
+    }
+    this.lastError = this.ERROR_NO_ERROR;
+    return ch;
+  }
+
+  /**
+   * Flush - Flush buffered output (V36+)
+   * Returns: DOSTRUE (-1) on success
+   */
+  Flush(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    if (this.useNewFileSystem) {
+      this.lastError = this.ERROR_NO_ERROR;
+      return -1;
+    }
+
+    if (handle === this.STDOUT_HANDLE || handle === this.STDERR_HANDLE) {
+      this.lastError = this.ERROR_NO_ERROR;
+      return -1;
+    }
+
+    this.lastError = this.ERROR_NO_ERROR;
+    return -1;
   }
 
   /**
@@ -2102,275 +2438,6 @@ export class DosLibrary {
   }
 
   /**
-   * FGetC - Read character from file (buffered) (V36)
-   * D1 = file handle (BPTR)
-   * Returns: D0 = character (0-255) or -1 for EOF
-   */
-  FGetC(): void {
-    const fileHandle = this.emulator.getRegister(CPURegister.D1);
-    console.log(`[dos.library] FGetC(fh=${fileHandle})`);
-
-    const file = this.openFiles.get(fileHandle);
-    if (!file) {
-      this.emulator.setRegister(CPURegister.D0, -1); // EOF
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      console.log(`[dos.library] FGetC: Invalid file handle, returning EOF`);
-      return;
-    }
-
-    // Console/stdin - read from input buffer
-    if (file.isConsole) {
-      if (this.inputBuffer.length > 0) {
-        const char = this.inputBuffer.charCodeAt(0);
-        this.inputBuffer = this.inputBuffer.substring(1);
-        this.emulator.setRegister(CPURegister.D0, char);
-        console.log(
-          `[dos.library] FGetC: Console, read char ${char} ('${String.fromCharCode(
-            char
-          )}')`
-        );
-      } else {
-        this.emulator.setRegister(CPURegister.D0, -1); // EOF
-        console.log(`[dos.library] FGetC: Console buffer empty, returning EOF`);
-      }
-      return;
-    }
-
-    // Regular file - read from buffer
-    if (!file.buffer || file.position >= file.buffer.length) {
-      this.emulator.setRegister(CPURegister.D0, -1); // EOF
-      this.lastError = this.ERROR_NO_ERROR; // EOF is not an error
-      console.log(`[dos.library] FGetC: EOF reached`);
-      return;
-    }
-
-    const char = file.buffer[file.position++];
-    this.emulator.setRegister(CPURegister.D0, char);
-    console.log(
-      `[dos.library] FGetC: Read char ${char} ('${String.fromCharCode(
-        char
-      )}') at pos ${file.position - 1}`
-    );
-  }
-
-  /**
-   * FPutC - Write character to file (buffered) (V36)
-   * D1 = file handle (BPTR)
-   * D2 = character (LONG, 0-255)
-   * Returns: D0 = character written or -1 (EOF) for error
-   */
-  FPutC(): void {
-    const fileHandle = this.emulator.getRegister(CPURegister.D1);
-    const char = this.emulator.getRegister(CPURegister.D2) & 0xff;
-    console.log(`[dos.library] FPutC(fh=${fileHandle}, char=${char})`);
-
-    const file = this.openFiles.get(fileHandle);
-    if (!file) {
-      this.emulator.setRegister(CPURegister.D0, -1); // EOF
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      console.log(`[dos.library] FPutC: Invalid file handle, returning EOF`);
-      return;
-    }
-
-    // Console output - send to callback
-    if (file.isConsole) {
-      const charStr = String.fromCharCode(char);
-      if (this.outputCallback) {
-        this.outputCallback(charStr);
-      }
-      this.emulator.setRegister(CPURegister.D0, char);
-      console.log(`[dos.library] FPutC: Console output: '${charStr}'`);
-      return;
-    }
-
-    // Regular file - append to buffer
-    if (!file.buffer) {
-      file.buffer = Buffer.alloc(0);
-    }
-    file.buffer = Buffer.concat([file.buffer, Buffer.from([char])]);
-    file.position = file.buffer.length;
-
-    this.emulator.setRegister(CPURegister.D0, char);
-    console.log(
-      `[dos.library] FPutC: Wrote char to file, new size=${file.buffer.length}`
-    );
-  }
-
-  /**
-   * FGets - Read line from file (buffered) (V36)
-   * D1 = file handle (BPTR)
-   * D2 = buffer address (STRPTR)
-   * D3 = buffer length (ULONG, must be > 0)
-   * Returns: D0 = buffer pointer or NULL for EOF
-   */
-  FGets(): void {
-    const fileHandle = this.emulator.getRegister(CPURegister.D1);
-    const bufAddr = this.emulator.getRegister(CPURegister.D2);
-    const bufLen = this.emulator.getRegister(CPURegister.D3);
-
-    console.log(
-      `[dos.library] FGets(fh=${fileHandle}, buf=0x${bufAddr.toString(
-        16
-      )}, len=${bufLen})`
-    );
-
-    if (bufLen === 0) {
-      this.emulator.setRegister(CPURegister.D0, 0); // NULL
-      this.lastError = this.ERROR_NO_ERROR; // EOF condition
-      console.log(`[dos.library] FGets: Zero length buffer, returning NULL`);
-      return;
-    }
-
-    // New FileManager-based implementation
-    if (this.useNewFileSystem && this.fileManager) {
-      console.log(
-        `[dos.library] FGets(FileManager) fh=${fileHandle} buf=0x${bufAddr.toString(
-          16
-        )} len=${bufLen}`
-      );
-      const fh = this.fileManager.getHandle(fileHandle);
-      if (!fh) {
-        this.emulator.setRegister(CPURegister.D0, 0);
-        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-        console.log(
-          `[dos.library] FGets: Invalid BPTR ${fileHandle}, returning NULL`
-        );
-        return;
-      }
-
-      let bytesRead = 0;
-      const maxBytes = Math.max(0, bufLen - 1);
-      while (bytesRead < maxBytes) {
-        const chunk = this.fileManager.read(fileHandle, 1);
-        if (chunk.length === 0) {
-          break;
-        }
-
-        const byte = chunk[0];
-        this.emulator.writeMemory(bufAddr + bytesRead, byte);
-        bytesRead++;
-        if (byte === 0x0a) {
-          break;
-        }
-      }
-
-      if (bytesRead === 0) {
-        this.emulator.setRegister(CPURegister.D0, 0);
-        this.lastError = this.ERROR_NO_ERROR;
-        console.log("[dos.library] FGets: EOF (FileManager), returning NULL");
-        return;
-      }
-
-      this.emulator.writeMemory(bufAddr + bytesRead, 0);
-      this.emulator.setRegister(CPURegister.D0, bufAddr);
-      const line = Buffer.from(
-        Array.from({ length: bytesRead }, (_, i) =>
-          this.emulator.readMemory(bufAddr + i)
-        )
-      ).toString("latin1");
-      console.log(
-        `[dos.library] FGets (FileManager): Read ${bytesRead} bytes: "${line.replace(
-          /\n/g,
-          "\\n"
-        )}"`
-      );
-      this.lastError = this.ERROR_NO_ERROR;
-      return;
-    }
-
-    const file = this.openFiles.get(fileHandle);
-    if (!file) {
-      this.emulator.setRegister(CPURegister.D0, 0); // NULL
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      console.log(`[dos.library] FGets: Invalid file handle, returning NULL`);
-      return;
-    }
-
-    // Check for immediate EOF
-    if (!file.buffer || file.position >= file.buffer.length) {
-      this.emulator.setRegister(CPURegister.D0, 0); // NULL
-      this.lastError = this.ERROR_NO_ERROR; // EOF, not an error
-      console.log(`[dos.library] FGets: EOF, returning NULL`);
-      return;
-    }
-
-    // Read up to bufLen-1 bytes or until newline
-    let bytesRead = 0;
-    const maxBytes = bufLen - 1; // Leave room for null terminator
-
-    while (bytesRead < maxBytes && file.position < file.buffer.length) {
-      const byte = file.buffer[file.position++];
-      this.emulator.writeMemory(bufAddr + bytesRead, byte);
-      bytesRead++;
-
-      // Stop at newline (newline IS included in buffer)
-      if (byte === 0x0a) {
-        // '\n'
-        break;
-      }
-    }
-
-    // Null-terminate the string
-    this.emulator.writeMemory(bufAddr + bytesRead, 0);
-
-    this.emulator.setRegister(CPURegister.D0, bufAddr); // Return buffer pointer
-    const line = String.fromCharCode(
-      ...Array.from({ length: bytesRead }, (_, i) =>
-        this.emulator.readMemory(bufAddr + i)
-      )
-    );
-    console.log(
-      `[dos.library] FGets: Read ${bytesRead} bytes: "${line.replace(
-        /\n/g,
-        "\\n"
-      )}"`
-    );
-  }
-
-  /**
-   * FPuts - Write string to file (buffered) (V36)
-   * D1 = file handle (BPTR)
-   * D2 = string address (STRPTR, null-terminated)
-   * Returns: D0 = 0 for success, -1 for error
-   */
-  FPuts(): void {
-    const fileHandle = this.emulator.getRegister(CPURegister.D1);
-    const strAddr = this.emulator.getRegister(CPURegister.D2);
-    const str = this.readString(strAddr);
-
-    console.log(`[dos.library] FPuts(fh=${fileHandle}, str="${str}")`);
-
-    const file = this.openFiles.get(fileHandle);
-    if (!file) {
-      this.emulator.setRegister(CPURegister.D0, -1); // Error
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      console.log(`[dos.library] FPuts: Invalid file handle, returning error`);
-      return;
-    }
-
-    // Console output - send to callback
-    if (file.isConsole) {
-      if (this.outputCallback) {
-        this.outputCallback(str);
-      }
-      this.emulator.setRegister(CPURegister.D0, 0); // Success
-      console.log(`[dos.library] FPuts: Console output (${str.length} bytes)`);
-      return;
-    }
-
-    // Regular file - append to buffer
-    if (!file.buffer) {
-      file.buffer = Buffer.alloc(0);
-    }
-    const strBuf = Buffer.from(str, "binary");
-    file.buffer = Buffer.concat([file.buffer, strBuf]);
-    file.position = file.buffer.length;
-
-    this.emulator.setRegister(CPURegister.D0, 0); // Success
-    console.log(`[dos.library] FPuts: Wrote ${str.length} bytes to file`);
-  }
-
-  /**
    * PutStr - Write string directly to Output() stream (STDOUT)
    * D1 = string pointer (STRPTR, null-terminated)
    * Returns: D0 = 0 on success, -1 on error
@@ -2438,187 +2505,6 @@ export class DosLibrary {
 
     this.lastError = this.ERROR_NO_ERROR;
     return 0;
-  }
-
-  /**
-   * FRead - Read blocks from file (buffered) (V36)
-   * D1 = file handle (BPTR)
-   * D2 = buffer address (STRPTR)
-   * D3 = block length (ULONG, must be > 0)
-   * D4 = number of blocks (ULONG, must be > 0)
-   * Returns: D0 = number of blocks read (0 for EOF)
-   */
-  FRead(): void {
-    const fileHandle = this.emulator.getRegister(CPURegister.D1);
-    const bufAddr = this.emulator.getRegister(CPURegister.D2);
-    const blockLen = this.emulator.getRegister(CPURegister.D3);
-    const numBlocks = this.emulator.getRegister(CPURegister.D4);
-
-    console.log(
-      `[dos.library] FRead(fh=${fileHandle}, buf=0x${bufAddr.toString(
-        16
-      )}, blocklen=${blockLen}, blocks=${numBlocks})`
-    );
-
-    if (blockLen <= 0 || numBlocks <= 0) {
-      this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_NO_ERROR;
-      console.log("[dos.library] FRead: Invalid block length or count");
-      return;
-    }
-
-    if (this.useNewFileSystem && this.fileManager) {
-      const fh = this.fileManager.getHandle(fileHandle);
-      if (!fh) {
-        this.emulator.setRegister(CPURegister.D0, 0);
-        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-        console.log("[dos.library] FRead (FileManager): Invalid BPTR");
-        return;
-      }
-
-      let blocksRead = 0;
-      for (let block = 0; block < numBlocks; block++) {
-        const data = this.fileManager.read(fileHandle, blockLen);
-        if (data.length < blockLen) {
-          if (data.length > 0) {
-            // Rewind file pointer since we cannot complete this block
-            this.fileManager.seek(fileHandle, -data.length, 1);
-          }
-          this.emulator.setRegister(CPURegister.D0, blocksRead);
-          this.lastError = this.ERROR_NO_ERROR;
-          console.log(
-            `[dos.library] FRead (FileManager): EOF after ${blocksRead} blocks`
-          );
-          return;
-        }
-
-        for (let i = 0; i < data.length; i++) {
-          this.emulator.writeMemory(bufAddr + block * blockLen + i, data[i]);
-        }
-        blocksRead++;
-      }
-
-      this.emulator.setRegister(CPURegister.D0, blocksRead);
-      this.lastError = this.ERROR_NO_ERROR;
-      console.log(
-        `[dos.library] FRead (FileManager): Read ${blocksRead} blocks (${
-          blocksRead * blockLen
-        } bytes)`
-      );
-      return;
-    }
-
-    const file = this.openFiles.get(fileHandle);
-    if (!file) {
-      this.emulator.setRegister(CPURegister.D0, 0); // 0 blocks read
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      console.log(`[dos.library] FRead: Invalid file handle`);
-      return;
-    }
-
-    if (!file.buffer || file.position >= file.buffer.length) {
-      this.emulator.setRegister(CPURegister.D0, 0); // EOF
-      console.log(`[dos.library] FRead: EOF`);
-      return;
-    }
-
-    // Read blocks
-    let blocksRead = 0;
-    const bytesPerBlock = blockLen;
-    const totalBytes = blockLen * numBlocks;
-
-    for (let block = 0; block < numBlocks; block++) {
-      const blockOffset = block * bytesPerBlock;
-
-      // Read one block
-      for (let i = 0; i < bytesPerBlock; i++) {
-        if (file.position >= file.buffer.length) {
-          // EOF reached mid-block
-          this.emulator.setRegister(CPURegister.D0, blocksRead);
-          console.log(
-            `[dos.library] FRead: EOF mid-block, read ${blocksRead} complete blocks`
-          );
-          return;
-        }
-
-        const byte = file.buffer[file.position++];
-        this.emulator.writeMemory(bufAddr + blockOffset + i, byte);
-      }
-
-      blocksRead++;
-    }
-
-    this.emulator.setRegister(CPURegister.D0, blocksRead);
-    console.log(
-      `[dos.library] FRead: Read ${blocksRead} blocks (${
-        blocksRead * bytesPerBlock
-      } bytes)`
-    );
-  }
-
-  /**
-   * FWrite - Write blocks to file (buffered) (V36)
-   * D1 = file handle (BPTR)
-   * D2 = buffer address (STRPTR)
-   * D3 = block length (ULONG, must be > 0)
-   * D4 = number of blocks (ULONG, must be > 0)
-   * Returns: D0 = number of blocks written
-   */
-  FWrite(): void {
-    const fileHandle = this.emulator.getRegister(CPURegister.D1);
-    const bufAddr = this.emulator.getRegister(CPURegister.D2);
-    const blockLen = this.emulator.getRegister(CPURegister.D3);
-    const numBlocks = this.emulator.getRegister(CPURegister.D4);
-
-    console.log(
-      `[dos.library] FWrite(fh=${fileHandle}, buf=0x${bufAddr.toString(
-        16
-      )}, blocklen=${blockLen}, blocks=${numBlocks})`
-    );
-
-    const file = this.openFiles.get(fileHandle);
-    if (!file) {
-      this.emulator.setRegister(CPURegister.D0, 0); // 0 blocks written
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      console.log(`[dos.library] FWrite: Invalid file handle`);
-      return;
-    }
-
-    // Console output
-    if (file.isConsole) {
-      const totalBytes = blockLen * numBlocks;
-      const bytes: number[] = [];
-      for (let i = 0; i < totalBytes; i++) {
-        bytes.push(this.emulator.readMemory(bufAddr + i));
-      }
-      const str = String.fromCharCode(...bytes);
-      if (this.outputCallback) {
-        this.outputCallback(str);
-      }
-      this.emulator.setRegister(CPURegister.D0, numBlocks);
-      console.log(`[dos.library] FWrite: Console output (${totalBytes} bytes)`);
-      return;
-    }
-
-    // Regular file - write blocks
-    if (!file.buffer) {
-      file.buffer = Buffer.alloc(0);
-    }
-
-    const totalBytes = blockLen * numBlocks;
-    const bytes: number[] = [];
-    for (let i = 0; i < totalBytes; i++) {
-      bytes.push(this.emulator.readMemory(bufAddr + i));
-    }
-
-    const newData = Buffer.from(bytes);
-    file.buffer = Buffer.concat([file.buffer, newData]);
-    file.position = file.buffer.length;
-
-    this.emulator.setRegister(CPURegister.D0, numBlocks);
-    console.log(
-      `[dos.library] FWrite: Wrote ${numBlocks} blocks (${totalBytes} bytes)`
-    );
   }
 
   /**
@@ -3774,6 +3660,28 @@ export class DosLibrary {
       );
     }
 
+    // Debug: log parsed arguments for door troubleshooting
+    const argAt = (idx: number): number =>
+      this.emulator.readMemory32(arrayAddr + idx * 4);
+    const readPtr = (ptr: number): string =>
+      ptr ? this.readString(ptr, 512) : "<null>";
+    const minLevel = this.emulator.readMemory32(arrayAddr + 10 * 4);
+    const parsedLine = `[dos.library] ReadArgs parsed -> template=${readPtr(
+      argAt(0)
+    )} outfile=${readPtr(argAt(1))} sort=${readPtr(argAt(2))} userdata=${readPtr(
+      argAt(3)
+    )} userkeys=${readPtr(argAt(4))} usermisc=${readPtr(
+      argAt(5)
+    )} confdb=${readPtr(argAt(6))} reg=${readPtr(
+      argAt(7)
+    )} showInactive=${argAt(8) ? "TRUE" : "FALSE"} ignoreSysop=${
+      argAt(9) ? "TRUE" : "FALSE"
+    } minUserLevel=${minLevel} noSep=${argAt(11) ? "TRUE" : "FALSE"} dotSep=${
+      argAt(12) ? "TRUE" : "FALSE"
+    }`;
+    console.log(parsedLine);
+    this.logDoorFile(parsedLine);
+
     this.emulator.setRegister(CPURegister.D0, rdargsAddr);
     this.lastError = this.ERROR_NO_ERROR;
   }
@@ -4039,6 +3947,15 @@ export class DosLibrary {
         `[dos.library] Returning success anyway to let door proceed.`
       );
       this.emulator.setRegister(CPURegister.D0, -1); // Return success
+      return true;
+    }
+
+    // Some doors call deeper LVOs we do not implement; stub benignly
+    if (offset === -298) {
+      console.log(
+        `[dos.library] WARNING: Offset -298 not implemented; returning 0`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
       return true;
     }
 

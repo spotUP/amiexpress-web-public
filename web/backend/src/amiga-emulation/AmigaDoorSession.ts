@@ -82,6 +82,8 @@ export class AmigaDoorSession {
     this.config = {
       timeout: 300, // 5 minutes default
       ...config,
+      cwd: config.cwd || path.dirname(config.executablePath),
+      assigns: config.assigns || {},
     };
     if (!this.config.doorId) {
       const fromSession = this.config.bbsSession?.doorCommand;
@@ -455,7 +457,7 @@ export class AmigaDoorSession {
     const prCliOffset = 0xac; // pr_CLI offset inside struct Process
     const cliStructAddr = 0x90000;
     const cmdLineAddr = 0x90100; // BSTR (length byte + text)
-    const argStringAddr = 0x90200; // args only (no program name)
+    const argStringAddr = 0x0f0100; // args only (no program name) — keep aligned with DoorLoader
     const localVarsListAddr = 0x90300;
     const rcVarAddr = 0x90320;
     const rcNameAddr = 0x90340;
@@ -469,7 +471,7 @@ export class AmigaDoorSession {
       0;
 
     // Full command line BSTR (program + node)
-    const cmdLine = `${progName.toUpperCase()} ${nodeId}`;
+    const cmdLine = progName.toUpperCase();
     this.emulator.writeMemory(cmdLineAddr, cmdLine.length);
     for (let i = 0; i < cmdLine.length; i++) {
       this.emulator.writeMemory(cmdLineAddr + 1 + i, cmdLine.charCodeAt(i));

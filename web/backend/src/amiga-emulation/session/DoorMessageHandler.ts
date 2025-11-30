@@ -90,60 +90,9 @@ export class DoorMessageHandler {
     this.sentInitialMessage = state.sentInitialMessage;
   }
 
-  /**
-   * Send startup/initialization message to door
-   */
+  // express.e: doors pull their own messages; no proactive startup PutMsg.
   sendStartupMessage(): void {
-    console.log("[DoorMessageHandler] === SENDING STARTUP MESSAGE TO DOOR ===");
-
-    // The door is polling AEDoorPort (created during initialization)
-    const portAddr = this.doorPortAddress || 0xa0000;
-    console.log(
-      `[DoorMessageHandler] Target port: AEDoorPort at 0x${portAddr.toString(
-        16
-      )}`
-    );
-
-    const STARTUP_COMMAND = 0;
-    const nodeId = this.resolveNodeId();
-    const userName =
-      this.config.bbsSession?.user?.username ?? "AmiExpress User";
-    const startupText = `NODE ${nodeId} READY - ${userName}`;
-
-    const msgAddr = this.allocateDoorCommandMessage(
-      STARTUP_COMMAND,
-      nodeId,
-      startupText
-    );
-    if (msgAddr === null) {
-      console.error(
-        "[DoorMessageHandler] Unable to allocate startup message structure"
-      );
-      return;
-    }
-
-    this.logDoorMessageContents(msgAddr, "Startup message");
-
-    // Send the message using PutMsg()
-    console.log(
-      `[DoorMessageHandler] Calling PutMsg(port=0x${portAddr.toString(
-        16
-      )}, msg=0x${msgAddr.toString(16)})`
-    );
-    this.execLibrary.putMsg(portAddr, msgAddr, {
-      suppressDoorCallback: this.messageConfig.suppressCallbacks,
-    });
-
-    console.log("[DoorMessageHandler] === STARTUP MESSAGE SENT ===");
-    console.log(
-      "[DoorMessageHandler] Door should receive this via GetMsg() and exit polling loop"
-    );
-
-    this.sentInitialMessage = true;
-
-    if (this.bullsHandler.isBullsDoor()) {
-      this.sendNodeStatusMessage();
-    }
+    // Intentionally no-op; we no longer inject a startup message.
   }
 
   /**

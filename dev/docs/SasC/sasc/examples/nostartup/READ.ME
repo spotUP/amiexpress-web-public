@@ -1,0 +1,68 @@
+Copyright (c) 1993 SAS Institute, Inc, Cary, NC USA
+All Rights Reserved
+
+Startup Code - What is it?
+--------------------------
+
+When you create a program, you put together statements to tell the computer
+what to do.  Then the compiler turns those statements into executable code
+to do what you wished.
+
+The startup code (c.o, cres.o, cback.o, etc.) does the initial work so that
+C statements such as
+
+	printf("Hello, World!");
+
+will work.  Without this code, you would need to do the set up yourself, in
+every program you write.
+
+
+Why would I NOT want to use the standard Startup Code?
+------------------------------------------------------
+
+While it is nice that this code sets things up for you, it really does a lot
+more than is necessary on the Amiga.  It does allow you to take programs
+from other computers and make them run on the Amiga with a minimum of
+effort, but your program is generally larger than it needs to be.  This is
+usually the case when using generic code (such as the startup code), as
+opposed to customizing your code to the specific application.  For instance,
+how many times have you used the "stderr" stream, except for occasional
+error message printing?  With the standard startup code, "stderr" is always
+initialized, whether you use it or not.
+
+If you are planning on 'porting (a term used to mean placing the same code
+on different machines, and making it run) your code to another computer,
+then you are better off using the standard startup.  It will be easier to
+make it work on the other machine that way.
+
+However, if your program is only meant for the Amiga, or you would have to
+do a significant amount of work to change it for the other platform anyway,
+there is no reason NOT to make it Amiga specific, and bypass the overhead of
+the standard startup code.
+
+
+How do I write a program that doesn't need Startup Code?
+--------------------------------------------------------
+
+First, look at the program in the "Example_1" drawer of this directory.  It
+is an example of the fairly classic "Hello, World!" program given in many
+programming books and classes.	It has been compiled with every option
+which can reduce the code size, and the resultant program is still 4132
+bytes in size.
+
+Now, look at the program in the "Example_2" drawer.  It is linked with no
+Startup Code at all, which gives the smallest possible program.  All it
+will contain is the code necessary to execute the program, with no extra
+setup of unnecessary details.  All the work is done in the program itself.
+The down side of not using any Startup Code is that NOTHING is done for
+you, you must do EVERYTHING yourself.  This is not as bad as it seems,
+since there is really very little to do for this program.  Even with
+having to open all the correct libraries ourselves, and doing the direct
+calls to AmigaDOS, the entire program, which performs the exact same
+functions as the first one, is only 124 bytes in size!
+
+Last, but not least, the program in the "Example_3" drawer is AmigaDOS
+V2.0 specific code, showing how easy it is to do a complete, useful
+program, with full command-line parsing, wildcard handling, etc.  It is
+similar to the UNIX 'cat' command (which displays text files on the
+screen), and its only 568 bytes in size!

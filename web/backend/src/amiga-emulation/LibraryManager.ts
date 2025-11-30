@@ -15,6 +15,7 @@ import { Socket } from "socket.io";
 import * as path from "path";
 import * as fs from "fs";
 import { LibraryLoader } from "./loader/LibraryLoader.js";
+import { PathManager } from "./api/PathManager.js";
 
 export class LibraryManager {
   public execLibrary: ExecLibrary | null = null;
@@ -32,6 +33,7 @@ export class LibraryManager {
   private aePortAddress: number = 0;
   private doorReplyPortAddr: number = 0;
   private useXimProtocol: boolean = false;
+  private pathManager: PathManager | null = null;
 
   constructor(emulator: MoiraEmulator, socket: Socket, config: DoorConfig) {
     this.emulator = emulator;
@@ -50,9 +52,10 @@ export class LibraryManager {
   private async initializeExec(): Promise<void> {
     console.log("[LibraryManager] Loading Kickstart ROM...");
 
+    const romBase = path.resolve(__dirname, "..", "..", "data", "amiga-roms");
     const romPath = path.join(
-      process.cwd(),
-      "data/amiga-roms/Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom"
+      romBase,
+      "Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom"
     );
     const romData = fs.readFileSync(romPath);
     this.emulator.loadROM(new Uint8Array(romData));
@@ -119,6 +122,19 @@ export class LibraryManager {
     this.doorPortAddress = portAddr;
     this.aePortAddress = portAddr;
 
+    // Initialize PathManager assigns based on BBS root/dataDir and optional overrides from config.assigns
+    // Resolve the BBS root reliably from this source path to avoid depending on cwd
+    const projectRoot =
+      process.env.BBS_ROOT || path.resolve(__dirname, "../../../..");
+    this.pathManager = new PathManager(projectRoot);
+    if (this.config.assigns) {
+      for (const [assign, target] of Object.entries(this.config.assigns)) {
+        this.pathManager.addAssign(assign, target);
+      }
+    }
+    const doorDir = path.dirname(this.config.executablePath);
+    this.pathManager.setProgDir(doorDir);
+
     const useXimProtocol = doorType !== "SIM" && doorType !== "SUP";
     this.useXimProtocol = useXimProtocol;
 
@@ -142,12 +158,12 @@ export class LibraryManager {
     this.dosLibrary = new DosLibrary(this.emulator);
     this.dosLibrary.setInheritedHandles(1, 2);
 
-    const projectRoot =
-      process.env.BBS_ROOT || path.resolve(process.cwd(), "../..");
     console.log(
       `[LibraryManager] Enabling FileManager with base directory: ${projectRoot}`
     );
-    this.dosLibrary.enableNewFileSystem(projectRoot);
+    this.dosLibrary.enableNewFileSystem(projectRoot, this.pathManager || undefined);
+    // Ensure PROGDIR: and CurrentDir point at the door folder so relative opens hit the right files
+    this.dosLibrary.setDoorDirectory(doorDir);
 
     this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
       const bbsSession: any = this.config.bbsSession || {};
@@ -197,6 +213,9 @@ export class LibraryManager {
       return this.libraryTraps!.handleTrap(pc);
     });
 
+    // Reset allocator base after bootstrapping ports/libraries to match vamos expectations
+    this.execLibrary.setAllocBase(0x0090d0);
+
     this.libraryTraps.installExecVectors();
 
     this.libraryTraps.setDOSLibrary(this.dosLibrary);
@@ -222,6 +241,18 @@ export class LibraryManager {
         );
         this.libraryTraps!.installIconVectors();
       }
+      if (
+        name.toLowerCase() === "graphics.library" ||
+        name.toLowerCase() === "intuition.library" ||
+        name.toLowerCase() === "utility.library"
+      ) {
+        console.log(
+          `[LibraryManager] ${name} opened, installing stub vectors from LVOs.i...`
+        );
+        this.libraryTraps!.installStubVectorsForLibrary(name, addr);
+      }
+      // Always install any known LVO stubs for newly opened libraries to avoid missing traps
+      this.libraryTraps!.installStubVectorsForLibrary(name, addr);
     });
 
     this.execLibrary.setDoorMessageCallback(

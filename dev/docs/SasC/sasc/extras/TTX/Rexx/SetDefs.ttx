@@ -1,0 +1,59 @@
+/*
+**  $VER: SetDefs.ttx 2.1 (17.8.93)
+**	   By Kenneth Yarnall.  This code may be freely distributed.
+**
+**  This macro should be attached to the open functions of TTX (see
+** instructions).  It checks the extension of the filename, and loads the
+** appropriate dfn file, if it recognizes the file type.  See the
+** instructions for more info.
+**
+**  Current extensions:  c, h, cpp, cxx, tex.  Add at your leisure.
+*/
+
+Options RESULTS
+
+GetFileInfo
+parse var RESULT . . '"'name'"'
+
+if name ~= "" then do
+	dotpos = LastPos('.', name)
+	if dotpos = 0 then
+		new.ext = ""
+	else
+		new.ext = SubStr(name, dotpos+1)
+end
+else
+	exit 0
+
+if new.ext == GetClip('extension') then
+	exit 0
+
+select
+	when new.ext = 'c' then do
+        SetClip('extension',new.ext)
+        OpenDefinitions "TURBOTEXT:Support/TTX_Startup.dfn"
+        OpenDefinitions "TURBOTEXT:Support/TTX_SASC.dfn"
+    end
+	when new.ext = 'h' then do
+        SetClip('extension',new.ext)
+        OpenDefinitions "TURBOTEXT:Support/TTX_Startup.dfn"
+        OpenDefinitions "TURBOTEXT:Support/TTX_SASC.dfn"
+    end
+	when new.ext = 'cpp' then do
+        SetClip('extension',new.ext)
+        OpenDefinitions "TURBOTEXT:Support/TTX_Startup.dfn"
+        OpenDefinitions "TURBOTEXT:Support/TTX_SASC.dfn"
+    end
+	when new.ext = 'cxx' then do
+        SetClip('extension',new.ext)
+        OpenDefinitions "TURBOTEXT:Support/TTX_Startup.dfn"
+        OpenDefinitions "TURBOTEXT:Support/TTX_SASC.dfn"
+    end
+	when new.ext = 'tex' then do
+        SetClip('extension',new.ext)
+        OpenDefinitions "TURBOTEXT:Support/TTX_Startup.dfn"
+        OpenDefinitions "TURBOTEXT:Support/TTX_TeX.dfn"
+    end
+	otherwise
+		NOP
+end

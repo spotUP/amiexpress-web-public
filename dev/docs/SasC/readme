@@ -1,0 +1,14 @@
+This is a finished install of SAS/C 6.58, including a patch that fixes a Y2K bug.
+This is the final and most updated version of SAS/C available.
+
+Copy the SAS/C directory and icon file to your hard drive, then run the following
+commands in the CLI so that SAS/C can run properly, or simply enter them into your
+user-startup or startup-sequence to have it done automatically when you boot up. The
+first line needs to be changed to point to where you copied the SAS/C installation.
+
+ assign sc: sys:programs/sasc
+ assign lib: sc:lib
+ assign include: sc:include
+ assign cxxinclude: sc:cxxinclude
+ path sc:c add
+

@@ -24,11 +24,12 @@ export class KickstartRom {
 
   /**
    * Load Kickstart ROM from disk
-   * Tries AROS ROM first (open-source), then falls back to Kickstart ROM
+   * Default: AROS first, Kickstart fallback. Env override AEDOOR_ROM=kickstart
    */
   private loadRom(): void {
-    // Try AROS ROM first (open-source, can be committed to GitHub)
-    // AROS ROM comes in two files: aros-rom.bin (256KB) + aros-ext.bin (256KB) = 512KB
+    const preferKickstart =
+      (process.env.AEDOOR_ROM || "").toLowerCase() === "kickstart";
+
     const repoRoot = path.resolve(__dirname, '../../..');
     const backendRoot = path.join(repoRoot, 'web/backend');
     const arosRomPaths = Array.from(
@@ -41,93 +42,99 @@ export class KickstartRom {
       ])
     );
 
-    // Try loading AROS ROM first
-    for (const basePath of arosRomPaths) {
-      const arosRomFile = path.join(basePath, 'aros-rom.bin');
-      const arosExtFile = path.join(basePath, 'aros-ext.bin');
+    const kickFilename = 'Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom';
+    const kickPaths = Array.from(
+      new Set([
+        path.join(process.cwd(), 'data/amiga-roms', kickFilename),
+        path.join(backendRoot, 'data/amiga-roms', kickFilename),
+        path.join(repoRoot, 'data/amiga-roms', kickFilename),
+        path.join(__dirname, '../../data/amiga-roms', kickFilename),
+        path.join(__dirname, '../../../data/amiga-roms', kickFilename),
+      ])
+    );
 
-      if (fs.existsSync(arosRomFile) && fs.existsSync(arosExtFile)) {
-        console.log(`[ROM] Loading AROS ROM (open-source) from: ${basePath}`);
+    const tryKickstart = (): boolean => {
+      let romPath: string | null = null;
+      for (const testPath of kickPaths) {
+        if (fs.existsSync(testPath)) {
+          romPath = testPath;
+          break;
+        }
+      }
+      if (!romPath) {
+        return false;
+      }
+      console.log(`[ROM] Loading Kickstart ROM from: ${romPath}`);
+      const romBuffer = fs.readFileSync(romPath);
+      this.romSize = romBuffer.length;
+      if (this.romSize !== this.ROM_SIZE) {
+        console.warn(`[ROM] Warning: ROM size ${this.romSize} doesn't match expected ${this.ROM_SIZE}`);
+      }
+      this.romData = new Uint8Array(romBuffer);
+      console.log(`[ROM] Kickstart 3.1 loaded successfully`);
+      console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
+      return true;
+    };
 
-        // Load both AROS files
-        const arosRom = fs.readFileSync(arosRomFile);
-        const arosExt = fs.readFileSync(arosExtFile);
+    const tryAros = (): boolean => {
+      for (const basePath of arosRomPaths) {
+        const arosRomFile = path.join(basePath, 'aros-rom.bin');
+        const arosExtFile = path.join(basePath, 'aros-ext.bin');
 
-        // Combine them (aros-rom.bin first, then aros-ext.bin)
-        this.romSize = arosRom.length + arosExt.length;
-        this.romData = new Uint8Array(this.romSize);
-        this.romData.set(new Uint8Array(arosRom), 0);
-        this.romData.set(new Uint8Array(arosExt), arosRom.length);
+        if (fs.existsSync(arosRomFile) && fs.existsSync(arosExtFile)) {
+          console.log(`[ROM] Loading AROS ROM (open-source) from: ${basePath}`);
+          const arosRom = fs.readFileSync(arosRomFile);
+          const arosExt = fs.readFileSync(arosExtFile);
+          this.romSize = arosRom.length + arosExt.length;
+          this.romData = new Uint8Array(this.romSize);
+          this.romData.set(new Uint8Array(arosRom), 0);
+          this.romData.set(new Uint8Array(arosExt), arosRom.length);
+          console.log(`[ROM] Loaded AROS ROM: ${this.romSize} bytes (${this.romSize / 1024}KB)`);
+          console.log(`[ROM]   - aros-rom.bin: ${arosRom.length} bytes`);
+          console.log(`[ROM]   - aros-ext.bin: ${arosExt.length} bytes`);
+          console.log(`[ROM] AROS ROM loaded successfully`);
+          console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
+          return true;
+        }
+      }
+      return false;
+    };
 
-        console.log(`[ROM] Loaded AROS ROM: ${this.romSize} bytes (${this.romSize / 1024}KB)`);
-        console.log(`[ROM]   - aros-rom.bin: ${arosRom.length} bytes`);
-        console.log(`[ROM]   - aros-ext.bin: ${arosExt.length} bytes`);
-        console.log(`[ROM] AROS ROM loaded successfully`);
-        console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
+    const kicked = preferKickstart ? tryKickstart() : false;
+    if (kicked) {
+      return;
+    }
+
+    const arosLoaded = tryAros();
+    if (arosLoaded) {
+      return;
+    }
+
+    if (!preferKickstart) {
+      const kickedAfter = tryKickstart();
+      if (kickedAfter) {
         return;
       }
     }
 
-    // Fall back to Kickstart 3.1 ROM (copyrighted, only for local dev)
-    console.log('[ROM] AROS ROM not found, trying Kickstart ROM...');
-    const romFilename = 'Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom';
-    const possiblePaths = Array.from(
-      new Set([
-        path.join(process.cwd(), 'data/amiga-roms', romFilename),
-        path.join(backendRoot, 'data/amiga-roms', romFilename),
-        path.join(repoRoot, 'data/amiga-roms', romFilename),
-        path.join(__dirname, '../../data/amiga-roms', romFilename),
-        path.join(__dirname, '../../../data/amiga-roms', romFilename),
-      ])
-    );
-
-    let romPath: string | null = null;
-    for (const testPath of possiblePaths) {
-      if (fs.existsSync(testPath)) {
-        romPath = testPath;
-        break;
-      }
-    }
-
-    if (!romPath) {
-      console.error('[ROM] No ROM found. Tried paths:');
-      console.error('[ROM] AROS ROM:');
-      arosRomPaths.forEach(p => {
-        console.error(`  - ${path.join(p, 'aros-rom.bin')} + ${path.join(p, 'aros-ext.bin')}`);
-      });
-      console.error('[ROM] Kickstart ROM:');
-      possiblePaths.forEach(p => console.error(`  - ${p}`));
-      // Emit to BBS terminal if session socket is available
-      try {
-        const globalAny: any = global as any;
-        const session = globalAny?.currentBbsSession;
+    console.error('[ROM] No ROM found. Tried paths:');
+    console.error('[ROM] AROS ROM:');
+    arosRomPaths.forEach(p => {
+      console.error(`  - ${path.join(p, 'aros-rom.bin')} + ${path.join(p, 'aros-ext.bin')}`);
+    });
+    console.error('[ROM] Kickstart ROM:');
+    kickPaths.forEach(p => console.error(`  - ${p}`));
+    try {
+      const globalAny: any = global as any;
+      const session = globalAny?.currentBbsSession;
       notifySysop(
         session,
         'No Amiga ROM found. Please install AROS ROM (free) or Kickstart ROM (commercial).'
       );
-      } catch (_) {
-        /* ignore */
-      }
-      throw new Error(`No Amiga ROM found. Please install AROS ROM (free) or Kickstart ROM (commercial).`);
+    } catch (_) {
+      /* ignore */
     }
-
-    console.log(`[ROM] Loading Kickstart ROM from: ${romPath}`);
-
-    // Read ROM file
-    const romBuffer = fs.readFileSync(romPath);
-    this.romSize = romBuffer.length;
-
-    console.log(`[ROM] Loaded ${this.romSize} bytes (${this.romSize / 1024}KB)`);
-
-    if (this.romSize !== this.ROM_SIZE) {
-      console.warn(`[ROM] Warning: ROM size ${this.romSize} doesn't match expected ${this.ROM_SIZE}`);
-    }
-
-    // Convert to Uint8Array for easy access
-    this.romData = new Uint8Array(romBuffer);
-
-    console.log(`[ROM] Kickstart 3.1 loaded successfully`);
-    console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
+    throw new Error(`No Amiga ROM found. Please install AROS ROM (free) or Kickstart ROM (commercial).`);
   }
 
   /**

@@ -1,0 +1,8 @@
+; Startup for SAS/C 6.58
+assign SC: SASC:sasc
+assign lib: SC:lib
+assign include: SC:include
+assign cxxinclude: SC:cxxinclude
+path SC:c ADD
+; needs large stack for C++ compilation
+stack 200000

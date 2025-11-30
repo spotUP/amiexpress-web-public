@@ -44,6 +44,7 @@ export function Layout() {
     { to: `${ADMIN_BASE}/file-checkers`, icon: FileCheck, label: 'File Checkers' },
     { to: `${ADMIN_BASE}/languages`, icon: Languages, label: 'Languages' },
     { to: `${ADMIN_BASE}/protocols`, icon: Download, label: 'Protocols' },
+    { to: `${ADMIN_BASE}/batches`, icon: FileText, label: 'Batch Editor' },
     { to: `${ADMIN_BASE}/deployment`, icon: Activity, label: 'Deployment' },
     { to: `${ADMIN_BASE}/import-export`, icon: ArrowUpDown, label: 'Import/Export' },
     { to: `${ADMIN_BASE}/logs`, icon: FileText, label: 'System Logs' },

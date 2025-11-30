@@ -1,0 +1,19 @@
+logging:
+  level: info
+  file: vamos.log
+trace:
+  instr: false
+  memory: false
+  vamos_ram: false
+  reg_dump: false
+profile:
+  enabled: true
+  libs:
+    names: [exec,dos]
+    calls: true
+  output:
+    file: vamos-profile.log
+    append: false
+    dump: true
+process:
+  stack: 8

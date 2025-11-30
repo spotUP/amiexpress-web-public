@@ -1,0 +1,192 @@
+Debugging C++ Programs
+
+Introduction
+
+This chapter contains an example of debugging a C++ program.
+The example program is in the sc:examples/cxx .  This directory
+contains two programs:
+
+chess1.cxx is a basic chess program that declares two classes:
+chessPiece  and chessBoard . The chessPiece  class
+describes the pieces used in a game of chess. The chessBoard 
+class describes the board on which the chess pieces
+are placed and moved. The chessBoard  class contains a
+data member, board , which is an array of
+pointers to chessPiece  objects.
+
+chess1.cxx   contains a logic error.  The instructions
+in this chapter show you how to use CodeProbe to find the error.
+
+chess2.cxx contains a corrected version of chess1.cxx .  You can
+compile, link, and run chess2.cxx  if you want to see what
+chess1.cxx  should print after you have fixed its logic
+error.
+
+Appendix 2, "Source Code for Debugger Examples," contains the source
+code for chess1.cxx .
+
+Running The Example
+
+To compile and link this example, enter the following command at
+the Shell prompt:
+
+   sc debug=ff pname=chess link sc:examples/cxx/chess1.cxx
+
+This command creates an executable module named chess  in your
+current directory.  To run the program from the Shell prompt, enter:
+
+   chess
+
+The program first instantiates a chessBoard  object
+called gameboard .  The
+chessBoard  constructor then instantiates the appropriate
+chessPiece  objects needed in a chess game. Each position in the
+chessBoard  object's 8x8 array points to the correct
+chessPiece  object at the start of chess game.
+
+Next, the program starts the game with the Sicilian opening and
+displays the chess board.  However, the pieces that were moved are
+moved to the wrong sides of the chess board.
+
+Finally, the gameboard  object is a local object to the function
+main , so its scope ends when function main  returns. board  is
+a chessBoard  object, so it is destructed when the program ends.
+The chessBoard  destructor frees all of the chessPiece  objects
+to which its data member board  points.
+
+Debugging The Program
+
+To run chess  under the control of the
+debugger, enter the cpr  command at the Shell prompt:
+
+   cpr chess
+
+Since the chess program is setting up the board correctly, but
+pieces are being moved to the wrong places, the error is probably
+in the chessBoard::movePiece  function.  For C++ programs,
+you can identify a member function by specifying its class and
+name separated by a double colon:
+
+   > break chessBoard::movePiece
+
+Now, run the program until it encounters the breakpoint:
+
+   > go
+
+CodeProbe stops at the first line of the
+chessBoard::movePiece  function.
+
+First, display the coordinates from which the next piece will be
+moved: old_r  and old_c :
+
+   > d old_r
+   1 (0x1)
+   > d old_c
+   4 (0x4)
+
+In the Sicilian opening, the first move is Pawn to King 4 (P-K4).
+Since white always moves first, the piece that is moved should
+be the white pawn.  You want to verify that the piece identified
+at coordinates is the white pawn.
+
+To display the contents of any class data member within a
+member function, treat the data member like a global variable.
+CodeProbe uses the this  pointer to display the data member of
+the correct object.  To find out what piece will be moved,
+enter the following display  command:
+
+   > d *board[1][4]
+
+CodeProbe prints the data members of the chessPiece  object
+pointed to by board[1][4]  :
+
+   struct chessPiece {
+      name = "pawn"
+      color = 'w' 119 (0x77)
+      code = 'p' 80 (0x50)
+      value = 1 (0x1)
+   }
+
+You now know that the correct piece will be moved, so
+execute the program until the chess piece has been moved from its
+old position to its new position.  The code that moves the chess
+piece is:
+
+   board[new_c][ new_r]  = board[ old_r] [ old_c] ;
+
+To execute chess  past this line, you enter:
+
+   > ps 4
+
+The coordinates of the pawn's new position should be
+board[ 3] [ 4]  .  To verify that the
+correct coordinates are passed into chessBoard::movePiece,
+display the values of new_r  and new_c :
+
+   > d new_r
+   3 (0x3)
+   > d new_c
+   4 (0x4)
+
+These coordinates are correct.
+To determine if the white pawn was moved to position
+board[ 3] [ 4]  , enter the display command:
+
+   > d *board[ 3] [ 4]
+   0x0
+
+This position on the board is NULL .  The white pawn was
+moved somewhere else. You need to find out where the white pawn
+was moved to.
+
+First, delete the current breakpoint, run the program to completion,
+and restart the chess  program:
+
+   > bc *
+   > go
+   Program exited with code 0.
+   > restart
+   Starting "chess"
+   chess:\t:chess..c\main 109
+
+Then, set a breakpoint in chessBoard::movePiece  that
+stops the program when color  is w  and
+code  is P .  Use the slash (\ )
+character to continue the command line:
+
+   > break chessBoard::movePiece \
+   >> when(board[ old_r] [ old_c] ->color == 'w' && \
+   >> board[ old_r] [ old_c] ->code == 'P')
+
+You can find out what position the white pawn is being moved to by
+displaying the values of new_r  and new_c  again:
+
+   > d new_r
+   3 (0x3)
+   > d new_c
+   4 (0x4)
+
+The coordinates to which the white pawn was supposed to have
+has been moved are correct, but the instruction that uses these
+coordinates uses them in reverse order.
+The white pawn should be moved to board[ 3] [ 4]  ,
+not board[ 4] [ 3]  , which indicates that the
+assignment statement shown previously is incorrect:
+
+   board[ new_c] [ new_r]  = board[ old_r] [ old_c] ;
+
+Before you can fix the error in the program, you need to run the
+program to completion, and then quit the debugger.
+
+   > go
+   Program exited with code 0.
+   > quit
+
+Edit the chess1.cxx  file, and change the assignment statement
+on line 86 in chessBoard::movePiece  to read:
+
+   board[ new_r] [ new_c]  = board[ old_r] [ old_c] ;
+
+Then, compile the example as described under "Running The Example."
+Run the program again.  Now the board prints correctly.
+

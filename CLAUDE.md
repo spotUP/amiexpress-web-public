@@ -285,20 +285,6 @@ npm run lint         # ESLint validation
 
 ## Git Workflow
 
-**Branch Strategy:**
-- Main branch: `main`
-- Create feature branches: `claude/feature-name-sessionid` or `feature/descriptive-name`
-- **NEVER** push directly to `main` - always create PRs
-- Delete branches after merging
-
-**PR Requirements:**
-- Run all relevant tests before creating PR
-- Backend: `cd web/backend && npx tsc --noEmit` must pass
-- Frontend: `cd web/frontend && npm run build:check` must pass
-- SDK: `cd sdk && npm run build` and test 2+ example doors must pass
-- Use descriptive PR titles with context
-- Reference issue numbers if applicable
-
 **Commit Messages:**
 - Use conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, etc.
 - Be descriptive: explain WHY, not just WHAT

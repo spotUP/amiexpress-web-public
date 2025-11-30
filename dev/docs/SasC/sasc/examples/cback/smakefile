@@ -1,0 +1,15 @@
+#
+# Makefile for cback.o examples
+# Copyright (c) 1992-1993 SAS Institute, Inc, Cary, NC, USA
+# All Rights Reserved
+#
+
+all: schelp back
+
+back: back.c
+   sc link STRUCTUREEQUIVALENCE LINK STARTUP=cback back.c
+
+
+
+schelp: schelp.c
+   sc link NOSTACKCHECK STRUCTUREEQUIVALENCE LINK STARTUP=cback  schelp.c

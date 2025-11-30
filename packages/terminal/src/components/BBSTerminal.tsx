@@ -765,17 +765,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
         return;
       }
-
-      // Track key state for doors
-      const keyCode = domEvent.code || domEvent.key;
-      keyState.current[keyCode] = true;
-
-      // Send to BBS backend
-      socket.emit('command', key);
     });
 
-    // Note: onData handler removed to prevent double character input
-    // onKey already handles all input and provides domEvent access for door key tracking
+    // Send all other input directly to the backend (doors/commands)
+    term.onData((data: string) => {
+      if (!socket.connected) {
+        console.error('❌ Socket not connected, cannot send data');
+        return;
+      }
+      if (
+        loginState.current === 'username' ||
+        loginState.current === 'password' ||
+        loginState.current === 'new-user-prompt' ||
+        loginState.current === 'checking-username' ||
+        loginState.current === 'registering'
+      ) {
+        return;
+      }
+      socket.emit('command', data);
+    });
 
     // Focus terminal on mount
     term.focus();
@@ -813,9 +821,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   return (
     <div
-      className={`h-full w-full flex items-center justify-center ${className}`}
+      className={`min-h-screen w-full flex items-center justify-center ${className}`}
       style={{
-        backgroundColor: '#000000'
+        backgroundColor: '#000000',
       }}
     >
       <div
@@ -825,7 +833,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         style={{
           overflow: 'hidden',
           position: 'relative',
-          outline: 'none'
+          outline: 'none',
+          width: '100%',
+          maxWidth: '960px',
         }}
       />
       <input

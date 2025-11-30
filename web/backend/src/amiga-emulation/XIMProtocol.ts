@@ -182,16 +182,39 @@ export class XIMProtocol {
    * Routes to appropriate specialized handler based on command type
    */
   handleMessage(msg: XIMMessage): void {
-    console.log(`[XIMProtocol] Handling command: ${this.messageParser.getCommandName(msg.command)}`);
+    const humanName = this.messageParser.getCommandName(msg.command);
+    console.log(
+      `[XIMProtocol] Handling command: ${humanName} (enum SV_NEWMSG=${XIMCommand.SV_NEWMSG}, RAWARROW=${XIMCommand.RAWARROW})`
+    );
 
-    // Normalize JH_REGISTER to carry the active node before logging/handling
-    if (msg.command === XIMCommand.JH_REGISTER) {
+    // Normalize nodeId to the active session node when the door leaves it unset or 0xFFFFFFFF.
+    if (
+      msg.nodeId === undefined ||
+      msg.nodeId === null ||
+      msg.nodeId === 0xffffffff
+    ) {
       const nodeId =
         (this.bbsSession?.nodeId as number) ||
         (this.bbsSession as any)?.nodeNumber ||
         1;
-      this.messageParser.writeData(msg.msgAddr, nodeId);
       this.messageParser.writeNodeId(msg.msgAddr, nodeId);
+      msg = { ...msg, nodeId };
+    }
+
+    // Normalize JH_REGISTER to carry the active node before logging/handling
+    if (msg.command === XIMCommand.JH_REGISTER) {
+      const incomingData =
+        typeof msg.data === 'number' && !Number.isNaN(msg.data)
+          ? msg.data
+          : undefined;
+      const nodeId =
+        (this.bbsSession?.nodeId as number) ||
+        (this.bbsSession as any)?.nodeNumber ||
+        1;
+      if (incomingData !== undefined) {
+        this.messageParser.writeData(msg.msgAddr, incomingData);
+      }
+      this.messageParser.writeNodeId(msg.msgAddr, msg.nodeId ?? nodeId);
       this.messageParser.writeLineNumber(msg.msgAddr, 0);
       const normalized = this.messageParser.parseMessage(msg.msgAddr);
       msg = { ...msg, data: normalized.data, nodeId: normalized.nodeId, lineNumber: normalized.lineNumber };
@@ -210,22 +233,19 @@ export class XIMProtocol {
       );
     }
 
-    const humanName = this.messageParser.getCommandName(msg.command);
     this.messageLogger?.(msg, humanName);
 
-    // Handle registration/shutdown ahead of other handlers to avoid PG_* collisions
-    if (msg.command === XIMCommand.JH_REGISTER) {
-      this.systemCommandsHandler.handleRegister(msg);
+    // Handle system commands first (register/shutdown and others)
+    if (this.isSystemCommand(msg.command)) {
+      this.handleSystemCommand(msg);
       return;
     }
+
+    // Registration gate
     if (!this.state.registered) {
       console.warn('[XIMProtocol] Ignoring command before JH_REGISTER handshake');
       this.messageParser.writeData(msg.msgAddr, 0);
       this.execLibrary.replyMsg(msg.msgAddr);
-      return;
-    }
-    if (msg.command === XIMCommand.JH_SHUTDOWN) {
-      this.systemCommandsHandler.handleShutdown(msg);
       return;
     }
 
@@ -254,12 +274,6 @@ export class XIMProtocol {
       return;
     }
 
-    // System Commands - handled by XIMSystemCommandsHandler
-    if (this.isSystemCommand(msg.command)) {
-      this.handleSystemCommand(msg);
-      return;
-    }
-
     // Unknown command
     console.log(`[XIMProtocol] Unhandled command: ${msg.command}`);
     this.sendReply(msg, 0);
@@ -269,7 +283,7 @@ export class XIMProtocol {
    * Check if command is an I/O command
    */
   private isIOCommand(command: number): boolean {
-    return [
+    const ioList = [
       XIMCommand.JH_LI,
       XIMCommand.JH_WRITE,
       XIMCommand.JH_SM,
@@ -290,7 +304,15 @@ export class XIMProtocol {
       XIMCommand.PG_SM,
       XIMCommand.PG_UD,
       XIMCommand.PG_US,
-    ].includes(command);
+    ];
+    if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
+      console.log(
+        `[XIMProtocol][IOCheckDebug] command=${command} inIO=${ioList.includes(
+          command
+        )}`
+      );
+    }
+    return ioList.includes(command);
   }
 
   /**
@@ -307,7 +329,11 @@ export class XIMProtocol {
         break;
 
       case XIMCommand.JH_SM:
+        this.ioHandler.handleSendMessage(msg);
+        break;
       case XIMCommand.JH_SMPTR:
+        // JH_SMPTR uses stringPtr instead of embedded string
+        msg.string = '';
         this.ioHandler.handleSendMessage(msg);
         break;
 
@@ -341,6 +367,10 @@ export class XIMProtocol {
 
       case XIMCommand.JH_FetchKey:
         this.ioHandler.handleFetchKey(msg);
+        break;
+
+      case XIMCommand.JH_CK:
+        this.ioHandler.handleCheckKey(msg);
         break;
 
       case XIMCommand.JH_CO:
@@ -378,18 +408,25 @@ export class XIMProtocol {
    * Check if command is a data query command
    */
   private isDataQueryCommand(command: number): boolean {
-    return (command >= 100 && command <= 146) ||
-           (command >= 527 && command <= 545) ||
-           (command === 606) ||
-           (command >= 700 && command <= 701) ||
-           (command >= 1000 && command <= 1002);
+    const inRange =
+      (command >= 100 && command <= 146) ||
+      (command >= 527 && command <= 545) ||
+      command === 606 ||
+      (command >= 700 && command <= 701) ||
+      (command >= 1000 && command <= 1002);
+    if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
+      console.log(
+        `[XIMProtocol][DataCheckDebug] command=${command} inDQ=${inRange}`
+      );
+    }
+    return inRange;
   }
 
   /**
    * Check if command is a BBS info command
    */
   private isBBSInfoCommand(command: number): boolean {
-    return [
+    const bbsList = [
       XIMCommand.JH_BBSNAME,
       XIMCommand.JH_SYSOP,
       XIMCommand.EXPRESS_VERSION,
@@ -419,7 +456,15 @@ export class XIMProtocol {
       XIMCommand.BB_CHATSET,
       XIMCommand.BB_DROPDTR,
       XIMCommand.BB_GETTASK,
-    ].includes(command);
+    ];
+    if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
+      console.log(
+        `[XIMProtocol][BBSCheckDebug] command=${command} inBBS=${bbsList.includes(
+          command
+        )}`
+      );
+    }
+    return bbsList.includes(command);
   }
 
   /**
@@ -460,6 +505,10 @@ export class XIMProtocol {
       case XIMCommand.BB_SCRLEFT:
       case XIMCommand.BB_SCRTOP:
         this.bbsInfoHandler.handleScreenDimensions(msg);
+        break;
+      case XIMCommand.SCREEN_ADDRESS:
+      case XIMCommand.RAWSCREEN_ADDRESS:
+        this.bbsInfoHandler.handleScreenAddress(msg);
         break;
 
       case XIMCommand.BB_PURGELINE:
@@ -516,7 +565,7 @@ export class XIMProtocol {
    * Check if command is a system command
    */
   private isSystemCommand(command: number): boolean {
-    return [
+    const systemList = [
       XIMCommand.JH_REGISTER,
       XIMCommand.JH_SHUTDOWN,
       XIMCommand.JH_SIGBIT,
@@ -549,7 +598,18 @@ export class XIMProtocol {
       XIMCommand.SV_NEWMSG,
       XIMCommand.PRV_COMMAND,
       XIMCommand.PRV_GROUP,
-    ].includes(command);
+    ];
+
+    // Debug: log once to confirm runtime list
+    if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
+      console.log(
+        `[XIMProtocol][SystemListDebug] command=${command} RAWARROW=${XIMCommand.RAWARROW} SV_NEWMSG=${XIMCommand.SV_NEWMSG} inList=${systemList.includes(
+          command
+        )} list=${systemList.join(',')}`
+      );
+    }
+
+    return systemList.includes(command);
   }
 
   /**
@@ -587,6 +647,10 @@ export class XIMProtocol {
 
       case XIMCommand.JH_FLAGFILE:
         this.systemCommandsHandler.handleFlagFile(msg);
+        break;
+
+      case XIMCommand.JH_SHOWFLAGS:
+        this.systemCommandsHandler.handleShowFlags(msg);
         break;
 
       case XIMCommand.ZMODEMSEND:

@@ -6,21 +6,34 @@ import { findCaseInsensitive } from '../utils/fs-amiga.util';
 
 const BATCH_FILES = ['batch0', 'batch1', 'batch2', 'batch3', 'batch4', 'batch5', 'batch6'];
 
-function getBatchDir(): string {
-  return config.getConfig().dataDir;
+function batchRoots(): string[] {
+  const roots = [
+    config.getConfig().dataDir,
+    process.env.BBS_ROOT || path.resolve(process.cwd(), '..'),
+  ].filter(Boolean);
+  return Array.from(new Set(roots));
+}
+
+function findBatchPath(name: string): string | null {
+  for (const root of batchRoots()) {
+    const p = path.join(root, name);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
 }
 
 function listBatches(): string[] {
-  return BATCH_FILES.filter((name) => fs.existsSync(path.join(getBatchDir(), name)));
+  ensureBatchFiles();
+  return BATCH_FILES.filter((name) => !!findBatchPath(name));
 }
 
 function readBatch(name: string): string {
-  const file = path.join(getBatchDir(), name);
-  return fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : '';
+  const file = findBatchPath(name);
+  return file ? fs.readFileSync(file, 'utf-8') : '';
 }
 
 function writeBatch(name: string, content: string) {
-  const file = path.join(getBatchDir(), name);
+  const file = findBatchPath(name) || path.join(batchRoots()[0], name);
   fs.writeFileSync(file, content, 'utf-8');
 }
 
@@ -67,8 +80,43 @@ function resolveExecutable(base: string): string | null {
   return null;
 }
 
+function ensureBatchFiles() {
+  const roots = batchRoots();
+  if (!roots.length) {
+    return;
+  }
+
+  const primary = roots[0];
+  fs.mkdirSync(primary, { recursive: true });
+
+  for (const name of BATCH_FILES) {
+    const target = path.join(primary, name);
+    const existing = findBatchPath(name);
+
+    if (existing) {
+      if (existing !== target && !fs.existsSync(target)) {
+        try {
+          fs.copyFileSync(existing, target);
+        } catch (err) {
+          console.error(`[BatchEditor] Failed to copy ${existing} to ${target}:`, err);
+        }
+      }
+      continue;
+    }
+
+    if (!fs.existsSync(target)) {
+      try {
+        fs.writeFileSync(target, '', 'utf-8');
+      } catch (err) {
+        console.error(`[BatchEditor] Failed to create ${target}:`, err);
+      }
+    }
+  }
+}
+
 export function createBatchRouter(): ReturnType<typeof express.Router> {
   const router = express.Router();
+  ensureBatchFiles();
 
   router.get('/', (_req: Request, res: Response) => {
     res.json({ batches: listBatches() });

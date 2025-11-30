@@ -1,0 +1,8 @@
+##base _FOOBase
+##bias 30
+##public
+foofunc__3FOOFi(this,intparm)(A0,D0)
+foofunc__3FOOFPc(this,ptrparm)(A0,A1)
+__ctor__3FOOFi(this,xxx,init)(A0,D0,D1)
+__dtor__3FOOFv(this,xxx)(A0,D0)
+##end

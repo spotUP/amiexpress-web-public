@@ -35,7 +35,9 @@ export enum SegmentType {
 export interface HunkSegment {
   type: SegmentType;
   data: Uint8Array;
-  address: number;
+  address: number; // start of segment data/code (BPTR<<2) after header
+  headerAddress: number; // address of segment header (size/next)
+  bptr: number; // BPTR to header (matches LoadSeg return)
   size: number;
 }
 
@@ -88,7 +90,9 @@ export class HunkLoader {
           segments.push({
             type: hunkType === HunkType.HUNK_CODE ? SegmentType.CODE : SegmentType.DATA,
             data: segmentData,
-            address: segmentAddresses[activeSegmentIndex],
+            address: segmentAddresses[activeSegmentIndex].dataAddress,
+            headerAddress: segmentAddresses[activeSegmentIndex].headerAddress,
+            bptr: segmentAddresses[activeSegmentIndex].bptr,
             size: declaredSize,
           });
           break;
@@ -103,7 +107,9 @@ export class HunkLoader {
           segments.push({
             type: SegmentType.BSS,
             data: new Uint8Array(declaredSize),
-            address: segmentAddresses[activeSegmentIndex],
+            address: segmentAddresses[activeSegmentIndex].dataAddress,
+            headerAddress: segmentAddresses[activeSegmentIndex].headerAddress,
+            bptr: segmentAddresses[activeSegmentIndex].bptr,
             size: declaredSize,
           });
 
@@ -124,20 +130,33 @@ export class HunkLoader {
           relocations.set(activeSegmentIndex, existingRelocs);
           break;
         }
+        case HunkType.HUNK_RELOC32SHORT: {
+          if (activeSegmentIndex < 0) {
+            throw new Error("HUNK_RELOC32SHORT block without an active segment");
+          }
+          const existingRelocs = relocations.get(activeSegmentIndex) ?? [];
+          this.readRelocationShortBlock(existingRelocs);
+          relocations.set(activeSegmentIndex, existingRelocs);
+          break;
+        }
         case HunkType.HUNK_SYMBOL:
         case HunkType.HUNK_DEBUG:
           this.skipToEnd();
           activeSegmentIndex = -1;
           break;
         default:
-          console.warn(`[HunkLoader] Skipping unsupported hunk type 0x${hunkType.toString(16)}`);
+          console.warn(
+            `[HunkLoader] Skipping unsupported hunk type 0x${hunkType.toString(16)}`
+          );
+          this.skipToEnd();
+          activeSegmentIndex = -1;
           break;
       }
     }
 
     const entryPoint =
       segments.find((segment) => segment.type === SegmentType.CODE)?.address ||
-      segmentAddresses[0] ||
+      segmentAddresses[0]?.dataAddress ||
       0x1000;
 
     return {
@@ -148,9 +167,20 @@ export class HunkLoader {
   }
 
   load(emulator: MoiraEmulator, hunkFile: HunkFile): void {
-    for (const segment of hunkFile.segments) {
-      for (let i = 0; i < segment.data.length; i++) {
-        emulator.writeMemory(segment.address + i, segment.data[i]);
+    // Write segments into memory with DOS LoadSeg semantics:
+    // header: [sizeInLongsOfData][nextBPTR], payload immediately after
+    for (let i = 0; i < hunkFile.segments.length; i++) {
+      const segment = hunkFile.segments[i];
+      const next = hunkFile.segments[i + 1];
+
+      const sizeLongs = segment.size >>> 2; // size of payload in longwords
+      const nextBptr = next ? next.bptr : 0; // BPTR to next header
+
+      emulator.writeMemory32(segment.headerAddress, sizeLongs);
+      emulator.writeMemory32(segment.headerAddress + 4, nextBptr);
+
+      for (let j = 0; j < segment.data.length; j++) {
+        emulator.writeMemory(segment.address + j, segment.data[j]);
       }
     }
 
@@ -190,6 +220,28 @@ export class HunkLoader {
         emulator.writeMemory(address + 1, (relocatedValue >> 16) & 0xff);
         emulator.writeMemory(address + 2, (relocatedValue >> 8) & 0xff);
         emulator.writeMemory(address + 3, relocatedValue & 0xff);
+      }
+    }
+  }
+
+  private readRelocationShortBlock(output: Relocation[]): void {
+    while (true) {
+      const numOffsets = this.readU16();
+      if (numOffsets === 0) {
+        // Align to next long boundary if we stopped on an odd short
+        if (this.position & 1) {
+          this.position++;
+        }
+        break;
+      }
+      const targetSegment = this.readU16() & 0x3fffffff;
+      for (let i = 0; i < numOffsets; i++) {
+        const offset = this.readU16();
+        output.push({ offset, targetSegment });
+      }
+      // Ensure even alignment
+      if (this.position & 1) {
+        this.position++;
       }
     }
   }
@@ -241,14 +293,20 @@ export class HunkLoader {
     };
   }
 
-  private allocateSegmentAddresses(segmentSizes: number[]): number[] {
-    const addresses: number[] = [];
+  private allocateSegmentAddresses(
+    segmentSizes: number[]
+  ): { headerAddress: number; dataAddress: number; bptr: number }[] {
+    const addresses: { headerAddress: number; dataAddress: number; bptr: number }[] = [];
     let currentAddress = 0x1000;
 
     for (const sizeWords of segmentSizes) {
-      addresses.push(currentAddress);
       const sizeBytes = sizeWords * 4;
-      currentAddress += sizeBytes;
+      const headerAddress = currentAddress;
+      const dataAddress = headerAddress + 8; // size + next
+      const bptr = headerAddress >> 2;
+      addresses.push({ headerAddress, dataAddress, bptr });
+
+      currentAddress += sizeBytes + 8;
       currentAddress = this.align(currentAddress, 0x100);
     }
 
@@ -288,6 +346,15 @@ export class HunkLoader {
     const slice = this.buffer.slice(this.position, this.position + length);
     this.position += length;
     return slice;
+  }
+
+  private readU16(): number {
+    if (this.position + 2 > this.buffer.length) {
+      throw new Error(`Unexpected end of buffer at position ${this.position}`);
+    }
+    const value = this.buffer.readUInt16BE(this.position);
+    this.position += 2;
+    return value;
   }
 
   private skipToEnd(): void {

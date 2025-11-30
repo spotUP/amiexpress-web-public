@@ -1,0 +1,11 @@
+all: test libs:mylib.library
+
+test: test.c
+   sc link test.c
+
+mylib.o: mylib.c
+   sc libcode nostackcheck profile mylib.c
+
+libs:mylib.library: mylib.o
+   sc link mylib.o startup=libinitr noicons to mylib.library 
+   slink from mylib.library to libs:mylib.library nodebug noicons

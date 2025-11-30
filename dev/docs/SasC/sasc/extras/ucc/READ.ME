@@ -1,0 +1,74 @@
+Copyright (C) 1992-1993 Doug Walker, Cary, NC.  All Rights Reserved.
+
+This program and source code is freely redistributable 
+for noncommercial purposes.  A fee may be charged to 
+recover distribution costs.  You may not distribute 
+changes to this program without the permission of the 
+author.
+
+This software is provided as-is.  Use it at your own risk.
+=================================================
+
+UCC V1.0 - a Unix-like front-end for SAS/C® Version 6
+
+UCC forks the SC command with the options LINK and NOVERSION.
+It parses its command line and, based on the UNIX options below,
+modifies the behavior of SC:
+
+   -c        ==> Adds NOLINK (overrides the LINK specified earlier)
+
+   -O        ==> Adds OPTIMIZE
+
+   -g        ==> Adds DEBUG=SF (Full symbolic debugging information)
+
+   -I<dir>
+   -I <dir>  ==> Adds IDIR=<dir>
+
+   -D<def>
+   -D <def>  ==> Adds DEF=<def>
+
+   -P
+   -E        ==> Adds PPONLY
+
+   -lm       ==> Adds MATH=S
+
+   -o<name>
+   -o <name> ==> Adds PNAME=<name>
+
+   -v        ==> Adds VERBOSE VERSION; also prints the SC command line used
+
+   -w        ==> Adds NOWARN
+
+Anything that doesn't start with a dash and is not a parameter to an
+option that starts with a dash is passed through to SC "as is".  This
+means you can specify any SC options you like on the UCC command line.
+
+SC, when invoked, will read the SCOPTIONS file just like normal, so you
+can use SCOPTS to set up your default options.
+
+UCC does *not* compile by default to a file called "a.out" like UNIX
+compilers do.  I think this is stupid, so I didn't implement it.  If 
+you really want this, specify -oa.out or put PNAME=a.out in your 
+SCOPTIONS file.
+
+Examples:
+
+   Compile and link "hello.c" with debugging information:
+   
+      ucc -g hello.c
+
+   Compile but do not link the same file:
+   
+      ucc -c -g hello.c
+
+   Compile and link "hello.c" and produce a linker cross-reference map:
+
+      ucc -g hello.c map mapxref
+
+   Do the same as the above command, but use a Global Symbol Table:
+
+      ucc -g hello.c map mapxref gst hello.gst
+
+
+--Doug Walker
+  02OCT92

@@ -9,6 +9,8 @@ export interface DoorConfig {
   bbsSession?: any; // BBS session data (user, system, node info)
   doorId?: string; // Optional door identifier (info name/shortcut)
   args?: string[]; // Optional CLI arguments (without program name)
+  cwd?: string; // Working directory for the door (defaults to door directory)
+  assigns?: Record<string, string>; // Amiga assigns (BBS:, Doors:, NodeX:, etc.)
   stack?: number; // Optional stack size (bytes) from .info (STACK tooltype)
   priority?: string; // Optional priority setting
   resident?: boolean;

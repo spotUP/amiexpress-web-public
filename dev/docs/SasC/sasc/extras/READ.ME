@@ -1,0 +1,52 @@
+This directory contains programs that may be of use to you.  They may
+also serve as useful examples.  The following directories are provided:
+
+   abslink  - Contains source code for an "absolute linker" program.  An
+              absolute linker binds an AmigaDOS executable to a fixed
+              memory address.  This is useful if you are generating ROM
+              images or images for use with an embedded system.
+
+   CED      - Contains macros for use with the CygnusEd editor.
+
+   dirwalker- Contains source code for a useful function that traverses
+              a directory tree for you.  You supply callback functions
+              and dirwalker() will call you for each file and directory
+              in the specified tree.
+
+   dismem   - Contains a disassembler that can disassemble flat files
+              containing 68000 code.  Useful for disassembling the output
+              of abslink, above.
+
+   Enforcer - Contains the distribution archive for the Enforcer utility,
+              which tracks down accesses to illegal addresses on Amigas
+              with an MMU (68020 or higher only).
+
+   MKMK     - Contains the source code to the MKMK makefile generator
+              utility.
+
+   Memlib   - Contains source code to a link library that can help you
+              track down memory-trashing problems in your code.
+
+   MungWall - Contains the distribution archive for the MungWall utility,
+              which also helps you track down memory-trashing problems.
+
+   SMFind   - Contains the source code to the SMFind utility, which allows
+              you to search for strings in a set of files and get the
+              results in the message browser, SCMSG.
+
+   sprof    - Contains the source code to the SPROF utility, which profiles
+              programs that have been compiled with the PROFILE compiler
+              option and linked with one of the standard startup modules.
+
+   TTX      - Contains macros for use with the TurboText editor.
+
+   ucc      - Contains the source code for a UNIX-like front-end for the
+              compiler.  Most of the common UNIX command-line switches are
+              accepted, plus any SC command-line option.
+
+In addition, the following file is included:
+
+   lmktosmake - An AmigaDOS shell script that will attempt to convert
+                Version 5 lmkfiles into Version 6 smakefiles.  This is
+                not guaranteed to work, but it will give you a starting
+                point.

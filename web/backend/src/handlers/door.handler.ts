@@ -38,7 +38,6 @@ function disableShortcuts(session: BBSSession) {
 function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode: number; command?: string }) {
   switch (acp.code) {
     case -1: // ACP_CONTROLCOMMAND
-      // No-op placeholder
       break;
     case 1: // ACP_SysopLogin
       session.quietFlag = false;
@@ -87,7 +86,6 @@ function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode
       session.quietFlag = false;
       break;
     case 19: // ACP_CUSTOMCOMMAND
-      // No-op placeholder
       break;
     default:
       // For other ACP codes, we simply record the request on the session
@@ -1074,19 +1072,76 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     // Create AmigaDoorSession to run the native Amiga executable
     const amigaSession = new AmigaDoorSession(socket, doorConfig);
 
+    // Move to a fresh line before the door renders any output (prevents menu prompt overlap)
+    socket.emit('ansi-output', '\r\n');
+
+    // Wire user input into the Amiga door while it runs
+    session.inDoorManager = true;
+    session.subState = LoggedOnSubState.DOOR_RUNNING;
+    session.doorInputHandler = (data: string) => {
+      try {
+        const shared: any = (amigaSession as any).sharedState || {};
+        logDoorDebug(
+          `KEY door=${door.command || door.id || 'UNK'} data=${JSON.stringify(
+            data
+          )}`
+        );
+        if (shared.ximProtocol) {
+          shared.ximProtocol.queueInput(data);
+        }
+        if (
+          shared.dosLibrary &&
+          !(shared.ximProtocol?.isWaitingForLineInput?.() ?? false)
+        ) {
+          shared.dosLibrary.queueInput(data);
+        }
+      } catch (err) {
+        console.error('[executeAmigaDoor] Error routing door input:', err);
+      }
+    };
+    // Persist session state so socket-handlers sees the door flags/handler
+    try {
+      const { setSession, userSessions } = require('../server/session-manager');
+      setSession(socket.id, session);
+      if ((session as any).user?.id) {
+        userSessions.set((session as any).user.id, session);
+      }
+    } catch (err) {
+      console.error('[executeAmigaDoor] Unable to persist session for door input:', err);
+    }
+
     // Start the door execution
     await amigaSession.start();
 
     console.log(`[executeAmigaDoor] Door execution completed`);
 
-    // Emit completion message and return to menu
-    socket.emit('ansi-output', '\r\n\x1b[32mPress ENTER to continue...\x1b[0m');
+    session.inDoorManager = false;
+    delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
+    try {
+      const { setSession, userSessions } = require('../server/session-manager');
+      setSession(socket.id, session);
+      if ((session as any).user?.id) {
+        userSessions.set((session as any).user.id, session);
+      }
+    } catch {
+      /* ignore */
+    }
 
   } catch (error) {
     console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
     socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress ENTER to continue...\x1b[0m');
+    session.inDoorManager = false;
+    delete session.doorInputHandler;
+    try {
+      const { setSession, userSessions } = require('../server/session-manager');
+      setSession(socket.id, session);
+      if ((session as any).user?.id) {
+        userSessions.set((session as any).user.id, session);
+      }
+    } catch {
+      /* ignore */
+    }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 }

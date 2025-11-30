@@ -125,6 +125,8 @@ export class XIMIOHandler {
             console.log(
               `[XIMIOHandler] Backspace, buffer now: "${this.lineInputBuffer}"`
             );
+            // Echo backspace to terminal
+            this.socket.emit('ansi-output', '\b \b');
           }
           continue;
         }
@@ -134,6 +136,8 @@ export class XIMIOHandler {
           console.log(
             `[XIMIOHandler] Character added, buffer now: "${this.lineInputBuffer}"`
           );
+          // Echo typed character
+          this.socket.emit('ansi-output', char);
         }
         continue;
       }
@@ -195,10 +199,29 @@ export class XIMIOHandler {
       `[XIMIOHandler] Completing line input with: "${result}"`
     );
 
-    this.messageParser.writeMessageString(msg.msgAddr, result);
+    // Ensure stringPtr points to embedded buffer if missing
+    if (!msg.stringPtr) {
+      const strPtr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+      this.messageParser.writeStringPointer(msg.msgAddr, strPtr);
+      msg.stringPtr = strPtr;
+    }
 
-    // Reply with success (1) unless carrier dropped
-    this.reply(msg, this.state.carrierDropped ? -1 : 1);
+    // Write into embedded buffer
+    this.messageParser.writeMessageString(msg.msgAddr, result);
+    // If a string pointer was provided, mirror there too
+    if (msg.stringPtr) {
+      this.messageParser.writeString(
+        msg.stringPtr,
+        result,
+        DoorConstants.MESSAGE_STRING_CAPACITY
+      );
+    }
+
+    // Reply with length (or -1 on carrier drop) and mirror into Command like the earlier working path
+    const lenVal = this.state.carrierDropped ? -1 : result.length;
+    this.messageParser.writeCommand(msg.msgAddr, lenVal);
+    this.messageParser.writeLineNumber(msg.msgAddr, 0);
+    this.reply(msg, lenVal);
 
     // Reset state
     this.waitingForLineInput = false;
@@ -362,6 +385,7 @@ export class XIMIOHandler {
    */
   handleExtendedHotkey(msg: XIMMessage): void {
     console.log('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal');
+    this.state.lineCount = 0;
 
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
@@ -384,18 +408,49 @@ export class XIMIOHandler {
   handleFetchKey(msg: XIMMessage): void {
     console.log('[XIMIOHandler] JH_FetchKey - Non-blocking key check');
 
+    if (this.state.carrierDropped) {
+      this.messageParser.writeCommand(msg.msgAddr, 0);
+      this.reply(msg, -1);
+      return;
+    }
+
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
       this.messageParser.writeCommand(msg.msgAddr, char.charCodeAt(0));
-      this.messageParser.writeMessageString(msg.msgAddr, char);
       console.log(`  [READ] Key available: '${char}'`);
-    } else {
-      this.messageParser.writeCommand(msg.msgAddr, 0);
-      console.log('  [NO INPUT] No key available');
-      this.messageParser.writeMessageString(msg.msgAddr, '');
+      this.reply(msg, 1, char);
+      return;
     }
 
-    this.reply(msg, 1);
+    this.messageParser.writeCommand(msg.msgAddr, 0);
+    console.log('  [NO INPUT] No key available');
+    this.reply(msg, 1, '');
+  }
+
+  /**
+   * Handle JH_CK (QuickKey check) - non-blocking, include port in Command
+   * From express.e JH_CK case
+   */
+  handleCheckKey(msg: XIMMessage): void {
+    console.log('[XIMIOHandler] JH_CK - QuicKey check');
+
+    if (this.state.carrierDropped) {
+      this.messageParser.writeCommand(msg.msgAddr, 0);
+      this.reply(msg, -1);
+      return;
+    }
+
+    if (this.inputQueue.length > 0) {
+      const char = this.inputQueue.shift()!;
+      this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
+      console.log(`  [READ] QuicKey: '${char}'`);
+      this.reply(msg, 1, char);
+      return;
+    }
+
+    this.messageParser.writeCommand(msg.msgAddr, 0);
+    console.log('  [NO INPUT] No key available');
+    this.reply(msg, 1, '');
   }
 
   /**
@@ -405,17 +460,23 @@ export class XIMIOHandler {
   handleQuickKey(msg: XIMMessage): void {
     console.log('[XIMIOHandler] QUICK_KEY - Quick key input');
 
+    if (this.state.carrierDropped) {
+      this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
+      this.reply(msg, -1);
+      return;
+    }
+
     const char = this.inputQueue.shift();
     const charCode = typeof char === 'string' ? char.charCodeAt(0) : -1;
     this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
 
     if (char) {
       console.log(`  [READ] Quick key: '${char}' (code ${charCode})`);
+      this.reply(msg, charCode);
     } else {
       console.log('  [TIMEOUT] No input available');
+      this.reply(msg, -1);
     }
-
-    this.reply(msg, charCode);
   }
 
   /**

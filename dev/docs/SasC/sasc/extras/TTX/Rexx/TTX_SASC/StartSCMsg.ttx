@@ -1,0 +1,34 @@
+/*
+**  $VER: StartSCMsg.ttx 2.1 (17.8.93)
+**      By Kenneth Yarnall.  This code may be freely distributed
+**
+**  Starts SCMsg, placing it on the public screen named by the single
+** argument.  If SCMsg is already running, moves it to the public screen
+** that is passed in.
+*/
+
+StartSCMsg:
+Options RESULTS
+
+Parse ARG pubscrname
+
+/* If there wasn't a screename passed in, get one from ttx. */
+if pubscrname = "" then do
+	GetScreenInfo
+	Parse VAR RESULT . '"' pubscrname '"'
+end
+
+if ~show('P', 'SC_SCMSG') then do
+    Address COMMAND
+    'run sc:c/scmsg SCREEN ' || pubscrname  /* run scmsg */
+    'WaitForPort' 'SC_SCMSG'    /* WaitForPort needs to be in the path */
+    Address
+    if RC ~= 0 then do          /* couldn't find scmsg */
+        SetStatusBar "Couldn't find SCMsg -- aborting"
+        Return 10
+    end
+end
+else
+    Address SC_SCMSG 'opts screen ' || pubscrname
+
+Return

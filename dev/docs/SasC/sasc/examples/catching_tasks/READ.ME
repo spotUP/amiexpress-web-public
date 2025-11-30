@@ -1,0 +1,132 @@
+Example of debugging tasks
+Copyright (c) 1993 SAS Institute, Inc, Cary, NC USA
+All Rights Reserved
+
+This example demonstrates the CPR debugger's ability to debug a task
+that is already running, possibly in an infinite loop.
+
+There are two series of steps listed below. The first is for debugging
+a process that has been started from a Shell, and the second is for
+debugging a task started from the Workbench.
+
+Before going through the examples, first double click on 
+the Build icon to build the two small example programs 
+necessary for this demo.
+
+==================================================
+Catching a process that was started from the Shell
+==================================================
+
+
+1) Start a Shell, change directories to sc:examples/catching_tasks,
+   and run the program "loop". The program loop is a small program 
+   that just prints out "looping..." over and over. It does set
+   its priority to -1 though, so that it won't monopolize the CPU.
+   
+      cd sc:examples/catching_tasks
+      loop
+      
+2) Start the debugger on the "dummy" program, by clicking once on
+   the debug icon, and holding down shift and double-clicking on
+   the "dummy" icon.  (You can also run the debugger from the 
+   Shell by typing "cpr dummy".)
+   
+3) Tell CPR to list all the tasks in the system.
+
+      tasks all
+      
+4) Find the task with the priority of -1. If you are running the 
+   standard Shell under 2.0, the name of the process will be 
+   "Shell Process". If the name is unique, you can use the name
+   to identify the process. If not, use the address in the first column
+   to identify the process.
+   
+   To catch the process by name, type
+   
+      catch "Shell Process"
+
+   Note that "Shell Process" must be in quotes. To catch the process
+   by address, type
+   
+      catch 0xnnnnnnn
+      
+   where nnnnnnn is the address of the process.
+
+5) Now list the tasks under CPR's control.
+
+     tasks
+        
+6) Since we're not interested in debugging the "dummy" process, we
+   can let it go. Use the address in the first column to identify
+   the task.
+   
+     detach 0xnnnnnnn
+     
+   where nnnnnnn is the address of the process.
+ 
+7) CPR should now display assembly lines for the loop program.
+   Most likely, CPR stopped the program in a system call. Load the
+   debugging information for the loop program. Use the form of SYMLOAD
+   that uses the seglist from the CLI structure.
+   
+      symload "loop"
+      
+8) You can now set a breakpoint in the loop program. 
+
+      break loop:main 18
+      
+9) Run the program.
+  
+      go
+      
+10) CPR should stop the program on line 18 and display the source.
+    At this point you can set 'i' to 1 and step out of the loop.
+    
+      set i = 1
+      proceed
+      proceed
+      proceed
+      
+11) Quit Cpr.
+      
+      quit
+      
+NOTE. When you type quit in CPR, all tasks that have been caught are
+      "let go", and they run as normal until completion. The main
+      task (dummy in this case) will be forced to call exit (unless
+      you specify "quit -abort" or started cpr with -s), and are then
+      terminated.
+      
+      If instead of doing a quit on step 11, you did a "GO" to let the
+      program "loop" run to completion, you will notice that CPR does
+      not return to user control. That is because the "Shell Process"
+      did not terminate, only the loop command did. The "Shell Process"
+      process is now running the Shell, and CPR is actually debugging the
+      Shell. At this point you can hit CTRL-C in CPR and type quit. The
+      Shell will now run as normal.
+       
+     
+
+==================================================
+Catching a process that was started from Workbench
+==================================================
+   
+The only difference between catching a process started from
+the CLI and one started from Workbench, is finding the name
+of the process. The name will generally be the name of the
+executable.
+
+1) Double click on the loop icon. 
+
+2) Click on Debug, and shift double-click on Dummy.
+
+3) Catch the loop program.
+   
+     catch "loop"
+     
+       
+From here, all is the same as the CLI method starting at
+step 5, until you get to step 11, quitting CPR. Since the
+"loop" program was not run from a shell, its process will die
+whel the loop program finishes. Therefore, you can do a "GO", 
+and CPR will report back that the program has finished.

@@ -258,6 +258,7 @@ export class XIMMessageParser {
       [XIMCommand.JH_SO]: 'JH_SO (Serial Output)',
       [XIMCommand.JH_MCI]: 'JH_MCI',
       [XIMCommand.GETKEY]: 'GETKEY',
+      [XIMCommand.RAWARROW]: 'RAWARROW',
 
       // Data query commands (DT_*)
       [XIMCommand.DT_NAME]: 'DT_NAME',
@@ -331,6 +332,7 @@ export class XIMMessageParser {
       [XIMCommand.EXT_SAVE_ACCOUNT]: 'EXT_SAVE_ACCOUNT',
       [XIMCommand.NETUPLOAD]: 'NETUPLOAD',
       [XIMCommand.NETDOWNLOAD]: 'NETDOWNLOAD',
+      [XIMCommand.SV_NEWMSG]: 'SV_NEWMSG',
     };
 
     return names[command] || `Unknown (${command})`;

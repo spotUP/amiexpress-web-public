@@ -646,13 +646,15 @@ export class BullsDoorHandler {
           )}`
         );
       }
-      // Ensure handshake fields stay in "host ready" state
-      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xdc, 0xff);
-      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xe0, 0x1);
-      this.emulator.writeMemory32(this.bullsInfoBufferAddr + 0xe4, 0xff);
 
       const handshakeValue = this.emulator.readMemory32(
         this.bullsInfoBufferAddr + 0xdc
+      );
+      const commandValue = this.emulator.readMemory32(
+        this.bullsInfoBufferAddr + 0xe0
+      );
+      const nodeValue = this.emulator.readMemory32(
+        this.bullsInfoBufferAddr + 0xe4
       );
       if (handshakeValue !== this.handshakeValueLog) {
         this.handshakeValueLog = handshakeValue;
@@ -662,6 +664,8 @@ export class BullsDoorHandler {
         const bbsPort = this.emulator.readMemory32(a4 + 0x44c);
         console.log(
           `[BullsDoorHandler] handshake 0xdc=0x${handshakeValue.toString(
+            16
+          )} e0=0x${commandValue.toString(16)} e4=0x${nodeValue.toString(
             16
           )} ctrl=0x${controlPtr.toString(16)} info=0x${infoPtr.toString(
             16

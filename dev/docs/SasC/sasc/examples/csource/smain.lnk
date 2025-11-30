@@ -1,0 +1,4 @@
+FROM LIB:c.o "smain.o"+"sort.o"+"swap.o"
+TO "smain"
+LIB LIB:sc.lib LIB:amiga.lib
+

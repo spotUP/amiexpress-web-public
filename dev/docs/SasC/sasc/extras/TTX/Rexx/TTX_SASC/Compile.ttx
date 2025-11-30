@@ -1,0 +1,37 @@
+/*
+**  $VER: Compile.ttx 2.1 (17.8.93)
+**      By Kenneth Yarnall.  This code may be freely distributed
+**
+**  Compile.ttx makes sure that there is a current file, and then
+** compiles it via sc using an "on-the-fly" shell script.  It also
+** starts SCmsg.
+**
+*/
+
+Options RESULTS
+
+/* Get the current screen name from TTX, to use when opening SCMsg */
+
+GetScreenInfo
+Parse VAR RESULT . '"' pubscrname '"'
+
+fullname = 'Rexx:TTX_SASC/SafeGetFileName'()
+
+path = 'Rexx:TTX_SASC/GetPathPart'(fullname)
+name = 'Rexx:TTX_SASC/GetFilePart'(fullname)
+
+Call 'Rexx:TTX_SASC/StartSCMsg.ttx' pubscrname
+
+/*
+**  Build an "On the fly script" and execute it to compile.
+*/
+
+conspec = 'con:20/20/600/200/SC/SCREEN' || pubscrname
+
+Address 'COMMAND'
+'run cd ' || path || ' +' || '0A'X,
+    || 'sc >' || conspec || ' ' || name || ' +' || '0A'X,
+    || 'Wait 5'
+
+exit 0
+

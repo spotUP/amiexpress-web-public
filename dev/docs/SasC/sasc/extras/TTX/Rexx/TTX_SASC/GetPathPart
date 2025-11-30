@@ -1,0 +1,16 @@
+/*
+**   GetPathPart: Extracts the path name from a full file specification.
+** So long as that spec is valid, this should not fail.
+*/
+
+GetPathPart:
+
+Parse ARG path
+
+dirend = LastPos('/', path)
+if dirend = 0 then
+    dirend = Pos(':',path)
+if dirend ~= 0 then
+    path = Left(path,dirend)
+
+Return path

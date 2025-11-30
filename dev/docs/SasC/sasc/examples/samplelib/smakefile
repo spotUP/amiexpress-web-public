@@ -1,0 +1,50 @@
+# This smakefile will build 4 things.
+#  1) Small library that shares global data between all 
+#     tasks.                                  (test_one.library)
+#  2) Test executable to open this library.   (try_one)
+#  3) Small library that does not share global data 
+#     between tasks.                          (test_multi.library)
+#  4) Test executable to open this library.   (try_multi)
+
+all: try_one try_multi libs:test_one.library libs:test_multi.library
+
+
+try_one: try_one.c
+      sc link debug=line try_one.c
+
+
+
+libs:test_one.library: test.o 
+      slink with <<
+LIBPREFIX _LIB 
+LIBFD test.fd 
+to test_one.library 
+FROM lib:libent.o lib:libinit.o test.o 
+lib lib:sc.lib 
+noicons
+SD 
+libversion 1 librevision 0
+<
+      slink from test_one.library to libs:test_one.library ND noicons
+
+
+try_multi: try_multi.c
+      sc link debug=line try_multi.c
+
+
+libs:test_multi.library: test.o 
+      slink with <<
+LIBPREFIX _LIB 
+LIBFD test.fd 
+to test_multi.library 
+FROM lib:libent.o lib:libinitr.o test.o 
+lib lib:sc.lib 
+noicons
+SD 
+libversion 1 librevision 0
+<
+      slink from test_multi.library to libs:test_multi.library ND noicons
+      
+test.o: test.c      
+      sc libcode nostackcheck debug line test.c
+

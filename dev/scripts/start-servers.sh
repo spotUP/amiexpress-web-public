@@ -62,6 +62,12 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOGS_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOGS_DIR"
 
+# Clean backend build artifacts that can cause stale runtime
+printf "%b\n" "${CYAN}→ Cleaning backend build artifacts...${RESET}"
+rm -rf "$REPO_ROOT/web/backend/dist"
+rm -f "$REPO_ROOT/web/backend/src/amiga-emulation/xim/"*.js
+rm -f "$REPO_ROOT/web/backend/src/api/"*.js
+
 # Use fixed log filenames (will be overwritten each time)
 BACKEND_LOG="$LOGS_DIR/backend.log"
 PREVIEW_LOG="$LOGS_DIR/preview.log"

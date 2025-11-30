@@ -76,6 +76,7 @@ export enum XIMCommand {
   DT_LANGUAGE = 527,
   DT_QUICKFLAG = 528,
   DT_GOODFILE = 529,
+  DT_GOODFILE_FLAG = 531,
   DT_ANSICOLOR = 530,
   DT_ISANSI = 541,
   DT_MSGCODE = 543,
@@ -127,7 +128,7 @@ export enum XIMCommand {
   RETURNCOMMAND2 = 628,    // Return command 2
   QUICK_KEY = 608,         // Quick key
   ENVSTAT = 163,           // Environment status
-  SV_NEWMSG = 135,         // Server new message
+  SV_NEWMSG = 177,         // Server new message (express.e uses 177)
   PRV_COMMAND = 133,       // Private command
   PRV_GROUP = 134,         // Private group
   ACP_COMMAND = 544,       // ACP command passthrough

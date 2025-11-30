@@ -1,0 +1,5 @@
+FROM LIB:c.o "chess2.o"
+TO "chess2"
+LIB LIB:sc.lib LIB:amiga.lib
+ADDSYM
+

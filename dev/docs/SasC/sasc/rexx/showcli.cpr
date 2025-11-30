@@ -1,0 +1,121 @@
+/* 
+Usage: ShowCLI [ 0xnnnnnn ] 
+Version 1.00  02-Nov-88
+
+Dumps the CLI structure for a process address
+*/
+address 'COMMAND'
+'version >nil: exec.library 36 '
+lrc = rc
+
+if (rc = 0) then
+  check = addlib('rexxsupport.library',0,-30,0) 
+
+address
+
+
+parse arg name '0x' tsk .
+
+NULL = "00000000"x
+
+if (name = '?') then
+   do
+   do i = 2 to 6
+      'd "'||strip(sourceline(i),'T',"0a"x) '"'
+   end
+   exit(0)
+   end
+else if (tsk ~= '') then
+   do
+   name = right(tsk,8,'0')
+   taskbase = x2c(name)
+   name = '0x'||name
+   end
+else
+   do
+   options results
+   'opt task'
+   tasklist = result
+   options
+   tasklist = strip(tasklist)
+   name = right(tasklist, 9)
+   name = left(name,8)
+   taskbase = x2c(name)
+   name = '0x'||name
+   end
+
+tasknum   = right(c2d(import(offset(taskbase,140),4)), 9)
+cli       = x2c(c2x(d2c(c2d(import(offset(taskbase,172),4))*4,4)))
+command = 'No command loaded'
+module = ''
+if (cli ~= NULL) then
+   do
+      cmdname = d2c(c2d(import(offset(cli,16),4))*4,4)
+      cmdlen = c2d(import(cmdname, 1))
+      module = import(offset(cmdname,1), cmdlen)
+      if cmdlen ~= 0 then
+         command = 'Loaded as command:' module 
+      end
+      'd "Process' tasknum ||':' command '"'
+      /* Now dump the CLI Structure */
+
+      pbstr = d2c(c2d(import(offset(cli,24),4))*4,4)
+      prompt = import(offset(pbstr,1),c2d(import(pbstr,1)))
+      'd "Prompt     : \"' || prompt || '\""'
+
+      cbstr = d2c(c2d(import(offset(cli,4),4))*4,4)
+      curdir = import(offset(cbstr,1),c2d(import(cbstr,1)))
+      'd "Currentdir : \"' || curdir || '\""'
+
+      ebstr = d2c(c2d(import(offset(cli,36),4))*4,4)
+      execfile = import(offset(ebstr,1),c2d(import(ebstr,1)))
+      'd "ExecuteFile: \"' || execfile || '\""'
+
+      rslt2 = right(c2d(import(cli,4)),8)
+      retc  = right(c2d(import(offset(cli,12),4)),8)
+      stack = c2d(import(offset(cli,52),4))*4
+      'd "Result2:   ' rslt2 '  ReturnCode:    ' retc '   Stack:' stack '"'
+
+      faillev = right(c2d(import(offset(cli,20),4)),8)
+      interactive = "NONInteractive"
+      if (import(offset(cli,40),4) ~= NULL) then interactive = "Interactive   "
+      type = "Foreground"
+      if (import(offset(cli,44),4) ~= NULL) then type = "Background"
+      'd "FailLevel: ' faillev ' ' interactive '            ' type '"'
+
+      stdin = '0x'||c2x(d2c(c2d(import(offset(cli,28),4))*4,4))
+      curin = '0x'||c2x(d2c(c2d(import(offset(cli,32),4))*4,4))
+      redir = ''
+      if (stdin ~= curin) then redir = '  <Redirected>'
+      'd "StdInput: ' stdin '  CurrentInput: ' curin redir'"'
+
+      stdout = '0x'||c2x(d2c(c2d(import(offset(cli,48),4))*4,4))
+      curout = '0x'||c2x(d2c(c2d(import(offset(cli,56),4))*4,4))
+      redir = ''
+      if (stdin ~= curin) then redir = '  <Redirected>'
+      'd "StdOutput:' stdout '  CurrentOutput:' curout redir'"'
+
+      seglist = '0x'||c2x(d2c(c2d(import(offset(cli,60),4))*4,4))
+      path    = '0x'||c2x(d2c(c2d(import(offset(cli,8),4))*4,4))
+      'd "Seglist:  ' seglist '  Path:         ' path '"'
+      exit(0)
+   end
+
+'d "Unable to find' name '"'
+exit(0)
+
+/* Find a given library in the system 
+findlib:
+parse arg tofind
+execbase = next("00000004"x)
+liboff = 378
+nodebase = import(offset(execbase, liboff), 4)
+
+do while(import(nodebase,4) ~= NULL)
+   if import(import(offset(nodebase,10),4)) = tofind then return nodebase
+   nodebase = import(nodebase,4)
+end
+
+'d "Could not find' tofind||'"'
+exit(0)
+*/

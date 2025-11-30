@@ -4,17 +4,19 @@ import { config } from '../config';
 import { findCaseInsensitive } from '../utils/fs-amiga.util';
 import { writeQuickNewScreen } from '../utils/quicknew-generator';
 import { writeLastCallersBulletin } from '../utils/lastcallers-generator';
+import { doorDropFileManager } from '../services/DoorDropFileManager';
 
 function resolveAssign(p: string): string {
   const lower = p.toLowerCase();
   const base = config.getConfig().dataDir;
+  const bbsRoot = process.env.BBS_ROOT || base || path.resolve(process.cwd(), '..');
   if (lower.startsWith('bbs:')) {
     const rel = p.substring(4);
     return path.join(base, rel);
   }
   if (lower.startsWith('doors:')) {
     const rel = p.substring(6);
-    return path.join(process.env.BBS_ROOT || path.resolve(process.cwd(), '..'), 'Doors', rel);
+    return path.join(bbsRoot, 'Doors', rel);
   }
   return p;
 }
@@ -48,23 +50,18 @@ function resolveExecutable(base: string): string | null {
   return null;
 }
 
-async function runProgram(progPath: string, args: string[], redirectPath?: string): Promise<void> {
+async function runProgram(progPath: string, args: string[], redirectPath?: string, nodeId: number = 1): Promise<void> {
   const ext = path.extname(progPath).toLowerCase();
   const isTs = ext === '.ts';
   const isJs = ext === '.js';
+  const isDoorish =
+    /[/\\]doors[/\\]/i.test(progPath) ||
+    progPath.toLowerCase().includes('doors:');
 
-  // For native binaries, ensure execute permission; otherwise skip with warning
+  // Route Amiga binaries through the door runner (everything non-TS/JS in batches)
   if (!isTs && !isJs) {
-    try {
-      const mode = fs.statSync(progPath).mode;
-      if ((mode & 0o111) === 0) {
-        console.warn(`[BatchScheduler] Skipping ${progPath} (not executable)`);
-        return;
-      }
-    } catch {
-      console.warn(`[BatchScheduler] Skipping ${progPath} (stat failed)`);
-      return;
-    }
+    await runAmigaDoorViaRunner(progPath, nodeId || 1, args, path.dirname(progPath), redirectPath);
+    return;
   }
 
   await new Promise<void>((resolve) => {
@@ -92,8 +89,13 @@ async function runProgram(progPath: string, args: string[], redirectPath?: strin
         output += chunk.toString();
       });
 
-      child.on('error', (err: any) => {
+      child.on('error', async (err: any) => {
         console.warn(`[BatchScheduler] Failed to start ${progPath}: ${err.message}`);
+        // Fallback: if this looks like an Amiga binary, try running via the door runner
+        if (!isTs && !isJs && (isDoorish || err.code === 'ENOEXEC')) {
+          console.warn(`[BatchScheduler] Retrying ${progPath} via Amiga door runner fallback`);
+          await runAmigaDoorViaRunner(progPath, 0, args);
+        }
         resolve();
       });
 
@@ -115,12 +117,18 @@ async function runProgram(progPath: string, args: string[], redirectPath?: strin
       });
     } catch (err: any) {
       console.warn(`[BatchScheduler] Error spawning ${progPath}: ${err.message || err}`);
+      if (!isTs && !isJs) {
+        console.warn(`[BatchScheduler] Retrying ${progPath} via Amiga door runner fallback (spawn error)`);
+        runAmigaDoorViaRunner(progPath, nodeId || 1, args).catch((e: any) => {
+          console.warn(`[BatchScheduler] Fallback runner failed for ${progPath}: ${e?.message || e}`);
+        });
+      }
       resolve();
     }
   });
 }
 
-async function executeLine(rawLine: string): Promise<void> {
+async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   const line = rawLine.trim();
   if (!line || line.startsWith(';') || line.startsWith('.')) {
     return;
@@ -139,6 +147,8 @@ async function executeLine(rawLine: string): Promise<void> {
   if (parts.length === 0) {
     return;
   }
+  const amigaArgs = parts.slice(1);
+  const resolvedArgs = amigaArgs.map((arg) => resolveAssign(arg));
 
   const program = parts[0].toLowerCase();
   if (program === '.key' || program === 'key') {
@@ -146,23 +156,12 @@ async function executeLine(rawLine: string): Promise<void> {
     return;
   }
 
-  // Special-case QuickNew (TS/host)
-  if (program.includes('quicknew')) {
-    try {
-      await writeQuickNewScreen(1);
-      console.log('[BatchScheduler] QuickNew screen regenerated (conf 1)');
-    } catch (err: any) {
-      console.warn('[BatchScheduler] QuickNew generation failed:', err?.message || err);
-    }
-    return;
-  }
-
   // Special-case NTR-LASTCALLERS (68K) to generate lastc.txt
   if (program.includes('ntr-lastcallers') || program.includes('lastcallers')) {
-    const nodeNum = parseInt(parts[1] || '0', 10) || 0;
+    const nodeNum = nodeId || parseInt(parts[1] || '0', 10) || 1;
     const doorPath = resolveAssign('doors:ntr-lastcallers/ntr-lastcallers');
     if (doorPath) {
-      await runAmigaDoorViaRunner(doorPath, nodeNum, []);
+      await runAmigaDoorViaRunner(doorPath, nodeNum, resolvedArgs, path.dirname(doorPath));
       console.log(`[BatchScheduler] Ran NTR-LASTCALLERS for node ${nodeNum}`);
     }
     return;
@@ -172,10 +171,10 @@ async function executeLine(rawLine: string): Promise<void> {
   if (program.includes('multitop/mtop')) {
     const doorPath = resolveAssign('doors:multitop/mtop');
     // Expect args: <design> <output> [ignoresysop] [userdata] [userDataPath]
-    const args = parts.slice(1);
-    const nodeNum = 0; // not used by multitop designs but runner requires a node
+    const args = amigaArgs;
+    const nodeNum = nodeId || 1;
     if (doorPath) {
-      await runAmigaDoorViaRunner(doorPath, nodeNum, args);
+      await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath));
       console.log('[BatchScheduler] Ran MultiTop with args:', args.join(' '));
     }
     return;
@@ -184,10 +183,10 @@ async function executeLine(rawLine: string): Promise<void> {
   // Special-case SlickTop (68K) to generate bull11
   if (program.includes('slicktop/slicktop')) {
     const doorPath = resolveAssign('doors:slicktop/slicktop');
-    const args = parts.slice(1); // e.g., bbs:bulletins/bull11.txt bbs:conf14/conf.db 20 3 "title"
-    const nodeNum = 0;
+    const args = amigaArgs; // e.g., bbs:bulletins/bull11.txt bbs:conf14/conf.db 20 3 "title"
+    const nodeNum = nodeId || 1;
     if (doorPath) {
-      await runAmigaDoorViaRunner(doorPath, nodeNum, args);
+      await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath));
       console.log('[BatchScheduler] Ran SlickTop with args:', args.join(' '));
     }
     return;
@@ -200,10 +199,10 @@ async function executeLine(rawLine: string): Promise<void> {
     return;
   }
 
-  await runProgram(resolvedProg, parts.slice(1), redirect);
+  await runProgram(resolvedProg, amigaArgs, redirect, nodeId);
 }
 
-async function runBatchFile(batchPath: string): Promise<void> {
+export async function runBatchFile(batchPath: string, nodeId: number): Promise<void> {
   if (!fs.existsSync(batchPath)) {
     return;
   }
@@ -213,7 +212,7 @@ async function runBatchFile(batchPath: string): Promise<void> {
 
   for (const rawLine of lines) {
     try {
-      await executeLine(rawLine);
+      await executeLine(rawLine, nodeId);
     } catch (err) {
       console.error(`[BatchScheduler] Error executing line "${rawLine}":`, err);
     }
@@ -221,8 +220,8 @@ async function runBatchFile(batchPath: string): Promise<void> {
 }
 
 export async function runLoginBatches(nodeId: number): Promise<void> {
-  const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '..');
   const baseDir = config.getConfig().dataDir;
+  const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
   const day = new Date().getDay(); // 0-6, Sunday = 0
   const batchName = `batch${day}`;
   const batch000 = 'batch000';
@@ -235,20 +234,108 @@ export async function runLoginBatches(nodeId: number): Promise<void> {
   ];
 
   for (const candidate of candidates) {
-    await runBatchFile(candidate);
+    await runBatchFile(candidate, nodeId || 1);
   }
 }
-function runAmigaDoorViaRunner(doorPath: string, nodeId: number, args: string[] = []): Promise<void> {
+
+/**
+ * Run logoff batches (same batch0–batch6/000 set as logon).
+ * AmiExpress runs these at logoff via system commands; mirror that behavior here.
+ */
+export async function runLogoffBatches(nodeId: number): Promise<void> {
+  const baseDir = config.getConfig().dataDir;
+  const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
+  const day = new Date().getDay(); // 0-6, Sunday = 0
+  const batchName = `batch${day}`;
+  const batch000 = 'batch000';
+
+  const candidates = [
+    path.join(baseDir, batchName),
+    path.join(bbsRoot, `Node${nodeId}`, batchName),
+    path.join(baseDir, batch000),
+    path.join(bbsRoot, `Node${nodeId}`, batch000),
+  ];
+
+  for (const candidate of candidates) {
+    await runBatchFile(candidate, nodeId || 1);
+  }
+}
+function runAmigaDoorViaRunner(doorPath: string, nodeId: number, args: string[] = [], cwd?: string, redirectPath?: string): Promise<void> {
   const appRootPath = path.resolve(__dirname, '../../../..');
+  const dataDir = config.getConfig().dataDir;
+  const bbsRoot = process.env.BBS_ROOT || dataDir || path.resolve(process.cwd(), '..');
+  const assigns: Record<string, string> = {
+    'BBS:': dataDir,
+    'BBS': dataDir,
+    'Doors:': path.join(bbsRoot, 'Doors'),
+    'Doors': path.join(bbsRoot, 'Doors'),
+    [`Node${nodeId}:`]: path.join(bbsRoot, `Node${nodeId}`),
+    [`Node${nodeId}`]: path.join(bbsRoot, `Node${nodeId}`),
+  };
+
+  // Create drop files so doors see expected environment
+  try {
+    doorDropFileManager.createDoorSys(nodeId, {
+      id: nodeId,
+      name: 'Sysop',
+      realname: 'Sysop',
+      username: 'sysop',
+      secLevel: 255,
+      expert: 'Y',
+      ansi: 'Y',
+      calls: 1,
+      uploads: 0,
+      downloads: 0,
+      byteLimit: 1024 * 1024 * 10,
+      location: 'Unknown',
+      phone: '000-000-0000',
+      linesPerScreen: 24,
+      protocol: 'Z',
+      lastLogin: new Date(),
+    } as any, 60 * 60);
+    doorDropFileManager.createDorInfo(nodeId, {
+      id: nodeId,
+      name: 'Sysop',
+      realname: 'Sysop',
+      username: 'sysop',
+      secLevel: 255,
+      expert: 'Y',
+      ansi: 'Y',
+      calls: 1,
+      uploads: 0,
+      downloads: 0,
+      byteLimit: 1024 * 1024 * 10,
+      location: 'Unknown',
+      phone: '000-000-0000',
+      linesPerScreen: 24,
+      protocol: 'Z',
+      lastLogin: new Date(),
+    } as any);
+  } catch (err: any) {
+    console.warn('[BatchScheduler] Failed to create drop files:', err?.message || err);
+  }
+
   return new Promise<void>((resolve) => {
     const runnerPath = path.join(appRootPath, 'web', 'backend', 'dist', 'scripts', 'run-amiga-door.js');
     const resolvedRunner = fs.existsSync(runnerPath) ? runnerPath : path.join(appRootPath, 'web', 'backend', 'src', 'scripts', 'run-amiga-door.ts');
 
-    const execArgs = [resolvedRunner, doorPath, String(nodeId), ...args];
+    const useTsRunner = resolvedRunner.endsWith('.ts');
+    const command = useTsRunner ? 'npx' : 'node';
+    const toolTypes = { DISABLE_GUARD: 'true' };
+    const execArgs = useTsRunner
+      ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes)]
+      : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes)];
 
-    const child: any = require('child_process').spawn('node', execArgs, {
-      cwd: appRootPath,
+    const child: any = require('child_process').spawn(command, execArgs, {
+      cwd: cwd || path.dirname(doorPath),
       env: { ...process.env, TS_NODE_TRANSPILE_ONLY: 'true' },
+    });
+    let output = '';
+    child.stdout?.on('data', (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      output += chunk.toString();
     });
 
     child.on('error', (err: any) => {
@@ -256,8 +343,30 @@ function runAmigaDoorViaRunner(doorPath: string, nodeId: number, args: string[] 
       resolve();
     });
     child.on('close', (code: number) => {
+      const trimmed = output.trim();
       if (code !== 0) {
         console.warn(`[BatchScheduler] Amiga door runner exited with code ${code}`);
+        if (trimmed) {
+          console.warn(`[BatchScheduler] Runner output:\n${trimmed}`);
+        }
+      }
+      if (trimmed) {
+        try {
+          const logFile = path.join(appRootPath, 'logs', 'door-68k.log');
+          fs.appendFileSync(logFile, `[BatchRunner] door=${doorPath} node=${nodeId} code=${code}\n${trimmed}\n`, { encoding: 'utf8' });
+        } catch {
+          /* ignore */
+        }
+      }
+      if (redirectPath) {
+        const resolved = resolveAssign(redirectPath);
+        try {
+          fs.mkdirSync(path.dirname(resolved), { recursive: true });
+          fs.writeFileSync(resolved, output, 'utf8');
+          console.log(`[BatchScheduler] Redirected output to ${resolved}`);
+        } catch (err) {
+          console.error('[BatchScheduler] Failed to write redirect file:', err);
+        }
       }
       resolve();
     });

@@ -12,10 +12,12 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import { config } from '../config';
 import { db } from '../database';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
+import { BBSSession } from '../index';
 import { sessions, getSession, setSession, deleteSession, createSession, getNextAvailableNodeId, checkConnectionLimit } from './session-manager';
 import { callersLog, getRecentCallerActivity, displaySystemBulletins } from './database-helpers';
 import { nodeManager, arexxEngine } from '../nodes';
 import { nodeFileManager } from '../services/NodeFileManager';
+import { runLogoffBatches } from '../services/batch-scheduler';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
 import { handleCommand } from '../handlers/command.handler';
@@ -100,15 +102,34 @@ async function initializeSession(socket: Socket) {
 function registerCommandHandler(socket: Socket) {
   console.log('[socket-handlers] registerCommandHandler called, registering door:input listener');
 
+  const markDoorInput = (session: BBSSession, data: string): boolean => {
+    const now = Date.now();
+    const last = (session as any).__lastDoorInput;
+    if (last && last.data === data && now - last.ts < 100) {
+      return true; // duplicate within debounce window
+    }
+    (session as any).__lastDoorInput = { data, ts: now };
+    return false;
+  };
+
   // Handle door input (for TypeScript doors)
   socket.on('door:input', (data: string) => {
     const session = getSession(socket.id);
     if (!session) return;
 
+    // We already route door keystrokes through the main 'command' channel.
+    // Ignore door:input when a door is active to prevent double-processing.
+    if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
+      return;
+    }
+
     console.log('[socket-handlers] door:input received:', JSON.stringify(data));
     logDoorDebug(`SOCKET door:input data=${JSON.stringify(data)} node=${session.nodeId} state=${session.subState} door=${(session as any).doorId || ''}`);
 
     if (session.inDoorManager && session.doorInputHandler) {
+      if (markDoorInput(session, data)) {
+        return;
+      }
       console.log('[socket-handlers] Calling doorInputHandler from door:input');
       session.doorInputHandler(data);
     } else {
@@ -276,13 +297,17 @@ function registerCommandHandler(socket: Socket) {
 
     if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
       if (session.doorInputHandler) {
+        if (markDoorInput(session, data)) {
+          return;
+        }
         console.log('[socket-handlers] ✓ Calling doorInputHandler (door is active)');
         logDoorDebug(`CMD->door handler dispatch`);
         session.doorInputHandler(data);
         return;
       } else {
-        console.log('[socket-handlers] ⚠️ inDoorManager/DOOR_RUNNING but no doorInputHandler; clearing door state and falling through');
-        logDoorDebug(`WARN missing handler while door active; ignoring input to avoid relaunch`);
+        console.log('[socket-handlers] ⚠️ inDoorManager/DOOR_RUNNING but no doorInputHandler; sending raw to door:input anyway');
+        logDoorDebug(`WARN missing handler while door active; emitting door:input fallback`);
+        socket.emit('door:input', data);
         return;
       }
     }
@@ -482,6 +507,13 @@ function registerDisconnectHandler(socket: Socket) {
     // Log user logout if they were logged in (express.e:9493 callersLog)
     if (session.user) {
       await callersLog(session.user.id, session.user.username, 'Logged off');
+
+      // Run logoff batches (mirror logon batch runner)
+      try {
+        await runLogoffBatches(session.nodeId || 0);
+      } catch (err) {
+        console.error('[LOGOFF] Logoff batch runner failed:', err);
+      }
 
       // Save command history to disk (express.e:25067, 7951, 28612, 28631)
       try {

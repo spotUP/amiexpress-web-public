@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
 export class FileHandle {
   /** File descriptor or stream object */
@@ -178,6 +179,15 @@ export class FileHandle {
     }
 
     try {
+      console.log(`[FileHandle] write ${data.length} bytes to ${this.sysPath}`);
+      try {
+        // Mirror to door log for debugging batch outputs (stable path to repo logs)
+        const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
+        const line = `[FileWrite] ${new Date().toISOString()} ${this.amiPath} -> ${this.sysPath} bytes=${data.length}\n`;
+        require('fs').appendFileSync(logPath, line, { encoding: 'utf8' });
+      } catch {
+        /* ignore */
+      }
       const bytesWritten = fs.writeSync(this.fd, data, 0, data.length, this.position);
       this.position += bytesWritten;
 

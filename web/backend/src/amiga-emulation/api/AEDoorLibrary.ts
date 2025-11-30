@@ -664,7 +664,14 @@ export class AEDoorLibrary {
     command: number,
     options: { string?: string; data?: number; useStringPointer?: boolean } = {}
   ): number {
-    if (options.string !== undefined) {
+    if (command === XIMCommand.JH_REGISTER) {
+      const replyName = this.readCString(
+        state.replyNameAddr,
+        state.stringCapacity
+      );
+      this.writeCString(state.stringPtr, replyName, state.stringCapacity);
+      options = { ...options, data: 0, useStringPointer: false };
+    } else if (options.string !== undefined) {
       this.writeCString(state.stringPtr, options.string, state.stringCapacity);
     }
 

@@ -1,0 +1,19 @@
+/* rexx */
+options results
+'GT'
+options
+line = result
+options results
+'GI'
+options
+index = result
+num = SUBSTR(line, index+1, 1)
+if num == " " then 
+  do
+   'NC'
+  end
+/* num = upper(num) */
+num = translate(num, "abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+'IN'
+num
+'IN'

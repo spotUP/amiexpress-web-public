@@ -1,0 +1,220 @@
+1764208886.5  Node ready
+1764208886.7  server message cmd:153
+1764208886.7  server message data:1
+1764208886.7  server message string:
+1764208889.18 Received: hex $9B 0
+1764208889.18 Received control: hex $31 49
+1764208889.18 Received control: hex $7E 126
+1764208889.18 LOCAL LOGON
+1764208889.25 execute syscmd: FRONTEND 
+1764208889.27 execute syscmd: ANSI 
+1764208890.34 Received: hex $0D 0
+1764208890.34 execute syscmd: SYSTEMPW 
+1764208891.42 Received: hex $62 = b inControl=0
+
+1764208891.49 Received: hex $6F = o inControl=0
+
+1764208892.23 Received: hex $73 = s inControl=0
+
+1764208892.23 Received: hex $73 = s inControl=0
+
+1764208892.33 Received: hex $73 = s inControl=0
+
+1764208893.9  Received: hex $08 0
+1764208893.38 Received: hex $08 0
+1764208893.44 Received: hex $08 0
+1764208894.0  Received: hex $08 0
+1764208894.7  Received: hex $08 0
+1764208894.13 Received: hex $08 0
+1764208896.21 Received: hex $0D 0
+1764208897.2  Received: hex $72 = r inControl=0
+
+1764208897.16 Received: hex $0D 0
+1764208899.7  Received: hex $65 = e inControl=0
+
+1764208899.7  Received: hex $72 = r inControl=0
+
+1764208899.39 Received: hex $08 0
+1764208899.45 Received: hex $08 0
+1764208900.6  Received: hex $72 = r inControl=0
+
+1764208900.21 Received: hex $0D 0
+1764208900.43 Received: hex $74 = t inControl=0
+
+1764208900.46 Received: hex $65 = e inControl=0
+
+1764208901.7  Received: hex $73 = s inControl=0
+
+1764208901.13 Received: hex $74 = t inControl=0
+
+1764208901.18 Received: hex $0D 0
+1764208902.28 Received: hex $63 = c inControl=0
+
+1764208903.9  Received: hex $0D 0
+1764208904.49 Received: hex $0D 0
+1764208908.47 Received: hex $74 = t inControl=0
+
+1764208909.2  Received: hex $65 = e inControl=0
+
+1764208909.13 Received: hex $73 = s inControl=0
+
+1764208909.20 Received: hex $74 = t inControl=0
+
+1764208909.27 Received: hex $0D 0
+1764208911.8  Received: hex $31 = 1 inControl=0
+
+1764208911.15 Received: hex $31 = 1 inControl=0
+
+1764208911.23 Received: hex $31 = 1 inControl=0
+
+1764208911.29 Received: hex $0D 0
+1764208912.45 Received: hex $31 = 1 inControl=0
+
+1764208913.18 Received: hex $B2 = ² inControl=0
+
+1764208913.34 Received: hex $31 = 1 inControl=0
+
+1764208914.9  Received: hex $08 0
+1764208914.16 Received: hex $08 0
+1764208915.14 Received: hex $B2 = ² inControl=0
+
+1764208916.1  Received: hex $08 0
+1764208917.35 Received: hex $22 = " inControl=0
+
+1764208918.43 Received: hex $7C = | inControl=0
+
+1764208919.20 Received: hex $C5 = Å inControl=0
+
+1764208920.12 Received: hex $08 0
+1764208920.18 Received: hex $08 0
+1764208920.24 Received: hex $08 0
+1764208920.41 Received: hex $0D 0
+1764208923.9  Received: hex $74 = t inControl=0
+
+1764208923.14 Received: hex $65 = e inControl=0
+
+1764208923.25 Received: hex $73 = s inControl=0
+
+1764208923.30 Received: hex $74 = t inControl=0
+
+1764208924.47 Received: hex $08 0
+1764208925.3  Received: hex $08 0
+1764208925.10 Received: hex $08 0
+1764208925.16 Received: hex $08 0
+1764208925.22 Received: hex $08 0
+1764208925.28 Received: hex $74 = t inControl=0
+
+1764208926.29 Received: hex $65 = e inControl=0
+
+1764208926.44 Received: hex $73 = s inControl=0
+
+1764208927.7  Received: hex $74 = t inControl=0
+
+1764208927.14 Received: hex $0D 0
+1764208928.19 Received: hex $74 = t inControl=0
+
+1764208928.35 Received: hex $65 = e inControl=0
+
+1764208928.48 Received: hex $73 = s inControl=0
+
+1764208929.13 Received: hex $74 = t inControl=0
+
+1764208929.25 Received: hex $0D 0
+1764208934.28 Received: hex $0D 0
+1764208936.10 Received: hex $31 = 1 inControl=0
+
+1764208936.42 Received: hex $0D 0
+1764208939.0  Received: hex $0D 0
+1764208941.26 Received: hex $0D 0
+1764208942.49 Received: hex $79 = y inControl=0
+
+1764208943.4  execute syscmd: SCRIPT 
+1764208945.5  timeused debug: test logon same day,  currday 20418, lastday 20418, timeused 0, todays dl 0
+1764208946.16 Received: hex $0D 0
+1764208946.24 execute syscmd: S 
+1764208948.13 Received: hex $0D 0
+1764208950.47 Received: hex $67 = g inControl=0
+
+1764208951.13 Received: hex $0D 0
+1764208951.14 execute bbscmd: G 
+1764208952.11 execute syscmd: LOGOFF 
+1764208952.13 execute syscmd: LOGOFF1 
+1764208952.17 setenvmsg: LOGOFF1
+1764208952.19 run door: BBS:Commands/SYSCmd/LOGOFF1
+1764208955.23 Received: hex $9B 0
+1764208955.23 Received control: hex $30 48
+1764208955.24 Received control: hex $7E 126
+1764208955.24 SYSOP LOGON
+1764208957.15 execute syscmd: ANSI 
+1764208957.24 timeused debug: boss logon same day,  currday 20418, lastday 20418, timeused 63, todays dl 0
+1764208958.26 Received: hex $0D 0
+1764208958.30 execute syscmd: S 
+1764208959.36 Received: hex $0D 0
+1764208960.20 Received: hex $67 = g inControl=0
+
+1764208960.47 Received: hex $65 = e inControl=0
+
+1764208960.49 Received: hex $74 = t inControl=0
+
+1764208961.31 Received: hex $61 = a inControl=0
+
+1764208961.40 Received: hex $6E = n inControl=0
+
+1764208961.46 Received: hex $73 = s inControl=0
+
+1764208962.8  Received: hex $65 = e inControl=0
+
+1764208962.12 Received: hex $72 = r inControl=0
+
+1764208962.46 Received: hex $08 0
+1764208963.3  Received: hex $08 0
+1764208963.35 Received: hex $77 = w inControl=0
+
+1764208963.40 Received: hex $65 = e inControl=0
+
+1764208963.46 Received: hex $72 = r inControl=0
+
+1764208964.28 Received: hex $0D 0
+1764208964.28 execute bbscmd: GETANSWER 
+1764208964.31 setenvmsg: GETANSWER
+1764208964.33 run door: DOORS:GetAnswer/GetAnswer
+1764208964.36 msg request: 1
+1764208964.36 data: 0
+1764208964.37 string: DoorReplyPort1
+1764208964.37 msg request: 4
+1764208964.37 data: 1
+1764208964.37 string: GetAnswer v1.2 by Agamemnon / Moment 22
+1764208964.37 msg request: 4
+1764208964.37 data: 1
+1764208964.37 string: ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+1764208964.38 msg request: 5
+1764208964.38 data: 40
+1764208964.38 string: Enter handle/usernr >: 
+1764208965.37 Received: hex $74 = t inControl=0
+
+1764208965.41 Received: hex $65 = e inControl=0
+
+1764208966.5  Received: hex $73 = s inControl=0
+
+1764208966.12 Received: hex $74 = t inControl=0
+
+1764208966.17 Received: hex $0D 0
+1764208966.22 msg request: 4
+1764208966.22 data: 1
+1764208966.22 string: Searched for test, Not found!
+1764208966.22 msg request: 4
+1764208966.22 data: 1
+1764208966.22 string: 
+1764208966.23 msg request: 2
+1764208966.23 data: 1
+1764208966.23 string: 
+1764209040.39 Received: hex $0D 0
+1764209042.42 Received: hex $9B 0
+1764209042.42 Received control: hex $39 57
+1764209042.42 Received control: hex $7E 126
+1764209042.45 input timeout - state=4
+1764209043.12 execute syscmd: LOGOFF 
+1764209043.15 execute syscmd: LOGOFF1 
+1764209043.18 setenvmsg: LOGOFF1
+1764209043.20 run door: BBS:Commands/SYSCmd/LOGOFF1
+1764209052.38 CTRL-C detected

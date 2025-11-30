@@ -6,6 +6,7 @@
  */
 
 import * as path from 'path';
+import * as fs from 'fs';
 import { resolveCaseInsensitivePath } from '../../utils/fs-amiga.util';
 
 export class PathManager {
@@ -51,8 +52,18 @@ export class PathManager {
    * Initialize standard AmigaDOS assigns
    */
   private initializeStandardAssigns(): void {
+    // Resolve common assigns in a case-insensitive way to mirror Amiga volumes.
+    // Prefer capitalized "Doors" (matches repo layout) if present.
+    const doorsUpper = path.join(this.baseDir, 'Doors/');
+    const doorsLower = path.join(this.baseDir, 'doors/');
+    const doorsPath =
+      (fs.existsSync(doorsUpper) && doorsUpper) ||
+      (fs.existsSync(doorsLower) && doorsLower) ||
+      resolveCaseInsensitivePath(this.baseDir, ['doors']) ||
+      doorsLower;
+
     // BBS-specific assigns
-    this.assigns.set('doors:', this.normalizeAssignPath(path.join(this.baseDir, 'doors/')));
+    this.assigns.set('doors:', this.normalizeAssignPath(doorsPath));
     this.assigns.set('bbs:', this.normalizeAssignPath(this.baseDir));
     this.assigns.set('data:', this.normalizeAssignPath(path.join(this.baseDir, 'data/')));
     this.assigns.set('screens:', this.normalizeAssignPath(path.join(this.baseDir, 'Screens/')));

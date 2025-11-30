@@ -6,10 +6,14 @@
  */
 
 import { Socket } from 'socket.io';
+import * as fs from 'fs';
+import * as path from 'path';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
+import { callersLogManager } from '../../services/CallersLogManager';
+import { startSysopPage } from '../../handlers/chat.handler';
 
 export class XIMBBSInfoHandler {
   private emulator: MoiraEmulator;
@@ -33,6 +37,50 @@ export class XIMBBSInfoHandler {
     this.messageParser = messageParser;
     this.bbsSession = bbsSession;
     this.state = state;
+  }
+
+  /**
+   * Resolve BBS root and node id for log paths
+   */
+  private getBbsRoot(): string {
+    const sessionRoot = (this.bbsSession as any)?.bbsRoot;
+    if (sessionRoot) return sessionRoot;
+    return process.env.BBS_ROOT || path.join(process.cwd());
+  }
+
+  private getNodeId(): number {
+    return (
+      (this.bbsSession?.nodeId as number) ||
+      (this.bbsSession as any)?.nodeNumber ||
+      1
+    );
+  }
+
+  /**
+   * Append a line to a node-specific log file (CallersLog/UDLog)
+   */
+  private appendNodeLog(filename: string, line: string): void {
+    try {
+      const nodeId = this.getNodeId();
+      const nodeDir = path.join(this.getBbsRoot(), `Node${nodeId}`);
+      fs.mkdirSync(nodeDir, { recursive: true });
+      const logPath = path.join(nodeDir, filename);
+      fs.appendFileSync(logPath, `${line}\n`, 'utf8');
+    } catch (err) {
+      console.error(`[XIMBBSInfo] Failed to write ${filename}:`, err);
+    }
+  }
+
+  /**
+   * Return a best-effort screen address (dummy for console-only)
+   */
+  private getScreenAddress(): number {
+    const stateAddr = (this.state as any)?.screenAddress;
+    const sessionAddr = (this.bbsSession as any)?.screenAddress;
+    if (typeof stateAddr === 'number') return stateAddr;
+    if (typeof sessionAddr === 'number') return sessionAddr;
+    // Use a stable dummy handle similar to intuition.library stub range
+    return 0x20000;
   }
 
   /**
@@ -133,14 +181,53 @@ export class XIMBBSInfoHandler {
         break;
 
       case XIMCommand.BB_CONFNUM:
-        value = (this.bbsSession?.conferenceId || 1).toString();
-        console.log(`[XIMBBSInfo] BB_CONFNUM: ${value}`);
+        {
+          const confNum =
+            (this.bbsSession as any)?.currentConf !== undefined
+              ? (this.bbsSession as any).currentConf - 1
+              : (this.bbsSession?.conferenceId || 1) - 1;
+          value = confNum.toString();
+          console.log(`[XIMBBSInfo] BB_CONFNUM: ${value}`);
+          break;
+        }
+
+      case XIMCommand.BB_COMMAND:
+        value = this.bbsSession?.currentCommand || '';
+        console.log(`[XIMBBSInfo] BB_COMMAND: "${value}"`);
         break;
 
       case XIMCommand.BB_LOGONTYPE:
         const logonType = this.bbsSession?.logonType || 3;
         console.log(`[XIMBBSInfo] BB_LOGONTYPE: ${logonType}`);
         this.reply(msg, logonType);
+        return;
+
+      case XIMCommand.BB_TASKPRI:
+        // express.e returns cmds.taskPri as a char/byte; default 0
+        this.reply(msg, (this.bbsSession as any)?.taskPri || 0);
+        return;
+
+      case XIMCommand.BB_CHATFLAG:
+        this.handleChat(msg);
+        return;
+      case XIMCommand.BB_CHATSET:
+        this.handleChat(msg);
+        return;
+
+      case XIMCommand.BB_CALLERSLOG:
+        this.handleCallersLog(msg);
+        return;
+
+      case XIMCommand.BB_UDLOG:
+        this.handleUDLog(msg);
+        return;
+
+      case XIMCommand.BB_REMOVEPORT:
+        this.reply(msg, 1);
+        return;
+
+      case XIMCommand.BB_SOPT:
+        this.reply(msg, 1);
         return;
     }
 
@@ -196,6 +283,22 @@ export class XIMBBSInfoHandler {
     }
 
     this.messageParser.writeData(msg.msgAddr, value);
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle SCREEN_ADDRESS / RAWSCREEN_ADDRESS
+   * From E sources (express.e:3740-3748)
+   */
+  handleScreenAddress(msg: XIMMessage): void {
+    const addr = this.getScreenAddress() >>> 0;
+    if (msg.command === XIMCommand.SCREEN_ADDRESS) {
+      const hex = addr.toString(16).padStart(8, '0').toLowerCase();
+      this.messageParser.writeMessageString(msg.msgAddr, hex);
+    } else {
+      this.messageParser.writeMessageString(msg.msgAddr, addr.toString());
+    }
+
     this.reply(msg, 1);
   }
 
@@ -309,6 +412,16 @@ export class XIMBBSInfoHandler {
     console.log('[XIMBBSInfo] BB_CALLERSLOG - Write to callers log');
     console.log(`  Log text: "${logText}"`);
 
+    if (logText.length > 0) {
+      const nodeId = this.getNodeId();
+      this.appendNodeLog('CallersLog', logText);
+      try {
+        callersLogManager.logActivity(nodeId, logText);
+      } catch (err) {
+        console.warn('[XIMBBSInfo] callersLogManager failed:', err);
+      }
+    }
+
     this.reply(msg, 1);
   }
 
@@ -321,6 +434,10 @@ export class XIMBBSInfoHandler {
 
     console.log('[XIMBBSInfo] BB_UDLOG - Write to U/D log');
     console.log(`  Log text: "${logText}"`);
+
+    if (logText.length > 0) {
+      this.appendNodeLog('UDLog', logText);
+    }
 
     this.reply(msg, 1);
   }
@@ -339,17 +456,37 @@ export class XIMBBSInfoHandler {
    * Handle chat flag
    */
   handleChat(msg: XIMMessage): void {
-    console.log(`[XIMBBSInfo] ${msg.command === XIMCommand.BB_CHATFLAG ? 'BB_CHATFLAG' : 'BB_CHATSET'} - Chat status`);
+    const isFlag = msg.command === XIMCommand.BB_CHATFLAG;
+    console.log(`[XIMBBSInfo] ${isFlag ? 'BB_CHATFLAG' : 'BB_CHATSET'} - Chat status`);
 
-    if (msg.command === XIMCommand.BB_CHATFLAG) {
-      this.messageParser.writeData(msg.msgAddr, 0);
-      console.log('  Chat flag: 0 (no chat)');
-    } else {
-      const chatEnabled = msg.data !== 0;
-      console.log(`  Set chat: ${chatEnabled ? 'enabled' : 'disabled'}`);
+    if (isFlag) {
+      // express.e: returns "ON"/"OFF" in the string buffer
+      const chatStr = (this.bbsSession as any)?.sysopAvail ? 'ON' : 'OFF';
+      this.messageParser.writeMessageString(msg.msgAddr, chatStr);
+      this.reply(msg, 1);
+      return;
     }
 
-    this.reply(msg, 1);
+    // BB_CHATSET
+    if (msg.data) {
+      const paged = (this.bbsSession as any)?.pagedFlag || 0;
+      this.messageParser.writeMessageString(msg.msgAddr, paged.toString());
+      this.reply(msg, 1);
+    } else {
+      const newVal = parseInt(msg.string || '0', 10) || 0;
+      const prev = (this.bbsSession as any)?.pagedFlag || 0;
+      (this.bbsSession as any).pagedFlag = newVal;
+
+      if (newVal && !prev) {
+        try {
+          startSysopPage(this.socket, this.bbsSession as any);
+        } catch (err) {
+          console.warn('[XIMBBSInfo] sysop page trigger failed:', err);
+        }
+      }
+
+      this.reply(msg, 1);
+    }
   }
 
   /**
@@ -358,7 +495,6 @@ export class XIMBBSInfoHandler {
    */
   handleDropDTR(msg: XIMMessage): void {
     console.log('[XIMBBSInfo] BB_DROPDTR - Drop DTR (hangup)');
-    console.log('  [TODO] Implement actual disconnect');
 
     this.state.carrierDropped = true;
     this.reply(msg, 1);

@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import { FileHandle } from './FileHandle';
 import { PathManager } from './PathManager';
 import { AmigaFileCache } from './AmigaFileCache';
+import * as path from 'path';
 
 export class FileManager {
   /** Registry of all open file handles: BPTR → FileHandle */
@@ -101,6 +102,15 @@ export class FileManager {
    */
   open(amiPath: string, mode: number): number {
     console.log(`[FileManager] Open: "${amiPath}" mode=${mode}`);
+    const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
+    const logToFile = (msg: string) => {
+      try {
+        fs.appendFileSync(logPath, `[FileManager] ${new Date().toISOString()} ${msg}\n`, { encoding: 'utf8' });
+      } catch {
+        /* ignore */
+      }
+    };
+    logToFile(`Open "${amiPath}" mode=${mode} currentDir="${this.currentDirAmi}"`);
 
     // Check for special devices first
     const specialDevice = this.pathManager.isSpecialDevice(amiPath);
@@ -130,6 +140,7 @@ export class FileManager {
     let sysPath = this.pathManager.amiToSysPath(amiPath, this.currentDirSysPath);
     if (!sysPath) {
       console.error(`[FileManager] ❌ Failed to resolve path: "${amiPath}"`);
+      logToFile(`Resolve failed for "${amiPath}"`);
       return 0; // Failed
     }
 
@@ -137,8 +148,10 @@ export class FileManager {
     const fileExists = fs.existsSync(sysPath);
     if (fileExists) {
       console.log(`[FileManager] ✅ Open: "${amiPath}" -> "${sysPath}" (EXISTS)`);
+      logToFile(`Resolved "${amiPath}" -> "${sysPath}" (exists)`);
     } else {
       console.log(`[FileManager] ⚠️  Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will fail with IoErr=205)`);
+      logToFile(`Resolved "${amiPath}" -> "${sysPath}" (not found)`);
     }
 
     // Determine file open mode
@@ -179,6 +192,7 @@ export class FileManager {
     // Try to open the file
     if (!fh.open(fileMode)) {
       console.error(`[FileManager] Failed to open file: ${sysPath}`);
+      logToFile(`Failed to open "${sysPath}"`);
       return 0; // Failed
     }
 

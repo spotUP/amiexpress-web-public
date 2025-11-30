@@ -17,6 +17,8 @@ import { AEDoorLibrary } from "./AEDoorLibrary";
 import { DosLibrary } from "./DosLibrary";
 import { IconLibrary } from "./IconLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Library function vector entry
@@ -229,6 +231,118 @@ const DOS_VECTORS: LibraryVector[] = [
     },
   },
   {
+    offset: -306,
+    name: "FGetC",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.FGetC();
+    },
+  },
+  {
+    offset: -312,
+    name: "FPutC",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.FPutC();
+    },
+  },
+  {
+    offset: -318,
+    name: "UnGetC",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.UnGetC();
+    },
+  },
+  {
+    offset: -324,
+    name: "FRead",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.FRead();
+    },
+  },
+  {
+    offset: -330,
+    name: "FWrite",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.FWrite();
+    },
+  },
+  {
+    offset: -336,
+    name: "FGets",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.FGets();
+    },
+  },
+  {
+    offset: -342,
+    name: "FPuts",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.FPuts();
+    },
+  },
+  {
+    offset: -360,
+    name: "Flush",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.Flush();
+    },
+  },
+  {
+    offset: -84,
+    name: "Lock",
+    handler: (emu, lib: DosLibrary) => {
+      lib.Lock();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -90,
+    name: "UnLock",
+    handler: (emu, lib: DosLibrary) => {
+      lib.UnLock();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -96,
+    name: "DupLock",
+    handler: (emu, lib: DosLibrary) => {
+      lib.DupLock();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -102,
+    name: "Examine",
+    handler: (emu, lib: DosLibrary) => {
+      lib.Examine();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -108,
+    name: "ExNext",
+    handler: (emu, lib: DosLibrary) => {
+      lib.ExNext();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -120,
+    name: "CreateDir",
+    handler: (emu, lib: DosLibrary) => {
+      lib.CreateDir();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -126,
+    name: "CurrentDir",
+    handler: (emu, lib: DosLibrary) => {
+      lib.CurrentDir();
+      return emu.getRegister(0);
+    },
+  },
+  {
     offset: -132,
     name: "IoErr",
     handler: (emu, lib: DosLibrary) => {
@@ -265,6 +379,37 @@ const DOS_VECTORS: LibraryVector[] = [
       return 0; // Exit doesn't return in the normal sense
     },
   },
+  {
+    offset: -402,
+    name: "NameFromLock",
+    handler: (emu, lib: DosLibrary) => {
+      lib.NameFromLock();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -798,
+    name: "ReadArgs",
+    handler: (emu, lib: DosLibrary) => {
+      lib.ReadArgs();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -858,
+    name: "FreeArgs",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FreeArgs();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -298,
+    name: "DosStub_-298",
+    handler: (emu, lib: DosLibrary) => {
+      return 0;
+    },
+  },
 ];
 
 /**
@@ -292,11 +437,19 @@ const EXEC_VECTORS: LibraryVector[] = [
     },
   },
   {
+    offset: -522, // RawDoFmt
+    name: "RawDoFmt",
+    handler: (emu, lib: ExecLibrary) => {
+      return lib.rawDoFmt();
+    },
+  },
+  {
     offset: -132, // LVO -132 (0xFF7C)
     name: "Forbid",
     handler: (emu, lib: ExecLibrary) => {
       console.log("[ExecLibrary] Forbid() - stub (no-op)");
-      return 0;
+      // Preserve D0/condition flags; Forbid has no return value
+      return emu.getRegister(0);
     },
   },
   {
@@ -304,7 +457,7 @@ const EXEC_VECTORS: LibraryVector[] = [
     name: "Permit",
     handler: (emu, lib: ExecLibrary) => {
       console.log("[ExecLibrary] Permit() - stub (no-op)");
-      return 0;
+      return emu.getRegister(0);
     },
   },
   {
@@ -319,10 +472,23 @@ const EXEC_VECTORS: LibraryVector[] = [
   {
     offset: -210, // LVO -210 (0xFF2E)
     name: "FreeMem",
-    handler: (emu, lib: ExecLibrary) => {
+    handler: (emu, lib: ExecLibrary, returnAddr?: number) => {
       const memAddr = emu.getRegister(9); // A1
       const size = emu.getRegister(0); // D0
       lib.freeMem(memAddr, size);
+      // When the door tears down its heap and returns to the CLI stub (PC around 0x119a),
+      // make sure the stack top holds the original seglist return so the final RTS
+      // does not jump into random data.
+      if (returnAddr === 0x119a) {
+        const spAfterPop = emu.getRegister(15);
+        const exitTrapAddr = 0x1ff000;
+        emu.writeMemory32(spAfterPop, exitTrapAddr);
+        console.log(
+          `[ExecLibrary] FreeMem exit fix: seeded exit trap 0x${exitTrapAddr.toString(
+            16
+          )} at SP=0x${spAfterPop.toString(16)}`
+        );
+      }
       return 0;
     },
   },
@@ -616,6 +782,24 @@ const EXEC_VECTORS: LibraryVector[] = [
     name: "StackSwap",
     handler: (emu, lib: ExecLibrary) => {
       const structAddr = emu.getRegister(8); // A0
+      try {
+        const oldSP = emu.getRegister(15);
+        const ln = emu.readMemory32(structAddr); // ln_Succ
+        const stNew = emu.readMemory32(structAddr + 4); // stk_Lower
+        const stUpper = emu.readMemory32(structAddr + 8); // stk_Upper
+        const stSP = emu.readMemory32(structAddr + 12); // stk_Pointer
+        console.log(
+          `[StackSwap] struct=0x${structAddr.toString(
+            16
+          )} ln=0x${ln.toString(16)} lower=0x${stNew.toString(
+            16
+          )} upper=0x${stUpper.toString(16)} newSP=0x${stSP.toString(
+            16
+          )} oldSP=0x${oldSP.toString(16)}`
+        );
+      } catch (err) {
+        console.log(`[StackSwap] failed to read struct at 0x${structAddr.toString(16)}`);
+      }
       lib.stackSwap(structAddr);
       return 0;
     },
@@ -651,9 +835,13 @@ export class LibraryTraps {
   // Optional callback for monitoring library calls
   private onLibraryCall?: (functionName: string, pc: number) => void;
 
+  // Parsed offsets from dev/docs/LVOs.i (libName -> offsets)
+  private lvoOffsetsByLibrary: Map<string, number[]> = new Map();
+
   constructor(emulator: MoiraEmulator, execLibrary: ExecLibrary) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
+    this.loadLvoOffsetsFromFile();
   }
 
   /**
@@ -729,6 +917,13 @@ export class LibraryTraps {
     console.log(
       `[LibraryTraps] Installed ${EXEC_VECTORS.length} Exec.library vectors`
     );
+
+    // Stub any remaining Exec LVOs from LVOs.i so unknown calls fail gracefully
+    this.installStubVectorsForLibrary(
+      "exec.library",
+      execBase,
+      this.execLibrary
+    );
   }
 
   /**
@@ -785,6 +980,8 @@ export class LibraryTraps {
     console.log(
       `[LibraryTraps] Installed ${DOS_VECTORS.length} dos.library vectors`
     );
+
+    this.installStubVectorsForLibrary("dos.library", dosBase, this.dosLibrary);
   }
 
   /**
@@ -864,6 +1061,58 @@ export class LibraryTraps {
       )}`
     );
     console.log("[LibraryTraps] icon.library vectors - stub implementation");
+  }
+
+  /**
+   * Install stub handlers for any remaining LVOs we know about for a library.
+   * Uses offsets parsed from dev/docs/LVOs.i and only installs if not already trapped.
+   */
+  installStubVectorsForLibrary(
+    libName: string,
+    baseAddr: number,
+    libraryInstance: any = null
+  ): void {
+    const normalized = libName.toLowerCase();
+    const offsets = this.lvoOffsetsByLibrary.get(normalized);
+    if (!offsets || offsets.length === 0 || baseAddr === 0) {
+      return;
+    }
+
+    let added = 0;
+    for (const offset of offsets) {
+      const trapAddr = baseAddr + offset;
+      if (this.trapMap.has(trapAddr)) {
+        continue;
+      }
+      const vector: LibraryVector = {
+        offset,
+        name: `${normalized}-stub`,
+        handler: (emu: MoiraEmulator) => {
+          console.log(
+            `[LibraryTraps] Stubbed ${normalized} offset ${offset} at PC=0x${trapAddr.toString(
+              16
+            )}`
+          );
+          return emu.getRegister(0);
+        },
+      };
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, libraryInstance);
+
+      if (!this.offsetMap.has(offset)) {
+        this.offsetMap.set(offset, []);
+        this.offsetLibraryMap.set(offset, []);
+      }
+      this.offsetMap.get(offset)!.push(vector);
+      this.offsetLibraryMap.get(offset)!.push(libraryInstance);
+      added++;
+    }
+
+    if (added > 0) {
+      console.log(
+        `[LibraryTraps] Stubbed ${added} LVOs for ${normalized} from LVOs.i`
+      );
+    }
   }
 
   /**
@@ -1100,10 +1349,17 @@ export class LibraryTraps {
     // Call the handler with the correct library instance
     // Note: Handler may now modify SP (e.g., StackSwap), but we've already popped the return address
     // Pass returnAddr to handler for functions like Supervisor() that need it
+    const prevD0 = this.emulator.getRegister(0);
+    const prevSr = this.emulator.getRegister(17);
     const result = (vector.handler as any)(this.emulator, library, returnAddr);
+    const preserveRegs = vector.name === "Forbid" || vector.name === "Permit";
 
-    // Set return value in D0
-    this.emulator.setRegister(0, result);
+    // Set return value in D0 unless the call should preserve the caller state
+    if (!preserveRegs) {
+      this.emulator.setRegister(0, result);
+    } else {
+      this.emulator.setRegister(0, prevD0);
+    }
 
     // CRITICAL FIX: Restore A6 register after trap handler
     // M68K calling convention requires A6 to be preserved across function calls
@@ -1141,40 +1397,49 @@ export class LibraryTraps {
     // the Z and N flags to be set based on the return value (like TST.L D0 would do)
     //
     // M68K SR format: Bits 15-8 = system byte, Bits 4-0 = CCR (X N Z V C)
-    const sr = this.emulator.getRegister(17); // Get current SR
-    let newSr = sr & 0xfff0; // Clear N, Z, V, C flags (bits 0-3), preserve X flag (bit 4)
+    if (preserveRegs) {
+      this.emulator.setRegister(17, prevSr); // Preserve SR for void calls
+      console.log(
+        `[LibraryTraps] ${vector.name}() preserved SR: 0x${prevSr
+          .toString(16)
+          .padStart(4, "0")}`
+      );
+    } else {
+      const sr = this.emulator.getRegister(17); // Get current SR
+      let newSr = sr & 0xfff0; // Clear N, Z, V, C flags (bits 0-3), preserve X flag (bit 4)
 
-    // Set Z flag if result is zero
-    if (result === 0) {
-      newSr |= 0x04; // Set Z flag (bit 2)
+      // Set Z flag if result is zero
+      if (result === 0) {
+        newSr |= 0x04; // Set Z flag (bit 2)
+      }
+
+      // Set N flag if result is negative (bit 31 set for 32-bit value)
+      if (result & 0x80000000) {
+        newSr |= 0x08; // Set N flag (bit 3)
+      }
+
+      // V (overflow) and C (carry) are cleared for library returns
+
+      this.emulator.setRegister(17, newSr); // Update SR
+
+      // Verify SR was actually set
+      const verifySr = this.emulator.getRegister(17);
+      console.log(
+        `[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`
+      );
+      console.log(
+        `[LibraryTraps]   Set SR to: 0x${newSr
+          .toString(16)
+          .padStart(4, "0")} (Z=${newSr & 0x04 ? 1 : 0} N=${
+          newSr & 0x08 ? 1 : 0
+        })`
+      );
+      console.log(
+        `[LibraryTraps]   Verified SR: 0x${verifySr
+          .toString(16)
+          .padStart(4, "0")} (Z=${verifySr & 0x04 ? 1 : 0})`
+      );
     }
-
-    // Set N flag if result is negative (bit 31 set for 32-bit value)
-    if (result & 0x80000000) {
-      newSr |= 0x08; // Set N flag (bit 3)
-    }
-
-    // V (overflow) and C (carry) are cleared for library returns
-
-    this.emulator.setRegister(17, newSr); // Update SR
-
-    // Verify SR was actually set
-    const verifySr = this.emulator.getRegister(17);
-    console.log(
-      `[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`
-    );
-    console.log(
-      `[LibraryTraps]   Set SR to: 0x${newSr
-        .toString(16)
-        .padStart(4, "0")} (Z=${newSr & 0x04 ? 1 : 0} N=${
-        newSr & 0x08 ? 1 : 0
-      })`
-    );
-    console.log(
-      `[LibraryTraps]   Verified SR: 0x${verifySr
-        .toString(16)
-        .padStart(4, "0")} (Z=${verifySr & 0x04 ? 1 : 0})`
-    );
 
     // Set PC to return address
     // EXCEPTIONS: Supervisor() and Exit() set PC themselves, so check if it was changed
@@ -1222,31 +1487,9 @@ export class LibraryTraps {
     // The fixed refillPrefetch() now properly sets IRD and IRC without executing.
     this.emulator.refillPrefetch();
 
-    // Verify final register state and ENFORCE 4-byte SP alignment
-    let finalSp = this.emulator.getRegister(15);
+    // Verify final register state
+    const finalSp = this.emulator.getRegister(15);
     const finalA6 = this.emulator.getRegister(14);
-
-    // CRITICAL FIX: Ensure SP is 4-byte aligned (M68K requirement)
-    // If SP is misaligned, round DOWN to nearest 4-byte boundary
-    const misalignment = finalSp % 4;
-    if (misalignment !== 0) {
-      const originalSp = finalSp;
-      finalSp = finalSp - misalignment; // Round down to 4-byte boundary
-      this.emulator.setRegister(15, finalSp);
-      console.log(
-        `[LibraryTraps] *** SP MISALIGNMENT DETECTED AND CORRECTED ***`
-      );
-      console.log(
-        `[LibraryTraps]   Original SP: 0x${originalSp.toString(
-          16
-        )} (misaligned by ${misalignment} bytes)`
-      );
-      console.log(
-        `[LibraryTraps]   Corrected SP: 0x${finalSp.toString(
-          16
-        )} (4-byte aligned)`
-      );
-    }
 
     console.log(`[LibraryTraps] Returning to 0x${returnAddr.toString(16)}`);
     console.log(
@@ -1404,5 +1647,65 @@ export class LibraryTraps {
     }
 
     return true;
+  }
+
+  /**
+   * Load the LVO definitions from dev/docs/LVOs.i so we can stub missing vectors.
+   */
+  private loadLvoOffsetsFromFile(): void {
+    const candidates = [
+      path.resolve(process.cwd(), "dev/docs/LVOs.i"),
+      path.resolve(process.cwd(), "../dev/docs/LVOs.i"),
+      path.resolve(process.cwd(), "../../dev/docs/LVOs.i"),
+      path.resolve(__dirname, "../../../../dev/docs/LVOs.i"),
+      path.resolve(__dirname, "../../../../../dev/docs/LVOs.i"),
+    ];
+
+    let data: string | null = null;
+    for (const candidate of candidates) {
+      try {
+        if (fs.existsSync(candidate)) {
+          data = fs.readFileSync(candidate, "utf8");
+          console.log(`[LibraryTraps] Loaded LVOs from ${candidate}`);
+          break;
+        }
+      } catch {
+        // ignore and try next
+      }
+    }
+
+    if (!data) {
+      console.warn("[LibraryTraps] LVOs.i not found; stub vectors disabled");
+      return;
+    }
+
+    let currentLib = "";
+    const libRegex = /\*+ LVOs for ([^*]+?) \*/i;
+    const lvoRegex = /equ\s+(-?\d+)/i;
+
+    for (const rawLine of data.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      const libMatch = line.match(libRegex);
+      if (libMatch) {
+        currentLib = libMatch[1].trim().toLowerCase();
+        if (!this.lvoOffsetsByLibrary.has(currentLib)) {
+          this.lvoOffsetsByLibrary.set(currentLib, []);
+        }
+        continue;
+      }
+
+      if (!currentLib || line.length === 0 || line.startsWith(";")) {
+        continue;
+      }
+
+      const lvoMatch = line.match(lvoRegex);
+      if (lvoMatch) {
+        const offset = parseInt(lvoMatch[1], 10);
+        const list = this.lvoOffsetsByLibrary.get(currentLib)!;
+        if (!list.includes(offset)) {
+          list.push(offset);
+        }
+      }
+    }
   }
 }

@@ -1,36 +1,62 @@
 import path from 'path';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { config } from '../config';
+import { doorDropFileManager } from '../services/DoorDropFileManager';
 
 interface RunnerOptions {
   execPath: string;
   args: string[];
   nodeId: number;
   doorId?: string;
+  cwd?: string;
+  user?: any;
+  timeRemaining?: number;
+  assigns?: Record<string, string>;
+  toolTypes?: Record<string, string>;
 }
 
 async function runDoor(opts: RunnerOptions) {
   const dataDir = config.getConfig().dataDir;
   const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+  const user = opts.user || {
+    id: 1,
+    name: 'Sysop',
+    realname: 'Sysop',
+    username: 'sysop',
+    secLevel: 255,
+    expert: 'Y',
+    ansi: 'Y',
+    calls: 1,
+    uploads: 0,
+    downloads: 0,
+    byteLimit: 1024 * 1024 * 10,
+    location: 'Unknown',
+    phone: '000-000-0000',
+    linesPerScreen: 24,
+    protocol: 'Z',
+    lastLogin: new Date(),
+  };
+  const timeRemaining = opts.timeRemaining ?? 60 * 60; // default 60 minutes
+
+  // Ensure drop files exist for doors expecting DOOR.SYS/DORINFO
+  try {
+    doorDropFileManager.createDoorSys(opts.nodeId, user, timeRemaining);
+    doorDropFileManager.createDorInfo(opts.nodeId, user);
+  } catch (err: any) {
+    console.warn('[run-amiga-door] Failed to create drop files:', err?.message || err);
+  }
 
   const session = {
     nodeId: opts.nodeId,
     nodeNumber: opts.nodeId,
     bbsName: 'AmiExpress Web BBS',
     sysopName: 'Sysop',
-    timeRemaining: 60,
+    timeRemaining,
     doorCommand: opts.doorId || path.basename(opts.execPath),
     doorName: opts.doorId || path.basename(opts.execPath),
     dataDir,
     bbsRoot,
-    user: {
-      id: 'sysop-runner',
-      name: 'Sysop',
-      username: 'sysop',
-      secLevel: 255,
-      expert: 'Y',
-      ansi: 'Y',
-    },
+    user,
   };
 
   const amigaSession = new AmigaDoorSession(
@@ -45,6 +71,9 @@ async function runDoor(opts: RunnerOptions) {
       timeout: 300,
       bbsSession: session,
       doorId: opts.doorId,
+      cwd: opts.cwd || path.dirname(opts.execPath),
+      assigns: opts.assigns || {},
+      toolTypes: opts.toolTypes || {},
     } as any
   );
 
@@ -52,7 +81,29 @@ async function runDoor(opts: RunnerOptions) {
 }
 
 async function main() {
-  const [, , execPathArg, nodeArg, ...doorArgs] = process.argv;
+  const args = process.argv.slice(2);
+  let assignsArg: Record<string, string> = {};
+  let toolTypesArg: Record<string, string> = {};
+  const assignsIndex = args.indexOf('--assigns');
+  if (assignsIndex >= 0 && assignsIndex + 1 < args.length) {
+    try {
+      assignsArg = JSON.parse(args[assignsIndex + 1]);
+    } catch {
+      assignsArg = {};
+    }
+    args.splice(assignsIndex, 2);
+  }
+  const toolTypesIndex = args.indexOf('--tooltypes');
+  if (toolTypesIndex >= 0 && toolTypesIndex + 1 < args.length) {
+    try {
+      toolTypesArg = JSON.parse(args[toolTypesIndex + 1]);
+    } catch {
+      toolTypesArg = {};
+    }
+    args.splice(toolTypesIndex, 2);
+  }
+
+  const [execPathArg, nodeArg, ...doorArgs] = args;
   if (!execPathArg) {
     console.error('Usage: ts-node run-amiga-door.ts <doorPath> <nodeId> [args...]');
     process.exit(1);
@@ -61,11 +112,15 @@ async function main() {
     ? execPathArg
     : path.join(process.cwd(), execPathArg);
   const nodeId = parseInt(nodeArg || '0', 10) || 0;
+  const cwd = path.dirname(execPath);
   try {
     await runDoor({
       execPath,
       args: doorArgs,
       nodeId,
+      cwd,
+      assigns: assignsArg,
+      toolTypes: Object.keys(toolTypesArg).length ? toolTypesArg : { DISABLE_GUARD: 'true' }, // allow batch doors to run longer if needed
     });
     process.exit(0);
   } catch (err: any) {

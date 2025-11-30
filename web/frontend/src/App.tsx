@@ -7,15 +7,17 @@ import './App.css';
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Terminal />} />
-        <Route path="/wizard" element={<GamePromptWizard />} />
-        <Route path="/door-wizard" element={<GamePromptWizard />} />
-        <Route path="/admin/import" element={<ImportExport />} />
-        <Route path="/system" element={<SystemStatus />} />
-      </Routes>
-    </Router>
+    <div className="app-shell">
+      <Router>
+        <Routes>
+          <Route path="/" element={<Terminal />} />
+          <Route path="/wizard" element={<GamePromptWizard />} />
+          <Route path="/door-wizard" element={<GamePromptWizard />} />
+          <Route path="/admin/import" element={<ImportExport />} />
+          <Route path="/system" element={<SystemStatus />} />
+        </Routes>
+      </Router>
+    </div>
   );
 }
 

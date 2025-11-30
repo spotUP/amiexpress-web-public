@@ -539,6 +539,14 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     return '';
   });
 
+  // ~NSF - Non-Stop Flag (express.e pause control)
+  parsed = parsed.replace(/~NSF/g, () => {
+    if (session) {
+      (session as any).nonStopText = true;
+    }
+    return '';
+  });
+
   // ~CR. - Character Read (express.e:5462-5468)
   // Waits for single keypress without prompt
   parsed = parsed.replace(/~CR\./g, () => {

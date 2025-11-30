@@ -12,7 +12,7 @@ Goal: deliver a production-ready, reference-board-compatible 1:1 port of AmiExpr
 ### Phase 0 – Baseline and Source Mapping
 - [x] Map express.e modules (state machine, MCI, logon/new user, commands, file/message subsystems) with line references for quick lookup.
 - [x] Document reference-board data layout (Conf1/Node1 screens, menu/bull files) and lock in expected search order (no Conf01/BBS roots).
-- [ ] Inventory current deviations in web/backend vs. express.e to target fixes.
+- [x] Inventory current deviations in web/backend vs. express.e to target fixes (see deviation list).
 
 **Deviation inventory (initial)**
 - Menu/prompt: intermittent triple prompts after mail scan; MENU screen not found when loader falls through; menu redraw not tied to menuPause/DisplayMenu state.
@@ -21,6 +21,7 @@ Goal: deliver a production-ready, reference-board-compatible 1:1 port of AmiExpr
 - New user: line-mode inputs sometimes treated as hotkeys; spacing/line breaks differ; password policy not tied to system settings; stuck in new_user_script/sexage; summary/confirmation formatting wrong.
 - Commands: file listings (F/FR) auto-scroll; FS/N/VER/WHD block until Enter without prompt; T shows extra prompts; S not invoking userstats door; ? just refreshes expert menu; X toggles without menu redraw; W/WHO require double Enter or door glue; J flow prompts differ; message enter/reply flow diverges from express.e prompts.
 - Data integrity: user.data/keys/misc must be files (avoid EISDIR); avoid recreating Conf01; stop creating extensionless screen files (e.g., AWAITSCREEN).
+- Doors: prompt replies and key handling needed express.e alignment (JH_PM/JH_LI, GETKEY/HK/ExtHK/FetchKey/QuickKey/CK); transfer returns/playpen semantics needed real-path handling; stringPtr safety for prompts; ACP/PRV side effects aligned; logs/door traces enabled.
 
 **Current notes (in progress)**
 - State machine/menu loop: express.e lines 28540–28660 (DISPLAY_BULL → MENU, READ_COMMAND/SHORTCUTS/PROCESS_COMMAND).
@@ -38,6 +39,30 @@ Goal: deliver a production-ready, reference-board-compatible 1:1 port of AmiExpr
 - Message subsystem anchors:
   - enterMSG at ~10749 (toName/subject prompts, private flag, reply quoting, saveNewMSG flow, attached files).
   - replyPrompt loop ~11040+ handling A/D/M/F/R/L/Q/?/??, NS, translation; uses lineInput and returns to caller with RESULT codes.
+
+### Phase X – 68K Door / XIM Parity (new)
+Goal: no stubs or gaps in door IPC; mirror express.e exactly so 68K doors run unmodified.
+
+**Checklist to implement (express.e references in aedoor/axcommon)**
+- Registration: JH_REGISTER reply echoes Data/Node/String (DoorReplyPort<n>), sets Command=line length, StrPtr/Filler1/2=embedded buffer, LineNum set/cleared per express.e, length=0x104.
+- Prompt/input: JH_PM/JH_LI return per express.e (Data/Command/LineNum exact), write both embedded/stringPtr; ESC/BS/CR behavior matches; echo restored; stringPtr defaulted to embedded buffer when missing.
+- Key handling: GETKEY/HK/ExtHK/FetchKey/QuickKey/JH_CK semantics (port/char codes, blocking vs non-blocking, timeouts, empty replies), lineCount resets where required; duplicates debounced.
+- Output: JH_SM/JH_WRITE/CO/SO honor Data for CRLF, preserve CR/BS/ANSI, no wrapping side effects.
+- System commands: RAWARROW, SV_NEWMSG, RETURN/CHAIN/PRV/ENVSTAT, ACP_COMMAND side effects (quiet/chat/offhook/logoff), SIGBIT returns real mask, MCI processing identical to screens.
+- Data queries: DT_* all fields (password hashing, bits add/rem/query, line length, ANSI flags, time/byte fields, handles, language) per express.e.
+- BBS info: BB_* fields (STATUS, NODEID, CONFNAME/LOCAL/NUM, COMMAND, LOGONTYPE, TASKPRI, CHATFLAG/SET, CALLERSLOG/UDLOG, SCREEN dims, PURGELINE*, NONSTOPTEXT, LINECOUNT) return correct values and accept writes where express.e allows.
+- File/display: JH_SG/JH_SF/NSF with ACS/lang search order; JH_EF ack; JH_FLAGFILE + SHOWFLAGS queue; correct BBS:/NODE:/DOORS: resolution.
+- Transfers: ZMODEMSEND/RECEIVE/BATCH codes, NETUPLOAD/DOWNLOAD semantics; playpen lookup for bare filenames; no placeholder touches; return counts; carrier drop handling.
+- Message pointer ops: JH_SMPTR uses stringPtr payloads; JH_20/QUICK_KEY parity.
+- Drop files/paths: DOOR.SYS/DORINFO placement in node playpen; avoid extra paths; path resolution mirrors express.e.
+- Lifecycle: no synthetic startup messages; loop guard only on true hangs; shutdown clears flags/handlers.
+- Logging: optional per-message trace for debugging.
+
+**Execution plan**
+ 1) Audit express.e XIM sections and map expected Data/Command/stringPtr/LineNum per opcode; list divergences in current handlers.
+ 2) Fill protocol gaps: implement missing handlers (JH_SMPTR, ACP effects), fix prompt semantics (done), complete DT/BB fields, finish MCI/ACS logic, remove remaining stubs.
+ 3) Path/asset parity: align BBS:/NODE:/DOORS: resolution and drop files; warn on missing door assets instead of silent exits.
+ 4) Verification: enable trace, run several 68K doors (prompt-driven, MCI-heavy, transfer) to confirm no unknown opcodes and correct replies; then disable debug noise. Shift GA testing to another door if GA itself misbehaves on stock express.e.
   - Message list/read/edit/forward/delete scattered around 9820–11980; mail scan earlier via confScan (27980+).
 
 ### Phase 1 – State Machine, Screens, Pauses (express.e 28540–28660)

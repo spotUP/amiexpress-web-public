@@ -10,6 +10,7 @@ import { DoorConstants } from '../DoorTypes';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
+import * as bcrypt from 'bcryptjs';
 
 export class XIMDataQueryHandler {
   private emulator: MoiraEmulator;
@@ -66,10 +67,24 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_PASSWORD:
         if (isRead) {
+          // express.e: doors cannot read passwords; return empty
           this.messageParser.writeString(stringAddr, '', 40);
-          console.log(`  [READ] DT_PASSWORD: (blocked - security)`);
+          console.log(`  [READ] DT_PASSWORD: (blocked)`);
         } else {
-          console.log(`  [WRITE] DT_PASSWORD: (not implemented - needs hashing)`);
+          const newPwd = this.messageParser.readString(stringAddr, 40);
+          if (user) {
+            try {
+              const hash = bcrypt.hashSync(newPwd, 10);
+              user.passwordHash = hash;
+              // Retain plaintext only if other paths expect it (some importers do)
+              user.password = newPwd;
+              (user as any).pwdLastUpdated = Date.now();
+              (user as any).pwdType = 1; // bcrypt
+            } catch (err) {
+              console.error('[XIMDataQuery] Failed to hash password:', err);
+            }
+          }
+          console.log(`  [WRITE] DT_PASSWORD set (length=${newPwd.length})`);
         }
         break;
 
@@ -183,11 +198,16 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_LINELENGTH:
         if (isRead) {
-          const lineLen = 80;
+          const lineLen = (this.state as any).userLineLen || user?.lineLength || user?.lineLen || 80;
           this.messageParser.writeString(stringAddr, lineLen.toString(), 200);
           console.log(`  [READ] DT_LINELENGTH: ${lineLen}`);
         } else {
           const newLen = parseInt(this.messageParser.readString(stringAddr, 200));
+          if (user) {
+            (user as any).lineLen = newLen;
+            (user as any).lineLength = newLen;
+          }
+          (this.state as any).userLineLen = Number.isFinite(newLen) ? newLen : (this.state as any).userLineLen;
           console.log(`  [WRITE] DT_LINELENGTH: ${newLen}`);
         }
         break;
@@ -375,9 +395,13 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_TIMEOUT:
         if (isRead) {
-          const timeout = 300;
+          const timeout = (this.state as any).doorTimeout || (this.state as any).timeoutSeconds || 300;
           this.messageParser.writeString(stringAddr, timeout.toString(), 200);
           console.log(`  [READ] DT_TIMEOUT: ${timeout}`);
+        } else {
+          const newTimeout = parseInt(this.messageParser.readString(stringAddr, 200));
+          (this.state as any).doorTimeout = newTimeout;
+          console.log(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
         }
         break;
 
@@ -429,9 +453,16 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_QUICKFLAG:
       case XIMCommand.DT_GOODFILE:
+      case XIMCommand.DT_ANSICOLOR:
+      case XIMCommand.DT_GOODFILE_FLAG:
         if (isRead) {
-          this.messageParser.writeString(stringAddr, '0', 200);
-          console.log(`  [READ] ${this.messageParser.getCommandName(msg.command)}: 0`);
+          const val = (this.state as any)[msg.command] ?? 0;
+          this.messageParser.writeString(stringAddr, String(val), 200);
+          console.log(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${val}`);
+        } else {
+          const newVal = parseInt(this.messageParser.readString(stringAddr, 200)) || 0;
+          (this.state as any)[msg.command] = newVal;
+          console.log(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newVal}`);
         }
         break;
 

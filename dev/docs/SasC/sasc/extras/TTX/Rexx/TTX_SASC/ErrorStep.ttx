@@ -1,0 +1,188 @@
+/*
+**  $VER: ErrorStep.ttx 2.1 (17.8.93)
+**      By Kenneth Yarnall.  This code may be freely distributed.
+**
+**   Step to the next SAS/C (tm) error from within TurboText (tm).
+** Should be bound to a key/menu entry (see TTX_SASC.dfn) and run from a
+** TurboText window containing the file being compiled.
+**
+**  This takes a single argument, which should be one of the commands to
+** move scmsg to a new message (next, prev, top, bottom, or blank for the
+** current message).  This argument (stored in the variable 'movement') is
+** Interpret'ed and sent to scmsg unadulterated.
+*/
+
+Options RESULTS
+
+/* Make sure SCMsg is really running! */
+
+if ~show('P', 'SC_SCMSG') then do
+    SetStatusBar "Couldn't find SCMsg -- aborting"
+    exit 10
+end
+
+/*
+** Get the current TurboText port and store it
+*/
+
+primo.port = Address()
+SetClip('primo_port', primo.port)
+
+/*
+** Get the command line argument
+*/
+
+parse arg movement
+
+/*
+** Get basic info from scmsg
+*/
+
+Address 'SC_SCMSG'
+
+/*
+**  Move depending on the argument given, and analyse the new error.
+** Interpret is my favorite Rexx command...
+*/
+
+Interpret movement
+
+/*
+**  Get the name of the main file from scmsg.  If there is no file name,
+** there are no errors.
+*/
+
+'file'
+main.path = RESULT
+
+if main.path = "" then do      /* No messages in the Browser */
+    Address VALUE primo.port
+    SetStatusBar "No SAS/C errors"
+    exit 0
+end
+
+/*
+**  Now check for an alternate file
+*/
+
+'altfile'
+alt.path = RESULT
+
+/*
+**  Retrieve the number and text of the message from scmsg.
+*/
+
+'number'
+err.num = RESULT
+
+'text'
+err.text = RESULT
+
+/*
+**  Process the main file.
+*/
+
+Call MainFile
+
+/*
+**  Process the alternate file, if any.
+**
+**  The reason I put these two sections into "subroutines" is so that the
+** order in which they are called can easily be switched.
+*/
+
+if alt.path ~= "" then
+    Call AltFile
+
+/*  All there is to it. */
+
+exit 0
+
+/*-------------------------------------------------------------------*/
+
+MainFile:
+
+Address SC_SCMSG
+'line'
+main.line = RESULT
+
+/*  Now find the filename portion of main.path */
+
+main.name = 'Rexx:TTX_SASC/GetFilePart'(main.path)
+
+/*
+**  Find the window containing the main file.
+*/
+
+Call FindFilePort main.name,main.path
+main.port = RESULT
+
+if main.port = ""
+    then Return
+
+Address VALUE main.port
+Window2Front
+ActivateWindow
+Move FOLDS main.line
+SetStatusBar err.num||': '||err.text
+
+Return
+
+/*-------------------------------------------------------------------*/
+
+AltFile:
+
+Address SC_SCMSG
+'altline'
+alt.line = RESULT
+
+/*  Now find the filename portion of alt.path */
+
+alt.name= 'Rexx:TTX_SASC/GetFilePart'(alt.path)
+
+/*
+**  Find the window containing the alternate file.
+*/
+
+Call FindFilePort alt.name,alt.path
+alt.port = RESULT
+
+if alt.port = ""
+    then Return
+
+Address VALUE alt.port
+Window2Front
+ActivateWindow
+Move FOLDS alt.line
+SetStatusBar err.num||': '||err.text
+
+Return
+
+/*-------------------------------------------------------------------*/
+
+
+/*
+**  FindFilePort -- Finds the TurboText port corresponding to a file, or
+** tries to open the file if it is not in memory.  The TTX address was
+** stored in a clip earlier so that we could get at it again here.
+*/
+
+FindFilePort: PROCEDURE
+
+Parse arg file,path
+
+Address TurboText GetPort file
+
+if RESULT = "RESULT" then do
+    Address VALUE GetClip('primo_port')
+    promptstr = '"Load ' || file || '?"'
+    RequestBool '"TTX <=> SAS/C"' promptstr
+    if RESULT = "YES" then do
+        OpenDoc NAME path
+        Return RESULT
+    end
+    else
+        Return ""
+end
+else
+    Return RESULT

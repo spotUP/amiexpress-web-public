@@ -93,7 +93,10 @@ export class ExecLibrary {
 
   // Memory allocation tracking
   private allocations: Map<number, number> = new Map(); // address -> size
-  private nextFreeMemory: number = 0x080000; // Start allocating at 512KB
+  // Start allocations at 0x90d0 to mirror vamos observations for door startup
+  private nextFreeMemory: number = 0x0090d0;
+  // Free list for simple reuse
+  private freeList: { addr: number; size: number }[] = [];
 
   // Message port tracking
   private messagePorts: Map<number, MessagePort> = new Map(); // address -> port
@@ -127,8 +130,15 @@ export class ExecLibrary {
   private readonly AEDOOR_LIB_ADDR = 0x030000; // AEDoor.library at 192KB
   private readonly ICON_LIB_ADDR = 0x040000; // icon.library at 256KB
   private readonly INTUITION_LIB_ADDR = 0x050000; // intuition.library at 320KB
+  private readonly GRAPHICS_LIB_ADDR = 0x060000; // graphics.library at 384KB
   private readonly UTILITY_LIB_ADDR = 0x070000; // utility.library at 448KB
+  private nextStubLibraryAddr = 0x080000; // fallback base for unknown stub libraries
   private readonly PORT_LIST_OFFSET = 392;
+  private currentStackLower = 0;
+  private currentStackUpper = 0;
+  private rawDoFmtCount = 0;
+  private rawDoFmtScratchPtr = 0;
+  private rawDoFmtReturnStub = 0;
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
@@ -173,6 +183,27 @@ export class ExecLibrary {
     console.log(
       `[ExecLibrary] ExecBase at 0x${this.execBase.address.toString(16)}`
     );
+  }
+
+  /**
+   * Track current stack bounds for StackSwap symmetry.
+   */
+  setStackBounds(lower: number, size: number): void {
+    this.currentStackLower = lower >>> 0;
+    this.currentStackUpper = (lower + size) >>> 0;
+    console.log(
+      `[ExecLibrary] Stack bounds set: lower=0x${this.currentStackLower.toString(
+        16
+      )} upper=0x${this.currentStackUpper.toString(16)}`
+    );
+  }
+
+  getStackUpper(): number {
+    return this.currentStackUpper;
+  }
+
+  getStackLower(): number {
+    return this.currentStackLower;
   }
 
   /**
@@ -608,6 +639,12 @@ export class ExecLibrary {
         libRevision = 0;
         break;
 
+      case "graphics.library":
+        libAddr = this.GRAPHICS_LIB_ADDR;
+        libVersion = 36;
+        libRevision = 0;
+        break;
+
       case "utility.library":
         libAddr = this.UTILITY_LIB_ADDR;
         libVersion = 37;
@@ -615,16 +652,24 @@ export class ExecLibrary {
         break;
 
       default:
-        console.log(`[ExecLibrary]   Unknown library: ${name}`);
-        return 0; // NULL
+        libAddr = this.nextStubLibraryAddr;
+        this.nextStubLibraryAddr += 0x010000;
+        libVersion = version;
+        libRevision = 0;
+        console.log(
+          `[ExecLibrary]   Opened generic stub library "${name}" at 0x${libAddr.toString(
+            16
+          )}`
+        );
+        break;
     }
 
-    // Check version requirement
+    // Check version requirement (allow graceful upgrade for stubs)
     if (version > libVersion) {
       console.log(
-        `[ExecLibrary]   Version ${version} > available ${libVersion}, returning NULL`
+        `[ExecLibrary]   Version ${version} > available ${libVersion}, proceeding with stub (compat mode)`
       );
-      return 0; // NULL
+      libVersion = version;
     }
 
     // Create library node
@@ -732,6 +777,13 @@ export class ExecLibrary {
         const sigNum = this.emulator.getRegister(0); // D0
         const sigResult = this.AllocSignal(sigNum);
         this.emulator.setRegister(0, sigResult);
+        return true;
+
+      case -522: // Unknown/unused in doors we’ve seen – safely stub
+        console.log(
+          `[ExecLibrary]   *** Unimplemented Exec LVO -522 (stub, preserve state) ***`
+        );
+        // Preserve D0/A6; just return current D0
         return true;
 
       // *** CRITICAL MISSING CASES FOR BULLS ***
@@ -918,8 +970,22 @@ export class ExecLibrary {
     // Align size to 4-byte boundary
     const alignedSize = (size + 3) & ~3;
 
-    const addr = this.nextFreeMemory;
-    this.nextFreeMemory += alignedSize;
+    // Try to reuse a free block of sufficient size (first-fit)
+    let addr = 0;
+    for (let i = 0; i < this.freeList.length; i++) {
+      const block = this.freeList[i];
+      if (block.size >= alignedSize) {
+        addr = block.addr;
+        this.freeList.splice(i, 1);
+        break;
+      }
+    }
+
+    // Fallback to bump allocator
+    if (addr === 0) {
+      addr = this.nextFreeMemory;
+      this.nextFreeMemory += alignedSize;
+    }
 
     // Track allocation
     this.allocations.set(addr, alignedSize);
@@ -953,11 +1019,32 @@ export class ExecLibrary {
           16
         )}, ${size}) - freed ${allocation} bytes`
       );
+
+      // Simple stack-like reuse: if freeing the topmost block, rewind bump pointer
+      if (addr + allocation === this.nextFreeMemory) {
+        this.nextFreeMemory = addr;
+      } else {
+        this.freeList.push({ addr, size: allocation });
+      }
     } else {
       console.log(
         `[ExecLibrary] FreeMem(0x${addr.toString(16)}, ${size}) - not tracked`
       );
     }
+  }
+
+  /**
+   * Reset allocator base (used to mirror vamos entry stack expectations).
+   */
+  setAllocBase(addr: number): void {
+    this.nextFreeMemory = addr >>> 0;
+    this.freeList = [];
+    this.allocations.clear();
+    console.log(
+      `[ExecLibrary] Allocator base reset to 0x${this.nextFreeMemory.toString(
+        16
+      )}`
+    );
   }
 
   /**
@@ -2200,8 +2287,8 @@ export class ExecLibrary {
 
     // Get OLD stack values (current state)
     const oldPointer = this.emulator.getRegister(15); // Current SP
-    const oldLower = 0xfd000; // Standard CLI stack lower bound
-    const oldUpper = 0xfe000; // Standard CLI stack upper bound (4KB)
+    const oldLower = this.currentStackLower || newLower;
+    const oldUpper = this.currentStackUpper || newUpper;
 
     console.log(
       `[ExecLibrary]   OLD: Lower=0x${oldLower.toString(
@@ -2225,6 +2312,8 @@ export class ExecLibrary {
 
     // Set SP to NEW value requested by caller
     this.emulator.setRegister(15, newPointer);
+    this.currentStackLower = newLower;
+    this.currentStackUpper = newUpper;
 
     console.log(
       `[ExecLibrary]   Stack swapped! SP now 0x${newPointer.toString(16)}`
@@ -2579,6 +2668,210 @@ export class ExecLibrary {
         16
       )} tailPred=0x${newTailPred.toString(16)}`
     );
+  }
+
+  /**
+   * RawDoFmt - Format string with callback (Exec)
+   * A0 = format string, A1 = argv pointer, A2 = putch func (ignored here), A3 = putch data (STRPTR*)
+   *
+   * We emulate Exec's behavior: if a putch callback is supplied, call it per
+   * character with D0=char and A3=putData. Otherwise, fall back to the common
+   * RawPutChar(bufferPtrPtr) pattern by writing into *(A3) and advancing it.
+   */
+  rawDoFmt(): number {
+    const fmtPtr = this.emulator.getRegister(CPURegister.A0);
+    const argvAddr = this.emulator.getRegister(CPURegister.A1);
+    const putChFunc = this.emulator.getRegister(CPURegister.A2);
+    const putChDataPtr = this.emulator.getRegister(CPURegister.A3);
+
+    const fmt = this.emulator.readString(fmtPtr);
+    this.rawDoFmtCount++;
+    if (this.rawDoFmtCount <= 3) {
+      console.log(
+        `[ExecLibrary] RawDoFmt #${this.rawDoFmtCount} fmt="${fmt}" argv=0x${argvAddr.toString(
+          16
+        )} putch=0x${putChFunc.toString(16)} data=0x${putChDataPtr.toString(16)}`
+      );
+    }
+    const formatted = this.formatRawString(fmt, argvAddr);
+
+    // If a putch callback is provided, invoke it directly with D0=char and A3=putData.
+    if (putChFunc !== 0) {
+      const baseState = this.captureCpuState();
+      const returnStub = this.ensureRawDoFmtReturnStub();
+      for (let i = 0; i < formatted.length; i++) {
+        this.invokePutChCallback(
+          putChFunc,
+          putChDataPtr,
+          formatted.charCodeAt(i) & 0xff,
+          baseState,
+          returnStub
+        );
+      }
+      return 0;
+    }
+
+    // Honor RawPutChar(bufferPtrPtr) usage when no callback is provided.
+    let outPtr = 0;
+    let shouldAdvancePointer = false;
+
+    if (putChDataPtr !== 0) {
+      const pointed = this.emulator.readMemory32(putChDataPtr);
+      if (pointed !== 0) {
+        outPtr = pointed;
+        shouldAdvancePointer = true;
+      }
+    }
+
+    if (outPtr === 0) {
+      if (this.rawDoFmtScratchPtr === 0) {
+        // Allocate a small scratch buffer once (4KB, cleared)
+        this.rawDoFmtScratchPtr = this.allocMem(4096, 1 << 16);
+      }
+      outPtr = this.rawDoFmtScratchPtr;
+    }
+
+    for (let i = 0; i < formatted.length; i++) {
+      this.emulator.writeMemory(outPtr++, formatted.charCodeAt(i) & 0xff);
+    }
+    this.emulator.writeMemory(outPtr, 0);
+    if (shouldAdvancePointer) {
+      this.emulator.writeMemory32(putChDataPtr, outPtr);
+    }
+    return 0;
+  }
+
+  private captureCpuState(): number[] {
+    const regs: number[] = [];
+    for (let i = CPURegister.D0; i <= CPURegister.SR; i++) {
+      regs[i] = this.emulator.getRegister(i as CPURegister);
+    }
+    return regs;
+  }
+
+  private restoreCpuState(regs: number[]): void {
+    for (let i = CPURegister.D0; i <= CPURegister.SR; i++) {
+      this.emulator.setRegister(i as CPURegister, regs[i]);
+    }
+    this.emulator.refillPrefetch();
+  }
+
+  private ensureRawDoFmtReturnStub(): number {
+    if (this.rawDoFmtReturnStub === 0) {
+      this.rawDoFmtReturnStub = 0x001fe000; // Scratch area below exit trap
+      this.emulator.writeMemory16(this.rawDoFmtReturnStub, 0x4e75); // RTS
+    }
+    return this.rawDoFmtReturnStub;
+  }
+
+  private invokePutChCallback(
+    funcAddr: number,
+    putChDataPtr: number,
+    charCode: number,
+    baseState: number[],
+    returnStub: number
+  ): void {
+    // Start from the captured state for each invocation to avoid drift.
+    this.restoreCpuState(baseState);
+
+    // Set up call frame
+    const spBefore = this.emulator.getRegister(CPURegister.A7) >>> 0;
+    const newSp = (spBefore - 4) >>> 0;
+    this.emulator.writeMemory32(newSp, returnStub);
+    this.emulator.setRegister(CPURegister.A7, newSp);
+    this.emulator.setRegister(CPURegister.D0, charCode & 0xff);
+    this.emulator.setRegister(CPURegister.A3, putChDataPtr);
+    this.emulator.setRegister(CPURegister.PC, funcAddr >>> 0);
+    this.emulator.refillPrefetch();
+
+    // Execute until the callback returns or a safety limit is hit
+    let returned = false;
+    const maxSteps = 1000;
+    for (let steps = 0; steps < maxSteps; steps++) {
+      this.emulator.executeInstruction();
+      const pcNow = this.emulator.getRegister(CPURegister.PC);
+      if (pcNow === returnStub) {
+        returned = true;
+        break;
+      }
+    }
+
+    if (!returned) {
+      console.warn(
+        `[ExecLibrary] RawDoFmt putch callback did not return within ${maxSteps} steps (func=0x${funcAddr.toString(
+          16
+        )})`
+      );
+    }
+
+    // Restore state for continued RawDoFmt processing
+    this.restoreCpuState(baseState);
+  }
+
+  private formatRawString(fmt: string, argvAddr: number): string {
+    let result = "";
+    let argIndex = 0;
+
+    for (let i = 0; i < fmt.length; i++) {
+      if (fmt[i] === "%" && i + 1 < fmt.length) {
+        const spec = fmt[i + 1];
+        let longFormat = false;
+
+        if (spec === "l" && i + 2 < fmt.length) {
+          longFormat = true;
+          i++;
+        }
+
+        const actualSpec = longFormat ? fmt[i + 1] : spec;
+
+        switch (actualSpec) {
+          case "s": {
+            const strPtr = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            const str = this.emulator.readString(strPtr);
+            result += str;
+            argIndex++;
+            i++;
+            break;
+          }
+          case "d":
+          case "u": {
+            const val = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            result += (val | 0).toString(10);
+            argIndex++;
+            i++;
+            break;
+          }
+          case "x":
+          case "X": {
+            const val = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            result += val.toString(16);
+            argIndex++;
+            i++;
+            break;
+          }
+          case "c": {
+            const val = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            result += String.fromCharCode(val & 0xff);
+            argIndex++;
+            i++;
+            break;
+          }
+          case "%": {
+            result += "%";
+            i++;
+            break;
+          }
+          default: {
+            result += fmt[i];
+            break;
+          }
+        }
+      } else {
+        result += fmt[i];
+      }
+    }
+
+    return result;
   }
 
   /**

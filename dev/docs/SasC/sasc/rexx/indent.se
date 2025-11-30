@@ -1,0 +1,27 @@
+/* rexx to indent a marked block */
+/* Get line of end of block */
+'BM "E"'
+options results
+'GL'
+end = result
+options
+/* goto start of block */
+'BM "B"'
+'BL'
+do forever
+/* Get line */
+options results
+'GT'
+options
+line = result
+/* get first char */
+num = SUBSTR(line, 1, 1)
+if num ~= "/" & num ~= "#" then 
+   '"   "'
+'BL NL'
+/* check to see if done */
+options results
+'GL'
+options
+if result > end then exit(0)
+end

@@ -56,8 +56,14 @@ export class XIMSystemCommandsHandler {
   handleRegister(msg: XIMMessage): void {
     console.log('[XIMSystem] Door registering with BBS');
 
-    // Ensure string pointers are valid (express.e seeds msg.msgString before replying)
+    // Seed msg->String with DoorReplyPort<n> like the Amiga reference log
     const strPtr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    const regNodeId =
+      (this.bbsSession?.nodeId as number) ||
+      (this.bbsSession as any)?.nodeNumber ||
+      1;
+    const seedString = `DoorReplyPort${regNodeId}`;
+    this.messageParser.writeMessageString(msg.msgAddr, seedString);
     this.messageParser.writeStringPointer(msg.msgAddr, strPtr);
     this.messageParser.writeFiller1(msg.msgAddr, strPtr);
     this.messageParser.writeFiller2(msg.msgAddr, strPtr);
@@ -69,12 +75,15 @@ export class XIMSystemCommandsHandler {
     const lineLen =
       typeof rawLineLen === 'number' && rawLineLen > 0 ? rawLineLen : 29;
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
-    const nodeId =
-      (this.bbsSession?.nodeId as number) ||
-      (this.bbsSession as any)?.nodeNumber ||
-      1;
-    this.messageParser.writeData(msg.msgAddr, nodeId);
-    this.messageParser.writeNodeId(msg.msgAddr, nodeId);
+    const dataOut =
+      typeof msg.data === 'number' && !Number.isNaN(msg.data)
+        ? msg.data
+        : undefined;
+    const nodeId = regNodeId;
+    if (dataOut !== undefined) {
+      this.messageParser.writeData(msg.msgAddr, dataOut);
+    }
+    this.messageParser.writeNodeId(msg.msgAddr, msg.nodeId ?? nodeId);
     this.messageParser.writeLineNumber(msg.msgAddr, 0);
     // Ensure length is sane; otherwise echo the message back untouched.
     const parsed = this.messageParser.parseMessage(msg.msgAddr);
@@ -88,8 +97,18 @@ export class XIMSystemCommandsHandler {
       )} str="${parsedFinal.string}"`
     );
     console.log(
-      `[XIMSystem][RegisterReply][dbg] wrote nodeId=${nodeId} data=${nodeId} lineLen=${lineLen}`
+      `[XIMSystem][RegisterReply][dbg] wrote nodeId=${nodeId} data=${parsedFinal.data} lineLen=${lineLen}`
     );
+
+    // Mirror the reply into Bulls control/info buffers if present so Bulls sees the updated fields
+    try {
+      const bulls = (global as any).bullsHandlerInstance;
+      if (bulls && typeof bulls.mirrorRegisterReply === 'function') {
+        bulls.mirrorRegisterReply(parsedFinal);
+      }
+    } catch (err) {
+      console.warn('[XIMSystem] Bulls mirrorRegisterReply failed:', err);
+    }
 
     this.state.registered = true;
     this.state.shuttingDown = false;
@@ -120,7 +139,27 @@ export class XIMSystemCommandsHandler {
    */
   handleRawArrow(msg: XIMMessage): void {
     console.log('[XIMSystem] RAWARROW: Toggle raw arrow mode (no-op in web)');
+
+    // Ack
     this.reply(msg, 1);
+
+    // Mirror for Bulls so it sees the ack fields
+    try {
+      const bulls = (global as any).bullsHandlerInstance;
+      if (bulls && typeof bulls.mirrorRegisterReply === 'function') {
+        bulls.mirrorRegisterReply({
+          command: XIMCommand.RAWARROW,
+          data: 1,
+          nodeId:
+            (this.bbsSession?.nodeId as number) ||
+            (this.bbsSession as any)?.nodeNumber ||
+            1,
+          msgAddr: msg.msgAddr,
+        });
+      }
+    } catch (err) {
+      console.warn('[XIMSystem] Bulls mirror for RAWARROW failed:', err);
+    }
   }
 
   /**
@@ -181,7 +220,27 @@ export class XIMSystemCommandsHandler {
     console.log('[XIMSystem] SV_NEWMSG - Set server message');
     console.log(`  Message: "${message}"`);
 
-    this.reply(msg, 1);
+    // Ack with Data=1 per express.e behavior
+    this.messageParser.writeData(msg.msgAddr, 1);
+    this.execLibrary.replyMsg(msg.msgAddr);
+
+    // Mirror into Bulls buffers so the door sees the acked cmd/data/node
+    try {
+      const bulls = (global as any).bullsHandlerInstance;
+      if (bulls && typeof bulls.mirrorRegisterReply === 'function') {
+        bulls.mirrorRegisterReply({
+          command: XIMCommand.SV_NEWMSG,
+          data: 1,
+          nodeId:
+            (this.bbsSession?.nodeId as number) ||
+            (this.bbsSession as any)?.nodeNumber ||
+            1,
+          msgAddr: msg.msgAddr,
+        });
+      }
+    } catch (err) {
+      console.warn('[XIMSystem] Bulls mirror for SV_NEWMSG failed:', err);
+    }
   }
 
   /**
@@ -195,6 +254,13 @@ export class XIMSystemCommandsHandler {
     console.log(`  Command: "${command}"`);
 
     this.state.prvCommand = command;
+    // Execute immediately like express.e processCommand
+    try {
+      const { handleCommand } = require('../../handlers/command.handler');
+      handleCommand(this.socket, this.bbsSession as any, command);
+    } catch (err) {
+      console.warn('[XIMSystem] PRV_COMMAND execution error:', err);
+    }
     this.reply(msg, 1);
   }
 
@@ -208,6 +274,11 @@ export class XIMSystemCommandsHandler {
     console.log('[XIMSystem] PRV_GROUP - Modify group settings');
     console.log(`  Group data: "${groupData}"`);
 
+    // Update conference names/locations when targeting current conf
+    const confNum = parseInt(groupData, 10);
+    if (!Number.isNaN(confNum)) {
+      (this.bbsSession as any).currentConf = confNum + 1;
+    }
     this.reply(msg, 1);
   }
 
@@ -218,7 +289,10 @@ export class XIMSystemCommandsHandler {
   handleSignalBit(msg: XIMMessage): void {
     console.log('[XIMSystem] JH_SIGBIT - Query signal bits');
 
-    this.reply(msg, 0);
+    // Return a distinct signal mask; use msg.data when provided, otherwise default bit 1
+    const bit = typeof msg.data === 'number' && msg.data > 0 ? msg.data : 1;
+    const mask = 1 << (bit & 31);
+    this.reply(msg, mask);
   }
 
   /**
@@ -231,12 +305,26 @@ export class XIMSystemCommandsHandler {
     console.log('[XIMSystem] JH_MCI - Process MCI codes');
     console.log(`  Text: "${text}"`);
 
-    let output = text;
-    if (msg.data !== 0) {
-      output += '\r\n';
+    // Use the existing MCI processor to render codes the same way screens do
+    try {
+      const { parseMCI } = require('../../handlers/screen.handler');
+      const result = parseMCI(text, this.bbsSession as any, {
+        allowCommands: false,
+        pauseAfter: msg.data !== 0,
+      });
+      if (result?.content) {
+        this.socket.emit('ansi-output', result.content);
+      } else {
+        this.socket.emit('ansi-output', text + (msg.data !== 0 ? '\r\n' : ''));
+      }
+      if (msg.data !== 0) {
+        // express.e: add CRLF and checkForPause
+        this.socket.emit('ansi-output', '\r\n');
+      }
+    } catch (err) {
+      console.warn('[XIMSystem] JH_MCI fallback:', err);
+      this.socket.emit('ansi-output', text + (msg.data !== 0 ? '\r\n' : ''));
     }
-
-    this.socket.emit('ansi-output', output);
 
     this.reply(msg, 1);
   }
@@ -251,7 +339,17 @@ export class XIMSystemCommandsHandler {
     console.log('[XIMSystem] JH_SG - Display security screen');
     console.log(`  Screen: "${screenName}"`);
 
-    this.socket.emit('ansi-output', `\r\n[Security screen: ${screenName}]\r\n`);
+    const resolved = this.resolvePath(screenName);
+    if (fs.existsSync(resolved)) {
+      try {
+        const content = fs.readFileSync(resolved, 'utf-8');
+        this.socket.emit('ansi-output', content);
+      } catch (err) {
+        console.warn(`[XIMSystem] JH_SG failed to read ${resolved}:`, err);
+      }
+    } else {
+      console.warn(`[XIMSystem] JH_SG: Screen not found at ${resolved}`);
+    }
 
     this.reply(msg, 1);
   }
@@ -266,7 +364,17 @@ export class XIMSystemCommandsHandler {
     console.log('[XIMSystem] JH_SF - Show file');
     console.log(`  File: "${fileName}"`);
 
-    this.socket.emit('ansi-output', `\r\n[Display file: ${fileName}]\r\n`);
+    const resolved = this.resolvePath(fileName);
+    if (fs.existsSync(resolved)) {
+      try {
+        const content = fs.readFileSync(resolved, 'utf-8');
+        this.socket.emit('ansi-output', content);
+      } catch (err) {
+        console.warn(`[XIMSystem] JH_SF failed to read ${resolved}:`, err);
+      }
+    } else {
+      console.warn(`[XIMSystem] JH_SF: File not found at ${resolved}`);
+    }
 
     this.reply(msg, 1);
   }
@@ -296,8 +404,23 @@ export class XIMSystemCommandsHandler {
 
     console.log('[XIMSystem] JH_FLAGFILE - Flag file for download');
     console.log(`  File: "${fileName}"`);
-    console.log('  [TODO] Add to download queue');
 
+    // Persist flagged file on the session for host pickup (simplified queue)
+    if (!Array.isArray((this.bbsSession as any).flaggedFiles)) {
+      (this.bbsSession as any).flaggedFiles = [];
+    }
+    (this.bbsSession as any).flaggedFiles.push(fileName);
+
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle JH_SHOWFLAGS (List flagged files)
+   */
+  handleShowFlags(msg: XIMMessage): void {
+    const flagged = (this.bbsSession as any)?.flaggedFiles || [];
+    const output = flagged.join('\r\n');
+    this.messageParser.writeMessageString(msg.msgAddr, output);
     this.reply(msg, 1);
   }
 
@@ -332,8 +455,7 @@ export class XIMSystemCommandsHandler {
     const resolved = targets
       .map((t) => ({ original: t, resolved: this.resolvePath(t) }))
       .filter((t) => t.resolved && this.pathExists(t.resolved));
-    const stagedPaths = resolved.map((r) => r.resolved);
-    const staged = stagedPaths.length > 0 ? this.stageDownloads(stagedPaths) : null;
+    const staged = resolved.length > 0 ? this.stageDownloads(resolved.map((r) => r.resolved)) : null;
 
     console.log(
       `[XIMSystem] ZMODEMSEND: targets=${targets.join(', ')} staged=${staged}`
@@ -343,7 +465,7 @@ export class XIMSystemCommandsHandler {
       this.startZmodemTransfer('download', staged);
     }
 
-    this.reply(msg, staged && staged.length > 0 ? 1 : 0);
+    this.reply(msg, staged ? staged.length : 0);
   }
 
   /**
@@ -366,7 +488,7 @@ export class XIMSystemCommandsHandler {
       return;
     }
 
-    const ensured = this.ensureUploadTarget(resolved);
+    const ensured = dest ? this.ensureUploadTarget(dest, resolved) : null;
     if (ensured) {
       this.startZmodemTransfer('upload', [ensured]);
     }
@@ -381,8 +503,7 @@ export class XIMSystemCommandsHandler {
 
     const targets = this.collectTransferList(msg, true);
     const resolved = targets.filter((t) => this.pathExists(this.resolvePath(t)));
-    const stagedPaths = resolved.map((t) => this.resolvePath(t));
-    const staged = stagedPaths.length > 0 ? this.stageDownloads(stagedPaths) : null;
+    const staged = resolved.length > 0 ? this.stageDownloads(resolved.map((t) => this.resolvePath(t))) : null;
 
     console.log(
       `[XIMSystem] BATCHZMODEMSEND: count=${targets.length} staged=${staged}`
@@ -390,7 +511,7 @@ export class XIMSystemCommandsHandler {
     if (staged && staged.length > 0) {
       this.startZmodemTransfer('download', staged);
     }
-    this.reply(msg, staged && staged.length > 0 ? 1 : 0);
+    this.reply(msg, staged ? staged.length : 0);
   }
 
   handleNetTransfer(msg: XIMMessage): void {
@@ -404,7 +525,7 @@ export class XIMSystemCommandsHandler {
       const dest = targets[0] || '';
       const resolved = dest ? this.resolvePath(dest) : '';
       console.log(`[XIMSystem] NETUPLOAD: ${dest} -> ${resolved}`);
-      const ensured = resolved ? this.ensureUploadTarget(resolved) : null;
+      const ensured = dest ? this.ensureUploadTarget(dest, resolved) : null;
       if (ensured) {
         this.startZmodemTransfer('upload', [ensured]);
       }
@@ -414,15 +535,14 @@ export class XIMSystemCommandsHandler {
 
     const targets = this.collectTransferList(msg, false);
     const resolved = targets.filter((t) => this.pathExists(this.resolvePath(t)));
-    const stagedPaths = resolved.map((t) => this.resolvePath(t));
-    const staged = stagedPaths.length > 0 ? this.stageDownloads(stagedPaths) : null;
+    const staged = resolved.length > 0 ? this.stageDownloads(resolved.map((t) => this.resolvePath(t))) : null;
     console.log(
       `[XIMSystem] NETDOWNLOAD: targets=${targets.join(',')} staged=${staged}`
     );
     if (staged && staged.length > 0) {
       this.startZmodemTransfer('download', staged);
     }
-    this.reply(msg, staged && staged.length > 0 ? 1 : 0);
+    this.reply(msg, staged ? staged.length : 0);
   }
 
   handleAcpCommand(msg: XIMMessage): void {
@@ -436,6 +556,48 @@ export class XIMSystemCommandsHandler {
       command: commandString,
       targetNode,
     };
+
+    // Immediate side effects for known ACP codes (express.e shortcuts)
+    switch (msg.data) {
+      case 4: // Toggle chat
+        (this.bbsSession as any).chatFlag = !(this.bbsSession as any).chatFlag;
+        break;
+      case 5: // Exit node / logoff
+        (this.bbsSession as any).acpExit = true;
+        break;
+      case 10: // Offhook
+        (this.bbsSession as any).offHook = true;
+        break;
+      case 11: // Quiet node
+        (this.bbsSession as any).quietFlag = true;
+        break;
+      case -1: // Control command (no-op but record)
+        break;
+      case 1: // Sysop login
+      case 2: // Instant login
+      case 3: // AEShell
+      case 6: // Local login
+      case 8: // Accounts
+      case 9: // Init modem
+      case 13: // Node chat
+      case 14: // SaveWin
+      case 15: // NRAMS
+        (this.bbsSession as any).quietFlag = false;
+        break;
+      case 7: // Reserve node
+      case 12: // Node config
+        (this.bbsSession as any).quietFlag = true;
+        break;
+      case 19: // Custom command
+        break;
+    }
+    (this.bbsSession as any).acpLastAction = {
+      code: msg.data,
+      command: commandString,
+      targetNode,
+      timestamp: Date.now(),
+    };
+    // JH_UPDATE-like behavior: store last action for host/master handling
     this.reply(msg, 1);
   }
 
@@ -474,11 +636,20 @@ export class XIMSystemCommandsHandler {
 
   private resolvePath(amigaPath: string): string {
     const paths = this.getPaths();
-    return paths.resolveAmigaPath(
+    const resolved = paths.resolveAmigaPath(
       amigaPath,
       this.bbsSession?.nodeId ?? 0,
       undefined
     );
+    if (this.pathExists(resolved)) {
+      return resolved;
+    }
+    // If a bare filename, search Node{n}/Playpen for it (checkInPlaypens analogue)
+    if (!/[/:\\]/.test(amigaPath)) {
+      const playpenHit = this.checkInPlaypens(amigaPath);
+      if (playpenHit) return playpenHit;
+    }
+    return resolved;
   }
 
   private getPaths(): BBSPaths {
@@ -495,6 +666,23 @@ export class XIMSystemCommandsHandler {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Search all Node{n}/Playpen directories for a filename (express.e: checkInPlaypens)
+   */
+  private checkInPlaypens(filename: string): string | null {
+    const root = this.getPaths().root();
+    const maxNodes = 255;
+    for (let i = 0; i < maxNodes; i++) {
+      const nodeDir = path.join(root, `Node${i}`);
+      if (!fs.existsSync(nodeDir)) continue;
+      const candidate = path.join(nodeDir, 'Playpen', filename);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   private getPointerString(ptr?: number, maxLen: number = 255): string {
@@ -872,27 +1060,35 @@ export class XIMSystemCommandsHandler {
   /**
    * Ensure an upload destination exists; if a directory is given, create a placeholder file.
    */
-  private ensureUploadTarget(resolvedPath: string): string | null {
+  private ensureUploadTarget(originalPath: string, resolvedPath: string): string | null {
     try {
       let targetPath = resolvedPath;
       const stat = fs.existsSync(resolvedPath) ? fs.statSync(resolvedPath) : null;
 
-      // If a directory or trailing separator, place file in playpen with a default name
+      // If a directory or trailing separator, place file in that directory using the provided filename (or default)
       if (stat?.isDirectory() || resolvedPath.endsWith(path.sep)) {
+        const baseName =
+          path.basename(originalPath) && path.basename(originalPath) !== path.sep
+            ? path.basename(originalPath)
+            : `upload_${Date.now()}.bin`;
+        targetPath = path.join(resolvedPath, baseName);
+      }
+
+      // If no stat and no directory separators, place into node playpen
+      if (!stat && !resolvedPath.includes(path.sep)) {
         const playpen = this.getPaths()
           .node(this.bbsSession?.nodeId ?? 0)
           .playpen();
         fs.mkdirSync(playpen, { recursive: true });
-        const baseName = `upload_${Date.now()}.bin`;
+        const baseName =
+          path.basename(originalPath) && path.basename(originalPath) !== path.sep
+            ? path.basename(originalPath)
+            : resolvedPath || `upload_${Date.now()}.bin`;
         targetPath = path.join(playpen, baseName);
-      } else {
-        fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
       }
 
-      // Touch placeholder to mark success
-      if (!fs.existsSync(targetPath)) {
-        fs.writeFileSync(targetPath, Buffer.alloc(0));
-      }
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+
       return targetPath;
     } catch (err) {
       console.error('[XIMSystem] Failed to prepare upload target:', err);
@@ -901,28 +1097,13 @@ export class XIMSystemCommandsHandler {
   }
 
   /**
-   * Stage outgoing downloads into the node playpen to simulate a transfer.
+   * Gather outgoing downloads. Unlike the earlier staging copy, express.e sends the real file path;
+   * here we just return existing resolved paths (no copy). Returns null on failure, [] if none.
    */
   private stageDownloads(resolvedFiles: string[]): string[] | null {
     try {
-      const playpen = this.getPaths()
-        .node(this.bbsSession?.nodeId ?? 0)
-        .playpen();
-      fs.mkdirSync(playpen, { recursive: true });
-      const staged: string[] = [];
-      for (const src of resolvedFiles) {
-        const dest = path.join(playpen, path.basename(src));
-        try {
-          if (src !== dest) {
-            fs.copyFileSync(src, dest);
-          }
-          staged.push(dest);
-        } catch (err) {
-          console.error('[XIMSystem] Failed to stage download:', err);
-          return null;
-        }
-      }
-      return staged;
+      const files = resolvedFiles.filter((p) => this.pathExists(p));
+      return files;
     } catch (err) {
       console.error('[XIMSystem] stageDownloads failed:', err);
       return null;
