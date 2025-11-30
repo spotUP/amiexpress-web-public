@@ -165,6 +165,11 @@ export class LibraryManager {
     // Ensure PROGDIR: and CurrentDir point at the door folder so relative opens hit the right files
     this.dosLibrary.setDoorDirectory(doorDir);
 
+    const stdoutRedirect = process.env.AEDOOR_STDOUT || process.env.AEDOOR_STDOUT_PATH;
+    if (stdoutRedirect) {
+      this.dosLibrary.redirectStdout(stdoutRedirect);
+    }
+
     this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
       const bbsSession: any = this.config.bbsSession || {};
       if (bbsSession.transferRawActive) {

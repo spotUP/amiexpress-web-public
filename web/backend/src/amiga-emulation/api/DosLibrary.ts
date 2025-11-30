@@ -1108,6 +1108,39 @@ export class DosLibrary {
   }
 
   /**
+   * Redirect STDOUT to the provided AmigaDOS path, mirroring CLI ">" redirection.
+   * Returns the new BPTR or 0 on failure.
+   */
+  redirectStdout(amiPath: string): number {
+    if (!this.fileManager || !this.pathManager) {
+      console.warn(`[dos.library] Cannot redirect stdout without FileManager/PathManager`);
+      return 0;
+    }
+
+    const resolved = this.pathManager.amiToSysPath(amiPath, this.currentDirectory);
+    if (resolved) {
+      try {
+        fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      } catch {
+        /* ignore directory creation failures; open() will report errors */
+      }
+    }
+
+    const bptr = this.fileManager.open(amiPath, MODE_NEWFILE);
+    if (!bptr) {
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      console.error(`[dos.library] Failed to redirect stdout to ${amiPath}`);
+      return 0;
+    }
+
+    this.fileManager.setStdoutHandle(bptr);
+    this.inheritedOutput = bptr;
+    this.logDoorFile(`STDOUT redirected to ${amiPath} (BPTR ${bptr})`);
+    console.log(`[dos.library] STDOUT redirected to ${amiPath} (BPTR ${bptr})`);
+    return bptr;
+  }
+
+  /**
    * Input - Get standard input file handle
    * Returns: D0 = inherited stdin handle
    *

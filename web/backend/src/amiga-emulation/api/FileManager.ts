@@ -24,6 +24,9 @@ export class FileManager {
   /** Next available BPTR for allocation */
   private nextBptr: number = 3; // 1=stdin, 2=stdout already allocated
 
+  /** Current stdout BPTR (allows redirection) */
+  private stdoutBptr: number = 2;
+
   /** Path manager for AmigaDOS path resolution */
   private pathManager: PathManager;
 
@@ -78,6 +81,7 @@ export class FileManager {
     stdout.bAddr = 2;
     stdout.open('w');
     this.handles.set(2, stdout);
+    this.stdoutBptr = 2;
 
     console.log('[FileManager] Initialized standard handles:');
     console.log(`  BPTR 1 (stdin):  ${stdin.toString()}`);
@@ -329,7 +333,14 @@ export class FileManager {
    * Get stdout BPTR (always 2)
    */
   getStdoutBptr(): number {
-    return 2;
+    return this.stdoutBptr;
+  }
+
+  /**
+   * Redirect stdout to a different BPTR (e.g., CLI-style "> file")
+   */
+  setStdoutHandle(bptr: number): void {
+    this.stdoutBptr = bptr;
   }
 
   /**
