@@ -1,3 +1,6 @@
+import * as fs from "fs";
+import path from "path";
+
 // TypeScript interface for Moira WebAssembly module
 
 export interface MoiraModule {
@@ -123,10 +126,46 @@ export class MoiraEmulator {
 
   async initialize(): Promise<void> {
     // Load the WASM module
-    const createMoiraModule = require("./build/moira.js");
+    const candidates = [
+      path.join(__dirname, "build", "moira.js"),
+      path.resolve(
+        __dirname,
+        "..",
+        "..",
+        "..",
+        "src",
+        "amiga-emulation",
+        "cpu",
+        "build",
+        "moira.js"
+      ),
+      path.resolve(
+        process.cwd(),
+        "src",
+        "amiga-emulation",
+        "cpu",
+        "build",
+        "moira.js"
+      ),
+    ];
+    let moiraPath = "";
+    let createMoiraModule: any = null;
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        moiraPath = candidate;
+        createMoiraModule = require(candidate);
+        break;
+      }
+    }
+    if (!createMoiraModule) {
+      throw new Error(
+        `Failed to locate moira.js. Tried: ${candidates.join(", ")}`
+      );
+    }
     this.module = await createMoiraModule();
     if (!this.module) throw new Error("Failed to load Moira module");
     this.cpu = new this.module.MoiraCPU(this.memorySize);
+    console.log(`[MoiraEmulator] moira.js loaded from ${moiraPath}`);
     // Don't reset yet - wait until ROM is loaded
   }
 

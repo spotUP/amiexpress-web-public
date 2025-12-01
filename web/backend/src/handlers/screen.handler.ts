@@ -18,10 +18,25 @@ import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';
 
-const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG === '1';
+// Screen/MCI debugging: always log unless explicitly disabled
+const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG !== '0';
 const screenDebug = (...args: any[]) => {
   if (SCREEN_DEBUG_ENABLED) {
-    console.log(...args);
+    console.log('[SCREEN]', ...args);
+  }
+};
+const SCREEN_FLOW_SCREENS = new Set([
+  'AWAITSCREEN',
+  'BBSTITLE',
+  'LOGON',
+  'BULL',
+  'NODE_BULL',
+  'CONF_BULL',
+  'MENU',
+]);
+const screenFlowLog = (screenName: string, ...args: any[]) => {
+  if (SCREEN_FLOW_SCREENS.has(screenName.toUpperCase())) {
+    console.log('[SCREEN FLOW]', ...args);
   }
 };
 
@@ -556,11 +571,16 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     return '';
   });
 
+  // ~F / ~f - Form feed / clear screen (common in legacy screens)
+  parsed = parsed.replace(/~[Ff]/g, '\x1b[2J\x1b[H');
+
   // ~CC_ - Custom Command Execution (express.e:5555-5563)
   // Format: ~CC_<command>| or ~CC_<command>|| - executes a BBS command from the screen,
   // and some classic files only include a single trailing pipe (e.g. the reference-board V-AWAIT trigger),
   // so we accept either delimiter length like express.e did.
-  const ccRegex = /~CC_([^|]+)\|{1,2}/g;
+  // reference-board screens sometimes omit the pipe and just terminate with whitespace/~SP.
+  // Accept either a pipe delimiter or whitespace/end of line.
+  const ccRegex = /~CC_([^\s|~\r\n]+)(\|{1,2})?/g;
   let ccMatch;
   while ((ccMatch = ccRegex.exec(parsed)) !== null) {
     const commandStr = ccMatch[1];
@@ -683,11 +703,8 @@ export function loadScreenFile(
     let basePath: string;
     const assignLower = assign.toLowerCase();
 
-    if (assignLower === 'bbs') {
-      // bbs: maps to the root dataDir (not dataDir/BBS)
-      basePath = baseDir;
-    } else if (assignLower === 'work') {
-      // WORK: is typically the data volume; map to dataDir
+    if (assignLower === 'bbs' || assignLower === 'work') {
+      // bbs: or work: map to the root dataDir (not dataDir/BBS)
       basePath = baseDir;
     } else if (assignLower.startsWith('node')) {
       const nodeNum = assign.match(/\d+/)?.[0] || '0';
@@ -704,10 +721,10 @@ export function loadScreenFile(
     const fs = require('fs');
     let currentPath = basePath;
     const pathComponents = relativePath.split('/').filter(c => c.length > 0);
-    // If WORK: points at the data root and the first component is "bbs" (from Amiga paths),
+    // If WORK:/BBS: points at the data root and the first component is "bbs",
     // drop that component so we resolve to dataDir/Screens/...
-    if (assignLower === 'work' && pathComponents.length > 0 && pathComponents[0].toLowerCase() === 'bbs') {
-      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' from WORK: path ${relativePath}`);
+    if ((assignLower === 'work' || assignLower === 'bbs') && pathComponents.length > 0 && pathComponents[0].toLowerCase() === 'bbs') {
+      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' from ${assignLower.toUpperCase()}: path ${relativePath}`);
       pathComponents.shift();
     }
     let resolved = true;
@@ -933,6 +950,29 @@ export function loadScreenFile(
     }
   }
 
+  // AmiExpress commonly reuses LOGONxx files or BULLxx files for bulletins.
+  // If the explicit screen name was not found, try known fallbacks.
+  const upper = screenName.toUpperCase();
+  if (upper === 'BULL' || upper === 'NODE_BULL' || upper === 'CONF_BULL') {
+    const fallbackCandidates = [
+      path.join(baseDir, 'Screens', 'BULL20!.TXT'),
+      path.join(baseDir, `Node${nodeId}`, 'logon20.txt'),
+      path.join(baseDir, `Node${nodeId}`, 'logon10.txt'),
+    ];
+    for (const fallback of fallbackCandidates) {
+      const candidate = findCaseInsensitive(path.dirname(fallback), path.basename(fallback));
+      if (candidate && fs.existsSync(candidate)) {
+        try {
+          const content = fs.readFileSync(candidate, 'utf-8');
+          screenDebug(`[loadScreenFile]  Using fallback screen for ${screenName}: ${candidate}`);
+          return { content, isPetscii: false, filePath: candidate };
+        } catch (error) {
+          console.error(`[loadScreenFile]     (error reading fallback ${candidate}): ${(error as Error).message}`);
+        }
+      }
+    }
+  }
+
   console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
   console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
 
@@ -976,11 +1016,12 @@ export function loadScreenFile(
  * @returns Content with proper ESC prefixes
  */
 export function addAnsiEscapes(content: string): string {
-  // Match ANSI sequences: [digits;digitsm or [digitm or [H or [2J etc
-  // But NOT [%X] which are variable placeholders
-  // And NOT isolated brackets like [AmiExpress-Web] - only valid ANSI sequences
-  // Valid: [0m, [1;32m, [2J, [H, etc. - must start with digit or be special (H,J,K)
-  return content.replace(/\[([0-9;]+[A-Za-z]|[HJK]|2J)/g, '\x1b[$1');
+  // Match ANSI sequences: ESC?[digits;digits+][A-Za-z] or ESC?[HJK] or ESC?2J
+  // Avoid double-prefixing sequences that already contain ESC (express.e stores ESC bytes)
+  return content.replace(/(\x1b)?\[([0-9;]*[A-Za-z]|[HJK]|2J)/g, (_m, esc, body) => {
+    // If ESC was already present, preserve a single ESC; otherwise add one
+    return `\x1b[${body}`;
+  });
 }
 
 /**
@@ -999,8 +1040,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   screenDebug(`[displayScreen] User: ${session.user?.name || 'guest'}`);
   screenDebug(`[displayScreen] ========================================`);
 
-  const isMenuScreen = screenName.toUpperCase() === 'MENU';
-  const shouldClear = SCREENS_REQUIRE_CLEAR.has(screenName.toUpperCase());
+  screenFlowLog(screenName, `Display request for ${screenName} (runCommands=${runCommands}) state=${session.subState} node=${session.nodeId || 0}`);
+  const upperName = screenName.toUpperCase();
+  const isMenuScreen = upperName === 'MENU';
+  const isFlowScreen = SCREEN_FLOW_SCREENS.has(upperName);
+  const shouldClear = SCREENS_REQUIRE_CLEAR.has(upperName);
 
   // Express.e:6567 - reset cmdShortcuts before attempting to load the menu screen
   if (isMenuScreen) {
@@ -1020,6 +1064,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     screenDebug(`[displayScreen] Content length: ${content.length} bytes`);
     screenDebug(`[displayScreen] PETSCII: ${isPetscii ? 'YES' : 'NO'}`);
     screenDebug(`[displayScreen] Render event: ${screenName} (node ${session.nodeId || 0})`);
+    screenFlowLog(screenName, `Loaded ${screenName} file=${filePath} petscii=${isPetscii ? 'Y' : 'N'} bytes=${content.length}`);
 
     let parsed: string;
     let commands: any[] = [];
@@ -1038,6 +1083,12 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Normalize line endings for terminal display
     parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
 
+    // For flow screens (BULL/NODE_BULL/CONF_BULL/LOGON/etc.), ensure the frame ends
+    // with a newline so the pause prompt does not collide with the final line of content.
+    if (isFlowScreen && !parsed.endsWith('\r\n')) {
+      parsed += '\r\n';
+    }
+
     // Auto-paginate long screens (e.g., >25 lines like real AmiExpress More prompt)
     const pageHeight = session?.screenHeight || 25;
     const lines = parsed.split(/\r\n|\n/);
@@ -1051,7 +1102,16 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       socket.emit(eventName, prefix + chunk + promptLine);
     };
 
-    if (!session.lastScreenHadPause && lines.length > pageHeight) {
+    screenFlowLog(
+      screenName,
+      `Parsed ${screenName}: event=${eventName} commands=${commands.length} pause=${session.lastScreenHadPause ? 'Y' : 'N'} pages=${lines.length}`
+    );
+
+    // Bulletin/logon flow screens should render as a single frame like express.e.
+    // Skip auto-pagination for flow screens; rely on explicit ~SP/pauses instead.
+    const allowPagination = !isFlowScreen;
+
+    if (allowPagination && !session.lastScreenHadPause && lines.length > pageHeight) {
       session.paginatedScreen = {
         lines,
         nextIndex: pageSize,
@@ -1101,12 +1161,14 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       session.queuedScreenCommands = commands;
       session.pendingScreenCommand = undefined;
       session.screenCommandResolver = null;
+      screenFlowLog(screenName, `Queued ${commands.length} screen command(s) for deferred execution`);
       return true;
     } else if (commands.length > 0) {
       screenDebug(`[displayScreen] ==========================================`);
       screenDebug(`[displayScreen] EXECUTING ${commands.length} COMMANDS FROM SCREEN FILE: ${screenName}`);
       screenDebug(`[displayScreen] Commands:`, commands);
       screenDebug(`[displayScreen] ==========================================`);
+      screenFlowLog(screenName, `Executing ${commands.length} command(s) from ${screenName}`);
       const { handleCommand } = require('./command.handler');
 
       session.pendingScreenCommand = new Promise<void>(resolve => {
@@ -1136,6 +1198,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
           screenDebug(`[displayScreen] ==========================================`);
           screenDebug(`[displayScreen] ALL COMMANDS COMPLETED FROM: ${screenName}`);
           screenDebug(`[displayScreen] ==========================================`);
+          screenFlowLog(screenName, `Completed ${commands.length} command(s) from ${screenName}`);
         } finally {
           session.executingScreenCommand = false;
           if (session.screenCommandResolver) {

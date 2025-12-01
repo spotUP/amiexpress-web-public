@@ -74,6 +74,11 @@ export class DoorDropFileManager {
     console.log(`  BBS root: ${this.bbsRoot}`);
   }
 
+  setBbsRoot(bbsRoot: string): void {
+    this.bbsRoot = bbsRoot;
+    console.log(`[DoorDropFile] Root updated -> ${bbsRoot}`);
+  }
+
   /**
    * Create DOOR.SYS file for a door session
    */

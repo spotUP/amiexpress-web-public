@@ -231,6 +231,12 @@ const displayFlowStates = new Set<LoggedOnSubState>([
   LoggedOnSubState.DISPLAY_MENU,
 ]);
 console.log('[command.handler] displayFlowStates:', Array.from(displayFlowStates));
+const DISPLAY_FLOW_LOG_ENABLED = process.env.SCREEN_DEBUG !== '0';
+const displayFlowLog = (...args: any[]) => {
+  if (DISPLAY_FLOW_LOG_ENABLED) {
+    console.log('[DISPLAY FLOW]', ...args);
+  }
+};
 
 function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
@@ -436,6 +442,13 @@ export function setConstants(constants: any) {
 async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
   try {
     while (isDisplayFlowState(session.subState)) {
+      displayFlowLog(
+        'advance',
+        `state=${session.subState}`,
+        `menuPause=${session.menuPause ? 'Y' : 'N'}`,
+        `queued=${session.queuedScreenCommands?.length || 0}`,
+        `pending=${!!session.pendingScreenCommand}`
+      );
       // Clear any pending pause once a key arrives
       // If a previous screen queued commands, execute them before advancing
       if (session.queuedScreenCommands && session.queuedScreenCommands.length > 0) {
@@ -448,6 +461,7 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
           session.pendingScreenCommand = undefined;
           session.screenCommandResolver = null;
         }
+        displayFlowLog('queued commands completed', `state=${session.subState}`);
         if (!isDisplayFlowState(session.subState)) {
           return;
         }
@@ -459,29 +473,36 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
 
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
         if (!toolFlags.noBulls) {
+          displayFlowLog('showing BULL');
           const shown = await displayScreen(socket, session, 'BULL');
           if (shown && pauseDisplayFlow(socket, session)) {
             session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
+            displayFlowLog('pause after BULL');
             return;
           }
         }
+        displayFlowLog('skip BULL (toolFlags or not shown)');
         session.subState = LoggedOnSubState.DISPLAY_NODE_BULL;
         continue;
       }
 
       if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
         if (!toolFlags.noBulls) {
+          displayFlowLog('showing NODE_BULL');
           const shown = await displayScreen(socket, session, 'NODE_BULL');
           if (shown && pauseDisplayFlow(socket, session)) {
             session.subState = LoggedOnSubState.CONF_SCAN;
+            displayFlowLog('pause after NODE_BULL');
             return;
           }
         }
+        displayFlowLog('skip NODE_BULL (toolFlags or not shown)');
         session.subState = LoggedOnSubState.CONF_SCAN;
         continue;
       }
 
       if (session.subState === LoggedOnSubState.CONF_SCAN) {
+        displayFlowLog('running confScan');
         const { performConferenceScan } = require('./message-scan.handler');
         await performConferenceScan(socket, session);
         // express.e: confScan uses nonStopMail flag but returns to DISPLAY_CONF_BULL
@@ -492,13 +513,16 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
 
       if (session.subState === LoggedOnSubState.DISPLAY_CONF_BULL) {
         if (!toolFlags.noConfBulls) {
+          displayFlowLog('showing CONF_BULL');
           const displayed = await displayConferenceBulletins(socket, session);
           if (displayed && pauseDisplayFlow(socket, session)) {
             // Keep next state queued for when pause finishes
             session.subState = LoggedOnSubState.DISPLAY_MENU;
+            displayFlowLog('pause after CONF_BULL');
             return;
           }
         }
+        displayFlowLog('skip CONF_BULL (toolFlags or not shown)');
         // express.e: join default conference/message base without triggering mail scan again
         const confToJoin = session.user?.confRJoin || 1;
         const msgBaseToJoin = session.user?.msgBaseRJoin || 1;
@@ -541,6 +565,7 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
           }
         }
 
+        displayFlowLog('displaying MENU', `forceMenus=${forceMenus ? 'Y' : 'N'}`, `expert=${session.user?.expert}`);
         await menuDisplayMainMenu(socket, session);
         return;
       }

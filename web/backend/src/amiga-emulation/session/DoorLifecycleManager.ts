@@ -234,6 +234,10 @@ export class DoorLifecycleManager {
       if (this.lifecycleConfig.debugLevel !== "minimal") {
         this.logInitialState();
       }
+      // Ensure startup message is sent for XIM doors before looping
+      if (!this.executionState.startupMessageSent && this.config.doorType === "XIM") {
+        await this.sendStartupMessage();
+      }
       let prevA4 = this.emulator.getRegister(12);
       let prevA5 = this.emulator.getRegister(13);
       let earlyTraceCount = 0;
@@ -493,6 +497,13 @@ export class DoorLifecycleManager {
       const a4 = this.emulator.getRegister(12);
       const a5 = this.emulator.getRegister(13);
       const sp = this.emulator.getRegister(15);
+      if (this.bullsHandler) {
+        this.bullsHandler.dumpBuffers(
+          `[DoorLifecycleManager] Low-PC dump iter=${this.executionState.iterationCount} pc=0x${pc.toString(
+            16
+          )}`
+        );
+      }
       console.log(
         `[DoorLifecycleManager] PC in low memory (0x${pc.toString(
           16
@@ -729,6 +740,19 @@ export class DoorLifecycleManager {
     // Bulls-specific PC monitor
     if (this.bullsHandler) {
       this.bullsHandler.monitorPc(this.executionState.iterationCount);
+      if (offset === -210 /* FreeMem */ || offset === -414 /* CloseLibrary */) {
+        this.bullsHandler.reinforcePointersForTeardown();
+        this.bullsHandler.mirrorLastReplyIntoBuffers();
+        this.bullsHandler.seedTeardownFromHandshake();
+      }
+      // Capture teardown state just before/after FreeMem/CloseLibrary to see current cmd/data/node
+      if (offset === -210 || offset === -414) {
+        this.bullsHandler.dumpBuffers(
+          `[DoorLifecycleManager] Teardown probe offset=${offset} pc=0x${pc.toString(
+            16
+          )}`
+        );
+      }
     }
     // Track A4/A5 changes to catch early corruption; log nearby frame slots
     const a4 = this.emulator.getRegister(12);
@@ -1401,6 +1425,10 @@ export class DoorLifecycleManager {
     if (this.messageHandler) {
       try {
         this.messageHandler.sendStartupMessage();
+        // For XIM doors (e.g., Bulls), immediately send the node status/register message
+        if (this.config.doorType === "XIM") {
+          this.messageHandler.sendNodeStatusMessage();
+        }
       } catch (err) {
         console.error(
           "[DoorLifecycleManager] Error sending startup message:",

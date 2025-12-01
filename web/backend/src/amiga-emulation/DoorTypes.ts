@@ -30,6 +30,8 @@ export interface DoorConfig {
 }
 
 export class DoorConstants {
+  // Exec message header size (mn_Node + reply/length)
+  static readonly MESSAGE_HEADER_SIZE = 0x14;
   static readonly DOOR_INFO_SIZE = 0x146;
   static readonly DOOR_INFO_MESSAGE_OFFSET = 0x46;
   static readonly MESSAGE_STRING_OFFSET = 0x14;

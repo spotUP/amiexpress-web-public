@@ -63,6 +63,10 @@ Goal: no stubs or gaps in door IPC; mirror express.e exactly so 68K doors run un
  2) Fill protocol gaps: implement missing handlers (JH_SMPTR, ACP effects), fix prompt semantics (done), complete DT/BB fields, finish MCI/ACS logic, remove remaining stubs.
  3) Path/asset parity: align BBS:/NODE:/DOORS: resolution and drop files; warn on missing door assets instead of silent exits.
  4) Verification: enable trace, run several 68K doors (prompt-driven, MCI-heavy, transfer) to confirm no unknown opcodes and correct replies; then disable debug noise. Shift GA testing to another door if GA itself misbehaves on stock express.e.
+- **Immediate door tasks (current blockers)**:
+  - Fix POSIX absolute path handling in PathManager (done) and ensure drop files/STDOUT land outside PROGDIR when requested.
+  - Bulls regression: door exits after banner with PC→0; CloseLibrary/FreeMem sequence suggests stack corruption/XIM handshake mismatch. Exec now auto-protects any message returned via WaitPort/GetMsg from FreeMem, but Bulls is not hitting those paths yet (no WaitPort/GetMsg calls logged) and still frees its 0x937c/0x9370 buffers before dying. Capture stack/register expectations from express.e door glue, guard against closing STDOUT, and validate reply/command buffers before freeing; align teardown with the live reply buffer observed in `/tmp/bulls-run.log`.
+   - Keep batch scripts and daily logon doors working while fixing XIM paths; avoid regressions in batch command emulation.
   - Message list/read/edit/forward/delete scattered around 9820–11980; mail scan earlier via confScan (27980+).
 
 ### Phase 1 – State Machine, Screens, Pauses (express.e 28540–28660)
@@ -131,6 +135,10 @@ Goal: no stubs or gaps in door IPC; mirror express.e exactly so 68K doors run un
 
 ## Active Status
 - Progress this session:
+  - PathManager now treats POSIX absolute paths as literal, so redirects like `/tmp/bulls.out` no longer resolve under PROGDIR. Moira loader works from dist by searching source paths.
+  - LibraryManager/DOS now honor `BBS_DATA_DIR/BBS_ROOT` for assigns/ROM lookup; runner sets these before door launch and retargets drop files accordingly.
+  - Bulls standalone run still exits after banner; stdout captured to `/tmp/bulls.out` (110 bytes). Trace shows CloseLibrary/FreeMem followed by PC→0 (stack corruption). Needs XIM/drop-file/state audit next.
+  - Exec WaitPort/GetMsg now auto-protect any message pointer returned to the door from FreeMem; Bulls still never hits WaitPort/GetMsg and continues to FreeMem its 0x937c/0x9370 buffers before dying (see `/tmp/bulls-run.log`), so next step is to bind teardown to the live reply buffer instead of the static control block.
   - `?` command now redraws the menu (expert mode) without extra text; non-expert returns to menu state.
   - VER/WHO/WHD now emit a press-key prompt and return to the menu; New Files now emits a press-key prompt before menu return.
   - X toggle now immediately redraws the menu without an extra pause; T returns to menu without requiring a second keypress.
@@ -138,3 +146,4 @@ Goal: no stubs or gaps in door IPC; mirror express.e exactly so 68K doors run un
   - ~SS_ now strips extensions (quicknew.txt no longer becomes quicknew.txt.txt), so embedded screen files should render.
   - WORK: assign now maps to dataDir and drops a leading "bbs" path component, so paths like WORK:bbs/Screens/logoff/002.logoff resolve to the real Screens/logoff directory.
   - Deviation inventory still pending; remaining command/state/MCI/new-user tasks stay open.
+- Bulls door debugging: mirrored AEDoor fields now write to both canonical and header-biased offsets (base+0x14) to match Bulls’ layout; host-side XIM helpers use the biased writes too. Handshake logging now captures biased cmd/data/node, but Bulls still frees buffers with zeros (control/info stuck at 0x9228), suggesting the live message pointer is being lost or overwritten during teardown. Next action: pin 0x6c24/0x6c20 to the real WaitPort/GetMsg result (likely A1 around 0x937c) and stop resetting to the preallocated control block so we can seed nonzero dc/e0/e4 before FreeMem/CloseLibrary.

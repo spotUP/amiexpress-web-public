@@ -148,11 +148,11 @@ export class DosLibrary {
   private readonly ERROR_LINE_TOO_LONG = 120;
 
   // Base paths for logical devices
-  private readonly rootPath: string;
-  private readonly bbsDataPath: string;
+  private rootPath: string = "";
+  private bbsDataPath: string = "";
 
   // Directory and lock management for door support
-  private currentDirectory: string;
+  private currentDirectory: string = "";
   private currentDirectoryAmiga: string = "BBS:";
   private lastLockPath: string = "";
   private doorDirectory: string = ""; // Set by AmigaDoorSession for PROGDIR: device
@@ -171,16 +171,16 @@ export class DosLibrary {
   private readArgsHeapPtr: number = this.READARGS_HEAP_BASE;
   private readArgsContexts: Map<number, ReadArgsContext> = new Map();
   private readArgsBufferPool: number[] = [];
-  private readonly doorFileLogPath: string;
+  private doorFileLogPath: string;
 
-  constructor(emulator: MoiraEmulator) {
+  constructor(emulator: MoiraEmulator, rootPathOverride?: string) {
     this.emulator = emulator;
-    this.rootPath =
-      process.env.BBS_ROOT || path.resolve(process.cwd(), "../..");
-    this.bbsDataPath = path.join(this.rootPath, "BBS");
-    this.currentDirectory = this.bbsDataPath;
-    this.ensureDirectory(this.bbsDataPath);
-    this.ensureDirectory("/tmp/ram/ENV");
+    const detectedRoot =
+      rootPathOverride ||
+      process.env.BBS_DATA_DIR ||
+      process.env.BBS_ROOT ||
+      path.resolve(process.cwd(), "../..");
+    this.setBasePaths(detectedRoot);
     this.readArgsHeapPtr = this.READARGS_HEAP_BASE;
     this.envVarStructNext = this.envVarStructPointer;
     this.envStringNext = this.envStringPointer;
@@ -233,6 +233,18 @@ export class DosLibrary {
     } catch {
       /* ignore logging failures */
     }
+  }
+
+  /**
+   * Update base paths after construction so callers can force the BBS root.
+   */
+  setBasePaths(rootPath: string): void {
+    this.rootPath = rootPath;
+    this.bbsDataPath = path.join(this.rootPath, "BBS");
+    this.currentDirectory = this.bbsDataPath;
+    this.ensureDirectory(this.bbsDataPath);
+    this.ensureDirectory("/tmp/ram/ENV");
+    this.doorFileLogPath = path.join(this.rootPath, "logs", "door-68k.log");
   }
 
   /**
@@ -775,6 +787,14 @@ export class DosLibrary {
 
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
+      // Do not allow standard handles to be closed; return success like AmigaDOS.
+      if (handle === this.STDIN_HANDLE || handle === this.STDOUT_HANDLE || handle === this.STDERR_HANDLE) {
+        console.log(
+          `[dos.library] Close: standard handle ${handle} (FileManager) -> success`
+        );
+        this.logDoorFile(`CLOSE ok handle=${handle} standard=true`);
+        return -1; // DOSTRUE
+      }
       const success = this.fileManager.close(handle);
       if (success) {
         console.log(

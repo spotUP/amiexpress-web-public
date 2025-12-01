@@ -98,6 +98,7 @@ export class AEDoorLibrary {
    */
   createComm(): number {
     const nodeId = this.resolveNodeId();
+    console.log(`[AEDoorLibrary] CreateComm for node ${nodeId}`);
     const bbsPortAddr = this.findBbsPort(nodeId);
 
     if (bbsPortAddr === 0) {
@@ -586,6 +587,7 @@ export class AEDoorLibrary {
       const portAddr = this.execLibrary.findPort(addr);
       this.execLibrary.freeMem(addr, name.length + 1);
       if (portAddr !== 0) {
+        console.log(`[AEDoorLibrary] Found BBS port "${name}" at 0x${portAddr.toString(16)}`);
         return portAddr;
       }
     }

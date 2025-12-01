@@ -22,6 +22,7 @@ export class XIMSystemCommandsHandler {
   private messageParser: XIMMessageParser;
   private bbsSession: BBSSessionData;
   private state: XIMState;
+  private ximPortAddr: number;
   private bullsHandler: any;
   private transferRawActive = false;
 
@@ -39,6 +40,11 @@ export class XIMSystemCommandsHandler {
     this.messageParser = messageParser;
     this.bbsSession = bbsSession;
     this.state = state;
+    this.ximPortAddr =
+      (state as any).ximPortAddr ||
+      (state as any).aePortAddr ||
+      (state as any).doorPortAddr ||
+      0;
 
     try {
       // Lazy import to avoid circular refs
@@ -147,13 +153,14 @@ export class XIMSystemCommandsHandler {
     try {
       const bulls = (global as any).bullsHandlerInstance;
       if (bulls && typeof bulls.mirrorRegisterReply === 'function') {
+        const nodeId =
+          (this.bbsSession?.nodeId as number) ||
+          (this.bbsSession as any)?.nodeNumber ||
+          1;
         bulls.mirrorRegisterReply({
           command: XIMCommand.RAWARROW,
           data: 1,
-          nodeId:
-            (this.bbsSession?.nodeId as number) ||
-            (this.bbsSession as any)?.nodeNumber ||
-            1,
+          nodeId,
           msgAddr: msg.msgAddr,
         });
       }

@@ -17,6 +17,9 @@ import * as fs from "fs";
 import { LibraryLoader } from "./loader/LibraryLoader.js";
 import { PathManager } from "./api/PathManager.js";
 
+const DEFAULT_ROM =
+  "Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom";
+
 export class LibraryManager {
   public execLibrary: ExecLibrary | null = null;
   public aedoorLibrary: AEDoorLibrary | null = null;
@@ -34,6 +37,7 @@ export class LibraryManager {
   private doorReplyPortAddr: number = 0;
   private useXimProtocol: boolean = false;
   private pathManager: PathManager | null = null;
+  private bbsRoot: string = "";
 
   constructor(emulator: MoiraEmulator, socket: Socket, config: DoorConfig) {
     this.emulator = emulator;
@@ -49,14 +53,42 @@ export class LibraryManager {
     await this.initializeExec();
   }
 
+  private resolveBbsRoot(): string {
+    const sessionRoot =
+      (this.config.bbsSession?.bbsRoot as string | undefined) ||
+      (this.config.bbsSession?.dataDir as string | undefined);
+    const envRoot =
+      process.env.BBS_DATA_DIR || process.env.BBS_ROOT || sessionRoot;
+    const resolved = envRoot
+      ? path.resolve(envRoot)
+      : path.resolve(__dirname, "../../../..");
+    this.bbsRoot = resolved;
+    return resolved;
+  }
+
+  private resolveRomPath(): string {
+    const romName = process.env.AEDOOR_ROM_FILE || DEFAULT_ROM;
+    const candidates = [
+      path.join(this.bbsRoot, "data", "amiga-roms", romName),
+      path.join(process.cwd(), "data", "amiga-roms", romName),
+      path.resolve(__dirname, "..", "..", "data", "amiga-roms", romName),
+    ];
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    throw new Error(
+      `Kickstart ROM not found. Tried: ${candidates.join(", ")}`
+    );
+  }
+
   private async initializeExec(): Promise<void> {
+    const projectRoot = this.resolveBbsRoot();
+    console.log(`[LibraryManager] BBS root resolved to ${projectRoot}`);
     console.log("[LibraryManager] Loading Kickstart ROM...");
 
-    const romBase = path.resolve(__dirname, "..", "..", "data", "amiga-roms");
-    const romPath = path.join(
-      romBase,
-      "Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom"
-    );
+    const romPath = this.resolveRomPath();
     const romData = fs.readFileSync(romPath);
     this.emulator.loadROM(new Uint8Array(romData));
 
@@ -124,8 +156,6 @@ export class LibraryManager {
 
     // Initialize PathManager assigns based on BBS root/dataDir and optional overrides from config.assigns
     // Resolve the BBS root reliably from this source path to avoid depending on cwd
-    const projectRoot =
-      process.env.BBS_ROOT || path.resolve(__dirname, "../../../..");
     this.pathManager = new PathManager(projectRoot);
     if (this.config.assigns) {
       for (const [assign, target] of Object.entries(this.config.assigns)) {
@@ -155,7 +185,8 @@ export class LibraryManager {
 
     console.log("[LibraryManager] Creating DOS.library...");
 
-    this.dosLibrary = new DosLibrary(this.emulator);
+    this.dosLibrary = new DosLibrary(this.emulator, projectRoot);
+    this.dosLibrary.setBasePaths(projectRoot);
     this.dosLibrary.setEnvironment(this.config.env);
     this.dosLibrary.setInheritedHandles(1, 2);
 

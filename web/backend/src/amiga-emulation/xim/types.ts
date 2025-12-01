@@ -233,6 +233,10 @@ export interface XIMState {
   language: string;
   confAccess: string;
   carrierDropped: boolean;
+  ximPortAddr?: number;
+  aePortAddr?: number;
+  doorPortAddr?: number;
+  doorReplyPortAddr?: number;
   returnCommand?: string;
   prvCommand?: string;
   chainCommand?: string;

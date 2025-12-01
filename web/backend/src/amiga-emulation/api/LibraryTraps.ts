@@ -43,6 +43,7 @@ const AEDOOR_VECTORS: LibraryVector[] = [
     offset: -30, // LVO -30 (0xFFE2)
     name: "CreateComm",
     handler: (emu, lib: AEDoorLibrary) => {
+      console.log("[AEDoorLibrary][Trap] CreateComm intercepted");
       return lib.createComm();
     },
   },
@@ -163,6 +164,7 @@ const AEDOOR_VECTORS: LibraryVector[] = [
     offset: -132, // LVO -132 (0xFF7C)
     name: "PreCreateComm",
     handler: (emu, lib: AEDoorLibrary) => {
+      console.log("[AEDoorLibrary][Trap] PreCreateComm intercepted");
       return lib.preCreateComm();
     },
   },
@@ -540,6 +542,12 @@ const EXEC_VECTORS: LibraryVector[] = [
     name: "GetMsg",
     handler: (emu, lib: ExecLibrary) => {
       const portAddr = emu.getRegister(8); // A0
+      const portName = portAddr ? lib.getPortName(portAddr) : "";
+      console.log(
+        `[ExecLibrary][Trap][GetMsg] port=0x${portAddr.toString(
+          16
+        )} name=${portName}`
+      );
       return lib.getMsg(portAddr);
     },
   },
@@ -630,6 +638,12 @@ const EXEC_VECTORS: LibraryVector[] = [
     name: "WaitPort",
     handler: (emu, lib: ExecLibrary) => {
       const portAddr = emu.getRegister(8); // A0
+      const portName = portAddr ? lib.getPortName(portAddr) : "";
+      console.log(
+        `[ExecLibrary][Trap][WaitPort] port=0x${portAddr.toString(
+          16
+        )} name=${portName}`
+      );
       return lib.waitPort(portAddr);
     },
   },

@@ -124,6 +124,9 @@ export class ExecLibrary {
   private libraryLoader: any = null;
   private useNativeLibraries: boolean = false;
 
+  // Host-owned AEDoor messages that must not be freed by doors (jhMessage buffers)
+  private protectedMessages: Set<number> = new Set();
+
   // Standard library addresses (for stubs)
   private readonly EXEC_BASE_ADDR = 0x010000; // ExecBase at 64KB
   private readonly DOS_LIB_ADDR = 0x020000; // DOS.library at 128KB
@@ -239,6 +242,34 @@ export class ExecLibrary {
 
   setDoorPortAddress(addr: number): void {
     this.doorPortAddr = addr;
+  }
+  getDoorPortAddress(): number {
+    return this.doorPortAddr;
+  }
+
+  /** Allow callers to mark host-owned jhMessage buffers as protected from FreeMem. */
+  registerProtectedMessage(msgAddr: number): void {
+    if (msgAddr && msgAddr >= 0x100) {
+      this.protectedMessages.add(msgAddr);
+    }
+  }
+
+  /**
+   * When Exec hands a message pointer back to the door (WaitPort/GetMsg),
+   * mark it protected so the door cannot FreeMem the host-owned buffer.
+   */
+  private protectReturnedMessage(msgAddr: number, context: string): void {
+    if (!msgAddr || msgAddr < 0x100) {
+      return;
+    }
+    if (!this.protectedMessages.has(msgAddr)) {
+      console.log(
+        `[ExecLibrary] Protecting message from ${context}: 0x${msgAddr.toString(
+          16
+        )}`
+      );
+    }
+    this.registerProtectedMessage(msgAddr);
   }
 
   /**
@@ -816,8 +847,12 @@ export class ExecLibrary {
   openLibrary(nameAddr: number, version: number): number {
     // Read library name from memory
     const name = this.emulator.readString(nameAddr);
-
-    console.log(`[ExecLibrary] OpenLibrary("${name}", ${version})`);
+    const pc = this.emulator.getRegister(CPURegister.PC);
+    console.log(
+      `[ExecLibrary][OpenLibrary] pc=0x${pc.toString(
+        16
+      )} "${name}" v${version}`
+    );
 
     // Use hybrid approach
     const result = this.openLibraryHybrid(name, version);
@@ -844,6 +879,24 @@ export class ExecLibrary {
     // Find library by address
     for (const [name, lib] of this.libraries.entries()) {
       if (lib.address === libAddr) {
+        const lower = name.toLowerCase();
+        // Keep core libraries resident for the life of the process; some doors
+        // (e.g., Bulls) call CloseLibrary(dos.library) during teardown and then
+        // continue executing. Dropping vectors or deleting the entry can corrupt
+        // subsequent calls. Mirror classic behavior by ignoring CloseLibrary for
+        // exec/dos/aedoor/icon.
+        if (
+          lower === "dos.library" ||
+          lower === "exec.library" ||
+          lower === "aedoor.library" ||
+          lower === "icon.library"
+        ) {
+          console.log(
+            `[ExecLibrary] CloseLibrary(${name}) ignored (kept resident)`
+          );
+          return;
+        }
+
         lib.openCount--;
         console.log(
           `[ExecLibrary] CloseLibrary(${name}), count=${lib.openCount}`
@@ -1015,6 +1068,20 @@ export class ExecLibrary {
    * Frees previously allocated memory
    */
   freeMem(addr: number, size: number): void {
+    try {
+      // Generic protection: skip freeing host-owned jhMessage buffers
+      if (this.protectedMessages.has(addr)) {
+        console.log(
+          `[ExecLibrary] FreeMem(0x${addr.toString(
+            16
+          )}, ${size}) - skipped (protected message buffer)`
+        );
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+
     const allocation = this.allocations.get(addr);
     if (allocation) {
       this.allocations.delete(addr);
@@ -1308,7 +1375,10 @@ export class ExecLibrary {
    */
   findPort(nameAddr: number): number {
     const name = this.emulator.readString(nameAddr);
-    console.log(`[ExecLibrary] FindPort("${name}")`);
+    const pc = this.emulator.getRegister(CPURegister.PC);
+    console.log(
+      `[ExecLibrary][FindPort] pc=0x${pc.toString(16)} "${name}"`
+    );
 
     // CORRECT IMPLEMENTATION: Search for port in public registry
     // FindPort() should NOT create ports - it only searches for existing ones
@@ -1609,7 +1679,7 @@ export class ExecLibrary {
     // Track port in our registry
     const port: MessagePort = {
       address: portAddr,
-      name: "", // Private port (no name)
+      name: "", // Private port (CreateMsgPort has no name)
       messages: [],
       sigBit: signalBit,
       sigTask: this.currentTask.address,
@@ -1861,20 +1931,15 @@ export class ExecLibrary {
     // Create port using standard CreateMsgPort
     const portAddr = this.createMsgPort();
 
-    // Get the port from registry
-    const port = this.messagePorts.get(portAddr);
-    if (!port) {
-      throw new Error(`Failed to create public port "${name}"`);
-    }
-
-    // Set the name
-    port.name = name;
-
-    // Write name to port structure (ln_Name at offset 10)
-    // Allocate memory for name string
+    // Write name to port structure (ln_Name at offset 10) and registry entry
     const nameAddr = this.allocMem(name.length + 1, 0);
     this.emulator.writeString(nameAddr, name);
     this.emulator.writeMemory32(portAddr + 10, nameAddr);
+    const port = this.messagePorts.get(portAddr);
+    if (port) {
+      port.name = name;
+      this.messagePorts.set(portAddr, port);
+    }
 
     // Add to public registry
     this.registerPublicPort(name, portAddr);
@@ -1966,6 +2031,14 @@ export class ExecLibrary {
       return;
     }
 
+    console.log(
+      `[ExecLibrary][PutMsg] port=0x${portAddr.toString(
+        16
+      )} name=${port.name ?? "<unnamed>"} msg=0x${msgAddr.toString(
+        16
+      )} suppress=${suppressDoorCallback ? "yes" : "no"}`
+    );
+
     // Bulls: avoid rerouting to allow the door's chosen port to be honored.
 
     // CRITICAL: Set message type to NT_MESSAGE (5) as per autodocs
@@ -2055,7 +2128,7 @@ export class ExecLibrary {
    * Removes and returns the first message from the port's queue.
    */
   getMsg(portAddr: number): number {
-    console.log(`[ExecLibrary] GetMsg(port=0x${portAddr.toString(16)})`);
+    console.log(`[ExecLibrary] >>> GetMsg(port=0x${portAddr.toString(16)})`);
 
     const port = this.messagePorts.get(portAddr);
     if (!port) {
@@ -2078,6 +2151,12 @@ export class ExecLibrary {
         port.messages.length
       } remaining`
     );
+    console.log(
+      `[ExecLibrary] GetMsg returning msg=0x${msgAddr.toString(
+        16
+      )} queueLen=${port.messages.length}`
+    );
+    this.protectReturnedMessage(msgAddr, `GetMsg port=0x${portAddr.toString(16)}`);
 
     // Clear signaled flag if no more messages
     if (port.messages.length === 0) {
@@ -2106,9 +2185,9 @@ export class ExecLibrary {
     let port: MessagePort | undefined = this.messagePorts.get(portAddr);
     if (!port) {
       console.log(
-        `[ExecLibrary] WaitPort: Port at 0x${portAddr.toString(
-          16
-        )} not in registry, auto-registering`
+        `[ExecLibrary] >>> WaitPort(port=0x${portAddr.toString(
+        16
+        )}) - not in registry, auto-registering`
       );
       const autoPort = this.autoRegisterPort(portAddr);
       if (autoPort) {
@@ -2158,6 +2237,11 @@ export class ExecLibrary {
     // MESSAGE FOUND! Return the head message without removing it.
     // Real WaitPort waits on the signal and returns the first message; GetMsg removes it.
     const msgAddr = port.messages[0];
+    console.log(
+      `[ExecLibrary] WaitPort returning msg=0x${msgAddr.toString(
+        16
+      )} queueLen=${port.messages.length}`
+    );
     // Clear signaled bit like Exec's Wait would do
     port.signaled = false;
     console.log(
@@ -2172,6 +2256,10 @@ export class ExecLibrary {
     console.log(`[ExecLibrary]   Queue length: ${port.messages.length}`);
     console.log(
       `[ExecLibrary] ===============================================`
+    );
+    this.protectReturnedMessage(
+      msgAddr,
+      `WaitPort port=0x${portAddr.toString(16)}`
     );
     return msgAddr;
   }
@@ -2219,8 +2307,11 @@ export class ExecLibrary {
       return;
     }
 
-    console.log(`[ExecLibrary] ReplyMsg(msg=0x${msgAddr.toString(16)})`);
-    console.log(`[ExecLibrary]   Reply Port: 0x${replyPortAddr.toString(16)}`);
+    console.log(
+      `[ExecLibrary][ReplyMsg] msg=0x${msgAddr.toString(
+        16
+      )} replyPort=0x${replyPortAddr.toString(16)}`
+    );
 
     // CRITICAL: Set message type to NT_REPLYMSG (6) as per autodocs
     // This distinguishes replies from new messages

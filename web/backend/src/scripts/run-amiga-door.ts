@@ -8,6 +8,7 @@ interface RunnerOptions {
   args: string[];
   nodeId: number;
   doorId?: string;
+  doorType?: string;
   cwd?: string;
   user?: any;
   timeRemaining?: number;
@@ -17,8 +18,15 @@ interface RunnerOptions {
 }
 
 async function runDoor(opts: RunnerOptions) {
-  const dataDir = config.getConfig().dataDir;
-  const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+  const cfg = config.getConfig();
+  const resolvedDataDir = path.resolve(cfg.dataDir);
+  const bbsRoot = path.resolve(
+    process.env.BBS_DATA_DIR || process.env.BBS_ROOT || resolvedDataDir
+  );
+  const dataDir = bbsRoot;
+  process.env.BBS_ROOT = bbsRoot;
+  process.env.BBS_DATA_DIR = bbsRoot;
+  doorDropFileManager.setBbsRoot(bbsRoot);
   const user = opts.user || {
     id: 1,
     name: 'Sysop',
@@ -60,11 +68,16 @@ async function runDoor(opts: RunnerOptions) {
     user,
   };
 
-    const amigaSession = new AmigaDoorSession(
-      // Null socket interface; AmigaDoorSession only emits events—mock with no-ops
-      {
-        emit: () => {},
-      on: () => {},
+  // Prefer explicit doorType; otherwise infer XIM for Bulls binaries
+  const inferredDoorType =
+    opts.doorType ||
+    (path.basename(opts.execPath).toLowerCase().includes('bull') ? 'XIM' : undefined);
+
+  const amigaSession = new AmigaDoorSession(
+    // Null socket interface; AmigaDoorSession only emits events—mock with no-ops
+    {
+      emit: () => {},
+    on: () => {},
     } as any,
     {
       executablePath: opts.execPath,
@@ -76,6 +89,7 @@ async function runDoor(opts: RunnerOptions) {
       assigns: opts.assigns || {},
       env: opts.env,
       toolTypes: opts.toolTypes || {},
+      doorType: inferredDoorType,
     } as any
   );
 

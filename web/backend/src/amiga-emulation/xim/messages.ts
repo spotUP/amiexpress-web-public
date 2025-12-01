@@ -33,42 +33,34 @@ export class XIMMessageParser {
    *   Size: 0x100 bytes
    */
   parseMessage(msgAddr: number): XIMMessage {
+    const headerBias = DoorConstants.MESSAGE_HEADER_SIZE || 0;
+    const readWithBias = (offset: number): number => {
+      const primary = this.emulator.readMemory32(msgAddr + offset);
+      const biasedOffset = offset + headerBias;
+      if (
+        headerBias > 0 &&
+        biasedOffset < DoorConstants.MESSAGE_TOTAL_LENGTH
+      ) {
+        const biased = this.emulator.readMemory32(msgAddr + biasedOffset);
+        return primary !== 0 ? primary : biased;
+      }
+      return primary;
+    };
+
     const replyPort = this.emulator.readMemory32(
       msgAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET
     );
-    const command = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET
-    );
-    const data = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_DATA_OFFSET
-    );
-    const nodeId = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_NODE_OFFSET
-    );
-    const lineNumber = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_LINE_OFFSET
-    );
-    const signal = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_SIGNAL_OFFSET
-    );
-    const task = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_TASK_OFFSET
-    );
-    const semaphore = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_SEMAPHORE_OFFSET
-    );
-    const filler1 = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_FILLER1_OFFSET
-    );
-    const filler2 = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_FILLER2_OFFSET
-    );
-    const stringPtr = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET
-    );
-    const filler3 = this.emulator.readMemory32(
-      msgAddr + DoorConstants.MESSAGE_FILLER3_OFFSET
-    );
+    const command = readWithBias(DoorConstants.MESSAGE_COMMAND_OFFSET);
+    const data = readWithBias(DoorConstants.MESSAGE_DATA_OFFSET);
+    const nodeId = readWithBias(DoorConstants.MESSAGE_NODE_OFFSET);
+    const lineNumber = readWithBias(DoorConstants.MESSAGE_LINE_OFFSET);
+    const signal = readWithBias(DoorConstants.MESSAGE_SIGNAL_OFFSET);
+    const task = readWithBias(DoorConstants.MESSAGE_TASK_OFFSET);
+    const semaphore = readWithBias(DoorConstants.MESSAGE_SEMAPHORE_OFFSET);
+    const filler1 = readWithBias(DoorConstants.MESSAGE_FILLER1_OFFSET);
+    const filler2 = readWithBias(DoorConstants.MESSAGE_FILLER2_OFFSET);
+    const stringPtr = readWithBias(DoorConstants.MESSAGE_STRING_PTR_OFFSET);
+    const filler3 = readWithBias(DoorConstants.MESSAGE_FILLER3_OFFSET);
     const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
 
     // Read the string (200 bytes starting at offset 24)
@@ -162,76 +154,57 @@ export class XIMMessageParser {
    * Write reply data/result (msg->Data)
    */
   writeData(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_DATA_OFFSET,
-      value
-    );
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_DATA_OFFSET, value);
   }
 
   /**
    * Write Command (msg->Command)
    */
   writeCommand(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET,
-      value
-    );
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_COMMAND_OFFSET, value);
   }
 
   /**
    * Write LineNum (msg->LineNum)
    */
   writeLineNumber(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_LINE_OFFSET,
-      value
-    );
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_LINE_OFFSET, value);
   }
 
   /**
    * Write NodeID (msg->NodeID)
    */
   writeNodeId(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_NODE_OFFSET,
-      value
-    );
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_NODE_OFFSET, value);
   }
 
   /**
    * Write semaphore/filler pointers
    */
   writeSemaphore(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_SEMAPHORE_OFFSET,
+    this.writeWithBias(
+      msgAddr,
+      DoorConstants.MESSAGE_SEMAPHORE_OFFSET,
       value
     );
   }
 
   writeFiller1(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_FILLER1_OFFSET,
-      value
-    );
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER1_OFFSET, value);
   }
 
   writeFiller2(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_FILLER2_OFFSET,
-      value
-    );
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER2_OFFSET, value);
   }
 
   writeFiller3(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_FILLER3_OFFSET,
-      value
-    );
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER3_OFFSET, value);
   }
 
   writeStringPointer(msgAddr: number, value: number): void {
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET,
+    this.writeWithBias(
+      msgAddr,
+      DoorConstants.MESSAGE_STRING_PTR_OFFSET,
       value
     );
   }
@@ -336,5 +309,21 @@ export class XIMMessageParser {
     };
 
     return names[command] || `Unknown (${command})`;
+  }
+
+  /**
+   * Write a 32-bit value to the canonical jhMessage offset and, when space
+   * permits, to the header-biased offset used by Bulls (message base + 0x14).
+   */
+  private writeWithBias(msgAddr: number, offset: number, value: number): void {
+    this.emulator.writeMemory32(msgAddr + offset, value);
+    const headerBias = DoorConstants.MESSAGE_HEADER_SIZE || 0;
+    const biasedOffset = offset + headerBias;
+    if (
+      headerBias > 0 &&
+      biasedOffset < DoorConstants.MESSAGE_TOTAL_LENGTH
+    ) {
+      this.emulator.writeMemory32(msgAddr + biasedOffset, value);
+    }
   }
 }

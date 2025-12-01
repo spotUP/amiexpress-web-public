@@ -91,28 +91,25 @@ export class XIMHostService {
     this.ensureReady();
 
     const msgAddr = this.exec.allocMem(DoorConstants.MESSAGE_TOTAL_LENGTH, DoorConstants.MEMF_PUBLIC_CLEAR);
+    this.exec.registerProtectedMessage(msgAddr);
     const replyPort = this.exec.createMsgPort();
     this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET, replyPort);
     this.emulator.writeMemory16(msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET, DoorConstants.MESSAGE_TOTAL_LENGTH);
-    this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_NODE_OFFSET, nodeId);
-    this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET, msgAddr + DoorConstants.MESSAGE_STRING_OFFSET);
+    this.parser.writeNodeId(msgAddr, nodeId);
+    this.parser.writeStringPointer(msgAddr, msgAddr + DoorConstants.MESSAGE_STRING_OFFSET);
     this.parser.clearString(msgAddr + DoorConstants.MESSAGE_STRING_OFFSET);
     return { msgAddr, replyPort, aedoorPort: this.doorPort };
   }
 
   /** Set message fields. */
   setCommand(handle: XIMHandle, cmd: number) {
-    this.emulator.writeMemory32(handle.msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, cmd);
+    this.parser.writeCommand(handle.msgAddr, cmd);
   }
   setData(handle: XIMHandle, data: number) {
-    this.emulator.writeMemory32(handle.msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, data);
+    this.parser.writeData(handle.msgAddr, data);
   }
   setString(handle: XIMHandle, value: string) {
-    const truncated = value.slice(0, DoorConstants.MESSAGE_STRING_CAPACITY - 1);
-    for (let i = 0; i < truncated.length; i++) {
-      this.emulator.writeMemory(handle.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET + i, truncated.charCodeAt(i));
-    }
-    this.emulator.writeMemory(handle.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET + truncated.length, 0);
+    this.parser.writeMessageString(handle.msgAddr, value);
   }
 
   parse(handle: XIMHandle) {

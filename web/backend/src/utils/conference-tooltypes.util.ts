@@ -22,8 +22,9 @@ const defaultFlags: ConferenceToolFlags = {
   showNewFiles: false,
   noNewFiles: false,
   forceMenus: false,
-  noBulls: true,
-  noConfBulls: true,
+  // AmiExpress defaults show bulletins unless explicitly disabled
+  noBulls: false,
+  noConfBulls: false,
   freeDownloads: false,
 };
 

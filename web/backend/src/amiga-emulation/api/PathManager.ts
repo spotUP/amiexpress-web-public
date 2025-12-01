@@ -145,6 +145,13 @@ export class PathManager {
       return null; // Caller should handle as console
     }
 
+    // POSIX absolute paths should bypass assigns and map directly
+    if (amiPath.startsWith('/')) {
+      const normalized = path.normalize(amiPath);
+      console.log(`[PathManager] Absolute POSIX path: "${amiPath}" => "${normalized}"`);
+      return normalized;
+    }
+
     const upperPath = amiPath.toUpperCase();
 
     // Special devices

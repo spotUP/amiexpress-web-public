@@ -31,6 +31,16 @@ export class DoorMessageHandler {
   private lastMessageDump: number = 0;
   private messageCount: number = 0;
   private firstNonRegisterSeen: boolean = false;
+  private logMessageRequest(
+    msgAddr: number,
+    command: number,
+    data: number,
+    str: string
+  ): void {
+    console.log(`[DoorMessageHandler] msg request: ${command}`);
+    console.log(`[DoorMessageHandler] data: ${data}`);
+    console.log(`[DoorMessageHandler] string: ${str ?? ""}`);
+  }
 
   // Shared references (managed by parent)
   private doorReplyPortAddr: number = 0;
@@ -90,9 +100,13 @@ export class DoorMessageHandler {
     this.sentInitialMessage = state.sentInitialMessage;
   }
 
-  // express.e: doors pull their own messages; no proactive startup PutMsg.
+  // For XIM doors, express.e expects the BBS to deliver an initial node-status/register
+  // message via PutMsg so the door can call WaitPort/GetMsg to start IPC.
   sendStartupMessage(): void {
-    // Intentionally no-op; we no longer inject a startup message.
+    if (!this.bullsHandler.isBullsDoor()) {
+      return;
+    }
+    this.sendNodeStatusMessage();
   }
 
   /**
@@ -111,7 +125,10 @@ export class DoorMessageHandler {
       return;
     }
 
-    const portAddr = this.doorPortAddress || 0xa0000;
+    const portAddr =
+      this.doorPortAddress ||
+      this.execLibrary.getDoorPortAddress() ||
+      0xa0000;
     const statusText = `NODE ${this.resolveNodeId()} STATUS READY`;
     const msgAddr = this.allocateDoorCommandMessage(
       1,
@@ -127,9 +144,25 @@ export class DoorMessageHandler {
         16
       )})`
     );
+    console.log(
+      `[DoorMessageHandler]   port=0x${portAddr.toString(
+        16
+      )} msg=0x${msgAddr.toString(16)} reply=0x${this.doorReplyPortAddr.toString(
+        16
+      )} len=${DoorConstants.MESSAGE_TOTAL_LENGTH}`
+    );
     this.execLibrary.putMsg(portAddr, msgAddr, {
       suppressDoorCallback: this.messageConfig.suppressCallbacks,
     });
+    this.sentInitialMessage = true;
+    // Track startup message so Bulls handler can mirror if Bulls peeks elsewhere
+    this.bullsHandler.setStartupMessage(msgAddr);
+    // Also enqueue a direct reply to the door's reply port so WaitPort/GetMsg sees it immediately
+    if (this.doorReplyPortAddr) {
+      this.execLibrary.putMsg(this.doorReplyPortAddr, msgAddr, {
+        suppressDoorCallback: this.messageConfig.suppressCallbacks,
+      });
+    }
   }
 
   /**
@@ -187,6 +220,22 @@ export class DoorMessageHandler {
       msgAddr + DoorConstants.MESSAGE_NODE_OFFSET,
       this.resolveNodeId()
     );
+    // Bias the Bulls-style header fields as well
+    const bias = DoorConstants.MESSAGE_HEADER_SIZE || 0;
+    if (bias > 0) {
+      this.emulator.writeMemory32(
+        msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET + bias,
+        command
+      );
+      this.emulator.writeMemory32(
+        msgAddr + DoorConstants.MESSAGE_DATA_OFFSET + bias,
+        data
+      );
+      this.emulator.writeMemory32(
+        msgAddr + DoorConstants.MESSAGE_NODE_OFFSET + bias,
+        this.resolveNodeId() || 1
+      );
+    }
     this.writeStringToMemory(
       msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
       messageText,
@@ -327,6 +376,11 @@ export class DoorMessageHandler {
     replyPortAddr: number
   ): void {
     console.log(`[DoorMessageHandler] Processing command ${command}...`);
+    this.logMessageRequest(msgAddr, command, data, str);
+    // If the incoming message uses a different reply port, honor it (express.e ReplyMsg behavior)
+    if (replyPortAddr && replyPortAddr !== this.doorReplyPortAddr) {
+      this.doorReplyPortAddr = replyPortAddr;
+    }
 
     // Command constants from aedoor.h
     const JH_LI = 0; // Line Input
@@ -360,7 +414,26 @@ export class DoorMessageHandler {
         console.log(
           `[DoorMessageHandler]   JH_REGISTER: Door registering with BBS`
         );
-        console.log(`[DoorMessageHandler]   Door is now active and ready`);
+        // express.e: msg.command := userLineLen (else 29)
+        const rawLineLen =
+          (this.config.bbsSession as any)?.user?.linesPerScreen ??
+          (this.config.bbsSession as any)?.user?.lineLength ??
+          (this.config.bbsSession as any)?.pauseLines ??
+          (this.config.bbsSession as any)?.lineWrap;
+        const lineLen =
+          typeof rawLineLen === "number" && rawLineLen > 0 ? rawLineLen : 29;
+        this.emulator.writeMemory32(
+          msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET,
+          lineLen
+        );
+        // Keep data/node/string as provided by the door; clear lineNum
+        this.emulator.writeMemory32(
+          msgAddr + DoorConstants.MESSAGE_LINE_OFFSET,
+          0
+        );
+        console.log(
+          `[DoorMessageHandler]   Replied with line length ${lineLen}`
+        );
         break;
 
       case JH_SHUTDOWN:
@@ -547,15 +620,20 @@ export class DoorMessageHandler {
 
   // Private helper methods
   private ensureDoorInfoStructure(): void {
-    if (
-      !this.execLibrary ||
-      !this.emulator ||
-      !this.bullsHandler.isBullsDoor()
-    ) {
+    if (!this.execLibrary || !this.emulator) {
       return;
     }
-    // Delegate to Bulls handler
-    // Note: This would normally be handled by the BullsDoorHandler
+    // Ensure reply port exists
+    if (this.doorReplyPortAddr === 0) {
+      this.doorReplyPortAddr = this.execLibrary.createMsgPort();
+    }
+    // Minimal allocations to satisfy Bulls node-status message
+    if (this.nodeStatusAddr === 0) {
+      this.nodeStatusAddr = this.execLibrary.allocMem(256, DoorConstants.MEMF_PUBLIC_CLEAR);
+    }
+    if (this.doorInfoAddr === 0) {
+      this.doorInfoAddr = this.execLibrary.allocMem(256, DoorConstants.MEMF_PUBLIC_CLEAR);
+    }
   }
 
   private resolveNodeId(): number {
