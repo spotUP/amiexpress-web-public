@@ -577,10 +577,17 @@ export class AEDoorLibrary {
   }
 
   /**
-   * Locate AEDoorPort for this node (falls back to non-numbered port).
+   * Locate BBS message port for this node (tries both XIM and SIM port names).
+   * Per express.e:4316-4320: XIM doors use AEDoorPort{n}, SIM doors use DoorControl{n}
    */
   private findBbsPort(nodeId: number): number {
-    const portNames = [`AEDoorPort${nodeId}`, "AEDoorPort"];
+    // Try both XIM (AEDoorPort) and SIM (DoorControl) port naming conventions
+    const portNames = [
+      `DoorControl${nodeId}`,   // SIM/SUP/TIM/IIM - express.e:4319
+      `AEDoorPort${nodeId}`,    // XIM - express.e:4317
+      "DoorControl",            // Fallback simple SIM port
+      "AEDoorPort"              // Fallback simple XIM port
+    ];
     for (const name of portNames) {
       const addr = this.createTempCString(name);
       if (addr === 0) continue;

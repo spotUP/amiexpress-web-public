@@ -117,32 +117,41 @@ export class LibraryManager {
     libraryLoader.addSearchPath(path.join(process.cwd(), "Libs"));
     this.execLibrary.setLibraryLoader(libraryLoader, true);
 
+    // Pre-register any libraries present on disk so getLibraryBase() can
+    // resolve them before OpenLibrary is invoked.
+    this.registerLibrariesFromDisk(path.join(this.bbsRoot, "Libs"));
+    this.registerLibrariesFromDisk(path.join(this.bbsRoot, "System", "Libs"));
+
     const doorType = this.config.doorType || "SIM";
     const nodeId = this.config.bbsSession?.nodeId || 0;
 
     console.log(`[LibraryManager] Door type: ${doorType}`);
 
-    console.log("[LibraryManager] Creating AEDoorPort for BBS data access...");
+    // Per express.e:4316-4320: XIM doors use AEDoorPort{n}, SIM/SUP/TIM/IIM use DoorControl{n}
+    const isSIMType = doorType === "SIM" || doorType === "SUP" || doorType === "TIM" || doorType === "IIM";
+    const basePortName = isSIMType ? "DoorControl" : "AEDoorPort";
 
-    // Amiga doors (including Bulls) call FindPort("AEDoorPort<n>") with 1-based node numbers.
+    console.log(`[LibraryManager] Creating ${basePortName} for BBS data access...`);
+
+    // Amiga doors call FindPort with 1-based node numbers.
     // Our session nodeId may be 0-based; normalize to 1-based for public port naming.
     const amigaNodeId = nodeId === 0 ? 1 : nodeId;
-    const portName = `AEDoorPort${amigaNodeId}`;
+    const portName = `${basePortName}${amigaNodeId}`;
     const portAddr = this.execLibrary.createPublicPort(portName);
     this.execLibrary.setDoorPortAddress(portAddr);
     console.log(
       `[LibraryManager] Created ${portName} at 0x${portAddr.toString(16)}`
     );
 
-    const simplePortAddr = this.execLibrary.createPublicPort("AEDoorPort");
+    const simplePortAddr = this.execLibrary.createPublicPort(basePortName);
     console.log(
-      `[LibraryManager] Created AEDoorPort (simple) at 0x${simplePortAddr.toString(
+      `[LibraryManager] Created ${basePortName} (simple) at 0x${simplePortAddr.toString(
         16
       )}`
     );
     // Also register the raw nodeId variant if different, to satisfy any 0-based lookups.
     if (nodeId !== amigaNodeId) {
-      const zeroBasedName = `AEDoorPort${nodeId}`;
+      const zeroBasedName = `${basePortName}${nodeId}`;
       const zeroBasedAddr = this.execLibrary.createPublicPort(zeroBasedName);
       console.log(
         `[LibraryManager] Created ${zeroBasedName} at 0x${zeroBasedAddr.toString(
@@ -323,6 +332,25 @@ export class LibraryManager {
       }
     } catch (error) {
       console.warn("[LibraryManager] Failed to ensure Answers directories", error);
+    }
+  }
+
+  private registerLibrariesFromDisk(dir: string): void {
+    if (!this.execLibrary) return;
+    try {
+      if (!fs.existsSync(dir)) return;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        const name = entry.name;
+        if (!name.toLowerCase().endsWith(".library")) continue;
+        this.execLibrary.registerLibraryPlaceholder(name);
+      }
+    } catch (err) {
+      console.warn(
+        `[LibraryManager] Failed to pre-register libraries from ${dir}:`,
+        err
+      );
     }
   }
 
