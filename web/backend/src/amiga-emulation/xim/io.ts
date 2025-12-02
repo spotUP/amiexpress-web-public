@@ -16,6 +16,7 @@ import { BBSSessionData, XIMMessage, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { BBSPaths } from '../../utils/bbs-paths.util';
+import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 
 export class XIMIOHandler {
   private emulator: MoiraEmulator;
@@ -860,6 +861,7 @@ export class XIMIOHandler {
       this.emitText(content, false, true, autoPause, msg);
       return true;
     } catch (err) {
+      SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', filePath, err as Error);
       console.error(`[XIMIOHandler] Failed to display file ${filePath}:`, err);
       return false;
     }

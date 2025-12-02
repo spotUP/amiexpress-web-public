@@ -14,6 +14,7 @@ import { ExecLibrary } from '../api/ExecLibrary';
 import { BBSPaths } from '../../utils/bbs-paths.util';
 import { DoorConstants } from '../DoorTypes';
 import { ZmodemTransferManager, TransferDirection, TransferTransport } from '../../services/zmodem-transfer.service';
+import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 
 export class XIMSystemCommandsHandler {
   private emulator: MoiraEmulator;
@@ -352,6 +353,7 @@ export class XIMSystemCommandsHandler {
         const content = fs.readFileSync(resolved, 'utf-8');
         this.socket.emit('ansi-output', content);
       } catch (err) {
+        SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', resolved, err as Error);
         console.warn(`[XIMSystem] JH_SG failed to read ${resolved}:`, err);
       }
     } else {
@@ -377,6 +379,7 @@ export class XIMSystemCommandsHandler {
         const content = fs.readFileSync(resolved, 'utf-8');
         this.socket.emit('ansi-output', content);
       } catch (err) {
+        SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', resolved, err as Error);
         console.warn(`[XIMSystem] JH_SF failed to read ${resolved}:`, err);
       }
     } else {

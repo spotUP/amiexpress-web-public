@@ -18,6 +18,7 @@ import { creditAccountTrackUploads } from '../utils/download-ratios.util';
 import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
 import { getSessionBySocketId } from './session-manager';
 import { callersLog } from './database-helpers';
+import { SysopDebugUtil } from '../utils/sysop-debug.util';
 
 /**
  * Register file upload/download socket event handlers
@@ -30,12 +31,13 @@ export function registerFileHandlers(socket: Socket) {
   socket.on('file-upload', async (data: { filename: string; size: number; type: string; data: number[] }) => {
     console.log('[file-upload] Received file from browser:', data.filename, data.size, 'bytes');
 
-    try {
-      const fs = require('fs');
-      const path = require('path');
+    const fs = require('fs');
+    const path = require('path');
 
-      // Get playpen directory
-      const playpenDir = getPlaypenDir(session.nodeId || 0, config.get('dataDir'));
+    // Get playpen directory
+    const playpenDir = getPlaypenDir(session.nodeId || 0, config.get('dataDir'));
+
+    try {
 
       // Ensure playpen exists (handle legacy PlayPen file from Amiga BBS)
       if (fs.existsSync(playpenDir)) {
@@ -68,7 +70,8 @@ export function registerFileHandlers(socket: Socket) {
       });
 
     } catch (error: any) {
-      console.error('[file-upload] Error saving file:', error);
+      const filePath = `${playpenDir || 'unknown'}/${data.filename}`;
+      SysopDebugUtil.debugFileError(socket, session, 'write', filePath, error);
       socket.emit('ansi-output', `\r\n\x1b[31mError saving file: ${error.message}\x1b[0m\r\n`);
     }
   });
