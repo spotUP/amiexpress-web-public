@@ -17,6 +17,7 @@ import { findCaseInsensitive } from '../utils/fs-amiga.util';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 // Screen/MCI debugging: always log unless explicitly disabled
 const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG !== '0';
@@ -864,6 +865,7 @@ export function loadScreenFile(
         try {
           return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false, filePath: securityVariant };
         } catch (error) {
+          SysopDebugUtil.debugFileError(null, session, 'read', securityVariant, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
         }
       }
@@ -877,8 +879,9 @@ export function loadScreenFile(
       const foundPath = findCaseInsensitive(location.dir, filename);
       if (foundPath) {
         screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${foundPath}`);
+        let fileToUse: string = foundPath;
         try {
-          const fileToUse = resolvePetsciiPath(foundPath, !!session?.petsciiMode);
+          fileToUse = resolvePetsciiPath(foundPath, !!session?.petsciiMode);
           const isPetsciiFile = isPetsciiSeqFile(fileToUse);
           if (isPetsciiFile) {
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
@@ -887,12 +890,14 @@ export function loadScreenFile(
               const content = convertPetsciiToPetMe64(petsciiBuffer);
               return { content, isPetscii: true, filePath: fileToUse };
             } catch (error) {
+              SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${fileToUse}`, { error: (error as Error).message }, DebugSeverity.WARNING);
               console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             }
           } else {
             return { content: fs.readFileSync(fileToUse, 'utf-8'), isPetscii: false, filePath: fileToUse };
           }
         } catch (error) {
+          SysopDebugUtil.debugFileError(null, session, 'read', fileToUse, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading file: ${(error as Error).message})`);
         }
       } else {
@@ -921,6 +926,7 @@ export function loadScreenFile(
           }
           return { content: fs.readFileSync(secPath, 'utf-8'), isPetscii: false, filePath: secPath };
         } catch (error) {
+          SysopDebugUtil.debugFileError(null, session, 'read', secPath, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
         }
       }
@@ -937,6 +943,7 @@ export function loadScreenFile(
             const content = convertPetsciiToPetMe64(petsciiBuffer);
             return { content, isPetscii: true, filePath: candidatePath };
           } catch (error) {
+            SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${candidatePath}`, { error: (error as Error).message }, DebugSeverity.WARNING);
             console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
           }
         } else {
@@ -946,6 +953,7 @@ export function loadScreenFile(
         screenDebug(`[loadScreenFile]     (not found)`);
       }
     } catch (error) {
+      SysopDebugUtil.debugFileError(null, session, 'read', filePath, error as Error, DebugSeverity.WARNING);
       console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
     }
   }
@@ -967,6 +975,7 @@ export function loadScreenFile(
           screenDebug(`[loadScreenFile]  Using fallback screen for ${screenName}: ${candidate}`);
           return { content, isPetscii: false, filePath: candidate };
         } catch (error) {
+          SysopDebugUtil.debugFileError(null, session, 'read', candidate, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading fallback ${candidate}): ${(error as Error).message}`);
         }
       }
@@ -975,6 +984,7 @@ export function loadScreenFile(
 
   console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
   console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
+  SysopDebugUtil.warn(null, session, 'Screen File', `Screen "${screenName}" not found after trying ${attemptNum} locations`);
 
   if (screenName.toUpperCase() === 'AWAITSCREEN') {
     const nodeFallbackDir = path.join(baseDir, 'Node1');
