@@ -348,8 +348,8 @@ export class XIMDataQueryHandler {
         if (isRead) {
           // Format as Amiga-style date: "DD-MMM-YY HH:MM:SS"
           // Based on express.e:3769 formatCDateTime(loggedOnUser.timeLastOn,tempstring)
-          if (user?.lastLoginAt) {
-            const lastOn = new Date(user.lastLoginAt);
+          if (user?.lastLogin || user?.timeLastOn) {
+            const lastOn = new Date(user.lastLogin || user.timeLastOn!);
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             const day = lastOn.getDate().toString().padStart(2, '0');
             const month = months[lastOn.getMonth()];

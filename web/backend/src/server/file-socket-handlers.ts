@@ -26,6 +26,42 @@ export function registerFileHandlers(socket: Socket) {
   const session = getSessionBySocketId(socket.id);
   if (!session) return;
 
+  // Handle file upload from browser (receives file data directly)
+  socket.on('file-upload', async (data: { filename: string; size: number; type: string; data: number[] }) => {
+    console.log('[file-upload] Received file from browser:', data.filename, data.size, 'bytes');
+
+    try {
+      const fs = require('fs');
+      const path = require('path');
+
+      // Get playpen directory
+      const playpenDir = getPlaypenDir(session.nodeId || 0, config.get('dataDir'));
+
+      // Ensure playpen exists
+      fs.mkdirSync(playpenDir, { recursive: true });
+
+      // Write file to playpen
+      const filePath = path.join(playpenDir, data.filename);
+      const buffer = Buffer.from(data.data);
+      fs.writeFileSync(filePath, buffer);
+
+      console.log('[file-upload] Wrote file to:', filePath);
+
+      // Trigger the file-uploaded event logic by emitting it back to this same socket handler
+      // The file-uploaded handler below will process it
+      socket.emit('file-uploaded', {
+        filename: data.filename,
+        originalname: data.filename,
+        size: data.size,
+        path: filePath
+      });
+
+    } catch (error: any) {
+      console.error('[file-upload] Error saving file:', error);
+      socket.emit('ansi-output', `\r\n\x1b[31mError saving file: ${error.message}\x1b[0m\r\n`);
+    }
+  });
+
   // Handle file upload completion (express.e:19059-19110)
   socket.on('file-uploaded', async (data: { filename: string; originalname: string; size: number; path?: string }) => {
     console.log('File uploaded event received:', data);

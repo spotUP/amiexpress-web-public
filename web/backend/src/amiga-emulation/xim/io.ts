@@ -287,9 +287,16 @@ export class XIMIOHandler {
   handleSendMessage(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
 
-    console.log(`[XIMIOHandler] JH_SM: "${text}"`);
+    // Don't add newline for:
+    // 1. Messages that are only ANSI color codes (prevents blank lines)
+    // 2. Messages ending with ": " or ":" followed by ANSI codes (keeps label+value on same line)
+    const isOnlyAnsiCodes = /^\x1b\[[0-9;]*m$/.test(text);
+    const endsWithColonAndAnsi = /:\s*(\x1b\[[0-9;]*m)*\s*$/.test(text);
+    const shouldAddNewline = (msg.data !== 0) && !isOnlyAnsiCodes && !endsWithColonAndAnsi;
 
-    this.emitText(text, msg.data !== 0, true);
+    console.log(`[XIMIOHandler] JH_SM: "${text}" (msg.data=${msg.data}, addNewline=${shouldAddNewline}, isOnlyAnsi=${isOnlyAnsiCodes}, endsWithColon=${endsWithColonAndAnsi})`);
+
+    this.emitText(text, shouldAddNewline, true);
 
     this.reply(msg, 1);
   }
@@ -748,6 +755,13 @@ export class XIMIOHandler {
 
     const rawLines = normalized.split('\n');
     const hasTrailingNewline = normalized.endsWith('\n');
+
+    // Remove trailing empty string from split if text ended with newline
+    // to prevent double line breaks
+    if (hasTrailingNewline && rawLines.length > 0 && rawLines[rawLines.length - 1] === '') {
+      rawLines.pop();
+    }
+
     let bytesSent = 0;
 
     for (let i = 0; i < rawLines.length; i++) {

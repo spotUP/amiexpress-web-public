@@ -16,6 +16,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { LibraryLoader } from "./loader/LibraryLoader.js";
 import { PathManager } from "./api/PathManager.js";
+import { BbsApiLibrary } from "./api/BbsApiLibrary.js";
 
 const DEFAULT_ROM =
   "Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom";
@@ -27,6 +28,7 @@ export class LibraryManager {
   public iconLibrary: IconLibrary | null = null;
   public libraryTraps: LibraryTraps | null = null;
   public ximProtocol: XIMProtocol | null = null;
+  public bbsApiLibrary: BbsApiLibrary | null = null;
 
   private emulator: MoiraEmulator;
   private socket: Socket;
@@ -309,6 +311,64 @@ export class LibraryManager {
         );
       }
     );
+
+    // Set up BBS API dispatcher for SIM doors (0x790 calling convention)
+    if (isSIMType) {
+      console.log("[LibraryManager] Setting up BBS API dispatcher for SIM door...");
+
+      // Initialize low-memory region (parameter blocks at 0x794, 0x79c)
+      BbsApiLibrary.setupLowMemory(this.emulator);
+
+      // Create BBS API library instance
+      // Note: AmigaDoorSession is not available here, so we pass session data via config
+      this.bbsApiLibrary = new BbsApiLibrary(
+        this.config.bbsSession as any,
+        this.emulator
+      );
+
+      // Allocate memory for trap instruction (ILLEGAL = 0x4AFC)
+      const trapAddr = this.execLibrary.allocMem(4, 0); // 4 bytes, any memory
+      if (trapAddr === 0) {
+        console.error("[LibraryManager] Failed to allocate memory for BBS API trap!");
+      } else {
+        // Write ILLEGAL instruction at trap address
+        this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
+        // Register trap handler
+        this.libraryTraps!.registerCustomTrap(
+          trapAddr,
+          "BBS_API_DISPATCHER",
+          (emu: MoiraEmulator) => {
+            // Call BBS API dispatcher
+            const result = this.bbsApiLibrary!.dispatch();
+            return result;
+          },
+          this.bbsApiLibrary
+        );
+
+        // Write trap address to 0x790 so WHO can find it
+        this.emulator.writeMemory32(0x790, trapAddr);
+
+        console.log(
+          `[LibraryManager] BBS API dispatcher installed at 0x${trapAddr.toString(16)}`
+        );
+        console.log(
+          `[LibraryManager] Function pointer written to 0x790 → 0x${trapAddr.toString(16)}`
+        );
+
+        // Verify the value was written correctly
+        const verifyValue = this.emulator.readMemory32(0x790);
+        console.log(
+          `[LibraryManager] Verification: 0x790 contains 0x${verifyValue.toString(16)}`
+        );
+
+        // Also verify the ILLEGAL instruction is at the trap address
+        const trapInstruction = this.emulator.readMemory16(trapAddr);
+        console.log(
+          `[LibraryManager] Verification: ILLEGAL instruction at 0x${trapAddr.toString(16)} = 0x${trapInstruction.toString(16)}`
+        );
+      }
+    }
 
     console.log("[LibraryManager] Library system ready");
   }

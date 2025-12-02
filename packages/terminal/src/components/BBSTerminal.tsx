@@ -426,6 +426,94 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       resetZmodem();
     });
 
+    // Handle file upload request from backend
+    socket.on('show-file-upload', (options: { accept?: string; maxSize?: number; multiple?: boolean }) => {
+      console.log('[BBSTerminal] show-file-upload event received:', options);
+
+      // Create a hidden file input element
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = options.accept || '*/*';
+      fileInput.multiple = options.multiple || false;
+      fileInput.style.display = 'none';
+
+      fileInput.addEventListener('change', async (e) => {
+        const target = e.target as HTMLInputElement;
+        const files = target.files;
+
+        if (!files || files.length === 0) {
+          console.log('[BBSTerminal] No files selected');
+          socket.emit('upload-cancelled');
+          return;
+        }
+
+        console.log('[BBSTerminal] Files selected:', files.length);
+
+        // Upload each file
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          console.log(`[BBSTerminal] Uploading file ${i + 1}/${files.length}:`, file.name);
+
+          // Check file size
+          if (options.maxSize && file.size > options.maxSize) {
+            socket.emit('ansi-output', `\r\n\x1b[31mFile ${file.name} exceeds maximum size of ${options.maxSize} bytes\x1b[0m\r\n`);
+            continue;
+          }
+
+          // Read file as ArrayBuffer
+          const reader = new FileReader();
+          reader.onload = async (e) => {
+            const arrayBuffer = e.target?.result as ArrayBuffer;
+
+            // Send file data to backend
+            socket.emit('file-upload', {
+              filename: file.name,
+              size: file.size,
+              type: file.type,
+              data: Array.from(new Uint8Array(arrayBuffer))
+            });
+          };
+          reader.readAsArrayBuffer(file);
+        }
+
+        // Clean up
+        document.body.removeChild(fileInput);
+      });
+
+      fileInput.addEventListener('cancel', () => {
+        console.log('[BBSTerminal] File selection cancelled');
+        socket.emit('upload-cancelled');
+        document.body.removeChild(fileInput);
+      });
+
+      // Add to DOM and trigger click
+      document.body.appendChild(fileInput);
+      fileInput.click();
+    });
+
+    // Handle file download request from backend
+    socket.on('download-file', (fileInfo: { filename: string; size: number; url: string; path?: string }) => {
+      console.log('[BBSTerminal] download-file event received:', fileInfo);
+
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = fileInfo.url;
+      link.download = fileInfo.filename;
+      link.style.display = 'none';
+
+      // Add to DOM, click, and remove
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      console.log('[BBSTerminal] Download initiated for:', fileInfo.filename);
+
+      // Notify backend that download started
+      socket.emit('file-download-started', {
+        filename: fileInfo.filename
+      });
+    });
+
     socket.on('disconnect', (reason: string) => {
       console.log('🔌 BBS Terminal: Disconnected:', reason);
       if (reason === 'io client disconnect') {

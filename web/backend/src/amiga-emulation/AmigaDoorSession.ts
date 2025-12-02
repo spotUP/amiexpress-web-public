@@ -14,7 +14,6 @@ import { appendFileSync } from "fs";
 import { DoorConfig } from "./DoorTypes.js";
 import { LibraryManager } from "./LibraryManager.js";
 import { DoorLoader } from "./DoorLoader.js";
-import { BullsDoorHandler } from "./session/BullsDoorHandler.js";
 import { DoorLifecycleManager } from "./session/DoorLifecycleManager.js";
 import { DoorMessageHandler } from "./session/DoorMessageHandler.js";
 
@@ -26,11 +25,10 @@ import { DoorMessageHandler } from "./session/DoorMessageHandler.js";
  * Architecture:
  * - LibraryManager: Handles library initialization and trap management
  * - DoorLoader: Handles binary loading and CPU setup
- * - BullsDoorHandler: Bulls-specific functionality
  * - DoorLifecycleManager: Execution loop and lifecycle management
  * - DoorMessageHandler: Message processing and IPC handling
  *
- * Version: 2025-11-20 - REFACTORED: Modular architecture implementation
+ * Version: 2025-12-01 - Generic door emulation (Bulls-specific code removed)
  */
 
 export class AmigaDoorSession {
@@ -42,7 +40,6 @@ export class AmigaDoorSession {
   // Core components (extracted into separate modules)
   private libraryManager: LibraryManager | null = null;
   private doorLoader: DoorLoader | null = null;
-  private bullsHandler: BullsDoorHandler | null = null;
   private lifecycleManager: DoorLifecycleManager | null = null;
   private messageHandler: DoorMessageHandler | null = null;
 
@@ -249,30 +246,11 @@ export class AmigaDoorSession {
         "[AmigaDoorSession] ✅ Door binary loaded and CPU configured"
       );
 
-      // Initialize Bulls Handler (Phase 4)
-      this.bullsHandler = new BullsDoorHandler(
-        this.emulator,
-        this.sharedState.execLibrary,
-        this.config
-      );
-      this.bullsHandler.initializeBulls();
-
-      // Set shared state in Bulls handler
-      this.bullsHandler.setSharedState({
-        doorInfoAddr: this.sharedState.doorInfoAddr,
-        nodeStatusAddr: this.sharedState.nodeStatusAddr,
-        doorSummaryPtr: this.sharedState.doorSummaryPtr,
-        doorReplyPortAddr: this.sharedState.doorReplyPortAddr,
-        aePortAddress: this.sharedState.aePortAddress,
-        sentInitialMessage: this.sharedState.sentInitialMessage,
-      });
-
       // Initialize Message Handler (Phase 5B)
       this.messageHandler = new DoorMessageHandler(
         this.emulator,
         this.socket,
         this.sharedState.execLibrary,
-        this.bullsHandler,
         this.config
       );
       this.messageHandler.setXIMProtocol(this.sharedState.ximProtocol);
@@ -291,7 +269,6 @@ export class AmigaDoorSession {
         this.emulator,
         this.socket,
         this.config,
-        this.bullsHandler,
         this.libraryManager,
         this.doorLoader,
         this.messageHandler
@@ -306,9 +283,6 @@ export class AmigaDoorSession {
       );
       console.log(
         `[AmigaDoorSession]   - DoorLoader: Binary loading and CPU setup`
-      );
-      console.log(
-        `[AmigaDoorSession]   - BullsDoorHandler: Bulls-specific logic`
       );
       console.log(
         `[AmigaDoorSession]   - DoorLifecycleManager: Execution loop management`
@@ -622,7 +596,6 @@ export class AmigaDoorSession {
     // Clear all references
     this.libraryManager = null;
     this.doorLoader = null;
-    this.bullsHandler = null;
     this.lifecycleManager = null;
     this.messageHandler = null;
 
@@ -689,7 +662,7 @@ export class AmigaDoorSession {
    */
   private logDoorEvent(message: string): void {
     try {
-      const projectRoot = path.resolve(process.cwd(), "../..");
+      const projectRoot = path.resolve(process.cwd());
       const logFile = path.join(projectRoot, "logs", "door-68k.log");
       const line = `[DoorLog] ${new Date().toISOString()} ${message}\n`;
       appendFileSync(logFile, line, { encoding: "utf8" });

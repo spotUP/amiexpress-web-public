@@ -52,8 +52,9 @@ async function mainRun() {
   const input = process.env.BBS_INPUT || DEFAULT_INPUT;
   if (doorType === 'PY' || doorType === 'PYTHON') {
     const interpreter = process.env.PYTHON || 'python3';
+    let rc = 0;
     try {
-      const rc = await run(interpreter, [main], {
+      rc = await run(interpreter, [main], {
         env: {
           ...process.env,
           ...getMockEnv(undefined, undefined, input)
@@ -64,14 +65,13 @@ async function mainRun() {
         process.exit(0);
       }
       process.exit(rc || 0);
-    } catch (err) {
-      if (err && err.code === 'ENOENT') {
+    } catch (err: any) {
+      if (err && (err as any).code === 'ENOENT') {
         console.error(`python interpreter not found (${interpreter}), skipping PY harness`);
         process.exit(0);
       }
       throw err;
     }
-    process.exit(rc || 0);
   }
 
   if (doorType === 'AREXX' || doorType === 'REXX') {
@@ -79,8 +79,9 @@ async function mainRun() {
       console.error('AREXX door missing npm run "run" script');
       process.exit(1);
     }
+    let rc = 0;
     try {
-      const rc = await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run'], {
+      rc = await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run'], {
         env: {
           ...process.env,
           ...getMockEnv(undefined, undefined, input)
@@ -91,8 +92,8 @@ async function mainRun() {
         process.exit(0);
       }
       process.exit(rc || 0);
-    } catch (err) {
-      if (err && err.code === 'ENOENT') {
+    } catch (err: any) {
+      if (err && (err as any).code === 'ENOENT') {
         console.error('AREXX interpreter/npm not found, skipping RX harness');
         process.exit(0);
       }

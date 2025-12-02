@@ -149,6 +149,9 @@ export class DoorLoader {
     // Build CLI structure with key BPTR fields (dos/dosextens.h CommandLineInterface)
     const cliSize = 0x80;
     const cliAddr = 0xf0000; // store CLI in chip space
+    const cliBptr = cliAddr >> 2;
+    const compatCliAddr = cliBptr; // raw pointer form for doors that skip BADDR
+    const compatBstrAddr = compatCliAddr + cliSize;
     for (let i = 0; i < cliSize; i++) {
       this.emulator.writeMemory(cliAddr + i, 0);
     }
@@ -162,7 +165,6 @@ export class DoorLoader {
 
     // Populate Process structure fields (pr_CLI, pr_CurrentDir, standard handles, arguments)
     const taskAddr = this.execLibrary.getCurrentTaskAddress();
-    const cliBptr = cliAddr >> 2;
     const segListBptr = hunkFile.segments[0]?.bptr || 0;
     // Offsets based on dos/Process layout (Task+MsgPort already written): see amitools dos.py
     const prSegList = taskAddr + 0x80;
@@ -261,6 +263,40 @@ export class DoorLoader {
     writeCli32(0x50, this.exitTrapAddress); // cli_ReturnAddr
     writeCli32(0x54, nodeId); // cli_Pid
     writeCli32(0x58, customArgs.length); // cli_NumArgs
+
+    // Compatibility: some doors treat pr_CLI as an APTR instead of BPTR; mirror a direct-pointer CLI.
+    for (let i = 0; i < cliSize; i++) {
+      this.emulator.writeMemory(compatCliAddr + i, 0);
+    }
+    this.emulator.writeMemory(compatBstrAddr, progName.length);
+    for (let i = 0; i < progName.length; i++) {
+      this.emulator.writeMemory(compatBstrAddr + 1 + i, progName.charCodeAt(i));
+    }
+    const writeCompat32 = (offset: number, val: number) =>
+      this.emulator.writeMemory32(compatCliAddr + offset, val >>> 0);
+    writeCompat32(0x00, 0);
+    writeCompat32(0x04, 0);
+    writeCompat32(0x08, lockAddr); // command dir (APTR)
+    writeCompat32(0x0c, 0);
+    writeCompat32(0x10, compatBstrAddr); // command name APTR
+    writeCompat32(0x14, 0);
+    writeCompat32(0x18, 0);
+    writeCompat32(0x1c, 1 << 2); // stdin as BPTR→APTR
+    writeCompat32(0x20, 1 << 2);
+    writeCompat32(0x24, 0);
+    writeCompat32(0x28, 1);
+    writeCompat32(0x2c, 0);
+    writeCompat32(0x30, 2 << 2);
+    writeCompat32(0x34, this.stackSizeBytes);
+    writeCompat32(0x38, 2 << 2);
+    writeCompat32(0x3c, segListBptr << 2); // module APTR
+    writeCompat32(0x40, lockAddr);
+    writeCompat32(0x44, 0);
+    writeCompat32(0x48, 0);
+    writeCompat32(0x4c, 0);
+    writeCompat32(0x50, this.exitTrapAddress);
+    writeCompat32(0x54, nodeId);
+    writeCompat32(0x58, customArgs.length);
 
     console.log(
       `[DoorLoader] CLI set: BPTR=0x${cliBptr.toString(

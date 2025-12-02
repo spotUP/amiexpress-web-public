@@ -175,6 +175,14 @@ const AEDOOR_VECTORS: LibraryVector[] = [
       return lib.postDeleteComm();
     },
   },
+  {
+    offset: -24, // Some doors call this slot; provide a safe stub
+    name: "Stub_-24",
+    handler: () => {
+      console.log("[AEDoorLibrary][Trap] Stub -24 invoked");
+      return 0;
+    },
+  },
 ];
 
 /**
@@ -860,6 +868,31 @@ export class LibraryTraps {
   // Parsed offsets from dev/docs/LVOs.i (libName -> offsets)
   private lvoOffsetsByLibrary: Map<string, number[]> = new Map();
 
+  /**
+   * Helper to identify which library a trap belongs to for logging
+   */
+  private getLibraryName(library: any): string {
+    if (!library) {
+      return "unknown";
+    }
+    if (library === this.execLibrary) {
+      return "exec.library";
+    }
+    if (library === this.dosLibrary) {
+      return "dos.library";
+    }
+    if (library === this.aedoorLibrary) {
+      return "AEDoor.library";
+    }
+    if (library === this.iconLibrary) {
+      return "icon.library";
+    }
+    if ((library as any).libraryName) {
+      return (library as any).libraryName;
+    }
+    return "unknown";
+  }
+
   constructor(emulator: MoiraEmulator, execLibrary: ExecLibrary) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
@@ -894,6 +927,38 @@ export class LibraryTraps {
    */
   setIconLibrary(lib: IconLibrary): void {
     this.iconLibrary = lib;
+  }
+
+  /**
+   * Register a custom trap handler at a specific address
+   *
+   * Used for non-library traps like BBS API dispatcher at 0x790
+   *
+   * @param address - Memory address where trap will be triggered
+   * @param name - Descriptive name for the trap
+   * @param handler - Function to call when trap is triggered
+   * @param library - Optional library instance for context
+   */
+  registerCustomTrap(
+    address: number,
+    name: string,
+    handler: (emu: MoiraEmulator) => number,
+    library?: any
+  ): void {
+    const vector: LibraryVector = {
+      offset: 0, // Not used for custom traps
+      name: name,
+      handler: handler,
+    };
+
+    this.trapMap.set(address, vector);
+    if (library) {
+      this.libraryMap.set(address, library);
+    }
+
+    console.log(
+      `[LibraryTraps] Registered custom trap '${name}' at 0x${address.toString(16)}`
+    );
   }
 
   /**
@@ -1272,8 +1337,11 @@ export class LibraryTraps {
       return false;
     }
 
+    const library = this.libraryMap.get(pc);
+    const libraryName = this.getLibraryName(library);
+
     console.log(
-      `[LibraryTraps] *** INTERCEPTED: ${vector.name}() at PC=0x${pc.toString(
+      `[LibraryTraps] *** INTERCEPTED: ${libraryName}.${vector.name}() at PC=0x${pc.toString(
         16
       )} ***`
     );
@@ -1315,7 +1383,23 @@ export class LibraryTraps {
       vector.name === "SendCmd"
     ) {
       console.log(
-        `[LibraryTraps] ⚠️  OUTPUT FUNCTION: ${vector.name}() - THIS SHOULD PRODUCE TERMINAL OUTPUT`
+        `[LibraryTraps] OUTPUT FUNCTION: ${vector.name}() - this should produce terminal output`
+      );
+    }
+
+    // Additional AEDoor-specific tracing
+    if (libraryName === "AEDoor.library") {
+      const d0 = this.emulator.getRegister(0);
+      const d1 = this.emulator.getRegister(1);
+      const a0 = this.emulator.getRegister(8);
+      const a1 = this.emulator.getRegister(9);
+      const a4 = this.emulator.getRegister(4);
+      console.log(
+        `[LibraryTraps][AEDoor] offset=${vector.offset} d0=0x${d0.toString(
+          16
+        )} d1=0x${d1.toString(16)} a0=0x${a0.toString(
+          16
+        )} a1=0x${a1.toString(16)} a4=0x${a4.toString(16)}`
       );
     }
 
@@ -1364,9 +1448,6 @@ export class LibraryTraps {
         )}`
       );
     }
-
-    // Get the library instance for this trap
-    const library = this.libraryMap.get(pc);
 
     // Call the handler with the correct library instance
     // Note: Handler may now modify SP (e.g., StackSwap), but we've already popped the return address
@@ -1556,11 +1637,12 @@ export class LibraryTraps {
     // TODO: More sophisticated collision resolution if needed
     const vector = vectors[0];
     const library = libraries![0];
+    const libraryName = this.getLibraryName(library);
 
     console.log(
-      `[LibraryTraps] Intercepted: ${
-        vector.name
-      }() at offset ${offset} (A6=0x${baseAddr.toString(16)})`
+      `[LibraryTraps] Intercepted: ${libraryName}.${vector.name}() at offset ${offset} (A6=0x${baseAddr.toString(
+        16
+      )})`
     );
 
     // Notify monitor if callback is set

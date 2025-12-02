@@ -423,8 +423,10 @@ export function handleUploadCommand(socket: any, session: BBSSession): void {
   // express.e:25649 - setEnvStat(ENV_UPLOADING)
   console.log('[ENV] Uploading');
 
-  // Start a ZMODEM receive into the node playpen (mirrors uploadaFile -> fileReceive path).
-  startZmodemUpload(socket, session);
+  // express.e:25656 - uploadaFile(0, cmdcode, FALSE)
+  // The first parameter 0 means show upload interface first, not immediate ZMODEM
+  // This lets user select file area before starting ZMODEM transfer
+  _displayUploadInterface(socket, session, '');
 }
 
 /**

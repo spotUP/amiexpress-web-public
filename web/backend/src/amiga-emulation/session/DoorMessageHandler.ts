@@ -7,9 +7,9 @@ import { MoiraEmulator } from "../cpu/MoiraEmulator.js";
 import { Socket } from "socket.io";
 import { ExecLibrary } from "../api/ExecLibrary.js";
 import { XIMProtocol, XIMCommand } from "../XIMProtocol.js";
-import { BullsDoorHandler } from "./BullsDoorHandler.js";
 import { DoorConfig, DoorConstants } from "../DoorTypes.js";
 import { logDoorMessage } from "../../utils/door-logging.util";
+import { populateDoorInfoStructs } from "./door-info.util.js";
 
 export interface MessageProcessingConfig {
   suppressCallbacks: boolean;
@@ -23,7 +23,6 @@ export class DoorMessageHandler {
   private socket: Socket;
   private execLibrary: ExecLibrary;
   private ximProtocol: XIMProtocol | null = null;
-  private bullsHandler: BullsDoorHandler;
   private config: DoorConfig;
 
   // Message processing state
@@ -55,13 +54,11 @@ export class DoorMessageHandler {
     emulator: MoiraEmulator,
     socket: Socket,
     execLibrary: ExecLibrary,
-    bullsHandler: BullsDoorHandler,
     config: DoorConfig
   ) {
     this.emulator = emulator;
     this.socket = socket;
     this.execLibrary = execLibrary;
-    this.bullsHandler = bullsHandler;
     this.config = config;
 
     this.messageConfig = {
@@ -103,66 +100,97 @@ export class DoorMessageHandler {
   // For XIM doors, express.e expects the BBS to deliver an initial node-status/register
   // message via PutMsg so the door can call WaitPort/GetMsg to start IPC.
   sendStartupMessage(): void {
-    if (!this.bullsHandler.isBullsDoor()) {
-      return;
-    }
-    this.sendNodeStatusMessage();
+    this.sendInitAndStatusMessages();
   }
 
   /**
-   * Send node status message for Bulls door
+   * Send INIT (cmd 0) and STAT (cmd 1) messages for XIM doors, mirroring AEDoor.library
    */
-  sendNodeStatusMessage(): void {
-    if (!this.bullsHandler.isBullsDoor() || this.sentInitialMessage) {
+  sendInitAndStatusMessages(): void {
+    if (this.sentInitialMessage) {
       return;
     }
 
+    // Ensure DoorInfo/NodeStatus blocks are populated like AEDoor.library
     this.ensureDoorInfoStructure();
-    if (!this.nodeStatusAddr) {
+    const session: any = (this.config as any)?.bbsSession || {};
+    const userName =
+      session.user?.username ||
+      session.currentUser?.username ||
+      session.username ||
+      "SYSOP";
+    const location =
+      session.user?.location ||
+      session.currentUser?.location ||
+      session.location ||
+      "AMIGA";
+    const cliName =
+      session.command ||
+      (this.config as any)?.doorId ||
+      session.doorId ||
+      "BULLS";
+
+    populateDoorInfoStructs(this.emulator, this.doorInfoAddr, this.nodeStatusAddr, {
+      aePort: this.doorPortAddress || this.execLibrary.getDoorPortAddress() || 0,
+      replyPort: this.doorReplyPortAddr,
+      nodeId: this.resolveNodeId(),
+      userName,
+      location,
+      cliName,
+    });
+    if (!this.doorInfoAddr || !this.nodeStatusAddr) {
       console.warn(
-        "[DoorMessageHandler] Cannot send node status message: no node status block"
+        "[DoorMessageHandler] Cannot send init/status messages: missing doorInfo or nodeStatus"
       );
       return;
     }
 
+    // Bulls expects two messages: JH_INIT (cmd=0, data=DoorInfo) then JH_STAT (cmd=1, data=NodeStatus)
     const portAddr =
       this.doorPortAddress ||
       this.execLibrary.getDoorPortAddress() ||
       0xa0000;
     const statusText = `NODE ${this.resolveNodeId()} STATUS READY`;
-    const msgAddr = this.allocateDoorCommandMessage(
+
+    const initMsgAddr = this.allocateDoorCommandMessage(0, 0, "INIT");
+    const statMsgAddr = this.allocateDoorCommandMessage(
       1,
-      this.nodeStatusAddr,
+      this.doorInfoAddr + 0xe4,
       statusText
     );
-    if (msgAddr === null) {
+    if (initMsgAddr === null || statMsgAddr === null) {
       return;
     }
 
-    console.log(
-      `[DoorMessageHandler] Sending node status message (data=0x${this.nodeStatusAddr.toString(
-        16
-      )})`
-    );
-    console.log(
-      `[DoorMessageHandler]   port=0x${portAddr.toString(
-        16
-      )} msg=0x${msgAddr.toString(16)} reply=0x${this.doorReplyPortAddr.toString(
-        16
-      )} len=${DoorConstants.MESSAGE_TOTAL_LENGTH}`
-    );
-    this.execLibrary.putMsg(portAddr, msgAddr, {
-      suppressDoorCallback: this.messageConfig.suppressCallbacks,
-    });
-    this.sentInitialMessage = true;
-    // Track startup message so Bulls handler can mirror if Bulls peeks elsewhere
-    this.bullsHandler.setStartupMessage(msgAddr);
-    // Also enqueue a direct reply to the door's reply port so WaitPort/GetMsg sees it immediately
-    if (this.doorReplyPortAddr) {
-      this.execLibrary.putMsg(this.doorReplyPortAddr, msgAddr, {
+    const enqueue = (msgAddr: number, label: string) => {
+      console.log(
+        `[DoorMessageHandler] Sending ${label} message (data=0x${this.emulator.readMemory32(
+          msgAddr + DoorConstants.MESSAGE_DATA_OFFSET
+        ).toString(16)})`
+      );
+      console.log(
+        `[DoorMessageHandler]   port=0x${portAddr.toString(
+          16
+        )} msg=0x${msgAddr.toString(
+          16
+        )} reply=0x${this.doorReplyPortAddr.toString(
+          16
+        )} len=${DoorConstants.MESSAGE_TOTAL_LENGTH}`
+      );
+      this.execLibrary.putMsg(portAddr, msgAddr, {
         suppressDoorCallback: this.messageConfig.suppressCallbacks,
       });
-    }
+      if (this.doorReplyPortAddr) {
+        this.execLibrary.putMsg(this.doorReplyPortAddr, msgAddr, {
+          suppressDoorCallback: this.messageConfig.suppressCallbacks,
+        });
+      }
+    };
+
+    enqueue(initMsgAddr, "INIT");
+    enqueue(statMsgAddr, "STAT");
+
+    this.sentInitialMessage = true;
   }
 
   /**
@@ -246,28 +274,23 @@ export class DoorMessageHandler {
   }
 
   /**
+   * Get XIM command name from command number (matches AmiExpress logging)
+   */
+  private getCommandName(command: number): string {
+    // Find enum key by value
+    for (const [key, value] of Object.entries(XIMCommand)) {
+      if (value === command && isNaN(Number(key))) {
+        return key;
+      }
+    }
+    return `UNKNOWN_${command}`;
+  }
+
+  /**
    * Handle door message (trap-based, not polling)
    */
   handleDoorMessage(portAddr: number, msgAddr: number): void {
     this.messageCount++;
-
-    // Bulls-specific dumping for debugging (first few messages only).
-    if (this.bullsHandler.isBullsDoor() && this.lastMessageDump < 5) {
-      this.dumpBullsMessage(msgAddr);
-    }
-
-    console.log(
-      `[DoorMessageHandler] ===============================================`
-    );
-    console.log(
-      `[DoorMessageHandler] *** DOOR MESSAGE RECEIVED (via PutMsg trap) ***`
-    );
-    console.log(`[DoorMessageHandler] Message #${this.messageCount}`);
-    console.log(
-      `[DoorMessageHandler] ===============================================`
-    );
-    console.log(`[DoorMessageHandler]   Port: 0x${portAddr.toString(16)}`);
-    console.log(`[DoorMessageHandler]   Message: 0x${msgAddr.toString(16)}`);
 
     // Parse message structure
     const mn_ReplyPort = this.emulator.readMemory32(
@@ -294,25 +317,16 @@ export class DoorMessageHandler {
       str += String.fromCharCode(ch);
     }
 
-    console.log(`[DoorMessageHandler]   Command: ${command}`);
-    console.log(`[DoorMessageHandler]   Data: 0x${data.toString(16)}`);
-    console.log(`[DoorMessageHandler]   String: "${str}"`);
-    console.log(
-      `[DoorMessageHandler]   Reply port: 0x${mn_ReplyPort.toString(16)}`
-    );
-    console.log(`[DoorMessageHandler]   Length: ${mn_Length}`);
+    // Log in AmiExpress format (matches express.e logging)
+    const commandName = this.getCommandName(command);
+    console.log(`msg request: ${command} (${commandName})`);
+    console.log(`data: ${data}`);
+    console.log(`string: ${str}`);
 
     // Use XIM Protocol handler to process and respond
     if (this.ximProtocol) {
       const ximMessage = this.ximProtocol.parseMessage(msgAddr);
       this.ximProtocol.handleMessage(ximMessage);
-
-      if (
-        this.bullsHandler.isBullsDoor() &&
-        ximMessage.command === XIMCommand.JH_LI
-      ) {
-        this.bullsHandler.injectBullsKeyboardInput();
-      }
     } else {
       console.log(
         `[DoorMessageHandler] WARNING: XIM Protocol not initialized!`

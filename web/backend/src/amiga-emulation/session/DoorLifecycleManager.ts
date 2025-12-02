@@ -9,7 +9,6 @@ import { LibraryTraps } from "../api/LibraryTraps.js";
 import * as fs from "fs";
 import * as path from "path";
 import { XIMProtocol } from "../XIMProtocol.js";
-import { BullsDoorHandler } from "./BullsDoorHandler.js";
 import { DoorConfig, DoorConstants } from "../DoorTypes.js";
 import { LibraryManager } from "../LibraryManager.js";
 import { DoorLoader } from "../DoorLoader.js";
@@ -57,7 +56,6 @@ export class DoorLifecycleManager {
   private config: DoorConfig;
   private libraryTraps: LibraryTraps | null = null;
   private ximProtocol: XIMProtocol | null = null;
-  private bullsHandler: BullsDoorHandler;
   private libraryManager: LibraryManager;
   private doorLoader: DoorLoader;
   private messageHandler: DoorMessageHandler | null = null;
@@ -95,7 +93,6 @@ export class DoorLifecycleManager {
     emulator: MoiraEmulator,
     socket: Socket,
     config: DoorConfig,
-    bullsHandler: BullsDoorHandler,
     libraryManager: LibraryManager,
     doorLoader: DoorLoader,
     messageHandler: DoorMessageHandler | null
@@ -103,7 +100,6 @@ export class DoorLifecycleManager {
     this.emulator = emulator;
     this.socket = socket;
     this.config = config;
-    this.bullsHandler = bullsHandler;
     this.libraryManager = libraryManager;
     this.doorLoader = doorLoader;
     this.messageHandler = messageHandler;
@@ -309,7 +305,6 @@ export class DoorLifecycleManager {
           }
           this.traceFirstLogged++;
         }
-        await this.handleBullsExecution(pc);
 
         if (this.traceFirstPCOnly && this.traceLogPath) {
           this.traceFirstPCOnly = false;
@@ -372,111 +367,7 @@ export class DoorLifecycleManager {
   }
 
   private async handlePausedState(): Promise<void> {
-    if (
-      this.bullsHandler.isBullsDoor() &&
-      !this.bullsHandler.hasBullsReplyPortBeenInjected()
-    ) {
-      const a4Paused = this.emulator.getRegister(12);
-      if (a4Paused !== 0) {
-        console.log(
-          `[DoorLifecycleManager] A4 set to 0x${a4Paused.toString(
-            16
-          )}, injecting reply ports`
-        );
-        this.bullsHandler.injectBullsReplyPort();
-      }
-    }
     await new Promise((resolve) => setImmediate(resolve));
-  }
-
-  private async handleBullsExecution(pc: number): Promise<void> {
-    if (!this.bullsHandler.isBullsDoor()) {
-      return;
-    }
-
-    // If we haven't injected the Bulls reply/data pointers yet, retry once A4 is valid.
-    const a4 = this.emulator.getRegister(12);
-    if (!this.bullsHandler.hasBullsReplyPortBeenInjected() && a4 !== 0) {
-      this.bullsHandler.injectBullsReplyPort();
-    }
-
-    // 🔥 CRITICAL BULLS FIX: Force A4=0x0984 when stuck at PC=0x6C24 main loop
-    if (pc === 0x6c24) {
-      if (a4 === 0) {
-        console.log(
-          `[DoorLifecycleManager] 🔥 PC=0x6c24 A4=0x0 → FORCING A4=0x0984`
-        );
-        this.emulator.setRegister(12, 0x0984);
-      }
-    }
-
-    // Bulls-specific PC tracking
-    this.bullsHandler.logBullsPcState(pc);
-    this.bullsHandler.logBullsHandshakeState(pc);
-    this.bullsHandler.monitorBullsPointers(pc);
-    this.bullsHandler.refreshBullsDoorPointers();
-
-    // Bulls ROM return handling
-    if (
-      (pc >= 0xf00000 && pc <= 0xf30000) ||
-      (pc >= 0x6fff0 && pc <= 0x7070f)
-    ) {
-      await this.handleBullsRomReturn(pc);
-    }
-
-  }
-
-  private async handleBullsRomReturn(pc: number): Promise<void> {
-    console.log(
-      `[DoorLifecycleManager] Bulls PC entered ROM/UNMAPPED region (0x${pc.toString(
-        16
-      )}), attempting recovery`
-    );
-
-    if (pc >= 0xf00000 && pc <= 0xf30000) {
-      // Handle ROM wait loop
-      if (this.forceROMReturn()) {
-        this.executionState.romReturnAttempts++;
-      }
-    } else {
-      // Handle unmapped memory
-      const sp = this.emulator.getRegister(15);
-      this.emulator.setRegister(15, sp + 4); // Pop return address
-      this.emulator.setRegister(16, 0x6c24); // Force back to main Bulls loop
-      this.emulator.refillPrefetch();
-      this.executionState.romReturnAttempts++;
-    }
-  }
-
-  private async handleBullsStartup(pc: number): Promise<void> {
-    console.log(
-      `[DoorLifecycleManager] *** BULLS DOOR DETECTED - SENDING EARLY STARTUP MESSAGE ***`
-    );
-    this.executionState.startupMessageSent = true;
-    await this.sendStartupMessage();
-    // Simulate an initial Enter key so Bulls can proceed past CLI prompts if it needs stdin
-    this.ximProtocol?.queueInput("\r");
-    this.bullsHandler.injectBullsReplyPort();
-  }
-
-  private detectBullsPolling(pc: number): boolean {
-    const bullsPollingAddresses = [
-      0x1158, 0x118e, 0x1190, 0x1200, 0x1250, 0x1300,
-    ];
-    return (
-      bullsPollingAddresses.includes(pc) &&
-      !this.executionState.startupMessageSent
-    );
-  }
-
-  private handleBullsPolling(pc: number): void {
-    console.log(
-      `[DoorLifecycleManager] *** BULLS POLLING DETECTED AT PC=0x${pc.toString(
-        16
-      )} - SENDING STARTUP MESSAGE ***`
-    );
-    this.executionState.startupMessageSent = true;
-    this.sendStartupMessage();
   }
 
   private checkExitConditions(pc: number): boolean {
@@ -497,13 +388,6 @@ export class DoorLifecycleManager {
       const a4 = this.emulator.getRegister(12);
       const a5 = this.emulator.getRegister(13);
       const sp = this.emulator.getRegister(15);
-      if (this.bullsHandler) {
-        this.bullsHandler.dumpBuffers(
-          `[DoorLifecycleManager] Low-PC dump iter=${this.executionState.iterationCount} pc=0x${pc.toString(
-            16
-          )}`
-        );
-      }
       console.log(
         `[DoorLifecycleManager] PC in low memory (0x${pc.toString(
           16
@@ -737,23 +621,6 @@ export class DoorLifecycleManager {
     this.executionState.iterationCount++;
     this.executionState.lastProgressIteration = this.executionState.iterationCount;
     this.executionState.lastProgressTime = Date.now();
-    // Bulls-specific PC monitor
-    if (this.bullsHandler) {
-      this.bullsHandler.monitorPc(this.executionState.iterationCount);
-      if (offset === -210 /* FreeMem */ || offset === -414 /* CloseLibrary */) {
-        this.bullsHandler.reinforcePointersForTeardown();
-        this.bullsHandler.mirrorLastReplyIntoBuffers();
-        this.bullsHandler.seedTeardownFromHandshake();
-      }
-      // Capture teardown state just before/after FreeMem/CloseLibrary to see current cmd/data/node
-      if (offset === -210 || offset === -414) {
-        this.bullsHandler.dumpBuffers(
-          `[DoorLifecycleManager] Teardown probe offset=${offset} pc=0x${pc.toString(
-            16
-          )}`
-        );
-      }
-    }
     // Track A4/A5 changes to catch early corruption; log nearby frame slots
     const a4 = this.emulator.getRegister(12);
     const a5 = this.emulator.getRegister(13);
@@ -946,8 +813,9 @@ export class DoorLifecycleManager {
       const opType = instrWord & 0xffc0;
       const isJsr = opType === 0x4e80;
       const isJmp = opType === 0x4ec0;
+      const inStartupFlow = pc >= 0x3b00 && pc <= 0x3c00;
       const inPostFreeRange = pc >= 0x5c90 && pc <= 0x5d10;
-      if (!isJsr && !isJmp && !inPostFreeRange) {
+      if (!isJsr && !isJmp && !inPostFreeRange && !inStartupFlow) {
         return;
       }
 
@@ -1022,31 +890,43 @@ export class DoorLifecycleManager {
       const formatVal = (value: number | null): string =>
         value === null ? "<err>" : `0x${value.toString(16)}`;
 
-      console.log(
-        `[DoorLifecycleManager] FLOW probe pc=0x${pc.toString(
-          16
-        )} instr=0x${instrWord.toString(
-          16
-        )} kind=${isJsr ? "JSR" : isJmp ? "JMP" : "PCWIN"} mode=${mmm}/${
-          regField
-        } target=${target !== null ? `0x${target.toString(16)}` : "<unk>"} ext=${
-          extWord !== null ? `0x${extWord.toString(16)}` : "<none>"
-        } extLong=${extLong !== null ? `0x${extLong.toString(16)}` : "<none>"} sp=0x${sp.toString(
-          16
-        )} A0=0x${a0.toString(16)} A1=0x${a1.toString(
-          16
-        )} A2=0x${a2.toString(16)} A4=0x${a4.toString(
-          16
-        )} A5=0x${a5.toString(16)} A6=0x${a6.toString(
-          16
-        )} [-0x58(A5)]=${formatVal(
-          memA5m58
-        )} [target]=${formatVal(targetMem)} [0x5cda]=${formatVal(
-          mem5cda
-        )} [0x5cfa]=${formatVal(mem5cfa)} [0x4b90]=${formatVal(
-          mem4b90
-        )} lastPCs=[${lastPcTrace}]`
-      );
+      if (inStartupFlow || inPostFreeRange) {
+      if (inStartupFlow || inPostFreeRange) {
+        const targetBytes =
+          target !== null
+            ? [safeRead16(target), safeRead16(target + 2)]
+                .map((v) => (v === null ? "<err>" : `0x${v.toString(16)}`))
+                .join(",")
+            : "<none>";
+        console.log(
+          `[DoorLifecycleManager] FLOW probe pc=0x${pc.toString(
+            16
+          )} instr=0x${instrWord.toString(
+            16
+          )} kind=${isJsr ? "JSR" : isJmp ? "JMP" : "PCWIN"} mode=${mmm}/${
+            regField
+          } target=${target !== null ? `0x${target.toString(16)}` : "<unk>"} ext=${
+            extWord !== null ? `0x${extWord.toString(16)}` : "<none>"
+          } extLong=${
+            extLong !== null ? `0x${extLong.toString(16)}` : "<none>"
+          } targetWords=${targetBytes} sp=0x${sp.toString(
+            16
+          )} A0=0x${a0.toString(16)} A1=0x${a1.toString(
+            16
+          )} A2=0x${a2.toString(16)} A4=0x${a4.toString(
+            16
+          )} A5=0x${a5.toString(16)} A6=0x${a6.toString(
+            16
+          )} [-0x58(A5)]=${formatVal(
+            memA5m58
+          )} [target]=${formatVal(targetMem)} [0x5cda]=${formatVal(
+            mem5cda
+          )} [0x5cfa]=${formatVal(mem5cfa)} [0x4b90]=${formatVal(
+            mem4b90
+          )} lastPCs=[${lastPcTrace}]`
+        );
+      }
+      }
     } catch {
       /* ignore probe errors */
     }
@@ -1425,10 +1305,6 @@ export class DoorLifecycleManager {
     if (this.messageHandler) {
       try {
         this.messageHandler.sendStartupMessage();
-        // For XIM doors (e.g., Bulls), immediately send the node status/register message
-        if (this.config.doorType === "XIM") {
-          this.messageHandler.sendNodeStatusMessage();
-        }
       } catch (err) {
         console.error(
           "[DoorLifecycleManager] Error sending startup message:",
@@ -1440,12 +1316,6 @@ export class DoorLifecycleManager {
         "[DoorLifecycleManager] No DoorMessageHandler available for startup message"
       );
     }
-  }
-
-  private forceROMReturn(): boolean {
-    // Placeholder - would implement ROM return logic
-    console.log("[DoorLifecycleManager] Attempting to return door from ROM...");
-    return true;
   }
 
   /**

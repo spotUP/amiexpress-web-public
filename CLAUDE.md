@@ -65,6 +65,34 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ---
 
+**KEEP HANDOFF.MD COMPACT - THIS IS CRITICAL FOR CONTEXT BUDGET**
+
+1. **Maximum size**: 5KB (50-60 lines)
+2. **Only essentials**: Current state, recent work (1-2 sessions), next steps, key files
+3. **Never include**: Detailed analysis, code snippets, disassembly, stack traces, old session summaries
+4. **Check size**: Run `wc -c handoff.md` before updating - must be under 5000 bytes
+5. **Archive old content**: Move detailed analysis to `Documentation/` or session-specific files
+
+**Why:** When sessions are continued:
+- Verbose handoff.md (16KB) generates 40-50K token conversation summary
+- Compact handoff.md (2KB) generates 5-10K token conversation summary
+- Savings: 30-40K tokens (20-25% of 200K budget)
+- This is the BIGGEST source of context consumption in continued sessions
+
+**What TO do:**
+- Keep handoff.md to current state + 1-2 recent sessions only
+- Move detailed technical analysis to Documentation/ files
+- Reference files by path instead of including content
+- Update handoff.md at end of session with minimal summary only
+
+**Violation = Trim handoff.md immediately to under 5KB**
+
+**Check Scripts**:
+- `./dev/scripts/check-handoff-size.sh` - Validates handoff.md size
+- `./dev/scripts/check-context-usage.sh` - Full context consumption analysis
+
+---
+
 ## ⚠️ Development Status
 
 **This project is in ACTIVE DEVELOPMENT - NOT production ready**

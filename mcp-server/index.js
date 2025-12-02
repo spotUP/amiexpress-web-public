@@ -545,7 +545,7 @@ class AmiExpressDocsServer {
   }
 
   async searchNDKAutodocs(query, library = null) {
-    const autodocsPath = path.join(PROJECT_ROOT, 'Docs', 'NDK3.2R4', 'Autodocs');
+    const autodocsPath = path.join(PROJECT_ROOT, 'Source', 'Documentation', 'NDK3.2R4', 'Autodocs');
     const results = [];
 
     try {

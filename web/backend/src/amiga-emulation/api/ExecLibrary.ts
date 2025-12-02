@@ -634,6 +634,23 @@ export class ExecLibrary {
    * Open stub library (original implementation)
    */
   private openLibraryStub(name: string, version: number): number {
+    const existing =
+      this.libraries.get(name) || this.libraries.get(name.toLowerCase());
+    if (existing) {
+      existing.openCount++;
+      if (version > existing.version) {
+        existing.version = version;
+        existing.revision = 0;
+        this.writeLibraryToMemory(existing);
+      }
+      console.log(
+        `[ExecLibrary]   Reusing registered ${name} at 0x${existing.address.toString(
+          16
+        )}, count=${existing.openCount}`
+      );
+      return existing.address;
+    }
+
     // Create library structure based on name
     let libAddr = 0;
     let libVersion = 0;
@@ -719,6 +736,10 @@ export class ExecLibrary {
     };
 
     this.libraries.set(name, lib);
+    const lower = name.toLowerCase();
+    if (lower !== name) {
+      this.libraries.set(lower, lib);
+    }
 
     // Write library structure to memory
     this.writeLibraryToMemory(lib);
@@ -982,6 +1003,24 @@ export class ExecLibrary {
       // LVO offsets are at: -30 (CreateComm), -36 (DeleteComm), etc.
       // These are RTS instructions (0x4E75) or JMP instructions
 
+      // Pre-register the real library so getLibraryBase() returns nonzero even
+      // before the door explicitly opens it. OpenLibrary will bump openCount.
+      const lib: LibraryNode = {
+        address: destAddr,
+        name: "AEDoor.library",
+        version: 2,
+        revision: 0,
+        openCount: 0,
+        negSize: 30,
+        posSize: 34,
+      };
+      this.libraries.set("AEDoor.library", lib);
+      this.libraries.set("aedoor.library", lib);
+      this.writeLibraryToMemory(lib);
+      console.log(
+        `[ExecLibrary]   Registered AEDoor.library in library list (openCount=0)`
+      );
+
       return true;
     } catch (error) {
       console.log(`[ExecLibrary] ERROR loading AEDoor.library:`, error);
@@ -1154,8 +1193,45 @@ export class ExecLibrary {
    * Get library base address by name
    */
   getLibraryBase(name: string): number {
-    const lib = this.libraries.get(name);
+    const lib =
+      this.libraries.get(name) || this.libraries.get(name.toLowerCase());
     return lib ? lib.address : 0;
+  }
+
+  /**
+   * Pre-register a library placeholder so getLibraryBase() returns a stable
+   * address even before OpenLibrary is called.
+   */
+  registerLibraryPlaceholder(
+    name: string,
+    version: number = 0,
+    revision: number = 0
+  ): void {
+    const lower = name.toLowerCase();
+    if (this.libraries.has(name) || this.libraries.has(lower)) {
+      return;
+    }
+    const libAddr = this.nextStubLibraryAddr;
+    this.nextStubLibraryAddr += 0x010000;
+    const lib: LibraryNode = {
+      address: libAddr,
+      name,
+      version,
+      revision,
+      openCount: 0,
+      negSize: 30,
+      posSize: 34,
+    };
+    this.libraries.set(name, lib);
+    if (lower !== name) {
+      this.libraries.set(lower, lib);
+    }
+    this.writeLibraryToMemory(lib);
+    console.log(
+      `[ExecLibrary]   Registered library placeholder "${name}" at 0x${libAddr.toString(
+        16
+      )}`
+    );
   }
 
   /**
