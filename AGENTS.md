@@ -168,3 +168,79 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 - Need to find a function? Use `Grep` to locate it, then `Read` with offset/limit for that section
 - Need to explore codebase? Use `Task` tool with Explore agent
 - Only read small, focused files (<500 lines) in full
+
+---
+
+## Door Testing Script
+
+**Purpose**: Comprehensive automated testing of all installed 68K Amiga doors for debugging and validation.
+
+**Location**: `dev/scripts/test-all-doors.sh` (shell wrapper) and `dev/scripts/test-all-doors.ts` (TypeScript implementation)
+
+**When to Use**:
+- User asks to "test doors" or "debug doors"
+- Investigating door crashes or hangs
+- Validating door installation
+- Comparing behavior across multiple doors
+
+**Usage Examples**:
+```bash
+# Test all doors with defaults (5s timeout per door)
+./dev/scripts/test-all-doors.sh
+
+# Test with verbose output (shows door output and errors)
+./dev/scripts/test-all-doors.sh --verbose
+
+# Test only specific doors (comma-separated pattern matching)
+./dev/scripts/test-all-doors.sh --filter "WHO,RTW,B"
+
+# Custom timeout (10 seconds) and output file
+./dev/scripts/test-all-doors.sh --timeout 10000 --output /tmp/my-test.txt
+```
+
+**Features**:
+- Scans all doors in `Doors/` directory
+- Tests each door with configurable timeout (default: 5000ms)
+- Captures output, errors, exit codes, and signals
+- Generates comprehensive report with:
+  - Success/failure status
+  - Timeout detection
+  - Crash/error details
+  - Output samples for debugging
+- Supports filtering by door name pattern
+
+**Output Report**:
+- Default location: `dev/scripts/door-test-results.txt`
+- Contains:
+  - Summary statistics (total, passed, failed, timed out)
+  - Per-door results with status and error info
+  - Full output capture for failed doors
+
+**Best Practices**:
+- Run with `--verbose` first to see what doors are doing
+- Use `--filter` to focus on specific problematic doors
+- Increase `--timeout` for doors known to have long initialization
+- Always check the generated report file for detailed error information
+- Compare door output against expected behavior from express.e
+
+**Example Workflow**:
+```bash
+# 1. Test all doors to identify failures
+./dev/scripts/test-all-doors.sh
+
+# 2. Re-test failed doors with verbose output
+./dev/scripts/test-all-doors.sh --verbose --filter "WHO,RTW"
+
+# 3. Analyze report for specific error patterns
+cat dev/scripts/door-test-results.txt | grep -A 10 "FAILED"
+
+# 4. Run individual door with harness for deeper debugging
+node web/backend/dist/scripts/run-amiga-door.js Doors/WHO/WHO 1
+```
+
+**Important Notes**:
+- Script requires backend to be built: `cd web/backend && npm run build`
+- Does NOT require BBS server to be running
+- Each door runs in isolated process
+- Timeout kills are normal for doors expecting interactive input
+- Check `/tmp/*.out` files for individual door output logs

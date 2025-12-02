@@ -188,11 +188,15 @@ export class HunkLoader {
   }
 
   private applyRelocationsToMemory(emulator: MoiraEmulator, hunkFile: HunkFile): void {
+    console.log(`[HunkLoader] Applying relocations to ${hunkFile.relocations.size} segments`);
+
     for (const [segmentIndex, relocs] of hunkFile.relocations.entries()) {
       const segment = hunkFile.segments[segmentIndex];
       if (!segment) {
         continue;
       }
+
+      console.log(`[HunkLoader] Segment ${segmentIndex} (${segment.type.toUpperCase()}) at 0x${segment.address.toString(16)}: ${relocs.length} relocations`);
 
       for (const reloc of relocs) {
         const targetSegment = hunkFile.segments[reloc.targetSegment];
@@ -215,6 +219,11 @@ export class HunkLoader {
           emulator.readMemory(address + 3);
 
         const relocatedValue = (currentValue + targetSegment.address) >>> 0;
+
+        // Log first 5 relocations for each segment
+        if (relocs.indexOf(reloc) < 5) {
+          console.log(`  [${relocs.indexOf(reloc)}] offset=0x${offset.toString(16)} addr=0x${address.toString(16)} before=0x${currentValue.toString(16)} after=0x${relocatedValue.toString(16)} target=seg${reloc.targetSegment}(0x${targetSegment.address.toString(16)})`);
+        }
 
         emulator.writeMemory(address, (relocatedValue >> 24) & 0xff);
         emulator.writeMemory(address + 1, (relocatedValue >> 16) & 0xff);

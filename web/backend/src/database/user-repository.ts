@@ -8,6 +8,7 @@ import { userFileManager } from '../services/UserFileManager';
 import { userDatabaseManager } from '../services/UserDatabaseManager';
 import type { User } from './types';
 import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 // Helper function to map field names to column names
 function fieldToColumn(field: string): string {
@@ -101,6 +102,14 @@ export class UserRepository {
         console.log(`[Database] Synced new user ${newUser.username} to user.data/keys/misc`);
       } catch (error) {
         console.error(`[Database] Failed to sync user to disk:`, error);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Database',
+          `Failed to sync new user "${newUser.username}" to disk files (user.data/keys/misc)`,
+          { error: error instanceof Error ? error.message : String(error), slotNumber },
+          DebugSeverity.WARNING
+        );
         // Don't throw - DB insert succeeded, file write is best-effort
       }
     }
@@ -221,6 +230,14 @@ export class UserRepository {
           console.log(`[Database] Synced updated user ${updatedUser.username} to disk files (slot ${slotNumber})`);
         } catch (error) {
           console.error(`[Database] Failed to sync user update to disk:`, error);
+          SysopDebugUtil.debug(
+            null,
+            null,
+            'Database',
+            `Failed to sync updated user "${updatedUser.username}" to disk files`,
+            { error: error instanceof Error ? error.message : String(error), slotNumber },
+            DebugSeverity.WARNING
+          );
           // Don't throw - DB update succeeded, file write is best-effort
         }
       }

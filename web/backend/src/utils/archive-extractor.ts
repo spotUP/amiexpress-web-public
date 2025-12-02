@@ -13,6 +13,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { SysopDebugUtil, DebugSeverity } from './sysop-debug.util';
 
 /**
  * Archive entry interface
@@ -130,6 +131,18 @@ export abstract class BaseArchiveExtractor implements IArchiveExtractor {
       return true;
     } catch (error: any) {
       console.error(`[${this.formatName}] Error: ${error.message}`);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Archive Extractor',
+        `Failed to extract FILE_ID.DIZ from ${this.formatName} archive "${path.basename(filepath)}"`,
+        {
+          error: error.message,
+          format: this.formatName,
+          filepath: path.basename(filepath)
+        },
+        DebugSeverity.WARNING
+      );
       return false;
     }
   }

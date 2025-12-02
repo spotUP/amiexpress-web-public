@@ -516,7 +516,7 @@ export class XIMIOHandler {
   /**
    * Handle JH_SG (Show GFile with ACS/language lookup)
    */
-  handleShowGFile(msg: XIMMessage): void {
+  async handleShowGFile(msg: XIMMessage): Promise<void> {
     const partName = this.getMessageString(msg).trim();
     const forceNonStop = msg.data === 1;
 
@@ -545,7 +545,7 @@ export class XIMIOHandler {
       return;
     }
 
-    const displayed = this.displayTextFile(target, forceNonStop, msg);
+    const displayed = await this.displayTextFile(target, forceNonStop, msg);
     if (!displayed) {
       this.reply(msg, 0);
       return;
@@ -559,7 +559,7 @@ export class XIMIOHandler {
   /**
    * Handle JH_SF (Show File - full path)
    */
-  handleShowFile(msg: XIMMessage): void {
+  async handleShowFile(msg: XIMMessage): Promise<void> {
     const targetPath = this.getMessageString(msg).trim();
     const forceNonStop = msg.data === 1;
 
@@ -587,7 +587,7 @@ export class XIMIOHandler {
       return;
     }
 
-    const displayed = this.displayTextFile(target, forceNonStop, msg);
+    const displayed = await this.displayTextFile(target, forceNonStop, msg);
     if (!displayed) {
       this.reply(msg, 0);
       return;
@@ -612,6 +612,46 @@ export class XIMIOHandler {
   handleCheckToDisplay(msg: XIMMessage): void {
     const patched: XIMMessage = { ...msg, data: 1 };
     this.handleShowGFile(patched);
+  }
+
+  /**
+   * Handle JH_MCI (Process MCI codes)
+   * From E sources (express.e:3456-3462)
+   * Processes MCI codes in the message string and outputs to terminal
+   */
+  async handleMCI(msg: XIMMessage): Promise<void> {
+    console.log(`[XIMIOHandler] JH_MCI: Processing MCI codes`);
+
+    const inputString = this.getMessageString(msg).trim();
+
+    try {
+      // Import parseMciCodes dynamically since it's async
+      const { parseMciCodes } = await import('../../handlers/screen.handler.js');
+
+      // Get BBS session info for MCI processing
+      const bbsSession = this.bbsSession || {};
+      const bbsName = bbsSession.bbsName || 'AmiExpress-Web';
+      const sysopName = bbsSession.sysopName || 'Sysop';
+      const location = bbsSession.user?.location || 'The Internet';
+
+      // Process MCI codes
+      const result = await parseMciCodes(inputString, bbsSession as any, bbsName, sysopName, location);
+
+      // Output parsed content to terminal (express.e: processMci outputs to terminal)
+      this.socket.emit('ansi-output', result.parsed);
+
+      // If data flag is set, output backspace + newline (express.e:3459-3461)
+      if (msg.data) {
+        this.socket.emit('ansi-output', '\b\n');
+        // Note: checkForPause() not implemented yet
+      }
+
+      console.log(`[XIMIOHandler] JH_MCI: Processed successfully`);
+      this.reply(msg, 1);
+    } catch (error: any) {
+      console.error(`[XIMIOHandler] JH_MCI: Error processing MCI codes:`, error.message || error);
+      this.reply(msg, 0);
+    }
   }
 
   /**
@@ -850,15 +890,32 @@ export class XIMIOHandler {
   /**
    * Display a text file with optional pagination
    */
-  private displayTextFile(
+  private async displayTextFile(
     filePath: string,
     forceNonStop: boolean,
     msg: XIMMessage
-  ): boolean {
+  ): Promise<boolean> {
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
-      const autoPause = !forceNonStop;
-      this.emitText(content, false, true, autoPause, msg);
+
+      // Process MCI codes in file contents (express.e:6790-6820)
+      try {
+        const { parseMciCodes } = await import('../../handlers/screen.handler.js');
+        const bbsSession = this.bbsSession || {};
+        const bbsName = bbsSession.bbsName || 'AmiExpress-Web';
+        const sysopName = bbsSession.sysopName || 'Sysop';
+        const location = bbsSession.user?.location || 'The Internet';
+
+        const result = await parseMciCodes(content, bbsSession as any, bbsName, sysopName, location);
+        const autoPause = !forceNonStop;
+        this.emitText(result.parsed, false, true, autoPause, msg);
+      } catch (mciError: any) {
+        console.warn(`[XIMIOHandler] MCI processing failed, displaying raw: ${mciError.message}`);
+        // Fallback to raw display if MCI processing fails
+        const autoPause = !forceNonStop;
+        this.emitText(content, false, true, autoPause, msg);
+      }
+
       return true;
     } catch (err) {
       SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', filePath, err as Error);

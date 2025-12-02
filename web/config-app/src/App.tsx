@@ -19,6 +19,7 @@ import { ImportExportPage } from './pages/ImportExportPage';
 import { DeploymentPage } from './pages/DeploymentPage';
 import { LogsPage } from './pages/LogsPage';
 import { BatchEditorPage } from './pages/BatchEditorPage';
+import { SessionLogsPage } from './pages/SessionLogsPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -64,6 +65,7 @@ function App() {
         <Route path="import-export" element={<ImportExportPage />} />
         <Route path="audit" element={<AuditLogPage />} />
         <Route path="logs" element={<LogsPage />} />
+        <Route path="session-logs" element={<SessionLogsPage />} />
         <Route path="batches" element={<BatchEditorPage />} />
         <Route path="*" element={<Navigate to="system" replace />} />
       </Route>

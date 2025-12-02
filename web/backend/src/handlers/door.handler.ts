@@ -14,6 +14,8 @@ import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { config } from '../config';
 import { BBSState } from '../index';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { DebugLogger } from '../utils/debug-logger.util';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -261,6 +263,16 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     }
 
     disableShortcuts(session);
+
+    // Log door launch
+    DebugLogger.door(socket.id, `Launching door: ${doorInfo.name || doorInfo.command}`, {
+      command: doorInfo.command,
+      name: doorInfo.name,
+      path: doorInfo.resolvedPath,
+      type: doorInfo.type || 'Amiga 68K',
+      stack: doorInfo.stack
+    });
+
     // Create AmigaDoorSession
     const amigaSession = new AmigaDoorSession(socket, {
       executablePath: doorInfo.resolvedPath,
@@ -295,6 +307,14 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
         }
       } catch (err) {
         console.error('[launchAmigaDoor] Error routing door input:', err);
+        SysopDebugUtil.debugDoorError(
+          socket,
+          session,
+          doorInfo.command || doorInfo.id || 'Unknown',
+          'Error routing door input',
+          { error: (err as Error).message },
+          DebugSeverity.WARNING
+        );
       }
     };
     // Persist session state so socket-handlers sees the door flags/handler
@@ -306,9 +326,21 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
       }
     } catch (err) {
       console.error('[launchAmigaDoor] Unable to persist session for door input:', err);
+      SysopDebugUtil.debugDoorError(
+        socket,
+        session,
+        doorInfo.command || doorInfo.id || 'Unknown',
+        'Unable to persist session for door input',
+        { error: (err as Error).message },
+        DebugSeverity.WARNING
+      );
     }
 
     await amigaSession.start();
+
+    // Log door exit
+    DebugLogger.doorSuccess(socket.id, `Door exited: ${doorInfo.name || doorInfo.command}`);
+
     session.inDoorManager = false;
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -394,6 +426,14 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
 
   } catch (error) {
     console.error(`[launchAmigaDoor] Error executing door:`, error);
+    SysopDebugUtil.debugDoorError(
+      socket,
+      session,
+      doorInfo.command || doorInfo.id || 'Unknown',
+      'Error executing 68K Amiga door',
+      { doorPath: doorInfo.location, error: (error as Error).message, stack: (error as Error).stack },
+      DebugSeverity.CRITICAL
+    );
     socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -580,6 +620,14 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
     default:
       socket.emit('ansi-output', `Unknown door type: ${door.type}\r\n`);
       console.error(`Unknown door type: ${door.type}`);
+      SysopDebugUtil.debugDoorError(
+        socket,
+        session,
+        door.name,
+        `Unknown door type: ${door.type}`,
+        { doorType: door.type, doorPath: door.path },
+        DebugSeverity.CRITICAL
+      );
   }
 
   // Clean up drop files after door exit
@@ -706,6 +754,14 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
   } catch (error) {
     console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error);
+    SysopDebugUtil.debugDoorError(
+      socket,
+      session,
+      door.name,
+      'Error executing TypeScript door',
+      { doorPath: door.path, error: (error as Error).message, stack: (error as Error).stack },
+      DebugSeverity.CRITICAL
+    );
 
     // Clear door active flag on error
     delete session.inDoorManager;

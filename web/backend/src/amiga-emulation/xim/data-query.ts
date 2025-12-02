@@ -11,6 +11,7 @@ import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import * as bcrypt from 'bcryptjs';
+import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 
 export class XIMDataQueryHandler {
   private emulator: MoiraEmulator;
@@ -82,6 +83,17 @@ export class XIMDataQueryHandler {
               (user as any).pwdType = 1; // bcrypt
             } catch (err) {
               console.error('[XIMDataQuery] Failed to hash password:', err);
+              SysopDebugUtil.debug(
+                null,
+                this.bbsSession,
+                'XIM Protocol',
+                `Failed to hash user password in DT_PASSWORD handler`,
+                {
+                  error: err instanceof Error ? err.message : String(err),
+                  username: user?.username || 'unknown'
+                },
+                DebugSeverity.CRITICAL
+              );
             }
           }
           console.log(`  [WRITE] DT_PASSWORD set (length=${newPwd.length})`);

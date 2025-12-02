@@ -25,6 +25,7 @@ import { convertUnicodePuaToPetscii } from './utils/petscii.util';
 import { writeUploadToDirFile } from './utils/dir-file.util';
 import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.util';
 import { AuthHandler } from './handlers/auth.handler';
+import { SessionLogsHandler } from './handlers/session-logs.handler';
 import { authenticateToken, requireSysop, AuthRequest } from './middleware/auth.middleware';
 import { createConfigRouter } from './api/config-routes';
 import { createBatchRouter } from './api/batch-routes';
@@ -519,6 +520,7 @@ function updateSessionForSocket(socketId: string, updates: Partial<BBSSession>):
 
 // Initialize handlers
 const authHandler = new AuthHandler(db);
+const sessionLogsHandler = new SessionLogsHandler();
 
 // Initialize internode chat handler dependencies
 const { setInternodeChatDependencies } = require('./handlers/internode-chat.handler');
@@ -603,6 +605,23 @@ app.get('/auth/me', authenticateToken(db), requireSysop(), (req: Request, res: R
 );
 app.post('/auth/register', (req: Request, res: Response) => authHandler.register(req, res));
 app.post('/auth/refresh', (req: Request, res: Response) => authHandler.refresh(req, res));
+
+// Session Logs API - Sysop-only routes
+app.get('/api/sessions', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+  sessionLogsHandler.getActiveSessions(req as AuthRequest, res)
+);
+app.get('/api/sessions/stats', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+  sessionLogsHandler.getStats(req as AuthRequest, res)
+);
+app.get('/api/sessions/:sessionId/log', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+  sessionLogsHandler.getSessionLog(req as AuthRequest, res)
+);
+app.get('/api/sessions/:sessionId/log/raw', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+  sessionLogsHandler.getSessionLogRaw(req as AuthRequest, res)
+);
+app.post('/api/sessions/:sessionId/save', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+  sessionLogsHandler.saveSessionLog(req as AuthRequest, res)
+);
 
 // Configuration API - Sysop-only routes
 const configRouter = createConfigRouter(db);

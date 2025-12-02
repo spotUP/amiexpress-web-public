@@ -33,34 +33,29 @@ export class XIMMessageParser {
    *   Size: 0x100 bytes
    */
   parseMessage(msgAddr: number): XIMMessage {
-    const headerBias = DoorConstants.MESSAGE_HEADER_SIZE || 0;
-    const readWithBias = (offset: number): number => {
-      const primary = this.emulator.readMemory32(msgAddr + offset);
-      const biasedOffset = offset + headerBias;
-      if (
-        headerBias > 0 &&
-        biasedOffset < DoorConstants.MESSAGE_TOTAL_LENGTH
-      ) {
-        const biased = this.emulator.readMemory32(msgAddr + biasedOffset);
-        return primary !== 0 ? primary : biased;
-      }
-      return primary;
-    };
+    // CRITICAL FIX: Removed ALL bias logic - it was completely wrong!
+    // There is NO duplicate copy of message fields at +0x14 offset.
+    // The jhMessage structure has ONE copy of each field at the canonical offsets.
+    //
+    // Previous bug: readWithBias was reading from BOTH offset and offset+0x14,
+    // e.g., reading TASK from 0xf0 AND 0x104 (FILLER3), causing confusion.
+    //
+    // Correct approach: Read directly from canonical offsets only.
 
     const replyPort = this.emulator.readMemory32(
       msgAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET
     );
-    const command = readWithBias(DoorConstants.MESSAGE_COMMAND_OFFSET);
-    const data = readWithBias(DoorConstants.MESSAGE_DATA_OFFSET);
-    const nodeId = readWithBias(DoorConstants.MESSAGE_NODE_OFFSET);
-    const lineNumber = readWithBias(DoorConstants.MESSAGE_LINE_OFFSET);
-    const signal = readWithBias(DoorConstants.MESSAGE_SIGNAL_OFFSET);
-    const task = readWithBias(DoorConstants.MESSAGE_TASK_OFFSET);
-    const semaphore = readWithBias(DoorConstants.MESSAGE_SEMAPHORE_OFFSET);
-    const filler1 = readWithBias(DoorConstants.MESSAGE_FILLER1_OFFSET);
-    const filler2 = readWithBias(DoorConstants.MESSAGE_FILLER2_OFFSET);
-    const stringPtr = readWithBias(DoorConstants.MESSAGE_STRING_PTR_OFFSET);
-    const filler3 = readWithBias(DoorConstants.MESSAGE_FILLER3_OFFSET);
+    const command = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET);
+    const data = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET);
+    const nodeId = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_NODE_OFFSET);
+    const lineNumber = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_LINE_OFFSET);
+    const signal = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_SIGNAL_OFFSET);
+    const task = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_TASK_OFFSET);
+    const semaphore = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_SEMAPHORE_OFFSET);
+    const filler1 = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER1_OFFSET);
+    const filler2 = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER2_OFFSET);
+    const stringPtr = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET);
+    const filler3 = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER3_OFFSET);
     const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
 
     // Read the string (200 bytes starting at offset 24)
@@ -312,18 +307,21 @@ export class XIMMessageParser {
   }
 
   /**
-   * Write a 32-bit value to the canonical jhMessage offset and, when space
-   * permits, to the header-biased offset used by Bulls (message base + 0x14).
+   * Write a 32-bit value to the canonical jhMessage offset.
+   *
+   * CRITICAL FIX: Removed biased write (+0x14) that was corrupting message structure.
+   * The biased write was overwriting MESSAGE_TASK_OFFSET (0xf0) and causing stack
+   * corruption crashes in all XIM doors. Express.e uses standard ReplyMsg() without
+   * any biased offset modifications.
+   *
+   * Previous bug: writeData(0xdc) also wrote to 0xf0 (MESSAGE_TASK_OFFSET)
+   * Result: Door crashed when processing reply with corrupted task pointer
    */
   private writeWithBias(msgAddr: number, offset: number, value: number): void {
+    // Only write to canonical offset - no biased write for XIM messages
     this.emulator.writeMemory32(msgAddr + offset, value);
-    const headerBias = DoorConstants.MESSAGE_HEADER_SIZE || 0;
-    const biasedOffset = offset + headerBias;
-    if (
-      headerBias > 0 &&
-      biasedOffset < DoorConstants.MESSAGE_TOTAL_LENGTH
-    ) {
-      this.emulator.writeMemory32(msgAddr + biasedOffset, value);
-    }
+
+    // Biased write removed - was causing MESSAGE_TASK_OFFSET corruption
+    // Previous code wrote to msgAddr + offset + 0x14, overwriting critical fields
   }
 }

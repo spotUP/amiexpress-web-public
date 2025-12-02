@@ -181,7 +181,7 @@ export class XIMProtocol {
    * Handle incoming XIM message from door
    * Routes to appropriate specialized handler based on command type
    */
-  handleMessage(msg: XIMMessage): void {
+  async handleMessage(msg: XIMMessage): Promise<void> {
     const humanName = this.messageParser.getCommandName(msg.command);
     console.log(
       `[XIMProtocol] Handling command: ${humanName} (enum SV_NEWMSG=${XIMCommand.SV_NEWMSG}, RAWARROW=${XIMCommand.RAWARROW})`
@@ -258,7 +258,7 @@ export class XIMProtocol {
 
     // I/O Commands - handled by XIMIOHandler
     if (this.isIOCommand(msg.command)) {
-      this.handleIOCommand(msg);
+      await this.handleIOCommand(msg);
       return;
     }
 
@@ -292,6 +292,7 @@ export class XIMProtocol {
       XIMCommand.JH_HK,
       XIMCommand.JH_SG,
       XIMCommand.JH_SF,
+      XIMCommand.JH_MCI,
       XIMCommand.JH_ExtHK,
       XIMCommand.JH_FetchKey,
       XIMCommand.JH_CO,
@@ -318,7 +319,7 @@ export class XIMProtocol {
   /**
    * Handle I/O commands
    */
-  private handleIOCommand(msg: any): void {
+  private async handleIOCommand(msg: any): Promise<void> {
     switch (msg.command) {
       case XIMCommand.JH_LI:
         this.ioHandler.handleLineInput(msg);
@@ -346,11 +347,15 @@ export class XIMProtocol {
         break;
 
       case XIMCommand.JH_SG:
-        this.ioHandler.handleShowGFile(msg);
+        await this.ioHandler.handleShowGFile(msg);
         break;
 
       case XIMCommand.JH_SF:
-        this.ioHandler.handleShowFile(msg);
+        await this.ioHandler.handleShowFile(msg);
+        break;
+
+      case XIMCommand.JH_MCI:
+        await this.ioHandler.handleMCI(msg);
         break;
 
       case XIMCommand.DISPLAY_FILE:

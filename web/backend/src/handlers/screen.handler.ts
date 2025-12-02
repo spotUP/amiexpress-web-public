@@ -18,6 +18,7 @@ import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { DebugLogger } from '../utils/debug-logger.util';
 
 // Screen/MCI debugging: always log unless explicitly disabled
 const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG !== '0';
@@ -160,6 +161,10 @@ export async function parseMciCodes(
 screenDebug('[MCI] ========== PROCESSING MCI CODES ==========');
 screenDebug('[MCI] Content length:', content.length);
 screenDebug('[MCI] Looking for ~XC_ and ~XI codes...');
+
+  // Debug log start of MCI parsing
+  DebugLogger.mci((session as any).socket?.id || 'unknown', `Parsing MCI codes (${content.length} bytes)`);
+
   const xcRegex = /~XC_([^\|]+)\|\|/g;
   let xcMatch;
   while ((xcMatch = xcRegex.exec(parsed)) !== null) {
@@ -170,6 +175,9 @@ screenDebug('[MCI] Looking for ~XC_ and ~XI codes...');
     // Remove the ~XC code from output (silent execution)
     parsed = parsed.replace(xcMatch[0], '');
     screenDebug('[MCI] Added command to execution queue');
+
+    // Debug log found MCI code
+    DebugLogger.mci((session as any).socket?.id || 'unknown', `Found MCI: ~XC_ (Execute Command)`, { command: commandStr });
   }
 
   // ~XI - Execute XIM door (express.e format: ~XI<doorpath>)
@@ -228,6 +236,14 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       }
     } catch (error) {
       console.error('[parseMciCodes] Error getting message base list:', error);
+      SysopDebugUtil.debug(
+        null,
+        session,
+        'MCI',
+        'Error parsing ~ML. (message base list)',
+        { error: (error as Error).message },
+        DebugSeverity.WARNING
+      );
       msgBaseList = '                     \x1b[32m1\x1b[33m) \x1b[35mDefault                       \x1b[36m\x1b[0m\r\n';
     }
     parsed = parsed.replace(/~ML\./g, msgBaseList);
@@ -252,6 +268,14 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       }
     } catch (error) {
       console.error('[parseMciCodes] Error getting message base descriptions:', error);
+      SysopDebugUtil.debug(
+        null,
+        session,
+        'MCI',
+        'Error parsing ~MD. (message base descriptions)',
+        { error: (error as Error).message },
+        DebugSeverity.WARNING
+      );
       msgBaseDesc = '   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0mDefault                       \r\n';
     }
     parsed = parsed.replace(/~MD\./g, msgBaseDesc);
@@ -318,6 +342,14 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     }
   } catch (error) {
     console.error('[parseMciCodes] Error getting message base name:', error);
+    SysopDebugUtil.debug(
+      null,
+      session,
+      'MCI',
+      'Error parsing ~MN| (message base name)',
+      { error: (error as Error).message },
+      DebugSeverity.WARNING
+    );
   }
   parsed = parsed.replace(/~MN\|/g, msgBaseName);
 
@@ -352,6 +384,14 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     }
   } catch (error) {
     console.error('[parseMciCodes] Error getting file count:', error);
+    SysopDebugUtil.debug(
+      null,
+      session,
+      'MCI',
+      'Error parsing ~FC| (file count)',
+      { error: (error as Error).message },
+      DebugSeverity.WARNING
+    );
   }
   parsed = parsed.replace(/~FC\|/g, totalFiles.toString());
 
@@ -998,6 +1038,14 @@ export function loadScreenFile(
         return { content, isPetscii: false, filePath: ansiFallback };
       } catch (error) {
         console.error(`[loadScreenFile]     (error reading ANSI fallback screen: ${(error as Error).message})`);
+        SysopDebugUtil.debugFileError(
+          null,
+          session,
+          'read',
+          ansiFallback,
+          error as Error,
+          DebugSeverity.WARNING
+        );
       }
     }
 
@@ -1010,6 +1058,14 @@ export function loadScreenFile(
         return { content, isPetscii: true, filePath: petsciiFallback };
       } catch (error) {
         console.error(`[loadScreenFile]     (error reading fallback screen: ${(error as Error).message})`);
+        SysopDebugUtil.debugFileError(
+          null,
+          session,
+          'read',
+          petsciiFallback,
+          error as Error,
+          DebugSeverity.WARNING
+        );
       }
     }
   }
@@ -1076,6 +1132,14 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     screenDebug(`[displayScreen] Render event: ${screenName} (node ${session.nodeId || 0})`);
     screenFlowLog(screenName, `Loaded ${screenName} file=${filePath} petscii=${isPetscii ? 'Y' : 'N'} bytes=${content.length}`);
 
+    // Log screen display
+    DebugLogger.screen(socket.id, `Displaying screen: ${screenName}`, {
+      file: filePath,
+      size: `${content.length} bytes`,
+      isPetscii,
+      conference: session.currentConf
+    });
+
     let parsed: string;
     let commands: any[] = [];
 
@@ -1083,6 +1147,14 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const result = await parseMciCodes(content, session);
     parsed = result.parsed;
     commands = result.commands;
+
+    // Log MCI parsing results
+    if (commands.length > 0) {
+      DebugLogger.mciSuccess(socket.id, `MCI codes found in ${screenName}`, {
+        commandCount: commands.length,
+        commands: commands.map(cmd => cmd.type || cmd.command || 'unknown')
+      });
+    }
     session.lastScreenHadPause = result.hasPause;
 
     // Add ESC prefix to bare ANSI sequences only for ANSI paths
@@ -1203,6 +1275,14 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
             } catch (error) {
               console.error(`[displayScreen]  ERROR executing command ${commandStr}:`, error);
               console.error(`[displayScreen] Error stack:`, (error as Error).stack);
+              SysopDebugUtil.debug(
+                socket,
+                session,
+                'SCREEN',
+                `Error executing screen command: ${commandStr}`,
+                { error: (error as Error).message, stack: (error as Error).stack },
+                DebugSeverity.CRITICAL
+              );
             }
           }
           screenDebug(`[displayScreen] ==========================================`);
@@ -1233,6 +1313,14 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     console.error(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
     console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
     console.error(`[displayScreen] ========================================`);
+    SysopDebugUtil.debug(
+      socket,
+      session,
+      'SCREEN',
+      `Screen file not found: ${screenName}`,
+      { conferenceId: session.currentConf || 'none' },
+      DebugSeverity.CRITICAL
+    );
     notifySysop(session, `Screen not found: ${screenName}`);
     session.lastScreenFilePath = undefined;
     return false;
@@ -1270,6 +1358,14 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
         await handleCommand(socket, session, commandStr);
       } catch (error) {
         console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, error);
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'SCREEN',
+          `Error executing queued command: ${commandStr}`,
+          { error: (error as Error).message },
+          DebugSeverity.CRITICAL
+        );
       }
     }
   } finally {

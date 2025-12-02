@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { config } from '../config';
 import { db } from '../database';
+import { SysopDebugUtil, DebugSeverity } from './sysop-debug.util';
 
 export interface ConferenceToolFlags {
   forceNewscan: boolean;
@@ -68,6 +69,14 @@ function readFlagsFromDb(confNumber: number): Partial<ConferenceToolFlags> {
     return result;
   } catch (error) {
     console.error(`[ConferenceTooltypes] Error reading DB config for conference ${confNumber}:`, error);
+    SysopDebugUtil.debug(
+      null,
+      null,
+      'Conference Switching',
+      `Failed to read DB config for conference ${confNumber}`,
+      { error: error instanceof Error ? error.message : String(error), confNumber },
+      DebugSeverity.WARNING
+    );
     return {};
   }
 }
@@ -131,6 +140,14 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     return result;
   } catch (error) {
     console.error(`[ConferenceTooltypes] Error parsing Conf${confNumber}.info:`, error);
+    SysopDebugUtil.debug(
+      null,
+      null,
+      'Conference Switching',
+      `Failed to parse Conf${confNumber}.info tooltypes`,
+      { error: error instanceof Error ? error.message : String(error), confNumber },
+      DebugSeverity.WARNING
+    );
     return {};
   }
 }

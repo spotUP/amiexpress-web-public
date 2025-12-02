@@ -490,6 +490,35 @@ class ApiClient {
       body: JSON.stringify({ name, content }),
     });
   }
+
+  // Session Logs
+  async getSessions() {
+    return this.request<ApiResponse>(`${API_BASE}/sessions`);
+  }
+
+  async getSessionLog(sessionId: string) {
+    return this.request<ApiResponse>(`${API_BASE}/sessions/${sessionId}/log`);
+  }
+
+  async getSessionLogRaw(sessionId: string) {
+    const response = await fetch(`${API_BASE}/sessions/${sessionId}/log/raw`, {
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+      },
+    });
+    if (!response.ok) throw new Error('Failed to fetch raw log');
+    return await response.text();
+  }
+
+  async saveSessionLog(sessionId: string) {
+    return this.request<ApiResponse>(`${API_BASE}/sessions/${sessionId}/save`, {
+      method: 'POST',
+    });
+  }
+
+  async getSessionStats() {
+    return this.request<ApiResponse>(`${API_BASE}/sessions/stats`);
+  }
 }
 
 export const apiClient = new ApiClient();

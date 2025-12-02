@@ -3,6 +3,7 @@
 
 import { db } from './database';
 import { AREXXContext, AREXXScript } from './types';
+import { SysopDebugUtil, DebugSeverity } from './utils/sysop-debug.util';
 
 /**
  * AREXX Variable Storage
@@ -239,6 +240,20 @@ class BBSFunctions {
       return messageId;
     } catch (error) {
       console.error('AREXX BBSPOSTMSG error:', error);
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to post message via BBSPOSTMSG()`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          subject,
+          toUser,
+          isPrivate,
+          username: this.context.user?.username
+        },
+        DebugSeverity.WARNING
+      );
       return 0;
     }
   }
@@ -254,6 +269,18 @@ class BBSFunctions {
       );
       return messages.length;
     } catch (error) {
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to get message count via BBSGETMSGCOUNT()`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          confId,
+          baseId
+        },
+        DebugSeverity.WARNING
+      );
       return 0;
     }
   }
@@ -285,6 +312,17 @@ class BBSFunctions {
       }
     } catch (error) {
       console.error('AREXX BBSGETUSER error:', error);
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to get user via BBSGETUSER()`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          usernameOrId
+        },
+        DebugSeverity.WARNING
+      );
       return null;
     }
   }
@@ -299,6 +337,19 @@ class BBSFunctions {
       return true;
     } catch (error) {
       console.error('AREXX BBSSETUSER error:', error);
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to update user field via BBSSETUSER()`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          field,
+          value,
+          userId: this.context.user?.id
+        },
+        DebugSeverity.WARNING
+      );
       return false;
     }
   }
@@ -312,6 +363,16 @@ class BBSFunctions {
       // In a real implementation, would query active sessions
       return 1; // At least the current user
     } catch (error) {
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to get online count via BBSGETONLINECOUNT()`,
+        {
+          error: error instanceof Error ? error.message : String(error)
+        },
+        DebugSeverity.WARNING
+      );
       return 0;
     }
   }
@@ -328,6 +389,16 @@ class BBSFunctions {
       }
       return [];
     } catch (error) {
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to get online users via BBSGETONLINEUSERS()`,
+        {
+          error: error instanceof Error ? error.message : String(error)
+        },
+        DebugSeverity.WARNING
+      );
       return [];
     }
   }
@@ -342,6 +413,17 @@ class BBSFunctions {
       const conf = conferences.find(c => c.id === id);
       return conf?.name || 'Unknown';
     } catch (error) {
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to get conference name via BBSGETCONFNAME()`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          confId
+        },
+        DebugSeverity.WARNING
+      );
       return 'Unknown';
     }
   }
@@ -354,6 +436,16 @@ class BBSFunctions {
       const conferences = await db.getConferences();
       return conferences.length;
     } catch (error) {
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to get conference count via BBSGETCONFERENCES()`,
+        {
+          error: error instanceof Error ? error.message : String(error)
+        },
+        DebugSeverity.WARNING
+      );
       return 0;
     }
   }
@@ -381,6 +473,16 @@ class BBSFunctions {
       // For now, return placeholder
       return 'System';
     } catch (error) {
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to get last caller via BBSGETLASTCALLER()`,
+        {
+          error: error instanceof Error ? error.message : String(error)
+        },
+        DebugSeverity.WARNING
+      );
       return 'Unknown';
     }
   }
@@ -406,6 +508,17 @@ class BBSFunctions {
       return content;
     } catch (error) {
       console.error('BBSREADFILE error:', error);
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to read file via BBSREADFILE()`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          filename
+        },
+        DebugSeverity.WARNING
+      );
       return '';
     }
   }
@@ -436,6 +549,18 @@ class BBSFunctions {
       return true;
     } catch (error) {
       console.error('BBSWRITEFILE error:', error);
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to write file via BBSWRITEFILE()`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          filename,
+          append
+        },
+        DebugSeverity.WARNING
+      );
       return false;
     }
   }
@@ -454,6 +579,17 @@ class BBSFunctions {
       }
     } catch (error) {
       console.error('BBSSHOWMENU error:', error);
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `Failed to show menu via BBSSHOWMENU()`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          menuName
+        },
+        DebugSeverity.WARNING
+      );
       await this.BBSWRITE(`Error loading menu: ${menuName}`);
     }
   }
@@ -808,6 +944,18 @@ export class AREXXInterpreter {
 
       return { success: true, output: this.output };
     } catch (error) {
+      SysopDebugUtil.debug(
+        this.context.socket || null,
+        this.context.session || null,
+        'AREXX Script',
+        `AREXX script execution failed`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          output: this.output.slice(-5), // Last 5 lines of output for context
+          scriptLength: script.length
+        },
+        DebugSeverity.CRITICAL
+      );
       return {
         success: false,
         output: this.output,

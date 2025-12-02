@@ -18,6 +18,7 @@ import { ACSPermission } from '../constants/acs-permissions';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 // Result codes from express.e
 const RESULT_SUCCESS = 0;
@@ -116,6 +117,10 @@ export async function reloadDoorCommands(
   } catch (error) {
     const errorMsg = `Failed to reload doors: ${(error as Error).message}`;
     console.error(`[Hot-Reload] ${errorMsg}`, error);
+
+    // Note: reloadDoorCommands doesn't have socket/session available
+    // Error is already logged to console and returned in response
+
     return {
       success: false,
       message: errorMsg,
@@ -206,6 +211,8 @@ async function runCommand(
   // express.e:4647, 4669 - Command not found
   if (!commandDef) {
     console.log(`  Command not found: ${cmd}`);
+    // Note: Sysop debug message is sent later in internal-commands.ts
+    // at the final "Unknown command" display, not here during lookup
     return RESULT_FAILURE;
   }
 
@@ -226,6 +233,14 @@ async function runCommand(
   } else if (userSecLevel < requiredAccess) {
     // express.e:4705-4707 - User doesn't have sufficient access
     console.log(`  Access denied: user level ${userSecLevel} < required ${requiredAccess}`);
+    SysopDebugUtil.debug(
+      socket,
+      session,
+      'COMMAND',
+      `Access denied for command: ${cmd}`,
+      { userSecLevel, requiredAccess, username: session.user?.username },
+      DebugSeverity.WARNING
+    );
     socket.emit('ansi-output', AnsiUtil.errorLine('You do not have access to that command.'));
     return RESULT_NOT_ALLOWED;
   } else {
@@ -301,11 +316,31 @@ async function runCommand(
       return RESULT_SUCCESS;
     } catch (error) {
       console.error(`  Error executing door:`, error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'COMMAND',
+        `Error executing command: ${cmd}`,
+        {
+          error: (error as Error).message,
+          doorType: commandDef.type,
+          doorPath: location
+        },
+        DebugSeverity.CRITICAL
+      );
       socket.emit('ansi-output', AnsiUtil.errorLine('Error executing command.'));
       return RESULT_FAILURE;
     }
   } else {
     console.warn(`  executeDoor not available - command execution skipped`);
+    SysopDebugUtil.debug(
+      socket,
+      session,
+      'COMMAND',
+      `executeDoor not available - cannot execute command: ${cmd}`,
+      { cmdType, doorType: commandDef.type },
+      DebugSeverity.CRITICAL
+    );
     socket.emit('ansi-output', AnsiUtil.errorLine('Command execution not available.'));
     return RESULT_FAILURE;
   }

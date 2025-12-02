@@ -14,6 +14,7 @@ import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { callersLogManager } from '../../services/CallersLogManager';
 import { startSysopPage } from '../../handlers/chat.handler';
+import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 
 export class XIMBBSInfoHandler {
   private emulator: MoiraEmulator;
@@ -68,6 +69,18 @@ export class XIMBBSInfoHandler {
       fs.appendFileSync(logPath, `${line}\n`, 'utf8');
     } catch (err) {
       console.error(`[XIMBBSInfo] Failed to write ${filename}:`, err);
+      SysopDebugUtil.debug(
+        this.socket,
+        this.bbsSession,
+        'XIM Protocol',
+        `Failed to write to ${filename} log file`,
+        {
+          error: err instanceof Error ? err.message : String(err),
+          filename,
+          nodeId: this.getNodeId()
+        },
+        DebugSeverity.WARNING
+      );
     }
   }
 
@@ -419,6 +432,18 @@ export class XIMBBSInfoHandler {
         callersLogManager.logActivity(nodeId, logText);
       } catch (err) {
         console.warn('[XIMBBSInfo] callersLogManager failed:', err);
+        SysopDebugUtil.debug(
+          this.socket,
+          this.bbsSession,
+          'XIM Protocol',
+          `Failed to log activity to CallersLog manager`,
+          {
+            error: err instanceof Error ? err.message : String(err),
+            nodeId,
+            textLength: logText.length
+          },
+          DebugSeverity.WARNING
+        );
       }
     }
 
@@ -482,6 +507,14 @@ export class XIMBBSInfoHandler {
           startSysopPage(this.socket, this.bbsSession as any);
         } catch (err) {
           console.warn('[XIMBBSInfo] sysop page trigger failed:', err);
+          SysopDebugUtil.debug(
+            this.socket,
+            this.bbsSession,
+            'XIM Protocol',
+            `Failed to trigger sysop page`,
+            { error: err instanceof Error ? err.message : String(err) },
+            DebugSeverity.WARNING
+          );
         }
       }
 

@@ -15,6 +15,7 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { SysopDebugUtil, DebugSeverity } from './sysop-debug.util';
 
 /**
  * Path to lha binary (compiled from source)
@@ -125,7 +126,19 @@ export async function createLhaArchive(
           }
           resolve();
         } catch (error: any) {
-          reject(new Error(`Archive created but not found: ${error.message}`));
+          const errorMsg = `Archive created but not found: ${error.message}`;
+          SysopDebugUtil.debug(
+            null,
+            null,
+            'LHA Archiver',
+            `Failed to verify LHA archive "${path.basename(archivePath)}" after creation`,
+            {
+              error: error.message,
+              archivePath: path.basename(archivePath)
+            },
+            DebugSeverity.CRITICAL
+          );
+          reject(new Error(errorMsg));
         }
       } else {
         reject(new Error(`LHA failed with exit code ${code}\nStderr: ${stderr}\nStdout: ${stdout}`));

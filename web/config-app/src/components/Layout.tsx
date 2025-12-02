@@ -48,6 +48,7 @@ export function Layout() {
     { to: `${ADMIN_BASE}/deployment`, icon: Activity, label: 'Deployment' },
     { to: `${ADMIN_BASE}/import-export`, icon: ArrowUpDown, label: 'Import/Export' },
     { to: `${ADMIN_BASE}/logs`, icon: FileText, label: 'System Logs' },
+    { to: `${ADMIN_BASE}/session-logs`, icon: Activity, label: 'Session Logs' },
     { to: `${ADMIN_BASE}/audit`, icon: History, label: 'Audit Log' },
   ];
 

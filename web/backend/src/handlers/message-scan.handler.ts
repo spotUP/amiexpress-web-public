@@ -16,6 +16,7 @@ import {
   getConferenceScanFlags
 } from '../utils/message-pointers.util';
 import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 // Dependencies injected from index.ts
 let _db: any = null;
@@ -94,6 +95,19 @@ async function checkMailConfScan(conferenceId: number, messageBaseId: number, us
     return (confBase.scanFlags & MAIL_SCAN_MASK) !== 0;
   } catch (error) {
     console.error(`[checkMailConfScan] Failed to load conf_base for user ${userId} conf ${conferenceId} msgBase ${messageBaseId}:`, error);
+    SysopDebugUtil.debug(
+      null,
+      null,
+      'Message Scanning',
+      `Failed to load message pointers for mail scan check`,
+      {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        conferenceId,
+        messageBaseId
+      },
+      DebugSeverity.WARNING
+    );
     return true; // Fallback to scanning if we cannot determine
   }
 }
@@ -171,6 +185,19 @@ async function countNewMessages(
     }
   } catch (error) {
     console.error(`Error counting messages in conf ${conferenceId} msgbase ${messageBaseId}:`, error);
+    SysopDebugUtil.debug(
+      null,
+      null,
+      'Message Scanning',
+      `Failed to count messages in conference`,
+      {
+        error: error instanceof Error ? error.message : String(error),
+        conferenceId,
+        messageBaseId,
+        username
+      },
+      DebugSeverity.WARNING
+    );
   }
 
   return { newPublic, newPrivate, lastScanned, mailStatHigh };
@@ -249,6 +276,19 @@ export async function performConferenceScan(socket: any, session: any): Promise<
           await updateScanPointer(session.user.id, conference.id, msgBase.id, newPointer);
         } catch (err) {
           console.error(`[confScan] Failed to update scan pointer for conf ${conference.id} msgBase ${msgBase.id}:`, err);
+          SysopDebugUtil.debug(
+            null,
+            null,
+            'Message Scanning',
+            `Failed to update scan pointer after conference scan`,
+            {
+              error: err instanceof Error ? err.message : String(err),
+              conferenceId: conference.id,
+              messageBaseId: msgBase.id,
+              newPointer
+            },
+            DebugSeverity.WARNING
+          );
         }
       }
 
@@ -261,6 +301,18 @@ export async function performConferenceScan(socket: any, session: any): Promise<
         }
       } catch (err) {
         console.error(`[confScan] Failed to read scan flags for conf ${conference.id} msgBase ${msgBase.id}:`, err);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Message Scanning',
+          `Failed to read scan flags for file-scan check`,
+          {
+            error: err instanceof Error ? err.message : String(err),
+            conferenceId: conference.id,
+            messageBaseId: msgBase.id
+          },
+          DebugSeverity.WARNING
+        );
       }
     }
 
@@ -280,6 +332,17 @@ export async function performConferenceScan(socket: any, session: any): Promise<
         session.currentConf = currentConfBackup;
       } catch (err) {
         console.error(`[confScan] Failed to run new-files scan for conf ${conference.id}:`, err);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Message Scanning',
+          `Failed to run new-files scan during conference scan`,
+          {
+            error: err instanceof Error ? err.message : String(err),
+            conferenceId: conference.id
+          },
+          DebugSeverity.WARNING
+        );
       }
     }
 

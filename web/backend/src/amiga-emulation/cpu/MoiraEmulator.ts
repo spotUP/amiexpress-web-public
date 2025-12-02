@@ -57,6 +57,9 @@ export class MoiraEmulator {
 
   constructor(private memorySize: number = 16 * 1024 * 1024) {} // 16MB for full 24-bit address space (Amiga standard)
 
+  // Track CODE regions for self-modifying code support
+  private codeRegions: Array<{ start: number; end: number }> = [];
+
   /**
    * Check whether the underlying WASM CPU has been instantiated.
    */
@@ -304,7 +307,44 @@ export class MoiraEmulator {
       // Allow write for now to see what happens, but log it
     }
 
+    // SELF-MODIFYING CODE SUPPORT: Check if writing to code region
+    // Only check during execution (PC > 0), not during HUNK loading
+    const pc = this.getRegister(16);
+    if (pc > 0) {
+      const isCodeWrite = this.isCodeAddress(address);
+      if (isCodeWrite) {
+        // If writing to code near PC (within 64KB), refill prefetch queue
+        if (Math.abs(address - pc) < 0x10000) {
+          console.log(`[Self-Mod Code] Write to code at 0x${address.toString(16)}, PC=0x${pc.toString(16)} - refilling prefetch`);
+          this.cpu.setMemoryByte(address, value);
+          this.refillPrefetch(); // Invalidate instruction cache
+          return;
+        }
+      }
+    }
+
     this.cpu.setMemoryByte(address, value);
+  }
+
+  /**
+   * Register a code region for self-modifying code detection
+   */
+  registerCodeRegion(start: number, size: number): void {
+    const end = start + size - 1;
+    this.codeRegions.push({ start, end });
+    console.log(`[Self-Mod Code] Registered CODE region: 0x${start.toString(16)}-0x${end.toString(16)} (${size} bytes)`);
+  }
+
+  /**
+   * Check if an address is in a code region
+   */
+  private isCodeAddress(addr: number): boolean {
+    for (const region of this.codeRegions) {
+      if (addr >= region.start && addr <= region.end) {
+        return true;
+      }
+    }
+    return false;
   }
 
   getCycles(): number {
@@ -322,7 +362,17 @@ export class MoiraEmulator {
   readMemory32(address: number): number {
     const high = this.readMemory16(address);
     const low = this.readMemory16(address + 2);
-    return ((high << 16) | low) >>> 0; // Unsigned 32-bit
+    const value = ((high << 16) | low) >>> 0; // Unsigned 32-bit
+
+    // DEBUG: Track reads from 0xf0081 to see when it returns garbage
+    if (address === 0xf0081) {
+      console.log(`[MEMORY-READ] readMemory32(0xf0081) = 0x${value.toString(16).padStart(8, '0')}`);
+      if (value === 0xfffec8) {
+        console.error(`[MEMORY-READ] ERROR: Got garbage value 0xfffec8 instead of 0x77686f00!`);
+      }
+    }
+
+    return value;
   }
 
   writeMemory16(address: number, value: number): void {

@@ -149,15 +149,55 @@ public:
         // Get page number (each page = 64KB)
         uint8_t page = (addr >> 16) & 0xFF;
 
+        // DEBUG: Track reads from 0xf0080-0xf0084 (CLI program name area)
+        if (addr >= 0xf0080 && addr <= 0xf0084) {
+            static int read_count = 0;
+            if (++read_count <= 50) {  // Only log first 50 reads
+                EM_ASM({
+                    console.log('[READ8] addr=0x' + $0.toString(16).padStart(6, '0') +
+                                ' page=0x' + $1.toString(16).padStart(2, '0') +
+                                ' memSrc=' + $2);
+                }, addr, page, (int)cpuMemSrc[page]);
+            }
+        }
+
         // Page table lookup (following vAmiga's peek8 implementation)
         switch (cpuMemSrc[page]) {
-            case MemSrc::CHIP:
+            case MemSrc::CHIP: {
                 // Read from chip RAM with mask
-                return chipRam[addr & chipMask];
+                u8 value = chipRam[addr & chipMask];
 
-            case MemSrc::ROM:
+                // DEBUG: Log value from CLI program name area
+                if (addr >= 0xf0080 && addr <= 0xf0084) {
+                    static int value_log_count = 0;
+                    if (++value_log_count <= 50) {
+                        EM_ASM({
+                            console.log('[READ8] CHIP: addr=0x' + $0.toString(16).padStart(6, '0') +
+                                        ' offset=0x' + $1.toString(16).padStart(6, '0') +
+                                        ' value=0x' + $2.toString(16).padStart(2, '0') +
+                                        ' (' + String.fromCharCode($2) + ')');
+                        }, addr, addr & chipMask, value);
+                    }
+                }
+
+                return value;
+            }
+
+            case MemSrc::ROM: {
                 // Read from ROM with mask
-                return rom[addr & romMask];
+                u8 value = rom[addr & romMask];
+
+                // DEBUG: Log if trying to read CLI area from ROM (this would be wrong!)
+                if (addr >= 0xf0080 && addr <= 0xf0084) {
+                    EM_ASM({
+                        console.error('[READ8] ERROR: Reading CLI area from ROM! addr=0x' + $0.toString(16).padStart(6, '0') +
+                                    ' offset=0x' + $1.toString(16).padStart(6, '0') +
+                                    ' value=0x' + $2.toString(16).padStart(2, '0'));
+                    }, addr, addr & romMask, value);
+                }
+
+                return value;
+            }
 
             case MemSrc::SLOW:
                 if (!slowRam.empty()) {

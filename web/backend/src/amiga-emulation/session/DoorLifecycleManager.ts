@@ -1015,10 +1015,68 @@ export class DoorLifecycleManager {
     return false;
   }
 
+  // Track PC history for debugging bad jumps
+  private pcHistory: number[] = [];
+  private readonly PC_HISTORY_SIZE = 10;
+
   private async executeInstruction(pc: number): Promise<void> {
     const wasAt24a6 = pc === 0x24a6;
+
+    // Track PC history (circular buffer)
+    this.pcHistory.push(pc);
+    if (this.pcHistory.length > this.PC_HISTORY_SIZE) {
+      this.pcHistory.shift();
+    }
+
+    // Detect jumps to ROM space (potential bug)
+    if (pc >= 0xf00000 && pc < 0xf80000) {
+      // This is our exception handler space - ok
+    } else if (pc >= 0xf80000) {
+      // This is ROM space - check if it's a bad jump
+      console.error(`\n*** JUMP TO ROM DETECTED ***`);
+      console.error(`  Current PC: 0x${pc.toString(16)}`);
+      console.error(`  PC History (last ${this.pcHistory.length} instructions):`);
+      this.pcHistory.forEach((p, i) => {
+        console.error(`    [${i}] 0x${p.toString(16)}`);
+      });
+      console.error(`  Iteration: ${this.executionState.iterationCount}`);
+    }
+
+    // CRITICAL: Track SP before instruction to detect corruption
+    const spBefore = this.emulator.getRegister(15);
+
     const cyclesExecuted = this.emulator.executeInstruction();
     this.executionState.totalCycles += cyclesExecuted;
+
+    // CRITICAL: Check for SP corruption immediately after instruction
+    const spAfter = this.emulator.getRegister(15);
+    if (spAfter === 0xfffffffa || spAfter < 0x1000 || spAfter > 0x100000) {
+      const newPc = this.emulator.getRegister(16);
+      console.error(`\n*** SP CORRUPTION DETECTED AFTER INSTRUCTION ***`);
+      console.error(`  PC before: 0x${pc.toString(16)}`);
+      console.error(`  PC after:  0x${newPc.toString(16)}`);
+      console.error(`  SP before: 0x${spBefore.toString(16)}`);
+      console.error(`  SP after:  0x${spAfter.toString(16)} *** CORRUPTED ***`);
+      console.error(`  Cycles: ${cyclesExecuted}`);
+      console.error(`  Iteration: ${this.executionState.iterationCount}`);
+      console.error(`  PC History (last ${this.pcHistory.length}):`);
+      this.pcHistory.forEach((p, i) => {
+        console.error(`    [${i}] 0x${p.toString(16)}`);
+      });
+
+      // Read instruction bytes at PC
+      try {
+        const op0 = this.emulator.readMemory(pc);
+        const op1 = this.emulator.readMemory(pc + 1);
+        const opcode = (op0 << 8) | op1;
+        console.error(`  Instruction at 0x${pc.toString(16)}: 0x${opcode.toString(16).padStart(4, '0')}`);
+      } catch (e) {
+        console.error(`  Could not read instruction at 0x${pc.toString(16)}`);
+      }
+
+      // This will be caught by the main loop and terminate the door
+      throw new Error(`SP corrupted from 0x${spBefore.toString(16)} to 0x${spAfter.toString(16)}`);
+    }
 
     // Check PC after executeInstruction() if we were at 0x24a6
     if (wasAt24a6) {

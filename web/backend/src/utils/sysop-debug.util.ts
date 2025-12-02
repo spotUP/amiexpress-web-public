@@ -102,7 +102,7 @@ export class SysopDebugUtil {
     severity: DebugSeverity = DebugSeverity.INFO
   ): void {
     const debugMsg = `[SYSOP DEBUG] ${category}: ${message}`;
-    const detailsMsg = details ? `\n  Details: ${JSON.stringify(details, null, 2)}` : '';
+    const detailsMsg = details ? ` (${JSON.stringify(details)})` : '';
 
     // Always log to backend
     console.log(debugMsg + detailsMsg);
@@ -110,7 +110,7 @@ export class SysopDebugUtil {
     // Send to terminal if sysop
     if (this.isSysop(session) && socket) {
       const color = this.getSeverityColor(severity);
-      socket.emit('ansi-output', `\r\n${color}${debugMsg}${detailsMsg}\x1b[0m\r\n`);
+      socket.emit('ansi-output', `${color}${debugMsg}${detailsMsg}\x1b[0m\r\n`);
     }
   }
 

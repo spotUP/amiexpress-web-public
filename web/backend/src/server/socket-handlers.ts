@@ -26,6 +26,8 @@ import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { runSamiLogUpdate } from '../services/SamiLogRunner';
 import { BBSPaths } from '../utils/bbs-paths.util';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { sessionLogManager } from '../services/SessionLogManager';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -50,6 +52,19 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
     socket.disconnect();
     return;
   }
+
+  // Start tracking session output for admin log viewer
+  sessionLogManager.startSession(socket.id);
+
+  // Wrap socket.emit to capture all terminal output
+  const originalEmit = socket.emit.bind(socket);
+  socket.emit = ((event: string, ...args: any[]) => {
+    // Capture ansi-output events for session log
+    if (event === 'ansi-output' && args[0]) {
+      sessionLogManager.captureOutput(socket.id, args[0]);
+    }
+    return originalEmit(event, ...args);
+  }) as any;
 
   // NOTE: Session initialization is handled by index.ts BEFORE calling this function
   // This function only registers event handlers - it should NOT create or initialize sessions
@@ -87,6 +102,17 @@ async function initializeSession(socket: Socket) {
     return nodeSession;
   } catch (error) {
     console.error('Failed to assign node to session:', error);
+    SysopDebugUtil.debug(
+      socket,
+      null,
+      'Socket Connection',
+      `Failed to assign node to new connection`,
+      {
+        error: error instanceof Error ? error.message : String(error),
+        socketId: socket.id
+      },
+      DebugSeverity.CRITICAL
+    );
     socket.emit('ansi-output', '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[31mSorry, all nodes are busy.\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[33mPlease try again in a moment.\x1b[0m\r\n');
@@ -222,6 +248,9 @@ function registerCommandHandler(socket: Socket) {
       console.error('No session found for socket:', socket.id);
       return;
     }
+
+    // Capture user input for session log viewer
+    sessionLogManager.captureInput(socket.id, data);
 
     // If raw transfer mode is active, bypass normal command handling
     if ((session as any).transferRawActive) {
@@ -489,6 +518,9 @@ function registerDisconnectHandler(socket: Socket) {
   socket.on('disconnect', async () => {
     console.log('Client disconnected');
 
+    // End session log tracking
+    sessionLogManager.endSession(socket.id);
+
     const session = getSession(socket.id);
     if (!session) return;
 
@@ -513,6 +545,18 @@ function registerDisconnectHandler(socket: Socket) {
         await runLogoffBatches(session.nodeId || 0);
       } catch (err) {
         console.error('[LOGOFF] Logoff batch runner failed:', err);
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'Socket Connection',
+          `Failed to run logoff batches`,
+          {
+            error: err instanceof Error ? err.message : String(err),
+            nodeId: session.nodeId,
+            username: session.user.username
+          },
+          DebugSeverity.WARNING
+        );
       }
 
       // Save command history to disk (express.e:25067, 7951, 28612, 28631)
@@ -522,6 +566,19 @@ function registerDisconnectHandler(socket: Socket) {
         console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${session.user.username}`);
       } catch (error) {
         console.error('[CommandHistory] Error saving command history:', error);
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'Socket Connection',
+          `Failed to save command history on logoff`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+            userId: session.user.id,
+            username: session.user.username,
+            historyLength: session.commandHistory?.length || 0
+          },
+          DebugSeverity.WARNING
+        );
         // Don't fail logout on history save error
       }
 
@@ -536,12 +593,36 @@ function registerDisconnectHandler(socket: Socket) {
         console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
       } catch (error) {
         console.error(`[LOGOFF] Error deleting node files:`, error);
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'Socket Connection',
+          `Failed to delete node files on logoff`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+            nodeId,
+            username: session.user.username
+          },
+          DebugSeverity.WARNING
+        );
       }
 
       try {
         await runSamiLogUpdate(session);
       } catch (error) {
         console.error('[LOGOFF] SAmiLog update failed:', error);
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'Socket Connection',
+          `Failed to update SAmiLog on logoff`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+            username: session.user?.username,
+            nodeId: session.nodeId
+          },
+          DebugSeverity.WARNING
+        );
       }
     }
 

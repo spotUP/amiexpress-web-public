@@ -2117,10 +2117,14 @@ export class ExecLibrary {
 
     // Bulls: avoid rerouting to allow the door's chosen port to be honored.
 
-    // CRITICAL: Set message type to NT_MESSAGE (5) as per autodocs
-    // Message.mn_Node.ln_Type is at offset 8
-    const NT_MESSAGE = 5;
-    this.emulator.writeMemory(msgAddr + 8, NT_MESSAGE);
+    // CRITICAL FIX: Do NOT set message type here!
+    // The caller (door code or ReplyMsg) must set the appropriate type:
+    // - NT_MESSAGE (5) for new messages sent via PutMsg
+    // - NT_REPLYMSG (6) for replies sent via ReplyMsg
+    // putMsg() should only deliver the message, not modify its type.
+    //
+    // Bug was: ReplyMsg set NT_REPLYMSG, then putMsg overwrote it to NT_MESSAGE,
+    // causing doors to misinterpret replies as new messages and crash.
 
     // Add message to port's queue
     port.messages.push(msgAddr);

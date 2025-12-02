@@ -1243,10 +1243,10 @@ export class LibraryTraps {
         const d1 = this.emulator.getRegister(1);
         const a0 = this.emulator.getRegister(8);
         const a1 = this.emulator.getRegister(9);
-        const a4 = this.emulator.getRegister(4); // A4 = data segment
-        const a5 = this.emulator.getRegister(5);
-        const a6 = this.emulator.getRegister(6);
-        const a7 = this.emulator.getRegister(7); // SP
+        const a4 = this.emulator.getRegister(12); // A4 = data segment (FIXED: was 4, should be 12!)
+        const a5 = this.emulator.getRegister(13); // FIXED: was 5, should be 13
+        const a6 = this.emulator.getRegister(14); // FIXED: was 6, should be 14
+        const a7 = this.emulator.getRegister(15); // SP (FIXED: was 7, should be 15)
         const sp = this.emulator.getRegister(15);
 
         console.error(`[LibraryTraps]   Bulls Registers:`);
@@ -1358,9 +1358,9 @@ export class LibraryTraps {
       const d1 = this.emulator.getRegister(1);
       const a0 = this.emulator.getRegister(8);
       const a1 = this.emulator.getRegister(9);
-      const a4 = this.emulator.getRegister(4); // A4 = data segment
-      const a5 = this.emulator.getRegister(5);
-      const a6 = this.emulator.getRegister(6);
+      const a4 = this.emulator.getRegister(12); // A4 = data segment (FIXED: was 4, should be 12!)
+      const a5 = this.emulator.getRegister(13); // FIXED: was 5, should be 13
+      const a6 = this.emulator.getRegister(14); // FIXED: was 6, should be 14
 
       console.log(`[LibraryTraps]   Bulls state during ${vector.name}():`);
       console.log(
@@ -1454,8 +1454,21 @@ export class LibraryTraps {
     // Pass returnAddr to handler for functions like Supervisor() that need it
     const prevD0 = this.emulator.getRegister(0);
     const prevSr = this.emulator.getRegister(17);
+    const spBeforeHandler = this.emulator.getRegister(15);
     const result = (vector.handler as any)(this.emulator, library, returnAddr);
     const preserveRegs = vector.name === "Forbid" || vector.name === "Permit";
+
+    // CRITICAL: Check for SP corruption immediately after handler
+    const spAfterHandler = this.emulator.getRegister(15);
+    if (spAfterHandler === 0xfffffffa || spAfterHandler < 0x1000) {
+      console.error(`\n*** SP CORRUPTION DETECTED ***`);
+      console.error(`  Function: ${vector.name}()`);
+      console.error(`  SP before handler: 0x${spBeforeHandler.toString(16)}`);
+      console.error(`  SP after handler:  0x${spAfterHandler.toString(16)} *** CORRUPTED ***`);
+      console.error(`  Return address: 0x${returnAddr.toString(16)}`);
+      console.error(`  D0 result: 0x${result.toString(16)}`);
+      console.error(`  THIS IS THE BUG! ${vector.name}() corrupted SP!`);
+    }
 
     // Set return value in D0 unless the call should preserve the caller state
     if (!preserveRegs) {

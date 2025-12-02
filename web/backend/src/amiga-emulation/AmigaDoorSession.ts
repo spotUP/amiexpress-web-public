@@ -398,9 +398,9 @@ export class AmigaDoorSession {
 
     // Set up door message callback
     this.sharedState.execLibrary.setDoorMessageCallback(
-      (portAddr: number, msgAddr: number) => {
+      async (portAddr: number, msgAddr: number) => {
         if (this.messageHandler) {
-          this.messageHandler.handleDoorMessage(portAddr, msgAddr);
+          await this.messageHandler.handleDoorMessage(portAddr, msgAddr);
         }
       }
     );

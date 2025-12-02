@@ -18,6 +18,7 @@ import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 import { ConferenceRepository } from '../database/conference-repository';
 import { db } from '../database';
 import { config } from '../config';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FileFlagManager } from '../utils/file-flag.util';
@@ -170,6 +171,14 @@ export class DownloadHandler {
     }
 
     if (fileList.length === 0) {
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'DOWNLOAD',
+        'No files found matching download request',
+        { filenameInput, conferenceId: session.currentConf },
+        DebugSeverity.WARNING
+      );
       socket.emit('ansi-output', '\r\n\x1b[31mNo files found to download.\x1b[0m\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return 'FAILURE';

@@ -1,5 +1,6 @@
 import { BBSSession } from "../../index";
 import { LoggedOnSubState } from "../../constants/bbs-states";
+import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -576,6 +577,18 @@ export async function processBBSCommand(
       // No matching door - unknown command
       console.log(`[Command Handler] No matching door found for: ${command}`);
       socket.emit("ansi-output", `\r\nUnknown command: ${command}\r\n`);
+
+      // Sysop debug message (appears after "Unknown command" and before "Press any key")
+      console.log('>>> ABOUT TO CALL SysopDebugUtil.debug()');
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'COMMAND',
+        `Command not found: ${command}`,
+        { attemptedCommand: command },
+        DebugSeverity.INFO
+      );
+
       socket.emit(
         "ansi-output",
         "\r\n\x1b[32mPress any key to continue...\x1b[0m"

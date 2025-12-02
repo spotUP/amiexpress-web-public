@@ -8,6 +8,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { ACSPermission } from '../constants/acs-permissions';
 import { checkSecurity } from '../utils/security.util';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 
 // Dependencies (injected from index.ts)
@@ -391,6 +392,18 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       }
     } catch (error) {
       console.error('[Webhook] Error sending new message webhook:', error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Message Posting',
+        `Failed to send webhook for message posted to sysop`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          subject: entry.subject,
+          conferenceId: session.currentConf
+        },
+        DebugSeverity.WARNING
+      );
     }
 
     socket.emit('ansi-output', '\r\n');
@@ -400,6 +413,19 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
 
   } catch (error) {
     console.error('[saveMessage] Error:', error);
+    SysopDebugUtil.debug(
+      socket,
+      session,
+      'Message Posting',
+      `Failed to save message`,
+      {
+        error: error instanceof Error ? error.message : String(error),
+        subject: entry.subject,
+        toUser: entry.toUser,
+        conferenceId: session.currentConf
+      },
+      DebugSeverity.CRITICAL
+    );
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.errorLine('Failed to save message'));
     socket.emit('ansi-output', '\r\n');

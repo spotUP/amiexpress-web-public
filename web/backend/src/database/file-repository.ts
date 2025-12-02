@@ -5,6 +5,7 @@
 
 import { fileAreaManager } from '../services/FileAreaManager';
 import type { FileArea, FileEntry } from './types';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 export class FileRepository {
   constructor(private db: any) {}
@@ -42,6 +43,18 @@ export class FileRepository {
       }
     } catch (error) {
       console.error(`[Database] Failed to sync file entry to disk:`, error);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to sync file entry "${file.filename}" to disk (.dir file)`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          areaId: file.areaId,
+          filename: file.filename
+        },
+        DebugSeverity.WARNING
+      );
       // Don't throw - DB insert succeeded
     }
 
@@ -152,6 +165,14 @@ export class FileRepository {
       }
     } catch (error) {
       console.error(`[Database] Failed to sync updated file entry to disk:`, error);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to sync updated file entry to disk (.dir file)`,
+        { error: error instanceof Error ? error.message : String(error), fileId: id },
+        DebugSeverity.WARNING
+      );
     }
   }
 
@@ -205,6 +226,19 @@ export class FileRepository {
         }
       } catch (error) {
         console.error(`[Database] Failed to delete file entry from disk:`, error);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Database',
+          `Failed to delete file entry from disk (.dir file)`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+            fileId: id,
+            filename: row.filename,
+            areaId: row.areaid
+          },
+          DebugSeverity.WARNING
+        );
       }
     }
   }
@@ -244,6 +278,18 @@ export class FileRepository {
       console.log(`[Database] Created .dir file for area "${area.name}" in conference ${area.conferenceId}`);
     } catch (error) {
       console.error(`[Database] Failed to create .dir file:`, error);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to create .dir file for file area "${area.name}"`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          areaName: area.name,
+          conferenceId: area.conferenceId
+        },
+        DebugSeverity.WARNING
+      );
     }
 
     return areaId;

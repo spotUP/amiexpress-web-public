@@ -6,6 +6,7 @@
 import { messageFileManager } from '../services/MessageFileManager';
 import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager';
 import type { Message } from './types';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 export class MessageRepository {
   constructor(private db: any) {}
@@ -61,6 +62,19 @@ export class MessageRepository {
       console.log(`[Database] Synced message ${messageId} to HeaderFile and MailStats (conf ${message.conferenceId})`);
     } catch (error) {
       console.error(`[Database] Failed to sync message to disk:`, error);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to sync new message to disk files (.msg and HeaderFile)`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          messageId,
+          conferenceId: message.conferenceId,
+          subject: message.subject
+        },
+        DebugSeverity.WARNING
+      );
       // Don't throw - DB insert succeeded, file write is best-effort
     }
 
@@ -193,6 +207,14 @@ export class MessageRepository {
       }
     } catch (error) {
       console.error(`[Database] Failed to sync updated message to disk:`, error);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to sync updated message to disk files (.msg and HeaderFile)`,
+        { error: error instanceof Error ? error.message : String(error), messageId: id },
+        DebugSeverity.WARNING
+      );
     }
   }
 
@@ -220,6 +242,18 @@ export class MessageRepository {
         console.log(`[Database] Deleted message ${id} from .msg and marked in HeaderFile`);
       } catch (error) {
         console.error(`[Database] Failed to delete message file from disk:`, error);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Database',
+          `Failed to delete message from disk files (.msg and HeaderFile)`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+            messageId: id,
+            conferenceId: row.conferenceid
+          },
+          DebugSeverity.WARNING
+        );
       }
     }
   }

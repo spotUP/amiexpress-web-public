@@ -162,6 +162,18 @@ export class LibraryManager {
       );
     }
 
+    // CRITICAL FIX: Create BOTH port naming conventions to support all door types
+    // Some doors are misdetected, so create alternate port names for compatibility
+    const altBasePortName = isSIMType ? "AEDoorPort" : "DoorControl";
+    console.log(`[LibraryManager] Creating alternate port names (${altBasePortName}) for compatibility...`);
+
+    this.execLibrary.createPublicPort(`${altBasePortName}${amigaNodeId}`);
+    this.execLibrary.createPublicPort(altBasePortName);
+    if (nodeId !== amigaNodeId) {
+      this.execLibrary.createPublicPort(`${altBasePortName}${nodeId}`);
+    }
+    console.log(`[LibraryManager] Alternate ports created - doors can FindPort with either naming convention`);
+
     this.doorPortAddress = portAddr;
     this.aePortAddress = portAddr;
 

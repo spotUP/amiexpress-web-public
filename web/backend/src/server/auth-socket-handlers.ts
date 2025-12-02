@@ -18,6 +18,8 @@ import { sanitizeInput } from '../utils/input-normalizer.util';
 import { ipBanManager } from '../security/ip-ban-manager';
 import { displayScreen, doPause } from '../handlers/screen.handler';
 import { runLoginBatches } from '../services/batch-scheduler';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { sessionLogManager } from '../services/SessionLogManager';
 
 /**
  * Register authentication socket event handlers
@@ -86,6 +88,14 @@ export function registerAuthHandlers(socket: Socket) {
         // Get user from database
         user = await db.getUserById(decoded.userId);
         if (!user) {
+          SysopDebugUtil.debug(
+            socket,
+            session,
+            'AUTH',
+            'JWT authentication failed - user not found',
+            { userId: decoded.userId },
+            DebugSeverity.WARNING
+          );
           socket.emit('login-failed', 'User not found');
           return;
         }
@@ -101,11 +111,27 @@ export function registerAuthHandlers(socket: Socket) {
 
           if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
             console.log('Too many login errors, disconnecting');
+            SysopDebugUtil.debug(
+              socket,
+              session,
+              'AUTH',
+              'Too many login errors - disconnecting',
+              { reason: 'empty username', retries: session.loginRetryCount, maxFails },
+              DebugSeverity.CRITICAL
+            );
             socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
             setTimeout(() => socket.disconnect(), 500);
             return;
           }
 
+          SysopDebugUtil.debug(
+            socket,
+            session,
+            'AUTH',
+            'Login attempt with empty username',
+            { retries: session.loginRetryCount, maxFails },
+            DebugSeverity.WARNING
+          );
           socket.emit('login-failed', 'Username cannot be empty');
           if (!handleFailure()) return;
           return;
@@ -117,6 +143,14 @@ export function registerAuthHandlers(socket: Socket) {
 
         if (!existingUser) {
           console.log('User not found, prompting for new user creation');
+          SysopDebugUtil.debug(
+            socket,
+            session,
+            'AUTH',
+            'User not found - prompting for new user creation',
+            { attemptedUsername: safeUsername },
+            DebugSeverity.INFO
+          );
           socket.emit('user-not-found', {
             username: safeUsername,
             prompt: safeUsername.toUpperCase() === 'NEW'
@@ -135,11 +169,27 @@ export function registerAuthHandlers(socket: Socket) {
 
           if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
             console.log('Too many login errors, disconnecting');
+            SysopDebugUtil.debug(
+              socket,
+              session,
+              'AUTH',
+              'Too many login errors - disconnecting',
+              { reason: 'empty password', username: safeUsername, retries: session.loginRetryCount, maxFails },
+              DebugSeverity.CRITICAL
+            );
             socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
             setTimeout(() => socket.disconnect(), 500);
             return;
           }
 
+          SysopDebugUtil.debug(
+            socket,
+            session,
+            'AUTH',
+            'Login attempt with empty password',
+            { username: safeUsername, retries: session.loginRetryCount, maxFails },
+            DebugSeverity.WARNING
+          );
           socket.emit('ansi-output', '\r\nInvalid PassWord\r\n');
           socket.emit('prompt-password');
           if (!handleFailure()) return;
@@ -157,11 +207,27 @@ export function registerAuthHandlers(socket: Socket) {
 
           if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
             console.log('Too many login errors, disconnecting');
+            SysopDebugUtil.debug(
+              socket,
+              session,
+              'AUTH',
+              'Too many login errors - disconnecting',
+              { reason: 'invalid password', username: safeUsername, retries: session.loginRetryCount, maxFails },
+              DebugSeverity.CRITICAL
+            );
             socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
             setTimeout(() => socket.disconnect(), 500);
             return;
           }
 
+          SysopDebugUtil.debug(
+            socket,
+            session,
+            'AUTH',
+            'Invalid password',
+            { username: safeUsername, retries: session.loginRetryCount, maxFails },
+            DebugSeverity.WARNING
+          );
           // express.e:29209 - aePuts('Invalid PassWord\b\n')
           socket.emit('login-failed', 'Invalid PassWord\r\n');
           // Match express.e: immediately re-prompt for password without asking for username again
@@ -194,6 +260,14 @@ export function registerAuthHandlers(socket: Socket) {
         refreshToken: refreshToken
       });
       } else {
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'AUTH',
+          'Login attempt with missing credentials',
+          { hasToken: !!data.token, hasUsername: !!data.username, hasPassword: !!data.password },
+          DebugSeverity.WARNING
+        );
         socket.emit('login-failed', 'Missing credentials');
         return;
       }
@@ -208,11 +282,32 @@ export function registerAuthHandlers(socket: Socket) {
       session.ansiMode = user.ansi;
       installAnsiFilter(socket, session);
 
+      // Test sysop debug system
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'AUTH',
+        'Login successful - sysop debug system active',
+        { username: user.username, secLevel: user.secLevel },
+        DebugSeverity.INFO
+      );
+
+      // Update session log with user info
+      sessionLogManager.updateSession(socket.id, user.id, user.username, session.nodeId);
+
       // Run daily batch for this node (once per calendar day, per node) to mirror AmiExpress batch runner
       try {
         await runLoginBatches(session.nodeId || 0);
       } catch (err) {
         console.error('[LOGIN] Batch scheduler failed:', err);
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'AUTH',
+          'Login batch scheduler failed',
+          { nodeId: session.nodeId, error: (err as Error).message },
+          DebugSeverity.WARNING
+        );
       }
 
       // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
@@ -243,6 +338,14 @@ export function registerAuthHandlers(socket: Socket) {
         callersLogManager.logLogin(nodeId, user.username);
       } catch (error) {
         console.error(`[LOGIN] Error writing node files:`, error);
+        SysopDebugUtil.debugFileError(
+          socket,
+          session,
+          'write',
+          `Node${nodeId}.user / Node${nodeId}.userkeys`,
+          error as Error,
+          DebugSeverity.CRITICAL
+        );
       }
 
       // Phase 9: Initialize security system (express.e:447-455)
@@ -257,6 +360,14 @@ export function registerAuthHandlers(socket: Socket) {
         await systemStats.incrementCalls(user.id);
       } catch (error) {
         console.error('[SystemStats] Error tracking login:', error);
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'AUTH',
+          'SystemStats tracking failed',
+          { userId: user.id, error: (error as Error).message },
+          DebugSeverity.WARNING
+        );
       }
 
       // Trigger webhook for user login (skip for sysops to reduce noise)
@@ -271,6 +382,14 @@ export function registerAuthHandlers(socket: Socket) {
           });
         } catch (error) {
           console.error('[Webhook] Error sending user login webhook:', error);
+          SysopDebugUtil.debug(
+            socket,
+            session,
+            'AUTH',
+            'Webhook service failed',
+            { userId: user.id, username: user.username, error: (error as Error).message },
+            DebugSeverity.WARNING
+          );
         }
       }
 
@@ -320,6 +439,14 @@ export function registerAuthHandlers(socket: Socket) {
       triggerSamiLogRefresh();
     } catch (error) {
       console.error('Socket login error:', error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'AUTH',
+        'Login exception caught',
+        { error: (error as Error).message, stack: (error as Error).stack },
+        DebugSeverity.CRITICAL
+      );
       socket.emit('login-failed', 'Invalid credentials');
     }
   });
@@ -334,10 +461,26 @@ export function registerAuthHandlers(socket: Socket) {
       if (safeUsername.length === 0) {
         session.loginRetryCount++;
         if (session.loginRetryCount >= 5) {
+          SysopDebugUtil.debug(
+            socket,
+            session,
+            'AUTH',
+            'Too many login errors in check-username - disconnecting',
+            { reason: 'empty username', retries: session.loginRetryCount },
+            DebugSeverity.CRITICAL
+          );
           socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
           setTimeout(() => socket.disconnect(), 500);
           return;
         }
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'AUTH',
+          'Empty username in check-username handler',
+          { retries: session.loginRetryCount },
+          DebugSeverity.WARNING
+        );
         socket.emit('login-failed', 'Username cannot be empty');
         socket.emit('retry-login');
         return;
@@ -363,6 +506,14 @@ export function registerAuthHandlers(socket: Socket) {
       }
     } catch (error) {
       console.error('Username check error:', error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'AUTH',
+        'Exception in check-username handler',
+        { error: (error as Error).message },
+        DebugSeverity.CRITICAL
+      );
       socket.emit('login-failed', 'Error checking username');
       socket.emit('retry-login');
     }
@@ -393,6 +544,14 @@ export function registerAuthHandlers(socket: Socket) {
         // express.e:29633-29637 - Check if too many errors
         if (session.loginRetryCount >= 5) {
           console.log('Too many login errors, disconnecting');
+          SysopDebugUtil.debug(
+            socket,
+            session,
+            'AUTH',
+            'Too many login errors in new-user-response - disconnecting',
+            { reason: 'retry limit exceeded', retries: session.loginRetryCount },
+            DebugSeverity.CRITICAL
+          );
           socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
           setTimeout(() => socket.disconnect(), 500);
           return;
@@ -404,6 +563,14 @@ export function registerAuthHandlers(socket: Socket) {
       }
     } catch (error) {
       console.error('New user response error:', error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'AUTH',
+        'Exception in new-user-response handler',
+        { error: (error as Error).message },
+        DebugSeverity.CRITICAL
+      );
       socket.emit('login-failed', 'Registration error');
     }
   });

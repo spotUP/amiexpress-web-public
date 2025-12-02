@@ -291,6 +291,33 @@ export interface ConfigAuditLog {
   timestamp: Date;
 }
 
+// Session Log types
+export interface SessionInfo {
+  sessionId: string;
+  userId?: string;
+  username?: string;
+  nodeId?: number;
+  startTime: string;
+  lastActivity: string;
+  lineCount: number;
+}
+
+export interface SessionLog {
+  sessionId: string;
+  userId?: string;
+  username?: string;
+  nodeId?: number;
+  startTime: string;
+  lastActivity: string;
+  output: string[];
+}
+
+export interface SessionStats {
+  totalSessions: number;
+  totalLines: number;
+  oldestSession?: string;
+}
+
 // API Response wrapper
 export interface ApiResponse<T = any> {
   success: boolean;

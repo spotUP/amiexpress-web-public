@@ -68,6 +68,11 @@ export class DoorLoader {
           16
         )}, size=${seg.size} bytes`
       );
+
+      // Register CODE segments for self-modifying code detection
+      if (seg.type.toUpperCase() === 'CODE') {
+        this.emulator.registerCodeRegion(seg.address, seg.size);
+      }
     }
 
     // Load segments into memory
@@ -298,6 +303,11 @@ export class DoorLoader {
     writeCompat32(0x54, nodeId);
     writeCompat32(0x58, customArgs.length);
 
+    // DEBUG: Verify what's actually at 0xf0081 after initialization
+    const verify0xf0081 = this.emulator.readMemory32(0xf0081);
+    console.log(`[DoorLoader] DEBUG: Memory at 0xf0081 = 0x${verify0xf0081.toString(16).padStart(8, '0')}`);
+    console.log(`[DoorLoader] DEBUG: Expected 'who' = 0x77686f00, CLI at 0x${cliAddr.toString(16)}`);
+
     console.log(
       `[DoorLoader] CLI set: BPTR=0x${cliBptr.toString(
         16
@@ -324,14 +334,20 @@ export class DoorLoader {
     // Amiga E startup expects A0/A5 to point at the stack top (vamos shows A0/A5=stack upper)
     const stackTop = this.stackBaseAddr + this.stackSizeBytes;
     this.emulator.setRegister(8, stackTop); // A0 (vamos: A0=stack upper)
-    this.emulator.setRegister(12, 0); // A4 starts zero; prologue links it
+
+    // CRITICAL FIX: A4 must point to DATA segment for small data model
+    // SAS/C and similar compilers use A4-relative addressing for global data
+    const dataSegmentForA4 = hunkFile.segments.find((seg: { type: string }) => seg.type.toUpperCase() === 'DATA');
+    const a4Value = dataSegmentForA4 ? dataSegmentForA4.address : 0;
+    this.emulator.setRegister(12, a4Value); // A4 = DATA segment address
+
     this.emulator.setRegister(13, stackTop); // A5 = stack top (vamos)
     const a4Now = this.emulator.getRegister(12);
     const a5Now = this.emulator.getRegister(13);
     console.log(
-      `  A4/A5 set to stack top: A4=0x${a4Now.toString(16)} A5=0x${a5Now.toString(
+      `  A4=0x${a4Now.toString(16)} (DATA segment), A5=0x${a5Now.toString(
         16
-      )} stackTop=0x${stackTop.toString(16)}`
+      )} (stack top), stackTop=0x${stackTop.toString(16)}`
     );
 
     // Seed Amiga E runtime frame around A5 (negative offsets from Technical_info.txt)
@@ -432,10 +448,9 @@ export class DoorLoader {
         this.emulator.writeMemory32(addr, 0);
       }
     }
-    // Prepare seglist return (BPTR) on the stack, matching AmigaDOS CLI startup.
-    // AmigaDOS seeds the return address to the seglist; avoid poisoning the stack with sentinel values.
-    const seglistReturnAddr = segListBptr << 2;
-    this.emulator.writeMemory32(finalSP, seglistReturnAddr);
+    // Prepare exit trap address on stack. When door does RTS, it will jump to our exit trap.
+    // This allows DoorLifecycleManager to detect clean exit at PC=0x1ff000.
+    this.emulator.writeMemory32(finalSP, this.exitTrapAddress);
 
     // Seed old SP at top of new stack (used by door stack switch to restore)
     this.emulator.writeMemory32(finalSP + 4, savedOriginalSP);

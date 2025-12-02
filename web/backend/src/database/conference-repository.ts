@@ -6,6 +6,7 @@
 import { conferenceFileManager } from '../services/ConferenceFileManager';
 import { messageFileManager } from '../services/MessageFileManager';
 import type { Conference, MessageBase } from './types';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 export class ConferenceRepository {
   private readonly db: any;
@@ -52,9 +53,10 @@ export class ConferenceRepository {
     const confId = result.lastInsertRowid as number;
 
     // CRITICAL: Write to Conf.DB for Amiga door compatibility
+    let slotNumber: number = -1;
     try {
       const allConfs = await this.getConferences();
-      const slotNumber = allConfs.length - 1;  // 0-indexed
+      slotNumber = allConfs.length - 1;  // 0-indexed
       const fullConf: Conference = {
         ...conf,
         id: confId,
@@ -72,6 +74,18 @@ export class ConferenceRepository {
     } catch (error) {
       if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
         console.error(`[Database] Failed to sync conference to disk:`, error);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Database',
+          `Failed to sync conference "${conf.name}" to Conf.DB`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+            conferenceName: conf.name,
+            slotNumber
+          },
+          DebugSeverity.WARNING
+        );
       }
       // Don't throw - DB insert succeeded
     }
@@ -167,6 +181,14 @@ export class ConferenceRepository {
     } catch (error) {
       if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
         console.error(`[Database] Failed to sync updated conference to disk:`, error);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Database',
+          `Failed to sync updated conference to Conf.DB`,
+          { error: error instanceof Error ? error.message : String(error), conferenceId: id },
+          DebugSeverity.WARNING
+        );
       }
     }
   }
@@ -184,6 +206,18 @@ export class ConferenceRepository {
       console.log(`[Database] Ensured Messages directory for conference ${mb.conferenceId}`);
     } catch (error) {
       console.error(`[Database] Failed to create Messages directory:`, error);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to create Messages directory for conference ${mb.conferenceId}`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          conferenceId: mb.conferenceId,
+          messageBaseName: mb.name
+        },
+        DebugSeverity.WARNING
+      );
     }
 
     return mbId;

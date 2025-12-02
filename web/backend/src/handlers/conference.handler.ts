@@ -9,6 +9,7 @@ import { displayScreen } from './screen.handler';
 import { displayMainMenu } from './command-handler/menu';
 import { getMailStatFile, loadMsgPointers, validatePointers } from '../utils/message-pointers.util';
 import { finalizeCommand } from '../utils/command-response.util';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 import type { BBSSession } from '../index';
 
@@ -120,6 +121,18 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
       await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });
     } catch (err) {
       console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Conference Switching',
+        `Failed to persist auto-rejoin settings for conference`,
+        {
+          error: err instanceof Error ? err.message : String(err),
+          userId: session.user.id,
+          conferenceId: confId
+        },
+        DebugSeverity.WARNING
+      );
     }
   }
 
@@ -133,6 +146,19 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
       session.lastNewReadConf = validated.lastNewReadConf || 0;
     } catch (err) {
       console.error('[joinConference] Failed to load/validate message pointers:', err);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Conference Switching',
+        `Failed to load/validate message pointers when joining conference`,
+        {
+          error: err instanceof Error ? err.message : String(err),
+          userId: session.user.id,
+          conferenceId: confId,
+          messageBaseId: msgBaseId
+        },
+        DebugSeverity.WARNING
+      );
       session.lastMsgReadConf = 0;
       session.lastNewReadConf = 0;
     }

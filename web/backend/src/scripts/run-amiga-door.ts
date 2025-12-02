@@ -68,10 +68,10 @@ async function runDoor(opts: RunnerOptions) {
     user,
   };
 
-  // Prefer explicit doorType; otherwise infer XIM for Bulls binaries
+  // Prefer explicit doorType; otherwise infer XIM for Bulls/WHO binaries
   const inferredDoorType =
     opts.doorType ||
-    (path.basename(opts.execPath).toLowerCase().includes('bull') ? 'XIM' : undefined);
+    (path.basename(opts.execPath).toLowerCase().match(/bull|who/) ? 'XIM' : undefined);
 
   const amigaSession = new AmigaDoorSession(
     // Null socket interface; AmigaDoorSession only emits events—mock with no-ops
@@ -100,6 +100,8 @@ async function main() {
   const args = process.argv.slice(2);
   let assignsArg: Record<string, string> = {};
   let toolTypesArg: Record<string, string> = {};
+  let doorTypeArg: string | undefined = undefined;
+
   const assignsIndex = args.indexOf('--assigns');
   if (assignsIndex >= 0 && assignsIndex + 1 < args.length) {
     try {
@@ -118,10 +120,15 @@ async function main() {
     }
     args.splice(toolTypesIndex, 2);
   }
+  const doorTypeIndex = args.indexOf('--doortype');
+  if (doorTypeIndex >= 0 && doorTypeIndex + 1 < args.length) {
+    doorTypeArg = args[doorTypeIndex + 1];
+    args.splice(doorTypeIndex, 2);
+  }
 
   const [execPathArg, nodeArg, ...doorArgs] = args;
   if (!execPathArg) {
-    console.error('Usage: ts-node run-amiga-door.ts <doorPath> <nodeId> [args...]');
+    console.error('Usage: ts-node run-amiga-door.ts <doorPath> <nodeId> [--doortype TYPE] [--assigns JSON] [--tooltypes JSON] [args...]');
     process.exit(1);
   }
   const execPath = path.isAbsolute(execPathArg)
@@ -135,6 +142,7 @@ async function main() {
       args: doorArgs,
       nodeId,
       cwd,
+      doorType: doorTypeArg,
       assigns: assignsArg,
       toolTypes: Object.keys(toolTypesArg).length ? toolTypesArg : { DISABLE_GUARD: 'true' }, // allow batch doors to run longer if needed
       env: process.env,
