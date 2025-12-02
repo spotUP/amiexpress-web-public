@@ -37,8 +37,19 @@ export function registerFileHandlers(socket: Socket) {
       // Get playpen directory
       const playpenDir = getPlaypenDir(session.nodeId || 0, config.get('dataDir'));
 
-      // Ensure playpen exists
-      fs.mkdirSync(playpenDir, { recursive: true });
+      // Ensure playpen exists (handle legacy PlayPen file from Amiga BBS)
+      if (fs.existsSync(playpenDir)) {
+        const stat = fs.statSync(playpenDir);
+        if (stat.isFile()) {
+          // Remove old file (legacy empty PlayPen file)
+          fs.unlinkSync(playpenDir);
+          fs.mkdirSync(playpenDir, { recursive: true });
+        }
+        // If it's already a directory, we're good
+      } else {
+        // Create directory if it doesn't exist
+        fs.mkdirSync(playpenDir, { recursive: true });
+      }
 
       // Write file to playpen
       const filePath = path.join(playpenDir, data.filename);
