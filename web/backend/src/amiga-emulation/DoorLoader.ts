@@ -153,7 +153,7 @@ export class DoorLoader {
 
     // Build CLI structure with key BPTR fields (dos/dosextens.h CommandLineInterface)
     const cliSize = 0x80;
-    const cliAddr = 0xf0000; // store CLI in chip space
+    const cliAddr = 0xe0000; // store CLI in chip space (must not overlap exception handlers at 0xf00000)
     const cliBptr = cliAddr >> 2;
     const compatCliAddr = cliBptr; // raw pointer form for doors that skip BADDR
     const compatBstrAddr = compatCliAddr + cliSize;
