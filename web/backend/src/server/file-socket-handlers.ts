@@ -19,7 +19,24 @@ import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer
 import { getSessionBySocketId } from './session-manager';
 import { callersLog } from './database-helpers';
 import { SysopDebugUtil } from '../utils/sysop-debug.util';
-import { loadConferences } from '../handlers/conference.handler';
+
+/**
+ * Helper function to load conferences for stats tracking
+ */
+async function loadConferences(session: any, database: any) {
+  if (session.conferences && Array.isArray(session.conferences)) {
+    return session.conferences;
+  }
+  try {
+    const repo = new ConferenceRepository(database);
+    const confs = await repo.getConferences();
+    session.conferences = confs;
+    return confs;
+  } catch (err) {
+    console.error('[Upload] Failed to load conferences for accounting', err);
+    return undefined;
+  }
+}
 
 /**
  * Process batch file - handles file testing, database entry, and stats updates
@@ -403,7 +420,7 @@ async function processFileUpload(
             session.tempData.currentDescription = [];
             session.tempData.maxDescLines = 10;
             session.tempData.descLineCount = 0;
-            session.subState = LoggedOnSubState.FILE_DESC_INPUT;
+            session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
             return;
           }
         } catch (error) {
@@ -416,7 +433,7 @@ async function processFileUpload(
           session.tempData.currentDescription = [];
           session.tempData.maxDescLines = 10;
           session.tempData.descLineCount = 0;
-          session.subState = LoggedOnSubState.FILE_DESC_INPUT;
+          session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
           return;
         }
       }
