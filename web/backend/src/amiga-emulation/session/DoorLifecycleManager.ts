@@ -13,6 +13,7 @@ import { DoorConfig, DoorConstants } from "../DoorTypes.js";
 import { LibraryManager } from "../LibraryManager.js";
 import { DoorLoader } from "../DoorLoader.js";
 import { DoorMessageHandler } from "./DoorMessageHandler.js";
+import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 
 export interface ExecutionState {
   iterationCount: number;
@@ -1245,19 +1246,37 @@ export class DoorLifecycleManager {
   }
 
   private async handleExecutionError(error: unknown): Promise<void> {
+    const pc = this.emulator.getRegister(16);
+    const sp = this.emulator.getRegister(15);
+    const doorName = path.basename(this.config.executablePath);
+
     console.error("[DoorLifecycleManager] 💥 ERROR in execution loop:", error);
     console.error(
       `[DoorLifecycleManager] 💥 Iteration: ${this.executionState.iterationCount}`
     );
-    console.error(
-      `[DoorLifecycleManager] 💥 PC: 0x${this.emulator
-        .getRegister(16)
-        .toString(16)}`
-    );
+    console.error(`[DoorLifecycleManager] 💥 PC: 0x${pc.toString(16)}`);
+    console.error(`[DoorLifecycleManager] 💥 SP: 0x${sp.toString(16)}`);
     console.error(
       `[DoorLifecycleManager] 💥 Stack: ${
         error instanceof Error ? error.stack : "No stack"
       }`
+    );
+
+    // Send detailed crash information to sysop
+    SysopDebugUtil.debugDoorCrash(
+      this.socket,
+      this.config.bbsSession,
+      doorName,
+      {
+        pc,
+        sp,
+        iteration: this.executionState.iterationCount,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        lastSignificantPC: this.executionState.lastSignificantPC,
+        writeCallCount: this.executionState.writeCallCount,
+        aedoorCallCount: this.executionState.aedoorCallCount,
+      }
     );
 
     this.socket.emit("door:error", {
