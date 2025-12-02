@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
+import { SysopDebugUtil, DebugSeverity } from './sysop-debug.util';
 
 // Door/Command types from axenums.e:15
 export enum DoorType {
@@ -74,13 +75,17 @@ export interface CommandDefinition {
  *
  * Uses `strings` command to extract tooltypes from binary .info file
  * Format: KEY=VALUE pairs (one per line)
+ *
+ * @param session - Optional BBS session for sysop debug messages
+ * @param socket - Optional socket for sysop debug messages
  */
-export function parseInfoFile(filePath: string): Map<string, string> {
+export function parseInfoFile(filePath: string, session?: any, socket?: any): Map<string, string> {
   const tooltypes = new Map<string, string>();
 
   try {
     // Check if file exists
     if (!fs.existsSync(filePath)) {
+      SysopDebugUtil.debugFileError(socket, session, 'read', filePath, new Error('File does not exist'), DebugSeverity.WARNING);
       console.error(`[parseInfoFile] File does not exist: ${filePath}`);
       return tooltypes;
     }
@@ -126,10 +131,12 @@ export function parseInfoFile(filePath: string): Map<string, string> {
 
       console.log(`[parseInfoFile] Extracted ${tooltypes.size} tooltypes`);
     } catch (cmdError) {
+      SysopDebugUtil.debug(socket, session, 'Command Parser', `strings command failed for ${filePath}`, { error: (cmdError as Error).message }, DebugSeverity.CRITICAL);
       console.error(`[parseInfoFile] strings command failed:`, cmdError);
       throw cmdError;
     }
   } catch (error) {
+    SysopDebugUtil.debugFileError(socket, session, 'parse', filePath, error as Error, DebugSeverity.CRITICAL);
     console.error(`[parseInfoFile] Error parsing .info file ${filePath}:`, error);
   }
 
@@ -142,7 +149,7 @@ export function parseInfoFile(filePath: string): Map<string, string> {
  * Format: *COMMAND_NAME TYPE LOCATION
  * Example: *WEEK XM050Doors:WeekConfTop/WeekConfTop.XIM
  */
-export function parseCmdFile(filePath: string): CommandDefinition | null {
+export function parseCmdFile(filePath: string, session?: any, socket?: any): CommandDefinition | null {
   try {
     if (!fs.existsSync(filePath)) {
       return null;
@@ -217,6 +224,7 @@ export function parseCmdFile(filePath: string): CommandDefinition | null {
       }
     }
   } catch (error) {
+    SysopDebugUtil.debugFileError(socket, session, 'parse', filePath, error as Error, DebugSeverity.CRITICAL);
     console.error(`Error parsing .CMD file ${filePath}:`, error);
   }
 
