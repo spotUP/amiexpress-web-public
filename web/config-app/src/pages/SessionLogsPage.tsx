@@ -37,10 +37,10 @@ export function SessionLogsPage() {
   const saveToFileMutation = useMutation({
     mutationFn: (sessionId: string) => apiClient.saveSessionLog(sessionId),
     onSuccess: (response) => {
-      const filePath = (response.data as any)?.filePath;
+      const filePath = (response as any)?.filePath;
       if (filePath) {
         navigator.clipboard.writeText(filePath);
-        showSuccess(`Log saved to: ${filePath}\nFile path copied to clipboard!`);
+        showSuccess(`Log saved to: ${filePath}\n\nPath copied to clipboard!`);
       } else {
         showSuccess('Log saved successfully');
       }
