@@ -174,14 +174,9 @@ export class IconLibrary {
 
     if (!isValidArray) {
       console.log(`[icon.library]   WARNING: Invalid tooltype array pointer (first entry: 0x${firstPtr.toString(16)})`);
-      console.log(`[icon.library]   Attempting lazy load from command .info file...`);
-
-      // Try to find and load the command's .info file
-      const result = this.lazyLoadCommandTooltypes(toolTypeArrayPtr, typeName);
-      if (result) {
-        this.emulator.setRegister(CPURegister.D0, result);
-        return;
-      }
+      console.log(`[icon.library]   Real AmiExpress doesn't provide DOORUSE tooltypes - returning NULL`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      return;
     }
 
     // Loop through NULL-terminated array of string pointers
