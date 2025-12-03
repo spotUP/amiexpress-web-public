@@ -229,28 +229,38 @@ export class IconLibrary {
   private lazyLoadCommandTooltypes(pointerAddr: number, tooltypeName: string): number {
     console.log(`[icon.library]   Searching through ${this.diskObjects.size} loaded DiskObjects for "${tooltypeName}"`);
 
+    // WORKAROUND: Some doors check DOORUSE.V5.6 but expect the mode value from DOORUSE.<cmd>
+    // If looking for DOORUSE.V5.6, also try DOORUSE.FR, DOORUSE.CS, etc.
+    const altNames: string[] = [tooltypeName];
+    if (tooltypeName.toUpperCase().startsWith('DOORUSE.V')) {
+      // Try DOORUSE.FR, DOORUSE.CS, etc. as fallback
+      altNames.push('DOORUSE.FR', 'DOORUSE.CS', 'DOORUSE.NSU', 'DOORUSE.N');
+    }
+
     // Search through all loaded DiskObjects to find one with the requested tooltype
     for (const [addr, diskObj] of this.diskObjects.entries()) {
       const toolTypesPtr = this.emulator.readMemory32(addr + 53); // do_ToolTypes at offset 53
       if (toolTypesPtr === 0) continue;
 
-      // Search this DiskObject's tooltypes
-      let index = 0;
-      while (index < 1000) {
-        const tooltypeStrPtr = this.emulator.readMemory32(toolTypesPtr + (index * 4));
-        if (tooltypeStrPtr === 0) break; // End of array
+      // Try each alternative name
+      for (const searchName of altNames) {
+        let index = 0;
+        while (index < 1000) {
+          const tooltypeStrPtr = this.emulator.readMemory32(toolTypesPtr + (index * 4));
+          if (tooltypeStrPtr === 0) break; // End of array
 
-        const tooltypeStr = this.readString(tooltypeStrPtr);
-        const upperTooltypeStr = tooltypeStr.toUpperCase();
+          const tooltypeStr = this.readString(tooltypeStrPtr);
+          const upperTooltypeStr = tooltypeStr.toUpperCase();
 
-        if (upperTooltypeStr.startsWith(tooltypeName.toUpperCase())) {
-          if (tooltypeStr.length === tooltypeName.length || tooltypeStr[tooltypeName.length] === '=') {
-            console.log(`[icon.library]   ✓ Found "${tooltypeName}" in DiskObject at 0x${addr.toString(16)}`);
-            console.log(`[icon.library]   ✓ Returning tooltype string at 0x${tooltypeStrPtr.toString(16)}: "${tooltypeStr}"`);
-            return tooltypeStrPtr;
+          if (upperTooltypeStr.startsWith(searchName.toUpperCase())) {
+            if (tooltypeStr.length === searchName.length || tooltypeStr[searchName.length] === '=') {
+              console.log(`[icon.library]   ✓ Found "${searchName}" (searching for "${tooltypeName}") in DiskObject at 0x${addr.toString(16)}`);
+              console.log(`[icon.library]   ✓ Returning tooltype string at 0x${tooltypeStrPtr.toString(16)}: "${tooltypeStr}"`);
+              return tooltypeStrPtr;
+            }
           }
+          index++;
         }
-        index++;
       }
     }
 

@@ -11,3 +11,26 @@
 [32mLast 07 Days Files in [33m>> C64 <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
 [35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
 
+[32mLast 07 Days Files in [33m>> Scene Stuff <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
+
+[32mLast 07 Days Files in  [33m Chip Tunes <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
+
+[32mLast 07 Days Files in [33m>> Requests <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
+
+[32mLast 07 Days Files in [33m>> TOCEC Apps <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
+
+[32mLast 07 Days Files in [33m>> ASCII & ANSI <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
+
+[32mLast 07 Days Files in [33m>> Demo Dungeon Dir1 <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
+
+[32mLast 07 Days Files in [33m>> Demo Dungeon Dir2 <<[34m :        [0m([35mFiles[33m: [36m00[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m00.0[0m)
+[35mYesterdays Statistics [0m: [32m00 [36mFiles[33m, [32m00 [36mFakes[33m, [32m00.0 [36mMegs [33m![0m
+
+[44;33m  QuickNew V2.2 by Calypso/GOD & REbEL/QTX[36m Date : 14:51:43  [35m Time : Wednesda  
+[0m
