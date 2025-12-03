@@ -398,16 +398,39 @@ export class DoorLoader {
       console.log(`  A1 (end of CODE): 0x${codeEnd.toString(16)}`);
     }
 
+    // Configure stack FIRST (before setting PC)
+    this.setupStack(segListBptr);
+
+    // Simulate JSR call to entry point by manually pushing return address
+    // This is critical: many Amiga programs (like Bulls) do MOVEM.L at entry
+    // to save registers. They expect a return address ABOVE those saved registers.
+    // On real Amiga, the C startup code or shell CALLs the program via JSR,
+    // which pushes the return address. We must simulate this.
+    const currentSP = this.emulator.getRegister(15);
+    const newSP = currentSP - 4;
+    this.emulator.writeMemory32(newSP, this.exitTrapAddress);
+    this.emulator.setRegister(15, newSP);
+
+    // Update the saved SP value at finalSP+4 to reflect the new SP after JSR
+    // Some doors (like Bulls) save/restore SP and expect this value to be correct
+    this.emulator.writeMemory32(currentSP + 4, newSP);
+
+    console.log(
+      `[DoorLoader] Simulated JSR: Pushed return address 0x${this.exitTrapAddress.toString(
+        16
+      )} at SP=0x${newSP.toString(16)}`
+    );
+    console.log(
+      `[DoorLoader] Updated saved SP at 0x${(currentSP + 4).toString(16)} to 0x${newSP.toString(16)}`
+    );
+
     // Set PC to REAL HUNK ENTRY POINT
     console.log(
-      `[BULLS-FIX] Setting PC to HUNK entry point 0x${hunkFile.entryPoint.toString(
+      `[DoorLoader] Setting PC to HUNK entry point 0x${hunkFile.entryPoint.toString(
         16
       )}`
     );
     this.emulator.setRegister(16, hunkFile.entryPoint);
-
-    // Configure stack
-    this.setupStack(segListBptr);
 
     // Early instrumentation: capture pointers before execution
     const prSegListVal = this.emulator.readMemory32(taskAddr + 0x80);
