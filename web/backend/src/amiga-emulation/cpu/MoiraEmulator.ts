@@ -422,7 +422,11 @@ export class MoiraEmulator {
     // Call refillPrefetch on WASM CPU if available
     // TypeScript doesn't have type definitions for this C++ method
     if (typeof (this.cpu as any).refillPrefetch === "function") {
+      const pcBefore = this.cpu.getRegister(16);
+      console.log(`[MOIRA] refillPrefetch() called at PC=0x${pcBefore.toString(16)}`);
       (this.cpu as any).refillPrefetch();
+    } else {
+      console.warn(`[MOIRA] refillPrefetch() not available in WASM module!`);
     }
   }
 

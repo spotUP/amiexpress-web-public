@@ -1653,6 +1653,7 @@ const EXEC_VECTORS: LibraryVector[] = [
       // Set PC to the supervisor function address
       // The function will execute and eventually RTS back to returnAddr
       emu.setRegister(16, a5); // PC = supervisor function
+      emu.refillPrefetch(); // CRITICAL: Refill prefetch after changing PC
 
       // CRITICAL: Do NOT push return address - it's already on stack from JSR to Supervisor
       // The supervisor function will RTS to returnAddr (which handleTrap already popped)
@@ -2801,6 +2802,7 @@ export class LibraryTraps {
         const returnAddr = this.emulator.readMemory32(sp);
         this.emulator.setRegister(15, sp + 4);
         this.emulator.setRegister(16, returnAddr);
+        this.emulator.refillPrefetch(); // CRITICAL: Refill prefetch after changing PC
         console.error(
           `[LibraryTraps]   Simulated RTS with D0=0, returning to 0x${returnAddr.toString(
             16
@@ -2822,6 +2824,7 @@ export class LibraryTraps {
         const returnAddr = this.emulator.readMemory32(sp);
         this.emulator.setRegister(15, sp + 4);
         this.emulator.setRegister(16, returnAddr);
+        this.emulator.refillPrefetch(); // CRITICAL: Refill prefetch after changing PC
         return true;
       }
 
@@ -3073,6 +3076,9 @@ export class LibraryTraps {
         )}`
       );
       this.emulator.setRegister(16, returnAddr);
+      // CRITICAL: Refill prefetch queue after changing PC!
+      // Without this, MOIRA executes stale instructions from the old PC location
+      this.emulator.refillPrefetch();
       const verifyPC = this.emulator.getRegister(16);
       console.log(
         `[LibraryTraps] Verified PC is now: 0x${verifyPC.toString(16)}`
@@ -3253,6 +3259,7 @@ export class LibraryTraps {
       );
     } else {
       this.emulator.setRegister(16, returnAddr);
+      this.emulator.refillPrefetch(); // CRITICAL: Refill prefetch after changing PC
     }
 
     return true;
