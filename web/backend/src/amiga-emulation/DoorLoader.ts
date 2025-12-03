@@ -111,8 +111,12 @@ export class DoorLoader {
     );
     const dataBase = dataSegment ? dataSegment.address : 0;
     this.stackSizeBytes = Math.max(4096, this.config.stack || 8192);
-    // Mirror vamos layout: stack lower ~0x6e74, upper ~0x8e74, SP starts 8 bytes below top
-    this.stackBaseAddr = 0x6e74;
+    // Place stack AFTER DATA segment (like vamos does), not at hardcoded address
+    // This prevents startup code from zeroing our stack/exit trap
+    const dataEnd = dataSegment ? dataSegment.address + dataSegment.data.length : 0x10000;
+    // Align to 8 bytes and add small gap (vamos uses ~20 bytes gap)
+    this.stackBaseAddr = ((dataEnd + 32) + 7) & ~7;
+    console.log(`  Stack: lower=0x${this.stackBaseAddr.toString(16)}, upper=0x${(this.stackBaseAddr + this.stackSizeBytes).toString(16)} (after DATA end 0x${dataEnd.toString(16)})`);
 
     // Match vamos startup: user mode, Z flag set from zeroed D registers
     this.emulator.setRegister(17, 0x0000); // SR (Status Register)
@@ -503,7 +507,7 @@ export class DoorLoader {
    * Set up Bulls-specific execution
    */
   private async setupBullsExecution(): Promise<void> {
-    console.log(`[BULLS-FORCE] 🔧 Initializing Bulls for proper execution`);
+    console.log(`[BULLS-FORCE] [INIT] Initializing Bulls for proper execution`);
     console.log(
       `[BULLS-FORCE]   Bulls Code segment: 0x1000-0x4b3f (19,228 bytes)`
     );
@@ -552,19 +556,19 @@ export class DoorLoader {
     this.emulator.writeMemory32(doorInfoAddr + 0xE8, 255); // Security level
 
     console.log(
-      `[BULLS-FORCE] ✅ Created DoorInfo structure at 0x${doorInfoAddr.toString(16)} (${doorInfoSize} bytes)`
+      `[BULLS-FORCE] [OK] Created DoorInfo structure at 0x${doorInfoAddr.toString(16)} (${doorInfoSize} bytes)`
     );
 
     // Inject AEDoorBase at A4+0x988
     this.emulator.writeMemory32(a4Value + 0x988, aeDoorBaseAddr);
     console.log(
-      `[BULLS-FORCE] ✅ Injected AEDoorBase=0x${aeDoorBaseAddr.toString(16)} at A4+0x988`
+      `[BULLS-FORCE] [OK] Injected AEDoorBase=0x${aeDoorBaseAddr.toString(16)} at A4+0x988`
     );
 
     // Inject DoorInfo pointer at A4+0x6c24 (Bulls reads DoorInfo from here)
     this.emulator.writeMemory32(a4Value + 0x6c24, doorInfoAddr);
     console.log(
-      `[BULLS-FORCE] ✅ Injected DoorInfo=0x${doorInfoAddr.toString(16)} at A4+0x6c24`
+      `[BULLS-FORCE] [OK] Injected DoorInfo=0x${doorInfoAddr.toString(16)} at A4+0x6c24`
     );
 
     // Inject Reply Port at multiple A4 offsets (per Bulls_DISASM_NOTES.md:39-40)
@@ -573,7 +577,7 @@ export class DoorLoader {
       this.emulator.writeMemory32(a4Value + offset, replyPortAddr);
     }
     console.log(
-      `[BULLS-FORCE] ✅ Injected Reply Port=0x${replyPortAddr.toString(16)} at ${replyPortOffsets.length} A4 offsets`
+      `[BULLS-FORCE] [OK] Injected Reply Port=0x${replyPortAddr.toString(16)} at ${replyPortOffsets.length} A4 offsets`
     );
 
     // CRITICAL FIX: Bulls parses CLI arguments from pointer at A4+0x6c16
@@ -584,15 +588,19 @@ export class DoorLoader {
     this.emulator.writeMemory(cliArgAddr, 0); // Empty string (null terminator)
     this.emulator.writeMemory32(a4Value + 0x6c16, cliArgAddr); // Inject pointer
     console.log(
-      `[BULLS-FORCE] ✅ Injected CLI arg pointer=0x${cliArgAddr.toString(16)} at A4+0x6c16`
+      `[BULLS-FORCE] [OK] Injected CLI arg pointer=0x${cliArgAddr.toString(16)} at A4+0x6c16`
     );
 
     // Also initialize A4+0x510 buffer (where Bulls stores parsed arguments)
-    for (let i = 0; i < 200; i++) {
+    // CRITICAL: Only clear up to 0x5bc (172 bytes), not 200!
+    // Addresses A4+0x5bc onwards contain function pointers that must be preserved
+    // (0x61c4 = A4+0x5bc contains a critical function pointer at 0x3aac)
+    const argBufSize = 0x5bc - 0x510; // = 172 bytes, stop before function pointers
+    for (let i = 0; i < argBufSize; i++) {
       this.emulator.writeMemory(a4Value + 0x510 + i, 0);
     }
     console.log(
-      `[BULLS-FORCE] ✅ Initialized argument buffer at A4+0x510 (200 bytes)`
+      `[BULLS-FORCE] Initialized argument buffer at A4+0x510 (${argBufSize} bytes, preserving A4+0x5bc+)`
     );
 
     // CRITICAL: Allow Bulls to execute naturally from HUNK entry point 0x13E9
