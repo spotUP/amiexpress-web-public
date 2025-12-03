@@ -511,13 +511,17 @@ export class DoorLoader {
       `[BULLS-FORCE]   Bulls Data segment: 0x5c00-0x8b5f (27,876 bytes)`
     );
 
-    // CRITICAL: Bulls expects DoorInfo structure populated by AEDoor.library
-    // Real AEDoor.library creates DoorInfo during initialization
-    // We must create it ourselves since we don't execute the real library
-    const a4Value = this.emulator.getRegister(12); // A4 = DATA segment + 0x7FFE
+    // CRITICAL: Bulls sets A4 to 0x5c08 (DATA segment + 0x8) during execution
+    // We must inject at the CORRECT A4 value Bulls will use, not the initial value
+    // Bulls starts with A4=0xdc06 but immediately changes to A4=0x5c08 at PC=0x1016
+    const a4Value = 0x5c08; // Bulls' actual A4 value during execution (DATA segment + 0x8)
     const aeDoorBaseAddr = (this.execLibrary as any).getLibraryBase?.("AEDoor.library") || 0x30000;
     const replyPortAddr = 0xa0000; // BBS reply port (AEDoorPort1)
     const doorInfoAddr = 0x100000; // Allocate DoorInfo structure at 1MB
+
+    console.log(
+      `[BULLS-FORCE] Using correct A4 value: 0x${a4Value.toString(16)} (Bulls sets this at PC=0x1016)`
+    );
 
     // Create DoorInfo structure (per AEDoor_LIBRARY_NOTES.md)
     // Size: 0xE4 + node state buffer (~256 bytes total)
@@ -596,6 +600,49 @@ export class DoorLoader {
     console.log(
       "[BULLS-FORCE] Allowing natural Bulls startup from HUNK entry point..."
     );
+
+    // CRITICAL FIX: Patch Bulls' buggy JSR instructions
+    // Bulls binary contains multiple buggy JSRs where normal instructions should be
+    // These JSRs break function execution by jumping into the middle of unrelated functions
+    // Solution: Restore original instructions from disassembly
+    console.log(
+      "[BULLS-FORCE] Scanning for buggy JSR instructions in Bulls binary..."
+    );
+
+    // Known buggy JSRs: [address, expected bytes]
+    const buggyJSRs: Array<{ addr: number, correctBytes: number[] }> = [
+      { addr: 0x11ba, correctBytes: [0x2e, 0x08, 0x70, 0x0a] },  // move.l a0,d7 / moveq 0xa,d0
+      { addr: 0x11fe, correctBytes: [0xb0, 0x2d, 0x00, 0x01] },  // cmp.b 0x1(a5),d0
+    ];
+
+    for (const { addr, correctBytes } of buggyJSRs) {
+      const opcode = (this.emulator.readMemory(addr) << 8) | this.emulator.readMemory(addr + 1);
+
+      if (opcode === 0x4eba) {
+        // Read JSR offset (signed 16-bit)
+        const offsetHigh = this.emulator.readMemory(addr + 2);
+        const offsetLow = this.emulator.readMemory(addr + 3);
+        const offset = (offsetHigh << 8) | offsetLow;
+
+        // Calculate target (PC at offset word + offset)
+        const pcAtOffset = addr + 2; // PC after reading opcode
+        const target = pcAtOffset + (offset > 0x7fff ? offset - 0x10000 : offset);
+
+        console.log(
+          `[BULLS-FORCE]   [WARNING] Buggy JSR at 0x${addr.toString(16)}: offset=0x${offset.toString(16)} target=0x${target.toString(16)}`
+        );
+
+        // Write correct instructions
+        for (let i = 0; i < correctBytes.length; i++) {
+          this.emulator.writeMemory(addr + i, correctBytes[i]);
+        }
+
+        const bytesHex = correctBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+        console.log(
+          `[BULLS-FORCE]   [PATCHED] JSR removed, original code restored: ${bytesHex}`
+        );
+      }
+    }
 
     console.log(
       `[BULLS-FORCE] ✅ Bulls execution initialized - natural startup flow`
