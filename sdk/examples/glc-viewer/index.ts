@@ -365,7 +365,7 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
  * Run GLC Viewer door (TypeScript door interface)
  */
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket } = doorSession;
+  const { socket, bbsSession } = doorSession;
 
   try {
     const config = loadConfig();
@@ -398,7 +398,13 @@ export async function runDoor(doorSession: any): Promise<void> {
   }
 
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+
+  // Wait for user input using proper door input handler
   await new Promise<void>((resolve) => {
-    socket.once('user-input', () => resolve());
+    const inputHandler = (data: string) => {
+      delete bbsSession.doorInputHandler;
+      resolve();
+    };
+    bbsSession.doorInputHandler = inputHandler;
   });
 }

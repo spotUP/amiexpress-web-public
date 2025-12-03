@@ -55,7 +55,7 @@ function drawLine(canvas: any, width: number, height: number, x0: number, y0: nu
 }
 
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket } = doorSession;
+  const { socket, bbsSession } = doorSession;
 
   let angleX = 0, angleY = 0, angleZ = 0;
   let speed = 0.03;
@@ -91,11 +91,11 @@ export async function runDoor(doorSession: any): Promise<void> {
     socket.emit('ansi-output', header + controls + stats + frame);
   };
 
-  const cleanup = () => {
+  const cleanup = (data: string) => {
     if (closed) return;
     closed = true;
     if (interval) clearInterval(interval);
-    socket.off('user-input', inputHandler);
+    delete bbsSession.doorInputHandler;
     socket.emit('ansi-output', '\x1b[0m\x1b[2J\x1b[H');
   };
 
@@ -108,7 +108,7 @@ export async function runDoor(doorSession: any): Promise<void> {
     else if (key === 'q' || key === 'escape') { cleanup(); socket.emit('ansi-output', '\x1b[32mGoodbye!\x1b[0m'); socket.emit('door:close'); }
   };
 
-  socket.on('user-input', inputHandler);
+  bbsSession.doorInputHandler = inputHandler;
   interval = setInterval(renderFrame, 60);
   renderFrame();
 

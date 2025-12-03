@@ -102,10 +102,19 @@ export class SysopDebugUtil {
     severity: DebugSeverity = DebugSeverity.INFO
   ): void {
     const debugMsg = `[SYSOP DEBUG] ${category}: ${message}`;
-    const detailsMsg = details ? ` (${JSON.stringify(details)})` : '';
+
+    // Format details as human-readable JSON with indentation
+    let detailsMsg = '';
+    if (details) {
+      const formattedDetails = JSON.stringify(details, null, 2)
+        .split('\n')
+        .map((line, idx) => idx === 0 ? line : `  ${line}`) // Indent all lines except first
+        .join('\r\n');
+      detailsMsg = `\r\n  ${formattedDetails}`;
+    }
 
     // Always log to backend
-    console.log(debugMsg + detailsMsg);
+    console.log(debugMsg + (details ? `\n${JSON.stringify(details, null, 2)}` : ''));
 
     // Send to terminal if sysop
     if (this.isSysop(session) && socket) {
@@ -136,8 +145,15 @@ export class SysopDebugUtil {
   }
 
   /**
+   * Format a 32-bit value as hex with optional ASCII representation
+   */
+  private static formatHex32(val: number): string {
+    return `0x${(val >>> 0).toString(16).padStart(8, '0')}`;
+  }
+
+  /**
    * Send door crash information to sysop
-   * Includes PC, SP, and last instructions for debugging
+   * Includes full register dump, PC history, stack contents, and error details
    */
   static debugDoorCrash(
     socket: any,
@@ -146,37 +162,117 @@ export class SysopDebugUtil {
     crashInfo: {
       pc?: number;
       sp?: number;
-      lastInstructions?: string[];
       error?: string;
+      iteration?: number;
+      // Register dump
+      registers?: {
+        d0?: number; d1?: number; d2?: number; d3?: number;
+        d4?: number; d5?: number; d6?: number; d7?: number;
+        a0?: number; a1?: number; a2?: number; a3?: number;
+        a4?: number; a5?: number; a6?: number;
+      };
+      // PC history (last N program counter values)
+      pcHistory?: number[];
+      // Stack contents (values near SP)
+      stackContents?: number[];
+      // Memory at key addresses
+      memoryDump?: { address: number; value: number; label?: string }[];
+      // Last significant PC (before library calls)
+      lastSignificantPC?: number;
+      // Call counts
+      writeCallCount?: number;
+      aedoorCallCount?: number;
+      // Stack info
+      stackBase?: number;
+      stackSize?: number;
+      // Raw error stack trace (for backend log only)
+      stack?: string;
       [key: string]: any;
     }
   ): void {
     const crashMsg = `[SYSOP DEBUG] Door '${doorName}' CRASHED`;
     let details = '';
 
+    // Basic info
     if (crashInfo.pc !== undefined) {
-      details += `\n  PC (Program Counter): 0x${crashInfo.pc.toString(16)}`;
+      details += `\r\n  PC: ${this.formatHex32(crashInfo.pc)}`;
     }
     if (crashInfo.sp !== undefined) {
-      details += `\n  SP (Stack Pointer): 0x${crashInfo.sp.toString(16)}`;
+      details += `\r\n  SP: ${this.formatHex32(crashInfo.sp)}`;
     }
     if (crashInfo.error) {
-      details += `\n  Error: ${crashInfo.error}`;
+      details += `\r\n  Error: ${crashInfo.error}`;
     }
-    if (crashInfo.lastInstructions && crashInfo.lastInstructions.length > 0) {
-      details += `\n  Last instructions:\n    ${crashInfo.lastInstructions.join('\n    ')}`;
+    if (crashInfo.iteration !== undefined) {
+      details += `\r\n  Iteration: ${crashInfo.iteration}`;
+    }
+
+    // Register dump (D0-D7, A0-A6)
+    if (crashInfo.registers) {
+      const r = crashInfo.registers;
+      details += `\r\n  Registers:`;
+      details += `\r\n    D0=${this.formatHex32(r.d0 ?? 0)} D1=${this.formatHex32(r.d1 ?? 0)} D2=${this.formatHex32(r.d2 ?? 0)} D3=${this.formatHex32(r.d3 ?? 0)}`;
+      details += `\r\n    D4=${this.formatHex32(r.d4 ?? 0)} D5=${this.formatHex32(r.d5 ?? 0)} D6=${this.formatHex32(r.d6 ?? 0)} D7=${this.formatHex32(r.d7 ?? 0)}`;
+      details += `\r\n    A0=${this.formatHex32(r.a0 ?? 0)} A1=${this.formatHex32(r.a1 ?? 0)} A2=${this.formatHex32(r.a2 ?? 0)} A3=${this.formatHex32(r.a3 ?? 0)}`;
+      details += `\r\n    A4=${this.formatHex32(r.a4 ?? 0)} A5=${this.formatHex32(r.a5 ?? 0)} A6=${this.formatHex32(r.a6 ?? 0)}`;
+    }
+
+    // PC history
+    if (crashInfo.pcHistory && crashInfo.pcHistory.length > 0) {
+      details += `\r\n  PC History (last ${crashInfo.pcHistory.length}):`;
+      const historyStr = crashInfo.pcHistory
+        .map(pc => `0x${pc.toString(16)}`)
+        .join(' -> ');
+      details += `\r\n    ${historyStr}`;
+    }
+
+    // Stack contents
+    if (crashInfo.stackContents && crashInfo.stackContents.length > 0) {
+      details += `\r\n  Stack (at SP):`;
+      const stackStr = crashInfo.stackContents
+        .map((val, i) => `[SP+${i * 4}]=${this.formatHex32(val)}`)
+        .join(' ');
+      details += `\r\n    ${stackStr}`;
+    }
+
+    // Memory dump
+    if (crashInfo.memoryDump && crashInfo.memoryDump.length > 0) {
+      details += `\r\n  Memory:`;
+      for (const mem of crashInfo.memoryDump) {
+        const label = mem.label ? ` (${mem.label})` : '';
+        details += `\r\n    [${this.formatHex32(mem.address)}]=${this.formatHex32(mem.value)}${label}`;
+      }
+    }
+
+    // Last significant PC
+    if (crashInfo.lastSignificantPC !== undefined) {
+      details += `\r\n  Last significant PC: ${this.formatHex32(crashInfo.lastSignificantPC)}`;
+    }
+
+    // Call counts
+    if (crashInfo.writeCallCount !== undefined || crashInfo.aedoorCallCount !== undefined) {
+      details += `\r\n  Calls: Write=${crashInfo.writeCallCount ?? 0}, AEDoor=${crashInfo.aedoorCallCount ?? 0}`;
+    }
+
+    // Stack bounds
+    if (crashInfo.stackBase !== undefined && crashInfo.stackSize !== undefined) {
+      const stackTop = crashInfo.stackBase + crashInfo.stackSize;
+      details += `\r\n  Stack bounds: ${this.formatHex32(crashInfo.stackBase)} - ${this.formatHex32(stackTop)}`;
     }
 
     const fullMsg = crashMsg + details;
 
-    // Always log to backend
-    console.error(fullMsg);
+    // Always log to backend (use \n for console)
+    console.error(fullMsg.replace(/\r\n/g, '\n'));
+    if (crashInfo.stack) {
+      console.error('  JavaScript stack:', crashInfo.stack);
+    }
 
-    // Send to terminal if sysop
+    // Send to terminal if sysop (use \r\n for ANSI terminal)
     if (this.isSysop(session) && socket) {
       const color = this.getSeverityColor(DebugSeverity.CRITICAL);
       socket.emit('ansi-output', `\r\n${color}${fullMsg}\x1b[0m\r\n`);
-      socket.emit('ansi-output', `\x1b[${DebugSeverity.WARNING}mYou can paste this information to Claude for debugging.\x1b[0m\r\n`);
+      socket.emit('ansi-output', `\x1b[33mPaste this output to Claude for debugging assistance.\x1b[0m\r\n`);
     }
   }
 }

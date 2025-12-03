@@ -402,14 +402,14 @@ function sendCLS(socket: SocketIOSocket): void {
 async function getChar(socket: SocketIOSocket, echoChar: boolean): Promise<string> {
   return new Promise((resolve) => {
     const handleInput = (data: string) => {
-      socket.off('user-input', handleInput);
+      delete bbsSession.doorInputHandler;
       const key = data.trim().toUpperCase();
       if (echoChar) {
         transmit(socket, key);
       }
       resolve(key);
     };
-    socket.on('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
   });
 }
 
@@ -418,10 +418,10 @@ async function query(socket: SocketIOSocket, promptText: string, maxlen: number)
     sendStr(socket, promptText + ' ');
 
     const handleInput = (data: string) => {
-      socket.off('user-input', handleInput);
+      delete bbsSession.doorInputHandler;
       resolve(data.trim().substring(0, maxlen));
     };
-    socket.on('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
   });
 }
 
@@ -499,7 +499,7 @@ function displaywalldata(socket: SocketIOSocket, displaylines: number, displayid
 }
 
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user } = doorSession;
+  const { socket, user, bbsSession } = doorSession;
 
   // Initialize settings
   settings = {

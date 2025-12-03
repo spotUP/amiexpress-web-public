@@ -438,14 +438,15 @@ export class AmigaDoorSession {
 
     const taskAddr = 0x70000; // Current task address used by ExecLibrary
     const prCliOffset = 0xac; // pr_CLI offset inside struct Process
-    const cliStructAddr = 0x90000;
-    const cmdLineAddr = 0x90100; // BSTR (length byte + text)
+    // CLI structures at 0x110000+ to avoid overlap with door code (0x1000-0x100000)
+    const cliStructAddr = 0x110000;
+    const cmdLineAddr = 0x110100; // BSTR (length byte + text)
     const argStringAddr = 0x0f0100; // args only (no program name) — keep aligned with DoorLoader
-    const localVarsListAddr = 0x90300;
-    const rcVarAddr = 0x90320;
-    const rcNameAddr = 0x90340;
-    const result2VarAddr = 0x90360;
-    const result2NameAddr = 0x90380;
+    const localVarsListAddr = 0x110300;
+    const rcVarAddr = 0x110320;
+    const rcNameAddr = 0x110340;
+    const result2VarAddr = 0x110360;
+    const result2NameAddr = 0x110380;
 
     const progName = path.basename(this.config.executablePath);
     const nodeId =

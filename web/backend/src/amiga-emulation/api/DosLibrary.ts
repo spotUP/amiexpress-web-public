@@ -118,8 +118,9 @@ export class DosLibrary {
   private firstOpenSeen: boolean = false;
   private envNormalizedMap: Map<string, string> = new Map();
   private envVarCache: Map<string, number> = new Map();
-  private readonly envVarStructPointer: number = 0x94000;
-  private readonly envStringPointer: number = 0x96000;
+  // Environment variable storage at 0x120000+ to avoid overlap with door code (0x1000-0x100000)
+  private readonly envVarStructPointer: number = 0x120000;
+  private readonly envStringPointer: number = 0x122000;
   private envVarStructNext: number;
   private envStringNext: number;
   private readonly envVarStructSize: number = 0x40;

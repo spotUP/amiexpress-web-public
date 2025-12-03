@@ -274,7 +274,11 @@ export async function runDoor(doorSession: any): Promise<void> {
       socket.emit('ansi-output', '\x1b[33mSign up at: http://www.bbslink.net/\x1b[0m\r\n\r\n');
       socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
       await new Promise<void>((resolve) => {
-        socket.once('user-input', () => resolve());
+        bbsSession.doorInputHandler = (data: string) => {
+      delete bbsSession.doorInputHandler;
+      resolve();
+    };
+    bbsSession.doorInputHandler;
       });
       return;
     }

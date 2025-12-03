@@ -1,6 +1,7 @@
 import { BBSSession } from "../../index";
 import { BBSState, LoggedOnSubState } from "../../constants/bbs-states";
 import { AnsiUtil } from "../../utils/ansi.util";
+import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
 
 // Import from other handler modules
 import { displayMenuPrompt } from "./menu";
@@ -33,6 +34,20 @@ let SCREEN_MENU: string = "MENU";
  * Handles all BBS command processing and routing
  * 1:1 port from AmiExpress express.e command processing
  */
+
+/**
+ * Debug log helper - logs to console AND sysop terminal/session log
+ * When a sysop is logged in, debug messages appear in both backend.log and session log
+ */
+function debugLog(socket: any, session: BBSSession | undefined, message: string, category: string = "CMD") {
+  // Always log to console (backend.log)
+  console.log(message);
+
+  // If sysop logged in, also send to terminal and session log
+  if (socket && session?.user?.secLevel && session.user.secLevel >= 200) {
+    SysopDebugUtil.debug(socket, session, category, message.replace(/^\[.*?\]\s*/, ''));
+  }
+}
 
 // Dependency injection setters
 export function setDatabase(database: any) {
@@ -127,7 +142,9 @@ export async function processCommand(
   command: string,
   params: string
 ): Promise<string> {
-  console.log(
+  debugLog(
+    socket,
+    session,
     `[CommandPriority] Processing command: ${command} with params: ${params}`
   );
 
@@ -140,27 +157,27 @@ export async function processCommand(
   // Try SysCommand first
   const sysResult = await runSysCommand(socket, session, command, params);
   if (sysResult === "SUCCESS") {
-    console.log("[CommandPriority] Executed as SysCommand");
+    debugLog(socket, session, "[CommandPriority] Executed as SysCommand");
     return "SUCCESS";
   }
   if (sysResult === "NOT_ALLOWED") {
-    console.log("[CommandPriority] SysCommand denied by permissions");
+    debugLog(socket, session, "[CommandPriority] SysCommand denied by permissions");
     return "NOT_ALLOWED";
   }
 
   // Try BbsCommand second
   const bbsResult = await runBbsCommand(socket, session, command, params);
   if (bbsResult === "SUCCESS") {
-    console.log("[CommandPriority] Executed as BbsCommand");
+    debugLog(socket, session, "[CommandPriority] Executed as BbsCommand");
     return "SUCCESS";
   }
   if (bbsResult === "NOT_ALLOWED") {
-    console.log("[CommandPriority] BbsCommand denied by permissions");
+    debugLog(socket, session, "[CommandPriority] BbsCommand denied by permissions");
     return "NOT_ALLOWED";
   }
 
   // Try InternalCommand last
-  console.log("[CommandPriority] Trying as InternalCommand");
+  debugLog(socket, session, "[CommandPriority] Trying as InternalCommand");
   await processBBSCommand(socket, session, command, params);
   return "SUCCESS";
 }

@@ -63,9 +63,17 @@ LOGS_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOGS_DIR"
 
 # Clean backend build artifacts that can cause stale runtime
-printf "%b\n" "${CYAN}→ Cleaning backend build artifacts...${RESET}"
+# CRITICAL: Remove stale .js files that override .ts files when using tsx
+printf "%b\n" "${CYAN}→ Cleaning stale .js files in amiga-emulation...${RESET}"
+STALE_JS=$(find "$REPO_ROOT/web/backend/src/amiga-emulation" -name "*.js" -type f \
+  ! -path "*/moira-source/*" ! -path "*/build/*" 2>/dev/null)
+if [ -n "$STALE_JS" ]; then
+  echo "$STALE_JS" | xargs rm -f
+  printf "%b\n" "   ${YELLOW}[CLEANED]${RESET} Removed stale .js files that could override .ts"
+else
+  printf "%b\n" "   ${GREEN}[OK]${RESET} No stale .js files found"
+fi
 rm -rf "$REPO_ROOT/web/backend/dist"
-rm -f "$REPO_ROOT/web/backend/src/amiga-emulation/xim/"*.js
 rm -f "$REPO_ROOT/web/backend/src/api/"*.js
 
 # Use fixed log filenames (will be overwritten each time)

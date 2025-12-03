@@ -116,8 +116,33 @@ function getNodes(currentNodeNumber: number): NodeInfo[] {
  * Display telnet frontend
  */
 function displayFrontend(socket: SocketIOSocket, user: any): void {
-  const hostname = user?.hostname || 'NOT AVAILABLE';
-  const userIp = user?.ip || 'NOT AVAILABLE';
+  // Get connection info from user object or socket handshake
+  let hostname = user?.hostname;
+  let userIp = user?.ip;
+
+  // For web connections, extract from Socket.IO handshake
+  if (!hostname || hostname === 'NOT AVAILABLE') {
+    const handshake = (socket as any).handshake;
+    if (handshake) {
+      // Get IP from Socket.IO headers
+      userIp = handshake.address ||
+               handshake.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
+               handshake.headers?.['x-real-ip'] ||
+               'WEB CLIENT';
+
+      // For web connections, show connection type
+      const referer = handshake.headers?.referer || handshake.headers?.origin;
+      if (referer) {
+        hostname = 'WEB CLIENT';
+      } else {
+        hostname = 'NOT AVAILABLE';
+      }
+    }
+  }
+
+  hostname = hostname || 'NOT AVAILABLE';
+  userIp = userIp || 'NOT AVAILABLE';
+
   const nodeNumber = user?.nodeNumber || 0;
   const bbsIp = getBBSIp();
 
@@ -201,7 +226,7 @@ function displayFrontend(socket: SocketIOSocket, user: any): void {
  * Run Telnet Frontend door (TypeScript door interface)
  */
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user } = doorSession;
+  const { socket, user, bbsSession } = doorSession;
 
   // Display the frontend
   displayFrontend(socket, user);
@@ -209,20 +234,18 @@ export async function runDoor(doorSession: any): Promise<void> {
   // Auto-exit after 2 seconds or wait for any key
   const exitPromise = new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {
-      socket.off('user-input', handleInput);
+      delete bbsSession.doorInputHandler;
       resolve();
     }, 2000);
 
-    const handleInput = () => {
+    const handleInput = (data: string) => {
       clearTimeout(timeout);
-      socket.off('user-input', handleInput);
+      delete bbsSession.doorInputHandler;
       resolve();
     };
 
-    socket.once('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
   });
 
   await exitPromise;
-
-  socket.emit('ansi-output', '\r\n\x1b[32mContinuing to main menu...\x1b[0m\r\n');
 }

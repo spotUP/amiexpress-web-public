@@ -196,11 +196,11 @@ export async function runDoor(doorSession: any): Promise<void> {
   await new Promise<void>((resolve) => {
     const handleInput = (data: string) => {
       if (data.trim() === '' || data.includes('\n') || data.includes('\r')) {
-        socket.off('user-input', handleInput);
+        delete bbsSession.doorInputHandler;
         resolve();
       }
     };
 
-    socket.on('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
   });
 }

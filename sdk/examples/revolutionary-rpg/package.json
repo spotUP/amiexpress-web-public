@@ -1,0 +1,26 @@
+{
+  "name": "revolutionary-rpg",
+  "version": "1.0.0",
+  "description": "Next-generation RPG with AI companions and procedural generation",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["bbs", "door", "game", "rpg", "ai"],
+  "author": "AmiExpress SDK",
+  "license": "MIT",
+  "dependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "doorMetadata": {
+    "name": "Revolutionary RPG",
+    "description": "AI-driven RPG with procedural worlds and dynamic economy",
+    "version": "1.0.0",
+    "author": "AmiExpress SDK",
+    "doorPattern": "integrated",
+    "buildable": true,
+    "bbsCommand": "/RPG"
+  }
+}

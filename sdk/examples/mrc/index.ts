@@ -553,8 +553,8 @@ function doHelp(): void {
 
   // Wait for keypress
   return new Promise<void>((resolve) => {
-    const handleInput = () => {
-      socket.off('user-input', handleInput);
+    const handleInput = (data: string) => {
+      delete bbsSession.doorInputHandler;
       showTitle();
       showChat();
       resolve();
@@ -954,7 +954,7 @@ async function mainLoop(): Promise<void> {
       }
     };
 
-    socket.on('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
 
     socket.once('disconnect', () => {
       socket.off('user-input', handleInput);

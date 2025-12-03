@@ -94,15 +94,18 @@
 - [x] Sandboxed door execution
 - [x] Drop file security
 
-### Data Validation
-- [x] Input sanitization
-- [x] SQL injection protection (parameterized queries)
-- [x] XSS prevention (ANSI output only)
-- [x] Command injection prevention
+### Data Validation (Defensive Security Only)
+
+**Note:** All security measures below are DEFENSIVE - protecting users from attacks, not offensive tools.
+
+- [x] Input sanitization (validate user input to prevent malicious data)
+- [x] SQL injection protection (parameterized queries prevent database attacks)
+- [x] XSS prevention (ANSI output only - prevents cross-site scripting attacks)
+- [x] Command injection prevention (validate commands to prevent shell injection)
 
 ### Recommended (Before Production)
-- [ ] Security audit
-- [ ] Penetration testing
+- [ ] Security audit (assess defensive security measures)
+- [ ] Penetration testing (test defensive security - authorized only)
 - [ ] Rate limiting
 - [ ] HTTPS/TLS configuration
 - [ ] CORS policy review

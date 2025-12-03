@@ -17,7 +17,7 @@ This document tracks the progress of porting classic AmiExpress Amiga E doors to
 **Status**: ✅ COMPLETE
 
 **Original Source**: `dev/docs/AmiExpressEDoorSources/DiscordAnnounce/dannounce.e` (410 lines)
-**TypeScript Port**: `web/backend/src/doors/discord-announce/index.ts`
+**TypeScript Port**: `doors/discord-announce/index.ts` (installed from SDK)
 **Command**: `DANNOUNCE`
 **Type**: TypeScript door (TS)
 
@@ -75,7 +75,7 @@ Already installed! Command info file at `Commands/DANNOUNCE.info`.
 **Status**: ✅ COMPLETE
 
 **Original Source**: `dev/docs/AmiExpressEDoorSources/telnetConnect/telnetdoor.e` (133 lines)
-**TypeScript Port**: `web/backend/src/doors/telnet-connect/index.ts`
+**TypeScript Port**: `doors/telnet-connect/index.ts` (installed from SDK)
 **Command**: `TELNET`
 **Type**: TypeScript door (TS)
 
@@ -119,7 +119,7 @@ Already installed! Command info file at `Commands/TELNET.info`.
 **Status**: ✅ COMPLETE
 
 **Original Source**: `dev/docs/AmiExpressEDoorSources/TelnetFront/telnetfront.e` (227 lines)
-**TypeScript Port**: `web/backend/src/doors/telnet-front/index.ts`
+**TypeScript Port**: `doors/telnet-front/index.ts` (installed from SDK)
 **Command**: `TFRONT`
 **Type**: TypeScript door (TS)
 
@@ -160,7 +160,7 @@ Already installed! Command info file at `Commands/TFRONT.info`.
 **Status**: ✅ COMPLETE
 
 **Original Source**: `dev/docs/AmiExpressEDoorSources/BBSLink/bbslink.e` (339 lines)
-**TypeScript Port**: `web/backend/src/doors/bbslink/index.ts`
+**TypeScript Port**: `doors/bbslink/index.ts` (installed from SDK)
 **Command**: `BBSLINK`
 **Type**: TypeScript door (TS)
 
@@ -221,7 +221,7 @@ Already installed! Command info file at `Commands/BBSLINK.info`.
 **Status**: ✅ COMPLETE
 
 **Original Source**: `dev/docs/AmiExpressEDoorSources/BBSLink/bbslinkwall.e` (547 lines)
-**TypeScript Port**: `web/backend/src/doors/bbslink-wall/index.ts`
+**TypeScript Port**: `doors/bbslink-wall/index.ts` (installed from SDK)
 **Command**: `BBSLINKWALL`
 **Type**: TypeScript door (TS)
 
@@ -276,7 +276,7 @@ Already installed! Command info file at `Commands/BBSLINKWALL.info`.
 **Status**: ✅ COMPLETE
 
 **Original Source**: `dev/docs/AmiExpressEDoorSources/Global Last Callers/GLCViewer.e` (943 lines)
-**TypeScript Port**: `web/backend/src/doors/glc-viewer/index.ts`
+**TypeScript Port**: `doors/glc-viewer/index.ts` (installed from SDK)
 **Command**: `GLCVIEWER`
 **Type**: TypeScript door (TS)
 
@@ -352,7 +352,7 @@ Already installed! Command info file at `Commands/GLCVIEWER.info`.
 **Status**: ✅ COMPLETE (Core Features)
 
 **Original Source**: `dev/docs/AmiExpressEDoorSources/Global Wall/gwall.e` (1,832 lines)
-**TypeScript Port**: `web/backend/src/doors/gwall/index.ts` (700+ lines)
+**TypeScript Port**: `doors/gwall/index.ts` (installed from SDK, 700+ lines)
 **Command**: `GWALL`
 **Type**: TypeScript door (TS)
 
@@ -441,7 +441,7 @@ Already installed! Command info file at `Commands/GWALL.info`.
 
 **TypeScript Ports**:
 - `web/backend/src/services/mrc-client.ts` (MRC daemon/multiplexer)
-- `web/backend/src/doors/mrc/index.ts` (Interactive door)
+- `doors/mrc/index.ts` (Interactive door, installed from SDK)
 
 **Command**: `MRC`
 **Type**: Two-component system (TypeScript daemon + TypeScript door)
@@ -625,17 +625,15 @@ Use config files in `doors/DOORNAME/`:
 
 ### 3. Installation
 
-Create command info file in `Commands/`:
+Create command info file in `Commands/BBSCmd/`:
 ```
-COMMAND=DOORNAME
-NAME=Door Display Name
+BBSCMD=DOORNAME
 TYPE=TS
-PATH=web/backend/src/doors/doorname
+LOCATION=doors/doorname
+DESCRIPTION=Door Display Name
 ACCESS=0
-HOT=
-PRIVATE=N
-OVERLOAD=N
-HIDDEN=N
+MULTINODE=YES
+PRIORITY=SAME
 ```
 
 ### 4. Output
@@ -647,17 +645,19 @@ HIDDEN=N
 
 ### 5. Input
 
-Wait for user input with promises:
+Wait for user input using the proper door input handler:
 ```typescript
 await new Promise<void>((resolve) => {
-  const handleInput = (data: string) => {
-    socket.off('user-input', handleInput);
+  const inputHandler = (data: string) => {
+    delete bbsSession.doorInputHandler;
     // Process input
     resolve();
   };
-  socket.on('user-input', handleInput);
+  bbsSession.doorInputHandler = inputHandler;
 });
 ```
+
+**IMPORTANT**: Do NOT use `socket.on('user-input')` or `socket.once('user-input')` - this pattern is deprecated and doesn't work correctly. Always use `bbsSession.doorInputHandler` for server-side TypeScript doors.
 
 ### 6. Testing
 
@@ -708,9 +708,9 @@ To port a new door:
 
 1. Choose a door from the inventory above
 2. Read the original E source in `dev/docs/AmiExpressEDoorSources/`
-3. Create new directory: `web/backend/src/doors/doorname/`
+3. Create new directory in SDK: `sdk/examples/doorname/` or develop in `doors/doorname/`
 4. Implement `runDoor()` function
-5. Create command info file in `Commands/`
+5. Use SDK Build & Run to auto-install (creates .info file and installs to `doors/`)
 6. Test thoroughly
 7. Update this document with status
 8. Submit PR
@@ -721,8 +721,8 @@ To port a new door:
 
 - **Amiga E Documentation**: E language syntax and patterns
 - **Original Express.e**: `AmiExpress-Sources/express.e` - BBS door protocol
-- **TypeScript Door Example**: `web/backend/src/doors/phreakwars/` - Full featured door
-- **Discord Door**: `web/backend/src/doors/discord-announce/` - Simple door example
+- **SDK Examples**: `sdk/examples/` - Multiple door examples
+- **Installed Doors**: `doors/` - Production door installations
 
 ---
 

@@ -1103,11 +1103,39 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       console.log(`[executeAmigaDoor] RTW detected - forcing XIM door type`);
     }
 
+    // Build CLI arguments - XIM doors typically expect node number as first arg
+    const nodeNumber = session.nodeId || 1;
+    const doorArgs: string[] = [];
+
+    // Add node number as first argument for XIM doors (required by most XIM doors like AquaScan)
+    if (doorType === 'XIM') {
+      doorArgs.push(nodeNumber.toString());
+    }
+
+    // Add any additional arguments from door.passParameters or door.args
+    if (door.passParameters && typeof door.passParameters === 'string') {
+      doorArgs.push(...door.passParameters.split(' ').filter((a: string) => a));
+    }
+
+    // Add doorCommand and doorId to session for XIMProtocol to access
+    // XIMProtocol uses these to respond to GET_CUSTOM_MSGBASE_MENUCMD (525)
+    console.log(`[executeAmigaDoor] Setting doorCommand="${door.command}" on session`);
+    (session as any).doorCommand = door.command;
+    (session as any).doorId = door.command;
+    console.log(`[executeAmigaDoor] Verified session.doorCommand="${(session as any).doorCommand}"`);
+
+    // Set bbsRoot on session so XIMProtocol can find command .info files
+    (session as any).bbsRoot = bbsRoot;
+    (session as any).dataDir = bbsRoot;
+    console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol`);
+
     const doorConfig = {
       executablePath: doorPath,
       doorType: doorType,
+      doorId: door.command,  // Command name (e.g., "FR") for GET_CMD_TOOLTYPE
       timeout: 300, // 5 minutes
       bbsSession: session, // Use session's actual nodeId assigned by getNextAvailableNodeId()
+      args: doorArgs, // CLI arguments for the door
       stack: door.stack,
       priority: door.priority,
       resident: door.resident,

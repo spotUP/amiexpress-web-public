@@ -106,7 +106,8 @@ export async function extractFileDizBuiltin(
   // Format: @BEGIN_FILE_ID.DIZ ... @END_FILE_ID.DIZ
   if (ext === '.txt') {
     try {
-      const content = await fs.readFile(uploadedFilePath, 'utf-8');
+      // Read as Latin-1 to handle Amiga text encoding
+      const content = await fs.readFile(uploadedFilePath, 'latin1');
 
       // Look for @BEGIN_FILE_ID.DIZ and @END_FILE_ID.DIZ tags
       const beginTag = '@BEGIN_FILE_ID.DIZ';
@@ -127,7 +128,7 @@ export async function extractFileDizBuiltin(
           .slice(0, 10);
 
         if (lines.length > 0) {
-          await fs.writeFile(dizPath, lines.join('\n'), 'utf-8');
+          await fs.writeFile(dizPath, lines.join('\n'), 'latin1');
           console.log(`[FILE_ID.DIZ] Extracted FILE_ID.DIZ from .txt file (${lines.length} lines)`);
           return true;
         }
@@ -250,7 +251,9 @@ export async function readFileDiz(
 
   try {
     // Read FILE_ID.DIZ content
-    const content = await fs.readFile(dizPath, 'utf-8');
+    // Amiga FILE_ID.DIZ files typically use ISO-8859-1 (Latin-1) or CP437 encoding
+    // Reading as 'latin1' preserves all byte values and prevents "��" replacement chars
+    const content = await fs.readFile(dizPath, 'latin1');
 
     // Split into lines and clean up
     let lines = content

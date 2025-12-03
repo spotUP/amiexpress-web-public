@@ -2,6 +2,24 @@
 
 > **Complete analysis reveals a sophisticated multi-protocol BBS system with advanced features, but implementation is 60-70% complete despite optimistic documentation claims of 90-95%.**
 
+## ⚠️ Project Context & Safety
+
+**This is a historical software preservation project** - recreating 1980s-1990s Bulletin Board System (BBS) culture for educational purposes.
+
+- 📚 **Educational Platform:** Preserving pre-internet online community history
+- 🎮 **Retro Computing:** Running vintage Amiga software via CPU emulation
+- 🛡️ **Defensive Security:** All security features protect users, not attack systems
+- ⚖️ **Open Source:** Transparent, documented, MIT licensed
+
+**Technical Terms Context:**
+- "Illegal instruction" = CPU emulation term (invalid opcode), not harmful activity
+- "Injection prevention" = Defensive security (SQL/command injection protection)
+- "Exploit prevention" = Protecting against vulnerabilities, not creating them
+
+📖 **See [PROJECT_SAFETY.md](./PROJECT_SAFETY.md) for complete safety documentation**
+
+---
+
 ## 📊 Project Scale & Status
 
 ### Size Overview

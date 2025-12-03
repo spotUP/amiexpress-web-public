@@ -25,10 +25,20 @@ export class IconLibrary {
   private diskObjects: Map<number, DiskObject> = new Map();
   private nextDiskObjectAddr: number = 0x60000; // DiskObjects at 384KB
   private bbsRoot: string;
+  private doorDirectory: string = ''; // Set by AmigaDoorSession for PROGDIR: device
 
   constructor(emulator: MoiraEmulator, bbsRoot: string = '~/Code/amiexpress-web') {
     this.emulator = emulator;
     this.bbsRoot = bbsRoot;
+  }
+
+  /**
+   * Set the door directory for PROGDIR: device
+   * Called by LibraryManager when starting a door
+   */
+  setDoorDirectory(doorPath: string): void {
+    this.doorDirectory = doorPath;
+    console.log(`[icon.library] PROGDIR: device set to ${doorPath}`);
   }
 
   /**
@@ -42,16 +52,27 @@ export class IconLibrary {
     const namePtr = this.emulator.getRegister(CPURegister.A0);
     let name = this.readString(namePtr);
 
-    console.log(`[icon.library] GetDiskObject("${name}")`);
+    console.log(`[icon.library] *** GetDiskObject CALLED *** namePtr=0x${namePtr.toString(16)}, name="${name}"`);
 
     // Translate AmigaOS device assignments to Unix paths
-    if (name.startsWith('DOORS:')) {
-      name = 'doors/' + name.substring(6);
+    const upperName = name.toUpperCase();
+    if (upperName.startsWith('PROGDIR:')) {
+      // PROGDIR: - door's own directory (e.g., PROGDIR:AquaScan -> /path/to/Doors/AquaScan/AquaScan)
+      const relativePath = name.substring(8); // Skip "PROGDIR:"
+      if (this.doorDirectory) {
+        name = path.join(this.doorDirectory, relativePath);
+        console.log(`[icon.library]   Translated PROGDIR: -> ${name}`);
+      } else {
+        console.log(`[icon.library]   WARNING: PROGDIR: used but doorDirectory not set`);
+        name = relativePath;
+      }
+    } else if (upperName.startsWith('DOORS:')) {
+      name = 'Doors/' + name.substring(6);
       console.log(`[icon.library]   Translated DOORS: -> ${name}`);
-    } else if (name.startsWith('BBS:')) {
+    } else if (upperName.startsWith('BBS:')) {
       name = name.substring(4);
       console.log(`[icon.library]   Translated BBS: -> ${name}`);
-    } else if (name.startsWith('SYS:')) {
+    } else if (upperName.startsWith('SYS:')) {
       name = 'system/' + name.substring(4);
       console.log(`[icon.library]   Translated SYS: -> ${name}`);
     }

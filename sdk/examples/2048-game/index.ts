@@ -241,7 +241,7 @@ class Game2048 {
 }
 
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user } = doorSession;
+  const { socket, user, bbsSession } = doorSession;
   const playerName = user?.name || user?.username || 'Guest';
 
   console.log(`User ${playerName} connected to 2048 Game`);
@@ -272,14 +272,14 @@ export async function runDoor(doorSession: any): Promise<void> {
     inputStream.write(data);
   };
 
-  socket.on('user-input', handleSocketInput);
+  bbsSession.doorInputHandler = handleSocketInput;
 
   await new Promise<void>((resolve) => {
     let finished = false;
 
-    const cleanup = () => {
+    const cleanup = (data: string) => {
       outputStream.off('data', sendAnsi);
-      socket.off('user-input', handleSocketInput);
+      delete bbsSession.doorInputHandler;
       ui.destroy();
     };
 

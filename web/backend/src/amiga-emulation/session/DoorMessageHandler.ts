@@ -11,6 +11,7 @@ import { DoorConfig, DoorConstants } from "../DoorTypes.js";
 import { logDoorMessage } from "../../utils/door-logging.util";
 import { populateDoorInfoStructs } from "./door-info.util.js";
 import { parseMciCodes } from "../../handlers/screen.handler.js";
+import { parseInfoFile } from "../../utils/amiga-command-parser.util.js";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -1591,6 +1592,20 @@ export class DoorMessageHandler {
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 24);
         break;
 
+      case GET_CUSTOM_MSGBASE_MENUCMD:
+        // Returns the menu command that was used to launch this door
+        // e.g., if user typed "FR" which launched AquaScan, return "FR"
+        // Doors use this to look up DOORUSE.FR in their .info tooltypes
+        {
+          const cmdName = this.config.doorId ||
+                          this.config.bbsSession?.doorCommand ||
+                          "";
+          console.log(`[DoorMessageHandler]   GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
+          this.writeStringToMessage(msgAddr, cmdName);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, cmdName.length);
+        }
+        break;
+
       case BB_CONFACCOUNT:
       case EDITOR_STRUCT:
       case LOAD_CONFDB:
@@ -1608,7 +1623,6 @@ export class DoorMessageHandler {
       case LAST_READ:
       case LAST_SCANNED:
       case MSGBASE_LOC:
-      case GET_CUSTOM_MSGBASE_MENUCMD:
       case SER_INOUT:
       case MEMCONF:
       case SET_SERSHARED:
@@ -1836,9 +1850,50 @@ export class DoorMessageHandler {
         break;
       case GET_CMD_TOOLTYPE:
         // express.e:4137-4140: Read tooltype from command file
-        console.log(`[DoorMessageHandler]   GET_CMD_TOOLTYPE: Not implemented (returns empty)`);
-        this.writeStringToMessage(msgAddr, "");
-        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
+        // msg.string INPUT = tooltype key to look up (e.g., "LOCATION", "DOORUSE.FR")
+        // msg.data OUTPUT = 1 if found, 0 if not found
+        // msg.string OUTPUT = the tooltype value
+        {
+          const tooltypeKey = str.toUpperCase();
+          const cmdName = this.config.doorId ||
+                          this.config.bbsSession?.doorCommand ||
+                          "";
+          console.log(`[DoorMessageHandler]   GET_CMD_TOOLTYPE: key="${tooltypeKey}", command="${cmdName}"`);
+
+          let tooltypeValue = "";
+          let found = 0;
+
+          // Try to find the command's .info file
+          const bbsPath = this.config.bbsSession?.dataDir || process.cwd();
+          const possiblePaths = [
+            path.join(bbsPath, "Commands", "BBSCmd", `${cmdName}.info`),
+            path.join(bbsPath, "Commands", "SysCmd", `${cmdName}.info`),
+            path.join(bbsPath, "Commands", "ConfCmd", `${cmdName}.info`),
+          ];
+
+          for (const infoPath of possiblePaths) {
+            if (fs.existsSync(infoPath)) {
+              try {
+                const tooltypes = parseInfoFile(infoPath);
+                if (tooltypes.has(tooltypeKey)) {
+                  tooltypeValue = tooltypes.get(tooltypeKey) || "";
+                  found = 1;
+                  console.log(`[DoorMessageHandler]     Found: ${tooltypeKey}="${tooltypeValue}" in ${infoPath}`);
+                  break;
+                }
+              } catch (err) {
+                console.log(`[DoorMessageHandler]     Error parsing ${infoPath}: ${err}`);
+              }
+            }
+          }
+
+          if (!found) {
+            console.log(`[DoorMessageHandler]     Tooltype "${tooltypeKey}" not found`);
+          }
+
+          this.writeStringToMessage(msgAddr, tooltypeValue);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, found);
+        }
         break;
 
       case SIG_PLAYPEN:

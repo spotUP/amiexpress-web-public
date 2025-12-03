@@ -93,8 +93,9 @@ export class ExecLibrary {
 
   // Memory allocation tracking
   private allocations: Map<number, number> = new Map(); // address -> size
-  // Start allocations at 0x90d0 to mirror vamos observations for door startup
-  private nextFreeMemory: number = 0x0090d0;
+  // Start allocations at 0x100000 (1MB) to avoid overlap with door code segments
+  // Door code starts at 0x1000 and large doors can exceed 100KB
+  private nextFreeMemory: number = 0x100000;
   // Free list for simple reuse
   private freeList: { addr: number; size: number }[] = [];
 
@@ -305,7 +306,8 @@ export class ExecLibrary {
     // Create stub function for unknown system vectors
     // Some programs (like GetAnswer) load function pointers from low memory
     // We create a stub that just does RTS (return immediately)
-    const STUB_FUNCTION_ADDR = 0xf00f00;
+    // MUST be in chip RAM (0x000000-0x1FFFFF) - using area after exception handlers
+    const STUB_FUNCTION_ADDR = 0x180f00; // After exception handlers (0x180000-0x180800)
     this.emulator.writeMemory16(STUB_FUNCTION_ADDR, 0x4e75); // RTS instruction
     console.log(
       `[ExecLibrary] Created stub function at 0x${STUB_FUNCTION_ADDR.toString(
@@ -350,8 +352,11 @@ export class ExecLibrary {
   private setupExceptionVectors(): void {
     console.log("[ExecLibrary] Setting up exception vectors...");
 
-    // Exception handler code location (high memory, won't conflict with door)
-    const EXCEPTION_HANDLER_BASE = 0xf00000;
+    // Exception handler code location - MUST be within chip RAM (0x000000-0x1FFFFF)
+    // The vAmiga-style WASM memory only maps chip RAM (2MB) and ROM (512KB at 0xF80000)
+    // Pages 0x20-0xF7 are unmapped and writes are silently ignored!
+    // Use 0x180000 (1.5MB into chip RAM) - safe distance from door code/data
+    const EXCEPTION_HANDLER_BASE = 0x180000;
 
     // Create exception handlers that skip the offending instruction
     for (let i = 0; i < 64; i++) {
@@ -375,6 +380,13 @@ export class ExecLibrary {
       this.emulator.writeMemory32(vectorAddr, handlerAddr);
     }
 
+    // Verify handler 4 (Illegal Instruction) was written correctly
+    const handler4Addr = EXCEPTION_HANDLER_BASE + 4 * 32; // 0xf00080
+    const verifyWord0 = this.emulator.readMemory16(handler4Addr);
+    const verifyWord1 = this.emulator.readMemory16(handler4Addr + 2);
+    const verifyWord2 = this.emulator.readMemory16(handler4Addr + 4);
+    console.log(`[ExecLibrary] Handler 4 at 0x${handler4Addr.toString(16)}: [${verifyWord0.toString(16)}, ${verifyWord1.toString(16)}, ${verifyWord2.toString(16)}] (expected: 5aaf, 2, 4e73)`);
+
     console.log("[ExecLibrary] Exception vectors initialized (0x00-0xFF)");
     console.log(
       `[ExecLibrary] Exception handlers at 0x${EXCEPTION_HANDLER_BASE.toString(
@@ -384,6 +396,7 @@ export class ExecLibrary {
     console.log(
       "[ExecLibrary] Handlers skip offending instruction (+2 bytes) and RTE"
     );
+
   }
 
   /**
@@ -771,7 +784,8 @@ export class ExecLibrary {
         console.log(
           `[ExecLibrary]   *** OpenLibrary trap called (LVO -552) ***`
         );
-        const nameAddr = this.emulator.getRegister(12); // A0
+        // FIXED: A0 = register 8 (not 12 which is A4)
+        const nameAddr = this.emulator.getRegister(8); // A0
         const version = this.emulator.getRegister(0); // D0
         const libResult = this.openLibrary(nameAddr, version);
         this.emulator.setRegister(0, libResult); // Return library base in D0
@@ -781,7 +795,8 @@ export class ExecLibrary {
         console.log(
           `[ExecLibrary]   *** CloseLibrary trap called (LVO -414) ***`
         );
-        const libAddr = this.emulator.getRegister(13); // A1
+        // FIXED: A1 = register 9 (not 13 which is A5)
+        const libAddr = this.emulator.getRegister(9); // A1
         if (libAddr !== 0) {
           this.closeLibrary(libAddr);
           this.emulator.setRegister(0, 0); // Return 0 (success)
@@ -790,7 +805,8 @@ export class ExecLibrary {
 
       case -294: // _LVOFindTask ✓
         console.log(`[ExecLibrary]   FindTask trap called`);
-        const nameAddr2 = this.emulator.getRegister(13); // A1
+        // FIXED: A1 = register 9 (not 13 which is A5)
+        const nameAddr2 = this.emulator.getRegister(9); // A1
         const result = this.findTask(nameAddr2);
         this.emulator.setRegister(0, result);
         return true;
@@ -805,15 +821,17 @@ export class ExecLibrary {
 
       case -210: // _LVOFreeMem ✓
         console.log(`[ExecLibrary]   FreeMem trap called`);
-        const addr = this.emulator.getRegister(0); // D0
-        const freeSize = this.emulator.getRegister(1); // D1
+        // Note: FreeMem uses A1 for address, D0 for size per AmigaOS spec
+        const addr = this.emulator.getRegister(9); // A1 = memory block
+        const freeSize = this.emulator.getRegister(0); // D0 = size
         this.freeMem(addr, freeSize);
         this.emulator.setRegister(0, 0);
         return true;
 
       case -390: // _LVOFindPort ✓
         console.log(`[ExecLibrary]   FindPort trap called`);
-        const portNameAddr = this.emulator.getRegister(13); // A1
+        // FIXED: A1 = register 9 (not 13 which is A5)
+        const portNameAddr = this.emulator.getRegister(9); // A1
         const portResult = this.findPort(portNameAddr);
         this.emulator.setRegister(0, portResult);
         return true;
@@ -822,7 +840,8 @@ export class ExecLibrary {
         console.log(
           `[ExecLibrary]   *** SetTaskPri trap called (LVO -300) ***`
         );
-        const taskAddr = this.emulator.getRegister(13); // A1
+        // FIXED: A1 = register 9 (not 13 which is A5)
+        const taskAddr = this.emulator.getRegister(9); // A1
         const newPri = this.emulator.getRegister(0); // D0
         const priResult = this.setTaskPri(taskAddr, newPri);
         this.emulator.setRegister(0, priResult);
@@ -835,7 +854,7 @@ export class ExecLibrary {
         this.emulator.setRegister(0, sigResult);
         return true;
 
-      case -522: // Unknown/unused in doors we’ve seen – safely stub
+      case -522: // Unknown/unused in doors we've seen – safely stub
         console.log(
           `[ExecLibrary]   *** Unimplemented Exec LVO -522 (stub, preserve state) ***`
         );
@@ -845,14 +864,16 @@ export class ExecLibrary {
       // *** CRITICAL MISSING CASES FOR BULLS ***
       case -372: // _LVOGetMsg - THIS IS WHAT BULLS IS CALLING!
         console.log(`[ExecLibrary] *** INTERCEPTED: GetMsg() (LVO -372) ***`);
-        const portAddr = this.emulator.getRegister(12); // A0
+        // FIXED: A0 = register 8 (not 12 which is A4)
+        const portAddr = this.emulator.getRegister(8); // A0
         const msgResult = this.getMsg(portAddr);
         this.emulator.setRegister(0, msgResult); // Return message in D0
         return true;
 
       case -384: // _LVOWaitPort - Door will loop on this
         console.log(`[ExecLibrary] *** INTERCEPTED: WaitPort() (LVO -384) ***`);
-        const waitPortAddr = this.emulator.getRegister(12); // A0
+        // FIXED: A0 = register 8 (not 12 which is A4)
+        const waitPortAddr = this.emulator.getRegister(8); // A0
         const waitResult = this.waitPort(waitPortAddr);
         this.emulator.setRegister(0, waitResult);
         return true;

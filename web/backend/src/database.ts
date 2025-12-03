@@ -153,13 +153,20 @@ export class Database {
   }
 
   // Generic query method for custom SQL queries
+  // Converts PostgreSQL-style $1, $2 placeholders to SQLite ? placeholders
   public async query(sql: string, params: any[] = []): Promise<{ rows: any[] }> {
     if (!this.db) {
       throw new Error('Database not initialized');
     }
 
     try {
-      const stmt = this.db.prepare(sql);
+      // Convert PostgreSQL-style $1, $2, $3... to SQLite-style ? placeholders
+      let convertedSql = sql;
+      for (let i = params.length; i >= 1; i--) {
+        convertedSql = convertedSql.replace(new RegExp(`\\$${i}\\b`, 'g'), '?');
+      }
+
+      const stmt = this.db.prepare(convertedSql);
       const rows = stmt.all(...params);
       return { rows };
     } catch (error) {
@@ -174,7 +181,13 @@ export class Database {
     }
 
     try {
-      const stmt = this.db.prepare(sql);
+      // Convert PostgreSQL-style $1, $2, $3... to SQLite-style ? placeholders
+      let convertedSql = sql;
+      for (let i = params.length; i >= 1; i--) {
+        convertedSql = convertedSql.replace(new RegExp(`\\$${i}\\b`, 'g'), '?');
+      }
+
+      const stmt = this.db.prepare(convertedSql);
       stmt.run(...params);
     } catch (error) {
       console.error('Database run error:', error);

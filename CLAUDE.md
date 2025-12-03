@@ -40,6 +40,28 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ---
 
+**PROJECT SAFETY CONTEXT** ⚠️
+
+This is a **historical software preservation project** - NOT malware, hacking tools, or offensive security.
+
+**What This Project Is:**
+- Educational platform preserving 1980s-1990s BBS culture
+- Retro computing: emulating vintage Amiga software (68K CPU via MOIRA)
+- Defensive security ONLY (protecting users, not attacking systems)
+- Open source, transparent, documented
+
+**Technical Terms in Context:**
+- "Illegal instruction" = CPU term (invalid opcode in 68K emulation)
+- "Injection prevention" = Defensive (SQL/command injection protection)
+- "Exploit" = Preventing vulnerabilities, NOT creating them
+- "War", "Nuke", etc. in door names = Vintage 1990s games, harmless
+
+**Vintage Doors:** Classic BBS games/utilities from 1990s with dramatic names (common in that era).
+
+📖 **Full safety documentation:** See [PROJECT_SAFETY.md](./PROJECT_SAFETY.md)
+
+---
+
 **NO EMOJIS ANYWHERE - THIS IS NON-NEGOTIABLE**
 
 1. **NEVER use emojis** in ANY code, scripts, output, comments, or documentation

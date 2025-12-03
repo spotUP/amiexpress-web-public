@@ -1152,7 +1152,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     if (commands.length > 0) {
       DebugLogger.mciSuccess(socket.id, `MCI codes found in ${screenName}`, {
         commandCount: commands.length,
-        commands: commands.map(cmd => cmd.type || cmd.command || 'unknown')
+        commands: commands  // Commands are strings, not objects
       });
     }
     session.lastScreenHadPause = result.hasPause;
@@ -1233,6 +1233,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         eventName,
         commands,
       };
+      // Queue commands for execution after pause is dismissed
+      if (commands.length > 0) {
+        session.queuedScreenCommands = commands;
+        screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
+      }
       socket.emit(eventName, '\r\n(Pause)...Space To Resume: ');
       return true;
     }
@@ -1251,7 +1256,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       screenDebug(`[displayScreen] Commands:`, commands);
       screenDebug(`[displayScreen] ==========================================`);
       screenFlowLog(screenName, `Executing ${commands.length} command(s) from ${screenName}`);
-      const { handleCommand } = require('./command.handler');
+      const { handleCommand } = require('./command-handler/core');
 
       session.pendingScreenCommand = new Promise<void>(resolve => {
         session.screenCommandResolver = resolve;
@@ -1343,7 +1348,7 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
   }
   session.lastScreenCommandsHash = commandsHash;
 
-  const { handleCommand } = require('./command.handler');
+  const { handleCommand } = require('./command-handler/core');
   session.pendingScreenCommand = new Promise<void>(resolve => {
     session.screenCommandResolver = resolve;
   });

@@ -211,7 +211,7 @@ async function processBatchFile(
     // Use SQL arithmetic to avoid JavaScript number overflow for bytesUpload (BIGINT)
     const trackUploads = creditAccountTrackUploads(session.user!);
     if (trackUploads) {
-      await db.query(`
+      await db.run(`
         UPDATE users
         SET uploads = uploads + 1,
             bytesupload = bytesupload + $1,
@@ -219,7 +219,7 @@ async function processBatchFile(
         WHERE id = $2
       `, [data.size, session.user!.id]);
 
-      await db.query(
+      await db.run(
         'UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2',
         [data.size, session.user!.id]
       );
@@ -650,7 +650,7 @@ export function registerFileHandlers(socket: Socket) {
 
       // Update user download statistics (express.e:9475-9492)
       // Use SQL arithmetic to avoid JavaScript number overflow for bytesDownload (BIGINT)
-      await db.query(`
+      await db.run(`
         UPDATE users
         SET downloads = downloads + 1,
             bytesdownload = bytesdownload + $1,
@@ -659,7 +659,7 @@ export function registerFileHandlers(socket: Socket) {
       `, [fileEntry.size, session.user.id]);
 
       // Update user_stats table (for ratio calculations)
-      await db.query(
+      await db.run(
         'UPDATE user_stats SET bytes_downloaded = bytes_downloaded + $1, files_downloaded = files_downloaded + 1 WHERE user_id = $2',
         [fileEntry.size, session.user.id]
       );

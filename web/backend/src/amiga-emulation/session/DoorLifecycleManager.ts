@@ -40,6 +40,7 @@ export interface ExecutionState {
   loopStartPC: number;
   lastProgressIteration: number;
   lastProgressTime: number;
+  gapJumpLogged: boolean;
 }
 
 export interface LifecycleConfig {
@@ -164,6 +165,7 @@ export class DoorLifecycleManager {
       loopStartPC: 0,
       lastProgressIteration: 0,
       lastProgressTime: Date.now(),
+      gapJumpLogged: false,
     };
   }
 
@@ -235,6 +237,16 @@ export class DoorLifecycleManager {
       if (!this.executionState.startupMessageSent && this.config.doorType === "XIM") {
         await this.sendStartupMessage();
       }
+
+      // CRITICAL: Verify all library trap ILLEGAL instructions are in place before execution
+      if (this.libraryTraps) {
+        const { verified, failed, failedAddrs } = this.libraryTraps.verifyIllegalInstructions();
+        if (failed > 0) {
+          console.error(`[DoorLifecycleManager] CRITICAL: ${failed} library trap(s) missing ILLEGAL instruction!`);
+          console.error(`[DoorLifecycleManager] Failed addresses: ${failedAddrs.map(a => '0x' + a.toString(16)).join(', ')}`);
+        }
+      }
+
       let prevA4 = this.emulator.getRegister(12);
       let prevA5 = this.emulator.getRegister(13);
       let earlyTraceCount = 0;
@@ -1017,7 +1029,7 @@ export class DoorLifecycleManager {
 
   // Track PC history for debugging bad jumps
   private pcHistory: number[] = [];
-  private readonly PC_HISTORY_SIZE = 10;
+  private readonly PC_HISTORY_SIZE = 50; // Increased from 10 to capture more context before crash
 
   private async executeInstruction(pc: number): Promise<void> {
     const wasAt24a6 = pc === 0x24a6;
@@ -1028,9 +1040,25 @@ export class DoorLifecycleManager {
       this.pcHistory.shift();
     }
 
-    // Detect jumps to ROM space (potential bug)
-    if (pc >= 0xf00000 && pc < 0xf80000) {
-      // This is our exception handler space - ok
+    // Detect jumps to unusual memory regions
+    // Exception handlers are now at 0x180000 (within chip RAM)
+    if (pc >= 0x180000 && pc < 0x180800) {
+      // This is our exception handler space (64 handlers x 32 bytes) - ok
+    } else if (pc >= 0x8000 && pc < 0xa000 && !this.executionState.gapJumpLogged) {
+      // PC in gap between typical CODE and DATA segments - likely bad jump
+      // This range 0x8000-0xA000 typically falls between segments
+      console.error(`\n*** JUMP TO CODE/DATA GAP DETECTED ***`);
+      console.error(`  Current PC: 0x${pc.toString(16)}`);
+      console.error(`  Iteration: ${this.executionState.iterationCount}`);
+      console.error(`  SP: 0x${this.emulator.getRegister(15).toString(16)}`);
+      console.error(`  A4: 0x${this.emulator.getRegister(12).toString(16)}`);
+      console.error(`  A5: 0x${this.emulator.getRegister(13).toString(16)}`);
+      console.error(`  PC History (last ${Math.min(20, this.pcHistory.length)}):`);
+      const startIdx = Math.max(0, this.pcHistory.length - 20);
+      this.pcHistory.slice(startIdx).forEach((p, i) => {
+        console.error(`    [${startIdx + i}] 0x${p.toString(16)}`);
+      });
+      this.executionState.gapJumpLogged = true; // Only log once
     } else if (pc >= 0xf80000) {
       // This is ROM space - check if it's a bad jump
       console.error(`\n*** JUMP TO ROM DETECTED ***`);
@@ -1045,8 +1073,79 @@ export class DoorLifecycleManager {
     // CRITICAL: Track SP before instruction to detect corruption
     const spBefore = this.emulator.getRegister(15);
 
+    // CRITICAL FIX: Check for ILLEGAL instruction (0x4AFC) BEFORE executing
+    // This is how we intercept library calls - doors use JSR -offset(A6)
+    // which jumps to library vectors containing ILLEGAL instructions
+    const opcode = this.emulator.readMemory16(pc);
+    if (opcode === 0x4AFC) {
+      // ILLEGAL instruction - this is a library call trap!
+      // handleIllegal will route to LibraryTraps if PC is at library vector
+      const handled = this.emulator.handleIllegal(pc);
+      if (handled) {
+        // Library call was handled, no need to execute the instruction
+        this.executionState.totalCycles += 4; // ILLEGAL takes ~4 cycles
+        return;
+      }
+      // If not handled, fall through to normal execution
+    }
+
     const cyclesExecuted = this.emulator.executeInstruction();
     this.executionState.totalCycles += cyclesExecuted;
+
+    // CRITICAL: Check if we ended up at an exception handler
+    // This means MOIRA triggered an exception internally (not through our ILLEGAL check)
+    const pcAfterExec = this.emulator.getRegister(16);
+    if (pcAfterExec >= 0x180000 && pcAfterExec < 0x180800) {
+      // We're at an exception handler! MOIRA handled an exception internally.
+      // Check which exception (each handler is 32 bytes apart)
+      const exceptionNum = (pcAfterExec - 0x180000) / 32;
+      console.error(`[DoorLifecycleManager] *** MOIRA EXCEPTION ${exceptionNum} at PC=0x${pc.toString(16)} ***`);
+
+      // For ILLEGAL (exception 4), try our library trap handler
+      if (exceptionNum === 4) {
+        // Get the PC that caused the exception (it's on stack)
+        const sp = this.emulator.getRegister(15);
+        const exceptionPC = this.emulator.readMemory32(sp + 2); // SR is at SP, PC at SP+2
+        console.error(`[DoorLifecycleManager] ILLEGAL exception, original PC was 0x${exceptionPC.toString(16)}`);
+
+        // Try to handle as library trap
+        const handled = this.emulator.handleIllegal(exceptionPC);
+        if (handled) {
+          console.log(`[DoorLifecycleManager] Recovered from ILLEGAL via library trap`);
+          // Pop the exception frame manually (SR=2 bytes, PC=4 bytes)
+          this.emulator.setRegister(15, sp + 6);
+          return;
+        }
+      }
+
+      // If not handled, log details and continue (exception handler will try to recover)
+      console.error(`[DoorLifecycleManager] Exception not handled as library trap, letting handler run`);
+    }
+
+    // Check for unexpected PC jumps (not normal instruction flow)
+    const newPc = this.emulator.getRegister(16);
+    const pcDelta = newPc - pc;
+    // Normal instructions advance PC by 2-10 bytes, branches go backwards or small forward
+    // A jump from 0x2xxx to 0x9xxx is suspicious
+    if (pcDelta > 0x2000 || (pcDelta < 0 && pcDelta > -0x8000 && newPc > 0x8000 && newPc < 0xa000)) {
+      console.error(`\n*** UNEXPECTED PC JUMP DETECTED ***`);
+      console.error(`  PC before: 0x${pc.toString(16)}`);
+      console.error(`  PC after:  0x${newPc.toString(16)}`);
+      console.error(`  Delta: 0x${pcDelta.toString(16)} (${pcDelta})`);
+      console.error(`  SP: 0x${this.emulator.getRegister(15).toString(16)}`);
+      console.error(`  SR: 0x${this.emulator.getRegister(17).toString(16)}`);
+      console.error(`  Iteration: ${this.executionState.iterationCount}`);
+      try {
+        const op0 = this.emulator.readMemory(pc);
+        const op1 = this.emulator.readMemory(pc + 1);
+        const opcode = (op0 << 8) | op1;
+        console.error(`  Instruction at 0x${pc.toString(16)}: 0x${opcode.toString(16).padStart(4, '0')}`);
+      } catch (e) {
+        console.error(`  Could not read instruction`);
+      }
+      console.error(`  Registers: D0=0x${this.emulator.getRegister(0).toString(16)} D1=0x${this.emulator.getRegister(1).toString(16)}`);
+      console.error(`             A0=0x${this.emulator.getRegister(8).toString(16)} A5=0x${this.emulator.getRegister(13).toString(16)} A6=0x${this.emulator.getRegister(14).toString(16)}`);
+    }
 
     // CRITICAL: Check for SP corruption immediately after instruction
     const spAfter = this.emulator.getRegister(15);
@@ -1308,17 +1407,72 @@ export class DoorLifecycleManager {
     const sp = this.emulator.getRegister(15);
     const doorName = path.basename(this.config.executablePath);
 
-    console.error("[DoorLifecycleManager] 💥 ERROR in execution loop:", error);
+    console.error("[DoorLifecycleManager] ERROR in execution loop:", error);
     console.error(
-      `[DoorLifecycleManager] 💥 Iteration: ${this.executionState.iterationCount}`
+      `[DoorLifecycleManager] Iteration: ${this.executionState.iterationCount}`
     );
-    console.error(`[DoorLifecycleManager] 💥 PC: 0x${pc.toString(16)}`);
-    console.error(`[DoorLifecycleManager] 💥 SP: 0x${sp.toString(16)}`);
+    console.error(`[DoorLifecycleManager] PC: 0x${pc.toString(16)}`);
+    console.error(`[DoorLifecycleManager] SP: 0x${sp.toString(16)}`);
     console.error(
-      `[DoorLifecycleManager] 💥 Stack: ${
+      `[DoorLifecycleManager] Stack: ${
         error instanceof Error ? error.stack : "No stack"
       }`
     );
+
+    // Gather all registers for crash dump
+    const registers = {
+      d0: this.emulator.getRegister(0),
+      d1: this.emulator.getRegister(1),
+      d2: this.emulator.getRegister(2),
+      d3: this.emulator.getRegister(3),
+      d4: this.emulator.getRegister(4),
+      d5: this.emulator.getRegister(5),
+      d6: this.emulator.getRegister(6),
+      d7: this.emulator.getRegister(7),
+      a0: this.emulator.getRegister(8),
+      a1: this.emulator.getRegister(9),
+      a2: this.emulator.getRegister(10),
+      a3: this.emulator.getRegister(11),
+      a4: this.emulator.getRegister(12),
+      a5: this.emulator.getRegister(13),
+      a6: this.emulator.getRegister(14),
+    };
+
+    // Read stack contents (8 longwords starting at SP)
+    const stackContents: number[] = [];
+    try {
+      for (let i = 0; i < 8; i++) {
+        const addr = sp + (i * 4);
+        if (addr >= 0 && addr < 0x1000000) { // Valid 24-bit address
+          stackContents.push(this.emulator.readMemory32(addr));
+        }
+      }
+    } catch {
+      // Ignore memory read errors during crash dump
+    }
+
+    // Gather memory at key locations
+    const memoryDump: { address: number; value: number; label?: string }[] = [];
+    try {
+      // A4-relative data (small data model)
+      const a4 = registers.a4;
+      if (a4 >= 0x7FFE) {
+        memoryDump.push({ address: a4 - 0x40, value: this.emulator.readMemory32(a4 - 0x40), label: 'A4-0x40' });
+        memoryDump.push({ address: a4 - 0x1c, value: this.emulator.readMemory32(a4 - 0x1c), label: 'A4-0x1c' });
+      }
+      // A5-relative frame (Amiga E runtime)
+      const a5 = registers.a5;
+      if (a5 > 0) {
+        memoryDump.push({ address: a5 - 0x28, value: this.emulator.readMemory32(a5 - 0x28), label: 'A5-0x28 execbase' });
+        memoryDump.push({ address: a5 - 0x2c, value: this.emulator.readMemory32(a5 - 0x2c), label: 'A5-0x2c dosbase' });
+      }
+      // Memory at PC (what instruction caused the crash)
+      if (pc > 0 && pc < 0x1000000) {
+        memoryDump.push({ address: pc, value: this.emulator.readMemory32(pc), label: 'at PC' });
+      }
+    } catch {
+      // Ignore memory read errors during crash dump
+    }
 
     // Send detailed crash information to sysop
     SysopDebugUtil.debugDoorCrash(
@@ -1330,10 +1484,16 @@ export class DoorLifecycleManager {
         sp,
         iteration: this.executionState.iterationCount,
         error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        registers,
+        pcHistory: [...this.pcHistory], // Copy of PC history
+        stackContents,
+        memoryDump,
         lastSignificantPC: this.executionState.lastSignificantPC,
         writeCallCount: this.executionState.writeCallCount,
         aedoorCallCount: this.executionState.aedoorCallCount,
+        stackBase: 0x6e74, // From DoorLoader
+        stackSize: this.config.stack || 8192,
+        stack: error instanceof Error ? error.stack : undefined,
       }
     );
 

@@ -912,6 +912,10 @@ export class XIMProtocol {
 
     // Try to find the command's .info file
     const bbsPath = (this.bbsSession as any)?.dataDir || (this.bbsSession as any)?.bbsRoot || process.cwd();
+    console.log(`[XIMProtocol]   Using bbsPath: ${bbsPath}`);
+    console.log(`[XIMProtocol]   bbsSession.dataDir: ${(this.bbsSession as any)?.dataDir}`);
+    console.log(`[XIMProtocol]   bbsSession.bbsRoot: ${(this.bbsSession as any)?.bbsRoot}`);
+
     const possiblePaths = [
       path.join(bbsPath, 'Commands', 'BBSCmd', `${this.doorCommand}.info`),
       path.join(bbsPath, 'Commands', 'SysCmd', `${this.doorCommand}.info`),
@@ -920,9 +924,10 @@ export class XIMProtocol {
 
     let infoPath = '';
     for (const p of possiblePaths) {
+      console.log(`[XIMProtocol]   Checking: ${p} -> ${fs.existsSync(p) ? 'EXISTS' : 'NOT FOUND'}`);
       if (fs.existsSync(p)) {
         infoPath = p;
-        console.log(`[XIMProtocol]   Found .info file: ${infoPath}`);
+        console.log(`[XIMProtocol]   ✓ Found .info file: ${infoPath}`);
         break;
       }
     }

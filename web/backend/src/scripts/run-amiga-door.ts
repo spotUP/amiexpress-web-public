@@ -101,6 +101,14 @@ async function main() {
   let assignsArg: Record<string, string> = {};
   let toolTypesArg: Record<string, string> = {};
   let doorTypeArg: string | undefined = undefined;
+  let doorIdArg: string | undefined = undefined;
+
+  // Parse --doorId argument (command name used to launch door, e.g., "FR")
+  const doorIdIndex = args.indexOf('--doorId');
+  if (doorIdIndex >= 0 && doorIdIndex + 1 < args.length) {
+    doorIdArg = args[doorIdIndex + 1];
+    args.splice(doorIdIndex, 2);
+  }
 
   const assignsIndex = args.indexOf('--assigns');
   if (assignsIndex >= 0 && assignsIndex + 1 < args.length) {
@@ -128,7 +136,7 @@ async function main() {
 
   const [execPathArg, nodeArg, ...doorArgs] = args;
   if (!execPathArg) {
-    console.error('Usage: ts-node run-amiga-door.ts <doorPath> <nodeId> [--doortype TYPE] [--assigns JSON] [--tooltypes JSON] [args...]');
+    console.error('Usage: ts-node run-amiga-door.ts <doorPath> <nodeId> [--doorId CMD] [--doortype TYPE] [--assigns JSON] [--tooltypes JSON] [args...]');
     process.exit(1);
   }
   const execPath = path.isAbsolute(execPathArg)
@@ -142,6 +150,7 @@ async function main() {
       args: doorArgs,
       nodeId,
       cwd,
+      doorId: doorIdArg,
       doorType: doorTypeArg,
       assigns: assignsArg,
       toolTypes: Object.keys(toolTypesArg).length ? toolTypesArg : { DISABLE_GUARD: 'true' }, // allow batch doors to run longer if needed

@@ -5,12 +5,14 @@ import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import type { SessionInfo } from '../types';
 import { SessionLogTerminal } from '../components/SessionLogTerminal';
+import { stripAnsiCodes } from '../utils/ansi-parser';
 
 export function SessionLogsPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [viewMode, setViewMode] = useState<'terminal' | 'raw'>('raw');
 
   // Fetch active sessions
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
@@ -193,6 +195,28 @@ export function SessionLogsPage() {
               Session Log: {sessionLog?.username || 'Loading...'}
             </h2>
             <div className="flex gap-2">
+              <div className="flex bg-bbs-surface rounded">
+                <button
+                  onClick={() => setViewMode('raw')}
+                  className={`px-3 py-2 rounded-l ${
+                    viewMode === 'raw'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-bbs-text hover:bg-bbs-hover'
+                  }`}
+                >
+                  Raw Text
+                </button>
+                <button
+                  onClick={() => setViewMode('terminal')}
+                  className={`px-3 py-2 rounded-r ${
+                    viewMode === 'terminal'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-bbs-text hover:bg-bbs-hover'
+                  }`}
+                >
+                  Terminal View
+                </button>
+              </div>
               <button
                 onClick={handleCopyLog}
                 className="px-3 py-2 bg-bbs-surface text-bbs-text rounded hover:bg-bbs-hover flex items-center gap-2"
@@ -216,9 +240,18 @@ export function SessionLogsPage() {
               Loading log...
             </div>
           ) : sessionLog ? (
-            <div className="border border-bbs-border rounded-lg overflow-hidden" style={{ height: '600px' }}>
-              <SessionLogTerminal content={sessionLog.output} />
-            </div>
+            viewMode === 'terminal' ? (
+              <div className="border border-bbs-border rounded-lg overflow-hidden" style={{ height: '600px' }}>
+                <SessionLogTerminal content={sessionLog.output} />
+              </div>
+            ) : (
+              <div
+                className="border border-bbs-border rounded-lg overflow-auto bg-black p-4 font-mono text-sm whitespace-pre-wrap text-green-400"
+                style={{ height: '600px' }}
+              >
+                {stripAnsiCodes(sessionLog.output.join(''))}
+              </div>
+            )
           ) : (
             <div className="bg-bbs-surface p-8 rounded-lg border border-bbs-border text-center text-bbs-muted">
               Session log not found

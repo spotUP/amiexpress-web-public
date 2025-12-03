@@ -171,7 +171,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   if (program.includes('multitop/mtop')) {
     const doorPath = resolveAssign('doors:multitop/mtop');
     // Expect args: <design> <output> [ignoresysop] [userdata] [userDataPath]
-    const args = amigaArgs;
+    const args = resolvedArgs;
     const nodeNum = nodeId || 1;
     if (doorPath) {
       await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath));
@@ -180,15 +180,14 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     return;
   }
 
-  // Special-case QuickNew (68K) to generate screens:quicknew.txt with higher loop limit
+  // Special-case QuickNew (68K) to generate screens:quicknew.txt
   if (program.includes('quicknew/quicknew')) {
     const doorPath = resolveAssign('doors:quicknew/quicknew');
-    const args = amigaArgs; // e.g., quicknew.config1 <days>
+    const args = resolvedArgs; // Use resolved paths to avoid path doubling
     const nodeNum = nodeId || 1;
     if (doorPath) {
       const envOverrides = {
         AEDOOR_STDOUT: 'screens:quicknew.txt',
-        AEDOOR_LOOP_LIMIT: '2000000',
       };
       await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath), undefined, envOverrides);
       console.log('[BatchScheduler] Ran QuickNew with stdout redirected to screens:quicknew.txt');
@@ -199,7 +198,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   // Special-case SlickTop (68K) to generate bull11
   if (program.includes('slicktop/slicktop')) {
     const doorPath = resolveAssign('doors:slicktop/slicktop');
-    const args = amigaArgs; // e.g., bbs:bulletins/bull11.txt bbs:conf14/conf.db 20 3 "title"
+    const args = resolvedArgs; // Use resolved paths to avoid path doubling
     const nodeNum = nodeId || 1;
     if (doorPath) {
       await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath));

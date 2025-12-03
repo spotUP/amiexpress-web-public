@@ -49,6 +49,68 @@
    - Always use JSON for structured data
    - Create directories with `{ recursive: true }`
 
+6. **Input Handling** ⚠️ CRITICAL
+   - **ALWAYS** use `bbsSession.doorInputHandler` for input
+   - **NEVER** use `socket.on('user-input')` or `socket.once('user-input')`
+   - The socket patterns are deprecated and don't work
+   - See [TypeScript Door Guide](./TYPESCRIPT_DOOR_GUIDE.md) for details
+
+---
+
+## Door Patterns
+
+The SDK supports two door development patterns:
+
+### Pattern 1: Simple runDoor() Function (Recommended for Most Doors)
+
+Use this for utilities, simple games, and straightforward doors:
+
+```typescript
+export async function runDoor(doorSession: any): Promise<void> {
+  const { socket, user, bbsSession, bbs, params } = doorSession;
+
+  // Your door logic
+  socket.emit('ansi-output', `Hello, ${user.username}!\r\n`);
+
+  // Input handling (CORRECT WAY)
+  await new Promise<void>((resolve) => {
+    bbsSession.doorInputHandler = (data: string) => {
+      delete bbsSession.doorInputHandler;
+      resolve();
+    };
+  });
+}
+```
+
+**Pros:** Simple, direct, no framework overhead
+**Cons:** Manual ANSI handling, no high-level UI components
+**Best for:** Information displays, simple utilities, quick tools
+
+📖 **See:** [TypeScript Door Guide](./TYPESCRIPT_DOOR_GUIDE.md) for complete details
+
+### Pattern 2: SDK Class-Based Framework (For Complex Games)
+
+Use this for advanced games requiring engines (graphics, physics, AI):
+
+```typescript
+import { Door, GraphicsEngine, InputEngine } from '@amiexpress/sdk';
+
+const door = new Door({ name: 'My Game', version: '1.0.0' });
+const gfx = new GraphicsEngine({ width: 80, height: 24 });
+
+door.onConnect(async (user) => {
+  // Complex game logic with engines
+});
+
+door.start();
+```
+
+**Pros:** Rich UI components, physics, AI, multiplayer support
+**Cons:** More complex, larger bundle size
+**Best for:** RPGs, arcade games, multiplayer experiences
+
+📖 **See:** Sections below for full SDK framework details
+
 ---
 
 ## SDK Architecture Overview

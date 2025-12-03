@@ -16,6 +16,15 @@ import { ExecLibrary } from "./ExecLibrary";
 import { AEDoorLibrary } from "./AEDoorLibrary";
 import { DosLibrary } from "./DosLibrary";
 import { IconLibrary } from "./IconLibrary";
+import { UtilityLibrary } from "./UtilityLibrary";
+import {
+  MathFFPLibrary,
+  MathTransLibrary,
+  MathIEEEDoubBasLibrary,
+  MathIEEEDoubTransLibrary,
+  MathIEEESingBasLibrary,
+  MathIEEESingTransLibrary,
+} from "./MathLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 import * as fs from "fs";
 import * as path from "path";
@@ -428,6 +437,1054 @@ const DOS_VECTORS: LibraryVector[] = [
       return emu.getRegister(0);
     },
   },
+];
+
+/**
+ * Tag constants from <utility/tagitem.h>
+ */
+const TAG_DONE = 0;     // Terminates array, ti_Data unused
+const TAG_IGNORE = 1;   // Ignore this item, not end of array
+const TAG_MORE = 2;     // ti_Data is pointer to another array (terminates current)
+const TAG_SKIP = 3;     // Skip this and the next ti_Data items
+const TAG_USER = 0x80000000; // User tags start here
+
+/**
+ * Helper: Read a TagItem from memory
+ * Returns { ti_Tag, ti_Data } or null if address is 0
+ */
+function readTagItem(emu: MoiraEmulator, addr: number): { ti_Tag: number; ti_Data: number } | null {
+  if (addr === 0) return null;
+  const ti_Tag = emu.readMemory32(addr);
+  const ti_Data = emu.readMemory32(addr + 4);
+  return { ti_Tag, ti_Data };
+}
+
+/**
+ * Helper: Implement NextTagItem logic
+ * Takes a pointer to pointer (address of tagItemPtr variable) and returns next valid TagItem
+ * Handles TAG_DONE, TAG_IGNORE, TAG_MORE, TAG_SKIP
+ */
+function nextTagItemImpl(emu: MoiraEmulator, tagItemPtrAddr: number): number {
+  if (tagItemPtrAddr === 0) return 0;
+
+  // Read the current TagItem pointer
+  let currentPtr = emu.readMemory32(tagItemPtrAddr);
+  if (currentPtr === 0) return 0;
+
+  while (true) {
+    const tag = readTagItem(emu, currentPtr);
+    if (!tag) return 0;
+
+    switch (tag.ti_Tag) {
+      case TAG_DONE:
+        // End of list - update pointer and return NULL
+        emu.writeMemory32(tagItemPtrAddr, 0);
+        return 0;
+
+      case TAG_IGNORE:
+        // Skip this entry, continue to next
+        currentPtr += 8; // sizeof(TagItem)
+        continue;
+
+      case TAG_MORE:
+        // ti_Data points to another tag array, chain to it
+        currentPtr = tag.ti_Data;
+        if (currentPtr === 0) {
+          emu.writeMemory32(tagItemPtrAddr, 0);
+          return 0;
+        }
+        continue;
+
+      case TAG_SKIP:
+        // Skip this entry and ti_Data more entries
+        currentPtr += 8 * (1 + tag.ti_Data);
+        continue;
+
+      default:
+        // Valid tag - update pointer to point to NEXT entry and return THIS entry
+        emu.writeMemory32(tagItemPtrAddr, currentPtr + 8);
+        return currentPtr;
+    }
+  }
+}
+
+/**
+ * Helper: Find a tag in a tag list
+ * Returns pointer to TagItem or 0 if not found
+ */
+function findTagItemImpl(emu: MoiraEmulator, tagValue: number, tagList: number): number {
+  if (tagList === 0) return 0;
+
+  // We need a temporary storage for the pointer
+  // Use a high memory address that won't conflict
+  const tempPtrAddr = 0x1FE000; // Temporary storage for pointer
+  emu.writeMemory32(tempPtrAddr, tagList);
+
+  let maxIterations = 1000; // Safety limit
+  while (maxIterations-- > 0) {
+    const tagItemAddr = nextTagItemImpl(emu, tempPtrAddr);
+    if (tagItemAddr === 0) break;
+
+    const tag = readTagItem(emu, tagItemAddr);
+    if (tag && tag.ti_Tag === tagValue) {
+      return tagItemAddr;
+    }
+  }
+
+  return 0; // Not found
+}
+
+/**
+ * icon.library function vectors
+ * Reference: NDK3.2R4/Include_I/lvo/icon_lib.i
+ * LVO = Library Vector Offset (in bytes from library base)
+ */
+const ICON_VECTORS: LibraryVector[] = [
+  {
+    offset: -30, // LVO -30: GetDiskObject
+    name: "GetDiskObject",
+    handler: (emu, lib: IconLibrary) => {
+      lib.GetDiskObject();
+      return emu.getRegister(0); // D0 = DiskObject pointer or NULL
+    },
+  },
+  {
+    offset: -36, // LVO -36: PutDiskObject
+    name: "PutDiskObject",
+    handler: (emu, lib: IconLibrary) => {
+      lib.PutDiskObject();
+      return emu.getRegister(0); // D0 = success (non-zero) or failure (0)
+    },
+  },
+  {
+    offset: -42, // LVO -42: FreeDiskObject
+    name: "FreeDiskObject",
+    handler: (emu, lib: IconLibrary) => {
+      lib.FreeDiskObject();
+      return 0;
+    },
+  },
+  {
+    offset: -48, // LVO -48: FindToolType
+    name: "FindToolType",
+    handler: (emu, lib: IconLibrary) => {
+      lib.FindToolType();
+      return emu.getRegister(0); // D0 = pointer to tooltype value or NULL
+    },
+  },
+  {
+    offset: -54, // LVO -54: MatchToolValue
+    name: "MatchToolValue",
+    handler: (emu, lib: IconLibrary) => {
+      lib.MatchToolValue();
+      return emu.getRegister(0); // D0 = TRUE/FALSE
+    },
+  },
+];
+
+/**
+ * utility.library function vectors
+ * Reference: NDK3.2R4/Include_I/lvo/utility_lib.i
+ * LVO = Library Vector Offset (in bytes from library base)
+ */
+const UTILITY_VECTORS: LibraryVector[] = [
+  // Tag-related functions (offsets -30 to -96)
+  {
+    offset: -30, // LVO -30: FindTagItem
+    name: "FindTagItem",
+    handler: (emu, lib: UtilityLibrary) => {
+      // Input: D0 = tagValue to search for, A0 = tagList
+      // Output: D0 = pointer to TagItem or NULL
+      const tagValue = emu.getRegister(0);  // D0
+      const tagList = emu.getRegister(8);   // A0
+
+      const result = findTagItemImpl(emu, tagValue, tagList);
+      console.log(`[UtilityLibrary] FindTagItem(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${result.toString(16)}`);
+      return result;
+    },
+  },
+  {
+    offset: -36, // LVO -36: GetTagData
+    name: "GetTagData",
+    handler: (emu, lib: UtilityLibrary) => {
+      // Input: D0 = tagValue, D1 = defaultVal, A0 = tagList
+      // Output: D0 = ti_Data for matching tag, or defaultVal if not found
+      const tagValue = emu.getRegister(0);    // D0
+      const defaultVal = emu.getRegister(1);  // D1
+      const tagList = emu.getRegister(8);     // A0
+
+      const tagItemAddr = findTagItemImpl(emu, tagValue, tagList);
+      if (tagItemAddr !== 0) {
+        const tag = readTagItem(emu, tagItemAddr);
+        if (tag) {
+          console.log(`[UtilityLibrary] GetTagData(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${tag.ti_Data.toString(16)} (found)`);
+          return tag.ti_Data;
+        }
+      }
+
+      console.log(`[UtilityLibrary] GetTagData(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${defaultVal.toString(16)} (default)`);
+      return defaultVal;
+    },
+  },
+  {
+    offset: -42, // LVO -42: PackBoolTags
+    name: "PackBoolTags",
+    handler: (emu) => {
+      // Input: D0 = initialFlags, A0 = tagList, A1 = boolMap (TagItem array)
+      // Output: D0 = flags with bits set/cleared according to boolMap and tagList
+      // For each tag in boolMap, if that tag exists in tagList with non-zero ti_Data,
+      // set the corresponding bit (boolMap's ti_Data) in the flags word.
+      const initialFlags = emu.getRegister(0);  // D0
+      const tagList = emu.getRegister(8);       // A0
+      const boolMap = emu.getRegister(9);       // A1
+
+      let flags = initialFlags;
+
+      if (boolMap !== 0) {
+        // Use temporary pointer storage
+        const tempPtrAddr = 0x1FE008;
+        emu.writeMemory32(tempPtrAddr, boolMap);
+
+        let maxIterations = 100;
+        while (maxIterations-- > 0) {
+          const mapItemAddr = nextTagItemImpl(emu, tempPtrAddr);
+          if (mapItemAddr === 0) break;
+
+          const mapItem = readTagItem(emu, mapItemAddr);
+          if (!mapItem) break;
+
+          // Look for this tag in the tagList
+          const foundAddr = findTagItemImpl(emu, mapItem.ti_Tag, tagList);
+          if (foundAddr !== 0) {
+            const foundTag = readTagItem(emu, foundAddr);
+            if (foundTag && foundTag.ti_Data !== 0) {
+              // Set the bit specified by mapItem.ti_Data
+              flags |= mapItem.ti_Data;
+            } else {
+              // Clear the bit (tag exists but ti_Data is 0)
+              flags &= ~mapItem.ti_Data;
+            }
+          }
+        }
+      }
+
+      console.log(`[UtilityLibrary] PackBoolTags(init=0x${initialFlags.toString(16)}) = 0x${flags.toString(16)}`);
+      return flags;
+    },
+  },
+  {
+    offset: -48, // LVO -48: NextTagItem
+    name: "NextTagItem",
+    handler: (emu) => {
+      // Input: A0 = pointer to pointer to TagItem (tagItemPtr)
+      // Output: D0 = pointer to next TagItem, or NULL if end of list
+      // The pointer at A0 is updated to point to the entry AFTER the returned one
+      const tagItemPtrAddr = emu.getRegister(8); // A0
+
+      const result = nextTagItemImpl(emu, tagItemPtrAddr);
+      // Note: tagItemPtrAddr memory has been updated by nextTagItemImpl
+
+      if (result !== 0) {
+        const tag = readTagItem(emu, result);
+        console.log(`[UtilityLibrary] NextTagItem(ptr=0x${tagItemPtrAddr.toString(16)}) = 0x${result.toString(16)} (tag=0x${tag?.ti_Tag.toString(16)})`);
+      } else {
+        console.log(`[UtilityLibrary] NextTagItem(ptr=0x${tagItemPtrAddr.toString(16)}) = NULL (end of list)`);
+      }
+      return result;
+    },
+  },
+  {
+    offset: -54, // LVO -54: FilterTagChanges
+    name: "FilterTagChanges",
+    handler: (emu) => {
+      // Input: A0 = new tagList, A1 = original tagList, D0 = flags
+      // Output: void
+      // Compares new tags vs original and eliminates tags that specify no change
+      const newList = emu.getRegister(8);   // A0
+      const origList = emu.getRegister(9);  // A1
+      const apply = emu.getRegister(0);     // D0 (TRUE = apply changes, FALSE = filter only)
+
+      if (newList === 0) {
+        console.log("[UtilityLibrary] FilterTagChanges - NULL newList");
+        return 0;
+      }
+
+      // Use temporary pointer for iteration
+      const tempPtrAddr = 0x1FE010;
+      emu.writeMemory32(tempPtrAddr, newList);
+
+      let filtered = 0;
+      let maxIterations = 1000;
+      while (maxIterations-- > 0) {
+        const tagAddr = nextTagItemImpl(emu, tempPtrAddr);
+        if (tagAddr === 0) break;
+
+        const tag = readTagItem(emu, tagAddr);
+        if (!tag) break;
+
+        // Find same tag in original list
+        const origAddr = findTagItemImpl(emu, tag.ti_Tag, origList);
+        if (origAddr !== 0) {
+          const origTag = readTagItem(emu, origAddr);
+          if (origTag && origTag.ti_Data === tag.ti_Data) {
+            // Same value - mark as TAG_IGNORE to filter out
+            emu.writeMemory32(tagAddr, TAG_IGNORE);
+            filtered++;
+          } else if (apply && origTag) {
+            // Apply change to original
+            emu.writeMemory32(origAddr + 4, tag.ti_Data);
+          }
+        }
+      }
+
+      console.log(`[UtilityLibrary] FilterTagChanges(new=0x${newList.toString(16)}, orig=0x${origList.toString(16)}) filtered ${filtered}`);
+      return 0;
+    },
+  },
+  {
+    offset: -58, // Non-standard offset - some doors call this
+    name: "Utility_-58_Stub",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] WARNING: Called non-standard offset -58 - stub");
+      return 0;
+    },
+  },
+  {
+    offset: -60, // LVO -60: MapTags
+    name: "MapTags",
+    handler: (emu) => {
+      // Input: A0 = tagList, A1 = mapList, D0 = includeMask
+      // Output: void
+      // Converts tag values in tagList using mappings from mapList
+      const tagList = emu.getRegister(8);   // A0
+      const mapList = emu.getRegister(9);   // A1
+      const includeMask = emu.getRegister(0); // D0
+
+      if (tagList === 0 || mapList === 0) {
+        console.log("[UtilityLibrary] MapTags - NULL list");
+        return 0;
+      }
+
+      // Iterate through tagList
+      const tempPtrAddr = 0x1FE018;
+      emu.writeMemory32(tempPtrAddr, tagList);
+
+      let mapped = 0;
+      let maxIterations = 1000;
+      while (maxIterations-- > 0) {
+        const tagAddr = nextTagItemImpl(emu, tempPtrAddr);
+        if (tagAddr === 0) break;
+
+        const tag = readTagItem(emu, tagAddr);
+        if (!tag) break;
+
+        // Look for this tag in the mapList
+        const mapAddr = findTagItemImpl(emu, tag.ti_Tag, mapList);
+        if (mapAddr !== 0) {
+          const mapTag = readTagItem(emu, mapAddr);
+          if (mapTag) {
+            // Replace ti_Tag with the mapped value
+            emu.writeMemory32(tagAddr, mapTag.ti_Data);
+            mapped++;
+          }
+        }
+      }
+
+      console.log(`[UtilityLibrary] MapTags(tags=0x${tagList.toString(16)}, map=0x${mapList.toString(16)}) mapped ${mapped}`);
+      return 0;
+    },
+  },
+  {
+    offset: -66, // LVO -66: AllocateTagItems
+    name: "AllocateTagItems",
+    handler: (emu, lib: UtilityLibrary) => {
+      // Input: D0 = numItems
+      // Output: D0 = pointer to allocated TagItem array or NULL
+      const numItems = emu.getRegister(0);
+
+      if (numItems === 0) {
+        console.log("[UtilityLibrary] AllocateTagItems(0) = NULL");
+        return 0;
+      }
+
+      // Allocate memory for TagItem array (8 bytes each + TAG_DONE terminator)
+      const size = (numItems + 1) * 8;
+      // Use a simple bump allocator from high memory
+      const allocAddr = 0x1F0000 + (Math.random() * 0x8000) | 0;
+
+      // Initialize with TAG_DONE
+      for (let i = 0; i <= numItems; i++) {
+        emu.writeMemory32(allocAddr + i * 8, TAG_DONE);
+        emu.writeMemory32(allocAddr + i * 8 + 4, 0);
+      }
+
+      console.log(`[UtilityLibrary] AllocateTagItems(${numItems}) = 0x${allocAddr.toString(16)}`);
+      return allocAddr;
+    },
+  },
+  {
+    offset: -72, // LVO -72: CloneTagItems
+    name: "CloneTagItems",
+    handler: (emu) => {
+      // Input: A0 = original tagList
+      // Output: D0 = pointer to cloned tagList or NULL
+      const original = emu.getRegister(8); // A0
+
+      if (original === 0) {
+        // Return empty tag list (just TAG_DONE)
+        const emptyAddr = 0x1F8000 + (Math.random() * 0x1000) | 0;
+        emu.writeMemory32(emptyAddr, TAG_DONE);
+        emu.writeMemory32(emptyAddr + 4, 0);
+        console.log(`[UtilityLibrary] CloneTagItems(NULL) = empty list at 0x${emptyAddr.toString(16)}`);
+        return emptyAddr;
+      }
+
+      // Count tags in original
+      const tempPtrAddr = 0x1FE020;
+      emu.writeMemory32(tempPtrAddr, original);
+      let count = 0;
+      let maxIterations = 1000;
+      while (maxIterations-- > 0) {
+        const addr = nextTagItemImpl(emu, tempPtrAddr);
+        if (addr === 0) break;
+        count++;
+      }
+
+      // Allocate and copy
+      const cloneAddr = 0x1F8000 + (Math.random() * 0x1000) | 0;
+      emu.writeMemory32(tempPtrAddr, original);
+      let idx = 0;
+      maxIterations = 1000;
+      while (maxIterations-- > 0) {
+        const addr = nextTagItemImpl(emu, tempPtrAddr);
+        if (addr === 0) break;
+        const tag = readTagItem(emu, addr);
+        if (tag) {
+          emu.writeMemory32(cloneAddr + idx * 8, tag.ti_Tag);
+          emu.writeMemory32(cloneAddr + idx * 8 + 4, tag.ti_Data);
+          idx++;
+        }
+      }
+      // Add TAG_DONE terminator
+      emu.writeMemory32(cloneAddr + idx * 8, TAG_DONE);
+      emu.writeMemory32(cloneAddr + idx * 8 + 4, 0);
+
+      console.log(`[UtilityLibrary] CloneTagItems(0x${original.toString(16)}) = 0x${cloneAddr.toString(16)} (${count} tags)`);
+      return cloneAddr;
+    },
+  },
+  {
+    offset: -78, // LVO -78: FreeTagItems
+    name: "FreeTagItems",
+    handler: (emu) => {
+      // Input: A0 = tagList
+      // Output: void
+      const tagList = emu.getRegister(8); // A0
+      // For our simple allocator, we just log and don't actually free
+      console.log(`[UtilityLibrary] FreeTagItems(0x${tagList.toString(16)})`);
+      return 0;
+    },
+  },
+  {
+    offset: -84, // LVO -84: RefreshTagItemClones
+    name: "RefreshTagItemClones",
+    handler: (emu) => {
+      // Input: A0 = clone, A1 = original
+      // Output: void
+      // Rejuvenates a clone from the original (copies data values back)
+      const clone = emu.getRegister(8);    // A0
+      const original = emu.getRegister(9); // A1
+
+      if (clone === 0 || original === 0) {
+        console.log("[UtilityLibrary] RefreshTagItemClones - NULL pointer");
+        return 0;
+      }
+
+      // Iterate through clone and update from original
+      const tempPtrAddr = 0x1FE028;
+      emu.writeMemory32(tempPtrAddr, clone);
+
+      let refreshed = 0;
+      let maxIterations = 1000;
+      while (maxIterations-- > 0) {
+        const cloneAddr = nextTagItemImpl(emu, tempPtrAddr);
+        if (cloneAddr === 0) break;
+
+        const cloneTag = readTagItem(emu, cloneAddr);
+        if (!cloneTag) break;
+
+        // Find in original
+        const origAddr = findTagItemImpl(emu, cloneTag.ti_Tag, original);
+        if (origAddr !== 0) {
+          const origTag = readTagItem(emu, origAddr);
+          if (origTag) {
+            emu.writeMemory32(cloneAddr + 4, origTag.ti_Data);
+            refreshed++;
+          }
+        }
+      }
+
+      console.log(`[UtilityLibrary] RefreshTagItemClones(clone=0x${clone.toString(16)}, orig=0x${original.toString(16)}) refreshed ${refreshed}`);
+      return 0;
+    },
+  },
+  {
+    offset: -90, // LVO -90: TagInArray
+    name: "TagInArray",
+    handler: (emu) => {
+      // Input: D0 = tagValue, A0 = tagArray (array of Tag values, NOT TagItems, terminated with TAG_DONE)
+      // Output: D0 = TRUE if found, FALSE otherwise
+      const tagValue = emu.getRegister(0); // D0
+      const tagArray = emu.getRegister(8); // A0
+
+      if (tagArray === 0) {
+        console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, NULL) = FALSE`);
+        return 0;
+      }
+
+      // Search array - this is an array of ULONGs (not TagItems), terminated by TAG_DONE
+      let addr = tagArray;
+      let maxIterations = 1000;
+      while (maxIterations-- > 0) {
+        const tag = emu.readMemory32(addr);
+        if (tag === TAG_DONE) break;
+        if (tag === tagValue) {
+          console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, 0x${tagArray.toString(16)}) = TRUE`);
+          return 1; // TRUE
+        }
+        addr += 4; // Next ULONG
+      }
+
+      console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, 0x${tagArray.toString(16)}) = FALSE`);
+      return 0; // FALSE
+    },
+  },
+  {
+    offset: -96, // LVO -96: FilterTagItems
+    name: "FilterTagItems",
+    handler: (emu) => {
+      // Input: A0 = tagList, A1 = filterArray (array of Tag values), D0 = logic (TAGFILTER_AND or TAGFILTER_NOT)
+      // Output: D0 = number of valid items remaining
+      // TAGFILTER_AND (0) = exclude everything but filter hits
+      // TAGFILTER_NOT (1) = exclude only filter hits
+      const tagList = emu.getRegister(8);     // A0
+      const filterArray = emu.getRegister(9); // A1
+      const logic = emu.getRegister(0);       // D0
+
+      if (tagList === 0) {
+        console.log("[UtilityLibrary] FilterTagItems(NULL) = 0");
+        return 0;
+      }
+
+      const tempPtrAddr = 0x1FE030;
+      emu.writeMemory32(tempPtrAddr, tagList);
+
+      let remaining = 0;
+      let filtered = 0;
+      let maxIterations = 1000;
+
+      while (maxIterations-- > 0) {
+        const tagAddr = nextTagItemImpl(emu, tempPtrAddr);
+        if (tagAddr === 0) break;
+
+        const tag = readTagItem(emu, tagAddr);
+        if (!tag) break;
+
+        // Check if tag is in filter array
+        let inArray = false;
+        if (filterArray !== 0) {
+          let checkAddr = filterArray;
+          let checkMax = 1000;
+          while (checkMax-- > 0) {
+            const filterTag = emu.readMemory32(checkAddr);
+            if (filterTag === TAG_DONE) break;
+            if (filterTag === tag.ti_Tag) {
+              inArray = true;
+              break;
+            }
+            checkAddr += 4;
+          }
+        }
+
+        // Apply filter logic
+        const shouldKeep = logic === 0 ? inArray : !inArray; // AND vs NOT
+        if (shouldKeep) {
+          remaining++;
+        } else {
+          // Mark as TAG_IGNORE
+          emu.writeMemory32(tagAddr, TAG_IGNORE);
+          filtered++;
+        }
+      }
+
+      console.log(`[UtilityLibrary] FilterTagItems(tags=0x${tagList.toString(16)}, logic=${logic}) kept ${remaining}, filtered ${filtered}`);
+      return remaining;
+    },
+  },
+  // Additional utility functions (-102 to -132)
+  {
+    offset: -102, // LVO -102: CallHookPkt
+    name: "CallHookPkt",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] CallHookPkt() - stub, returns 0");
+      return 0;
+    },
+  },
+  {
+    offset: -120, // LVO -120: Amiga2Date
+    name: "Amiga2Date",
+    handler: (emu) => {
+      // Input: D0 = seconds since 01-Jan-1978, A0 = pointer to ClockData structure
+      // Output: void (fills ClockData structure)
+      // ClockData: sec(UWORD), min(UWORD), hour(UWORD), mday(UWORD), month(UWORD), year(UWORD), wday(UWORD)
+      const amigaSeconds = emu.getRegister(0) >>> 0; // D0
+      const clockDataAddr = emu.getRegister(8);      // A0
+
+      if (clockDataAddr === 0) {
+        console.log("[UtilityLibrary] Amiga2Date - NULL ClockData pointer");
+        return 0;
+      }
+
+      // Amiga epoch: 1978-01-01 00:00:00
+      // JavaScript epoch: 1970-01-01 00:00:00
+      // Difference: 8 years = 252,288,000 seconds (accounting for leap years 1972, 1976)
+      const AMIGA_EPOCH_OFFSET = 252288000; // Seconds from 1970 to 1978
+      const unixSeconds = amigaSeconds + AMIGA_EPOCH_OFFSET;
+      const date = new Date(unixSeconds * 1000);
+
+      const sec = date.getUTCSeconds();
+      const min = date.getUTCMinutes();
+      const hour = date.getUTCHours();
+      const mday = date.getUTCDate();
+      const month = date.getUTCMonth() + 1; // JavaScript months are 0-based
+      const year = date.getUTCFullYear();
+      const wday = date.getUTCDay(); // 0=Sunday
+
+      // Write to ClockData structure
+      emu.writeMemory16(clockDataAddr + 0, sec);
+      emu.writeMemory16(clockDataAddr + 2, min);
+      emu.writeMemory16(clockDataAddr + 4, hour);
+      emu.writeMemory16(clockDataAddr + 6, mday);
+      emu.writeMemory16(clockDataAddr + 8, month);
+      emu.writeMemory16(clockDataAddr + 10, year);
+      emu.writeMemory16(clockDataAddr + 12, wday);
+
+      console.log(`[UtilityLibrary] Amiga2Date(${amigaSeconds}) = ${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')} ${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`);
+      return 0;
+    },
+  },
+  {
+    offset: -126, // LVO -126: Date2Amiga
+    name: "Date2Amiga",
+    handler: (emu) => {
+      // Input: A0 = pointer to ClockData structure
+      // Output: D0 = seconds since 01-Jan-1978
+      const clockDataAddr = emu.getRegister(8); // A0
+
+      if (clockDataAddr === 0) {
+        console.log("[UtilityLibrary] Date2Amiga - NULL ClockData pointer");
+        return 0;
+      }
+
+      // Read ClockData structure
+      const sec = emu.readMemory16(clockDataAddr + 0);
+      const min = emu.readMemory16(clockDataAddr + 2);
+      const hour = emu.readMemory16(clockDataAddr + 4);
+      const mday = emu.readMemory16(clockDataAddr + 6);
+      const month = emu.readMemory16(clockDataAddr + 8);
+      const year = emu.readMemory16(clockDataAddr + 10);
+
+      // Convert to JavaScript Date (UTC)
+      const date = Date.UTC(year, month - 1, mday, hour, min, sec);
+      const unixSeconds = Math.floor(date / 1000);
+
+      // Convert to Amiga seconds (subtract epoch offset)
+      const AMIGA_EPOCH_OFFSET = 252288000;
+      const amigaSeconds = unixSeconds - AMIGA_EPOCH_OFFSET;
+
+      console.log(`[UtilityLibrary] Date2Amiga(${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')} ${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}) = ${amigaSeconds}`);
+      return amigaSeconds >>> 0; // Return as unsigned
+    },
+  },
+  {
+    offset: -132, // LVO -132: CheckDate
+    name: "CheckDate",
+    handler: (emu) => {
+      // Input: A0 = pointer to ClockData structure
+      // Output: D0 = day of week (0-6, 0=Sunday) if valid, or -1 if invalid
+      const clockDataAddr = emu.getRegister(8); // A0
+
+      if (clockDataAddr === 0) {
+        console.log("[UtilityLibrary] CheckDate - NULL ClockData pointer");
+        return -1;
+      }
+
+      // Read ClockData structure
+      const sec = emu.readMemory16(clockDataAddr + 0);
+      const min = emu.readMemory16(clockDataAddr + 2);
+      const hour = emu.readMemory16(clockDataAddr + 4);
+      const mday = emu.readMemory16(clockDataAddr + 6);
+      const month = emu.readMemory16(clockDataAddr + 8);
+      const year = emu.readMemory16(clockDataAddr + 10);
+
+      // Validate ranges
+      if (sec > 59 || min > 59 || hour > 23) {
+        console.log(`[UtilityLibrary] CheckDate - invalid time: ${hour}:${min}:${sec}`);
+        return -1;
+      }
+      if (month < 1 || month > 12 || mday < 1 || mday > 31) {
+        console.log(`[UtilityLibrary] CheckDate - invalid date: ${year}-${month}-${mday}`);
+        return -1;
+      }
+      if (year < 1978 || year > 2099) {
+        console.log(`[UtilityLibrary] CheckDate - invalid year: ${year}`);
+        return -1;
+      }
+
+      // Check days in month
+      const daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+      if (month === 2 && isLeap) {
+        daysInMonth[2] = 29;
+      }
+      if (mday > daysInMonth[month]) {
+        console.log(`[UtilityLibrary] CheckDate - invalid day: ${year}-${month}-${mday} (max ${daysInMonth[month]})`);
+        return -1;
+      }
+
+      // Calculate day of week
+      const date = new Date(Date.UTC(year, month - 1, mday));
+      const wday = date.getUTCDay();
+
+      // Also update wday in the structure
+      emu.writeMemory16(clockDataAddr + 12, wday);
+
+      console.log(`[UtilityLibrary] CheckDate(${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')}) = ${wday} (valid)`);
+      return wday;
+    },
+  },
+  // Math functions
+  {
+    offset: -138, // LVO -138: SMult32
+    name: "SMult32",
+    handler: (emu, lib: UtilityLibrary) => lib.sMult32(),
+  },
+  {
+    offset: -144, // LVO -144: UMult32
+    name: "UMult32",
+    handler: (emu, lib: UtilityLibrary) => lib.uMult32(),
+  },
+  {
+    offset: -150, // LVO -150: SDivMod32
+    name: "SDivMod32",
+    handler: (emu) => {
+      const dividend = emu.getRegister(0); // D0
+      const divisor = emu.getRegister(1);  // D1
+      if (divisor === 0) {
+        console.log("[UtilityLibrary] SDivMod32() - division by zero!");
+        return 0;
+      }
+      const quotient = Math.trunc(dividend / divisor);
+      const remainder = dividend % divisor;
+      emu.setRegister(1, remainder); // D1 = remainder
+      console.log(`[UtilityLibrary] SDivMod32(${dividend}/${divisor}) = ${quotient} rem ${remainder}`);
+      return quotient; // D0 = quotient
+    },
+  },
+  {
+    offset: -156, // LVO -156: UDivMod32
+    name: "UDivMod32",
+    handler: (emu) => {
+      const dividend = emu.getRegister(0) >>> 0; // D0 unsigned
+      const divisor = emu.getRegister(1) >>> 0;  // D1 unsigned
+      if (divisor === 0) {
+        console.log("[UtilityLibrary] UDivMod32() - division by zero!");
+        return 0;
+      }
+      const quotient = Math.trunc(dividend / divisor);
+      const remainder = dividend % divisor;
+      emu.setRegister(1, remainder); // D1 = remainder
+      console.log(`[UtilityLibrary] UDivMod32(${dividend}/${divisor}) = ${quotient} rem ${remainder}`);
+      return quotient; // D0 = quotient
+    },
+  },
+  // String functions
+  {
+    offset: -162, // LVO -162: Stricmp
+    name: "Stricmp",
+    handler: (emu, lib: UtilityLibrary) => lib.stricmp(),
+  },
+  {
+    offset: -168, // LVO -168: Strnicmp
+    name: "Strnicmp",
+    handler: (emu, lib: UtilityLibrary) => lib.strnicmp(),
+  },
+  {
+    offset: -174, // LVO -174: ToUpper
+    name: "ToUpper",
+    handler: (emu, lib: UtilityLibrary) => lib.toUpper(),
+  },
+  {
+    offset: -180, // LVO -180: ToLower
+    name: "ToLower",
+    handler: (emu, lib: UtilityLibrary) => lib.toLower(),
+  },
+  // V39 functions (AmigaOS 3.0+)
+  {
+    offset: -186, // LVO -186: ApplyTagChanges
+    name: "ApplyTagChanges",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] ApplyTagChanges() - stub");
+      return 0;
+    },
+  },
+  {
+    offset: -198, // LVO -198: SMult64
+    name: "SMult64",
+    handler: (emu) => {
+      // 64-bit signed multiply: D0:D1 = D0 * D1
+      const a = emu.getRegister(0); // D0
+      const b = emu.getRegister(1); // D1
+      const result = BigInt(a | 0) * BigInt(b | 0);
+      const lo = Number(result & BigInt(0xFFFFFFFF));
+      const hi = Number((result >> BigInt(32)) & BigInt(0xFFFFFFFF));
+      emu.setRegister(0, lo); // D0 = low 32 bits
+      emu.setRegister(1, hi); // D1 = high 32 bits
+      console.log(`[UtilityLibrary] SMult64(${a} * ${b}) = ${hi}:${lo}`);
+      return lo;
+    },
+  },
+  {
+    offset: -204, // LVO -204: UMult64
+    name: "UMult64",
+    handler: (emu) => {
+      // 64-bit unsigned multiply: D0:D1 = D0 * D1
+      const a = emu.getRegister(0) >>> 0; // D0 unsigned
+      const b = emu.getRegister(1) >>> 0; // D1 unsigned
+      const result = BigInt(a) * BigInt(b);
+      const lo = Number(result & BigInt(0xFFFFFFFF));
+      const hi = Number((result >> BigInt(32)) & BigInt(0xFFFFFFFF));
+      emu.setRegister(0, lo); // D0 = low 32 bits
+      emu.setRegister(1, hi); // D1 = high 32 bits
+      console.log(`[UtilityLibrary] UMult64(${a} * ${b}) = ${hi}:${lo}`);
+      return lo;
+    },
+  },
+  {
+    offset: -210, // LVO -210: PackStructureTags
+    name: "PackStructureTags",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] PackStructureTags() - stub, returns 0");
+      return 0;
+    },
+  },
+  {
+    offset: -216, // LVO -216: UnpackStructureTags
+    name: "UnpackStructureTags",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] UnpackStructureTags() - stub, returns 0");
+      return 0;
+    },
+  },
+  // Named Object functions (V39)
+  {
+    offset: -222, // LVO -222: AddNamedObject
+    name: "AddNamedObject",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] AddNamedObject() - stub, returns FALSE");
+      return 0; // FALSE
+    },
+  },
+  {
+    offset: -228, // LVO -228: AllocNamedObjectA
+    name: "AllocNamedObjectA",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] AllocNamedObjectA() - stub, returns NULL");
+      return 0; // NULL
+    },
+  },
+  {
+    offset: -234, // LVO -234: AttemptRemNamedObject
+    name: "AttemptRemNamedObject",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] AttemptRemNamedObject() - stub, returns FALSE");
+      return 0; // FALSE
+    },
+  },
+  {
+    offset: -240, // LVO -240: FindNamedObject
+    name: "FindNamedObject",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] FindNamedObject() - stub, returns NULL");
+      return 0; // NULL
+    },
+  },
+  {
+    offset: -246, // LVO -246: FreeNamedObject
+    name: "FreeNamedObject",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] FreeNamedObject() - stub");
+      return 0;
+    },
+  },
+  {
+    offset: -252, // LVO -252: NamedObjectName
+    name: "NamedObjectName",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] NamedObjectName() - stub, returns NULL");
+      return 0; // NULL
+    },
+  },
+  {
+    offset: -258, // LVO -258: ReleaseNamedObject
+    name: "ReleaseNamedObject",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] ReleaseNamedObject() - stub");
+      return 0;
+    },
+  },
+  {
+    offset: -264, // LVO -264: RemNamedObject
+    name: "RemNamedObject",
+    handler: (emu) => {
+      console.log("[UtilityLibrary] RemNamedObject() - stub");
+      return 0;
+    },
+  },
+  {
+    offset: -270, // LVO -270: GetUniqueID
+    name: "GetUniqueID",
+    handler: (emu, lib: UtilityLibrary) => lib.getUniqueID(),
+  },
+];
+
+/**
+ * mathffp.library function vectors (Fast Floating Point basic math)
+ * LVO offsets from lvo/mathffp_lib.i
+ */
+const MATHFFP_VECTORS: LibraryVector[] = [
+  { offset: -30, name: "SPFix", handler: (emu, lib: MathFFPLibrary) => lib.spFix() },
+  { offset: -36, name: "SPFlt", handler: (emu, lib: MathFFPLibrary) => lib.spFlt() },
+  { offset: -42, name: "SPCmp", handler: (emu, lib: MathFFPLibrary) => lib.spCmp() },
+  { offset: -48, name: "SPTst", handler: (emu, lib: MathFFPLibrary) => lib.spTst() },
+  { offset: -54, name: "SPAbs", handler: (emu, lib: MathFFPLibrary) => lib.spAbs() },
+  { offset: -60, name: "SPNeg", handler: (emu, lib: MathFFPLibrary) => lib.spNeg() },
+  { offset: -66, name: "SPAdd", handler: (emu, lib: MathFFPLibrary) => lib.spAdd() },
+  { offset: -72, name: "SPSub", handler: (emu, lib: MathFFPLibrary) => lib.spSub() },
+  { offset: -78, name: "SPMul", handler: (emu, lib: MathFFPLibrary) => lib.spMul() },
+  { offset: -84, name: "SPDiv", handler: (emu, lib: MathFFPLibrary) => lib.spDiv() },
+  { offset: -90, name: "SPFloor", handler: (emu, lib: MathFFPLibrary) => lib.spFloor() },
+  { offset: -96, name: "SPCeil", handler: (emu, lib: MathFFPLibrary) => lib.spCeil() },
+];
+
+/**
+ * mathtrans.library function vectors (transcendental math)
+ * LVO offsets from lvo/mathtrans_lib.i
+ */
+const MATHTRANS_VECTORS: LibraryVector[] = [
+  { offset: -30, name: "SPAtan", handler: (emu, lib: MathTransLibrary) => lib.spAtan() },
+  { offset: -36, name: "SPSin", handler: (emu, lib: MathTransLibrary) => lib.spSin() },
+  { offset: -42, name: "SPCos", handler: (emu, lib: MathTransLibrary) => lib.spCos() },
+  { offset: -48, name: "SPTan", handler: (emu, lib: MathTransLibrary) => lib.spTan() },
+  { offset: -54, name: "SPSincos", handler: (emu, lib: MathTransLibrary) => lib.spSincos() },
+  { offset: -60, name: "SPSinh", handler: (emu, lib: MathTransLibrary) => lib.spSinh() },
+  { offset: -66, name: "SPCosh", handler: (emu, lib: MathTransLibrary) => lib.spCosh() },
+  { offset: -72, name: "SPTanh", handler: (emu, lib: MathTransLibrary) => lib.spTanh() },
+  { offset: -78, name: "SPExp", handler: (emu, lib: MathTransLibrary) => lib.spExp() },
+  { offset: -84, name: "SPLog", handler: (emu, lib: MathTransLibrary) => lib.spLog() },
+  { offset: -90, name: "SPPow", handler: (emu, lib: MathTransLibrary) => lib.spPow() },
+  { offset: -96, name: "SPSqrt", handler: (emu, lib: MathTransLibrary) => lib.spSqrt() },
+  { offset: -102, name: "SPTieee", handler: (emu, lib: MathTransLibrary) => lib.spTieee() },
+  { offset: -108, name: "SPFieee", handler: (emu, lib: MathTransLibrary) => lib.spFieee() },
+  { offset: -114, name: "SPAsin", handler: (emu, lib: MathTransLibrary) => lib.spAsin() },
+  { offset: -120, name: "SPAcos", handler: (emu, lib: MathTransLibrary) => lib.spAcos() },
+  { offset: -126, name: "SPLog10", handler: (emu, lib: MathTransLibrary) => lib.spLog10() },
+];
+
+/**
+ * mathieeedoubbas.library function vectors (IEEE double basic)
+ * LVO offsets from lvo/mathieeedoubbas_lib.i
+ */
+const MATHIEEEDOUBBAS_VECTORS: LibraryVector[] = [
+  { offset: -30, name: "IEEEDPFix", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpFix() },
+  { offset: -36, name: "IEEEDPFlt", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpFlt() },
+  { offset: -42, name: "IEEEDPCmp", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpCmp() },
+  { offset: -48, name: "IEEEDPTst", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpTst() },
+  { offset: -54, name: "IEEEDPAbs", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpAbs() },
+  { offset: -60, name: "IEEEDPNeg", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpNeg() },
+  { offset: -66, name: "IEEEDPAdd", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpAdd() },
+  { offset: -72, name: "IEEEDPSub", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpSub() },
+  { offset: -78, name: "IEEEDPMul", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpMul() },
+  { offset: -84, name: "IEEEDPDiv", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpDiv() },
+  { offset: -90, name: "IEEEDPFloor", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpFloor() },
+  { offset: -96, name: "IEEEDPCeil", handler: (emu, lib: MathIEEEDoubBasLibrary) => lib.ieeeDpCeil() },
+];
+
+/**
+ * mathieeedoubtrans.library function vectors (IEEE double transcendental)
+ * LVO offsets from lvo/mathieeedoubtrans_lib.i
+ */
+const MATHIEEEDOUBTRANS_VECTORS: LibraryVector[] = [
+  { offset: -30, name: "IEEEDPAtan", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpAtan() },
+  { offset: -36, name: "IEEEDPSin", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpSin() },
+  { offset: -42, name: "IEEEDPCos", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpCos() },
+  { offset: -48, name: "IEEEDPTan", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpTan() },
+  { offset: -54, name: "IEEEDPSincos", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpSincos() },
+  { offset: -60, name: "IEEEDPSinh", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpSinh() },
+  { offset: -66, name: "IEEEDPCosh", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpCosh() },
+  { offset: -72, name: "IEEEDPTanh", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpTanh() },
+  { offset: -78, name: "IEEEDPExp", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpExp() },
+  { offset: -84, name: "IEEEDPLog", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpLog() },
+  { offset: -90, name: "IEEEDPPow", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpPow() },
+  { offset: -96, name: "IEEEDPSqrt", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpSqrt() },
+  { offset: -102, name: "IEEEDPTieee", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpTieee() },
+  { offset: -108, name: "IEEEDPFieee", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpFieee() },
+  { offset: -114, name: "IEEEDPAsin", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpAsin() },
+  { offset: -120, name: "IEEEDPAcos", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpAcos() },
+  { offset: -126, name: "IEEEDPLog10", handler: (emu, lib: MathIEEEDoubTransLibrary) => lib.ieeeDpLog10() },
+];
+
+/**
+ * mathieeesingbas.library function vectors (IEEE single basic)
+ * LVO offsets from lvo/mathieeesingbas_lib.i
+ */
+const MATHIEEESINGBAS_VECTORS: LibraryVector[] = [
+  { offset: -30, name: "IEEESPFix", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPFix() },
+  { offset: -36, name: "IEEESPFlt", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPFlt() },
+  { offset: -42, name: "IEEESPCmp", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPCmp() },
+  { offset: -48, name: "IEEESPTst", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPTst() },
+  { offset: -54, name: "IEEESPAbs", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPAbs() },
+  { offset: -60, name: "IEEESPNeg", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPNeg() },
+  { offset: -66, name: "IEEESPAdd", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPAdd() },
+  { offset: -72, name: "IEEESPSub", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPSub() },
+  { offset: -78, name: "IEEESPMul", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPMul() },
+  { offset: -84, name: "IEEESPDiv", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPDiv() },
+  { offset: -90, name: "IEEESPFloor", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPFloor() },
+  { offset: -96, name: "IEEESPCeil", handler: (emu, lib: MathIEEESingBasLibrary) => lib.ieeeSPCeil() },
+];
+
+/**
+ * mathieeesingtrans.library function vectors (IEEE single transcendental)
+ * LVO offsets from lvo/mathieeesingtrans_lib.i
+ */
+const MATHIEEESINGTRANS_VECTORS: LibraryVector[] = [
+  { offset: -30, name: "IEEESPAtan", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPAtan() },
+  { offset: -36, name: "IEEESPSin", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPSin() },
+  { offset: -42, name: "IEEESPCos", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPCos() },
+  { offset: -48, name: "IEEESPTan", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPTan() },
+  { offset: -54, name: "IEEESPSincos", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPSincos() },
+  { offset: -60, name: "IEEESPSinh", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPSinh() },
+  { offset: -66, name: "IEEESPCosh", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPCosh() },
+  { offset: -72, name: "IEEESPTanh", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPTanh() },
+  { offset: -78, name: "IEEESPExp", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPExp() },
+  { offset: -84, name: "IEEESPLog", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPLog() },
+  { offset: -90, name: "IEEESPPow", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPPow() },
+  { offset: -96, name: "IEEESPSqrt", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPSqrt() },
+  { offset: -102, name: "IEEESPTieee", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPTieee() },
+  { offset: -108, name: "IEEESPFieee", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPFieee() },
+  { offset: -114, name: "IEEESPAsin", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPAsin() },
+  { offset: -120, name: "IEEESPAcos", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPAcos() },
+  { offset: -126, name: "IEEESPLog10", handler: (emu, lib: MathIEEESingTransLibrary) => lib.ieeeSPLog10() },
 ];
 
 /**
@@ -848,6 +1905,13 @@ export class LibraryTraps {
   private aedoorLibrary: AEDoorLibrary | null = null;
   private dosLibrary: DosLibrary | null = null;
   private iconLibrary: IconLibrary | null = null;
+  private utilityLibrary: UtilityLibrary | null = null;
+  private mathFFPLibrary: MathFFPLibrary | null = null;
+  private mathTransLibrary: MathTransLibrary | null = null;
+  private mathIEEEDoubBasLibrary: MathIEEEDoubBasLibrary | null = null;
+  private mathIEEEDoubTransLibrary: MathIEEEDoubTransLibrary | null = null;
+  private mathIEEESingBasLibrary: MathIEEESingBasLibrary | null = null;
+  private mathIEEESingTransLibrary: MathIEEESingTransLibrary | null = null;
 
   // Map of trap address -> vector entry
   private trapMap: Map<number, LibraryVector> = new Map();
@@ -886,6 +1950,27 @@ export class LibraryTraps {
     }
     if (library === this.iconLibrary) {
       return "icon.library";
+    }
+    if (library === this.utilityLibrary) {
+      return "utility.library";
+    }
+    if (library === this.mathFFPLibrary) {
+      return "mathffp.library";
+    }
+    if (library === this.mathTransLibrary) {
+      return "mathtrans.library";
+    }
+    if (library === this.mathIEEEDoubBasLibrary) {
+      return "mathieeedoubbas.library";
+    }
+    if (library === this.mathIEEEDoubTransLibrary) {
+      return "mathieeedoubtrans.library";
+    }
+    if (library === this.mathIEEESingBasLibrary) {
+      return "mathieeesingbas.library";
+    }
+    if (library === this.mathIEEESingTransLibrary) {
+      return "mathieeesingtrans.library";
     }
     if ((library as any).libraryName) {
       return (library as any).libraryName;
@@ -930,6 +2015,55 @@ export class LibraryTraps {
   }
 
   /**
+   * Set the utility.library instance
+   */
+  setUtilityLibrary(lib: UtilityLibrary): void {
+    this.utilityLibrary = lib;
+  }
+
+  /**
+   * Set the mathffp.library instance
+   */
+  setMathFFPLibrary(lib: MathFFPLibrary): void {
+    this.mathFFPLibrary = lib;
+  }
+
+  /**
+   * Set the mathtrans.library instance
+   */
+  setMathTransLibrary(lib: MathTransLibrary): void {
+    this.mathTransLibrary = lib;
+  }
+
+  /**
+   * Set the mathieeedoubbas.library instance
+   */
+  setMathIEEEDoubBasLibrary(lib: MathIEEEDoubBasLibrary): void {
+    this.mathIEEEDoubBasLibrary = lib;
+  }
+
+  /**
+   * Set the mathieeedoubtrans.library instance
+   */
+  setMathIEEEDoubTransLibrary(lib: MathIEEEDoubTransLibrary): void {
+    this.mathIEEEDoubTransLibrary = lib;
+  }
+
+  /**
+   * Set the mathieeesingbas.library instance
+   */
+  setMathIEEESingBasLibrary(lib: MathIEEESingBasLibrary): void {
+    this.mathIEEESingBasLibrary = lib;
+  }
+
+  /**
+   * Set the mathieeesingtrans.library instance
+   */
+  setMathIEEESingTransLibrary(lib: MathIEEESingTransLibrary): void {
+    this.mathIEEESingTransLibrary = lib;
+  }
+
+  /**
    * Register a custom trap handler at a specific address
    *
    * Used for non-library traps like BBS API dispatcher at 0x790
@@ -962,10 +2096,53 @@ export class LibraryTraps {
   }
 
   /**
+   * Verify all installed ILLEGAL instructions are still in place.
+   * Returns the number of verified traps and any that failed.
+   */
+  verifyIllegalInstructions(): { verified: number; failed: number; failedAddrs: number[] } {
+    let verified = 0;
+    let failed = 0;
+    const failedAddrs: number[] = [];
+
+    for (const [addr] of this.trapMap) {
+      try {
+        const opcode = this.emulator.readMemory16(addr);
+        if (opcode === 0x4AFC) {
+          verified++;
+        } else {
+          failed++;
+          failedAddrs.push(addr);
+          console.error(
+            `[LibraryTraps] VERIFICATION FAILED at 0x${addr.toString(16)}: expected 0x4AFC, got 0x${opcode.toString(16)}`
+          );
+        }
+      } catch (e) {
+        failed++;
+        failedAddrs.push(addr);
+        console.error(
+          `[LibraryTraps] VERIFICATION ERROR at 0x${addr.toString(16)}: ${e}`
+        );
+      }
+    }
+
+    if (failed > 0) {
+      console.error(
+        `[LibraryTraps] VERIFICATION: ${verified} OK, ${failed} FAILED!`
+      );
+    } else {
+      console.log(
+        `[LibraryTraps] VERIFICATION: All ${verified} ILLEGAL instructions verified OK`
+      );
+    }
+
+    return { verified, failed, failedAddrs };
+  }
+
+  /**
    * Install trap vectors for a library
    *
-   * Builds a map of vector addresses to handlers.
-   * No memory modification needed - we intercept at execution time.
+   * Writes ILLEGAL instruction (0x4AFC) at each vector address.
+   * When door calls JSR -offset(A6), it hits ILLEGAL and we intercept.
    */
   installExecVectors(): void {
     const execBase = this.execLibrary.getExecBaseAddress();
@@ -977,6 +2154,17 @@ export class LibraryTraps {
 
     for (const vector of EXEC_VECTORS) {
       const trapAddr = execBase + vector.offset;
+
+      // CRITICAL FIX: Write ILLEGAL instruction at vector address!
+      // This is how we intercept library calls - when door does JSR -offset(A6),
+      // it jumps to trapAddr which contains ILLEGAL, triggering our handler.
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
+      // Verify the write succeeded
+      const verify = this.emulator.readMemory16(trapAddr);
+      if (verify !== 0x4AFC) {
+        console.error(`[LibraryTraps] FAILED to write ILLEGAL at 0x${trapAddr.toString(16)}: got 0x${verify.toString(16)}`);
+      }
 
       // Store mapping of address to handler
       this.trapMap.set(trapAddr, vector);
@@ -1041,6 +2229,9 @@ export class LibraryTraps {
     for (const vector of DOS_VECTORS) {
       const trapAddr = dosBase + vector.offset;
 
+      // CRITICAL FIX: Write ILLEGAL instruction at vector address!
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
       // Store mapping of address to handler
       this.trapMap.set(trapAddr, vector);
       this.libraryMap.set(trapAddr, this.dosLibrary);
@@ -1099,6 +2290,9 @@ export class LibraryTraps {
     for (const vector of AEDOOR_VECTORS) {
       const trapAddr = aedoorBase + vector.offset;
 
+      // CRITICAL FIX: Write ILLEGAL instruction at vector address!
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
       // Store mapping of address to handler
       this.trapMap.set(trapAddr, vector);
       this.libraryMap.set(trapAddr, this.aedoorLibrary);
@@ -1147,7 +2341,302 @@ export class LibraryTraps {
         16
       )}`
     );
-    console.log("[LibraryTraps] icon.library vectors - stub implementation");
+
+    for (const vector of ICON_VECTORS) {
+      const trapAddr = iconBase + vector.offset;
+
+      // Write ILLEGAL instruction at vector address to trigger trap
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
+      // Store mapping of address to handler
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.iconLibrary);
+
+      // Store mapping by offset (array-based to handle collisions)
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.iconLibrary);
+
+      console.log(
+        `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
+          vector.offset
+        })`
+      );
+    }
+
+    console.log(`[LibraryTraps] *** icon.library FULLY OPERATIONAL - ALL traps installed and ready ***`);
+
+    console.log(
+      `[LibraryTraps] Installed ${ICON_VECTORS.length} icon.library vectors`
+    );
+  }
+
+  /**
+   * Install utility.library vectors
+   */
+  installUtilityVectors(): void {
+    if (!this.utilityLibrary) {
+      console.error(
+        "[LibraryTraps] Cannot install utility vectors: library not set"
+      );
+      return;
+    }
+
+    const utilityBase = this.execLibrary.getLibraryBase("utility.library");
+    if (utilityBase === 0) {
+      console.error(
+        "[LibraryTraps] Cannot install utility vectors: library not opened"
+      );
+      return;
+    }
+
+    console.log(
+      `[LibraryTraps] Installing utility.library vectors at base 0x${utilityBase.toString(
+        16
+      )}`
+    );
+
+    for (const vector of UTILITY_VECTORS) {
+      const trapAddr = utilityBase + vector.offset;
+
+      // Write ILLEGAL instruction at vector address
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
+      // Store mapping of address to handler
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.utilityLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.utilityLibrary);
+
+      console.log(
+        `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
+          vector.offset
+        })`
+      );
+    }
+
+    console.log(
+      `[LibraryTraps] Installed ${UTILITY_VECTORS.length} utility.library vectors`
+    );
+
+    // Add stub vectors for other utility functions
+    this.installStubVectorsForLibrary(
+      "utility.library",
+      utilityBase,
+      this.utilityLibrary
+    );
+  }
+
+  /**
+   * Install mathffp.library vectors
+   */
+  installMathFFPVectors(): void {
+    if (!this.mathFFPLibrary) {
+      console.error("[LibraryTraps] Cannot install mathffp vectors: library not set");
+      return;
+    }
+
+    const mathBase = this.execLibrary.getLibraryBase("mathffp.library");
+    if (mathBase === 0) {
+      console.error("[LibraryTraps] Cannot install mathffp vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing mathffp.library vectors at base 0x${mathBase.toString(16)}`);
+
+    for (const vector of MATHFFP_VECTORS) {
+      const trapAddr = mathBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.mathFFPLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.mathFFPLibrary);
+    }
+
+    console.log(`[LibraryTraps] Installed ${MATHFFP_VECTORS.length} mathffp.library vectors`);
+  }
+
+  /**
+   * Install mathtrans.library vectors
+   */
+  installMathTransVectors(): void {
+    if (!this.mathTransLibrary) {
+      console.error("[LibraryTraps] Cannot install mathtrans vectors: library not set");
+      return;
+    }
+
+    const mathBase = this.execLibrary.getLibraryBase("mathtrans.library");
+    if (mathBase === 0) {
+      console.error("[LibraryTraps] Cannot install mathtrans vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing mathtrans.library vectors at base 0x${mathBase.toString(16)}`);
+
+    for (const vector of MATHTRANS_VECTORS) {
+      const trapAddr = mathBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.mathTransLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.mathTransLibrary);
+    }
+
+    console.log(`[LibraryTraps] Installed ${MATHTRANS_VECTORS.length} mathtrans.library vectors`);
+  }
+
+  /**
+   * Install mathieeedoubbas.library vectors
+   */
+  installMathIEEEDoubBasVectors(): void {
+    if (!this.mathIEEEDoubBasLibrary) {
+      console.error("[LibraryTraps] Cannot install mathieeedoubbas vectors: library not set");
+      return;
+    }
+
+    const mathBase = this.execLibrary.getLibraryBase("mathieeedoubbas.library");
+    if (mathBase === 0) {
+      console.error("[LibraryTraps] Cannot install mathieeedoubbas vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing mathieeedoubbas.library vectors at base 0x${mathBase.toString(16)}`);
+
+    for (const vector of MATHIEEEDOUBBAS_VECTORS) {
+      const trapAddr = mathBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.mathIEEEDoubBasLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.mathIEEEDoubBasLibrary);
+    }
+
+    console.log(`[LibraryTraps] Installed ${MATHIEEEDOUBBAS_VECTORS.length} mathieeedoubbas.library vectors`);
+  }
+
+  /**
+   * Install mathieeedoubtrans.library vectors
+   */
+  installMathIEEEDoubTransVectors(): void {
+    if (!this.mathIEEEDoubTransLibrary) {
+      console.error("[LibraryTraps] Cannot install mathieeedoubtrans vectors: library not set");
+      return;
+    }
+
+    const mathBase = this.execLibrary.getLibraryBase("mathieeedoubtrans.library");
+    if (mathBase === 0) {
+      console.error("[LibraryTraps] Cannot install mathieeedoubtrans vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing mathieeedoubtrans.library vectors at base 0x${mathBase.toString(16)}`);
+
+    for (const vector of MATHIEEEDOUBTRANS_VECTORS) {
+      const trapAddr = mathBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.mathIEEEDoubTransLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.mathIEEEDoubTransLibrary);
+    }
+
+    console.log(`[LibraryTraps] Installed ${MATHIEEEDOUBTRANS_VECTORS.length} mathieeedoubtrans.library vectors`);
+  }
+
+  /**
+   * Install mathieeesingbas.library vectors
+   */
+  installMathIEEESingBasVectors(): void {
+    if (!this.mathIEEESingBasLibrary) {
+      console.error("[LibraryTraps] Cannot install mathieeesingbas vectors: library not set");
+      return;
+    }
+
+    const mathBase = this.execLibrary.getLibraryBase("mathieeesingbas.library");
+    if (mathBase === 0) {
+      console.error("[LibraryTraps] Cannot install mathieeesingbas vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing mathieeesingbas.library vectors at base 0x${mathBase.toString(16)}`);
+
+    for (const vector of MATHIEEESINGBAS_VECTORS) {
+      const trapAddr = mathBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.mathIEEESingBasLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.mathIEEESingBasLibrary);
+    }
+
+    console.log(`[LibraryTraps] Installed ${MATHIEEESINGBAS_VECTORS.length} mathieeesingbas.library vectors`);
+  }
+
+  /**
+   * Install mathieeesingtrans.library vectors
+   */
+  installMathIEEESingTransVectors(): void {
+    if (!this.mathIEEESingTransLibrary) {
+      console.error("[LibraryTraps] Cannot install mathieeesingtrans vectors: library not set");
+      return;
+    }
+
+    const mathBase = this.execLibrary.getLibraryBase("mathieeesingtrans.library");
+    if (mathBase === 0) {
+      console.error("[LibraryTraps] Cannot install mathieeesingtrans vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing mathieeesingtrans.library vectors at base 0x${mathBase.toString(16)}`);
+
+    for (const vector of MATHIEEESINGTRANS_VECTORS) {
+      const trapAddr = mathBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.mathIEEESingTransLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.mathIEEESingTransLibrary);
+    }
+
+    console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathieeesingtrans.library vectors`);
   }
 
   /**
@@ -1171,6 +2660,9 @@ export class LibraryTraps {
       if (this.trapMap.has(trapAddr)) {
         continue;
       }
+      // CRITICAL FIX: Write ILLEGAL instruction at vector address!
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
       const vector: LibraryVector = {
         offset,
         name: `${normalized}-stub`,

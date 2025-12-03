@@ -335,11 +335,12 @@ export class DoorLoader {
     const stackTop = this.stackBaseAddr + this.stackSizeBytes;
     this.emulator.setRegister(8, stackTop); // A0 (vamos: A0=stack upper)
 
-    // CRITICAL FIX: A4 must point to DATA segment for small data model
-    // SAS/C and similar compilers use A4-relative addressing for global data
+    // CRITICAL FIX: A4 must point to DATA segment + 0x7FFE for small data model
+    // SAS/C and similar compilers use 16-bit signed A4-relative addressing
+    // By setting A4 = dataSegment + 0x7FFE, we can address -32768 to +32767 range
     const dataSegmentForA4 = hunkFile.segments.find((seg: { type: string }) => seg.type.toUpperCase() === 'DATA');
-    const a4Value = dataSegmentForA4 ? dataSegmentForA4.address : 0;
-    this.emulator.setRegister(12, a4Value); // A4 = DATA segment address
+    const a4Value = dataSegmentForA4 ? dataSegmentForA4.address + 0x7FFE : 0;
+    this.emulator.setRegister(12, a4Value); // A4 = DATA segment + 0x7FFE (SAS/C small data model)
 
     this.emulator.setRegister(13, stackTop); // A5 = stack top (vamos)
     const a4Now = this.emulator.getRegister(12);

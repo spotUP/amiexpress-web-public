@@ -257,7 +257,7 @@ async function getManualConnection(socket: SocketIOSocket): Promise<TelnetConfig
       switch (step) {
         case 0: // Get hostname
           if (!input) {
-            socket.off('user-input', handleInput);
+            delete bbsSession.doorInputHandler;
             resolve(null);
             return;
           }
@@ -278,7 +278,7 @@ async function getManualConnection(socket: SocketIOSocket): Promise<TelnetConfig
       }
     };
 
-    socket.on('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
   });
 }
 
@@ -286,7 +286,7 @@ async function getManualConnection(socket: SocketIOSocket): Promise<TelnetConfig
  * Run Telnet Connect door (TypeScript door interface)
  */
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user } = doorSession;
+  const { socket, user, bbsSession } = doorSession;
 
   const configs = loadConfig();
   let running = true;
@@ -297,10 +297,10 @@ export async function runDoor(doorSession: any): Promise<void> {
     // Wait for user selection
     const choice = await new Promise<string>((resolve) => {
       const handleInput = (data: string) => {
-        socket.off('user-input', handleInput);
+        delete bbsSession.doorInputHandler;
         resolve(data.trim().toUpperCase());
       };
-      socket.on('user-input', handleInput);
+      bbsSession.doorInputHandler = handleInput;
     });
 
     if (choice === 'Q' || !choice) {

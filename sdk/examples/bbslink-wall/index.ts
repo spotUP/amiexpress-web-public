@@ -256,7 +256,7 @@ async function getUserInput(socket: SocketIOSocket, prompt: string, maxLen: numb
       }
     };
 
-    socket.on('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
 
     // Timeout after 5 minutes
     setTimeout(() => {
@@ -274,7 +274,7 @@ async function getYesNo(socket: SocketIOSocket): Promise<boolean> {
     const handleInput = (data: string) => {
       const key = data.toLowerCase();
       if (key === 'y') {
-        socket.off('user-input', handleInput);
+        delete bbsSession.doorInputHandler;
         socket.emit('ansi-output', 'Y\r\n');
         resolve(true);
       } else if (key === 'n') {
@@ -284,7 +284,7 @@ async function getYesNo(socket: SocketIOSocket): Promise<boolean> {
       }
     };
 
-    socket.on('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
   });
 }
 
@@ -305,7 +305,7 @@ async function pause(socket: SocketIOSocket, message: string = 'press RETURN to 
  * Run BBSLink Wall door (TypeScript door interface)
  */
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user } = doorSession;
+  const { socket, user, bbsSession } = doorSession;
 
   try {
     // Load configuration

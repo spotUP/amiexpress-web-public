@@ -25,6 +25,20 @@ const RESULT_SUCCESS = 0;
 const RESULT_FAILURE = -1;
 const RESULT_NOT_ALLOWED = -2;
 
+/**
+ * Debug log helper - logs to console AND sysop terminal/session log
+ * When a sysop is logged in, debug messages appear in both backend.log and session log
+ */
+function debugLog(socket: any, session: any, message: string, category: string = "CMD") {
+  // Always log to console (backend.log)
+  console.log(message);
+
+  // If sysop logged in, also send to terminal and session log
+  if (socket && session?.user?.secLevel && session.user.secLevel >= 200) {
+    SysopDebugUtil.debug(socket, session, category, message.replace(/^\[.*?\]\s*/, ''));
+  }
+}
+
 // Dependencies injected from index.ts
 let _executeDoor: any = null;
 let _processInternalCommand: any = null;
@@ -145,7 +159,7 @@ export async function runSysCommand(
   cmd: string,
   params: string = ''
 ): Promise<number> {
-  console.log(`[SYSCMD] Executing: ${cmd} ${params}`);
+  debugLog(socket, session, `[SYSCMD] Executing: ${cmd} ${params}`);
 
   // express.e:4814-4815 - Debug logging
   // debugLog(LOG_DEBUG, "execute syscmd: ${cmd} ${params}")
@@ -170,7 +184,7 @@ export async function runBbsCommand(
   cmd: string,
   params: string = ''
 ): Promise<number> {
-  console.log(`[BBSCMD] Executing: ${cmd} ${params}`);
+  debugLog(socket, session, `[BBSCMD] Executing: ${cmd} ${params}`);
 
   // express.e:4808-4809 - Debug logging
   // debugLog(LOG_DEBUG, "execute bbscmd: ${cmd} ${params}")

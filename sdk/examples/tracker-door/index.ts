@@ -1555,18 +1555,18 @@ if (typeof window !== 'undefined') {
 }
 
 export async function runDoor(doorSession: any): Promise<void> {
-  const { socket } = doorSession;
+  const { socket, bbsSession } = doorSession;
 
   socket.emit('ansi-output', '\r\n\x1b[33mTRACKER requires the browser-based hybrid runtime for full audio/visual support.\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[33mPlease launch it from the web interface to experience the tracker UI.\x1b[0m\r\n');
   socket.emit('ansi-output', '\r\n\x1b[32mPress any key to return to the BBS...\x1b[0m');
 
   await new Promise<void>((resolve) => {
-    const handler = () => {
-      socket.off('user-input', handler);
+    const handler = (data: string) => {
+      delete bbsSession.doorInputHandler;
       resolve();
     };
-    socket.on('user-input', handler);
+    bbsSession.doorInputHandler = handler;
   });
 }
 // @ts-nocheck
