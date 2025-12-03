@@ -511,6 +511,86 @@ export class DoorLoader {
       `[BULLS-FORCE]   Bulls Data segment: 0x5c00-0x8b5f (27,876 bytes)`
     );
 
+    // CRITICAL: Bulls expects DoorInfo structure populated by AEDoor.library
+    // Real AEDoor.library creates DoorInfo during initialization
+    // We must create it ourselves since we don't execute the real library
+    const a4Value = this.emulator.getRegister(12); // A4 = DATA segment + 0x7FFE
+    const aeDoorBaseAddr = (this.execLibrary as any).getLibraryBase?.("AEDoor.library") || 0x30000;
+    const replyPortAddr = 0xa0000; // BBS reply port (AEDoorPort1)
+    const doorInfoAddr = 0x100000; // Allocate DoorInfo structure at 1MB
+
+    // Create DoorInfo structure (per AEDoor_LIBRARY_NOTES.md)
+    // Size: 0xE4 + node state buffer (~256 bytes total)
+    const doorInfoSize = 0x200;
+    for (let i = 0; i < doorInfoSize; i++) {
+      this.emulator.writeMemory(doorInfoAddr + i, 0);
+    }
+
+    // Populate DoorInfo fields
+    this.emulator.writeMemory32(doorInfoAddr + 0x00, replyPortAddr); // dif_AEPort
+    this.emulator.writeMemory32(doorInfoAddr + 0x04, replyPortAddr); // dif_ReplyPort
+    this.emulator.writeMemory32(doorInfoAddr + 0x08, 0); // dif_EventHook
+
+    // dif_NameBuf: User name (0x0C + 0x32 bytes)
+    const userName = "SYSOP";
+    for (let i = 0; i < userName.length; i++) {
+      this.emulator.writeMemory(doorInfoAddr + 0x0C + i, userName.charCodeAt(i));
+    }
+
+    // dif_BBSInfo: BBS title (0x46)
+    const bbsTitle = "AmiExpress Web BBS Node 1";
+    for (let i = 0; i < bbsTitle.length; i++) {
+      this.emulator.writeMemory(doorInfoAddr + 0x46 + i, bbsTitle.charCodeAt(i));
+    }
+
+    // dif_NodeState: Node data (0xE4) - Bulls polls this!
+    this.emulator.writeMemory32(doorInfoAddr + 0xE4, 1); // Node number
+    this.emulator.writeMemory32(doorInfoAddr + 0xE8, 255); // Security level
+
+    console.log(
+      `[BULLS-FORCE] ✅ Created DoorInfo structure at 0x${doorInfoAddr.toString(16)} (${doorInfoSize} bytes)`
+    );
+
+    // Inject AEDoorBase at A4+0x988
+    this.emulator.writeMemory32(a4Value + 0x988, aeDoorBaseAddr);
+    console.log(
+      `[BULLS-FORCE] ✅ Injected AEDoorBase=0x${aeDoorBaseAddr.toString(16)} at A4+0x988`
+    );
+
+    // Inject DoorInfo pointer at A4+0x6c24 (Bulls reads DoorInfo from here)
+    this.emulator.writeMemory32(a4Value + 0x6c24, doorInfoAddr);
+    console.log(
+      `[BULLS-FORCE] ✅ Injected DoorInfo=0x${doorInfoAddr.toString(16)} at A4+0x6c24`
+    );
+
+    // Inject Reply Port at multiple A4 offsets (per Bulls_DISASM_NOTES.md:39-40)
+    const replyPortOffsets = [0x44c, 0x450, 0x474, 0x57c, 0x5b8, 0x6a0, 0x720, 0x800, 0x9a4, 0x9a8, 0x6c6c];
+    for (const offset of replyPortOffsets) {
+      this.emulator.writeMemory32(a4Value + offset, replyPortAddr);
+    }
+    console.log(
+      `[BULLS-FORCE] ✅ Injected Reply Port=0x${replyPortAddr.toString(16)} at ${replyPortOffsets.length} A4 offsets`
+    );
+
+    // CRITICAL FIX: Bulls parses CLI arguments from pointer at A4+0x6c16
+    // Bulls disassembly at 0xfbc: movea.l 0x6c16(a4), a1  ; Load arg pointer
+    // Bulls calls strcmp at 0x100c to validate arguments
+    // Create empty argument string (Bulls accepts empty args for XIM mode)
+    const cliArgAddr = 0xd0000; // Allocate at 0xd0000
+    this.emulator.writeMemory(cliArgAddr, 0); // Empty string (null terminator)
+    this.emulator.writeMemory32(a4Value + 0x6c16, cliArgAddr); // Inject pointer
+    console.log(
+      `[BULLS-FORCE] ✅ Injected CLI arg pointer=0x${cliArgAddr.toString(16)} at A4+0x6c16`
+    );
+
+    // Also initialize A4+0x510 buffer (where Bulls stores parsed arguments)
+    for (let i = 0; i < 200; i++) {
+      this.emulator.writeMemory(a4Value + 0x510 + i, 0);
+    }
+    console.log(
+      `[BULLS-FORCE] ✅ Initialized argument buffer at A4+0x510 (200 bytes)`
+    );
+
     // CRITICAL: Allow Bulls to execute naturally from HUNK entry point 0x13E9
     // Let startup code set A4 via LEA $984,A4 instruction
     console.log(
