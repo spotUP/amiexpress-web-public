@@ -854,6 +854,14 @@ export class ExecLibrary {
         this.emulator.setRegister(0, sigResult);
         return true;
 
+      case -306: // _LVOSetSignal ✓
+        console.log(`[ExecLibrary]   SetSignal trap called`);
+        const newSignals = this.emulator.getRegister(0); // D0
+        const signalMask = this.emulator.getRegister(1); // D1
+        const oldSignals = this.setSignal(newSignals, signalMask);
+        this.emulator.setRegister(0, oldSignals);
+        return true;
+
       case -522: // Unknown/unused in doors we've seen – safely stub
         console.log(
           `[ExecLibrary]   *** Unimplemented Exec LVO -522 (stub, preserve state) ***`
@@ -1453,6 +1461,52 @@ export class ExecLibrary {
         )}`
       );
     }
+  }
+
+  /**
+   * SetSignal() - LVO -306 (0xFFFFFED2)
+   *
+   * Examine and/or modify the set of signals for the current task.
+   *
+   * Parameters:
+   *   D0 = newSignals: The new values for the signals specified in signalMask
+   *   D1 = signalMask: The set of signals to be affected
+   *
+   * Returns:
+   *   D0 = The old values for ALL signals (before any changes)
+   *
+   * The new signal values are modified as follows:
+   *   signals = (signals & ~signalMask) | (newSignals & signalMask)
+   *
+   * Bulls uses this to clear signals after processing messages.
+   */
+  setSignal(newSignals: number, signalMask: number): number {
+    console.log(
+      `[ExecLibrary] SetSignal(newSignals=0x${newSignals.toString(
+        16
+      )}, signalMask=0x${signalMask.toString(16)})`
+    );
+
+    // Get current signal state for the current task
+    // In our simplified model, we track signals in currentTask.sigRecvd
+    const oldSignals = this.currentTask.sigRecvd;
+
+    console.log(
+      `  Old signals: 0x${oldSignals.toString(16)} (before changes)`
+    );
+
+    // Apply changes: clear bits in mask, then set new bits
+    const clearedSignals = oldSignals & ~signalMask;
+    const newSignalState = clearedSignals | (newSignals & signalMask);
+
+    this.currentTask.sigRecvd = newSignalState;
+
+    console.log(
+      `  New signals: 0x${newSignalState.toString(16)} (after changes)`
+    );
+
+    // Return OLD signal values (before any changes)
+    return oldSignals;
   }
 
   /**
