@@ -166,12 +166,14 @@ export class IconLibrary {
     const typeName = this.readString(typeNamePtr).toUpperCase();
 
     console.log(`[icon.library] FindToolType(0x${toolTypeArrayPtr.toString(16)}, "${typeName}")`);
+    console.log(`[icon.library]   DEBUG: Reading 32-bit value at 0x${toolTypeArrayPtr.toString(16)}: 0x${this.readLong(toolTypeArrayPtr).toString(16)}`);
 
     // Loop through NULL-terminated array of string pointers
     let arrayIndex = 0;
     while (true) {
       // Read pointer from array (each entry is 4 bytes)
       const tooltypeStrPtr = this.readLong(toolTypeArrayPtr + (arrayIndex * 4));
+      console.log(`[icon.library]   DEBUG: Array[${arrayIndex}] at 0x${(toolTypeArrayPtr + (arrayIndex * 4)).toString(16)} = 0x${tooltypeStrPtr.toString(16)}`);
 
       // NULL terminator - not found
       if (tooltypeStrPtr === 0) {

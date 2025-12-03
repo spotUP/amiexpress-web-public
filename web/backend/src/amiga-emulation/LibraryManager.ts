@@ -16,7 +16,7 @@ import {
   MathIEEEDoubTransLibrary,
   MathIEEESingBasLibrary,
   MathIEEESingTransLibrary,
-} from "./api/MathLibrary.js";
+} from "./api/MathLibrary";
 import { LibraryTraps } from "./api/LibraryTraps.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import { DoorConfig, DoorConstants } from "./DoorTypes.js";
