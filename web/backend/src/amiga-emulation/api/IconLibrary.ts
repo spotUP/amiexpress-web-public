@@ -230,11 +230,14 @@ export class IconLibrary {
     console.log(`[icon.library]   Searching through ${this.diskObjects.size} loaded DiskObjects for "${tooltypeName}"`);
 
     // WORKAROUND: Some doors check DOORUSE.V5.6 but expect the mode value from DOORUSE.<cmd>
-    // If looking for DOORUSE.V5.6, also try DOORUSE.FR, DOORUSE.CS, etc.
-    const altNames: string[] = [tooltypeName];
+    // If looking for DOORUSE.V5.6, try DOORUSE.FR, DOORUSE.CS, etc. FIRST (prefer mode over version)
+    const altNames: string[] = [];
     if (tooltypeName.toUpperCase().startsWith('DOORUSE.V')) {
-      // Try DOORUSE.FR, DOORUSE.CS, etc. as fallback
+      // Try DOORUSE.FR, DOORUSE.CS, etc. FIRST (these have the mode value like "REVSCAN")
       altNames.push('DOORUSE.FR', 'DOORUSE.CS', 'DOORUSE.NSU', 'DOORUSE.N');
+      altNames.push(tooltypeName); // Try original as last resort
+    } else {
+      altNames.push(tooltypeName);
     }
 
     // Search through all loaded DiskObjects to find one with the requested tooltype
