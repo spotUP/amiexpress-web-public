@@ -86,12 +86,12 @@ export class XIMProtocol {
     // Store iconLibrary for command .info file loading
     this.iconLibrary = iconLibrary;
 
-    // CRITICAL: Pre-load command's .info file and write DiskObject tooltype pointer to 0x100e5c
-    // This is required for doors like AquaScan that expect the tooltype array pointer to be pre-initialized
-    // Real AmiExpress does this automatically when launching doors
-    if (this.iconLibrary && this.doorCommand) {
-      this.preLoadCommandDiskObject();
-    }
+    // NOTE: Real reference-board BBS does NOT pre-load command .info files for doors
+    // AquaScan works fine without DOORUSE tooltypes on real BBS
+    // Disabling pre-load to match real AmiExpress behavior
+    // if (this.iconLibrary && this.doorCommand) {
+    //   this.preLoadCommandDiskObject();
+    // }
 
     this.state = {
       registered: false,
