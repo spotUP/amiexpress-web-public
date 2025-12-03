@@ -33,6 +33,9 @@ export class XIMProtocol {
   private doorReplyPort: number = 0;
   private bbsSession: BBSSessionData;
   private state: XIMState;
+  private doorCommand: string = ''; // Command name used to launch this door (e.g., "FR")
+  private doorCommandAddr: number = 0; // Persistent memory address for door command string
+  private iconLibrary: any = null; // IconLibrary for loading .info files
 
   // Specialized handlers
   private messageParser: XIMMessageParser;
@@ -47,13 +50,49 @@ export class XIMProtocol {
     execLibrary: ExecLibrary,
     socket: Socket,
     doorPort: number,
-    bbsSession?: any
+    bbsSession?: any,
+    iconLibrary?: any
   ) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
     this.socket = socket;
     this.doorPort = doorPort;
     this.bbsSession = bbsSession || {};
+    // Extract door command name (e.g., "FR" for AquaScan running in FR mode)
+    // Check multiple possible locations where doorId/doorCommand might be set
+    console.log(`[XIMProtocol] CONSTRUCTOR CALLED - bbsSession type: ${typeof bbsSession}, has doorCommand: ${!!bbsSession?.doorCommand}, has doorId: ${!!bbsSession?.doorId}`);
+    this.doorCommand = bbsSession?.doorCommand || bbsSession?.doorId || bbsSession?.doorName || '';
+    console.log(`[XIMProtocol] doorCommand="${this.doorCommand}" (from: doorCommand=${bbsSession?.doorCommand}, doorId=${bbsSession?.doorId}, doorName=${bbsSession?.doorName})`);
+
+    // Allocate persistent memory for door command string in a high memory region
+    // Use a fixed high address that won't conflict with door's memory
+    if (this.doorCommand) {
+      // Use address 0x1FF800 (near top of 2MB address space, unlikely to be used)
+      this.doorCommandAddr = 0x1FF800;
+      const bufferSize = this.doorCommand.length + 1;
+
+      // Write the command string to this fixed address
+      for (let i = 0; i < this.doorCommand.length; i++) {
+        this.emulator.writeMemory(this.doorCommandAddr + i, this.doorCommand.charCodeAt(i));
+      }
+      this.emulator.writeMemory(this.doorCommandAddr + this.doorCommand.length, 0); // null terminator
+
+      // Verify immediately
+      const verifyStr = this.emulator.readString(this.doorCommandAddr, bufferSize);
+      console.log(`[XIMProtocol] Wrote door command to fixed address 0x${this.doorCommandAddr.toString(16)}`);
+      console.log(`[XIMProtocol]   Wrote: "${this.doorCommand}" -> Read back: "${verifyStr}"`);
+    }
+
+    // Store iconLibrary for command .info file loading
+    this.iconLibrary = iconLibrary;
+
+    // CRITICAL: Pre-load command's .info file and write DiskObject tooltype pointer to 0x100e5c
+    // This is required for doors like AquaScan that expect the tooltype array pointer to be pre-initialized
+    // Real AmiExpress does this automatically when launching doors
+    if (this.iconLibrary && this.doorCommand) {
+      this.preLoadCommandDiskObject();
+    }
+
     this.state = {
       registered: false,
       shuttingDown: false,
@@ -268,6 +307,16 @@ export class XIMProtocol {
       return;
     }
 
+    // Command-related handlers (GET_CUSTOM_MSGBASE_MENUCMD, GET_CMD_TOOLTYPE, etc.)
+    // These MUST be checked BEFORE isBBSInfoCommand because command 525 is shared:
+    // - BB_NONSTOPTEXT = 525 (in bbsList)
+    // - GET_CUSTOM_MSGBASE_MENUCMD = 525 (door command lookup)
+    // For doors like AquaScan, 525 means "get menu command", not "nonstop text"
+    if (this.isCommandInfoRequest(msg.command)) {
+      this.handleCommandInfoRequest(msg);
+      return;
+    }
+
     // BBS Info Commands (BB_*) - handled by XIMBBSInfoHandler
     if (this.isBBSInfoCommand(msg.command)) {
       this.handleBBSInfoCommand(msg);
@@ -275,8 +324,116 @@ export class XIMProtocol {
     }
 
     // Unknown command
-    console.log(`[XIMProtocol] Unhandled command: ${msg.command}`);
+    console.log(`[XIMProtocol] ⚠️ UNHANDLED COMMAND: ${msg.command} (0x${msg.command.toString(16)})`);
+    console.log(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}, data=${msg.data}, string="${msg.string}"`);
     this.sendReply(msg, 0);
+  }
+
+  /**
+   * Check if command is a command-info request (GET_CUSTOM_MSGBASE_MENUCMD, GET_CMD_TOOLTYPE)
+   */
+  private isCommandInfoRequest(command: number): boolean {
+    // 525 = GET_CUSTOM_MSGBASE_MENUCMD - Returns menu command used to launch door
+    // 551 = GET_CMD_TOOLTYPE - Reads tooltype from command's .info file
+    const is525 = command === 525;
+    const is551 = command === 551;
+    if (is525 || is551) {
+      console.log(`[XIMProtocol] isCommandInfoRequest(${command}) -> TRUE (is525=${is525}, is551=${is551})`);
+      return true;
+    }
+    // Debug: log ALL commands in the 500-600 range to catch any we might be missing
+    if (command >= 500 && command <= 600) {
+      console.log(`[XIMProtocol] isCommandInfoRequest(${command}) -> FALSE (command in 500-600 range but NOT 525/551)`);
+    }
+    return false;
+  }
+
+  /**
+   * Handle command-info requests
+   * express.e:4137-4140 for GET_CMD_TOOLTYPE
+   * express.e:4015 for GET_CUSTOM_MSGBASE_MENUCMD
+   */
+  private handleCommandInfoRequest(msg: XIMMessage): void {
+    const command = msg.command;
+
+    if (command === 525) {
+      // GET_CUSTOM_MSGBASE_MENUCMD - Returns menu command that launched this door
+      // e.g., if user typed "FR" which launched AquaScan, return "FR"
+      // Doors use this to look up DOORUSE.FR in their .info tooltypes
+      const cmdName = this.doorCommand || '';
+      console.log(`[XIMProtocol] GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
+
+      // Refresh the string in fixed memory (in case it was overwritten)
+      if (this.doorCommandAddr > 0 && cmdName) {
+        for (let i = 0; i < cmdName.length; i++) {
+          this.emulator.writeMemory(this.doorCommandAddr + i, cmdName.charCodeAt(i));
+        }
+        this.emulator.writeMemory(this.doorCommandAddr + cmdName.length, 0);
+
+        // Set StringPtr to fixed memory location
+        this.messageParser.writeStringPointer(msg.msgAddr, this.doorCommandAddr);
+        const stringContent = this.emulator.readString(this.doorCommandAddr, cmdName.length + 1);
+        console.log(`[XIMProtocol]   StringPtr=0x${this.doorCommandAddr.toString(16)} (fixed) -> "${stringContent}"`);
+      } else {
+        // Fallback: write to embedded buffer
+        this.messageParser.writeMessageString(msg.msgAddr, cmdName);
+        const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+        this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+        console.log(`[XIMProtocol]   StringPtr=0x${stringAddr.toString(16)} (message buffer)`);
+      }
+
+      this.sendReply(msg, cmdName.length);
+    } else if (command === 551) {
+      // GET_CMD_TOOLTYPE - Read tooltype from command's .info file
+      // msg.string = tooltype key to look up (e.g., "DOORUSE.FR")
+      // Returns the tooltype value from the .info file
+      const tooltypeKey = (msg.string || '').toUpperCase();
+      const cmdName = this.doorCommand || '';
+      console.log(`[XIMProtocol] GET_CMD_TOOLTYPE: key="${tooltypeKey}" cmd="${cmdName}"`);
+
+      // Look up the tooltype in command's .info file
+      const fs = require('fs');
+      const path = require('path');
+      const { parseInfoFile } = require('../utils/amiga-command-parser.util');
+
+      let tooltypeValue = '';
+      let found = 0;
+
+      const bbsPath = (this.bbsSession as any)?.dataDir || (this.bbsSession as any)?.bbsRoot || process.cwd();
+      const possiblePaths = [
+        path.join(bbsPath, 'Commands', 'BBSCmd', `${cmdName}.info`),
+        path.join(bbsPath, 'Commands', 'SysCmd', `${cmdName}.info`),
+        path.join(bbsPath, 'Commands', 'ConfCmd', `${cmdName}.info`),
+      ];
+
+      for (const infoPath of possiblePaths) {
+        if (fs.existsSync(infoPath)) {
+          const tooltypes = parseInfoFile(infoPath);
+          if (tooltypes.has(tooltypeKey)) {
+            tooltypeValue = tooltypes.get(tooltypeKey) || '';
+            found = 1;
+            console.log(`[XIMProtocol]   Found "${tooltypeKey}"="${tooltypeValue}" in ${infoPath}`);
+            break;
+          }
+        }
+      }
+
+      if (!found) {
+        console.log(`[XIMProtocol]   Tooltype "${tooltypeKey}" not found`);
+      }
+
+      // Write string to embedded buffer
+      this.messageParser.writeMessageString(msg.msgAddr, tooltypeValue);
+
+      // Write pointer to the embedded string buffer
+      const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+      this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+
+      console.log(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr=0x${stringAddr.toString(16)}`);
+
+      this.messageParser.writeData(msg.msgAddr, found);
+      this.sendReply(msg, found);
+    }
   }
 
   /**
@@ -736,5 +893,91 @@ export class XIMProtocol {
    */
   getStateSnapshot(): XIMState {
     return { ...this.state };
+  }
+
+  /**
+   * Pre-load command's .info file and write DiskObject tooltype pointer to memory
+   * This mimics what real AmiExpress does when launching doors
+   * Doors like AquaScan expect the tooltype array pointer to be at a known memory location
+   */
+  private preLoadCommandDiskObject(): void {
+    if (!this.iconLibrary || !this.doorCommand) {
+      return;
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+
+    console.log(`[XIMProtocol] Pre-loading command .info file for door: ${this.doorCommand}`);
+
+    // Try to find the command's .info file
+    const bbsPath = (this.bbsSession as any)?.dataDir || (this.bbsSession as any)?.bbsRoot || process.cwd();
+    const possiblePaths = [
+      path.join(bbsPath, 'Commands', 'BBSCmd', `${this.doorCommand}.info`),
+      path.join(bbsPath, 'Commands', 'SysCmd', `${this.doorCommand}.info`),
+      path.join(bbsPath, 'Commands', 'ConfCmd', `${this.doorCommand}.info`),
+    ];
+
+    let infoPath = '';
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        infoPath = p;
+        console.log(`[XIMProtocol]   Found .info file: ${infoPath}`);
+        break;
+      }
+    }
+
+    if (!infoPath) {
+      console.log(`[XIMProtocol]   No .info file found for command: ${this.doorCommand}`);
+      return;
+    }
+
+    // Manually call icon.library GetDiskObject by simulating the library call
+    // Set A0 to point to the filename string
+    const CPURegister = { A0: 8, D0: 0 };
+
+    // Write the path to memory at a temporary location
+    const pathAddr = 0x1FF700; // Just below doorCommandAddr
+    for (let i = 0; i < infoPath.length; i++) {
+      this.emulator.writeMemory(pathAddr + i, infoPath.charCodeAt(i));
+    }
+    this.emulator.writeMemory(pathAddr + infoPath.length, 0); // null terminator
+
+    // Set A0 register to point to the path
+    this.emulator.setRegister(CPURegister.A0, pathAddr);
+
+    // Call GetDiskObject
+    console.log(`[XIMProtocol]   Calling GetDiskObject("${infoPath}")`);
+    this.iconLibrary.GetDiskObject();
+
+    // GetDiskObject returns DiskObject pointer in D0
+    const diskObjPtr = this.emulator.getRegister(CPURegister.D0);
+    console.log(`[XIMProtocol]   GetDiskObject returned: 0x${diskObjPtr.toString(16)}`);
+
+    if (diskObjPtr === 0) {
+      console.log(`[XIMProtocol]   Failed to load DiskObject`);
+      return;
+    }
+
+    // Extract do_ToolTypes pointer from DiskObject
+    // DiskObject structure: do_ToolTypes is at offset 53 (0x35)
+    const toolTypesPtr = this.emulator.readMemory32(diskObjPtr + 53);
+    console.log(`[XIMProtocol]   DiskObject->do_ToolTypes = 0x${toolTypesPtr.toString(16)}`);
+
+    // CRITICAL: Write tooltype array pointer to memory address 0x100e5c
+    // This is where AquaScan (and likely other doors) expect to find it
+    const TOOLTYPE_PTR_ADDR = 0x100e5c;
+    this.emulator.writeMemory32(TOOLTYPE_PTR_ADDR, toolTypesPtr);
+    console.log(`[XIMProtocol]   ✅ Wrote tooltype pointer to 0x${TOOLTYPE_PTR_ADDR.toString(16)}`);
+
+    // Verify the write
+    const verifyPtr = this.emulator.readMemory32(TOOLTYPE_PTR_ADDR);
+    console.log(`[XIMProtocol]   Verification: Memory at 0x${TOOLTYPE_PTR_ADDR.toString(16)} = 0x${verifyPtr.toString(16)}`);
+
+    if (verifyPtr === toolTypesPtr) {
+      console.log(`[XIMProtocol]   ✅ SUCCESS: Door can now call FindToolType(0x100e5c, ...) and it will work!`);
+    } else {
+      console.log(`[XIMProtocol]   ❌ ERROR: Verification failed!`);
+    }
   }
 }

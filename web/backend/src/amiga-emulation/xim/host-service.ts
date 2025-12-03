@@ -68,7 +68,7 @@ export class XIMHostService {
     this.doorPort = this.exec.ensurePublicPort(portName);
     this.exec.setDoorPortAddress(this.doorPort);
 
-    this.xim = new XIMProtocol(this.emulator, this.exec, this.socket, this.doorPort, this.bbsSession);
+    this.xim = new XIMProtocol(this.emulator, this.exec, this.socket, this.doorPort, this.bbsSession, null); // No iconLibrary in host-service context
     this.parser = new XIMMessageParser(this.emulator);
 
     // Route PutMsg() traffic to the real XIM handlers, same as AmigaDoorSession does.

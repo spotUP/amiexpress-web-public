@@ -81,7 +81,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const zmodemSession = useRef<any | null>(null);
   const pendingUploadFiles = useRef<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const transferTimeout = useRef<NodeJS.Timeout | null>(null);
+  const transferTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resetZmodem = () => {
     zmodemSession.current = null;

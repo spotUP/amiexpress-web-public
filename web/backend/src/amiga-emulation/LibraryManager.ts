@@ -8,6 +8,15 @@ import { ExecLibrary } from "./api/ExecLibrary.js";
 import { AEDoorLibrary } from "./api/AEDoorLibrary.js";
 import { DosLibrary } from "./api/DosLibrary.js";
 import { IconLibrary } from "./api/IconLibrary.js";
+import { UtilityLibrary } from "./api/UtilityLibrary.js";
+import {
+  MathFFPLibrary,
+  MathTransLibrary,
+  MathIEEEDoubBasLibrary,
+  MathIEEEDoubTransLibrary,
+  MathIEEESingBasLibrary,
+  MathIEEESingTransLibrary,
+} from "./api/MathLibrary.js";
 import { LibraryTraps } from "./api/LibraryTraps.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import { DoorConfig, DoorConstants } from "./DoorTypes.js";
@@ -26,6 +35,13 @@ export class LibraryManager {
   public aedoorLibrary: AEDoorLibrary | null = null;
   public dosLibrary: DosLibrary | null = null;
   public iconLibrary: IconLibrary | null = null;
+  public utilityLibrary: UtilityLibrary | null = null;
+  public mathFFPLibrary: MathFFPLibrary | null = null;
+  public mathTransLibrary: MathTransLibrary | null = null;
+  public mathIEEEDoubBasLibrary: MathIEEEDoubBasLibrary | null = null;
+  public mathIEEEDoubTransLibrary: MathIEEEDoubTransLibrary | null = null;
+  public mathIEEESingBasLibrary: MathIEEESingBasLibrary | null = null;
+  public mathIEEESingTransLibrary: MathIEEESingTransLibrary | null = null;
   public libraryTraps: LibraryTraps | null = null;
   public ximProtocol: XIMProtocol | null = null;
   public bbsApiLibrary: BbsApiLibrary | null = null;
@@ -191,6 +207,14 @@ export class LibraryManager {
     const useXimProtocol = doorType !== "SIM" && doorType !== "SUP";
     this.useXimProtocol = useXimProtocol;
 
+    // Create icon.library BEFORE XIMProtocol so it can pre-load command .info files
+    console.log("[LibraryManager] Creating icon.library...");
+    const bbsRoot = projectRoot;
+    this.ensureAnswerFiles(bbsRoot);
+    this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
+    // Set door directory for PROGDIR: support in GetDiskObject
+    this.iconLibrary.setDoorDirectory(doorDir);
+
     if (useXimProtocol) {
       console.log("[LibraryManager] Creating XIM Protocol handler...");
       this.ximProtocol = new XIMProtocol(
@@ -198,7 +222,8 @@ export class LibraryManager {
         this.execLibrary,
         this.socket,
         portAddr,
-        this.config.bbsSession
+        this.config.bbsSession,
+        this.iconLibrary  // Pass iconLibrary for command .info file loading
       );
     } else {
       console.log(
@@ -259,11 +284,18 @@ export class LibraryManager {
       this.config.bbsSession || {}
     );
 
-    console.log("[LibraryManager] Creating icon.library...");
+    console.log("[LibraryManager] Creating utility.library...");
 
-    const bbsRoot = projectRoot;
-    this.ensureAnswerFiles(bbsRoot);
-    this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
+    this.utilityLibrary = new UtilityLibrary(this.emulator, this.socket);
+
+    console.log("[LibraryManager] Creating math libraries...");
+
+    this.mathFFPLibrary = new MathFFPLibrary(this.emulator);
+    this.mathTransLibrary = new MathTransLibrary(this.emulator);
+    this.mathIEEEDoubBasLibrary = new MathIEEEDoubBasLibrary(this.emulator);
+    this.mathIEEEDoubTransLibrary = new MathIEEEDoubTransLibrary(this.emulator);
+    this.mathIEEESingBasLibrary = new MathIEEESingBasLibrary(this.emulator);
+    this.mathIEEESingTransLibrary = new MathIEEESingTransLibrary(this.emulator);
 
     console.log("[LibraryManager] Installing library call traps...");
 
@@ -273,14 +305,28 @@ export class LibraryManager {
       return this.libraryTraps!.handleTrap(pc);
     });
 
-    // Reset allocator base after bootstrapping ports/libraries to match vamos expectations
-    this.execLibrary.setAllocBase(0x0090d0);
+    // Reset allocator base after bootstrapping ports/libraries
+    // Use 0x100000 (1MB) to avoid overlap with door code segments (0x1000-0x100000)
+    this.execLibrary.setAllocBase(0x100000);
 
     this.libraryTraps.installExecVectors();
 
     this.libraryTraps.setDOSLibrary(this.dosLibrary);
     this.libraryTraps.setAEDoorLibrary(this.aedoorLibrary);
     this.libraryTraps.setIconLibrary(this.iconLibrary);
+    this.libraryTraps.setUtilityLibrary(this.utilityLibrary);
+    this.libraryTraps.setMathFFPLibrary(this.mathFFPLibrary);
+    this.libraryTraps.setMathTransLibrary(this.mathTransLibrary);
+    this.libraryTraps.setMathIEEEDoubBasLibrary(this.mathIEEEDoubBasLibrary);
+    this.libraryTraps.setMathIEEEDoubTransLibrary(this.mathIEEEDoubTransLibrary);
+    this.libraryTraps.setMathIEEESingBasLibrary(this.mathIEEESingBasLibrary);
+    this.libraryTraps.setMathIEEESingTransLibrary(this.mathIEEESingTransLibrary);
+
+    // Pre-open utility.library and install vectors immediately
+    // Some doors use utility.library functions without calling OpenLibrary first
+    console.log("[LibraryManager] Pre-opening utility.library and installing vectors...");
+    this.execLibrary.openLibraryHybrid("utility.library", 37);
+    this.libraryTraps.installUtilityVectors();
 
     this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {
       if (name.toLowerCase() === "dos.library") {
@@ -301,10 +347,39 @@ export class LibraryManager {
         );
         this.libraryTraps!.installIconVectors();
       }
+      if (name.toLowerCase() === "utility.library") {
+        console.log(
+          "[LibraryManager] utility.library opened, installing vectors..."
+        );
+        this.libraryTraps!.installUtilityVectors();
+      }
+      if (name.toLowerCase() === "mathffp.library") {
+        console.log("[LibraryManager] mathffp.library opened, installing vectors...");
+        this.libraryTraps!.installMathFFPVectors();
+      }
+      if (name.toLowerCase() === "mathtrans.library") {
+        console.log("[LibraryManager] mathtrans.library opened, installing vectors...");
+        this.libraryTraps!.installMathTransVectors();
+      }
+      if (name.toLowerCase() === "mathieeedoubbas.library") {
+        console.log("[LibraryManager] mathieeedoubbas.library opened, installing vectors...");
+        this.libraryTraps!.installMathIEEEDoubBasVectors();
+      }
+      if (name.toLowerCase() === "mathieeedoubtrans.library") {
+        console.log("[LibraryManager] mathieeedoubtrans.library opened, installing vectors...");
+        this.libraryTraps!.installMathIEEEDoubTransVectors();
+      }
+      if (name.toLowerCase() === "mathieeesingbas.library") {
+        console.log("[LibraryManager] mathieeesingbas.library opened, installing vectors...");
+        this.libraryTraps!.installMathIEEESingBasVectors();
+      }
+      if (name.toLowerCase() === "mathieeesingtrans.library") {
+        console.log("[LibraryManager] mathieeesingtrans.library opened, installing vectors...");
+        this.libraryTraps!.installMathIEEESingTransVectors();
+      }
       if (
         name.toLowerCase() === "graphics.library" ||
-        name.toLowerCase() === "intuition.library" ||
-        name.toLowerCase() === "utility.library"
+        name.toLowerCase() === "intuition.library"
       ) {
         console.log(
           `[LibraryManager] ${name} opened, installing stub vectors from LVOs.i...`
