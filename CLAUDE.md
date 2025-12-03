@@ -567,12 +567,32 @@ BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
 - Essential for debugging door execution, understanding polling loops, and identifying missing library calls
 - Much more effective than trying to infer behavior from register/memory logging
 
-## Amiga Binary Testing (Optional)
-- **vamos**: CLI tool for testing Amiga binaries outside BBS
+## Amiga Binary Testing and Debugging (CRITICAL)
+- **vamos**: ALWAYS use as reference implementation when debugging 68K emulator issues
+- **amitools**: Complete suite of Amiga development/debugging tools
 - Install: `pip3 install amitools`
-- Usage: `vamos doors/who/who` (test door execution)
-- Also available: `vda68k` for disassembly
-- Helpful for debugging 68K door issues before BBS integration
+
+### When to Use vamos/amitools
+1. **Emulator Bugs**: If a door works on real Amiga but fails in our emulator, compare with vamos
+2. **JSR/Branch Issues**: Verify branch targets and PC-relative calculations match vamos
+3. **Library Calls**: Compare library call sequences and return values
+4. **Memory Layout**: Check load addresses and segment placement
+5. **Before Patching Binaries**: NEVER patch Amiga binaries - fix the emulator instead
+
+### Usage Examples
+```bash
+# Test door execution
+vamos doors/who/who
+
+# Trace execution with detailed logging
+vamos --log-file=/tmp/vamos.log doors/Bulls/Bulls
+
+# Disassemble with vda68k
+vda68k doors/RTW/rtw -s 0x1156 -e 0x1200
+```
+
+### Critical Rule
+**NEVER assume Amiga binaries are buggy** - if they work in vamos or on real Amiga, the bug is in OUR emulator, not the binary. Use vamos as ground truth for correct behavior.
 
 ## Amiga BBS Import/Export
 - Import users, messages, files, and configuration from classic Amiga BBS
