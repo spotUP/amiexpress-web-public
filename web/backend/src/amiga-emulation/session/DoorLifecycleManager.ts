@@ -1148,8 +1148,10 @@ export class DoorLifecycleManager {
     }
 
     // CRITICAL: Check for SP corruption immediately after instruction
+    // Note: Programs can allocate their own stack via AllocMem (starts at 0x100000)
+    // and set SP to that memory, so we allow SP up to 0x800000 (8MB)
     const spAfter = this.emulator.getRegister(15);
-    if (spAfter === 0xfffffffa || spAfter < 0x1000 || spAfter > 0x100000) {
+    if (spAfter === 0xfffffffa || spAfter < 0x1000 || spAfter > 0x800000) {
       const newPc = this.emulator.getRegister(16);
       console.error(`\n*** SP CORRUPTION DETECTED AFTER INSTRUCTION ***`);
       console.error(`  PC before: 0x${pc.toString(16)}`);

@@ -111,12 +111,18 @@ export class DoorLoader {
     );
     const dataBase = dataSegment ? dataSegment.address : 0;
     this.stackSizeBytes = Math.max(4096, this.config.stack || 8192);
-    // Place stack AFTER DATA segment (like vamos does), not at hardcoded address
+    // Place stack AFTER last segment (like vamos does), not at hardcoded address
     // This prevents startup code from zeroing our stack/exit trap
-    const dataEnd = dataSegment ? dataSegment.address + dataSegment.data.length : 0x10000;
+    // For CODE+DATA programs: after DATA. For CODE-only: after CODE.
+    let lastSegmentEnd = 0x10000; // fallback
+    if (dataSegment) {
+      lastSegmentEnd = dataSegment.address + dataSegment.data.length;
+    } else if (codeSegment) {
+      lastSegmentEnd = codeSegment.address + codeSegment.data.length;
+    }
     // Align to 8 bytes and add small gap (vamos uses ~20 bytes gap)
-    this.stackBaseAddr = ((dataEnd + 32) + 7) & ~7;
-    console.log(`  Stack: lower=0x${this.stackBaseAddr.toString(16)}, upper=0x${(this.stackBaseAddr + this.stackSizeBytes).toString(16)} (after DATA end 0x${dataEnd.toString(16)})`);
+    this.stackBaseAddr = ((lastSegmentEnd + 32) + 7) & ~7;
+    console.log(`  Stack: lower=0x${this.stackBaseAddr.toString(16)}, upper=0x${(this.stackBaseAddr + this.stackSizeBytes).toString(16)} (after segment end 0x${lastSegmentEnd.toString(16)})`);
 
     // Match vamos startup: user mode, Z flag set from zeroed D registers
     this.emulator.setRegister(17, 0x0000); // SR (Status Register)
