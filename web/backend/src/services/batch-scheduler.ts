@@ -343,7 +343,9 @@ function runAmigaDoorViaRunner(
 
     const useTsRunner = resolvedRunner.endsWith('.ts');
     const command = useTsRunner ? 'npx' : 'node';
-    const toolTypes = { DISABLE_GUARD: 'true' };
+    // For batch doors, use a higher loop limit (10M) but keep the guard enabled
+    // This allows longer-running doors while still catching infinite loops
+    const toolTypes = { LOOP_LIMIT: '10000000' };
     const execArgs = useTsRunner
       ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes)]
       : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes)];
@@ -351,7 +353,27 @@ function runAmigaDoorViaRunner(
     const child: any = require('child_process').spawn(command, execArgs, {
       cwd: cwd || path.dirname(doorPath),
       env: { ...process.env, ...envOverrides, TS_NODE_TRANSPILE_ONLY: 'true' },
+      detached: true, // Create new process group so we can kill the entire tree
     });
+
+    // Timeout to prevent stuck doors from running forever (60 seconds max for batch doors)
+    const BATCH_DOOR_TIMEOUT = 60000;
+    let killed = false;
+    const timeoutHandle = setTimeout(() => {
+      if (!child.killed && child.pid) {
+        console.warn(`[BatchScheduler] Door ${path.basename(doorPath)} timed out after ${BATCH_DOOR_TIMEOUT / 1000}s, killing process tree (pid ${child.pid})`);
+        killed = true;
+        try {
+          // Kill entire process group (negative pid kills the group)
+          process.kill(-child.pid, 'SIGKILL');
+        } catch (e: any) {
+          // Fallback to regular kill if process group kill fails
+          console.warn(`[BatchScheduler] Process group kill failed: ${e.message}, trying direct kill`);
+          child.kill('SIGKILL');
+        }
+      }
+    }, BATCH_DOOR_TIMEOUT);
+
     const MAX_OUTPUT_LENGTH = 256 * 1024; // keep last 256 KB
     let output = '';
     const appendOutput = (chunk: Buffer) => {
@@ -369,12 +391,16 @@ function runAmigaDoorViaRunner(
     });
 
     child.on('error', (err: any) => {
+      clearTimeout(timeoutHandle);
       console.warn(`[BatchScheduler] Amiga door runner failed to start: ${err.message}`);
       resolve();
     });
     child.on('close', (code: number) => {
+      clearTimeout(timeoutHandle);
       const trimmed = output.trim();
-      if (code !== 0) {
+      if (killed) {
+        console.warn(`[BatchScheduler] Door ${path.basename(doorPath)} was killed due to timeout`);
+      } else if (code !== 0) {
         console.warn(`[BatchScheduler] Amiga door runner exited with code ${code}`);
         if (trimmed) {
           console.warn(`[BatchScheduler] Runner output:\n${trimmed}`);

@@ -106,14 +106,29 @@ export class DoorLifecycleManager {
     this.doorLoader = doorLoader;
     this.messageHandler = messageHandler;
 
+    // Get loop guard settings from toolTypes (passed by batch-scheduler or run-amiga-door)
+    // or fall back to environment variables
+    const toolTypes = config.toolTypes || {};
     const disableGuardEnv = process.env.AEDOOR_DISABLE_GUARD;
+    const disableGuardTooltype = toolTypes['DISABLE_GUARD'];
+
+    // Loop limit: toolTypes > env > default (500K)
+    const loopLimitTooltype = toolTypes['LOOP_LIMIT'];
+    const loopLimit = loopLimitTooltype
+      ? Number(loopLimitTooltype)
+      : Number(process.env.AEDOOR_LOOP_LIMIT ?? 500000);
+
+    // Disable guard: must be explicitly set to 'true' or '1' to disable
+    // Default is ENABLED (guard active) to prevent runaway doors
+    const disableGuard = disableGuardTooltype === 'true' || disableGuardTooltype === '1' ||
+                         disableGuardEnv === 'true' || disableGuardEnv === '1';
+
     this.lifecycleConfig = {
       timeout: config.timeout || 300,
-      loopGuardLimit: Number(process.env.AEDOOR_LOOP_LIMIT ?? 500000),
+      loopGuardLimit: loopLimit,
       cycleTarget: 8, // 8MHz CPU cycles per microsecond
       debugLevel: (process.env.AEDOOR_DEBUG_LEVEL as any) || "normal",
-      // Allow env override so we can re-enable the guard for debugging tight loops
-      disableGuard: disableGuardEnv ? disableGuardEnv === "1" : true,
+      disableGuard: disableGuard,
       progressTimeoutMs: Number(process.env.AEDOOR_PROGRESS_TIMEOUT_MS ?? 5000),
     };
     console.log(
