@@ -75,6 +75,14 @@
   font-display: block;
 }
 
+@font-face {
+  font-family: 'C64ProMono';
+  src: url('/fonts/C64_Pro_Mono-STYLE.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;

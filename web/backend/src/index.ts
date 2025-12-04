@@ -21,7 +21,7 @@ export { BBSState, LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
 import { testFile, TestResult } from './utils/file-test.util';
 import { moveUploadedFile, getConferenceDir } from './utils/file-hold.util';
-import { convertUnicodePuaToPetscii } from './utils/petscii.util';
+import { convertUnicodePuaToPetscii, convertPetsciiInputToAscii, convertAsciiToPetsciiOutput } from './utils/petscii.util';
 import { writeUploadToDirFile } from './utils/dir-file.util';
 import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.util';
 import { AuthHandler } from './handlers/auth.handler';
@@ -276,6 +276,7 @@ export interface BBSSession {
   mouseEventsEnabled?: boolean; // Whether mouse events should be sent to door (for ANSI editor, etc.)
   ansiEnabled?: boolean; // Whether ANSI is enabled for this session
   petsciiMode?: boolean; // Whether PETSCII mode is enabled (40x25, .seq files)
+  ripMode?: boolean; // Whether RIP graphics mode is enabled (640x350, .rip files)
   terminalType?: 'c64' | 'modern' | 'unknown'; // Terminal type: C64 (raw PETSCII), modern (Unicode PUA), or unknown
   screenWidth?: number; // Terminal width (40 for C64, 80 for modern)
   screenHeight?: number; // Terminal height (25 for C64, 24 for modern)
@@ -568,6 +569,15 @@ setOlmDependencies({
     // TODO: Implement full environment stat tracking
   },
   config
+});
+
+// Initialize Preference/Chat commands handler dependencies - express.e:26113+ (Expert mode)
+setPreferenceChatCommandsDependencies({
+  startSysopPage: (socket: any, session: any) => {
+    // Placeholder for sysop page - handled elsewhere
+    console.log('[SYSOP] Page sysop requested');
+  },
+  db
 });
 
 // Initialize New User Registration handler dependencies - express.e:30003+
@@ -950,8 +960,22 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
   const emitter = {
     emit: (event: string, data: any) => {
       if (event === 'ansi-output') {
-        // Modern terminal or unknown - send as-is (ANSI codes)
-        connection.write(data);
+        // Check if this is a C64/PETSCII terminal
+        if (connection.session?.terminalType === 'c64' || connection.session?.petsciiMode) {
+          // C64 terminal - convert ASCII text to PETSCII with proper case handling
+          // This handles prompts like "Username:", "Password:", etc.
+          if (typeof data === 'string') {
+            // Strip ANSI escape sequences (C64 doesn't understand them)
+            const strippedData = data.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+            const petsciiBytes = convertAsciiToPetsciiOutput(strippedData);
+            connection.write(petsciiBytes);
+          } else {
+            connection.write(data);
+          }
+        } else {
+          // Modern terminal or unknown - send as-is (ANSI codes)
+          connection.write(data);
+        }
       } else if (event === 'petscii-output') {
         // Handle PETSCII output based on terminal type
         if (connection.session?.terminalType === 'c64') {
@@ -998,8 +1022,16 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
     }
 
     // Convert telnet/SSH data to string
-    // Use 'binary' encoding to preserve raw bytes, then convert to UTF-8
-    const input = data.toString('utf-8');
+    // For C64/PETSCII terminals, convert PETSCII bytes to ASCII
+    // For modern terminals, use UTF-8 encoding
+    let input: string;
+    if (connection.session?.petsciiMode || connection.session?.terminalType === 'c64') {
+      // PETSCII terminals send characters in PETSCII encoding, not ASCII
+      // e.g., lowercase 'a' is 0xC1 in PETSCII, not 0x61 like ASCII
+      input = convertPetsciiInputToAscii(data);
+    } else {
+      input = data.toString('utf-8');
+    }
 
     // Process through BBS command handler (same as Socket.IO)
     if (connection.session) {
@@ -2340,6 +2372,36 @@ async function initializeData() {
       telnetServer = new TelnetServer(telnetPort);
       telnetServer.on('connection', (connection: TelnetConnection) => {
         setupTelnetSSHHandler(connection, 'telnet');
+      });
+      // Handle C64 terminal auto-detection (skip graphics prompt, show BBSTITLE directly)
+      telnetServer.on('c64-detected', async (connection: TelnetConnection) => {
+        if (connection.session) {
+          console.log('[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE');
+          const { displayScreen } = await import('./handlers/screen.handler');
+          // Create a telnet-compatible emitter for displayScreen
+          const emitter = {
+            emit: (event: string, data: any) => {
+              if (event === 'petscii-output' || event === 'ansi-output') {
+                // For C64, convert to raw PETSCII if needed
+                if (typeof data === 'string') {
+                  const petsciiData = convertUnicodePuaToPetscii(data);
+                  connection.write(petsciiData);
+                } else {
+                  connection.write(data);
+                }
+              }
+            }
+          };
+          await displayScreen(emitter as any, connection.session, 'BBSTITLE');
+          // Transition to login
+          connection.session.state = BBSState.LOGON;
+          connection.session.subState = undefined;
+          connection.session.tempData = connection.session.tempData || {};
+          connection.session.tempData.loginPhase = 'username';
+          connection.write(Buffer.from([0x0D, 0x0D])); // Two CR for spacing
+          // Send Username: prompt in proper PETSCII (uppercase displays correctly)
+          connection.write(convertAsciiToPetsciiOutput('Username: '));
+        }
       });
       await telnetServer.start();
       console.log(`[OK] Telnet Server ready on port ${telnetPort}`);

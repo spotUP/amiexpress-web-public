@@ -21,8 +21,8 @@ import { config } from '../config';
 import { finalizeCommand } from '../utils/command-response.util';
 
 // Injected dependencies
-let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
-let _findSecurityScreen: (screenBasePath: string, userSecLevel: number) => string | null;
+let _displayScreen: (socket: any, session: BBSSession, screenName: string) => Promise<boolean>;
+let _findSecurityScreen: (screenBasePath: string, userSecLevel: number, petsciiMode?: boolean, ripMode?: boolean) => string | null;
 
 // Injection function
 export function setSystemCommandsDependencies(deps: {
@@ -37,7 +37,7 @@ export function setSystemCommandsDependencies(deps: {
  * Handle G command - Goodbye/Logoff
  * 1:1 port from express.e:25047-25075 internalCommandG()
  */
-export function handleGoodbyeCommand(socket: any, session: BBSSession, params: string = ''): void {
+export async function handleGoodbyeCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // express.e:25050-25055 - Parse parameters
   const parsedParams = ParamsUtil.parse(params);
   let auto = false;
@@ -105,7 +105,7 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
   if (session.shortcuts) session.shortcuts.clear();
   session.doorExpertMode = false;
   session.menuPause = true; // ensure next displayMainMenu shows if invoked during logoff edge cases
-  const logoffDisplayed = _displayScreen(socket, session, 'Logoff');
+  const logoffDisplayed = await _displayScreen(socket, session, 'Logoff');
 
   if (!logoffDisplayed) {
     // Fallback if Logoff.txt doesn't exist
@@ -123,7 +123,8 @@ export function handleGoodbyeCommand(socket: any, session: BBSSession, params: s
     console.error('[LOGOFF] Failed to save flagged files:', err);
   }
 
-  socket.emit('ansi-output', AnsiUtil.colorize('Disconnecting...', 'yellow') + '\r\n');
+  // express.e logoff message - show modem disconnect message
+  socket.emit('ansi-output', '\r\n\r\nClick...NO CARRIER\r\n');
 
   // Emit disconnect event to close connection (give time for screen to display and door to run)
   setTimeout(() => {
@@ -184,7 +185,7 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
   const helpBasePath = 'BBSHelp';
 
   // express.e:25084 - findSecurityScreen()
-  const helpScreenPath = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0);
+  const helpScreenPath = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
 
   if (helpScreenPath) {
     // express.e:25085 - displayFile(screen)

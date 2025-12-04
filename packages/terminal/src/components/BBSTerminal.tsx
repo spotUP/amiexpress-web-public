@@ -1,10 +1,14 @@
-import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import Zmodem from 'zmodem.js/src/zmodem_browser';
+
+// RIP Graphics types (inline to avoid package dependency)
+const RIP_WIDTH = 640;
+const RIP_HEIGHT = 350;
 
 const SHARED_AUTH_TOKEN_KEY = 'authToken';
 const BBS_AUTH_TOKEN_KEY = 'bbs_auth_token';
@@ -78,6 +82,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     paths: [],
   });
   const zmodemSentry = useRef<any | null>(null);
+
+  // RIP Graphics state
+  const [ripMode, setRipMode] = useState<boolean>(false);
+  const ripCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ripBuffer = useRef<string>(''); // Buffer for RIP commands
   const zmodemSession = useRef<any | null>(null);
   const pendingUploadFiles = useRef<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -560,6 +569,22 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
+      // Check for RIP mode escape codes (express.e:25679-25683)
+      // [1! = Enter RIP pixel/graphics mode
+      // [2! = Return to RIP text mode
+      if (data.includes('\x1b[1!') || data.includes('[1!')) {
+        console.log('[RIP] Entering RIP graphics mode');
+        setRipMode(true);
+        // Strip the escape code and continue processing
+        data = data.replace(/\x1b?\[1!/g, '');
+      }
+      if (data.includes('\x1b[2!') || data.includes('[2!')) {
+        console.log('[RIP] Exiting RIP graphics mode');
+        setRipMode(false);
+        // Strip the escape code and continue processing
+        data = data.replace(/\x1b?\[2!/g, '');
+      }
+
       const currentFont = term.options.fontFamily;
       if (currentFont && currentFont.includes('PetMe64')) {
         if (data.includes('\x1b[2J') || data.includes('\x1b[H\x1b[2J') || data.includes('\x1b[0m\x1b[2J')) {
@@ -567,6 +592,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           console.log('[ANSI] Screen clear detected, restored font from PetMe64 to', normalFont.current);
         }
       }
+
+      // If in RIP mode, buffer RIP commands for processing
+      if (ripMode && data.includes('!|')) {
+        ripBuffer.current += data;
+        // Process RIP commands in buffer (basic implementation - full parsing in RIPRenderer)
+        console.log('[RIP] Buffered RIP content, length:', ripBuffer.current.length);
+      }
+
       term.write(data);
       term.refresh(0, term.rows - 1);
     });
@@ -584,6 +617,32 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.write(data);
       term.refresh(0, term.rows - 1);
       console.log('[PETSCII] PETSCII content written to terminal');
+    });
+
+    // Terminal resize handler (PETSCII mode uses 40x25)
+    socket.on('terminal-resize', (size: { cols: number; rows: number }) => {
+      console.log('[Terminal] Resize request:', size.cols, 'x', size.rows);
+      term.resize(size.cols, size.rows);
+      // For PETSCII mode (40x25), also switch to PetMe64 font
+      if (size.cols === 40 && size.rows === 25) {
+        const currentFont = term.options.fontFamily;
+        if (!currentFont?.includes('PetMe64')) {
+          normalFont.current = currentFont || 'mosoul, "Courier New", monospace';
+        }
+        term.options.fontFamily = 'PetMe64, "Courier New", monospace';
+        console.log('[PETSCII] Terminal resized to 40x25, switched to PetMe64 font');
+      }
+    });
+
+    // RIP mode handler (RIPscrip v1.54 graphics protocol)
+    socket.on('rip-mode', (info: { enabled: boolean; width?: number; height?: number }) => {
+      console.log('[RIP] Mode changed:', info.enabled ? 'ENABLED' : 'DISABLED');
+      setRipMode(info.enabled);
+      if (info.enabled) {
+        // Initialize RIP canvas when entering RIP mode
+        ripBuffer.current = '';
+        console.log('[RIP] RIP graphics mode initialized:', info.width || RIP_WIDTH, 'x', info.height || RIP_HEIGHT);
+      }
     });
 
     // Auto-login handlers
@@ -874,8 +933,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         loginState.current === 'username' ||
         loginState.current === 'password' ||
         loginState.current === 'new-user-prompt' ||
-        loginState.current === 'checking-username' ||
-        loginState.current === 'registering'
+        loginState.current === 'checking-username'
+        // Note: 'registering' removed - server handles registration input including pause prompts
       ) {
         return;
       }
@@ -916,6 +975,23 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     terminalInstance.current?.focus();
   };
 
+  // Handle RIP canvas click to send commands back to BBS
+  const handleRipCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = ripCanvasRef.current;
+    const socket = socketRef.current;
+    if (!canvas || !socket) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = RIP_WIDTH / rect.width;
+    const scaleY = RIP_HEIGHT / rect.height;
+    const x = Math.floor((event.clientX - rect.left) * scaleX);
+    const y = Math.floor((event.clientY - rect.top) * scaleY);
+
+    console.log(`[RIP] Canvas click at ${x}, ${y}`);
+    // In a full implementation, we would check mouse regions here
+    // For now, just log the click
+  }, []);
+
   return (
     <div
       className={`min-h-screen w-full flex items-center justify-center ${className}`}
@@ -935,6 +1011,48 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           maxWidth: '960px',
         }}
       />
+      {/* RIP Graphics Canvas Overlay */}
+      {ripMode && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10,
+            backgroundColor: '#000',
+            border: '2px solid #555',
+            boxShadow: '0 0 20px rgba(0,0,0,0.8)',
+          }}
+        >
+          <canvas
+            ref={ripCanvasRef}
+            width={RIP_WIDTH}
+            height={RIP_HEIGHT}
+            onClick={handleRipCanvasClick}
+            style={{
+              imageRendering: 'pixelated',
+              cursor: 'pointer',
+              display: 'block',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: '5px',
+              right: '5px',
+              backgroundColor: '#333',
+              color: '#0f0',
+              padding: '2px 6px',
+              fontSize: '10px',
+              fontFamily: 'monospace',
+              borderRadius: '3px',
+            }}
+          >
+            RIP Graphics
+          </div>
+        </div>
+      )}
       <input
         ref={fileInputRef}
         type="file"

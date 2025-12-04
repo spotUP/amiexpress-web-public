@@ -25,6 +25,7 @@ import {
   MathIEEESingBasLibrary,
   MathIEEESingTransLibrary,
 } from "./MathLibrary";
+import { IntuitionLibrary } from "./IntuitionLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 import * as fs from "fs";
 import * as path from "path";
@@ -434,6 +435,231 @@ const DOS_VECTORS: LibraryVector[] = [
     name: "DateToStr",
     handler: (emu, lib: DosLibrary) => {
       lib.DateToStr();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -228,
+    name: "AllocDosObject",
+    handler: (emu, lib: DosLibrary) => {
+      lib.AllocDosObject();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -234,
+    name: "FreeDosObject",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FreeDosObject();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -378,
+    name: "OpenFromLock",
+    handler: (emu, lib: DosLibrary) => {
+      lib.OpenFromLock();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -72,
+    name: "DeleteFile",
+    handler: (emu, lib: DosLibrary) => {
+      lib.DeleteFile();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -78,
+    name: "Rename",
+    handler: (emu, lib: DosLibrary) => {
+      lib.Rename();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -114,
+    name: "Info",
+    handler: (emu, lib: DosLibrary) => {
+      lib.Info();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -168,
+    name: "SetComment",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SetComment();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -174,
+    name: "SetProtection",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SetProtection();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -300,
+    name: "AddPart",
+    handler: (emu, lib: DosLibrary) => {
+      lib.AddPart();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -288,
+    name: "FilePart",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FilePart();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -294,
+    name: "PathPart",
+    handler: (emu, lib: DosLibrary) => {
+      lib.PathPart();
+      return emu.getRegister(0);
+    },
+  },
+  // All remaining dos.library functions from DosLibrary.handleCall()
+  {
+    offset: -138,
+    name: "CreateProc",
+    handler: (emu, lib: DosLibrary) => {
+      lib.CreateProc();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -150,
+    name: "LoadSeg",
+    handler: (emu, lib: DosLibrary) => {
+      lib.LoadSeg();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -156,
+    name: "UnLoadSeg",
+    handler: (emu, lib: DosLibrary) => {
+      lib.UnLoadSeg();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -162,
+    name: "DeviceProc",
+    handler: (emu, lib: DosLibrary) => {
+      lib.DeviceProc();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -180,
+    name: "WaitForChar_180",
+    handler: (emu, lib: DosLibrary) => {
+      lib.WaitForChar();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -264,
+    name: "VPrintf",
+    handler: (emu, lib: DosLibrary) => {
+      lib.VPrintf();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -390,
+    name: "Fault",
+    handler: (emu, lib: DosLibrary) => {
+      lib.Fault();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -396,
+    name: "PrintFault",
+    handler: (emu, lib: DosLibrary) => {
+      lib.PrintFault();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -516,
+    name: "FGetC_516",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FGetC();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -522,
+    name: "FPutC_522",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FPutC();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -534,
+    name: "FRead_534",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FRead();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -540,
+    name: "FWrite_540",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FWrite();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -546,
+    name: "FGets_546",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FGets();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -552,
+    name: "FPuts_552",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FPuts();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -564,
+    name: "VFPrintf",
+    handler: (emu, lib: DosLibrary) => {
+      lib.VFPrintf();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -804,
+    name: "ReadArgs_804",
+    handler: (emu, lib: DosLibrary) => {
+      lib.ReadArgs();
+      return emu.getRegister(0);
+    },
+  },
+  {
+    offset: -810,
+    name: "FreeArgs_810",
+    handler: (emu, lib: DosLibrary) => {
+      lib.FreeArgs();
       return emu.getRegister(0);
     },
   },
@@ -1488,6 +1714,73 @@ const MATHIEEESINGTRANS_VECTORS: LibraryVector[] = [
 ];
 
 /**
+ * Intuition.library function vectors
+ * Reference: Amiga ROM Kernel Reference Manual & intuition.library FD file
+ * LVO = Library Vector Offset (in bytes from library base)
+ *
+ * These are stub implementations since we don't have a real Amiga GUI,
+ * but doors may still call these functions.
+ */
+const INTUITION_VECTORS: LibraryVector[] = [
+  {
+    offset: -72, // LVO -72 CloseWindow
+    name: "CloseWindow",
+    handler: (emu, lib: IntuitionLibrary) => {
+      lib.CloseWindow();
+      return emu.getRegister(0); // Return D0
+    },
+  },
+  {
+    offset: -78, // LVO -78 CloseScreen
+    name: "CloseScreen",
+    handler: (emu, lib: IntuitionLibrary) => {
+      lib.CloseScreen();
+      return emu.getRegister(0); // Return D0
+    },
+  },
+  {
+    offset: -198, // LVO -198 OpenScreen
+    name: "OpenScreen",
+    handler: (emu, lib: IntuitionLibrary) => {
+      lib.OpenScreen();
+      return emu.getRegister(0); // Return D0 (screen handle)
+    },
+  },
+  {
+    offset: -204, // LVO -204 OpenWindow
+    name: "OpenWindow",
+    handler: (emu, lib: IntuitionLibrary) => {
+      lib.OpenWindow();
+      return emu.getRegister(0); // Return D0 (window handle)
+    },
+  },
+  {
+    offset: -276, // LVO -276 SetWindowTitles
+    name: "SetWindowTitles",
+    handler: (emu, lib: IntuitionLibrary) => {
+      lib.SetWindowTitles();
+      return emu.getRegister(0); // Return D0
+    },
+  },
+  {
+    offset: -282, // LVO -282 RefreshGadgets
+    name: "RefreshGadgets",
+    handler: (emu, lib: IntuitionLibrary) => {
+      lib.RefreshGadgets();
+      return emu.getRegister(0); // Return D0
+    },
+  },
+  {
+    offset: -438, // LVO -438 OpenWorkBench
+    name: "OpenWorkBench",
+    handler: (emu, lib: IntuitionLibrary) => {
+      lib.OpenWorkBench();
+      return emu.getRegister(0); // Return D0 (screen handle)
+    },
+  },
+];
+
+/**
  * Exec.library function vectors
  * Reference: Amiga ROM Kernel Reference Manual & exec.library FD file
  * LVO = Library Vector Offset (in bytes from library base)
@@ -1576,12 +1869,21 @@ const EXEC_VECTORS: LibraryVector[] = [
     },
   },
   {
-    offset: -306, // LVO -306 (0xFECE)
+    offset: -300, // LVO -300 (SetTaskPri - CORRECTED offset)
     name: "SetTaskPri",
     handler: (emu, lib: ExecLibrary) => {
       const taskAddr = emu.getRegister(9); // A1
       const newPri = emu.getRegister(0); // D0
       return lib.setTaskPri(taskAddr, newPri);
+    },
+  },
+  {
+    offset: -306, // LVO -306 (SetSignal)
+    name: "SetSignal",
+    handler: (emu, lib: ExecLibrary) => {
+      const newSignals = emu.getRegister(0); // D0
+      const signalMask = emu.getRegister(1); // D1
+      return lib.setSignal(newSignals, signalMask);
     },
   },
   {
@@ -1913,6 +2215,7 @@ export class LibraryTraps {
   private mathIEEEDoubTransLibrary: MathIEEEDoubTransLibrary | null = null;
   private mathIEEESingBasLibrary: MathIEEESingBasLibrary | null = null;
   private mathIEEESingTransLibrary: MathIEEESingTransLibrary | null = null;
+  private intuitionLibrary: IntuitionLibrary | null = null;
 
   // Map of trap address -> vector entry
   private trapMap: Map<number, LibraryVector> = new Map();
@@ -1972,6 +2275,9 @@ export class LibraryTraps {
     }
     if (library === this.mathIEEESingTransLibrary) {
       return "mathieeesingtrans.library";
+    }
+    if (library === this.intuitionLibrary) {
+      return "intuition.library";
     }
     if ((library as any).libraryName) {
       return (library as any).libraryName;
@@ -2062,6 +2368,13 @@ export class LibraryTraps {
    */
   setMathIEEESingTransLibrary(lib: MathIEEESingTransLibrary): void {
     this.mathIEEESingTransLibrary = lib;
+  }
+
+  /**
+   * Set the intuition.library instance
+   */
+  setIntuitionLibrary(lib: IntuitionLibrary): void {
+    this.intuitionLibrary = lib;
   }
 
   /**
@@ -2372,6 +2685,61 @@ export class LibraryTraps {
 
     console.log(
       `[LibraryTraps] Installed ${ICON_VECTORS.length} icon.library vectors`
+    );
+  }
+
+  /**
+   * Install intuition.library vectors
+   */
+  installIntuitionVectors(): void {
+    if (!this.intuitionLibrary) {
+      console.error(
+        "[LibraryTraps] Cannot install intuition vectors: library not set"
+      );
+      return;
+    }
+
+    const intuitionBase = this.execLibrary.getLibraryBase("intuition.library");
+    if (intuitionBase === 0) {
+      console.error(
+        "[LibraryTraps] Cannot install intuition vectors: library not opened"
+      );
+      return;
+    }
+
+    console.log(
+      `[LibraryTraps] Installing intuition.library vectors at base 0x${intuitionBase.toString(
+        16
+      )}`
+    );
+
+    for (const vector of INTUITION_VECTORS) {
+      const trapAddr = intuitionBase + vector.offset;
+
+      // Write ILLEGAL instruction at vector address to trigger trap
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
+      // Store mapping of address to handler
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.intuitionLibrary);
+
+      // Store mapping by offset (array-based to handle collisions)
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.intuitionLibrary);
+
+      console.log(
+        `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
+          vector.offset
+        })`
+      );
+    }
+
+    console.log(
+      `[LibraryTraps] Installed ${INTUITION_VECTORS.length} intuition.library vectors`
     );
   }
 

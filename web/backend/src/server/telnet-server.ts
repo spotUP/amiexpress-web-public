@@ -478,10 +478,45 @@ export class TelnetServer extends EventEmitter {
     // Emit connection event
     this.emit('connection', connection);
 
-    // Skip waiting for an initial keypress; show ANSI prompt immediately for telnet clients
-    connection.session.subState = LoggedOnSubState.ANSI_PROMPT;
-    connection.session.tempData = { inputBuffer: '' };
-    connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+    // Wait briefly for terminal type negotiation before showing prompt
+    // This allows C64 terminals to be auto-detected via TTYPE
+    let promptShown = false;
+    const showPrompt = () => {
+      if (promptShown) return;
+      promptShown = true;
+
+      // Check if C64 was detected - skip graphics prompt and go straight to PETSCII mode
+      if (connection.session && connection.terminalType &&
+          (connection.terminalType.includes('C64') ||
+           connection.terminalType.includes('COMMODORE') ||
+           connection.terminalType.includes('PETSCII'))) {
+        console.log(`[Telnet] C64 terminal detected (${connection.terminalType}) - auto-enabling PETSCII mode`);
+        connection.session.terminalType = 'c64';
+        connection.session.petsciiMode = true;
+        connection.session.ansiEnabled = false;
+        connection.session.screenWidth = 40;
+        connection.session.screenHeight = 25;
+        connection.session.subState = LoggedOnSubState.DISPLAY_BBSTITLE;
+        connection.session.tempData = { inputBuffer: '' };
+        // Emit terminal detection event for index.ts to handle BBSTITLE display
+        this.emit('c64-detected', connection);
+      } else if (connection.session) {
+        // Show standard ANSI prompt for non-C64 terminals
+        connection.session.subState = LoggedOnSubState.ANSI_PROMPT;
+        connection.session.tempData = { inputBuffer: '' };
+        connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+      }
+    };
+
+    // Listen for terminal-type event (comes from handleTerminalType)
+    connection.once('terminal-type', () => {
+      showPrompt();
+    });
+
+    // Timeout after 500ms if no TTYPE response - show prompt anyway
+    setTimeout(() => {
+      showPrompt();
+    }, 500);
   }
 
   /**

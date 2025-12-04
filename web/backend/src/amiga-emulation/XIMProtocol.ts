@@ -523,6 +523,7 @@ export class XIMProtocol {
         this.ioHandler.handleCheckToDisplay(msg);
         break;
 
+      case XIMCommand.JH_DL:  // Alias for JH_ExtHK (both are value 15)
       case XIMCommand.JH_ExtHK:
         this.ioHandler.handleExtendedHotkey(msg);
         break;
@@ -570,9 +571,26 @@ export class XIMProtocol {
    * Check if command is a data query command
    */
   private isDataQueryCommand(command: number): boolean {
+    // BB_* commands in 126-146 range should NOT be treated as data queries
+    // They are BBS info commands handled by bbsInfoHandler
+    const isBBSInfo = [
+      XIMCommand.BB_CONFNAME,    // 126
+      XIMCommand.BB_CONFLOCAL,   // 127
+      XIMCommand.BB_LOCAL,       // 128
+      XIMCommand.BB_MAINLINE,    // 131
+      XIMCommand.BB_TASKPRI,     // 140
+      XIMCommand.BB_CHATFLAG,    // 142
+      XIMCommand.BB_PCONFNAME,   // 146
+      XIMCommand.BB_PCONFLOCAL,  // 147
+    ].includes(command);
+
+    if (isBBSInfo) {
+      return false; // Not a data query - let it fall through to BBS info handler
+    }
+
     const inRange =
       (command >= 100 && command <= 146) ||
-      (command >= 527 && command <= 545) ||
+      (command >= 527 && command <= 548) ||  // Extended to include MOD_TYPE, EDITOR_STRUCT, BYPASS_CSI_CHECK, SENTBY
       command === 606 ||
       (command >= 700 && command <= 701) ||
       (command >= 1000 && command <= 1002);

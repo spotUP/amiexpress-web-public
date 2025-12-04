@@ -912,7 +912,41 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
 
     // Enter key ends the current phase input
-    if (cleanData === '\r' || cleanData === '\n' || cleanData === '\r\n') {
+    // Handle CR, LF, or CR+LF - normalize all line endings to a single action
+    // Telnet can send: CR alone, LF alone, CR+LF together, or CR+NUL
+    // Input may also include text before the line ending (e.g., "password\r\n")
+
+    // Skip if this is just LF following a previous CR (CR+LF split across calls)
+    if (cleanData === '\n' && session.tempData.lastCharWasCR) {
+      session.tempData.lastCharWasCR = false;
+      return;
+    }
+
+    // Extract any printable characters before line endings and add to buffer
+    const lineEndIndex = cleanData.search(/[\r\n]/);
+    if (lineEndIndex > 0) {
+      // There's text before the line ending - add it to buffer
+      const textPart = cleanData.substring(0, lineEndIndex);
+      for (const char of textPart) {
+        if (char >= ' ' && char <= '~') {
+          appendChar(char);
+          if (phase === 'password') {
+            socket.emit('ansi-output', '*');
+          } else {
+            socket.emit('ansi-output', char);
+          }
+        }
+      }
+    }
+
+    const hasCR = cleanData.includes('\r');
+    const hasLF = cleanData.includes('\n');
+    const isLineEnding = hasCR || hasLF;
+
+    // Track if this ends with CR (for split CR+LF detection)
+    session.tempData.lastCharWasCR = cleanData.endsWith('\r');
+
+    if (isLineEnding) {
       const input = session.tempData.inputBuffer || '';
       session.tempData.inputBuffer = '';
 
@@ -926,7 +960,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       if (phase === 'password') {
         const username = (session.tempData.loginUsername || '').trim();
+        // For C64/PETSCII terminals in unshifted mode, input is UPPERCASE only
+        // Convert to lowercase since most passwords are stored in lowercase
+        // Also try original case as fallback for mixed-case passwords
         const password = input;
+        const passwordLower = input.toLowerCase();
 
         if (!username) {
           socket.emit('ansi-output', '\r\nUsername: ');
@@ -938,7 +976,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         try {
           const dbModule: any = await import('../database');
           const dbLocal: any = db || dbModule.db || dbModule;
-          const user = await dbLocal.authenticateUser(username, password);
+          // Try lowercase first (for C64 uppercase input), then original case
+          let user = await dbLocal.authenticateUser(username, passwordLower);
+          if (!user && password !== passwordLower) {
+            user = await dbLocal.authenticateUser(username, password);
+          }
           if (!user) {
             socket.emit('ansi-output', '\r\nInvalid PassWord\r\nUsername: ');
             session.tempData.loginPhase = 'username';
@@ -1014,13 +1056,19 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
 
     // Collect printable characters for current phase
-    if (cleanData.length === 1 && cleanData >= ' ' && cleanData <= '~') {
-      appendChar(cleanData);
-      // Echo only for username; mask password
-      if (phase === 'password') {
-        socket.emit('ansi-output', '*');
-      } else {
-        socket.emit('ansi-output', cleanData);
+    // Handle both single chars and multi-char input (telnet may buffer)
+    for (const char of cleanData) {
+      if (char >= ' ' && char <= '~') {
+        // Reset CR tracking for non-line-ending characters
+        session.tempData.lastCharWasCR = false;
+
+        appendChar(char);
+        // Echo only for username; mask password
+        if (phase === 'password') {
+          socket.emit('ansi-output', '*');
+        } else {
+          socket.emit('ansi-output', char);
+        }
       }
     }
 

@@ -25,7 +25,7 @@ import type { BBSSession } from '../index';
 let _handleGoodbyeCommand: (socket: any, session: BBSSession, params?: string) => void;
 let _messages: any[] = [];
 let _confScreenDir: string;
-let _findSecurityScreen: (basePath: string, secLevel: number) => string | null;
+let _findSecurityScreen: (basePath: string, secLevel: number, petsciiMode?: boolean, ripMode?: boolean) => string | null;
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
 let _searchFileDescriptions: (searchPattern: string, conferenceId: number) => Promise<any[]>;
 
@@ -468,7 +468,7 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
   // Try to find help file - keeps removing last character until found
   while (searchTerm.length > 0) {
     const helpBasePath = path.join('help', searchTerm);
-    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0);
+    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
 
     if (foundFile) {
       break;

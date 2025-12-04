@@ -66,6 +66,15 @@ function resolvePetsciiPath(originalPath: string, petsciiEnabled: boolean): stri
   return originalPath;
 }
 
+/**
+ * Check if a file is a RIP graphics file
+ * express.e:6765 - StriCmp(extension,'.rip')
+ */
+function isRipFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  return ext === '.rip';
+}
+
 function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {
   // reference-board data uses unpadded ConfX; avoid padded variants to prevent Conf01 creation
   const names: string[] = [`Conf${relConfNum}`];
@@ -716,7 +725,7 @@ export function loadScreenFile(
   conferenceId?: number,
   nodeId: number = 0,
   session?: BBSSession
-): { content: string; isPetscii: boolean; filePath: string } | null {
+): { content: string; isPetscii: boolean; isRip: boolean; filePath: string } | null {
   // BBS directory structure matches original Amiga AmiExpress
   // Use dataDir from config which points to project root
   const { config } = require('../config');
@@ -873,20 +882,45 @@ export function loadScreenFile(
     return Array.from(variants);
   };
 
+  const addRipVariants = (name: string) => {
+    const variants = new Set<string>();
+    // Prefer RIP .rip first
+    variants.add(`${name}.rip`);
+    variants.add(`${name}.RIP`);
+    // Also allow explicit name as-is
+    variants.add(name);
+    // Fall back to ANSI text if no .rip exists
+    variants.add(`${name}.TXT`);
+    variants.add(`${name}.txt`);
+    variants.add(`${name}.logoff`);
+    variants.add(`${name}.logoff.txt`);
+    variants.add(`${name}.LOGOFF.TXT`);
+    return Array.from(variants);
+  };
+
   const filenameVariations = (() => {
     // Special-case BBSTITLE: try .TXT first to avoid noisy extensionless probes
     if (screenName.toUpperCase() === 'BBSTITLE') {
-      return session?.petsciiMode
-        ? [...addPetsciiVariants(screenName)]
-        : ['BBSTITLE.TXT', 'BBSTITLE.txt', 'BBSTITLE'];
+      if (session?.petsciiMode) {
+        return [...addPetsciiVariants(screenName)];
+      } else if (session?.ripMode) {
+        return [...addRipVariants(screenName)];
+      }
+      return ['BBSTITLE.TXT', 'BBSTITLE.txt', 'BBSTITLE'];
     }
     if (screenName.toUpperCase() === 'AWAITSCREEN') {
-      return session?.petsciiMode
-        ? [...addPetsciiVariants(screenName)]
-        : ['AWAITSCREEN.TXT', 'AWAITSCREEN.txt'];
+      if (session?.petsciiMode) {
+        return [...addPetsciiVariants(screenName)];
+      } else if (session?.ripMode) {
+        return [...addRipVariants(screenName)];
+      }
+      return ['AWAITSCREEN.TXT', 'AWAITSCREEN.txt'];
     }
     if (session?.petsciiMode) {
       return isC64Client ? addPetsciiVariants(`${screenName}_C64`) : addPetsciiVariants(screenName);
+    }
+    if (session?.ripMode) {
+      return addRipVariants(screenName);
     }
     return addAnsiVariants(screenName);
   })();
@@ -899,11 +933,23 @@ export function loadScreenFile(
     // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
     if (!isAssignPath) {
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
-      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel);
+      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, session?.petsciiMode, session?.ripMode);
       if (securityVariant) {
         screenDebug(`[loadScreenFile]  Found security screen for ${screenName} at: ${securityVariant}`);
         try {
-          return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false, filePath: securityVariant };
+          // Check if it's a PETSCII .seq file - convert for PetMe64 font display
+          if (isPetsciiSeqFile(securityVariant)) {
+            screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
+            const petsciiBuffer = fs.readFileSync(securityVariant);
+            const content = convertPetsciiToPetMe64(petsciiBuffer);
+            return { content, isPetscii: true, isRip: false, filePath: securityVariant };
+          }
+          // Check if it's a RIP file - send raw content (express.e:6776-6780)
+          if (isRipFile(securityVariant)) {
+            screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
+            return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false, isRip: true, filePath: securityVariant };
+          }
+          return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false, isRip: false, filePath: securityVariant };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', securityVariant, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -928,13 +974,16 @@ export function loadScreenFile(
             try {
               const petsciiBuffer = fs.readFileSync(fileToUse);
               const content = convertPetsciiToPetMe64(petsciiBuffer);
-              return { content, isPetscii: true, filePath: fileToUse };
+              return { content, isPetscii: true, isRip: false, filePath: fileToUse };
             } catch (error) {
               SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${fileToUse}`, { error: (error as Error).message }, DebugSeverity.WARNING);
               console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             }
+          } else if (isRipFile(fileToUse)) {
+            screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
+            return { content: fs.readFileSync(fileToUse, 'utf-8'), isPetscii: false, isRip: true, filePath: fileToUse };
           } else {
-            return { content: fs.readFileSync(fileToUse, 'utf-8'), isPetscii: false, filePath: fileToUse };
+            return { content: fs.readFileSync(fileToUse, 'utf-8'), isPetscii: false, isRip: false, filePath: fileToUse };
           }
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', fileToUse, error as Error, DebugSeverity.WARNING);
@@ -955,16 +1004,19 @@ export function loadScreenFile(
     // For assign paths (bbs:, node:, work:), also honor security-numbered variants (LOGON20.TXT, etc.)
     if (isAssignPath) {
       const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
-      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel);
+      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, session?.petsciiMode, session?.ripMode);
       if (secPath) {
         screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
         try {
           if (isPetsciiSeqFile(secPath)) {
             const petsciiBuffer = fs.readFileSync(secPath);
             const content = convertPetsciiToPetMe64(petsciiBuffer);
-            return { content, isPetscii: true, filePath: secPath };
+            return { content, isPetscii: true, isRip: false, filePath: secPath };
           }
-          return { content: fs.readFileSync(secPath, 'utf-8'), isPetscii: false, filePath: secPath };
+          if (isRipFile(secPath)) {
+            return { content: fs.readFileSync(secPath, 'utf-8'), isPetscii: false, isRip: true, filePath: secPath };
+          }
+          return { content: fs.readFileSync(secPath, 'utf-8'), isPetscii: false, isRip: false, filePath: secPath };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', secPath, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -974,24 +1026,35 @@ export function loadScreenFile(
 
     try {
       const candidatePath = resolvePetsciiPath(filePath, !!session?.petsciiMode);
-      if (fs.existsSync(candidatePath)) {
-        screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${candidatePath}`);
-        if (isPetsciiSeqFile(candidatePath)) {
-          screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
-          try {
-            const petsciiBuffer = fs.readFileSync(candidatePath);
-            const content = convertPetsciiToPetMe64(petsciiBuffer);
-            return { content, isPetscii: true, filePath: candidatePath };
-          } catch (error) {
-            SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${candidatePath}`, { error: (error as Error).message }, DebugSeverity.WARNING);
-            console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
-          }
-        } else {
-          return { content: fs.readFileSync(candidatePath, 'utf-8'), isPetscii: false, filePath: candidatePath };
-        }
-      } else {
-        screenDebug(`[loadScreenFile]     (not found)`);
+      // Try the path as-is, then with common extensions (.txt, .TXT, .ans, .ANS)
+      // This handles ~SR_ which generates paths like "001.logoff" but files are "001.logoff.txt"
+      const pathsToTry = [candidatePath];
+      if (!candidatePath.match(/\.(txt|ans|seq)$/i)) {
+        pathsToTry.push(candidatePath + '.txt', candidatePath + '.TXT', candidatePath + '.ans', candidatePath + '.ANS');
       }
+
+      for (const tryPath of pathsToTry) {
+        if (fs.existsSync(tryPath)) {
+          screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${tryPath}`);
+          if (isPetsciiSeqFile(tryPath)) {
+            screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
+            try {
+              const petsciiBuffer = fs.readFileSync(tryPath);
+              const content = convertPetsciiToPetMe64(petsciiBuffer);
+              return { content, isPetscii: true, isRip: false, filePath: tryPath };
+            } catch (error) {
+              SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${tryPath}`, { error: (error as Error).message }, DebugSeverity.WARNING);
+              console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
+            }
+          } else if (isRipFile(tryPath)) {
+            screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
+            return { content: fs.readFileSync(tryPath, 'utf-8'), isPetscii: false, isRip: true, filePath: tryPath };
+          } else {
+            return { content: fs.readFileSync(tryPath, 'utf-8'), isPetscii: false, isRip: false, filePath: tryPath };
+          }
+        }
+      }
+      screenDebug(`[loadScreenFile]     (not found after trying extensions)`);
     } catch (error) {
       SysopDebugUtil.debugFileError(null, session, 'read', filePath, error as Error, DebugSeverity.WARNING);
       console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
@@ -1013,7 +1076,7 @@ export function loadScreenFile(
         try {
           const content = fs.readFileSync(candidate, 'utf-8');
           screenDebug(`[loadScreenFile]  Using fallback screen for ${screenName}: ${candidate}`);
-          return { content, isPetscii: false, filePath: candidate };
+          return { content, isPetscii: false, isRip: false, filePath: candidate };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', candidate, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading fallback ${candidate}): ${(error as Error).message}`);
@@ -1035,7 +1098,7 @@ export function loadScreenFile(
       try {
         const content = fs.readFileSync(ansiFallback, 'utf-8');
         screenDebug(`[loadScreenFile]  Using ANSI fallback screen ${ansiFallback}`);
-        return { content, isPetscii: false, filePath: ansiFallback };
+        return { content, isPetscii: false, isRip: false, filePath: ansiFallback };
       } catch (error) {
         console.error(`[loadScreenFile]     (error reading ANSI fallback screen: ${(error as Error).message})`);
         SysopDebugUtil.debugFileError(
@@ -1055,7 +1118,7 @@ export function loadScreenFile(
         const buffer = fs.readFileSync(petsciiFallback);
         const content = convertPetsciiToPetMe64(buffer);
         screenDebug(`[loadScreenFile]  Using PETSCII fallback screen ${petsciiFallback}`);
-        return { content, isPetscii: true, filePath: petsciiFallback };
+        return { content, isPetscii: true, isRip: false, filePath: petsciiFallback };
       } catch (error) {
         console.error(`[loadScreenFile]     (error reading fallback screen: ${(error as Error).message})`);
         SysopDebugUtil.debugFileError(

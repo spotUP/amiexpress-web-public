@@ -159,11 +159,7 @@ export async function runSysCommand(
   cmd: string,
   params: string = ''
 ): Promise<number> {
-  debugLog(socket, session, `[SYSCMD] Executing: ${cmd} ${params}`);
-
-  // express.e:4814-4815 - Debug logging
-  // debugLog(LOG_DEBUG, "execute syscmd: ${cmd} ${params}")
-
+  // Note: Don't log "Executing" here - only log when command is actually found
   // express.e:4817 - Call runCommand with CMDTYPE_SYSCMD
   return runCommand(socket, session, CommandType.SYSCMD, cmd, params);
 }
@@ -184,11 +180,7 @@ export async function runBbsCommand(
   cmd: string,
   params: string = ''
 ): Promise<number> {
-  debugLog(socket, session, `[BBSCMD] Executing: ${cmd} ${params}`);
-
-  // express.e:4808-4809 - Debug logging
-  // debugLog(LOG_DEBUG, "execute bbscmd: ${cmd} ${params}")
-
+  // Note: Don't log "Executing" here - only log when command is actually found
   // express.e:4811 - Call runCommand with CMDTYPE_BBSCMD
   return runCommand(socket, session, CommandType.BBSCMD, cmd, params);
 }
@@ -224,13 +216,13 @@ async function runCommand(
 
   // express.e:4647, 4669 - Command not found
   if (!commandDef) {
-    console.log(`  Command not found: ${cmd}`);
     // Note: Sysop debug message is sent later in internal-commands.ts
     // at the final "Unknown command" display, not here during lookup
     return RESULT_FAILURE;
   }
 
-  console.log(`  Found command: ${commandDef.name} (${commandDef.type})`);
+  // Log "Executing" only AFTER command is found (not before lookup like old code did)
+  debugLog(socket, session, `Executing: ${cmdUpper} ${params}`.trim());
 
   // express.e:4700-4708 - Check access level
   // Screen-triggered commands during the connect flow (AWAIT state) need to run

@@ -17,6 +17,7 @@ import {
   MathIEEESingBasLibrary,
   MathIEEESingTransLibrary,
 } from "./api/MathLibrary";
+import { IntuitionLibrary } from "./api/IntuitionLibrary";
 import { LibraryTraps } from "./api/LibraryTraps.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import { DoorConfig, DoorConstants } from "./DoorTypes.js";
@@ -42,6 +43,7 @@ export class LibraryManager {
   public mathIEEEDoubTransLibrary: MathIEEEDoubTransLibrary | null = null;
   public mathIEEESingBasLibrary: MathIEEESingBasLibrary | null = null;
   public mathIEEESingTransLibrary: MathIEEESingTransLibrary | null = null;
+  public intuitionLibrary: IntuitionLibrary | null = null;
   public libraryTraps: LibraryTraps | null = null;
   public ximProtocol: XIMProtocol | null = null;
   public bbsApiLibrary: BbsApiLibrary | null = null;
@@ -214,6 +216,12 @@ export class LibraryManager {
     this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
     // Set door directory for PROGDIR: support in GetDiskObject
     this.iconLibrary.setDoorDirectory(doorDir);
+    // Set door command for DOORUSE.* lookups (used by AquaScan and similar doors)
+    if (this.config.doorId) {
+      this.iconLibrary.setDoorCommand(this.config.doorId);
+    } else if (this.config.bbsSession?.doorCommand) {
+      this.iconLibrary.setDoorCommand(String(this.config.bbsSession.doorCommand));
+    }
 
     if (useXimProtocol) {
       console.log("[LibraryManager] Creating XIM Protocol handler...");
@@ -297,6 +305,9 @@ export class LibraryManager {
     this.mathIEEESingBasLibrary = new MathIEEESingBasLibrary(this.emulator);
     this.mathIEEESingTransLibrary = new MathIEEESingTransLibrary(this.emulator);
 
+    console.log("[LibraryManager] Creating intuition.library...");
+    this.intuitionLibrary = new IntuitionLibrary(this.emulator);
+
     console.log("[LibraryManager] Installing library call traps...");
 
     this.libraryTraps = new LibraryTraps(this.emulator, this.execLibrary);
@@ -321,6 +332,7 @@ export class LibraryManager {
     this.libraryTraps.setMathIEEEDoubTransLibrary(this.mathIEEEDoubTransLibrary);
     this.libraryTraps.setMathIEEESingBasLibrary(this.mathIEEESingBasLibrary);
     this.libraryTraps.setMathIEEESingTransLibrary(this.mathIEEESingTransLibrary);
+    this.libraryTraps.setIntuitionLibrary(this.intuitionLibrary);
 
     // Pre-open utility.library and install vectors immediately
     // Some doors use utility.library functions without calling OpenLibrary first
@@ -377,10 +389,11 @@ export class LibraryManager {
         console.log("[LibraryManager] mathieeesingtrans.library opened, installing vectors...");
         this.libraryTraps!.installMathIEEESingTransVectors();
       }
-      if (
-        name.toLowerCase() === "graphics.library" ||
-        name.toLowerCase() === "intuition.library"
-      ) {
+      if (name.toLowerCase() === "intuition.library") {
+        console.log("[LibraryManager] intuition.library opened, installing vectors...");
+        this.libraryTraps!.installIntuitionVectors();
+      }
+      if (name.toLowerCase() === "graphics.library") {
         console.log(
           `[LibraryManager] ${name} opened, installing stub vectors from LVOs.i...`
         );

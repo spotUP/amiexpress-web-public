@@ -44,7 +44,7 @@ export function SystemConfigPage() {
     },
   });
 
-  const { register, watch, reset } = useForm<SystemConfig>({
+  const { register, watch, reset, setValue } = useForm<SystemConfig>({
     values: {
       language_base: 'Languages',
       default_language: 'English',
@@ -265,7 +265,8 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="min_password_strength"
-                {...register('min_password_strength', { valueAsNumber: true })}
+                value={watch('min_password_strength') ?? 0}
+                onChange={(e) => setValue('min_password_strength', parseInt(e.target.value, 10), { shouldDirty: true })}
                 className="input-field w-full"
               >
                 <option value={0}>0 - No check</option>
@@ -282,7 +283,8 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="max_password_fails"
-                {...register('max_password_fails', { valueAsNumber: true })}
+                value={watch('max_password_fails') ?? -1}
+                onChange={(e) => setValue('max_password_fails', parseInt(e.target.value, 10), { shouldDirty: true })}
                 className="input-field w-full"
               >
                 <option value={-1}>Unlimited (-1)</option>

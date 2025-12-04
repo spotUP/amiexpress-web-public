@@ -26,10 +26,20 @@ export class IconLibrary {
   private nextDiskObjectAddr: number = 0x60000; // DiskObjects at 384KB
   private bbsRoot: string;
   private doorDirectory: string = ''; // Set by AmigaDoorSession for PROGDIR: device
+  private doorCommand: string = ''; // The command used to launch this door (e.g., "N", "FR")
 
   constructor(emulator: MoiraEmulator, bbsRoot: string = '~/Code/amiexpress-web') {
     this.emulator = emulator;
     this.bbsRoot = bbsRoot;
+  }
+
+  /**
+   * Set the door command (used for DOORUSE.* lookups)
+   * Called by AmigaDoorSession when starting a door
+   */
+  setDoorCommand(command: string): void {
+    this.doorCommand = command.toUpperCase();
+    console.log(`[icon.library] Door command set to: ${this.doorCommand}`);
   }
 
   /**
@@ -167,27 +177,61 @@ export class IconLibrary {
 
     console.log(`[icon.library] FindToolType(0x${toolTypeArrayPtr.toString(16)}, "${typeName}")`);
 
-    // Check if the tooltype array pointer looks valid (should point to DiskObject tooltype array in 0x60000 range)
-    // If not, this might be a door that expects tooltypes to be pre-loaded but the memory was overwritten
-    const firstPtr = this.readLong(toolTypeArrayPtr);
-    const isValidArray = firstPtr === 0 || (firstPtr >= 0x60000 && firstPtr < 0x80000);
+    // WORKAROUND: Version compatibility check (DOORUSE.V5.6, DOORUSE.V4.0, etc.)
+    // Some doors check DOORUSE.<version> to verify BBS compatibility.
+    // These tooltypes don't exist in icons - return the actual command mode instead.
+    // Pattern: DOORUSE.V followed by a version number (e.g., V5.6, V4.0, V3.1)
+    let searchTypeName = typeName;
+    if (typeName.match(/^DOORUSE\.V\d+\.?\d*/)) {
+      if (this.doorCommand) {
+        // Redirect version check to command-specific entry
+        searchTypeName = `DOORUSE.${this.doorCommand}`;
+        console.log(`[icon.library]   Version check "${typeName}" -> searching for "${searchTypeName}" instead`);
+      } else {
+        // No door command - search for any DOORUSE.* entry
+        searchTypeName = 'DOORUSE.';
+        console.log(`[icon.library]   Version check "${typeName}" -> searching for any DOORUSE.* entry`);
+      }
+    }
 
-    if (!isValidArray) {
-      console.log(`[icon.library]   WARNING: Invalid tooltype array pointer (first entry: 0x${firstPtr.toString(16)})`);
-      console.log(`[icon.library]   Real AmiExpress doesn't provide DOORUSE tooltypes - returning NULL`);
+    // Validate pointer is in valid memory range (not NULL or in ROM/reserved areas)
+    if (toolTypeArrayPtr === 0 || toolTypeArrayPtr < 0x1000) {
+      console.log(`[icon.library]   ERROR: Invalid tooltype array pointer - returning NULL`);
       this.emulator.setRegister(CPURegister.D0, 0);
       return;
     }
 
     // Loop through NULL-terminated array of string pointers
+    // NOTE: The array can be anywhere in memory - doors like AquaScan read their own
+    // config file and build tooltype arrays in their own allocated memory
     let arrayIndex = 0;
+
+    // Check if first entry points to raw icon data (starts with 0xe310 = WB13 magic)
+    // Some doors like AquaScan pass raw icon binary data instead of a parsed array
+    const firstPtr = this.readLong(toolTypeArrayPtr);
+    if (firstPtr !== 0) {
+      const magic = (this.emulator.readMemory(firstPtr) << 8) | this.emulator.readMemory(firstPtr + 1);
+      if (magic === 0xe310) {
+        console.log(`[icon.library]   Detected raw icon data at 0x${firstPtr.toString(16)} (magic 0xe310)`);
+        const result = this.searchIconBinaryForTooltype(firstPtr, typeName);
+        if (result !== 0) {
+          console.log(`[icon.library]   Found "${typeName}" in raw icon at 0x${result.toString(16)}`);
+          this.emulator.setRegister(CPURegister.D0, result);
+          return;
+        }
+        console.log(`[icon.library]   Tooltype "${typeName}" not found in raw icon data`);
+        this.emulator.setRegister(CPURegister.D0, 0);
+        return;
+      }
+    }
+
     while (true) {
       // Read pointer from array (each entry is 4 bytes)
       const tooltypeStrPtr = this.readLong(toolTypeArrayPtr + (arrayIndex * 4));
 
       // NULL terminator - not found
       if (tooltypeStrPtr === 0) {
-        console.log(`[icon.library]   Tooltype "${typeName}" not found - returning NULL`);
+        console.log(`[icon.library]   Tooltype "${searchTypeName}" not found after ${arrayIndex} entries - returning NULL`);
         this.emulator.setRegister(CPURegister.D0, 0);
         return;
       }
@@ -195,14 +239,51 @@ export class IconLibrary {
       // Read tooltype string
       const tooltypeStr = this.readString(tooltypeStrPtr);
 
-      // Check if it starts with typeName (case-insensitive)
+      // Check if it starts with searchTypeName (case-insensitive)
       const upperTooltypeStr = tooltypeStr.toUpperCase();
-      if (upperTooltypeStr.startsWith(typeName)) {
-        // Check if followed by '=' or end of string (exact match)
-        if (tooltypeStr.length === typeName.length || tooltypeStr[typeName.length] === '=') {
-          console.log(`[icon.library]   Found "${typeName}" -> "${tooltypeStr}" at 0x${tooltypeStrPtr.toString(16)}`);
-          this.emulator.setRegister(CPURegister.D0, tooltypeStrPtr);
+      if (upperTooltypeStr.startsWith(searchTypeName)) {
+        // Standard match: exact name or NAME=value pattern
+        if (tooltypeStr.length === searchTypeName.length || tooltypeStr[searchTypeName.length] === '=') {
+          // FindToolType returns pointer to VALUE (after '='), not the whole string
+          const equalsPos = tooltypeStr.indexOf('=');
+          if (equalsPos >= 0) {
+            // Return pointer to character after '='
+            const valuePtr = tooltypeStrPtr + equalsPos + 1;
+            const value = tooltypeStr.substring(equalsPos + 1);
+            console.log(`[icon.library]   Found "${searchTypeName}" -> value "${value}" at 0x${valuePtr.toString(16)}`);
+            this.emulator.setRegister(CPURegister.D0, valuePtr);
+          } else {
+            // No '=' means boolean tooltype, return pointer to empty string (null terminator)
+            console.log(`[icon.library]   Found "${searchTypeName}" (boolean) at 0x${(tooltypeStrPtr + tooltypeStr.length).toString(16)}`);
+            this.emulator.setRegister(CPURegister.D0, tooltypeStrPtr + tooltypeStr.length);
+          }
           return;
+        }
+        // Prefix search: if searchTypeName ends with '.', match any continuation
+        // For DOORUSE. prefix, we know the door command and can find the exact match
+        if (searchTypeName.endsWith('.')) {
+          // Check if this is a DOORUSE lookup and we know the door command
+          if (searchTypeName === 'DOORUSE.' && this.doorCommand) {
+            // Look for DOORUSE.<command>= in this tooltype
+            const expectedPrefix = `DOORUSE.${this.doorCommand}=`;
+            if (upperTooltypeStr.startsWith(expectedPrefix)) {
+              // Found the matching DOORUSE entry! Return pointer to VALUE
+              const equalsPos = tooltypeStr.indexOf('=');
+              if (equalsPos >= 0) {
+                const valuePtr = tooltypeStrPtr + equalsPos + 1;
+                const value = tooltypeStr.substring(equalsPos + 1);
+                console.log(`[icon.library]   Found DOORUSE.${this.doorCommand} -> value "${value}" at 0x${valuePtr.toString(16)}`);
+                this.emulator.setRegister(CPURegister.D0, valuePtr);
+                return;
+              }
+            }
+            // This entry doesn't match our command, continue searching
+          } else {
+            // Generic prefix search - return first match
+            console.log(`[icon.library]   Prefix match "${searchTypeName}" -> full string "${tooltypeStr}" at 0x${tooltypeStrPtr.toString(16)}`);
+            this.emulator.setRegister(CPURegister.D0, tooltypeStrPtr);
+            return;
+          }
         }
       }
 
@@ -237,7 +318,7 @@ export class IconLibrary {
 
     // Search through all loaded DiskObjects to find one with the requested tooltype
     for (const [addr, diskObj] of this.diskObjects.entries()) {
-      const toolTypesPtr = this.emulator.readMemory32(addr + 53); // do_ToolTypes at offset 53
+      const toolTypesPtr = this.emulator.readMemory32(addr + 54); // do_ToolTypes at offset 54
       if (toolTypesPtr === 0) continue;
 
       // Try each alternative name
@@ -268,19 +349,153 @@ export class IconLibrary {
 
   /**
    * MatchToolValue - Match tooltype value
-   * A0 = typeString (C-string pointer)
-   * Returns: D0 = TRUE if match, FALSE otherwise
+   * A0 = typeString (C-string pointer to tooltype, e.g., "FILETYPE=TEXT")
+   * A1 = value (C-string pointer to value to match, e.g., "TEXT")
+   * Returns: D0 = TRUE if typeString contains value, FALSE otherwise
    *
    * Offset: -54 (0xFFFFFFCA)
+   *
+   * NOTE: Some doors like AquaScan pass a file path with empty value
+   * as an icon file existence check. We handle this by checking if
+   * the path looks like a file path and if the .info file exists.
    */
   MatchToolValue(): void {
     const typeStringPtr = this.emulator.getRegister(CPURegister.A0);
+    const valuePtr = this.emulator.getRegister(CPURegister.A1);
+
     const typeString = this.readString(typeStringPtr);
+    const value = valuePtr !== 0 ? this.readString(valuePtr) : '';
 
-    console.log(`[icon.library] MatchToolValue("${typeString}")`);
-    console.log(`  Stub: returning FALSE (no match)`);
+    console.log(`[icon.library] MatchToolValue(A0=0x${typeStringPtr.toString(16)}, A1=0x${valuePtr.toString(16)})`);
+    console.log(`[icon.library]   typeString="${typeString}", value="${value}"`);
 
-    this.emulator.setRegister(CPURegister.D0, 0);
+    // Special case: If A0 points to a DiskObject we created, and value is empty,
+    // the door is checking if the icon is valid. Return TRUE.
+    if (this.diskObjects.has(typeStringPtr) && !value) {
+      console.log(`[icon.library]   A0 is a DiskObject pointer - returning TRUE (icon valid)`);
+      this.emulator.setRegister(CPURegister.D0, 1);
+      return;
+    }
+
+    // Special case: If typeString is a pure numeric string (conference/node number) and value is empty,
+    // the door is checking if a conference or node icon exists. Try "Conf<number>" then "Node<number>".
+    if (!value && /^\d+$/.test(typeString)) {
+      const num = typeString;
+      console.log(`[icon.library]   Detected numeric icon check: ${num}`);
+
+      // Try Conf<N> first, then Node<N>
+      const prefixes = ['Conf', 'Node'];
+      for (const prefix of prefixes) {
+        const iconPath = path.join(this.bbsRoot, `${prefix}${num}.info`);
+
+        // Case-insensitive file lookup
+        const dir = path.dirname(iconPath);
+        const baseName = path.basename(iconPath).toLowerCase();
+        let realPath: string | null = null;
+        try {
+          const files = fs.readdirSync(dir);
+          const found = files.find(f => f.toLowerCase() === baseName);
+          if (found) {
+            realPath = path.join(dir, found);
+          }
+        } catch (e) {
+          // Directory doesn't exist
+        }
+
+        if (realPath) {
+          console.log(`[icon.library]   Loading ${prefix}${num} icon from: ${realPath}`);
+          const tooltypes = this.parseInfoFile(realPath);
+          if (tooltypes && tooltypes.length > 0) {
+            const diskObjAddr = this.createFakeDiskObject(tooltypes);
+            console.log(`[icon.library]   Created DiskObject at 0x${diskObjAddr.toString(16)} with ${tooltypes.length} tooltypes`);
+            this.emulator.setRegister(CPURegister.D0, diskObjAddr);
+            return;
+          }
+        }
+      }
+
+      console.log(`[icon.library]   Icon for number ${num} NOT found (tried Conf${num} and Node${num})`);
+      this.emulator.setRegister(CPURegister.D0, 0); // NULL - doesn't exist
+      return;
+    }
+
+    // Special case: If typeString looks like a file path and value is empty,
+    // some doors like AquaScan use this as a combined existence check + load.
+    // We load the icon and return the DiskObject pointer (not just TRUE/FALSE).
+    if (!value && (typeString.includes(':') || typeString.includes('/'))) {
+      console.log(`[icon.library]   Detected file path - loading icon`);
+
+      // Try to resolve the path and load the .info file
+      let iconPath = typeString;
+      const upperPath = iconPath.toUpperCase();
+
+      if (upperPath.startsWith('DOORS:')) {
+        iconPath = path.join(this.bbsRoot, 'Doors', iconPath.substring(6));
+      } else if (upperPath.startsWith('PROGDIR:')) {
+        iconPath = path.join(this.doorDirectory || this.bbsRoot, iconPath.substring(8));
+      } else if (upperPath.startsWith('BBS:')) {
+        // BBS: resolves to BBS root directory
+        iconPath = path.join(this.bbsRoot, iconPath.substring(4));
+      } else if (!path.isAbsolute(iconPath)) {
+        iconPath = path.join(this.bbsRoot, iconPath);
+      }
+
+      // Add .info extension if not present
+      if (!iconPath.toLowerCase().endsWith('.info')) {
+        iconPath += '.info';
+      }
+
+      // Case-insensitive file lookup
+      const dir = path.dirname(iconPath);
+      const baseName = path.basename(iconPath).toLowerCase();
+      let realPath: string | null = null;
+      try {
+        const files = fs.readdirSync(dir);
+        const found = files.find(f => f.toLowerCase() === baseName);
+        if (found) {
+          realPath = path.join(dir, found);
+        }
+      } catch (e) {
+        // Directory doesn't exist
+      }
+
+      if (realPath) {
+        console.log(`[icon.library]   Loading icon from: ${realPath}`);
+        // Parse the icon file and create a DiskObject
+        const tooltypes = this.parseInfoFile(realPath);
+        if (tooltypes && tooltypes.length > 0) {
+          const diskObjAddr = this.createFakeDiskObject(tooltypes);
+          console.log(`[icon.library]   Created DiskObject at 0x${diskObjAddr.toString(16)} with ${tooltypes.length} tooltypes`);
+          this.emulator.setRegister(CPURegister.D0, diskObjAddr);
+          return;
+        }
+      }
+
+      console.log(`[icon.library]   Icon file NOT found or empty: ${iconPath}`);
+      this.emulator.setRegister(CPURegister.D0, 0); // NULL - not found
+      return;
+    }
+
+    // Standard behavior: Check if typeString contains value after '='
+    // e.g., "FILETYPE=TEXT|IMAGE" should match "TEXT" or "IMAGE"
+    const equalsPos = typeString.indexOf('=');
+    if (equalsPos >= 0 && value) {
+      const typeValue = typeString.substring(equalsPos + 1).toUpperCase();
+      const searchValue = value.toUpperCase();
+
+      // Values can be separated by '|'
+      const values = typeValue.split('|');
+      for (const v of values) {
+        if (v.trim() === searchValue) {
+          console.log(`[icon.library]   Match found: "${v}" == "${searchValue}"`);
+          this.emulator.setRegister(CPURegister.D0, 1); // TRUE
+          return;
+        }
+      }
+    }
+
+    console.log(`[icon.library]   No match found`);
+    this.emulator.setRegister(CPURegister.D0, 0); // FALSE
   }
 
   /**
@@ -312,11 +527,22 @@ export class IconLibrary {
     this.writeWord(diskObjAddr + 2, 0);
 
     // Skip gadget structure (44 bytes)
+    // DiskObject layout after Gadget (44 bytes at offset 4):
+    //   offset 48: do_Type (UBYTE, 1 byte)
+    //   offset 49: padding (1 byte for word alignment)
+    //   offset 50: do_DefaultTool (LONG, 4 bytes)
+    //   offset 54: do_ToolTypes (LONG, 4 bytes)
+    //   offset 58: do_CurrentX (LONG, 4 bytes)
+    //   offset 62: do_CurrentY (LONG, 4 bytes)
+    //   offset 66: do_DrawerData (LONG, 4 bytes)
+    //   offset 70: do_ToolWindow (LONG, 4 bytes)
+    //   offset 74: do_StackSize (LONG, 4 bytes)
+
     // Write type (WBTOOL = 2)
     this.emulator.writeMemory(diskObjAddr + 48, 2);
 
-    // DefaultTool pointer (NULL)
-    this.writeLong(diskObjAddr + 49, 0);
+    // DefaultTool pointer (NULL) - at offset 50 (word-aligned)
+    this.writeLong(diskObjAddr + 50, 0);
 
     // ToolTypes array - if we have tooltypes, create the array
     let tooltypesPtr = 0;
@@ -351,15 +577,15 @@ export class IconLibrary {
       console.log(`[icon.library]     ToolTypes array at 0x${tooltypesPtr.toString(16)}, ${toolTypes.length} entries`);
     }
 
-    // ToolTypes pointer
-    this.writeLong(diskObjAddr + 53, tooltypesPtr);
+    // ToolTypes pointer - at offset 54 (word-aligned)
+    this.writeLong(diskObjAddr + 54, tooltypesPtr);
 
-    // Other fields (zeros)
-    this.writeLong(diskObjAddr + 57, 0); // CurrentX
-    this.writeLong(diskObjAddr + 61, 0); // CurrentY
-    this.writeLong(diskObjAddr + 65, 0); // DrawerData
-    this.writeLong(diskObjAddr + 69, 0); // ToolWindow
-    this.writeLong(diskObjAddr + 73, 4096); // StackSize (default)
+    // Other fields (zeros) - all word-aligned
+    this.writeLong(diskObjAddr + 58, 0); // CurrentX
+    this.writeLong(diskObjAddr + 62, 0); // CurrentY
+    this.writeLong(diskObjAddr + 66, 0); // DrawerData
+    this.writeLong(diskObjAddr + 70, 0); // ToolWindow
+    this.writeLong(diskObjAddr + 74, 4096); // StackSize (default)
 
     // Register the DiskObject
     const diskObj: DiskObject = {
@@ -369,6 +595,62 @@ export class IconLibrary {
     this.diskObjects.set(diskObjAddr, diskObj);
 
     return diskObjAddr;
+  }
+
+  /**
+   * Search within raw icon binary data for a tooltype string
+   * Icons store tooltypes as null-terminated strings in a specific format
+   * This handles the case where doors pass raw icon data to FindToolType
+   */
+  private searchIconBinaryForTooltype(iconDataPtr: number, typeName: string): number {
+    const upperTypeName = typeName.toUpperCase();
+
+    // Scan through memory looking for the tooltype string
+    // Icon files embed tooltypes as null-terminated strings
+    // We'll search up to 4KB from the start of the icon data
+    const maxSearchBytes = 4096;
+
+    // Debug: show first 32 bytes of icon data
+    const firstBytes: string[] = [];
+    for (let i = 0; i < 32; i++) {
+      firstBytes.push(this.emulator.readMemory(iconDataPtr + i).toString(16).padStart(2, '0'));
+    }
+    console.log(`[icon.library]   Icon data at 0x${iconDataPtr.toString(16)}: ${firstBytes.join(' ')}`);
+
+    // Find where ASCII strings start (after binary header and image data)
+    // Look for sequences of printable ASCII characters
+    let foundStrings = 0;
+    for (let offset = 0; offset < maxSearchBytes && foundStrings < 10; offset++) {
+      const str = this.readString(iconDataPtr + offset, 256);
+
+      // Skip non-printable or too short
+      if (str.length < 4) continue;
+
+      // Check if it looks like a tooltype (contains = and is mostly printable)
+      if (str.includes('=') || str.startsWith('(')) {
+        console.log(`[icon.library]   searchIconBinary: offset 0x${offset.toString(16)} -> "${str.substring(0, 50)}"`);
+        foundStrings++;
+      }
+
+      // Check if the string starts with our tooltype name (case-insensitive)
+      const upperStr = str.toUpperCase();
+      if (upperStr.startsWith(upperTypeName)) {
+        // Verify it's a proper tooltype match:
+        // - Either exact match (same length)
+        // - Or followed by '=' (tooltype with value)
+        const isExactMatch = str.length === typeName.length;
+        const isToolTypeMatch = str[typeName.length] === '=';
+        if (isExactMatch || isToolTypeMatch) {
+          const returnAddr = iconDataPtr + offset;
+          const verifyStr = this.readString(returnAddr, 64);
+          console.log(`[icon.library]   searchIconBinary: MATCH! Found "${str}" at offset 0x${offset.toString(16)}`);
+          console.log(`[icon.library]   Returning address 0x${returnAddr.toString(16)} which contains: "${verifyStr}"`);
+          return returnAddr;
+        }
+      }
+    }
+
+    return 0; // Not found
   }
 
   /**

@@ -43,11 +43,20 @@ export class ViewFileHandler {
     // setEnvStat(ENV_VIEWING) - express.e:25678
     console.log('[ENV] Viewing');
 
-    // RIP mode handling (express.e:25679-25681) - not applicable for web
-    // aePuts('[1!') / aePuts('[2!')
+    // RIP mode handling (express.e:25679-25681)
+    // [1! = Enter RIP graphics/pixel mode
+    // [2! = Return to RIP text mode
+    if (session.ripMode) {
+      socket.emit('ansi-output', '\x1b[1!'); // Enter RIP pixel mode
+    }
 
     // Call viewAFile - express.e:25682
     await this.viewAFile(socket, session, params);
+
+    // RIP mode: Return to text mode after viewing
+    if (session.ripMode) {
+      socket.emit('ansi-output', '\x1b[2!'); // Return to RIP text mode
+    }
   }
 
   /**

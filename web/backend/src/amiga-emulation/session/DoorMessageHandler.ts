@@ -2129,6 +2129,18 @@ export class DoorMessageHandler {
     const bbsRoot = this.config.bbsSession?.bbsRoot || this.config.bbsSession?.dataDir || "";
     const user = this.config.bbsSession?.user;
     const secLevel = user?.secLevel || 0;
+    const petsciiMode = this.config.bbsSession?.petsciiMode || false;
+    const ripMode = this.config.bbsSession?.ripMode || false;
+
+    // Extensions to try based on graphics mode (express.e:6258-6295)
+    let extensions: string[];
+    if (ripMode) {
+      extensions = ['.rip', '.RIP', '.txt', '.TXT'];
+    } else if (petsciiMode) {
+      extensions = ['.seq', '.SEQ', '.txt', '.TXT'];
+    } else {
+      extensions = ['.txt', '.TXT'];
+    }
 
     // Round down to nearest 5 (express.e:6275)
     let currentLevel = Math.floor(secLevel / 5) * 5;
@@ -2136,17 +2148,21 @@ export class DoorMessageHandler {
 
     // Try security-level-specific screens from current level down to minLevel
     while (currentLevel >= minLevel) {
-      const secFilePath = path.join(bbsRoot, `${screenPath}${currentLevel}.txt`);
-      if (fs.existsSync(secFilePath)) {
-        return secFilePath;
+      for (const ext of extensions) {
+        const secFilePath = path.join(bbsRoot, `${screenPath}${currentLevel}${ext}`);
+        if (fs.existsSync(secFilePath)) {
+          return secFilePath;
+        }
       }
       currentLevel -= 5;
     }
 
     // Fall back to base file
-    const basePath = path.join(bbsRoot, `${screenPath}.txt`);
-    if (fs.existsSync(basePath)) {
-      return basePath;
+    for (const ext of extensions) {
+      const basePath = path.join(bbsRoot, `${screenPath}${ext}`);
+      if (fs.existsSync(basePath)) {
+        return basePath;
+      }
     }
 
     return null;

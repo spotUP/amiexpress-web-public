@@ -536,6 +536,50 @@ export class XIMDataQueryHandler {
         }
         break;
 
+      case XIMCommand.MOD_TYPE:
+        // Module type indicator - return 0 for standard
+        if (isRead) {
+          this.messageParser.writeString(stringAddr, '0', 200);
+          console.log(`  [READ] MOD_TYPE: 0`);
+        } else {
+          const modType = this.messageParser.readString(stringAddr, 200);
+          (this.state as any).modType = parseInt(modType) || 0;
+          console.log(`  [WRITE] MOD_TYPE: ${modType}`);
+        }
+        break;
+
+      case XIMCommand.EDITOR_STRUCT:
+        // Editor structure pointer - return 0 (no editor struct)
+        replyData = 0;
+        console.log(`  EDITOR_STRUCT: 0 (no editor struct)`);
+        break;
+
+      case XIMCommand.BYPASS_CSI_CHECK:
+        // Bypass CSI (ANSI) check flag
+        if (isRead) {
+          const bypass = (this.state as any).bypassCSICheck || 0;
+          this.messageParser.writeString(stringAddr, bypass.toString(), 200);
+          console.log(`  [READ] BYPASS_CSI_CHECK: ${bypass}`);
+        } else {
+          const newBypass = parseInt(this.messageParser.readString(stringAddr, 200)) || 0;
+          (this.state as any).bypassCSICheck = newBypass;
+          console.log(`  [WRITE] BYPASS_CSI_CHECK: ${newBypass}`);
+        }
+        break;
+
+      case XIMCommand.SENTBY:
+        // Sent by indicator (for messages)
+        if (isRead) {
+          const sentBy = (this.state as any).sentBy || '';
+          this.messageParser.writeString(stringAddr, sentBy, 200);
+          console.log(`  [READ] SENTBY: "${sentBy}"`);
+        } else {
+          const newSentBy = this.messageParser.readString(stringAddr, 200);
+          (this.state as any).sentBy = newSentBy;
+          console.log(`  [WRITE] SENTBY: "${newSentBy}"`);
+        }
+        break;
+
       default:
         console.log(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
     }

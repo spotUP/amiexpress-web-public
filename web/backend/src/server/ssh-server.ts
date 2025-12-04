@@ -20,6 +20,7 @@ import { BBSSession } from '../index';
 import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 import { ipBanManager } from '../security/ip-ban-manager';
+import { LoggedOnSubState } from '../constants/bbs-states';
 
 /**
  * SSH Connection
@@ -291,6 +292,11 @@ export class SSHServerImpl extends EventEmitter {
       setSession(connection.sessionId, session);
 
       console.log(`[SSH] BBS session created for node ${connection.nodeId}`);
+
+      // Show graphics prompt (same as telnet server)
+      session.subState = LoggedOnSubState.ANSI_PROMPT;
+      session.tempData = { inputBuffer: '' };
+      connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
     });
 
     // Forward events

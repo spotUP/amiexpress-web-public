@@ -25,7 +25,7 @@ import type { BBSSession } from '../index';
 
 // Dependencies injected from index.ts
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => void;
-let _findSecurityScreen: (basePath: string, secLevel: number) => string | null;
+let _findSecurityScreen: (basePath: string, secLevel: number, petsciiMode?: boolean, ripMode?: boolean) => string | null;
 let _confScreenDir: string;
 let _db: any;
 let _hasKeysFile: any;
@@ -614,7 +614,7 @@ export function handleReadBulletinCommand(socket: any, session: BBSSession, para
 function _showBulletinHelp(socket: any, session: BBSSession): void {
   // Display BullHelp screen
   const bullHelpBasePath = path.join('Bulletins', 'BullHelp');
-  const helpScreen = _findSecurityScreen(bullHelpBasePath, session.user?.secLevel || 0);
+  const helpScreen = _findSecurityScreen(bullHelpBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
 
   if (helpScreen) {
     _displayScreen(socket, session, helpScreen);
@@ -637,7 +637,7 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
  */
 function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number, nonStopDisplay: boolean): void {
   const bulletinBasePath = path.join('Bulletins', `Bull${bulletinNum}`);
-  const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0);
+  const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
 
   socket.emit('ansi-output', '\r\n');
 

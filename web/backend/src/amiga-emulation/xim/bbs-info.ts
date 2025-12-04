@@ -184,12 +184,17 @@ export class XIMBBSInfoHandler {
         break;
 
       case XIMCommand.BB_CONFLOCAL:
-        value = this.bbsSession?.conferencePath || '/Conf1';
-        console.log(`[XIMBBSInfo] BB_CONFLOCAL: "${value}"`);
+        {
+          // Return Amiga-style path like "BBS:Conf1/" (door expects this format)
+          const confId = (this.bbsSession as any)?.currentConf || this.bbsSession?.conferenceId || 1;
+          value = `BBS:Conf${confId}/`;
+          console.log(`[XIMBBSInfo] BB_CONFLOCAL: "${value}"`);
+        }
         break;
 
       case XIMCommand.BB_LOCAL:
-        value = this.bbsSession?.bbsPath || '/';
+        // Return Amiga-style BBS root path
+        value = 'BBS:';
         console.log(`[XIMBBSInfo] BB_LOCAL: "${value}"`);
         break;
 

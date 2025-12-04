@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Socket } from 'socket.io';
 import type { BBSSession } from '../index';
+import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
 
 export interface BBSUser {
   id: string;
@@ -108,6 +109,85 @@ export class BBSApi {
    */
   setColor(colorCode: number): void {
     this.socket.emit('ansi-output', `\x1b[${colorCode}m`);
+  }
+
+  // ========================================
+  // PETSCII OUTPUT FUNCTIONS (for C64 mode)
+  // ========================================
+
+  /**
+   * Check if session is in PETSCII mode (C64 terminal)
+   * When true, doors should use 40x25 layout and PETSCII output
+   */
+  isPetsciiMode(): boolean {
+    return this.session?.petsciiMode === true;
+  }
+
+  /**
+   * Get terminal dimensions (40x25 for PETSCII, 80x24 for ANSI)
+   */
+  getTerminalSize(): { width: number; height: number } {
+    return {
+      width: this.session?.screenWidth || 80,
+      height: this.session?.screenHeight || 24
+    };
+  }
+
+  /**
+   * Write PETSCII content to terminal
+   * Emits 'petscii-output' event which triggers PetMe64 font on frontend
+   * For real C64 terminals, this is converted to raw PETSCII bytes
+   *
+   * @param data String (already in Unicode PUA format) or Buffer (raw PETSCII bytes)
+   */
+  writePetscii(data: string | Buffer): void {
+    if (Buffer.isBuffer(data)) {
+      // Convert raw PETSCII bytes to Unicode PUA for PetMe64 font
+      const converted = convertPetsciiToPetMe64(data);
+      this.socket.emit('petscii-output', converted);
+    } else {
+      // Already a string - send directly
+      this.socket.emit('petscii-output', data);
+    }
+  }
+
+  /**
+   * Write PETSCII content with newline
+   */
+  writePetsciiLine(data: string | Buffer): void {
+    if (Buffer.isBuffer(data)) {
+      const converted = convertPetsciiToPetMe64(data);
+      this.socket.emit('petscii-output', converted + '\r\n');
+    } else {
+      this.socket.emit('petscii-output', data + '\r\n');
+    }
+  }
+
+  /**
+   * Auto-detect mode and write appropriate output
+   * Use this when you have both ANSI and PETSCII versions of content
+   *
+   * @param ansiText Text/ANSI output for modern terminals
+   * @param petsciiData PETSCII output for C64 terminals (optional, falls back to ANSI)
+   */
+  writeAuto(ansiText: string, petsciiData?: string | Buffer): void {
+    if (this.isPetsciiMode() && petsciiData !== undefined) {
+      this.writePetscii(petsciiData);
+    } else {
+      this.write(ansiText);
+    }
+  }
+
+  /**
+   * Clear screen - auto-detects PETSCII vs ANSI mode
+   */
+  clearScreenAuto(): void {
+    if (this.isPetsciiMode()) {
+      // PETSCII clear screen: CHR$(147) = 0x93
+      this.writePetscii(Buffer.from([0x93]));
+    } else {
+      this.clearScreen();
+    }
   }
 
   // ========================================

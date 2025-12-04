@@ -125,8 +125,9 @@ export async function startNewUserRegistration(socket: Socket, session: any, use
 
   // express.e:30047 - Create new account structure
   // Initialize registration data
+  // express.e:30055 - AstrCopy(loggedOnUser.name,userName,31) preserves login name
   session.newUserData = {
-    username: '', // Always re-prompt for handle like express.e
+    username: username || '', // Preserve login name for prefill (express.e:30055)
     location: '',
     phone: '',
     email: '',
@@ -159,9 +160,14 @@ export async function startNewUserRegistration(socket: Socket, session: any, use
 
 /**
  * Prompt for name - express.e:30115-30168 (jLoop1)
+ * express.e:30144 - lineInput('',loggedOnUser.name,30,...) prefills with login name
  */
 function promptForName(socket: Socket, session: any) {
-  socket.emit('ansi-output', `\r\nEnter your Name: `);
+  const prefill = session.newUserData?.username || '';
+  // express.e:30141-30144 - Show prompt with prefilled value
+  socket.emit('ansi-output', `\r\nEnter your Name: ${prefill}`);
+  // Set input buffer to prefill value so user can edit it or press Enter to accept
+  session.inputBuffer = prefill;
 }
 
 /**
@@ -337,18 +343,68 @@ export async function handleAccessPasswordInput(socket: Socket, session: any, in
 }
 
 async function beginRegistrationPrompts(socket: Socket, session: any, username: string) {
+  // express.e:30128+ doNewUser() - show intro screens with proper pause handling
+  // Note: "Now, part one of our questioning" comes from SCRIPT questionnaire (join.txt), not core flow
+
   if (!session.newUserData.introShown) {
-    if (await showScreen(socket, session, screenConfig.GUESTLOGON)) {
-      doPause(socket, session);
+    // Show GUESTLOGON screen if it exists
+    const guestShown = await showScreen(socket, session, screenConfig.GUESTLOGON);
+    if (guestShown) {
+      // If displayScreen already set up a pause (from ~SP in screen), attach our callback
+      // Don't call doPause again - that would show double "(Pause)...Space To Resume:"
+      if (session.paginatedScreen) {
+        session.paginatedScreen.onComplete = () => continueIntroFlow(socket, session, 'join');
+      } else {
+        // Screen didn't have pause, add one manually
+        doPause(socket, session, () => continueIntroFlow(socket, session, 'join'));
+      }
+      return; // Wait for user to press space
     }
-    if (await showScreen(socket, session, screenConfig.JOIN)) {
-      doPause(socket, session);
+
+    // No GUESTLOGON, try JOIN
+    const joinShown = await showScreen(socket, session, screenConfig.JOIN);
+    if (joinShown) {
+      if (session.paginatedScreen) {
+        session.paginatedScreen.onComplete = () => continueIntroFlow(socket, session, 'name');
+      } else {
+        doPause(socket, session, () => continueIntroFlow(socket, session, 'name'));
+      }
+      return; // Wait for user to press space
     }
-    socket.emit('ansi-output', '\r\n\x1b[36m-= New User Account Creation =-\x1b[0m\r\n\r\n');
-    socket.emit('ansi-output', 'Blank line to retreat\r\n\r\n');
+
+    // No intro screens, proceed directly to name prompt
     session.newUserData.introShown = true;
   }
 
+  finishIntroAndPromptName(socket, session);
+}
+
+function continueIntroFlow(socket: Socket, session: any, phase: string) {
+  if (phase === 'join') {
+    // Show JOIN screen after GUESTLOGON
+    showScreen(socket, session, screenConfig.JOIN).then(joinShown => {
+      if (joinShown) {
+        if (session.paginatedScreen) {
+          session.paginatedScreen.onComplete = () => continueIntroFlow(socket, session, 'name');
+        } else {
+          doPause(socket, session, () => continueIntroFlow(socket, session, 'name'));
+        }
+      } else {
+        continueIntroFlow(socket, session, 'name');
+      }
+    });
+    return;
+  }
+
+  if (phase === 'name') {
+    // All intro screens shown, proceed to name prompt
+    session.newUserData.introShown = true;
+    session.newUserData.pendingIntroPhase = undefined;
+    finishIntroAndPromptName(socket, session);
+  }
+}
+
+function finishIntroAndPromptName(socket: Socket, session: any) {
   // Reset any pagination/shortcut state before line prompts
   session.paginatedScreen = undefined;
   session.queuedScreenCommands = [];
@@ -359,6 +415,9 @@ async function beginRegistrationPrompts(socket: Socket, session: any, username: 
     session.shortcuts.clear();
   }
   session.inputBuffer = '';
+
+  // express.e:30135 - Show "Blank line to retreat" before name prompt
+  socket.emit('ansi-output', '\r\nBlank line to retreat\r\n');
 
   // Always ask for handle first (express.e jLoop1)
   session.subState = LoggedOnSubState.NEW_USER_NAME;
@@ -653,7 +712,7 @@ function showSummaryAndConfirm(socket: Socket, session: any) {
   socket.emit('ansi-output', `PassWord : ENCRYPTED\r\n`);
   socket.emit('ansi-output', `Computer : ${data.computerType || 'AMiGA 500'}\r\n`);
   socket.emit('ansi-output', `Scrn Clr : ${data.screenClear ? 'YES' : 'NO'}\r\n\r\n`);
-  socket.emit('ansi-output', 'Is this Information Correct? (Y/n) ');
+  socket.emit('ansi-output', 'Is the above Correct? ');
 }
 
 async function continueRegistrationFlow(socket: Socket, session: any) {

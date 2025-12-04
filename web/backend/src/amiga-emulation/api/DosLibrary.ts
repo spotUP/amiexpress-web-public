@@ -35,6 +35,14 @@ const OFFSET_BEGINNING = -1; // Seek from start of file
 const OFFSET_CURRENT = 0; // Seek from current position
 const OFFSET_END = 1; // Seek from end of file
 
+// AllocDosObject types (from dos/dosextens.h)
+const DOS_FILEHANDLE = 0;   // Allocate FileHandle structure
+const DOS_FIB = 1;          // Allocate FileInfoBlock structure (260 bytes)
+const DOS_EXALLCONTROL = 2; // Allocate ExAllControl structure
+const DOS_STDPKT = 3;       // Allocate DosPacket structure
+const DOS_CLI = 4;          // Allocate CommandLineInterface structure
+const DOS_RDARGS = 5;       // Allocate RDArgs structure
+
 interface FileHandle {
   id: number;
   name: string;
@@ -1941,7 +1949,9 @@ export class DosLibrary {
       this.writeLong(fibPtr + 120, stats.isDirectory() ? 2 : -3);
 
       // fib_Size (4 bytes)
-      this.writeLong(fibPtr + 124, stats.isFile() ? stats.size : 0);
+      const fibSizeVal = stats.isFile() ? stats.size : 0;
+      this.writeLong(fibPtr + 124, fibSizeVal);
+      console.log(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) -> 0x${(fibPtr + 124).toString(16)}`);
 
       // fib_NumBlocks (4 bytes)
       this.writeLong(fibPtr + 128, 0);
@@ -2072,7 +2082,9 @@ export class DosLibrary {
       this.writeLong(fibPtr + 120, stats.isDirectory() ? 2 : -3);
 
       // fib_Size (4 bytes)
-      this.writeLong(fibPtr + 124, stats.isFile() ? stats.size : 0);
+      const fibSizeVal = stats.isFile() ? stats.size : 0;
+      this.writeLong(fibPtr + 124, fibSizeVal);
+      console.log(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) -> 0x${(fibPtr + 124).toString(16)}`);
 
       // fib_NumBlocks (4 bytes)
       this.writeLong(fibPtr + 128, 0);
@@ -3265,6 +3277,61 @@ export class DosLibrary {
   }
 
   /**
+   * OpenFromLock - Open a file from a lock (V36)
+   * D1 = lock (BPTR) - consumed by this call
+   * Returns: D0 = file handle (BPTR) or 0 on error
+   *
+   * Opens the file associated with the lock for reading.
+   * The lock is consumed and should not be UnLocked separately.
+   */
+  OpenFromLock(): void {
+    const lockId = this.emulator.getRegister(CPURegister.D1);
+
+    console.log(`[dos.library] OpenFromLock(lock=${lockId})`);
+
+    const lock = this.locks.get(lockId);
+    if (!lock) {
+      console.error(`[dos.library] OpenFromLock: Invalid lock ID ${lockId}`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    // Open the file for reading using FileManager
+    const filePath = lock.path;
+    console.log(`[dos.library] OpenFromLock: Opening file ${filePath}`);
+
+    try {
+      // Use FileManager to open the file
+      if (!this.fileManager) {
+        console.error(`[dos.library] OpenFromLock: FileManager not available`);
+        this.emulator.setRegister(CPURegister.D0, 0);
+        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        return;
+      }
+
+      const bptr = this.fileManager.open(filePath, 1005); // MODE_OLDFILE
+      if (bptr === 0) {
+        console.error(`[dos.library] OpenFromLock: Failed to open ${filePath}`);
+        this.emulator.setRegister(CPURegister.D0, 0);
+        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        return;
+      }
+
+      // Lock is consumed - remove it from our locks map
+      this.locks.delete(lockId);
+
+      console.log(`[dos.library] OpenFromLock: Opened ${filePath} as BPTR ${bptr}`);
+      this.emulator.setRegister(CPURegister.D0, bptr);
+      this.lastError = this.ERROR_NO_ERROR;
+    } catch (error) {
+      console.error(`[dos.library] OpenFromLock: Error opening ${filePath}:`, error);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+    }
+  }
+
+  /**
    * NameFromFH - Get the name of an open filehandle (V36)
    * D1 = fh (BPTR)
    * D2 = buffer (STRPTR)
@@ -4058,6 +4125,120 @@ export class DosLibrary {
   }
 
   /**
+   * AllocDosObject - Allocate a DOS object (V36)
+   * D1 = type (DOS_FILEHANDLE=0, DOS_FIB=1, DOS_EXALLCONTROL=2, DOS_STDPKT=3, DOS_CLI=4, DOS_RDARGS=5)
+   * D2 = tags (pointer to tag list, often NULL)
+   * Returns: D0 = pointer to allocated object or 0 on error
+   *
+   * Structure sizes:
+   * - DOS_FILEHANDLE: 48 bytes (FileHandle)
+   * - DOS_FIB: 260 bytes (FileInfoBlock)
+   * - DOS_EXALLCONTROL: 16 bytes (ExAllControl)
+   * - DOS_STDPKT: 68 bytes (DosPacket)
+   * - DOS_CLI: 64 bytes (CommandLineInterface)
+   * - DOS_RDARGS: 32 bytes (RDArgs)
+   */
+  public AllocDosObject(): void {
+    const type = this.emulator.getRegister(CPURegister.D1);
+    const tags = this.emulator.getRegister(CPURegister.D2);
+
+    console.log(`[dos.library] AllocDosObject(type=${type}, tags=0x${tags.toString(16)})`);
+
+    // Determine size based on type
+    let size: number;
+    let typeName: string;
+    switch (type) {
+      case DOS_FILEHANDLE:
+        size = 48;
+        typeName = 'DOS_FILEHANDLE';
+        break;
+      case DOS_FIB:
+        size = 260;
+        typeName = 'DOS_FIB';
+        break;
+      case DOS_EXALLCONTROL:
+        size = 16;
+        typeName = 'DOS_EXALLCONTROL';
+        break;
+      case DOS_STDPKT:
+        size = 68;
+        typeName = 'DOS_STDPKT';
+        break;
+      case DOS_CLI:
+        size = 64;
+        typeName = 'DOS_CLI';
+        break;
+      case DOS_RDARGS:
+        size = 32;
+        typeName = 'DOS_RDARGS';
+        break;
+      default:
+        console.error(`[dos.library] AllocDosObject: Unknown type ${type}`);
+        this.emulator.setRegister(CPURegister.D0, 0);
+        this.lastError = 122; // ERROR_BAD_NUMBER
+        return;
+    }
+
+    // Allocate memory (use high memory area for DOS objects)
+    // We'll use a simple bump allocator starting at 0x200000
+    if (!this.dosObjectAllocBase) {
+      this.dosObjectAllocBase = 0x200000;
+    }
+
+    const addr = this.dosObjectAllocBase;
+    this.dosObjectAllocBase += size + 4; // Add 4 bytes padding for alignment
+
+    // Zero the memory
+    for (let i = 0; i < size; i++) {
+      this.emulator.writeMemory(addr + i, 0);
+    }
+
+    // Track the allocation for FreeDosObject
+    if (!this.allocatedDosObjects) {
+      this.allocatedDosObjects = new Map();
+    }
+    this.allocatedDosObjects.set(addr, { type, size });
+
+    console.log(`[dos.library] AllocDosObject(${typeName}) -> 0x${addr.toString(16)} (${size} bytes)`);
+    this.emulator.setRegister(CPURegister.D0, addr);
+  }
+
+  /**
+   * FreeDosObject - Free a DOS object allocated by AllocDosObject (V36)
+   * D1 = type (must match type used in AllocDosObject)
+   * D2 = pointer to object
+   * Returns: nothing (void)
+   */
+  public FreeDosObject(): void {
+    const type = this.emulator.getRegister(CPURegister.D1);
+    const ptr = this.emulator.getRegister(CPURegister.D2);
+
+    console.log(`[dos.library] FreeDosObject(type=${type}, ptr=0x${ptr.toString(16)})`);
+
+    if (ptr === 0) {
+      console.log(`[dos.library] FreeDosObject: NULL pointer, ignoring`);
+      return;
+    }
+
+    // Check if this was allocated by us
+    if (this.allocatedDosObjects && this.allocatedDosObjects.has(ptr)) {
+      const info = this.allocatedDosObjects.get(ptr)!;
+      if (info.type !== type) {
+        console.warn(`[dos.library] FreeDosObject: Type mismatch (allocated=${info.type}, freeing=${type})`);
+      }
+      this.allocatedDosObjects.delete(ptr);
+      console.log(`[dos.library] FreeDosObject: Freed ${info.size} bytes at 0x${ptr.toString(16)}`);
+    } else {
+      // Not tracked - just ignore (door may have allocated it differently)
+      console.log(`[dos.library] FreeDosObject: Unknown allocation at 0x${ptr.toString(16)}, ignoring`);
+    }
+  }
+
+  // Track DOS object allocations
+  private dosObjectAllocBase?: number;
+  private allocatedDosObjects?: Map<number, { type: number; size: number }>;
+
+  /**
    * Handle library function call by offset
    *
    * NOTE: Offset -28 does NOT exist in standard dos.library!
@@ -4238,6 +4419,9 @@ export class DosLibrary {
       case -330:
         this.NameFromFH();
         return true;
+      case -378:
+        this.OpenFromLock();
+        return true;
       case -390:
         this.Fault();
         return true;
@@ -4260,6 +4444,14 @@ export class DosLibrary {
         return true;
       case -126:
         this.FindVar();
+        return true;
+
+      // V36+ DOS object allocation
+      case -228:
+        this.AllocDosObject();
+        return true;
+      case -234:
+        this.FreeDosObject();
         return true;
 
       default:
