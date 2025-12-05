@@ -5,6 +5,8 @@ services:
     env: static
     buildCommand: cd web/frontend && npm ci --include=dev && npm run build
     staticPublishPath: ./web/frontend/dist
+    autoDeploy: true
+    branch: main
 
   # Backend - Web Service (Unified Deployment - serves all frontends)
   - type: web
@@ -12,6 +14,8 @@ services:
     env: node
     region: oregon
     plan: starter
+    autoDeploy: true
+    branch: main
     buildCommand: |
       # Build SDK
       cd sdk && npm ci --include=dev && npm run build && cd ..
