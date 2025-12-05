@@ -266,10 +266,27 @@ export interface AREXXContext {
 export interface FileTransferProtocol {
   id: string;
   name: string;
-  type: 'zmodem' | 'ftp' | 'websocket';
+  type: 'zmodem' | 'ymodem' | 'xmodem' | 'xmodem-crc' | 'xmodem-1k' | 'punter' | 'ftp' | 'websocket';
   enabled: boolean;
   config: Record<string, any>;
 }
+
+// C64-compatible transfer protocols (for PETSCII terminals)
+export type C64TransferProtocol = 'punter' | 'xmodem' | 'xmodem-crc';
+
+// All supported file transfer protocols
+export type SupportedProtocol = 'zmodem' | 'ymodem' | 'xmodem' | 'xmodem-crc' | 'xmodem-1k' | 'punter' | 'websocket';
+
+// Protocol display names
+export const PROTOCOL_DISPLAY_NAMES: Record<SupportedProtocol, string> = {
+  'zmodem': 'ZMODEM',
+  'ymodem': 'YMODEM (Batch)',
+  'xmodem': 'XMODEM (Checksum)',
+  'xmodem-crc': 'XMODEM-CRC',
+  'xmodem-1k': 'XMODEM-1K',
+  'punter': 'Punter (C64)',
+  'websocket': 'WebSocket (Browser)'
+};
 
 export interface TransferSession {
   id: string;

@@ -154,7 +154,8 @@ export function ProtocolsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {protocols.map((protocol: Protocol) => {
           const code = protocol.protocol_code?.toUpperCase() || '';
-          const unsupported = code.includes('YMODEM') || code === 'Y';
+          // All protocols now implemented: ZMODEM, YMODEM, XMODEM variants, Punter
+          const isC64Protocol = code.includes('PUNTER') || code === 'P';
           return (
             <div key={protocol.id} className="card">
               <div className="flex items-start justify-between mb-4">
@@ -171,8 +172,8 @@ export function ProtocolsPage() {
                           <span>Default</span>
                         </span>
                       )}
-                      {unsupported && (
-                        <span className="px-2 py-1 bg-yellow-500/20 text-yellow-500 rounded text-xs">Not implemented</span>
+                      {isC64Protocol && (
+                        <span className="px-2 py-1 bg-blue-500/20 text-blue-500 rounded text-xs">C64/C128</span>
                       )}
                     </div>
                     <p className="text-xs text-bbs-muted font-mono">{protocol.protocol_code}</p>
@@ -180,11 +181,10 @@ export function ProtocolsPage() {
                 </div>
                 <button
                   onClick={() => handleToggle(protocol)}
-                  disabled={unsupported}
                   className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
                     protocol.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
-                  } ${unsupported ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  title={unsupported ? 'Y-Modem bridge not implemented yet' : 'Toggle availability'}
+                  }`}
+                  title="Toggle availability"
                 >
                   {protocol.enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                   <span>{protocol.enabled ? 'Enabled' : 'Disabled'}</span>
@@ -231,8 +231,7 @@ export function ProtocolsPage() {
                 <button
                   onClick={() => handleMakeDefault(protocol, protocols)}
                   className="btn-secondary flex items-center justify-center space-x-2"
-                  disabled={unsupported}
-                  title={unsupported ? 'Y-Modem default is disabled until support lands' : 'Set as default'}
+                  title="Set as default protocol"
                 >
                   <Star size={16} />
                   <span>Default</span>
@@ -251,7 +250,7 @@ export function ProtocolsPage() {
 
       {protocols.length === 0 && (
         <div className="card text-center text-bbs-muted">
-          No protocols configured. Add transfer protocols like XMODEM or ZMODEM.
+          No protocols configured. Add transfer protocols like ZMODEM, YMODEM, XMODEM, or Punter.
         </div>
       )}
 
@@ -397,7 +396,7 @@ export function ProtocolsPage() {
               </div>
             </form>
             <p className="text-xs text-bbs-muted mt-3">
-              Note: Y-Modem entries are shown for completeness but the bridge is not wired yet; keep them disabled until implemented.
+              Supported protocols: ZMODEM (batch), YMODEM (batch), XMODEM (checksum/CRC/1K), Punter (C64/C128), WebSocket (browser).
             </p>
           </div>
         </div>

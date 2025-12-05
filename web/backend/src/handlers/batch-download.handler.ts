@@ -137,13 +137,15 @@ export class BatchDownloadHandler {
     session: BBSSession,
     input: string
   ): Promise<void> {
-    if (!session.tempData?.waitingForBatchConfirm) {
+    // Support both the flagManager batch flow and the file selector batch flow
+    if (!session.tempData?.waitingForBatchConfirm && !session.tempData?.downloadFileList) {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
 
     session.tempData.waitingForBatchConfirm = false;
-    const downloadList = session.tempData.batchDownloadList || [];
+    // Support both data formats: batchDownloadList (from flagManager) and downloadFileList (from file selector)
+    const downloadList = session.tempData.batchDownloadList || session.tempData.downloadFileList || [];
 
     const answer = input.trim().toUpperCase();
 
@@ -165,17 +167,23 @@ export class BatchDownloadHandler {
 
     // Emit download events for browser to handle
     for (const fileInfo of downloadList) {
-      const downloadUrl = `/api/download/${fileInfo.confNum}/${fileInfo.dirNum}/${encodeURIComponent(fileInfo.name)}`;
+      // Support both formats: name (flagManager) and filename (file selector)
+      const fileName = fileInfo.name || fileInfo.filename;
+      const confNum = fileInfo.confNum || fileInfo.areaId || session.currentConf || 1;
+      const dirNum = fileInfo.dirNum || 1;
+      const filePath = fileInfo.fullPath || fileInfo.path;
+
+      const downloadUrl = `/api/download/${confNum}/${dirNum}/${encodeURIComponent(fileName)}`;
 
       // Emit download-file event for each file
       socket.emit('download-file', {
-        filename: fileInfo.name,
+        filename: fileName,
         size: fileInfo.size,
         url: downloadUrl,
-        path: fileInfo.fullPath
+        path: filePath
       });
 
-      socket.emit('ansi-output', `\x1b[32m-> Downloading: ${fileInfo.name}\x1b[0m\r\n`);
+      socket.emit('ansi-output', `\x1b[32m-> Downloading: ${fileName}\x1b[0m\r\n`);
 
       // Update download statistics for each file
       const isFree = this.isFreeDownload(fileInfo);

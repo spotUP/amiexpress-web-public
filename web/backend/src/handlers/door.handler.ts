@@ -8,6 +8,7 @@
 import { spawn, fork } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import { resolveCaseInsensitivePath } from '../utils/fs-amiga.util';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { callersLogManager } from '../services/CallersLogManager';
@@ -122,6 +123,7 @@ interface Door {
   mimicVer?: string;
   passParameters?: number;
   internal?: string;
+  args?: string;
   toolTypes?: Record<string, string>;
 }
 
@@ -273,12 +275,13 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
       stack: doorInfo.stack
     });
 
-    // Create AmigaDoorSession
+    // Create AmigaDoorSession - interactive doors need guard disabled
     const amigaSession = new AmigaDoorSession(socket, {
       executablePath: doorInfo.resolvedPath,
       timeout: 600,
       doorId: doorInfo.command || doorInfo.id,
       stack: doorInfo.stack,
+      toolTypes: { DISABLE_GUARD: 'true' },
       bbsSession: {
         user: session.user,
         nodeNumber: session.nodeId || 0,
@@ -1112,7 +1115,12 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       doorArgs.push(nodeNumber.toString());
     }
 
-    // Add any additional arguments from door.passParameters or door.args
+    // Add ARGS from .info file (e.g., ARGS=REVSCAN for AquaScan)
+    if (door.args) {
+      doorArgs.push(...door.args.split(' ').filter((a: string) => a));
+    }
+
+    // Add any additional arguments from door.passParameters
     if (door.passParameters && typeof door.passParameters === 'string') {
       doorArgs.push(...door.passParameters.split(' ').filter((a: string) => a));
     }
@@ -1128,6 +1136,13 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     (session as any).bbsRoot = bbsRoot;
     (session as any).dataDir = bbsRoot;
     console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol`);
+
+    // Interactive doors need guard disabled - they legitimately wait for user input
+    // Batch doors (run via batch-scheduler) use LOOP_LIMIT instead
+    const interactiveToolTypes = {
+      ...door.toolTypes,
+      DISABLE_GUARD: 'true'
+    };
 
     const doorConfig = {
       executablePath: doorPath,
@@ -1150,7 +1165,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       mimicVer: door.mimicVer,
       passParameters: door.passParameters,
       internal: door.internal,
-      toolTypes: door.toolTypes
+      toolTypes: interactiveToolTypes
     };
 
     // Create AmigaDoorSession to run the native Amiga executable
@@ -1959,6 +1974,7 @@ export async function initializeDoors() {
       mimicVer: cmdDef.mimicVer,
       passParameters: cmdDef.passParameters,
       internal: cmdDef.internal,
+      args: cmdDef.args,
       toolTypes: cmdDef.toolTypes
     };
 

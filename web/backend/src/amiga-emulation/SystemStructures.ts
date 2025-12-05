@@ -22,7 +22,7 @@ export class SystemStructures {
 
   // Amiga system addresses
   private readonly EXECBASE_ADDR = 0x000004;  // ExecBase pointer stored here
-  private readonly EXECBASE_STRUCT = 0x010000; // Actual ExecBase structure location
+  private readonly EXECBASE_STRUCT = 0x080000; // Actual ExecBase structure (after door code range)
   private readonly DOS_BASE = 0xFFFF0000;      // dos.library base
   private readonly EXEC_BASE = 0xFF8000;       // exec.library base
   private readonly AEDOOR_BASE = 0xFF4000;     // AEDoor.library base

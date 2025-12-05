@@ -7,6 +7,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
 // Session type - using any for now since BBSSession is defined in index.ts
 type Session = any;

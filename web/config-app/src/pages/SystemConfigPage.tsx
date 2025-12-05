@@ -458,13 +458,19 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_protocol" className="label">
                 Default Protocol
               </label>
-              <input
+              <select
                 id="new_user_protocol"
-                type="text"
                 {...register('new_user_protocol')}
                 className="input-field w-full"
-                placeholder="ZMODEM"
-              />
+              >
+                <option value="zmodem">ZMODEM (Recommended)</option>
+                <option value="ymodem">YMODEM (Batch)</option>
+                <option value="xmodem-1k">XMODEM-1K</option>
+                <option value="xmodem-crc">XMODEM-CRC</option>
+                <option value="xmodem">XMODEM (Checksum)</option>
+                <option value="punter">Punter (C64/C128)</option>
+                <option value="websocket">WebSocket (Browser)</option>
+              </select>
             </div>
             <div>
               <label htmlFor="new_user_screen_type" className="label">

@@ -10,17 +10,19 @@ import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
  * Function offsets (negative values):
  * -72 = CloseWindow
  * -78 = CloseScreen
- * -204 = OpenWindow
  * -198 = OpenScreen
+ * -204 = OpenWindow
  * -276 = SetWindowTitles
  * -282 = RefreshGadgets
+ * -348 = AutoRequest
  * -438 = OpenWorkBench
  */
 
 export class IntuitionLibrary {
   private emulator: MoiraEmulator;
-  private nextWindowHandle: number = 0x10000;
-  private nextScreenHandle: number = 0x20000;
+  // Window/screen handles must be outside door code range (0x1000-0x80000)
+  private nextWindowHandle: number = 0x099000;
+  private nextScreenHandle: number = 0x09A000;
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
@@ -114,7 +116,49 @@ export class IntuitionLibrary {
    */
   OpenWorkBench(): void {
     console.log('[intuition.library] OpenWorkBench() - returning dummy screen handle');
-    this.emulator.setRegister(CPURegister.D0, 0x30000);
+    // Use screen handle range (0x09A000+) to avoid door code range (0x1000-0x80000)
+    this.emulator.setRegister(CPURegister.D0, 0x09A000);
+  }
+
+  /**
+   * AutoRequest - Display a simple requester dialog (LVO -348)
+   * A0 = Window pointer (can be NULL)
+   * A1 = BodyText (IntuiText pointer)
+   * A2 = PosText (IntuiText for left/positive button)
+   * A3 = NegText (IntuiText for right/negative button)
+   * D0 = PosFlags (IDCMP flags)
+   * D1 = NegFlags (IDCMP flags)
+   * D2 = Width
+   * D3 = Height
+   * Returns: D0 = TRUE if positive clicked, FALSE if negative
+   *
+   * For BBS doors without GUI, we log the request and return FALSE
+   * to indicate the user "dismissed" the dialog.
+   */
+  AutoRequest(): void {
+    const window = this.emulator.getRegister(CPURegister.A0);
+    const bodyTextPtr = this.emulator.getRegister(CPURegister.A1);
+    const posTextPtr = this.emulator.getRegister(CPURegister.A2);
+    const negTextPtr = this.emulator.getRegister(CPURegister.A3);
+
+    // Try to read the body text to log it
+    let bodyText = '';
+    if (bodyTextPtr !== 0) {
+      // IntuiText structure:
+      // +0: FrontPen (UBYTE), +1: BackPen (UBYTE), +2: DrawMode (UBYTE),
+      // +4: LeftEdge (WORD), +6: TopEdge (WORD), +8: ITextFont (APTR),
+      // +12: IText (STRPTR), +16: NextText (APTR)
+      const iTextPtr = this.emulator.readMemory32(bodyTextPtr + 12);
+      if (iTextPtr !== 0) {
+        bodyText = this.readString(iTextPtr);
+      }
+    }
+
+    console.log(`[intuition.library] AutoRequest(window=0x${window.toString(16)}, body="${bodyText}") - returning FALSE (no GUI)`);
+
+    // Return FALSE (0) to indicate user "cancelled" the dialog
+    // This allows the door to continue with error handling
+    this.emulator.setRegister(CPURegister.D0, 0);
   }
 
   /**
@@ -155,6 +199,9 @@ export class IntuitionLibrary {
         return true;
       case -438:
         this.OpenWorkBench();
+        return true;
+      case -348:
+        this.AutoRequest();
         return true;
       default:
         return false; // Unknown function

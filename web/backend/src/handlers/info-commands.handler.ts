@@ -391,11 +391,14 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   if (!checkSecurity(session.user, ACSPermission.XPR_SEND) && !checkSecurity(session.user, ACSPermission.XPR_RECEIVE)) {
     socket.emit('ansi-output', AnsiUtil.colorize('[ 11] [DISABLED]\r\n', 'red'));
   } else {
+    const { PROTOCOL_DISPLAY_NAMES } = require('../types');
+    const userProtocol = currentUser.protocol || 'zmodem';
+    const protocolName = PROTOCOL_DISPLAY_NAMES[userProtocol] || userProtocol.toUpperCase();
     socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
     socket.emit('ansi-output', ' 11');
     socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
     socket.emit('ansi-output', AnsiUtil.colorize('TRANSFER PROTOCOL....... ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize('WebSocket', 'yellow'));
+    socket.emit('ansi-output', AnsiUtil.colorize(protocolName, 'yellow'));
     socket.emit('ansi-output', '\r\n');
   }
 
@@ -613,7 +616,19 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'Transfer Protocol: ');
+      // Display protocol selection menu
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('Select Transfer Protocol:\r\n', 'cyan'));
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[1] ', 'blue') + 'ZMODEM          - Fast, reliable, batch transfers (recommended)\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[2] ', 'blue') + 'YMODEM (Batch)  - Batch transfers with file info\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[3] ', 'blue') + 'XMODEM-1K       - 1024-byte blocks with CRC\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[4] ', 'blue') + 'XMODEM-CRC      - 128-byte blocks with CRC-16\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[5] ', 'blue') + 'XMODEM          - 128-byte blocks with checksum (legacy)\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[6] ', 'blue') + 'Punter (C64)    - Commodore 64/128 protocol\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[7] ', 'blue') + 'WebSocket       - Browser-based transfers\r\n');
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', 'Select (1-7) or <CR>=Cancel: ');
       session.subState = LoggedOnSubState.W_EDIT_PROTOCOL;
       break;
 
@@ -973,7 +988,33 @@ export async function handleWEditProtocolInput(socket: any, session: BBSSession,
     return;
   }
 
-  // For web version, protocol is always WebSocket, just acknowledge
+  // Protocol selection mapping
+  const protocolMap: { [key: string]: string } = {
+    '1': 'zmodem',
+    '2': 'ymodem',
+    '3': 'xmodem-1k',
+    '4': 'xmodem-crc',
+    '5': 'xmodem',
+    '6': 'punter',
+    '7': 'websocket'
+  };
+
+  const selectedProtocol = protocolMap[trimmed];
+
+  if (!selectedProtocol) {
+    socket.emit('ansi-output', '\r\nInvalid selection. Please enter 1-7.\r\n');
+    socket.emit('ansi-output', 'Select (1-7) or <CR>=Cancel: ');
+    return;
+  }
+
+  // Update user protocol
+  session.user.protocol = selectedProtocol;
+  await db.updateUser(session.user.id, { protocol: selectedProtocol });
+
+  const { PROTOCOL_DISPLAY_NAMES } = require('../types');
+  const protocolName = PROTOCOL_DISPLAY_NAMES[selectedProtocol] || selectedProtocol.toUpperCase();
+  socket.emit('ansi-output', `\r\nProtocol set to: ${protocolName}\r\n`);
+
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }

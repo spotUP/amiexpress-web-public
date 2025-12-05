@@ -141,10 +141,10 @@ export class AmigaDosEnvironment {
       `[AmigaDosEnvironment] Creating AEDoorPort for user: ${session.user.username}`
     );
 
-    // Create the port through ExecLibrary
-    const portAddr = (this.execLibrary as any).createSystemPort(portName, 0);
+    // Create the port through ExecLibrary using the correct method
+    const portAddr = (this.execLibrary as any).createPublicPort(portName);
 
-    if (portAddr === 0) {
+    if (!portAddr || portAddr === 0) {
       console.error(`[AmigaDosEnvironment] Failed to create ${portName}!`);
       return;
     }

@@ -2,7 +2,8 @@
 # Comprehensive 68K Door Test Script
 # Tests all available 68K doors to verify emulation completeness
 
-set -e
+# Don't use set -e so we can test all doors even after failures
+# set -e
 
 PROJECT_ROOT="~/Code/amiexpress-web"
 cd "$PROJECT_ROOT"

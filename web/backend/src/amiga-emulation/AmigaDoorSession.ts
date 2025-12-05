@@ -16,6 +16,7 @@ import { LibraryManager } from "./LibraryManager.js";
 import { DoorLoader } from "./DoorLoader.js";
 import { DoorLifecycleManager } from "./session/DoorLifecycleManager.js";
 import { DoorMessageHandler } from "./session/DoorMessageHandler.js";
+import { DoorLogger, getDoorLogger, removeDoorLogger } from "./DoorLogger.js";
 
 /**
  * AmigaDoorSession - REFACTORED VERSION
@@ -36,6 +37,9 @@ export class AmigaDoorSession {
   private socket: Socket;
   private config: DoorConfig;
   private isRunning: boolean = false;
+
+  // Per-door logger for this session
+  private logger: DoorLogger;
 
   // Core components (extracted into separate modules)
   private libraryManager: LibraryManager | null = null;
@@ -100,14 +104,18 @@ export class AmigaDoorSession {
       }
     }
 
+    // Create per-door logger
+    const doorName = path.basename(this.config.executablePath);
+    const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber;
+    console.log(`[AmigaDoorSession] About to create logger for: ${doorName} node: ${nodeId}`);
+    this.logger = getDoorLogger(doorName, nodeId);
+    console.log(`[AmigaDoorSession] Logger created, path: ${this.logger.getLogPath()}`);
+
     console.log(
-      `[AmigaDoorSession] Initializing refactored session for: ${path.basename(
-        this.config.executablePath
-      )}`
+      `[AmigaDoorSession] Initializing refactored session for: ${doorName}`
     );
-    this.logDoorEvent(
-      `START door=${path.basename(this.config.executablePath)} path=${this.config.executablePath}`
-    );
+    this.logger.info(`Session initialized for ${this.config.executablePath}`);
+    this.logger.info(`Log file: ${this.logger.getLogPath()}`);
 
     // Set up socket event handlers
     this.setupSocketHandlers();
@@ -228,7 +236,8 @@ export class AmigaDoorSession {
       this.libraryManager = new LibraryManager(
         this.emulator,
         this.socket,
-        this.config
+        this.config,
+        this.logger
       );
       await this.initializeLibraries();
 
@@ -239,7 +248,8 @@ export class AmigaDoorSession {
       this.doorLoader = new DoorLoader(
         this.emulator,
         this.sharedState.execLibrary,
-        this.config
+        this.config,
+        this.logger
       );
       await this.doorLoader.loadDoor();
       console.log(
@@ -271,7 +281,8 @@ export class AmigaDoorSession {
         this.config,
         this.libraryManager,
         this.doorLoader,
-        this.messageHandler
+        this.messageHandler,
+        this.logger
       );
       this.lifecycleManager.setLibraryTraps(this.sharedState.libraryTraps);
       this.lifecycleManager.setXIMProtocol(this.sharedState.ximProtocol);
@@ -298,16 +309,10 @@ export class AmigaDoorSession {
 
       // Start the lifecycle management
       await this.lifecycleManager.startLifecycle();
-      this.logDoorEvent(
-        `END door=${path.basename(this.config.executablePath)} status=ok`
-      );
+      this.logger.info(`Door completed: ${path.basename(this.config.executablePath)} status=ok`);
     } catch (error) {
       console.error("[AmigaDoorSession] Error starting door:", error);
-      this.logDoorEvent(
-        `END door=${path.basename(this.config.executablePath)} status=error msg=${
-          error instanceof Error ? error.message : error
-        }`
-      );
+      this.logger.error(`Door failed: ${path.basename(this.config.executablePath)} error=${error instanceof Error ? error.message : error}`);
       this.socket.emit("door:error", {
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -350,6 +355,17 @@ export class AmigaDoorSession {
     this.sharedState.aePortAddress = this.libraryManager.getDoorPortAddress(); // Same as door port for RTW
     this.sharedState.doorReplyPortAddr =
       this.libraryManager.getReplyPortAddress();
+
+    // Set up sysop debug callback for file errors
+    if (this.sharedState.dosLibrary) {
+      this.sharedState.dosLibrary.setDebugCallback((message: string, level: string) => {
+        // Only emit warnings and errors to sysop terminal
+        if (level === 'warn' || level === 'error') {
+          const color = level === 'error' ? '\x1b[31m' : '\x1b[33m';
+          this.socket.emit('ansi-output', `${color}${message}\x1b[0m\r\n`);
+        }
+      });
+    }
 
     // Set up callbacks between components
     this.setupComponentCallbacks();
@@ -436,7 +452,7 @@ export class AmigaDoorSession {
       return;
     }
 
-    const taskAddr = 0x70000; // Current task address used by ExecLibrary
+    const taskAddr = 0x090000; // Current task address (must match ExecLibrary)
     const prCliOffset = 0xac; // pr_CLI offset inside struct Process
     // CLI structures at 0x110000+ to avoid overlap with door code (0x1000-0x100000)
     const cliStructAddr = 0x110000;
@@ -569,7 +585,8 @@ export class AmigaDoorSession {
    * Terminate the door session - REFACTORED
    */
   terminate(): void {
-    console.log("[AmigaDoorSession] 🔄 Terminating refactored door session...");
+    console.log("[AmigaDoorSession] Terminating refactored door session...");
+    this.logger.info("Terminating session...");
 
     this.isRunning = false;
 
@@ -594,13 +611,19 @@ export class AmigaDoorSession {
       this.emulator = null;
     }
 
+    // End door logger
+    this.logger.end(undefined, "Session terminated");
+    const doorName = path.basename(this.config.executablePath);
+    const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber;
+    removeDoorLogger(doorName, nodeId);
+
     // Clear all references
     this.libraryManager = null;
     this.doorLoader = null;
     this.lifecycleManager = null;
     this.messageHandler = null;
 
-    console.log("[AmigaDoorSession] ✅ Refactored door session terminated");
+    console.log("[AmigaDoorSession] Refactored door session terminated");
   }
 
   /**
@@ -659,16 +682,9 @@ export class AmigaDoorSession {
   }
 
   /**
-   * Append door events to backend.log so admin log view shows 68k door activity.
+   * Get the per-door logger for this session
    */
-  private logDoorEvent(message: string): void {
-    try {
-      const projectRoot = path.resolve(process.cwd());
-      const logFile = path.join(projectRoot, "logs", "door-68k.log");
-      const line = `[DoorLog] ${new Date().toISOString()} ${message}\n`;
-      appendFileSync(logFile, line, { encoding: "utf8" });
-    } catch (err) {
-      console.error("[AmigaDoorSession] Failed to write door log:", err);
-    }
+  getLogger(): DoorLogger {
+    return this.logger;
   }
 }

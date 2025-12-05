@@ -40,6 +40,7 @@ export enum LoggedOnSubState {
   FILES_SELECT_DIRECTORIES = 'files_select_directories',
   FILES_VIEW_AREA = 'files_view_area',
   FILES_DOWNLOAD = 'files_download',
+  FILES_DOWNLOAD_SELECT = 'files_download_select',  // Batch download file selection
   FILES_UPLOAD = 'files_upload',
   UPLOAD_FILENAME_INPUT = 'upload_filename_input',
   UPLOAD_DESC_INPUT = 'upload_desc_input',

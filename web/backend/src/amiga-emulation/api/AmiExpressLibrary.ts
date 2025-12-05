@@ -487,7 +487,8 @@ export class AmiExpressLibrary {
 
     // Allocate interface structure at a fixed address (simplified)
     // In real implementation, would allocate via exec.library AllocMem
-    this.difacePointer = 0x10000;  // Fixed address for now
+    // Must be outside door code range (0x1000-0x80000)
+    this.difacePointer = 0x098000;  // After Task structure at 0x090000
     console.log(`  Allocated interface at: 0x${this.difacePointer.toString(16)}`);
 
     // Initialize interface structure fields (simplified)

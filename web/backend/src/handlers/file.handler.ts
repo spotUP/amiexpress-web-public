@@ -1064,10 +1064,12 @@ export function startFileDownload(socket: any, session: BBSSession, fileArea: an
     socket.emit('ansi-output', `   ${description}\r\n\r\n`);
   });
 
-  // Prompt for file selection
-  socket.emit('ansi-output', '\x1b[32mSelect file to download (1-\x1b[33m' + areaFiles.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.FILES_SELECT_AREA;
-  session.tempData = { downloadMode: true, fileArea, areaFiles };
+  // Prompt for file selection - express.e:20031 "Space between filenames"
+  // Support multiple selections: space-separated numbers, ranges (1-3), or filenames
+  socket.emit('ansi-output', '\x1b[33mEnter file #s (e.g. 1 3 5), range (1-5), or filename(s):\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[32mSelect files to download: \x1b[0m');
+  session.subState = LoggedOnSubState.FILES_DOWNLOAD_SELECT;
+  session.tempData = { downloadMode: true, fileArea, areaFiles, batchDownload: true };
 }
 
 export function handleFileDownload(socket: any, session: BBSSession, fileIndex: number) {
