@@ -29,30 +29,31 @@ export interface DirFileEntry {
 /**
  * Check if a line is the start of a new file entry
  * Port from express.e dirLineNewFile()
+ *
+ * Format: filename(12) + SPACE(1) + STATUS(1) + size + date + desc
+ * Note: NO guaranteed space after status marker - size can be variable width
  */
 export function isNewFileEntry(line: string): boolean {
-  // New file entries have format: "filename     X  " where X is status marker
-  // Position 13 (0-indexed) should be a status marker (P, F, N, or D)
-  // Position 12 should be a space
-  if (line.length < 17) return false;
+  // Must be at least 14 chars (filename + space + status)
+  if (line.length < 14) return false;
 
   const statusPos = 13;
   const statusChar = line[statusPos];
 
-  // Check if it's a valid status marker
+  // Check if it's a valid status marker at position 13
   if (statusChar !== 'P' && statusChar !== 'F' && statusChar !== 'N' && statusChar !== 'D') {
     return false;
   }
 
-  // Check for spaces around status marker
-  if (line[12] !== ' ' || line[14] !== ' ') {
+  // Position 12 must be a space (between filename and status)
+  if (line[12] !== ' ') {
     return false;
   }
 
-  // Filename section (first 12 chars) should not start with 33 spaces (continuation line)
-  const firstChars = line.substring(0, Math.min(33, line.length));
-  if (firstChars.trim().length === 0 && line.length > 33) {
-    return false; // This is a continuation line
+  // Filename section (first 12 chars) should not be all spaces (continuation line)
+  const filename = line.substring(0, 12);
+  if (filename.trim().length === 0) {
+    return false; // This is a continuation line (33 spaces of indentation)
   }
 
   return true;
@@ -61,6 +62,10 @@ export function isNewFileEntry(line: string): boolean {
 /**
  * Parse a single file entry from DIR file lines
  * Port from express.e displayFileList() / displayIt2()
+ *
+ * From express.e:27204 - They replace position 13 with space before parsing:
+ * tempstr[13]:=" "
+ * parseParams(tempstr)
  */
 export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry | null {
   const firstLine = lines[startIndex];
@@ -75,15 +80,17 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
   // Parse status marker (position 13)
   const statusMarker = firstLine[13] as 'P' | 'F' | 'N' | 'D';
 
-  // Parse file size (starts at position 16, ends before date)
-  // Format: "  123K  23-Oct-25"
-  const afterStatus = firstLine.substring(16);
-  const sizeMatch = afterStatus.match(/^\s*(\d+[KMG]?)\s+/);
-  let fileSizeDisplay = '0K';
+  // Express.e technique: Replace status marker with space, then parse as space-separated fields
+  // This handles variable-width file sizes correctly
+  const normalized = firstLine.substring(0, 13) + ' ' + firstLine.substring(14);
+  const fields = normalized.trim().split(/\s+/);
+
+  // Fields: [filename, size, date, ...description]
+  let fileSizeDisplay = '0';
   let fileSize = 0;
 
-  if (sizeMatch) {
-    fileSizeDisplay = sizeMatch[1];
+  if (fields.length >= 2) {
+    fileSizeDisplay = fields[1];
 
     // Convert size to bytes
     const sizeStr = fileSizeDisplay.toUpperCase();
@@ -99,19 +106,15 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
     }
   }
 
-  // Parse date (9 characters after size, format: DD-MMM-YY)
+  // Parse date (field 2, format: DD-MMM-YY)
   // Example: "23-Oct-25"
-  const dateStart = firstLine.indexOf(fileSizeDisplay, 16) + fileSizeDisplay.length;
-  const dateSection = firstLine.substring(dateStart).trim();
-  const dateMatch = dateSection.match(/^(\d{1,2}-[A-Za-z]{3}-\d{2})\s+(.*)/);
-
   let uploadDateDisplay = '';
   let uploadDate = new Date();
   let description = '';
 
-  if (dateMatch) {
-    uploadDateDisplay = dateMatch[1];
-    description = dateMatch[2] || '';
+  // Parse date from field 2 (format: DD-MMM-YY)
+  if (fields.length >= 3 && fields[2].match(/^\d{1,2}-[A-Za-z]{3}-\d{2}$/)) {
+    uploadDateDisplay = fields[2];
 
     // Parse date (DD-MMM-YY format)
     const dateParts = uploadDateDisplay.split('-');
@@ -128,9 +131,16 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
       const month = months[monthStr] ?? 0;
       uploadDate = new Date(year, month, day);
     }
+
+    // Description is everything after date (fields 3+)
+    if (fields.length > 3) {
+      description = fields.slice(3).join(' ');
+    }
   } else {
-    // No date match, description starts after size
-    description = dateSection;
+    // No valid date, description starts after size
+    if (fields.length > 2) {
+      description = fields.slice(2).join(' ');
+    }
   }
 
   // Collect multi-line description (lines with 33 spaces indentation)

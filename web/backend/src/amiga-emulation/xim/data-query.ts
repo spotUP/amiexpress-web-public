@@ -56,9 +56,35 @@ export class XIMDataQueryHandler {
     switch (msg.command) {
       case XIMCommand.DT_NAME:
         if (isRead) {
-          const username = user?.username || 'Guest';
-          this.messageParser.writeString(stringAddr, username, 31);
-          console.log(`  [READ] DT_NAME: "${username}"`);
+          // Context-aware handling: For file scanning doors (FR, N, F, CS, etc.),
+          // DT_NAME returns number of files in current directory, not username
+          const doorCommand = (this.bbsSession as any).doorCommand?.toUpperCase();
+          const isFileScanDoor = doorCommand && ['FR', 'N', 'F', 'CS', 'SCAN', 'NSU'].includes(doorCommand);
+
+          if (isFileScanDoor) {
+            // Return file count from current conference's NumULs file
+            const confNum = (this.bbsSession as any).conferenceNumber || 1;
+            const bbsRoot = (this.bbsSession as any).bbsRoot || process.cwd();
+            const numULsPath = require('path').join(bbsRoot, `Conf${confNum}`, 'NumULs');
+
+            let fileCount = '0';
+            try {
+              const fs = require('fs');
+              if (fs.existsSync(numULsPath)) {
+                fileCount = fs.readFileSync(numULsPath, 'utf8').trim();
+              }
+            } catch (err) {
+              console.error(`  [READ] DT_NAME: Failed to read NumULs from ${numULsPath}:`, err);
+            }
+
+            this.messageParser.writeString(stringAddr, fileCount, 31);
+            console.log(`  [READ] DT_NAME (file scan context): "${fileCount}" files in Conf${confNum}`);
+          } else {
+            // Normal context: return username
+            const username = user?.username || 'Guest';
+            this.messageParser.writeString(stringAddr, username, 31);
+            console.log(`  [READ] DT_NAME: "${username}"`);
+          }
         } else {
           const newName = this.messageParser.readString(stringAddr, 31);
           if (user) user.username = newName;
@@ -157,6 +183,20 @@ export class XIMDataQueryHandler {
           const newLevel = parseInt(this.messageParser.readString(stringAddr, 200));
           if (user) user.secLevel = newLevel;
           console.log(`  [WRITE] DT_SECSTATUS: ${newLevel}`);
+        }
+        break;
+
+      case XIMCommand.ENVSTAT:
+        // Environment status - returns current BBS activity state
+        // Used by doors like AquaScan to determine BBS context (files, mail, etc.)
+        if (isRead) {
+          const envStat = (this.bbsSession as any).currentStat || 0;
+          this.messageParser.writeString(stringAddr, envStat.toString(), 200);
+          console.log(`  [READ] ENVSTAT: ${envStat}`);
+        } else {
+          const newStat = parseInt(this.messageParser.readString(stringAddr, 200)) || 0;
+          (this.bbsSession as any).currentStat = newStat;
+          console.log(`  [WRITE] ENVSTAT: ${newStat}`);
         }
         break;
 

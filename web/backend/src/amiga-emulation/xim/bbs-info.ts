@@ -92,8 +92,8 @@ export class XIMBBSInfoHandler {
     const sessionAddr = (this.bbsSession as any)?.screenAddress;
     if (typeof stateAddr === 'number') return stateAddr;
     if (typeof sessionAddr === 'number') return sessionAddr;
-    // Use a stable dummy handle similar to intuition.library stub range
-    return 0x20000;
+    // Use a stable dummy handle in IntuitionLibrary stub range (0x099000+)
+    return 0x099000;
   }
 
   /**

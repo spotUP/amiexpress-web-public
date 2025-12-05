@@ -22,6 +22,7 @@ import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
 import { XIMBBSInfoHandler } from './xim/bbs-info';
 import { XIMSystemCommandsHandler } from './xim/system-commands';
+import { ximDebugLogger } from './xim/debug-logger';
 
 export { XIMCommand } from './xim/types';
 
@@ -222,6 +223,17 @@ export class XIMProtocol {
    */
   async handleMessage(msg: XIMMessage): Promise<void> {
     const humanName = this.messageParser.getCommandName(msg.command);
+
+    // Log incoming message to XIM debug log
+    ximDebugLogger.logMessage(msg.command, humanName, 'RECV', {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      data: msg.data,
+      string: msg.string,
+      stringPtr: msg.stringPtr ? `0x${msg.stringPtr.toString(16)}` : null,
+      nodeId: msg.nodeId,
+      lineNumber: msg.lineNumber
+    });
+
     console.log(
       `[XIMProtocol] Handling command: ${humanName} (enum SV_NEWMSG=${XIMCommand.SV_NEWMSG}, RAWARROW=${XIMCommand.RAWARROW})`
     );
@@ -902,6 +914,14 @@ export class XIMProtocol {
    * Send reply to door via ReplyMsg
    */
   private sendReply(msg: any, data: number): void {
+    const humanName = this.messageParser.getCommandName(msg.command);
+
+    // Log outgoing reply to XIM debug log
+    ximDebugLogger.logMessage(msg.command, humanName, 'SEND', {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      reply_data: data
+    });
+
     this.messageParser.writeData(msg.msgAddr, data);
     this.execLibrary.replyMsg(msg.msgAddr);
   }

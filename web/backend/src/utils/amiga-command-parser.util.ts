@@ -67,6 +67,7 @@ export interface CommandDefinition {
   internal?: string;        // Internal command (express.e:4711)
   passParameters?: number;  // Pass parameters mode (express.e:4712)
   mciText?: string;         // MCI text for MCI type doors (express.e:4295)
+  args?: string;            // Command-line arguments to pass to door (ARGS tooltype)
   toolTypes?: Record<string, string>; // All parsed tooltypes (uppercased keys)
 }
 
@@ -338,6 +339,12 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   const mciText = tooltypes.get('MCI_TEXT');
   if (mciText && type === DoorType.MCI) {
     cmd.mciText = mciText;
+  }
+
+  // ARGS for command-line arguments to pass to door
+  const args = tooltypes.get('ARGS');
+  if (args) {
+    cmd.args = args;
   }
 
   return cmd;

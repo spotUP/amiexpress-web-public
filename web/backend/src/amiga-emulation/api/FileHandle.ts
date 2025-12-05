@@ -208,6 +208,7 @@ export class FileHandle {
   seek(position: number, whence: number): number {
     if (this.isMemoryHandle && this.memoryBuffer) {
       const size = this.memoryBuffer.length;
+      const oldPos = this.position;
       if (whence === 0) {
         this.position = position;
       } else if (whence === 1) {
@@ -215,7 +216,9 @@ export class FileHandle {
       } else if (whence === 2) {
         this.position = size + position;
       }
-      this.position = Math.max(0, Math.min(this.position, size));
+      // Allow seeking past EOF (AmigaDOS behavior)
+      // Clamp only to prevent negative positions
+      this.position = Math.max(0, this.position);
       return this.position;
     }
 

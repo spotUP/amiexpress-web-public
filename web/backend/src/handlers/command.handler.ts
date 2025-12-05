@@ -30,7 +30,8 @@ import {
   handleFileDownload,
   displayFileAreaContents,
   handleFileDeleteConfirmation,
-  handleFileMoveConfirmation
+  handleFileMoveConfirmation,
+  matchesWildcard
 } from './file.handler';
 import {
   displayAccountEditingMenu,
@@ -1388,6 +1389,44 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // PRIORITY 8: Handle DOWNLOAD_FILENAME_INPUT (line-buffered input like lineInput in express.e:20124)
+  // express.e:20124 - status:=lineInput('','',200,INPUT_TIMEOUT,tempStr2)
+  if (session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT) {
+    console.log(' [DOWNLOAD] User entering filename (line-buffered)');
+
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer || '';
+      session.inputBuffer = '';
+
+      const { DownloadHandler } = require('./download.handler');
+      await DownloadHandler.handleFilenameInput(socket, session, input);
+    } else if (data === '\x7f' || data === '\b') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      socket.emit('ansi-output', data);
+    }
+    return;
+  }
+
+  // PRIORITY 9: Handle DOWNLOAD_CONFIRM_INPUT (Y/N confirmation - single char hotkey OK)
+  if (session.subState === LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT) {
+    console.log(' [DOWNLOAD] User confirming download');
+    // Y/N confirmation can be hotkey mode
+    const { DownloadHandler } = require('./download.handler');
+    await DownloadHandler.handleConfirmInput(socket, session, data);
+    return;
+  }
+
   // Handle substate-specific input
   // If menu is waiting to display and the user pressed any key (including Enter),
   // immediately drop to READ_COMMAND so input is not lost to the display flow loop.
@@ -1489,6 +1528,107 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     }
+    return;
+  }
+
+  // Handle batch download file selection (FILES_DOWNLOAD_SELECT)
+  // Supports: space-separated numbers, ranges (1-5), or filenames
+  if (session.subState === LoggedOnSubState.FILES_DOWNLOAD_SELECT) {
+    const input = data.trim();
+
+    // Empty input or Q/A to abort - express.e:20140-20142
+    if (input === '' || input.toUpperCase() === 'Q' || input.toUpperCase() === 'A') {
+      socket.emit('ansi-output', '\r\n\x1b[33mDownload cancelled.\x1b[0m\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.tempData = undefined;
+      return;
+    }
+
+    const areaFiles = session.tempData?.areaFiles || [];
+    const selectedFiles: any[] = [];
+    const errors: string[] = [];
+
+    // Parse input: space-separated items which can be numbers, ranges (1-5), or filenames
+    const items = input.split(/\s+/).filter((s: string) => s.length > 0);
+
+    for (const item of items) {
+      // Check for range format (e.g., 1-5)
+      const rangeMatch = item.match(/^(\d+)-(\d+)$/);
+      if (rangeMatch) {
+        const start = parseInt(rangeMatch[1]);
+        const end = parseInt(rangeMatch[2]);
+        if (start >= 1 && end <= areaFiles.length && start <= end) {
+          for (let i = start; i <= end; i++) {
+            const file = areaFiles[i - 1];
+            if (file && !selectedFiles.includes(file)) {
+              selectedFiles.push(file);
+            }
+          }
+        } else {
+          errors.push(`Invalid range: ${item}`);
+        }
+        continue;
+      }
+
+      // Check for number
+      const num = parseInt(item);
+      if (!isNaN(num) && num >= 1 && num <= areaFiles.length) {
+        const file = areaFiles[num - 1];
+        if (file && !selectedFiles.includes(file)) {
+          selectedFiles.push(file);
+        }
+        continue;
+      }
+
+      // Treat as filename - search for matches (supports wildcards)
+      const matches = areaFiles.filter((f: any) => {
+        const name = f.filename || f.name;
+        if (item.includes('*') || item.includes('?')) {
+          return matchesWildcard(name, item);
+        }
+        return name.toLowerCase() === item.toLowerCase();
+      });
+
+      if (matches.length > 0) {
+        for (const match of matches) {
+          if (!selectedFiles.includes(match)) {
+            selectedFiles.push(match);
+          }
+        }
+      } else {
+        errors.push(`File not found: ${item}`);
+      }
+    }
+
+    // Report errors
+    for (const err of errors) {
+      socket.emit('ansi-output', `\r\n\x1b[31m${err}\x1b[0m`);
+    }
+
+    if (selectedFiles.length === 0) {
+      socket.emit('ansi-output', '\r\n\x1b[31mNo valid files selected.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[32mSelect files to download: \x1b[0m');
+      return;
+    }
+
+    // Show selected files and confirm
+    socket.emit('ansi-output', `\r\n\x1b[32mFiles selected for download (${selectedFiles.length}):\x1b[0m\r\n`);
+    selectedFiles.forEach((file: any, index: number) => {
+      const name = file.filename || file.name;
+      const size = file.size || 0;
+      socket.emit('ansi-output', `  ${index + 1}. ${name} (${size} bytes)\r\n`);
+    });
+
+    const totalSize = selectedFiles.reduce((sum: number, f: any) => sum + (f.size || 0), 0);
+    socket.emit('ansi-output', `\r\n\x1b[32mTotal size: ${totalSize} bytes\x1b[0m\r\n`);
+    socket.emit('ansi-output', '\r\n\x1b[36mDownload these files? (Y/N): \x1b[0m');
+
+    session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
+    session.tempData = {
+      ...session.tempData,
+      downloadFileList: selectedFiles,
+      downloadBatch: selectedFiles.length > 1
+    };
     return;
   }
 
@@ -1767,18 +1907,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
-  // Handle download input (D command continuation)
-  if (session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT) {
-    const { DownloadHandler } = require('./download.handler');
-    await DownloadHandler.handleFilenameInput(socket, session, data.trim());
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT) {
-    const { DownloadHandler } = require('./download.handler');
-    await DownloadHandler.handleConfirmInput(socket, session, data.trim());
-    return;
-  }
+  // NOTE: DOWNLOAD_FILENAME_INPUT and DOWNLOAD_CONFIRM_INPUT are handled earlier
+  // in the line-buffered input section (lines 1391-1427)
 
   // Handle view file input (V command continuation)
   if (session.subState === LoggedOnSubState.VIEW_FILE_INPUT) {

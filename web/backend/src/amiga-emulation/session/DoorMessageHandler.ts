@@ -1290,10 +1290,13 @@ export class DoorMessageHandler {
 
       case BB_CONFLOCAL:
         // express.e:3701-3707: Get/Set conference location (directory)
+        // Returns Amiga-style path like "BBS:Conf2/" - door expects this format for Dir1 access
         console.log(`[DoorMessageHandler]   BB_CONFLOCAL: data=${data}`);
         if (data) {
-          // Get current conference directory
-          const confDir = this.config.bbsSession?.conferenceDir || "CONF1:";
+          // Get current conference directory from currentConf number
+          const confNum = (this.config.bbsSession as any)?.currentConf || 1;
+          const confDir = `BBS:Conf${confNum}/`;
+          console.log(`[DoorMessageHandler]   BB_CONFLOCAL returning: "${confDir}" (from currentConf=${confNum})`);
           this.writeStringToMessage(msgAddr, confDir);
         } else {
           // Set conference location
@@ -1302,9 +1305,9 @@ export class DoorMessageHandler {
         break;
 
       case BB_LOCAL:
-        // express.e:3708-3709: BBS local directory
-        console.log(`[DoorMessageHandler]   BB_LOCAL`);
-        this.writeStringToMessage(msgAddr, this.config.bbsSession?.bbsRoot || "/");
+        // express.e:3708-3709: BBS local directory (Amiga-style assign "BBS:")
+        console.log(`[DoorMessageHandler]   BB_LOCAL: returning "BBS:"`);
+        this.writeStringToMessage(msgAddr, "BBS:");
         break;
 
       case BB_TASKPRI:

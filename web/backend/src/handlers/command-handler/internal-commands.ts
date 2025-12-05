@@ -294,10 +294,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       await handleFileListCommand(socket, session, params);
       return;
 
-    // FR removed - should use AquaScan XIM door from BBSCmd/fr.info
-    // case 'FR': // File Listings Raw (internalCommandFR) - express.e:24883-24887
-    //   await handleFileListRawCommand(socket, session, params);
-    //   return;
+    case 'FR': // File Listings Reverse (internalCommandFR) - express.e:24883-24887
+      await handleFileListRawCommand(socket, session, params);
+      return;
 
     case 'FM': // File Maintenance (internalCommandFM) - express.e:24889-25045
       await FileMaintenanceHandler.handleFileMaintenanceCommand(socket, session, params);

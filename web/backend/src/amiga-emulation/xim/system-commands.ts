@@ -205,12 +205,15 @@ export class XIMSystemCommandsHandler {
 
     const isRead = msg.data !== 0;
     if (isRead) {
-      const status = 0;
+      // Return current environment status from session (set by command-execution.handler.ts)
+      // For file scan commands (FR, F, N, etc.), this will be 8 (ENV_FILES)
+      const status = (this.bbsSession as any).currentStat || 0;
       this.messageParser.writeMessageString(msg.msgAddr, status.toString());
       console.log(`  [READ] Status: ${status}`);
     } else {
       const value = this.getMessageString(msg);
       if (value.length > 0) {
+        (this.bbsSession as any).currentStat = parseInt(value) || 0;
         console.log(`  [WRITE] Set status: ${value}`);
       }
     }

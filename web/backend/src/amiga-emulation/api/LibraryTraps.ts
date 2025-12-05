@@ -1771,6 +1771,14 @@ const INTUITION_VECTORS: LibraryVector[] = [
     },
   },
   {
+    offset: -348, // LVO -348 AutoRequest
+    name: "AutoRequest",
+    handler: (emu, lib: IntuitionLibrary) => {
+      lib.AutoRequest();
+      return emu.getRegister(0); // Return D0 (TRUE/FALSE)
+    },
+  },
+  {
     offset: -438, // LVO -438 OpenWorkBench
     name: "OpenWorkBench",
     handler: (emu, lib: IntuitionLibrary) => {
@@ -3348,12 +3356,13 @@ export class LibraryTraps {
     let properA6 = a6Before; // Default: restore to original value
 
     // Determine library base from the library instance
+    // Fallback addresses must match ExecLibrary.ts memory layout (0x080000+)
     if (library === this.execLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("exec.library") || 0x10000;
+      properA6 = this.execLibrary.getLibraryBase("exec.library") || 0x080000;
     } else if (library === this.dosLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("dos.library") || 0x20000;
+      properA6 = this.execLibrary.getLibraryBase("dos.library") || 0x0B0000;
     } else if (library === this.aedoorLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("AEDoor.library") || 0x30000;
+      properA6 = this.execLibrary.getLibraryBase("AEDoor.library") || 0x0C0000;
     }
 
     this.emulator.setRegister(14, properA6);
@@ -3560,12 +3569,13 @@ export class LibraryTraps {
     let properA6 = a6Before; // Default: restore to original value
 
     // Determine library base from the library instance
+    // Fallback addresses must match ExecLibrary.ts memory layout (0x080000+)
     if (library === this.execLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("exec.library") || 0x10000;
+      properA6 = this.execLibrary.getLibraryBase("exec.library") || 0x080000;
     } else if (library === this.dosLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("dos.library") || 0x20000;
+      properA6 = this.execLibrary.getLibraryBase("dos.library") || 0x0B0000;
     } else if (library === this.aedoorLibrary) {
-      properA6 = this.execLibrary.getLibraryBase("AEDoor.library") || 0x30000;
+      properA6 = this.execLibrary.getLibraryBase("AEDoor.library") || 0x0C0000;
     }
 
     this.emulator.setRegister(14, properA6);

@@ -17,6 +17,9 @@ import { PathManager } from './PathManager';
 import { AmigaFileCache } from './AmigaFileCache';
 import * as path from 'path';
 
+/** Callback type for sysop debug messages */
+export type DoorDebugCallback = (message: string, level: 'info' | 'warn' | 'error') => void;
+
 export class FileManager {
   /** Registry of all open file handles: BPTR → FileHandle */
   private handles: Map<number, FileHandle> = new Map();
@@ -40,12 +43,27 @@ export class FileManager {
   /** Shared file cache for read-only Amiga files */
   private fileCache?: AmigaFileCache;
 
+  /** Callback to emit debug messages to sysop terminal */
+  private debugCallback?: DoorDebugCallback;
+
   constructor(baseDir: string, pathManager: PathManager, fileCache?: AmigaFileCache) {
     this.baseDir = baseDir;
     this.pathManager = pathManager;
     this.fileCache = fileCache;
     this.initializeStandardHandles();
     this.currentDirSysPath = this.pathManager.amiToSysPath(this.currentDirAmi, this.baseDir) || this.baseDir;
+  }
+
+  /** Set callback for sysop debug messages */
+  setDebugCallback(callback: DoorDebugCallback): void {
+    this.debugCallback = callback;
+  }
+
+  /** Emit debug message to sysop if callback is set */
+  private emitDebug(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {
+    if (this.debugCallback) {
+      this.debugCallback(message, level);
+    }
   }
 
   /**
@@ -143,19 +161,22 @@ export class FileManager {
     // Map AmigaDOS path to system path
     let sysPath = this.pathManager.amiToSysPath(amiPath, this.currentDirSysPath);
     if (!sysPath) {
-      console.error(`[FileManager] ❌ Failed to resolve path: "${amiPath}"`);
+      console.error(`[FileManager] Failed to resolve path: "${amiPath}"`);
       logToFile(`Resolve failed for "${amiPath}"`);
+      this.emitDebug(`[68K] Path resolve failed: "${amiPath}"`, 'error');
       return 0; // Failed
     }
 
     // Check if file exists and log it
     const fileExists = fs.existsSync(sysPath);
     if (fileExists) {
-      console.log(`[FileManager] ✅ Open: "${amiPath}" -> "${sysPath}" (EXISTS)`);
+      console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (EXISTS)`);
       logToFile(`Resolved "${amiPath}" -> "${sysPath}" (exists)`);
     } else {
-      console.log(`[FileManager] ⚠️  Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will fail with IoErr=205)`);
+      console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will fail with IoErr=205)`);
       logToFile(`Resolved "${amiPath}" -> "${sysPath}" (not found)`);
+      // Emit to sysop terminal for visibility
+      this.emitDebug(`[68K] File not found: "${amiPath}"`, 'warn');
     }
 
     // Determine file open mode

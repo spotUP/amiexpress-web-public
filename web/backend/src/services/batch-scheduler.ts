@@ -364,12 +364,30 @@ function runAmigaDoorViaRunner(
         console.warn(`[BatchScheduler] Door ${path.basename(doorPath)} timed out after ${BATCH_DOOR_TIMEOUT / 1000}s, killing process tree (pid ${child.pid})`);
         killed = true;
         try {
-          // Kill entire process group (negative pid kills the group)
-          process.kill(-child.pid, 'SIGKILL');
-        } catch (e: any) {
-          // Fallback to regular kill if process group kill fails
-          console.warn(`[BatchScheduler] Process group kill failed: ${e.message}, trying direct kill`);
+          // AGGRESSIVE KILL: Use pkill to kill ALL processes matching the door name
+          // This is necessary because npm/npx don't create proper process groups
+          const doorName = path.basename(doorPath);
+          const { execSync } = require('child_process');
+
+          // First try process group kill
+          try {
+            process.kill(-child.pid, 'SIGKILL');
+          } catch (e1: any) {
+            console.warn(`[BatchScheduler] Process group kill failed: ${e1.message}`);
+          }
+
+          // Then kill by name (catches npm/npx children)
+          try {
+            execSync(`pkill -9 -f "${doorName}"`, { stdio: 'ignore' });
+            console.warn(`[BatchScheduler] Killed all processes matching: ${doorName}`);
+          } catch (e2: any) {
+            // pkill returns non-zero if no processes found, ignore
+          }
+
+          // Finally, direct kill of child
           child.kill('SIGKILL');
+        } catch (e: any) {
+          console.error(`[BatchScheduler] Failed to kill door: ${e.message}`);
         }
       }
     }, BATCH_DOOR_TIMEOUT);

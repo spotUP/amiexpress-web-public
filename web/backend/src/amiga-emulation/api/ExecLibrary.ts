@@ -102,7 +102,7 @@ export class ExecLibrary {
   // Message port tracking
   private messagePorts: Map<number, MessagePort> = new Map(); // address -> port
   private publicPorts: Map<string, number> = new Map(); // lower-case name -> address
-  private nextPortAddress: number = 0x0a0000; // Start at 640KB
+  private nextPortAddress: number = 0x0a0000; // Start at 640KB (between Task and library stubs)
 
   // Semaphore tracking
   private publicSemaphores: Map<string, number> = new Map(); // name -> address
@@ -128,15 +128,21 @@ export class ExecLibrary {
   // Host-owned AEDoor messages that must not be freed by doors (jhMessage buffers)
   private protectedMessages: Set<number> = new Set();
 
-  // Standard library addresses (for stubs)
-  private readonly EXEC_BASE_ADDR = 0x010000; // ExecBase at 64KB
-  private readonly DOS_LIB_ADDR = 0x020000; // DOS.library at 128KB
-  private readonly AEDOOR_LIB_ADDR = 0x030000; // AEDoor.library at 192KB
-  private readonly ICON_LIB_ADDR = 0x040000; // icon.library at 256KB
-  private readonly INTUITION_LIB_ADDR = 0x050000; // intuition.library at 320KB
-  private readonly GRAPHICS_LIB_ADDR = 0x060000; // graphics.library at 384KB
-  private readonly UTILITY_LIB_ADDR = 0x070000; // utility.library at 448KB
-  private nextStubLibraryAddr = 0x080000; // fallback base for unknown stub libraries
+  // Memory Layout (per vamos/Amiga conventions):
+  // 0x000000-0x0007FF: Exception vectors, scratch
+  // 0x001000-0x07FFFF: Door code segments (512KB max)
+  // 0x080000+: System structures and library stubs
+  // 0x100000+: AllocMem heap
+  //
+  // Standard library addresses (for stubs) - AFTER door code range
+  private readonly EXEC_BASE_ADDR = 0x080000; // ExecBase at 512KB (after door code)
+  private readonly DOS_LIB_ADDR = 0x0B0000; // DOS.library at 704KB
+  private readonly AEDOOR_LIB_ADDR = 0x0C0000; // AEDoor.library at 768KB
+  private readonly ICON_LIB_ADDR = 0x0D0000; // icon.library at 832KB
+  private readonly INTUITION_LIB_ADDR = 0x0E0000; // intuition.library at 896KB
+  private readonly GRAPHICS_LIB_ADDR = 0x0E8000; // graphics.library at 928KB
+  private readonly UTILITY_LIB_ADDR = 0x0F0000; // utility.library at 960KB
+  private nextStubLibraryAddr = 0x0F8000; // fallback base for unknown stub libraries
   private readonly PORT_LIST_OFFSET = 392;
   private currentStackLower = 0;
   private currentStackUpper = 0;
@@ -161,11 +167,12 @@ export class ExecLibrary {
     };
 
     // Create current task (the door itself)
-    const taskMsgPortAddr = 0x07005c; // Process msg port at task + 0x5C
+    // Task is at 0x090000 - after ExecBase (0x080000) but before library stubs (0x0B0000+)
+    const taskMsgPortAddr = 0x09005c; // Process msg port at task + 0x5C
     this.currentTask = {
-      address: 0x070000, // Task structure at 448KB
+      address: 0x090000, // Task/Process structure at 576KB
       name: "Door Task",
-      node: 0x070000,
+      node: 0x090000,
       sigRecvd: 0, // No signals received yet
       sigWait: 0, // Not waiting for signals (0 = TS_READY)
       state: 0, // TS_READY

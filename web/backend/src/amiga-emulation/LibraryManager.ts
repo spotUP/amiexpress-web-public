@@ -27,6 +27,7 @@ import * as fs from "fs";
 import { LibraryLoader } from "./loader/LibraryLoader.js";
 import { PathManager } from "./api/PathManager.js";
 import { BbsApiLibrary } from "./api/BbsApiLibrary.js";
+import { DoorLogger } from "./DoorLogger.js";
 
 const DEFAULT_ROM =
   "Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom";
@@ -58,11 +59,13 @@ export class LibraryManager {
   private useXimProtocol: boolean = false;
   private pathManager: PathManager | null = null;
   private bbsRoot: string = "";
+  private logger: DoorLogger | null = null;
 
-  constructor(emulator: MoiraEmulator, socket: Socket, config: DoorConfig) {
+  constructor(emulator: MoiraEmulator, socket: Socket, config: DoorConfig, logger?: DoorLogger) {
     this.emulator = emulator;
     this.socket = socket;
     this.config = config;
+    this.logger = logger || null;
     this.isBullsDoor = path
       .basename(config.executablePath)
       .toLowerCase()
@@ -479,19 +482,22 @@ export class LibraryManager {
       const amigaNodeId = nodeId === 0 ? 1 : nodeId;
       const nodeDir = path.join(bbsRoot, `Node${amigaNodeId}`);
 
-      const dirs = [
-        path.join(bbsRoot, "Answers"),
-        path.join(nodeDir, "Answers"),
-        path.join(nodeDir, "TempAns"),
-      ];
-
-      for (const dir of dirs) {
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
+      // Ensure node directory exists
+      if (!fs.existsSync(nodeDir)) {
+        fs.mkdirSync(nodeDir, { recursive: true });
       }
+
+      // TempAns is a directory for temporary answer files
+      const tempAnsDir = path.join(nodeDir, "TempAns");
+      if (!fs.existsSync(tempAnsDir)) {
+        fs.mkdirSync(tempAnsDir, { recursive: true });
+      }
+
+      // NOTE: "Answers" is a FILE (not directory) that stores user questionnaire responses
+      // Do NOT create it as a directory - doors like GetAnswer expect it to be a file
+      // The file is created by new-user.handler.ts when users complete questionnaires
     } catch (error) {
-      console.warn("[LibraryManager] Failed to ensure Answers directories", error);
+      console.warn("[LibraryManager] Failed to ensure node directories", error);
     }
   }
 

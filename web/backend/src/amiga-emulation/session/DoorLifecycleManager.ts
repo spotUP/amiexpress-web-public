@@ -14,6 +14,7 @@ import { LibraryManager } from "../LibraryManager.js";
 import { DoorLoader } from "../DoorLoader.js";
 import { DoorMessageHandler } from "./DoorMessageHandler.js";
 import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
+import { DoorLogger } from "../DoorLogger.js";
 
 export interface ExecutionState {
   iterationCount: number;
@@ -63,6 +64,7 @@ export class DoorLifecycleManager {
   private messageHandler: DoorMessageHandler | null = null;
   private codeLowerBound: number = 0;
   private codeUpperBound: number = 0;
+  private logger: DoorLogger | null = null;
 
   // Execution state
   private executionState: ExecutionState;
@@ -97,7 +99,8 @@ export class DoorLifecycleManager {
     config: DoorConfig,
     libraryManager: LibraryManager,
     doorLoader: DoorLoader,
-    messageHandler: DoorMessageHandler | null
+    messageHandler: DoorMessageHandler | null,
+    logger?: DoorLogger
   ) {
     this.emulator = emulator;
     this.socket = socket;
@@ -105,6 +108,7 @@ export class DoorLifecycleManager {
     this.libraryManager = libraryManager;
     this.doorLoader = doorLoader;
     this.messageHandler = messageHandler;
+    this.logger = logger || null;
 
     // Get loop guard settings from toolTypes (passed by batch-scheduler or run-amiga-door)
     // or fall back to environment variables
@@ -407,6 +411,15 @@ export class DoorLifecycleManager {
       console.log(
         `[DoorLifecycleManager] Total iterations: ${this.executionState.iterationCount}`
       );
+
+      // Emit non-zero exit codes to sysop terminal for visibility
+      if (returnCode !== 0) {
+        const doorName = this.config.doorId || 'Unknown';
+        // AmigaDOS return codes: 0=OK, 5=WARN, 10=ERROR, 20=FAIL
+        const codeDesc = returnCode === 5 ? 'WARN' : returnCode === 10 ? 'ERROR' : returnCode === 20 ? 'FAIL' : `code ${returnCode}`;
+        this.socket.emit('ansi-output', `\x1b[33m[68K] ${doorName} exited with ${codeDesc}\x1b[0m\r\n`);
+      }
+
       this.terminate();
       return true;
     }

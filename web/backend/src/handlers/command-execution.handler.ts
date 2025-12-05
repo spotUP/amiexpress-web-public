@@ -274,7 +274,13 @@ async function runCommand(
   console.log(`  Executing ${commandDef.type} door: ${commandDef.location}`);
 
   // Set environment status (express.e:4710)
-  // setEnvStat(ENV_DOORS)
+  // For file scan commands (FR, F, N, CS, SCAN, NSU), set ENV_FILES (8)
+  // This is critical for doors like AquaScan to know the BBS context
+  const isFileScanCommand = ['FR', 'F', 'N', 'CS', 'SCAN', 'NSU'].includes(cmdUpper);
+  if (isFileScanCommand) {
+    session.currentStat = 8; // ENV_FILES
+    console.log(`  Set environment status to ENV_FILES (8) for file scan command`);
+  }
 
   // Execute the door using the door handler
   if (_executeDoor) {
@@ -312,6 +318,7 @@ async function runCommand(
       mimicVer: commandDef.mimicVer,
       passParameters: commandDef.passParameters,
       internal: commandDef.internal,
+      args: commandDef.args,
       toolTypes: commandDef.toolTypes
     };
 
