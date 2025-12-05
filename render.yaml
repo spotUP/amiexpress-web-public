@@ -15,6 +15,8 @@ services:
     buildCommand: |
       # Build SDK
       cd sdk && npm ci --include=dev && npm run build && cd ..
+      # Build SDK Preview Frontend
+      cd sdk/tools/preview/frontend && npm ci --include=dev && npm run build && cd ../../../..
       # Build frontend
       cd web/frontend && npm ci --include=dev && npm run build && cd ../..
       # Build config-app
