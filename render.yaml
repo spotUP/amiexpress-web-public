@@ -6,13 +6,21 @@ services:
     buildCommand: cd web/frontend && npm ci --include=dev && npm run build
     staticPublishPath: ./web/frontend/dist
 
-  # Backend - Web Service
+  # Backend - Web Service (Unified Deployment - serves all frontends)
   - type: web
     name: amiexpress-backend
     env: node
     region: oregon
     plan: starter
-    buildCommand: cd web/backend && npm ci
+    buildCommand: |
+      # Build SDK
+      cd sdk && npm ci --include=dev && npm run build && cd ..
+      # Build frontend
+      cd web/frontend && npm ci --include=dev && npm run build && cd ../..
+      # Build config-app
+      cd web/config-app && npm ci --include=dev && npm run build && cd ../..
+      # Build backend (and install deps)
+      cd web/backend && npm ci
     startCommand: cd web/backend && npx tsx src/index.ts
     envVars:
       - key: NODE_ENV

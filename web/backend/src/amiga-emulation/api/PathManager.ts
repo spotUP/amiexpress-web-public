@@ -7,6 +7,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import { resolveCaseInsensitivePath } from '../../utils/fs-amiga.util';
 
 export class PathManager {

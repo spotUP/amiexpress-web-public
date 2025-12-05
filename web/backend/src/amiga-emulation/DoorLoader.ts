@@ -8,9 +8,11 @@ import { HunkLoader } from "./loader/HunkLoader.js";
 import { ExecLibrary } from "./api/ExecLibrary.js";
 import { DoorConfig } from "./DoorTypes.js";
 import * as fs from "fs";
+import * as amigafs from "../utils/amigafs";
 import * as path from "path";
 import { notifySysop } from "../utils/sysop-alert.util.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
+import { DoorLogger } from "./DoorLogger.js";
 
 export class DoorLoader {
   private emulator: MoiraEmulator;
@@ -20,15 +22,18 @@ export class DoorLoader {
   private stackBaseAddr: number = 0;
   private stackSizeBytes: number = 0;
   private readonly exitTrapAddress = 0x1ff000;
+  private logger: DoorLogger | null = null;
 
   constructor(
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
-    config: DoorConfig
+    config: DoorConfig,
+    logger?: DoorLogger
   ) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
     this.config = config;
+    this.logger = logger || null;
     this.isBullsDoor = path
       .basename(config.executablePath)
       .toLowerCase()
@@ -52,22 +57,23 @@ export class DoorLoader {
         this.config.executablePath,
         error as Error
       );
+      this.logger?.error(`Failed to read binary: ${this.config.executablePath}`);
       throw error;
     }
     console.log(`[DoorLoader] Door binary size: ${binary.length} bytes`);
+    this.logger?.info(`Binary loaded: ${binary.length} bytes`);
 
     // Parse Amiga HUNK format
     const hunkLoader = new HunkLoader();
     const hunkFile = hunkLoader.parse(Buffer.from(binary));
 
     console.log(`[DoorLoader] Parsed ${hunkFile.segments.length} segments:`);
+    this.logger?.info(`Parsed ${hunkFile.segments.length} segments`);
     for (let i = 0; i < hunkFile.segments.length; i++) {
       const seg = hunkFile.segments[i];
-      console.log(
-        `  Segment ${i}: ${seg.type.toUpperCase()} at 0x${seg.address.toString(
-          16
-        )}, size=${seg.size} bytes`
-      );
+      const segInfo = `Segment ${i}: ${seg.type.toUpperCase()} at 0x${seg.address.toString(16)}, size=${seg.size} bytes`;
+      console.log(`  ${segInfo}`);
+      this.logger?.log('HUNK', segInfo);
 
       // Register CODE segments for self-modifying code detection
       if (seg.type.toUpperCase() === 'CODE') {
@@ -83,6 +89,7 @@ export class DoorLoader {
         16
       )}`
     );
+    this.logger?.info(`Entry point: 0x${hunkFile.entryPoint.toString(16)}`);
 
     // Set up CPU for door execution
     this.setupCpuRegisters(hunkFile);
@@ -154,15 +161,22 @@ export class DoorLoader {
       this.emulator.writeMemory(ARG_BSTR_ADDR + 1 + i, argString.charCodeAt(i));
     }
 
-    // Vamos shows D0 counting command + args, D2=0x2000 on entry
-    const argc = Math.max(1, customArgs.length + 1);
-    this.emulator.setRegister(0, argc); // D0 = argc
+    // AmigaDOS process startup registers (from vamos dos/run.py):
+    // D0 = arg_len (length of argument string, NOT argc)
+    // A0 = arg_ptr (pointer to argument string)
+    // D2 = stack_size
+    const argLen = argString.length;
+    this.emulator.setRegister(0, argLen); // D0 = length of arg string
     this.emulator.setRegister(1, 0); // D1 = 0 at startup
-    this.emulator.setRegister(2, 0x2000); // D2 observed in vamos
-    console.log(`  D0 (argc): ${argc} D2=0x2000`);
+    this.emulator.setRegister(2, this.stackSizeBytes); // D2 = stack size
+    console.log(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toString(16)}`);
 
     // Build CLI structure with key BPTR fields (dos/dosextens.h CommandLineInterface)
-    const cliSize = 0x80;
+    // Memory Layout (from NDK amitools/vamos/libstructs/dos.py):
+    //   0xe0000-0xe003F: CLIStruct (64 bytes, 16 fields), extended to 0xe007F for AX compat fields
+    //   0xe0080-0xe00FF: BSTR command name (128 bytes max)
+    //   0xe0200-0xe0213: FileLockStruct (20 bytes: fl_Link, fl_Key, fl_Access, fl_Task, fl_Volume)
+    const cliSize = 0x80; // 128 bytes: 64-byte standard CLI + extended fields + padding
     const cliAddr = 0xe0000; // store CLI in chip space (must not overlap exception handlers at 0xf00000)
     const cliBptr = cliAddr >> 2;
     const compatCliAddr = cliBptr; // raw pointer form for doors that skip BADDR
@@ -210,11 +224,13 @@ export class DoorLoader {
       this.emulator.writeMemory32(addr, val >>> 0);
 
     // Create a minimal FileLock for BBS: as current dir/home dir
-    const lockAddr = 0xe0000;
-    for (let i = 0; i < 32; i++) {
+    // FileLockStruct is 20 bytes (5 x LONG/APTR/BPTR fields) - see amitools/vamos/libstructs/dos.py
+    // Placed at 0xe0200 to avoid overlap with CLI (0xe0000-0xe007F) + BSTR (0xe0080-0xe00FF)
+    const lockAddr = 0xe0200;
+    const FILELOCK_SIZE = 20; // fl_Link(4) + fl_Key(4) + fl_Access(4) + fl_Task(4) + fl_Volume(4)
+    for (let i = 0; i < FILELOCK_SIZE; i++) {
       this.emulator.writeMemory(lockAddr + i, 0);
     }
-    // struct FileLock: fl_Link (APTR), fl_Key (LONG), fl_Access (LONG), fl_Task (APTR), fl_Volume (BPTR)
     write32(lockAddr + 0x0, 0); // fl_Link
     write32(lockAddr + 0x4, 0); // fl_Key
     write32(lockAddr + 0x8, -2); // fl_Access = ACCESS_READ(-2)
@@ -341,14 +357,20 @@ export class DoorLoader {
       )} stackBase=0x${this.stackBaseAddr.toString(16)} stackSize=${this.stackSizeBytes}`
     );
 
-    // Amiga E startup expects A0/A5 to point at the stack top (vamos shows A0/A5=stack upper)
+    // AmigaDOS startup: A0 = pointer to argument string (NOT stack top!)
+    // Amiga E doors may expect A0=stack, but standard AmigaDOS programs expect A0=args
+    // The arg string is at ARG_STRING_ADDR (0x0f0100)
     const stackTop = this.stackBaseAddr + this.stackSizeBytes;
-    this.emulator.setRegister(8, stackTop); // A0 (vamos: A0=stack upper)
+    this.emulator.setRegister(8, ARG_STRING_ADDR); // A0 = arg string pointer
+    console.log(`  A0 (arg string): 0x${ARG_STRING_ADDR.toString(16)} "${argString}"`);
 
     // CRITICAL FIX: A4 must point to DATA segment + 0x7FFE for small data model
     // SAS/C and similar compilers use 16-bit signed A4-relative addressing
     // By setting A4 = dataSegment + 0x7FFE, we can address -32768 to +32767 range
     const dataSegmentForA4 = hunkFile.segments.find((seg: { type: string }) => seg.type.toUpperCase() === 'DATA');
+    if (!dataSegmentForA4) {
+      console.warn(`[DoorLoader] WARNING: No DATA segment found! A4 will be 0. Segment types: ${hunkFile.segments.map((s: any) => s.type).join(', ')}`);
+    }
     const a4Value = dataSegmentForA4 ? dataSegmentForA4.address + 0x7FFE : 0;
     this.emulator.setRegister(12, a4Value); // A4 = DATA segment + 0x7FFE (SAS/C small data model)
 
@@ -458,6 +480,17 @@ export class DoorLoader {
         16
       )} segHeader[size_longs=${segHeaderSizeLongs} nextBPTR=0x${segHeaderNext.toString(16)}]`
     );
+
+    // Log initial CPU state to door log
+    this.logger?.cpu(
+      hunkFile.entryPoint,
+      argLen,
+      ARG_STRING_ADDR,
+      this.emulator.getRegister(15),
+      a4Value,
+      `A5=0x${a5Now.toString(16)} A6=0x${execBaseAddr.toString(16)}`
+    );
+    this.logger?.info(`Args: "${argString}" len=${argLen}`);
   }
 
   /**
@@ -525,7 +558,7 @@ export class DoorLoader {
     // We must inject at the CORRECT A4 value Bulls will use, not the initial value
     // Bulls starts with A4=0xdc06 but immediately changes to A4=0x5c08 at PC=0x1016
     const a4Value = 0x5c08; // Bulls' actual A4 value during execution (DATA segment + 0x8)
-    const aeDoorBaseAddr = (this.execLibrary as any).getLibraryBase?.("AEDoor.library") || 0x30000;
+    const aeDoorBaseAddr = (this.execLibrary as any).getLibraryBase?.("AEDoor.library") || 0x0C0000;
     const replyPortAddr = 0xa0000; // BBS reply port (AEDoorPort1)
     const doorInfoAddr = 0x100000; // Allocate DoorInfo structure at 1MB
 

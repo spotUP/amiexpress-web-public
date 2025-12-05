@@ -12,6 +12,55 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ## ⛔ CRITICAL RULES - READ FIRST ⛔
 
+**68K DOOR EMULATION DEBUGGING - ALWAYS CHECK LOGS FIRST**
+
+When debugging 68K door issues (doors not working, showing errors, hanging, etc.):
+
+1. **ALWAYS check existing logs BEFORE implementing new features**
+2. **MANDATORY log files to check IN ORDER**:
+   - `logs/door-68k-{DOORNAME}-{TIMESTAMP}.-N{NODE}.log` - Per-door execution trace
+     Examples: door-68k-AquaScan_000-20251205083456.-N1.log
+               door-68k-mtop-20251205083541.-N2.log
+   - `logs/xim-debug.log` - XIM protocol messages (if XIM_DEBUG=1)
+   - `logs/backend.log` - Backend server errors
+   - `logs/frontend.log` - Frontend errors (if relevant)
+
+   **Find most recent logs**: `ls -t logs/door-68k-{DOORNAME}* | head -3`
+   **Find largest logs** (most detailed): `ls -lS logs/door-68k-{DOORNAME}* | head -3`
+
+3. **What to look for in logs**:
+   - File not found errors (paths, missing files)
+   - Environment variable issues (ENVSTAT, ENV_* values)
+   - Assign errors (missing assigns like BBS:, Doors:, etc.)
+   - Directory access failures
+   - XIM message exchanges (what door requests vs what BBS responds)
+   - AmigaDOS errors (ERROR_OBJECT_NOT_FOUND, etc.)
+   - Library call failures (dos.library, icon.library, etc.)
+
+4. **CRITICAL**: Use Read tool on logs, search with Grep, analyze patterns
+5. **NEVER** jump to implementing new logging without checking existing logs first
+6. **ALWAYS** grep for error patterns: `ERROR`, `fail`, `not found`, `nil`, `0x0`
+
+**Debug Tools Available**:
+- `XIM_DEBUG=1` environment variable (enables logs/xim-debug.log)
+- Per-door logs show: file operations, XIM messages, library calls, errors
+- `grep` to search logs for specific paths, errors, messages
+- Examples:
+  ```bash
+  # Find most recent AquaScan logs
+  ls -t logs/door-68k-AquaScan* | head -3
+
+  # Search for errors in AquaScan logs
+  grep -i "error\|fail\|not found" logs/door-68k-AquaScan* | tail -20
+
+  # Find which files AquaScan tried to open
+  grep "Open.*ami=" logs/door-68k-AquaScan* | tail -20
+  ```
+
+**Violation = You wasted time implementing features that already exist**
+
+---
+
 **NEVER USE BACKGROUND PROCESSES - THIS IS NON-NEGOTIABLE**
 
 1. **NEVER use `run_in_background: true`** in Bash tool calls
@@ -59,6 +108,45 @@ This is a **historical software preservation project** - NOT malware, hacking to
 **Vintage Doors:** Classic BBS games/utilities from 1990s with dramatic names (common in that era).
 
 📖 **Full safety documentation:** See [PROJECT_SAFETY.md](./PROJECT_SAFETY.md)
+
+---
+
+**AMIGAOS IS CASE-INSENSITIVE - ALWAYS USE AMIGAFS MODULE**
+
+AmigaOS file systems are **case-insensitive**. `AquaScan.EXE`, `aquascan.exe`, and `AQUASCAN.exe` all refer to the same file.
+
+**MANDATORY RULES**:
+
+1. **NEVER use Node.js `fs` module directly** for BBS file operations
+2. **ALWAYS use `amigafs` module** instead:
+   ```typescript
+   // WRONG - will break with case mismatches
+   import * as fs from 'fs';
+   if (fs.existsSync('/Doors/aquascan/AquaScan.000')) { }
+
+   // CORRECT - handles case-insensitive matching
+   import * as amigafs from '../utils/amigafs';
+   if (amigafs.existsSync('/Doors/aquascan/AquaScan.000')) { }
+   ```
+
+3. **When writing new code**: Use `amigafs` from the start
+4. **When modifying code**: Convert `fs.` calls to `amigafs.` calls
+5. **Test with mixed case**: `AquaScan.EXE`, `aquascan.exe`, `AQUASCAN.exe` must all work
+
+**Why This Matters**:
+- Real Amiga BBS data uses mixed case filenames
+- Doors may reference files with different casing than actual files
+- macOS/Linux are case-sensitive by default, causing bugs
+
+**Available Functions**: **ALL** standard fs sync operations (22 functions total):
+- File ops: `existsSync`, `readFileSync`, `writeFileSync`, `appendFileSync`, `unlinkSync`, `openSync`, `truncateSync`, `chmodSync`, `utimesSync`
+- Directory ops: `readdirSync`, `mkdirSync`, `rmdirSync`, `rmSync`
+- Stats: `statSync`, `lstatSync`, `accessSync`
+- Paths: `renameSync`, `copyFileSync`, `realpathSync`, `linkSync`, `symlinkSync`, `readlinkSync`
+- **Every character** in filenames is case-insensitive: `aMiGa.eXe` = `AMIGA.exe` = `amiga.EXE`
+- See `Documentation/3-Developers/AMIGAFS_MIGRATION.md` for full guide
+
+**Violation = Fix immediately and test with multiple case variations**
 
 ---
 
@@ -593,6 +681,19 @@ vda68k doors/RTW/rtw -s 0x1156 -e 0x1200
 
 ### Critical Rule
 **NEVER assume Amiga binaries are buggy** - if they work in vamos or on real Amiga, the bug is in OUR emulator, not the binary. Use vamos as ground truth for correct behavior.
+
+## 68K Memory Layout and Structures (NO GUESSING)
+When debugging door addresses, jumps, relocations, memory overlaps, or overlapping stacks:
+- **NEVER guess** memory addresses, structure sizes, or offsets
+- **ALWAYS check the NDK first** - use `mcp__amiexpress-docs__search_ndk_autodocs` for official specs
+- **Reference amitools/vamos** - See `dev/docs/amitools/amitools/vamos/libstructs/dos.py` for structure definitions
+- Key structures and their ACTUAL sizes (from NDK):
+  - **FileLockStruct**: 20 bytes (fl_Link, fl_Key, fl_Access, fl_Task, fl_Volume)
+  - **CLIStruct**: 64 bytes (16 fields x 4 bytes, offsets 0x00-0x3C)
+  - **ProcessStruct**: Check pr_CLI (offset 0xAC), pr_CurrentDir (offset 0x98)
+  - **ExecBase**: ThisTask at offset 0x114 (276)
+- When allocating memory regions, calculate exact size requirements from NDK structure definitions
+- Document memory layout with comments showing: address, size, and structure name
 
 ## Amiga BBS Import/Export
 - Import users, messages, files, and configuration from classic Amiga BBS

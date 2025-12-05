@@ -1,9 +1,11 @@
 import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
+import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
 import { FileManager } from "./FileManager";
 import { PathManager } from "./PathManager";
 import { AmigaFileCache } from "./AmigaFileCache";
+import { ximDebugLogger } from "../xim/debug-logger";
 
 /**
  * dos.library - Amiga DOS Library
@@ -249,7 +251,7 @@ export class DosLibrary {
    */
   setBasePaths(rootPath: string): void {
     this.rootPath = rootPath;
-    this.bbsDataPath = path.join(this.rootPath, "BBS");
+    this.bbsDataPath = this.rootPath; // BBS data is at project root (Conf1, Conf2, Commands, etc.)
     this.currentDirectory = this.bbsDataPath;
     this.ensureDirectory(this.bbsDataPath);
     this.ensureDirectory("/tmp/ram/ENV");
@@ -283,6 +285,15 @@ export class DosLibrary {
       fs.appendFileSync(logPath, lines.join('\n') + '\n', { encoding: 'utf8' });
     } catch {
       /* ignore */
+    }
+  }
+
+  /**
+   * Set callback for sysop debug messages (file not found, etc.)
+   */
+  setDebugCallback(callback: (message: string, level: 'info' | 'warn' | 'error') => void): void {
+    if (this.fileManager) {
+      this.fileManager.setDebugCallback(callback);
     }
   }
 
@@ -611,6 +622,7 @@ export class DosLibrary {
 
     console.log(`[dos.library] Open(filename="${filename}", mode=${mode})`);
     this.logDoorFile(`OPEN req ami="${filename}" mode=${mode}`);
+    ximDebugLogger.logFileOperation('Open', filename, undefined, { mode });
 
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
@@ -619,12 +631,14 @@ export class DosLibrary {
         this.lastError = this.ERROR_NO_ERROR;
         console.log(`[dos.library] Open (FileManager) returned BPTR: ${bptr}`);
         this.logDoorFile(`OPEN fm ok handle=${bptr} ami="${filename}" mode=${mode}`);
+        ximDebugLogger.logFileOperation('Open (FileManager)', filename, undefined, { mode, bptr, success: true });
       } else {
         this.lastError = this.ERROR_OBJECT_NOT_FOUND;
         console.error(
           `[dos.library] Open (FileManager) failed for "${filename}"`
         );
         this.logDoorFile(`OPEN fm fail ami="${filename}" mode=${mode}`);
+        ximDebugLogger.logFileOperation('Open (FileManager)', filename, undefined, { mode, bptr: 0, success: false });
       }
       if (this.exitAfterFirstOpen && !this.firstOpenSeen) {
         this.firstOpenSeen = true;
@@ -4484,7 +4498,7 @@ export class DosLibrary {
     if ((type & 0xff) === 0) {
       localSearchAttempted = true;
       // Get current CLI structure from pr_CLI
-      const taskAddr = 0x70000; // Current task
+      const taskAddr = 0x090000; // Current task (must match ExecLibrary)
       const prCliOffset = 0xac;
       const cliBPTR = this.emulator.readMemory32(taskAddr + prCliOffset);
 

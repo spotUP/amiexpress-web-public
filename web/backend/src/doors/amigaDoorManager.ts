@@ -11,6 +11,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { getAmigaAssignPaths } from '../utils/bbs-paths.util';
@@ -113,20 +114,29 @@ export class AmigaDoorManager {
   /**
    * Initialize AmigaDOS Assigns
    * Maps logical assigns to physical paths within BBS root
+   * Uses case-insensitive matching to find correct directory names
    */
   private initializeAssigns(): AmigaDOSAssigns {
+    const { resolveCaseInsensitivePath } = require('../utils/fs-amiga.util');
+
+    // Helper to find directory with case-insensitive matching
+    const findDir = (name: string): string => {
+      const resolved = resolveCaseInsensitivePath(this.bbsRoot, [name]);
+      return resolved || path.join(this.bbsRoot, name);
+    };
+
     return {
       'BBS:': this.bbsRoot,
-      'Doors:': path.join(this.bbsRoot, 'Doors'),
-      'Screens:': path.join(this.bbsRoot, 'Screens'),
-      'Storage:': path.join(this.bbsRoot, 'Storage'),
-      'NODE0:': path.join(this.bbsRoot, 'Node0'),
-      'NODE1:': path.join(this.bbsRoot, 'Node1'),
-      'NODE2:': path.join(this.bbsRoot, 'Node2'),
-      'NODE3:': path.join(this.bbsRoot, 'Node3'),
-      'Protocols:': path.join(this.bbsRoot, 'Protocols'),
-      'Utils:': path.join(this.bbsRoot, 'Utils'),
-      'Libs:': path.join(this.bbsRoot, 'Libs'),
+      'Doors:': findDir('Doors'),
+      'Screens:': findDir('Screens'),
+      'Storage:': findDir('Storage'),
+      'NODE0:': findDir('Node0'),
+      'NODE1:': findDir('Node1'),
+      'NODE2:': findDir('Node2'),
+      'NODE3:': findDir('Node3'),
+      'Protocols:': findDir('Protocols'),
+      'Utils:': findDir('Utils'),
+      'Libs:': findDir('Libs'),
     };
   }
 
