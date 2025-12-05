@@ -89,6 +89,49 @@ When debugging 68K door issues (doors not working, showing errors, hanging, etc.
 
 ---
 
+**DISK-BASED CONFIGURATION - NEVER USE DATABASE FOR BBS CONFIG**
+
+AmiExpress is a **disk-based BBS**, NOT a database-driven application. Configuration ALWAYS comes from disk files.
+
+1. **NEVER load conferences from database** - Use ConfConfig.info or Conf*.info files
+2. **NEVER load message bases from database** - Use MsgBase.DB or message base .info files
+3. **NEVER load file areas from database** - Use conference .info DLPATH/ULPATH tooltypes
+4. **NEVER assume database has accurate configuration** - It may be stale or empty
+
+**What TO use:**
+- **Conferences**: `ConfConfig.info` (NCONFS, NAME.n, LOCATION.n) → express.e:cmds.numConf
+- **Message Bases**: `Conf{N}/MsgBase.DB` binary files or base .info files
+- **File Areas**: `Conf{N}.info` tooltypes (NDIRS, DLPATH.1, ULPATH.1, etc.)
+- **Commands**: `Commands/BBSCmd/*.info` and `Commands/SysCmd/*.info`
+- **Doors**: `doors/*/*.info` files
+- **Users**: Users.DB binary file (legacy) OR SQLite database (modern)
+- **BBS Config**: `bbsConfig.info` tooltypes
+
+**Why:**
+- express.e reads from disk files, NOT a database
+- Database is ONLY for: users, messages, call logs, statistics
+- Configuration must be hot-reloadable from disk
+- Sysops edit .info files directly, not SQL
+
+**Implementation:**
+```typescript
+// WRONG - Loading conferences from database
+const conferences = await db.getConferences();
+
+// RIGHT - Loading from ConfConfig.info
+import { loadConfConfig } from '../services/conf-config.service';
+const confConfig = loadConfConfig(bbsRoot);
+const conferences = confConfig.entries.map((e, i) => ({
+  id: i + 1,
+  name: e.name,
+  location: e.location
+}));
+```
+
+**Violation = Fix immediately and document why database was used incorrectly**
+
+---
+
 **PROJECT SAFETY CONTEXT** ⚠️
 
 This is a **historical software preservation project** - NOT malware, hacking tools, or offensive security.
