@@ -17,6 +17,8 @@ services:
     autoDeploy: true
     branch: main
     buildCommand: |
+      # Build shared terminal package (required by SDK preview and frontend)
+      cd packages/terminal && npm ci && npm run build && cd ../..
       # Build SDK
       cd sdk && npm ci --include=dev && npm run build && cd ..
       # Build SDK Preview Frontend
