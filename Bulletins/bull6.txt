@@ -15,7 +15,7 @@ Baud N Name             Group / Location    On-Time  Actions  H:MM Up-K Dn-K
 [34m----------------------------------------------------------------------------
 [31m19.2 5[37m [32mJACKTORY         [33moOItalyOo RAMJAM    [34m21:50:11 [35m[------] [36m0:11 [0m   0    0
 [34m----------------------------------------------------------------------------
-[0m                    YOU COULD BE MINE... But you smell.                     
+[0m                        Colour our world blackened.                         
 [0;4;33m                                                                      v2.00 [0m
 [44;4;33m Calls:    1 / Y'day:    4 | U:    0 /     0k | D:    0 /     0k | Hrs:   0 [0m
 [44;4;33m The Records - Calls:  275 | U:  286 / D775mb | D: 3745 / @402mb | Hrs:  30 [0m
