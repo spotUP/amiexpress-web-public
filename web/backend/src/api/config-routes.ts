@@ -8,8 +8,11 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import { ConfigService } from '../services/config.service';
+import { ConferenceSetupService } from '../services/conference-setup.service';
+import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
 import type { Database } from '../database';
+import * as path from 'path';
 
 // Standard API response format
 interface ApiResponse<T = any> {
@@ -25,6 +28,11 @@ interface ApiResponse<T = any> {
 export function createConfigRouter(database: Database): ReturnType<typeof express.Router> {
   const router = express.Router();
   const configService = new ConfigService(database);
+
+  // Initialize services
+  const bbsRoot = process.env.BBS_ROOT || path.join(process.cwd(), '../../');
+  const conferenceSetup = new ConferenceSetupService(bbsRoot);
+  const healthCheck = new BBSHealthCheckService(bbsRoot);
 
   // Extract request context from JWT token
   const getRequestContext = (req: any) => ({
@@ -216,8 +224,39 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
   router.post('/conferences', async (req: any, res: Response) => {
     try {
       const context = getRequestContext(req);
+
+      // Create database config record
       const config = await configService.createConferenceConfig(req.body, context);
-      sendResponse(res, config, 'Conference configuration created');
+
+      // Auto-create all directories and files (MODERN enhancement!)
+      try {
+        await conferenceSetup.setupConference({
+          conferenceId: config.conference_id,
+          conferenceName: `Conference ${config.conference_id}`,
+          location: `Conf${config.conference_id}`,
+          ndirs: config.ndirs || 1,
+          minAccessLevel: config.min_access_level,
+          maxAccessLevel: config.max_access_level,
+          forceNewscan: config.force_newscan,
+          excludeFTP: config.exclude_ftp,
+          privateConf: config.private_conf,
+          readOnly: config.read_only
+        });
+
+        // Update ConfConfig.info with new conference
+        await conferenceSetup.updateConfConfig(
+          config.conference_id,
+          `Conference ${config.conference_id}`,
+          `Conf${config.conference_id}/`
+        );
+
+        console.log(`[ConfigAPI] Auto-created directories and files for Conf${config.conference_id}`);
+      } catch (setupError) {
+        console.error(`[ConfigAPI] Failed to auto-create conference files:`, setupError);
+        // Don't fail the entire request - database record was created successfully
+      }
+
+      sendResponse(res, config, 'Conference configuration created and auto-configured');
     } catch (error) {
       handleError(res, error);
     }
@@ -253,6 +292,64 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       }
 
       sendResponse(res, { deleted: true }, 'Conference configuration deleted');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/conferences/health
+   * Check health of all conferences (files, directories)
+   */
+  router.get('/conferences/health', async (req: Request, res: Response) => {
+    try {
+      const healthChecks = await conferenceSetup.checkAllConferences();
+      sendResponse(res, healthChecks, 'Conference health check complete');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/conferences/:conferenceId/health
+   * Check health of a single conference
+   */
+  router.get('/conferences/:conferenceId/health', async (req: Request, res: Response) => {
+    try {
+      const conferenceId = parseInt(req.params.conferenceId, 10);
+      const healthCheck = await conferenceSetup.checkConferenceHealth(conferenceId);
+      sendResponse(res, healthCheck, `Conference ${conferenceId} health check complete`);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/conferences/:conferenceId/auto-fix
+   * Auto-fix issues found in conference health check
+   */
+  router.post('/conferences/:conferenceId/auto-fix', async (req: any, res: Response) => {
+    try {
+      const conferenceId = parseInt(req.params.conferenceId, 10);
+
+      // Run health check first
+      const healthCheck = await conferenceSetup.checkConferenceHealth(conferenceId);
+
+      if (healthCheck.issues.length === 0) {
+        return sendResponse(res, healthCheck, `Conference ${conferenceId} has no issues`);
+      }
+
+      if (!healthCheck.canAutoFix) {
+        return handleError(res, new Error(`Cannot auto-fix Conference ${conferenceId}: ${healthCheck.issues.join(', ')}`));
+      }
+
+      // Auto-fix issues
+      await conferenceSetup.autoFixConference(conferenceId, healthCheck);
+
+      // Run health check again to verify
+      const updatedHealthCheck = await conferenceSetup.checkConferenceHealth(conferenceId);
+
+      sendResponse(res, updatedHealthCheck, `Conference ${conferenceId} auto-fix complete`);
     } catch (error) {
       handleError(res, error);
     }
@@ -1430,6 +1527,50 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       await fs.writeFile(logFile, '', 'utf-8');
 
       sendResponse(res, { cleared: true, logType }, `${logType} log cleared`);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // ===== BBS Health Check =====
+
+  /**
+   * GET /api/config/health
+   * Run full BBS health check (all categories)
+   */
+  router.get('/health', async (req: Request, res: Response) => {
+    try {
+      const report = await healthCheck.runFullHealthCheck();
+      sendResponse(res, report, 'BBS health check complete');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/health/auto-fix
+   * Auto-fix all fixable issues found in health check
+   */
+  router.post('/health/auto-fix', async (req: any, res: Response) => {
+    try {
+      // Run health check first
+      const report = await healthCheck.runFullHealthCheck();
+
+      if (report.autoFixableIssues === 0) {
+        return sendResponse(res, { fixed: 0, failed: 0, report }, 'No fixable issues found');
+      }
+
+      // Auto-fix all issues
+      const result = await healthCheck.autoFixAll(report);
+
+      // Run health check again to verify
+      const updatedReport = await healthCheck.runFullHealthCheck();
+
+      sendResponse(
+        res,
+        { ...result, report: updatedReport },
+        `Auto-fix complete: ${result.fixed} fixed, ${result.failed} failed`
+      );
     } catch (error) {
       handleError(res, error);
     }

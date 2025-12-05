@@ -20,6 +20,7 @@ import { DeploymentPage } from './pages/DeploymentPage';
 import { LogsPage } from './pages/LogsPage';
 import { BatchEditorPage } from './pages/BatchEditorPage';
 import { SessionLogsPage } from './pages/SessionLogsPage';
+import { HealthCheckPage } from './pages/HealthCheckPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -50,6 +51,7 @@ function App() {
       >
         <Route index element={<Navigate to="system" replace />} />
         <Route path="system" element={<SystemConfigPage />} />
+        <Route path="health" element={<HealthCheckPage />} />
         <Route path="nodes" element={<NodesPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="conferences" element={<ConferencesPage />} />

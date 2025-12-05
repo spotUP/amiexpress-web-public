@@ -157,10 +157,12 @@ export class DosLibrary {
   private readonly ERROR_TOO_MANY_ARGS = 118;
   private readonly ERROR_UNMATCHED_QUOTES = 119;
   private readonly ERROR_LINE_TOO_LONG = 120;
+  private readonly ERROR_INVALID_LOCK = 211;
 
   // Base paths for logical devices
   private rootPath: string = "";
   private bbsDataPath: string = "";
+  private bbsRoot: string = "";
 
   // Directory and lock management for door support
   private currentDirectory: string = "";
@@ -252,6 +254,7 @@ export class DosLibrary {
   setBasePaths(rootPath: string): void {
     this.rootPath = rootPath;
     this.bbsDataPath = this.rootPath; // BBS data is at project root (Conf1, Conf2, Commands, etc.)
+    this.bbsRoot = rootPath;
     this.currentDirectory = this.bbsDataPath;
     this.ensureDirectory(this.bbsDataPath);
     this.ensureDirectory("/tmp/ram/ENV");
@@ -391,7 +394,17 @@ export class DosLibrary {
     // Handle PROGDIR: device - door's own directory
     if (amigaPath.toUpperCase().startsWith("PROGDIR:")) {
       const relativePath = amigaPath.substring(8);
-      const resolved = path.join(this.doorDirectory, relativePath);
+      let resolved = path.join(this.doorDirectory, relativePath);
+
+      // Amiga filesystems are case-insensitive
+      const { findCaseInsensitive } = require('../../utils/fs-amiga.util');
+      const dir = path.dirname(resolved);
+      const file = path.basename(resolved);
+      const caseInsensitivePath = findCaseInsensitive(dir, file);
+      if (caseInsensitivePath) {
+        resolved = caseInsensitivePath;
+      }
+
       console.log(`[dos.library] PROGDIR: device -> ${resolved}`);
       return resolved;
     }
@@ -407,7 +420,17 @@ export class DosLibrary {
     // Handle BBS: device - BBS system files
     if (amigaPath.toUpperCase().startsWith("BBS:")) {
       const relativePath = amigaPath.substring(4);
-      const resolved = path.join(this.bbsDataPath, relativePath);
+      let resolved = path.join(this.bbsDataPath, relativePath);
+
+      // Amiga filesystems are case-insensitive
+      const { findCaseInsensitive } = require('../../utils/fs-amiga.util');
+      const dir = path.dirname(resolved);
+      const file = path.basename(resolved);
+      const caseInsensitivePath = findCaseInsensitive(dir, file);
+      if (caseInsensitivePath) {
+        resolved = caseInsensitivePath;
+      }
+
       console.log(`[dos.library] BBS: device -> ${resolved}`);
       return resolved;
     }
@@ -427,10 +450,26 @@ export class DosLibrary {
     }
 
     // Handle relative paths - resolve from current directory
-    const resolved = path.join(this.currentDirectory, amigaPath);
-    console.log(
-      `[dos.library] Relative path from ${this.currentDirectory} -> ${resolved}`
-    );
+    let resolved = path.join(this.currentDirectory, amigaPath);
+
+    // Amiga filesystems are case-insensitive - try case-insensitive lookup
+    // This handles files like "Dir1" when code asks for "DIR1"
+    const { findCaseInsensitive } = require('../../utils/fs-amiga.util');
+    const dir = path.dirname(resolved);
+    const file = path.basename(resolved);
+    const caseInsensitivePath = findCaseInsensitive(dir, file);
+
+    if (caseInsensitivePath) {
+      resolved = caseInsensitivePath;
+      console.log(
+        `[dos.library] Case-insensitive match: "${amigaPath}" -> ${resolved}`
+      );
+    } else {
+      console.log(
+        `[dos.library] Relative path from ${this.currentDirectory} -> ${resolved}`
+      );
+    }
+
     return resolved;
   }
 
@@ -1799,13 +1838,58 @@ export class DosLibrary {
     const oldName = this.readString(oldNamePtr);
     const newName = this.readString(newNamePtr);
 
-    console.log(
-      `[dos.library] Rename("${oldName}", "${newName}") - STUB, returning success`
-    );
+    console.log(`[dos.library] Rename("${oldName}", "${newName}")`);
 
-    // Stub: always return success
-    this.emulator.setRegister(CPURegister.D0, -1);
-    this.lastError = this.ERROR_NO_ERROR;
+    const oldPath = this.resolvePath(oldName);
+    const newPath = this.resolvePath(newName);
+
+    if (!oldPath) {
+      console.error(
+        `[dos.library] Rename: Failed to resolve old path "${oldName}"`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    if (!newPath) {
+      console.error(
+        `[dos.library] Rename: Failed to resolve new path "${newName}"`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    if (!fs.existsSync(oldPath)) {
+      console.error(`[dos.library] Rename: Source file not found: ${oldPath}`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    if (fs.existsSync(newPath)) {
+      console.error(
+        `[dos.library] Rename: Destination already exists: ${newPath}`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_IN_USE;
+      return;
+    }
+
+    try {
+      fs.renameSync(oldPath, newPath);
+      console.log(`[dos.library] Rename: Renamed ${oldPath} to ${newPath}`);
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_NO_ERROR;
+    } catch (error) {
+      console.error(
+        `[dos.library] Rename: Error renaming ${oldPath} to ${newPath}:`,
+        error
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_WRITE_PROTECTED;
+    }
   }
 
   /**
@@ -1898,16 +1982,39 @@ export class DosLibrary {
    * Returns: D0 = new lock (or 0 on failure)
    */
   DupLock(): void {
-    const lock = this.emulator.getRegister(CPURegister.D1);
+    const lockId = this.emulator.getRegister(CPURegister.D1);
+
+    if (lockId === 0) {
+      console.log(`[dos.library] DupLock(0) - NULL lock, returning 0`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_NO_ERROR;
+      return;
+    }
+
+    const originalLock = this.locks.get(lockId);
+    if (!originalLock) {
+      console.error(
+        `[dos.library] DupLock: Invalid lock ID 0x${lockId.toString(16)}`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_INVALID_LOCK;
+      return;
+    }
+
+    // Create a new lock with the same path and mode
+    const newLockId = this.nextLockId++;
+    this.locks.set(newLockId, {
+      id: newLockId,
+      path: originalLock.path,
+      mode: originalLock.mode,
+      amigaPath: originalLock.amigaPath,
+    });
 
     console.log(
-      `[dos.library] DupLock(lock=0x${lock.toString(
-        16
-      )}) - STUB, returning same lock`
+      `[dos.library] DupLock(lock=${lockId}) - Created duplicate lock ${newLockId} for ${originalLock.path}`
     );
 
-    // Return the same lock value
-    this.emulator.setRegister(CPURegister.D0, lock);
+    this.emulator.setRegister(CPURegister.D0, newLockId);
     this.lastError = this.ERROR_NO_ERROR;
   }
 
@@ -1951,16 +2058,23 @@ export class DosLibrary {
       this.writeLong(fibPtr, 0);
 
       // fib_DirEntryType (4 bytes) - negative = file, positive = dir
-      this.writeLong(fibPtr + 4, stats.isDirectory() ? 2 : -3);
+      // Special case: AmiExpress "Dir1", "Dir2", etc. files are treated as pseudo-directories
+      // These are BBS file database files that doors like AquaScan need to read sequentially
+      const isBBSDirFile = /^DIR\d+$/i.test(fileName);
+      const dirEntryType = stats.isDirectory() || isBBSDirFile ? 2 : -3;
+      console.log(`[dos.library] Examine: fileName="${fileName}" isBBSDirFile=${isBBSDirFile} dirEntryType=${dirEntryType}`);
+      this.writeLong(fibPtr + 4, dirEntryType);
 
       // fib_FileName (108 bytes BCPL string)
       this.writeBCPLString(fibPtr + 8, fileName, 107);
 
-      // fib_Protection (4 bytes)
-      this.writeLong(fibPtr + 116, 0);
+      // fib_Protection (4 bytes) - Amiga RWED bits (inverted: 0=allowed, 1=protected)
+      // Standard file: 0x0F = DEWR all protected (read-only)
+      const protection = stats.isDirectory() ? 0 : 0x0F;
+      this.writeLong(fibPtr + 116, protection);
 
-      // fib_EntryType (4 bytes)
-      this.writeLong(fibPtr + 120, stats.isDirectory() ? 2 : -3);
+      // fib_EntryType (4 bytes) - same as fib_DirEntryType
+      this.writeLong(fibPtr + 120, dirEntryType);
 
       // fib_Size (4 bytes)
       const fibSizeVal = stats.isFile() ? stats.size : 0;
@@ -1990,6 +2104,11 @@ export class DosLibrary {
         `[dos.library] Examine: ${fileName} (${
           stats.isDirectory() ? "dir" : "file"
         }, ${stats.size} bytes)`
+      );
+      console.log(
+        `[dos.library]   fib_DirEntryType=${stats.isDirectory() ? 2 : -3}, ` +
+        `fib_EntryType=${stats.isDirectory() ? 2 : -3}, ` +
+        `fib_Size=${fibSizeVal}, fib_Protection=${protection}`
       );
 
       // Initialize directory iterator for this lock if it's a directory
@@ -2083,17 +2202,22 @@ export class DosLibrary {
       // fib_DiskKey (4 bytes)
       this.writeLong(fibPtr, index);
 
-      // fib_DirEntryType (4 bytes)
-      this.writeLong(fibPtr + 4, stats.isDirectory() ? 2 : -3);
+      // fib_DirEntryType (4 bytes) - negative = file, positive = dir
+      // Special case: AmiExpress "Dir1", "Dir2", etc. files are treated as pseudo-directories
+      const isBBSDirFile = /^DIR\d+$/i.test(fileName);
+      const dirEntryType = stats.isDirectory() || isBBSDirFile ? 2 : -3;
+      this.writeLong(fibPtr + 4, dirEntryType);
 
       // fib_FileName (108 bytes BCPL string)
       this.writeBCPLString(fibPtr + 8, fileName, 107);
 
-      // fib_Protection (4 bytes)
-      this.writeLong(fibPtr + 116, 0);
+      // fib_Protection (4 bytes) - Amiga RWED bits (inverted: 0=allowed, 1=protected)
+      // Standard file: 0x0F = DEWR all protected (read-only)
+      const protection = stats.isDirectory() ? 0 : 0x0F;
+      this.writeLong(fibPtr + 116, protection);
 
-      // fib_EntryType (4 bytes)
-      this.writeLong(fibPtr + 120, stats.isDirectory() ? 2 : -3);
+      // fib_EntryType (4 bytes) - same as fib_DirEntryType
+      this.writeLong(fibPtr + 120, dirEntryType);
 
       // fib_Size (4 bytes)
       const fibSizeVal = stats.isFile() ? stats.size : 0;
@@ -2145,24 +2269,76 @@ export class DosLibrary {
    * D1 = lock
    * D2 = InfoData pointer
    * Returns: D0 = success (DOSTRUE=-1, DOSFALSE=0)
+   *
+   * InfoData structure (36 bytes):
+   * id_NumSoftErrors (4), id_UnitNumber (4), id_DiskState (4), id_NumBlocks (4),
+   * id_NumBlocksUsed (4), id_BytesPerBlock (4), id_DiskType (4), id_VolumeNode (4),
+   * id_InUse (4)
    */
   Info(): void {
-    const lock = this.emulator.getRegister(CPURegister.D1);
+    const lockId = this.emulator.getRegister(CPURegister.D1);
     const infoPtr = this.emulator.getRegister(CPURegister.D2);
 
     console.log(
-      `[dos.library] Info(lock=0x${lock.toString(
+      `[dos.library] Info(lock=0x${lockId.toString(
         16
-      )}, info=0x${infoPtr.toString(16)}) - STUB`
+      )}, info=0x${infoPtr.toString(16)})`
     );
 
-    // Stub: fill in minimal InfoData structure
-    for (let i = 0; i < 36; i++) {
-      this.emulator.writeMemory(infoPtr + i, 0);
-    }
+    try {
+      // Get filesystem stats
+      let volumePath = this.bbsRoot;
+      if (lockId !== 0) {
+        const lock = this.locks.get(lockId);
+        if (lock) {
+          volumePath = lock.path;
+        }
+      }
 
-    this.emulator.setRegister(CPURegister.D0, -1);
-    this.lastError = this.ERROR_NO_ERROR;
+      const stats = fs.statfsSync ? fs.statfsSync(volumePath) : null;
+
+      // id_NumSoftErrors (4 bytes) - always 0
+      this.writeLong(infoPtr + 0, 0);
+
+      // id_UnitNumber (4 bytes) - always 0
+      this.writeLong(infoPtr + 4, 0);
+
+      // id_DiskState (4 bytes) - ID_VALIDATED (0)
+      this.writeLong(infoPtr + 8, 0);
+
+      // id_NumBlocks (4 bytes) - total blocks (or fake value)
+      const numBlocks = stats ? Math.floor(stats.blocks / 2) : 1000000;
+      this.writeLong(infoPtr + 12, numBlocks);
+
+      // id_NumBlocksUsed (4 bytes) - used blocks (or fake value)
+      const numBlocksUsed = stats
+        ? Math.floor((stats.blocks - stats.bfree) / 2)
+        : 500000;
+      this.writeLong(infoPtr + 16, numBlocksUsed);
+
+      // id_BytesPerBlock (4 bytes) - always 512
+      this.writeLong(infoPtr + 20, 512);
+
+      // id_DiskType (4 bytes) - ID_DOS_DISK (0x444F5300 = 'DOS\0')
+      this.writeLong(infoPtr + 24, 0x444f5300);
+
+      // id_VolumeNode (4 bytes) - fake volume node pointer
+      this.writeLong(infoPtr + 28, 0x00090000);
+
+      // id_InUse (4 bytes) - always 0 (not locked)
+      this.writeLong(infoPtr + 32, 0);
+
+      console.log(
+        `[dos.library] Info: blocks=${numBlocks}, used=${numBlocksUsed}, bytes/block=512`
+      );
+
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_NO_ERROR;
+    } catch (error) {
+      console.error(`[dos.library] Info: Error getting volume info:`, error);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+    }
   }
 
   /**
@@ -2300,9 +2476,9 @@ export class DosLibrary {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-    console.log(`[dos.library] CreateProc("${name}") - STUB, returning NULL`);
+    console.log(`[dos.library] CreateProc("${name}") - UNSUPPORTED (process creation not allowed), returning NULL`);
 
-    // Stub: not supported
+    // Process creation not supported in door emulation
     this.emulator.setRegister(CPURegister.D0, 0);
     this.lastError = this.ERROR_NO_FREE_STORE;
   }
@@ -2342,9 +2518,9 @@ export class DosLibrary {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-    console.log(`[dos.library] LoadSeg("${name}") - STUB, returning NULL`);
+    console.log(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (dynamic code loading not allowed), returning NULL`);
 
-    // Stub: not supported
+    // Dynamic code loading not supported (security)
     this.emulator.setRegister(CPURegister.D0, 0);
     this.lastError = this.ERROR_OBJECT_NOT_FOUND;
   }
@@ -2358,9 +2534,10 @@ export class DosLibrary {
     const segList = this.emulator.getRegister(CPURegister.D1);
 
     console.log(
-      `[dos.library] UnLoadSeg(segList=0x${segList.toString(16)}) - STUB`
+      `[dos.library] UnLoadSeg(segList=0x${segList.toString(16)}) - No-op (LoadSeg always fails)`
     );
 
+    // Always success since LoadSeg always returns NULL
     this.emulator.setRegister(CPURegister.D0, -1);
     this.lastError = this.ERROR_NO_ERROR;
   }
@@ -2375,10 +2552,10 @@ export class DosLibrary {
     const name = this.readString(namePtr);
 
     console.log(
-      `[dos.library] DeviceProc("${name}") - STUB, returning fake MsgPort`
+      `[dos.library] DeviceProc("${name}") - Returning fake MsgPort (device handlers not implemented)`
     );
 
-    // Return fake MsgPort address
+    // Return fake MsgPort address for compatibility
     this.emulator.setRegister(CPURegister.D0, 0x4000);
     this.lastError = this.ERROR_NO_ERROR;
   }
@@ -2388,6 +2565,8 @@ export class DosLibrary {
    * D1 = name
    * D2 = comment
    * Returns: D0 = success (DOSTRUE=-1, DOSFALSE=0)
+   *
+   * Note: File comments stored in .comment sidecar files (xattr not universally supported)
    */
   SetComment(): void {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
@@ -2395,10 +2574,53 @@ export class DosLibrary {
     const name = this.readString(namePtr);
     const comment = commentPtr ? this.readString(commentPtr) : "";
 
-    console.log(`[dos.library] SetComment("${name}", "${comment}") - STUB`);
+    console.log(`[dos.library] SetComment("${name}", "${comment}")`);
 
-    this.emulator.setRegister(CPURegister.D0, -1);
-    this.lastError = this.ERROR_NO_ERROR;
+    const realPath = this.resolvePath(name);
+    if (!realPath) {
+      console.error(
+        `[dos.library] SetComment: Failed to resolve path "${name}"`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    if (!fs.existsSync(realPath)) {
+      console.error(`[dos.library] SetComment: File not found: ${realPath}`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    try {
+      // Store comment in .comment sidecar file
+      const commentPath = realPath + ".comment";
+      if (comment) {
+        fs.writeFileSync(commentPath, comment, "utf-8");
+        console.log(
+          `[dos.library] SetComment: Wrote comment to ${commentPath}`
+        );
+      } else {
+        // Empty comment = delete comment file
+        if (fs.existsSync(commentPath)) {
+          fs.unlinkSync(commentPath);
+          console.log(
+            `[dos.library] SetComment: Removed comment file ${commentPath}`
+          );
+        }
+      }
+
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_NO_ERROR;
+    } catch (error) {
+      console.error(
+        `[dos.library] SetComment: Error setting comment on ${realPath}:`,
+        error
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_WRITE_PROTECTED;
+    }
   }
 
   /**
@@ -2413,11 +2635,63 @@ export class DosLibrary {
     const name = this.readString(namePtr);
 
     console.log(
-      `[dos.library] SetProtection("${name}", 0x${protect.toString(16)}) - STUB`
+      `[dos.library] SetProtection("${name}", 0x${protect.toString(16)})`
     );
 
-    this.emulator.setRegister(CPURegister.D0, -1);
-    this.lastError = this.ERROR_NO_ERROR;
+    const realPath = this.resolvePath(name);
+    if (!realPath) {
+      console.error(
+        `[dos.library] SetProtection: Failed to resolve path "${name}"`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    if (!fs.existsSync(realPath)) {
+      console.error(
+        `[dos.library] SetProtection: File not found: ${realPath}`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    try {
+      // Convert Amiga protection bits to Unix mode
+      // Amiga bits (inverted): R=bit0, W=bit1, E=bit2, D=bit3
+      // 0 = operation allowed, 1 = operation protected
+      const amigaRead = !(protect & 0x01);    // R bit inverted
+      const amigaWrite = !(protect & 0x02);   // W bit inverted
+      const amigaExec = !(protect & 0x04);    // E bit inverted
+
+      // Map to Unix permissions (owner only, group/other read if file is readable)
+      let unixMode = 0;
+      if (amigaRead) unixMode |= 0o400;  // Owner read
+      if (amigaWrite) unixMode |= 0o200; // Owner write
+      if (amigaExec) unixMode |= 0o100;  // Owner execute
+
+      // Add group/other read if owner can read
+      if (amigaRead) {
+        unixMode |= 0o040; // Group read
+        unixMode |= 0o004; // Other read
+      }
+
+      fs.chmodSync(realPath, unixMode);
+      console.log(
+        `[dos.library] SetProtection: Set ${realPath} to mode ${unixMode.toString(8)}`
+      );
+
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_NO_ERROR;
+    } catch (error) {
+      console.error(
+        `[dos.library] SetProtection: Error setting protection on ${realPath}:`,
+        error
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_WRITE_PROTECTED;
+    }
   }
 
   /**
@@ -2426,12 +2700,53 @@ export class DosLibrary {
    * Returns: D0 = parent lock (or 0 if none)
    */
   ParentDir(): void {
-    const lock = this.emulator.getRegister(CPURegister.D1);
+    const lockId = this.emulator.getRegister(CPURegister.D1);
 
-    console.log(`[dos.library] ParentDir(lock=0x${lock.toString(16)}) - STUB`);
+    console.log(`[dos.library] ParentDir(lock=0x${lockId.toString(16)})`);
 
-    // Return 0 (no parent - we're at root)
-    this.emulator.setRegister(CPURegister.D0, 0);
+    if (lockId === 0) {
+      console.log(`[dos.library] ParentDir: NULL lock, returning 0`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_NO_ERROR;
+      return;
+    }
+
+    const lock = this.locks.get(lockId);
+    if (!lock) {
+      console.error(
+        `[dos.library] ParentDir: Invalid lock ID 0x${lockId.toString(16)}`
+      );
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_INVALID_LOCK;
+      return;
+    }
+
+    // Get parent directory
+    const parentPath = path.dirname(lock.path);
+
+    // Check if we're at root (parent is same as current or bbsRoot)
+    if (parentPath === lock.path || parentPath === this.bbsRoot) {
+      console.log(`[dos.library] ParentDir: At root, returning 0`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = this.ERROR_NO_ERROR;
+      return;
+    }
+
+    // Create lock for parent directory
+    const parentLockId = this.nextLockId++;
+    const parentAmigaPath = path.dirname(lock.amigaPath);
+    this.locks.set(parentLockId, {
+      id: parentLockId,
+      path: parentPath,
+      mode: lock.mode,
+      amigaPath: parentAmigaPath,
+    });
+
+    console.log(
+      `[dos.library] ParentDir: Created lock ${parentLockId} for parent ${parentPath}`
+    );
+
+    this.emulator.setRegister(CPURegister.D0, parentLockId);
     this.lastError = this.ERROR_NO_ERROR;
   }
 
@@ -2465,9 +2780,9 @@ export class DosLibrary {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-    console.log(`[dos.library] Execute("${name}") - STUB, returning failure`);
+    console.log(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command execution blocked for security), returning failure`);
 
-    // Stub: not supported
+    // Shell command execution not supported (security)
     this.emulator.setRegister(CPURegister.D0, 0);
     this.lastError = this.ERROR_OBJECT_NOT_FOUND;
   }

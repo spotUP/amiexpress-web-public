@@ -210,10 +210,24 @@ function showSysopMenu(socket: Socket, commands: SysopMenuItem[], doors: any[]):
   socket.emit('ansi-output', '\x1b[0;32mSelect command: \x1b[0;37m');
 }
 
+// Cache for sysop doors (expires after 5 minutes)
+let sysopDoorsCache: { doors: any[]; timestamp: number } | null = null;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Get list of doors with sysop-level access
+ * Uses 5-minute cache to avoid repeated filesystem scans
  */
 async function getSysopDoors(session: BBSSession): Promise<any[]> {
+  // Check cache first
+  const now = Date.now();
+  if (sysopDoorsCache && (now - sysopDoorsCache.timestamp) < CACHE_TTL) {
+    // Filter cached doors by user security level
+    return sysopDoorsCache.doors.filter(door =>
+      (session.user?.secLevel || 0) >= (door.minSecurity || 0)
+    );
+  }
+
   const sysopDoors: any[] = [];
 
   try {
@@ -225,15 +239,15 @@ async function getSysopDoors(session: BBSSession): Promise<any[]> {
     // Filter for sysop-level doors (access level >= 100)
     const sysopAmigaDoors = amigaDoors.filter((door: any) =>
       door.installed &&
-      (door.access || 0) >= 100 &&
-      (session.user?.secLevel || 0) >= (door.access || 0)
+      (door.access || 0) >= 100
     );
 
     sysopDoors.push(...sysopAmigaDoors.map((door: any) => ({
       name: door.name,
       command: door.command,
       description: door.description || door.name,
-      type: 'amiga'
+      type: 'amiga',
+      minSecurity: door.access || 100
     })));
 
     // TODO: Add TypeScript doors with sysop access
@@ -243,7 +257,16 @@ async function getSysopDoors(session: BBSSession): Promise<any[]> {
     console.error('[Sysop Menu] Error scanning for sysop doors:', error);
   }
 
-  return sysopDoors;
+  // Update cache
+  sysopDoorsCache = {
+    doors: sysopDoors,
+    timestamp: now
+  };
+
+  // Filter by user security level before returning
+  return sysopDoors.filter(door =>
+    (session.user?.secLevel || 0) >= (door.minSecurity || 0)
+  );
 }
 
 /**

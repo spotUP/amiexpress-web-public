@@ -9,6 +9,8 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 import { ACSPermission } from '../constants/acs-permissions';
 import { checkSecurity } from '../utils/security.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { writeMessageFile, formatMessageDate } from '../utils/message-file.util';
+import { config } from '../config';
 
 
 // Dependencies (injected from index.ts)
@@ -334,12 +336,13 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
   try {
     // Create message object
     const messageBody = entry.body.join('\n');
+    const messageDate = new Date();
 
     const message = {
       subject: entry.subject,
       body: messageBody,
       author: session.user!.username,
-      timestamp: new Date(),
+      timestamp: messageDate,
       conferenceId: session.currentConf || 1,
       messageBaseId: session.currentMsgBase || 1,
       isPrivate: entry.isPrivate,
@@ -352,7 +355,22 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       transferFiles: entry.transferFiles || false
     };
 
-    // Save to database
+    // CRITICAL: Write message to DISK (AmiExpress format)
+    // Express.e:10694-10704 - Messages MUST be on disk for doors to read
+    const msgNum = await writeMessageFile(
+      session.currentConf || 1,
+      session.currentMsgBase || 1,
+      {
+        from: session.user!.username,
+        to: entry.toUser,
+        subject: entry.subject,
+        date: formatMessageDate(messageDate),
+        body: messageBody
+      },
+      config.get('dataDir')
+    );
+
+    // Save to database (for web UI, search indexing)
     const messageId = await _db.createMessage(message);
 
     // Log the action
@@ -407,7 +425,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     }
 
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.successLine(`Message #${messageId} posted successfully!`));
+    socket.emit('ansi-output', AnsiUtil.successLine(`Message #${msgNum} posted successfully!`));
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
 

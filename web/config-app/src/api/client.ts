@@ -519,6 +519,17 @@ class ApiClient {
   async getSessionStats() {
     return this.request<ApiResponse>(`${API_BASE}/sessions/stats`);
   }
+
+  // Health Check
+  async getHealthCheck() {
+    return this.request<ApiResponse>(`${API_BASE}/config/health`);
+  }
+
+  async autoFixHealth() {
+    return this.request<ApiResponse>(`${API_BASE}/config/health/auto-fix`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

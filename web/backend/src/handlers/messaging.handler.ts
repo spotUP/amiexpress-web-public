@@ -13,6 +13,8 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { finalizeCommand } from '../utils/command-response.util';
 import { messageIndexManager } from '../services/MessageIndexManager';
+import { getAllMessageIds, readMessageFile } from '../utils/message-file.util';
+import { config } from '../config';
 
 // Dependencies (injected)
 let _db: any;
@@ -69,26 +71,52 @@ export async function handleReadMessagesFullCommand(
 
   console.log('[ENV] Mail - Read');
 
-  // Get messages from database for current conference and message base
+  // Get messages from DISK (AmiExpress format)
+  // Database is only for web UI/search, not for BBS message reading
   const confId = session.currentConf || 1;
   const msgBaseId = session.currentMsgBase || 1;
-  const messages = await _db.getMessages(confId, msgBaseId, {
-    privateOnly: false,
-    userId: session.user?.username
-  });
+  const bbsDataPath = config.get('dataDir');
+  const username = session.user?.username.toLowerCase();
 
-  // Attach msgNumber from HeaderFile to align with AmiExpress pointers
-  try {
-    const headers = messageIndexManager.readHeaderFile(confId).sort((a, b) => a.msgNumb - b.msgNumb);
-    if (headers.length === messages.length) {
-      // Sort messages ascending by timestamp to align with append order
-      messages.sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime());
-      headers.forEach((h, idx) => {
-        (messages[idx] as any).msgNumber = h.msgNumb;
+  // Get all message IDs from disk
+  const messageIds = await getAllMessageIds(confId, bbsDataPath);
+  const messages: any[] = [];
+
+  // Read each message from disk
+  for (const msgNum of messageIds) {
+    const message = await readMessageFile(confId, msgNum, bbsDataPath);
+    if (!message) {
+      continue; // Skip corrupted/missing files
+    }
+
+    // Filter by privacy: show public messages and private messages to/from this user
+    if (!message.isPrivate) {
+      // Public message - show to everyone
+      messages.push({
+        id: msgNum,
+        msgNumber: msgNum,
+        subject: message.subject,
+        body: message.body,
+        author: message.from,
+        toUser: message.to,
+        timestamp: new Date(message.date), // Parse DD-MMM-YY HH:MM:SS format
+        isPrivate: false
+      });
+    } else if (username &&
+               (message.to.toLowerCase() === username ||
+                message.from.toLowerCase() === username)) {
+      // Private message to or from this user
+      messages.push({
+        id: msgNum,
+        msgNumber: msgNum,
+        subject: message.subject,
+        body: message.body,
+        author: message.from,
+        toUser: message.to,
+        timestamp: new Date(message.date),
+        isPrivate: true
       });
     }
-  } catch (err) {
-    console.error('[handleReadMessagesFullCommand] Failed to map msg numbers from headers:', err);
   }
 
   if (messages.length === 0) {

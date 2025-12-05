@@ -141,7 +141,7 @@ async function processBatchFile(
 
     // Move file to appropriate directory (express.e:19403-19415)
     let finalFilePath = data.path || '';
-    if (data.path && fileStatus !== 'active') {
+    if (data.path) {
       try {
         finalFilePath = await moveUploadedFile(
           data.path,

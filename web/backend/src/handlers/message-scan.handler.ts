@@ -17,6 +17,8 @@ import {
 } from '../utils/message-pointers.util';
 import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { getAllMessageIds, readMessageFile, readMailStats } from '../utils/message-file.util';
+import { config } from '../config';
 
 // Dependencies injected from index.ts
 let _db: any = null;
@@ -46,25 +48,55 @@ export function setMessageScanDependencies(
 }
 
 /**
+ * Check if conferenceAccess uses area names instead of X/_ string
+ * 1:1 port from express.e:458-465 isConfAccessAreaName()
+ *
+ * @param user - User object
+ * @returns True if conferenceAccess contains area names (not just X/_)
+ */
+function isConfAccessAreaName(user: any): boolean {
+  if (!user?.confAccess) return false;
+
+  // express.e:461-465 - Check if any character is not 'X' or '_'
+  let count = 0;
+  for (let i = 0; i < user.confAccess.length; i++) {
+    const c = user.confAccess[i];
+    if (c !== 'X' && c !== '_') {
+      count++;
+    }
+  }
+  return count !== 0;
+}
+
+/**
  * Check if user has access to a conference
- * 1:1 port from express.e:8499-8514 checkConfAccess()
+ * 1:1 port from express.e:8499-8512 checkConfAccess()
  *
  * @param user - User object
  * @param conferenceId - Conference ID (1-based)
  * @returns True if user has access
  */
 export function checkConfAccess(user: any, conferenceId: number): boolean {
+  // express.e:8501-8502 - Check if user exists
   if (!user) return false;
 
-  // express.e:8506-8511 - Check confAccess string
-  // confAccess is a string where each character represents access to a conference
-  // 'X' = has access, '_' = no access
-  // Conference IDs are 1-based, so conferenceId=1 checks position [0]
-  if (user.confAccess && user.confAccess.length >= conferenceId) {
-    return user.confAccess[conferenceId - 1] === 'X';
+  // express.e:8504-8509 - Check confAccess string (X/_ format)
+  if (!isConfAccessAreaName(user)) {
+    // Conference IDs are 1-based, so conferenceId=1 checks position [0]
+    if (conferenceId <= (user.confAccess?.length || 0)) {
+      if (user.confAccess[conferenceId - 1] === 'X') {
+        return true;
+      }
+    }
+    return false;
   }
 
-  // Default: no access if confAccess not set or too short
+  // express.e:8511-8512 - Area-based access (e.g., "Conf.1", "Conf.2")
+  // Check if TOOLTYPE_AREA contains this conference name
+  const confName = `Conf.${conferenceId}`;
+  // For now, we don't support area-based access in the web version
+  // This would require implementing checkToolTypeExists() for TOOLTYPE_AREA
+  // Default to no access for area-based format
   return false;
 }
 
@@ -143,6 +175,7 @@ async function countNewMessages(
     lastScanned = pointer;
 
     if (headers.length > 0) {
+      // Use binary HeaderFile if available
       for (const header of headers) {
         if (header.msgNumb <= pointer) {
           continue;
@@ -165,23 +198,39 @@ async function countNewMessages(
           newPublic++;
         }
       }
-    } else if (_db) {
-      // Fallback to DB rows when legacy header files are missing
-      const messages = await _db.getMessages(conferenceId, messageBaseId, { limit: 1000 });
-      let msgNum = 0;
-      for (const msg of messages.reverse()) {
-        msgNum++;
+    } else {
+      // Read from disk .msg files (AmiExpress format)
+      // This is the PRIMARY method - database is only for web UI/search
+      const bbsDataPath = config.get('dataDir');
+      const messageIds = await getAllMessageIds(conferenceId, bbsDataPath);
+
+      for (const msgNum of messageIds) {
         if (msgNum <= pointer) {
           continue;
         }
+
+        // Read message from disk
+        const message = await readMessageFile(conferenceId, msgNum, bbsDataPath);
+        if (!message) {
+          continue; // Skip if file doesn't exist or is corrupted
+        }
+
         lastScanned = Math.max(lastScanned, msgNum);
-        if (msg.isPrivate && safeName && (msg.toUser?.toLowerCase?.() === safeName || msg.author?.toLowerCase?.() === safeName)) {
-          newPrivate++;
-        } else if (!msg.isPrivate) {
+
+        const toLower = (message.to || '').trim().toLowerCase();
+        const fromLower = (message.from || '').trim().toLowerCase();
+        const isPrivate = message.isPrivate;
+
+        if (isPrivate) {
+          if (safeName && (toLower === safeName || fromLower === safeName)) {
+            newPrivate++;
+          }
+        } else {
           newPublic++;
         }
       }
-      mailStatHigh = Math.max(mailStatHigh, msgNum);
+
+      mailStatHigh = messageIds.length > 0 ? Math.max(...messageIds) : 0;
     }
   } catch (error) {
     console.error(`Error counting messages in conf ${conferenceId} msgbase ${messageBaseId}:`, error);

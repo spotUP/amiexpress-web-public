@@ -2228,6 +2228,119 @@ export class Database {
       });
       console.log('  ✓ Created sysop user');
 
+      // Create default transfer protocols
+      const protocols = [
+        {
+          protocol_name: 'ZMODEM',
+          protocol_code: 'Z',
+          command: 'sz',
+          upload_command: 'rz',
+          download_command: 'sz',
+          batch_upload: 1,
+          batch_download: 1,
+          bidirectional: 0,
+          enabled: 1,
+          is_default: 1
+        },
+        {
+          protocol_name: 'YMODEM',
+          protocol_code: 'Y',
+          command: 'sb',
+          upload_command: 'rb',
+          download_command: 'sb',
+          batch_upload: 1,
+          batch_download: 1,
+          bidirectional: 0,
+          enabled: 1,
+          is_default: 0
+        },
+        {
+          protocol_name: 'XMODEM-1K',
+          protocol_code: 'X1',
+          command: 'sx -k',
+          upload_command: 'rx',
+          download_command: 'sx -k',
+          batch_upload: 0,
+          batch_download: 0,
+          bidirectional: 0,
+          enabled: 1,
+          is_default: 0
+        },
+        {
+          protocol_name: 'XMODEM-CRC',
+          protocol_code: 'XC',
+          command: 'sx',
+          upload_command: 'rx',
+          download_command: 'sx',
+          batch_upload: 0,
+          batch_download: 0,
+          bidirectional: 0,
+          enabled: 1,
+          is_default: 0
+        },
+        {
+          protocol_name: 'XMODEM',
+          protocol_code: 'X',
+          command: 'sx',
+          upload_command: 'rx',
+          download_command: 'sx',
+          batch_upload: 0,
+          batch_download: 0,
+          bidirectional: 0,
+          enabled: 1,
+          is_default: 0
+        },
+        {
+          protocol_name: 'Punter (C64/C128)',
+          protocol_code: 'P',
+          command: 'punter',
+          upload_command: 'punter -r',
+          download_command: 'punter -s',
+          batch_upload: 0,
+          batch_download: 0,
+          bidirectional: 0,
+          enabled: 1,
+          is_default: 0
+        },
+        {
+          protocol_name: 'WebSocket',
+          protocol_code: 'WS',
+          command: 'websocket',
+          upload_command: 'websocket-upload',
+          download_command: 'websocket-download',
+          batch_upload: 1,
+          batch_download: 1,
+          bidirectional: 1,
+          enabled: 1,
+          is_default: 0
+        }
+      ];
+
+      const protocolInsert = this.db.prepare(`
+        INSERT INTO protocols (
+          protocol_name, protocol_code, command,
+          upload_command, download_command,
+          batch_upload, batch_download, bidirectional,
+          enabled, is_default
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const proto of protocols) {
+        protocolInsert.run(
+          proto.protocol_name,
+          proto.protocol_code,
+          proto.command,
+          proto.upload_command,
+          proto.download_command,
+          proto.batch_upload,
+          proto.batch_download,
+          proto.bidirectional,
+          proto.enabled,
+          proto.is_default
+        );
+        console.log(`  ✓ Created protocol: ${proto.protocol_name}`);
+      }
+
       console.log('✓ Database initialization completed successfully');
     } catch (error) {
       console.error('✗ Database initialization failed:', error);

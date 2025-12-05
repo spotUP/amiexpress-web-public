@@ -392,14 +392,56 @@ export class AmiExpressLibrary {
 
   /**
    * aeGetUser() - Get user information
-   * Returns: A0 = pointer to user structure (stub)
+   * Returns: A0 = pointer to user structure
+   *
+   * User structure (simplified):
+   * +0: username (30 bytes, null-terminated)
+   * +30: location (30 bytes, null-terminated)
+   * +60: security level (4 bytes, long)
+   * +64: time limit (4 bytes, long)
+   * Total: 68 bytes
    */
   private aeGetUser(): boolean {
-    console.log('[AmiExpress] aeGetUser() called (stub)');
+    console.log('[AmiExpress] aeGetUser() called');
 
-    // Return null pointer for now (stub)
-    this.emulator.setRegister(CPURegister.A0, 0);
+    // Allocate user structure in memory (use area after string buffer)
+    const USER_STRUCT_ADDR = this.stringBufferPointer + this.STRING_BUFFER_SIZE + 256;
+    const userStructSize = 68;
 
+    // Clear structure
+    for (let i = 0; i < userStructSize; i++) {
+      this.emulator.writeMemory(USER_STRUCT_ADDR + i, 0);
+    }
+
+    // Get user data from session
+    const username = this.session?.user?.username || 'Guest';
+    const location = this.session?.user?.location || 'Unknown';
+    const secLevel = this.session?.user?.secLevel || 30;
+    const timeLimit = this.session?.user?.timeLimit || -1;
+
+    // Write username (max 29 chars + null)
+    for (let i = 0; i < Math.min(username.length, 29); i++) {
+      this.emulator.writeMemory(USER_STRUCT_ADDR + i, username.charCodeAt(i));
+    }
+
+    // Write location (max 29 chars + null)
+    for (let i = 0; i < Math.min(location.length, 29); i++) {
+      this.emulator.writeMemory(USER_STRUCT_ADDR + 30 + i, location.charCodeAt(i));
+    }
+
+    // Write security level (big-endian long)
+    this.emulator.writeMemory32(USER_STRUCT_ADDR + 60, secLevel);
+
+    // Write time limit (big-endian long)
+    this.emulator.writeMemory32(USER_STRUCT_ADDR + 64, timeLimit);
+
+    console.log(
+      `[AmiExpress] aeGetUser: username="${username}", location="${location}", ` +
+      `secLevel=${secLevel}, timeLimit=${timeLimit}`
+    );
+
+    // Return pointer to structure
+    this.emulator.setRegister(CPURegister.A0, USER_STRUCT_ADDR);
     return true;
   }
 

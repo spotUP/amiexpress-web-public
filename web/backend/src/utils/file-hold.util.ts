@@ -230,13 +230,44 @@ export async function moveToFileArea(
 }
 
 /**
+ * Move file to conference Files directory (active uploads)
+ * Express.e:19403-19415 - Standard file upload destination
+ *
+ * @param sourcePath Current file location
+ * @param filename Filename
+ * @param conferencePath Path to conference directory
+ * @returns New file path
+ */
+export async function moveToFiles(
+  sourcePath: string,
+  filename: string,
+  conferencePath: string
+): Promise<string> {
+  const filesDir = path.join(conferencePath, 'Files');
+  const targetPath = path.join(filesDir, filename);
+
+  // Ensure Files directory exists
+  await fs.mkdir(filesDir, { recursive: true });
+
+  try {
+    // Move file from playpen to Files
+    await fs.rename(sourcePath, targetPath);
+    console.log(`[Files] Moved ${filename} to ${filesDir}`);
+    return targetPath;
+  } catch (error: any) {
+    console.error(`[Files] Error moving file: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
  * Move file to appropriate directory based on status
  * Express.e:19403-19415 - Complete file movement logic
  *
  * @param sourcePath Current file location
  * @param filename Filename
  * @param status File status (hold, lcfiles, or active)
- * @param targetId Conference ID (for hold/lcfiles) or File Area ID (for active)
+ * @param conferenceId Conference ID
  * @param bbsDataPath Base BBS data path
  * @returns New file path
  */
@@ -244,19 +275,19 @@ export async function moveUploadedFile(
   sourcePath: string,
   filename: string,
   status: 'hold' | 'lcfiles' | 'active' | 'private',
-  targetId: number,
+  conferenceId: number,
   bbsDataPath: string
 ): Promise<string> {
+  const conferenceDir = getConferenceDir(conferenceId, bbsDataPath);
+
   if (status === 'hold' || status === 'private') {
-    // targetId is conferenceId - Move to HOLD directory for sysop review
-    const conferenceDir = getConferenceDir(targetId, bbsDataPath);
+    // Move to HOLD directory for sysop review
     return await moveToHold(sourcePath, filename, conferenceDir);
   } else if (status === 'lcfiles') {
-    // targetId is conferenceId - Move to LCFILES directory for lost carrier handling
-    const conferenceDir = getConferenceDir(targetId, bbsDataPath);
+    // Move to LCFILES directory for lost carrier handling
     return await moveToLCFiles(sourcePath, filename, conferenceDir);
   } else {
-    // targetId is fileAreaId - Move to file area directory (normal upload)
-    return await moveToFileArea(sourcePath, filename, targetId, bbsDataPath);
+    // Move to Files directory (normal active upload)
+    return await moveToFiles(sourcePath, filename, conferenceDir);
   }
 }

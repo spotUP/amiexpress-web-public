@@ -27,6 +27,8 @@ import type {
   FileChecker,
   FileCheckerError
 } from '../database/types';
+import { loadBBSConfig, saveBBSConfig, type BBSConfigData } from './bbs-config-file.service';
+import { config as appConfig } from '../config';
 
 // ===== Zod Validation Schemas =====
 
@@ -323,12 +325,17 @@ export class ConfigService {
   // ===== System Configuration =====
 
   async getSystemConfig(): Promise<SystemConfig> {
-    let config = this.configRepo.getSystemConfig();
+    // DISK-BASED: Read from bbsConfig.info
+    const bbsRoot = appConfig.get('dataDir');
+    const diskConfig = loadBBSConfig(bbsRoot);
 
-    // Create default if doesn't exist
-    if (!config) {
-      config = this.configRepo.createSystemConfig({});
-    }
+    // Convert BBSConfigData to SystemConfig format (add id and timestamps)
+    const config: SystemConfig = {
+      id: 1,
+      ...diskConfig,
+      created_at: new Date(),
+      updated_at: new Date(),
+    } as SystemConfig;
 
     return config;
   }
@@ -343,10 +350,14 @@ export class ConfigService {
     // Get old values for audit
     const oldConfig = await this.getSystemConfig();
 
-    // Update
-    const newConfig = this.configRepo.updateSystemConfig(validated);
+    // DISK-BASED: Write to bbsConfig.info
+    const bbsRoot = appConfig.get('dataDir');
+    saveBBSConfig(bbsRoot, validated);
 
-    // Log change
+    // Get updated config from disk
+    const newConfig = await this.getSystemConfig();
+
+    // Log change to audit table (database still used for audit trail)
     this.configRepo.logConfigChange(
       'system_config',
       1,

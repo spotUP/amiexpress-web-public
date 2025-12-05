@@ -1,6 +1,10 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import { db } from '../database';
 import { config } from '../config';
+import { loadConfConfig } from '../services/conf-config.service';
+import { conferenceFileManager } from '../services/ConferenceFileManager';
+import { loadFileAreasFromDisk } from '../services/file-areas-loader';
 import { Door, DoorSession, ChatState } from '../types';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import {
@@ -215,10 +219,58 @@ export async function initializeData() {
     // Initialize default webhook if configured
     await initializeDefaultWebhook();
 
-    conferences = await db.getConferences();
-    if (conferences.length === 0) {
-      await db.initializeDefaultData();
-      conferences = await db.getConferences();
+    // express.e: cmds.numConf and confNames/confDirs are populated from ConfConfig.info (NCONFS, NAME.n, LOCATION.n)
+    // The BBS ALWAYS uses disk files, NOT the database, for conference configuration
+    const bbsRoot = process.env.BBS_ROOT || config.get('dataDir');
+    const confConfig = loadConfConfig(bbsRoot);
+
+    if (confConfig && confConfig.confCount > 0) {
+      // Create conferences array from ConfConfig.info (express.e:8499-8512 uses cmds.numConf from this file)
+      conferences = [];
+      for (let i = 0; i < confConfig.confCount; i++) {
+        const entry = confConfig.entries[i];
+        conferences.push({
+          id: i + 1,
+          name: entry.name || `Conference ${i + 1}`,
+          location: entry.location || `BBS:Conf${i + 1}/`
+        });
+      }
+      console.log(`[Conference Init] Loaded ${conferences.length} conferences from ConfConfig.info`);
+    } else {
+      // Fallback: check for Conf.DB headers (original AmiExpress format)
+      const confDbHeaders = conferenceFileManager.getAllConferenceHeaders();
+      if (confDbHeaders.length > 0) {
+        conferences = confDbHeaders.map((header: any, i: number) => ({
+          id: i + 1,
+          name: header.name || `Conference ${i + 1}`,
+          location: `BBS:Conf${i + 1}/`
+        }));
+        console.log(`[Conference Init] Loaded ${conferences.length} conferences from Conf.DB files`);
+      } else {
+        // Last resort: scan for Conf*.info files on disk
+        const confFiles = fs.readdirSync(bbsRoot).filter((f: string) => /^Conf\d+\.info$/.test(f));
+        const confNumbers = confFiles.map((f: string) => parseInt(f.match(/\d+/)?.[0] || '0')).filter((n: number) => n > 0).sort((a: number, b: number) => a - b);
+        if (confNumbers.length > 0) {
+          const maxConf = Math.max(...confNumbers);
+          conferences = [];
+          for (let i = 1; i <= maxConf; i++) {
+            conferences.push({
+              id: i,
+              name: `Conference ${i}`,
+              location: `BBS:Conf${i}/`
+            });
+          }
+          console.log(`[Conference Init] Found ${conferences.length} Conf*.info files on disk`);
+        } else {
+          // Absolute fallback: use database
+          conferences = await db.getConferences();
+          if (conferences.length === 0) {
+            await db.initializeDefaultData();
+            conferences = await db.getConferences();
+          }
+          console.log(`[Conference Init] Using ${conferences.length} conferences from database`);
+        }
+      }
     }
 
     // Inject conferences into screen handler
@@ -238,12 +290,9 @@ export async function initializeData() {
     setHelpers({ callersLog, loadFlagged, loadHistory });
     setConstants({ SCREEN_BULL, SCREEN_NODE_BULL, SCREEN_CONF_BULL, LoggedOnSubState });
 
-    // Load file areas for all conferences
-    fileAreas = [];
-    for (const conf of conferences) {
-      const areas = await db.getFileAreas(conf.id);
-      fileAreas.push(...areas);
-    }
+    // Load file areas from disk (express.e:5006, 15264 - reads NDIRS, DLPATH.n, ULPATH.n from Conf*.info)
+    fileAreas = loadFileAreasFromDisk(bbsRoot, conferences);
+    console.log(`[Initialization] Loaded ${fileAreas.length} file areas from disk`);
 
     // Load file entries for all file areas
     fileEntries = []; // TODO: Load file entries per-area as needed

@@ -568,7 +568,10 @@ export class FileMaintenanceHandler {
     fs.writeFileSync(dirFilePath, updated.join('\r\n'), 'utf-8');
 
     await this.deletePhysicalFile(session, currentFile.filename, ctx.dirNum);
-    await this.deleteDbEntries(session.currentConf || 1, currentFile.filename);
+
+    // Database sync - optional, not required for BBS operation
+    // Doors read from DIR files on disk, not from database
+    // await this.deleteDbEntries(session.currentConf || 1, currentFile.filename);
 
     if (_callersLog) {
       _callersLog(session.user?.id || null, session.user?.username || 'unknown', 'Deleted file', currentFile.filename, session.nodeId || 1);
@@ -612,7 +615,10 @@ export class FileMaintenanceHandler {
     fs.writeFileSync(destPath, merged.join('\r\n'), 'utf-8');
 
     await this.movePhysicalFile(session, currentFile.filename, ctx.dirNum, destDir);
-    await this.moveDbEntry(session.currentConf || 1, currentFile.filename, destDir);
+
+    // Database sync - optional, not required for BBS operation
+    // Doors read from DIR files on disk, not from database
+    // await this.moveDbEntry(session.currentConf || 1, currentFile.filename, destDir);
 
     if (_callersLog) {
       _callersLog(session.user?.id || null, session.user?.username || 'unknown', 'Moved file', `${currentFile.filename} -> ${destDir}`, session.nodeId || 1);

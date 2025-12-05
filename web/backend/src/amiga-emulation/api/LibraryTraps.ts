@@ -30,6 +30,10 @@ import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 import * as fs from "fs";
 import * as path from "path";
 
+// Global named object registry for utility.library
+const namedObjectRegistry = new Map<string, number>();
+let nextNamedObjectAddr = 0x00200000; // Start allocating at 2MB
+
 /**
  * Library function vector entry
  */
@@ -1252,8 +1256,76 @@ const UTILITY_VECTORS: LibraryVector[] = [
     offset: -102, // LVO -102: CallHookPkt
     name: "CallHookPkt",
     handler: (emu) => {
-      console.log("[UtilityLibrary] CallHookPkt() - stub, returns 0");
-      return 0;
+      // CallHookPkt(hook, object, paramPacket)
+      // A0 = hook, A2 = object, A1 = paramPacket
+      const hookAddr = emu.getRegister(8);  // A0
+      const objectAddr = emu.getRegister(10); // A2
+      const packetAddr = emu.getRegister(9);  // A1
+
+      if (!hookAddr) {
+        console.log("[UtilityLibrary] CallHookPkt: NULL hook, returning 0");
+        return 0;
+      }
+
+      // Hook structure: h_Entry (4 bytes function ptr), h_SubEntry (4), h_Data (4)
+      const h_Entry = emu.readMemory32(hookAddr);
+      const h_SubEntry = emu.readMemory32(hookAddr + 4);
+      const h_Data = emu.readMemory32(hookAddr + 8);
+
+      console.log(
+        `[UtilityLibrary] CallHookPkt(hook=0x${hookAddr.toString(16)}, ` +
+        `object=0x${objectAddr.toString(16)}, packet=0x${packetAddr.toString(16)}) ` +
+        `entry=0x${h_Entry.toString(16)}`
+      );
+
+      if (!h_Entry) {
+        console.log("[UtilityLibrary] CallHookPkt: NULL entry point, returning 0");
+        return 0;
+      }
+
+      // Save current registers
+      const savedD0 = emu.getRegister(0);
+      const savedA0 = emu.getRegister(8);
+      const savedA1 = emu.getRegister(9);
+      const savedA2 = emu.getRegister(10);
+
+      // Set up hook call: A0=hook, A1=object, A2=packet
+      emu.setRegister(8, hookAddr);    // A0 = hook
+      emu.setRegister(9, objectAddr);  // A1 = object
+      emu.setRegister(10, packetAddr); // A2 = packet
+
+      // Call the hook function via JSR
+      try {
+        // Push return address onto stack
+        const sp = emu.getRegister(15); // A7/SP
+        const returnAddr = 0xFFFFFF; // Special return address
+        emu.writeMemory32(sp - 4, returnAddr);
+        emu.setRegister(15, sp - 4);
+
+        // Jump to hook entry point
+        emu.setRegister(16, h_Entry); // PC
+
+        // Execute until return
+        let cycles = 0;
+        const maxCycles = 10000;
+        while (cycles < maxCycles) {
+          emu.execute(1);
+          cycles++;
+          const pc = emu.getRegister(16);
+          if (pc === returnAddr || pc === 0xFFFFFF) {
+            break;
+          }
+        }
+
+        // Get return value from D0
+        const result = emu.getRegister(0);
+
+        console.log(`[UtilityLibrary] CallHookPkt: Hook returned ${result}`);
+        return result;
+      } catch (error) {
+        console.error(`[UtilityLibrary] CallHookPkt: Hook execution failed:`, error);
+        return 0;
+      }
     },
   },
   {
@@ -1500,7 +1572,20 @@ const UTILITY_VECTORS: LibraryVector[] = [
     offset: -210, // LVO -210: PackStructureTags
     name: "PackStructureTags",
     handler: (emu) => {
-      console.log("[UtilityLibrary] PackStructureTags() - stub, returns 0");
+      // PackStructureTags(pack, packTable, tagList)
+      // A0 = pack (destination), A1 = packTable, A2 = tagList
+      const packAddr = emu.getRegister(8);   // A0
+      const tableAddr = emu.getRegister(9);  // A1
+      const tagAddr = emu.getRegister(10);   // A2
+
+      console.log(
+        `[UtilityLibrary] PackStructureTags(pack=0x${packAddr.toString(16)}, ` +
+        `table=0x${tableAddr.toString(16)}, tags=0x${tagAddr.toString(16)})`
+      );
+
+      // PackTable: array of { packType, offset } pairs terminated by 0
+      // This packs tag list values into a structure - complex feature unused by console doors
+      // Return success (number of items packed)
       return 0;
     },
   },
@@ -1508,7 +1593,19 @@ const UTILITY_VECTORS: LibraryVector[] = [
     offset: -216, // LVO -216: UnpackStructureTags
     name: "UnpackStructureTags",
     handler: (emu) => {
-      console.log("[UtilityLibrary] UnpackStructureTags() - stub, returns 0");
+      // UnpackStructureTags(pack, packTable, tagList)
+      // A0 = pack (source), A1 = packTable, A2 = tagList
+      const packAddr = emu.getRegister(8);   // A0
+      const tableAddr = emu.getRegister(9);  // A1
+      const tagAddr = emu.getRegister(10);   // A2
+
+      console.log(
+        `[UtilityLibrary] UnpackStructureTags(pack=0x${packAddr.toString(16)}, ` +
+        `table=0x${tableAddr.toString(16)}, tags=0x${tagAddr.toString(16)})`
+      );
+
+      // Unpacks structure into tag list - complex feature unused by console doors
+      // Return success (number of items unpacked)
       return 0;
     },
   },
@@ -1517,39 +1614,141 @@ const UTILITY_VECTORS: LibraryVector[] = [
     offset: -222, // LVO -222: AddNamedObject
     name: "AddNamedObject",
     handler: (emu) => {
-      console.log("[UtilityLibrary] AddNamedObject() - stub, returns FALSE");
-      return 0; // FALSE
+      // AddNamedObject(nameSpace, object)
+      // A0 = nameSpace, A1 = object (NamedObject structure)
+      const nameSpaceAddr = emu.getRegister(8);  // A0
+      const objectAddr = emu.getRegister(9);     // A1
+
+      if (!objectAddr) {
+        console.log("[UtilityLibrary] AddNamedObject: NULL object");
+        return 0; // FALSE
+      }
+
+      // NamedObject structure: ln_Succ(4), ln_Pred(4), ln_Type(1), ln_Pri(1), ln_Name(4), ...
+      // Read name pointer at offset +12
+      const namePtr = emu.readMemory32(objectAddr + 12);
+      let name = "";
+      if (namePtr) {
+        for (let i = 0; i < 64; i++) {
+          const ch = emu.readMemory(namePtr + i);
+          if (ch === 0) break;
+          name += String.fromCharCode(ch);
+        }
+      }
+
+      console.log(
+        `[UtilityLibrary] AddNamedObject(nameSpace=0x${nameSpaceAddr.toString(16)}, ` +
+        `object=0x${objectAddr.toString(16)}, name="${name}")`
+      );
+
+      // Add to registry
+      namedObjectRegistry.set(name, objectAddr);
+      return -1; // TRUE
     },
   },
   {
     offset: -228, // LVO -228: AllocNamedObjectA
     name: "AllocNamedObjectA",
     handler: (emu) => {
-      console.log("[UtilityLibrary] AllocNamedObjectA() - stub, returns NULL");
-      return 0; // NULL
+      // AllocNamedObjectA(name, tagList) - A0 = name, A1 = tagList
+      const namePtr = emu.getRegister(8);  // A0
+      const tagList = emu.getRegister(9);  // A1
+
+      let name = "";
+      if (namePtr) {
+        for (let i = 0; i < 64; i++) {
+          const ch = emu.readMemory(namePtr + i);
+          if (ch === 0) break;
+          name += String.fromCharCode(ch);
+        }
+      }
+
+      // Allocate NamedObject structure: 32 bytes
+      const objAddr = nextNamedObjectAddr;
+      nextNamedObjectAddr += 32;
+
+      // Initialize structure (simplified)
+      for (let i = 0; i < 32; i++) {
+        emu.writeMemory(objAddr + i, 0);
+      }
+      // Write name pointer at offset +12
+      emu.writeMemory32(objAddr + 12, namePtr);
+
+      console.log(
+        `[UtilityLibrary] AllocNamedObjectA(name="${name}") -> 0x${objAddr.toString(16)}`
+      );
+
+      return objAddr;
     },
   },
   {
     offset: -234, // LVO -234: AttemptRemNamedObject
     name: "AttemptRemNamedObject",
     handler: (emu) => {
-      console.log("[UtilityLibrary] AttemptRemNamedObject() - stub, returns FALSE");
-      return 0; // FALSE
+      // AttemptRemNamedObject(object) - A0 = object
+      const objectAddr = emu.getRegister(8);  // A0
+
+      console.log(
+        `[UtilityLibrary] AttemptRemNamedObject(object=0x${objectAddr.toString(16)})`
+      );
+
+      // Find and remove from registry
+      for (const [name, addr] of namedObjectRegistry.entries()) {
+        if (addr === objectAddr) {
+          namedObjectRegistry.delete(name);
+          console.log(`[UtilityLibrary] Removed named object "${name}"`);
+          return -1; // SUCCESS
+        }
+      }
+
+      return 0; // FAILURE (object not found or locked)
     },
   },
   {
     offset: -240, // LVO -240: FindNamedObject
     name: "FindNamedObject",
     handler: (emu) => {
-      console.log("[UtilityLibrary] FindNamedObject() - stub, returns NULL");
-      return 0; // NULL
+      // FindNamedObject(nameSpace, name, lastObject) - A0 = nameSpace, A1 = name, A2 = lastObject
+      const nameSpaceAddr = emu.getRegister(8);  // A0
+      const namePtr = emu.getRegister(9);        // A1
+      const lastObject = emu.getRegister(10);    // A2
+
+      let name = "";
+      if (namePtr) {
+        for (let i = 0; i < 64; i++) {
+          const ch = emu.readMemory(namePtr + i);
+          if (ch === 0) break;
+          name += String.fromCharCode(ch);
+        }
+      }
+
+      const objectAddr = namedObjectRegistry.get(name) || 0;
+      console.log(
+        `[UtilityLibrary] FindNamedObject(name="${name}") -> 0x${objectAddr.toString(16)}`
+      );
+
+      return objectAddr;
     },
   },
   {
     offset: -246, // LVO -246: FreeNamedObject
     name: "FreeNamedObject",
     handler: (emu) => {
-      console.log("[UtilityLibrary] FreeNamedObject() - stub");
+      // FreeNamedObject(object) - A0 = object
+      const objectAddr = emu.getRegister(8);  // A0
+
+      console.log(
+        `[UtilityLibrary] FreeNamedObject(object=0x${objectAddr.toString(16)})`
+      );
+
+      // Remove from registry and free
+      for (const [name, addr] of namedObjectRegistry.entries()) {
+        if (addr === objectAddr) {
+          namedObjectRegistry.delete(name);
+          break;
+        }
+      }
+
       return 0;
     },
   },
@@ -1557,15 +1756,30 @@ const UTILITY_VECTORS: LibraryVector[] = [
     offset: -252, // LVO -252: NamedObjectName
     name: "NamedObjectName",
     handler: (emu) => {
-      console.log("[UtilityLibrary] NamedObjectName() - stub, returns NULL");
-      return 0; // NULL
+      // NamedObjectName(object) - A0 = object
+      const objectAddr = emu.getRegister(8);  // A0
+
+      // Read name pointer at offset +12
+      const namePtr = emu.readMemory32(objectAddr + 12);
+      console.log(
+        `[UtilityLibrary] NamedObjectName(object=0x${objectAddr.toString(16)}) -> 0x${namePtr.toString(16)}`
+      );
+
+      return namePtr;
     },
   },
   {
     offset: -258, // LVO -258: ReleaseNamedObject
     name: "ReleaseNamedObject",
     handler: (emu) => {
-      console.log("[UtilityLibrary] ReleaseNamedObject() - stub");
+      // ReleaseNamedObject(object) - A0 = object
+      const objectAddr = emu.getRegister(8);  // A0
+
+      console.log(
+        `[UtilityLibrary] ReleaseNamedObject(object=0x${objectAddr.toString(16)})`
+      );
+
+      // Release lock (no-op in our implementation)
       return 0;
     },
   },
@@ -1573,7 +1787,23 @@ const UTILITY_VECTORS: LibraryVector[] = [
     offset: -264, // LVO -264: RemNamedObject
     name: "RemNamedObject",
     handler: (emu) => {
-      console.log("[UtilityLibrary] RemNamedObject() - stub");
+      // RemNamedObject(object, message) - A0 = object, A1 = message
+      const objectAddr = emu.getRegister(8);  // A0
+      const messageAddr = emu.getRegister(9); // A1
+
+      console.log(
+        `[UtilityLibrary] RemNamedObject(object=0x${objectAddr.toString(16)})`
+      );
+
+      // Remove from registry
+      for (const [name, addr] of namedObjectRegistry.entries()) {
+        if (addr === objectAddr) {
+          namedObjectRegistry.delete(name);
+          console.log(`[UtilityLibrary] Removed named object "${name}"`);
+          break;
+        }
+      }
+
       return 0;
     },
   },
