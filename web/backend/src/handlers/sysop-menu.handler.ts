@@ -36,8 +36,62 @@ export async function displaySysopMenu(socket: Socket, session: BBSSession, para
     return;
   }
 
+  // Import sysop command handlers
+  const {
+    handleRemoteShellCommand,
+    handleAccountEditingCommand,
+    handleCallersLogCommand,
+    handleStatisticsCommand,
+    handleFileMaintenanceCommand,
+    handleTerminalSettingsCommand
+  } = require('./sysop-commands.handler');
+
   // Build list of sysop commands
   const sysopCommands: SysopMenuItem[] = [
+    // Numbered internal commands (0-5) from express.e
+    {
+      key: '0',
+      name: 'Remote Shell',
+      description: 'Remote shell access (Amiga original - informational)',
+      handler: handleRemoteShellCommand,
+      minSecurity: 250
+    },
+    {
+      key: '1',
+      name: 'Account Editing',
+      description: 'Edit user accounts, security levels, flags',
+      handler: handleAccountEditingCommand,
+      minSecurity: 250
+    },
+    {
+      key: '2',
+      name: 'Callers Log',
+      description: 'View recent caller activity',
+      handler: handleCallersLogCommand,
+      minSecurity: 100
+    },
+    {
+      key: '3',
+      name: 'Statistics',
+      description: 'View system statistics and reports',
+      handler: handleStatisticsCommand,
+      minSecurity: 100
+    },
+    {
+      key: '4',
+      name: 'File Maintenance',
+      description: 'File area maintenance and management',
+      handler: handleFileMaintenanceCommand,
+      minSecurity: 100
+    },
+    {
+      key: '5',
+      name: 'Terminal Settings',
+      description: 'Terminal and display settings',
+      handler: handleTerminalSettingsCommand,
+      minSecurity: 100
+    },
+    // Named sysop commands
     {
       key: 'NM',
       name: 'Node Management',
