@@ -1172,6 +1172,19 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       DISABLE_GUARD: 'true'
     };
 
+    // Ensure the DOORUSE tooltype is set to the command-specific value so doors like AquaScan know which mode to run in.
+    const commandKey = door.command?.toUpperCase();
+    if (commandKey) {
+      const doorUseKey = `DOORUSE.${commandKey}`;
+      const doorUseValue = door.toolTypes?.[doorUseKey];
+      if (doorUseValue && !interactiveToolTypes['DOORUSE']) {
+        interactiveToolTypes['DOORUSE'] = doorUseValue;
+        console.log(
+          `[executeAmigaDoor] Populated DOORUSE=${doorUseValue} from tooltype ${doorUseKey} for command ${commandKey}`
+        );
+      }
+    }
+
     const doorConfig = {
       executablePath: doorPath,
       doorType: doorType,
