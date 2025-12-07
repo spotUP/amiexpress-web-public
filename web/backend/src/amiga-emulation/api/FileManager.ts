@@ -271,7 +271,33 @@ export class FileManager {
       return Buffer.alloc(0);
     }
 
-    return fh.read(length);
+    const data = fh.read(length);
+
+    // Targeted debug: inspect Dir1 content for AquaScan FR parsing
+    if (/dir1/i.test(fh.name)) {
+      const sample = data.subarray(0, Math.min(data.length, 64));
+      const hex = Array.from(sample)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join(' ');
+      const printable = sample
+        .toString('latin1')
+        .replace(/\r/g, '<CR>')
+        .replace(/\n/g, '<LF>');
+      const crCount = data.filter((b) => b === 0x0d).length;
+      const lfCount = data.filter((b) => b === 0x0a).length;
+      const text = data.toString('latin1');
+      const lines = text.split(/\r?\n/).filter((line) => line.length > 0);
+      const previewLines = lines.slice(0, 5).map((line) => line.slice(0, 120));
+      console.log(
+        `[FileManager] Dir1 read BPTR=${bptr} bytes=${data.length} CR=${crCount} LF=${lfCount} ` +
+          `sample="${printable}" hex=${hex}`
+      );
+      console.log(
+        `[FileManager][Dir1] lines=${lines.length} preview=${previewLines.join(' | ')}`
+      );
+    }
+
+    return data;
   }
 
   /**

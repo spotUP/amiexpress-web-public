@@ -8,6 +8,7 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { formatFileSize, formatUploadDate } from './file-upload.util';
+import { looksLikeAsciiArt } from './ascii-art.util';
 
 /**
  * Get DIR file path based on upload status
@@ -148,9 +149,22 @@ export async function writeDirEntry(
     await fs.mkdir(path.dirname(dirFilePath), { recursive: true });
 
     // Split description into lines
-    const descLines = description.split('\n').filter(line => line.trim().length > 0);
-    const firstLine = descLines[0] || '';
-    const additionalLines = descLines.slice(1);
+    const rawLines = description.split('\n').map(line => line.replace(/\r$/, ''));
+    const meaningfulLines = rawLines.filter(line => line.trim().length > 0);
+    let primaryLine = '';
+    const continuationLines: string[] = [];
+
+    for (const line of meaningfulLines) {
+      if (!primaryLine && !looksLikeAsciiArt(line)) {
+        primaryLine = line;
+        continue;
+      }
+      continuationLines.push(line);
+    }
+
+    if (!primaryLine && continuationLines.length > 0) {
+      primaryLine = continuationLines.shift()!;
+    }
 
     // Build entry
     let entry = '';
@@ -160,14 +174,14 @@ export async function writeDirEntry(
       filename,
       fileSize,
       uploadDate,
-      firstLine,
+      primaryLine,
       statusMarker,
       isLCFile
     );
 
     // Express.e:19496-19505 - Additional description lines
-    if (additionalLines.length > 0) {
-      entry += buildDescriptionLines(additionalLines);
+    if (continuationLines.length > 0) {
+      entry += buildDescriptionLines(continuationLines);
     }
 
     // Express.e:19506-19509 - 'Sent by:' line (if enabled)

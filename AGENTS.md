@@ -31,6 +31,10 @@ Every time you are done working, create/update a document handoff.md in the root
 
 If unsure, ask the user instead of guessing before proceeding 
 
+No guessing on behavior. Match AmiExpress exactly using proof from express.e sources, official docs, or disassembly; every change must be backed by evidence and 1:1 with the originals.
+
+Never lie or overstate success. Do not claim behavior works unless verified against real AmiExpress behavior or evidence; honesty is mandatory even if results are negative.
+
 When asked to debug or solve a bug, always read the backend log first and use it to drive the investigation before making changes.
 
 When working on 68K door emulation, always review the generated 68K door logs (e.g., door-68k.log or run logs) early to guide debugging. If logs are missing or unwritable, fix the path or permissions before proceeding.

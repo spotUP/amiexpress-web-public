@@ -22,6 +22,7 @@ import { config } from '../config';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
 import { getMaxDirs } from '../utils/max-dirs.util';
+import { looksLikeAsciiArt } from '../utils/ascii-art.util';
 
 /**
  * Display file list for a conference
@@ -207,7 +208,13 @@ export class FileListingHandler {
       }
 
       // Read and display DIR file
-      const entries = await readDirFile(dirFilePath);
+      let entries: DirFileEntry[];
+      try {
+        entries = await readDirFile(dirFilePath);
+      } catch (error: any) {
+        this.handleDirFileReadError(socket, session, dirDisplayName, error);
+        return;
+      }
 
       if (entries.length === 0) {
         socket.emit('ansi-output', '\x1b[33mNo files in this directory.\x1b[0m\r\n');
@@ -220,17 +227,19 @@ export class FileListingHandler {
         // Display entries (reverse if needed)
         const displayEntries = reverse ? entries.reverse() : entries;
 
-        for (const entry of displayEntries) {
-          // Display file entry
-          await this.displayFileEntry(socket, session, entry, hasNonStop);
+      for (const entry of displayEntries) {
+        const displayLines = this.getDisplayLines(entry);
 
-          // Check for pause after each entry (express.e:27613)
-          const shouldContinue3 = await flagPause(socket, session, entry.rawLines.length);
-          if (!shouldContinue3) {
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            return;
-          }
+        // Display file entry
+        await this.displayFileEntry(socket, session, displayLines);
+
+        // Check for pause after each entry (express.e:27613)
+        const shouldContinue3 = await flagPause(socket, session, entry.rawLines.length);
+        if (!shouldContinue3) {
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          return;
         }
+      }
       }
 
       socket.emit('ansi-output', '\r\n');
@@ -257,16 +266,48 @@ export class FileListingHandler {
    * Display a single file entry
    * Port from express.e:27626+ displayIt2()
    */
+  private static getDisplayLines(entry: DirFileEntry): string[] {
+    const isContinuationLine = (line: string) =>
+      line.length >= 33 && line.substring(0, 33).trim().length === 0;
+
+    return entry.rawLines.filter((line, index) => {
+      if (index === 0) {
+        return true;
+      }
+      if (!isContinuationLine(line)) {
+        return true;
+      }
+      const content = line.substring(33);
+      return content.trim().length > 0;
+    });
+  }
+
   private static async displayFileEntry(
     socket: Socket,
     session: Session,
-    entry: DirFileEntry,
-    hasNonStop: boolean
+    lines: string[]
   ): Promise<void> {
-    // Display all raw lines for the entry
-    for (const line of entry.rawLines) {
+    for (const line of lines) {
       socket.emit('ansi-output', line + '\r\n');
     }
+  }
+
+  /**
+   * Handle failures reading a DIR file (missing or unreadable)
+   */
+  private static handleDirFileReadError(
+    socket: Socket,
+    session: Session,
+    dirDisplayName: string,
+    error: any
+  ): void {
+    console.error(`[FileListing] Failed to read ${dirDisplayName} directory file:`, error);
+    const sysopName = config.get('sysopName') || 'Sysop';
+    socket.emit(
+      `\x1b[31mThere is a problem with File listings, please tell ${sysopName}\x1b[0m\r\n`
+    );
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 
 

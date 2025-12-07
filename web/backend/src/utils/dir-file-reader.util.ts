@@ -227,12 +227,8 @@ export function formatDirEntry(entry: DirFileEntry): string {
  * Read DIR file from disk
  */
 export async function readDirFile(dirFilePath: string): Promise<DirFileEntry[]> {
-  try {
-    const content = await fs.promises.readFile(dirFilePath, 'utf-8');
-    return parseDirFile(content);
-  } catch (error) {
-    return [];
-  }
+  const content = await fs.promises.readFile(dirFilePath, 'utf-8');
+  return parseDirFile(content);
 }
 
 /**

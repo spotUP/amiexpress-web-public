@@ -74,6 +74,15 @@ private:
             }
         }
 
+        // FAST RAM: map immediately after chip RAM, up to start of ROM/I/O
+        if (!fastRam.empty()) {
+            uint32_t fastPages = (fastRam.size() + 0xFFFF) / 0x10000;
+            uint32_t startPage = 0x20; // page after 2MB chip
+            for (uint32_t i = 0; i < fastPages && (startPage + i) < 0xF8; i++) {
+                cpuMemSrc[startPage + i] = MemSrc::FAST;
+            }
+        }
+
         // ROM: pages 0xF8-0xFF (512KB)
         if (!rom.empty()) {
             for (int i = 0xF8; i <= 0xFF; i++) {
@@ -88,8 +97,10 @@ private:
         EM_ASM({
             console.log('[MOIRA WASM] Memory page table updated');
             console.log('[MOIRA WASM]   Chip RAM pages: 0x00-0x' + ($0).toString(16));
+            console.log('[MOIRA WASM]   Fast RAM pages: 0x20-0x' + ($1).toString(16));
             console.log('[MOIRA WASM]   ROM pages: 0xF8-0xFF');
-        }, chipRam.empty() ? 0 : ((chipRam.size() + 0xFFFF) / 0x10000) - 1);
+        }, chipRam.empty() ? 0 : ((chipRam.size() + 0xFFFF) / 0x10000) - 1,
+           fastRam.empty() ? 0x1F : (0x20 + ((fastRam.size() + 0xFFFF) / 0x10000) - 1));
     }
 
 public:
@@ -104,6 +115,17 @@ public:
                                 ciaTimerA(0),
                                 ciaTimerB(0) {
         cpuModel = Model::M68000;
+
+        // Allocate FAST RAM from requested memSize (after 2MB chip, before ROM)
+        size_t fastSize = 0;
+        if (memSize > chipRam.size()) {
+            size_t maxFast = 0xF80000 - chipRam.size(); // stop before ROM region
+            fastSize = std::min(memSize - chipRam.size(), maxFast);
+        }
+        if (fastSize > 0) {
+            fastRam.assign(fastSize, 0);
+            fastMask = fastRam.size() - 1;
+        }
 
         // Calculate memory masks (size - 1)
         chipMask = chipRam.size() - 1;

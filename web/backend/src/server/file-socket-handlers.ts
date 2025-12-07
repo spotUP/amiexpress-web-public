@@ -4,7 +4,7 @@
  */
 
 import { Socket } from 'socket.io';
-import { BBSSession } from '../index';
+import { BBSSession, UploadSessionContext } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { db } from '../database';
 import { config } from '../config';
@@ -19,6 +19,7 @@ import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer
 import { getSessionBySocketId } from './session-manager';
 import { callersLog } from './database-helpers';
 import { SysopDebugUtil } from '../utils/sysop-debug.util';
+import { getUploadContextById, deleteUploadContextById } from './upload-session-store';
 
 /**
  * Helper function to load conferences for stats tracking
@@ -38,6 +39,15 @@ async function loadConferences(session: any, database: any) {
   }
 }
 
+function clearUploadContext(session: BBSSession, socket?: Socket) {
+  const uploadId = session.uploadContext?.uploadSessionId || socket?.id;
+  if (uploadId) {
+    deleteUploadContextById(uploadId);
+  }
+  session.tempData = undefined;
+  session.uploadContext = undefined;
+}
+
 /**
  * Process batch file - handles file testing, database entry, and stats updates
  */
@@ -47,17 +57,30 @@ async function processBatchFile(
   data: { filename: string; originalname: string; size: number; path?: string },
   config: any
 ) {
+  const uploadContext: UploadSessionContext | undefined = session.uploadContext || session.tempData;
+  if (!uploadContext) {
+    socket.emit('ansi-output', '\r\n\x1b[31mError: Upload session lost\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    clearUploadContext(session, socket);
+    return;
+  }
+  if (session.tempData !== uploadContext) {
+    session.tempData = uploadContext;
+  }
+
   // Original batch upload mode or processing after description
-  const fileArea = session.tempData.fileArea;
-  const currentIndex = session.tempData.currentUploadIndex || 0;
-  const currentFile = session.tempData.uploadBatch[currentIndex];
+  const fileArea = uploadContext.fileArea;
+  const currentIndex = uploadContext.currentUploadIndex || 0;
+  const currentFile = uploadContext.uploadBatch[currentIndex];
 
   if (!currentFile) {
     socket.emit('ansi-output', '\r\n\x1b[31mError: No file info for uploaded file\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    clearUploadContext(session, socket);
     return;
   }
 
@@ -323,7 +346,7 @@ async function processBatchFile(
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    clearUploadContext(session, socket);
 
   } catch (error: any) {
     console.error('File upload error:', error);
@@ -334,7 +357,7 @@ async function processBatchFile(
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    clearUploadContext(session, socket);
   }
 }
 
@@ -347,7 +370,25 @@ async function processFileUpload(
   config: any,
   data: { filename: string; originalname: string; size: number; path?: string }
 ) {
+  const socketUploadSession = getUploadContextById(socket.id);
+  const uploadSession = socketUploadSession || session.uploadContext || session.tempData;
+  const hasValidUploadContext = !!(uploadSession && uploadSession.uploadMode && uploadSession.fileArea);
+
+  if (!hasValidUploadContext) {
+    socket.emit('ansi-output', '\r\n\x1b[31mError: Upload session invalid\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    clearUploadContext(session, socket);
+    return;
+  }
+
+  if (session.tempData !== uploadSession) {
+    session.tempData = uploadSession;
+  }
+
   console.log('[processFileUpload] Processing:', data);
+  console.log('[processFileUpload] session.tempData:', session.tempData);
 
   // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
   const isRegularFileUpload = session.tempData?.uploadMode && session.tempData?.fileArea;
@@ -364,7 +405,7 @@ async function processFileUpload(
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    clearUploadContext(session, socket);
     return;
   }
 
@@ -516,7 +557,7 @@ export function registerFileHandlers(socket: Socket) {
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
+      clearUploadContext(session, socket);
       return;
     }
 

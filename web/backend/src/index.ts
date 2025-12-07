@@ -16,7 +16,11 @@ import { doorDropFileManager } from './services/DoorDropFileManager';
 import { triggerSamiLogRefresh } from './services/SamiLogService';
 import { conferenceFileManager } from './services/ConferenceFileManager';
 import { loadConfConfig } from './services/conf-config.service';
-import { loadFileAreasFromDisk } from './services/file-areas-loader';
+import {
+  loadFileAreasFromDisk,
+  ensureDirFilesExist,
+  ensureConferenceStructure
+} from './services/file-areas-loader';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 export { BBSState, LoggedOnSubState };
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';
@@ -231,6 +235,13 @@ import {
   updateScanPointer
 } from './utils/message-pointers.util';
 
+export interface UploadSessionContext {
+  uploadMode: true;
+  fileArea: any;
+  uploadSessionId: string;
+  [key: string]: any;
+}
+
 export interface BBSSession {
   state: BBSState;
   subState?: LoggedOnSubState;
@@ -263,6 +274,7 @@ export interface BBSSession {
   doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
   displayFlowPaused?: boolean; // Waiting for keypress to advance BULL/NODE_BULL/CONF_BULL/menu flow
   tempData?: any; // Temporary data storage for complex operations (like file listing)
+  uploadContext?: UploadSessionContext;
   pendingDisplayInputs?: string[];
   replayingDisplayInputs?: boolean;
   transferRawActive?: boolean; // When true, bypass cooked command handling for raw transfer (ZMODEM)
@@ -2132,6 +2144,8 @@ async function initializeData() {
 
     // Load file areas from disk (express.e:5006, 15264 - reads NDIRS, DLPATH.n, ULPATH.n from Conf*.info)
     fileAreas = loadFileAreasFromDisk(bbsRoot, conferences);
+    await ensureDirFilesExist(bbsRoot, fileAreas);
+    await ensureConferenceStructure(bbsRoot, conferences, fileAreas);
     console.log(`[Initialization] Loaded ${fileAreas.length} file areas from disk`);
 
     // Load file entries for all file areas

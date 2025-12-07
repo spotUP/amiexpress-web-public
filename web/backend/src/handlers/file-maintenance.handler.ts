@@ -431,7 +431,12 @@ export class FileMaintenanceHandler {
   ) {
     socket.emit('ansi-output', '\r\n');
 
-    const descLines = entry.rawLines.slice(0, 1 + MAX_DESC_LINES);
+    const isContinuationLine = (line: string) =>
+      line.length >= 33 && line.substring(0, 33).trim().length === 0;
+
+    const descLines = entry.rawLines
+      .slice(0, 1 + MAX_DESC_LINES)
+      .filter((line, index) => index === 0 || !isContinuationLine(line));
     descLines.forEach(line => socket.emit('ansi-output', `${line}\r\n`));
     socket.emit('ansi-output', '\r\n');
 

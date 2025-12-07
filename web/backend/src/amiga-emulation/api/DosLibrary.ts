@@ -2049,6 +2049,25 @@ export class DosLibrary {
       const stats = fs.statSync(lock.path);
       const fileName = path.basename(lock.path);
 
+      // Targeted trace for AquaScan FR gating: only for Dir1 examines
+      if (/^dir1$/i.test(fileName)) {
+        const pc = this.emulator.getRegister(CPURegister.PC);
+        const d0 = this.emulator.getRegister(CPURegister.D0);
+        const d1 = this.emulator.getRegister(CPURegister.D1);
+        const d7 = this.emulator.getRegister(CPURegister.D7);
+        const a0 = this.emulator.getRegister(CPURegister.A0);
+        const a1 = this.emulator.getRegister(CPURegister.A1);
+        const sp = this.emulator.getRegister(CPURegister.A7);
+        const returnAddr = this.emulator.readMemory32(sp);
+        const a5 = this.emulator.getRegister(CPURegister.A5);
+        const val32 = this.emulator.readMemory16(a5 + 0x32);
+        console.log(
+          `[dos.library][trace] PC=0x${pc.toString(16)} D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} ` +
+          `D7=0x${d7.toString(16)} A0=0x${a0.toString(16)} A1=0x${a1.toString(16)} A5=0x${a5.toString(16)} ` +
+          `A5+0x32=0x${val32.toString(16)} SP=0x${sp.toString(16)} RA=0x${returnAddr.toString(16)} fib=0x${fibPtr.toString(16)} file=${fileName}`
+        );
+      }
+
       // Clear FileInfoBlock (260 bytes)
       for (let i = 0; i < 260; i++) {
         this.emulator.writeMemory(fibPtr + i, 0);
@@ -2058,12 +2077,18 @@ export class DosLibrary {
       this.writeLong(fibPtr, 0);
 
       // fib_DirEntryType (4 bytes) - negative = file, positive = dir
-      // Special case: AmiExpress "Dir1", "Dir2", etc. files are treated as pseudo-directories
-      // These are BBS file database files that doors like AquaScan need to read sequentially
-      const isBBSDirFile = /^DIR\d+$/i.test(fileName);
-      const dirEntryType = stats.isDirectory() || isBBSDirFile ? 2 : -3;
-      console.log(`[dos.library] Examine: fileName="${fileName}" isBBSDirFile=${isBBSDirFile} dirEntryType=${dirEntryType}`);
-      this.writeLong(fibPtr + 4, dirEntryType);
+      // AmiExpress "DirN" listing files must be treated as directories (matches real 68K behavior)
+      const isDirListing = /^dir\d+$/i.test(fileName);
+      const dirEntryType = stats.isDirectory() || isDirListing ? 2 : -3;
+      console.log(
+        `[dos.library] Examine: fileName="${fileName}" dirEntryType=${dirEntryType}`
+      );
+      // Write fib_DirEntryType/EntryType (positive for dirs, negative for files)
+      // Write as raw bytes (defensive: ensure positive dir marker stays set)
+      this.emulator.writeMemory(fibPtr + 4, (dirEntryType >> 24) & 0xff);
+      this.emulator.writeMemory(fibPtr + 5, (dirEntryType >> 16) & 0xff);
+      this.emulator.writeMemory(fibPtr + 6, (dirEntryType >> 8) & 0xff);
+      this.emulator.writeMemory(fibPtr + 7, dirEntryType & 0xff);
 
       // fib_FileName (108 bytes BCPL string)
       this.writeBCPLString(fibPtr + 8, fileName, 107);
@@ -2071,18 +2096,21 @@ export class DosLibrary {
       // fib_Protection (4 bytes) - Amiga RWED bits (inverted: 0=allowed, 1=protected)
       // Standard file: 0x0F = DEWR all protected (read-only)
       const protection = stats.isDirectory() ? 0 : 0x0F;
-      this.writeLong(fibPtr + 116, protection);
+      this.emulator.writeMemory32(fibPtr + 116, protection);
 
       // fib_EntryType (4 bytes) - same as fib_DirEntryType
-      this.writeLong(fibPtr + 120, dirEntryType);
+      this.emulator.writeMemory(fibPtr + 120, (dirEntryType >> 24) & 0xff);
+      this.emulator.writeMemory(fibPtr + 121, (dirEntryType >> 16) & 0xff);
+      this.emulator.writeMemory(fibPtr + 122, (dirEntryType >> 8) & 0xff);
+      this.emulator.writeMemory(fibPtr + 123, dirEntryType & 0xff);
 
       // fib_Size (4 bytes)
       const fibSizeVal = stats.isFile() ? stats.size : 0;
-      this.writeLong(fibPtr + 124, fibSizeVal);
+      this.emulator.writeMemory32(fibPtr + 124, fibSizeVal);
       console.log(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) -> 0x${(fibPtr + 124).toString(16)}`);
 
       // fib_NumBlocks (4 bytes)
-      this.writeLong(fibPtr + 128, 0);
+      this.emulator.writeMemory32(fibPtr + 128, 0);
 
       // fib_Date (12 bytes DateStamp)
       const mtime = stats.mtime;
@@ -2093,9 +2121,9 @@ export class DosLibrary {
       const minutes = mtime.getHours() * 60 + mtime.getMinutes();
       const ticks = mtime.getSeconds() * 50;
 
-      this.writeLong(fibPtr + 132, days);
-      this.writeLong(fibPtr + 136, minutes);
-      this.writeLong(fibPtr + 140, ticks);
+      this.emulator.writeMemory32(fibPtr + 132, days);
+      this.emulator.writeMemory32(fibPtr + 136, minutes);
+      this.emulator.writeMemory32(fibPtr + 140, ticks);
 
       // fib_Comment (80 bytes BCPL string)
       this.writeBCPLString(fibPtr + 144, "", 79);
@@ -2105,11 +2133,47 @@ export class DosLibrary {
           stats.isDirectory() ? "dir" : "file"
         }, ${stats.size} bytes)`
       );
+      // Use emulator readMemory32 to avoid missing helper methods
+      let loggedDirEntryType = this.emulator.readMemory32(fibPtr + 4);
+      let loggedEntryType = this.emulator.readMemory32(fibPtr + 120);
+      const rawDirBytes = [
+        this.emulator.readMemory(fibPtr + 4),
+        this.emulator.readMemory(fibPtr + 5),
+        this.emulator.readMemory(fibPtr + 6),
+        this.emulator.readMemory(fibPtr + 7),
+      ];
+      const rawEntryBytes = [
+        this.emulator.readMemory(fibPtr + 120),
+        this.emulator.readMemory(fibPtr + 121),
+        this.emulator.readMemory(fibPtr + 122),
+        this.emulator.readMemory(fibPtr + 123),
+      ];
       console.log(
-        `[dos.library]   fib_DirEntryType=${stats.isDirectory() ? 2 : -3}, ` +
-        `fib_EntryType=${stats.isDirectory() ? 2 : -3}, ` +
-        `fib_Size=${fibSizeVal}, fib_Protection=${protection}`
+        `[dos.library]   fib_DirEntryType=${loggedDirEntryType}, ` +
+        `fib_EntryType=${loggedEntryType}, fib_Size=${fibSizeVal}, fib_Protection=${protection}`
       );
+      console.log(
+        `[dos.library]   raw DirEntry bytes=${rawDirBytes
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(" ")} Entry bytes=${rawEntryBytes
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(" ")}`
+      );
+
+      // Targeted trace for AquaScan FR gating: only when caller PC ~0x6100-0x6200 (door code)
+      const pc = this.emulator.getRegister(CPURegister.PC);
+      if (pc >= 0x6100 && pc <= 0x6200) {
+        const d0 = this.emulator.getRegister(CPURegister.D0);
+        const d1 = this.emulator.getRegister(CPURegister.D1);
+        const d7 = this.emulator.getRegister(CPURegister.D7);
+        const a0 = this.emulator.getRegister(CPURegister.A0);
+        const a1 = this.emulator.getRegister(CPURegister.A1);
+        console.log(
+          `[dos.library][trace] PC=0x${pc.toString(16)} D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} ` +
+          `D7=0x${d7.toString(16)} A0=0x${a0.toString(16)} A1=0x${a1.toString(16)} ` +
+          `fib_DirEntryType=${loggedDirEntryType} fib_Size=${fibSizeVal} prot=${protection}`
+        );
+      }
 
       // Initialize directory iterator for this lock if it's a directory
       if (stats.isDirectory()) {
@@ -2200,13 +2264,13 @@ export class DosLibrary {
       }
 
       // fib_DiskKey (4 bytes)
-      this.writeLong(fibPtr, index);
+      this.emulator.writeMemory32(fibPtr, index);
 
       // fib_DirEntryType (4 bytes) - negative = file, positive = dir
-      // Special case: AmiExpress "Dir1", "Dir2", etc. files are treated as pseudo-directories
-      const isBBSDirFile = /^DIR\d+$/i.test(fileName);
-      const dirEntryType = stats.isDirectory() || isBBSDirFile ? 2 : -3;
-      this.writeLong(fibPtr + 4, dirEntryType);
+      // Treat DirN listing files as directories (AmiExpress convention)
+      const isDirListing = /^dir\d+$/i.test(fileName);
+      const dirEntryType = stats.isDirectory() || isDirListing ? 2 : -3;
+      this.emulator.writeMemory32(fibPtr + 4, dirEntryType);
 
       // fib_FileName (108 bytes BCPL string)
       this.writeBCPLString(fibPtr + 8, fileName, 107);
@@ -2214,18 +2278,18 @@ export class DosLibrary {
       // fib_Protection (4 bytes) - Amiga RWED bits (inverted: 0=allowed, 1=protected)
       // Standard file: 0x0F = DEWR all protected (read-only)
       const protection = stats.isDirectory() ? 0 : 0x0F;
-      this.writeLong(fibPtr + 116, protection);
+      this.emulator.writeMemory32(fibPtr + 116, protection);
 
       // fib_EntryType (4 bytes) - same as fib_DirEntryType
-      this.writeLong(fibPtr + 120, dirEntryType);
+      this.emulator.writeMemory32(fibPtr + 120, dirEntryType);
 
       // fib_Size (4 bytes)
       const fibSizeVal = stats.isFile() ? stats.size : 0;
-      this.writeLong(fibPtr + 124, fibSizeVal);
+      this.emulator.writeMemory32(fibPtr + 124, fibSizeVal);
       console.log(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) -> 0x${(fibPtr + 124).toString(16)}`);
 
       // fib_NumBlocks (4 bytes)
-      this.writeLong(fibPtr + 128, 0);
+      this.emulator.writeMemory32(fibPtr + 128, 0);
 
       // fib_Date (12 bytes DateStamp)
       const mtime = stats.mtime;
@@ -2236,9 +2300,9 @@ export class DosLibrary {
       const minutes = mtime.getHours() * 60 + mtime.getMinutes();
       const ticks = mtime.getSeconds() * 50;
 
-      this.writeLong(fibPtr + 132, days);
-      this.writeLong(fibPtr + 136, minutes);
-      this.writeLong(fibPtr + 140, ticks);
+      this.emulator.writeMemory32(fibPtr + 132, days);
+      this.emulator.writeMemory32(fibPtr + 136, minutes);
+      this.emulator.writeMemory32(fibPtr + 140, ticks);
 
       // fib_Comment (80 bytes BCPL string)
       this.writeBCPLString(fibPtr + 144, "", 79);

@@ -4,7 +4,11 @@ import { db } from '../database';
 import { config } from '../config';
 import { loadConfConfig } from '../services/conf-config.service';
 import { conferenceFileManager } from '../services/ConferenceFileManager';
-import { loadFileAreasFromDisk } from '../services/file-areas-loader';
+import {
+  loadFileAreasFromDisk,
+  ensureDirFilesExist,
+  ensureConferenceStructure
+} from '../services/file-areas-loader';
 import { Door, DoorSession, ChatState } from '../types';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import {
@@ -292,6 +296,8 @@ export async function initializeData() {
 
     // Load file areas from disk (express.e:5006, 15264 - reads NDIRS, DLPATH.n, ULPATH.n from Conf*.info)
     fileAreas = loadFileAreasFromDisk(bbsRoot, conferences);
+    await ensureDirFilesExist(bbsRoot, fileAreas);
+    await ensureConferenceStructure(bbsRoot, conferences, fileAreas);
     console.log(`[Initialization] Loaded ${fileAreas.length} file areas from disk`);
 
     // Load file entries for all file areas

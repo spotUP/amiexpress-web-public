@@ -251,11 +251,11 @@ var Game2048 = /** @class */ (function () {
 }());
 function runDoor(doorSession) {
     return __awaiter(this, void 0, void 0, function () {
-        var socket, user, playerName, highScorePath, game, inputStream, outputStream, ui, sendAnsi, handleSocketInput;
+        var socket, user, bbsSession, playerName, highScorePath, game, inputStream, outputStream, ui, sendAnsi, handleSocketInput;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    socket = doorSession.socket, user = doorSession.user;
+                    socket = doorSession.socket, user = doorSession.user, bbsSession = doorSession.bbsSession;
                     playerName = (user === null || user === void 0 ? void 0 : user.name) || (user === null || user === void 0 ? void 0 : user.username) || 'Guest';
                     console.log("User ".concat(playerName, " connected to 2048 Game"));
                     highScorePath = path.join(__dirname, 'highscore.txt');
@@ -278,12 +278,12 @@ function runDoor(doorSession) {
                     handleSocketInput = function (data) {
                         inputStream.write(data);
                     };
-                    socket.on('user-input', handleSocketInput);
+                    bbsSession.doorInputHandler = handleSocketInput;
                     return [4 /*yield*/, new Promise(function (resolve) {
                             var finished = false;
-                            var cleanup = function () {
+                            var cleanup = function (data) {
                                 outputStream.off('data', sendAnsi);
-                                socket.off('user-input', handleSocketInput);
+                                delete bbsSession.doorInputHandler;
                                 ui.destroy();
                             };
                             var finish = function () {

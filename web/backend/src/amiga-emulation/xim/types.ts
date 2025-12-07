@@ -132,6 +132,8 @@ export enum XIMCommand {
   PRV_COMMAND = 133,       // Private command
   PRV_GROUP = 134,         // Private group
   ACP_COMMAND = 544,       // ACP command passthrough
+  GET_CMD_TOOLTYPE = 551,  // Reads tooltype from command's .info file
+  GET_CUSTOM_MSGBASE_MENUCMD = 605, // Menu command for custom message bases
 
   // Transfers
   ZMODEMSEND = 137,

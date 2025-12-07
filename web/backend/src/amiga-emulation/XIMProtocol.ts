@@ -320,10 +320,9 @@ export class XIMProtocol {
     }
 
     // Command-related handlers (GET_CUSTOM_MSGBASE_MENUCMD, GET_CMD_TOOLTYPE, etc.)
-    // These MUST be checked BEFORE isBBSInfoCommand because command 525 is shared:
-    // - BB_NONSTOPTEXT = 525 (in bbsList)
-    // - GET_CUSTOM_MSGBASE_MENUCMD = 525 (door command lookup)
-    // For doors like AquaScan, 525 means "get menu command", not "nonstop text"
+    // These MUST be checked BEFORE isBBSInfoCommand because they live in the same
+    // numeric neighborhood (500-620) as BB_* commands such as BB_NONSTOPTEXT (525).
+    // GET_CUSTOM_MSGBASE_MENUCMD uses command 605, so 525 is free for BB_NONSTOPTEXT.
     if (this.isCommandInfoRequest(msg.command)) {
       this.handleCommandInfoRequest(msg);
       return;
@@ -345,17 +344,21 @@ export class XIMProtocol {
    * Check if command is a command-info request (GET_CUSTOM_MSGBASE_MENUCMD, GET_CMD_TOOLTYPE)
    */
   private isCommandInfoRequest(command: number): boolean {
-    // 525 = GET_CUSTOM_MSGBASE_MENUCMD - Returns menu command used to launch door
+    // 605 = GET_CUSTOM_MSGBASE_MENUCMD - Returns menu command used to launch door
     // 551 = GET_CMD_TOOLTYPE - Reads tooltype from command's .info file
-    const is525 = command === 525;
+    const is605 = command === XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD;
     const is551 = command === 551;
-    if (is525 || is551) {
-      console.log(`[XIMProtocol] isCommandInfoRequest(${command}) -> TRUE (is525=${is525}, is551=${is551})`);
+    if (is605 || is551) {
+      console.log(
+        `[XIMProtocol] isCommandInfoRequest(${command}) -> TRUE (is605=${is605}, is551=${is551})`
+      );
       return true;
     }
-    // Debug: log ALL commands in the 500-600 range to catch any we might be missing
-    if (command >= 500 && command <= 600) {
-      console.log(`[XIMProtocol] isCommandInfoRequest(${command}) -> FALSE (command in 500-600 range but NOT 525/551)`);
+    // Debug: log ALL commands in the 500-610 range to catch any we might be missing
+    if (command >= 500 && command <= 610) {
+      console.log(
+        `[XIMProtocol] isCommandInfoRequest(${command}) -> FALSE (command in 500-610 range but NOT GET_CUSTOM_MSGBASE_MENUCMD/551)`
+      );
     }
     return false;
   }
@@ -368,7 +371,7 @@ export class XIMProtocol {
   private handleCommandInfoRequest(msg: XIMMessage): void {
     const command = msg.command;
 
-    if (command === 525) {
+    if (command === XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD) {
       // GET_CUSTOM_MSGBASE_MENUCMD - Returns menu command that launched this door
       // e.g., if user typed "FR" which launched AquaScan, return "FR"
       // Doors use this to look up DOORUSE.FR in their .info tooltypes
@@ -395,7 +398,7 @@ export class XIMProtocol {
       }
 
       this.sendReply(msg, cmdName.length);
-    } else if (command === 551) {
+    } else if (command === XIMCommand.GET_CMD_TOOLTYPE) {
       // GET_CMD_TOOLTYPE - Read tooltype from command's .info file
       // msg.string = tooltype key to look up (e.g., "DOORUSE.FR")
       // Returns the tooltype value from the .info file

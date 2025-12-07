@@ -285,6 +285,7 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
       bbsSession: {
         user: session.user,
         nodeNumber: session.nodeId || 0,
+        nonStopText: false,
         bbsName: 'AmiExpress-Web BBS',
         sysopName: 'Sysop',
         timeRemaining: 60,

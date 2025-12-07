@@ -9,7 +9,8 @@ import { startPagination } from './screen.handler';
 import { AnsiUtil } from '../utils/ansi.util';
 import { finalizeCommand } from '../utils/command-response.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession, UploadSessionContext } from '../index';
+import { storeUploadContext } from '../server/upload-session-store';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];
@@ -988,20 +989,29 @@ export function startFileUpload(socket: any, session: BBSSession, fileArea: any)
   // Web-friendly flow: Show file picker immediately
   socket.emit('ansi-output', '\x1b[36mSelect file to upload...\x1b[0m\r\n\r\n');
 
-  // Initialize upload session data
-  session.tempData = {
+  const previousTempData = session.tempData || {};
+  const uploadContext: UploadSessionContext = {
     uploadMode: true,
-    fileArea: fileArea,
+    fileArea,
     uploadSessionId: socket.id,
     uploadBatch: [],
     uploadCount: 1,
     uploadStartTime: Date.now(),
-    webUploadMode: true  // Flag for web-based upload flow
+    webUploadMode: true,
+    batchUpload: previousTempData.batchUpload || false,
+    currentUploadIndex: 0
   };
+
+  session.uploadContext = uploadContext;
+  session.tempData = uploadContext;
+  storeUploadContext(socket.id, uploadContext);
+
+  // Initialize upload session data
+  // session.tempData already set via uploadContext above
 
   // Trigger file picker immediately (web-friendly approach)
   // Check if batch upload is enabled from tempData
-  const isBatchUpload = session.tempData?.batchUpload || false;
+  const isBatchUpload = uploadContext.batchUpload || false;
 
   socket.emit('show-file-upload', {
     accept: '*/*',

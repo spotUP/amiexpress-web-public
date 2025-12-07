@@ -15,8 +15,10 @@ import { DoorConstants } from '../DoorTypes';
 import { BBSSessionData, XIMMessage, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
+import { AnsiUtil } from '../../utils/ansi.util';
 import { BBSPaths } from '../../utils/bbs-paths.util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
+import { looksLikeAsciiArt } from '../../utils/ascii-art.util';
 
 export class XIMIOHandler {
   private emulator: MoiraEmulator;
@@ -246,7 +248,7 @@ export class XIMIOHandler {
       JSON.stringify(text)
     );
 
-    const bytesWritten = this.emitText(text, addNewline, true);
+    const bytesWritten = this.emitText(text, addNewline, true, true, msg);
 
     console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
     this.reply(msg, bytesWritten);
@@ -297,7 +299,7 @@ export class XIMIOHandler {
 
     console.log(`[XIMIOHandler] JH_SM: "${text}" (msg.data=${msg.data}, addNewline=${shouldAddNewline}, isOnlyAnsi=${isOnlyAnsiCodes}, endsWithColon=${endsWithColonAndAnsi})`);
 
-    this.emitText(text, shouldAddNewline, true);
+    this.emitText(text, shouldAddNewline, true, true, msg);
 
     this.reply(msg, 1);
   }
@@ -494,7 +496,7 @@ export class XIMIOHandler {
   handleConsoleOutput(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
 
-    this.emitText(text, msg.data !== 0, true);
+    this.emitText(text, msg.data !== 0, true, true, msg);
 
     this.reply(msg, 1);
   }
@@ -508,7 +510,7 @@ export class XIMIOHandler {
 
     console.log(`[XIMIOHandler] JH_SO (Serial): "${text}"`);
 
-    this.emitText(text, msg.data !== 0, true);
+    this.emitText(text, msg.data !== 0, true, true, msg);
 
     this.reply(msg, 1);
   }
@@ -809,7 +811,12 @@ export class XIMIOHandler {
       const line = rawLines[i];
       const isLastLine = i === rawLines.length - 1;
       const shouldAddLineBreak = !isLastLine || hasTrailingNewline;
-      const segments = this.wrapLine(line, this.state.lineWrap);
+
+      const visibleLine = AnsiUtil.stripAnsiForPlainText(line);
+      const lineLooksLikeArt = looksLikeAsciiArt(visibleLine);
+      const segments = lineLooksLikeArt
+        ? [line]
+        : this.wrapLine(line, this.state.lineWrap);
 
       for (let s = 0; s < segments.length; s++) {
         const segment = segments[s];
@@ -820,7 +827,8 @@ export class XIMIOHandler {
         this.socket.emit('ansi-output', output);
         bytesSent += output.length;
 
-        if (trackLines) {
+        const shouldTrackLine = trackLines;
+        if (shouldTrackLine) {
           this.state.lineCount += 1;
 
           if (
@@ -848,18 +856,46 @@ export class XIMIOHandler {
    * Simple fixed-width wrapper for a single line (no line breaks)
    */
   private wrapLine(line: string, width: number): string[] {
-    if (line.length <= width) {
+    if (width <= 0 || line.length === 0) {
       return [line];
     }
 
-    const parts: string[] = [];
-    let remaining = line;
-    while (remaining.length > width) {
-      parts.push(remaining.slice(0, width));
-      remaining = remaining.slice(width);
+    const segments: string[] = [];
+    let current = '';
+    let visibleCount = 0;
+
+    const flushCurrent = () => {
+      segments.push(current);
+      current = '';
+      visibleCount = 0;
+    };
+
+    let i = 0;
+    while (i < line.length) {
+      if (line[i] === '\x1b') {
+        const remainder = line.slice(i);
+        const escMatch = remainder.match(/^\x1b\[[0-9;]*[A-Za-z]/);
+        if (escMatch) {
+          current += escMatch[0];
+          i += escMatch[0].length;
+          continue;
+        }
+      }
+
+      current += line[i];
+      visibleCount += 1;
+      i += 1;
+
+      if (visibleCount >= width) {
+        flushCurrent();
+      }
     }
-    parts.push(remaining);
-    return parts;
+
+    if (current.length > 0 || segments.length === 0) {
+      segments.push(current);
+    }
+
+    return segments;
   }
 
   /**
