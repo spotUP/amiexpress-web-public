@@ -275,6 +275,30 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
       stack: doorInfo.stack
     });
 
+    const pickPositiveNumber = (...candidates: Array<number | undefined>): number | undefined => {
+      for (const candidate of candidates) {
+        if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+          return candidate;
+        }
+      }
+      return undefined;
+    };
+
+    const terminalHeight =
+      pickPositiveNumber(
+        session.tempData?.termHeight,
+        session.screenHeight,
+        session.user?.linesPerScreen,
+        session.user?.pageLength
+      ) ?? 24;
+
+    const terminalWidth =
+      pickPositiveNumber(
+        session.tempData?.termWidth,
+        session.screenWidth,
+        session.user?.lineLength
+      ) ?? 80;
+
     // Create AmigaDoorSession - interactive doors need guard disabled
     const amigaSession = new AmigaDoorSession(socket, {
       executablePath: doorInfo.resolvedPath,
@@ -292,7 +316,10 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
         doorCommand: doorInfo.command,
         doorName: doorInfo.name,
         dataDir: config.get('dataDir'),
-        doorId: doorInfo.command || doorInfo.id
+        doorId: doorInfo.command || doorInfo.id,
+        pauseLines: terminalHeight,
+        lineWrap: terminalWidth,
+        lineCount: 0
       }
     } as any);
 

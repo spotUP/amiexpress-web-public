@@ -94,13 +94,20 @@ export class XIMProtocol {
     //   this.preLoadCommandDiskObject();
     // }
 
+    const userLineLength =
+      this.bbsSession?.user?.linesPerScreen ??
+      this.bbsSession?.user?.lineLength ??
+      this.bbsSession?.user?.pageLength;
+    const defaultLineLength = userLineLength && userLineLength > 0 ? userLineLength : 22;
+    const wrapWidth = this.bbsSession?.lineWrap ?? 80;
+
     this.state = {
       registered: false,
       shuttingDown: false,
       nonStopText: !!this.bbsSession?.nonStopText,
       lineCount: this.bbsSession?.lineCount ?? 0,
-      lineWrap: this.bbsSession?.lineWrap ?? 79,
-      pauseLines: this.bbsSession?.pauseLines ?? 22,
+      lineWrap: wrapWidth,
+      pauseLines: this.bbsSession?.pauseLines ?? defaultLineLength,
       language: this.bbsSession?.language || 'txt',
       confAccess:
         this.bbsSession?.confAccess || this.bbsSession?.user?.confAccess || '',

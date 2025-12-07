@@ -10,6 +10,8 @@ import * as fs from 'fs/promises';
 import { formatFileSize, formatUploadDate } from './file-upload.util';
 import { looksLikeAsciiArt } from './ascii-art.util';
 
+const LINE_BREAK = '\r';
+
 /**
  * Get DIR file path based on upload status
  * Express.e:19473-19489
@@ -69,12 +71,12 @@ export function buildDirEntryLine(
   // Express.e:19447-19452
   if (isLCFile && filename.length > 12) {
     // Lost carrier with long filename - no padding
-    line = `${filename} ${sizeStr}  ${dateStr}  ${description}\n`;
+    line = `${filename} ${sizeStr}  ${dateStr}  ${description}${LINE_BREAK}`;
   } else {
     // Normal format with lowercase padding (\l)
     // \l\s[13] means left-align string in 13 character field (lowercase fills with spaces)
     const filenamePadded = filename.padEnd(13, ' ');
-    line = `${filenamePadded}${sizeStr}  ${dateStr}  ${description}\n`;
+    line = `${filenamePadded}${sizeStr}  ${dateStr}  ${description}${LINE_BREAK}`;
   }
 
   // Express.e:19454-19465 - Insert status marker at position 13
@@ -102,7 +104,7 @@ export function buildDescriptionLines(descriptionLines: string[]): string {
   const indent = ' '.repeat(33);  // 33 spaces
   return descriptionLines
     .filter(line => line.length > 0)
-    .map(line => `${indent}${line}\n`)
+    .map(line => `${indent}${line}${LINE_BREAK}`)
     .join('');
 }
 
@@ -116,7 +118,7 @@ export function buildDescriptionLines(descriptionLines: string[]): string {
 export function buildSentByLine(username: string): string {
   // Express.e:19507 - StringF(tempstr,'                                 Sent by: \s\n',loggedOnUser.name)
   const indent = ' '.repeat(33);
-  return `${indent}Sent by: ${username}\n`;
+  return `${indent}Sent by: ${username}${LINE_BREAK}`;
 }
 
 /**
