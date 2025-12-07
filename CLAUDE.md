@@ -759,3 +759,4 @@ When debugging door addresses, jumps, relocations, memory overlaps, or overlappi
 - Database: `Documentation/3-Developers/DATABASE.md`
 - Current Status: `Documentation/6-Progress/CURRENT_STATUS.md`
 - User Guide: `Documentation/1-Users/USER_GUIDE.md`
+- AI Navigation Tip: Start at `Documentation/README.md` for the audience-based summaries, the `archive/` storage pattern, and the reference-source catalog in `Documentation/7-Reference Sources/`. Scripts and tests now live under `Scripts/`; see `Scripts/README.md` for the new layout and the command patterns (dev/backend/backend-dev/emulation/legacy).

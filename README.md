@@ -38,6 +38,10 @@
 | Core BBS System | ✅ Working | 80% |
 | Multi-Protocol Server | ✅ Working | 85% |
 | Door Emulation (68K) | ⚠️ Partial | 60% |
+
+## 🗂 Documentation & Automation Map
+- **Documentation**: Start at `Documentation/README.md` to follow the audience-based summaries and `archive/` locations; it now includes an AI-friendly map that points to the key guides and the raw reference sources.
+- **Test Scripts**: All harnesses live under `Scripts/` with a fresh `Scripts/README.md`. The directories `Scripts/dev`, `Scripts/backend`, `Scripts/backend-dev`, `Scripts/emulation`, and `Scripts/legacy` categorize every runner so you can find and reuse them reliably.
 | Admin UI | ✅ Working | 90% |
 | SDK Framework | ⚠️ Overpromised | 40% |
 | Documentation | ❌ Misleading | - |

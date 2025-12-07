@@ -1,101 +1,18 @@
-# Database Management Rules
+# Database Overview (Summary)
+**Full audits, fixes, and migration guides live in `archive/DATABASE_AUDIT.md`, `archive/DATABASE_FIX_DOCUMENTATION.md`, and `archive/AMIGAFS_MIGRATION.md`.**
 
-## Column Names - ALWAYS USE LOWERCASE
+## 1. Schema Highlights
+- SQLite holds tables for `users`, `conferences`, `files`, `messages`, and `doors`. Each user row mirrors express.e’s 110+ fields (name, real name, access flags, statistics, answer scripts).
+- File areas store DirX metadata plus ASCII continuation blocks so FR/FS output can reproduce the original layout.
+- Logging tables capture uploads/downloads for FR and door auditing.
 
-### Rules:
-1. ALL columns are lowercase (e.g., `availableforchat`, `seclevel`, `quietnode`)
-2. NEVER use camelCase in SQL queries
-3. Use aliases for TypeScript mapping:
-   ```sql
-   -- ✓ CORRECT:
-   SELECT availableforchat as "availableForChat" FROM users
+## 2. Audit & Migration
+- `DATABASE_AUDIT.md` documents every express.e column mapped to the new schema; use it when adding new fields or bridging to Arexx.
+- Migration scripts (TypeScript) keep the `securityLevels` table aligned with express.e ACS bits.
+- `DATABASE_FIX_DOCUMENTATION.md` covers how we treat zero-based indexing vs express.e's 1-based structures.
 
-   -- ✗ WRONG:
-   SELECT "availableForChat" FROM users
-   ```
+## 3. Operational Notes
+- When DB errors occur, check `logs/backend.log` and run the `Archive` script replicating the Amiga `User.data` import.
+- Use `BCRYPT_MIGRATION_COMPLETE.md` strategies to ensure password storage matches both express.e and the modern bcrypt requirement.
 
-### UPSERT ON CONFLICT - CRITICAL:
-```sql
--- ✗ WRONG - Will cause constraint error:
-ON CONFLICT (nodeId) DO UPDATE SET ...
-
--- ✅ CORRECT - Use lowercase:
-ON CONFLICT (nodeid) DO UPDATE SET ...
-```
-
-PostgreSQL stores unquoted columns as lowercase internally!
-
-## UNIQUE Constraints - ALWAYS PREVENT DUPLICATES
-
-### When Creating Tables:
-```sql
-CREATE TABLE IF NOT EXISTS table_name (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  -- OR for composite keys:
-  UNIQUE(name, parent_id)
-);
-```
-
-### Tables with UNIQUE constraints:
-- `users(username)` - UNIQUE
-- `conferences(name)` - UNIQUE
-- `message_bases(name, conferenceid)` - UNIQUE composite
-- `file_areas(name, conferenceid)` - UNIQUE composite
-- `file_entries(filename, areaid)` - UNIQUE composite
-- `node_sessions(nodeid)` - UNIQUE
-- `webhooks(name)` - UNIQUE
-- `bulletins(filename, conferenceid)` - UNIQUE composite
-
-## Initialization Rules
-
-### ALWAYS call db.init() first:
-```typescript
-// ✓ CORRECT:
-async function initializeData() {
-  await db.init();  // MUST be first!
-  const conferences = await db.getConferences();
-}
-
-// ✗ WRONG:
-async function initializeData() {
-  const conferences = await db.getConferences(); // WILL CRASH!
-}
-```
-
-### Schema Changes - Use DROP CASCADE:
-```typescript
-// ✓ CORRECT: Drop dependent tables first
-await client.query(`DROP TABLE IF EXISTS chat_room_messages CASCADE`);
-await client.query(`DROP TABLE IF EXISTS chat_room_members CASCADE`);
-await client.query(`DROP TABLE IF EXISTS chat_rooms CASCADE`);
-
-// Then create with new schema
-await client.query(`CREATE TABLE IF NOT EXISTS chat_rooms ( ... )`);
-```
-
-## Common Errors & Fixes
-
-### "relation does not exist"
-- **Cause:** db.init() not called
-- **Fix:** Add `await db.init()` in initializeData()
-
-### "column referenced in foreign key constraint does not exist"
-- **Cause:** Old table schema conflicts with new schema
-- **Fix:** DROP CASCADE before CREATE
-
-### "db.init is not a function"
-- **Cause:** Missing init() method
-- **Fix:** Add public `async init(): Promise<void>` method
-
-### "duplicate key value violates unique constraint"
-- **Cause:** ON CONFLICT using camelCase instead of lowercase
-- **Fix:** Use lowercase column names in ON CONFLICT clause
-
-## Testing Checklist
-
-Before deploying database changes:
-- [ ] Run `cd backend && npm run dev` locally
-- [ ] Check console: "Database tables created successfully"
-- [ ] Test the feature works
-- [ ] Verify tables exist with sample query
+**Need deeper detail?** Dive into the archived docs for sample SQL, auditing spreadsheets, and migration commands that keep this database 1:1.

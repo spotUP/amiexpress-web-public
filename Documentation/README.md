@@ -9,6 +9,7 @@ Choose your role to find relevant documentation:
 - **[Developers](#for-developers)** - Contributing code
 - **[Door Developers](#for-door-developers)** - Creating doors
 - **[Reference](#quick-reference)** - Quick lookups
+- **[Reference Sources](#reference-sources)** - Archived reference source bundles
 
 ---
 
@@ -82,6 +83,7 @@ Choose your role to find relevant documentation:
 🎨 **[MCI Codes](5-Reference/MCI_CODES.md)** - MCI code reference
 📄 **[Screen Files](5-Reference/SCREEN_FILES.md)** - Screen file format
 📁 **[File Structure](5-Reference/FILE_STRUCTURE.md)** - Project organization
+🧾 **[Reference Sources](7-Reference Sources/README.md)** - External reference source bundles (petscii-bbs, UADE, etc.)
 
 ---
 
@@ -108,8 +110,16 @@ Documentation/
 ├── 3-Developers/     # Developer guides
 ├── 4-Door-Developers/# Door development guides
 ├── 5-Reference/      # Quick reference materials
-└── 6-Progress/       # Status tracking + archived logs
+├── 6-Progress/       # Status tracking + archived logs
+└── 7-Reference Sources/# Reference source archives and samples
 ```
+
+### AI Documentation Map
+
+- **Summary files first**: Each numbered folder exposes a single summary doc (e.g., `1-Users/USER_GUIDE.md`, `2-Sysops/ADMINISTRATION.md`, `3-Developers/ARCHITECTURE.md`, `4-Door-Developers/DOOR_DEVELOPMENT.md`, `5-Reference/COMMAND_REFERENCE.md`, `6-Progress/CURRENT_STATUS.md`). These are your starting points for quick answers.
+- **Archives for depth**: When you need the full context, dive into the `archive/` subfolder inside that same directory (e.g., `Documentation/3-Developers/archive/sdk/README.md` or `Documentation/4-Door-Developers/archive/doors/README.md`).
+- **Reference sources**: All raw code references, door binaries, emulator trees, and archived manuals are under `Documentation/7-Reference Sources/`—don’t move or edit them; just reference for parity checks.
+- **Testing & automation**: The `Scripts/README.md` explains where every test harness now lives (`Scripts/dev/`, `Scripts/backend/`, `Scripts/backend-dev/`, `Scripts/emulation/`, `Scripts/legacy/`). Refer to that file before running or editing tests so you stay within the consolidated structure.
 
 ### Writing Guidelines
 
@@ -237,3 +247,5 @@ find Documentation/archive -name "FILENAME.md"
 
 **Last Updated**: 2025-11-01
 **Documentation Version**: 2.0 (Reorganized Structure)
+## Archive Pattern Update
+Each numbered directory now hosts an `archive/` subfolder that preserves the detailed legacy markdown files (root-level summaries remain front-and-center). Door/emulator/source archives live under `7-Reference Sources/` so readers can focus on summaries before stepping into the deep research notes.
