@@ -227,19 +227,16 @@ export class FileListingHandler {
         // Display entries (reverse if needed)
         const displayEntries = reverse ? entries.reverse() : entries;
 
-      for (const entry of displayEntries) {
-        const displayLines = this.getDisplayLines(entry);
+        for (const entry of displayEntries) {
+          const displayLines = this.getDisplayLines(entry);
 
-        // Display file entry
-        await this.displayFileEntry(socket, session, displayLines);
-
-        // Check for pause after each entry (express.e:27613)
-        const shouldContinue3 = await flagPause(socket, session, entry.rawLines.length);
-        if (!shouldContinue3) {
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          return;
+          // Display file entry and allow the pause handler to decide when to stop
+          const shouldContinueEntry = await this.displayFileEntry(socket, session, displayLines);
+          if (!shouldContinueEntry) {
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            return;
+          }
         }
-      }
       }
 
       socket.emit('ansi-output', '\r\n');
@@ -286,10 +283,15 @@ export class FileListingHandler {
     socket: Socket,
     session: Session,
     lines: string[]
-  ): Promise<void> {
+  ): Promise<boolean> {
     for (const line of lines) {
       socket.emit('ansi-output', line + '\r\n');
+      const shouldContinue = await flagPause(socket, session, 1);
+      if (!shouldContinue) {
+        return false;
+      }
     }
+    return true;
   }
 
   /**

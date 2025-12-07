@@ -62,6 +62,33 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOGS_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOGS_DIR"
 
+# Rotate old logs
+cleanup_logs_dir() {
+  local retention_days=${LOG_RETENTION_DAYS:-7}
+  local max_files=${LOG_MAX_FILES:-250}
+
+  printf "%b\n" "${CYAN}→ Cleaning up old logs (retain ${retention_days}d, max ${max_files} files)...${RESET}"
+
+  # Remove stale logs older than retention window
+  find "$LOGS_DIR" -maxdepth 1 -type f -name "*.log" -mtime +"$retention_days" -print -delete 2>/dev/null
+
+  # Trim file count if still too high
+  local log_count
+  log_count=$(find "$LOGS_DIR" -maxdepth 1 -type f -name "*.log" 2>/dev/null | wc -l)
+  while [ "$log_count" -gt "$max_files" ]; do
+    local oldest
+    oldest=$(find "$LOGS_DIR" -maxdepth 1 -type f -name "*.log" -printf '%T@ %p\n' | sort -n | head -n 1 | cut -d' ' -f2-)
+    if [ -n "$oldest" ]; then
+      rm -f "$oldest"
+    else
+      break
+    fi
+    log_count=$(find "$LOGS_DIR" -maxdepth 1 -type f -name "*.log" 2>/dev/null | wc -l)
+  done
+}
+
+cleanup_logs_dir
+
 # Clean backend build artifacts that can cause stale runtime
 # CRITICAL: Remove stale .js files that override .ts files when using tsx
 printf "%b\n" "${CYAN}→ Cleaning stale .js files in amiga-emulation...${RESET}"
