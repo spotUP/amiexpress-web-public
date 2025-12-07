@@ -1,0 +1,56 @@
+/*
+** $VER: TTX_SASC.dfn 2.1 (17.8.93)
+**      By Kenneth Yarnall.  This code may be freely distributed.
+**
+**   Attaches menus and function key equivalents to TurboText.  Either
+** merge this file with TURBOTEXT:Support/Startup.dfn, or insert the lines
+**
+**      LINKS:
+**        TURBOTEXT:Support/TTX_SASC.dfn
+**
+** at the end of that file, or use SetDefs.ttx (see docs).
+*/
+
+MENUS: APPEND
+
+MENU " SAS/C "
+    ITEM "Make Project...  F6" "" ExecArexxMacro Rexx:TTX_SASC/Build.ttx
+    ITEM "Compile File... ^F6" "" ExecArexxMacro Rexx:TTX_SASC/Compile.ttx
+    ITEM "Options...        »" "" NOP
+    	SUB "General   F7" "" ExecArexxMacro Rexx:TTX_SASC/SetOptions.ttx
+    	SUB "Link on     " "" ExecTool "SC:C/scopts LINK"
+    	SUB "Link off    " "" ExecTool "SC:C/scopts NOLINK"
+
+    ITEM "Debug Program     »" "" NOP
+        SUB "CLI" "" ExecArexxMacro Rexx:TTX_SASC/CPR.ttx cli
+        SUB "WB " "" ExecArexxMacro Rexx:TTX_SASC/CPR.ttx wb
+
+MENU " SCMsg "
+    ITEM "Start Browser " "" ExecArexxMacro Rexx:TTX_SASC/StartSCMsg.ttx
+    ITEM "Show Browser  " "" ExecArexxString "Address SC_SCMSG; Show"
+    ITEM "Hide Browser  " "" ExecArexxString "Address SC_SCMSG; Hide"
+    ITEM "Clear Browser " "" ExecArexxString "Address SC_SCMSG; Clear"
+    BAR
+    ITEM "Current    F8" "" ExecArexxMacro Rexx:TTX_SASC/ErrorStep.ttx
+    ITEM "Previous   F9" "" ExecArexxMacro Rexx:TTX_SASC/ErrorStep.ttx prev
+    ITEM "Next      F10" "" ExecArexxMacro Rexx:TTX_SASC/ErrorStep.ttx next
+    ITEM "First        " "" ExecArexxMacro Rexx:TTX_SASC/ErrorStep.ttx top
+    ITEM "Last         " "" ExecArexxMacro Rexx:TTX_SASC/ErrorStep.ttx bottom
+    ITEM "Delete       " "" ExecArexxString "Address SC_SCMSG; Delete"
+#
+
+KEYBOARD:  APPEND
+
+F6              ExecArexxMacro Rexx:TTX_SASC/Build.ttx
+CTRL-F6         ExecArexxMacro Rexx:TTX_SASC/Compile.ttx
+SHIFT-CTRL-F6   ExecArexxMacro Rexx:TTX_SASC/Build.ttx protos
+F7              ExecArexxMacro Rexx:TTX_SASC/SetOptions.ttx
+F8              ExecArexxMacro Rexx:TTX_SASC/ErrorStep.ttx
+F9              ExecArexxMacro Rexx:TTX_SASC/ErrorStep.ttx prev
+F10             ExecArexxMacro Rexx:TTX_SASC/ErrorStep.ttx next
+
+ALT-C           ExecArexxMacro Rexx:CommentBlk.ttx
+CTRL-HELP       ExecArexxMacro Rexx:TTX_SASC/FunctionHelp.ttx
+/* This activates Martin's Autodoc xref macro -- not included */
+ALT-HELP        ExecArexxMacro Rexx:getxref.ttx
+#

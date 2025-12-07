@@ -1,0 +1,127 @@
+Copyright (c) 1993 SAS Institute, Inc, Cary, NC, USA
+All Rights Reserved
+
+This file describes some techniques for debugging
+devices.
+
+This explaination is broken up into two sections,
+
+1) Debugging Devices that do not create a new task or
+   debugging the code areas that run in the Users process,
+   
+   and
+  
+2) Debugging the task created by the device.
+
+=========================================================
+Debugging Devices in code area that run under the User's
+task.
+=========================================================
+
+This type of debugging is exactly like debugging a shared
+library. You can set a breakpoint on a function in the device
+by saying 
+
+   break example.device:DevBeginIO
+
+NOTE: CPR does not have any debugging information for the 
+      device until the OpenDevice() call has returned. Therefore
+      this technique will not work for setting a breakpoint
+      on the Init(), or Open(), or UserDevInit() routine in 
+      the device.
+
+Here's a trick for debugging the UserDevInit() if you have Enforcer
+and SegTracker running.
+
+At the start of the UserDevInit() insert a harmless enforcer hit, ie
+  {
+        volatile char *a = 0;
+        *a = 0;
+  }
+  
+Run CPR on the program that opens your device.
+Run the program by typing
+
+  go
+
+CPR will stop at the enforcer hit and display assembly source. Remember
+that OpenDevice() has not yet returned, to CPR has no debugging
+information.  To load  the debugging information, type
+
+  symload
+  
+This form of the command will ask SegTracker for the name and seglist of
+the current PC, and load debug information. If the device load module
+is not in the current directory, you may need to tell symload the absolute
+path to the load module. To do this type
+
+  symload PC pc "<filename>"
+
+Make sure "filename" is enclosed in quotes.  For example, if the correct
+filename is "sc:examples/example_device/example.device", you would type
+
+  symload PC pc "sc:examples/example_device/example.device"
+
+=========================================================
+Debugging the task created by the device.
+=========================================================
+
+There are two important items to remember when setting breakpoints
+in code from a device that executes as a second task.
+
+  1) Be sure to set the breakpoint at a location so that once the
+     PC gets there, CPR will have debugging information for that process.
+     When debugging a device, CPR does not have debugging information
+     about the device until the OpenDevice() call returns. For this
+     example, you can set a breakpoint at cmd_handler() line 70. This
+     location is safe because line 69 waits for the first message to
+     be sent to it from the BeginIO() routine.
+     
+  2) Make sure that CPR has control of the task that hits a breakpoint.
+     CPR implements breakpoint by inserting ILLEGAL instructions. If a
+     task that is not under CPR's control hits the breakpoint, the program
+     will get a Software Error 4.
+    
+Here are the steps for debugging the second task of this example
+device.
+
+1) Start CPR on the driver program. The driver program will do the
+   OpenDevice().
+   
+      cpr driver
+      
+2) Turn on catch new tasks, and catch devices.
+    
+      opt catch on
+      opt device on
+      
+3) Set a breakpoint in the code for the new task.
+
+      break example.device:cmd_handler 70
+      
+4) Run the program.
+ 
+      go
+      
+5) CPR should stop at line 70 of cmd_handler() and display the source
+   for serial.c. You can now lists the tasks under CPR's control.
+   
+      tasks
+      
+6) Notice that four tasks are currently under CPR's control. The two
+   extra tasks were created by the Open() of con: on lines 58 and 60.
+   We don't want to debug them, so let them run by detaching them.
+   
+      detach "CON"
+      detach "CON"
+      
+7) Now list the tasks again. You should see only two.
+     
+      tasks
+      
+
+At this point you can continue debugging as normal.
+
+If you want to debug a location before line 70 of this example,
+or before place where the OpenDevice() is known to have completed,
+use the Enforcer/SegTracker trick explained above.

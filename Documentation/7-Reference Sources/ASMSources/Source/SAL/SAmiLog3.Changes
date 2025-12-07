@@ -1,0 +1,134 @@
+DONE: 
+; 32 node compatable. (Actually, 100 node compatable, even if /X isn't!)
+; added checking of ^C
+; char(255) can now be used in filenames, as well as "-"
+; Only last 50kbytes of callerslog read into mem. Saves mem on large files.
+; Fixed a few illegal uses of system library return codes.
+; Now tells you (where applicable) which file was trying to be used before
+; an error happens... So you don't have to have SnoopDOS to find out what
+; went wrong anymore...
+; upto $FFFF rnd-lines instead of $FF
+; Fixed bug where it would not count a resumed-upload if it was the first
+; thing to be uploaded for that particular call.
+; Before it was possible for people to logoff very near to midnight and for
+; their stats to be added to the wrong day. (not a major problem, but fixed)
+
+; Known "Bug": If a user stays on for over 24-hours, their time online will
+; be calculated as the remainder when their actual time online is divided by
+; 24-hours. Hardly a real problem for anyone; There's no point adding extra
+; code to allow for the occassional (more like non-existant) nutter-caller.
+
+
+
+TO DO:
+
+Optionally not display new-users (coz they might have sad names etc)
+
+For internal last-callers design, these must be added:
+OPS: Logoff-Times Full-Nodes Show-Files NoRecords
+
+Clean up the variables :- I'm sure that (eg the input-file stuff) some
+things are being stored in two places for different routines when they could
+just share the single variable...
+Get rid of the Temp things for named variables (perhaps).
+
+Make clear routine setup default DAY values, EG DD-MMM-YY string etc.
+; Check the other parts of the storage file as well!...
+
+Can ENV contain something like just "BBS:" or "DH1:" or "SAL:" ??
+
+What happens if online for over 10 hours? NOTE: Over 24hours not possible.
+
+Call as door and it'll output for them, taking their screen-lines into
+account (and their ANSI), and an ENV with the output styles to use...
+
+; Output with:
+;           USER1          USER2          USER3
+; Name:     P0T-NOoDLE     Hydro          ErpMAster
+; Location: MTFKRZ!        *DCS*FANTASIA  ErpyerpLand
+; Actions:  [------]       [----d-]   etc etc
+
+; strip minicalleslog automatically once a day (DayRunner.exe)
+
+; Bar chars not only for calls/hour, minsused/hour, but also for the daily
+; stats for comparison of the weeks/average stats.
+
+; Implement last five uploads. (In storage file, but unused)
+
+; Implement Nº of updates. (In storage file, but unused)
+
+; CPS Upto 5 digits (or MORE!) (use longword instead of ASCII)...
+
+; update the information on the help text screen.
+
+
+
+
+
+Check that:
+
+Sends invalid callerslog when:
+	cannot find 40 stars in last 50k
+	No ")" at end of connect.
+	No ":" in date string.
+	No "]" at end of user numb.
+
+Should work when:
+	no connect string. (or space).
+	no/invalid logoff time.
+	file is moved to LCFiles (File(s) but no "byte",10 thing)
+
+	when upld/dnl info line is screwed (things missing, too many
+	digits, etc)
+
+
+
+
+------ Rest is message from big boss ... -------------------------------------
+
+Date   : Mon Sep 20 09:26:55 1993         Number: 403
+To     : P0T-NOODLE                       Recv'd: Fri Sep 24 09:29:23 1993
+From   : BIG BOSS                         Status: Private Message
+Subject: bug?
+
+I think i found a samilog bug.  It is not counting all the upload bytes
+making it so that there appears to be less dl bytes a day that there really
+is.  I have an example of this where a user uploads a file, then several
+more after that are skipped and at the end it shows 1 file 1227k bytes
+etc... and it shows 0 for the uploads in the last 10.  Here is a cut out of
+this:
+
+**************************************************************
+09-20-93 (08:52:44) [267] EneRgie & Sky (CONNECT 14400/ARQ/HST/HST/V42BIS) Portugal Finest!
+	Conference 2: > RAZOR 1911 WHQ-PC < Auto-ReJoined
+	Menu Command >:u
+	Resuming st_updt.zip  1298049 bytes [ 43008]
+	Upload Failed..
+	Menu Command >:z studio u
+	Menu Command >:u
+	Resuming st_updt.zip  1298049 bytes [139264]
+	 1 file(s), 1267k bytes, 11 minute(s). 50 second(s), 1630 cps, 113 % efficiency.
+	Skipped sealtdoc.zip
+	Skipped nr-fintd.zip
+	Skipped pshop33a.zip
+	Skipped pshop33b.zip
+	Skipped pshop33c.zip
+	Skipped dmp265.zip
+	Skipped portpls1.zip
+	Skipped portpls2.zip
+	Upload moved to EH4:PC/st_updt.zip
+	Menu Command >:n s u
+	Directory Scan for (09-19-93)
+	Menu Command >:g
+09-20-93 (09:10:50) EneRgie & Sky Off Normally
+
+Here's the log out of the mini_callerslog:
+
+14.4 6 EneRgie & Sky    Portugal Finest!    08:52:44 [----U-] 0:18    0    0
+
+So maybe it has to do with the resume stuff, but I am not sure if that's
+true either.  This may have happened before but i seldomly pay attention to
+it but now i will.
+ 
+Have fun with it!
+

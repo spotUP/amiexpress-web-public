@@ -1,0 +1,30 @@
+/*
+**  $VER: SetOptions.ttx 2.1 (17.8.93)
+**      By Kenneth Yarnall.  This code may be freely distributed.
+**
+**  Finds the current directory and runs scopts there, on the public screen
+** that is indicated by TTX's GetScreenInfo call.
+*/
+
+
+Options RESULTS
+
+/* Get pubscreen name from TTX */
+
+GetScreenInfo
+Parse VAR RESULT . '"' pubscrname '"'
+
+GetFilePath
+path = RESULT
+
+path = 'Rexx:TTX_SASC/GetPathPart'(path)
+
+Address 'COMMAND'
+'run cd '|| path || ' +',
+     || '0A'X || 'sc:c/scopts PUBSCREEN ' || pubscrname || ' +',
+     || '0A'X || 'sc:c/scopts'
+
+/*
+**  The '0A'X is a LF, and strings the CD and scopts together.
+** Does that work under 1.3?
+*/

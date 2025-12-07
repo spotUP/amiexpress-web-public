@@ -1,0 +1,13 @@
+all: chess1 chess2
+
+chess1: chess1.o
+   sc link chess1.o
+
+chess2: chess2.o
+   sc link chess2.o
+
+chess1.o: chess1.cxx
+chess2.o: chess2.cxx
+
+.cxx.o:
+   sc $<

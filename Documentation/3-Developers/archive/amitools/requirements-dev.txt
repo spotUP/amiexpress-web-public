@@ -1,0 +1,6 @@
+cython
+sphinx
+twine
+tox
+black
+build

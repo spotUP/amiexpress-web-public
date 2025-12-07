@@ -1,0 +1,179 @@
+/*rx
+ *  Compile.ced ... ARexx program to compile and review error/warning
+ *  messages in SAS/C 6.2 programs while within CED Pro 2.12.
+ *  Requires (minimum tested versions): ARexx 1.15, SAS/C 6.2, CED Pro 2.12
+ *
+ *  Copyright © 1992, 1993  Loren J. Rittle
+ *  Use as you will, just document your changes and keep my copyright and
+ *  header comment notice intact.  SAS and ASDG have explicit permission to
+ *  include this work in their respective compiler/editor packages.  All
+ *  other commercial use is prohibited.  This ARexx program must be
+ *  distributed in source form.  This work is provided in the hopes that
+ *  it will be useful, but no warranty is implied or given.
+ *
+ *  Based upon past non-scmsg based versions of Compile.ced,
+ *  Copyright © 1990, 1991  Loren J. Rittle
+ *
+ *  Loren J. Rittle (rittle@comm.mot.com)
+ *  Sun Apr 18 03:06:46 1993
+ *
+ *  Notes:
+ *
+ *  Your env:sc/SCMSG file should contain lines that look something
+ *  like the following to work with CED:
+ *
+ *	PORTNAME rexx_ced
+ *	EDITCOMMAND ed "%f"
+ *	GOTOFILE send dos/arexx command... "rexx:ced/GotoFile.ced %f"
+ *	GOTOLINE jumpto %l 1
+ *
+ *  Compile.ced doesn't use this interface due to
+ *  (what I believe to be) bugs in CED's (or possibly scmsg's) ARexx
+ *  interface support (I.e. I could never get CED to invoke an ARexx
+ *  macro sent from scmsg while Compile.ced was running.  One really
+ *  needs to use a macro instead of the plain 'open...' and 'jumpto'
+ *  because they, by themselves, are brain-damaged when it comes to this
+ *  type of use...).
+ *
+ *  Your env:sc/SCOPTIONS file should contain the following line:
+ *
+ *	ERRORREXX
+ *
+ *  I bind this macro to F6.  Hit once to compile, then again
+ *  to step through the errors.
+ */
+
+/* NO GENERAL USER MODIFIABLE PARTS BELOW THIS COMMENT. */
+
+options results
+options failat 31
+
+if ~show(ports, SC_SCMSG) then
+  do
+    address command 'run <nil: >nil: sc:c/scmsg'
+    address command 'waitforport SC_SCMSG'
+  end
+
+address SC_SCMSG 'next'
+if rc = 0 then
+  address SC_SCMSG 'file'
+if rc ~= 0 | result = 'compile.ced' then
+  do
+    'okay2' 'Rebuild error/warning database?'
+    if result then
+      do
+	address SC_SCMSG 'clear'
+	some_changes = 0
+	status 66; views = result
+	do i = 1 to views-1
+	  'next view'
+	  status 18; changes = result
+	  if changes ~= 0 then
+	    some_changes = 1
+	end
+	'next view'
+	if some_changes then
+	  do
+	    'okay2' 'Save all changes?'
+	    if result then
+	      'save all changes'
+	    else
+	      do
+		status 18; changes = result
+		if changes ~= 0 then
+		  do
+		    'okay2' 'Save changes to this one file at least?'
+		    if result then
+		      'save'
+		  end
+	      end
+	  end
+	else
+	  do
+	    status 18; changes = result
+	    if changes ~= 0 then
+	      do
+		'okay2' 'Save changes to this file?'
+		if result then
+		  'save'
+	      end
+	  end
+	'getstring' "'smake <nil: >nil: -sk' 'Enter command to rebuild database:'"
+	commandline = result
+	if word(commandline,1) = 'smake' then
+	  if ~exists('makefile') & ~exists('smakefile') then
+	    do
+	      'okay2' 'Warning: No [s]makefile, continue?'
+	      if ~result then
+		commandline = 'RESULT'
+	    end
+	if commandline = 'RESULT' then
+	  do
+	    status 19; filename = result
+	    commandline = 'sc' filename
+	    'okay2' 'Would you like to execute "'commandline'" instead?'
+	    if ~result then
+	      exit 0
+	  end
+	address SC_SCMSG 'newmsg "compile.ced" "compile.ced" 0 0 "" 0 Info 1 first placeholder, don''t delete'
+	address command commandline
+	commandrc = rc
+	address SC_SCMSG 'next'
+        address SC_SCMSG 'file'
+        if result = 'compile.ced' then
+          do
+	    if commandrc = 0 then
+	      'okay1' 'No errors/warnings.'
+	    else
+	      'okay1' 'Improper build or bad command.'
+	    exit 0
+          end
+      end
+    else
+      do
+	address SC_SCMSG 'number'
+	if result = '' then
+	  exit 0
+	'okay2' 'Recycle through error/warning database?'
+	if result then
+	  address SC_SCMSG 'next'
+	else
+	  do
+	    address SC_SCMSG 'prev'
+	    exit 0
+	  end
+      end
+  end
+
+address SC_SCMSG 'altfile'
+altfile = result
+if altfile ~= '' then
+  do
+    address SC_SCMSG 'altline'
+    altline = result
+    'jump to file' altfile
+    if ~result then
+      do
+	'open new'
+	'open...' altfile
+      end
+    'jumpto' altline '1'
+  end
+
+address SC_SCMSG 'file'
+file = result
+address SC_SCMSG 'line'
+line = result
+
+'jump to file' file
+if ~result then
+  do
+    'open new'
+    'open...' file
+  end
+'jumpto' line '1'
+
+address SC_SCMSG 'class'
+class = result
+address SC_SCMSG 'text'
+'okay1' class':' result

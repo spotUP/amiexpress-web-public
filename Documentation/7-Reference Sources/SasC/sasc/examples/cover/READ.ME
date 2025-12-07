@@ -1,0 +1,225 @@
+COVERAGE ANALYSIS EXAMPLE
+Copyright (c) 1992-1993 SAS Institute, Inc, Cary, NC USA
+All Rights Reserved
+-------------------------
+
+To use coverage analysis, you must compile your code with the "COVER"
+option enabled.  The SCOPTIONS file in this directory specifies the
+necessary options.  Do not use the OPTIMIZE option with COVER, since
+it will make the line number information inaccurate.
+
+When you link your program, you must use one of the SAS/C provided 
+startup modules that supports autoinitialization and autotermination
+functions.  For example, c.o, cres.o, cback.o, catch.o, and libinitr.o
+will all work.
+
+**** IMPORTANT ****  
+The order in which you execute the following steps in very important.  If
+you do  not execute the steps in this order, you may get incorrect
+results.  
+
+If you have tried this example before, be sure to delete the file cover.dat
+from the current directory before running it again.
+
+
+TO RUN THE COVERAGE UTILITY, DO THE FOLLOWING FROM THE SHELL
+------------------------------------------------------------
+1. Enter the following command:
+
+      SC test.c test2.c
+      
+   This will compile and link the test C source file so that its executable
+   includes the information needed by the coverage utility.  Note that
+   the SCOPTIONS file in this directory specifies the COVER option, so 
+   you do not need to specify it on the command line.  When you try to
+   apply coverage to your own projects, you will need to specify the
+   COVER option in your SCOPTIONS file or on the command line to
+   generate coverage analysis code.
+
+------------------------------------------------------------
+2. Run the test program:
+
+      test
+
+   It will produce the output
+   
+      USAGE: test <number>
+
+   Running test creates a file called cover.dat which contains
+   information about which lines were executed when you ran test.
+   
+------------------------------------------------------------
+3. Run the cover utility
+
+      cover
+
+   It will produce the output
+
+      In file test.c
+                             37 Lines,       11 not executed
+      In file test2.c
+                              9 Lines,        4 not executed
+
+   Running cover produces a file called test.cov and a file called test2.cov.
+   These files contain a copy of your test.c and test2.c source code.  They also 
+   contain arrows pointing to each line of your program that generates code which
+   was not executed.  A .cov file will be produced for every .c  that generated 
+   code.
+   
+------------------------------------------------------------
+4. Examine the first output file, test.cov.
+
+      se test.cov
+
+   What you will see in the editor is the following.  The lines prefaced
+   by arrows (==>) generated code but were not executed in this run.
+
+           1  #include <stdio.h>
+           2  #include <stdlib.h>
+           3  
+           4  int test2(int);
+           5  
+           6  int main(int argc, char *argv[])
+           7  {
+           8     int num;
+           9  
+          10     if(argc<2)
+          11     {
+          12        fprintf(stderr, "USAGE: test <number>\n");
+          13        exit(20);
+          14     }
+          15  
+==>       16     num = atoi(argv[1]);
+==>       17     if(num < 0)
+          18     {
+==>       19        printf("Number is negative\n");
+          20     }
+==>       21     else if(num<10)
+          22     {
+==>       23        printf("0 <= Number < 10\n");
+          24     }
+==>       25     else if(num <100)
+          26     {
+==>       27        printf("10 <= Number < 100\n");
+          28     }
+==>       29     else
+          30     {
+==>       31        printf("Number >= 100\n");
+          32     }
+          33  
+==>       34     test2(num);
+          35  
+==>       36     return(0);
+          37  }
+
+   Exit the editor and return to the Shell.
+
+------------------------------------------------------------
+5. Run the program again with a valid option:
+
+      test 10
+
+   The program will produce the output
+
+      10 <= Number < 100
+       
+   The cover.dat file will be updated to reflect the new paths taken through your 
+   code by this execution of test.     
+
+------------------------------------------------------------
+6. Run the cover utility again:
+
+      cover
+
+   This time it generates the following message:
+
+      In file test.c
+                             37 Lines,        4 not executed
+      In file test2.c
+                              9 Lines,        2 not executed
+  
+   The cover utility evaluates the updated information and produces new .cov files
+   that reflect which lines were and were not executed in both runs of the program.
+   
+------------------------------------------------------------
+7. Examine the new output file test.cov:
+
+      se test.cov
+
+   Notice that this time fewer arrows appear.  This is because the test
+   cases exercised more of the program.  The lines that still have arrows
+   were not executed either of the two times you ran the program.
+
+           1  #include <stdio.h>
+           2  #include <stdlib.h>
+           3  
+           4  int test2(int);
+           5  
+           6  int main(int argc, char *argv[])
+           7  {
+           8     int num;
+           9  
+          10     if(argc<2)
+          11     {
+          12        fprintf(stderr, "USAGE: test <number>\n");
+          13        exit(20);
+          14     }
+          15  
+          16     num = atoi(argv[1]);
+          17     if(num < 0)
+          18     {
+==>       19        printf("Number is negative\n");
+          20     }
+          21     else if(num<10)
+          22     {
+==>       23        printf("0 <= Number < 10\n");
+          24     }
+          25     else if(num <100)
+          26     {
+          27        printf("10 <= Number < 100\n");
+          28     }
+==>       29     else
+          30     {
+==>       31        printf("Number >= 100\n");
+          32     }
+          33  
+          34     test2(num);
+          35  
+          36     return(0);
+          37  }
+
+   Exit the editor and return to the Shell.
+
+------------------------------------------------------------
+8. Execute the remaining branches of the code.  Enter the following
+   commands from the Shell, ignoring the output:
+
+      test  -1
+      test   1
+      test 101
+
+------------------------------------------------------------
+9. Run the cover utility one more time:
+
+      cover
+
+   You should see the following output:
+   
+      In file test.c
+                             37 Lines,        0 not executed
+      In file test2.c
+                              9 Lines,        0 not executed
+  
+
+------------------------------------------------------------
+10. Examine the results in test.cov:
+
+       se test.cov
+
+    No remaining lines have arrows.  The "test suite" you just executed exercises
+    all lines of the program.
+
+Notice that the file "cover.dat" reflects all tests run, not just the most
+recent one.  If you want the data to reflect only the most recently run
+test, rename or delete the file "cover.dat" before running the test.
+

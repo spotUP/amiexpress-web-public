@@ -1,0 +1,11 @@
+/* FunctionHelp.ttx:
+** Activates AmigaGuide help system for the function name
+** currently under (or to the left of) the cursor.
+*/
+
+options results
+'GetWord'
+options
+
+address 'COMMAND'
+'run >nil: amigaguide sc:help/sc_lib.guide doc ' || result || '()'

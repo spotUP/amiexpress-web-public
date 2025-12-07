@@ -1,0 +1,30 @@
+SPROFOBJS = sprof.o timer.o report.o
+
+all: test smalltest sprof
+
+test: sprof.gst test.o
+   sc link test.o to test
+
+smalltest: sprof.gst smalltest.o
+   sc link smalltest.o to smalltest
+
+smalltest.o: test.c 
+   sc test.c define SMALLTEST=1 profile objname=smalltest.o
+
+test.o: test.c 
+   sc test.c profile
+
+sprof: sprof.exe
+   slink sprof.exe to sprof nd
+
+sprof.exe: sprof.gst $(SPROFOBJS)
+   sc link $(SPROFOBJS) to sprof.exe nosmallcode
+
+sprof.gst: sprofpriv.h
+   sc sprof.c mgst sprof.gst noobjname
+
+sprof.o: sprof.c sprofpriv.h
+timer.o: timer.c
+
+clean:
+   -delete \#?.exe \#?.o \#?.map \#?.lnk #?.gst test sprof quiet force

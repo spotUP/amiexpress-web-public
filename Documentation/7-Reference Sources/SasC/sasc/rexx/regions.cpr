@@ -1,0 +1,24 @@
+/* Display the Memory regions */
+address 'COMMAND'
+'version >nil: exec.library 36 '
+lrc = rc
+
+if (rc = 0) then
+  check = addlib('rexxsupport.library',0,-30,0) 
+
+address
+
+execbase = import("00000004"x,4)
+liboff = 322
+nodebase = import(offset(execbase, liboff), 4)
+
+do while(import(nodebase,4) ~= "00000000"x)
+   attr  = 'attr' c2x(import(offset(nodebase,14),2))
+   lower = 'lower' c2x(import(offset(nodebase,20),4))
+   upper = 'upper' c2x(import(offset(nodebase,24),4))
+   first = 'first' c2x(import(offset(nodebase,16),4))
+   free  = 'free' c2d(import(offset(nodebase,28),4))||'.'
+   'd "'||c2x(nodebase) attr lower upper first free||'"'
+   nodebase = import(nodebase,4)
+end
+exit(0)

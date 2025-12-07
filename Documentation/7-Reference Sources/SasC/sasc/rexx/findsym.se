@@ -1,0 +1,26 @@
+/* SE AREXX macro */
+options results
+'GW'  /* Get word under cursor */
+options
+parm = result
+
+address command
+
+'sc:c/gst >t:gstout sc:include/all.gst ' || parm
+
+gstrc = rc
+
+dummy1 = open('gstout','t:gstout','read')
+where  = readln('gstout')
+dummy1 = close('gstout')
+
+address
+
+if(gstrc == 0) then do
+   parse var where file dummy1 line dummy2
+   'OW "' || file || '\n"'
+   'LL "' || line || '\n"'
+end
+
+'DM' || where
+

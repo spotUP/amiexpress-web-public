@@ -1,0 +1,104 @@
+*************************************************************************
+
+SAS/C® Version 6.50 should be installed from the WorkBench.  Double-click
+on the "Install_SASC_6.50" icon to run the installation program if you
+have not already done so.
+
+**************************************************************************
+
+   1. The directories SC:EXAMPLES and SC:EXTRAS contain useful
+      utility programs and examples of techniques that may prove
+      useful to you.  Not all of these utilities are described in
+      the manual.
+
+   2. Since the compiler's executables are now AmigaDOS shared
+      libraries, they remain in memory after your compile
+      finishes.  They will be automatically flushed out of
+      memory if they are not in use and some other program
+      needs the memory.  However, if you run out of fast
+      memory, the operating system starts using chip memory
+      before flushing the libraries.  Chip memory is much
+      slower than fast memory on Amigas with faster processors,
+      so this may slow down your program.
+
+      If you think this is happening to you, and you are running
+      AmigaDOS 2.0, use the AVAIL command as follows to flush any
+      shared libraries before running your program:
+
+         avail flush
+
+   3. The format of bitfields changed in Version 6.0.  If you have a
+      program that ran under version 5.10 or earlier that depends on the
+      order of bits in bitfields, it will no longer work.
+
+   4. By default, when you include the file proto/exec.h you get "syscall"
+      pragmas for all exec.library functions.  Another set of pragmas exists
+      for exec that use the "libcall" method via the library base SysBase.
+      Either set of pragmas will work.  The "syscall" pragmas find the
+      address of exec.library by looking at memory location 4.  The
+      "libcall" pragmas find it by looking at the external variable
+      "SysBase".
+
+      On Amigas with 68020 and higher processors, it is significantly faster
+      to use the "libcall" pragmas.  To do this, define the preprocessor
+      symbol "__USE_SYSBASE" on the command line or by using a #define
+      statement.  If you do this, make sure you include the file
+      <proto/exec.h> rather than <pragmas/exec_pragmas.h>.  If you do this
+      and you are not using one of the SAS/C supplied startup modules, you
+      will have to initialize the variable SysBase yourself as follows:
+
+         struct ExecBase *SysBase = *(struct ExecBase **)4;
+
+   5. If you are using a program or disk handler which compresses files on
+      your drive (such as EPU, XFH-Handler, etc.), be aware that these
+      programs can require large amounts of RAM to decompress.  If you start
+      seeing "*** Freeing Resources" messages from the compiler, this could
+      be the problem.
+
+      There are currently only two ways to work around this problem: don't
+      use the compression handler for compiler files (such as include: files,
+      etc.), or use the MEMSIZE switch to cause the compiler to use less
+      memory for itself.
+
+   6. Due to problems using the SetFunction() function under AmigaDOS 1.3,
+      CPR does not have the ability to set deferred breakpoints in shared
+      libraries or devices under 1.3.  You can still debug a shared library
+      or device by stepping into it and using the SYMLOAD command to load
+      the debugging information.
+
+   7. At the last minute, a new feature was added to the libraries as a
+      bonus for those of you who actually read this file!  Two external
+      variables, _WBArgc and _WBArgv, and some autoinitializer code to
+      initialize them are now defined in the link libraries.  If your
+      program is invoked from WorkBench, _WBArgc and _WBArgv contain
+      values corresponding to the (argc, argv) parameters to main().
+      These values are derived from the WBStartup message.  Include
+      the file <dos.h> to use them.
+      
+      _WBArgc is an int containing the number of meaningful entries
+      in _WBArgv.
+      
+      _WBArgv is a char ** containing a list of arguments.  _WBArgv[0]
+      is always the name of the program being run.  Any ToolTypes set
+      in the program's icon follow;  each ToolType is a seperate 
+      entry in the _WBArgv array.  Finally, any additional icons 
+      selected with SHIFT-CLICK or SHIFT-DOUBLE-CLICK show up as
+      filenames in the _WBArgv array.  A good way to use this new
+      feature is to add the following code to the beginning of 
+      your main() function:
+
+         if(argc == 0)
+         {
+            /* Invoked from WorkBench... use WorkBench arguments  */
+            /* Make sure <dos.h> was included earlier in order to */
+            /* declare _WBArgc and _WBArgv.                       */
+            argc = _WBArgc;
+            argv = _WBArgv;
+         }
+
+      With this code in place, your code will probably be able to 
+      run without being aware that it was actually invoked from
+      WorkBench.
+
+      Source code for the autoinit routine is in SC:SOURCE/WBARGS.C.
+

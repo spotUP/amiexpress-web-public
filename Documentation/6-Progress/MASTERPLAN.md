@@ -1,22 +1,22 @@
 # AmiExpress 1:1 Parity Masterplan (Revised)
-**Goal:** Keep every subsystem tied directly to the express.e intentions while ensuring readers can find the distilled knowledge in `Documentation/1-6` and the archives.
+**Goal:** Keep every subsystem tied directly to the express.e intentions while making the distilled knowledge easy to find via `Documentation/1-6` and the source archives.
 
 ## 1. Documentation Alignment
-- Each numbered directory now exposes a single summary doc (e.g., `1-Users/USER_GUIDE.md`, `2-Sysops/ADMINISTRATION.md`, `3-Developers/ARCHITECTURE.md`, etc.) that explains the current status and points to the archived legacy files inside `archive/`.
-- All command, door, and backend test harnesses now live under `Scripts/` (see `Scripts/README.md`) so automation is centralized and simple to locate.
-- Archives retain the detailed reference material, experiments, and investigations (AquaScan root cause, Arexx phase notes, door disassembly) without front-loading the main navigation structure.
-- All reference source code (doors, emulators, petscii assets) lives under `Documentation/7-Reference Sources/`, keeping textual docs concise while preserving the raw artifacts needed for 1:1 parity verification.
+- Each numbered directory exposes a single summary doc (e.g., `1-Users/USER_GUIDE.md`, `2-Sysops/ADMINISTRATION.md`, `3-Developers/ARCHITECTURE.md`, `4-Door-Developers/DOOR_DEVELOPMENT.md`, `5-Reference/COMMAND_REFERENCE.md`, `6-Progress/CURRENT_STATUS.md`) that explains the current state and links down to the richer `archive/` material.
+- The `Documentation/6-Progress` section now tracks progress via `CURRENT_STATUS.md`, `MILESTONES.md`, `KNOWN_ISSUES.md`, and a dedicated `archive/` of historical logs, while `handoff.md` records blockages for quick session handoffs.
+- `Scripts/README.md` documents where all testing and support harnesses live so contributors can find automation quickly.
+- Reference source material (petscii screens, vAmiga manuals, UADE bits, door sources, etc.) stays verbatim in `Documentation/7-Reference Sources/` so we can prove behavior 1:1 with express.e.
 
 ## 2. Engineering Progress
-- **BBS features**: Core commands, files, conferences, chat, and Arexx support have been retained to match express.e syntax and prompts; statuses are tracked in `CURRENT_STATUS.md`, `MILESTONES.md`, and `KNOWN_ISSUES.md`.
-- **Door operations**: AquaScan and WHO launch through the TypeScript harness, output logs exactly mimic express.e, and the `dir-file.util.ts` parser now separates ASCII art from metadata before writing `Dir1` entries.
-- **68K doors**: XIM protocol is stable (JH_/DT_/BB_ commands), but SIM doors still wait on clearing the synchronous `FindPort` handshake—this remains the main showstopper.
+- **BBS features**: Core commands, files, conferences, chat, and Arexx support remain in place, and the session tracking docs now point at the reorganized directories instead of the old scattered notes.
+- **Door operations**: AquaScan and WHO still run through the TypeScript harness with logs saved under `logs/door-68k-*`, and `dir-file.util.ts` now splits ASCII art from metadata so `Dir1` mirrors express.e at a 1:1 level.
+- **68K doors**: FR now pauses per terminal height but still needs validation inside the full BBS flow; SIM door work continues to chase the express.e `FindPort`/`DoorControl` sequence documented in `Documentation/4-Door-Developers/archive/`.
 
 ## 3. Stabilization & Next Steps
-1. **Finalize AquaScan FR pagination**: ensure every ASCII art line is placed into the continuation column so the rendered list never folds or double-draws, and adjust the pause frequency to match the user’s saved terminal height.
-2. **Verify AquaScan/WHO prompts**: confirm `press <RETURN>` prompts pause per screen and that any abnormal combinations (punctuation, `.` fragments) no longer break the layout.
-3. **Revisit SIM door emulation**: map the express.e lines that call `DoorControl` and `FindPort` to the TypeScript version, reviewing the archived `68K_DOOR_EMULATION_SUMMARY.md` for trap sequences.
-4. **Restore network/dependency access**: the sandbox currently resolves `registry.npmjs.org` to `ENOTFOUND`, blocking NPM installs and font downloads—this must be addressed before further door or frontend validation.
-5. **Keep referencing the archives**: when debugging (command handler, door IO, Arexx), consult the archived docs before changing code to remain 1:1.
+1. **Reproduce AquaScan FR in the live BBS** so `DOORUSE=FR/REVSCAN` is set, collect `logs/xim-output.log` plus `logs/door-68k-AquaScan_*`, and verify the ASCII art lines plus `press <RETURN>` pacing now match the express.e trace in `Documentation/4-Door-Developers/archive/AQUASCAN_ANALYSIS_SUMMARY.md`.
+2. **Translate `Dir1` parsing to the door** by ensuring the 68K harness consumes the clean continuation lines produced by `lookslikeAsciiArt`/`writeDirEntry`.
+3. **Continue the SIM door work** by aligning our TypeScript handshake with the documented `FindPort`/`DoorControl` sequence in `Documentation/4-Door-Developers/archive/68K_DOOR_EMULATION_SUMMARY.md`.
+4. **Fix sandbox network access**—`registry.npmjs.org` still resolves to `ENOTFOUND`, so the frontend/test harnesses can’t download fonts or NPM packages until that is corrected.
+5. **Keep referencing the archives** when debugging command handlers, door IO, or Arexx; they are the source-of-truth for any 1:1 parity work.
 
 Following these steps keeps the ship aligned with express.e behavior while giving new contributors a clean overview plus the ability to dig into the archived research when required.

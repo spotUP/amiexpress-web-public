@@ -1,0 +1,118 @@
+Example shared library
+Copyright (c) 1992-1993 SAS Institute, Cary, NC, USA
+All Rights Reserved
+
+This example shows you how to debug a shared library and how to
+profile a shared library.
+
+DEBUGGING SHARED LIBRARIES
+--------------------------
+
+To debug a shared library, perform the following steps:
+
+1. Build the library.
+
+   Just type "SMAKE" in the Shell or double-click on the "Build" icon.
+   
+   SMAKE will build the library "mylib.library" and install it in your
+   LIBS: directory.  It will build the test program "test" in the current
+   directory.
+
+2. Run the test program under the debugger.
+
+   From the Shell, type
+   
+      cpr test
+
+   or from Workbench, click on the "Debug" icon, hold down the SHIFT key
+   and double-click on the "test" icon.
+
+3. Let CPR know you want to debug shared libraries.
+
+   Type the following in the dialog window:
+   
+      opt reslib on
+
+   or use the mouse to select the "Step into Reslib?" menu item from the 
+   "Options" menu.
+
+4. Set a breakpoint in the library routine and proceed.
+
+   Type the following in the CPR dialog window:
+   
+      b mylib.library:LIBtest1
+      go
+
+   After typing "go", you should see CPR stop at the routine "test1" in
+   your library.  In your libraries, the prefix preceding the name may 
+   vary depending on how you specify the LIBPREFIX option.  Since this
+   example specifies a LIBPREFIX of _LIB, we use LIB in the debugger.
+   Only functions that are listed in your .fd file need the prefix.
+
+5. Use the debugger normally.
+
+   Anything you can do in the debugger under normal circumstances is legal
+   in the shared library.  Try setting the value of the external variable
+   "b":
+   
+      set b = 10
+      go
+
+   You should hit your breakpoint again.  Go to the workbench by clicking
+   on the front-to-back gadget in the upper right-hand corner.  You'll see
+   that the function test1 returned 10.
+
+6. Clear all breakpoints and allow the program to complete.
+
+      bc *
+      go
+
+   Note that under AmigaDOS 1.3, there will be a short delay because
+   the test program calls the Delay() function.  Under AmigaDOS 2.0, you
+   will have to go to the workbench and click on the close gadget of the
+   program before the program will terminate.
+
+PROFILING SHARED LIBRARIES
+--------------------------
+
+Note that the smakefile compiles "mylib.c" with the PROFILE compiler
+option.  This causes the compiler to generate special code at the
+entry and exit to each function that can be used by the SPROF utility
+to determine how much time you are spending in each of your subroutines.
+
+To try the profiling, type the following in a Shell:
+
+   sprof test
+
+Note that "test" is NOT compiled with profiling.  However, "test" does
+invoke the shared library which IS compiled with profiling.  When the
+shared library is loaded, the libinitr.o startup code runs the profiling
+autoinitialization function from the standard link library.  This
+autoinit function establishes communications with the SPROF utility.
+
+You could also choose to run SPROF seperately.  To do this, open two
+Shell windows.  In one window, type
+
+   sprof
+
+and in the other, type
+
+   test
+
+When the library gets loaded, from anywhere in the system, SPROF knows
+and begins profiling.
+
+You can run SPROF on the library from WorkBench in either of two ways:
+
+   1. Double-click the SPROF icon in SC:C, then double-click the TEST
+      icon.
+   
+   2. Single-click the SPROF icon in SC:C, then hold down the SHIFT
+      key and double-click the TEST icon.
+
+If SPROF is not running when the library is initialized, the library 
+executes with no profiling.
+
+The SPROF utility is supplied in SC:C, and the source code is provided
+in SC:EXTRAS/SPROF.  For more information and a more detailed example,
+see SC:EXAMPLES/PROFILE.

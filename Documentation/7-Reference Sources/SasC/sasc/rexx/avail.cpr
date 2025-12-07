@@ -1,0 +1,12 @@
+/* */
+address 'COMMAND'
+'version >nil: exec.library 36 '
+lrc = rc
+
+if (rc = 0) then
+  check = addlib('rexxsupport.library',0,-30,0) 
+
+address
+
+'d "' || storage() 'bytes free"'
+exit(0)

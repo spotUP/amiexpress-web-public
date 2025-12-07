@@ -1,0 +1,13 @@
+#
+# Makefile for Transfer Activities v2.0 - All rights reseved.
+# Copyright (c)1994-95 Bobo of Mystic.
+#
+
+OBJS= What.o
+
+Main: $(OBJS)
+   sc link with <<
+$(OBJS)
+<
+
+What.o: What.c structure.h

@@ -1,0 +1,13 @@
+all: abslink runtest test
+
+abslink: abslink.o load.o
+   sc link abslink.o load.o
+
+runtest: runtest.c
+   sc link runtest.c to runtest nostartup
+
+test: test.c
+   sc link test.c to test nostartup
+
+abslink.o: abslink.c load.h
+load.o: load.c load.h

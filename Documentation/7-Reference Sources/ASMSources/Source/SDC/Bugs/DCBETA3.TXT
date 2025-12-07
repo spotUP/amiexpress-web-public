@@ -1,0 +1,7 @@
+
+Carcass and Jake both reported bugs about getting "?" chars all over
+stripped-down file listings, I think when using SDirStrip.
+
+I haven't investigated this at all.
+
+	Leo (Pot-Noodle)

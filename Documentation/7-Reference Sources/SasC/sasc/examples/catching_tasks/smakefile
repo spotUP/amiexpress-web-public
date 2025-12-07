@@ -1,0 +1,8 @@
+all: loop dummy
+
+loop: loop.c
+   sc debug symbolflush loop.c link nostackcheck
+   
+dummy: dummy.c
+   sc debug symbolflush dummy.c link nostackcheck
+

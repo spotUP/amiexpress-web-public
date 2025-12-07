@@ -1,0 +1,188 @@
+Resident Program Example
+Copyright (c) 1993 SAS Institute, Inc, Cary, NC, USA
+All Rights Reserved
+
+
+Resident - What does it mean?
+-----------------------------
+
+On the Amiga, when you type the name of a program, it is loaded from
+whatever disk device it exists on into your computer's memory, and
+then executed.  There are two inefficiencies in executing commands in
+this way:
+
+   1. If the disk device is slow, your program may take some
+      time to load and begin running.  If you run the program more than
+      once, the system reloads it from the disk again and again.
+      
+   2. If you run the same program twice (for example, running an
+      editor twice to edit two different files) the system allocates
+      memory for the program twice, but puts the same code in both
+      copies.  This wastes memory.
+
+Both of these problems are addressed by making the program "resident".
+Resident programs are pre-loaded into memory.  Any future invocations
+of the program use the already-loaded copy instead of loading it from
+the disk.
+
+The main requirement for making a program resident is that it be a "pure"
+program.  "pure" in this context means that the code and data in memory
+must not change after the program is loaded.  If the code or data changed
+with each invocation, one run of a resident program might cause the next
+run of the same program to behave differently.
+
+Unfortunately, writing a truly pure program can be quite difficult, 
+especially if you are used to writing C programs using traditional
+coding styles.  For example, if you assign a value to a global or
+static variable, your program is no longer pure!  Assigning to the
+global modifies your program's data section, and the next invocation
+of your program will see your modified value.  Also, if two invocations
+of the program are running at the same time, they might end up "fighting"
+over the variable - each program would set the variable to the value it
+wanted, but only one could win!
+
+The Commodore Resident command will not allow you to make a program
+resident unless it has the 'p', or "pure" bit set (See your AmigaDOS manual for a
+description of the "Protect" command for a description of protection bits
+which can exist for a file), unless you force it to do so with the PURE
+keyword.  Once a program is made resident, however, the Commodore Shell
+will not complain if it actually is NOT a pure program.  Some other Shells
+WILL complain (for instance, WShell will report "***Impure resident
+module!" after you execute your resident program if it is not pure).
+
+What the "cres.o" Startup Module Does for You
+---------------------------------------------
+
+"cres.o" is a version of the standard "c.o" startup module that makes it
+easier for you to create programs which can be made resident.  "cres.o"
+ensures that your program will stay pure by making a COPY of your near
+data section each time the program is run.  This copy is deleted as soon
+as your program is finished, leaving the original for use the next time 
+you run your program.  This means that you can write external and static
+data as if your program was not resident.
+
+NOTE:  This only works for NEAR data.  It is up to you to make sure that no
+FAR (or __chip) data is written to, as there is no way for cres.o to make
+this work.  For details on near and far data, see the User's Guide, 
+Volume I, Chapter 12, "How Does the Compiler Work?".
+
+When you link with cres.o, the linker automatically sets the PURE bit
+to let the Resident command know that it's OK to make your program
+resident.
+
+Using cres.o
+------------
+
+Using this version of the startup code is simplicity itself.  You don't have
+to make any changes to your code.  All that needs to be done is to tell the
+compiler to use cres.o in place of c.o.
+
+FROM WORKBENCH
+
+Double-click the SCoptions icon to run the compiler options setting program.
+In the main window, click the 'NoLink' gadget until it reads 'Link' (should
+be one click).  Then click the 'LINKER OPTIONS' gadget to go to the Linker
+Options window.  Click on the 'Startup=' gadget until it reads
+'Startup=cres' (should be one click).  Then click on 'OK' and then 'Save'.
+
+FROM CLI
+
+The 'scopts' program may be used from the CLI as well as from Workbench.
+Simply type
+
+        scopts link startup=cres
+
+at the CLI prompt to set the proper options.
+
+
+Example
+-------
+
+In this directory is a file named "cres.c", which is an example of a program
+which won't work if made resident using the standard startup module.  It has
+global data which is modified every time it is run.  If you compile this
+program as-is (the 'Link' option is already specified), and then make it
+resident, you will see the problem.  Here are the step-by-step operations to
+see this work:
+
+        1) Open a Shell.  You can do this from the Workbench, or from within
+           the SE Editor, using the "Create New CLI" menu option, or by
+           pressing Ctrl-F within SE.
+
+           (We need to do this from a Shell as there is no easy way to use the
+           Resident command from the Workbench.)
+
+        2) Enter the command: sc cres.c
+        
+           (Since you have set the LINK option in the SCOPTIONS file, this
+           command will compile and link the program.)
+
+        3) Enter the command: Resident cr cres pure
+        
+           (This makes the program "cres" resident.  You can invoke it 
+           by typing "cr".)
+
+        4) Enter the command: cr
+
+           (It should print two lines of output, the second saying
+           "Everything's O.K.!"  If you are running WShell or some other
+           shell that detects impure resident modules, you should get
+           a warning now.)
+
+        5) Enter the command again: cr
+
+           (This time, it should print two lines of output again, but the
+           second line will say "Something's wrong!  check = nn", where 'nn'
+           equals some number other than 5.)
+
+        6) Enter the command: Resident cr remove
+
+           (Since it doesn't work correctly, we need to get rid of it!)
+
+If this program relied on the value of 'check' being 5 whenever is started
+running, you can see that it will fail on the second or subsequent runs.
+
+Now, to make this work, all we must do is enter the following command
+
+        scopts startup=cres
+
+this will add 'startup=cres' to our current options (leaving the 'Link'
+option set).
+
+Now, the following steps will demonstrate that the program has just been
+turned into a pure, residentable program, without having to change a line of
+code!
+
+        1) Open a CLI.
+
+        2) Enter the command: sc cres.c
+
+        3) Enter the command: Resident cr cres
+
+        4) Enter the command: cr
+
+           (It should print two lines of output, the second saying
+           "Everything's O.K.!")
+
+        -) Each time you repeat step 4, you should get the exact same
+           output.
+
+
+Synopsis
+--------
+
+Making programs resident has several advantages over non-resident status, if
+you have enough RAM to keep them around!
+
+There is no load time involved, since the code is already in place, and if
+you try to run multiple copies of the code at the same time, only one copy
+is actually needed, thereby using less RAM.
+
+To create a program which can be made resident, simply link with cres.o in
+place of c.o.  Then use the Resident command (or equivalent) to install the
+program in memory.
+
+Remember though, that cres.o will only work with near data.  If you must
+create a resident program which needs more than 64K of writable global data,
+you must use other techniques (such as runtime allocation, passing global
+structure pointers, etc.) which are beyond the scope of this article.

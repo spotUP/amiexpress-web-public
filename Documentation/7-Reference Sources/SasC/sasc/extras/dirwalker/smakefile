@@ -1,0 +1,12 @@
+SWORDOBJS = sword.o dirwalker.o
+SHOWOBJS = show.o dirwalker.o
+
+all: sword show
+
+sword: $(SWORDOBJS)
+   SC $(SWORDOBJS) LINK
+
+show: $(SHOWOBJS)
+   SC $(SHOWOBJS) LINK
+
+ 

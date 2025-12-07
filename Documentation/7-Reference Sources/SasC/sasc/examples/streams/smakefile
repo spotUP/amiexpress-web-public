@@ -1,0 +1,23 @@
+all: ifstream ofstream fstream istrstream ostrstream
+
+ifstream: ifstream.o
+   sc link ifstream.o
+
+ofstream: ofstream.o
+   sc link ofstream.o
+
+fstream: fstream.o
+   sc link fstream.o
+
+istrstream: istrstream.o
+   sc link istrstream.o
+
+ostrstream: ostrstream.o
+   sc link ifstream.o
+
+ifstream.o: ifstream.cpp
+ofstream.o: ofstream.cpp
+fstream.o: fstream.cpp
+istrstream.o: istrstream.cpp
+ostrstream.o: ostrstream.cpp
+

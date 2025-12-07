@@ -1,0 +1,156 @@
+*****************************************************************************
+* Option Oa - Output ANSI                                                   *
+*****************************************************************************
+OaSTxt	Dc.b	"Creating ANSI Output...",10
+OaSTxtL	Equ	*-OaSTxt
+	Even
+OppyOa	Tst.l	OutANSI_K(a5)		If ANSI output
+	Bne.s	OppyOaD			specified then continue.
+	RTS				If not, return.
+
+OppyOaD	Move.b	#0,Opt_F_1(a5)		Clear Options
+	Bsr	BigDAlo			De-Alocate Any Files In Memory
+
+	BSet	#X1_AnyRout,Fil_F_1(a5)	Signal that a routine has been run.
+	BClr	#F1_NoANSI,Fmt_F_1(a5)	Set ANSI mode.
+	Lea	OaSTxt(pc),a0
+	Moveq	#OaSTxtL,d3
+	Bra.s	Output_Main
+*****************************************************************************
+* Option On - Output Non-ANSI                                               *
+*****************************************************************************
+OnSTxt	Dc.b	"Creating Non-ANSI Output...",10
+OnSTxtL	Equ	*-OnSTxt
+	Even
+OppyOn	Tst.l	OutNoANSI_K(a5)		If Non-ANSI output
+	Bne.s	OppyOnD			specified then continue.
+	RTS				If not, return.
+
+OppyOnD	Move.b	#0,Opt_F_1(a5)		Clear Options
+	Bsr	BigDAlo			De-Alocate Any Files In Memory
+
+	BSet	#X1_AnyRout,Fil_F_1(a5)	Signal that a routine has been run.
+	BSet	#F1_NoANSI,Fmt_F_1(a5)	Set Non-ANSI mode.
+	Lea	OnSTxt(pc),a0
+	Moveq	#OnSTxtL,d3
+;;;;;;;	Bra.s	Output_Main
+*****************************************************************************
+* Option O - Main Output Routine for both ANSI and Non-ANSI                 *
+*****************************************************************************
+Output_Main
+	Bsr	CLIRite			Send the progress text.
+	Bsr	CkCtrlC			Check for Ctrl-C
+;---------------------------------------------------------------------------;
+	Bsr	LoadSto			Load Storage File Into Memory
+;---------------------------------------------------------------------------;
+	Bsr.s	LoadInputDesign		Load Input design...
+;---------------------------------------------------------------------------;
+	Move.l	In_FNam(a5),FNaFTxt(a5)	Adr input filename for FormTxt
+	Move.l	In_FAdr(a5),a0		Adr of START of Input for FormTxt
+	Move.l	a0,d5
+	Add.l	In_FSze(a5),d5		Adr of  END  of Input for FormTxt
+;---------------------------------------------------------------------------;
+	Bsr	FormTxt			Format Input -> File: COpnAdd(a5)
+;;;;;;;	WrtBlks MUST be called straight after FormTxt because d0 = Nº chars.
+	Bra	WrtBlks			Write Blocks to output file.
+;;;;;;;					This also deallocates the blocks.
+;===========================================================================;
+;;;;;;;	RTS for us.			Continue with next options...
+;---------------------------------------------------------------------------;
+RndHead	Dc.b	"!!",10,0		Check for at top of Input-files.
+RndHLen	Equ	*-RndHead
+	Even
+*****************************************************************************
+*****************************************************************************
+*****************************************************************************
+* Get name of input file. If internal, determine adr and fake it.           *
+*****************************************************************************
+LoadInputDesign
+	BSet	#X1_InGot,Fil_F_1(a5)	Set that an input has been chosen
+	Beq.s	LIDDoIt			If one has already been chosen,
+	RTS				skip loading/chosing another one.
+LIDDoIt	Tst.l	Design_K(a5)		Check if an external design was given
+	Beq	UseInternalDesign	If not, use an internal design.
+
+	Move.l	Design_K(a5),In_FNam(a5) Adr input filename for FormTxt
+	Move.l	Design_K(a5),FileNam(a5) Going to load the Input File...
+	Bsr	NRead			...Read it!
+
+	Move.l	FileAdr(a5),a0		Point to start of file.
+	Lea	RndHead(pc),a2		String to search for.
+	Move.l	a0,d6
+	Cmpi.l	#RndHLen+2,FileSze(a5)	Make sure file long enough...
+	Ble.s	Got_In			If not, can't be a file-list...
+	Addq	#RndHLen,d6		Adr to stop searching at.
+	Bsr	SAdrStr			Search for "!!",10
+	Tst.l	d3			0Bytes away = at top of file.
+	Bne.s	Got_In			NOPE, not list of outputs.
+*****************************************************************************
+;;;;;;;	Else the file we have loaded is a list of output filenames, one
+;;;;;;; of which we need to chose...
+	Move.l	FileAdr(a5),ListAdr(a5)	-.
+	Move.l	FileSze(a5),ListSze(a5)	 |_ Free standard pointers for
+	BClr	#SF1_InMem,STD_F_1(a5)	 |  loading input file.
+	BSet	#X1_InList,Fil_F_1(a5)	-'
+	Bne	Internal
+
+	Move.l	ListAdr(a5),a0		Point to the list.
+	Move.l	a0,a2
+	Add.l	ListSze(a5),a2		Adr of END of list-file.
+	Moveq	#0,d5			Clear d0 to count number of returns
+	Moveq	#10,d1			<Return> for speed.
+RetLoo3	Cmp.l	a2,a0			Are we at/past the EOF?
+	Bge.s	CtdRet2			YES=All returns counted...
+	Cmp.b	(a0)+,d1		Is this a return?
+	Bne.s	RetLoo3			Nope, Look at next character
+	Addq.l	#1,d5			Yes, 1 more return found...
+	SF	-1(a0)			Null the return for DOS-Filepaths...
+	Bra.s	RetLoo3			...Look for more
+
+CtdRet2	Subq.l	#1,d5			Don't count the first line. ("!!",10)
+	Ble	InvList			Less than 1 line = Error.
+	Cmpi.l	#$FFFF,d5		More than $FFFF lines?
+	Blt.s	DoneRe2
+	Move.l	#$FFFF,d5		Yes = Set to $FFFF lines
+DoneRe2
+;	NOW The number of lines (#rets) is in d5
+;===========================================================================;
+	Bsr	RndWord			Get #Rnd 0 to (d5-1) (NumLins) » d3
+;;;;;;; This is fine as the returned number will be how many nulls to FIND
+;;;;;;; (ie the line_number-1 - so for Line 1, d3=0 !)
+	Addq.l	#1,d3			Make it skip the 1st line ("!!",10).
+LinSel2	Move.l	ListAdr(a5),a0		Point to Start of the list...
+	Moveq	#0,d0			Null for speed.
+	Bra.s	RetSeJ2			Goto Line #d3 (count starts at 0!)
+RetLoo4	Cmp.b	(a0)+,d0		Is this a return?
+	Bne.s	RetLoo4			Nope, Keep looking...
+RetSeJ2	DBra	d3,RetLoo4		Yup, Keep looking till all returns found
+
+;;;;;;;	Now the new filename adr is in a0!
+
+	Move.l	a0,In_FNam(a5)		Adr input filename for FormTxt
+	Move.l	a0,FileNam(a5)		Going to load the Input File...
+	Bsr	NRead			...Read it!
+*****************************************************************************
+Got_In	Move.l	FileAdr(a5),In_FAdr(a5)	-.
+	Move.l	FileSze(a5),In_FSze(a5)	 |_ Free standard pointers for
+	BClr	#SF1_InMem,STD_F_1(a5)	 |  loading of other files in input.
+	BSet	#X1_Input,Fil_F_1(a5)	-'
+	Bne	Internal
+	RTS				Input loaded, continue...
+*****************************************************************************
+UseInternalDesign
+	Lea	Int_LC_Msg(pc),a0
+	Move.l	a0,In_FNam(a5)		Adr input filename for FormTxt
+	Lea	Int_LC_Dsn(pc),a0
+	Move.l	a0,In_FAdr(a5)		Set adr of input "file".
+	Move.l	#Int_LC_Dsn_Len,In_FSze(a5)
+;;;;;;;	Do not set #X1_Input, so that internal mem not freed.
+	BClr	#X1_Input,Fil_F_1(a5)	Make SURE its cleared.
+	Bne	Internal
+	RTS				Continue as if loaded from disk.
+
+Int_LC_Dsn	Incbin	ASM:Source/SAL/Outputs/Internal_Output
+Int_LC_Dsn_Len	Equ	*-Int_LC_Dsn
+Int_LC_Msg	Dc.b	"<Internal Last Callers Output>",0
+		Even
