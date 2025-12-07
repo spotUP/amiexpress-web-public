@@ -249,3 +249,11 @@ find Documentation/archive -name "FILENAME.md"
 **Documentation Version**: 2.0 (Reorganized Structure)
 ## Archive Pattern Update
 Each numbered directory now hosts an `archive/` subfolder that preserves the detailed legacy markdown files (root-level summaries remain front-and-center). Door/emulator/source archives live under `7-Reference Sources/` so readers can focus on summaries before stepping into the deep research notes.
+
+## Legacy Documents & Archives
+
+- `Documentation/AmiExpressDocs` moved to `Documentation/5-Reference/archive/AmiExpressDocs/` (legacy AmiExpress docs bundle).
+- `Documentation/amiga-emulation` now sits in `Documentation/4-Door-Developers/archive/amiga-emulation/` (emulation reports, debugging notes).
+- `Documentation/backend/amiexpress-docs` relocated to `Documentation/3-Developers/archive/backend-amiexpress-docs/` (backend-specific AmiExpress write-ups).
+- `Documentation/Amiga_SASC_v6_Manual_Volume1.html` lives under `Documentation/7-Reference Sources/Amiga_SASC/` for compiler reference.
+- `Screens/BBSTITLE.TXT` moved to `Documentation/5-Reference/archive/Screens/` alongside other screen-file artifacts.

@@ -1,0 +1,5 @@
+The .INFO Files now take control over the express system. The whole ACP.STARTUP has now been changed to single INFO Files where you put in the configuration. First of all make sure you installed the workbench, otherwise you can`t install AmiExpress V4.0 or above.
+
+For further information look at the section which describes all info files for installing AmiExpress. But first you must decide how many nodes you want to install to configurate your express the right way. Since version 3.60 you may have up to 32 nodes.
+
+We highly suggest that you store AmiExpress and all associated programs in a volume called BBS: this simplifies finding any problems you may have. Installing AmiExpress is fairly complicated so please be patient, even those who have run earlier version of AmiExpress should notice a lot of setup changes, Therefore there will not be any quick setup instructions.
