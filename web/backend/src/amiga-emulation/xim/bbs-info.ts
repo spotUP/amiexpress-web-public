@@ -357,6 +357,7 @@ export class XIMBBSInfoHandler {
     console.log(`[XIMBBSInfo] BB_NONSTOPTEXT: ${enable ? 'Enable' : 'Disable'} non-stop text`);
 
     this.state.nonStopText = enable;
+    this.state.lineCount = 0;
     this.reply(msg, 1);
   }
 

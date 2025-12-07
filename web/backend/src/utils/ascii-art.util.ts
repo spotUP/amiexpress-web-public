@@ -12,7 +12,7 @@ export function looksLikeAsciiArt(line: string): boolean {
   const digits = (trimmed.match(/[0-9]/g) || []).length;
   const nonAlphanumeric = trimmed.length - letters - digits;
   const punctuationRatio = nonAlphanumeric / trimmed.length;
-  const symbolMatch = trimmed.match(/[\-_/\\|=+*~`@#%^&\[\]\(\)<>]/g);
+  const symbolMatch = trimmed.match(/[:\-_/\\|=+*~`@#%^&\[\]\(\)<>]/g);
   const symbolCount = symbolMatch ? symbolMatch.length : 0;
   const leadingIndent = line.match(/^\s+/)?.[0].length || 0;
 
@@ -39,6 +39,21 @@ export function looksLikeAsciiArt(line: string): boolean {
 
   const artChars = (line.match(/[|_\/\\\-()]/g) || []).length;
   if (artChars >= 8 && letters + digits < trimmed.length * 0.8) {
+    return true;
+  }
+
+  const borderArt = /^[|:][\s\S]*[:|]$/.test(trimmed);
+  if (borderArt && symbolCount >= 2) {
+    return true;
+  }
+
+  const borderedLine =
+    trimmed.length >= 20 &&
+    trimmed.startsWith('|') &&
+    trimmed.endsWith('|') &&
+    trimmed.split('|').length >= 3 &&
+    symbolCount >= 4;
+  if (borderedLine) {
     return true;
   }
 

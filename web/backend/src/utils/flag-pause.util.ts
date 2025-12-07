@@ -39,7 +39,13 @@ export async function flagPause(
     session.tempData.lineCount = (session.tempData.lineCount || 0) + count;
   }
 
-  const userLineLen = session.user?.pageLength || 23;
+  const userLineLen =
+    session.tempData?.termHeight ||
+    session.screenHeight ||
+    session.user?.linesPerScreen ||
+    session.user?.lineLength ||
+    session.user?.pageLength ||
+    23;
 
   // Check if we need to pause
   // express.e:28031

@@ -27,7 +27,6 @@ import { displayMenuPrompt as menuDisplayMenuPrompt } from "./menu";
 
 // Import specific functions from input handlers module
 import { handleSpecializedInput as inputHandleSpecializedInput } from "./input-handlers";
-import { handleSysopMenuInput as inputHandleSysopMenuInput } from "./input-handlers";
 
 // Import specific functions from command execution module
 import { processBBSCommand as cmdExecProcessBBSCommand } from "./command-execution";

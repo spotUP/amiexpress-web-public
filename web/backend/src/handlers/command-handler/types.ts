@@ -63,7 +63,6 @@ export interface InputBufferState {
 // Session extensions for command handler
 export interface CommandSessionData extends BBSSession {
   commandText?: string;
-  inSysopMenu?: boolean;
   messageSubject?: string;
   messageBody?: string;
   messageRecipient?: string;

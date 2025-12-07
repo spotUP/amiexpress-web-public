@@ -1,1 +1,0 @@
-char *__MWLogName = "CON:0/0/639/199/MemLib/AUTO/CLOSE/WAIT";

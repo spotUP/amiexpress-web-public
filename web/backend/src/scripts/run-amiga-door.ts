@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { config } from '../config';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
@@ -55,6 +56,42 @@ async function runDoor(opts: RunnerOptions) {
     console.warn('[run-amiga-door] Failed to create drop files:', err?.message || err);
   }
 
+  const debugEnabled = process.env.DEBUG_XIM_OUTPUT === '1';
+  const debugLogPath =
+    process.env.DEBUG_XIM_OUTPUT_PATH ??
+    path.join(process.cwd(), 'logs', 'xim-output.log');
+
+  const instrumentedSocket = (() => {
+    let stream: fs.WriteStream | null = null;
+    const ensureStream = () => {
+      if (!stream) {
+        stream = fs.createWriteStream(debugLogPath, {
+          flags: 'a',
+          encoding: 'utf8',
+        });
+      }
+      return stream;
+    };
+
+    return debugEnabled
+      ? {
+          emit(event: string, payload?: any): void {
+            if (event === 'ansi-output' && typeof payload === 'string') {
+              ensureStream().write(payload);
+            }
+          },
+          on: () => {},
+          close(): void {
+            stream?.end();
+          },
+        }
+      : {
+          emit: () => {},
+          on: () => {},
+          close: () => {},
+        };
+  })();
+
   const session = {
     nodeId: opts.nodeId,
     nodeNumber: opts.nodeId,
@@ -74,11 +111,7 @@ async function runDoor(opts: RunnerOptions) {
     (path.basename(opts.execPath).toLowerCase().match(/bull|who/) ? 'XIM' : undefined);
 
   const amigaSession = new AmigaDoorSession(
-    // Null socket interface; AmigaDoorSession only emits events—mock with no-ops
-    {
-      emit: () => {},
-    on: () => {},
-    } as any,
+    instrumentedSocket as any,
     {
       executablePath: opts.execPath,
       args: opts.args,
@@ -93,7 +126,11 @@ async function runDoor(opts: RunnerOptions) {
     } as any
   );
 
-  await amigaSession.start();
+  try {
+    await amigaSession.start();
+  } finally {
+    instrumentedSocket.close();
+  }
 }
 
 async function main() {

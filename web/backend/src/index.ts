@@ -378,9 +378,6 @@ export interface BBSSession {
   accountEditorState?: any; // State tracking for account editor
   inputCallback?: (input: string) => Promise<void>; // Callback for input handling
 
-  // Sysop menu state
-  inSysopMenu?: boolean; // Whether user is currently in sysop menu
-
   // Command history (express.e:207-209, 2158-2168, 2669-2713)
   commandHistory: string[]; // Circular buffer of last 20 commands (historyBuf) - express.e:207
   historyIndex: number; // Current position for next command storage (historyNum) - express.e:208

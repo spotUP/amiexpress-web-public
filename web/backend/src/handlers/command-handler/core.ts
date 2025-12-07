@@ -5,7 +5,6 @@ import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
 
 // Import from other handler modules
 import { displayMenuPrompt } from "./menu";
-import { handleSysopMenuInput } from "./input-handlers";
 import { processBBSCommand } from "./command-execution";
 import {
   runSysCommand as execSysCommand,
@@ -147,12 +146,6 @@ export async function processCommand(
     session,
     `[CommandPriority] Processing command: ${command} with params: ${params}`
   );
-
-  // Handle sysop menu input routing
-  if ((session as any).inSysopMenu) {
-    await handleSysopMenuInput(socket, session, command);
-    return "SUCCESS";
-  }
 
   // Try SysCommand first
   const sysResult = await runSysCommand(socket, session, command, params);

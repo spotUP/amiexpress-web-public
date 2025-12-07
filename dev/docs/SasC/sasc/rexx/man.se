@@ -1,8 +1,0 @@
-/* bring up library help on a function */
-   
-options results
-'GW'
-options
-
-address 'COMMAND'
-'run >nil: amigaguide sc:help/sc_lib.guide doc ' || result || '()'

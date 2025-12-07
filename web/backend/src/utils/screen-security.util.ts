@@ -8,6 +8,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+const GRAPHIC_EXTENSIONS = ['.TXT.GR'];
+const TEXT_EXTENSIONS = ['.TXT', '.txt'];
+
 function resolveCaseInsensitivePath(targetPath: string): string | null {
   if (fs.existsSync(targetPath)) {
     return targetPath;
@@ -68,11 +71,11 @@ export function findSecurityScreen(
   // RIP mode checks .RIP first, PETSCII checks .seq first
   let extensions: string[];
   if (ripMode) {
-    extensions = ['.rip', '.RIP', '.TXT', '.txt'];
+    extensions = ['.rip', '.RIP', ...GRAPHIC_EXTENSIONS, ...TEXT_EXTENSIONS];
   } else if (petsciiMode) {
-    extensions = ['.seq', '.SEQ', '.TXT', '.txt'];
+    extensions = ['.seq', '.SEQ', ...GRAPHIC_EXTENSIONS, ...TEXT_EXTENSIONS];
   } else {
-    extensions = ['.TXT', '.txt'];
+    extensions = [...GRAPHIC_EXTENSIONS, ...TEXT_EXTENSIONS];
   }
 
   // express.e:6256-6260 - Check security screens

@@ -49,7 +49,6 @@ import {
   setSystemCommandsDependencies,
 } from "../system-commands.handler";
 import { WebhookCommandsHandler } from "../webhook-commands.handler";
-import { displaySysopMenu } from "../sysop-menu.handler";
 import {
   handleTimeCommand,
   handleNewFilesCommand,
@@ -218,19 +217,6 @@ function translateShortcut(session: BBSSession, raw: string): string {
     }
   }
   return keyStr;
-}
-
-// Export sysop menu input handler (used by core.ts)
-export async function handleSysopMenuInput(
-  socket: any,
-  session: BBSSession,
-  input: string
-): Promise<void> {
-  const {
-    displaySysopMenu: displaySysopMenuLocal,
-    handleSysopMenuInput: handleSysopMenuInputLocal,
-  } = require("../sysop-menu.handler");
-  await handleSysopMenuInputLocal(socket, session, input);
 }
 
 /**
@@ -587,7 +573,7 @@ async function handleProcessCommand(socket: any, session: BBSSession) {
   console.log("🔍 [AFTER COMMAND] subState is:", session.subState);
 
   // Skip menu display if Door Manager or Sysop Menu is active
-  if ((session as any).inDoorManager || (session as any).inSysopMenu) {
+  if ((session as any).inDoorManager) {
     console.log("✅ [AFTER COMMAND] Special mode is active - NOT showing menu");
     return;
   }

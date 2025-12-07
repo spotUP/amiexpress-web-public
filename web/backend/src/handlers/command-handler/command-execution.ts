@@ -46,7 +46,6 @@ import {
   handleEnterMessageCommand,
 } from "../system-commands.handler";
 import { WebhookCommandsHandler } from "../webhook-commands.handler";
-import { displaySysopMenu } from "../sysop-menu.handler";
 import {
   handleTimeCommand,
   handleNewFilesCommand,
@@ -400,10 +399,6 @@ export async function processBBSCommand(
 
     case "CM": // Conference Maintenance (SYSOP) (internalCommandCM) - express.e:24843-24852
       await handleConferenceMaintenanceCommand(socket, session);
-      return;
-
-    case "SYSOP": // Sysop Commands Menu - Central hub for all sysop commands
-      await displaySysopMenu(socket, session, params);
       return;
 
     case "WEBHOOK": // Webhook Management (SYSOP) - Custom web command
