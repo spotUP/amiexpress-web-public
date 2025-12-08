@@ -208,7 +208,7 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
  */
 export async function handleReadMessagesCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // Import and call the full implementation
-  const { handleReadMessagesFullCommand } = await import('./messaging.handler');
+  const { handleReadMessagesFullCommand } = await import('./message/messaging.handler');
   await handleReadMessagesFullCommand(socket, session, params);
 }
 

@@ -91,7 +91,7 @@ import {
   handleCMInput,
   handleCMNumericInput,
   setMessageCommandsDependencies,
-} from "../message-commands.handler";
+} from "../message/message-commands.handler";
 import {
   handleVersionCommand,
   handleWhoCommand,
@@ -149,7 +149,7 @@ import {
   handleEnterMessageFullCommand,
   handleMessageReaderNav,
   setMessagingDependencies,
-} from "../messaging.handler";
+} from "../message/messaging.handler";
 import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
@@ -174,7 +174,7 @@ import {
   handleMessageReplaceWithInput,
   handleMessageInsertLineInput,
   handleMessageInsertTextInput,
-} from "../message-entry.handler";
+} from "../message/message-entry.handler";
 
 // Import from other modules within command-handler
 import { displayMainMenu } from "./menu";

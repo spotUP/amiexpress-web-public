@@ -4,21 +4,21 @@
  * 1:1 port from express.e:28066-28120 confScan()
  */
 
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { AnsiUtil } from '../utils/ansi.util';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import {
   loadMsgPointers,
   updateScanPointer,
   validatePointers,
   getConferenceScanFlags
-} from '../utils/message-pointers.util';
-import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager';
-import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
-import { getAllMessageIds, readMessageFile, readMailStats } from '../utils/message-file.util';
-import { config } from '../config';
+} from '../../utils/message-pointers.util';
+import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManager';
+import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
+import { getAllMessageIds, readMessageFile, readMailStats } from '../../utils/message-file.util';
+import { config } from '../../config';
 
 // Dependencies injected from index.ts
 let _db: any = null;

@@ -3,14 +3,14 @@
  * 1:1 port from express.e:10749+ enterMSG()
  */
 
-import { BBSSession } from '../index';
-import { AnsiUtil } from '../utils/ansi.util';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkSecurity } from '../utils/security.util';
-import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
-import { writeMessageFile, formatMessageDate } from '../utils/message-file.util';
-import { config } from '../config';
+import { BBSSession } from '../../index';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkSecurity } from '../../utils/security.util';
+import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
+import { writeMessageFile, formatMessageDate } from '../../utils/message-file.util';
+import { config } from '../../config';
 
 
 // Dependencies (injected from index.ts)
@@ -384,7 +384,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     // Trigger webhook for new message
     console.log('[Message] About to trigger NEW_MESSAGE webhook');
     try {
-      const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+      const { webhookService, WebhookTrigger } = await import('../../services/webhook.service');
 
       const conference = await _db.getConferenceById(session.currentConf);
       const messageBase = await _db.getMessageBaseById(session.currentMsgBase);

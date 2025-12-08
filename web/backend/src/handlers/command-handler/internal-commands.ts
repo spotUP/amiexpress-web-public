@@ -65,7 +65,7 @@ import {
   handleNodeManagementCommand,
   handleConferenceMaintenanceCommand,
   setMessageCommandsDependencies
-} from '../message-commands.handler';
+} from '../message/message-commands.handler';
 import {
   handleVersionCommand,
   handleWhoDetailedCommand,
@@ -99,7 +99,7 @@ import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,
   setMessagingDependencies
-} from '../messaging.handler';
+} from '../message/messaging.handler';
 import { FileMaintenanceHandler } from '../file-maintenance.handler';
 import { handleJoinConferenceCommand } from '../user-commands.handler';
 import { displayDoorMenu } from '../door.handler';

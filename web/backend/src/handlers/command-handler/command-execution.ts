@@ -82,7 +82,7 @@ import {
   handleJMInput,
   handleCMInput,
   handleCMNumericInput,
-} from "../message-commands.handler";
+} from "../message/message-commands.handler";
 import {
   handleVersionCommand,
   handleWhoCommand,
@@ -132,7 +132,7 @@ import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,
   handleMessageReaderNav,
-} from "../messaging.handler";
+} from "../message/messaging.handler";
 
 // Import utilities
 import { AnsiUtil } from "../../utils/ansi.util";

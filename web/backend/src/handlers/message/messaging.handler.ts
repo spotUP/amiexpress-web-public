@@ -4,17 +4,17 @@
  * 1:1 port from AmiExpress express.e message commands
  */
 
-import { BBSSession } from '../index';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { EnvStat } from '../constants/env-codes';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { finalizeCommand } from '../utils/command-response.util';
-import { messageIndexManager } from '../services/MessageIndexManager';
-import { getAllMessageIds, readMessageFile } from '../utils/message-file.util';
-import { config } from '../config';
+import { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { EnvStat } from '../../constants/env-codes';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { finalizeCommand } from '../../utils/command-response.util';
+import { messageIndexManager } from '../../services/MessageIndexManager';
+import { getAllMessageIds, readMessageFile } from '../../utils/message-file.util';
+import { config } from '../../config';
 
 // Dependencies (injected)
 let _db: any;

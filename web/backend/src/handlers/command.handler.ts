@@ -110,7 +110,7 @@ import {
   handleCMInput,
   handleCMNumericInput,
   setMessageCommandsDependencies
-} from './message-commands.handler';
+} from './message/message-commands.handler';
 import {
   handleVersionCommand,
   handleWhoCommand,
@@ -168,7 +168,7 @@ import {
   handleEnterMessageFullCommand,
   handleMessageReaderNav,
   setMessagingDependencies
-} from './messaging.handler';
+} from './message/messaging.handler';
 import {
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
@@ -195,7 +195,7 @@ import {
   handleMessageReplaceWithInput,
   handleMessageInsertLineInput,
   handleMessageInsertTextInput
-} from './message-entry.handler';
+} from './message/message-entry.handler';
 
 import { finalizeCommand } from '../utils/command-response.util';
 
@@ -2321,7 +2321,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     if (data === '\r' || data === '\n') {
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
-      const { handleMessageReaderNav } = await import('./messaging.handler');
+      const { handleMessageReaderNav } = await import('./message/messaging.handler');
       await handleMessageReaderNav(socket, session, input);
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {

@@ -12,7 +12,7 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { db } from '../database';
-import { checkConfAccess } from './message-scan.handler';
+import { checkConfAccess } from './message/message-scan.handler';
 import { finalizeCommand } from '../utils/command-response.util';
 import { AnsiUtil } from '../utils/ansi.util';
 

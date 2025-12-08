@@ -82,7 +82,7 @@ import {
   displayMailScanScreen,
   setMessageScanDependencies,
   checkConfAccess
-} from './handlers/message-scan.handler';
+} from './handlers/message/message-scan.handler';
 import {
   setUserCommandsDependencies
 } from './handlers/user-commands.handler';
@@ -104,7 +104,7 @@ import {
 } from './handlers/advanced-commands.handler';
 import {
   setMessageCommandsDependencies
-} from './handlers/message-commands.handler';
+} from './handlers/message/message-commands.handler';
 import {
   setInfoCommandsDependencies
 } from './handlers/info-commands.handler';
@@ -119,7 +119,7 @@ import {
 } from './handlers/transfer-misc-commands.handler';
 import {
   setMessagingDependencies
-} from './handlers/messaging.handler';
+} from './handlers/message/messaging.handler';
 import {
   displayDoorMenu,
   executeDoor,
@@ -175,7 +175,7 @@ import {
   setGetUserStats,
   setFileMaintenanceDependencies
 } from './handlers/file.handler';
-import { setMessageEntryDependencies } from './handlers/message-entry.handler';
+import { setMessageEntryDependencies } from './handlers/message/message-entry.handler';
 import {
   handleAccountEditing,
   displayUserList,

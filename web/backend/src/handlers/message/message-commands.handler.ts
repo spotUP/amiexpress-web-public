@@ -7,15 +7,15 @@
  * - CM (Conference Maintenance) - SYSOP conference settings - express.e:24843-24852
  */
 
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkSecurity } from '../utils/acs.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { ParamsUtil } from '../utils/params.util';
-import { normalizeForComparison } from '../utils/input-normalizer.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkSecurity } from '../../utils/acs.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { ParamsUtil } from '../../utils/params.util';
+import { normalizeForComparison } from '../../utils/input-normalizer.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 interface MessageBase {
   id: number;
