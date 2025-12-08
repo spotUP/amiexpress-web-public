@@ -4,14 +4,14 @@
  */
 
 import type { Bulletin } from './types';
+import { BaseRepository } from './BaseRepository';
 
-export class BulletinRepository {
-  constructor(private db: any) {}
+export class BulletinRepository extends BaseRepository<any> {
+  constructor(db: any) { super(db); }
 
   async createBulletin(bulletin: { conferenceId: number; filename: string; title: string }): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO bulletins (conferenceid, filename, title)
       VALUES (?, ?, ?)
     `);
@@ -20,7 +20,6 @@ export class BulletinRepository {
   }
 
   async getBulletins(conferenceId?: number): Promise<Bulletin[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
     let sql: string;
     let params: any[];
@@ -33,7 +32,7 @@ export class BulletinRepository {
       params = [];
     }
 
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     const rows = stmt.all(...params) as any[];
 
     return rows.map(row => ({
@@ -47,9 +46,8 @@ export class BulletinRepository {
   }
 
   async getBulletinById(id: number): Promise<Bulletin | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM bulletins WHERE id = ?');
+    const stmt = this.prepare('SELECT * FROM bulletins WHERE id = ?');
     const row = stmt.get(id) as any;
 
     if (!row) return null;
@@ -65,9 +63,8 @@ export class BulletinRepository {
   }
 
   async deleteBulletin(id: number): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('DELETE FROM bulletins WHERE id = ?');
+    const stmt = this.prepare('DELETE FROM bulletins WHERE id = ?');
     stmt.run(id);
   }
 }

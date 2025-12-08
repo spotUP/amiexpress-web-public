@@ -7,14 +7,14 @@ import { messageFileManager } from '../services/MessageFileManager';
 import { messageIndexManager, MsgStatus } from '../services/MessageIndexManager';
 import type { Message } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { BaseRepository } from './BaseRepository';
 
-export class MessageRepository {
-  constructor(private db: any) {}
+export class MessageRepository extends BaseRepository<any> {
+  constructor(db: any) { super(db); }
 
   async createMessage(message: Omit<Message, 'id'>): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO messages (
         subject, body, author, timestamp, conferenceid, messagebaseid,
         isprivate, touser, parentid, attachments, edited, editedby, editedat
@@ -88,7 +88,6 @@ export class MessageRepository {
     userId?: string;
     search?: string;
   }): Promise<Message[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
     let sql = `
       SELECT m.*, mb.name as messageBaseName, c.name as conferenceName
@@ -122,7 +121,7 @@ export class MessageRepository {
       params.push(options.offset);
     }
 
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     const rows = stmt.all(...params) as any[];
 
     return rows.map(row => ({
@@ -144,7 +143,6 @@ export class MessageRepository {
   }
 
   async updateMessage(id: number, updates: Partial<Message>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const fields = Object.keys(updates).filter(key => key !== 'id');
     if (fields.length === 0) return;
@@ -162,12 +160,12 @@ export class MessageRepository {
     });
 
     const sql = `UPDATE messages SET ${setClause} WHERE id = ?`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     stmt.run(...values, id);
 
     // CRITICAL: Sync to disk file for Amiga door compatibility
     try {
-      const selectStmt = this.db.prepare('SELECT * FROM messages WHERE id = ?');
+      const selectStmt = this.prepare('SELECT * FROM messages WHERE id = ?');
       const row = selectStmt.get(id) as any;
 
       if (row) {
@@ -219,13 +217,12 @@ export class MessageRepository {
   }
 
   async deleteMessage(id: number): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     // Get message info before deleting for file cleanup
-    const selectStmt = this.db.prepare('SELECT conferenceid, id FROM messages WHERE id = ?');
+    const selectStmt = this.prepare('SELECT conferenceid, id FROM messages WHERE id = ?');
     const row = selectStmt.get(id) as any;
 
-    const stmt = this.db.prepare('DELETE FROM messages WHERE id = ?');
+    const stmt = this.prepare('DELETE FROM messages WHERE id = ?');
     stmt.run(id);
 
     // CRITICAL: Delete from disk files for Amiga door compatibility
@@ -259,9 +256,8 @@ export class MessageRepository {
   }
 
   async updateReadPointer(userId: number, conferenceId: number, messageBaseId: number, lastRead: number): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT OR REPLACE INTO conf_base (user_id, conference_id, message_base_id, last_msg_read_conf)
       VALUES (?, ?, ?, ?)
     `);
@@ -270,9 +266,8 @@ export class MessageRepository {
 
   // Online Line Messages (OLM) methods
   async sendOnlineMessage(fromUserId: string, fromUsername: string, toUserId: string, toUsername: string, message: string): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO online_messages (from_user_id, from_username, to_user_id, to_username, message)
       VALUES (?, ?, ?, ?, ?)
     `);
@@ -281,9 +276,8 @@ export class MessageRepository {
   }
 
   async getUnreadMessages(userId: string): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT id, from_user_id, from_username, message, created_at
       FROM online_messages
       WHERE to_user_id = ? AND delivered = 0
@@ -297,9 +291,8 @@ export class MessageRepository {
   }
 
   async getAllMessages(userId: string): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT id, from_user_id, from_username, message, created_at, delivered, read, delivered_at, read_at
       FROM online_messages
       WHERE to_user_id = ?
@@ -318,9 +311,8 @@ export class MessageRepository {
   }
 
   async markMessageDelivered(messageId: number): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE online_messages
       SET delivered = 1, delivered_at = strftime('%s', 'now')
       WHERE id = ?
@@ -329,9 +321,8 @@ export class MessageRepository {
   }
 
   async markMessageRead(messageId: number): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE online_messages
       SET read = 1, read_at = strftime('%s', 'now')
       WHERE id = ?
@@ -340,9 +331,8 @@ export class MessageRepository {
   }
 
   async getUnreadMessageCount(userId: string): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT COUNT(*) as count
       FROM online_messages
       WHERE to_user_id = ? AND delivered = 0
@@ -352,9 +342,8 @@ export class MessageRepository {
   }
 
   async deleteOLMMessage(messageId: number, userId: string): Promise<boolean> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       DELETE FROM online_messages
       WHERE id = ? AND to_user_id = ?
     `);

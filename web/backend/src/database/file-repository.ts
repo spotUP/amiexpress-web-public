@@ -6,14 +6,14 @@
 import { fileAreaManager } from '../services/FileAreaManager';
 import type { FileArea, FileEntry } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { BaseRepository } from './BaseRepository';
 
-export class FileRepository {
-  constructor(private db: any) {}
+export class FileRepository extends BaseRepository<any> {
+  constructor(db: any) { super(db); }
 
   async createFileEntry(file: Omit<FileEntry, 'id'>): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO file_entries (
         filename, description, size, uploader, uploaddate, downloads,
         areaid, fileiddiz, rating, votes, status, checked, comment
@@ -67,7 +67,6 @@ export class FileRepository {
     search?: string;
     status?: string;
   }): Promise<FileEntry[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
     let sql = 'SELECT * FROM file_entries WHERE areaid = ?';
     const params: any[] = [areaId];
@@ -95,7 +94,7 @@ export class FileRepository {
       params.push(options.offset);
     }
 
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     const rows = stmt.all(...params) as any[];
 
     return rows.map(row => ({
@@ -117,7 +116,6 @@ export class FileRepository {
   }
 
   async updateFileEntry(id: number, updates: Partial<FileEntry>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const fields = Object.keys(updates).filter(key => key !== 'id');
     if (fields.length === 0) return;
@@ -132,12 +130,12 @@ export class FileRepository {
     });
 
     const sql = `UPDATE file_entries SET ${setClause} WHERE id = ?`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     stmt.run(...values, id);
 
     // CRITICAL: Sync to .dir file for Amiga door compatibility
     try {
-      const selectStmt = this.db.prepare('SELECT * FROM file_entries WHERE id = ?');
+      const selectStmt = this.prepare('SELECT * FROM file_entries WHERE id = ?');
       const row = selectStmt.get(id) as any;
 
       if (row) {
@@ -177,9 +175,8 @@ export class FileRepository {
   }
 
   async getFileEntry(id: number): Promise<FileEntry | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT fe.*, fa.conferenceid as conferenceId
       FROM file_entries fe
       JOIN file_areas fa ON fe.areaid = fa.id
@@ -207,13 +204,12 @@ export class FileRepository {
   }
 
   async deleteFileEntry(id: number): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     // Get file info before deleting for disk cleanup
-    const selectStmt = this.db.prepare('SELECT filename, areaid FROM file_entries WHERE id = ?');
+    const selectStmt = this.prepare('SELECT filename, areaid FROM file_entries WHERE id = ?');
     const row = selectStmt.get(id) as any;
 
-    const stmt = this.db.prepare('DELETE FROM file_entries WHERE id = ?');
+    const stmt = this.prepare('DELETE FROM file_entries WHERE id = ?');
     stmt.run(id);
 
     // CRITICAL: Delete from .dir file for Amiga door compatibility
@@ -244,16 +240,14 @@ export class FileRepository {
   }
 
   async incrementDownloadCount(id: number): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('UPDATE file_entries SET downloads = downloads + 1 WHERE id = ?');
+    const stmt = this.prepare('UPDATE file_entries SET downloads = downloads + 1 WHERE id = ?');
     stmt.run(id);
   }
 
   async createFileArea(area: Omit<FileArea, 'id' | 'created' | 'updated'>): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO file_areas (
         name, description, path, conferenceid, maxfiles, uploadaccess, downloadaccess
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -296,9 +290,8 @@ export class FileRepository {
   }
 
   async getFileAreas(conferenceId: number): Promise<FileArea[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM file_areas WHERE conferenceid = ? ORDER BY id');
+    const stmt = this.prepare('SELECT * FROM file_areas WHERE conferenceid = ? ORDER BY id');
     const rows = stmt.all(conferenceId) as any[];
 
     return rows.map(row => ({
@@ -316,9 +309,8 @@ export class FileRepository {
   }
 
   async getFileAreaById(id: number): Promise<FileArea | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM file_areas WHERE id = ?');
+    const stmt = this.prepare('SELECT * FROM file_areas WHERE id = ?');
     const row = stmt.get(id) as any;
 
     if (!row) return null;
@@ -338,9 +330,8 @@ export class FileRepository {
   }
 
   async getFilesByArea(areaId: number): Promise<FileEntry[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM file_entries WHERE areaid = ? ORDER BY uploaddate DESC');
+    const stmt = this.prepare('SELECT * FROM file_entries WHERE areaid = ? ORDER BY uploaddate DESC');
     const rows = stmt.all(areaId) as any[];
 
     return rows.map(row => ({
@@ -367,9 +358,8 @@ export class FileRepository {
     totalUploads: number;
     totalDownloads: number;
   }> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT
         COUNT(*) as totalfiles,
         COALESCE(SUM(fe.size), 0) as totalbytes,

@@ -12,6 +12,7 @@
  * - Audit logging
  */
 
+import { BaseRepository } from './BaseRepository';
 import type {
   SystemConfig,
   NodeConfig,
@@ -29,8 +30,8 @@ import type {
   FileCheckerError
 } from './types';
 
-export class ConfigRepository {
-  constructor(private db: any) {}
+export class ConfigRepository extends BaseRepository<any> {
+  constructor(db: any) { super(db); }
 
   // ===== System Configuration (Singleton) =====
 
@@ -38,7 +39,7 @@ export class ConfigRepository {
    * Get system configuration (always id = 1)
    */
   getSystemConfig(): SystemConfig | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM system_config WHERE id = 1
     `);
 
@@ -52,7 +53,7 @@ export class ConfigRepository {
    * Create system configuration (singleton)
    */
   createSystemConfig(config: Partial<SystemConfig>): SystemConfig {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO system_config (
         bbs_name, sysop_name, location, phone, email, website,
         min_password_length, min_password_strength, max_password_fails,
@@ -189,7 +190,7 @@ export class ConfigRepository {
       return this.getSystemConfig()!;
     }
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE system_config SET ${fields.join(', ')} WHERE id = 1
     `);
 
@@ -203,7 +204,7 @@ export class ConfigRepository {
    * Get all node configurations
    */
   getNodeConfigs(): NodeConfig[] {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM node_config ORDER BY node_number ASC
     `);
 
@@ -215,7 +216,7 @@ export class ConfigRepository {
    * Get node configuration by node number
    */
   getNodeConfig(nodeNumber: number): NodeConfig | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM node_config WHERE node_number = ?
     `);
 
@@ -229,7 +230,7 @@ export class ConfigRepository {
    * Create node configuration
    */
   createNodeConfig(config: Omit<NodeConfig, 'id' | 'created_at' | 'updated_at'>): NodeConfig {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO node_config (
         node_number, node_start, priority,
         capitol_files, def_screens, no_mci_msg,
@@ -303,7 +304,7 @@ export class ConfigRepository {
     }
 
     values.push(nodeNumber);
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE node_config SET ${fields.join(', ')} WHERE node_number = ?
     `);
 
@@ -315,7 +316,7 @@ export class ConfigRepository {
    * Delete node configuration
    */
   deleteNodeConfig(nodeNumber: number): boolean {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       DELETE FROM node_config WHERE node_number = ?
     `);
 
@@ -329,7 +330,7 @@ export class ConfigRepository {
    * Get conference configuration by conference ID
    */
   getConferenceConfig(conferenceId: number): ConferenceConfig | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM conference_config WHERE conference_id = ?
     `);
 
@@ -343,7 +344,7 @@ export class ConfigRepository {
    * Get all conference configurations
    */
   getConferenceConfigs(): ConferenceConfig[] {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM conference_config ORDER BY conference_id ASC
     `);
 
@@ -355,7 +356,7 @@ export class ConfigRepository {
    * Create conference configuration
    */
   createConferenceConfig(config: Omit<ConferenceConfig, 'id' | 'created_at' | 'updated_at'>): ConferenceConfig {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO conference_config (
         conference_id, ndirs,
         dlpath_1, dlpath_2, dlpath_3, dlpath_4, dlpath_5, dlpath_6, dlpath_7, dlpath_8,
@@ -416,7 +417,7 @@ export class ConfigRepository {
     }
 
     values.push(conferenceId);
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE conference_config SET ${fields.join(', ')} WHERE conference_id = ?
     `);
 
@@ -428,7 +429,7 @@ export class ConfigRepository {
    * Delete conference configuration
    */
   deleteConferenceConfig(conferenceId: number): boolean {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       DELETE FROM conference_config WHERE conference_id = ?
     `);
 
@@ -442,7 +443,7 @@ export class ConfigRepository {
    * Get all doors
    */
   getDoors(): Door[] {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM doors ORDER BY door_name ASC
     `);
 
@@ -454,7 +455,7 @@ export class ConfigRepository {
    * Get door by ID
    */
   getDoor(id: number): Door | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM doors WHERE id = ?
     `);
 
@@ -468,7 +469,7 @@ export class ConfigRepository {
    * Get door by command
    */
   getDoorByCommand(command: string): Door | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM doors WHERE door_command = ?
     `);
 
@@ -482,7 +483,7 @@ export class ConfigRepository {
    * Create door
    */
   createDoor(door: Omit<Door, 'id' | 'created_at' | 'updated_at'>): Door {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO doors (
         door_name, door_command, door_type,
         door_path, door_args, working_directory,
@@ -549,7 +550,7 @@ export class ConfigRepository {
     }
 
     values.push(id);
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE doors SET ${fields.join(', ')} WHERE id = ?
     `);
 
@@ -561,7 +562,7 @@ export class ConfigRepository {
    * Delete door
    */
   deleteDoor(id: number): boolean {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       DELETE FROM doors WHERE id = ?
     `);
 
@@ -575,7 +576,7 @@ export class ConfigRepository {
    * Get system languages configuration
    */
   getSystemLanguages(): SystemLanguages | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM system_languages WHERE id = 1
     `);
 
@@ -589,7 +590,7 @@ export class ConfigRepository {
    * Create system languages configuration
    */
   createSystemLanguages(config: Partial<SystemLanguages>): SystemLanguages {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO system_languages (
         host_language, language_base_path, allow_user_selection
       ) VALUES (?, ?, ?)
@@ -622,7 +623,7 @@ export class ConfigRepository {
       return this.getSystemLanguages()!;
     }
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE system_languages SET ${fields.join(', ')} WHERE id = 1
     `);
 
@@ -636,7 +637,7 @@ export class ConfigRepository {
    * Get all languages
    */
   getLanguages(): Language[] {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM languages ORDER BY language_number ASC
     `);
 
@@ -648,7 +649,7 @@ export class ConfigRepository {
    * Get language by ID
    */
   getLanguage(id: number): Language | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM languages WHERE id = ?
     `);
 
@@ -662,7 +663,7 @@ export class ConfigRepository {
    * Get language by code
    */
   getLanguageByCode(code: string): Language | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM languages WHERE language_code = ?
     `);
 
@@ -676,7 +677,7 @@ export class ConfigRepository {
    * Create language
    */
   createLanguage(language: Omit<Language, 'id' | 'created_at' | 'updated_at'>): Language {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO languages (
         language_number, title, language_code, file_path, enabled
       ) VALUES (?, ?, ?, ?, ?)
@@ -712,7 +713,7 @@ export class ConfigRepository {
     }
 
     values.push(id);
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE languages SET ${fields.join(', ')} WHERE id = ?
     `);
 
@@ -724,7 +725,7 @@ export class ConfigRepository {
    * Delete language
    */
   deleteLanguage(id: number): boolean {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       DELETE FROM languages WHERE id = ?
     `);
 
@@ -738,7 +739,7 @@ export class ConfigRepository {
    * Get all protocols
    */
   getProtocols(): Protocol[] {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM protocols ORDER BY protocol_name ASC
     `);
 
@@ -750,7 +751,7 @@ export class ConfigRepository {
    * Get protocol by ID
    */
   getProtocol(id: number): Protocol | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM protocols WHERE id = ?
     `);
 
@@ -764,7 +765,7 @@ export class ConfigRepository {
    * Get protocol by code
    */
   getProtocolByCode(code: string): Protocol | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM protocols WHERE protocol_code = ?
     `);
 
@@ -778,7 +779,7 @@ export class ConfigRepository {
    * Create protocol
    */
   createProtocol(protocol: Omit<Protocol, 'id' | 'created_at' | 'updated_at'>): Protocol {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO protocols (
         protocol_name, protocol_code,
         command, upload_command, download_command,
@@ -822,7 +823,7 @@ export class ConfigRepository {
     }
 
     values.push(id);
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE protocols SET ${fields.join(', ')} WHERE id = ?
     `);
 
@@ -834,7 +835,7 @@ export class ConfigRepository {
    * Delete protocol
    */
   deleteProtocol(id: number): boolean {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       DELETE FROM protocols WHERE id = ?
     `);
 
@@ -858,7 +859,7 @@ export class ConfigRepository {
     ipAddress?: string,
     userAgent?: string
   ): ConfigAuditLog {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO config_audit_log (
         table_name, record_id, action,
         old_values, new_values, changed_fields,
@@ -897,7 +898,7 @@ export class ConfigRepository {
    * Get audit log entry by ID
    */
   getAuditLogEntry(id: number): ConfigAuditLog | null {
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM config_audit_log WHERE id = ?
     `);
 
@@ -927,7 +928,7 @@ export class ConfigRepository {
     query += ' ORDER BY timestamp DESC LIMIT ?';
     params.push(limit);
 
-    const stmt = this.db.prepare(query);
+    const stmt = this.prepare(query);
     const rows = stmt.all(...params) as any[];
 
     return rows.map(row => this.mapAuditLogRow(row));
@@ -1184,7 +1185,7 @@ export class ConfigRepository {
   // ===== SECURITY LEVEL ACCESS (TOOLTYPE_ACCESS) =====
 
   getAllSecurityAccessForLevel(securityLevel: number): SecurityLevelAccess[] {
-    const rows = this.db.prepare(`
+    const rows = this.prepare(`
       SELECT * FROM security_level_access
       WHERE security_level = ?
       ORDER BY acs_flag
@@ -1193,7 +1194,7 @@ export class ConfigRepository {
   }
 
   getSecurityAccessByFlag(securityLevel: number, acsFlag: string): SecurityLevelAccess | null {
-    const row = this.db.prepare(`
+    const row = this.prepare(`
       SELECT * FROM security_level_access
       WHERE security_level = ? AND acs_flag = ?
     `).get(securityLevel, acsFlag);
@@ -1202,7 +1203,7 @@ export class ConfigRepository {
 
   createSecurityAccess(data: Omit<SecurityLevelAccess, 'id' | 'created_at' | 'updated_at'>): number {
     const now = Math.floor(Date.now() / 1000);
-    const result = this.db.prepare(`
+    const result = this.prepare(`
       INSERT INTO security_level_access (
         security_level, acs_flag, enabled, description, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?)
@@ -1233,7 +1234,7 @@ export class ConfigRepository {
     if (fields.length === 0) return false;
 
     values.push(id);
-    const result = this.db.prepare(`
+    const result = this.prepare(`
       UPDATE security_level_access
       SET ${fields.join(', ')}
       WHERE id = ?
@@ -1243,7 +1244,7 @@ export class ConfigRepository {
   }
 
   deleteSecurityAccess(id: number): boolean {
-    const result = this.db.prepare('DELETE FROM security_level_access WHERE id = ?').run(id);
+    const result = this.prepare('DELETE FROM security_level_access WHERE id = ?').run(id);
     return result.changes > 0;
   }
 
@@ -1262,23 +1263,23 @@ export class ConfigRepository {
   // ===== DRIVES (TOOLTYPE_DRIVES) =====
 
   getAllDrives(): DriveConfig[] {
-    const rows = this.db.prepare('SELECT * FROM drives ORDER BY drive_number').all();
+    const rows = this.prepare('SELECT * FROM drives ORDER BY drive_number').all();
     return rows.map(this.mapDriveRow.bind(this));
   }
 
   getDriveById(id: number): DriveConfig | null {
-    const row = this.db.prepare('SELECT * FROM drives WHERE id = ?').get(id);
+    const row = this.prepare('SELECT * FROM drives WHERE id = ?').get(id);
     return row ? this.mapDriveRow(row) : null;
   }
 
   getDriveByNumber(driveNumber: number): DriveConfig | null {
-    const row = this.db.prepare('SELECT * FROM drives WHERE drive_number = ?').get(driveNumber);
+    const row = this.prepare('SELECT * FROM drives WHERE drive_number = ?').get(driveNumber);
     return row ? this.mapDriveRow(row) : null;
   }
 
   createDrive(data: Omit<DriveConfig, 'id' | 'created_at' | 'updated_at'>): number {
     const now = Math.floor(Date.now() / 1000);
-    const result = this.db.prepare(`
+    const result = this.prepare(`
       INSERT INTO drives (
         drive_number, drive_path, enabled, description, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?)
@@ -1305,12 +1306,12 @@ export class ConfigRepository {
     if (fields.length === 0) return false;
 
     values.push(id);
-    const result = this.db.prepare(`UPDATE drives SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    const result = this.prepare(`UPDATE drives SET ${fields.join(', ')} WHERE id = ?`).run(...values);
     return result.changes > 0;
   }
 
   deleteDrive(id: number): boolean {
-    const result = this.db.prepare('DELETE FROM drives WHERE id = ?').run(id);
+    const result = this.prepare('DELETE FROM drives WHERE id = ?').run(id);
     return result.changes > 0;
   }
 
@@ -1329,18 +1330,18 @@ export class ConfigRepository {
   // ===== COMPUTER TYPES (TOOLTYPE_COMPUTERLIST) =====
 
   getAllComputerTypes(): ComputerType[] {
-    const rows = this.db.prepare('SELECT * FROM computer_types ORDER BY computer_number').all();
+    const rows = this.prepare('SELECT * FROM computer_types ORDER BY computer_number').all();
     return rows.map(this.mapComputerTypeRow.bind(this));
   }
 
   getComputerTypeById(id: number): ComputerType | null {
-    const row = this.db.prepare('SELECT * FROM computer_types WHERE id = ?').get(id);
+    const row = this.prepare('SELECT * FROM computer_types WHERE id = ?').get(id);
     return row ? this.mapComputerTypeRow(row) : null;
   }
 
   createComputerType(data: Omit<ComputerType, 'id' | 'created_at' | 'updated_at'>): number {
     const now = Math.floor(Date.now() / 1000);
-    const result = this.db.prepare(`
+    const result = this.prepare(`
       INSERT INTO computer_types (
         computer_number, computer_name, enabled, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?)
@@ -1359,12 +1360,12 @@ export class ConfigRepository {
     if (fields.length === 0) return false;
 
     values.push(id);
-    const result = this.db.prepare(`UPDATE computer_types SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    const result = this.prepare(`UPDATE computer_types SET ${fields.join(', ')} WHERE id = ?`).run(...values);
     return result.changes > 0;
   }
 
   deleteComputerType(id: number): boolean {
-    const result = this.db.prepare('DELETE FROM computer_types WHERE id = ?').run(id);
+    const result = this.prepare('DELETE FROM computer_types WHERE id = ?').run(id);
     return result.changes > 0;
   }
 
@@ -1382,18 +1383,18 @@ export class ConfigRepository {
   // ===== SCREEN TYPES (TOOLTYPE_SCREENTYPES) =====
 
   getAllScreenTypes(): ScreenType[] {
-    const rows = this.db.prepare('SELECT * FROM screen_types ORDER BY screen_number').all();
+    const rows = this.prepare('SELECT * FROM screen_types ORDER BY screen_number').all();
     return rows.map(this.mapScreenTypeRow.bind(this));
   }
 
   getScreenTypeById(id: number): ScreenType | null {
-    const row = this.db.prepare('SELECT * FROM screen_types WHERE id = ?').get(id);
+    const row = this.prepare('SELECT * FROM screen_types WHERE id = ?').get(id);
     return row ? this.mapScreenTypeRow(row) : null;
   }
 
   createScreenType(data: Omit<ScreenType, 'id' | 'created_at' | 'updated_at'>): number {
     const now = Math.floor(Date.now() / 1000);
-    const result = this.db.prepare(`
+    const result = this.prepare(`
       INSERT INTO screen_types (
         screen_number, screen_type, screen_title, enabled, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?)
@@ -1413,12 +1414,12 @@ export class ConfigRepository {
     if (fields.length === 0) return false;
 
     values.push(id);
-    const result = this.db.prepare(`UPDATE screen_types SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    const result = this.prepare(`UPDATE screen_types SET ${fields.join(', ')} WHERE id = ?`).run(...values);
     return result.changes > 0;
   }
 
   deleteScreenType(id: number): boolean {
-    const result = this.db.prepare('DELETE FROM screen_types WHERE id = ?').run(id);
+    const result = this.prepare('DELETE FROM screen_types WHERE id = ?').run(id);
     return result.changes > 0;
   }
 
@@ -1437,18 +1438,18 @@ export class ConfigRepository {
   // ===== FILE CHECKERS (TOOLTYPE_FCHECK) =====
 
   getAllFileCheckers(): FileChecker[] {
-    const rows = this.db.prepare('SELECT * FROM file_checkers ORDER BY checker_name').all();
+    const rows = this.prepare('SELECT * FROM file_checkers ORDER BY checker_name').all();
     return rows.map(this.mapFileCheckerRow.bind(this));
   }
 
   getFileCheckerById(id: number): FileChecker | null {
-    const row = this.db.prepare('SELECT * FROM file_checkers WHERE id = ?').get(id);
+    const row = this.prepare('SELECT * FROM file_checkers WHERE id = ?').get(id);
     return row ? this.mapFileCheckerRow(row) : null;
   }
 
   createFileChecker(data: Omit<FileChecker, 'id' | 'created_at' | 'updated_at'>): number {
     const now = Math.floor(Date.now() / 1000);
-    const result = this.db.prepare(`
+    const result = this.prepare(`
       INSERT INTO file_checkers (
         checker_name, checker_path, options, stack_size, priority, script_path, enabled, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1481,17 +1482,17 @@ export class ConfigRepository {
     if (fields.length === 0) return false;
 
     values.push(id);
-    const result = this.db.prepare(`UPDATE file_checkers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    const result = this.prepare(`UPDATE file_checkers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
     return result.changes > 0;
   }
 
   deleteFileChecker(id: number): boolean {
-    const result = this.db.prepare('DELETE FROM file_checkers WHERE id = ?').run(id);
+    const result = this.prepare('DELETE FROM file_checkers WHERE id = ?').run(id);
     return result.changes > 0;
   }
 
   getFileCheckerErrors(checkerId: number): FileCheckerError[] {
-    const rows = this.db.prepare(`
+    const rows = this.prepare(`
       SELECT * FROM file_checker_errors
       WHERE file_checker_id = ?
       ORDER BY error_number
@@ -1501,7 +1502,7 @@ export class ConfigRepository {
 
   createFileCheckerError(data: Omit<FileCheckerError, 'id' | 'created_at' | 'updated_at'>): number {
     const now = Math.floor(Date.now() / 1000);
-    const result = this.db.prepare(`
+    const result = this.prepare(`
       INSERT INTO file_checker_errors (
         file_checker_id, error_number, error_pattern, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?)
@@ -1510,7 +1511,7 @@ export class ConfigRepository {
   }
 
   deleteFileCheckerError(id: number): boolean {
-    const result = this.db.prepare('DELETE FROM file_checker_errors WHERE id = ?').run(id);
+    const result = this.prepare('DELETE FROM file_checker_errors WHERE id = ?').run(id);
     return result.changes > 0;
   }
 

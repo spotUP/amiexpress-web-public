@@ -9,6 +9,7 @@ import { userDatabaseManager } from '../services/UserDatabaseManager';
 import type { User } from './types';
 import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { BaseRepository } from './BaseRepository';
 
 // Helper function to map field names to column names
 function fieldToColumn(field: string): string {
@@ -44,15 +45,16 @@ function fieldToColumn(field: string): string {
   return map[field] || field.toLowerCase();
 }
 
-export class UserRepository {
-  constructor(private db: any) {}
+export class UserRepository extends BaseRepository<User> {
+  constructor(db: any) {
+    super(db);
+  }
 
   async createUser(userData: Omit<User, 'id' | 'created' | 'updated'>): Promise<string> {
-    if (!this.db) throw new Error('Database not initialized');
-
     const id = crypto.randomUUID();
     const safeUsername = sanitizeInput(userData.username);
-    const stmt = this.db.prepare(`
+
+    this.run(`
       INSERT INTO users (
         id, username, passwordhash, realname, location, phone, email,
         seclevel, uploads, downloads, bytesupload, bytesdownload, ratio,
@@ -62,9 +64,7 @@ export class UserRepository {
         availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
         topuploadcps, topdownloadcps, bytelimit
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
+    `, [
       id, safeUsername, userData.passwordHash, userData.realname,
       userData.location, userData.phone, userData.email, userData.secLevel,
       userData.uploads, userData.downloads, userData.bytesUpload, userData.bytesDownload,
@@ -78,7 +78,7 @@ export class UserRepository {
       userData.availableForChat ? 1 : 0, userData.quietNode ? 1 : 0, userData.autoRejoin,
       userData.confAccess, userData.areaName, userData.uuCP ? 1 : 0, userData.topUploadCPS,
       userData.topDownloadCPS, userData.byteLimit
-    );
+    ]);
 
     // CRITICAL: Write to disk files for Amiga door compatibility
     // Get the full user object we just created
@@ -118,11 +118,8 @@ export class UserRepository {
   }
 
   async getUserByUsername(username: string): Promise<User | null> {
-    if (!this.db) throw new Error('Database not initialized');
-
     const normalizedUsername = normalizeForComparison(username);
-    const stmt = this.db.prepare('SELECT * FROM users WHERE LOWER(username) = ?');
-    const user = stmt.get(normalizedUsername) as any;
+    const user = this.get<any>('SELECT * FROM users WHERE LOWER(username) = ?', [normalizedUsername]);
 
     if (!user) return null;
 
@@ -130,10 +127,7 @@ export class UserRepository {
   }
 
   async getUserById(id: string): Promise<User | null> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
-    const user = stmt.get(id) as any;
+    const user = this.get<any>('SELECT * FROM users WHERE id = ?', [id]);
 
     if (!user) return null;
 
@@ -196,7 +190,6 @@ export class UserRepository {
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const sanitizedUpdates = { ...updates };
     if (typeof sanitizedUpdates.username === 'string') {
@@ -215,8 +208,7 @@ export class UserRepository {
     });
 
     const sql = `UPDATE users SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
-    const stmt = this.db.prepare(sql);
-    stmt.run(...values, id);
+    this.run(sql, [...values, id]);
 
     // CRITICAL: Sync to disk files for Amiga door compatibility
     const updatedUser = await this.getUserById(id);
@@ -245,7 +237,6 @@ export class UserRepository {
   }
 
   async getUsers(filter?: { secLevel?: number; newUser?: boolean; limit?: number }): Promise<User[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
     let sql = 'SELECT * FROM users WHERE 1=1';
     const params: any[] = [];
@@ -267,13 +258,11 @@ export class UserRepository {
       params.push(filter.limit);
     }
 
-    const stmt = this.db.prepare(sql);
-    const users = stmt.all(...params) as any[];
+    const users = this.all<any>(sql, params);
     return users.map(u => this.mapUserFromDb(u));
   }
 
   async deleteUser(id: string): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     // Get user before deletion for logging
     const user = await this.getUserById(id);
@@ -282,8 +271,7 @@ export class UserRepository {
     }
 
     // Delete from database
-    const stmt = this.db.prepare('DELETE FROM users WHERE id = ?');
-    const result = stmt.run(id);
+    const result = this.run('DELETE FROM users WHERE id = ?', [id]);
 
     if (result.changes === 0) {
       throw new Error(`Failed to delete user ${id}`);

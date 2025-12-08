@@ -5,15 +5,15 @@
 
 import * as crypto from 'crypto';
 import type { InternodeChatSession, InternodeChatMessage } from '../types';
+import { BaseRepository } from './BaseRepository';
 
-export class ChatRepository {
-  constructor(private db: any) {}
+export class ChatRepository extends BaseRepository<any> {
+  constructor(db: any) { super(db); }
 
   // User lookup helpers for OLM/Chat
   async getUserByUsernameForOLM(username: string): Promise<{ id: string; username: string; availableForChat: boolean } | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT id, username, availableforchat FROM users WHERE LOWER(username) = LOWER(?)');
+    const stmt = this.prepare('SELECT id, username, availableforchat FROM users WHERE LOWER(username) = LOWER(?)');
     const row = stmt.get(username) as any;
     if (!row) return null;
 
@@ -31,9 +31,8 @@ export class ChatRepository {
     secLevel: number;
     currentAction?: string;
   }>> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT id, username, realname, seclevel
       FROM users
       WHERE availableforchat = 1
@@ -58,10 +57,9 @@ export class ChatRepository {
     recipientUsername: string,
     recipientSocket: string
   ): Promise<string> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const sessionId = crypto.randomUUID();
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO chat_sessions (
         session_id, initiator_id, initiator_username, initiator_socket,
         recipient_id, recipient_username, recipient_socket, status
@@ -72,9 +70,8 @@ export class ChatRepository {
   }
 
   async getChatSession(sessionId: string): Promise<InternodeChatSession | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM chat_sessions WHERE session_id = ?');
+    const stmt = this.prepare('SELECT * FROM chat_sessions WHERE session_id = ?');
     const row = stmt.get(sessionId) as any;
     if (!row) return null;
 
@@ -92,9 +89,8 @@ export class ChatRepository {
   }
 
   async getChatSessionBySocketId(socketId: string): Promise<InternodeChatSession | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT * FROM chat_sessions
       WHERE (initiator_socket = ? OR recipient_socket = ?)
       AND status = 'active'
@@ -116,9 +112,8 @@ export class ChatRepository {
   }
 
   async getPendingChatInvitationForUser(userId: string): Promise<{ sessionId: string } | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT session_id
       FROM chat_sessions
       WHERE recipient_id = ?
@@ -134,9 +129,8 @@ export class ChatRepository {
     sessionId: string,
     status: 'requesting' | 'active' | 'ended' | 'declined'
   ): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE chat_sessions
       SET status = ?, updated_at = strftime('%s', 'now')
       WHERE session_id = ?
@@ -145,9 +139,8 @@ export class ChatRepository {
   }
 
   async endChatSession(sessionId: string): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       UPDATE chat_sessions
       SET status = 'ended', ended_at = strftime('%s', 'now'), updated_at = strftime('%s', 'now')
       WHERE session_id = ?
@@ -156,9 +149,8 @@ export class ChatRepository {
   }
 
   async getActiveChatSessions(): Promise<InternodeChatSession[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM chat_sessions WHERE status = \'active\' ORDER BY started_at DESC');
+    const stmt = this.prepare('SELECT * FROM chat_sessions WHERE status = \'active\' ORDER BY started_at DESC');
     const rows = stmt.all() as any[];
 
     return rows.map(row => ({
@@ -180,15 +172,14 @@ export class ChatRepository {
     senderUsername: string,
     message: string
   ): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO chat_messages (session_id, sender_id, sender_username, message)
       VALUES (?, ?, ?, ?)
     `);
     const result = stmt.run(sessionId, senderId, senderUsername, message);
 
-    const updateStmt = this.db.prepare(`
+    const updateStmt = this.prepare(`
       UPDATE chat_sessions
       SET message_count = message_count + 1, updated_at = strftime('%s', 'now')
       WHERE session_id = ?
@@ -199,9 +190,8 @@ export class ChatRepository {
   }
 
   async getChatHistory(sessionId: string, limit: number = 50): Promise<InternodeChatMessage[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?');
+    const stmt = this.prepare('SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?');
     const rows = stmt.all(sessionId, limit) as any[];
 
     return rows.reverse().map(row => ({
@@ -217,18 +207,16 @@ export class ChatRepository {
   }
 
   async getChatMessageCount(sessionId: string): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?');
+    const stmt = this.prepare('SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?');
     const row = stmt.get(sessionId) as any;
     return parseInt(row.count);
   }
 
   // Chat Room Methods
   async createChatRoom(room: any): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO chat_rooms (
         room_id, room_name, topic, created_by, created_by_username,
         is_public, max_users, is_persistent, password
@@ -241,42 +229,37 @@ export class ChatRepository {
   }
 
   async getChatRoom(roomId: string): Promise<any> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM chat_rooms WHERE room_id = ?');
+    const stmt = this.prepare('SELECT * FROM chat_rooms WHERE room_id = ?');
     return stmt.get(roomId);
   }
 
   async getChatRoomByName(roomName: string): Promise<any> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM chat_rooms WHERE room_name = ?');
+    const stmt = this.prepare('SELECT * FROM chat_rooms WHERE room_name = ?');
     return stmt.get(roomName);
   }
 
   async listChatRooms(onlyPublic: boolean = true): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const sql = onlyPublic
       ? `SELECT r.*, (SELECT COUNT(*) FROM chat_room_members WHERE room_id = r.room_id) as member_count
          FROM chat_rooms r WHERE is_public = 1 ORDER BY created_at DESC`
       : `SELECT r.*, (SELECT COUNT(*) FROM chat_room_members WHERE room_id = r.room_id) as member_count
          FROM chat_rooms r ORDER BY created_at DESC`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     return stmt.all();
   }
 
   async deleteChatRoom(roomId: string): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('DELETE FROM chat_rooms WHERE room_id = ?');
+    const stmt = this.prepare('DELETE FROM chat_rooms WHERE room_id = ?');
     stmt.run(roomId);
   }
 
   async joinChatRoom(roomId: string, userId: string, username: string, socketId: string, isModerator: boolean = false): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT OR REPLACE INTO chat_room_members (room_id, user_id, username, socket_id, is_moderator)
       VALUES (?, ?, ?, ?, ?)
     `);
@@ -284,31 +267,27 @@ export class ChatRepository {
   }
 
   async leaveChatRoom(roomId: string, userId: string): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('DELETE FROM chat_room_members WHERE room_id = ? AND user_id = ?');
+    const stmt = this.prepare('DELETE FROM chat_room_members WHERE room_id = ? AND user_id = ?');
     stmt.run(roomId, userId);
   }
 
   async getRoomMembers(roomId: string): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM chat_room_members WHERE room_id = ? ORDER BY joined_at ASC');
+    const stmt = this.prepare('SELECT * FROM chat_room_members WHERE room_id = ? ORDER BY joined_at ASC');
     return stmt.all(roomId);
   }
 
   async getRoomMemberCount(roomId: string): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM chat_room_members WHERE room_id = ?');
+    const stmt = this.prepare('SELECT COUNT(*) as count FROM chat_room_members WHERE room_id = ?');
     const row = stmt.get(roomId) as any;
     return parseInt(row.count);
   }
 
   async saveChatRoomMessage(message: any): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO chat_room_messages (room_id, sender_id, sender_username, message, message_type)
       VALUES (?, ?, ?, ?, ?)
     `);
@@ -316,15 +295,13 @@ export class ChatRepository {
   }
 
   async getChatRoomHistory(roomId: string, limit: number = 50): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM chat_room_messages WHERE room_id = ? ORDER BY created_at DESC LIMIT ?');
+    const stmt = this.prepare('SELECT * FROM chat_room_messages WHERE room_id = ? ORDER BY created_at DESC LIMIT ?');
     const rows = stmt.all(roomId, limit);
     return (rows as any[]).reverse();
   }
 
   async updateRoomMember(roomId: string, userId: string, updates: any): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const sets: string[] = [];
     const values: any[] = [];
@@ -342,14 +319,13 @@ export class ChatRepository {
 
     values.push(roomId, userId);
     const sql = `UPDATE chat_room_members SET ${sets.join(', ')} WHERE room_id = ? AND user_id = ?`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     stmt.run(...values);
   }
 
   async getUserRooms(userId: string): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       SELECT r.*, m.is_moderator, m.is_muted, m.joined_at
       FROM chat_rooms r
       INNER JOIN chat_room_members m ON r.room_id = m.room_id
@@ -360,30 +336,26 @@ export class ChatRepository {
   }
 
   async isUserInRoom(roomId: string, userId: string): Promise<boolean> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT 1 FROM chat_room_members WHERE room_id = ? AND user_id = ?');
+    const stmt = this.prepare('SELECT 1 FROM chat_room_members WHERE room_id = ? AND user_id = ?');
     return stmt.get(roomId, userId) !== undefined;
   }
 
   async isUserModerator(roomId: string, userId: string): Promise<boolean> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT is_moderator FROM chat_room_members WHERE room_id = ? AND user_id = ?');
+    const stmt = this.prepare('SELECT is_moderator FROM chat_room_members WHERE room_id = ? AND user_id = ?');
     const row = stmt.get(roomId, userId) as any;
     return row ? Boolean(row.is_moderator) : false;
   }
 
   async isUserMuted(roomId: string, userId: string): Promise<boolean> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT is_muted FROM chat_room_members WHERE room_id = ? AND user_id = ?');
+    const stmt = this.prepare('SELECT is_muted FROM chat_room_members WHERE room_id = ? AND user_id = ?');
     const row = stmt.get(roomId, userId) as any;
     return row ? Boolean(row.is_muted) : false;
   }
 
   async updateChatRoom(roomId: string, updates: any): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const fields: string[] = [];
     const values: any[] = [];
@@ -411,7 +383,7 @@ export class ChatRepository {
     values.push(roomId);
 
     const sql = `UPDATE chat_rooms SET ${fields.join(', ')} WHERE room_id = ?`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     stmt.run(...values);
   }
 }

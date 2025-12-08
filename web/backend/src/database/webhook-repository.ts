@@ -4,14 +4,14 @@
  */
 
 import type { Webhook } from './types';
+import { BaseRepository } from './BaseRepository';
 
-export class WebhookRepository {
-  constructor(private db: any) {}
+export class WebhookRepository extends BaseRepository<any> {
+  constructor(db: any) { super(db); }
 
   async getWebhooks(): Promise<Webhook[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM webhooks ORDER BY id ASC');
+    const stmt = this.prepare('SELECT * FROM webhooks ORDER BY id ASC');
     const rows = stmt.all() as any[];
 
     return rows.map(row => ({
@@ -27,9 +27,8 @@ export class WebhookRepository {
   }
 
   async getWebhook(id: number): Promise<Webhook | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM webhooks WHERE id = ?');
+    const stmt = this.prepare('SELECT * FROM webhooks WHERE id = ?');
     const row = stmt.get(id) as any;
 
     if (!row) return null;
@@ -47,9 +46,8 @@ export class WebhookRepository {
   }
 
   async createWebhook(data: { name: string; url: string; type: 'discord' | 'slack'; triggers: string[] }): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO webhooks (name, url, type, enabled, triggers)
       VALUES (?, ?, ?, 1, ?)
     `);
@@ -58,7 +56,6 @@ export class WebhookRepository {
   }
 
   async updateWebhook(id: number, data: any): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const fields: string[] = [];
     const values: any[] = [];
@@ -90,21 +87,19 @@ export class WebhookRepository {
     values.push(id);
 
     const sql = `UPDATE webhooks SET ${fields.join(', ')} WHERE id = ?`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     stmt.run(...values);
   }
 
   async deleteWebhook(id: number): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('DELETE FROM webhooks WHERE id = ?');
+    const stmt = this.prepare('DELETE FROM webhooks WHERE id = ?');
     stmt.run(id);
   }
 
   async getWebhooksByTrigger(trigger: string): Promise<Webhook[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM webhooks WHERE enabled = 1');
+    const stmt = this.prepare('SELECT * FROM webhooks WHERE enabled = 1');
     const rows = stmt.all() as any[];
 
     return rows

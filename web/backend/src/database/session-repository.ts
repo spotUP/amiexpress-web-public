@@ -5,14 +5,14 @@
 
 import type { Session } from './types';
 import type { NodeSession } from '../types';
+import { BaseRepository } from './BaseRepository';
 
-export class SessionRepository {
-  constructor(private db: any) {}
+export class SessionRepository extends BaseRepository<any> {
+  constructor(db: any) { super(db); }
 
   async createSession(session: Omit<Session, 'created' | 'updated'>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT OR REPLACE INTO sessions (
         id, userid, socketid, state, substate, currentconf, currentmsgbase,
         timeremaining, lastactivity, confrjoin, msgbaserjoin, commandbuffer,
@@ -32,9 +32,8 @@ export class SessionRepository {
   }
 
   async getSession(id: string): Promise<Session | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM sessions WHERE id = ?');
+    const stmt = this.prepare('SELECT * FROM sessions WHERE id = ?');
     const row = stmt.get(id) as any;
     if (!row) return null;
 
@@ -63,7 +62,6 @@ export class SessionRepository {
   }
 
   async updateSession(id: string, updates: Partial<Session>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
     if (fields.length === 0) return;
@@ -81,22 +79,20 @@ export class SessionRepository {
     });
 
     const sql = `UPDATE sessions SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     stmt.run(...values, id);
   }
 
   async deleteSession(id: string): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('DELETE FROM sessions WHERE id = ?');
+    const stmt = this.prepare('DELETE FROM sessions WHERE id = ?');
     stmt.run(id);
   }
 
   async getActiveSessions(): Promise<Session[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const thirtyMinutesAgo = Math.floor(Date.now() / 1000) - 1800;
-    const stmt = this.db.prepare('SELECT * FROM sessions WHERE lastactivity > ?');
+    const stmt = this.prepare('SELECT * FROM sessions WHERE lastactivity > ?');
     const rows = stmt.all(thirtyMinutesAgo) as any[];
 
     return rows.map(row => ({
@@ -124,9 +120,8 @@ export class SessionRepository {
   }
 
   async createNodeSession(session: Omit<NodeSession, 'created' | 'updated'>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT OR REPLACE INTO node_sessions (
         id, nodeid, userid, socketid, state, substate, currentconf, currentmsgbase,
         timeremaining, lastactivity, status, loadlevel, currentuser
@@ -142,7 +137,6 @@ export class SessionRepository {
   }
 
   async updateNodeSession(id: string, updates: Partial<NodeSession>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created');
     if (fields.length === 0) return;
@@ -157,12 +151,11 @@ export class SessionRepository {
     });
 
     const sql = `UPDATE node_sessions SET ${setClause}, updated = strftime('%s', 'now') WHERE id = ?`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     stmt.run(...values, id);
   }
 
   async getNodeSessions(nodeId?: number): Promise<NodeSession[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
     let sql = 'SELECT * FROM node_sessions';
     const params: any[] = [];
@@ -173,7 +166,7 @@ export class SessionRepository {
     }
 
     sql += ' ORDER BY lastactivity DESC';
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     const rows = stmt.all(...params) as any[];
 
     return rows.map(row => ({

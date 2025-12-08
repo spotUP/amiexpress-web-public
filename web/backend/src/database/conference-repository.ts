@@ -7,35 +7,37 @@ import { conferenceFileManager } from '../services/ConferenceFileManager';
 import { messageFileManager } from '../services/MessageFileManager';
 import type { Conference, MessageBase } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { BaseRepository } from './BaseRepository';
 
-export class ConferenceRepository {
-  private readonly db: any;
-
+export class ConferenceRepository extends BaseRepository<any> {
   constructor(db: any) {
     if (!db) {
       throw new Error('Database not initialized');
     }
 
+    // Unwrap database object if needed
+    let actualDb: any;
     if (db && db.db && typeof db.db.prepare === 'function') {
-      this.db = db.db;
+      actualDb = db.db;
     } else if (typeof db.prepare === 'function') {
-      this.db = db;
+      actualDb = db;
     } else if (db.getDatabase && typeof db.getDatabase === 'function') {
       const raw = db.getDatabase();
       if (raw && typeof raw.prepare === 'function') {
-        this.db = raw;
+        actualDb = raw;
       } else {
         throw new Error('Invalid database object provided to ConferenceRepository');
       }
     } else {
       throw new Error('Invalid database object provided to ConferenceRepository');
     }
+
+    super(actualDb);
   }
 
   async createConference(conf: Omit<Conference, 'id' | 'created' | 'updated'>): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare(`
+    const stmt = this.prepare(`
       INSERT INTO conferences (
         name, description, ratio, ratiotype, uploads, downloads, bytesupload, bytesdownload
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -94,11 +96,10 @@ export class ConferenceRepository {
   }
 
   async getConferences(): Promise<Conference[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
     console.log('[ConferenceRepository] getConferences this.db type:', !!this.db, typeof this.db, this.db && this.db.constructor && this.db.constructor.name);
 
-    const stmt = this.db.prepare('SELECT * FROM conferences ORDER BY id');
+    const stmt = this.prepare('SELECT * FROM conferences ORDER BY id');
     const rows = stmt.all() as any[];
     return rows.map(row => ({
       id: row.id,
@@ -116,9 +117,8 @@ export class ConferenceRepository {
   }
 
   async getConferenceById(id: number): Promise<Conference | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM conferences WHERE id = ?');
+    const stmt = this.prepare('SELECT * FROM conferences WHERE id = ?');
     const row = stmt.get(id) as any;
     if (!row) return null;
 
@@ -138,7 +138,6 @@ export class ConferenceRepository {
   }
 
   async updateConference(id: number, updates: Partial<Conference>): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
 
     const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created' && key !== 'updated');
     if (fields.length === 0) return;
@@ -147,12 +146,12 @@ export class ConferenceRepository {
     const values = fields.map(f => updates[f as keyof Conference]);
 
     const sql = `UPDATE conferences SET ${setClause} WHERE id = ?`;
-    const stmt = this.db.prepare(sql);
+    const stmt = this.prepare(sql);
     stmt.run(...values, id);
 
     // CRITICAL: Sync to Conf.DB for Amiga door compatibility
     try {
-      const selectStmt = this.db.prepare('SELECT * FROM conferences WHERE id = ?');
+      const selectStmt = this.prepare('SELECT * FROM conferences WHERE id = ?');
       const row = selectStmt.get(id) as any;
 
       if (row) {
@@ -194,9 +193,8 @@ export class ConferenceRepository {
   }
 
   async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('INSERT INTO message_bases (name, conferenceid) VALUES (?, ?)');
+    const stmt = this.prepare('INSERT INTO message_bases (name, conferenceid) VALUES (?, ?)');
     const result = stmt.run(mb.name, mb.conferenceId);
     const mbId = result.lastInsertRowid as number;
 
@@ -224,9 +222,8 @@ export class ConferenceRepository {
   }
 
   async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM message_bases WHERE conferenceid = ? ORDER BY id');
+    const stmt = this.prepare('SELECT * FROM message_bases WHERE conferenceid = ? ORDER BY id');
     const rows = stmt.all(conferenceId) as any[];
     return rows.map(row => ({
       id: row.id,
@@ -238,9 +235,8 @@ export class ConferenceRepository {
   }
 
   async getMessageBaseById(id: number): Promise<MessageBase | null> {
-    if (!this.db) throw new Error('Database not initialized');
 
-    const stmt = this.db.prepare('SELECT * FROM message_bases WHERE id = ?');
+    const stmt = this.prepare('SELECT * FROM message_bases WHERE id = ?');
     const row = stmt.get(id) as any;
     if (!row) return null;
 
