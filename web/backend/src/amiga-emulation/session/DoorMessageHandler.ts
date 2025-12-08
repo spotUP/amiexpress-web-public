@@ -290,7 +290,7 @@ export class DoorMessageHandler {
     const replyPortAddr =
       this.doorReplyPortAddr ||
       this.emulator.readMemory32(this.doorInfoAddr + 0x4) ||
-      this.execLibrary.getDoorReplyPortAddress();
+      this.execLibrary.getDoorPortAddress();
     const NT_MESSAGE = 5;
 
     // Exec message header
