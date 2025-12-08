@@ -19,12 +19,12 @@ import express from 'express';
 import { db } from '../database';
 import { config } from '../config';
 import { AuthHandler } from '../handlers/user/auth.handler';
-import { SessionLogsHandler } from '../handlers/session-logs.handler';
+import { SessionLogsHandler } from '../handlers/admin/session-logs.handler';
 import { authenticateToken, requireSysop, AuthRequest } from '../middleware/auth.middleware';
 import { createConfigRouter } from '../api/config-routes';
 import { createBatchRouter } from '../api/batch-routes';
-import { createImportRouter } from '../handlers/import.handler';
-import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/wizard.handler';
+import { createImportRouter } from '../handlers/admin/import.handler';
+import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
 import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
 

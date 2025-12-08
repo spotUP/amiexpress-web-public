@@ -30,11 +30,11 @@ import { convertUnicodePuaToPetscii, convertPetsciiInputToAscii, convertAsciiToP
 import { writeUploadToDirFile } from './utils/dir-file.util';
 import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.util';
 import { AuthHandler } from './handlers/user/auth.handler';
-import { SessionLogsHandler } from './handlers/session-logs.handler';
+import { SessionLogsHandler } from './handlers/admin/session-logs.handler';
 import { authenticateToken, requireSysop, AuthRequest } from './middleware/auth.middleware';
 import { createConfigRouter } from './api/config-routes';
 import { createBatchRouter } from './api/batch-routes';
-import { createImportRouter } from './handlers/import.handler';
+import { createImportRouter } from './handlers/admin/import.handler';
 import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, setConferences, hasKeysFile } from './handlers/screen.handler';
 import { registerSocketHandlers } from './server/socket-handlers';
 import { displaySystemBulletins } from './server/database-helpers';

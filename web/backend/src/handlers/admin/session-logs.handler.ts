@@ -4,8 +4,8 @@
  */
 
 import { Request, Response } from 'express';
-import { sessionLogManager } from '../services/SessionLogManager';
-import { AuthRequest } from '../middleware/auth.middleware';
+import { sessionLogManager } from '../../services/SessionLogManager';
+import { AuthRequest } from '../../middleware/auth.middleware';
 
 export class SessionLogsHandler {
   /**
