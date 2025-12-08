@@ -207,16 +207,31 @@ import { runLoginBatches } from '../services/batch-scheduler';
 import { initializeSecurity } from '../utils/security.util';
 
 // Dependencies (injected)
-let db: any;
-let config: any;
-let conferences: any[] = [];
-let messageBases: any[] = [];
-let fileAreas: any[] = [];
-let processOlmMessageQueue: any;
-let checkSecurity: any;
-let setEnvStat: any;
-let getRecentCallerActivity: any;
-let doors: any[] = [];
+
+// Import getters from dependency-injection module (eliminates duplicate variables)
+import {
+  getDatabase,
+  getConfig,
+  getConferences,
+  getMessageBases,
+  getFileAreas,
+  getDoors
+} from './command-handler/dependency-injection';
+
+// Re-export dependency injection for external modules (backward compatibility)
+export {
+  setDatabase,
+  setConfig,
+  setConferences,
+  setMessageBases,
+  setFileAreas,
+  setProcessOlmMessageQueue,
+  setCheckSecurity,
+  setSetEnvStat,
+  setGetRecentCallerActivity,
+  setDoors,
+  setConstants
+} from './command-handler/dependency-injection';
 
 // Re-export command loading functions for index.ts
 export { loadCommands, setCommandExecutionDependencies } from './command-execution.handler';
@@ -394,52 +409,6 @@ function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean
 }
 
 // Dependency injection setters
-export function setDatabase(database: any) {
-  db = database;
-}
-
-export function setConfig(cfg: any) {
-  config = cfg;
-}
-
-export function setConferences(confs: any[]) {
-  conferences = confs;
-}
-
-export function setMessageBases(bases: any[]) {
-  messageBases = bases;
-}
-
-export function setFileAreas(areas: any[]) {
-  fileAreas = areas;
-}
-
-export function setProcessOlmMessageQueue(fn: any) {
-  console.log(' setProcessOlmMessageQueue called, fn type:', typeof fn);
-  processOlmMessageQueue = fn;
-  console.log(' processOlmMessageQueue set, now type:', typeof processOlmMessageQueue);
-}
-
-export function setCheckSecurity(fn: any) {
-  checkSecurity = fn;
-}
-
-export function setSetEnvStat(fn: any) {
-  setEnvStat = fn;
-}
-
-export function setGetRecentCallerActivity(fn: any) {
-  getRecentCallerActivity = fn;
-}
-
-export function setDoors(doorsList: any[]) {
-  doors = doorsList;
-}
-
-export function setConstants(constants: any) {
-  SCREEN_MENU = constants.SCREEN_MENU;
-}
-
 async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
   try {
     while (isDisplayFlowState(session.subState)) {
@@ -975,7 +944,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         // Authenticate using existing auth handler logic
         try {
           const dbModule: any = await import('../database');
-          const dbLocal: any = db || dbModule.db || dbModule;
+          const dbLocal: any = getDatabase() || dbModule.db || dbModule;
           // Try lowercase first (for C64 uppercase input), then original case
           let user = await dbLocal.authenticateUser(username, passwordLower);
           if (!user && password !== passwordLower) {
@@ -1183,7 +1152,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
     // Check for /WHO command
     if (input.toUpperCase() === '/WHO') {
-      const members = await db.getRoomMembers(session.currentRoomId);
+      const members = await getDatabase().getRoomMembers(session.currentRoomId);
       socket.emit('ansi-output', '\r\n\x1b[36mUsers in room (' + members.length + '):\x1b[0m\r\n');
       for (const member of members) {
         const modBadge = member.is_moderator ? ' \x1b[33m[MOD]\x1b[0m' : '';
@@ -1504,7 +1473,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
      }
 
     // Get file areas for current conference and find by relative number (1,2,3...)
-    const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
+    const currentFileAreas = getFileAreas().filter(area => area.conferenceId === session.currentConf);
     const selectedArea = currentFileAreas[areaNumber - 1]; // 1-based indexing
 
     if (!selectedArea) {
@@ -2055,7 +2024,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
 
     // Validate relative conference number and convert to conference object
-    if (relConfNum < 1 || relConfNum > conferences.length) {
+    if (relConfNum < 1 || relConfNum > getConferences().length) {
       socket.emit('ansi-output', '\r\nInvalid conference number.\r\n');
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -2063,11 +2032,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       return;
     }
 
-    const selectedConf = conferences[relConfNum - 1]; // Convert to 0-based index
+    const selectedConf = getConferences()[relConfNum - 1]; // Convert to 0-based index
     const confId = selectedConf.id; // Get actual database ID
 
     // Find first message base for this conference (express.e uses first base as default)
-    const confMessageBases = messageBases.filter(mb => mb.conferenceId === confId);
+    const confMessageBases = getMessageBases().filter(mb => mb.conferenceId === confId);
     if (confMessageBases.length === 0) {
       socket.emit('ansi-output', '\r\n\x1b[31mNo message bases available in this conference!\x1b[0m\r\n');
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
@@ -2387,13 +2356,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
       // Process conference number
       const confNum = parseInt(input);
-      if (isNaN(confNum) || confNum < 1 || confNum > conferences.length) {
+      if (isNaN(confNum) || confNum < 1 || confNum > getConferences().length) {
         // express.e:25142-25150 - Redisplay JOINCONF and prompt again (no error message)
         await displayScreen(socket, session, 'JOINCONF');
         socket.emit('ansi-output', '\r\n');
         socket.emit('ansi-output', AnsiUtil.complexPrompt([
           { text: 'Conference Number ', color: 'white' },
-          { text: `(1-${conferences.length})`, color: 'cyan' },
+          { text: `(1-${getConferences().length})`, color: 'cyan' },
           { text: ': ', color: 'white' }
         ]));
         session.inputBuffer = '';
@@ -2402,9 +2371,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       }
 
       // Get conference and join it
-      const selectedConf = conferences[confNum - 1];
+      const selectedConf = getConferences()[confNum - 1];
       const confId = selectedConf.id;
-      const confMessageBases = messageBases.filter(mb => mb.conferenceId === confId);
+      const confMessageBases = getMessageBases().filter(mb => mb.conferenceId === confId);
 
       if (confMessageBases.length === 0) {
         socket.emit('ansi-output', '\r\n');
@@ -3769,12 +3738,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       //
       // Check if command matches a door (BBSCMD)
       console.log(`[Command Handler] Checking for door match: "${command}"`);
-      console.log(`[Command Handler] Available doors: ${doors.length}`);
-      if (doors.length > 0) {
-        console.log(`[Command Handler] Sample door commands: ${doors.slice(0, 5).map(d => d.command).join(', ')}`);
+      console.log(`[Command Handler] Available doors: ${getDoors().length}`);
+      if (getDoors().length > 0) {
+        console.log(`[Command Handler] Sample door commands: ${getDoors().slice(0, 5).map(d => d.command).join(', ')}`);
       }
 
-      const matchingDoor = doors.find(door =>
+      const matchingDoor = getDoors().find(door =>
         door.command.toLowerCase() === command.toLowerCase()
       );
 
