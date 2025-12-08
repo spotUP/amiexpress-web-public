@@ -22,7 +22,6 @@ import { config } from '../config';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
 import { getMaxDirs } from '../utils/max-dirs.util';
-import { looksLikeAsciiArt } from '../utils/ascii-art.util';
 
 /**
  * Display file list for a conference

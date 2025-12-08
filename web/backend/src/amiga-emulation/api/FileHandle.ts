@@ -48,6 +48,9 @@ export class FileHandle {
   /** True when operating entirely from memory (no filesystem descriptor) */
   private isMemoryHandle: boolean = false;
 
+  /** Track open mode to guard invalid seeks */
+  private openMode: 'r' | 'w' | 'rw' | null = null;
+
   constructor(
     amiPath: string,
     sysPath: string,
@@ -74,6 +77,7 @@ export class FileHandle {
    */
   open(mode: 'r' | 'w' | 'rw'): boolean {
     try {
+      this.openMode = mode;
       if (this.memoryBuffer) {
         if (mode === 'w' || mode === 'rw') {
           console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" for writing`);
@@ -208,17 +212,23 @@ export class FileHandle {
   seek(position: number, whence: number): number {
     if (this.isMemoryHandle && this.memoryBuffer) {
       const size = this.memoryBuffer.length;
-      const oldPos = this.position;
+      let targetPos = this.position;
       if (whence === 0) {
-        this.position = position;
+        targetPos = position;
       } else if (whence === 1) {
-        this.position += position;
+        targetPos = this.position + position;
       } else if (whence === 2) {
-        this.position = size + position;
+        targetPos = size + position;
       }
-      // Allow seeking past EOF (AmigaDOS behavior)
-      // Clamp only to prevent negative positions
-      this.position = Math.max(0, this.position);
+      // Guard runaway seeks on read-only memory-backed handles to avoid tight loops
+      if (this.openMode === 'r' && targetPos > size) {
+        console.warn(
+          `[FileHandle] Seek beyond EOF for "${this.amiPath}" (requested=${targetPos}, size=${size})`
+        );
+        return -1;
+      }
+      // Allow seeking past EOF for write handles; clamp negatives
+      this.position = Math.max(0, targetPos);
       return this.position;
     }
 
@@ -227,16 +237,27 @@ export class FileHandle {
     }
 
     try {
-      // whence: 0 = SEEK_SET, 1 = SEEK_CUR, 2 = SEEK_END
+      const stats = fs.fstatSync(this.fd);
+      const fileSize = stats.size;
+      // Compute target position first
+      let targetPos = this.position;
       if (whence === 0) {
-        this.position = position;
+        targetPos = position;
       } else if (whence === 1) {
-        this.position += position;
-      } else if (whence === 2) {
-        const stats = fs.fstatSync(this.fd);
-        this.position = stats.size + position;
+        targetPos = this.position + position;
+      } else if (whence === 2 || whence === -1) {
+        targetPos = stats.size + position;
       }
 
+      // If opened read-only, prevent runaway seeks far past EOF
+      if (this.openMode === 'r' && targetPos > fileSize) {
+        console.warn(
+          `[FileHandle] Seek beyond EOF for "${this.amiPath}" (requested=${targetPos}, size=${fileSize})`
+        );
+        return -1;
+      }
+
+      this.position = targetPos;
       return this.position;
     } catch (error) {
       console.error(`[FileHandle] Seek error:`, error);

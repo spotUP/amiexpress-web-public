@@ -1,0 +1,10 @@
+.key node
+bbs:doors/bytekiller/Bytekillhandler bbs:node1/callerslog
+doors:quicknew/quicknew doors:quicknew/quicknew.config1 7 >bbs:screens/quicknew.txt
+doors:multitop/mtop doors:multitop/designs/mtopulbytes1.dsg bbs:bulletins/bull1.txt ignoresysop userdata bbs:user.data
+doors:multitop/mtop doors:multitop/designs/mtopdlbytes1.dsg bbs:bulletins/bull2.txt ignoresysop userdata bbs:user.data
+doors:multitop/mtop doors:multitop/designs/mtopmsgs1.dsg bbs:bulletins/bull3.txt ignoresysop userdata bbs:user.data
+doors:multitop/mtop doors:multitop/designs/mtopulcps1.dsg bbs:bulletins/bull4.txt ignoresysop userdata bbs:user.data
+doors:multitop/mtop doors:multitop/designs/mtopdlcps1.dsg bbs:bulletins/bull5.txt ignoresysop userdata bbs:user.data
+doors:glcviewer/glcupdater reference-board BBS:Node1/CallersLog IGNORESYSOP IGNORELOCAL
+bbs:utils/samilog/samilog -UC"1" -O"BBS:Bulletins/bull6.txt"15

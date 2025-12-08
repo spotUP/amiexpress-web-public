@@ -18,8 +18,8 @@ import { conferenceFileManager } from './services/ConferenceFileManager';
 import { loadConfConfig } from './services/conf-config.service';
 import {
   loadFileAreasFromDisk,
-  ensureDirFilesExist,
-  ensureConferenceStructure
+  ensureConferenceStructure,
+  ensureRootScreens
 } from './services/file-areas-loader';
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
 export { BBSState, LoggedOnSubState };
@@ -2141,7 +2141,7 @@ async function initializeData() {
 
     // Load file areas from disk (express.e:5006, 15264 - reads NDIRS, DLPATH.n, ULPATH.n from Conf*.info)
     fileAreas = loadFileAreasFromDisk(bbsRoot, conferences);
-    await ensureDirFilesExist(bbsRoot, fileAreas);
+    await ensureRootScreens(bbsRoot);
     await ensureConferenceStructure(bbsRoot, conferences, fileAreas);
     console.log(`[Initialization] Loaded ${fileAreas.length} file areas from disk`);
 

@@ -51,6 +51,8 @@ export interface LifecycleConfig {
   debugLevel: "minimal" | "normal" | "verbose" | "comprehensive";
   disableGuard?: boolean;
   progressTimeoutMs: number;
+  pcProbeRanges?: Array<{ start: number; end: number }>;
+  pcProbeMaxHits?: number;
 }
 
 export class DoorLifecycleManager {
@@ -82,6 +84,8 @@ export class DoorLifecycleManager {
     function: string;
   }> = [];
   private lastPCs: number[] = [];
+  private watchValueOffsets: number[] = [];
+  private lastWatchedValues: Map<number, number> = new Map();
   private traceRegs: boolean = false;
   private traceInterval: number = 500;
   private traceLogPath: string = "";
@@ -92,6 +96,9 @@ export class DoorLifecycleManager {
   private traceFirstPCOnly: boolean = true;
   private lastA6Logged: number = 0;
   private lastExecBasePointer: number = 0;
+  private pcProbeRanges: Array<{ start: number; end: number; hits: number }> =
+    [];
+  private pcProbeMaxHits: number = 1;
 
   constructor(
     emulator: MoiraEmulator,
@@ -144,6 +151,34 @@ export class DoorLifecycleManager {
     this.traceRegs = process.env.DOOR_TRACE_REGS === "1";
     this.traceInterval = Number(process.env.DOOR_TRACE_INTERVAL ?? 500);
     this.traceFirstCount = Number(process.env.DOOR_TRACE_FIRST_PC_COUNT ?? 0);
+    this.pcProbeMaxHits = Number(process.env.DOOR_PC_PROBE_MAX_HITS ?? 1);
+    this.pcProbeRanges = this.parsePcProbeRanges(
+      process.env.DOOR_PC_PROBE_RANGES || ""
+    );
+    const watchOffsetsEnv = process.env.DOOR_WATCH_VALUES_OFFSETS || "";
+    this.watchValueOffsets = watchOffsetsEnv
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => parseInt(s, 16))
+      .filter((n) => !Number.isNaN(n));
+    if (this.watchValueOffsets.length > 0) {
+      console.log(
+        `[DoorLifecycleManager] Value watch offsets: ${this.watchValueOffsets
+          .map((o) => "0x" + o.toString(16))
+          .join(", ")}`
+      );
+    }
+    console.log(
+      `[DoorLifecycleManager] PC probe env="${process.env.DOOR_PC_PROBE_RANGES || ""}" maxHits=${this.pcProbeMaxHits} parsed=${this.pcProbeRanges
+        .map(
+          (r) =>
+            `0x${r.start.toString(16)}-0x${r.end.toString(
+              16
+            )} (max ${this.pcProbeMaxHits})`
+        )
+        .join(", ") || "none"}`
+    );
     try {
       const root = path.resolve(process.cwd(), "../..");
       this.traceLogPath = path.join(root, "logs", "door-68k.log");
@@ -277,7 +312,7 @@ export class DoorLifecycleManager {
           continue;
         }
 
-        // === STEP 2: Get current PC and handle Bulls-specific logic ===
+        // === STEP 2: Get current PC and handle door-specific logic ===
         const pc = this.emulator.getRegister(16);
         this.recordProgressByPc(pc);
         // Track recent PCs for crash diagnostics
@@ -285,6 +320,8 @@ export class DoorLifecycleManager {
         if (this.lastPCs.length > 8) {
           this.lastPCs.shift();
         }
+      this.checkPcProbes(pc);
+      this.checkWatchedValues();
         if (earlyTraceCount < 32) {
           const a4Now = this.emulator.getRegister(12);
           const a5Now = this.emulator.getRegister(13);
@@ -1035,6 +1072,112 @@ export class DoorLifecycleManager {
       return this.emulator.readMemory32(addr >>> 0);
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * PC probe helper: logs when the PC enters configured ranges (driven by env).
+   */
+  private checkPcProbes(pc: number): void {
+    if (!this.pcProbeRanges.length) {
+      return;
+    }
+    for (const range of this.pcProbeRanges) {
+      if (range.hits >= this.pcProbeMaxHits) {
+        continue;
+      }
+      if (pc >= range.start && pc <= range.end) {
+        range.hits++;
+        const d0 = this.emulator.getRegister(0);
+        const d1 = this.emulator.getRegister(1);
+        const a0 = this.emulator.getRegister(8);
+        const a4 = this.emulator.getRegister(12);
+        const a5 = this.emulator.getRegister(13);
+        const a6 = this.emulator.getRegister(14);
+        const sp = this.emulator.getRegister(15);
+        // Helpful context for door data structures (generic logging)
+        const memA4_8b8 = this.safeRead32Global(a4 + 0x8b8);
+        const memA4_8bc = this.safeRead32Global(a4 + 0x8bc);
+        const memA4_6c88 = this.safeRead32Global(a4 + 0x6c88);
+        console.log(
+          `[DoorLifecycleManager] PC probe hit range 0x${range.start.toString(
+            16
+          )}-0x${range.end.toString(
+            16
+          )} pc=0x${pc.toString(16)} iter=${
+            this.executionState.iterationCount
+          } d0=0x${d0.toString(16)} d1=0x${d1.toString(
+            16
+          )} a0=0x${a0.toString(16)} a4=0x${a4.toString(
+            16
+          )} a5=0x${a5.toString(16)} a6=0x${a6.toString(
+            16
+          )} sp=0x${sp.toString(
+            16
+          )} [a4+0x8b8]=0x${(memA4_8b8 ?? 0).toString(
+            16
+          )} [a4+0x8bc]=0x${(memA4_8bc ?? 0).toString(
+            16
+          )} [a4+0x6c88]=0x${(memA4_6c88 ?? 0).toString(16)}`
+        );
+      }
+    }
+  }
+
+  /**
+   * Parse ranges like "0x1200-0x1300,0x3aa0-0x3c30" for PC probes.
+   */
+  private parsePcProbeRanges(envValue: string): Array<{
+    start: number;
+    end: number;
+    hits: number;
+  }> {
+    if (!envValue.trim()) {
+      return [];
+    }
+    return envValue
+      .split(",")
+      .map((segment) => segment.trim())
+      .filter(Boolean)
+      .map((segment) => {
+        const parts = segment.split("-");
+        const start = parseInt(parts[0], 0);
+        const end = parts[1] ? parseInt(parts[1], 0) : start;
+        return { start, end, hits: 0 };
+      })
+      .filter(
+        (range) =>
+          Number.isFinite(range.start) &&
+          Number.isFinite(range.end) &&
+          range.start <= range.end
+      );
+  }
+
+  /**
+   * Watch specific offsets relative to A4 and log when they change.
+   * Enables debugging when list counters or pointers are mutated by the door.
+   */
+  private checkWatchedValues(): void {
+    if (this.watchValueOffsets.length === 0) {
+      return;
+    }
+    const a4 = this.emulator.getRegister(12);
+    for (const off of this.watchValueOffsets) {
+      const addr = a4 + off;
+      const val = this.emulator.readMemory32(addr);
+      const prev = this.lastWatchedValues.get(off);
+      if (prev === undefined || prev !== val) {
+        console.log(
+          `[DoorLifecycleManager][WATCH] A4+0x${off.toString(
+            16
+          )} (0x${addr.toString(16)}) changed: 0x${(prev ?? 0).toString(
+            16
+          )} -> 0x${val.toString(16)} at PC=0x${this.emulator
+            .getRegister(16)
+            .toString(16)}`
+        );
+        this.lastWatchedValues.set(off, val);
+      }
     }
   }
 

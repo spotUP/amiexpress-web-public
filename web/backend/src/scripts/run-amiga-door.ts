@@ -105,10 +105,8 @@ async function runDoor(opts: RunnerOptions) {
     user,
   };
 
-  // Prefer explicit doorType; otherwise infer XIM for Bulls/WHO binaries
-  const inferredDoorType =
-    opts.doorType ||
-    (path.basename(opts.execPath).toLowerCase().match(/bull|who/) ? 'XIM' : undefined);
+  // Prefer explicit doorType; default to provided value without door-name heuristics
+  const inferredDoorType = opts.doorType;
 
   const amigaSession = new AmigaDoorSession(
     instrumentedSocket as any,
@@ -171,7 +169,12 @@ async function main() {
     args.splice(doorTypeIndex, 2);
   }
 
-  const [execPathArg, nodeArg, ...doorArgs] = args;
+  const [execPathArg, nodeArg, ...doorArgsRaw] = args;
+  // Allow callers to prefix door args with --args (drop the flag, keep the payload)
+  const doorArgs =
+    doorArgsRaw.length > 0 && doorArgsRaw[0] === '--args'
+      ? doorArgsRaw.slice(1)
+      : doorArgsRaw;
   if (!execPathArg) {
     console.error('Usage: ts-node run-amiga-door.ts <doorPath> <nodeId> [--doorId CMD] [--doortype TYPE] [--assigns JSON] [--tooltypes JSON] [args...]');
     process.exit(1);

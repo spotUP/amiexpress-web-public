@@ -15,7 +15,7 @@ Baud N Name             Group / Location    On-Time  Actions  H:MM Up-K Dn-K
 [34m----------------------------------------------------------------------------
 [31mLOCL 0[37m [32mSandman          [33m>>F A I R L I G H T [34m11:17:33 [35m[------] [36m0:01 [0m   0    0
 [34m----------------------------------------------------------------------------
-[0m                         ONE WORLD - Don't abuse it                         
+[0m                 We are on the way out of ressession. (NOT)                 
 [0;4;33m                                                                      v2.00 [0m
 [44;4;33m Calls:    1 / Y'day:    4 | U:    0 /     0k | D:    0 /     0k | Hrs:   0 [0m
 [44;4;33m The Records - Calls:  275 | U:  286 / D775mb | D: 3745 / @402mb | Hrs:  30 [0m

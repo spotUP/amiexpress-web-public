@@ -167,6 +167,11 @@ export class AEDoorLibrary {
     this.interfaces.set(difaceAddr, state);
     this.emulator.setRegister(0, difaceAddr);
 
+    // Immediately post the initial AEDoor-style message so doors that expect
+    // a startup notification (e.g., XIM doors) see traffic on their reply port
+    // without needing an explicit host nudge.
+    this.sendInitialReadyMessage(state);
+
     return difaceAddr;
   }
 
@@ -488,7 +493,7 @@ export class AEDoorLibrary {
   /**
    * Send initial ready message to door's reply port
    *
-   * After CreateComm, Bulls (and other doors) poll GetMsg waiting for
+   * After CreateComm, XIM doors poll GetMsg waiting for
    * the BBS to send a message. We send a properly formatted AEDoor message
    * with JH_REGISTER (1) command as the initial handshake.
    */
@@ -547,7 +552,7 @@ export class AEDoorLibrary {
       )}`
     );
     console.log(
-      `[AEDoorLibrary] Bulls door should now receive JH_REGISTER and enter main processing loop`
+      `[AEDoorLibrary] XIM door should now receive JH_REGISTER and enter main processing loop`
     );
   }
 

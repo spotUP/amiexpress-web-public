@@ -16,6 +16,10 @@ export function looksLikeAsciiArt(line: string): boolean {
   const symbolCount = symbolMatch ? symbolMatch.length : 0;
   const leadingIndent = line.match(/^\s+/)?.[0].length || 0;
 
+  if (leadingIndent >= 33) {
+    return true;
+  }
+
   if (letters + digits === 0 && nonAlphanumeric > 0) {
     return true;
   }

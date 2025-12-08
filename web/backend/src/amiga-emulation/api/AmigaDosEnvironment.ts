@@ -433,7 +433,7 @@ export class AmigaDosEnvironment {
     //   - CIA-B: 0xBFD000
 
     // CRITICAL FIX: Return realistic ROM values instead of 0
-    // Bulls door reads 0xFF0000 and 0xFF0002, gets zeros, then jumps to NULL (crash)
+    // Some doors read 0xFF0000 and 0xFF0002, get zeros, then jump to NULL (crash)
     // We need to return safe addresses that won't cause crashes
 
     if (address >= 0xff0000 && address <= 0xff00ff) {
@@ -443,19 +443,19 @@ export class AmigaDosEnvironment {
       switch (address) {
         case 0xff0000:
         case 0xff0002:
-          // Bulls door specifically reads these addresses
+          // Certain doors specifically read these addresses
           // Return a safe RTS address (0x4E75) instruction address
           this.emulator.setRegister(CPURegister.D0, 0xffff0004); // Safe RTS address
           console.log(
             `[ROM Read] Address 0x${address.toString(
               16
-            )} (Bulls read): returning safe RTS address 0xFFFF0004`
+            )} (door read): returning safe RTS address 0xFFFF0004`
           );
           break;
 
         case 0xff0004:
         case 0xff0006:
-          // More Bulls reads - return safe values
+          // Additional defensive reads - return safe values
           this.emulator.setRegister(CPURegister.D0, 0xffff0008);
           console.log(
             `[ROM Read] Address 0x${address.toString(16)}: returning 0xFFFF0008`

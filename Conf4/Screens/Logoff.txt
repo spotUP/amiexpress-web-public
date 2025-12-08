@@ -1,1 +1,1 @@
-Placeholder screen Logoff.txt
+~ ~3SR_bbs:Screens/logoff/logoff

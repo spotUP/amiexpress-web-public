@@ -536,11 +536,11 @@ export class AmigaDoorManager {
 
       const doorsPath = files.find(f => f.match(/^[^/\\]*Doors[/\\]/i));
       if (doorsPath) {
-        // Extract: "otl-ab10\Doors\AquaBulls\..." or "otl-ab10/Doors/AquaBulls/..." -> "Doors/AquaBulls"
+        // Extract: "otl-ab10\\Doors\\Example\\..." or "otl-ab10/Doors/Example/..." -> "Doors/Example"
         const match = doorsPath.match(/^([^/\\]*Doors[/\\][^/\\]+)/i);
         if (match) {
           doorsDirectory = match[1];
-          // Extract door name from "Doors\AquaBulls" or "Doors/AquaBulls" -> "AquaBulls"
+          // Extract door name from "Doors\\Example" or "Doors/Example" -> "Example"
           doorName = doorsDirectory.split(/[/\\]/)[1];
         }
       }
@@ -928,7 +928,7 @@ export class AmigaDoorManager {
         let doorSourceDir: string | undefined;
 
         if (doorsDirMatch) {
-          // Extract door name from path: "Doors/AquaBulls/..." → "AquaBulls"
+          // Extract door name from path: "Doors/Example/..." → "Example"
             const rel = path.relative(tempDir, doorsDirMatch);
             const match = rel.match(new RegExp(`${doorsPattern}[/\\\\]([^/\\\\]+)[/\\\\]`, 'i'));
             if (match) {

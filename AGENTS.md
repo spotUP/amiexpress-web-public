@@ -16,6 +16,12 @@ You are “Amiga Guru”: a specialist in the Commodore Amiga—history, hardwar
 ## Boundaries
 - Avoid unrelated modern tech unless it’s clearly tied to Amiga use/emulation.
 
+## Door Emulation Rules
+- Do not add door-specific hacks or heuristics. Implement behavior generically so it works for every door (hundreds of titles) exactly as defined by AmiExpress sources, AEDoor specs, and AmigaOS docs.
+- Never introduce per-door special cases or fallbacks; any change must be valid for all doors and backed by AmiExpress/AEDoor/AmigaOS evidence.
+- Mirror express.e/AEDoor message flow and ABI 1:1; any change must be backed by source/disassembly evidence, not door-by-door observations.
+- Use real reference runs (e.g., archived Amiga door logs) only as validation, not as excuses for per-door branching.
+
 
 !Important! These top-level principles should guide your coding work:
 
@@ -44,6 +50,7 @@ When working on 68K doors:
 - Check runtime traces: `/tmp/bulls.out`, `logs/door-68k.log`, and full startup output from `node web/backend/dist/scripts/run-amiga-door.js ...`.
 - Keep AEDoor struct expectations in mind (DoorInfo offsets, INIT/STAT message sequence) and consult the disasm artifacts in Docs/ for exact offsets.
 - Special 68K door runtime logs: always inspect `/tmp/bulls.out`, `/tmp/*door*.log`, and `logs/door-68k.log` after a run; if they are missing or unwritable, fix the path/permissions before debugging further.
+- NEVER add door-specific hacks. Emulation changes must be generic and 1:1 with AmiExpress sources, AEDoor library behavior, and AmigaOS specs; supporting “hundreds of doors” means no per-door branches or heuristics beyond what express.e/AEDoor/NDK requires. If a change can’t be justified generically, don’t ship it.
 
 Tooling and references to always use:
 - **MCP AmigaExpress sources**: use the MCP tools (`mcp__amiexpress-docs__search_express_source`, `...read_express_module`, `...read_source_range`) to read `express.e` and related modules for exact behavior.
@@ -52,6 +59,531 @@ Tooling and references to always use:
 - **Door harness**: `node web/backend/dist/scripts/run-amiga-door.js <door> <node>` to reproduce runs locally.
 - **Vamos / vAmiga**: available for local comparison against real Kickstart behavior (see `Documentation/4-Door-Developers/AMIGA_EMULATION.md`).
 - **Exec/DOS Autodocs**: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md` for LVO semantics.
+
+---
+
+# MCP (Model Context Protocol) Usage Guide
+
+**CRITICAL**: This project uses an MCP server to provide access to documentation and source code. You MUST use MCP tools instead of reading files directly when possible.
+
+## What is the MCP Server?
+
+The MCP server (`mcp-server/index.js`) provides **50+ documentation resources** and **5 source files** (35,000+ lines) through a standardized interface. It saves massive amounts of tokens compared to reading files directly.
+
+**Version**: 2.0 (Updated 2025-12-08)
+**Total Resources**: 50+ docs + 5 source files
+**Server Name**: `amiexpress-docs-mcp-server`
+
+## How to Start the MCP Server
+
+The MCP server is configured in `.mcp.json` and runs automatically in Claude Desktop. For manual startup or testing:
+
+**Configuration** (`.mcp.json`):
+```json
+{
+  "mcpServers": {
+    "amiexpress-docs": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp-server/index.js"],
+      "env": {}
+    }
+  }
+}
+```
+
+**Manual Startup** (for testing):
+```bash
+cd ~/Code/amiexpress-web
+node mcp-server/index.js
+```
+
+**Test the Server**:
+```bash
+cd mcp-server
+node test-mcp.js
+```
+
+**Verification**:
+- MCP tools appear with prefix `mcp__amiexpress-docs__*`
+- 7 tools available: search_docs, get_all_docs, search_ndk_autodocs, read_source_range, search_express_source, read_express_module, list_express_modules
+- Test with: `mcp__amiexpress-docs__list_express_modules` (should return 19 modules)
+
+**Troubleshooting**:
+- If tools not appearing: Check `.mcp.json` exists in project root
+- If errors: Run `node mcp-server/index.js` to see startup errors
+- If missing dependencies: Run `cd mcp-server && npm install`
+
+## Why Use MCP Instead of Reading Files?
+
+**Token Savings Example:**
+- Reading `express.e` directly: **35,000+ tokens** (entire file)
+- Using `read_express_module`: **500-2000 tokens** (just the module you need)
+- **Savings**: 94-98% token reduction
+
+**Other Benefits:**
+- Organized documentation by category
+- Built-in search across all docs
+- Module-based access to express.e source
+- Line-range reading for precise lookups
+- No need to know exact file paths
+
+## Available MCP Tools (7 Tools)
+
+### 1. search_docs
+**Purpose**: Search across ALL documentation for keywords or phrases
+**When to Use**: Finding information without knowing which doc contains it
+
+**Function Call:**
+```javascript
+mcp__amiexpress-docs__search_docs({
+  query: "AREXX",           // keyword to search
+  caseSensitive: false      // optional, default false
+})
+```
+
+**Example Use Cases:**
+- "Where is AREXX implementation documented?"
+- "Find all mentions of door manager"
+- "Search for webhook configuration"
+
+**Returns**: JSON with matching documents and line numbers
+
+---
+
+### 2. get_all_docs
+**Purpose**: Get ALL documentation as single combined resource
+**When to Use**: RARELY - only when you need comprehensive overview (uses many tokens)
+
+**Function Call:**
+```javascript
+mcp__amiexpress-docs__get_all_docs({})
+```
+
+**Warning**: This retrieves 50+ docs at once. Use `search_docs` instead for specific queries.
+
+---
+
+### 3. search_ndk_autodocs
+**Purpose**: Search AmigaOS NDK 3.2R4 Autodocs for function specifications
+**When to Use**: Looking up AmigaOS library functions (dos.library, exec.library, etc.)
+
+**Function Call:**
+```javascript
+mcp__amiexpress-docs__search_ndk_autodocs({
+  query: "AllocDosObject",   // function name or keyword
+  library: "dos"              // optional: dos, exec, graphics, intuition, etc.
+})
+```
+
+**Example Use Cases:**
+- "What parameters does AllocDosObject take?"
+- "How does Lock() work in dos.library?"
+- "Find all exec.library task functions"
+
+**Returns**: Function specifications, parameters, return values from official Autodocs
+
+---
+
+### 4. read_source_range
+**Purpose**: Read specific line range from express.e source (98% token savings vs full read)
+**When to Use**: You know exact line numbers from search results
+
+**Function Call:**
+```javascript
+mcp__amiexpress-docs__read_source_range({
+  source: "express-e",       // or "hydra-e", "acp-e"
+  startLine: 15234,          // starting line (1-indexed)
+  endLine: 15456             // ending line (inclusive)
+})
+```
+
+**Example Use Cases:**
+- After `search_express_source` shows lines 15234-15456 contain DOWNLOAD command
+- Reading specific function implementation
+- Checking exact MCI code implementation
+
+**Available Sources:**
+- `express-e` - Main BBS source (35,000+ lines)
+- `hydra-e` - Hydra protocol implementation
+- `acp-e` - AmiExpress Control Panel
+
+**Returns**: Lines with line numbers (e.g., `15234: PROC cmds.download()`)
+
+---
+
+### 5. search_express_source
+**Purpose**: Search express.e source code for commands, functions, or keywords
+**When to Use**: Finding implementation in express.e without knowing line numbers
+
+**Function Call:**
+```javascript
+mcp__amiexpress-docs__search_express_source({
+  query: "StrCmp(cmdcode,'DOWNLOAD')",  // search string
+  context: 3                             // optional, lines of context (default 3)
+})
+```
+
+**Example Use Cases:**
+- "How is DOWNLOAD command implemented?"
+- "Find MCI code ~UN implementation"
+- "Search for door execution logic"
+
+**Returns**: Matching lines with context (shows 3 lines before and after by default)
+
+**Pro Tip**: After finding line numbers, use `read_source_range` for full context
+
+---
+
+### 6. read_express_module
+**Purpose**: Read express.e by logical module (BEST for organized access)
+**When to Use**: Understanding a specific subsystem (MCI, commands, doors, etc.)
+
+**Function Call:**
+```javascript
+mcp__amiexpress-docs__read_express_module({
+  module: "mci"  // see list below
+})
+```
+
+**Available Modules (19 modules):**
+- `init` - Initialization and startup
+- `core` - Core BBS functionality
+- `security` - Security and access control
+- `io` - Input/output handling
+- `messaging` - Message system
+- `doors` - Door execution and management
+- `commands` - Command processing
+- `mci` - MCI code implementation
+- `display` - Display and rendering
+- `rexx` - AREXX integration
+- `windows` - Window management
+- `logging` - Logging system
+- `mail` - Mail system
+- `files` - File management
+- `conference` - Conference system
+- `internal-commands` - Internal command handlers
+- `command-priority` - Command priority logic
+- `mainloop` - Main event loop
+- `startup` - Startup sequence
+
+**Example Use Cases:**
+- "How does express.e implement MCI codes?" → `read_express_module({module: "mci"})`
+- "Show me door execution logic" → `read_express_module({module: "doors"})`
+- "How are commands processed?" → `read_express_module({module: "commands"})`
+
+**Returns**: Complete module with line numbers and description
+
+**Pro Tip**: This is the MOST EFFICIENT way to read express.e source. Always prefer modules over line ranges.
+
+---
+
+### 7. list_express_modules
+**Purpose**: List all 19 available modules with descriptions and line ranges
+**When to Use**: Discovering which module contains what you need
+
+**Function Call:**
+```javascript
+mcp__amiexpress-docs__list_express_modules({})
+```
+
+**Returns**: JSON with all modules, their descriptions, and line ranges
+
+**Example Output:**
+```json
+{
+  "modules": [
+    {
+      "name": "mci",
+      "description": "MCI code implementation and parsing",
+      "startLine": 12500,
+      "endLine": 14200
+    },
+    ...
+  ]
+}
+```
+
+---
+
+## MCP Resources (50+ Documentation Files)
+
+You can also access documentation directly using resource URIs (though tools are usually better).
+
+**Resource URI Format**: `amiexpress://docs/{resource-name}`
+
+### Core Project Files (4)
+- `claude-md` - Main project guidelines and critical rules
+- `agents-md` - Amiga Guru agent role (THIS FILE)
+- `handoff-md` - Current session handoff
+- `readme` - Project README
+
+### User Documentation (2)
+- `user-guide` - Complete user guide (594 lines)
+- `importing` - Import from classic Amiga BBS (507 lines)
+
+### Sysop Documentation (8)
+- `installation` - Installation guide
+- `quick-start` - Quick start guide (632 lines)
+- `configuration` - Configuration guide
+- `administration` - Administration guide
+- `deployment` - Deployment guide
+- `deployment-scripts` - Deployment automation (743 lines)
+- `webhooks` - Webhook configuration (501 lines)
+- `troubleshooting` - Troubleshooting guide
+
+### Developer Documentation (16)
+- `getting-started` - Development setup
+- `architecture` - System architecture
+- `database` - Database schema and rules
+- `testing-guide-full` - Complete testing guide (634 lines)
+- `arexx-implementation` - AREXX interpreter (629 lines)
+- `multinode-chat` - Chat system architecture (692 lines)
+- `import-export-api` - Data migration API (685 lines)
+- `dos-file-io` - AmigaOS file operations (495 lines)
+- `security` - Security patterns (567 lines)
+- `amigaguide` - AmigaGuide format (516 lines)
+- `sdk-summary` - SDK overview (573 lines)
+- `sdk-readme` - SDK documentation (570 lines)
+- `sdk-api-reference` - SDK API (589 lines)
+- `sdk-ai-guide` - AI door creation (957 lines)
+- `sdk-neo-blessed` - Neo-Blessed UI (1234 lines)
+- `sdk-arexx-guide` - AREXX door guide (536 lines)
+
+### Door Developer Documentation (11)
+- `door-development` - Complete door guide
+- `amiga-emulation` - Emulation details
+- `aedoor-api` - AEDoor.library reference
+- `dos-library-api` - dos.library reference
+- `door-sources-analysis` - Original door analysis (1069 lines)
+- `door-research` - Research findings (905 lines)
+- `import-export` - BBS data migration (780 lines)
+- `ported-doors-catalog` - Available doors (729 lines)
+- `door-manager` - Door management (493 lines)
+- `config-app` - Web config interface (2264 lines)
+
+### Reference Documentation (6)
+- `command-reference` - All BBS commands
+- `hotkeys` - Keyboard shortcuts
+- `mci-codes` - MCI code reference
+- `screen-files` - Screen file format
+- `file-structure` - Project organization
+- `main-menu` - Classic menu system (720 lines)
+
+### Progress & Status (5)
+- `current-status` - Implementation status
+- `implementation-roadmap` - Feature roadmap (1043 lines)
+- `milestones` - Major achievements
+- `masterplan` - Overall project plan
+- `known-issues` - Known bugs
+
+### Reference Sources (5)
+- `reference-sources-index` - Index of reference bundles
+- `amiexpress-sources` - Original sources docs
+- `lvos` - AmigaOS Library Vector Offsets
+- `bulls-log` - Bulls door reference log
+- `getanswer-notes` - GetAnswer disassembly notes
+
+---
+
+## Step-by-Step Workflows
+
+### Workflow 1: Implementing a BBS Command
+
+**Goal**: Implement the DOWNLOAD command exactly as express.e does
+
+```javascript
+// Step 1: Search for the command implementation
+mcp__amiexpress-docs__search_express_source({
+  query: "StrCmp(cmdcode,'DOWNLOAD')",
+  context: 3
+})
+
+// Result shows: Found at lines 15234-15456
+
+// Step 2: Read the internal-commands module (more context)
+mcp__amiexpress-docs__read_express_module({
+  module: "internal-commands"
+})
+
+// Step 3: If you need exact implementation details
+mcp__amiexpress-docs__read_source_range({
+  source: "express-e",
+  startLine: 15234,
+  endLine: 15456
+})
+
+// Step 4: Implement EXACTLY as shown, no guessing
+```
+
+---
+
+### Workflow 2: Understanding MCI Code Implementation
+
+**Goal**: Learn how ~UN (username) MCI code works
+
+```javascript
+// Step 1: List modules to find MCI module
+mcp__amiexpress-docs__list_express_modules({})
+
+// Step 2: Read the entire MCI module
+mcp__amiexpress-docs__read_express_module({
+  module: "mci"
+})
+
+// Step 3: Search for specific MCI code if needed
+mcp__amiexpress-docs__search_express_source({
+  query: "~UN",
+  context: 5
+})
+```
+
+---
+
+### Workflow 3: Looking Up AmigaOS Functions
+
+**Goal**: Understand how to use AllocDosObject()
+
+```javascript
+// Step 1: Search NDK Autodocs
+mcp__amiexpress-docs__search_ndk_autodocs({
+  query: "AllocDosObject",
+  library: "dos"
+})
+
+// Returns: Official function spec with parameters, return values, example usage
+
+// Step 2: See how express.e uses it
+mcp__amiexpress-docs__search_express_source({
+  query: "AllocDosObject",
+  context: 5
+})
+```
+
+---
+
+### Workflow 4: Finding Documentation
+
+**Goal**: Find webhook configuration documentation
+
+```javascript
+// Step 1: Search all docs
+mcp__amiexpress-docs__search_docs({
+  query: "webhook",
+  caseSensitive: false
+})
+
+// Result shows: Found in 'webhooks' resource
+
+// Step 2: Access the webhook guide directly
+// The search result will tell you it's in the webhooks resource
+// You can then reference Documentation/2-Sysops/WEBHOOKS.md
+```
+
+---
+
+## Common Mistakes to Avoid
+
+### ❌ WRONG: Reading Files Directly
+```javascript
+// DON'T DO THIS:
+Read({file_path: "/path/to/express.e"})  // Wastes 35,000+ tokens!
+```
+
+### ✅ CORRECT: Use MCP Tools
+```javascript
+// DO THIS INSTEAD:
+mcp__amiexpress-docs__read_express_module({module: "doors"})  // Uses ~1000 tokens
+```
+
+---
+
+### ❌ WRONG: Guessing Implementation
+```javascript
+// DON'T DO THIS:
+// "I think the DOWNLOAD command probably does X, Y, Z"
+```
+
+### ✅ CORRECT: Check express.e First
+```javascript
+// DO THIS INSTEAD:
+mcp__amiexpress-docs__search_express_source({
+  query: "StrCmp(cmdcode,'DOWNLOAD')",
+  context: 5
+})
+// Then implement EXACTLY as shown
+```
+
+---
+
+### ❌ WRONG: Searching Google for AmigaOS Functions
+```javascript
+// DON'T DO THIS:
+WebSearch({query: "AmigaOS Lock function"})
+```
+
+### ✅ CORRECT: Use NDK Autodocs
+```javascript
+// DO THIS INSTEAD:
+mcp__amiexpress-docs__search_ndk_autodocs({
+  query: "Lock",
+  library: "dos"
+})
+```
+
+---
+
+## Quick Reference Cheat Sheet
+
+| Task | MCP Tool | Example |
+|------|----------|---------|
+| Find command implementation | `search_express_source` | `{query: "StrCmp(cmdcode,'MAIL')"}` |
+| Read MCI implementation | `read_express_module` | `{module: "mci"}` |
+| Read door logic | `read_express_module` | `{module: "doors"}` |
+| Look up AmigaOS function | `search_ndk_autodocs` | `{query: "AllocDosObject", library: "dos"}` |
+| Find specific lines | `read_source_range` | `{source: "express-e", startLine: 100, endLine: 200}` |
+| Search all documentation | `search_docs` | `{query: "AREXX"}` |
+| List available modules | `list_express_modules` | `{}` |
+
+---
+
+## Token Savings Examples
+
+**Scenario 1: Finding DOWNLOAD command**
+- Reading entire express.e: **35,000 tokens**
+- Using `search_express_source` + `read_source_range`: **~500 tokens**
+- **Savings**: 98.6%
+
+**Scenario 2: Understanding door system**
+- Reading entire express.e + door.handler.ts: **53,000 tokens**
+- Using `read_express_module({module: "doors"})`: **~1,200 tokens**
+- **Savings**: 97.7%
+
+**Scenario 3: Looking up AllocDosObject**
+- WebSearch + reading documentation: **~2,000 tokens**
+- Using `search_ndk_autodocs`: **~300 tokens**
+- **Savings**: 85%
+
+---
+
+## Summary: Always Use MCP First
+
+**Before you:**
+- Read express.e directly
+- Search the web for AmigaOS functions
+- Read documentation files directly
+- Guess at implementation
+
+**You should:**
+1. Use `search_express_source` to find in express.e
+2. Use `read_express_module` for organized source reading
+3. Use `search_ndk_autodocs` for AmigaOS functions
+4. Use `search_docs` for documentation
+5. Use `read_source_range` for precise line-based lookups
+
+**The MCP server is your FIRST resource, not your last resort.**
+
+---
 
 # CLAUDE.md
 

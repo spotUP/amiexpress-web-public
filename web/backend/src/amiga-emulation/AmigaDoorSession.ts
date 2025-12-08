@@ -29,7 +29,7 @@ import { DoorLogger, getDoorLogger, removeDoorLogger } from "./DoorLogger.js";
  * - DoorLifecycleManager: Execution loop and lifecycle management
  * - DoorMessageHandler: Message processing and IPC handling
  *
- * Version: 2025-12-01 - Generic door emulation (Bulls-specific code removed)
+ * Version: 2025-12-01 - Generic door emulation
  */
 
 export class AmigaDoorSession {
@@ -71,11 +71,6 @@ export class AmigaDoorSession {
     sentInitialMessage: false,
     trapVerified: false,
     ximPortsInitialized: false,
-
-    // Bulls-specific
-    bullsCreateCommPatched: false,
-    bullsInputScript: ["\r\n", "1\r\n", "Q\r\n"] as string[],
-    bullsScriptIndex: 0,
   };
 
   constructor(socket: Socket, config: DoorConfig) {
@@ -244,6 +239,30 @@ export class AmigaDoorSession {
       // Provide a CLI structure so doors see a real pr_CLI (matches /X SystemTagList)
       this.setupCliEnvironment();
 
+      // Optional: seed a Workbench-style startup message for doors that expect pr_CLI=0 + WBStartup
+      if (
+        process.env.DOOR_FORCE_WB_STARTUP === "1" &&
+        this.sharedState.execLibrary &&
+        this.emulator
+      ) {
+        const progName = path.basename(this.config.executablePath);
+        const argList = this.config.args?.map(String) || [];
+        const msgAddr = this.sharedState.execLibrary.seedWorkbenchStartup(
+          progName,
+          argList.length > 0 ? argList : [progName]
+        );
+        // Workbench-launched tasks have pr_CLI = NULL; mirror that when requested
+        const taskAddr = this.sharedState.execLibrary.getCurrentTaskAddress();
+        this.emulator.writeMemory32(taskAddr + 0xac, 0);
+        // Disable pr_CLI restore callback so later CreatePort calls do not reassert CLI mode
+        this.sharedState.execLibrary.setDoorInitCallback(() => {});
+        console.log(
+          `[AmigaDoorSession] DOOR_FORCE_WB_STARTUP=1 -> seeded WBStartup (0x${msgAddr.toString(
+            16
+          )}) and cleared pr_CLI`
+        );
+      }
+
       // Initialize Door Loader (Phase 3)
       this.doorLoader = new DoorLoader(
         this.emulator,
@@ -273,6 +292,34 @@ export class AmigaDoorSession {
         aePortAddress: this.sharedState.aePortAddress,
         sentInitialMessage: this.sharedState.sentInitialMessage,
       });
+
+      // Optional watchpoints for debugging: set DOOR_WATCH_ADDRESSES as comma-separated hex
+      const watchEnv = process.env.DOOR_WATCH_ADDRESSES;
+      const watchOffEnv = process.env.DOOR_WATCH_OFFSETS;
+      const addrs =
+        watchEnv
+          ?.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((s) => parseInt(s, 16))
+          .filter((n) => !Number.isNaN(n)) || [];
+      const offs =
+        watchOffEnv
+          ?.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((s) => parseInt(s, 16))
+          .filter((n) => !Number.isNaN(n)) || [];
+      const logPath = process.env.DOOR_WATCH_LOG || "/tmp/door-watch.log";
+      if (addrs.length > 0 || offs.length > 0) {
+        this.emulator.setWatchpoints(addrs, logPath, offs);
+        console.log(
+          `[AmigaDoorSession] Watchpoints enabled at ${[
+            ...addrs.map((a) => "0x" + a.toString(16)),
+            ...offs.map((o) => "A4+0x" + o.toString(16)),
+          ].join(", ")} -> ${logPath}`
+        );
+      }
 
       // Initialize Lifecycle Manager (Phase 5A)
       this.lifecycleManager = new DoorLifecycleManager(
@@ -547,11 +594,17 @@ export class AmigaDoorSession {
     );
 
     // Set CLI info for dos.library helpers (GetArgStr, GetCliProgramName)
+    const isXimDoor = (this.config.doorType || "").toUpperCase() === "XIM";
+    const cliArgsRaw =
+      this.config.args && this.config.args.length > 0 ? this.config.args : [];
     const cliArgs =
-      this.config.args && this.config.args.length > 0
-        ? this.config.args
+      cliArgsRaw.length > 0
+        ? isXimDoor
+          ? [nodeId.toString(), ...cliArgsRaw]
+          : cliArgsRaw
         : [nodeId.toString()];
-    const argStringPlain = cliArgs.join(" ").trim() || nodeId.toString();
+    const argStringPlain =
+      cliArgs.join(" ").trim() || nodeId.toString();
     for (let i = 0; i < argStringPlain.length; i++) {
       this.emulator.writeMemory(argStringAddr + i, argStringPlain.charCodeAt(i));
     }

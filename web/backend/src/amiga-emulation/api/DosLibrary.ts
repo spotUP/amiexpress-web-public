@@ -504,6 +504,12 @@ export class DosLibrary {
 
   private ensureDirectory(dir: string): void {
     try {
+      // Skip if directory already exists
+      if (fs.existsSync(dir)) {
+        return;
+      }
+
+      console.log(`[dos.library] Creating directory: ${dir}`);
       fs.mkdirSync(dir, { recursive: true });
     } catch (error) {
       console.warn(
@@ -517,7 +523,7 @@ export class DosLibrary {
    * UADE compatibility: doors often pass relative filenames after calling
    * CurrentDir(). Classic AmigaDOS prepends the current directory text so
    * open() sees an absolute path. We mimic that behavior here so doors like
-   * Bulls see the same semantics even without modifying their strings.
+   * XIM doors see the same semantics even without modifying their strings.
    */
   private normalizeAmigaPath(amigaPath: string): string {
     if (amigaPath.includes(":") || amigaPath.startsWith("/")) {
@@ -1278,7 +1284,14 @@ export class DosLibrary {
     const resolved = this.pathManager.amiToSysPath(amiPath, this.currentDirectory);
     if (resolved) {
       try {
-        fs.mkdirSync(path.dirname(resolved), { recursive: true });
+        const parentDir = path.dirname(resolved);
+        // Don't create "BBS/" subdirectory - BBS: should resolve to project root
+        if (parentDir.endsWith('/BBS') || parentDir.endsWith('\\BBS')) {
+          console.warn(`[dos.library] Skipping creation of BBS/ subdirectory for redirect: ${amiPath} -> ${resolved}`);
+        } else if (!fs.existsSync(parentDir)) {
+          console.log(`[dos.library] Creating parent directory for stdout redirect: ${parentDir}`);
+          fs.mkdirSync(parentDir, { recursive: true });
+        }
       } catch {
         /* ignore directory creation failures; open() will report errors */
       }

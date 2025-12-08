@@ -7,7 +7,7 @@ import { MoiraEmulator } from "../cpu/MoiraEmulator.js";
 import { Socket } from "socket.io";
 import { ExecLibrary } from "../api/ExecLibrary.js";
 import { XIMProtocol, XIMCommand } from "../XIMProtocol.js";
-import { DoorConfig, DoorConstants } from "../DoorTypes.js";
+import { DoorConfig, DoorConstants, AEDoorCommand } from "../DoorTypes.js";
 import { logDoorMessage } from "../../utils/door-logging.util";
 import { populateDoorInfoStructs } from "./door-info.util.js";
 import { parseMciCodes } from "../../handlers/screen.handler.js";
@@ -39,9 +39,7 @@ export class DoorMessageHandler {
 
   // Message processing state
   private messageConfig: MessageProcessingConfig;
-  private lastMessageDump: number = 0;
   private messageCount: number = 0;
-  private firstNonRegisterSeen: boolean = false;
   private activeInput: ActiveInputState | null = null;
 
   // Door display state (express.e:3876,3877)
@@ -84,8 +82,6 @@ export class DoorMessageHandler {
       maxMessageSize: 1000,
       bufferSize: 256,
     };
-
-    this.firstNonRegisterSeen = false;
     this.setupInputHandler();
   }
 
@@ -163,6 +159,7 @@ export class DoorMessageHandler {
 
   /**
    * Send INIT (cmd 0) and STAT (cmd 1) messages for XIM doors, mirroring AEDoor.library
+   * layout (Exec message header + command at offset 0x14/0x18).
    */
   sendInitAndStatusMessages(): void {
     if (this.sentInitialMessage) {
@@ -186,7 +183,7 @@ export class DoorMessageHandler {
       session.command ||
       (this.config as any)?.doorId ||
       session.doorId ||
-      "BULLS";
+      "XIM";
 
     populateDoorInfoStructs(this.emulator, this.doorInfoAddr, this.nodeStatusAddr, {
       aePort: this.doorPortAddress || this.execLibrary.getDoorPortAddress() || 0,
@@ -203,17 +200,22 @@ export class DoorMessageHandler {
       return;
     }
 
-    // Bulls expects two messages: JH_INIT (cmd=0, data=DoorInfo) then JH_STAT (cmd=1, data=NodeStatus)
-    const portAddr =
-      this.doorPortAddress ||
-      this.execLibrary.getDoorPortAddress() ||
-      0xa0000;
+    // AEDoor-based XIM doors expect the messages on the public AE port (AEDoorPortX)
+    const portAddr = this.execLibrary.getDoorPortAddress();
+    const doorInfoReply =
+      this.doorInfoAddr > 0
+        ? this.emulator.readMemory32(this.doorInfoAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET)
+        : 0;
+    const targetPorts = Array.from(
+      new Set([portAddr, doorInfoReply].filter((p) => p && p > 0))
+    );
     const statusText = `NODE ${this.resolveNodeId()} STATUS READY`;
 
-    const initMsgAddr = this.allocateDoorCommandMessage(0, 0, "INIT");
-    const statMsgAddr = this.allocateDoorCommandMessage(
-      1,
-      this.doorInfoAddr + 0xe4,
+    // Real AEDoor disasm sends two PutMsg calls with d0=1 then d0=2
+    const initMsgAddr = this.allocateAedoorStyleMessage(1, 0, "INIT");
+    const statMsgAddr = this.allocateAedoorStyleMessage(
+      2,
+      this.doorInfoAddr + DoorConstants.MESSAGE_NODE_OFFSET,
       statusText
     );
     if (initMsgAddr === null || statMsgAddr === null) {
@@ -235,11 +237,22 @@ export class DoorMessageHandler {
           16
         )} len=${DoorConstants.MESSAGE_TOTAL_LENGTH}`
       );
-      this.execLibrary.putMsg(portAddr, msgAddr, {
-        suppressDoorCallback: this.messageConfig.suppressCallbacks,
-      });
-      if (this.doorReplyPortAddr) {
-        this.execLibrary.putMsg(this.doorReplyPortAddr, msgAddr, {
+      console.log(
+        `[DoorMessageHandler]   header: cmd=0x${this.emulator
+          .readMemory32(msgAddr + 20)
+          .toString(16)} data=0x${this.emulator
+          .readMemory32(msgAddr + 24)
+          .toString(16)}`
+      );
+      for (const dest of targetPorts) {
+        this.execLibrary.putMsg(dest, msgAddr, {
+          suppressDoorCallback: this.messageConfig.suppressCallbacks,
+        });
+      }
+      // Also queue to the door's reply port (mn_ReplyPort) if present, matching AEDoor behavior where the door may WaitPort on its own reply port.
+      const replyPort = this.doorReplyPortAddr || doorInfoReply;
+      if (replyPort && !targetPorts.includes(replyPort)) {
+        this.execLibrary.putMsg(replyPort, msgAddr, {
           suppressDoorCallback: this.messageConfig.suppressCallbacks,
         });
       }
@@ -252,48 +265,44 @@ export class DoorMessageHandler {
   }
 
   /**
-   * Allocate door command message structure
+   * Allocate a minimal AEDoor-style message (Exec message header + command/data)
+   * so legacy 68K doors see the exact layout expected from AEDoor.library.
    */
-  private allocateDoorCommandMessage(
+  private allocateAedoorStyleMessage(
     command: number,
     data: number,
     messageText: string
   ): number | null {
-    if (this.doorReplyPortAddr === 0) {
-      this.doorReplyPortAddr = this.execLibrary.createMsgPort();
-    }
-    if (this.doorReplyPortAddr === 0) {
+    // Mirror AEDoor.library: message buffer lives inside DoorInfo at +0x46
+    if (!this.doorInfoAddr) {
+      console.error("[DoorMessageHandler] Cannot create message without DoorInfo");
       console.error("[DoorMessageHandler] Failed to create reply port");
       return null;
     }
 
-    const msgAddr = this.execLibrary.allocMem(
-      DoorConstants.MESSAGE_TOTAL_LENGTH,
-      DoorConstants.MEMF_PUBLIC_CLEAR
-    );
-    if (msgAddr === 0) {
-      console.error(
-        "[DoorMessageHandler] Failed to allocate door command message memory"
-      );
-      return null;
+    // Ensure reply port exists
+    if (this.doorReplyPortAddr === 0) {
+      this.doorReplyPortAddr = this.execLibrary.createMsgPort();
     }
 
-    const replyPortAddr = this.doorReplyPortAddr;
+    const msgAddr = this.doorInfoAddr + DoorConstants.DOOR_INFO_MESSAGE_OFFSET;
+    const msgSize = DoorConstants.MESSAGE_TOTAL_LENGTH;
+    const replyPortAddr =
+      this.doorReplyPortAddr ||
+      this.emulator.readMemory32(this.doorInfoAddr + 0x4) ||
+      this.execLibrary.getDoorReplyPortAddress();
     const NT_MESSAGE = 5;
 
-    this.emulator.writeMemory32(msgAddr + 0, 0);
-    this.emulator.writeMemory32(msgAddr + 4, 0);
-    this.emulator.writeMemory(msgAddr + 8, NT_MESSAGE);
-    this.emulator.writeMemory(msgAddr + 9, 0);
-    this.emulator.writeMemory32(msgAddr + 10, 0);
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET,
-      replyPortAddr
-    );
-    this.emulator.writeMemory16(
-      msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET,
-      DoorConstants.MESSAGE_TOTAL_LENGTH
-    );
+    // Exec message header
+    this.emulator.writeMemory32(msgAddr + 0, 0); // ln_Succ
+    this.emulator.writeMemory32(msgAddr + 4, 0); // ln_Pred
+    this.emulator.writeMemory(msgAddr + 8, NT_MESSAGE); // ln_Type
+    this.emulator.writeMemory(msgAddr + 9, 0); // ln_Pri
+    this.emulator.writeMemory32(msgAddr + 10, 0); // ln_Name
+    this.emulator.writeMemory32(msgAddr + 14, replyPortAddr); // mn_ReplyPort
+    this.emulator.writeMemory16(msgAddr + 18, msgSize); // mn_Length
+
+    // AEDoor extension: command/data near the end of the 0x100 block, string at +0x14
     this.emulator.writeMemory32(
       msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET,
       command
@@ -302,26 +311,6 @@ export class DoorMessageHandler {
       msgAddr + DoorConstants.MESSAGE_DATA_OFFSET,
       data
     );
-    this.emulator.writeMemory32(
-      msgAddr + DoorConstants.MESSAGE_NODE_OFFSET,
-      this.resolveNodeId()
-    );
-    // Bias the Bulls-style header fields as well
-    const bias = DoorConstants.MESSAGE_HEADER_SIZE || 0;
-    if (bias > 0) {
-      this.emulator.writeMemory32(
-        msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET + bias,
-        command
-      );
-      this.emulator.writeMemory32(
-        msgAddr + DoorConstants.MESSAGE_DATA_OFFSET + bias,
-        data
-      );
-      this.emulator.writeMemory32(
-        msgAddr + DoorConstants.MESSAGE_NODE_OFFSET + bias,
-        this.resolveNodeId() || 1
-      );
-    }
     this.writeStringToMemory(
       msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
       messageText,
@@ -396,45 +385,6 @@ export class DoorMessageHandler {
     console.log(
       `[DoorMessageHandler] ===============================================`
     );
-  }
-
-  /**
-   * Dump Bulls message for debugging
-   */
-  private dumpBullsMessage(msgAddr: number): void {
-    const dumpOffsets = [
-      0x10, 0x14, 0x18, 0x1c, 0xdc, 0xe0, 0xe4, 0xe8, 0xec, 0xf0, 0xf4, 0xf8,
-      0xfc, 0x100,
-    ];
-    const dumpParts = dumpOffsets.map((off) => {
-      const val = this.emulator.readMemory32(msgAddr + off);
-      return `+0x${off.toString(16)}=0x${val.toString(16)}`;
-    });
-    console.log(
-      `[DoorMessageHandler][BullsMsgDump] msg=0x${msgAddr.toString(
-        16
-      )} ${dumpParts.join(", ")}`
-    );
-    // Log first non-register command to see where Bulls goes after handshake.
-    if (!this.firstNonRegisterSeen) {
-      const cmd = this.emulator.readMemory32(
-        msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET
-      );
-      if (cmd !== 1) {
-        this.firstNonRegisterSeen = true;
-        const data = this.emulator.readMemory32(
-          msgAddr + DoorConstants.MESSAGE_DATA_OFFSET
-        );
-        const str = this.emulator.readString(
-          msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
-          DoorConstants.MESSAGE_STRING_CAPACITY
-        );
-        console.log(
-          `[DoorMessageHandler][BullsFirstCmd] cmd=${cmd} data=${data} str="${str}"`
-        );
-      }
-    }
-    this.lastMessageDump++;
   }
 
   /**
@@ -2071,12 +2021,18 @@ export class DoorMessageHandler {
     if (this.doorReplyPortAddr === 0) {
       this.doorReplyPortAddr = this.execLibrary.createMsgPort();
     }
-    // Minimal allocations to satisfy Bulls node-status message
+    // Minimal allocations to satisfy XIM node-status message
     if (this.nodeStatusAddr === 0) {
-      this.nodeStatusAddr = this.execLibrary.allocMem(256, DoorConstants.MEMF_PUBLIC_CLEAR);
+      this.nodeStatusAddr = this.execLibrary.allocMem(
+        DoorConstants.NODE_STATUS_SIZE,
+        DoorConstants.MEMF_PUBLIC_CLEAR
+      );
     }
     if (this.doorInfoAddr === 0) {
-      this.doorInfoAddr = this.execLibrary.allocMem(256, DoorConstants.MEMF_PUBLIC_CLEAR);
+      this.doorInfoAddr = this.execLibrary.allocMem(
+        DoorConstants.DOOR_INFO_SIZE,
+        DoorConstants.MEMF_PUBLIC_CLEAR
+      );
     }
   }
 

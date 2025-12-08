@@ -32,7 +32,8 @@ export interface DoorConfig {
 export class DoorConstants {
   // Exec message header size (mn_Node + reply/length)
   static readonly MESSAGE_HEADER_SIZE = 0x14;
-  static readonly DOOR_INFO_SIZE = 0x146;
+  // AEDoor-based XIM doors touch offsets past 0x1a0 (cli/user/location buffers), so allocate >= 0x200
+  static readonly DOOR_INFO_SIZE = 0x240;
   static readonly DOOR_INFO_MESSAGE_OFFSET = 0x46;
   static readonly MESSAGE_STRING_OFFSET = 0x14;
   static readonly MESSAGE_STRING_CAPACITY = 200;
@@ -49,7 +50,8 @@ export class DoorConstants {
   static readonly MESSAGE_FILLER3_OFFSET = 0x104;
   static readonly MESSAGE_REPLY_PORT_OFFSET = 14;
   static readonly MESSAGE_LENGTH_OFFSET = 18;
-  static readonly MESSAGE_TOTAL_LENGTH = 0x104;
+  // AEDoor.library messages are ~0x100 bytes; match that for mn_Length.
+  static readonly MESSAGE_TOTAL_LENGTH = 0x100;
   static readonly DIF_DATA_PTR_OFFSET = 0x1c;
   static readonly DIF_STRING_PTR_OFFSET = 0x20;
   static readonly NODE_STATUS_SIZE = 0x100;
@@ -91,13 +93,6 @@ export const DOS_FUNCTION_OFFSETS: Record<string, string> = {
   // ... (full map will be moved here in later phases)
   "-474": "TWrite",
 };
-
-export interface BullsPointerWatch {
-  info: number;
-  control: number;
-  handshake: number;
-  nodeMirror: number;
-}
 
 export interface WriteCallLogEntry {
   pc: number;

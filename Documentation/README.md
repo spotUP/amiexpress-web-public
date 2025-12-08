@@ -17,7 +17,7 @@ Choose your role to find relevant documentation:
 
 **New to AmiExpress? Start here:**
 
-📖 **[User Guide](1-Users/USER_GUIDE.md)** - Complete guide to using the BBS
+📖 **[User Guide](1-Users/USER_GUIDE.md)** - Complete guide to using the BBS (594 lines)
 - Getting started
 - Login & authentication
 - Reading and posting messages
@@ -28,6 +28,8 @@ Choose your role to find relevant documentation:
 - Customization options
 - Keyboard shortcuts
 
+📥 **[Importing Data](1-Users/IMPORTING.md)** - Import from classic Amiga BBS (507 lines)
+
 ---
 
 ## For Sysops
@@ -35,12 +37,15 @@ Choose your role to find relevant documentation:
 **Running an AmiExpress BBS:**
 
 ### Getting Started
-🚀 **[Installation Guide](2-Sysops/INSTALLATION.md)** - Set up your BBS
-📝 **[Configuration Guide](2-Sysops/CONFIGURATION.md)** - Configure your system
+🚀 **[Quick Start Guide](2-Sysops/QUICK_START.md)** - Get running fast (632 lines)
+📝 **[Installation Guide](2-Sysops/INSTALLATION.md)** - Set up your BBS
+🔧 **[Configuration Guide](2-Sysops/CONFIGURATION.md)** - Configure your system
 
 ### Operations
 ⚙️ **[Administration Guide](2-Sysops/ADMINISTRATION.md)** - Day-to-day management
 🌐 **[Deployment Guide](2-Sysops/DEPLOYMENT.md)** - Production deployment
+📜 **[Deployment Scripts](2-Sysops/DEPLOYMENT_SCRIPTS.md)** - Automation scripts (743 lines)
+🔗 **[Webhooks](2-Sysops/WEBHOOKS.md)** - Webhook configuration (501 lines)
 🔧 **[Troubleshooting Guide](2-Sysops/TROUBLESHOOTING.md)** - Common issues
 
 ---
@@ -53,11 +58,23 @@ Choose your role to find relevant documentation:
 🏗️ **[Getting Started](3-Developers/GETTING_STARTED.md)** - Development setup
 📐 **[Architecture](3-Developers/ARCHITECTURE.md)** - System design
 💾 **[Database](3-Developers/DATABASE.md)** - Database schema and rules
-🧪 **[Testing](3-Developers/TESTING.md)** - Testing with Puppeteer
+🧪 **[Testing Guide](3-Developers/TESTING_GUIDE.md)** - Complete testing methodology (634 lines)
+
+### Implementation Guides
+🎯 **[AREXX Implementation](3-Developers/AREXX_IMPLEMENTATION.md)** - AREXX interpreter (629 lines)
+💬 **[Multi-Node Chat](3-Developers/MULTINODE_CHAT.md)** - Chat system architecture (692 lines)
+📥 **[Import/Export API](3-Developers/IMPORT_EXPORT_API.md)** - Data migration API (685 lines)
+📁 **[DOS File I/O](3-Developers/DOS_FILE_IO.md)** - AmigaOS file operations (495 lines)
+🔒 **[Security](3-Developers/SECURITY.md)** - Security patterns (567 lines)
+📖 **[AmigaGuide Support](3-Developers/AMIGAGUIDE.md)** - AmigaGuide format (516 lines)
+🌐 **[Telnet/SSH Servers](3-Developers/TELNET_SSH_SERVERS.md)** - Multi-protocol server implementation (296 lines)
 
 ### APIs
 🔌 **[API Reference](3-Developers/API_REFERENCE.md)** - Backend API
 🤝 **[Contributing](3-Developers/CONTRIBUTING.md)** - Contribution guidelines
+
+### SDK Documentation
+📦 **SDK docs in [archive/sdk/](3-Developers/archive/sdk/)** - Door Development Kit guides
 
 ---
 
@@ -72,6 +89,14 @@ Choose your role to find relevant documentation:
 📚 **[DOS Library API](4-Door-Developers/DOS_LIBRARY_API.md)** - dos.library reference
 💡 **[Examples](4-Door-Developers/EXAMPLES.md)** - Example doors
 
+### Technical References
+🔬 **[Door Sources Analysis](4-Door-Developers/DOOR_SOURCES_ANALYSIS.md)** - Original door analysis (1069 lines)
+🔍 **[Door Research](4-Door-Developers/DOOR_RESEARCH.md)** - Research findings (905 lines)
+📥 **[Import/Export](4-Door-Developers/IMPORT_EXPORT.md)** - BBS data migration (780 lines)
+📋 **[Ported Doors Catalog](4-Door-Developers/PORTED_DOORS_CATALOG.md)** - Available doors (729 lines)
+🔧 **[Door Manager](4-Door-Developers/DOOR_MANAGER.md)** - Door management system (493 lines)
+⚙️ **[Config App Design](4-Door-Developers/CONFIG_APP.md)** - Web config interface (2264 lines)
+
 ---
 
 ## Quick Reference
@@ -83,6 +108,7 @@ Choose your role to find relevant documentation:
 🎨 **[MCI Codes](5-Reference/MCI_CODES.md)** - MCI code reference
 📄 **[Screen Files](5-Reference/SCREEN_FILES.md)** - Screen file format
 📁 **[File Structure](5-Reference/FILE_STRUCTURE.md)** - Project organization
+📖 **[Main Menu Documentation](5-Reference/MAIN_MENU.md)** - Classic menu system (720 lines)
 🧾 **[Reference Sources](7-Reference Sources/README.md)** - External reference source bundles (petscii-bbs, UADE, etc.)
 
 ---
@@ -92,10 +118,13 @@ Choose your role to find relevant documentation:
 **For Claude and developers tracking progress:**
 
 📊 **[Current Status](6-Progress/CURRENT_STATUS.md)** - Implementation status
+📜 **[Progress History](6-Progress/PROGRESS_HISTORY.md)** - Complete milestone history (consolidated from 119 reports)
+🗺️ **[Implementation Roadmap](6-Progress/IMPLEMENTATION_ROADMAP.md)** - Complete feature roadmap (1043 lines)
 🎯 **[Milestones](6-Progress/MILESTONES.md)** - Major achievements
+📋 **[Master Plan](6-Progress/MASTERPLAN.md)** - Overall project plan
 ⚠️ **[Known Issues](6-Progress/KNOWN_ISSUES.md)** - Known bugs and workarounds
 
-**Session Logs:** [6-Progress/archive/](6-Progress/archive/)
+**Session Logs:** [6-Progress/archive/2025-10/](6-Progress/archive/2025-10/) | [6-Progress/archive/2025-11/](6-Progress/archive/2025-11/)
 
 ---
 

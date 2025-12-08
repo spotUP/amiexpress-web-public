@@ -124,7 +124,7 @@ export class BBSPaths {
 
   /**
    * Get Doors/ directory or specific door subdirectory
-   * @param doorName Optional door name (e.g., 'AquaBulls', 'WhatIs')
+   * @param doorName Optional door name (e.g., 'AquaDoor', 'WhatIs')
    */
   doors(doorName?: string): string {
     const doorsDir = path.join(this.root(), 'Doors');

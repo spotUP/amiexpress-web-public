@@ -27,8 +27,9 @@ export class KickstartRom {
    * Default: AROS first, Kickstart fallback. Env override AEDOOR_ROM=kickstart
    */
   private loadRom(): void {
-    const preferKickstart =
-      (process.env.AEDOOR_ROM || "").toLowerCase() === "kickstart";
+    const romPref = (process.env.AEDOOR_ROM || "").toLowerCase();
+    // Default: prefer real Kickstart if present; allow explicit override to AROS via AEDOOR_ROM=aros
+    const preferKickstart = romPref === "kickstart" || romPref === "" ;
 
     const repoRoot = path.resolve(__dirname, '../../..');
     const backendRoot = path.join(repoRoot, 'web/backend');

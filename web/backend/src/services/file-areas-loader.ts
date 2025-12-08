@@ -96,34 +96,13 @@ export function loadFileAreasFromDisk(bbsRoot: string, conferences: any[]): File
 }
 
 /**
- * Ensure every DIR file for the configured file areas exists.
- * If a DIR file is missing, create an empty file so doors/readers never fail.
+ * Placeholder creation for DIR files is disabled; callers may manage files manually.
  */
 export async function ensureDirFilesExist(
   bbsRoot: string,
   fileAreas: FileArea[]
 ): Promise<void> {
-  const created = new Set<string>();
-
-  for (const area of fileAreas) {
-    const confDir = path.join(bbsRoot, `Conf${area.conferenceId}`);
-    const dirFilePath = path.join(confDir, `DIR${area.dirNumber}`);
-
-    if (created.has(dirFilePath)) {
-      continue;
-    }
-
-    try {
-      await fs.promises.mkdir(confDir, { recursive: true });
-      const fileHandle = await fs.promises.open(dirFilePath, 'a');
-      await fileHandle.close();
-      created.add(dirFilePath);
-      console.log(`[FileAreas] Ensured DIR file exists: ${dirFilePath}`);
-      await ensureDirFileHasContent(dirFilePath);
-    } catch (error) {
-      console.error(`[FileAreas] Failed to ensure DIR file ${dirFilePath}:`, error);
-    }
-  }
+  // Intentionally left blank: placeholder creation for conferences is disabled.
 }
 
 async function touchFile(filePath: string): Promise<void> {
@@ -143,29 +122,8 @@ async function touchFile(filePath: string): Promise<void> {
 export async function ensureConferenceStructure(
   bbsRoot: string,
   conferences: any[],
-  fileAreas: FileArea[]
+  _fileAreas: FileArea[]
 ): Promise<void> {
-  const dirNumbersByConf = new Map<number, Set<number>>();
-  const areaNamesByConf = new Map<number, string[]>();
-  const globalScreensDir = path.join(bbsRoot, 'Screens');
-  let globalScreens: string[] = [];
-
-  try {
-    const entries = await fs.promises.readdir(globalScreensDir, { withFileTypes: true });
-    globalScreens = entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
-  } catch (error) {
-    console.warn(`[FileAreas] Unable to read global screens directory:`, error);
-  }
-
-  for (const area of fileAreas) {
-    if (!dirNumbersByConf.has(area.conferenceId)) {
-      dirNumbersByConf.set(area.conferenceId, new Set());
-      areaNamesByConf.set(area.conferenceId, []);
-    }
-    dirNumbersByConf.get(area.conferenceId)!.add(area.dirNumber);
-    areaNamesByConf.get(area.conferenceId)!.push(area.name);
-  }
-
   for (const conf of conferences) {
     const confDir = path.join(bbsRoot, `Conf${conf.id}`);
     const directories = ['Files', 'Upload', 'HOLD', 'LCFILES', 'Messages', 'Screens', 'SysopStats'];
@@ -178,55 +136,6 @@ export async function ensureConferenceStructure(
       }
     }
 
-    const pathsToTouch = [
-      path.join(confDir, 'NumULs'),
-      path.join(confDir, 'SysopStats', 'NumULs_2'),
-      path.join(confDir, 'Dir0.info'),
-      path.join(confDir, 'Messages.info'),
-      path.join(confDir, 'HOLD', 'HELD'),
-      path.join(confDir, 'LCFILES', 'uploads.lc')
-    ];
-
-    const dirNumbers = dirNumbersByConf.get(conf.id);
-    if (dirNumbers) {
-      for (const dirNum of dirNumbers) {
-        pathsToTouch.push(path.join(confDir, `DIR${dirNum}`));
-        pathsToTouch.push(path.join(confDir, `Dir${dirNum}.info`));
-      }
-    }
-
-    pathsToTouch.push(path.join(confDir, 'Upload', 'FILE_ID.DIZ'));
-
-    const areaNames = areaNamesByConf.get(conf.id);
-    if (areaNames) {
-      for (const name of areaNames) {
-        const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
-        pathsToTouch.push(path.join(confDir, 'Files', `${safeName}.dir`));
-      }
-    }
-
-    for (const filePath of pathsToTouch) {
-      try {
-        await touchFile(filePath);
-      } catch {
-        // Already logged
-      }
-    }
-
-    for (const screenName of globalScreens) {
-      const targetPath = path.join(confDir, 'Screens', screenName);
-      if (fs.existsSync(targetPath)) {
-        continue;
-      }
-      try {
-        await fs.promises.copyFile(path.join(globalScreensDir, screenName), targetPath);
-        console.log(`[FileAreas] Copied ${screenName} to ${confDir}/Screens`);
-      } catch (error: any) {
-        if (error.code !== 'ENOENT') {
-          console.error(`[FileAreas] Failed to copy screen ${screenName} to ${confDir}/Screens:`, error);
-        }
-      }
-    }
   }
 }
 
@@ -264,14 +173,46 @@ export function resolveAssignPath(assignPath: string, bbsRoot: string): string {
   return resolved;
 }
 
-async function ensureDirFileHasContent(filePath: string): Promise<void> {
+/**
+ * Ensure root Screens has placeholders for core screens only.
+ */
+export async function ensureRootScreens(bbsRoot: string): Promise<void> {
+  const screensDir = path.join(bbsRoot, 'Screens');
+  const requiredScreens = [
+    'BBSTITLE.TXT',
+    'LOGON.TXT',
+    'BULL.TXT',
+    'NODE_BULL.TXT',
+    'CONF_BULL.TXT',
+    'MENU.TXT',
+    'LOGOFF.TXT'
+  ];
+
   try {
-    const stats = await fs.promises.stat(filePath);
-    if (stats.size === 0) {
-      await fs.promises.writeFile(filePath, '\n');
-      console.log(`[FileAreas] Seeded DIR file placeholder: ${filePath}`);
-    }
+    await fs.promises.mkdir(screensDir, { recursive: true });
   } catch (error) {
-    console.error(`[FileAreas] Unable to seed DIR file ${filePath}:`, error);
+    console.error(`[FileAreas] Failed to ensure Screens directory ${screensDir}:`, error);
+    return;
+  }
+
+  let existingScreens: Set<string> = new Set();
+  try {
+    const entries = await fs.promises.readdir(screensDir);
+    existingScreens = new Set(entries.map((entry) => entry.toLowerCase()));
+  } catch (error) {
+    console.warn(`[FileAreas] Unable to read Screens directory ${screensDir}:`, error);
+  }
+
+  for (const screenName of requiredScreens) {
+    if (existingScreens.has(screenName.toLowerCase())) {
+      continue;
+    }
+    const targetPath = path.join(screensDir, screenName);
+    try {
+      await touchFile(targetPath);
+      console.log(`[FileAreas] Created placeholder root screen: ${screenName}`);
+    } catch (error) {
+      console.error(`[FileAreas] Failed to create placeholder root screen ${screenName}:`, error);
+    }
   }
 }

@@ -20,6 +20,27 @@ import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 
+function stripSauceMetadata(buffer: Buffer): Buffer {
+  const sauceMarker = Buffer.from('SAUCE00', 'ascii');
+  const markerIndex = buffer.lastIndexOf(sauceMarker);
+  if (markerIndex === -1) {
+    return buffer;
+  }
+  // Remove any leading SUB (0x1A) preceding the SAUCE block
+  const subIndex = buffer.lastIndexOf(0x1A, markerIndex);
+  const cutIndex = subIndex === -1 ? markerIndex : subIndex;
+  return buffer.slice(0, cutIndex);
+}
+
+function readScreenBuffer(filePath: string): Buffer {
+  const rawBuffer = fs.readFileSync(filePath);
+  return stripSauceMetadata(rawBuffer);
+}
+
+function readScreenText(filePath: string): string {
+  return readScreenBuffer(filePath).toString('utf-8');
+}
+
 // Screen/MCI debugging: always log unless explicitly disabled
 const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG !== '0';
 const screenDebug = (...args: any[]) => {
@@ -940,16 +961,16 @@ export function loadScreenFile(
           // Check if it's a PETSCII .seq file - convert for PetMe64 font display
           if (isPetsciiSeqFile(securityVariant)) {
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
-            const petsciiBuffer = fs.readFileSync(securityVariant);
+            const petsciiBuffer = readScreenBuffer(securityVariant);
             const content = convertPetsciiToPetMe64(petsciiBuffer);
             return { content, isPetscii: true, isRip: false, filePath: securityVariant };
           }
           // Check if it's a RIP file - send raw content (express.e:6776-6780)
           if (isRipFile(securityVariant)) {
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
-            return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false, isRip: true, filePath: securityVariant };
+            return { content: readScreenText(securityVariant), isPetscii: false, isRip: true, filePath: securityVariant };
           }
-          return { content: fs.readFileSync(securityVariant, 'utf-8'), isPetscii: false, isRip: false, filePath: securityVariant };
+          return { content: readScreenText(securityVariant), isPetscii: false, isRip: false, filePath: securityVariant };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', securityVariant, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -972,7 +993,7 @@ export function loadScreenFile(
           if (isPetsciiFile) {
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
             try {
-              const petsciiBuffer = fs.readFileSync(fileToUse);
+              const petsciiBuffer = readScreenBuffer(fileToUse);
               const content = convertPetsciiToPetMe64(petsciiBuffer);
               return { content, isPetscii: true, isRip: false, filePath: fileToUse };
             } catch (error) {
@@ -981,9 +1002,9 @@ export function loadScreenFile(
             }
           } else if (isRipFile(fileToUse)) {
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
-            return { content: fs.readFileSync(fileToUse, 'utf-8'), isPetscii: false, isRip: true, filePath: fileToUse };
+            return { content: readScreenText(fileToUse), isPetscii: false, isRip: true, filePath: fileToUse };
           } else {
-            return { content: fs.readFileSync(fileToUse, 'utf-8'), isPetscii: false, isRip: false, filePath: fileToUse };
+            return { content: readScreenText(fileToUse), isPetscii: false, isRip: false, filePath: fileToUse };
           }
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', fileToUse, error as Error, DebugSeverity.WARNING);
@@ -1009,14 +1030,14 @@ export function loadScreenFile(
         screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
         try {
           if (isPetsciiSeqFile(secPath)) {
-            const petsciiBuffer = fs.readFileSync(secPath);
+            const petsciiBuffer = readScreenBuffer(secPath);
             const content = convertPetsciiToPetMe64(petsciiBuffer);
             return { content, isPetscii: true, isRip: false, filePath: secPath };
           }
-          if (isRipFile(secPath)) {
-            return { content: fs.readFileSync(secPath, 'utf-8'), isPetscii: false, isRip: true, filePath: secPath };
-          }
-          return { content: fs.readFileSync(secPath, 'utf-8'), isPetscii: false, isRip: false, filePath: secPath };
+            if (isRipFile(secPath)) {
+              return { content: readScreenText(secPath), isPetscii: false, isRip: true, filePath: secPath };
+            }
+            return { content: readScreenText(secPath), isPetscii: false, isRip: false, filePath: secPath };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', secPath, error as Error, DebugSeverity.WARNING);
           console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -1039,7 +1060,7 @@ export function loadScreenFile(
           if (isPetsciiSeqFile(tryPath)) {
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
             try {
-              const petsciiBuffer = fs.readFileSync(tryPath);
+              const petsciiBuffer = readScreenBuffer(tryPath);
               const content = convertPetsciiToPetMe64(petsciiBuffer);
               return { content, isPetscii: true, isRip: false, filePath: tryPath };
             } catch (error) {
@@ -1048,9 +1069,9 @@ export function loadScreenFile(
             }
           } else if (isRipFile(tryPath)) {
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
-            return { content: fs.readFileSync(tryPath, 'utf-8'), isPetscii: false, isRip: true, filePath: tryPath };
+            return { content: readScreenText(tryPath), isPetscii: false, isRip: true, filePath: tryPath };
           } else {
-            return { content: fs.readFileSync(tryPath, 'utf-8'), isPetscii: false, isRip: false, filePath: tryPath };
+            return { content: readScreenText(tryPath), isPetscii: false, isRip: false, filePath: tryPath };
           }
         }
       }
@@ -1074,7 +1095,7 @@ export function loadScreenFile(
       const candidate = findCaseInsensitive(path.dirname(fallback), path.basename(fallback));
       if (candidate && fs.existsSync(candidate)) {
         try {
-          const content = fs.readFileSync(candidate, 'utf-8');
+        const content = readScreenText(candidate);
           screenDebug(`[loadScreenFile]  Using fallback screen for ${screenName}: ${candidate}`);
           return { content, isPetscii: false, isRip: false, filePath: candidate };
         } catch (error) {
@@ -1096,7 +1117,7 @@ export function loadScreenFile(
     const ansiFallback = findCaseInsensitive(nodeFallbackDir, 'bbstitle.txt') || findCaseInsensitive(nodeFallbackDir, 'bbstitle.TXT');
     if (ansiFallback) {
       try {
-        const content = fs.readFileSync(ansiFallback, 'utf-8');
+        const content = readScreenText(ansiFallback);
         screenDebug(`[loadScreenFile]  Using ANSI fallback screen ${ansiFallback}`);
         return { content, isPetscii: false, isRip: false, filePath: ansiFallback };
       } catch (error) {
@@ -1115,7 +1136,7 @@ export function loadScreenFile(
     const petsciiFallback = findCaseInsensitive(nodeFallbackDir, 'bbstitle.seq');
     if (petsciiFallback) {
       try {
-        const buffer = fs.readFileSync(petsciiFallback);
+        const buffer = readScreenBuffer(petsciiFallback);
         const content = convertPetsciiToPetMe64(buffer);
         screenDebug(`[loadScreenFile]  Using PETSCII fallback screen ${petsciiFallback}`);
         return { content, isPetscii: true, isRip: false, filePath: petsciiFallback };

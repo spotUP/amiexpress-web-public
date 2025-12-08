@@ -28,7 +28,9 @@ export class LibraryLoader {
   private emulator: MoiraEmulator;
   private hunkLoader: HunkLoader;
   private librarySearchPaths: string[];
-  private nextLibraryBase: number = 0xFFE00000; // Start high in 24-bit space
+  // Place real libraries safely within 24-bit address space but above door code.
+  // Door code lives below ~0x200000; use 0x00200000 and step downward to avoid collisions.
+  private nextLibraryBase: number = 0x00200000;
   private loadedLibraries = new Map<string, LoadedLibrary>();
 
   constructor(emulator: MoiraEmulator, searchPaths?: string[]) {

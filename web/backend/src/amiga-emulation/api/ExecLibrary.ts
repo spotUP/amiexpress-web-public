@@ -156,10 +156,10 @@ export class ExecLibrary {
     // Initialize ExecBase structure
     this.execBase = {
       address: this.EXEC_BASE_ADDR,
-      version: 37, // Kickstart 2.04+
-      revision: 175, // Standard revision
+      version: 40, // Kickstart 3.1 exec.library 40.10
+      revision: 10,
       idString: 0, // TODO: Create version string
-      softVer: 37, // Kickstart 2.04
+      softVer: 40, // Kickstart 3.1
       thisTask: 0, // Will be set when creating task
       libList: 0, // TODO: Create list
       taskReady: 0, // TODO: Create list
@@ -601,14 +601,26 @@ export class ExecLibrary {
           )}`
         );
 
-        // Check if already opened
-        const existing = this.libraries.get(name);
+        // If a placeholder already exists (from preregistration), upgrade it to the real base
+        const existing = this.libraries.get(name) || this.libraries.get(name.toLowerCase());
         if (existing) {
-          existing.openCount++;
+          existing.address = realLibrary.baseAddress;
+          existing.version = realLibrary.version || existing.version;
+          existing.revision = 0;
+          existing.openCount = (existing.openCount || 0) + 1;
+          this.writeLibraryToMemory(existing);
           console.log(
-            `[ExecLibrary]   Already open, count=${existing.openCount}`
+            `[ExecLibrary]   Upgraded placeholder for ${name} -> real base 0x${existing.address.toString(
+              16
+            )}, count=${existing.openCount}`
           );
-          return { success: true, address: existing.address, isNative: false };
+
+          // Notify callback with the real address
+          if (this.onLibraryOpened) {
+            this.onLibraryOpened(name, realLibrary.baseAddress);
+          }
+
+          return { success: true, address: existing.address, isNative: true };
         }
 
         // Create library node for real library
@@ -839,6 +851,14 @@ export class ExecLibrary {
         console.log(`[ExecLibrary]   FindPort trap called`);
         // FIXED: A1 = register 9 (not 13 which is A5)
         const portNameAddr = this.emulator.getRegister(9); // A1
+        const portNameStr = portNameAddr
+          ? this.emulator.readString(portNameAddr)
+          : "<null>";
+        console.log(
+          `[ExecLibrary][Trap][FindPort] A1=0x${portNameAddr.toString(
+            16
+          )} "${portNameStr}"`
+        );
         const portResult = this.findPort(portNameAddr);
         this.emulator.setRegister(0, portResult);
         return true;
@@ -876,8 +896,8 @@ export class ExecLibrary {
         // Preserve D0/A6; just return current D0
         return true;
 
-      // *** CRITICAL MISSING CASES FOR BULLS ***
-      case -372: // _LVOGetMsg - THIS IS WHAT BULLS IS CALLING!
+      // *** CRITICAL MISSING CASES FOR XIM DOORS ***
+      case -372: // _LVOGetMsg - used by XIM doors
         console.log(`[ExecLibrary] *** INTERCEPTED: GetMsg() (LVO -372) ***`);
         // FIXED: A0 = register 8 (not 12 which is A4)
         const portAddr = this.emulator.getRegister(8); // A0
@@ -938,10 +958,9 @@ export class ExecLibrary {
       if (lib.address === libAddr) {
         const lower = name.toLowerCase();
         // Keep core libraries resident for the life of the process; some doors
-        // (e.g., Bulls) call CloseLibrary(dos.library) during teardown and then
-        // continue executing. Dropping vectors or deleting the entry can corrupt
-        // subsequent calls. Mirror classic behavior by ignoring CloseLibrary for
-        // exec/dos/aedoor/icon.
+        // call CloseLibrary(dos.library) during teardown and then continue executing.
+        // Dropping vectors or deleting the entry can corrupt subsequent calls.
+        // Mirror classic behavior by ignoring CloseLibrary for exec/dos/aedoor/icon.
         if (
           lower === "dos.library" ||
           lower === "exec.library" ||
@@ -1485,7 +1504,7 @@ export class ExecLibrary {
    * The new signal values are modified as follows:
    *   signals = (signals & ~signalMask) | (newSignals & signalMask)
    *
-   * Bulls uses this to clear signals after processing messages.
+   * XIM doors use this to clear signals after processing messages.
    */
   setSignal(newSignals: number, signalMask: number): number {
     console.log(
@@ -2146,28 +2165,6 @@ export class ExecLibrary {
       )}, msg=0x${msgAddr.toString(16)})`
     );
 
-    // Bulls debug: log port name and key fields for doors
-    if ((global as any).currentBbsSession?.doorId === 'B') {
-      try {
-        const namePtr = this.emulator.readMemory32(portAddr);
-        const portName = namePtr
-          ? this.emulator.readString(namePtr, 32)
-          : '<noname>';
-        const cmd = this.emulator.readMemory32(msgAddr + 0xe0);
-        const data = this.emulator.readMemory32(msgAddr + 0xdc);
-        const node = this.emulator.readMemory32(msgAddr + 0xe4);
-        console.log(
-          `[ExecLibrary][Bulls] PutMsg port=${portName} msg=0x${msgAddr.toString(
-            16
-          )} cmd=0x${cmd.toString(16)} data=0x${data.toString(
-            16
-          )} node=0x${node.toString(16)}`
-        );
-      } catch (_) {
-        /* ignore */
-      }
-    }
-
     const originalPortAddr = portAddr;
     let port: MessagePort | undefined = this.messagePorts.get(portAddr);
 
@@ -2197,7 +2194,7 @@ export class ExecLibrary {
       )} suppress=${suppressDoorCallback ? "yes" : "no"}`
     );
 
-    // Bulls: avoid rerouting to allow the door's chosen port to be honored.
+    // Avoid rerouting so the door's chosen port is honored.
 
     // CRITICAL FIX: Do NOT set message type here!
     // The caller (door code or ReplyMsg) must set the appropriate type:
@@ -2260,11 +2257,11 @@ export class ExecLibrary {
     // ONLY invoke for messages TO AEDoorPort (name check), not reply ports
     const isAEDoorPort = port.name?.toLowerCase().startsWith("aedoorport");
     const isDoorTaskPort = originalPortAddr === this.currentTask.msgPort;
-    const isBullsReplyPort = port.name?.toLowerCase().startsWith("doorreplyport");
+    const isDoorReplyPort = port.name?.toLowerCase().startsWith("doorreplyport");
     if (
       !suppressDoorCallback &&
       this.doorMessageCallback &&
-      (isAEDoorPort || isDoorTaskPort || isBullsReplyPort)
+      (isAEDoorPort || isDoorTaskPort || isDoorReplyPort)
     ) {
       const label = isAEDoorPort ? port.name ?? "AEDoorPort" : "Door Task Port";
       console.log(
@@ -2367,29 +2364,6 @@ export class ExecLibrary {
 
     // Check if port has messages
     if (port.messages.length === 0) {
-      // Bulls workaround: mirror messages from Bulls reply port into this port if empty
-      try {
-        const bulls = (global as any).bullsHandlerInstance;
-        const bullsPort = bulls?.doorReplyPortAddr;
-        if (bulls && bullsPort) {
-          // If caller is waiting on a different port, mirror Bulls messages into it
-          const bullsPortEntry = this.messagePorts.get(bullsPort);
-          if (bullsPortEntry && bullsPortEntry.messages.length > 0) {
-            bullsPortEntry.messages.forEach((msgAddr) => {
-              if (!port.messages.includes(msgAddr)) {
-                port.messages.push(msgAddr);
-              }
-            });
-            console.log(
-              `[ExecLibrary][Bulls] Mirrored ${bullsPortEntry.messages.length} message(s) from 0x${bullsPort.toString(
-                16
-              )} to 0x${portAddr.toString(16)}`
-            );
-          }
-        }
-      } catch {
-        // ignore
-      }
       // No message - would block on real Amiga, we return 0
       if (port.messages.length === 0) {
         return 0;
@@ -2422,6 +2396,74 @@ export class ExecLibrary {
     this.protectReturnedMessage(
       msgAddr,
       `WaitPort port=0x${portAddr.toString(16)}`
+    );
+    return msgAddr;
+  }
+
+  /**
+   * Seed a Workbench-style WBStartup message into the current task's pr_MsgPort.
+   * Some doors launched without a CLI (pr_CLI==0) expect to fetch this message
+   * via GetMsg() to discover their arguments and environment.
+   */
+  seedWorkbenchStartup(programName: string, args: string[]): number {
+    const MEMF_CLEAR = 1 << 16;
+    const portAddr = this.currentTask.msgPort;
+    const msgSize = 0x28; // sizeof(struct WBStartup) with message header
+
+    const msgAddr = this.allocMem(msgSize, MEMF_CLEAR);
+    if (msgAddr === 0) {
+      console.warn(
+        "[ExecLibrary] seedWorkbenchStartup: failed to allocate startup message"
+      );
+      return 0;
+    }
+
+    // Message header (struct Message)
+    this.emulator.writeMemory32(msgAddr + 0x00, 0); // ln_Succ
+    this.emulator.writeMemory32(msgAddr + 0x04, 0); // ln_Pred
+    this.emulator.writeMemory(msgAddr + 0x08, 5); // ln_Type = NT_MESSAGE
+    this.emulator.writeMemory(msgAddr + 0x09, 0); // ln_Pri
+    this.emulator.writeMemory32(msgAddr + 0x0a, 0); // ln_Name
+    this.emulator.writeMemory32(msgAddr + 0x0e, portAddr); // mn_ReplyPort
+    this.emulator.writeMemory16(msgAddr + 0x12, msgSize); // mn_Length
+
+    // Build ArgList (struct WBArg { BPTR wa_Lock; STRPTR wa_Name; })
+    const safeArgs = args && args.length > 0 ? args : [programName];
+    const argListAddr = this.allocMem(safeArgs.length * 8 || 8, MEMF_CLEAR);
+    if (argListAddr === 0) {
+      console.warn(
+        "[ExecLibrary] seedWorkbenchStartup: failed to allocate ArgList"
+      );
+      return msgAddr;
+    }
+
+    safeArgs.forEach((arg, idx) => {
+      const strAddr = this.allocMem(arg.length + 1, MEMF_CLEAR);
+      if (strAddr === 0) {
+        return;
+      }
+      for (let i = 0; i < arg.length; i++) {
+        this.emulator.writeMemory(strAddr + i, arg.charCodeAt(i));
+      }
+      this.emulator.writeMemory(strAddr + arg.length, 0);
+
+      const entryAddr = argListAddr + idx * 8;
+      this.emulator.writeMemory32(entryAddr + 0, 0); // wa_Lock (BPTR), leave NULL
+      this.emulator.writeMemory32(entryAddr + 4, strAddr); // wa_Name
+    });
+
+    // WBStartup payload
+    this.emulator.writeMemory32(msgAddr + 0x14, portAddr); // sm_Process (reply task port)
+    this.emulator.writeMemory32(msgAddr + 0x18, 0); // sm_Segment (unused)
+    this.emulator.writeMemory32(msgAddr + 0x1c, safeArgs.length); // sm_NumArgs
+    this.emulator.writeMemory32(msgAddr + 0x20, 0); // sm_ToolWindow
+    this.emulator.writeMemory32(msgAddr + 0x24, argListAddr); // sm_ArgList
+
+    this.putMsg(portAddr, msgAddr);
+    console.log(
+      `[ExecLibrary] Seeded WBStartup message 0x${msgAddr.toString(
+        16
+      )} -> pr_MsgPort=0x${portAddr.toString(16)} args=[${safeArgs.join(", ")}]`
     );
     return msgAddr;
   }

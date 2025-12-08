@@ -11,6 +11,20 @@ WHITE='\033[0;37m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
+# Usage helper
+print_usage() {
+  cat <<'EOF'
+Usage: ./dev/scripts/start-servers.sh [options]
+
+Options:
+  --debug | -v | --verbose   Enable debug mode (full logs)
+  --full | --all             Open BBS + Admin/Settings + SDK (default)
+  --sdk-only                 Open SDK preview only; build SDK only
+  --bbs-only                 Open BBS terminal only; build BBS only
+  --help                     Show this help and exit
+EOF
+}
+
 # Parse command-line flags
 DEBUG_MODE=false
 DEBUG_OUTPUT="false"
@@ -19,6 +33,10 @@ OPEN_MODE="full"  # Default: Open all three tabs (BBS, Admin, SDK)
 # Check all arguments
 for arg in "$@"; do
   case "$arg" in
+    --help)
+      print_usage
+      exit 0
+      ;;
     --debug|-v|--verbose)
       DEBUG_MODE=true
       DEBUG_OUTPUT="true"
@@ -28,6 +46,9 @@ for arg in "$@"; do
       ;;
     --sdk-only)
       OPEN_MODE="sdk-only"
+      ;;
+    --bbs-only)
+      OPEN_MODE="bbs-only"
       ;;
   esac
 done
@@ -48,10 +69,13 @@ fi
 
 if [ "$OPEN_MODE" = "full" ]; then
   printf "%b\n" "${CYAN}→ Will open BBS, Admin/Settings, and SDK Preview in browser${RESET}"
-  printf "%b\n" "   ${WHITE}Use --sdk-only to open only SDK${RESET}"
-else
+  printf "%b\n" "   ${WHITE}Use --bbs-only to open only BBS, or --sdk-only for SDK only${RESET}"
+elif [ "$OPEN_MODE" = "sdk-only" ]; then
   printf "%b\n" "${CYAN}→ Will open SDK Preview only in browser${RESET}"
-  printf "%b\n" "   ${WHITE}Use --full to open all three apps${RESET}"
+  printf "%b\n" "   ${WHITE}Use --full to open all three apps, or --bbs-only for BBS only${RESET}"
+else
+  printf "%b\n" "${CYAN}→ Will open BBS terminal only (no Admin/SDK tabs)${RESET}"
+  printf "%b\n" "   ${WHITE}Use --full to open all three apps, or --sdk-only for SDK only${RESET}"
 fi
 
 # Get the repository root directory (portable)
@@ -222,56 +246,89 @@ fi
 # Check SDK Preview Frontend dependencies
 check_and_install_deps "$REPO_ROOT/sdk/tools/preview/frontend" "SDK Preview Frontend"
 
-# Always rebuild all frontends for unified deployment (ensures correct base paths)
-printf "%b\n" "${CYAN}→ Building all frontends for unified deployment...${RESET}"
+DO_BUILD_BBS=true
+DO_BUILD_ADMIN=true
+DO_BUILD_SDK=true
+
+if [ "$OPEN_MODE" = "bbs-only" ]; then
+  DO_BUILD_ADMIN=false
+  DO_BUILD_SDK=false
+  printf "%b\n" "${CYAN}→ Building frontends (BBS-only mode: skipping Admin/SDK)…${RESET}"
+elif [ "$OPEN_MODE" = "sdk-only" ]; then
+  DO_BUILD_BBS=false
+  DO_BUILD_ADMIN=false
+  printf "%b\n" "${CYAN}→ Building frontends (SDK-only mode)…${RESET}"
+else
+  printf "%b\n" "${CYAN}→ Building all frontends for unified deployment...${RESET}"
+fi
 printf "%b\n" "   ${WHITE}(This takes 15-30 seconds, please wait...)${RESET}"
 
+STEP_NUM=1
+
 # Build BBS Terminal Frontend (/)
-printf "%b" "   ${MAGENTA}[1/3]${RESET} Building BBS Terminal... "
-(cd "$REPO_ROOT/web/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
-BUILD_PID=$!
-while kill -0 $BUILD_PID 2>/dev/null; do
-  printf "."
-  sleep 1
-done
-wait $BUILD_PID
-if [ $? -eq 0 ]; then
-  printf "%b\n" " ${GREEN}[OK]${RESET}"
+if [ "$DO_BUILD_BBS" = true ]; then
+  printf "%b" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Building BBS Terminal... "
+  (cd "$REPO_ROOT/web/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
+  BUILD_PID=$!
+  while kill -0 $BUILD_PID 2>/dev/null; do
+    printf "."
+    sleep 1
+  done
+  wait $BUILD_PID
+  if [ $? -eq 0 ]; then
+    printf "%b\n" " ${GREEN}[OK]${RESET}"
+  else
+    printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+  fi
 else
-  printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+  printf "%b\n" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Skipping BBS Terminal build (sdk-only mode)"
 fi
+STEP_NUM=$((STEP_NUM + 1))
 
 # Build Admin Config Frontend (/admin/)
-printf "%b" "   ${MAGENTA}[2/3]${RESET} Building Admin Config... "
-(cd "$REPO_ROOT/web/config-app" && npm run build --loglevel=error > /dev/null 2>&1) &
-BUILD_PID=$!
-while kill -0 $BUILD_PID 2>/dev/null; do
-  printf "."
-  sleep 1
-done
-wait $BUILD_PID
-if [ $? -eq 0 ]; then
-  printf "%b\n" " ${GREEN}[OK]${RESET}"
+if [ "$DO_BUILD_ADMIN" = true ]; then
+  printf "%b" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Building Admin Config... "
+  (cd "$REPO_ROOT/web/config-app" && npm run build --loglevel=error > /dev/null 2>&1) &
+  BUILD_PID=$!
+  while kill -0 $BUILD_PID 2>/dev/null; do
+    printf "."
+    sleep 1
+  done
+  wait $BUILD_PID
+  if [ $? -eq 0 ]; then
+    printf "%b\n" " ${GREEN}[OK]${RESET}"
+  else
+    printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+  fi
 else
-  printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+  printf "%b\n" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Skipping Admin Config build (BBS-only/sdk-only mode)"
 fi
+STEP_NUM=$((STEP_NUM + 1))
 
 # Build SDK Preview Frontend (/sdk/)
-printf "%b" "   ${MAGENTA}[3/3]${RESET} Building SDK Preview... "
-(cd "$REPO_ROOT/sdk/tools/preview/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
-BUILD_PID=$!
-while kill -0 $BUILD_PID 2>/dev/null; do
-  printf "."
-  sleep 1
-done
-wait $BUILD_PID
-if [ $? -eq 0 ]; then
-  printf "%b\n" " ${GREEN}[OK]${RESET}"
+if [ "$DO_BUILD_SDK" = true ]; then
+  printf "%b" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Building SDK Preview... "
+  (cd "$REPO_ROOT/sdk/tools/preview/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
+  BUILD_PID=$!
+  while kill -0 $BUILD_PID 2>/dev/null; do
+    printf "."
+    sleep 1
+  done
+  wait $BUILD_PID
+  if [ $? -eq 0 ]; then
+    printf "%b\n" " ${GREEN}[OK]${RESET}"
+  else
+    printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+  fi
 else
-  printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+  printf "%b\n" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Skipping SDK Preview build (BBS-only mode)"
 fi
 
-printf "%b\n" "   ${GREEN}[OK] All frontends built successfully${RESET}"
+if [ "$DO_BUILD_BBS" = true ] || [ "$DO_BUILD_ADMIN" = true ] || [ "$DO_BUILD_SDK" = true ]; then
+  printf "%b\n" "   ${GREEN}[OK] Frontend build phase complete${RESET}"
+else
+  printf "%b\n" "   ${GREEN}[OK] Frontend builds skipped${RESET}"
+fi
 
 # TypeScript check for backend (quick check only, don't block startup)
 printf "%b\n" "${CYAN}→ Running quick TypeScript check...${RESET}"
@@ -446,7 +503,7 @@ if [ "$OPEN_MODE" = "full" ]; then
     printf "%b\n" "   ${CYAN}$ADMIN_URL${RESET}"
     printf "%b\n" "   ${CYAN}$SDK_URL${RESET}"
   fi
-else
+elif [ "$OPEN_MODE" = "sdk-only" ]; then
   # Open SDK only
   printf "%b\n" "${BLUE}[SDK]${RESET} Opening SDK Preview at ${CYAN}$SDK_URL${RESET}..."
 
@@ -466,6 +523,22 @@ else
   else
     printf "%b\n" "${YELLOW}[WARNING] Could not detect browser command. Please open URL manually:${RESET}"
     printf "%b\n" "   ${CYAN}$SDK_URL${RESET}"
+  fi
+else
+  # BBS only
+  printf "%b\n" "${GREEN}[LAUNCH]${RESET} Opening BBS at ${CYAN}$BBS_URL${RESET}..."
+
+  if command -v open &> /dev/null; then
+    open "$BBS_URL" 2>/dev/null &
+  elif command -v xdg-open &> /dev/null; then
+    xdg-open "$BBS_URL" 2>/dev/null &
+  elif command -v start &> /dev/null; then
+    start "$BBS_URL" 2>/dev/null &
+  elif command -v explorer.exe &> /dev/null; then
+    explorer.exe "$BBS_URL" 2>/dev/null &
+  else
+    printf "%b\n" "${YELLOW}[WARNING] Could not detect browser command. Please open URL manually:${RESET}"
+    printf "%b\n" "   ${CYAN}$BBS_URL${RESET}"
   fi
 fi
 

@@ -3334,10 +3334,10 @@ export class LibraryTraps {
           `[LibraryTraps]   This is likely a missing Exec.library function!`
         );
 
-        // DETAILED TRACING: Show Bulls execution context
-        console.error(`[LibraryTraps] *** BULLS EXECUTION CONTEXT ***`);
+        // DETAILED TRACING: Show door execution context
+        console.error(`[LibraryTraps] *** DOOR EXECUTION CONTEXT ***`);
 
-        // Get Bulls execution context
+        // Get door execution context
         const d0 = this.emulator.getRegister(0);
         const d1 = this.emulator.getRegister(1);
         const a0 = this.emulator.getRegister(8);
@@ -3348,7 +3348,7 @@ export class LibraryTraps {
         const a7 = this.emulator.getRegister(15); // SP (FIXED: was 7, should be 15)
         const sp = this.emulator.getRegister(15);
 
-        console.error(`[LibraryTraps]   Bulls Registers:`);
+        console.error(`[LibraryTraps]   Registers:`);
         console.error(
           `[LibraryTraps]     D0: 0x${d0.toString(16)}, D1: 0x${d1.toString(
             16
@@ -3360,8 +3360,7 @@ export class LibraryTraps {
           )}`
         );
         console.error(
-          `[LibraryTraps]     A4: 0x${a4.toString(16)} (data segment)`,
-          a4 === 0x984 ? "✅" : "❌"
+          `[LibraryTraps]     A4: 0x${a4.toString(16)} (data segment)`
         );
         console.error(
           `[LibraryTraps]     A5: 0x${a5.toString(16)}, A6: 0x${a6.toString(
@@ -3370,27 +3369,7 @@ export class LibraryTraps {
         );
         console.error(`[LibraryTraps]     A7(SP): 0x${a7.toString(16)}`);
 
-        // Check if we're in Bulls code range (considering HUNK load addresses)
-        const bullsCodeStart = 0x1000;
-        const bullsCodeEnd = 0x4b3f;
-        const bullsDataStart = 0x5c00;
-        const bullsDataEnd = 0x8b5f;
-
-        if (pc >= bullsCodeStart && pc <= bullsCodeEnd) {
-          const codeOffset = pc - bullsCodeStart;
-          console.error(
-            `[LibraryTraps]   Bulls CODE segment: PC=0x${pc.toString(
-              16
-            )} (offset +0x${codeOffset.toString(16)})`
-          );
-        } else if (pc >= bullsDataStart && pc <= bullsDataEnd) {
-          const dataOffset = pc - bullsDataStart;
-          console.error(
-            `[LibraryTraps]   Bulls DATA segment: PC=0x${pc.toString(
-              16
-            )} (offset +0x${dataOffset.toString(16)})`
-          );
-        } else if (pc >= execBase && pc <= execBase + 0x1000) {
+        if (pc >= execBase && pc <= execBase + 0x1000) {
           const libOffset = pc - execBase;
           console.error(
             `[LibraryTraps]   ROM/Exec space: PC=0x${pc.toString(
@@ -3447,7 +3426,7 @@ export class LibraryTraps {
       )} ***`
     );
 
-    // DETAILED TRACING: Show Bulls context on library calls for debugging
+    // DETAILED TRACING: Show door context on library calls for debugging
     if (
       vector.name === "OpenLibrary" ||
       vector.name === "AllocMem" ||
@@ -3459,16 +3438,12 @@ export class LibraryTraps {
       const d1 = this.emulator.getRegister(1);
       const a0 = this.emulator.getRegister(8);
       const a1 = this.emulator.getRegister(9);
-      const a4 = this.emulator.getRegister(12); // A4 = data segment (FIXED: was 4, should be 12!)
-      const a5 = this.emulator.getRegister(13); // FIXED: was 5, should be 13
-      const a6 = this.emulator.getRegister(14); // FIXED: was 6, should be 14
+      const a4 = this.emulator.getRegister(12); // A4 = data segment
+      const a5 = this.emulator.getRegister(13);
+      const a6 = this.emulator.getRegister(14);
 
-      console.log(`[LibraryTraps]   Bulls state during ${vector.name}():`);
-      console.log(
-        `[LibraryTraps]     A4: 0x${a4.toString(16)} ${
-          a4 === 0x984 ? "✅" : "❌"
-        }`
-      );
+      console.log(`[LibraryTraps]   Door state during ${vector.name}():`);
+      console.log(`[LibraryTraps]     A4: 0x${a4.toString(16)}`);
       console.log(
         `[LibraryTraps]     D0: 0x${d0.toString(16)}, D1: 0x${d1.toString(16)}`
       );

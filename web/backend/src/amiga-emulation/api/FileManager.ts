@@ -295,6 +295,7 @@ export class FileManager {
       console.log(
         `[FileManager][Dir1] lines=${lines.length} preview=${previewLines.join(' | ')}`
       );
+
     }
 
     return data;

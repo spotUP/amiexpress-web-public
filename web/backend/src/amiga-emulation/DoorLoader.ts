@@ -18,7 +18,6 @@ export class DoorLoader {
   private emulator: MoiraEmulator;
   private execLibrary: ExecLibrary;
   private config: DoorConfig;
-  private isBullsDoor: boolean = false;
   private stackBaseAddr: number = 0;
   private stackSizeBytes: number = 0;
   private readonly exitTrapAddress = 0x1ff000;
@@ -34,10 +33,6 @@ export class DoorLoader {
     this.execLibrary = execLibrary;
     this.config = config;
     this.logger = logger || null;
-    this.isBullsDoor = path
-      .basename(config.executablePath)
-      .toLowerCase()
-      .includes("bull");
   }
 
   /**
@@ -94,11 +89,6 @@ export class DoorLoader {
     // Set up CPU for door execution
     this.setupCpuRegisters(hunkFile);
 
-    // Set up Bulls-specific execution if needed
-    if (this.isBullsDoor) {
-      await this.setupBullsExecution();
-    }
-
     // Prefill the 68000 instruction queue
     this.emulator.refillPrefetch();
   }
@@ -142,12 +132,21 @@ export class DoorLoader {
 
     // Set up CLI/argument string similar to AmigaDOS
     const nodeId = this.config.bbsSession?.nodeId || 0;
+    const doorType = (this.config.doorType || "").toUpperCase();
     const progName = path.basename(this.config.executablePath);
-    const customArgs =
-      this.config.args && this.config.args.length > 0
-        ? this.config.args
-        : [nodeId.toString()];
+    let customArgs: string[] = [];
+    if (this.config.args && this.config.args.length > 0) {
+      // For XIM doors, prepend node number when explicit args are provided (matches ReadArgs templates like "NODE/N/A")
+      customArgs =
+        doorType === "XIM"
+          ? [nodeId.toString(), ...this.config.args]
+          : this.config.args;
+    } else {
+      // Default CLI: pass node number to both XIM and non-XIM doors (matches express.e tooling)
+      customArgs = [nodeId.toString()];
+    }
     const argString = customArgs.join(" ").trim();
+    console.log(`[DoorLoader] Building CLI args for doorType=${doorType} from config.args=${JSON.stringify(this.config.args || [])} -> "${argString}"`);
     const ARG_STRING_ADDR = 0x0f0100;
     const ARG_BSTR_ADDR = ARG_STRING_ADDR + 0x100;
 
@@ -165,6 +164,9 @@ export class DoorLoader {
     // D0 = arg_len (length of argument string, NOT argc)
     // A0 = arg_ptr (pointer to argument string)
     // D2 = stack_size
+    // AmigaDOS startup passes the raw argument length in D0 (even for XIM doors).
+    // Some earlier hacks zeroed this for XIM, which makes doors think they have no CLI.
+    // Keep it faithful: D0 = length of the argument string.
     const argLen = argString.length;
     this.emulator.setRegister(0, argLen); // D0 = length of arg string
     this.emulator.setRegister(1, 0); // D1 = 0 at startup
@@ -434,7 +436,7 @@ export class DoorLoader {
     this.setupStack(segListBptr);
 
     // Simulate JSR call to entry point by manually pushing return address
-    // This is critical: many Amiga programs (like Bulls) do MOVEM.L at entry
+    // This is critical: many Amiga programs do MOVEM.L at entry
     // to save registers. They expect a return address ABOVE those saved registers.
     // On real Amiga, the C startup code or shell CALLs the program via JSR,
     // which pushes the return address. We must simulate this.
@@ -444,7 +446,7 @@ export class DoorLoader {
     this.emulator.setRegister(15, newSP);
 
     // Update the saved SP value at finalSP+4 to reflect the new SP after JSR
-    // Some doors (like Bulls) save/restore SP and expect this value to be correct
+    // Some doors save/restore SP and expect this value to be correct
     this.emulator.writeMemory32(currentSP + 4, newSP);
 
     console.log(
@@ -542,113 +544,4 @@ export class DoorLoader {
     );
   }
 
-  /**
-   * Set up Bulls-specific execution
-   */
-  private async setupBullsExecution(): Promise<void> {
-    console.log(`[BULLS-FORCE] [INIT] Initializing Bulls for proper execution`);
-    console.log(
-      `[BULLS-FORCE]   Bulls Code segment: 0x1000-0x4b3f (19,228 bytes)`
-    );
-    console.log(
-      `[BULLS-FORCE]   Bulls Data segment: 0x5c00-0x8b5f (27,876 bytes)`
-    );
-
-    // CRITICAL: Bulls sets A4 to 0x5c08 (DATA segment + 0x8) during execution
-    // We must inject at the CORRECT A4 value Bulls will use, not the initial value
-    // Bulls starts with A4=0xdc06 but immediately changes to A4=0x5c08 at PC=0x1016
-    const a4Value = 0x5c08; // Bulls' actual A4 value during execution (DATA segment + 0x8)
-    const aeDoorBaseAddr = (this.execLibrary as any).getLibraryBase?.("AEDoor.library") || 0x0C0000;
-    const replyPortAddr = 0xa0000; // BBS reply port (AEDoorPort1)
-    const doorInfoAddr = 0x100000; // Allocate DoorInfo structure at 1MB
-
-    console.log(
-      `[BULLS-FORCE] Using correct A4 value: 0x${a4Value.toString(16)} (Bulls sets this at PC=0x1016)`
-    );
-
-    // Create DoorInfo structure (per AEDoor_LIBRARY_NOTES.md)
-    // Size: 0xE4 + node state buffer (~256 bytes total)
-    const doorInfoSize = 0x200;
-    for (let i = 0; i < doorInfoSize; i++) {
-      this.emulator.writeMemory(doorInfoAddr + i, 0);
-    }
-
-    // Populate DoorInfo fields
-    this.emulator.writeMemory32(doorInfoAddr + 0x00, replyPortAddr); // dif_AEPort
-    this.emulator.writeMemory32(doorInfoAddr + 0x04, replyPortAddr); // dif_ReplyPort
-    this.emulator.writeMemory32(doorInfoAddr + 0x08, 0); // dif_EventHook
-
-    // dif_NameBuf: User name (0x0C + 0x32 bytes)
-    const userName = "SYSOP";
-    for (let i = 0; i < userName.length; i++) {
-      this.emulator.writeMemory(doorInfoAddr + 0x0C + i, userName.charCodeAt(i));
-    }
-
-    // dif_BBSInfo: BBS title (0x46)
-    const bbsTitle = "AmiExpress Web BBS Node 1";
-    for (let i = 0; i < bbsTitle.length; i++) {
-      this.emulator.writeMemory(doorInfoAddr + 0x46 + i, bbsTitle.charCodeAt(i));
-    }
-
-    // dif_NodeState: Node data (0xE4) - Bulls polls this!
-    this.emulator.writeMemory32(doorInfoAddr + 0xE4, 1); // Node number
-    this.emulator.writeMemory32(doorInfoAddr + 0xE8, 255); // Security level
-
-    console.log(
-      `[BULLS-FORCE] [OK] Created DoorInfo structure at 0x${doorInfoAddr.toString(16)} (${doorInfoSize} bytes)`
-    );
-
-    // Inject AEDoorBase at A4+0x988
-    this.emulator.writeMemory32(a4Value + 0x988, aeDoorBaseAddr);
-    console.log(
-      `[BULLS-FORCE] [OK] Injected AEDoorBase=0x${aeDoorBaseAddr.toString(16)} at A4+0x988`
-    );
-
-    // Inject DoorInfo pointer at A4+0x6c24 (Bulls reads DoorInfo from here)
-    this.emulator.writeMemory32(a4Value + 0x6c24, doorInfoAddr);
-    console.log(
-      `[BULLS-FORCE] [OK] Injected DoorInfo=0x${doorInfoAddr.toString(16)} at A4+0x6c24`
-    );
-
-    // Inject Reply Port at multiple A4 offsets (per Bulls_DISASM_NOTES.md:39-40)
-    const replyPortOffsets = [0x44c, 0x450, 0x474, 0x57c, 0x5b8, 0x6a0, 0x720, 0x800, 0x9a4, 0x9a8, 0x6c6c];
-    for (const offset of replyPortOffsets) {
-      this.emulator.writeMemory32(a4Value + offset, replyPortAddr);
-    }
-    console.log(
-      `[BULLS-FORCE] [OK] Injected Reply Port=0x${replyPortAddr.toString(16)} at ${replyPortOffsets.length} A4 offsets`
-    );
-
-    // CRITICAL FIX: Bulls parses CLI arguments from pointer at A4+0x6c16
-    // Bulls disassembly at 0xfbc: movea.l 0x6c16(a4), a1  ; Load arg pointer
-    // Bulls calls strcmp at 0x100c to validate arguments
-    // Create empty argument string (Bulls accepts empty args for XIM mode)
-    const cliArgAddr = 0xd0000; // Allocate at 0xd0000
-    this.emulator.writeMemory(cliArgAddr, 0); // Empty string (null terminator)
-    this.emulator.writeMemory32(a4Value + 0x6c16, cliArgAddr); // Inject pointer
-    console.log(
-      `[BULLS-FORCE] [OK] Injected CLI arg pointer=0x${cliArgAddr.toString(16)} at A4+0x6c16`
-    );
-
-    // Also initialize A4+0x510 buffer (where Bulls stores parsed arguments)
-    // CRITICAL: Only clear up to 0x5bc (172 bytes), not 200!
-    // Addresses A4+0x5bc onwards contain function pointers that must be preserved
-    // (0x61c4 = A4+0x5bc contains a critical function pointer at 0x3aac)
-    const argBufSize = 0x5bc - 0x510; // = 172 bytes, stop before function pointers
-    for (let i = 0; i < argBufSize; i++) {
-      this.emulator.writeMemory(a4Value + 0x510 + i, 0);
-    }
-    console.log(
-      `[BULLS-FORCE] Initialized argument buffer at A4+0x510 (${argBufSize} bytes, preserving A4+0x5bc+)`
-    );
-
-    // CRITICAL: Allow Bulls to execute naturally from HUNK entry point 0x13E9
-    // Let startup code set A4 via LEA $984,A4 instruction
-    console.log(
-      "[BULLS-FORCE] Allowing natural Bulls startup from HUNK entry point..."
-    );
-    console.log(
-      `[BULLS-FORCE] Bulls execution initialized - natural startup flow`
-    );
-  }
 }

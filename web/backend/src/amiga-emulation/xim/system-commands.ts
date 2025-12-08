@@ -24,7 +24,6 @@ export class XIMSystemCommandsHandler {
   private bbsSession: BBSSessionData;
   private state: XIMState;
   private ximPortAddr: number;
-  private bullsHandler: any;
   private transferRawActive = false;
 
   constructor(
@@ -46,14 +45,6 @@ export class XIMSystemCommandsHandler {
       (state as any).aePortAddr ||
       (state as any).doorPortAddr ||
       0;
-
-    try {
-      // Lazy import to avoid circular refs
-      const { BullsDoorHandler } = require('../session/BullsDoorHandler.js');
-      this.bullsHandler = (global as any).bullsHandlerInstance || null;
-    } catch {
-      this.bullsHandler = null;
-    }
   }
 
   /**
@@ -107,16 +98,6 @@ export class XIMSystemCommandsHandler {
       `[XIMSystem][RegisterReply][dbg] wrote nodeId=${nodeId} data=${parsedFinal.data} lineLen=${lineLen}`
     );
 
-    // Mirror the reply into Bulls control/info buffers if present so Bulls sees the updated fields
-    try {
-      const bulls = (global as any).bullsHandlerInstance;
-      if (bulls && typeof bulls.mirrorRegisterReply === 'function') {
-        bulls.mirrorRegisterReply(parsedFinal);
-      }
-    } catch (err) {
-      console.warn('[XIMSystem] Bulls mirrorRegisterReply failed:', err);
-    }
-
     this.state.registered = true;
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
@@ -149,25 +130,6 @@ export class XIMSystemCommandsHandler {
 
     // Ack
     this.reply(msg, 1);
-
-    // Mirror for Bulls so it sees the ack fields
-    try {
-      const bulls = (global as any).bullsHandlerInstance;
-      if (bulls && typeof bulls.mirrorRegisterReply === 'function') {
-        const nodeId =
-          (this.bbsSession?.nodeId as number) ||
-          (this.bbsSession as any)?.nodeNumber ||
-          1;
-        bulls.mirrorRegisterReply({
-          command: XIMCommand.RAWARROW,
-          data: 1,
-          nodeId,
-          msgAddr: msg.msgAddr,
-        });
-      }
-    } catch (err) {
-      console.warn('[XIMSystem] Bulls mirror for RAWARROW failed:', err);
-    }
   }
 
   /**
@@ -234,24 +196,6 @@ export class XIMSystemCommandsHandler {
     // Ack with Data=1 per express.e behavior
     this.messageParser.writeData(msg.msgAddr, 1);
     this.execLibrary.replyMsg(msg.msgAddr);
-
-    // Mirror into Bulls buffers so the door sees the acked cmd/data/node
-    try {
-      const bulls = (global as any).bullsHandlerInstance;
-      if (bulls && typeof bulls.mirrorRegisterReply === 'function') {
-        bulls.mirrorRegisterReply({
-          command: XIMCommand.SV_NEWMSG,
-          data: 1,
-          nodeId:
-            (this.bbsSession?.nodeId as number) ||
-            (this.bbsSession as any)?.nodeNumber ||
-            1,
-          msgAddr: msg.msgAddr,
-        });
-      }
-    } catch (err) {
-      console.warn('[XIMSystem] Bulls mirror for SV_NEWMSG failed:', err);
-    }
   }
 
   /**

@@ -28,6 +28,7 @@ import { LibraryLoader } from "./loader/LibraryLoader.js";
 import { PathManager } from "./api/PathManager.js";
 import { BbsApiLibrary } from "./api/BbsApiLibrary.js";
 import { DoorLogger } from "./DoorLogger.js";
+import { spawnSync } from "child_process";
 
 const DEFAULT_ROM =
   "Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom";
@@ -52,7 +53,6 @@ export class LibraryManager {
   private emulator: MoiraEmulator;
   private socket: Socket;
   private config: DoorConfig;
-  private isBullsDoor: boolean = false;
   private doorPortAddress: number = 0;
   private aePortAddress: number = 0;
   private doorReplyPortAddr: number = 0;
@@ -66,10 +66,6 @@ export class LibraryManager {
     this.socket = socket;
     this.config = config;
     this.logger = logger || null;
-    this.isBullsDoor = path
-      .basename(config.executablePath)
-      .toLowerCase()
-      .includes("bull");
   }
 
   async initialize(): Promise<void> {
@@ -106,6 +102,54 @@ export class LibraryManager {
     );
   }
 
+  /**
+   * Ensure essential ROM libraries are available on disk by extracting them
+   * from a supported Kickstart image once. This is generic (no per-door hacks).
+   */
+  private ensureRomLibrariesExtracted(romPath: string, projectRoot: string): void {
+    try {
+      const needed = ["dos.library", "utility.library", "console.device"];
+      const libsDir = path.join(projectRoot, "Libs");
+
+      // If everything already exists, skip work
+      const missing = needed.filter((n) => !fs.existsSync(path.join(libsDir, n)));
+      if (missing.length === 0) {
+        return;
+      }
+
+      // romtool must be present to split modules
+      const which = spawnSync("which", ["romtool"], { encoding: "utf-8" });
+      if (which.status !== 0 || !which.stdout.trim()) {
+        console.warn("[LibraryManager] romtool not found; cannot extract ROM libraries");
+        return;
+      }
+
+      const outDir = path.join(projectRoot, "tmp", "rom-extract");
+      fs.mkdirSync(outDir, { recursive: true });
+
+      const split = spawnSync("romtool", ["split", romPath, "-o", outDir, "--no-version-dir"], {
+        encoding: "utf-8",
+      });
+      if (split.status !== 0) {
+        console.warn("[LibraryManager] romtool split failed:", split.stderr || split.stdout);
+        return;
+      }
+
+      const entries = fs.readdirSync(outDir);
+      for (const need of missing) {
+        const base = need.replace(".library", "").replace(".device", "");
+        const candidate = entries.find((e) => e.toLowerCase().startsWith(base.toLowerCase()));
+        if (!candidate) continue;
+        const src = path.join(outDir, candidate);
+        const dest = path.join(libsDir, need);
+        fs.copyFileSync(src, dest);
+        console.log(`[LibraryManager] Extracted ${need} from ROM → ${dest}`);
+      }
+    } catch (err) {
+      console.warn("[LibraryManager] Failed to extract ROM libraries", err);
+    }
+  }
+
   private async initializeExec(): Promise<void> {
     const projectRoot = this.resolveBbsRoot();
     console.log(`[LibraryManager] BBS root resolved to ${projectRoot}`);
@@ -123,20 +167,20 @@ export class LibraryManager {
 
     this.execLibrary = new ExecLibrary(this.emulator);
     this.execLibrary.initialize();
-    this.execLibrary.setWaitPortReturnCallback((addr: number) => {
-      if (this.isBullsDoor) {
-        // Store for Bulls handling (will be used by BullsDoorHandler)
-        console.log(
-          `[LibraryManager] WaitPort return PC recorded: 0x${addr.toString(16)}`
-        );
-      }
-    });
 
     if (!this.execLibrary.loadRealAEDoorLibrary()) {
       console.warn("[LibraryManager] Real AEDoor.library failed to load");
     }
 
+    // If a supported Kickstart is present, extract key libraries to disk once so
+    // doors can load real binaries instead of stubs. This is generic and runs
+    // only when files are missing.
+    this.ensureRomLibrariesExtracted(romPath, projectRoot);
+
     const libraryLoader = new LibraryLoader(this.emulator);
+    // Prefer real Amiga libraries when present on disk (repo / BBS root paths)
+    libraryLoader.addSearchPath(path.join(projectRoot, "Libs"));
+    libraryLoader.addSearchPath(path.join(projectRoot, "System", "Libs"));
     libraryLoader.addSearchPath(path.join(process.cwd(), "Libs"));
     this.execLibrary.setLibraryLoader(libraryLoader, true);
 
@@ -197,6 +241,13 @@ export class LibraryManager {
 
     this.doorPortAddress = portAddr;
     this.aePortAddress = portAddr;
+
+    // Create a dedicated reply port for doors (DoorReplyPort<n>) so XIM doors can
+    // post messages and receive replies on the expected port name.
+    const replyPortName = `DoorReplyPort${amigaNodeId}`;
+    this.doorReplyPortAddr = this.execLibrary.ensurePublicPort(replyPortName);
+    // Also provide a generic alias without the node suffix for legacy lookups.
+    this.execLibrary.ensurePublicPort("DoorReplyPort");
 
     // Initialize PathManager assigns based on BBS root/dataDir and optional overrides from config.assigns
     // Resolve the BBS root reliably from this source path to avoid depending on cwd
@@ -261,13 +312,15 @@ export class LibraryManager {
       this.dosLibrary.redirectStdout(stdoutRedirect);
     }
 
+    const normalizeAnsiNewlines = (data: string) => data.replace(/\r?\n/g, "\r\n");
+
     this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
       const bbsSession: any = this.config.bbsSession || {};
       if (bbsSession.transferRawActive) {
         this.socket.emit('transfer-raw:echo', buf);
         return;
       }
-      const text = buf.toString('latin1');
+      const text = normalizeAnsiNewlines(buf.toString('latin1'));
       this.socket.emit("ansi-output", text);
     });
     this.dosLibrary.setOutputCallback((text: string) => {
@@ -276,7 +329,7 @@ export class LibraryManager {
         this.socket.emit('transfer-raw:echo', Buffer.from(text, 'latin1'));
         return;
       }
-      this.socket.emit("ansi-output", text);
+      this.socket.emit("ansi-output", normalizeAnsiNewlines(text));
     });
     console.log("[LibraryManager] DOS.library output callback configured");
 
@@ -414,6 +467,32 @@ export class LibraryManager {
         );
       }
     );
+
+    // Ensure real dos.library is resident and vectors installed up front (generic)
+    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37);
+    if (dosHybrid.success) {
+      this.libraryTraps!.installDOSVectors();
+      console.log(
+        `[LibraryManager] dos.library pre-opened (${dosHybrid.isNative ? "native" : "stub"}) at 0x${dosHybrid.address.toString(
+          16
+        )}`
+      );
+    } else {
+      console.warn("[LibraryManager] Failed to pre-open dos.library");
+    }
+
+    // Pre-open AEDoor.library so vectors are installed even before doors call OpenLibrary.
+    const aedHybrid = this.execLibrary.openLibraryHybrid("AEDoor.library", 2);
+    if (aedHybrid.success) {
+      this.libraryTraps!.installAEDoorVectors();
+      console.log(
+        `[LibraryManager] AEDoor.library pre-opened (${aedHybrid.isNative ? "native" : "stub"}) at 0x${aedHybrid.address.toString(
+          16
+        )}`
+      );
+    } else {
+      console.warn("[LibraryManager] Failed to pre-open AEDoor.library");
+    }
 
     // Set up BBS API dispatcher for SIM doors (0x790 calling convention)
     if (isSIMType) {

@@ -1,7 +1,7 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 
 /**
- * Populate DoorInfo and NodeStatus blocks similarly to AEDoor.library for Bulls/WHO doors.
+ * Populate DoorInfo and NodeStatus blocks similarly to AEDoor.library for XIM doors.
  * Offsets based on Documentation/4-Door-Developers/AEDoor_LIBRARY_NOTES.md
  */
 export function populateDoorInfoStructs(
@@ -23,7 +23,7 @@ export function populateDoorInfoStructs(
   const nodeId = opts.nodeId ?? 1;
   const user = opts.userName ?? "SYSOP";
   const loc = opts.location ?? "AMIGA";
-  const cli = opts.cliName ?? "BULLS";
+  const cli = opts.cliName ?? "XIM";
 
   try {
     // Core pointers

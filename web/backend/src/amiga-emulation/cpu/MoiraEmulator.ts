@@ -59,6 +59,16 @@ export class MoiraEmulator {
 
   // Track CODE regions for self-modifying code support
   private codeRegions: Array<{ start: number; end: number }> = [];
+  // Optional watchpoints to log writes to specific addresses
+  private watchedAddresses: number[] = [];
+  private watchedLogPath: string | null = null;
+  private watchedOffsetsFromA4: number[] = [];
+
+  setWatchpoints(addresses: number[], logPath?: string, offsetsFromA4: number[] = []): void {
+    this.watchedAddresses = addresses;
+    this.watchedOffsetsFromA4 = offsetsFromA4;
+    this.watchedLogPath = logPath ?? null;
+  }
 
   /**
    * Check whether the underlying WASM CPU has been instantiated.
@@ -324,6 +334,31 @@ export class MoiraEmulator {
     }
 
     this.cpu.setMemoryByte(address, value);
+
+    // Watchpoint logging for debugging tricky doors (e.g., Bulls counters)
+    if (this.watchedAddresses.length > 0 || this.watchedOffsetsFromA4.length > 0) {
+      const a4 = this.getRegister(CPURegister.A4);
+      const targets = new Set<number>(this.watchedAddresses);
+      for (const off of this.watchedOffsetsFromA4) {
+        targets.add(a4 + off);
+      }
+      if (targets.has(address)) {
+        const msg = `[MoiraEmulator][WATCH] write @0x${address.toString(
+          16
+        )} = 0x${(value & 0xff).toString(16)} PC=0x${pc.toString(
+          16
+        )} A4=0x${a4.toString(16)}\n`;
+        if (this.watchedLogPath) {
+          try {
+            fs.appendFileSync(this.watchedLogPath, msg, { encoding: "utf8" });
+          } catch {
+            /* ignore logging errors */
+          }
+        } else {
+          console.log(msg.trimEnd());
+        }
+      }
+    }
   }
 
   /**
@@ -441,8 +476,8 @@ export class MoiraEmulator {
   }
 
   /**
-   * Handle ILLEGAL instruction (0x4AFC) - CRITICAL FIX FOR BULLS!
-   * This is called by the main execution loop when ILLEGAL is detected
+   * Handle ILLEGAL instruction (0x4AFC).
+   * This is called by the main execution loop when ILLEGAL is detected.
    */
   handleIllegal(pc: number): boolean {
     console.log(

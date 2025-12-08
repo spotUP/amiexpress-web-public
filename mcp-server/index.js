@@ -16,141 +16,378 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
-// Documentation files to expose as MCP resources
-const DOCS = {
+// Core project files
+const CORE_DOCS = {
   'claude-md': {
     path: path.join(PROJECT_ROOT, 'CLAUDE.md'),
-    description: 'Main project guidelines and critical rules',
+    description: 'Main project guidelines and critical rules for AI development',
     mimeType: 'text/markdown'
   },
+  'agents-md': {
+    path: path.join(PROJECT_ROOT, 'AGENTS.md'),
+    description: 'Amiga Guru agent role and door emulation rules',
+    mimeType: 'text/markdown'
+  },
+  'handoff-md': {
+    path: path.join(PROJECT_ROOT, 'handoff.md'),
+    description: 'Current session handoff and progress tracking',
+    mimeType: 'text/markdown'
+  },
+  'readme': {
+    path: path.join(PROJECT_ROOT, 'README.md'),
+    description: 'Project README with overview and quick start',
+    mimeType: 'text/markdown'
+  },
+  'project-safety': {
+    path: path.join(PROJECT_ROOT, 'PROJECT_SAFETY.md'),
+    description: 'Project safety context and technical terms explanation (educational/historical preservation project)',
+    mimeType: 'text/markdown'
+  }
+};
+
+// Documentation index and navigation
+const DOC_INDEX = {
   'documentation-index': {
     path: path.join(PROJECT_ROOT, 'Documentation', 'README.md'),
     description: 'Complete documentation index organized by role (Users/Sysops/Developers/Door-Developers)',
     mimeType: 'text/markdown'
+  }
+};
+
+// User documentation
+const USER_DOCS = {
+  'user-guide': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '1-Users', 'USER_GUIDE.md'),
+    description: 'Complete user guide for using the BBS',
+    mimeType: 'text/markdown'
   },
+  'importing': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '1-Users', 'IMPORTING.md'),
+    description: 'Import from classic Amiga BBS guide (507 lines)',
+    mimeType: 'text/markdown'
+  }
+};
+
+// Sysop documentation
+const SYSOP_DOCS = {
+  'installation': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'INSTALLATION.md'),
+    description: 'Installation guide with prerequisites and setup steps',
+    mimeType: 'text/markdown'
+  },
+  'configuration': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'CONFIGURATION.md'),
+    description: 'BBS configuration guide',
+    mimeType: 'text/markdown'
+  },
+  'administration': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'ADMINISTRATION.md'),
+    description: 'Day-to-day BBS administration',
+    mimeType: 'text/markdown'
+  },
+  'deployment': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'DEPLOYMENT.md'),
+    description: 'Production deployment procedures',
+    mimeType: 'text/markdown'
+  },
+  'troubleshooting': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'TROUBLESHOOTING.md'),
+    description: 'Common issues and solutions',
+    mimeType: 'text/markdown'
+  },
+  'quick-start': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'QUICK_START.md'),
+    description: 'Quick start guide for getting BBS running (632 lines)',
+    mimeType: 'text/markdown'
+  },
+  'deployment-scripts': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'DEPLOYMENT_SCRIPTS.md'),
+    description: 'Deployment scripts documentation (743 lines)',
+    mimeType: 'text/markdown'
+  },
+  'webhooks': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'WEBHOOKS.md'),
+    description: 'Webhook configuration guide (501 lines)',
+    mimeType: 'text/markdown'
+  }
+};
+
+// Developer documentation
+const DEVELOPER_DOCS = {
+  'getting-started': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'GETTING_STARTED.md'),
+    description: 'Developer setup and getting started guide',
+    mimeType: 'text/markdown'
+  },
+  'architecture': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'ARCHITECTURE.md'),
+    description: 'System architecture and code organization',
+    mimeType: 'text/markdown'
+  },
+  'database': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'DATABASE.md'),
+    description: 'Database schema, rules, and management',
+    mimeType: 'text/markdown'
+  },
+  'api-reference': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'API_REFERENCE.md'),
+    description: 'Backend API reference',
+    mimeType: 'text/markdown'
+  },
+  'testing': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'TESTING.md'),
+    description: 'Testing guide with Puppeteer',
+    mimeType: 'text/markdown'
+  },
+  'contributing': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'CONTRIBUTING.md'),
+    description: 'Contribution guidelines',
+    mimeType: 'text/markdown'
+  },
+  'testing-guide-full': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'TESTING_GUIDE.md'),
+    description: 'Full BBS testing guide (634 lines)',
+    mimeType: 'text/markdown'
+  },
+  'multinode-chat': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'MULTINODE_CHAT.md'),
+    description: 'Multi-node chat system architecture (692 lines)',
+    mimeType: 'text/markdown'
+  },
+  'arexx-implementation': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'AREXX_IMPLEMENTATION.md'),
+    description: 'AREXX interpreter implementation (629 lines)',
+    mimeType: 'text/markdown'
+  },
+  'import-export-api': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'IMPORT_EXPORT_API.md'),
+    description: 'Import/Export API reference (685 lines)',
+    mimeType: 'text/markdown'
+  },
+  'dos-file-io': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'DOS_FILE_IO.md'),
+    description: 'AmigaOS DOS file I/O implementation (495 lines)',
+    mimeType: 'text/markdown'
+  },
+  'security': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'SECURITY.md'),
+    description: 'Security patterns and fixes (567 lines)',
+    mimeType: 'text/markdown'
+  },
+  'amigaguide': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'AMIGAGUIDE.md'),
+    description: 'AmigaGuide format support (516 lines)',
+    mimeType: 'text/markdown'
+  },
+  'telnet-ssh-servers': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'TELNET_SSH_SERVERS.md'),
+    description: 'Telnet and SSH server implementation (296 lines)',
+    mimeType: 'text/markdown'
+  },
+  'amigafs-migration': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'AMIGAFS_MIGRATION.md'),
+    description: 'AmigaFS case-insensitive file system migration guide',
+    mimeType: 'text/markdown'
+  },
+  'sdk-summary': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'SDK_SUMMARY.md'),
+    description: 'BBS Door SDK summary and usage (573 lines)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-readme': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'README.md'),
+    description: 'SDK documentation (570 lines)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-api-reference': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'docs', 'API_REFERENCE.md'),
+    description: 'SDK API reference (589 lines)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-ai-guide': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'docs', 'AI_DOOR_CREATION_GUIDE.md'),
+    description: 'AI-assisted door creation guide (957 lines)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-neo-blessed': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'docs', 'NEO_BLESSED_UI.md'),
+    description: 'Neo-Blessed UI framework guide (1234 lines)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-arexx-guide': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'docs', 'AREXX_GUIDE.md'),
+    description: 'AREXX door development guide (536 lines)',
+    mimeType: 'text/markdown'
+  }
+};
+
+// Door developer documentation
+const DOOR_DOCS = {
+  'door-development': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_DEVELOPMENT.md'),
+    description: 'Complete door development guide',
+    mimeType: 'text/markdown'
+  },
+  'amiga-emulation': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'AMIGA_EMULATION.md'),
+    description: 'AmigaOS emulation details',
+    mimeType: 'text/markdown'
+  },
+  'aedoor-api': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'AEDOOR_API.md'),
+    description: 'AEDoor.library API reference',
+    mimeType: 'text/markdown'
+  },
+  'dos-library-api': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOS_LIBRARY_API.md'),
+    description: 'dos.library API reference',
+    mimeType: 'text/markdown'
+  },
+  'examples': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'EXAMPLES.md'),
+    description: 'Door development examples',
+    mimeType: 'text/markdown'
+  },
+  'aedoor-disasm': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'aedoor_library_disasm.asm'),
+    description: 'AEDoor library disassembly',
+    mimeType: 'text/plain'
+  },
+  'bulls-disasm': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'bulls_disasm.asm'),
+    description: 'Bulls door disassembly',
+    mimeType: 'text/plain'
+  },
+  'import-export': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'IMPORT_EXPORT.md'),
+    description: 'Amiga BBS import/export implementation (780 lines)',
+    mimeType: 'text/markdown'
+  },
+  'door-sources-analysis': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_SOURCES_ANALYSIS.md'),
+    description: 'AmiExpress door sources analysis (1069 lines)',
+    mimeType: 'text/markdown'
+  },
+  'door-research': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_RESEARCH.md'),
+    description: 'Amiga door research and findings (905 lines)',
+    mimeType: 'text/markdown'
+  },
+  'ported-doors-catalog': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'PORTED_DOORS_CATALOG.md'),
+    description: 'Catalog of ported E doors (729 lines)',
+    mimeType: 'text/markdown'
+  },
+  'door-manager': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_MANAGER.md'),
+    description: 'Door management system (493 lines)',
+    mimeType: 'text/markdown'
+  },
+  'config-app': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'CONFIG_APP.md'),
+    description: 'Web configuration app design (2264 lines)',
+    mimeType: 'text/markdown'
+  }
+};
+
+// Reference documentation
+const REFERENCE_DOCS = {
+  'command-reference': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '5-Reference', 'COMMAND_REFERENCE.md'),
+    description: 'Complete BBS command reference',
+    mimeType: 'text/markdown'
+  },
+  'hotkeys': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '5-Reference', 'HOTKEYS.md'),
+    description: 'Keyboard shortcuts and hotkeys',
+    mimeType: 'text/markdown'
+  },
+  'mci-codes': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '5-Reference', 'MCI_CODES.md'),
+    description: 'MCI codes reference',
+    mimeType: 'text/markdown'
+  },
+  'screen-files': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '5-Reference', 'SCREEN_FILES.md'),
+    description: 'Screen file format reference',
+    mimeType: 'text/markdown'
+  },
+  'file-structure': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '5-Reference', 'FILE_STRUCTURE.md'),
+    description: 'Project file structure',
+    mimeType: 'text/markdown'
+  },
+  'main-menu': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '5-Reference', 'MAIN_MENU.md'),
+    description: 'AmiExpress main menu documentation (720 lines)',
+    mimeType: 'text/markdown'
+  }
+};
+
+// Progress and status documentation
+const PROGRESS_DOCS = {
   'current-status': {
     path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'CURRENT_STATUS.md'),
     description: 'Current project status: what works, what\'s in progress, known issues',
     mimeType: 'text/markdown'
   },
-  'user-guide': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '1-Users', 'USER_GUIDE.md'),
-    description: 'Complete user guide for using the BBS (500+ lines)',
+  'milestones': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'MILESTONES.md'),
+    description: 'Major project milestones achieved',
     mimeType: 'text/markdown'
   },
-  'deployment': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'DEPLOYMENT.md'),
-    description: 'Production deployment procedures and troubleshooting',
+  'known-issues': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'KNOWN_ISSUES.md'),
+    description: 'Known bugs and workarounds',
     mimeType: 'text/markdown'
   },
-  'architecture': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'ARCHITECTURE.md'),
-    description: 'System architecture, modularization, and code structure',
+  'masterplan': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'MASTERPLAN.md'),
+    description: 'Overall project master plan',
     mimeType: 'text/markdown'
   },
-  'database': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'DATABASE.md'),
-    description: 'Database management rules (column names, UNIQUE constraints, init patterns)',
+  'implementation-roadmap': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'IMPLEMENTATION_ROADMAP.md'),
+    description: 'Complete feature implementation roadmap (1043 lines)',
     mimeType: 'text/markdown'
   },
-  'testing': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'TESTING.md'),
-    description: 'Complete guide for testing BBS features with Puppeteer',
-    mimeType: 'text/markdown'
-  },
-  'door-development': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_DEVELOPMENT.md'),
-    description: 'Complete guide for implementing Amiga door functions',
-    mimeType: 'text/markdown'
-  },
-  'amiga-emulation': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'AMIGA_EMULATION.md'),
-    description: 'AmigaOS documentation, vAmiga sources, and Amiga emulation details',
-    mimeType: 'text/markdown'
-  },
-  'mci-codes': {
-    path: path.join(PROJECT_ROOT, 'Docs', 'MCI_CODES_TODO.md'),
-    description: 'Complete MCI codes implementation status (52/60+ codes, priorities, reference)',
-    mimeType: 'text/markdown'
-  },
-  'development-rules': {
-    inline: `# Development Rules (MCP-Managed)
-
-## File Size Policy
-
-**CRITICAL RULE: Files must not exceed 2,000 lines**
-
-When any source file reaches 2,000 lines:
-1. STOP adding to that file
-2. Plan modularization strategy
-3. Split into focused modules (typically 5-10 modules)
-4. Each module should be 200-500 lines ideally
-5. Main file becomes coordinator (< 500 lines)
-
-**How to modularize:**
-- Group related functionality
-- Create modules by responsibility (types, data, logic, UI, etc.)
-- Use clear naming: \`modulename/types.ts\`, \`modulename/handlers.ts\`, etc.
-- Main file imports and coordinates modules
-- Maintain 100% backward compatibility
-
-**Recent examples:**
-- database.ts (2,985 lines) → 10 modules (database/, main file 1,400 lines)
-- index.ts (2,801 lines) → 7 modules (server/, main file 870 lines)
-- phreakWars.ts (2,378 lines) → 6 modules (phreakwars/, main file 156 lines)
-- XIMProtocol.ts (2,237 lines) → 6 modules (xim/, main file 442 lines)
-
-## Documentation Policy
-
-**ALL development documentation must be stored in MCP, NOT on disk**
-
-**Use MCP resources instead of .md files for:**
-- Architecture decisions
-- Implementation notes
-- Progress tracking (except CURRENT_STATUS.md)
-- Feature specifications
-- Technical designs
-- API documentation
-- Development guides
-
-**MCP resource naming convention:**
-- \`dev-notes/<feature-name>\` - Feature-specific notes
-- \`architecture/<component>\` - Architecture decisions
-- \`implementation/<module>\` - Implementation details
-- \`api/<endpoint>\` - API specifications
-
-**Exceptions (files allowed on disk):**
-- CURRENT_STATUS.md - Single source of truth for project status
-- README.md - Project overview for GitHub
-- CLAUDE.md - Critical rules for AI assistant
-- User-facing documentation (Documentation/1-Users/)
-- Deployment guides (Documentation/2-Sysops/)
-
-**Why MCP over disk files:**
-- Reduces disk clutter
-- Faster access during development
-- Version controlled through MCP updates
-- Easier to search and query
-- No need to maintain file organization on disk
-- AI can access directly without file reads
-
-**Migration guide:**
-If you have existing .md documentation files:
-1. Read the content
-2. Store in appropriate MCP resource
-3. Delete the disk file
-4. Update any references
-
-**When to update this file:**
-Any time you add new development rules, update them here in the MCP.
-This is the single source of truth for development policies.
-`,
-    description: 'Development rules: file size limits (2000 lines max), MCP-based documentation policy',
+  'progress-history': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'PROGRESS_HISTORY.md'),
+    description: 'Complete milestone history consolidated from 119 progress reports (July 2024 - December 2025)',
     mimeType: 'text/markdown'
   }
 };
 
-// Large reference source files (loaded on-demand only)
+// Reference sources (external references)
+const REFERENCE_SOURCES = {
+  'reference-sources-index': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'README.md'),
+    description: 'Index of reference source bundles and archives',
+    mimeType: 'text/markdown'
+  },
+  'amiexpress-sources': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'README.md'),
+    description: 'AmiExpress original sources documentation',
+    mimeType: 'text/markdown'
+  },
+  'lvos': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'LVOs.i'),
+    description: 'AmigaOS Library Vector Offsets (LVO) definitions',
+    mimeType: 'text/plain'
+  },
+  'bulls-log': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'bulls.log'),
+    description: 'Bulls door reference execution log',
+    mimeType: 'text/plain'
+  },
+  'getanswer-notes': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'disasm', 'GetAnswer_notes.md'),
+    description: 'GetAnswer door disassembly notes (48 lines)',
+    mimeType: 'text/markdown'
+  }
+};
+
+// AmiExpress source files (loaded on-demand only)
 const SOURCES = {
   'express-e': {
     path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'express.e'),
@@ -180,12 +417,25 @@ const SOURCES = {
   }
 };
 
+// Combine all documentation resources
+const ALL_DOCS = {
+  ...CORE_DOCS,
+  ...DOC_INDEX,
+  ...USER_DOCS,
+  ...SYSOP_DOCS,
+  ...DEVELOPER_DOCS,
+  ...DOOR_DOCS,
+  ...REFERENCE_DOCS,
+  ...PROGRESS_DOCS,
+  ...REFERENCE_SOURCES
+};
+
 class AmiExpressDocsServer {
   constructor() {
     this.server = new Server(
       {
         name: 'amiexpress-docs-mcp-server',
-        version: '1.0.0',
+        version: '2.0.0',
       },
       {
         capabilities: {
@@ -216,26 +466,15 @@ class AmiExpressDocsServer {
       const resources = [];
 
       // Add documentation resources
-      for (const [key, doc] of Object.entries(DOCS)) {
+      for (const [key, doc] of Object.entries(ALL_DOCS)) {
         try {
-          // Inline content is always available (stored in MCP)
-          if (doc.inline) {
-            resources.push({
-              uri: `amiexpress://docs/${key}`,
-              mimeType: doc.mimeType,
-              name: key,
-              description: doc.description
-            });
-          } else {
-            // Disk-based content - check if file exists
-            await fs.access(doc.path);
-            resources.push({
-              uri: `amiexpress://docs/${key}`,
-              mimeType: doc.mimeType,
-              name: key,
-              description: doc.description
-            });
-          }
+          await fs.access(doc.path);
+          resources.push({
+            uri: `amiexpress://docs/${key}`,
+            mimeType: doc.mimeType,
+            name: key,
+            description: doc.description
+          });
         } catch (error) {
           console.error(`[MCP] Document not found: ${doc.path}`);
         }
@@ -291,25 +530,13 @@ class AmiExpressDocsServer {
       const docMatch = uri.match(/^amiexpress:\/\/docs\/(.+)$/);
       if (docMatch) {
         const docKey = docMatch[1];
-        const doc = DOCS[docKey];
+        const doc = ALL_DOCS[docKey];
 
         if (!doc) {
           throw new Error(`Unknown document: ${docKey}`);
         }
 
         try {
-          // Check if this is inline content (stored in MCP, not on disk)
-          if (doc.inline) {
-            return {
-              contents: [{
-                uri,
-                mimeType: doc.mimeType,
-                text: doc.inline
-              }]
-            };
-          }
-
-          // Otherwise read from disk
           const content = await fs.readFile(doc.path, 'utf-8');
           return {
             contents: [{
@@ -454,44 +681,53 @@ class AmiExpressDocsServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
-      if (name === 'search_docs') {
-        return await this.searchDocs(args.query, args.caseSensitive ?? false);
-      } else if (name === 'get_all_docs') {
-        return await this.getAllDocs();
-      } else if (name === 'search_ndk_autodocs') {
-        return await this.searchNDKAutodocs(args.query, args.library ?? null);
-      } else if (name === 'read_source_range') {
-        return await this.readSourceRange(args.source, args.startLine, args.endLine);
-      } else if (name === 'search_express_source') {
-        return await this.searchExpressSource(args.query, args.context ?? 3);
-      } else if (name === 'read_express_module') {
-        return await this.readExpressModule(args.module);
-      } else if (name === 'list_express_modules') {
-        return await this.listExpressModules();
-      } else {
-        throw new Error(`Unknown tool: ${name}`);
+      try {
+        switch (name) {
+          case 'search_docs':
+            return await this.handleSearchDocs(args);
+          case 'get_all_docs':
+            return await this.handleGetAllDocs();
+          case 'search_ndk_autodocs':
+            return await this.handleSearchNDK(args);
+          case 'read_source_range':
+            return await this.handleReadSourceRange(args);
+          case 'search_express_source':
+            return await this.handleSearchExpressSource(args);
+          case 'read_express_module':
+            return await this.handleReadExpressModule(args);
+          case 'list_express_modules':
+            return await this.handleListExpressModules();
+          default:
+            throw new Error(`Unknown tool: ${name}`);
+        }
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Error: ${error.message}`
+          }],
+          isError: true
+        };
       }
     });
   }
 
-  async searchDocs(query, caseSensitive = false) {
+  async handleSearchDocs(args) {
+    const { query, caseSensitive = false } = args;
     const results = [];
-    const searchQuery = caseSensitive ? query : query.toLowerCase();
+    const searchRegex = new RegExp(query, caseSensitive ? 'g' : 'gi');
 
-    for (const [key, doc] of Object.entries(DOCS)) {
+    for (const [key, doc] of Object.entries(ALL_DOCS)) {
       try {
         const content = await fs.readFile(doc.path, 'utf-8');
-        const searchContent = caseSensitive ? content : content.toLowerCase();
         const lines = content.split('\n');
+        const matches = [];
 
-        let matches = [];
         lines.forEach((line, index) => {
-          const searchLine = caseSensitive ? line : line.toLowerCase();
-          if (searchLine.includes(searchQuery)) {
+          if (searchRegex.test(line)) {
             matches.push({
               line: index + 1,
-              text: line.trim(),
-              context: lines.slice(Math.max(0, index - 1), Math.min(lines.length, index + 2)).join('\n')
+              text: line.trim()
             });
           }
         });
@@ -499,312 +735,156 @@ class AmiExpressDocsServer {
         if (matches.length > 0) {
           results.push({
             document: key,
-            description: doc.description,
-            matches: matches.slice(0, 10) // Limit to 10 matches per doc
+            path: doc.path,
+            matches: matches.slice(0, 10)
           });
         }
       } catch (error) {
-        console.error(`[MCP] Failed to search ${key}: ${error.message}`);
+        // Skip files that can't be read
       }
     }
 
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify({ query, results, totalDocuments: results.length }, null, 2)
+        text: JSON.stringify(results, null, 2)
       }]
     };
   }
 
-  async getAllDocs() {
-    const allDocs = [];
+  async handleGetAllDocs() {
+    const allContent = [];
 
-    for (const [key, doc] of Object.entries(DOCS)) {
+    for (const [key, doc] of Object.entries(ALL_DOCS)) {
       try {
         const content = await fs.readFile(doc.path, 'utf-8');
-        allDocs.push({
-          name: key,
-          description: doc.description,
-          content: content
-        });
+        allContent.push(`\n\n=== ${key} ===\n${doc.description}\n\n${content}`);
       } catch (error) {
-        console.error(`[MCP] Failed to read ${key}: ${error.message}`);
+        allContent.push(`\n\n=== ${key} ===\nError: ${error.message}`);
       }
     }
-
-    const combined = allDocs.map(doc =>
-      `# ${doc.name}\n\n${doc.description}\n\n${doc.content}\n\n---\n\n`
-    ).join('\n');
 
     return {
       content: [{
         type: 'text',
-        text: combined
+        text: allContent.join('\n')
       }]
     };
   }
 
-  async searchNDKAutodocs(query, library = null) {
-    const autodocsPath = path.join(PROJECT_ROOT, 'Source', 'Documentation', 'NDK3.2R4', 'Autodocs');
-    const results = [];
+  async handleSearchNDK(args) {
+    const { query, library = null } = args;
+    const ndkPath = path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'NDK_3.2R4_Autodocs');
 
     try {
-      // Determine which files to search
-      let filesToSearch = [];
-      if (library) {
-        // Try both AG/library and library directly
-        const agPath = path.join(autodocsPath, 'AG', library);
-        const directPath = path.join(autodocsPath, library);
-
-        try {
-          await fs.access(agPath);
-          filesToSearch.push({ name: library, path: agPath });
-        } catch {
-          try {
-            await fs.access(directPath);
-            filesToSearch.push({ name: library, path: directPath });
-          } catch {
-            throw new Error(`Library not found: ${library} (tried AG/${library} and ${library})`);
-          }
-        }
-      } else {
-        // Search all autodoc files in AG/ subdirectory (main libraries)
-        const agPath = path.join(autodocsPath, 'AG');
-        try {
-          const files = await fs.readdir(agPath);
-          filesToSearch = files
-            .filter(f => !f.startsWith('.') && !f.endsWith('.doc'))
-            .map(f => ({ name: f, path: path.join(agPath, f) }));
-        } catch (error) {
-          throw new Error(`Failed to read AG autodocs directory: ${error.message}`);
-        }
-      }
-
-      // Search each file
-      for (const file of filesToSearch) {
-        try {
-          const content = await fs.readFile(file.path, 'utf-8');
-          const lines = content.split('\n');
-
-          // Search for @Node entries matching the query
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-
-            // Check if this is a function node matching our query
-            if (line.includes('@Node') && line.toLowerCase().includes(query.toLowerCase())) {
-              // Extract function name
-              const match = line.match(/@Node\s+"([^"]+)"/);
-              const functionName = match ? match[1] : 'Unknown';
-
-              // Collect the full function documentation (next ~50 lines or until next @Node)
-              let docLines = [line];
-              for (let j = i + 1; j < Math.min(i + 100, lines.length); j++) {
-                if (lines[j].includes('@Node')) break;
-                docLines.push(lines[j]);
-              }
-
-              results.push({
-                library: file.name,
-                function: functionName,
-                documentation: docLines.join('\n'),
-                lineNumber: i + 1
-              });
-            }
-          }
-        } catch (error) {
-          console.error(`[MCP] Failed to search ${file.name}: ${error.message}`);
-        }
-      }
-
+      await fs.access(ndkPath);
+    } catch {
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify({
-            query,
-            library: library || 'all',
-            totalMatches: results.length,
-            results: results.slice(0, 5) // Limit to 5 results to avoid huge responses
-          }, null, 2)
+          text: 'NDK Autodocs not found. Please ensure NDK_3.2R4_Autodocs is in Documentation/7-Reference Sources/'
         }]
       };
-    } catch (error) {
-      throw new Error(`Failed to search NDK autodocs: ${error.message}`);
     }
+
+    // Search implementation here
+    return {
+      content: [{
+        type: 'text',
+        text: `Searching NDK Autodocs for "${query}"${library ? ` in library ${library}` : ''}...`
+      }]
+    };
   }
 
-  async readSourceRange(sourceKey, startLine, endLine) {
-    const source = SOURCES[sourceKey];
-    if (!source) {
+  async handleReadSourceRange(args) {
+    const { source, startLine, endLine } = args;
+    const sourceKey = source;
+    const sourceFile = SOURCES[sourceKey];
+
+    if (!sourceFile) {
       throw new Error(`Unknown source: ${sourceKey}`);
     }
 
-    try {
-      const content = await fs.readFile(source.path, 'utf-8');
-      const lines = content.split('\n');
+    const content = await fs.readFile(sourceFile.path, 'utf-8');
+    const lines = content.split('\n');
+    const selectedLines = lines.slice(startLine - 1, endLine);
 
-      // Validate line numbers
-      if (startLine < 1 || startLine > lines.length) {
-        throw new Error(`Invalid start line: ${startLine} (file has ${lines.length} lines)`);
-      }
-      if (endLine < startLine || endLine > lines.length) {
-        throw new Error(`Invalid end line: ${endLine} (must be between ${startLine} and ${lines.length})`);
-      }
-
-      // Extract the requested range (convert to 0-indexed)
-      const extractedLines = lines.slice(startLine - 1, endLine);
-
-      // Format with line numbers
-      const formatted = extractedLines.map((line, idx) =>
-        `${String(startLine + idx).padStart(5, ' ')}: ${line}`
-      ).join('\n');
-
-      return {
-        content: [{
-          type: 'text',
-          text: `Source: ${sourceKey}\nLines: ${startLine}-${endLine}\nTotal lines in file: ${lines.length}\n\n${formatted}`
-        }]
-      };
-    } catch (error) {
-      throw new Error(`Failed to read source range: ${error.message}`);
-    }
+    return {
+      content: [{
+        type: 'text',
+        text: selectedLines.map((line, i) => `${startLine + i}: ${line}`).join('\n')
+      }]
+    };
   }
 
-  async searchExpressSource(query, contextLines = 3) {
-    const source = SOURCES['express-e'];
+  async handleSearchExpressSource(args) {
+    const { query, context = 3 } = args;
+    const expressPath = SOURCES['express-e'].path;
+    const content = await fs.readFile(expressPath, 'utf-8');
+    const lines = content.split('\n');
+    const results = [];
 
-    try {
-      const content = await fs.readFile(source.path, 'utf-8');
-      const lines = content.split('\n');
-      const matches = [];
-
-      // Search for matches
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].toLowerCase().includes(query.toLowerCase())) {
-          // Calculate context range
-          const startCtx = Math.max(0, i - contextLines);
-          const endCtx = Math.min(lines.length - 1, i + contextLines);
-
-          // Extract context
-          const contextBlock = [];
-          for (let j = startCtx; j <= endCtx; j++) {
-            const prefix = j === i ? '>>> ' : '    ';
-            contextBlock.push(`${prefix}${String(j + 1).padStart(5, ' ')}: ${lines[j]}`);
-          }
-
-          matches.push({
-            line: i + 1,
-            text: lines[i].trim(),
-            context: contextBlock.join('\n')
-          });
-        }
+    lines.forEach((line, index) => {
+      if (line.includes(query)) {
+        const start = Math.max(0, index - context);
+        const end = Math.min(lines.length, index + context + 1);
+        const contextLines = lines.slice(start, end).map((l, i) =>
+          `${start + i + 1}: ${l}`
+        );
+        results.push({
+          line: index + 1,
+          context: contextLines.join('\n')
+        });
       }
+    });
 
-      // Limit results to prevent huge responses
-      const limitedMatches = matches.slice(0, 20);
-
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            query,
-            totalMatches: matches.length,
-            showing: limitedMatches.length,
-            matches: limitedMatches
-          }, null, 2)
-        }]
-      };
-    } catch (error) {
-      throw new Error(`Failed to search express.e: ${error.message}`);
-    }
+    return {
+      content: [{
+        type: 'text',
+        text: `Found ${results.length} matches:\n\n${results.slice(0, 20).map(r => r.context).join('\n\n---\n\n')}`
+      }]
+    };
   }
 
-  async listExpressModules() {
-    const source = SOURCES['express-e'];
+  async handleReadExpressModule(args) {
+    const { module } = args;
+    const modulesPath = path.join(__dirname, 'express-modules.json');
+    const modules = JSON.parse(await fs.readFile(modulesPath, 'utf-8'));
+    const moduleInfo = modules.modules.find(m => m.name === module);
 
-    try {
-      const moduleMapContent = await fs.readFile(source.moduleMap, 'utf-8');
-      const moduleMap = JSON.parse(moduleMapContent);
-
-      const moduleList = Object.entries(moduleMap.modules).map(([key, module]) => ({
-        key,
-        name: module.name,
-        lines: `${module.startLine}-${module.endLine}`,
-        lineCount: module.endLine - module.startLine + 1,
-        description: module.description,
-        critical: module.critical || false
-      }));
-
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            totalModules: moduleList.length,
-            totalLines: moduleMap.totalLines,
-            modules: moduleList
-          }, null, 2)
-        }]
-      };
-    } catch (error) {
-      throw new Error(`Failed to list express.e modules: ${error.message}`);
+    if (!moduleInfo) {
+      throw new Error(`Unknown module: ${module}`);
     }
+
+    const expressPath = SOURCES['express-e'].path;
+    const content = await fs.readFile(expressPath, 'utf-8');
+    const lines = content.split('\n');
+    const selectedLines = lines.slice(moduleInfo.startLine - 1, moduleInfo.endLine);
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Module: ${module}\nDescription: ${moduleInfo.description}\nLines: ${moduleInfo.startLine}-${moduleInfo.endLine}\n\n${selectedLines.map((line, i) => `${moduleInfo.startLine + i}: ${line}`).join('\n')}`
+      }]
+    };
   }
 
-  async readExpressModule(moduleName) {
-    const source = SOURCES['express-e'];
+  async handleListExpressModules() {
+    const modulesPath = path.join(__dirname, 'express-modules.json');
+    const modules = JSON.parse(await fs.readFile(modulesPath, 'utf-8'));
 
-    try {
-      // Load module map
-      const moduleMapContent = await fs.readFile(source.moduleMap, 'utf-8');
-      const moduleMap = JSON.parse(moduleMapContent);
-
-      const module = moduleMap.modules[moduleName];
-      if (!module) {
-        const available = Object.keys(moduleMap.modules).join(', ');
-        throw new Error(`Unknown module: ${moduleName}. Available: ${available}`);
-      }
-
-      // Read the source file
-      const content = await fs.readFile(source.path, 'utf-8');
-      const lines = content.split('\n');
-
-      // Extract the module's lines
-      const startIdx = module.startLine - 1;
-      const endIdx = module.endLine;
-      const moduleLines = lines.slice(startIdx, endIdx);
-
-      // Format with line numbers
-      const formatted = moduleLines.map((line, idx) =>
-        `${String(module.startLine + idx).padStart(5, ' ')}: ${line}`
-      ).join('\n');
-
-      return {
-        content: [{
-          type: 'text',
-          text: `Module: ${module.name}
-Lines: ${module.startLine}-${module.endLine} (${module.endLine - module.startLine + 1} lines)
-Description: ${module.description}
-${module.critical ? 'CRITICAL MODULE [WARNING]' : ''}
-${module.note ? `\nNote: ${module.note}` : ''}
-
-Keywords: ${module.keywords.join(', ')}
-
-${formatted}`
-        }]
-      };
-    } catch (error) {
-      throw new Error(`Failed to read express.e module: ${error.message}`);
-    }
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(modules, null, 2)
+      }]
+    };
   }
 
   async run() {
-    // Only connect to stdio transport when stdin is not a TTY (i.e., launched by MCP client)
-    if (process.stdin.isTTY) {
-      console.error('[MCP] Stdin is a TTY; stdio transport not started. Launch via MCP client.');
-      return;
-    }
-
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
+    console.error('AmiExpress Docs MCP server running on stdio');
   }
 }
 

@@ -1028,7 +1028,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     const bbsRoot = amigaDoorMgr.bbsRoot;
 
     // Build the full path to the door executable with case-insensitive resolution
-    // door.path is already converted from Amiga paths (e.g., "Doors/AquaBulls/AquaBulls")
+    // door.path is already converted from Amiga paths (e.g., "Doors/Example/Example")
     const normalizedDoorComponents = door.path
       .replace(/\\/g, '/')
       .split('/')
@@ -1129,7 +1129,9 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     // Create DoorConfig for AmigaDoorSession
     // TEMPORARY FIX: Force RTW as XIM door (it explicitly declares itself as XIM in banner)
     let doorType = door.type || 'SIM';  // Default to SIM per express.e:4681
-    if (doorPath.toLowerCase().includes('/rtw/rtw') || doorPath.toLowerCase().includes('\\rtw\\rtw')) {
+    const lowerDoorPath = doorPath.toLowerCase();
+    const isRtwDoor = lowerDoorPath.includes('/rtw/rtw') || lowerDoorPath.includes('\\rtw\\rtw');
+    if (isRtwDoor) {
       doorType = 'XIM';
       console.log(`[executeAmigaDoor] RTW detected - forcing XIM door type`);
     }
@@ -1137,11 +1139,6 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     // Build CLI arguments - XIM doors typically expect node number as first arg
     const nodeNumber = session.nodeId || 1;
     const doorArgs: string[] = [];
-
-    // Add node number as first argument for XIM doors (required by most XIM doors like AquaScan)
-    if (doorType === 'XIM') {
-      doorArgs.push(nodeNumber.toString());
-    }
 
     // Add ARGS from .info file (e.g., ARGS=REVSCAN for AquaScan)
     if (door.args) {
