@@ -12,7 +12,8 @@
 - **AREXX Engine**: Interprets Amiga Arexx scripts; all phases (Discussions, `AREXX_PHASE2`, etc.) now archived to keep this summary lean.
 
 ## 3. Directory & Module Layout
-- `web/backend/src` holds features divided into `commands`, `doors`, `emulation`, `state`, `utils`, matching express.e's structure.
+- `web/backend/src` holds features organized into **feature-based subdirectories** (handlers/message, handlers/file, handlers/chat, etc.) after the Session 13 refactoring.
+- **See `BACKEND_ARCHITECTURE.md`** for the complete directory structure, including 9 handler subdirectories, 38 services, and 11 database repositories.
 - CLI tooling and script modules live under `dev/scripts` (see `BBS-CLI-IMPLEMENTATION.md` in the archive).
 - Security modules use bcrypt, rate limiting, and session management; refer to `archive/BCRYPT_MIGRATION_COMPLETE.md` for upgrade reasoning.
 
