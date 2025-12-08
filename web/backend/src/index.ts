@@ -71,7 +71,7 @@ import {
   setDatabase,
   setHelpers,
   setConstants
-} from './handlers/conference.handler';
+} from './handlers/operations/conference.handler';
 import {
   handleBulletinCommand,
   handleBulletinInput,

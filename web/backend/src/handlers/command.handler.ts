@@ -14,7 +14,7 @@ import * as fs from 'fs';
 
 // Import from other handlers
 import { displayScreen, doPause } from './screen.handler';
-import { displayConferenceBulletins, joinConference } from './conference.handler';
+import { displayConferenceBulletins, joinConference } from './operations/conference.handler';
 import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
 import { displayDoorMenu, executeDoor } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';

@@ -5,13 +5,13 @@
  * Based on express.e conference functions.
  */
 
-import { displayScreen } from './screen.handler';
-import { displayMainMenu } from './command-handler/menu';
-import { getMailStatFile, loadMsgPointers, validatePointers } from '../utils/message-pointers.util';
-import { finalizeCommand } from '../utils/command-response.util';
-import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { displayScreen } from '../screen.handler';
+import { displayMainMenu } from '../command-handler/menu';
+import { getMailStatFile, loadMsgPointers, validatePointers } from '../../utils/message-pointers.util';
+import { finalizeCommand } from '../../utils/command-response.util';
+import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 interface Conference {
   id: number;

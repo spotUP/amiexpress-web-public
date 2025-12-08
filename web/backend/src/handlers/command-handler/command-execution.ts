@@ -15,7 +15,7 @@ import { displayScreen } from "../screen.handler";
 import {
   displayConferenceBulletins,
   joinConference,
-} from "../conference.handler";
+} from "../operations/conference.handler";
 import { displayDoorMenu, executeDoor } from "../door.handler";
 import { startSysopPage } from "../chat/chat.handler";
 import {

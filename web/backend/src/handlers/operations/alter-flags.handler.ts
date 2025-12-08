@@ -8,12 +8,12 @@
  */
 
 import { Socket } from 'socket.io';
-import { config } from '../config';
-import { BBSSession } from '../index';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { FileFlagManager, getFlagFilesPrompt, getClearFlagsPrompt, getShowFlagsMessage } from '../utils/file-flag.util';
+import { config } from '../../config';
+import { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { FileFlagManager, getFlagFilesPrompt, getClearFlagsPrompt, getShowFlagsMessage } from '../../utils/file-flag.util';
 
 /**
  * Alter Flags Handler

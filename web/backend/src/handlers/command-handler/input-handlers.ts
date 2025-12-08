@@ -13,7 +13,7 @@ let doors: any[] = [];
 import {
   displayConferenceBulletins,
   joinConference,
-} from "../conference.handler";
+} from "../operations/conference.handler";
 import { displayDoorMenu, executeDoor } from "../door.handler";
 import { startSysopPage } from "../chat/chat.handler";
 import {

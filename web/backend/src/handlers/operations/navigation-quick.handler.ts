@@ -9,11 +9,11 @@
  * - >2 (next message base) - internalCommandGT2
  */
 
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 // Dependencies injected from index.ts
 let _joinConference: (socket: any, session: BBSSession, confId: number, msgBaseId: number) => Promise<boolean>;

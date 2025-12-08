@@ -52,7 +52,7 @@ import {
   setHelpers,
   setConstants,
   joinConference
-} from '../handlers/conference.handler';
+} from '../handlers/operations/conference.handler';
 import { setBulletinDependencies } from '../handlers/content/bulletin.handler';
 import { setMessageScanDependencies, checkConfAccess } from '../handlers/message/message-scan.handler';
 import { setUserCommandsDependencies } from '../handlers/commands/user-commands.handler';
