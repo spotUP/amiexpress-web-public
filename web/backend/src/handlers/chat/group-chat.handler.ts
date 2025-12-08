@@ -12,11 +12,11 @@
  */
 
 import { Socket } from 'socket.io';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 // Session type
 
 // Dependencies (injected via setter)

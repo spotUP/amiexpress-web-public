@@ -7,9 +7,9 @@
  */
 
 import { Socket } from 'socket.io';
-import { LoggedOnSubState, BBSState } from '../constants/bbs-states';
+import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 // Session type
 
 // Dependencies (injected)

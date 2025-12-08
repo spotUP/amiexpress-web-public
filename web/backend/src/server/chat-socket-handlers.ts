@@ -8,7 +8,7 @@ import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { db } from '../database';
 import { getSessionBySocketId } from './session-manager';
-import { sendChatMessage, acceptChat } from '../handlers/chat.handler';
+import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 
 /**
  * Register chat socket event handlers

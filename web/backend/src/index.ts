@@ -98,7 +98,7 @@ import {
 } from './handlers/display-file-commands.handler';
 import {
   setPreferenceChatCommandsDependencies
-} from './handlers/preference-chat-commands.handler';
+} from './handlers/chat/preference-chat-commands.handler';
 import {
   setAdvancedCommandsDependencies
 } from './handlers/advanced-commands.handler';
@@ -144,7 +144,7 @@ import {
   setChatState,
   setConstants as setConstantsForChatHandler,
   setHelpers as setHelpersForChatHandler
-} from './handlers/chat.handler';
+} from './handlers/chat/chat.handler';
 import {
   displayFileAreaContents,
   displayFileList,

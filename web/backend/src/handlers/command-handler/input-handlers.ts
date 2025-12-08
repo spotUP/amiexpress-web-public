@@ -15,7 +15,7 @@ import {
   joinConference,
 } from "../conference.handler";
 import { displayDoorMenu, executeDoor } from "../door.handler";
-import { startSysopPage } from "../chat.handler";
+import { startSysopPage } from "../chat/chat.handler";
 import {
   displayFileList,
   displayFileMaintenance,
@@ -75,8 +75,8 @@ import {
   handleCommentToSysopCommand,
   handlePageSysopCommand,
   setPreferenceChatCommandsDependencies,
-} from "../preference-chat-commands.handler";
-import { handleLiveChatCommand } from "../chat-commands.handler";
+} from "../chat/preference-chat-commands.handler";
+import { handleLiveChatCommand } from "../chat/chat-commands.handler";
 import {
   handleGreetingsCommand,
   handleMailScanCommand,

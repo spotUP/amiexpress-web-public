@@ -9,15 +9,15 @@
  * - OLM (Online Message) - Send node-to-node message - express.e:25406-25470
  */
 
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkSecurity } from '../utils/acs.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { ParamsUtil } from '../utils/params.util';
-import { displayMainMenu } from './command-handler/menu';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkSecurity } from '../../utils/acs.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { ParamsUtil } from '../../utils/params.util';
+import { displayMainMenu } from '../command-handler/menu';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 // Dependencies injected from index.ts
 let _startSysopPage: (socket: any, session: BBSSession) => void;

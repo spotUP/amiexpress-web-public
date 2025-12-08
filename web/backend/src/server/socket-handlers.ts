@@ -21,7 +21,7 @@ import { runLogoffBatches } from '../services/batch-scheduler';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
 import { handleCommand } from '../handlers/command.handler';
-import { exitChat, sendChatMessage, acceptChat } from '../handlers/chat.handler';
+import { exitChat, sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { runSamiLogUpdate } from '../services/SamiLogRunner';

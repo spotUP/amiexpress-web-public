@@ -5,7 +5,7 @@
  * Based on express.e chat system (ccom() function and chat mode).
  */
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 interface ChatSession {
   id: string;
@@ -87,7 +87,7 @@ export function startSysopPage(socket: any, session: BBSSession) {
   // Trigger webhook for sysop page
   (async () => {
     try {
-      const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+      const { webhookService, WebhookTrigger } = await import('../../services/webhook.service');
 
       await webhookService.sendWebhook(WebhookTrigger.SYSOP_PAGED, {
         username: session.user?.username || 'Unknown',

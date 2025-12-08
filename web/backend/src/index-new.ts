@@ -54,7 +54,7 @@ import { nodeFileManager } from './services/NodeFileManager';
 import { callersLogManager } from './services/CallersLogManager';
 import { displayScreen } from './handlers/screen.handler';
 import { handleCommand } from './handlers/command.handler';
-import { exitChat, sendChatMessage, acceptChat } from './handlers/chat.handler';
+import { exitChat, sendChatMessage, acceptChat } from './handlers/chat/chat.handler';
 import { initializeSecurity } from './utils/security.util';
 import { setEnvStat } from './utils/security.util';
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from './utils/file-diz.util';

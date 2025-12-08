@@ -59,7 +59,7 @@ import { setUserCommandsDependencies } from '../handlers/user-commands.handler';
 import { setSystemCommandsDependencies, handleGoodbyeCommand } from '../handlers/system-commands.handler';
 import { setNavigationCommandsDependencies } from '../handlers/navigation-commands.handler';
 import { setDisplayFileCommandsDependencies } from '../handlers/display-file-commands.handler';
-import { setPreferenceChatCommandsDependencies } from '../handlers/preference-chat-commands.handler';
+import { setPreferenceChatCommandsDependencies } from '../handlers/chat/preference-chat-commands.handler';
 import { setAdvancedCommandsDependencies } from '../handlers/advanced-commands.handler';
 import { setMessageCommandsDependencies } from '../handlers/message/message-commands.handler';
 import { setInfoCommandsDependencies } from '../handlers/info-commands.handler';
@@ -94,7 +94,7 @@ import {
   setChatState,
   setConstants as setConstantsForChatHandler,
   setHelpers as setHelpersForChatHandler
-} from '../handlers/chat.handler';
+} from '../handlers/chat/chat.handler';
 import {
   setDatabase as setDatabaseForCommandHandler,
   setConfig,

@@ -13,7 +13,7 @@ import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { callersLogManager } from '../../services/CallersLogManager';
-import { startSysopPage } from '../../handlers/chat.handler';
+import { startSysopPage } from '../../handlers/chat/chat.handler';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 
 export class XIMBBSInfoHandler {

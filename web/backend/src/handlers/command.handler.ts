@@ -17,7 +17,7 @@ import { displayScreen, doPause } from './screen.handler';
 import { displayConferenceBulletins, joinConference } from './conference.handler';
 import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
 import { displayDoorMenu, executeDoor } from './door.handler';
-import { startSysopPage } from './chat.handler';
+import { startSysopPage } from './chat/chat.handler';
 import {
   displayFileList,
   displayFileMaintenance,
@@ -92,10 +92,10 @@ import {
   handleCommentToSysopCommand,
   handlePageSysopCommand,
   setPreferenceChatCommandsDependencies
-} from './preference-chat-commands.handler';
+} from './chat/preference-chat-commands.handler';
 import {
   handleLiveChatCommand
-} from './chat-commands.handler';
+} from './chat/chat-commands.handler';
 import {
   handleGreetingsCommand,
   handleMailScanCommand,

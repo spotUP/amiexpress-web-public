@@ -50,10 +50,10 @@ import {
   handleCommentToSysopCommand,
   handlePageSysopCommand,
   setPreferenceChatCommandsDependencies
-} from '../preference-chat-commands.handler';
+} from '../chat/preference-chat-commands.handler';
 import {
   handleLiveChatCommand
-} from '../chat-commands.handler';
+} from '../chat/chat-commands.handler';
 import {
   handleGreetingsCommand,
   handleMailScanCommand,
