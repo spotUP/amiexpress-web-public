@@ -49,7 +49,7 @@ import {
 
 // Import required handlers and utilities
 import { BBSState, LoggedOnSubState } from './constants/bbs-states';
-import { nodeManager, arexxEngine } from './nodes';
+import { nodeManager, arexxEngine } from './services/node-manager.service';
 import { nodeFileManager } from './services/NodeFileManager';
 import { callersLogManager } from './services/CallersLogManager';
 import { displayScreen } from './handlers/screen.handler';

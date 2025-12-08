@@ -391,7 +391,7 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
 
   try {
     // Import QWKManager (lazy load to avoid circular dependency)
-    const { QWKManager } = await import('../../qwk');
+    const { QWKManager } = await import('../../services/qwk.service');
     const qwkManager = new QWKManager();
 
     // Generate QWK packet for all conferences user has access to

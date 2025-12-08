@@ -1,8 +1,8 @@
 // Multi-node Support Implementation
 // Manages multiple concurrent BBS sessions across different nodes
 
-import { db } from './database';
-import { NodeSession, NodeInfo } from './types';
+import { db } from '../database';
+import { NodeSession, NodeInfo } from '../types';
 
 export class NodeManager {
   private nodes: Map<number, NodeInfo> = new Map();

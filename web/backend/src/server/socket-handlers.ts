@@ -15,7 +15,7 @@ import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { BBSSession } from '../index';
 import { sessions, getSession, setSession, deleteSession, createSession, getNextAvailableNodeId, checkConnectionLimit } from './session-manager';
 import { callersLog, getRecentCallerActivity, displaySystemBulletins } from './database-helpers';
-import { nodeManager, arexxEngine } from '../nodes';
+import { nodeManager, arexxEngine } from '../services/node-manager.service';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { runLogoffBatches } from '../services/batch-scheduler';
 import { callersLogManager } from '../services/CallersLogManager';

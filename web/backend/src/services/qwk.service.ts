@@ -3,8 +3,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { db } from './database';
-import { QWKPacket, QWKMessage, FTNMessage } from './types';
+import { db } from '../database';
+import { QWKPacket, QWKMessage, FTNMessage } from '../types';
 
 export class QWKManager {
   private qwkPath: string;

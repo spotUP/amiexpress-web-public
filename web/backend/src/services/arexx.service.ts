@@ -1,9 +1,9 @@
 // Enhanced AREXX Scripting Engine for AmiExpress-Web
 // Implements a subset of AREXX suitable for web-based BBS automation
 
-import { db } from './database';
-import { AREXXContext, AREXXScript } from './types';
-import { SysopDebugUtil, DebugSeverity } from './utils/sysop-debug.util';
+import { db } from '../database';
+import { AREXXContext, AREXXScript } from '../types';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 
 /**
  * AREXX Variable Storage
