@@ -7,17 +7,17 @@
  */
 
 import { Socket } from 'socket.io';
-import { config } from '../config';
-import { BBSSession } from '../index';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
+import { config } from '../../config';
+import { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
-import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
-import { getMaxDirs } from '../utils/max-dirs.util';
-import { getConferenceDir } from '../utils/file-hold.util';
+import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
+import { getMaxDirs } from '../../utils/max-dirs.util';
+import { getConferenceDir } from '../../utils/file-hold.util';
 
 /**
  * View File Handler

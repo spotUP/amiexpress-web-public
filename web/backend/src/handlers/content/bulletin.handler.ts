@@ -6,13 +6,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { ParamsUtil } from '../utils/params.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { findBulletinFile, findBullHelpFile } from '../utils/screen-security.util';
-import { LoggedOnSubState } from '../constants/bbs-states';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { ParamsUtil } from '../../utils/params.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { findBulletinFile, findBullHelpFile } from '../../utils/screen-security.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
 
 // Dependencies injected from index.ts
 let _db: any = null;

@@ -76,7 +76,7 @@ import {
   handleBulletinCommand,
   handleBulletinInput,
   setBulletinDependencies
-} from './handlers/bulletin.handler';
+} from './handlers/content/bulletin.handler';
 import {
   performConferenceScan,
   displayMailScanScreen,

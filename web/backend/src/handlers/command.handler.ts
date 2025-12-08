@@ -41,7 +41,7 @@ import {
   handleBulletinCommand,
   handleBulletinInput,
   setBulletinDependencies
-} from './bulletin.handler';
+} from './content/bulletin.handler';
 import {
   FileMaintenanceHandler,
   setFileMaintenanceDependencies

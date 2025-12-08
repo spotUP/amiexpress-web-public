@@ -53,7 +53,7 @@ import {
   setConstants,
   joinConference
 } from '../handlers/conference.handler';
-import { setBulletinDependencies } from '../handlers/bulletin.handler';
+import { setBulletinDependencies } from '../handlers/content/bulletin.handler';
 import { setMessageScanDependencies, checkConfAccess } from '../handlers/message/message-scan.handler';
 import { setUserCommandsDependencies } from '../handlers/commands/user-commands.handler';
 import { setSystemCommandsDependencies, handleGoodbyeCommand } from '../handlers/commands/system-commands.handler';
