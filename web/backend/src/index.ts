@@ -174,7 +174,7 @@ import {
   setCallersLog,
   setGetUserStats,
   setFileMaintenanceDependencies
-} from './handlers/file.handler';
+} from './handlers/file/file.handler';
 import { setMessageEntryDependencies } from './handlers/message/message-entry.handler';
 import {
   handleAccountEditing,

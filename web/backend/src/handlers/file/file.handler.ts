@@ -4,13 +4,13 @@
  * 1:1 port from AmiExpress express.e file operations
  */
 
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { startPagination } from './screen.handler';
-import { AnsiUtil } from '../utils/ansi.util';
-import { finalizeCommand } from '../utils/command-response.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { startPagination } from '../screen.handler';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { finalizeCommand } from '../../utils/command-response.util';
 
-import type { BBSSession, UploadSessionContext } from '../index';
-import { storeUploadContext } from '../server/upload-session-store';
+import type { BBSSession, UploadSessionContext } from '../../index';
+import { storeUploadContext } from '../../server/upload-session-store';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];

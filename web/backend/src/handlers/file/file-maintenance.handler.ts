@@ -16,20 +16,20 @@
  * ENDPROC
  */
 
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkSecurity } from '../utils/acs.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { FileFlagManager } from '../utils/file-flag.util';
-import { parseDirSpan, getDirSpanPrompt, DirSpan } from '../utils/dir-span.util';
-import { parseDirFile, DirFileEntry } from '../utils/dir-file-reader.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkSecurity } from '../../utils/acs.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { FileFlagManager } from '../../utils/file-flag.util';
+import { parseDirSpan, getDirSpanPrompt, DirSpan } from '../../utils/dir-span.util';
+import { parseDirFile, DirFileEntry } from '../../utils/dir-file-reader.util';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
-import { getConferenceDir } from '../utils/file-hold.util';
+import { getConferenceDir } from '../../utils/file-hold.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 interface FileEntry {
   id: number;

@@ -77,7 +77,7 @@ import {
   displayUploadInterface,
   displayDownloadInterface,
   displayNewFiles
-} from '../handlers/file.handler';
+} from '../handlers/file/file.handler';
 import { setMessageEntryDependencies } from '../handlers/message/message-entry.handler';
 import { displayAccountEditingMenu, setDatabase as setDatabaseForAccountHandler } from '../handlers/account.handler';
 import {

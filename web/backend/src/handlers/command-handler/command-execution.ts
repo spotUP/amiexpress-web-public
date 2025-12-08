@@ -26,8 +26,8 @@ import {
   displayUploadInterface,
   displayDownloadInterface,
   startFileUpload,
-} from "../file.handler";
-import { FileMaintenanceHandler } from "../file-maintenance.handler";
+} from "../file/file.handler";
+import { FileMaintenanceHandler } from "../file/file-maintenance.handler";
 import {
   handleCFFlagSelectInput,
   handleCFConfSelectInput,

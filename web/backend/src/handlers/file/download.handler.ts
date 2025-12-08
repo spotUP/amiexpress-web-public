@@ -8,21 +8,21 @@
  */
 
 import { Socket } from 'socket.io';
-import { BBSSession } from '../index';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
-import { checkDownloadRatios, updateDownloadStats, creditAccountTrackDownloads } from '../utils/download-ratios.util';
-import { logDownload } from '../utils/download-logging.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
-import { ConferenceRepository } from '../database/conference-repository';
-import { db } from '../database';
-import { config } from '../config';
-import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
+import { checkDownloadRatios, updateDownloadStats, creditAccountTrackDownloads } from '../../utils/download-ratios.util';
+import { logDownload } from '../../utils/download-logging.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
+import { ConferenceRepository } from '../../database/conference-repository';
+import { db } from '../../database';
+import { config } from '../../config';
+import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import * as fs from 'fs';
 import * as path from 'path';
-import { FileFlagManager } from '../utils/file-flag.util';
-import { getConferenceDir } from '../utils/file-hold.util';
+import { FileFlagManager } from '../../utils/file-flag.util';
+import { getConferenceDir } from '../../utils/file-hold.util';
 
 /**
  * Download Handler

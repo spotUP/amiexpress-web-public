@@ -6,15 +6,15 @@
  */
 
 import { Socket } from 'socket.io';
-import { config } from '../config';
-import { BBSSession } from '../index';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { db } from '../database';
-import { checkConfAccess } from './message/message-scan.handler';
-import { finalizeCommand } from '../utils/command-response.util';
-import { AnsiUtil } from '../utils/ansi.util';
+import { config } from '../../config';
+import { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { db } from '../../database';
+import { checkConfAccess } from '../message/message-scan.handler';
+import { finalizeCommand } from '../../utils/command-response.util';
+import { AnsiUtil } from '../../utils/ansi.util';
 
 /**
  * FS Command - File Status

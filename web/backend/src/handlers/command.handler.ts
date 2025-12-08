@@ -32,7 +32,7 @@ import {
   handleFileDeleteConfirmation,
   handleFileMoveConfirmation,
   matchesWildcard
-} from './file.handler';
+} from './file/file.handler';
 import {
   displayAccountEditingMenu,
   displayUserList
@@ -45,7 +45,7 @@ import {
 import {
   FileMaintenanceHandler,
   setFileMaintenanceDependencies
-} from './file-maintenance.handler';
+} from './file/file-maintenance.handler';
 import {
   handleCFFlagSelectInput,
   handleCFConfSelectInput

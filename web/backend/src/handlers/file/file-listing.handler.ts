@@ -7,21 +7,21 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import * as amigafs from '../utils/amigafs';
+import * as amigafs from '../../utils/amigafs';
 import { Socket } from 'socket.io';
 // Session type - using any for now since BBSSession is defined in index.ts
 type Session = any;
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { displayScreen } from './screen.handler';
-import { readDirFile, getDirFilePath, getHoldDirFilePath, DirFileEntry } from '../utils/dir-file-reader.util';
-import { parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../utils/dir-span.util';
-import { FileFlagManager } from '../utils/file-flag.util';
-import { ParamsUtil } from '../utils/params.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { config } from '../config';
-import { getConferenceDir } from '../utils/file-hold.util';
-import { flagPause, initPauseState, setNonStopMode } from '../utils/flag-pause.util';
-import { getMaxDirs } from '../utils/max-dirs.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { displayScreen } from '../screen.handler';
+import { readDirFile, getDirFilePath, getHoldDirFilePath, DirFileEntry } from '../../utils/dir-file-reader.util';
+import { parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../../utils/dir-span.util';
+import { FileFlagManager } from '../../utils/file-flag.util';
+import { ParamsUtil } from '../../utils/params.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { config } from '../../config';
+import { getConferenceDir } from '../../utils/file-hold.util';
+import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
+import { getMaxDirs } from '../../utils/max-dirs.util';
 
 /**
  * Display file list for a conference

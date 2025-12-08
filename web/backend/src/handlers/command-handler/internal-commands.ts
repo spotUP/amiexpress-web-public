@@ -100,7 +100,7 @@ import {
   handleEnterMessageFullCommand,
   setMessagingDependencies
 } from '../message/messaging.handler';
-import { FileMaintenanceHandler } from '../file-maintenance.handler';
+import { FileMaintenanceHandler } from '../file/file-maintenance.handler';
 import { handleJoinConferenceCommand } from '../user-commands.handler';
 import { displayDoorMenu } from '../door.handler';
 import { handleUserStatsCommand } from '../user-commands.handler';

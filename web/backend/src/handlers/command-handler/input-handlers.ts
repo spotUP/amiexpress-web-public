@@ -24,11 +24,11 @@ import {
   displayUploadInterface,
   displayDownloadInterface,
   startFileUpload,
-} from "../file.handler";
+} from "../file/file.handler";
 import {
   FileMaintenanceHandler,
   setFileMaintenanceDependencies,
-} from "../file-maintenance.handler";
+} from "../file/file-maintenance.handler";
 import {
   handleCFFlagSelectInput,
   handleCFConfSelectInput,
