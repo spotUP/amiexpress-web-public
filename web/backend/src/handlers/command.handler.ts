@@ -1218,7 +1218,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = session.inputBuffer || '';
       session.inputBuffer = '';
 
-      const { handleOlmNodeInput } = require('./olm.handler');
+      const { handleOlmNodeInput } = require('./transfer/olm.handler');
       await handleOlmNodeInput(socket, session, input);
     } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
       // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
@@ -1252,7 +1252,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = session.inputBuffer || '';
       session.inputBuffer = '';
 
-      const { handleOlmComposeInput } = require('./olm.handler');
+      const { handleOlmComposeInput } = require('./transfer/olm.handler');
       await handleOlmComposeInput(socket, session, input);
     } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
       // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
@@ -1894,7 +1894,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle batch download confirmation
   if (session.subState === LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM) {
-    const { BatchDownloadHandler } = require('./batch-download.handler');
+    const { BatchDownloadHandler } = require('./transfer/batch-download.handler');
     await BatchDownloadHandler.handleBatchConfirm(socket, session, data.trim());
     return;
   }
@@ -3283,7 +3283,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'DB': // Download Batch - Download all flagged files
-      const { BatchDownloadHandler } = require('./batch-download.handler');
+      const { BatchDownloadHandler } = require('./transfer/batch-download.handler');
       await BatchDownloadHandler.handleBatchDownload(socket, session);
       return;
 
@@ -3328,7 +3328,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25503
-      const { handleOlmCommand: handleOlm } = require('./olm.handler');
+      const { handleOlmCommand: handleOlm } = require('./transfer/olm.handler');
       await handleOlm(socket, session, params);
       return;
 
@@ -3349,7 +3349,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'Q': // Quiet Mode / Block OLM (internalCommandQ) - express.e:25505-25515
-      const { handleQuietCommand } = require('./olm.handler');
+      const { handleQuietCommand } = require('./transfer/olm.handler');
       await handleQuietCommand(socket, session);
       return;
 

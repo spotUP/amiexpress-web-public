@@ -6,17 +6,17 @@
  */
 
 import { Socket } from 'socket.io';
-import { config } from '../config';
-import { BBSSession } from '../index';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkDownloadRatios, updateDownloadStats as applyDownloadStats, creditAccountTrackDownloads } from '../utils/download-ratios.util';
-import { ConferenceRepository } from '../database/conference-repository';
-import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
+import { config } from '../../config';
+import { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkDownloadRatios, updateDownloadStats as applyDownloadStats, creditAccountTrackDownloads } from '../../utils/download-ratios.util';
+import { ConferenceRepository } from '../../database/conference-repository';
+import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getConferenceDir } from '../utils/file-hold.util';
+import { getConferenceDir } from '../../utils/file-hold.util';
 
 /**
  * Batch Download Handler

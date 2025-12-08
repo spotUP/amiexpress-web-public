@@ -12,12 +12,12 @@
  */
 
 import { Socket } from 'socket.io';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { EnvStat } from '../constants/env-codes';
-import { checkSecurity } from '../utils/acs.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { EnvStat } from '../../constants/env-codes';
+import { checkSecurity } from '../../utils/acs.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 // Session type
 
 // Dependencies (injected)

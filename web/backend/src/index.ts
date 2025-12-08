@@ -569,7 +569,7 @@ setRoomCommandsDependencies({
 });
 
 // Initialize OLM (Online Message) handler dependencies - express.e:25406-25515
-const { setOlmDependencies } = require('./handlers/olm.handler');
+const { setOlmDependencies } = require('./handlers/transfer/olm.handler');
 
 setOlmDependencies({
   db,
