@@ -9,7 +9,7 @@ import { spawn, fork } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
-import { resolveCaseInsensitivePath } from '../utils/fs-amiga.util';
+import { resolvePath as resolveCaseInsensitivePath } from '../utils/amigafs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
@@ -1034,8 +1034,9 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       .split('/')
       .filter((component: string) => component.length > 0);
 
+    const fullDoorPath = path.join(bbsRoot, ...normalizedDoorComponents);
     let doorPath =
-      resolveCaseInsensitivePath(bbsRoot, normalizedDoorComponents) ||
+      resolveCaseInsensitivePath(fullDoorPath) ||
       path.join(bbsRoot, door.path);
 
     console.log(`[executeAmigaDoor] BBS root: ${bbsRoot}`);
@@ -1074,8 +1075,8 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
 
       // Search in Doors/ directory
       const doorsDir =
-        resolveCaseInsensitivePath(bbsRoot, ['Doors']) ||
-        resolveCaseInsensitivePath(bbsRoot, ['doors']);
+        resolveCaseInsensitivePath(path.join(bbsRoot, 'Doors')) ||
+        resolveCaseInsensitivePath(path.join(bbsRoot, 'doors'));
 
       if (doorsDir && fs.existsSync(doorsDir)) {
         try {

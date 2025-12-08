@@ -13,7 +13,7 @@ import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import { sequentialFileManager, formatNumberedFilename } from '../services/SequentialFileManager';
 import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
-import { findCaseInsensitive } from '../utils/fs-amiga.util';
+import { findCaseInsensitive } from '../utils/amigafs';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';

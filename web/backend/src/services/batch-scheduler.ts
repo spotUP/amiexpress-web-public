@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
-import { findCaseInsensitive } from '../utils/fs-amiga.util';
+import { findCaseInsensitive } from '../utils/amigafs';
 import { writeQuickNewScreen } from '../utils/quicknew-generator';
 import { writeLastCallersBulletin } from '../utils/lastcallers-generator';
 import { doorDropFileManager } from '../services/DoorDropFileManager';

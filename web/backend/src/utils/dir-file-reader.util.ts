@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { findCaseInsensitive } from './fs-amiga.util';
+import { findCaseInsensitive } from './amigafs';
 
 /**
  * DIR File Reader Utility

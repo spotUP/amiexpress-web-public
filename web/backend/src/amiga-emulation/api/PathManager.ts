@@ -8,7 +8,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
-import { resolveCaseInsensitivePath } from '../../utils/fs-amiga.util';
+import { resolvePath as resolveCaseInsensitivePath } from '../../utils/amigafs';
 
 export class PathManager {
   /** Map of AmigaDOS logical devices (assigns) to system paths */
@@ -60,7 +60,7 @@ export class PathManager {
     const doorsPath =
       (fs.existsSync(doorsUpper) && doorsUpper) ||
       (fs.existsSync(doorsLower) && doorsLower) ||
-      resolveCaseInsensitivePath(this.baseDir, ['doors']) ||
+      resolveCaseInsensitivePath(path.join(this.baseDir, 'doors')) ||
       doorsLower;
 
     // BBS-specific assigns
@@ -177,13 +177,12 @@ export class PathManager {
           return sysPath;
         }
 
-        const caseInsensitivePath = resolveCaseInsensitivePath(sysPath, normalizedComponents);
+        const fullPath = path.join(sysPath, ...normalizedComponents);
+        const caseInsensitivePath = resolveCaseInsensitivePath(fullPath);
         if (caseInsensitivePath) {
           console.log(`[PathManager] Mapped (case-insensitive): "${amiPath}" => "${caseInsensitivePath}"`);
           return caseInsensitivePath;
         }
-
-        const fullPath = path.join(sysPath, ...normalizedComponents);
 
         console.log(`[PathManager] Mapped: "${amiPath}" => "${fullPath}"`);
         return fullPath;
@@ -194,13 +193,13 @@ export class PathManager {
     if (currentDir) {
       const normalizedComponents = this.normalizeComponents(amiPath);
 
-      const caseInsensitivePath = resolveCaseInsensitivePath(currentDir, normalizedComponents);
+      const fullPath = path.join(currentDir, ...normalizedComponents);
+      const caseInsensitivePath = resolveCaseInsensitivePath(fullPath);
       if (caseInsensitivePath) {
         console.log(`[PathManager] Relative (case-insensitive): "${amiPath}" => "${caseInsensitivePath}"`);
         return caseInsensitivePath;
       }
 
-      const fullPath = path.join(currentDir, ...normalizedComponents);
       console.log(`[PathManager] Relative path: "${amiPath}" => "${fullPath}"`);
       return fullPath;
     }
@@ -208,7 +207,8 @@ export class PathManager {
     // No assign and no current directory - try relative to base
     const normalizedComponents = this.normalizeComponents(amiPath);
 
-    const basePath = resolveCaseInsensitivePath(this.baseDir, normalizedComponents);
+    const fullBasePath = path.join(this.baseDir, ...normalizedComponents);
+    const basePath = resolveCaseInsensitivePath(fullBasePath);
     if (basePath) {
       console.log(`[PathManager] Base relative (case-insensitive): "${amiPath}" => "${basePath}"`);
       return basePath;

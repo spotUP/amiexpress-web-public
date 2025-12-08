@@ -26,19 +26,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import { CONTROL_CHARS, calculateCRC16, calculateChecksum } from '../utils/transfer-protocol.util';
 
-// Control characters
-const SOH = 0x01;  // 128-byte block header
-const STX = 0x02;  // 1024-byte block header
-const EOT = 0x04;  // End of transmission
-const ACK = 0x06;  // Positive acknowledgment
-const NAK = 0x15;  // Negative acknowledgment
-const CAN = 0x18;  // Cancel
+// Control characters (re-export for compatibility)
+const SOH = CONTROL_CHARS.SOH;  // 128-byte block header
+const STX = CONTROL_CHARS.STX;  // 1024-byte block header
+const EOT = CONTROL_CHARS.EOT;  // End of transmission
+const ACK = CONTROL_CHARS.ACK;  // Positive acknowledgment
+const NAK = CONTROL_CHARS.NAK;  // Negative acknowledgment
+const CAN = CONTROL_CHARS.CAN;  // Cancel
 const C = 0x43;    // 'C' - CRC mode request
-const SUB = 0x1A;  // Padding byte (Ctrl-Z)
-
-// CRC-16-CCITT polynomial: X^16 + X^12 + X^5 + 1
-const CRC_POLY = 0x1021;
+const SUB = CONTROL_CHARS.SUB;  // Padding byte (Ctrl-Z)
 
 export type XmodemMode = 'checksum' | 'crc' | '1k';
 export type TransferDirection = 'send' | 'receive';
@@ -56,38 +54,6 @@ export interface XmodemTransfer {
   direction: TransferDirection;
   filePath: string;
   options: XmodemOptions;
-}
-
-/**
- * Calculate simple checksum (sum of bytes mod 256)
- */
-function calculateChecksum(data: Buffer): number {
-  let sum = 0;
-  for (let i = 0; i < data.length; i++) {
-    sum = (sum + data[i]) & 0xFF;
-  }
-  return sum;
-}
-
-/**
- * Calculate CRC-16-CCITT
- * Polynomial: 0x1021, Initial value: 0x0000
- */
-function calculateCRC16(data: Buffer): number {
-  let crc = 0x0000;
-
-  for (let i = 0; i < data.length; i++) {
-    crc ^= (data[i] << 8);
-    for (let bit = 0; bit < 8; bit++) {
-      if (crc & 0x8000) {
-        crc = ((crc << 1) ^ CRC_POLY) & 0xFFFF;
-      } else {
-        crc = (crc << 1) & 0xFFFF;
-      }
-    }
-  }
-
-  return crc;
 }
 
 /**

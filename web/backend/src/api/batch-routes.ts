@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
-import { findCaseInsensitive } from '../utils/fs-amiga.util';
+import { findCaseInsensitive } from '../utils/amigafs';
 
 const BATCH_FILES = ['batch0', 'batch1', 'batch2', 'batch3', 'batch4', 'batch5', 'batch6'];
 
