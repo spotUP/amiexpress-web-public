@@ -32,14 +32,14 @@ import {
 import {
   handleCFFlagSelectInput,
   handleCFConfSelectInput,
-} from "../advanced-commands.handler";
+} from "../commands/advanced-commands.handler";
 import {
   handleUserStatsCommand,
   handleJoinConferenceCommand,
   handleUploadCommand,
   handleDownloadCommand,
   setUserCommandsDependencies,
-} from "../user-commands.handler";
+} from "../commands/user-commands.handler";
 import {
   handleGoodbyeCommand,
   handleQuietModeCommand,
@@ -47,8 +47,8 @@ import {
   handleReadMessagesCommand,
   handleEnterMessageCommand,
   setSystemCommandsDependencies,
-} from "../system-commands.handler";
-import { WebhookCommandsHandler } from "../webhook-commands.handler";
+} from "../commands/system-commands.handler";
+import { WebhookCommandsHandler } from "../commands/webhook-commands.handler";
 import {
   handleTimeCommand,
   handleNewFilesCommand,
@@ -57,7 +57,7 @@ import {
   handlePreviousMessageBaseCommand,
   handleNextMessageBaseCommand,
   setNavigationCommandsDependencies,
-} from "../navigation-commands.handler";
+} from "../commands/navigation-commands.handler";
 import {
   handleQuestionMarkCommand,
   handleFileListCommand,
@@ -68,7 +68,7 @@ import {
   handleReadBulletinCommand,
   handleBulletinInput as handleBulletinInputFromDisplayFileCommands,
   setDisplayFileCommandsDependencies,
-} from "../display-file-commands.handler";
+} from "../commands/display-file-commands.handler";
 import {
   handleAnsiModeCommand,
   handleExpertModeCommand,
@@ -82,7 +82,7 @@ import {
   handleMailScanCommand,
   handleConferenceFlagsCommand,
   setAdvancedCommandsDependencies,
-} from "../advanced-commands.handler";
+} from "../commands/advanced-commands.handler";
 import {
   handleJoinMessageBaseCommand,
   handleNodeManagementCommand,
@@ -112,7 +112,7 @@ import {
   handleWEditProtocolInput,
   handleWEditTranslatorInput,
   setInfoCommandsDependencies,
-} from "../info-commands.handler";
+} from "../commands/info-commands.handler";
 import {
   handleRelogonCommand,
   handleViewFileCommand,
@@ -123,7 +123,7 @@ import {
   handleViewFileInput,
   handleZippySearchInput,
   setUtilityCommandsDependencies,
-} from "../utility-commands.handler";
+} from "../commands/utility-commands.handler";
 import {
   handleRemoteShellCommand,
   handleAccountEditingCommand,
@@ -132,7 +132,7 @@ import {
   handleEditAnyFileCommand,
   handleChangeDirectoryCommand,
   setSysopCommandsDependencies,
-} from "../sysop-commands.handler";
+} from "../commands/sysop-commands.handler";
 import {
   handleZmodemUploadCommand,
   handleSysopUploadCommand,
@@ -143,7 +143,7 @@ import {
   handleVoteMenuChoice,
   handleDownloadWithStatusCommand,
   setTransferMiscCommandsDependencies,
-} from "../transfer-misc-commands.handler";
+} from "../commands/transfer-misc-commands.handler";
 import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,

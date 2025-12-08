@@ -85,38 +85,38 @@ import {
 } from './handlers/message/message-scan.handler';
 import {
   setUserCommandsDependencies
-} from './handlers/user-commands.handler';
+} from './handlers/commands/user-commands.handler';
 import {
   handleGoodbyeCommand,
   setSystemCommandsDependencies
-} from './handlers/system-commands.handler';
+} from './handlers/commands/system-commands.handler';
 import {
   setNavigationCommandsDependencies
-} from './handlers/navigation-commands.handler';
+} from './handlers/commands/navigation-commands.handler';
 import {
   setDisplayFileCommandsDependencies
-} from './handlers/display-file-commands.handler';
+} from './handlers/commands/display-file-commands.handler';
 import {
   setPreferenceChatCommandsDependencies
 } from './handlers/chat/preference-chat-commands.handler';
 import {
   setAdvancedCommandsDependencies
-} from './handlers/advanced-commands.handler';
+} from './handlers/commands/advanced-commands.handler';
 import {
   setMessageCommandsDependencies
 } from './handlers/message/message-commands.handler';
 import {
   setInfoCommandsDependencies
-} from './handlers/info-commands.handler';
+} from './handlers/commands/info-commands.handler';
 import {
   setUtilityCommandsDependencies
-} from './handlers/utility-commands.handler';
+} from './handlers/commands/utility-commands.handler';
 import {
   setSysopCommandsDependencies
-} from './handlers/sysop-commands.handler';
+} from './handlers/commands/sysop-commands.handler';
 import {
   setTransferMiscCommandsDependencies
-} from './handlers/transfer-misc-commands.handler';
+} from './handlers/commands/transfer-misc-commands.handler';
 import {
   setMessagingDependencies
 } from './handlers/message/messaging.handler';

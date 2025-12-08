@@ -9,18 +9,18 @@
  */
 
 import * as fs from 'fs';
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { ParamsUtil } from '../utils/params.util';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { normalizeForComparison } from '../utils/input-normalizer.util';
-import { finalizeCommand } from '../utils/command-response.util';
-import type { BBSSession } from '../index';
-import { BBSPaths } from '../utils/bbs-paths.util';
-import { ZmodemTransferManager, TransferTransport } from '../services/zmodem-transfer.service';
-import { flaggedFilesManager } from '../services/FlaggedFilesManager';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { ParamsUtil } from '../../utils/params.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { normalizeForComparison } from '../../utils/input-normalizer.util';
+import { finalizeCommand } from '../../utils/command-response.util';
+import type { BBSSession } from '../../index';
+import { BBSPaths } from '../../utils/bbs-paths.util';
+import { ZmodemTransferManager, TransferTransport } from '../../services/zmodem-transfer.service';
+import { flaggedFilesManager } from '../../services/FlaggedFilesManager';
 import * as path from 'path';
 
 interface Conference {

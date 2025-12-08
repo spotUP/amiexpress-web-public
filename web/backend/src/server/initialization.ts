@@ -55,17 +55,17 @@ import {
 } from '../handlers/conference.handler';
 import { setBulletinDependencies } from '../handlers/bulletin.handler';
 import { setMessageScanDependencies, checkConfAccess } from '../handlers/message/message-scan.handler';
-import { setUserCommandsDependencies } from '../handlers/user-commands.handler';
-import { setSystemCommandsDependencies, handleGoodbyeCommand } from '../handlers/system-commands.handler';
-import { setNavigationCommandsDependencies } from '../handlers/navigation-commands.handler';
-import { setDisplayFileCommandsDependencies } from '../handlers/display-file-commands.handler';
+import { setUserCommandsDependencies } from '../handlers/commands/user-commands.handler';
+import { setSystemCommandsDependencies, handleGoodbyeCommand } from '../handlers/commands/system-commands.handler';
+import { setNavigationCommandsDependencies } from '../handlers/commands/navigation-commands.handler';
+import { setDisplayFileCommandsDependencies } from '../handlers/commands/display-file-commands.handler';
 import { setPreferenceChatCommandsDependencies } from '../handlers/chat/preference-chat-commands.handler';
-import { setAdvancedCommandsDependencies } from '../handlers/advanced-commands.handler';
+import { setAdvancedCommandsDependencies } from '../handlers/commands/advanced-commands.handler';
 import { setMessageCommandsDependencies } from '../handlers/message/message-commands.handler';
-import { setInfoCommandsDependencies } from '../handlers/info-commands.handler';
-import { setUtilityCommandsDependencies } from '../handlers/utility-commands.handler';
-import { setSysopCommandsDependencies } from '../handlers/sysop-commands.handler';
-import { setTransferMiscCommandsDependencies } from '../handlers/transfer-misc-commands.handler';
+import { setInfoCommandsDependencies } from '../handlers/commands/info-commands.handler';
+import { setUtilityCommandsDependencies } from '../handlers/commands/utility-commands.handler';
+import { setSysopCommandsDependencies } from '../handlers/commands/sysop-commands.handler';
+import { setTransferMiscCommandsDependencies } from '../handlers/commands/transfer-misc-commands.handler';
 import { setMessagingDependencies } from '../handlers/message/messaging.handler';
 import {
   setFileAreas,

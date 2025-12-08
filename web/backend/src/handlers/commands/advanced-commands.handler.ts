@@ -7,13 +7,13 @@
  * - CF (Conference Flags) - Manage conference scanning flags - express.e:24672-24750
  */
 
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkSecurity } from '../utils/acs.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkSecurity } from '../../utils/acs.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 interface Conference {
   id: number;

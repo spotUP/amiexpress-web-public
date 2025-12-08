@@ -4,18 +4,18 @@
  * 1:1 port from AmiExpress express.e commands
  */
 
-import { BBSSession, LoggedOnSubState } from '../index';
-import { Database } from '../database';
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { EnvStat } from '../constants/env-codes';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
+import { BBSSession, LoggedOnSubState } from '../../index';
+import { Database } from '../../database';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { EnvStat } from '../../constants/env-codes';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
 import {
   handleAccountEditorMenu,
   handleAccountEditorInput,
   handleSearchByNameInput
-} from './user-editor.handler';
+} from '../user-editor.handler';
 
 // Dependencies (injected)
 let _getRecentCallerActivity: any;

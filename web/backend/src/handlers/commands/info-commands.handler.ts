@@ -8,16 +8,16 @@
  * - W (Write User Parameters) - Edit user configuration - express.e:25712-25785+
  */
 
-import { LoggedOnSubState, BBSState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkSecurity } from '../utils/acs.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { db } from '../database';
+import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkSecurity } from '../../utils/acs.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { db } from '../../database';
 import bcrypt from 'bcryptjs';
-import { finalizeCommand } from '../utils/command-response.util';
+import { finalizeCommand } from '../../utils/command-response.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 // Dependencies injected from index.ts
 let _sessions: Map<string, BBSSession>;

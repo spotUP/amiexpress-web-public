@@ -4,14 +4,14 @@
  * 1:1 port from AmiExpress express.e commands
  */
 
-import { BBSSession, LoggedOnSubState } from '../index';
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { EnvStat } from '../constants/env-codes';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { BBSPaths } from '../utils/bbs-paths.util';
-import { ZmodemTransferManager, TransferTransport } from '../services/zmodem-transfer.service';
+import { BBSSession, LoggedOnSubState } from '../../index';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { EnvStat } from '../../constants/env-codes';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { BBSPaths } from '../../utils/bbs-paths.util';
+import { ZmodemTransferManager, TransferTransport } from '../../services/zmodem-transfer.service';
 import * as path from 'path';
 
 // Dependencies (injected)

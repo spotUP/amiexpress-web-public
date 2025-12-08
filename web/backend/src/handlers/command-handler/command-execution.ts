@@ -31,21 +31,21 @@ import { FileMaintenanceHandler } from "../file/file-maintenance.handler";
 import {
   handleCFFlagSelectInput,
   handleCFConfSelectInput,
-} from "../advanced-commands.handler";
+} from "../commands/advanced-commands.handler";
 import {
   handleUserStatsCommand,
   handleJoinConferenceCommand,
   handleUploadCommand,
   handleDownloadCommand,
-} from "../user-commands.handler";
+} from "../commands/user-commands.handler";
 import {
   handleGoodbyeCommand,
   handleQuietModeCommand,
   handleHelpCommand,
   handleReadMessagesCommand,
   handleEnterMessageCommand,
-} from "../system-commands.handler";
-import { WebhookCommandsHandler } from "../webhook-commands.handler";
+} from "../commands/system-commands.handler";
+import { WebhookCommandsHandler } from "../commands/webhook-commands.handler";
 import {
   handleTimeCommand,
   handleNewFilesCommand,
@@ -53,7 +53,7 @@ import {
   handleNextConferenceCommand,
   handlePreviousMessageBaseCommand,
   handleNextMessageBaseCommand,
-} from "../navigation-commands.handler";
+} from "../commands/navigation-commands.handler";
 import {
   handleQuestionMarkCommand,
   handleFileListCommand,
@@ -62,7 +62,7 @@ import {
   handleFlagInput,
   handleFileStatusCommand,
   handleReadBulletinCommand,
-} from "../display-file-commands.handler";
+} from "../commands/display-file-commands.handler";
 import {
   handleAnsiModeCommand,
   handleExpertModeCommand,
@@ -74,7 +74,7 @@ import {
   handleGreetingsCommand,
   handleMailScanCommand,
   handleConferenceFlagsCommand,
-} from "../advanced-commands.handler";
+} from "../commands/advanced-commands.handler";
 import {
   handleJoinMessageBaseCommand,
   handleNodeManagementCommand,
@@ -102,14 +102,14 @@ import {
   handleWEditScreentypeInput,
   handleWEditProtocolInput,
   handleWEditTranslatorInput,
-} from "../info-commands.handler";
+} from "../commands/info-commands.handler";
 import {
   handleRelogonCommand,
   handleViewFileCommand,
   handleZippySearchCommand,
   handleZoomCommand,
   handleHelpFilesCommand,
-} from "../utility-commands.handler";
+} from "../commands/utility-commands.handler";
 import {
   handleRemoteShellCommand,
   handleAccountEditingCommand,
@@ -117,7 +117,7 @@ import {
   handleEditDirectoryFilesCommand,
   handleEditAnyFileCommand,
   handleChangeDirectoryCommand,
-} from "../sysop-commands.handler";
+} from "../commands/sysop-commands.handler";
 import {
   handleZmodemUploadCommand,
   handleSysopUploadCommand,
@@ -127,7 +127,7 @@ import {
   handleVoteAnswerInput,
   handleVoteMenuChoice,
   handleDownloadWithStatusCommand,
-} from "../transfer-misc-commands.handler";
+} from "../commands/transfer-misc-commands.handler";
 import {
   handleReadMessagesFullCommand,
   handleEnterMessageFullCommand,

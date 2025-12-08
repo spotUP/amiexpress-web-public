@@ -9,16 +9,16 @@
  * - E: Enter message (internalCommandE - express.e:24860-24868) [STUB]
  */
 
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { ParamsUtil } from '../utils/params.util';
-import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
-import type { BBSSession } from '../index';
-import { FileFlagManager } from '../utils/file-flag.util';
-import { config } from '../config';
-import { finalizeCommand } from '../utils/command-response.util';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { ParamsUtil } from '../../utils/params.util';
+import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
+import type { BBSSession } from '../../index';
+import { FileFlagManager } from '../../utils/file-flag.util';
+import { config } from '../../config';
+import { finalizeCommand } from '../../utils/command-response.util';
 
 // Injected dependencies
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => Promise<boolean>;
@@ -208,7 +208,7 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
  */
 export async function handleReadMessagesCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // Import and call the full implementation
-  const { handleReadMessagesFullCommand } = await import('./message/messaging.handler');
+  const { handleReadMessagesFullCommand } = await import('../message/messaging.handler');
   await handleReadMessagesFullCommand(socket, session, params);
 }
 

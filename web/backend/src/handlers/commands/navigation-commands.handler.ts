@@ -10,14 +10,14 @@
  * - >>: Next Message Base (internalCommandGT2 - express.e:24580-24592)
  */
 
-import { checkSecurity } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { finalizeCommand } from '../utils/command-response.util';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { finalizeCommand } from '../../utils/command-response.util';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 interface Conference {
   id: number;

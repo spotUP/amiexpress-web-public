@@ -10,18 +10,18 @@
  * - B (Read Bulletin) - Read specific bulletin - express.e:24607-24656
  */
 
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkSecurity } from '../utils/acs.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { ParamsUtil } from '../utils/params.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkSecurity } from '../../utils/acs.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { ParamsUtil } from '../../utils/params.util';
 import path from 'path';
 import fs from 'fs';
-import { finalizeCommand } from '../utils/command-response.util';
-import { displayMainMenu } from './command-handler/menu';
+import { finalizeCommand } from '../../utils/command-response.util';
+import { displayMainMenu } from '../command-handler/menu';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 // Dependencies injected from index.ts
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => void;

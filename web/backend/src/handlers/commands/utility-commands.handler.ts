@@ -10,16 +10,16 @@
  * - ^ (Help Files) - View help files - express.e:25089-25111
  */
 
-import { LoggedOnSubState } from '../constants/bbs-states';
-import { ACSPermission } from '../constants/acs-permissions';
-import { checkSecurity } from '../utils/acs.util';
-import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
-import { ParamsUtil } from '../utils/params.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { checkSecurity } from '../../utils/acs.util';
+import { AnsiUtil } from '../../utils/ansi.util';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { ParamsUtil } from '../../utils/params.util';
 import path from 'path';
 import fs from 'fs';
 
-import type { BBSSession } from '../index';
+import type { BBSSession } from '../../index';
 
 // Dependencies injected from index.ts
 let _handleGoodbyeCommand: (socket: any, session: BBSSession, params?: string) => void;
@@ -391,7 +391,7 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
 
   try {
     // Import QWKManager (lazy load to avoid circular dependency)
-    const { QWKManager } = await import('../qwk');
+    const { QWKManager } = await import('../../qwk');
     const qwkManager = new QWKManager();
 
     // Generate QWK packet for all conferences user has access to
