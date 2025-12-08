@@ -15,10 +15,10 @@
 import { Socket } from 'socket.io';
 import * as fs from 'fs';
 import * as path from 'path';
-import { LoggedOnSubState, BBSState } from '../constants/bbs-states';
-import { displayScreen, doPause } from './screen.handler';
-import { config } from '../config';
-import { ConfigService } from '../services/config.service';
+import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
+import { displayScreen, doPause } from '../screen.handler';
+import { config } from '../../config';
+import { ConfigService } from '../../services/config.service';
 
 // Dependencies (injected from index.ts)
 let db: any;
@@ -1133,7 +1133,7 @@ async function createAccount(socket: Socket, session: any) {
 
     // Trigger webhook for new user registration
     try {
-      const { webhookService, WebhookTrigger } = await import('../services/webhook.service');
+      const { webhookService, WebhookTrigger } = await import('../../services/webhook.service');
       await webhookService.sendWebhook(WebhookTrigger.NEW_USER, {
         username: data.username,
         userId: newUserId,

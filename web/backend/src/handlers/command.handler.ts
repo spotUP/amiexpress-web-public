@@ -36,7 +36,7 @@ import {
 import {
   displayAccountEditingMenu,
   displayUserList
-} from './account.handler';
+} from './user/account.handler';
 import {
   handleBulletinCommand,
   handleBulletinInput,

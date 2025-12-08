@@ -6,9 +6,9 @@
  * Handles Command 1: Account Editing
  */
 
-import { BBSSession, LoggedOnSubState } from '../index';
-import { Database, User } from '../database';
-import { AnsiUtil } from '../utils/ansi.util';
+import { BBSSession, LoggedOnSubState } from '../../index';
+import { Database, User } from '../../database';
+import { AnsiUtil } from '../../utils/ansi.util';
 import * as bcrypt from 'bcryptjs';
 
 // Account editor state tracking

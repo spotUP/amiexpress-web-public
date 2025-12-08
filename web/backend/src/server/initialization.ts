@@ -79,7 +79,7 @@ import {
   displayNewFiles
 } from '../handlers/file/file.handler';
 import { setMessageEntryDependencies } from '../handlers/message/message-entry.handler';
-import { displayAccountEditingMenu, setDatabase as setDatabaseForAccountHandler } from '../handlers/account.handler';
+import { displayAccountEditingMenu, setDatabase as setDatabaseForAccountHandler } from '../handlers/user/account.handler';
 import {
   setDoors,
   setDoorSessions,

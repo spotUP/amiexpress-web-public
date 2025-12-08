@@ -4,7 +4,7 @@
  * 1:1 port from AmiExpress express.e account management
  */
 
-import { BBSSession, LoggedOnSubState, BBSState } from '../index';
+import { BBSSession, LoggedOnSubState, BBSState } from '../../index';
 
 // Dependencies (injected)
 let db: any;

@@ -29,7 +29,7 @@ import { moveUploadedFile, getConferenceDir } from './utils/file-hold.util';
 import { convertUnicodePuaToPetscii, convertPetsciiInputToAscii, convertAsciiToPetsciiOutput } from './utils/petscii.util';
 import { writeUploadToDirFile } from './utils/dir-file.util';
 import { updateSysopUploadStats, doUploadNotify } from './utils/upload-notify.util';
-import { AuthHandler } from './handlers/auth.handler';
+import { AuthHandler } from './handlers/user/auth.handler';
 import { SessionLogsHandler } from './handlers/session-logs.handler';
 import { authenticateToken, requireSysop, AuthRequest } from './middleware/auth.middleware';
 import { createConfigRouter } from './api/config-routes';
@@ -186,7 +186,7 @@ import {
   handleDeleteUserAccount,
   handleSearchUsers,
   setDatabase as setDatabaseForAccountHandler
-} from './handlers/account.handler';
+} from './handlers/user/account.handler';
 import {
   displayMainMenu,
   displayMenuPrompt,

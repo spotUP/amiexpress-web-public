@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { db } from '../database';
-import { AuthHandler } from '../handlers/auth.handler';
+import { AuthHandler } from '../handlers/user/auth.handler';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 
 /**

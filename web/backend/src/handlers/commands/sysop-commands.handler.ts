@@ -15,7 +15,7 @@ import {
   handleAccountEditorMenu,
   handleAccountEditorInput,
   handleSearchByNameInput
-} from '../user-editor.handler';
+} from '../user/user-editor.handler';
 
 // Dependencies (injected)
 let _getRecentCallerActivity: any;

@@ -18,7 +18,7 @@ import * as path from 'path';
 import express from 'express';
 import { db } from '../database';
 import { config } from '../config';
-import { AuthHandler } from '../handlers/auth.handler';
+import { AuthHandler } from '../handlers/user/auth.handler';
 import { SessionLogsHandler } from '../handlers/session-logs.handler';
 import { authenticateToken, requireSysop, AuthRequest } from '../middleware/auth.middleware';
 import { createConfigRouter } from '../api/config-routes';

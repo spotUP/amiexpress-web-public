@@ -4,9 +4,9 @@
  */
 
 import { Request, Response } from 'express';
-import { Database } from '../database';
-import { sanitizeInput } from '../utils/input-normalizer.util';
-import { AuthRequest } from '../middleware/auth.middleware';
+import { Database } from '../../database';
+import { sanitizeInput } from '../../utils/input-normalizer.util';
+import { AuthRequest } from '../../middleware/auth.middleware';
 
 export class AuthHandler {
   constructor(private db: Database) {}
