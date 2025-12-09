@@ -20,15 +20,39 @@
 
 ## Step 2: Get Render Service ID
 
+### If You Have Multiple Services
+
+If you currently have **two separate Render services** (backend + frontend):
+
+**Option 1: Unified Docker Service** (Recommended)
+- Use the **Docker backend service ID** only
+- GitHub Actions will deploy the unified service
+- After migration, you can delete the old frontend service
+
+**Option 2: Keep Separate Services**
+- Use the **backend service ID** only
+- Frontend deploys separately (static site)
+- GitHub Actions only deploys backend
+
+### Getting the Service ID
+
 1. Go to your Render service dashboard
-2. Look at the URL in your browser
-3. Copy the service ID from the URL
+2. Open the **backend service** (or unified Docker service)
+3. Look at the URL in your browser
+4. Copy the service ID from the URL
 
 **URL Format**: `https://dashboard.render.com/web/srv-xxxxxxxxxxxxx`
 
 **Service ID**: `srv-xxxxxxxxxxxxx` (the part after `/web/`)
 
 **Example**: `srv-cqb1234567890abcdef`
+
+### Service Names to Look For
+
+- Unified: `amiexpress-bbs` (Docker service)
+- Separate: `amiexpress-backend` or `amiexpress-backend-docker`
+
+**Note**: Do NOT use the frontend service ID - GitHub Actions deploys backend only.
 
 ## Step 3: Add Secrets to GitHub
 

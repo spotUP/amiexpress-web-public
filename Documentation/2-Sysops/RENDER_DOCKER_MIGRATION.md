@@ -4,6 +4,32 @@
 
 This guide covers migrating your Render.com deployment from the legacy Node.js build to the new Docker-based deployment.
 
+## Current Setup
+
+If you currently have **two separate Render services**:
+- **Backend Service**: Node.js web service (amiexpress-backend)
+- **Frontend Service**: Static site (amiexpress-frontend)
+
+You have **two migration options**:
+
+### Migration Options
+
+**Option A: Unified Docker Service** (Recommended)
+- Consolidate to a single Docker service
+- Backend serves all frontends (BBS Terminal, Admin Config, SDK Preview)
+- Simpler deployment, fewer services to manage
+- Cost: 1 service instead of 2
+- Build time: 60% faster than legacy
+
+**Option B: Keep Separate Services**
+- Migrate backend only to Docker
+- Keep frontend as static site
+- Maintains current architecture
+- Cost: 2 services (same as now)
+- Build time: Backend 60% faster, frontend unchanged
+
+This guide covers **Option A (Unified)**. For Option B, see [Separate Services Guide](#option-b-keep-separate-services) at the end.
+
 ## Why Migrate to Docker on Render?
 
 ### Benefits
@@ -24,7 +50,7 @@ This guide covers migrating your Render.com deployment from the legacy Node.js b
 | Cache Efficiency | Poor (npm cache) | Excellent (layer caching) |
 | Local Testing | Complex setup | `docker-compose up` |
 
-## Migration Steps
+## Migration Steps (Option A: Unified Docker Service)
 
 ### Step 1: Backup Current Deployment
 
@@ -139,13 +165,23 @@ telnet your-service.onrender.com 2323
 
 ### Step 6: Clean Up Legacy Services (Optional)
 
-Once Docker deployment is verified:
+Once unified Docker deployment is verified:
 
 1. Go to Render Dashboard
-2. Delete old services:
-   - `amiexpress-frontend` (if using static site)
-   - `amiexpress-backend-legacy` (old Node.js service)
+2. Delete **both** old services:
+   - `amiexpress-frontend` (static site - no longer needed)
+   - `amiexpress-backend` (old Node.js service)
 3. Docker deployment now serves all frontends from one container
+4. **Cost Savings**: Reduced from 2 services to 1 service
+
+**Before deleting**:
+- Verify unified service is working correctly
+- Test all frontends:
+  - BBS Terminal: `https://amiexpress-bbs.onrender.com/`
+  - Admin Config: `https://amiexpress-bbs.onrender.com/admin/`
+  - SDK Preview: `https://amiexpress-bbs.onrender.com/sdk/`
+- Confirm database data is accessible
+- Backup any logs you need from old services
 
 ## Environment Variables
 
@@ -302,6 +338,115 @@ For true multi-node scaling, consider:
 - **Fly.io** (native Docker + scaling)
 - **AWS ECS/Fargate** (production-grade)
 - **Your own server** with docker-compose
+
+## Option B: Keep Separate Services
+
+If you prefer to keep backend and frontend as separate services:
+
+### Step 1: Update Backend Only
+
+1. **Create new backend service** (to test first):
+   - Name: `amiexpress-backend-docker`
+   - Type: Web Service
+   - Environment: Docker
+   - Dockerfile: `./Dockerfile`
+   - Docker context: `.`
+
+2. **Copy environment variables** from old backend service:
+   ```yaml
+   NODE_ENV=production
+   HOST=0.0.0.0
+   PORT=3001
+   DATABASE_DIR=/app/db
+   BBS_DATA_DIR=/app/data/bbs
+   JWT_SECRET=[copy from old service]
+   JWT_REFRESH_SECRET=[copy from old service]
+   SESSION_SECRET=[copy from old service]
+   ```
+
+3. **Attach disk**:
+   - Name: `bbs-data`
+   - Mount path: `/app/db`
+   - Size: 10 GB
+   - **Important**: Migrate data from old service if needed
+
+4. **Deploy and test**
+
+### Step 2: Update Frontend to Use New Backend
+
+1. **Update frontend environment variables**:
+   - `VITE_API_URL`: Point to new backend URL
+   - Example: `https://amiexpress-backend-docker.onrender.com`
+
+2. **Redeploy frontend** (static site)
+
+### Step 3: Verify and Clean Up
+
+1. Test the new setup thoroughly
+2. Once verified, delete old backend service
+3. Rename `amiexpress-backend-docker` → `amiexpress-backend`
+
+### Separate Services render.yaml
+
+If you want to maintain two separate services in render.yaml:
+
+```yaml
+services:
+  # Backend - Docker Service
+  - type: web
+    name: amiexpress-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 3001
+      - key: DATABASE_DIR
+        value: /app/db
+      - key: JWT_SECRET
+        generateValue: true
+    disk:
+      name: bbs-data
+      mountPath: /app/db
+      sizeGB: 10
+
+  # Frontend - Static Site
+  - type: web
+    name: amiexpress-frontend
+    env: static
+    buildCommand: cd web/frontend && npm ci --include=dev && npm run build
+    staticPublishPath: ./web/frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://amiexpress-backend.onrender.com
+```
+
+### Pros and Cons
+
+**Separate Services**:
+- ✅ Frontend deploys faster (only static files)
+- ✅ Can use Render's CDN for frontend
+- ✅ Backend and frontend scale independently
+- ❌ More complex setup (2 services)
+- ❌ Higher cost (2 services on paid plans)
+- ❌ Need to manage CORS between services
+
+**Unified Docker Service**:
+- ✅ Simpler deployment (1 service)
+- ✅ Lower cost (1 service)
+- ✅ No CORS issues (same origin)
+- ✅ Easier environment variable management
+- ❌ Frontend changes require backend redeploy
+- ❌ Cannot use Render CDN for frontend
+
+### Recommendation
+
+For development/small deployments: **Unified Docker Service**
+For production/high traffic: **Separate Services** with CDN
 
 ## See Also
 
