@@ -1,6 +1,10 @@
+# AmiExpress BBS - Render.com Deployment Configuration
+#
+# Unified Docker Service - Serves all frontends (BBS, Admin, SDK)
+# Cost: 1 service | Build time: 3-5 minutes
+#
+
 services:
-  # AmiExpress BBS - Docker Deployment
-  # Simplified deployment using production-ready Docker image
   - type: web
     name: amiexpress-bbs
     env: docker
@@ -9,66 +13,44 @@ services:
     autoDeploy: true
     branch: main
 
-    # Docker configuration
     dockerfilePath: ./Dockerfile
     dockerContext: .
 
-    # Environment variables
     envVars:
       - key: NODE_ENV
         value: production
-
       - key: HOST
         value: 0.0.0.0
-
       - key: PORT
         value: 3001
-
       - key: BACKEND_PORT
         value: 3001
-
-      # Database configuration
       - key: DATABASE_DIR
         value: /app/db
-
       - key: DATABASE_FILE
         value: amiexpress.db
-
-      # BBS data directory
       - key: BBS_DATA_DIR
         value: /app/data/bbs
-
-      # ROM directory (for Amiga 68K doors)
       - key: ROM_DIR
         value: /app/data/amiga-roms
-
-      # Security (auto-generated)
       - key: JWT_SECRET
         generateValue: true
-
       - key: JWT_REFRESH_SECRET
         generateValue: true
-
       - key: SESSION_SECRET
         generateValue: true
-
-      # Optional: Debug logging
       - key: DEBUG
         value: false
-
       - key: XIM_DEBUG
         value: 0
 
-    # Persistent disk for SQLite database and BBS data
     disk:
       name: bbs-data
       mountPath: /app/db
       sizeGB: 10
 
-    # Health check
     healthCheckPath: /
 
-    # Custom headers for WebSocket support
     headers:
       - path: /*
         name: X-Frame-Options
@@ -76,55 +58,3 @@ services:
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
-
-# Legacy services (can be removed after Docker deployment is verified)
-# Keeping for rollback safety
-
-# Uncomment below to use legacy non-Docker deployment:
-#
-# services:
-#   # Frontend - Static Site (Legacy)
-#   - type: web
-#     name: amiexpress-frontend-legacy
-#     env: static
-#     buildCommand: cd web/frontend && npm ci --include=dev && npm run build
-#     staticPublishPath: ./web/frontend/dist
-#     autoDeploy: false
-#     branch: main
-#
-#   # Backend - Web Service (Legacy)
-#   - type: web
-#     name: amiexpress-backend-legacy
-#     env: node
-#     region: oregon
-#     plan: starter
-#     autoDeploy: false
-#     branch: main
-#     buildCommand: |
-#       cd packages/terminal && npm ci && npm run build && cd ../..
-#       cd sdk && npm ci --include=dev && npm run build && cd ..
-#       cd sdk/tools/preview/frontend && npm ci --include=dev && npm run build && cd ../../../..
-#       cd web/frontend && npm ci --include=dev && npm run build && cd ../..
-#       cd web/config-app && npm ci --include=dev && npm run build && cd ../..
-#       cd web/backend && npm ci
-#     startCommand: cd web/backend && npx tsx src/index.ts
-#     envVars:
-#       - key: NODE_ENV
-#         value: production
-#       - key: HOST
-#         value: 0.0.0.0
-#       - key: DATABASE_DIR
-#         value: /opt/render/project/src/web/backend/data
-#       - key: DATABASE_FILE
-#         value: amiexpress.db
-#       - key: BBS_DATA_DIR
-#         value: /opt/render/project/src
-#       - key: JWT_SECRET
-#         generateValue: true
-#       - key: JWT_REFRESH_SECRET
-#         generateValue: true
-#     disk:
-#       name: sqlite-data
-#       mountPath: /opt/render/project/src/web/backend/data
-#       sizeGB: 10
-#     healthCheckPath: /health
