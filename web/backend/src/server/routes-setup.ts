@@ -123,8 +123,12 @@ export function registerHttpRoutes(app: Application): void {
   app.use('/api/import', authenticateToken(db), requireSysop(), importRouter);
 
   // ===== Static File Serving for Unified Deployment =====
+  // Note: Using process.cwd() instead of __dirname for tsx compatibility
+  // process.cwd() = ~/Code/amiexpress-web/web/backend
+  const projectRoot = join(process.cwd(), '..', '..');
+
   // Serve SDK Preview at /sdk/
-  const sdkPreviewPath = join(__dirname, '../../../sdk/tools/preview/frontend/dist');
+  const sdkPreviewPath = join(projectRoot, 'sdk/tools/preview/frontend/dist');
   app.use('/sdk', express.static(sdkPreviewPath));
   app.use('/sdk', (req: Request, res: Response, next: NextFunction) => {
     if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
@@ -134,7 +138,7 @@ export function registerHttpRoutes(app: Application): void {
   });
 
   // Serve Admin Config at /admin/
-  const adminConfigPath = join(__dirname, '../../config-app/dist');
+  const adminConfigPath = join(projectRoot, 'web/config-app/dist');
   app.use('/admin', express.static(adminConfigPath));
   app.use('/admin', (req: Request, res: Response, next: NextFunction) => {
     if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
@@ -144,7 +148,7 @@ export function registerHttpRoutes(app: Application): void {
   });
 
   // Serve BBS Terminal Frontend at / (fallback)
-  const bbsFrontendPath = join(__dirname, '../../frontend/dist');
+  const bbsFrontendPath = join(projectRoot, 'web/frontend/dist');
   app.use(express.static(bbsFrontendPath));
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/socket.io')) {

@@ -250,6 +250,7 @@ export interface BBSSession {
   subState?: LoggedOnSubState;
   user?: any; // Will be User from database (expert stored as "X"/"N")
   currentConf: number;
+  conferenceId: number; // XIM doors read this property for current conference
   currentMsgBase: number;
   timeRemaining: number;
   lastActivity: number;
@@ -537,12 +538,12 @@ const authHandler = new AuthHandler(db);
 const sessionLogsHandler = new SessionLogsHandler();
 
 // Initialize internode chat handler dependencies
-const { setInternodeChatDependencies } = require('./handlers/internode-chat.handler');
-const { setChatCommandsDependencies, handleChatCommand } = require('./handlers/chat-commands.handler');
+const { setInternodeChatDependencies } = require('./handlers/chat/internode-chat.handler');
+const { setChatCommandsDependencies, handleChatCommand } = require('./handlers/chat/chat-commands.handler');
 
 setInternodeChatDependencies({ db, sessions, io });
 
-const internodeChatHandler = require('./handlers/internode-chat.handler');
+const internodeChatHandler = require('./handlers/chat/internode-chat.handler');
 setChatCommandsDependencies({
   db,
   sessions,
@@ -553,20 +554,20 @@ setChatCommandsDependencies({
 });
 
 // Initialize group chat room handler dependencies
-const { setGroupChatDependencies } = require('./handlers/group-chat.handler');
-const { setRoomCommandsDependencies } = require('./handlers/room-commands.handler');
+const { setGroupChatDependencies } = require('./handlers/chat/group-chat.handler');
+const { setRoomCommandsDependencies } = require('./handlers/chat/room-commands.handler');
 
 setGroupChatDependencies({ db, sessions, io });
 setRoomCommandsDependencies({
   db,
   sessions,
   io,
-  handleRoomCreate: require('./handlers/group-chat.handler').handleRoomCreate,
-  handleRoomJoin: require('./handlers/group-chat.handler').handleRoomJoin,
-  handleRoomLeave: require('./handlers/group-chat.handler').handleRoomLeave,
-  handleRoomList: require('./handlers/group-chat.handler').handleRoomList,
-  handleRoomKick: require('./handlers/group-chat.handler').handleRoomKick,
-  handleRoomMute: require('./handlers/group-chat.handler').handleRoomMute
+  handleRoomCreate: require('./handlers/chat/group-chat.handler').handleRoomCreate,
+  handleRoomJoin: require('./handlers/chat/group-chat.handler').handleRoomJoin,
+  handleRoomLeave: require('./handlers/chat/group-chat.handler').handleRoomLeave,
+  handleRoomList: require('./handlers/chat/group-chat.handler').handleRoomList,
+  handleRoomKick: require('./handlers/chat/group-chat.handler').handleRoomKick,
+  handleRoomMute: require('./handlers/chat/group-chat.handler').handleRoomMute
 });
 
 // Initialize OLM (Online Message) handler dependencies - express.e:25406-25515
@@ -594,7 +595,7 @@ setPreferenceChatCommandsDependencies({
 });
 
 // Initialize New User Registration handler dependencies - express.e:30003+
-const { setNewUserDependencies } = require('./handlers/new-user.handler');
+const { setNewUserDependencies } = require('./handlers/user/new-user.handler');
 
 setNewUserDependencies({
   db,
@@ -816,6 +817,7 @@ io.on('connection', async (socket) => {
     state: BBSState.AWAIT,
     subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
     currentConf: 1, // Start in General conference (ID 1) → Conf1/
+    conferenceId: 1, // XIM doors read this property
     currentMsgBase: 1, // Start in Main message base (ID 1)
     timeRemaining: 60, // 60 minutes default
     lastActivity: sessionStart,

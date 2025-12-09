@@ -41,7 +41,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleChatRequest } = require('../handlers/internode-chat.handler');
+    const { handleChatRequest } = require('../handlers/chat/internode-chat.handler');
     await handleChatRequest(socket, session, data);
   });
 
@@ -49,7 +49,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleChatAccept } = require('../handlers/internode-chat.handler');
+    const { handleChatAccept } = require('../handlers/chat/internode-chat.handler');
     await handleChatAccept(socket, session, data);
   });
 
@@ -57,7 +57,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleChatDecline } = require('../handlers/internode-chat.handler');
+    const { handleChatDecline } = require('../handlers/chat/internode-chat.handler');
     await handleChatDecline(socket, session, data);
   });
 
@@ -72,7 +72,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     }
     console.log('📨 [SOCKET.IO] Session found, user:', session.user?.username);
 
-    const { handleChatMessage } = require('../handlers/internode-chat.handler');
+    const { handleChatMessage } = require('../handlers/chat/internode-chat.handler');
     await handleChatMessage(socket, session, data);
     console.log('📨 [SOCKET.IO] handleChatMessage completed');
   });
@@ -81,7 +81,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleChatEnd } = require('../handlers/internode-chat.handler');
+    const { handleChatEnd } = require('../handlers/chat/internode-chat.handler');
     await handleChatEnd(socket, session);
   });
 
@@ -91,7 +91,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleRoomCreate } = require('../handlers/group-chat.handler');
+    const { handleRoomCreate } = require('../handlers/chat/group-chat.handler');
     await handleRoomCreate(socket, session, data);
   });
 
@@ -99,7 +99,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleRoomJoin } = require('../handlers/group-chat.handler');
+    const { handleRoomJoin } = require('../handlers/chat/group-chat.handler');
     await handleRoomJoin(socket, session, data);
   });
 
@@ -107,7 +107,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleRoomLeave } = require('../handlers/group-chat.handler');
+    const { handleRoomLeave } = require('../handlers/chat/group-chat.handler');
     await handleRoomLeave(socket, session);
   });
 
@@ -115,7 +115,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleRoomMessage } = require('../handlers/group-chat.handler');
+    const { handleRoomMessage } = require('../handlers/chat/group-chat.handler');
     await handleRoomMessage(socket, session, data);
   });
 
@@ -123,7 +123,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleRoomList } = require('../handlers/group-chat.handler');
+    const { handleRoomList } = require('../handlers/chat/group-chat.handler');
     await handleRoomList(socket, session, data);
   });
 
@@ -131,7 +131,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleRoomKick } = require('../handlers/group-chat.handler');
+    const { handleRoomKick } = require('../handlers/chat/group-chat.handler');
     await handleRoomKick(socket, session, data);
   });
 
@@ -139,7 +139,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const session = getSessionBySocketId(socket.id);
     if (!session) return;
 
-    const { handleRoomMute } = require('../handlers/group-chat.handler');
+    const { handleRoomMute } = require('../handlers/chat/group-chat.handler');
     await handleRoomMute(socket, session, data);
   });
 }

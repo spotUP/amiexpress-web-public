@@ -91,6 +91,7 @@ export function createSession(nodeId: number): BBSSession {
     state: BBSState.AWAIT,
     subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
     currentConf: 1, // Start in General conference (ID 1) → Conf1/
+    conferenceId: 1, // XIM doors read this property
     currentMsgBase: 1, // Start in Main message base (ID 1)
     timeRemaining: 60, // 60 minutes default
     lastActivity: Date.now(),

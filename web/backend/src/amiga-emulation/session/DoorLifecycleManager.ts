@@ -652,6 +652,9 @@ export class DoorLifecycleManager {
       this.executionState.lastInterceptedTrap = pc;
       this.executionState.lastInterceptedIteration =
         this.executionState.iterationCount;
+      // Record progress when library calls are made
+      this.executionState.lastProgressIteration = this.executionState.iterationCount;
+      this.executionState.lastProgressTime = Date.now();
       return true;
     }
 
@@ -697,8 +700,8 @@ export class DoorLifecycleManager {
     }
 
     this.executionState.iterationCount++;
-    this.executionState.lastProgressIteration = this.executionState.iterationCount;
-    this.executionState.lastProgressTime = Date.now();
+    // DO NOT update lastProgressIteration here - that defeats the loop guard!
+    // It should only be updated when actual progress is made (XIM messages, file I/O, etc.)
     // Track A4/A5 changes to catch early corruption; log nearby frame slots
     const a4 = this.emulator.getRegister(12);
     const a5 = this.emulator.getRegister(13);
@@ -1321,8 +1324,10 @@ export class DoorLifecycleManager {
     // CRITICAL: Check for SP corruption immediately after instruction
     // Note: Programs can allocate their own stack via AllocMem (starts at 0x100000)
     // and set SP to that memory, so we allow SP up to 0x800000 (8MB)
+    // IMPORTANT: Only trigger if SP CHANGED to invalid value (not if already invalid)
     const spAfter = this.emulator.getRegister(15);
-    if (spAfter === 0xfffffffa || spAfter < 0x1000 || spAfter > 0x800000) {
+    const spValid = (sp: number) => sp !== 0xfffffffa && sp >= 0x1000 && sp <= 0x800000;
+    if (!spValid(spAfter) && spValid(spBefore)) {
       const newPc = this.emulator.getRegister(16);
       console.error(`\n*** SP CORRUPTION DETECTED AFTER INSTRUCTION ***`);
       console.error(`  PC before: 0x${pc.toString(16)}`);
@@ -1484,15 +1489,15 @@ export class DoorLifecycleManager {
 
   private async handleGuardLimit(): Promise<void> {
     console.log(
-      `[DoorLifecycleManager] 🛑 SAFETY LIMIT: Door running for ${this.lifecycleConfig.loopGuardLimit} iterations - likely stuck`
+      `[DoorLifecycleManager] SAFETY LIMIT: Door running for ${this.lifecycleConfig.loopGuardLimit} iterations - likely stuck`
     );
     console.log(
-      `[DoorLifecycleManager] 🛑 Last PC: 0x${this.emulator
+      `[DoorLifecycleManager] Last PC: 0x${this.emulator
         .getRegister(16)
         .toString(16)}`
     );
     console.log(
-      `[DoorLifecycleManager] 🛑 Iterations since last progress: ${
+      `[DoorLifecycleManager] Iterations since last progress: ${
         this.executionState.iterationCount -
         this.executionState.lastProgressIteration
       }, ms since progress: ${
@@ -1500,15 +1505,38 @@ export class DoorLifecycleManager {
       }`
     );
     console.log(
-      `[DoorLifecycleManager] 🛑 Total cycles: ${this.executionState.totalCycles}`
+      `[DoorLifecycleManager] Total cycles: ${this.executionState.totalCycles}`
     );
     console.log(
-      `[DoorLifecycleManager] 🛑 Elapsed time: ${
+      `[DoorLifecycleManager] Elapsed time: ${
         Date.now() - this.executionState.startTime!
       }ms`
     );
-    console.log(`[DoorLifecycleManager] 🛑 Terminating for debugging purposes`);
-    this.terminate();
+
+    // Try to send SIGBREAKF_CTRL_C to door first (graceful interrupt)
+    if (this.libraryManager?.execLibrary) {
+      console.log(`[DoorLifecycleManager] Sending SIGBREAKF_CTRL_C to door task`);
+      const SIGBREAKF_CTRL_C = 0x1000; // Bit 12
+      try {
+        // Signal current task (0 = current task)
+        this.libraryManager.execLibrary.signal(0, SIGBREAKF_CTRL_C);
+
+        // Give door 500ms to handle the signal and exit gracefully
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // If still running after signal, terminate
+        if (this.executionState.isRunning) {
+          console.log(`[DoorLifecycleManager] Door did not respond to SIGBREAKF_CTRL_C, terminating`);
+          this.terminate();
+        }
+      } catch (error) {
+        console.error(`[DoorLifecycleManager] Error sending signal:`, error);
+        this.terminate();
+      }
+    } else {
+      console.log(`[DoorLifecycleManager] No ExecLibrary available, terminating immediately`);
+      this.terminate();
+    }
   }
 
   private async logWriteCall(pc: number): Promise<void> {

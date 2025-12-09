@@ -859,6 +859,235 @@ class BBSFunctions {
       return false;
     }
   }
+
+  /**
+   * AmiExpress-Specific AREXX Door Functions
+   * These match the original AmiExpress AREXX API used by legacy doors
+   */
+
+  /**
+   * SendString - Send text to terminal (AmiExpress alias for BBSWRITE)
+   * Usage: SendString "Hello World"
+   * Note: Real AmiExpress doors use: SS=SendString shortcut
+   */
+  async SendString(text: string): Promise<void> {
+    return this.BBSWRITE(text);
+  }
+
+  /**
+   * Transmit - Send formatted text with ANSI codes (AmiExpress alias)
+   * Usage: Transmit "[36mCyan Text[0m"
+   * Note: Real AmiExpress doors use: TR=Transmit shortcut
+   */
+  async Transmit(text: string): Promise<void> {
+    return this.BBSWRITE(text);
+  }
+
+  /**
+   * GetUser - Get user data field by ID (AmiExpress-specific)
+   * Usage: GetUser 100 (returns username)
+   *        GetUser 105 (returns security level)
+   *
+   * Field IDs match DT_* constants from XIM protocol:
+   * 100=NAME, 101=PASSWORD, 102=LOCATION, 105=SECSTATUS,
+   * 110=UPLOADS, 111=DOWNLOADS, 112=TIMESCALLED, etc.
+   *
+   * Note: Real AmiExpress doors use: GU=GetUser shortcut
+   */
+  async GetUser(fieldId: number): Promise<string> {
+    const user = this.context.user;
+    if (!user) return '';
+
+    // Map field IDs to user properties (matching XIM DT_* codes)
+    switch (fieldId) {
+      case 100: // DT_NAME
+        return user.username || '';
+      case 101: // DT_PASSWORD (never returned for security)
+        return '';
+      case 102: // DT_LOCATION
+        return user.location || '';
+      case 103: // DT_PHONENUMBER
+        return user.phone || '';
+      case 104: // DT_SLOTNUMBER (node ID)
+        return String(this.context.session?.nodeId || 1);
+      case 105: // DT_SECSTATUS (security level)
+        return String(user.secLevel || 0);
+      case 109: // DT_MESSAGESPOSTED
+        return String(user.posts || 0);
+      case 110: // DT_UPLOADS
+        return String(user.uploads || 0);
+      case 111: // DT_DOWNLOADS
+        return String(user.downloads || 0);
+      case 112: // DT_TIMESCALLED
+        return String(user.calls || 0);
+      case 113: // DT_TIMELASTON
+        return user.lastLogin ? new Date(user.lastLogin).toLocaleString() : '';
+      case 114: // DT_TIMEUSED
+        return String(user.timeOnline || 0);
+      case 115: // DT_TIMELIMIT
+        return String(user.timeLimit || 60);
+      case 121: // DT_EXPERT
+        return user.expert ? '1' : '0';
+      case 122: // DT_LINELENGTH
+        return String(user.lineLength || 80);
+      case 606: // DT_REALNAME
+        return user.realname || user.username || '';
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * GETCHAR - Get single character from user input (blocking)
+   * Usage: GETCHAR (waits for keypress, returns character)
+   * Note: Real AmiExpress doors use: GC=GETCHAR shortcut
+   *
+   * Returns Result variable with the character pressed
+   * Special keys: BSPC="08"x (backspace), CR="0d"x (enter)
+   */
+  async GETCHAR(): Promise<string> {
+    // In a real implementation, this would block waiting for input
+    // For web BBS, we need to handle this asynchronously via socket events
+    // For now, return empty and rely on socket-based input handling
+
+    // Store context for socket handler to resume
+    if (this.context.socket) {
+      // Request single character input via socket
+      this.context.socket.emit('door:request-char');
+
+      // Wait for input via promise (resolved by socket handler)
+      return new Promise((resolve) => {
+        this.context.socket.once('door:char-input', (char: string) => {
+          resolve(char);
+        });
+      });
+    }
+
+    return '';
+  }
+
+  /**
+   * Showfile - Display a file from BBS directories
+   * Usage: Showfile "doors:MyDoor/header.txt"
+   * Note: Real AmiExpress doors use: SF=Showfile shortcut
+   *
+   * Supports Amiga assigns: doors:, conf:, screens:, etc.
+   * Files can contain ANSI codes for formatting
+   */
+  async Showfile(filename: string): Promise<void> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      // Resolve Amiga-style assigns to actual paths
+      let resolvedPath = filename;
+      const bbsRoot = process.env.BBS_ROOT || path.join(process.cwd(), 'data', 'bbs', 'BBS');
+
+      // Map Amiga assigns to actual directories
+      if (filename.includes(':')) {
+        const [assign, ...pathParts] = filename.split(':');
+        const relativePath = pathParts.join(':');
+
+        switch (assign.toLowerCase()) {
+          case 'doors':
+            resolvedPath = path.join(bbsRoot, 'Doors', relativePath);
+            break;
+          case 'conf':
+          case 'conf1':
+            resolvedPath = path.join(bbsRoot, 'Conf1', relativePath);
+            break;
+          case 'screens':
+            resolvedPath = path.join(bbsRoot, 'Screens', relativePath);
+            break;
+          case 'bulletins':
+            resolvedPath = path.join(bbsRoot, 'Bulletins', relativePath);
+            break;
+          case 'utils':
+            resolvedPath = path.join(bbsRoot, 'Utils', relativePath);
+            break;
+          default:
+            // Unknown assign, try relative to BBS root
+            resolvedPath = path.join(bbsRoot, relativePath);
+        }
+      } else {
+        // No assign, relative to BBS root
+        resolvedPath = path.join(bbsRoot, filename);
+      }
+
+      // Security check - prevent directory traversal
+      const realPath = await fs.realpath(resolvedPath).catch(() => null);
+      if (!realPath || !realPath.startsWith(bbsRoot)) {
+        await this.BBSWRITE(`[ERROR] Access denied: ${filename}\r\n`);
+        return;
+      }
+
+      // Read and display file
+      const content = await fs.readFile(realPath, 'utf-8');
+      await this.BBSWRITE(content);
+
+    } catch (error) {
+      console.error('[Showfile] Error:', error);
+      await this.BBSWRITE(`[ERROR] File not found: ${filename}\r\n`);
+    }
+  }
+
+  /**
+   * bufferflush - Flush output buffer to terminal
+   * Usage: bufferflush
+   *
+   * In original AmiExpress, this forces all buffered output to be sent immediately
+   * In our implementation, output is already sent immediately via socket
+   * This is kept for compatibility with legacy doors
+   */
+  async bufferflush(): Promise<void> {
+    // Force socket flush if available
+    if (this.context.socket) {
+      // Socket.io already flushes, but we can trigger a sync point
+      this.context.socket.emit('door:flush');
+    }
+    return Promise.resolve();
+  }
+
+  /**
+   * shutdown - Gracefully close door and return to BBS
+   * Usage: shutdown
+   *
+   * Signals the BBS that the door is terminating normally
+   * Cleans up resources and returns user to main menu
+   */
+  async shutdown(): Promise<void> {
+    try {
+      await this.BBSLOG('info', `Door shutdown requested by ${this.context.user?.username || 'unknown'}`);
+
+      // Signal door exit via socket
+      if (this.context.socket) {
+        this.context.socket.emit('door:shutdown');
+      }
+
+      // Set shutdown flag in context
+      if (this.context.session) {
+        this.context.session.doorShutdown = true;
+      }
+
+    } catch (error) {
+      console.error('[shutdown] Error:', error);
+    }
+  }
+
+  /**
+   * Address - Set AREXX command port (AmiExpress compatibility)
+   * Usage: Address Value "AERexxControl"Node
+   *
+   * In original AmiExpress, this sets the AREXX command port to AERexxControlN
+   * where N is the node number. In our implementation, this is handled automatically
+   * via the context, so this is a no-op for compatibility.
+   */
+  async Address(port: string): Promise<void> {
+    // No-op for compatibility
+    // Original: Address Value "AERexxControl"Node
+    // We handle port addressing automatically via context
+    return Promise.resolve();
+  }
 }
 
 /**
@@ -1877,6 +2106,39 @@ export class AREXXInterpreter {
         String(args[0]),
         args[1] as 'DOOR.SYS' | 'DORINFO1.DEF' || 'DOOR.SYS'
       );
+    }
+
+    // AmiExpress-Specific AREXX Door Functions
+    // These match the original AmiExpress AREXX API for legacy door compatibility
+    if (funcName === 'SENDSTRING') {
+      await this.bbsFunctions.SendString(String(args[0] || ''));
+      return;
+    }
+    if (funcName === 'TRANSMIT') {
+      await this.bbsFunctions.Transmit(String(args[0] || ''));
+      return;
+    }
+    if (funcName === 'GETUSER') {
+      return await this.bbsFunctions.GetUser(Number(args[0]));
+    }
+    if (funcName === 'GETCHAR') {
+      return await this.bbsFunctions.GETCHAR();
+    }
+    if (funcName === 'SHOWFILE') {
+      await this.bbsFunctions.Showfile(String(args[0] || ''));
+      return;
+    }
+    if (funcName === 'BUFFERFLUSH') {
+      await this.bbsFunctions.bufferflush();
+      return;
+    }
+    if (funcName === 'SHUTDOWN') {
+      await this.bbsFunctions.shutdown();
+      return;
+    }
+    if (funcName === 'ADDRESS') {
+      await this.bbsFunctions.Address(String(args[0] || ''));
+      return;
     }
 
     // Standard AREXX Functions

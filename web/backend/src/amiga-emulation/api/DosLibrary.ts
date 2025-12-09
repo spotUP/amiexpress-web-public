@@ -6,6 +6,7 @@ import { FileManager } from "./FileManager";
 import { PathManager } from "./PathManager";
 import { AmigaFileCache } from "./AmigaFileCache";
 import { ximDebugLogger } from "../xim/debug-logger";
+import { EnvironmentManager } from "../session/EnvironmentManager";
 
 /**
  * dos.library - Amiga DOS Library
@@ -123,6 +124,9 @@ export class DosLibrary {
   private pathManager: PathManager | null = null;
   private fileCache: AmigaFileCache | null = null;
   private useNewFileSystem: boolean = false; // Feature flag for gradual migration
+
+  // Environment variable management (V36+ SetVar/GetVar/DeleteVar)
+  private envManager: EnvironmentManager | null = null;
   // Debug: optionally exit after first DOS Open to capture paths in tight loops
   private exitAfterFirstOpen: boolean = process.env.AEDOOR_EXIT_AFTER_OPEN === "1";
   private firstOpenSeen: boolean = false;
@@ -141,15 +145,13 @@ export class DosLibrary {
   private readonly STDERR_HANDLE = 3;
   private readonly NIL_HANDLE = 99; // Special handle for NIL: device
 
-  // DOS error codes
+  // DOS error codes (from NDK dos/dos.h)
+  // Success
   private readonly ERROR_NO_ERROR = 0;
-  private readonly ERROR_OBJECT_NOT_FOUND = 205;
-  private readonly ERROR_OBJECT_IN_USE = 202;
-  private readonly ERROR_NO_FREE_STORE = 103;
-  private readonly ERROR_READ_PROTECTED = 204;
-  private readonly ERROR_WRITE_PROTECTED = 214;
-  private readonly ERROR_NO_MORE_ENTRIES = 232;
-  private readonly ERROR_SEEK_ERROR = 219; // Seek not possible (console/device)
+
+  // Memory errors (103-120)
+  private readonly ERROR_NO_FREE_STORE = 103; // Out of memory
+  private readonly ERROR_TASK_TABLE_FULL = 105; // Process table full
   private readonly ERROR_BAD_TEMPLATE = 114;
   private readonly ERROR_BAD_NUMBER = 115;
   private readonly ERROR_REQUIRED_ARG_MISSING = 116;
@@ -157,7 +159,50 @@ export class DosLibrary {
   private readonly ERROR_TOO_MANY_ARGS = 118;
   private readonly ERROR_UNMATCHED_QUOTES = 119;
   private readonly ERROR_LINE_TOO_LONG = 120;
+
+  // Object errors (202-213)
+  private readonly ERROR_OBJECT_IN_USE = 202;
+  private readonly ERROR_OBJECT_EXISTS = 203;
+  private readonly ERROR_DIR_NOT_FOUND = 204;
+  private readonly ERROR_OBJECT_NOT_FOUND = 205;
+  private readonly ERROR_BAD_STREAM_NAME = 206;
+  private readonly ERROR_OBJECT_TOO_LARGE = 207;
+  private readonly ERROR_ACTION_NOT_KNOWN = 209;
+  private readonly ERROR_INVALID_COMPONENT_NAME = 210;
   private readonly ERROR_INVALID_LOCK = 211;
+  private readonly ERROR_OBJECT_WRONG_TYPE = 212;
+  private readonly ERROR_DISK_NOT_VALIDATED = 213;
+
+  // Protection errors (214-223)
+  private readonly ERROR_WRITE_PROTECTED = 214;
+  private readonly ERROR_DELETE_PROTECTED = 215;
+  private readonly ERROR_READ_PROTECTED = 216;
+  private readonly ERROR_NOT_A_DOS_DISK = 218;
+  private readonly ERROR_SEEK_ERROR = 219; // Seek not possible (console/device)
+  private readonly ERROR_COMMENT_TOO_BIG = 220;
+  private readonly ERROR_DISK_FULL = 221;
+  private readonly ERROR_DISK_WRITE_PROTECTED = 223;
+
+  // Filename errors (232-240)
+  private readonly ERROR_RENAME_ACROSS_DEVICES = 224;
+  private readonly ERROR_DIRECTORY_NOT_EMPTY = 225;
+  private readonly ERROR_TOO_MANY_LEVELS = 226;
+  private readonly ERROR_DEVICE_NOT_MOUNTED = 227;
+  private readonly ERROR_NO_MORE_ENTRIES = 232;
+  private readonly ERROR_IS_SOFT_LINK = 233;
+  private readonly ERROR_OBJECT_LINKED = 234;
+  private readonly ERROR_BAD_HUNK = 235;
+  private readonly ERROR_NOT_IMPLEMENTED = 236;
+  private readonly ERROR_RECORD_NOT_LOCKED = 240;
+
+  // Lock/file handling errors (241-299)
+  private readonly ERROR_LOCK_COLLISION = 241;
+  private readonly ERROR_LOCK_TIMEOUT = 242;
+  private readonly ERROR_UNLOCK_ERROR = 243;
+
+  // Device errors (300-399)
+  private readonly ERROR_BUFFER_OVERFLOW = 303;
+  private readonly ERROR_INVALID_STREAM_STATE = 304;
 
   // Base paths for logical devices
   private rootPath: string = "";
@@ -233,6 +278,9 @@ export class DosLibrary {
     });
 
     this.doorFileLogPath = path.join(this.rootPath, "logs", "door-68k.log");
+
+    // Initialize EnvironmentManager with base address 0x130000 (after 0x120000 env storage)
+    this.envManager = new EnvironmentManager(emulator, 0x130000);
   }
 
   /**
@@ -397,7 +445,7 @@ export class DosLibrary {
       let resolved = path.join(this.doorDirectory, relativePath);
 
       // Amiga filesystems are case-insensitive
-      const { findCaseInsensitive } = require('../../utils/fs-amiga.util');
+      const { findCaseInsensitive } = require('../../utils/amigafs');
       const dir = path.dirname(resolved);
       const file = path.basename(resolved);
       const caseInsensitivePath = findCaseInsensitive(dir, file);
@@ -423,7 +471,7 @@ export class DosLibrary {
       let resolved = path.join(this.bbsDataPath, relativePath);
 
       // Amiga filesystems are case-insensitive
-      const { findCaseInsensitive } = require('../../utils/fs-amiga.util');
+      const { findCaseInsensitive } = require('../../utils/amigafs');
       const dir = path.dirname(resolved);
       const file = path.basename(resolved);
       const caseInsensitivePath = findCaseInsensitive(dir, file);
@@ -454,7 +502,7 @@ export class DosLibrary {
 
     // Amiga filesystems are case-insensitive - try case-insensitive lookup
     // This handles files like "Dir1" when code asks for "DIR1"
-    const { findCaseInsensitive } = require('../../utils/fs-amiga.util');
+    const { findCaseInsensitive } = require('../../utils/amigafs');
     const dir = path.dirname(resolved);
     const file = path.basename(resolved);
     const caseInsensitivePath = findCaseInsensitive(dir, file);
@@ -678,12 +726,13 @@ export class DosLibrary {
         this.logDoorFile(`OPEN fm ok handle=${bptr} ami="${filename}" mode=${mode}`);
         ximDebugLogger.logFileOperation('Open (FileManager)', filename, undefined, { mode, bptr, success: true });
       } else {
-        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        // Get error code from FileManager
+        this.lastError = this.fileManager.getLastError();
         console.error(
-          `[dos.library] Open (FileManager) failed for "${filename}"`
+          `[dos.library] Open (FileManager) failed for "${filename}" with IoErr=${this.lastError}`
         );
-        this.logDoorFile(`OPEN fm fail ami="${filename}" mode=${mode}`);
-        ximDebugLogger.logFileOperation('Open (FileManager)', filename, undefined, { mode, bptr: 0, success: false });
+        this.logDoorFile(`OPEN fm fail ami="${filename}" mode=${mode} IoErr=${this.lastError}`);
+        ximDebugLogger.logFileOperation('Open (FileManager)', filename, undefined, { mode, bptr: 0, success: false, ioErr: this.lastError });
       }
       if (this.exitAfterFirstOpen && !this.firstOpenSeen) {
         this.firstOpenSeen = true;
@@ -1373,6 +1422,27 @@ export class DosLibrary {
   }
 
   /**
+   * SetIoErr() - LVO -348 (P2)
+   *
+   * Set the current I/O error code.
+   *
+   * Parameters:
+   *   D1 = Error code
+   *
+   * Returns:
+   *   D0 = Previous error code
+   */
+  SetIoErr(): number {
+    const newError = this.emulator.getRegister(CPURegister.D1);
+    const oldError = this.lastError;
+
+    console.log(`[dos.library] SetIoErr(${newError}), previous was ${oldError}`);
+
+    this.lastError = newError;
+    return oldError;
+  }
+
+  /**
    * DateStamp - Get current date/time
    * D1 = pointer to DateStamp structure (3 longs: days, minutes, ticks)
    * Returns: D0 = pointer to DateStamp (same as input)
@@ -1616,6 +1686,75 @@ export class DosLibrary {
   }
 
   /**
+   * FSeek() - LVO -678 (P2)
+   *
+   * Seek to a position in a buffered file.
+   *
+   * Parameters:
+   *   D1 = File handle
+   *   D2 = Offset (signed)
+   *   D3 = Mode (OFFSET_BEGINNING=-1, OFFSET_CURRENT=0, OFFSET_END=1)
+   *
+   * Returns:
+   *   D0 = 0 on success, -1 on error
+   */
+  FSeek(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+    const offset = this.emulator.getRegister(CPURegister.D2);
+    const mode = this.emulator.getRegister(CPURegister.D3);
+
+    console.log(`[dos.library] FSeek(handle=0x${handle.toString(16)}, offset=${offset}, mode=${mode})`);
+
+    // Call Seek() to perform the actual seek
+    this.emulator.setRegister(CPURegister.D1, handle);
+    this.emulator.setRegister(CPURegister.D2, offset);
+    this.emulator.setRegister(CPURegister.D3, mode);
+    const oldPos = this.Seek();
+
+    if (oldPos < 0) {
+      console.error(`[dos.library] FSeek: Seek failed`);
+      this.lastError = this.ERROR_SEEK_ERROR;
+      return -1;
+    }
+
+    this.lastError = this.ERROR_NO_ERROR;
+    return 0; // Success
+  }
+
+  /**
+   * FTell() - LVO -684 (P2)
+   *
+   * Get current position in a buffered file.
+   *
+   * Parameters:
+   *   D1 = File handle
+   *
+   * Returns:
+   *   D0 = Current position, or -1 on error
+   */
+  FTell(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+
+    console.log(`[dos.library] FTell(handle=0x${handle.toString(16)})`);
+
+    // Use Seek with offset=0, mode=OFFSET_CURRENT to get current position
+    this.emulator.setRegister(CPURegister.D1, handle);
+    this.emulator.setRegister(CPURegister.D2, 0); // offset = 0
+    this.emulator.setRegister(CPURegister.D3, 0); // OFFSET_CURRENT
+    const currentPos = this.Seek();
+
+    if (currentPos < 0) {
+      console.error(`[dos.library] FTell: Failed to get position`);
+      this.lastError = this.ERROR_SEEK_ERROR;
+      return -1;
+    }
+
+    console.log(`[dos.library] FTell: Current position = ${currentPos}`);
+    this.lastError = this.ERROR_NO_ERROR;
+    return currentPos;
+  }
+
+  /**
    * FGets - Read a line from a file (V36+)
    * Returns: buffer pointer or 0 on EOF/error
    */
@@ -1729,6 +1868,115 @@ export class DosLibrary {
       blockLen > 0 ? Math.floor(bytesWritten / blockLen) : 0;
     this.lastError = this.ERROR_NO_ERROR;
     return blocksWritten;
+  }
+
+  /**
+   * FOpen (-588) - Buffered file open (V36+)
+   * Input: D1 = BPTR to filename
+   *        D2 = BPTR to mode string ("r", "w", "a", "r+", "w+", "a+")
+   * Output: D0 = BPTR to FILE structure, or 0 on error
+   *
+   * P2 function - Buffered I/O wrapper around Open()
+   * Mode strings:
+   * - "r"  = read (MODE_OLDFILE)
+   * - "w"  = write/create (MODE_NEWFILE)
+   * - "a"  = append (MODE_READWRITE + seek to end)
+   * - "r+" = read/write existing (MODE_READWRITE)
+   * - "w+" = read/write create (MODE_NEWFILE)
+   * - "a+" = read/append (MODE_READWRITE + seek to end)
+   */
+  FOpen(): number {
+    const filenameBPtr = this.emulator.getRegister(CPURegister.D1);
+    const modeBPtr = this.emulator.getRegister(CPURegister.D2);
+
+    // Convert BPTRs to addresses
+    const filenameAddr = filenameBPtr << 2;
+    const modeAddr = modeBPtr << 2;
+
+    const filename = this.emulator.readString(filenameAddr, 256);
+    const modeStr = this.emulator.readString(modeAddr, 16);
+
+    console.log(`[dos.library] FOpen("${filename}", "${modeStr}")`);
+
+    // Map mode string to AmigaDOS mode constant
+    let mode: number;
+    let seekToEnd = false;
+
+    switch (modeStr) {
+      case 'r':
+        mode = MODE_OLDFILE; // Read existing
+        break;
+      case 'w':
+        mode = MODE_NEWFILE; // Write/create
+        break;
+      case 'a':
+        mode = MODE_READWRITE; // Append
+        seekToEnd = true;
+        break;
+      case 'r+':
+        mode = MODE_READWRITE; // Read/write existing
+        break;
+      case 'w+':
+        mode = MODE_NEWFILE; // Read/write create
+        break;
+      case 'a+':
+        mode = MODE_READWRITE; // Read/append
+        seekToEnd = true;
+        break;
+      default:
+        console.error(`[dos.library] FOpen: Invalid mode "${modeStr}"`);
+        this.lastError = this.ERROR_BAD_NUMBER;
+        return 0;
+    }
+
+    // Call Open() to open the file
+    this.emulator.setRegister(CPURegister.D1, filenameBPtr);
+    this.emulator.setRegister(CPURegister.D2, mode);
+    const handle = this.Open();
+
+    if (handle === 0) {
+      console.error(`[dos.library] FOpen: Open failed for "${filename}"`);
+      // lastError already set by Open()
+      return 0;
+    }
+
+    // If append mode, seek to end
+    if (seekToEnd) {
+      this.emulator.setRegister(CPURegister.D1, handle);
+      this.emulator.setRegister(CPURegister.D2, 0); // offset
+      this.emulator.setRegister(CPURegister.D3, OFFSET_END);
+      this.Seek();
+    }
+
+    console.log(`[dos.library] FOpen → handle=0x${handle.toString(16)}`);
+    this.lastError = this.ERROR_NO_ERROR;
+    return handle;
+  }
+
+  /**
+   * FClose (-594) - Buffered file close (V36+)
+   * Input: D1 = BPTR to FILE structure (file handle)
+   * Output: D0 = 0 for success, -1 for error
+   *
+   * P2 function - Buffered I/O wrapper around Close()
+   */
+  FClose(): number {
+    const handle = this.emulator.getRegister(CPURegister.D1);
+
+    console.log(`[dos.library] FClose(handle=0x${handle.toString(16)})`);
+
+    if (handle === 0) {
+      console.error(`[dos.library] FClose: NULL handle`);
+      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      return -1;
+    }
+
+    // Call Close() to close the file
+    this.emulator.setRegister(CPURegister.D1, handle);
+    this.Close();
+
+    this.lastError = this.ERROR_NO_ERROR;
+    return 0;
   }
 
   /**
@@ -2986,76 +3234,6 @@ export class DosLibrary {
   }
 
   /**
-   * PutStr - Write string directly to Output() stream (STDOUT)
-   * D1 = string pointer (STRPTR, null-terminated)
-   * Returns: D0 = 0 on success, -1 on error
-   */
-  PutStr(): number {
-    const strAddr = this.emulator.getRegister(CPURegister.D1);
-    if (!strAddr) {
-      console.warn("[dos.library] PutStr: NULL string pointer");
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      return -1;
-    }
-
-    const str = this.readString(strAddr, 4096);
-    const preview = str.length > 120 ? `${str.slice(0, 117)}...` : str;
-    console.log(
-      `[dos.library] PutStr("${preview
-        .replace(/\r/g, "\\r")
-        .replace(/\n/g, "\\n")}")`
-    );
-
-    if (this.useNewFileSystem && this.fileManager) {
-      const stdoutBptr = this.fileManager.getStdoutBptr();
-      const data = Buffer.from(str, "binary");
-      const result = this.fileManager.write(stdoutBptr, data);
-
-      if (result.bytesWritten < 0) {
-        console.error("[dos.library] PutStr: FileManager write failed");
-        this.lastError = this.ERROR_WRITE_PROTECTED;
-        return -1;
-      }
-
-      if (result.consoleData && this.outputCallback) {
-        this.outputCallback(result.consoleData.toString("binary"));
-      } else if (!result.consoleData) {
-        console.log("[dos.library] PutStr: Output redirected to file/device");
-      }
-
-      this.lastError = this.ERROR_NO_ERROR;
-      return 0;
-    }
-
-    const handle = this.inheritedOutput;
-    const stdout = this.openFiles.get(handle);
-
-    if (!stdout) {
-      console.error("[dos.library] PutStr: Invalid stdout handle");
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-      return -1;
-    }
-
-    if (stdout.isConsole || handle === this.STDOUT_HANDLE) {
-      if (this.outputCallback) {
-        this.outputCallback(str);
-      } else {
-        console.warn("[dos.library] PutStr: No output callback set");
-      }
-    } else {
-      if (!stdout.buffer) {
-        stdout.buffer = Buffer.alloc(0);
-      }
-      const strBuf = Buffer.from(str, "binary");
-      stdout.buffer = Buffer.concat([stdout.buffer, strBuf]);
-      stdout.position = stdout.buffer.length;
-    }
-
-    this.lastError = this.ERROR_NO_ERROR;
-    return 0;
-  }
-
-  /**
    * VFPrintf - Formatted print to file (buffered) (V36)
    * D1 = file handle (BPTR)
    * D2 = format string (STRPTR, RawDoFmt style)
@@ -3097,33 +3275,6 @@ export class DosLibrary {
 
     this.emulator.setRegister(CPURegister.D0, formatted.length);
     console.log(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
-  }
-
-  /**
-   * VPrintf - Formatted print to Output() (buffered) (V36)
-   * D1 = format string (STRPTR, RawDoFmt style)
-   * D2 = argv pointer (LONG array)
-   * Returns: D0 = number of bytes written or -1 for error
-   */
-  VPrintf(): void {
-    const fmtAddr = this.emulator.getRegister(CPURegister.D1);
-    const argvAddr = this.emulator.getRegister(CPURegister.D2);
-
-    const fmt = this.readString(fmtAddr);
-    console.log(`[dos.library] VPrintf(fmt="${fmt}")`);
-
-    // Format string
-    const formatted = this.formatString(fmt, argvAddr);
-
-    // Write to Output()
-    if (this.outputCallback) {
-      this.outputCallback(formatted);
-    }
-
-    this.emulator.setRegister(CPURegister.D0, formatted.length);
-    console.log(
-      `[dos.library] VPrintf: Wrote ${formatted.length} bytes to Output()`
-    );
   }
 
   /**
@@ -4462,6 +4613,159 @@ export class DosLibrary {
   }
 
   /**
+   * StrToDate - Convert string to DateStamp (V36+)
+   * Used by: AquaScan for parsing file dates
+   *
+   * Signature: BOOL StrToDate(struct DateTime *datetime)
+   * D1 = DateTime pointer
+   * Returns: BOOL success in D0
+   *
+   * DateTime structure (input):
+   * - struct DateStamp dat_Stamp (12 bytes) - OUTPUT
+   * - UBYTE dat_Format (1 byte) - INPUT (date format expected)
+   * - UBYTE dat_Flags (1 byte) - INPUT
+   * - STRPTR dat_StrDate (4 bytes) - INPUT (date string to parse)
+   * - STRPTR dat_StrTime (4 bytes) - INPUT (time string to parse)
+   * - STRPTR dat_StrDay (4 bytes) - ignored
+   *
+   * This function parses date/time strings and fills in the DateStamp structure.
+   */
+  StrToDate(): void {
+    const datetimeAddr = this.emulator.getRegister(CPURegister.D1);
+
+    // Read DateTime structure
+    const dat_Format = this.emulator.readMemory(datetimeAddr + 12);
+    const dat_Flags = this.emulator.readMemory(datetimeAddr + 13);
+    const dat_StrDate = this.emulator.readMemory32(datetimeAddr + 14);
+    const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 18);
+
+    console.log(
+      `[dos.library] StrToDate(format=${dat_Format}, datePtr=0x${dat_StrDate.toString(
+        16
+      )}, timePtr=0x${dat_StrTime.toString(16)})`
+    );
+
+    // Read date string if provided
+    let dateStr = "";
+    if (dat_StrDate !== 0) {
+      let addr = dat_StrDate;
+      while (true) {
+        const ch = this.emulator.readMemory(addr++);
+        if (ch === 0) break;
+        dateStr += String.fromCharCode(ch);
+      }
+    }
+
+    // Read time string if provided
+    let timeStr = "";
+    if (dat_StrTime !== 0) {
+      let addr = dat_StrTime;
+      while (true) {
+        const ch = this.emulator.readMemory(addr++);
+        if (ch === 0) break;
+        timeStr += String.fromCharCode(ch);
+      }
+    }
+
+    console.log(
+      `[dos.library] StrToDate parsing: date="${dateStr}" time="${timeStr}"`
+    );
+
+    // Default to current date/time if parsing fails
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth() + 1;
+    let day = now.getDate();
+    let hours = 0;
+    let minutes = 0;
+    let seconds = 0;
+
+    // Parse date string based on format
+    // Format 0 = dd-mmm-yy (DOS), 1 = yy-mm-dd (INT), 2 = mm-dd-yy (USA), 3 = dd-mm-yy (CDN)
+    if (dateStr) {
+      const parts = dateStr.split(/[-\/]/);
+      if (parts.length >= 3) {
+        switch (dat_Format) {
+          case 0: // dd-mmm-yy
+            day = parseInt(parts[0]);
+            // Parse month name
+            const monthNames = [
+              "jan",
+              "feb",
+              "mar",
+              "apr",
+              "may",
+              "jun",
+              "jul",
+              "aug",
+              "sep",
+              "oct",
+              "nov",
+              "dec",
+            ];
+            const monthIdx = monthNames.indexOf(parts[1].toLowerCase());
+            month = monthIdx >= 0 ? monthIdx + 1 : parseInt(parts[1]);
+            year = parseInt(parts[2]);
+            break;
+          case 1: // yy-mm-dd
+            year = parseInt(parts[0]);
+            month = parseInt(parts[1]);
+            day = parseInt(parts[2]);
+            break;
+          case 2: // mm-dd-yy
+            month = parseInt(parts[0]);
+            day = parseInt(parts[1]);
+            year = parseInt(parts[2]);
+            break;
+          case 3: // dd-mm-yy
+            day = parseInt(parts[0]);
+            month = parseInt(parts[1]);
+            year = parseInt(parts[2]);
+            break;
+        }
+
+        // Handle 2-digit year
+        if (year < 100) {
+          year += year < 78 ? 2000 : 1900;
+        }
+      }
+    }
+
+    // Parse time string (hh:mm:ss or hh:mm)
+    if (timeStr) {
+      const timeParts = timeStr.split(":");
+      if (timeParts.length >= 2) {
+        hours = parseInt(timeParts[0]) || 0;
+        minutes = parseInt(timeParts[1]) || 0;
+        if (timeParts.length >= 3) {
+          seconds = parseInt(timeParts[2]) || 0;
+        }
+      }
+    }
+
+    // Convert to Amiga DateStamp format
+    const epoch = new Date("1978-01-01T00:00:00Z");
+    const targetDate = new Date(year, month - 1, day);
+    const daysSinceEpoch = Math.floor(
+      (targetDate.getTime() - epoch.getTime()) / (24 * 60 * 60 * 1000)
+    );
+    const minutesPastMidnight = hours * 60 + minutes;
+    const ticksPastMinute = seconds * 50; // 50 ticks per second
+
+    console.log(
+      `[dos.library] StrToDate result: ${year}-${month}-${day} ${hours}:${minutes}:${seconds} -> days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute}`
+    );
+
+    // Write DateStamp structure (3 x 32-bit longs, big-endian)
+    this.emulator.writeMemory32(datetimeAddr, daysSinceEpoch);
+    this.emulator.writeMemory32(datetimeAddr + 4, minutesPastMidnight);
+    this.emulator.writeMemory32(datetimeAddr + 8, ticksPastMinute);
+
+    // Return success
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+  }
+
+  /**
    * AddPart - Append filename to path (V36+)
    * Used by: GLCViewer.e
    *
@@ -4742,6 +5046,9 @@ export class DosLibrary {
       case -132:
         this.IoErr();
         return true;
+      case -348: // SetIoErr - P2
+        this.emulator.setRegister(CPURegister.D0, this.SetIoErr());
+        return true;
 
       // Process management
       case -138:
@@ -4786,30 +5093,53 @@ export class DosLibrary {
         this.WaitForChar(); // Also at -204 for compatibility
         return true;
 
-      // Buffered I/O (V36+) - Phase 1 critical functions
-      case -264:
-        this.VPrintf();
+      // Buffered I/O (V36+) - Phase B P1/P2 functions
+      case -588: // FOpen - P2
+        this.emulator.setRegister(CPURegister.D0, this.FOpen());
         return true;
-      case -516:
-        this.FGetC();
+      case -594: // FClose - P2
+        this.emulator.setRegister(CPURegister.D0, this.FClose());
         return true;
-      case -522:
-        this.FPutC();
+      case -600: // FRead - P2
+        this.emulator.setRegister(CPURegister.D0, this.FRead());
         return true;
-      case -534:
-        this.FRead();
+      case -606: // FWrite - P2
+        this.emulator.setRegister(CPURegister.D0, this.FWrite());
         return true;
-      case -540:
-        this.FWrite();
+      case -612: // FGets - P1
+        this.emulator.setRegister(CPURegister.D0, this.FGets());
         return true;
-      case -546:
-        this.FGets();
+      case -618: // FPuts - P1
+        this.emulator.setRegister(CPURegister.D0, this.FPuts());
         return true;
-      case -552:
-        this.FPuts();
+      case -636: // Flush - P2
+        this.emulator.setRegister(CPURegister.D0, this.Flush());
         return true;
-      case -564:
-        this.VFPrintf();
+      case -642: // FGetC - P2
+        this.emulator.setRegister(CPURegister.D0, this.FGetC());
+        return true;
+      case -648: // FPutC - P2
+        this.emulator.setRegister(CPURegister.D0, this.FPutC());
+        return true;
+      case -678: // FSeek - P2
+        this.emulator.setRegister(CPURegister.D0, this.FSeek());
+        return true;
+      case -684: // FTell - P2
+        this.emulator.setRegister(CPURegister.D0, this.FTell());
+        return true;
+
+      // CLI functions (V36+) - Phase B P1 functions
+      case -462: // GetCurrentDirName - P1
+        this.GetCurrentDirName();
+        return true;
+      case -474: // GetProgramName - P1
+        this.GetProgramName();
+        return true;
+      case -492: // SetProgramDir - P1
+        this.SetProgramDir();
+        return true;
+      case -498: // GetProgramDir - P1
+        this.GetProgramDir();
         return true;
 
       // Phase 2: Path and error handling (V36+)
@@ -4842,6 +5172,9 @@ export class DosLibrary {
       case -744:
         this.DateToStr();
         return true;
+      case -750:
+        this.StrToDate();
+        return true;
       case -804:
         this.ReadArgs();
         return true;
@@ -4849,7 +5182,20 @@ export class DosLibrary {
         this.FreeArgs();
         return true;
       case -126:
-        this.FindVar();
+        this.CurrentDir();
+        return true;
+
+      // Signals - P0 CRITICAL
+      case -210: // SetSignal
+        this.SetSignal();
+        return true;
+
+      // Console I/O - P0 CRITICAL
+      case -216: // PutStr
+        this.PutStr();
+        return true;
+      case -222: // VPrintf
+        this.VPrintf();
         return true;
 
       // V36+ DOS object allocation
@@ -4860,8 +5206,48 @@ export class DosLibrary {
         this.FreeDosObject();
         return true;
 
+      // Signal checking - P0 CRITICAL
+      case -834: // CheckSignal
+        this.CheckSignal();
+        return true;
+
+      // V36+ Environment variables
+      case -900:
+        this.SetVar();
+        return true;
+      case -906:
+        this.GetVar();
+        return true;
+      case -912:
+        this.DeleteVar();
+        return true;
+      case -924: // FindVar - P0 CRITICAL (Enhanced)
+        this.FindVarEnhanced();
+        return true;
+
       default:
-        return false; // Unknown function
+        // COMPREHENSIVE STUB IMPLEMENTATION FOR ALL UNIMPLEMENTED FUNCTIONS
+        // This ensures doors never crash on unimplemented functions
+        console.warn(`[dos.library] STUB: Unimplemented function at LVO ${offset}`);
+
+        // Provide sensible defaults based on function type
+        // Most DOS functions return 0 for failure, -1 (TRUE) for success
+        // File operations return file handles (non-zero) or 0 for failure
+        // Memory operations return pointers or 0 for failure
+
+        // Default: Return 0 (failure) in D0
+        // Doors will typically check for 0 and handle the failure gracefully
+        this.emulator.setRegister(CPURegister.D0, 0);
+
+        // Log the function call for debugging
+        const d0 = this.emulator.getRegister(CPURegister.D0);
+        const d1 = this.emulator.getRegister(CPURegister.D1);
+        const a0 = this.emulator.getRegister(CPURegister.A0);
+        const a1 = this.emulator.getRegister(CPURegister.A1);
+        console.warn(`[dos.library]   Context: D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} A0=0x${a0.toString(16)} A1=0x${a1.toString(16)}`);
+        console.warn(`[dos.library]   Returning D0=0 (failure) - door should handle gracefully`);
+
+        return true; // Return true to indicate we handled it (with a stub)
     }
   }
 
@@ -4949,4 +5335,437 @@ export class DosLibrary {
     console.log(`[dos.library]   Global variables not supported`);
     this.emulator.setRegister(0, 0);
   }
+
+  /**
+   * SetVar() - LVO -900 (V36+)
+   *
+   * Set a local or global shell variable.
+   *
+   * Parameters:
+   *   A0 = name (C-string pointer)
+   *   A1 = buffer (value string pointer)
+   *   D0 = size (length of value, -1 for null-terminated)
+   *   D1 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256, GVF_BINARY_VAR=512)
+   *
+   * Returns:
+   *   D0 = BOOL (-1 for success, 0 for failure)
+   */
+  public SetVar(): void {
+    const nameAddr = this.emulator.getRegister(CPURegister.A0);
+    const bufferAddr = this.emulator.getRegister(CPURegister.A1);
+    const size = this.emulator.getRegister(CPURegister.D0);
+    const flags = this.emulator.getRegister(CPURegister.D1);
+
+    const name = this.emulator.readString(nameAddr, 256);
+    let value: string;
+
+    if (size === -1) {
+      // Null-terminated string
+      value = this.emulator.readString(bufferAddr, 4096);
+    } else {
+      // Fixed size buffer
+      value = this.emulator.readString(bufferAddr, size);
+    }
+
+    console.log(`[dos.library] SetVar("${name}", "${value}", size=${size}, flags=${flags})`);
+
+    if (!this.envManager) {
+      console.error(`[dos.library] SetVar: EnvironmentManager not initialized`);
+      this.emulator.setRegister(CPURegister.D0, 0); // Failure
+      return;
+    }
+
+    const success = this.envManager.setVar(name, value, flags);
+    this.emulator.setRegister(CPURegister.D0, success ? -1 : 0); // -1 = TRUE, 0 = FALSE
+  }
+
+  /**
+   * GetVar() - LVO -906 (V36+)
+   *
+   * Get the value of a local or global shell variable.
+   *
+   * Parameters:
+   *   A0 = name (C-string pointer)
+   *   A1 = buffer (destination for value)
+   *   D0 = size (buffer size)
+   *   D1 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256)
+   *
+   * Returns:
+   *   D0 = Number of characters copied (-1 if not found or error)
+   */
+  public GetVar(): void {
+    const nameAddr = this.emulator.getRegister(CPURegister.A0);
+    const bufferAddr = this.emulator.getRegister(CPURegister.A1);
+    const size = this.emulator.getRegister(CPURegister.D0);
+    const flags = this.emulator.getRegister(CPURegister.D1);
+
+    const name = this.emulator.readString(nameAddr, 256);
+
+    console.log(`[dos.library] GetVar("${name}", bufferSize=${size}, flags=${flags})`);
+
+    if (!this.envManager) {
+      console.error(`[dos.library] GetVar: EnvironmentManager not initialized`);
+      this.emulator.setRegister(CPURegister.D0, -1); // Not found
+      return;
+    }
+
+    const value = this.envManager.getVar(name);
+    if (value === undefined) {
+      console.log(`[dos.library]   Variable "${name}" not found`);
+      this.emulator.setRegister(CPURegister.D0, -1); // Not found
+      return;
+    }
+
+    // Copy value to buffer (truncate if necessary)
+    const copyLen = Math.min(value.length, size - 1); // Leave room for null terminator
+    this.emulator.writeString(bufferAddr, value.substring(0, copyLen));
+
+    console.log(`[dos.library]   Copied ${copyLen} characters: "${value.substring(0, copyLen)}"`);
+    this.emulator.setRegister(CPURegister.D0, copyLen);
+  }
+
+  /**
+   * DeleteVar() - LVO -912 (V36+)
+   *
+   * Delete a local or global shell variable.
+   *
+   * Parameters:
+   *   A0 = name (C-string pointer)
+   *   D1 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256)
+   *
+   * Returns:
+   *   D0 = BOOL (-1 for success, 0 for failure/not found)
+   */
+  public DeleteVar(): void {
+    const nameAddr = this.emulator.getRegister(CPURegister.A0);
+    const flags = this.emulator.getRegister(CPURegister.D1);
+
+    const name = this.emulator.readString(nameAddr, 256);
+
+    console.log(`[dos.library] DeleteVar("${name}", flags=${flags})`);
+
+    if (!this.envManager) {
+      console.error(`[dos.library] DeleteVar: EnvironmentManager not initialized`);
+      this.emulator.setRegister(CPURegister.D0, 0); // Failure
+      return;
+    }
+
+    const success = this.envManager.deleteVar(name);
+    this.emulator.setRegister(CPURegister.D0, success ? -1 : 0); // -1 = TRUE, 0 = FALSE
+  }
+
+  /**
+   * GetCurrentDirName (-462) - Get current directory name string
+   * Input: D1 = APTR to buffer
+   *        D2 = buffer size
+   * Output: D0 = success (BOOL), buffer filled with directory name
+   *
+   * P1 function - Returns the current directory as a path string
+   */
+  public GetCurrentDirName(): void {
+    const bufferAddr = this.emulator.getRegister(CPURegister.D1);
+    const bufferSize = this.emulator.getRegister(CPURegister.D2);
+
+    console.log(`[dos.library] GetCurrentDirName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
+
+    // Get current directory
+    // Return the current Amiga-style directory path
+    const currentDir = this.currentDirectoryAmiga || 'BBS:';
+
+    if (bufferSize < currentDir.length + 1) {
+      console.error(`[dos.library] GetCurrentDirName: Buffer too small`);
+      this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+      return;
+    }
+
+    // Write directory name to buffer
+    this.emulator.writeString(bufferAddr, currentDir);
+
+    console.log(`[dos.library] GetCurrentDirName → "${currentDir}"`);
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+  }
+
+  /**
+   * GetProgramName (-474) - Get program name string
+   * Input: D1 = APTR to buffer
+   *        D2 = buffer size
+   * Output: D0 = success (BOOL), buffer filled with program name
+   *
+   * P1 function - Returns the name of the current program
+   */
+  public GetProgramName(): void {
+    const bufferAddr = this.emulator.getRegister(CPURegister.D1);
+    const bufferSize = this.emulator.getRegister(CPURegister.D2);
+
+    console.log(`[dos.library] GetProgramName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
+
+    // Return a generic program name (could be enhanced to track actual program)
+    const programName = `DoorProgram`;
+
+    if (bufferSize < programName.length + 1) {
+      console.error(`[dos.library] GetProgramName: Buffer too small`);
+      this.emulator.setRegister(CPURegister.D0, 0); // FALSE
+      return;
+    }
+
+    // Write program name to buffer
+    this.emulator.writeString(bufferAddr, programName);
+
+    console.log(`[dos.library] GetProgramName → "${programName}"`);
+    this.emulator.setRegister(CPURegister.D0, -1); // TRUE
+  }
+
+  /**
+   * SetProgramDir (-492) - Set program directory lock
+   * Input: D1 = BPTR to lock
+   * Output: D0 = previous program directory lock
+   *
+   * P1 function - Sets the directory where the program was loaded from
+   */
+  public SetProgramDir(): void {
+    const newLock = this.emulator.getRegister(CPURegister.D1);
+
+    console.log(`[dos.library] SetProgramDir(lock=0x${newLock.toString(16)})`);
+
+    // Return the old lock (0 for now - could be enhanced to track)
+    const oldLock = 0;
+
+    // In a full implementation, we would store this in the Process structure
+    // pr_HomeDir field (offset 0x98)
+
+    this.emulator.setRegister(CPURegister.D0, oldLock);
+    console.log(`[dos.library] SetProgramDir → oldLock=0x${oldLock.toString(16)}`);
+  }
+
+  /**
+   * GetProgramDir (-498) - Get program directory lock
+   * Input: None
+   * Output: D0 = BPTR to program directory lock
+   *
+   * P1 function - Returns the directory where the program was loaded from
+   */
+  public GetProgramDir(): void {
+    console.log(`[dos.library] GetProgramDir()`);
+
+    // Return 0 for now (could be enhanced to track actual program directory)
+    // In a full implementation, we would read this from the Process structure
+    // pr_HomeDir field (offset 0x98)
+    const programDirLock = 0;
+
+    this.emulator.setRegister(CPURegister.D0, programDirLock);
+    console.log(`[dos.library] GetProgramDir → 0x${programDirLock.toString(16)}`);
+  }
+
+  // ============================================================================
+  // P0 CRITICAL FUNCTIONS
+  // ============================================================================
+
+  /**
+   * SetSignal() - LVO -210 (V36+)
+   *
+   * Set and/or examine process signal flags
+   *
+   * Parameters:
+   *   D0 = newSignals (signal mask to set)
+   *   D1 = signalSet (mask of signals to change, -1 for all)
+   *
+   * Returns:
+   *   D0 = Old signal state
+   *
+   * P0 function - Critical for signal-based synchronization
+   */
+  public SetSignal(): void {
+    const newSignals = this.emulator.getRegister(CPURegister.D0);
+    const signalSet = this.emulator.getRegister(CPURegister.D1);
+
+    console.log(`[dos.library] SetSignal(newSignals=0x${newSignals.toString(16)}, signalSet=0x${signalSet.toString(16)})`);
+
+    // Get current process signal state (stubbed for BBS emulator)
+    const oldSignals = 0; // No signals pending
+
+    // In a full implementation, we would:
+    // 1. Get current process from FindTask(0)
+    // 2. Read tc_SigRecvd from Task structure (offset 0x12)
+    // 3. Modify signals according to newSignals & signalSet
+    // 4. Write back to tc_SigRecvd
+
+    this.emulator.setRegister(CPURegister.D0, oldSignals);
+    console.log(`[dos.library] SetSignal → oldSignals=0x${oldSignals.toString(16)}`);
+  }
+
+  /**
+   * PutStr() - LVO -216 (V36+)
+   *
+   * Write a null-terminated string to stdout
+   *
+   * Parameters:
+   *   D1 = string (BPTR to C-string)
+   *
+   * Returns:
+   *   D0 = 0 for success, -1 for failure
+   *
+   * P0 function - Critical for console output
+   */
+  public PutStr(): void {
+    const stringBPtr = this.emulator.getRegister(CPURegister.D1);
+    const stringAddr = stringBPtr << 2;
+    const str = this.emulator.readString(stringAddr, 4096);
+
+    console.log(`[dos.library] PutStr("${str.substring(0, 50)}${str.length > 50 ? '...' : ''}")`);
+
+    // Write to stdout using Output() handle
+    const outputHandle = this.Output();
+    if (outputHandle === 0) {
+      this.emulator.setRegister(CPURegister.D0, -1); // Failure
+      return;
+    }
+
+    // Write string using Write()
+    this.emulator.setRegister(CPURegister.D1, outputHandle);
+    this.emulator.setRegister(CPURegister.D2, stringBPtr);
+    this.emulator.setRegister(CPURegister.D3, str.length);
+    const bytesWritten = this.Write();
+
+    this.emulator.setRegister(CPURegister.D0, bytesWritten === str.length ? 0 : -1);
+  }
+
+  /**
+   * VPrintf() - LVO -222 (V36+)
+   *
+   * Formatted output to stdout (printf-style)
+   *
+   * Parameters:
+   *   D1 = format (BPTR to format string)
+   *   D2 = argarray (APTR to array of arguments)
+   *
+   * Returns:
+   *   D0 = Number of characters written, or -1 for error
+   *
+   * P0 function - Critical for formatted console output
+   */
+  public VPrintf(): void {
+    const formatBPtr = this.emulator.getRegister(CPURegister.D1);
+    const argArrayPtr = this.emulator.getRegister(CPURegister.D2);
+    const formatAddr = formatBPtr << 2;
+    const format = this.emulator.readString(formatAddr, 4096);
+
+    console.log(`[dos.library] VPrintf("${format.substring(0, 50)}${format.length > 50 ? '...' : ''}")`);
+
+    // Parse format string and extract arguments
+    // This is a simplified implementation - full VPrintf would use RawDoFmt
+    let output = format;
+    let argIndex = 0;
+
+    // Replace %s, %d, %ld, %x format specifiers with arguments
+    output = output.replace(/%([ldx])?([sd])/g, (match, modifier, type) => {
+      if (argArrayPtr === 0) return match;
+
+      const argAddr = this.emulator.readMemory32(argArrayPtr + (argIndex * 4));
+      argIndex++;
+
+      if (type === 's') {
+        // String argument
+        return this.emulator.readString(argAddr, 256);
+      } else if (type === 'd') {
+        // Decimal number
+        return modifier === 'l' ? argAddr.toString() : (argAddr & 0xFFFF).toString();
+      }
+      return match;
+    });
+
+    // Write output using PutStr()
+    // Allocate temp buffer for output string
+    const tempAddr = this.allocateTemp(output.length + 1);
+    this.emulator.writeString(tempAddr, output);
+
+    this.emulator.setRegister(CPURegister.D1, tempAddr >> 2); // BPTR
+    this.PutStr();
+
+    const result = this.emulator.getRegister(CPURegister.D0);
+    this.emulator.setRegister(CPURegister.D0, result === 0 ? output.length : -1);
+  }
+
+  /**
+   * CheckSignal() - LVO -834 (V36+)
+   *
+   * Check if a specific signal is set
+   *
+   * Parameters:
+   *   D0 = signalNum (signal bit number 0-31)
+   *
+   * Returns:
+   *   D0 = TRUE (-1) if signal is set, FALSE (0) if not
+   *
+   * P0 function - Critical for signal checking
+   */
+  public CheckSignal(): void {
+    const signalNum = this.emulator.getRegister(CPURegister.D0);
+
+    console.log(`[dos.library] CheckSignal(signalNum=${signalNum})`);
+
+    // Check if signal bit is set (stubbed for BBS emulator)
+    // In a full implementation, we would:
+    // 1. Get current process from FindTask(0)
+    // 2. Read tc_SigRecvd from Task structure (offset 0x12)
+    // 3. Check if bit is set: (tc_SigRecvd & (1 << signalNum)) != 0
+
+    const isSet = false; // No signals set in emulator
+    this.emulator.setRegister(CPURegister.D0, isSet ? -1 : 0);
+    console.log(`[dos.library] CheckSignal → ${isSet ? 'TRUE' : 'FALSE'}`);
+  }
+
+  /**
+   * FindVar() - LVO -924 (V36+) - ENHANCED VERSION
+   *
+   * Find environment variable and return LocalVar structure pointer
+   * This is the enhanced P0 version with better flag support
+   *
+   * Parameters:
+   *   D1 = name (BPTR to variable name)
+   *   D2 = type (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256)
+   *
+   * Returns:
+   *   D0 = LocalVar structure pointer, or 0 if not found
+   *
+   * P0 function - Critical for environment variable access
+   */
+  public FindVarEnhanced(): void {
+    const nameBPtr = this.emulator.getRegister(CPURegister.D1);
+    const type = this.emulator.getRegister(CPURegister.D2);
+    const nameAddr = nameBPtr << 2;
+    const name = this.emulator.readString(nameAddr, 256);
+
+    console.log(`[dos.library] FindVar("${name}", type=${type})`);
+
+    if (!this.envManager) {
+      console.error(`[dos.library] FindVar: EnvironmentManager not initialized`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      return;
+    }
+
+    // Use EnvironmentManager's findVarPointer with flag support
+    const varAddr = this.envManager.findVarPointer(name, type);
+    this.emulator.setRegister(CPURegister.D0, varAddr);
+
+    if (varAddr !== 0) {
+      console.log(`[dos.library] FindVar → 0x${varAddr.toString(16)}`);
+    } else {
+      console.log(`[dos.library] FindVar → not found`);
+    }
+  }
+
+  /**
+   * Helper function to allocate temporary memory
+   */
+  private allocateTemp(size: number): number {
+    // Use a temporary memory region (e.g., 0x140000+)
+    if (!this.tempMemoryAddr) {
+      this.tempMemoryAddr = 0x140000;
+    }
+    const addr = this.tempMemoryAddr;
+    this.tempMemoryAddr += ((size + 3) & ~3); // Align to 4 bytes
+    return addr;
+  }
+
+  private tempMemoryAddr: number = 0x140000;
 }

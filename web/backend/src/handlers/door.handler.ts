@@ -305,7 +305,7 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
       timeout: 600,
       doorId: doorInfo.command || doorInfo.id,
       stack: doorInfo.stack,
-      toolTypes: { DISABLE_GUARD: 'true' },
+      toolTypes: { LOOP_LIMIT: '10000000' },  // 10M iterations for interactive doors
       bbsSession: {
         user: session.user,
         nodeNumber: session.nodeId || 0,
@@ -1163,11 +1163,11 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     (session as any).dataDir = bbsRoot;
     console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol`);
 
-    // Interactive doors need guard disabled - they legitimately wait for user input
-    // Batch doors (run via batch-scheduler) use LOOP_LIMIT instead
+    // Interactive doors use higher LOOP_LIMIT - they legitimately wait for user input
+    // Batch doors (run via batch-scheduler) use lower LOOP_LIMIT (10M default)
     const interactiveToolTypes = {
       ...door.toolTypes,
-      DISABLE_GUARD: 'true'
+      LOOP_LIMIT: door.toolTypes?.LOOP_LIMIT || '10000000'  // 10M iterations default
     };
 
     // Ensure the DOORUSE tooltype is set to the command-specific value so doors like AquaScan know which mode to run in.

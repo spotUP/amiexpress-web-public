@@ -85,5 +85,4 @@ batch*
 # Development tools
 .eslintrc
 .prettierrc
-tsconfig.json
 jest.config.js

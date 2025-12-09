@@ -1,6 +1,7 @@
 import { Socket } from "socket.io";
 import { AmigaDoorSession } from "./AmigaDoorSession";
 import { PythonDoorSession } from "./PythonDoorSession";
+import { AREXXDoorSession } from "./AREXXDoorSession";
 import * as path from "path";
 import { config } from "../config";
 import * as fs from "fs";
@@ -10,7 +11,7 @@ import * as fs from "fs";
  */
 
 // Door session type (union of all supported session types)
-type DoorSession = AmigaDoorSession | PythonDoorSession;
+type DoorSession = AmigaDoorSession | PythonDoorSession | AREXXDoorSession;
 
 // Active door sessions by socket ID
 const activeSessions = new Map<string, DoorSession>();
@@ -69,6 +70,13 @@ export function setupDoorHandlers(socket: Socket): void {
           // Python door
           console.log("[DoorHandler] Launching Python door");
           session = new PythonDoorSession(socket, {
+            executablePath,
+            timeout: 600, // 10 minutes
+          });
+        } else if (ext === ".rexx") {
+          // AREXX door
+          console.log("[DoorHandler] Launching AREXX door");
+          session = new AREXXDoorSession(socket, {
             executablePath,
             timeout: 600, // 10 minutes
           });

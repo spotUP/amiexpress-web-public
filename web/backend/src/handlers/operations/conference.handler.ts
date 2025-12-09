@@ -107,6 +107,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
   }
 
   session.currentConf = confId;
+  session.conferenceId = confId; // XIM doors read this
   session.currentMsgBase = msgBaseId;
   session.currentConfName = conference.name;
   session.relConfNum = confId; // For simplicity, use absolute conf number as relative
@@ -117,7 +118,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
     session.user.autoRejoin = confId;
     session.user.msgBaseRJoin = msgBaseId;
     try {
-      const { db } = require('../database');
+      const { db } = require('../../database');
       await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });
     } catch (err) {
       console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);

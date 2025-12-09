@@ -1,3 +1,4 @@
+import 'reflect-metadata'; // Must be first import for tsyringe decorators
 import path from 'path';
 import fs from 'fs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';

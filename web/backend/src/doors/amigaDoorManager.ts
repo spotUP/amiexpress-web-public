@@ -117,11 +117,11 @@ export class AmigaDoorManager {
    * Uses case-insensitive matching to find correct directory names
    */
   private initializeAssigns(): AmigaDOSAssigns {
-    const { resolveCaseInsensitivePath } = require('../utils/fs-amiga.util');
+    const { resolvePath } = require('../utils/amigafs');
 
     // Helper to find directory with case-insensitive matching
     const findDir = (name: string): string => {
-      const resolved = resolveCaseInsensitivePath(this.bbsRoot, [name]);
+      const resolved = resolvePath(this.bbsRoot, [name]);
       return resolved || path.join(this.bbsRoot, name);
     };
 

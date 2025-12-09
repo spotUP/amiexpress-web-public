@@ -101,7 +101,8 @@ cleanup_logs_dir() {
   log_count=$(find "$LOGS_DIR" -maxdepth 1 -type f -name "*.log" 2>/dev/null | wc -l)
   while [ "$log_count" -gt "$max_files" ]; do
     local oldest
-    oldest=$(find "$LOGS_DIR" -maxdepth 1 -type f -name "*.log" -printf '%T@ %p\n' | sort -n | head -n 1 | cut -d' ' -f2-)
+    # Use ls -t (sort by modification time) instead of find -printf (GNU find only)
+    oldest=$(ls -t "$LOGS_DIR"/*.log 2>/dev/null | tail -n 1)
     if [ -n "$oldest" ]; then
       rm -f "$oldest"
     else

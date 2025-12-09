@@ -748,7 +748,17 @@ export class IconLibrary {
         return true;
 
       default:
-        return false; // Unknown function
+        // COMPREHENSIVE STUB IMPLEMENTATION FOR ALL UNIMPLEMENTED FUNCTIONS
+        console.warn(`[icon.library] STUB: Unimplemented function at LVO ${offset}`);
+        this.emulator.setRegister(CPURegister.D0, 0);
+
+        const d0 = this.emulator.getRegister(CPURegister.D0);
+        const d1 = this.emulator.getRegister(CPURegister.D1);
+        const a0 = this.emulator.getRegister(CPURegister.A0);
+        console.warn(`[icon.library]   Context: D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} A0=0x${a0.toString(16)}`);
+        console.warn(`[icon.library]   Returning D0=0 (failure) - door should handle gracefully`);
+
+        return true; // Return true to indicate we handled it (with a stub)
     }
   }
 }

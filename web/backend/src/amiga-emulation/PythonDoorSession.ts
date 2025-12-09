@@ -257,7 +257,7 @@ export class PythonDoorSession {
     }
 
     // Remove socket listeners
-    this.socket.off('door:input');
+    this.socket.removeAllListeners('door:input');
 
     // Clean up drop files
     if (this.config.nodeId) {

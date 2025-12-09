@@ -20,6 +20,14 @@ export default defineConfig({
     assetsDir: 'assets',
     chunkSizeWarningLimit: 2048,
     rollupOptions: {
+      onwarn(warning, warn) {
+        // Suppress warnings about unresolved imports (typically Node.js built-ins)
+        if (warning.code === 'UNRESOLVED_IMPORT') {
+          return
+        }
+        // Use default for all other warnings
+        warn(warning)
+      },
       output: {
         manualChunks: {
           xterm: ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-canvas'],

@@ -57,10 +57,11 @@ interface Task {
   address: number;
   name: string;
   node: number;
-  sigRecvd: number; // Signals received (bits OR'd together)
-  sigWait: number; // Signals waiting for (0 = not waiting)
+  sigRecvd: number; // Signals received/pending (bits OR'd together) - ALIAS: pendingSignals
+  sigWait: number; // Signals waiting for (0 = not waiting) - ALIAS: waitingSignals
   state: number; // Task state (TS_READY, TS_WAIT, etc.)
   msgPort: number; // Message port address (for Process structure)
+  isWaiting: boolean; // True if task is blocked in Wait()
 }
 
 /**
@@ -93,6 +94,7 @@ export class ExecLibrary {
 
   // Memory allocation tracking
   private allocations: Map<number, number> = new Map(); // address -> size
+  private allocVecBlocks?: Map<number, { size: number; headerAddr: number }>; // AllocVec tracking
   // Start allocations at 0x100000 (1MB) to avoid overlap with door code segments
   // Door code starts at 0x1000 and large doors can exceed 100KB
   private nextFreeMemory: number = 0x100000;
@@ -109,6 +111,10 @@ export class ExecLibrary {
 
   // Signal allocation tracking (32 signals, bits 0-31)
   private allocatedSignals: number = 0; // Bitmask of allocated signals
+
+  // Standard signal bit definitions (from exec/tasks.h)
+  private static readonly SIGBREAKB_CTRL_C = 12; // Bit number for CTRL-C
+  private static readonly SIGBREAKF_CTRL_C = 1 << 12; // Signal mask (0x1000)
 
   // Door message callback - called when door sends message to AEDoorPort
   private doorMessageCallback:
@@ -177,6 +183,7 @@ export class ExecLibrary {
       sigWait: 0, // Not waiting for signals (0 = TS_READY)
       state: 0, // TS_READY
       msgPort: taskMsgPortAddr, // Message port for Process structure
+      isWaiting: false, // Not blocked in Wait()
     };
     this.execBase.thisTask = this.currentTask.address;
 
@@ -799,7 +806,7 @@ export class ExecLibrary {
 
     // Handle common Exec.library functions - CORRECTED LVOs from exec.library.lvos.i
     switch (offset) {
-      case -552: // _LVOOpenLibrary (CORRECTED from wrong -30)
+      case -552: // _LVOOpenLibrary
         console.log(
           `[ExecLibrary]   *** OpenLibrary trap called (LVO -552) ***`
         );
@@ -863,15 +870,60 @@ export class ExecLibrary {
         this.emulator.setRegister(0, portResult);
         return true;
 
-      case -300: // _LVOSetTaskPri (CORRECTED from wrong -306)
+      case -282: // _LVOSetTaskPri (P2)
         console.log(
-          `[ExecLibrary]   *** SetTaskPri trap called (LVO -300) ***`
+          `[ExecLibrary]   *** SetTaskPri trap called (LVO -282) ***`
         );
         // FIXED: A1 = register 9 (not 13 which is A5)
         const taskAddr = this.emulator.getRegister(9); // A1
         const newPri = this.emulator.getRegister(0); // D0
         const priResult = this.setTaskPri(taskAddr, newPri);
         this.emulator.setRegister(0, priResult);
+        return true;
+
+      // *** P1 SEMAPHORE FUNCTIONS (Phase B) ***
+      case -300: // _LVOObtainSemaphore - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: ObtainSemaphore() (LVO -300) ***`);
+        const obtainSemAddr = this.emulator.getRegister(8); // A0
+        this.obtainSemaphore(obtainSemAddr);
+        return true;
+
+      case -312: // _LVOReleaseSemaphore - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: ReleaseSemaphore() (LVO -312) ***`);
+        const releaseSemAddr = this.emulator.getRegister(8); // A0
+        this.releaseSemaphore(releaseSemAddr);
+        return true;
+
+      case -348: // _LVOInitSemaphore - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: InitSemaphore() (LVO -348) ***`);
+        const initSemAddr = this.emulator.getRegister(8); // A0
+        this.initSemaphore(initSemAddr);
+        return true;
+
+      case -432: // _LVOFindSemaphore - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: FindSemaphore() (LVO -432) ***`);
+        const findSemNameAddr = this.emulator.getRegister(9); // A1
+        const findSemResult = this.findSemaphore(findSemNameAddr);
+        this.emulator.setRegister(0, findSemResult);
+        return true;
+
+      case -438: // _LVOAddSemaphore - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: AddSemaphore() (LVO -438) ***`);
+        const addSemAddr = this.emulator.getRegister(9); // A1
+        this.addSemaphore(addSemAddr);
+        return true;
+
+      case -444: // _LVORemSemaphore - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: RemSemaphore() (LVO -444) ***`);
+        const remSemAddr = this.emulator.getRegister(9); // A1
+        this.remSemaphore(remSemAddr);
+        return true;
+
+      case -588: // _LVOAttemptSemaphore - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: AttemptSemaphore() (LVO -588) ***`);
+        const attemptSemAddr = this.emulator.getRegister(8); // A0
+        const attemptResult = this.attemptSemaphore(attemptSemAddr);
+        this.emulator.setRegister(0, attemptResult);
         return true;
 
       case -330: // _LVOAllocSignal ✓
@@ -889,11 +941,110 @@ export class ExecLibrary {
         this.emulator.setRegister(0, oldSignals);
         return true;
 
-      case -522: // Unknown/unused in doors we've seen – safely stub
-        console.log(
-          `[ExecLibrary]   *** Unimplemented Exec LVO -522 (stub, preserve state) ***`
-        );
-        // Preserve D0/A6; just return current D0
+      // *** P1 I/O REQUEST FUNCTIONS (Phase B) ***
+      case -504: // _LVOCreateIORequest - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: CreateIORequest() (LVO -504) ***`);
+        const createIOPort = this.emulator.getRegister(8); // A0
+        const createIOSize = this.emulator.getRegister(0); // D0
+        const createIOResult = this.createIORequest(createIOPort, createIOSize);
+        this.emulator.setRegister(0, createIOResult);
+        return true;
+
+      case -510: // _LVODeleteIORequest - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: DeleteIORequest() (LVO -510) ***`);
+        const deleteIOAddr = this.emulator.getRegister(8); // A0
+        this.deleteIORequest(deleteIOAddr);
+        return true;
+
+      case -516: // _LVODoIO - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: DoIO() (LVO -516) ***`);
+        const doIOAddr = this.emulator.getRegister(9); // A1
+        const doIOResult = this.doIO(doIOAddr);
+        this.emulator.setRegister(0, doIOResult);
+        return true;
+
+      case -522: // _LVOSendIO - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: SendIO() (LVO -522) ***`);
+        const sendIOAddr = this.emulator.getRegister(9); // A1
+        this.sendIO(sendIOAddr);
+        return true;
+
+      case -528: // _LVOCheckIO - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: CheckIO() (LVO -528) ***`);
+        const checkIOAddr = this.emulator.getRegister(9); // A1
+        const checkIOResult = this.checkIO(checkIOAddr);
+        this.emulator.setRegister(0, checkIOResult);
+        return true;
+
+      // *** P2 LIST OPERATIONS (Phase C) ***
+      case -234: // _LVORemHead - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: RemHead() (LVO -234) ***`);
+        const remHeadList = this.emulator.getRegister(8); // A0
+        const remHeadResult = this.remHead(remHeadList);
+        this.emulator.setRegister(0, remHeadResult);
+        return true;
+
+      case -240: // _LVORemTail - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: RemTail() (LVO -240) ***`);
+        const remTailList = this.emulator.getRegister(8); // A0
+        const remTailResult = this.remTail(remTailList);
+        this.emulator.setRegister(0, remTailResult);
+        return true;
+
+      case -246: // _LVORemove - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: Remove() (LVO -246) ***`);
+        const removeNode = this.emulator.getRegister(9); // A1
+        this.remove(removeNode);
+        return true;
+
+      case -252: // _LVOInsert - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: Insert() (LVO -252) ***`);
+        const insertList = this.emulator.getRegister(8); // A0
+        const insertNode = this.emulator.getRegister(9); // A1
+        const insertAfter = this.emulator.getRegister(10); // A2
+        this.insert(insertList, insertNode, insertAfter);
+        return true;
+
+      case -258: // _LVOAddHead - P2
+        console.log(`[ExecLibrary] *** INTERCEPTED: AddHead() (LVO -258) ***`);
+        const addHeadList = this.emulator.getRegister(8); // A0
+        const addHeadNode = this.emulator.getRegister(9); // A1
+        this.addHead(addHeadList, addHeadNode);
+        return true;
+
+      case -264: // _LVOAddTail - P2
+        console.log(`[ExecLibrary] *** INTERCEPTED: AddTail() (LVO -264) ***`);
+        const addTailList = this.emulator.getRegister(8); // A0
+        const addTailNode = this.emulator.getRegister(9); // A1
+        this.addTail(addTailList, addTailNode);
+        return true;
+
+      // *** P2 TASK CONTROL & MEMORY (Phase C) ***
+      case -162: // _LVODisable - P2
+        console.log(`[ExecLibrary] *** INTERCEPTED: Disable() (LVO -162) ***`);
+        this.disable();
+        return true;
+
+      case -168: // _LVOEnable - P2
+        console.log(`[ExecLibrary] *** INTERCEPTED: Enable() (LVO -168) ***`);
+        this.enable();
+        return true;
+
+      case -174: // _LVOForbid - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: Forbid() (LVO -174) ***`);
+        this.forbid();
+        return true;
+
+      case -180: // _LVOPermit - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: Permit() (LVO -180) ***`);
+        this.permit();
+        return true;
+
+      case -210: // _LVOAvailMem - P1
+        console.log(`[ExecLibrary] *** INTERCEPTED: AvailMem() (LVO -210) ***`);
+        const availMemReq = this.emulator.getRegister(1); // D1
+        const availMemResult = this.availMem(availMemReq);
+        this.emulator.setRegister(0, availMemResult);
         return true;
 
       // *** CRITICAL MISSING CASES FOR XIM DOORS ***
@@ -913,11 +1064,53 @@ export class ExecLibrary {
         this.emulator.setRegister(0, waitResult);
         return true;
 
+      // *** P0 CRITICAL MEMORY FUNCTIONS ***
+      case -474: // _LVOCopyMem - Fast memory copy
+        console.log(`[ExecLibrary] *** INTERCEPTED: CopyMem() (LVO -474) ***`);
+        const copySource = this.emulator.getRegister(8); // A0
+        const copyDest = this.emulator.getRegister(9); // A1
+        const copyLength = this.emulator.getRegister(0); // D0
+        this.copyMem(copySource, copyDest, copyLength);
+        return true;
+
+      case -480: // _LVOCopyMemQuick - Quick memory copy (aligned)
+        console.log(`[ExecLibrary] *** INTERCEPTED: CopyMemQuick() (LVO -480) ***`);
+        const quickSource = this.emulator.getRegister(8); // A0
+        const quickDest = this.emulator.getRegister(9); // A1
+        const quickLength = this.emulator.getRegister(0); // D0
+        this.copyMemQuick(quickSource, quickDest, quickLength);
+        return true;
+
+      case -684: // _LVOAllocVec - P0 CRITICAL (CORRECTED from -552)
+        console.log(`[ExecLibrary] *** INTERCEPTED: AllocVec() (LVO -684) ***`);
+        const vecSize = this.emulator.getRegister(0); // D0
+        const vecFlags = this.emulator.getRegister(1); // D1
+        const vecResult = this.allocVec(vecSize, vecFlags);
+        this.emulator.setRegister(0, vecResult);
+        return true;
+
+      case -690: // _LVOFreeVec - P0 CRITICAL (CORRECTED from -558)
+        console.log(`[ExecLibrary] *** INTERCEPTED: FreeVec() (LVO -690) ***`);
+        const vecAddr = this.emulator.getRegister(9); // A1
+        this.freeVec(vecAddr);
+        return true;
+
       default:
-        console.log(
-          `[ExecLibrary]   Unknown exec.library function offset: ${offset}`
-        );
-        return false;
+        // COMPREHENSIVE STUB IMPLEMENTATION FOR ALL UNIMPLEMENTED FUNCTIONS
+        console.warn(`[exec.library] STUB: Unimplemented function at LVO ${offset}`);
+
+        // Exec library functions return pointers (non-zero) or 0 for failure
+        // Default: Return 0 (failure) in D0
+        this.emulator.setRegister(CPURegister.D0, 0);
+
+        const d0 = this.emulator.getRegister(CPURegister.D0);
+        const d1 = this.emulator.getRegister(CPURegister.D1);
+        const a0 = this.emulator.getRegister(CPURegister.A0);
+        const a1 = this.emulator.getRegister(CPURegister.A1);
+        console.warn(`[exec.library]   Context: D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} A0=0x${a0.toString(16)} A1=0x${a1.toString(16)}`);
+        console.warn(`[exec.library]   Returning D0=0 (failure) - door should handle gracefully`);
+
+        return true; // Return true to indicate we handled it (with a stub)
     }
   }
 
@@ -1710,6 +1903,865 @@ export class ExecLibrary {
     this.publicSemaphores.set(name, semaphoreAddr);
 
     console.log(`[ExecLibrary]   Semaphore "${name}" added to public list`);
+  }
+
+  /**
+   * InitSemaphore() - LVO -348 (0xFFFFFEA4)
+   *
+   * Initialize a signal semaphore structure.
+   *
+   * Parameters:
+   *   A0 = SignalSemaphore pointer
+   *
+   * Returns:
+   *   None
+   *
+   * SignalSemaphore structure (48 bytes):
+   *   +0:  ss_Link (Node - 14 bytes)
+   *   +14: ss_NestCount (WORD - 2 bytes)
+   *   +16: ss_WaitQueue (MinList - 12 bytes)
+   *   +28: ss_MultipleLink (SemaphoreRequest - 14 bytes)
+   *   +42: ss_Owner (pointer - 4 bytes)
+   *   +46: ss_QueueCount (WORD - 2 bytes)
+   */
+  initSemaphore(semaphoreAddr: number): void {
+    if (semaphoreAddr === 0) {
+      console.log('[ExecLibrary] InitSemaphore(NULL) - ignoring');
+      return;
+    }
+
+    console.log(`[ExecLibrary] InitSemaphore(0x${semaphoreAddr.toString(16)})`);
+
+    // Initialize Node header (ss_Link)
+    this.emulator.writeMemory32(semaphoreAddr + 0, 0);  // ln_Succ
+    this.emulator.writeMemory32(semaphoreAddr + 4, 0);  // ln_Pred
+    this.emulator.writeMemory(semaphoreAddr + 8, 0);    // ln_Type
+    this.emulator.writeMemory(semaphoreAddr + 9, 0);    // ln_Pri
+    this.emulator.writeMemory32(semaphoreAddr + 10, 0); // ln_Name
+
+    // Initialize ss_NestCount
+    this.emulator.writeMemory16(semaphoreAddr + 14, 0);
+
+    // Initialize ss_WaitQueue (MinList)
+    const waitQueueAddr = semaphoreAddr + 16;
+    this.emulator.writeMemory32(waitQueueAddr + 0, waitQueueAddr + 4); // lh_Head → Tail
+    this.emulator.writeMemory32(waitQueueAddr + 4, 0);                 // lh_Tail (NULL)
+    this.emulator.writeMemory32(waitQueueAddr + 8, waitQueueAddr + 0); // lh_TailPred → Head
+
+    // Initialize ss_MultipleLink (SemaphoreRequest Node)
+    this.emulator.writeMemory32(semaphoreAddr + 28, 0); // ln_Succ
+    this.emulator.writeMemory32(semaphoreAddr + 32, 0); // ln_Pred
+    this.emulator.writeMemory(semaphoreAddr + 36, 0);   // ln_Type
+    this.emulator.writeMemory(semaphoreAddr + 37, 0);   // ln_Pri
+    this.emulator.writeMemory32(semaphoreAddr + 38, 0); // ln_Name
+
+    // Initialize ss_Owner
+    this.emulator.writeMemory32(semaphoreAddr + 42, 0);
+
+    // Initialize ss_QueueCount
+    this.emulator.writeMemory16(semaphoreAddr + 46, 0);
+
+    console.log(`[ExecLibrary]   Semaphore initialized`);
+  }
+
+  /**
+   * ObtainSemaphore() - LVO -300 (0xFFFFFED4)
+   *
+   * Acquire exclusive access to a signal semaphore.
+   * Supports nesting - same task can obtain multiple times.
+   *
+   * Parameters:
+   *   A0 = SignalSemaphore pointer
+   *
+   * Returns:
+   *   None (task will block if semaphore unavailable)
+   *
+   * In our single-task BBS emulator, this always succeeds immediately.
+   */
+  obtainSemaphore(semaphoreAddr: number): void {
+    if (semaphoreAddr === 0) {
+      console.log('[ExecLibrary] ObtainSemaphore(NULL) - ignoring');
+      return;
+    }
+
+    // Read current state
+    const nestCount = this.emulator.readMemory16(semaphoreAddr + 14);
+    const owner = this.emulator.readMemory32(semaphoreAddr + 42);
+    const currentTask = this.findTask(0); // 0 = FindTask(NULL) = current task
+
+    console.log(`[ExecLibrary] ObtainSemaphore(0x${semaphoreAddr.toString(16)}) nestCount=${nestCount} owner=0x${owner.toString(16)}`);
+
+    // If not owned or owned by current task, increment nest count
+    if (owner === 0 || owner === currentTask) {
+      this.emulator.writeMemory16(semaphoreAddr + 14, nestCount + 1);
+      this.emulator.writeMemory32(semaphoreAddr + 42, currentTask);
+      console.log(`[ExecLibrary]   Semaphore obtained, new nestCount=${nestCount + 1}`);
+    } else {
+      // In a real system, would block here. In single-task emulator, this shouldn't happen.
+      console.warn(`[ExecLibrary]   WARNING: Semaphore owned by different task! Forcing acquire.`);
+      this.emulator.writeMemory16(semaphoreAddr + 14, 1);
+      this.emulator.writeMemory32(semaphoreAddr + 42, currentTask);
+    }
+  }
+
+  /**
+   * ReleaseSemaphore() - LVO -312 (0xFFFFFEC8)
+   *
+   * Release a signal semaphore lock.
+   *
+   * Parameters:
+   *   A0 = SignalSemaphore pointer
+   *
+   * Returns:
+   *   None
+   *
+   * Each ObtainSemaphore() must have a matching ReleaseSemaphore().
+   */
+  releaseSemaphore(semaphoreAddr: number): void {
+    if (semaphoreAddr === 0) {
+      console.log('[ExecLibrary] ReleaseSemaphore(NULL) - ignoring');
+      return;
+    }
+
+    // Read current state
+    const nestCount = this.emulator.readMemory16(semaphoreAddr + 14);
+
+    console.log(`[ExecLibrary] ReleaseSemaphore(0x${semaphoreAddr.toString(16)}) nestCount=${nestCount}`);
+
+    if (nestCount > 0) {
+      const newNestCount = nestCount - 1;
+      this.emulator.writeMemory16(semaphoreAddr + 14, newNestCount);
+
+      if (newNestCount === 0) {
+        // Fully released, clear owner
+        this.emulator.writeMemory32(semaphoreAddr + 42, 0);
+        console.log(`[ExecLibrary]   Semaphore fully released`);
+      } else {
+        console.log(`[ExecLibrary]   Semaphore released, new nestCount=${newNestCount}`);
+      }
+    } else {
+      console.warn(`[ExecLibrary]   WARNING: ReleaseSemaphore called on unlocked semaphore!`);
+    }
+  }
+
+  /**
+   * AttemptSemaphore() - LVO -588 (0xFFFFFDB4)
+   *
+   * Non-blocking semaphore lock attempt.
+   *
+   * Parameters:
+   *   A0 = SignalSemaphore pointer
+   *
+   * Returns:
+   *   D0 = TRUE (-1) if obtained, FALSE (0) if unavailable
+   */
+  attemptSemaphore(semaphoreAddr: number): number {
+    if (semaphoreAddr === 0) {
+      console.log('[ExecLibrary] AttemptSemaphore(NULL) - returning FALSE');
+      return 0;
+    }
+
+    // Read current state
+    const nestCount = this.emulator.readMemory16(semaphoreAddr + 14);
+    const owner = this.emulator.readMemory32(semaphoreAddr + 42);
+    const currentTask = this.findTask(0);
+
+    console.log(`[ExecLibrary] AttemptSemaphore(0x${semaphoreAddr.toString(16)}) nestCount=${nestCount} owner=0x${owner.toString(16)}`);
+
+    // If not owned or owned by current task, increment nest count
+    if (owner === 0 || owner === currentTask) {
+      this.emulator.writeMemory16(semaphoreAddr + 14, nestCount + 1);
+      this.emulator.writeMemory32(semaphoreAddr + 42, currentTask);
+      console.log(`[ExecLibrary]   Semaphore obtained, new nestCount=${nestCount + 1}, returning TRUE`);
+      return -1; // TRUE
+    } else {
+      // Owned by different task - return FALSE (don't block)
+      console.log(`[ExecLibrary]   Semaphore unavailable, returning FALSE`);
+      return 0; // FALSE
+    }
+  }
+
+  /**
+   * RemSemaphore() - LVO -444 (0xFFFFFE44)
+   *
+   * Remove a semaphore from the public list.
+   *
+   * Parameters:
+   *   A1 = SignalSemaphore pointer
+   *
+   * Returns:
+   *   None
+   */
+  remSemaphore(semaphoreAddr: number): void {
+    if (semaphoreAddr === 0) {
+      console.log('[ExecLibrary] RemSemaphore(NULL) - ignoring');
+      return;
+    }
+
+    // Read semaphore name from ln_Name field (offset +10 in Node header)
+    const nameAddr = this.emulator.readMemory32(semaphoreAddr + 10);
+    if (nameAddr === 0) {
+      console.log(`[ExecLibrary] RemSemaphore(0x${semaphoreAddr.toString(16)}) - no name, not in public list`);
+      return;
+    }
+
+    const name = this.emulator.readString(nameAddr);
+    console.log(`[ExecLibrary] RemSemaphore("${name}")`);
+
+    // Remove from public registry
+    if (this.publicSemaphores.has(name)) {
+      this.publicSemaphores.delete(name);
+      console.log(`[ExecLibrary]   Semaphore "${name}" removed from public list`);
+    } else {
+      console.log(`[ExecLibrary]   Semaphore "${name}" not found in public list`);
+    }
+  }
+
+  /**
+   * CreateIORequest() - LVO -504 (0xFFFFFE08)
+   *
+   * Create an I/O request structure.
+   *
+   * Parameters:
+   *   A0 = MsgPort pointer (reply port)
+   *   D0 = Size of I/O request structure
+   *
+   * Returns:
+   *   D0 = IORequest pointer (0 if failed)
+   *
+   * IOStdReq structure (48 bytes):
+   *   +0:  io_Message (Message - 20 bytes)
+   *   +20: io_Device (pointer - 4 bytes)
+   *   +24: io_Unit (pointer - 4 bytes)
+   *   +28: io_Command (UWORD - 2 bytes)
+   *   +30: io_Flags (UBYTE - 1 byte)
+   *   +31: io_Error (BYTE - 1 byte)
+   *   +32: io_Actual (ULONG - 4 bytes)
+   *   +36: io_Length (ULONG - 4 bytes)
+   *   +40: io_Data (pointer - 4 bytes)
+   *   +44: io_Offset (ULONG - 4 bytes)
+   */
+  createIORequest(portAddr: number, size: number): number {
+    if (portAddr === 0) {
+      console.log('[ExecLibrary] CreateIORequest(NULL port) - returning NULL');
+      return 0;
+    }
+
+    if (size < 48) {
+      console.log(`[ExecLibrary] CreateIORequest: size ${size} too small (minimum 48 bytes) - returning NULL`);
+      return 0;
+    }
+
+    console.log(`[ExecLibrary] CreateIORequest(port=0x${portAddr.toString(16)}, size=${size})`);
+
+    // Allocate memory for IORequest
+    const ioReqAddr = this.allocMem(size, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+
+    if (ioReqAddr === 0) {
+      console.error(`[ExecLibrary]   CreateIORequest: AllocMem failed`);
+      return 0;
+    }
+
+    // Initialize io_Message (first 20 bytes)
+    // Message structure fields:
+    //   +0:  mn_Node.ln_Succ (4 bytes)
+    //   +4:  mn_Node.ln_Pred (4 bytes)
+    //   +8:  mn_Node.ln_Type (1 byte) - NT_MESSAGE = 5
+    //   +9:  mn_Node.ln_Pri (1 byte)
+    //   +10: mn_Node.ln_Name (4 bytes)
+    //   +14: mn_ReplyPort (4 bytes)
+    //   +18: mn_Length (2 bytes)
+
+    this.emulator.writeMemory32(ioReqAddr + 0, 0);     // ln_Succ
+    this.emulator.writeMemory32(ioReqAddr + 4, 0);     // ln_Pred
+    this.emulator.writeMemory(ioReqAddr + 8, 5);       // ln_Type = NT_MESSAGE
+    this.emulator.writeMemory(ioReqAddr + 9, 0);       // ln_Pri
+    this.emulator.writeMemory32(ioReqAddr + 10, 0);    // ln_Name
+    this.emulator.writeMemory32(ioReqAddr + 14, portAddr); // mn_ReplyPort
+    this.emulator.writeMemory16(ioReqAddr + 18, size); // mn_Length
+
+    // Initialize IORequest fields
+    this.emulator.writeMemory32(ioReqAddr + 20, 0);    // io_Device
+    this.emulator.writeMemory32(ioReqAddr + 24, 0);    // io_Unit
+    this.emulator.writeMemory16(ioReqAddr + 28, 0);    // io_Command
+    this.emulator.writeMemory(ioReqAddr + 30, 0);      // io_Flags
+    this.emulator.writeMemory(ioReqAddr + 31, 0);      // io_Error
+
+    // Initialize IOStdReq extended fields (if size >= 48)
+    if (size >= 48) {
+      this.emulator.writeMemory32(ioReqAddr + 32, 0);  // io_Actual
+      this.emulator.writeMemory32(ioReqAddr + 36, 0);  // io_Length
+      this.emulator.writeMemory32(ioReqAddr + 40, 0);  // io_Data
+      this.emulator.writeMemory32(ioReqAddr + 44, 0);  // io_Offset
+    }
+
+    console.log(`[ExecLibrary]   IORequest created at 0x${ioReqAddr.toString(16)}`);
+    return ioReqAddr;
+  }
+
+  /**
+   * DeleteIORequest() - LVO -510 (0xFFFFFE02)
+   *
+   * Delete an I/O request structure.
+   *
+   * Parameters:
+   *   A0 = IORequest pointer
+   *
+   * Returns:
+   *   None
+   */
+  deleteIORequest(ioReqAddr: number): void {
+    if (ioReqAddr === 0) {
+      console.log('[ExecLibrary] DeleteIORequest(NULL) - ignoring');
+      return;
+    }
+
+    console.log(`[ExecLibrary] DeleteIORequest(0x${ioReqAddr.toString(16)})`);
+
+    // Read size from mn_Length field
+    const size = this.emulator.readMemory16(ioReqAddr + 18);
+
+    // Free memory
+    this.freeMem(ioReqAddr, size);
+    console.log(`[ExecLibrary]   IORequest deleted`);
+  }
+
+  /**
+   * DoIO() - LVO -516 (0xFFFFFDFC)
+   *
+   * Perform synchronous I/O operation.
+   *
+   * Parameters:
+   *   A1 = IORequest pointer
+   *
+   * Returns:
+   *   D0 = io_Error value (0 = success)
+   *
+   * Blocks until I/O completes. In our BBS emulator, most I/O is
+   * handled synchronously anyway, so we just return success.
+   */
+  doIO(ioReqAddr: number): number {
+    if (ioReqAddr === 0) {
+      console.log('[ExecLibrary] DoIO(NULL) - returning error');
+      return -1; // IOERR_OPENFAIL
+    }
+
+    // Read io_Command
+    const command = this.emulator.readMemory16(ioReqAddr + 28);
+    const device = this.emulator.readMemory32(ioReqAddr + 20);
+
+    console.log(`[ExecLibrary] DoIO(0x${ioReqAddr.toString(16)}) command=${command} device=0x${device.toString(16)}`);
+
+    // In a real system, would dispatch to device driver
+    // For BBS emulator, most devices don't exist, so we stub this
+    console.log(`[ExecLibrary]   DoIO: Stubbed - returning success`);
+
+    // Set io_Error to 0 (success)
+    this.emulator.writeMemory(ioReqAddr + 31, 0);
+
+    return 0; // Success
+  }
+
+  /**
+   * SendIO() - LVO -522 (0xFFFFFDF6)
+   *
+   * Initiate asynchronous I/O operation.
+   *
+   * Parameters:
+   *   A1 = IORequest pointer
+   *
+   * Returns:
+   *   None (check io_Error and reply port for completion)
+   *
+   * Returns immediately. Caller must monitor reply port for completion message.
+   */
+  sendIO(ioReqAddr: number): void {
+    if (ioReqAddr === 0) {
+      console.log('[ExecLibrary] SendIO(NULL) - ignoring');
+      return;
+    }
+
+    // Read io_Command
+    const command = this.emulator.readMemory16(ioReqAddr + 28);
+    const device = this.emulator.readMemory32(ioReqAddr + 20);
+
+    console.log(`[ExecLibrary] SendIO(0x${ioReqAddr.toString(16)}) command=${command} device=0x${device.toString(16)}`);
+
+    // In a real system, would dispatch to device driver asynchronously
+    // For BBS emulator, we simulate immediate completion
+
+    // Set io_Error to 0 (success)
+    this.emulator.writeMemory(ioReqAddr + 31, 0);
+
+    // In a real system, would send reply message to port when complete
+    // For now, we just mark as complete
+    console.log(`[ExecLibrary]   SendIO: Stubbed - simulating immediate completion`);
+  }
+
+  /**
+   * CheckIO() - LVO -528 (0xFFFFFDF0)
+   *
+   * Check if an I/O request has completed.
+   *
+   * Parameters:
+   *   A1 = IORequest pointer
+   *
+   * Returns:
+   *   D0 = 0 if still pending, non-zero if completed
+   */
+  checkIO(ioReqAddr: number): number {
+    if (ioReqAddr === 0) {
+      console.log('[ExecLibrary] CheckIO(NULL) - returning completed');
+      return -1; // Consider NULL as completed
+    }
+
+    console.log(`[ExecLibrary] CheckIO(0x${ioReqAddr.toString(16)})`);
+
+    // In our BBS emulator, I/O completes synchronously
+    // So CheckIO always returns "completed"
+    console.log(`[ExecLibrary]   CheckIO: Stubbed - returning completed`);
+    return -1; // Non-zero = completed
+  }
+
+  /**
+   * AddHead() - LVO -258 (P2)
+   *
+   * Add node to head of list.
+   *
+   * Parameters:
+   *   A0 = List pointer
+   *   A1 = Node pointer
+   *
+   * Returns:
+   *   None
+   *
+   * Node structure (14 bytes):
+   *   +0:  ln_Succ (pointer - 4 bytes)
+   *   +4:  ln_Pred (pointer - 4 bytes)
+   *   +8:  ln_Type (byte - 1 byte)
+   *   +9:  ln_Pri (byte - 1 byte)
+   *   +10: ln_Name (pointer - 4 bytes)
+   */
+  addHead(listAddr: number, nodeAddr: number): void {
+    if (listAddr === 0 || nodeAddr === 0) {
+      console.log('[ExecLibrary] AddHead(NULL) - ignoring');
+      return;
+    }
+
+    console.log(`[ExecLibrary] AddHead(list=0x${listAddr.toString(16)}, node=0x${nodeAddr.toString(16)})`);
+
+    // Read current head
+    const oldHead = this.emulator.readMemory32(listAddr + 0); // lh_Head
+
+    // Set node links
+    this.emulator.writeMemory32(nodeAddr + 0, oldHead);      // ln_Succ → old head
+    this.emulator.writeMemory32(nodeAddr + 4, listAddr + 0); // ln_Pred → list head
+
+    // Update old head's predecessor
+    this.emulator.writeMemory32(oldHead + 4, nodeAddr);
+
+    // Update list head
+    this.emulator.writeMemory32(listAddr + 0, nodeAddr);
+
+    console.log(`[ExecLibrary]   Node added to head`);
+  }
+
+  /**
+   * AddTail() - LVO -264 (P2)
+   *
+   * Add node to tail of list.
+   *
+   * Parameters:
+   *   A0 = List pointer
+   *   A1 = Node pointer
+   *
+   * Returns:
+   *   None
+   */
+  addTail(listAddr: number, nodeAddr: number): void {
+    if (listAddr === 0 || nodeAddr === 0) {
+      console.log('[ExecLibrary] AddTail(NULL) - ignoring');
+      return;
+    }
+
+    console.log(`[ExecLibrary] AddTail(list=0x${listAddr.toString(16)}, node=0x${nodeAddr.toString(16)})`);
+
+    // Read current tail predecessor
+    const tailPredAddr = this.emulator.readMemory32(listAddr + 8); // lh_TailPred
+    const tailAddr = listAddr + 4; // lh_Tail
+
+    // Set node links
+    this.emulator.writeMemory32(nodeAddr + 0, tailAddr);      // ln_Succ → tail
+    this.emulator.writeMemory32(nodeAddr + 4, tailPredAddr);  // ln_Pred → old last node
+
+    // Update old last node's successor
+    this.emulator.writeMemory32(tailPredAddr + 0, nodeAddr);
+
+    // Update list tail predecessor
+    this.emulator.writeMemory32(listAddr + 8, nodeAddr);
+
+    console.log(`[ExecLibrary]   Node added to tail`);
+  }
+
+  /**
+   * RemHead() - LVO -234 (P1)
+   *
+   * Remove and return first node from list.
+   *
+   * Parameters:
+   *   A0 = List pointer
+   *
+   * Returns:
+   *   D0 = Node pointer (0 if list empty)
+   */
+  remHead(listAddr: number): number {
+    if (listAddr === 0) {
+      console.log('[ExecLibrary] RemHead(NULL) - returning NULL');
+      return 0;
+    }
+
+    // Read head node
+    const headAddr = this.emulator.readMemory32(listAddr + 0); // lh_Head
+    const tailAddr = listAddr + 4; // lh_Tail
+
+    // Check if list is empty (head points to tail)
+    if (headAddr === tailAddr) {
+      console.log(`[ExecLibrary] RemHead: List empty`);
+      return 0;
+    }
+
+    console.log(`[ExecLibrary] RemHead(list=0x${listAddr.toString(16)}) → node=0x${headAddr.toString(16)}`);
+
+    // Read new head (successor of current head)
+    const newHeadAddr = this.emulator.readMemory32(headAddr + 0); // ln_Succ
+
+    // Update list head
+    this.emulator.writeMemory32(listAddr + 0, newHeadAddr);
+
+    // Update new head's predecessor
+    this.emulator.writeMemory32(newHeadAddr + 4, listAddr + 0);
+
+    console.log(`[ExecLibrary]   Node removed from head`);
+    return headAddr;
+  }
+
+  /**
+   * RemTail() - LVO -240 (P1)
+   *
+   * Remove and return last node from list.
+   *
+   * Parameters:
+   *   A0 = List pointer
+   *
+   * Returns:
+   *   D0 = Node pointer (0 if list empty)
+   */
+  remTail(listAddr: number): number {
+    if (listAddr === 0) {
+      console.log('[ExecLibrary] RemTail(NULL) - returning NULL');
+      return 0;
+    }
+
+    // Read tail predecessor (last node)
+    const tailPredAddr = this.emulator.readMemory32(listAddr + 8); // lh_TailPred
+    const headAddr = listAddr + 0; // lh_Head
+
+    // Check if list is empty (tailPred points to head)
+    if (tailPredAddr === headAddr) {
+      console.log(`[ExecLibrary] RemTail: List empty`);
+      return 0;
+    }
+
+    console.log(`[ExecLibrary] RemTail(list=0x${listAddr.toString(16)}) → node=0x${tailPredAddr.toString(16)}`);
+
+    // Read new tail (predecessor of current tail)
+    const newTailPredAddr = this.emulator.readMemory32(tailPredAddr + 4); // ln_Pred
+
+    // Update list tail predecessor
+    this.emulator.writeMemory32(listAddr + 8, newTailPredAddr);
+
+    // Update new tail's successor
+    const tailAddr = listAddr + 4;
+    this.emulator.writeMemory32(newTailPredAddr + 0, tailAddr);
+
+    console.log(`[ExecLibrary]   Node removed from tail`);
+    return tailPredAddr;
+  }
+
+  /**
+   * Remove() - LVO -246 (P1)
+   *
+   * Remove a node from its list.
+   *
+   * Parameters:
+   *   A1 = Node pointer
+   *
+   * Returns:
+   *   None
+   */
+  remove(nodeAddr: number): void {
+    if (nodeAddr === 0) {
+      console.log('[ExecLibrary] Remove(NULL) - ignoring');
+      return;
+    }
+
+    console.log(`[ExecLibrary] Remove(node=0x${nodeAddr.toString(16)})`);
+
+    // Read node links
+    const succAddr = this.emulator.readMemory32(nodeAddr + 0); // ln_Succ
+    const predAddr = this.emulator.readMemory32(nodeAddr + 4); // ln_Pred
+
+    // Link predecessor to successor
+    this.emulator.writeMemory32(predAddr + 0, succAddr);
+
+    // Link successor to predecessor
+    this.emulator.writeMemory32(succAddr + 4, predAddr);
+
+    console.log(`[ExecLibrary]   Node removed from list`);
+  }
+
+  /**
+   * Insert() - LVO -252 (P1)
+   *
+   * Insert node into list after specified node.
+   *
+   * Parameters:
+   *   A0 = List pointer
+   *   A1 = Node to insert
+   *   A2 = Insert after this node (NULL = insert at head)
+   *
+   * Returns:
+   *   None
+   */
+  insert(listAddr: number, nodeAddr: number, afterAddr: number): void {
+    if (listAddr === 0 || nodeAddr === 0) {
+      console.log('[ExecLibrary] Insert(NULL) - ignoring');
+      return;
+    }
+
+    console.log(`[ExecLibrary] Insert(list=0x${listAddr.toString(16)}, node=0x${nodeAddr.toString(16)}, after=0x${afterAddr.toString(16)})`);
+
+    // If afterAddr is NULL, insert at head
+    if (afterAddr === 0) {
+      this.addHead(listAddr, nodeAddr);
+      return;
+    }
+
+    // Read successor of after node
+    const succAddr = this.emulator.readMemory32(afterAddr + 0); // ln_Succ
+
+    // Set new node links
+    this.emulator.writeMemory32(nodeAddr + 0, succAddr);   // ln_Succ → successor
+    this.emulator.writeMemory32(nodeAddr + 4, afterAddr);  // ln_Pred → after node
+
+    // Update after node's successor
+    this.emulator.writeMemory32(afterAddr + 0, nodeAddr);
+
+    // Update successor's predecessor
+    this.emulator.writeMemory32(succAddr + 4, nodeAddr);
+
+    console.log(`[ExecLibrary]   Node inserted`);
+  }
+
+  /**
+   * Disable() - LVO -162 (P2)
+   *
+   * Disable interrupts.
+   *
+   * Parameters:
+   *   None
+   *
+   * Returns:
+   *   None
+   *
+   * In BBS emulator, this is a no-op.
+   */
+  disable(): void {
+    console.log('[ExecLibrary] Disable() - no-op in emulated environment');
+  }
+
+  /**
+   * Enable() - LVO -168 (P2)
+   *
+   * Enable interrupts.
+   *
+   * Parameters:
+   *   None
+   *
+   * Returns:
+   *   None
+   *
+   * In BBS emulator, this is a no-op.
+   */
+  enable(): void {
+    console.log('[ExecLibrary] Enable() - no-op in emulated environment');
+  }
+
+  /**
+   * AvailMem() - LVO -210 (P1)
+   *
+   * Get available memory.
+   *
+   * Parameters:
+   *   D1 = Requirements (memory flags)
+   *
+   * Returns:
+   *   D0 = Available memory in bytes
+   *
+   * Returns a reasonable amount for BBS operations.
+   */
+  availMem(requirements: number): number {
+    console.log(`[ExecLibrary] AvailMem(requirements=0x${requirements.toString(16)})`);
+
+    // Return 8MB available (plenty for any BBS door)
+    const availableMemory = 8 * 1024 * 1024;
+
+    console.log(`[ExecLibrary]   Returning ${availableMemory} bytes available`);
+    return availableMemory;
+  }
+
+  // ============================================================================
+  // P0 CRITICAL FUNCTIONS
+  // ============================================================================
+
+  /**
+   * CopyMem() - LVO -474 (V36+)
+   *
+   * Fast memory copy (aligned, forward copy)
+   *
+   * Parameters:
+   *   A0 = source address
+   *   A1 = destination address
+   *   D0 = size (bytes)
+   *
+   * Returns:
+   *   None
+   *
+   * P0 function - Critical for memory operations
+   */
+  copyMem(sourceAddr: number, destAddr: number, size: number): void {
+    console.log(`[ExecLibrary] CopyMem(src=0x${sourceAddr.toString(16)}, dest=0x${destAddr.toString(16)}, size=${size})`);
+
+    if (size === 0 || sourceAddr === 0 || destAddr === 0) {
+      console.log(`[ExecLibrary]   Invalid parameters, skipping`);
+      return;
+    }
+
+    // Perform byte-by-byte copy (could be optimized with Buffer.copy if needed)
+    for (let i = 0; i < size; i++) {
+      const byte = this.emulator.readMemory(sourceAddr + i);
+      this.emulator.writeMemory(destAddr + i, byte);
+    }
+
+    console.log(`[ExecLibrary]   Copied ${size} bytes`);
+  }
+
+  /**
+   * CopyMemQuick() - LVO -480 (V36+)
+   *
+   * Quick memory copy (assumes longword aligned, multiple of 4)
+   *
+   * Parameters:
+   *   A0 = source address
+   *   A1 = destination address
+   *   D0 = size (bytes, multiple of 4)
+   *
+   * Returns:
+   *   None
+   *
+   * P0 function - Critical for fast memory operations
+   */
+  copyMemQuick(sourceAddr: number, destAddr: number, size: number): void {
+    console.log(`[ExecLibrary] CopyMemQuick(src=0x${sourceAddr.toString(16)}, dest=0x${destAddr.toString(16)}, size=${size})`);
+
+    if (size === 0 || sourceAddr === 0 || destAddr === 0) {
+      console.log(`[ExecLibrary]   Invalid parameters, skipping`);
+      return;
+    }
+
+    // Quick copy using 32-bit reads/writes
+    const numLongs = size >> 2; // Divide by 4
+    for (let i = 0; i < numLongs; i++) {
+      const longword = this.emulator.readMemory32(sourceAddr + (i * 4));
+      this.emulator.writeMemory32(destAddr + (i * 4), longword);
+    }
+
+    console.log(`[ExecLibrary]   Copied ${numLongs} longwords (${size} bytes)`);
+  }
+
+  /**
+   * AllocVec() - LVO -552 (V36+)
+   *
+   * Allocate memory with automatic size tracking
+   *
+   * Parameters:
+   *   D0 = byteSize (size to allocate)
+   *   D1 = requirements (MEMF_* flags)
+   *
+   * Returns:
+   *   D0 = memory pointer, or 0 for failure
+   *
+   * P0 function - Critical for tracked memory allocation
+   *
+   * Note: AllocVec prepends 4 bytes before the returned pointer to store size,
+   * so FreeVec can free without knowing the size.
+   */
+  allocVec(byteSize: number, requirements: number): number {
+    console.log(`[ExecLibrary] AllocVec(size=${byteSize}, requirements=0x${requirements.toString(16)})`);
+
+    if (byteSize === 0) {
+      console.log(`[ExecLibrary]   Zero size requested, returning NULL`);
+      return 0;
+    }
+
+    // Allocate extra 4 bytes for size header
+    const totalSize = byteSize + 4;
+    const memAddr = this.allocMem(totalSize, requirements);
+
+    if (memAddr === 0) {
+      console.log(`[ExecLibrary]   Allocation failed`);
+      return 0;
+    }
+
+    // Store size in first 4 bytes
+    this.emulator.writeMemory32(memAddr, byteSize);
+
+    // Return pointer after size header
+    const userAddr = memAddr + 4;
+    console.log(`[ExecLibrary]   AllocVec → 0x${userAddr.toString(16)} (${byteSize} bytes)`);
+    return userAddr;
+  }
+
+  /**
+   * FreeVec() - LVO -558 (V36+)
+   *
+   * Free memory allocated by AllocVec()
+   *
+   * Parameters:
+   *   A1 = memoryBlock (pointer returned by AllocVec)
+   *
+   * Returns:
+   *   None
+   *
+   * P0 function - Critical for freeing tracked memory
+   */
+  freeVec(memoryBlock: number): void {
+    if (memoryBlock === 0) {
+      console.log(`[ExecLibrary] FreeVec(NULL) - ignoring`);
+      return;
+    }
+
+    // Read size from 4 bytes before user pointer
+    const headerAddr = memoryBlock - 4;
+    const size = this.emulator.readMemory32(headerAddr);
+
+    console.log(`[ExecLibrary] FreeVec(0x${memoryBlock.toString(16)}) - size=${size}`);
+
+    // Free entire block including header
+    const totalSize = size + 4;
+    this.freeMem(headerAddr, totalSize);
+
+    console.log(`[ExecLibrary]   Freed ${totalSize} bytes`);
   }
 
   /**
@@ -2691,10 +3743,9 @@ export class ExecLibrary {
       return receivedSignals;
     }
 
-    // No signals present - in real Amiga, task would block here
-    // Mark the task as waiting and return 0 to indicate "still waiting"
+    // No signals present - BLOCK the task until signals arrive
     console.log(
-      `[ExecLibrary]   No signals present - task would block on real Amiga`
+      `[ExecLibrary]   No signals present - BLOCKING task execution`
     );
     console.log(
       `[ExecLibrary]   Setting sigWait=0x${mask.toString(
@@ -2704,9 +3755,23 @@ export class ExecLibrary {
 
     this.currentTask.sigWait = mask;
     this.currentTask.state = 2; // TS_WAIT
+    this.currentTask.isWaiting = true;
 
-    console.log("[ExecLibrary]   Returning 0 (no signals yet)");
-    return 0;
+    // PAUSE emulator execution until Signal() resumes us
+    console.log("[ExecLibrary]   *** PAUSING EMULATOR - waiting for signals ***");
+    this.emulator.pause(() => {
+      console.log("[ExecLibrary]   *** RESUMED from Wait() - signals received ***");
+    });
+
+    // When resumed, return the signals that were delivered
+    const deliveredSignals = this.currentTask.sigRecvd & mask;
+    this.currentTask.sigRecvd &= ~deliveredSignals;
+    this.currentTask.sigWait = 0;
+    this.currentTask.state = 0; // TS_READY
+    this.currentTask.isWaiting = false;
+
+    console.log(`[ExecLibrary]   Returning signals: 0x${deliveredSignals.toString(16)}`);
+    return deliveredSignals;
   }
 
   /**
@@ -2722,10 +3787,11 @@ export class ExecLibrary {
    * Returns:
    *   Nothing (void)
    *
-   * This would normally set the signal bits in the task structure
-   * and wake the task if it's blocked in Wait().
-   *
-   * Our stub implementation just logs the operation.
+   * Implementation:
+   * 1. ORs signal bits into task's tc_SigRecvd field
+   * 2. If task is waiting (sigWait != 0), checks for signal match
+   * 3. If match found AND task is blocked, calls emulator.resume() to wake task
+   * 4. Clears sigWait and sets task state to TS_READY
    */
   signal(taskAddr: number, signals: number): void {
     console.log(
@@ -2784,7 +3850,14 @@ export class ExecLibrary {
             16
           )} ***`
         );
-        console.log(`[ExecLibrary]   *** Task should wake from Wait() now ***`);
+        console.log(`[ExecLibrary]   *** RESUMING EMULATOR - waking task from Wait() ***`);
+
+        // Wake the task if it's blocked in Wait()
+        if (this.currentTask.isWaiting) {
+          this.currentTask.isWaiting = false;
+          this.emulator.resume(); // RESUME emulator execution
+        }
+
         this.currentTask.sigWait = 0;
         this.currentTask.state = 0; // TS_READY
       } else {
@@ -2829,70 +3902,6 @@ export class ExecLibrary {
       this.forbidNest--;
     }
     console.log(`[ExecLibrary] Permit() - nest level now: ${this.forbidNest}`);
-  }
-
-  /**
-   * CopyMem - General purpose memory copy
-   * A0 = source address
-   * A1 = dest address
-   * D0 = size (bytes)
-   *
-   * Copies memory from source to dest. Handles arbitrary lengths and alignments.
-   * Does NOT support overlapping copies.
-   */
-  copyMem(source: number, dest: number, size: number): void {
-    console.log(
-      `[ExecLibrary] CopyMem(src=0x${source.toString(
-        16
-      )}, dst=0x${dest.toString(16)}, size=${size})`
-    );
-
-    if (size === 0) {
-      return;
-    }
-
-    // Byte-by-byte copy (simple but works for all alignments)
-    for (let i = 0; i < size; i++) {
-      const byte = this.emulator.readMemory(source + i);
-      this.emulator.writeMemory(dest + i, byte);
-    }
-  }
-
-  /**
-   * CopyMemQuick - Optimized memory copy for aligned data
-   * A0 = source address (must be longword aligned)
-   * A1 = dest address (must be longword aligned)
-   * D0 = size (must be multiple of 4)
-   *
-   * Optimized version that requires longword alignment.
-   * Does NOT support overlapping copies.
-   */
-  copyMemQuick(source: number, dest: number, size: number): void {
-    console.log(
-      `[ExecLibrary] CopyMemQuick(src=0x${source.toString(
-        16
-      )}, dst=0x${dest.toString(16)}, size=${size})`
-    );
-
-    if (size === 0) {
-      return;
-    }
-
-    // Verify alignment
-    if (source % 4 !== 0 || dest % 4 !== 0 || size % 4 !== 0) {
-      console.warn(
-        `[ExecLibrary]   WARNING: CopyMemQuick requires longword alignment!`
-      );
-      // Fall back to byte copy
-      this.copyMem(source, dest, size);
-      return;
-    }
-
-    // Longword copy (4 bytes at a time)
-    for (let i = 0; i < size; i += 4) {
-      const long = this.emulator.readMemory32(source + i);
-      this.emulator.writeMemory32(dest + i, long);
-    }
   }
 
   private registerPublicPort(name: string, portAddr: number): void {
@@ -3187,77 +4196,4 @@ export class ExecLibrary {
     return result;
   }
 
-  /**
-   * AllocVec - Allocate memory and track size (V36+)
-   * D0 = byteSize
-   * D1 = attributes (MEMF_PUBLIC, MEMF_CHIP, MEMF_CLEAR, etc.)
-   * Returns: D0 = memory block address (or 0 on failure)
-   *
-   * Like AllocMem but tracks the size internally so FreeVec doesn't need size.
-   * We store size in a hidden header before the returned pointer.
-   */
-  allocVec(byteSize: number, attributes: number): number {
-    console.log(
-      `[ExecLibrary] AllocVec(size=${byteSize}, attrs=0x${attributes.toString(
-        16
-      )})`
-    );
-
-    if (byteSize === 0) {
-      console.log(`[ExecLibrary]   Zero-size allocation - returning NULL`);
-      return 0;
-    }
-
-    // Allocate extra 4 bytes for size header
-    const totalSize = byteSize + 4;
-    const headerAddr = this.allocMem(totalSize, attributes);
-
-    if (headerAddr === 0) {
-      console.log(`[ExecLibrary]   Allocation failed - out of memory`);
-      return 0;
-    }
-
-    // Write size to header (first 4 bytes)
-    this.emulator.writeMemory32(headerAddr, byteSize);
-
-    // Return pointer after header
-    const userAddr = headerAddr + 4;
-    console.log(
-      `[ExecLibrary]   Allocated at 0x${userAddr.toString(
-        16
-      )} (header at 0x${headerAddr.toString(16)})`
-    );
-
-    return userAddr;
-  }
-
-  /**
-   * FreeVec - Free memory allocated by AllocVec (V36+)
-   * A1 = memory block address (or NULL)
-   *
-   * Frees memory allocated by AllocVec. Size is retrieved from hidden header.
-   * Passing NULL is safe (does nothing).
-   */
-  freeVec(memoryBlock: number): void {
-    console.log(`[ExecLibrary] FreeVec(addr=0x${memoryBlock.toString(16)})`);
-
-    if (memoryBlock === 0) {
-      console.log(`[ExecLibrary]   NULL pointer - nothing to free`);
-      return;
-    }
-
-    // Read size from header (4 bytes before user pointer)
-    const headerAddr = memoryBlock - 4;
-    const size = this.emulator.readMemory32(headerAddr);
-
-    console.log(`[ExecLibrary]   Size from header: ${size} bytes`);
-
-    // Free including header
-    const totalSize = size + 4;
-    this.freeMem(headerAddr, totalSize);
-
-    console.log(
-      `[ExecLibrary]   Freed ${totalSize} bytes at 0x${headerAddr.toString(16)}`
-    );
-  }
 }

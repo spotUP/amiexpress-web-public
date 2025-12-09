@@ -114,7 +114,7 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   console.log('  - timeRemaining:', session.timeRemaining);
 
   // Process queued OLM messages before showing prompt - express.e:1464-1473
-  const { processOlmQueue } = require('../olm.handler');
+  const { processOlmQueue } = require('../transfer/olm.handler');
   if (processOlmQueue) {
     processOlmQueue(socket, session);
   }

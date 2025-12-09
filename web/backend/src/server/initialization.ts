@@ -405,7 +405,7 @@ export async function initializeData() {
 
     // Inject dependencies into preference/chat commands handler
     setPreferenceChatCommandsDependencies({
-      startSysopPage: require('../handlers/chat.handler').startSysopPage,
+      startSysopPage: require('../handlers/chat/chat.handler').startSysopPage,
       db
     });
 

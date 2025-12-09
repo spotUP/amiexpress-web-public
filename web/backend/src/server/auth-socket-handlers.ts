@@ -534,7 +534,7 @@ export function registerAuthHandlers(socket: Socket) {
         session.tempData = { newUsername: safeUsername };
 
         // Import and call new user handler
-        const { startNewUserRegistration } = require('../handlers/new-user.handler');
+        const { startNewUserRegistration } = require('../handlers/user/new-user.handler');
         await startNewUserRegistration(socket, session, safeUsername);
       } else {
         // express.e:29622 - Retry login increments retry counter

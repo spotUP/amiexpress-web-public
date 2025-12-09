@@ -46,6 +46,21 @@ export class FileManager {
   /** Callback to emit debug messages to sysop terminal */
   private debugCallback?: DoorDebugCallback;
 
+  /** Last error code (AmigaDOS ERROR_* constant) */
+  private lastErrorCode: number = 0;
+
+  // AmigaDOS error constants (match DosLibrary.ts)
+  private readonly ERROR_NO_ERROR = 0;
+  private readonly ERROR_OBJECT_NOT_FOUND = 205;
+  private readonly ERROR_OBJECT_WRONG_TYPE = 212;
+  private readonly ERROR_WRITE_PROTECTED = 214;
+  private readonly ERROR_READ_PROTECTED = 216;
+  private readonly ERROR_DISK_FULL = 221;
+  private readonly ERROR_NO_FREE_STORE = 103;
+  private readonly ERROR_SEEK_ERROR = 219;
+  private readonly ERROR_OBJECT_IN_USE = 202;
+  private readonly ERROR_INVALID_LOCK = 211;
+
   constructor(baseDir: string, pathManager: PathManager, fileCache?: AmigaFileCache) {
     this.baseDir = baseDir;
     this.pathManager = pathManager;
@@ -63,6 +78,54 @@ export class FileManager {
   private emitDebug(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {
     if (this.debugCallback) {
       this.debugCallback(message, level);
+    }
+  }
+
+  /**
+   * Get last error code and optionally clear it
+   * @param clear - Whether to clear error after reading
+   * @returns AmigaDOS ERROR_* code
+   */
+  getLastError(clear: boolean = false): number {
+    const error = this.lastErrorCode;
+    if (clear) {
+      this.lastErrorCode = this.ERROR_NO_ERROR;
+    }
+    return error;
+  }
+
+  /**
+   * Map Node.js error code to AmigaDOS ERROR_* constant
+   * @param err - Node.js error object
+   * @returns AmigaDOS error code
+   */
+  private mapNodeErrorToAmigaDOS(err: any): number {
+    if (!err || !err.code) {
+      return this.ERROR_NO_ERROR;
+    }
+
+    switch (err.code) {
+      case 'ENOENT': // File not found
+        return this.ERROR_OBJECT_NOT_FOUND;
+      case 'EACCES': // Permission denied
+        return this.ERROR_WRITE_PROTECTED;
+      case 'ENOTDIR': // Not a directory
+        return this.ERROR_OBJECT_WRONG_TYPE;
+      case 'EISDIR': // Is a directory
+        return this.ERROR_OBJECT_WRONG_TYPE;
+      case 'ENOSPC': // No space left on device
+        return this.ERROR_DISK_FULL;
+      case 'ENOMEM': // Out of memory
+        return this.ERROR_NO_FREE_STORE;
+      case 'EPERM': // Operation not permitted
+        return this.ERROR_WRITE_PROTECTED;
+      case 'EROFS': // Read-only file system
+        return this.ERROR_WRITE_PROTECTED;
+      case 'EEXIST': // File exists
+        return this.ERROR_OBJECT_IN_USE;
+      default:
+        console.warn(`[FileManager] Unmapped Node.js error: ${err.code}`);
+        return this.ERROR_NO_ERROR;
     }
   }
 
@@ -164,6 +227,7 @@ export class FileManager {
       console.error(`[FileManager] Failed to resolve path: "${amiPath}"`);
       logToFile(`Resolve failed for "${amiPath}"`);
       this.emitDebug(`[68K] Path resolve failed: "${amiPath}"`, 'error');
+      this.lastErrorCode = this.ERROR_OBJECT_NOT_FOUND;
       return 0; // Failed
     }
 
@@ -189,6 +253,7 @@ export class FileManager {
       fileMode = 'rw'; // MODE_READWRITE - read/write
     } else {
       console.error(`[FileManager] Unknown mode: ${mode}`);
+      this.lastErrorCode = this.ERROR_OBJECT_WRONG_TYPE;
       return 0; // Failed
     }
 
@@ -197,6 +262,7 @@ export class FileManager {
       const cached = this.fileCache.load(amiPath, this.currentDirSysPath);
       if (cached && cached.isDirectory) {
         console.error(`[FileManager] "${amiPath}" points to directory, cannot open as file`);
+        this.lastErrorCode = this.ERROR_OBJECT_WRONG_TYPE;
         return 0;
       }
       if (cached && cached.data) {
@@ -218,6 +284,14 @@ export class FileManager {
     if (!fh.open(fileMode)) {
       console.error(`[FileManager] Failed to open file: ${sysPath}`);
       logToFile(`Failed to open "${sysPath}"`);
+      // Map file system error if available
+      const fsError = (fh as any).lastError; // FileHandle may store error
+      if (fsError) {
+        this.lastErrorCode = this.mapNodeErrorToAmigaDOS(fsError);
+      } else {
+        // Default to NOT_FOUND for read, WRITE_PROTECTED for write
+        this.lastErrorCode = fileMode === 'r' ? this.ERROR_OBJECT_NOT_FOUND : this.ERROR_WRITE_PROTECTED;
+      }
       return 0; // Failed
     }
 
@@ -227,6 +301,7 @@ export class FileManager {
     this.handles.set(bptr, fh);
 
     console.log(`[FileManager] Opened file: ${fh.toString()}`);
+    this.lastErrorCode = this.ERROR_NO_ERROR; // Success
     return bptr;
   }
 

@@ -238,7 +238,7 @@ export class FileListingHandler {
         }
       }
 
-      socket.emit('ansi-output', '\r\n');
+      // Pause after directory listing (no extra blank line - flagPause adds one)
       const shouldContinue4 = await flagPause(socket, session, 1);
       if (!shouldContinue4) {
         session.subState = LoggedOnSubState.DISPLAY_MENU;

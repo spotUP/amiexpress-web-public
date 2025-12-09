@@ -526,13 +526,13 @@ function registerDisconnectHandler(socket: Socket) {
 
     // Handle internode chat cleanup if user was in chat
     if (session.subState === LoggedOnSubState.CHAT) {
-      const { handleChatDisconnect } = require('../handlers/internode-chat.handler');
+      const { handleChatDisconnect } = require('../handlers/chat/internode-chat.handler');
       await handleChatDisconnect(socket, session);
     }
 
     // Handle group chat room cleanup if user was in a room
     if (session.subState === LoggedOnSubState.CHAT_ROOM) {
-      const { handleRoomDisconnect } = require('../handlers/group-chat.handler');
+      const { handleRoomDisconnect } = require('../handlers/chat/group-chat.handler');
       await handleRoomDisconnect(socket, session);
     }
 

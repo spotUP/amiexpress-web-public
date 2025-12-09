@@ -172,7 +172,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25503
-      const { handleOlmCommand: handleOlm } = require('../olm.handler');
+      const { handleOlmCommand: handleOlm } = require('../transfer/olm.handler');
       await handleOlm(socket, session, params);
       return;
 
@@ -193,7 +193,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'Q': // Quiet Mode / Block OLM (internalCommandQ) - express.e:25505-25515
-      const { handleQuietCommand } = require('../olm.handler');
+      const { handleQuietCommand } = require('../transfer/olm.handler');
       await handleQuietCommand(socket, session);
       return;
 
