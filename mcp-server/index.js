@@ -58,12 +58,7 @@ const DOC_INDEX = {
 const USER_DOCS = {
   'user-guide': {
     path: path.join(PROJECT_ROOT, 'Documentation', '1-Users', 'USER_GUIDE.md'),
-    description: 'Complete user guide for using the BBS',
-    mimeType: 'text/markdown'
-  },
-  'importing': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '1-Users', 'IMPORTING.md'),
-    description: 'Import from classic Amiga BBS guide (507 lines)',
+    description: 'Complete user guide for using the BBS (includes import guide)',
     mimeType: 'text/markdown'
   }
 };
@@ -95,19 +90,9 @@ const SYSOP_DOCS = {
     description: 'Common issues and solutions',
     mimeType: 'text/markdown'
   },
-  'quick-start': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'QUICK_START.md'),
-    description: 'Quick start guide for getting BBS running (632 lines)',
-    mimeType: 'text/markdown'
-  },
-  'deployment-scripts': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'DEPLOYMENT_SCRIPTS.md'),
-    description: 'Deployment scripts documentation (743 lines)',
-    mimeType: 'text/markdown'
-  },
-  'webhooks': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'WEBHOOKS.md'),
-    description: 'Webhook configuration guide (501 lines)',
+  'sysop-guide': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'SYSOP_GUIDE.md'),
+    description: 'Sysop guide for getting BBS running (was QUICK_START.md)',
     mimeType: 'text/markdown'
   }
 };
@@ -144,11 +129,6 @@ const DEVELOPER_DOCS = {
     description: 'Contribution guidelines',
     mimeType: 'text/markdown'
   },
-  'testing-guide-full': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'TESTING_GUIDE.md'),
-    description: 'Full BBS testing guide (634 lines)',
-    mimeType: 'text/markdown'
-  },
   'multinode-chat': {
     path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'MULTINODE_CHAT.md'),
     description: 'Multi-node chat system architecture (692 lines)',
@@ -182,11 +162,6 @@ const DEVELOPER_DOCS = {
   'telnet-ssh-servers': {
     path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'TELNET_SSH_SERVERS.md'),
     description: 'Telnet and SSH server implementation (296 lines)',
-    mimeType: 'text/markdown'
-  },
-  'amigafs-migration': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'AMIGAFS_MIGRATION.md'),
-    description: 'AmigaFS case-insensitive file system migration guide',
     mimeType: 'text/markdown'
   },
   'sdk-summary': {
@@ -229,7 +204,7 @@ const DOOR_DOCS = {
     mimeType: 'text/markdown'
   },
   'amiga-emulation': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'AMIGA_EMULATION.md'),
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'AMIGA_EMULATION.md'),
     description: 'AmigaOS emulation details',
     mimeType: 'text/markdown'
   },
@@ -263,31 +238,11 @@ const DOOR_DOCS = {
     description: 'Amiga BBS import/export implementation (780 lines)',
     mimeType: 'text/markdown'
   },
-  'door-sources-analysis': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_SOURCES_ANALYSIS.md'),
-    description: 'AmiExpress door sources analysis (1069 lines)',
-    mimeType: 'text/markdown'
-  },
-  'door-research': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_RESEARCH.md'),
-    description: 'Amiga door research and findings (905 lines)',
-    mimeType: 'text/markdown'
-  },
-  'ported-doors-catalog': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'PORTED_DOORS_CATALOG.md'),
-    description: 'Catalog of ported E doors (729 lines)',
-    mimeType: 'text/markdown'
-  },
   'door-manager': {
     path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_MANAGER.md'),
     description: 'Door management system (493 lines)',
     mimeType: 'text/markdown'
   },
-  'config-app': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'CONFIG_APP.md'),
-    description: 'Web configuration app design (2264 lines)',
-    mimeType: 'text/markdown'
-  }
 };
 
 // Reference documentation
@@ -317,11 +272,6 @@ const REFERENCE_DOCS = {
     description: 'Project file structure',
     mimeType: 'text/markdown'
   },
-  'main-menu': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '5-Reference', 'MAIN_MENU.md'),
-    description: 'AmiExpress main menu documentation (720 lines)',
-    mimeType: 'text/markdown'
-  }
 };
 
 // Progress and status documentation
@@ -331,24 +281,9 @@ const PROGRESS_DOCS = {
     description: 'Current project status: what works, what\'s in progress, known issues',
     mimeType: 'text/markdown'
   },
-  'milestones': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'MILESTONES.md'),
-    description: 'Major project milestones achieved',
-    mimeType: 'text/markdown'
-  },
   'known-issues': {
     path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'KNOWN_ISSUES.md'),
     description: 'Known bugs and workarounds',
-    mimeType: 'text/markdown'
-  },
-  'masterplan': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'MASTERPLAN.md'),
-    description: 'Overall project master plan',
-    mimeType: 'text/markdown'
-  },
-  'implementation-roadmap': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'IMPLEMENTATION_ROADMAP.md'),
-    description: 'Complete feature implementation roadmap (1043 lines)',
     mimeType: 'text/markdown'
   },
   'progress-history': {
@@ -384,34 +319,84 @@ const REFERENCE_SOURCES = {
     path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'disasm', 'GetAnswer_notes.md'),
     description: 'GetAnswer door disassembly notes (48 lines)',
     mimeType: 'text/markdown'
+  },
+  'testing-guide': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'TESTING_GUIDE.md'),
+    description: 'Full BBS testing guide (archived)',
+    mimeType: 'text/markdown'
+  },
+  'deployment-scripts': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'DEPLOYMENT_SCRIPTS.md'),
+    description: 'Deployment scripts documentation (archived)',
+    mimeType: 'text/markdown'
+  },
+  'webhooks': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'WEBHOOKS.md'),
+    description: 'Webhook configuration guide (archived)',
+    mimeType: 'text/markdown'
+  },
+  'ported-doors-catalog': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'PORTED_DOORS_CATALOG.md'),
+    description: 'Catalog of ported E doors (archived)',
+    mimeType: 'text/markdown'
+  },
+  'main-menu': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'MAIN_MENU.md'),
+    description: 'AmiExpress main menu documentation (archived)',
+    mimeType: 'text/markdown'
+  },
+  'milestones': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'MILESTONES.md'),
+    description: 'Major project milestones (archived)',
+    mimeType: 'text/markdown'
+  },
+  'masterplan': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'MASTERPLAN.md'),
+    description: 'Overall project master plan (archived)',
+    mimeType: 'text/markdown'
+  },
+  'implementation-roadmap': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'IMPLEMENTATION_ROADMAP.md'),
+    description: 'Complete feature implementation roadmap (archived)',
+    mimeType: 'text/markdown'
+  },
+  'door-sources-analysis': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'research', 'DOOR_SOURCES_ANALYSIS.md'),
+    description: 'AmiExpress door sources analysis (archived)',
+    mimeType: 'text/markdown'
+  },
+  'door-research': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'research', 'DOOR_RESEARCH.md'),
+    description: 'Amiga door research and findings (archived)',
+    mimeType: 'text/markdown'
   }
 };
 
 // AmiExpress source files (loaded on-demand only)
 const SOURCES = {
   'express-e': {
-    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'express.e'),
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'express.e'),
     description: 'Original AmiExpress BBS source code in E language (35,000+ lines) - PRIMARY REFERENCE',
     mimeType: 'text/plain',
     moduleMap: path.join(__dirname, 'express-modules.json')
   },
   'hydra-e': {
-    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'hydra.e'),
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'hydra.e'),
     description: 'Hydra protocol implementation in E language (file transfer)',
     mimeType: 'text/plain'
   },
   'acp-e': {
-    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'ACP.e'),
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'ACP.e'),
     description: 'AmiExpress Control Panel source code (configuration tool)',
     mimeType: 'text/plain'
   },
   'zmodem-e': {
-    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'zmodem.e'),
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'zmodem.e'),
     description: 'ZModem protocol implementation in E language (file transfer)',
     mimeType: 'text/plain'
   },
   'ftpd-e': {
-    path: path.join(PROJECT_ROOT, 'AmiExpress-Sources', 'ftpd.e'),
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'ftpd.e'),
     description: 'FTP daemon implementation in E language',
     mimeType: 'text/plain'
   }
