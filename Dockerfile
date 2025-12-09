@@ -2,52 +2,84 @@
 # Multi-stage build for production-ready BBS container
 
 # ============================================================================
-# Stage 1: Build Frontend
+# Stage 1: Build Frontend (BBS Terminal)
 # ============================================================================
 FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/web/frontend
 
-# Copy frontend package files
 COPY web/frontend/package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy frontend source
 COPY web/frontend ./
-
-# Build frontend
 RUN npm run build
 
 # ============================================================================
-# Stage 2: Build Backend
+# Stage 2: Build Config App (Admin UI)
+# ============================================================================
+FROM node:18-alpine AS config-builder
+
+WORKDIR /app/web/config-app
+
+COPY web/config-app/package*.json ./
+RUN npm ci
+
+COPY web/config-app ./
+RUN npm run build
+
+# ============================================================================
+# Stage 3: Build SDK Preview
+# ============================================================================
+FROM node:18-alpine AS sdk-builder
+
+WORKDIR /app/sdk
+
+COPY sdk/package*.json ./
+RUN npm ci
+
+COPY sdk ./
+RUN npm run build
+
+# Build SDK preview frontend
+WORKDIR /app/sdk/tools/preview/frontend
+COPY sdk/tools/preview/frontend/package*.json ./
+RUN npm ci
+
+COPY sdk/tools/preview/frontend ./
+RUN npm run build
+
+# ============================================================================
+# Stage 4: Build Terminal Package
+# ============================================================================
+FROM node:18-alpine AS terminal-builder
+
+WORKDIR /app/packages/terminal
+
+COPY packages/terminal/package*.json ./
+RUN npm ci
+
+COPY packages/terminal ./
+RUN npm run build
+
+# ============================================================================
+# Stage 5: Build Backend
 # ============================================================================
 FROM node:18-alpine AS backend-builder
 
 WORKDIR /app/web/backend
 
-# Copy backend package files
 COPY web/backend/package*.json ./
-
-# Install ALL dependencies (including devDependencies for build)
 RUN npm ci
 
-# Copy backend source
 COPY web/backend ./
-
-# Build backend (TypeScript compilation)
 RUN npm run build
 
 # ============================================================================
-# Stage 3: Production Image
+# Stage 6: Production Image
 # ============================================================================
 FROM node:18-alpine
 
 # Install system dependencies
-# - python3: For Python doors
-# - sqlite: For database
-# - bash: For scripts
 RUN apk add --no-cache \
     python3 \
     py3-pip \
@@ -62,23 +94,22 @@ RUN addgroup -g 1001 bbsuser && \
 # Set working directory
 WORKDIR /app
 
-# Copy backend production dependencies only
+# Copy backend production dependencies
 COPY --from=backend-builder /app/web/backend/package*.json ./web/backend/
 WORKDIR /app/web/backend
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy built backend from builder
-COPY --from=backend-builder /app/web/backend/dist ./dist
-
-# Copy built frontend from builder
+# Copy all built artifacts
 WORKDIR /app
+COPY --from=backend-builder /app/web/backend/dist ./web/backend/dist
 COPY --from=frontend-builder /app/web/frontend/dist ./web/frontend/dist
+COPY --from=config-builder /app/web/config-app/dist ./web/config-app/dist
+COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
+COPY --from=sdk-builder /app/sdk/tools/preview/frontend/dist ./sdk/tools/preview/frontend/dist
+COPY --from=terminal-builder /app/packages/terminal/dist ./packages/terminal/dist
 
-# Copy necessary runtime files
-COPY package*.json ./
+# Copy runtime source files (needed for non-compiled parts)
 COPY web/backend/src ./web/backend/src
-COPY web/config-app/dist ./web/config-app/dist
-COPY sdk ./sdk
 
 # Create BBS data directories
 RUN mkdir -p \
@@ -90,38 +121,48 @@ RUN mkdir -p \
     /app/Screens \
     /app/Bulletins \
     /app/Users \
-    /app/db
+    /app/db \
+    /app/Conf1 /app/Conf2 /app/Conf3 /app/Conf4 /app/Conf5 \
+    /app/Conf6 /app/Conf7 /app/Conf8 /app/Conf9 /app/Conf10 \
+    /app/Conf11 /app/Conf12 /app/Conf13
 
-# Copy default BBS data (screens, commands, etc.)
-COPY Screens ./Screens
-COPY Commands ./Commands
-COPY Bulletins ./Bulletins
-COPY Conf*.info ./
-COPY Conf* ./
+# Copy default BBS data files
+COPY Screens /app/Screens
+COPY Bulletins /app/Bulletins
+COPY Commands /app/Commands
+COPY Conf1 /app/Conf1
+COPY Conf2 /app/Conf2
+COPY Conf3 /app/Conf3
+COPY Conf4 /app/Conf4
+COPY Conf5 /app/Conf5
+COPY Conf6 /app/Conf6
+COPY Conf7 /app/Conf7
+COPY Conf8 /app/Conf8
+COPY Conf9 /app/Conf9
+COPY Conf10 /app/Conf10
+COPY Conf11 /app/Conf11
+COPY Conf12 /app/Conf12
+COPY Conf13 /app/Conf13
 
-# Set ownership to bbsuser
+# Set permissions
 RUN chown -R bbsuser:bbsuser /app
 
 # Switch to non-root user
 USER bbsuser
 
-# Environment variables (can be overridden)
-ENV NODE_ENV=production \
-    PORT=3001 \
-    DATABASE_DIR=/app/db \
-    BBS_DATA_DIR=/app/data/bbs \
-    ROM_DIR=/app/data/amiga-roms
-
 # Expose ports
-# 3001: HTTP/WebSocket (main BBS interface)
+# 3001: HTTP/WebSocket (BBS + Admin + SDK)
 # 2323: Telnet
 # 2222: SSH
-# 8080: SDK Preview (optional)
+# 8080: SDK backend API
 EXPOSE 3001 2323 2222 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:3001/ || exit 1
 
-# Start command
-CMD ["node", "/app/web/backend/dist/src/index.js"]
+# Set working directory to backend
+WORKDIR /app/web/backend
+
+# Start the BBS server
+CMD ["node", "dist/src/index.js"]
