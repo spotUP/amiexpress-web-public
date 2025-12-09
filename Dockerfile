@@ -75,7 +75,8 @@ FROM node:18-alpine AS backend-builder
 WORKDIR /app/web/backend
 
 COPY web/backend/package*.json ./
-RUN npm ci
+# Skip postinstall script (web assets built in separate stages)
+RUN SKIP_WEB_ASSET_BUILD=1 npm ci
 
 COPY web/backend ./
 RUN npm run build
