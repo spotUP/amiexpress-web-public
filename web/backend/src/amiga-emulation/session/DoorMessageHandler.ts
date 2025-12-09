@@ -539,7 +539,7 @@ export class DoorMessageHandler {
     // System and misc commands
     const GETKEY = 500;
     const RAWARROW = 501;
-    const EXPRESS_VERSION = 502;
+    const EXPRESS_VERSION = 152; // FIXED: Was 502, should be 152 per types.ts
     const ACTIVE_NODES = 503;
     const ENVSTAT = 504;
     const SV_NEWMSG = 505;
@@ -668,6 +668,17 @@ export class DoorMessageHandler {
           smOutput += "\r\n";
         }
         this.socket.emit("ansi-output", smOutput);
+        break;
+
+      case JH_ExtHK:
+        // express.e:3432-3435: Extended HotKey - readChar with signal handling
+        // lineCount:=0
+        // msg.command:=readChar(doorTimeout,Shl(1,msg.signal))
+        // IF (msg.command<0) THEN msg.data:=-1 ELSE msg.data:=1
+        console.log(`[DoorMessageHandler]   JH_ExtHK: Extended hotkey (non-blocking)`);
+        // For now, just acknowledge with no key available
+        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, 0);
+        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
         break;
 
       case JH_PM:
@@ -1133,10 +1144,14 @@ export class DoorMessageHandler {
         break;
 
       case DT_LINELENGTH:
-        // express.e:3653-3660: Get/Set line length (userLineLen)
+        // express.e:3653-3660: Get/Set line length (userLineLen = screen HEIGHT in lines)
+        // Note: "lineLength" is misleading - this is SCREEN HEIGHT not character width
         console.log(`[DoorMessageHandler]   DT_LINELENGTH: data=${data}`);
         if (data) {
-          const lineLen = this.config.bbsSession?.user?.linesPerScreen || 24;
+          const lineLen = this.config.bbsSession?.pauseLines ||
+                          this.config.bbsSession?.user?.linesPerScreen ||
+                          (this.config.bbsSession as any)?.user?.pageLength ||
+                          24;
           this.writeStringToMessage(msgAddr, String(lineLen));
         } else {
           // Set line length from string
@@ -1240,10 +1255,11 @@ export class DoorMessageHandler {
 
       case BB_CONFLOCAL:
         // express.e:3701-3707: Get/Set conference location (directory)
-        // Returns Amiga-style path like "BBS:Conf2/" - door expects this format for Dir1 access
+        // Returns currentConfDir which is the full Amiga-style path with assign
+        // Real express.e uses paths like "BBS:Conf1/" or relative like "255/"
         console.log(`[DoorMessageHandler]   BB_CONFLOCAL: data=${data}`);
         if (data) {
-          // Get current conference directory from currentConf number
+          // Get current conference directory with BBS: assign and trailing slash
           const confNum = (this.config.bbsSession as any)?.currentConf || 1;
           const confDir = `BBS:Conf${confNum}/`;
           console.log(`[DoorMessageHandler]   BB_CONFLOCAL returning: "${confDir}" (from currentConf=${confNum})`);
@@ -1287,9 +1303,10 @@ export class DoorMessageHandler {
         break;
 
       case BB_MAINLINE:
-        // express.e:3794-3800: Main command line
-        console.log(`[DoorMessageHandler]   BB_MAINLINE`);
-        this.writeStringToMessage(msgAddr, "");
+        // express.e:3794-3800: Main command line (BBS version string)
+        // Real AmiExpress returns version like "v5.3" - doors check this for compatibility
+        console.log(`[DoorMessageHandler]   BB_MAINLINE: Returning BBS version`);
+        this.writeStringToMessage(msgAddr, "v5.3");
         break;
 
       case BB_NODEID:
@@ -1326,9 +1343,14 @@ export class DoorMessageHandler {
 
       // System commands
       case EXPRESS_VERSION:
-        // express.e:3808-3810: Express version
+        // express.e:3808-3810: Express version (getExpressMajorVer)
+        // Returns mimicVersion if set, otherwise formatted version string
+        // AquaScan expects "FR" for FidoNet Read mode compatibility
         console.log(`[DoorMessageHandler]   EXPRESS_VERSION`);
-        this.writeStringToMessage(msgAddr, "v4.0");
+        this.writeStringToMessage(msgAddr, "FR");
+        // Set data=1 for success (FIXED: use DoorConstants.MESSAGE_DATA_OFFSET, not hardcoded 24)
+        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
+        console.log(`[DoorMessageHandler]   EXPRESS_VERSION: Written "FR" to string, data=1`);
         break;
 
       case RAWARROW:
@@ -1540,9 +1562,16 @@ export class DoorMessageHandler {
         break;
 
       case BB_SCRHEIGHT:
-        // express.e:3867-3868: Screen height (24 rows standard)
-        console.log(`[DoorMessageHandler]   BB_SCRHEIGHT: 24`);
-        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 24);
+        // express.e:3867-3868: msg.data:=screen.height
+        // Return user's configured screen height (lines per screen)
+        {
+          const screenHeight = this.config.bbsSession?.pauseLines ||
+                               (this.config.bbsSession as any)?.user?.linesPerScreen ||
+                               (this.config.bbsSession as any)?.user?.pageLength ||
+                               24;
+          console.log(`[DoorMessageHandler]   BB_SCRHEIGHT: ${screenHeight}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, screenHeight);
+        }
         break;
 
       case GET_CUSTOM_MSGBASE_MENUCMD:
@@ -1943,12 +1972,13 @@ export class DoorMessageHandler {
    * Write a string to the message string field
    */
   private writeStringToMessage(msgAddr: number, str: string): void {
-    // Write string to offset 28 (after Message header + command + data)
+    // FIXED: Use DoorConstants.MESSAGE_STRING_OFFSET (20), not hardcoded 28
+    const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
     for (let i = 0; i < str.length && i < 200; i++) {
-      this.emulator.writeMemory(msgAddr + 28 + i, str.charCodeAt(i));
+      this.emulator.writeMemory(stringAddr + i, str.charCodeAt(i));
     }
     // Null terminate
-    this.emulator.writeMemory(msgAddr + 28 + str.length, 0);
+    this.emulator.writeMemory(stringAddr + str.length, 0);
   }
 
   /**

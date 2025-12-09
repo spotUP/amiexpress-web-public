@@ -285,8 +285,13 @@ export class XIMBBSInfoHandler {
         break;
 
       case XIMCommand.BB_SCRHEIGHT:
-        value = 24;
-        console.log('  BB_SCRHEIGHT: 24');
+        // express.e:3867-3868: msg.data:=screen.height
+        // Return user's configured screen height (lines per screen)
+        value = this.state.pauseLines ||
+                (this.bbsSession as any)?.user?.linesPerScreen ||
+                (this.bbsSession as any)?.user?.pageLength ||
+                24;
+        console.log(`  BB_SCRHEIGHT: ${value}`);
         break;
 
       case XIMCommand.BB_SCRLEFT:
@@ -414,7 +419,10 @@ export class XIMBBSInfoHandler {
   handleMainLine(msg: XIMMessage): void {
     console.log('[XIMBBSInfo] BB_MAINLINE - Get main command line');
 
-    const mainLine = this.bbsSession?.currentCommand || '';
+    // express.e:3794-3800: Returns BBS version string for door compatibility checks
+    // Real AmiExpress returns version like "v5.3", "v5.6", etc.
+    // Doors check this to verify they're running on compatible BBS version
+    const mainLine = 'v5.3';
     this.messageParser.writeMessageString(msg.msgAddr, mainLine);
     console.log(`  Command line: "${mainLine}"`);
 

@@ -759,24 +759,37 @@ class AmiExpressDocsServer {
 
   async handleSearchNDK(args) {
     const { query, library = null } = args;
-    const ndkPath = path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'NDK_3.2R4_Autodocs');
 
-    try {
-      await fs.access(ndkPath);
-    } catch {
-      return {
-        content: [{
-          type: 'text',
-          text: 'NDK Autodocs not found. Please ensure NDK_3.2R4_Autodocs is in Documentation/7-Reference Sources/'
-        }]
-      };
-    }
-
-    // Search implementation here
+    // NDK Autodocs are not currently available in the repository
+    // Users should refer to external AmigaOS documentation or amitools reference
     return {
       content: [{
         type: 'text',
-        text: `Searching NDK Autodocs for "${query}"${library ? ` in library ${library}` : ''}...`
+        text: `NDK Autodocs are not available in this repository.
+
+For AmigaOS library function documentation, please use:
+1. amitools reference at Documentation/7-Reference Sources/amitools/
+2. External AmigaOS NDK documentation
+3. Online resources: amigadev.elowar.com or wiki.amigaos.net
+
+Query: "${query}"${library ? ` (library: ${library})` : ''}
+
+Common dos.library offsets:
+  -30: Open
+  -36: Close
+  -42: Read
+  -48: Write
+  -60: Seek
+  -96: DupLock
+  -102: Examine
+  -108: ExNext
+  -114: Info
+  -120: CreateDir
+  -126: CurrentDir
+  -132: IoErr
+  -138: CreateProc
+  -150: Lock
+  -156: UnLock`
       }]
     };
   }
@@ -805,9 +818,10 @@ class AmiExpressDocsServer {
   async handleSearchExpressSource(args) {
     const { query, context = 3 } = args;
     const expressPath = SOURCES['express-e'].path;
-    const content = await fs.readFile(expressPath, 'utf-8');
-    const lines = content.split('\n');
-    const results = [];
+    try {
+      const content = await fs.readFile(expressPath, 'utf-8');
+      const lines = content.split('\n');
+      const results = [];
 
     lines.forEach((line, index) => {
       if (line.includes(query)) {
@@ -823,12 +837,15 @@ class AmiExpressDocsServer {
       }
     });
 
-    return {
-      content: [{
-        type: 'text',
-        text: `Found ${results.length} matches:\n\n${results.slice(0, 20).map(r => r.context).join('\n\n---\n\n')}`
-      }]
-    };
+      return {
+        content: [{
+          type: 'text',
+          text: `Found ${results.length} matches:\n\n${results.slice(0, 20).map(r => r.context).join('\n\n---\n\n')}`
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to search express.e: ${error.message} (path: ${expressPath})`);
+    }
   }
 
   async handleReadExpressModule(args) {

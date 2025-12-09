@@ -249,17 +249,23 @@ export class XIMDataQueryHandler {
         break;
 
       case XIMCommand.DT_LINELENGTH:
+        // express.e:3653-3660: userLineLen = screen HEIGHT in lines (NOT character width)
+        // This controls pagination ("More?" prompts)
         if (isRead) {
-          const lineLen = (this.state as any).userLineLen || user?.lineLength || user?.lineLen || 80;
+          const lineLen = this.state.pauseLines ||
+                          (this.bbsSession as any)?.pauseLines ||
+                          user?.linesPerScreen ||
+                          (user as any)?.pageLength ||
+                          24;
           this.messageParser.writeString(stringAddr, lineLen.toString(), 200);
-          console.log(`  [READ] DT_LINELENGTH: ${lineLen}`);
+          console.log(`  [READ] DT_LINELENGTH: ${lineLen} (screen height in lines)`);
         } else {
           const newLen = parseInt(this.messageParser.readString(stringAddr, 200));
           if (user) {
-            (user as any).lineLen = newLen;
-            (user as any).lineLength = newLen;
+            user.linesPerScreen = newLen;
+            (user as any).pageLength = newLen;
           }
-          (this.state as any).userLineLen = Number.isFinite(newLen) ? newLen : (this.state as any).userLineLen;
+          this.state.pauseLines = Number.isFinite(newLen) ? newLen : this.state.pauseLines;
           console.log(`  [WRITE] DT_LINELENGTH: ${newLen}`);
         }
         break;

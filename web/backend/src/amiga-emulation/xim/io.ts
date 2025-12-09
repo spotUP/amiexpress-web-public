@@ -291,14 +291,47 @@ export class XIMIOHandler {
   handleSendMessage(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
 
-    // Don't add newline for:
-    // 1. Messages that are only ANSI color codes (prevents blank lines)
-    // 2. Messages ending with ": " or ":" followed by ANSI codes (keeps label+value on same line)
+    // express.e:3406-3411: IF msg.data THEN aePuts('\b\n')
+    // Trust msg.data, but override for lines that are CLEARLY not prompts
     const isOnlyAnsiCodes = /^\x1b\[[0-9;]*m$/.test(text);
-    const endsWithColonAndAnsi = /:\s*(\x1b\[[0-9;]*m)*\s*$/.test(text);
-    const shouldAddNewline = (msg.data !== 0) && !isOnlyAnsiCodes && !endsWithColonAndAnsi;
 
-    console.log(`[XIMIOHandler] JH_SM: "${text}" (msg.data=${msg.data}, addNewline=${shouldAddNewline}, isOnlyAnsi=${isOnlyAnsiCodes}, endsWithColon=${endsWithColonAndAnsi})`);
+    // Default: trust msg.data
+    let shouldAddNewline = (msg.data !== 0) && !isOnlyAnsiCodes;
+
+    // Smart override: if msg.data=0 but this clearly ISN'T a prompt, add newline anyway
+    // This catches door bugs or compatibility issues without breaking real prompts
+    if (msg.data === 0 && !isOnlyAnsiCodes) {
+      const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
+      const trimmed = plainText.trim();
+
+      if (trimmed.length > 0) {
+        // Count trailing whitespace (file descriptions are padded to fixed width)
+        const trailingSpaces = plainText.length - plainText.trimEnd().length;
+
+        // Detect patterns that are DEFINITELY not prompts:
+        // 1. Excessive trailing whitespace (> 3 spaces) - file descriptions have padding
+        // 2. Starts with bullet/list markers (-, *, •, >, numbers)
+        // 3. Contains ASCII art box-drawing characters
+        // 4. Has repeated line-drawing chars (----, ====, ||||, ++++)
+        // 5. Very long line (> 50 chars) - prompts are short
+        // 6. Contains file listing patterns (size + date)
+        const hasPadding = trailingSpaces > 3;
+        const isBulletPoint = /^\s*[-*•>]\s/.test(plainText) || /^\s*\d+[.)]\s/.test(plainText);
+        const hasBoxChars = /[─│┌┐└┘├┤┬┴┼╔╗╚╝╠╣╦╩╬═║╒╓╘╙╛╜╕╖╞╟╡╢╤╥╧╨╪╫]/.test(trimmed);
+        const hasLineDrawing = /[-=|+]{4,}/.test(trimmed) || /[<>]{3,}/.test(trimmed);
+        const isLongLine = trimmed.length > 50;
+        const hasFilePattern = /\d{5,}\s+\d{1,2}-\d{1,2}-\d{2,4}/.test(trimmed);
+
+        const definitelyNotPrompt = hasPadding || isBulletPoint || hasBoxChars ||
+                                    hasLineDrawing || isLongLine || hasFilePattern;
+
+        if (definitelyNotPrompt) {
+          shouldAddNewline = true;
+        }
+      }
+    }
+
+    console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, addNewline=${shouldAddNewline})`);
 
     // Disable autoPause - doors handle their own pagination (e.g. AquaScan shows "More? (Y/n/ns)")
     // autoPause was interfering with door pagination and causing output to be lost
@@ -693,8 +726,10 @@ export class XIMIOHandler {
       case 8: // Screen width
         resultData = 80;
         break;
-      case 9: // User line length
-        resultData = bbsSession.user?.lineLen || 80;
+      case 9: // User line length (screen height in lines, NOT character width)
+        // express.e:4462: doormsg.data:=userLineLen
+        // userLineLen = number of lines on screen for pagination
+        resultData = bbsSession.pauseLines || bbsSession.user?.linesPerScreen || bbsSession.user?.pageLength || 24;
         break;
       default:
         resultData = 0;

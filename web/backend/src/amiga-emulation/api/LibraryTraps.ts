@@ -443,6 +443,14 @@ const DOS_VECTORS: LibraryVector[] = [
     },
   },
   {
+    offset: -750,
+    name: "StrToDate",
+    handler: (emu, lib: DosLibrary) => {
+      lib.StrToDate();
+      return emu.getRegister(0);
+    },
+  },
+  {
     offset: -228,
     name: "AllocDosObject",
     handler: (emu, lib: DosLibrary) => {

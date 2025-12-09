@@ -170,7 +170,15 @@ async function main() {
     args.splice(doorTypeIndex, 2);
   }
 
-  const [execPathArg, nodeArg, ...doorArgsRaw] = args;
+  // Parse --node argument
+  let nodeArg: string | undefined = undefined;
+  const nodeIndex = args.indexOf('--node');
+  if (nodeIndex >= 0 && nodeIndex + 1 < args.length) {
+    nodeArg = args[nodeIndex + 1];
+    args.splice(nodeIndex, 2);
+  }
+
+  const [execPathArg, positionalNodeArg, ...doorArgsRaw] = args;
   // Allow callers to prefix door args with --args (drop the flag, keep the payload)
   const doorArgs =
     doorArgsRaw.length > 0 && doorArgsRaw[0] === '--args'
@@ -183,7 +191,8 @@ async function main() {
   const execPath = path.isAbsolute(execPathArg)
     ? execPathArg
     : path.join(process.cwd(), execPathArg);
-  const nodeId = parseInt(nodeArg || '0', 10) || 0;
+  // Use --node flag if provided, otherwise fall back to positional arg
+  const nodeId = parseInt(nodeArg || positionalNodeArg || '0', 10) || 0;
   const cwd = path.dirname(execPath);
   try {
     await runDoor({

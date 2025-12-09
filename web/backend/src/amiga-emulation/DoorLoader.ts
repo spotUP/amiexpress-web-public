@@ -493,6 +493,13 @@ export class DoorLoader {
       `A5=0x${a5Now.toString(16)} A6=0x${execBaseAddr.toString(16)}`
     );
     this.logger?.info(`Args: "${argString}" len=${argLen}`);
+
+    // CRITICAL DEBUG: Verify ExecBase pointer at 0x4 is set correctly
+    const verifyExecBase = this.emulator.readMemory32(0x4);
+    console.log(`[DoorLoader] VERIFY: Memory[0x4]=0x${verifyExecBase.toString(16)} (expected 0x${execBaseAddr.toString(16)})`);
+    if (verifyExecBase !== execBaseAddr) {
+      console.error(`[DoorLoader] CRITICAL ERROR: Memory[0x4] is NOT ExecBase! Expected 0x${execBaseAddr.toString(16)}, got 0x${verifyExecBase.toString(16)}`);
+    }
   }
 
   /**

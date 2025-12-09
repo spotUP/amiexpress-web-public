@@ -301,6 +301,23 @@ export class DoorLifecycleManager {
         }
       }
 
+      // DEBUG: Verify ExecBase pointer at 0x4 before execution
+      const execBaseAtFour = this.emulator.readMemory32(0x4);
+      const a6AtStart = this.emulator.getRegister(14);
+      console.log(`[DoorLifecycleManager] PRE-EXEC CHECK: Memory[0x4]=0x${execBaseAtFour.toString(16)} A6=0x${a6AtStart.toString(16)}`);
+
+      // SAFEGUARD: If ExecBase at 0x4 is 0 or corrupted, fix it
+      const expectedExecBase = this.libraryManager?.execLibrary?.getExecBaseAddress() || 0x80000;
+      if (execBaseAtFour === 0 || (execBaseAtFour !== expectedExecBase && execBaseAtFour < 0x1000)) {
+        console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] is ${execBaseAtFour === 0 ? 'ZERO' : 'CORRUPTED'}! Fixing to 0x${expectedExecBase.toString(16)}`);
+        this.emulator.writeMemory32(0x4, expectedExecBase);
+        // Also fix A6 if it was loaded from corrupted memory
+        if (a6AtStart === 0 || a6AtStart === execBaseAtFour) {
+          this.emulator.setRegister(14, expectedExecBase);
+          console.log(`[DoorLifecycleManager] Fixed A6 register to 0x${expectedExecBase.toString(16)}`);
+        }
+      }
+
       let prevA4 = this.emulator.getRegister(12);
       let prevA5 = this.emulator.getRegister(13);
       let earlyTraceCount = 0;
@@ -325,6 +342,7 @@ export class DoorLifecycleManager {
         if (earlyTraceCount < 32) {
           const a4Now = this.emulator.getRegister(12);
           const a5Now = this.emulator.getRegister(13);
+          const a6Now = this.emulator.getRegister(14);
           if (a4Now !== prevA4 || a5Now !== prevA5) {
             console.log(
               `[DoorLifecycleManager] Early A4/A5 change iter=${this.executionState.iterationCount} PC=0x${pc.toString(
@@ -333,6 +351,18 @@ export class DoorLifecycleManager {
             );
             prevA4 = a4Now;
             prevA5 = a5Now;
+          }
+          // DEBUG: Track A6 changes in early iterations
+          if (earlyTraceCount <= 10) {
+            const memAt4 = this.emulator.readMemory32(0x4);
+            console.log(
+              `[DoorLifecycleManager] Early trace iter=${this.executionState.iterationCount} PC=0x${pc.toString(16)} A6=0x${a6Now.toString(16)} Memory[0x4]=0x${memAt4.toString(16)}`
+            );
+            // SAFEGUARD: Check if ExecBase at 0x4 got corrupted during execution
+            if (memAt4 === 0 && earlyTraceCount > 0) {
+              console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter ${this.executionState.iterationCount}! Fixing.`);
+              this.emulator.writeMemory32(0x4, expectedExecBase);
+            }
           }
           earlyTraceCount++;
         }

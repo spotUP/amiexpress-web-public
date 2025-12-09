@@ -61,6 +61,8 @@ interface Lock {
   path: string; // Real filesystem path
   mode: number; // ACCESS_READ=-2, ACCESS_WRITE=-1
   amigaPath: string; // Original AmigaDOS path (for CurrentDir/fixFilename)
+  memAddr: number; // Address of FileLockStruct in emulator memory
+  bptr: number; // BPTR (memAddr >> 2) returned to door
 }
 
 interface ReadArgsTemplateEntry {
@@ -220,6 +222,20 @@ export class DosLibrary {
   // Directory iteration for ExNext()
   private dirIterators: Map<number, string[]> = new Map();
   private dirIteratorIndex: Map<number, number> = new Map();
+
+  /**
+   * Find a lock by its BPTR value.
+   * 68K code receives BPTRs from Lock(), but our Map is keyed by lockId.
+   * This helper searches the map to find the lock with matching BPTR.
+   */
+  private findLockByBptr(bptr: number): { lock: Lock; lockId: number } | null {
+    for (const [lockId, lock] of this.locks.entries()) {
+      if (lock.bptr === bptr) {
+        return { lock, lockId };
+      }
+    }
+    return null;
+  }
 
   // CLI support (for GetArgStr, GetProgramName)
   private argStringPtr: number = 0; // Pointer to argument string
@@ -2154,6 +2170,38 @@ export class DosLibrary {
   }
 
   /**
+   * Allocate a FileLock structure in emulator memory
+   * Returns BPTR to the allocated structure
+   *
+   * FileLockStruct (20 bytes total):
+   *   +0  fl_Link (BPTR)   - pointer to next lock (0 if none)
+   *   +4  fl_Key (ULONG)   - unique key identifying the object
+   *   +8  fl_Access (LONG) - access mode
+   *   +12 fl_Task (APTR)   - handler task (0 for now)
+   *   +16 fl_Volume (BPTR) - volume node (0 for now)
+   */
+  private allocateFileLock(lockId: number, mode: number): number {
+    const FILELOCK_SIZE = 20;
+    const memAddr = this.allocateTemp(FILELOCK_SIZE);
+
+    // Initialize FileLock structure
+    this.emulator.writeMemory32(memAddr + 0, 0);      // fl_Link = 0 (no chain)
+    this.emulator.writeMemory32(memAddr + 4, lockId); // fl_Key = lock ID
+    this.emulator.writeMemory32(memAddr + 8, mode);   // fl_Access = mode
+    this.emulator.writeMemory32(memAddr + 12, 0);     // fl_Task = 0
+    this.emulator.writeMemory32(memAddr + 16, 0);     // fl_Volume = 0
+
+    // Convert to BPTR (address >> 2)
+    const bptr = memAddr >> 2;
+
+    console.log(
+      `[dos.library] Allocated FileLock: memAddr=0x${memAddr.toString(16)}, BPTR=${bptr}, lockId=${lockId}, mode=${mode}`
+    );
+
+    return bptr;
+  }
+
+  /**
    * Lock - Obtain a lock on a file or directory
    * D1 = name (pointer to null-terminated string)
    * D2 = access mode (ACCESS_READ=-2, ACCESS_WRITE=-1)
@@ -2197,20 +2245,25 @@ export class DosLibrary {
       `[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ✅ EXISTS`
     );
 
-    // Create lock
+    // Create lock with FileLock structure in memory
     const lockId = this.nextLockId++;
+    const bptr = this.allocateFileLock(lockId, mode);
+    const memAddr = bptr << 2;
+
     this.locks.set(lockId, {
       id: lockId,
       path: realPath,
       mode: mode,
       amigaPath: originalName,
+      memAddr: memAddr,
+      bptr: bptr,
     });
 
     this.lastLockPath = originalName;
     console.log(
-      `[dos.library] Lock: Created lock ${lockId} for path ${realPath}`
+      `[dos.library] Lock: Created lock ${lockId} (BPTR ${bptr}) for path ${realPath}`
     );
-    this.emulator.setRegister(CPURegister.D0, lockId);
+    this.emulator.setRegister(CPURegister.D0, bptr); // Return BPTR, not lockId!
     this.lastError = this.ERROR_NO_ERROR;
   }
 
@@ -2219,19 +2272,29 @@ export class DosLibrary {
    * D1 = lock
    */
   UnLock(): void {
-    const lockId = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
-    // Lock ID 0 is special (means "no lock")
-    if (lockId === 0) {
-      console.log(`[dos.library] UnLock: Lock ID 0 (no-op)`);
+    // BPTR 0 is special (means "no lock")
+    if (bptrIn === 0) {
+      console.log(`[dos.library] UnLock: BPTR 0 (no-op)`);
       return;
     }
 
-    if (this.locks.has(lockId)) {
-      console.log(`[dos.library] UnLock: Released lock ${lockId}`);
-      this.locks.delete(lockId);
-    } else {
-      console.warn(`[dos.library] UnLock: Invalid lock ID ${lockId}`);
+    // Find lock by BPTR and delete it
+    let found = false;
+    for (const [lockId, lock] of this.locks.entries()) {
+      if (lock.bptr === bptrIn) {
+        console.log(`[dos.library] UnLock: Released lock ${lockId} (BPTR ${bptrIn})`);
+        this.locks.delete(lockId);
+        // Note: We don't explicitly free the FileLock memory since allocateTemp()
+        // allocations are temporary and will be reclaimed automatically
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      console.warn(`[dos.library] UnLock: Invalid lock BPTR ${bptrIn}`);
     }
 
     this.lastError = this.ERROR_NO_ERROR;
@@ -2243,19 +2306,27 @@ export class DosLibrary {
    * Returns: D0 = new lock (or 0 on failure)
    */
   DupLock(): void {
-    const lockId = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
-    if (lockId === 0) {
+    if (bptrIn === 0) {
       console.log(`[dos.library] DupLock(0) - NULL lock, returning 0`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_NO_ERROR;
       return;
     }
 
-    const originalLock = this.locks.get(lockId);
+    // Find lock by BPTR
+    let originalLock: Lock | undefined;
+    for (const lock of this.locks.values()) {
+      if (lock.bptr === bptrIn) {
+        originalLock = lock;
+        break;
+      }
+    }
+
     if (!originalLock) {
       console.error(
-        `[dos.library] DupLock: Invalid lock ID 0x${lockId.toString(16)}`
+        `[dos.library] DupLock: Invalid lock BPTR 0x${bptrIn.toString(16)}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_INVALID_LOCK;
@@ -2264,18 +2335,23 @@ export class DosLibrary {
 
     // Create a new lock with the same path and mode
     const newLockId = this.nextLockId++;
+    const newBptr = this.allocateFileLock(newLockId, originalLock.mode);
+    const newMemAddr = newBptr << 2;
+
     this.locks.set(newLockId, {
       id: newLockId,
       path: originalLock.path,
       mode: originalLock.mode,
       amigaPath: originalLock.amigaPath,
+      memAddr: newMemAddr,
+      bptr: newBptr,
     });
 
     console.log(
-      `[dos.library] DupLock(lock=${lockId}) - Created duplicate lock ${newLockId} for ${originalLock.path}`
+      `[dos.library] DupLock(BPTR=${bptrIn}) - Created duplicate lock ${newLockId} (BPTR ${newBptr}) for ${originalLock.path}`
     );
 
-    this.emulator.setRegister(CPURegister.D0, newLockId);
+    this.emulator.setRegister(CPURegister.D0, newBptr); // Return BPTR, not lockId!
     this.lastError = this.ERROR_NO_ERROR;
   }
 
@@ -2291,16 +2367,26 @@ export class DosLibrary {
    * fib_Date (12 DateStamp), fib_Comment (80 BCPL), fib_OwnerUID (2), fib_OwnerGID (2)
    */
   Examine(): void {
-    const lockId = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
     const fibPtr = this.emulator.getRegister(CPURegister.D2);
 
     console.log(
-      `[dos.library] Examine(lock=${lockId}, fib=0x${fibPtr.toString(16)})`
+      `[dos.library] Examine(lock=${bptrIn}, fib=0x${fibPtr.toString(16)})`
     );
 
-    const lock = this.locks.get(lockId);
+    // Find lock by BPTR (D1 contains BPTR, not lockId)
+    let lock = null as any;
+    let foundLockId = 0;
+    for (const [lockId, l] of this.locks.entries()) {
+      if (l.bptr === bptrIn) {
+        lock = l;
+        foundLockId = lockId;
+        break;
+      }
+    }
+
     if (!lock) {
-      console.error(`[dos.library] Examine: Invalid lock ID ${lockId}`);
+      console.error(`[dos.library] Examine: Invalid lock BPTR ${bptrIn}`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return;
@@ -2439,8 +2525,8 @@ export class DosLibrary {
       // Initialize directory iterator for this lock if it's a directory
       if (stats.isDirectory()) {
         const files = fs.readdirSync(lock.path);
-        this.dirIterators.set(lockId, files);
-        this.dirIteratorIndex.set(lockId, 0);
+        this.dirIterators.set(foundLockId, files);
+        this.dirIteratorIndex.set(foundLockId, 0);
         console.log(
           `[dos.library] Examine: Initialized directory iterator (${files.length} entries)`
         );
@@ -2465,20 +2551,22 @@ export class DosLibrary {
    * Returns: D0 = success (DOSTRUE=-1, DOSFALSE=0)
    */
   ExNext(): void {
-    const lockId = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
     const fibPtr = this.emulator.getRegister(CPURegister.D2);
 
     console.log(
-      `[dos.library] ExNext(lock=${lockId}, fib=0x${fibPtr.toString(16)})`
+      `[dos.library] ExNext(lock=${bptrIn}, fib=0x${fibPtr.toString(16)})`
     );
 
-    const lock = this.locks.get(lockId);
-    if (!lock) {
-      console.error(`[dos.library] ExNext: Invalid lock ID ${lockId}`);
+    // Find lock by BPTR (D1 contains BPTR, not lockId)
+    const result = this.findLockByBptr(bptrIn);
+    if (!result) {
+      console.error(`[dos.library] ExNext: Invalid lock BPTR ${bptrIn}`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return;
     }
+    const { lock, lockId } = result;
 
     // Get or create directory iterator
     if (!this.dirIterators.has(lockId)) {
@@ -2601,11 +2689,11 @@ export class DosLibrary {
    * id_InUse (4)
    */
   Info(): void {
-    const lockId = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
     const infoPtr = this.emulator.getRegister(CPURegister.D2);
 
     console.log(
-      `[dos.library] Info(lock=0x${lockId.toString(
+      `[dos.library] Info(lock=0x${bptrIn.toString(
         16
       )}, info=0x${infoPtr.toString(16)})`
     );
@@ -2613,10 +2701,11 @@ export class DosLibrary {
     try {
       // Get filesystem stats
       let volumePath = this.bbsRoot;
-      if (lockId !== 0) {
-        const lock = this.locks.get(lockId);
-        if (lock) {
-          volumePath = lock.path;
+      if (bptrIn !== 0) {
+        // Find lock by BPTR (D1 contains BPTR, not lockId)
+        const result = this.findLockByBptr(bptrIn);
+        if (result) {
+          volumePath = result.lock.path;
         }
       }
 
@@ -2704,14 +2793,19 @@ export class DosLibrary {
 
       // Return lock to new directory
       const lockId = this.nextLockId++;
+      const bptr = this.allocateFileLock(lockId, -2); // ACCESS_READ
+      const memAddr = bptr << 2;
+
       this.locks.set(lockId, {
         id: lockId,
         path: realPath,
         mode: -2, // ACCESS_READ
         amigaPath: name,
+        memAddr: memAddr,
+        bptr: bptr,
       });
 
-      this.emulator.setRegister(CPURegister.D0, lockId);
+      this.emulator.setRegister(CPURegister.D0, bptr); // Return BPTR
       this.lastError = this.ERROR_NO_ERROR;
     } catch (error) {
       console.error(
@@ -2729,37 +2823,43 @@ export class DosLibrary {
    * Returns: D0 = old directory lock
    */
   CurrentDir(): void {
-    const lockId = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
-    console.log(`[dos.library] CurrentDir(lock=${lockId})`);
+    console.log(`[dos.library] CurrentDir(lock=${bptrIn})`);
 
     // Create lock for current directory (to return as "old directory")
     const oldDirLockId = this.nextLockId++;
+    const oldDirBptr = this.allocateFileLock(oldDirLockId, -2); // ACCESS_READ
+    const oldDirMemAddr = oldDirBptr << 2;
+
     this.locks.set(oldDirLockId, {
       id: oldDirLockId,
       path: this.currentDirectory,
       amigaPath: this.currentDirectoryAmiga,
       mode: -2, // ACCESS_READ
+      memAddr: oldDirMemAddr,
+      bptr: oldDirBptr,
     });
 
-    if (lockId === 0) {
+    if (bptrIn === 0) {
       // D1=0 means "just get current directory lock, don't change"
       console.log(
-        `[dos.library] CurrentDir: Returning current directory lock ${oldDirLockId} for ${this.currentDirectory}`
+        `[dos.library] CurrentDir: Returning current directory lock ${oldDirLockId} (BPTR ${oldDirBptr}) for ${this.currentDirectory}`
       );
-      this.emulator.setRegister(CPURegister.D0, oldDirLockId);
+      this.emulator.setRegister(CPURegister.D0, oldDirBptr); // Return BPTR
       this.lastError = this.ERROR_NO_ERROR;
       return;
     }
 
-    // Get the lock being set as current directory
-    const newLock = this.locks.get(lockId);
-    if (!newLock) {
-      console.error(`[dos.library] CurrentDir: Invalid lock ID ${lockId}`);
+    // Find lock by BPTR (D1 contains BPTR, not lockId)
+    const result = this.findLockByBptr(bptrIn);
+    if (!result) {
+      console.error(`[dos.library] CurrentDir: Invalid lock BPTR ${bptrIn}`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return;
     }
+    const newLock = result.lock;
 
     // Verify the lock points to a directory
     if (
@@ -2767,7 +2867,7 @@ export class DosLibrary {
       !fs.statSync(newLock.path).isDirectory()
     ) {
       console.error(
-        `[dos.library] CurrentDir: Lock ${lockId} does not point to a directory: ${newLock.path}`
+        `[dos.library] CurrentDir: Lock BPTR ${bptrIn} does not point to a directory: ${newLock.path}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
@@ -2784,8 +2884,8 @@ export class DosLibrary {
       `[dos.library] CurrentDir: Changed from ${oldDir} to ${this.currentDirectory}`
     );
 
-    // Return lock for old directory
-    this.emulator.setRegister(CPURegister.D0, oldDirLockId);
+    // Return BPTR for old directory
+    this.emulator.setRegister(CPURegister.D0, oldDirBptr);
     this.lastError = this.ERROR_NO_ERROR;
   }
 
@@ -3025,26 +3125,28 @@ export class DosLibrary {
    * Returns: D0 = parent lock (or 0 if none)
    */
   ParentDir(): void {
-    const lockId = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
-    console.log(`[dos.library] ParentDir(lock=0x${lockId.toString(16)})`);
+    console.log(`[dos.library] ParentDir(lock=0x${bptrIn.toString(16)})`);
 
-    if (lockId === 0) {
+    if (bptrIn === 0) {
       console.log(`[dos.library] ParentDir: NULL lock, returning 0`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_NO_ERROR;
       return;
     }
 
-    const lock = this.locks.get(lockId);
-    if (!lock) {
+    // Find lock by BPTR (D1 contains BPTR, not lockId)
+    const result = this.findLockByBptr(bptrIn);
+    if (!result) {
       console.error(
-        `[dos.library] ParentDir: Invalid lock ID 0x${lockId.toString(16)}`
+        `[dos.library] ParentDir: Invalid lock BPTR 0x${bptrIn.toString(16)}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_INVALID_LOCK;
       return;
     }
+    const lock = result.lock;
 
     // Get parent directory
     const parentPath = path.dirname(lock.path);
@@ -3060,18 +3162,23 @@ export class DosLibrary {
     // Create lock for parent directory
     const parentLockId = this.nextLockId++;
     const parentAmigaPath = path.dirname(lock.amigaPath);
+    const parentBptr = this.allocateFileLock(parentLockId, lock.mode);
+    const parentMemAddr = parentBptr << 2;
+
     this.locks.set(parentLockId, {
       id: parentLockId,
       path: parentPath,
       mode: lock.mode,
       amigaPath: parentAmigaPath,
+      memAddr: parentMemAddr,
+      bptr: parentBptr,
     });
 
     console.log(
-      `[dos.library] ParentDir: Created lock ${parentLockId} for parent ${parentPath}`
+      `[dos.library] ParentDir: Created lock ${parentLockId} (BPTR ${parentBptr}) for parent ${parentPath}`
     );
 
-    this.emulator.setRegister(CPURegister.D0, parentLockId);
+    this.emulator.setRegister(CPURegister.D0, parentBptr); // Return BPTR
     this.lastError = this.ERROR_NO_ERROR;
   }
 
@@ -3787,18 +3894,18 @@ export class DosLibrary {
    * Sets IoErr() to ERROR_LINE_TOO_LONG if buffer too short
    */
   NameFromLock(): void {
-    const lock = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
     const bufAddr = this.emulator.getRegister(CPURegister.D2);
     const bufLen = this.emulator.getRegister(CPURegister.D3);
 
     console.log(
-      `[dos.library] NameFromLock(lock=${lock.toString(
+      `[dos.library] NameFromLock(lock=${bptrIn.toString(
         16
       )}, buf=${bufAddr.toString(16)}, len=${bufLen})`
     );
 
     // If lock is NULL, return "SYS:"
-    if (lock === 0) {
+    if (bptrIn === 0) {
       const path = "SYS:";
       if (bufLen < path.length + 1) {
         this.lastError = 120; // ERROR_LINE_TOO_LONG
@@ -3810,16 +3917,17 @@ export class DosLibrary {
       return;
     }
 
-    // Look up lock in our locks map
-    const lockInfo = this.locks.get(lock);
-    if (!lockInfo) {
+    // Find lock by BPTR (D1 contains BPTR, not lockId)
+    const result = this.findLockByBptr(bptrIn);
+    if (!result) {
       console.log(
-        `[dos.library] NameFromLock: Lock ${lock.toString(16)} not found`
+        `[dos.library] NameFromLock: Lock BPTR ${bptrIn.toString(16)} not found`
       );
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE
       return;
     }
+    const lockInfo = result.lock;
 
     const path = lockInfo.path;
     if (bufLen < path.length + 1) {
@@ -3842,17 +3950,19 @@ export class DosLibrary {
    * The lock is consumed and should not be UnLocked separately.
    */
   OpenFromLock(): void {
-    const lockId = this.emulator.getRegister(CPURegister.D1);
+    const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
-    console.log(`[dos.library] OpenFromLock(lock=${lockId})`);
+    console.log(`[dos.library] OpenFromLock(lock=${bptrIn})`);
 
-    const lock = this.locks.get(lockId);
-    if (!lock) {
-      console.error(`[dos.library] OpenFromLock: Invalid lock ID ${lockId}`);
+    // Find lock by BPTR (D1 contains BPTR, not lockId)
+    const result = this.findLockByBptr(bptrIn);
+    if (!result) {
+      console.error(`[dos.library] OpenFromLock: Invalid lock BPTR ${bptrIn}`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return;
     }
+    const { lock, lockId } = result;
 
     // Open the file for reading using FileManager
     const filePath = lock.path;

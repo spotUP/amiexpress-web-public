@@ -239,6 +239,27 @@ export class LibraryManager {
     }
     console.log(`[LibraryManager] Alternate ports created - doors can FindPort with either naming convention`);
 
+    // Create AEServer ports for multinode doors (used for node status detection)
+    // Doors call FindPort("AEServer.%d") to detect active nodes on the BBS
+    // AmiExpress supported up to 255 nodes - create ports for all possible nodes
+    // Use lightweight ports to avoid exhausting signal bits (only 32 available)
+    const maxAEServerNodes = 255;
+    console.log(`[LibraryManager] Creating lightweight AEServer ports for multinode support (0-254)...`);
+    for (let i = 0; i < maxAEServerNodes; i++) {
+      this.execLibrary.createLightweightPort(`AEServer.${i}`);
+    }
+    console.log(`[LibraryManager] AEServer.0-254 lightweight ports created (255 nodes, no signals consumed)`);
+
+    // Create AREXX-format ports (AEDoorRP.XXX) for doors like RTW that use this naming convention
+    // RTW and other doors look for "AEDoorRP.000", "AEDoorRP.001" etc. (3-digit zero-padded node IDs)
+    // These are AREXX Rexx Port format names used for message passing
+    console.log(`[LibraryManager] Creating AREXX-format AEDoorRP ports for XIM door compatibility...`);
+    for (let i = 0; i < 10; i++) {
+      const rexxPortName = `AEDoorRP.${i.toString().padStart(3, '0')}`;
+      this.execLibrary.createLightweightPort(rexxPortName);
+    }
+    console.log(`[LibraryManager] AEDoorRP.000-009 AREXX ports created`);
+
     this.doorPortAddress = portAddr;
     this.aePortAddress = portAddr;
 

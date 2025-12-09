@@ -1617,6 +1617,8 @@ export class ExecLibrary {
    *
    * On Amiga, signals are used for IPC and synchronization.
    * Each task has 32 signal bits (0-31).
+   * Signals 0-15 are typically reserved for system use (CTRL-C, CTRL-D, etc.)
+   * User programs get signals 16-31.
    */
   AllocSignal(signalNum: number): number {
     // Convert from signed byte (-1 = 0xFFFFFFFF in 32-bit register)
@@ -1644,14 +1646,29 @@ export class ExecLibrary {
       return requestedSignal;
     }
 
-    // Otherwise, find any free signal (0-31)
-    for (let i = 0; i < 32; i++) {
+    // Otherwise, find any free signal - start from 16 (user signals) per AmigaOS convention
+    // Some doors check "if signal <= 0" which would incorrectly fail on signal 0
+    for (let i = 16; i < 32; i++) {
       const mask = 1 << i;
       if (!(this.allocatedSignals & mask)) {
         // Found a free signal
         this.allocatedSignals |= mask;
         console.log(
           `  Allocated signal ${i}, mask=0x${this.allocatedSignals.toString(
+            16
+          )}`
+        );
+        return i;
+      }
+    }
+
+    // If no user signals available, try system signals (0-15) as fallback
+    for (let i = 0; i < 16; i++) {
+      const mask = 1 << i;
+      if (!(this.allocatedSignals & mask)) {
+        this.allocatedSignals |= mask;
+        console.log(
+          `  Allocated system signal ${i} (fallback), mask=0x${this.allocatedSignals.toString(
             16
           )}`
         );
@@ -3190,6 +3207,59 @@ export class ExecLibrary {
   }
 
   /**
+   * Create a lightweight public port for FindPort lookup only.
+   * Unlike createPublicPort(), this does NOT allocate a signal bit.
+   * Use for bulk port creation like AEServer.0-254 where we don't need signaling.
+   *
+   * @param name - Port name (e.g., "AEServer.0")
+   * @returns Port address
+   */
+  createLightweightPort(name: string): number {
+    // Allocate port structure (34 bytes for MsgPort)
+    const portAddr = this.allocMem(34, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    if (!portAddr) {
+      console.error(`[ExecLibrary] Failed to allocate memory for lightweight port "${name}"`);
+      return 0;
+    }
+
+    // Allocate name string
+    const nameAddr = this.allocMem(name.length + 1, 0);
+    this.emulator.writeString(nameAddr, name);
+
+    // Write minimal MsgPort structure
+    this.emulator.writeMemory32(portAddr + 0, 0);     // ln_Succ
+    this.emulator.writeMemory32(portAddr + 4, 0);     // ln_Pred
+    this.emulator.writeMemory(portAddr + 8, 4);       // ln_Type = NT_MSGPORT
+    this.emulator.writeMemory(portAddr + 9, 0);       // ln_Pri
+    this.emulator.writeMemory32(portAddr + 10, nameAddr); // ln_Name
+    this.emulator.writeMemory(portAddr + 14, 0);      // mp_Flags = PA_IGNORE (no signaling)
+    this.emulator.writeMemory(portAddr + 15, 0);      // mp_SigBit = 0 (unused)
+    this.emulator.writeMemory32(portAddr + 16, 0);    // mp_SigTask = NULL (no task)
+
+    // Initialize empty message list
+    this.emulator.writeMemory32(portAddr + 20, portAddr + 24); // lh_Head -> lh_Tail
+    this.emulator.writeMemory32(portAddr + 24, 0);             // lh_Tail
+    this.emulator.writeMemory32(portAddr + 28, portAddr + 20); // lh_TailPred -> lh_Head
+    this.emulator.writeMemory(portAddr + 32, 0);               // lh_Type
+    this.emulator.writeMemory(portAddr + 33, 0);               // l_pad
+
+    // Register in public ports (for FindPort lookup)
+    this.registerPublicPort(name, portAddr);
+
+    // Also add to messagePorts map for PutMsg/GetMsg
+    this.messagePorts.set(portAddr, {
+      address: portAddr,
+      name: name,
+      messages: [],
+      sigBit: 0,
+      sigTask: 0,
+      signaled: false,
+    });
+
+    return portAddr;
+  }
+
+  /**
    * PutMsg() - LVO -366 (0xFFFFFE72)
    *
    * Send a message to a port.
@@ -3758,20 +3828,23 @@ export class ExecLibrary {
     this.currentTask.isWaiting = true;
 
     // PAUSE emulator execution until Signal() resumes us
+    // IMPORTANT: We return 0 now, but keep sigWait set so Signal() knows we're waiting.
+    // Signal() will:
+    //   1. Check sigWait to see if task is waiting
+    //   2. Set sigRecvd with the signals
+    //   3. Call emulator.resume()
+    // The door's polling loop will call Wait() again and find signals in sigRecvd.
     console.log("[ExecLibrary]   *** PAUSING EMULATOR - waiting for signals ***");
+    console.log(`[ExecLibrary]   sigWait=0x${mask.toString(16)} isWaiting=true - Signal() will wake us`);
+
     this.emulator.pause(() => {
-      console.log("[ExecLibrary]   *** RESUMED from Wait() - signals received ***");
+      console.log("[ExecLibrary]   *** RESUMED from Wait() - continuing execution ***");
     });
 
-    // When resumed, return the signals that were delivered
-    const deliveredSignals = this.currentTask.sigRecvd & mask;
-    this.currentTask.sigRecvd &= ~deliveredSignals;
-    this.currentTask.sigWait = 0;
-    this.currentTask.state = 0; // TS_READY
-    this.currentTask.isWaiting = false;
-
-    console.log(`[ExecLibrary]   Returning signals: 0x${deliveredSignals.toString(16)}`);
-    return deliveredSignals;
+    // Return 0 to indicate no signals yet - door will poll again after resume
+    // Don't clear sigWait here - Signal() checks it to know we're waiting
+    console.log(`[ExecLibrary]   Returning 0 (waiting for Signal)`);
+    return 0;
   }
 
   /**
