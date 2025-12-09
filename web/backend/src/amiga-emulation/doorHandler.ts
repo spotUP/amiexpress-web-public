@@ -1,5 +1,6 @@
 import { Socket } from "socket.io";
 import { AmigaDoorSession } from "./AmigaDoorSession";
+import { PythonDoorSession } from "./PythonDoorSession";
 import * as path from "path";
 import { config } from "../config";
 import * as fs from "fs";
@@ -8,8 +9,11 @@ import * as fs from "fs";
  * Door Handler - Manages door session lifecycle via Socket.io
  */
 
+// Door session type (union of all supported session types)
+type DoorSession = AmigaDoorSession | PythonDoorSession;
+
 // Active door sessions by socket ID
-const activeSessions = new Map<string, AmigaDoorSession>();
+const activeSessions = new Map<string, DoorSession>();
 
 /**
  * Set up door-related Socket.io event handlers
@@ -57,12 +61,26 @@ export function setupDoorHandlers(socket: Socket): void {
 
         console.log(`[DoorHandler] Executable path: ${executablePath}`);
 
-        // Create session
-        const session = new AmigaDoorSession(socket, {
-          executablePath,
-          doorType: "XIM",
-          timeout: 600, // 10 minutes
-        });
+        // Determine door type by file extension
+        const ext = path.extname(executablePath).toLowerCase();
+        let session: DoorSession;
+
+        if (ext === ".py") {
+          // Python door
+          console.log("[DoorHandler] Launching Python door");
+          session = new PythonDoorSession(socket, {
+            executablePath,
+            timeout: 600, // 10 minutes
+          });
+        } else {
+          // Amiga/native door (default)
+          console.log("[DoorHandler] Launching Amiga door");
+          session = new AmigaDoorSession(socket, {
+            executablePath,
+            doorType: "XIM",
+            timeout: 600, // 10 minutes
+          });
+        }
 
         activeSessions.set(socket.id, session);
 
