@@ -2,9 +2,27 @@
 # Multi-stage build for production-ready BBS container
 
 # ============================================================================
-# Stage 1: Build Frontend (BBS Terminal)
+# Stage 1: Build Terminal Package (needed by frontend)
+# ============================================================================
+FROM node:18-alpine AS terminal-builder
+
+WORKDIR /app/packages/terminal
+
+COPY packages/terminal/package*.json ./
+RUN npm ci
+
+COPY packages/terminal ./
+RUN npm run build
+
+# ============================================================================
+# Stage 2: Build Frontend (BBS Terminal)
 # ============================================================================
 FROM node:18-alpine AS frontend-builder
+
+WORKDIR /app
+
+# Copy terminal package first (frontend depends on it)
+COPY --from=terminal-builder /app/packages/terminal ./packages/terminal
 
 WORKDIR /app/web/frontend
 
@@ -12,10 +30,11 @@ COPY web/frontend/package*.json ./
 RUN npm ci
 
 COPY web/frontend ./
-RUN npm run build
+# Skip prebuild script (terminal already built), just run vite build
+RUN npm run build --ignore-scripts || vite build
 
 # ============================================================================
-# Stage 2: Build Config App (Admin UI)
+# Stage 3: Build Config App (Admin UI)
 # ============================================================================
 FROM node:18-alpine AS config-builder
 
@@ -28,7 +47,7 @@ COPY web/config-app ./
 RUN npm run build
 
 # ============================================================================
-# Stage 3: Build SDK Preview
+# Stage 4: Build SDK Preview
 # ============================================================================
 FROM node:18-alpine AS sdk-builder
 
@@ -47,19 +66,6 @@ WORKDIR /app/sdk/tools/preview/frontend
 COPY sdk/tools/preview/frontend/package*.json ./
 COPY sdk/tools/preview/frontend ./
 RUN npm ci --ignore-scripts && npm run build
-
-# ============================================================================
-# Stage 4: Build Terminal Package
-# ============================================================================
-FROM node:18-alpine AS terminal-builder
-
-WORKDIR /app/packages/terminal
-
-COPY packages/terminal/package*.json ./
-RUN npm ci
-
-COPY packages/terminal ./
-RUN npm run build
 
 # ============================================================================
 # Stage 5: Build Backend
