@@ -106,17 +106,17 @@ COPY --from=backend-builder /app/web/backend/package*.json ./web/backend/
 WORKDIR /app/web/backend
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy all built artifacts
+# Copy all built artifacts (frontend assets)
 WORKDIR /app
-COPY --from=backend-builder /app/web/backend/dist ./web/backend/dist
 COPY --from=frontend-builder /app/web/frontend/dist ./web/frontend/dist
 COPY --from=config-builder /app/web/config-app/dist ./web/config-app/dist
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
 COPY --from=sdk-builder /app/sdk/tools/preview/frontend/dist ./sdk/tools/preview/frontend/dist
 COPY --from=terminal-builder /app/packages/terminal/dist ./packages/terminal/dist
 
-# Copy runtime source files (needed for non-compiled parts)
+# Copy backend source files (backend runs TypeScript directly with tsx)
 COPY web/backend/src ./web/backend/src
+COPY web/backend/scripts ./web/backend/scripts
 
 # Create BBS data directories
 RUN mkdir -p \
@@ -171,5 +171,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Set working directory to backend
 WORKDIR /app/web/backend
 
-# Start the BBS server
-CMD ["node", "dist/src/index.js"]
+# Start the BBS server (runs TypeScript directly with tsx)
+CMD ["npx", "tsx", "src/index.ts"]
