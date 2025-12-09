@@ -76,7 +76,7 @@ WORKDIR /app/web/backend
 
 COPY web/backend/package*.json ./
 # Skip postinstall script (web assets built in separate stages)
-RUN SKIP_WEB_ASSET_BUILD=1 npm ci
+RUN npm ci --ignore-scripts
 
 COPY web/backend ./
 RUN npm run build
