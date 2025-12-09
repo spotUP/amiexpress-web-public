@@ -941,21 +941,23 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           return;
         }
 
-        // Authenticate using existing auth handler logic
+        // Authenticate using use case service (Clean Architecture)
         try {
-          const dbModule: any = await import('../database');
-          const dbLocal: any = getDatabase() || dbModule.db || dbModule;
-          // Try lowercase first (for C64 uppercase input), then original case
-          let user = await dbLocal.authenticateUser(username, passwordLower);
-          if (!user && password !== passwordLower) {
-            user = await dbLocal.authenticateUser(username, password);
-          }
-          if (!user) {
+          const { container } = await import('../container');
+          const { AuthenticationUseCase } = await import('../services/use-cases/authentication.use-case');
+          const authUseCase = container.resolve(AuthenticationUseCase);
+
+          const result = await authUseCase.authenticate(username, password);
+
+          if (!result.success) {
             socket.emit('ansi-output', '\r\nInvalid PassWord\r\nUsername: ');
             session.tempData.loginPhase = 'username';
             session.tempData.loginUsername = '';
             return;
           }
+
+          const user = result.user;
+          const db = getDatabase(); // For remaining database calls
 
           // Successful login: mirror auth-socket-handlers.ts login flow
           session.loginRetryCount = 0;
@@ -979,7 +981,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           }
 
           // Update last login and node files
-          await dbLocal.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
+          await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
           const nodeId = session.nodeId || 0;
           try {
             nodeFileManager.writeNodeUserFile(nodeId, user);
@@ -1152,14 +1154,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
     // Check for /WHO command
     if (input.toUpperCase() === '/WHO') {
-      const members = await getDatabase().getRoomMembers(session.currentRoomId);
-      socket.emit('ansi-output', '\r\n\x1b[36mUsers in room (' + members.length + '):\x1b[0m\r\n');
-      for (const member of members) {
-        const modBadge = member.is_moderator ? ' \x1b[33m[MOD]\x1b[0m' : '';
-        const muteBadge = member.is_muted ? ' \x1b[31m[MUTED]\x1b[0m' : '';
-        socket.emit('ansi-output', '  ' + member.username + modBadge + muteBadge + '\r\n');
-      }
-      socket.emit('ansi-output', '\r\n');
+      const { container } = await import('../container');
+      const { ChatRoomUseCase } = await import('../services/use-cases/chat-room.use-case');
+      const chatRoomUseCase = container.resolve(ChatRoomUseCase);
+
+      const members = await chatRoomUseCase.getRoomMembers(session.currentRoomId || 'default');
+      const output = chatRoomUseCase.formatMembersList(members);
+      socket.emit('ansi-output', output);
       return;
     }
 
