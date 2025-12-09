@@ -34,19 +34,14 @@ FROM node:18-alpine AS sdk-builder
 
 WORKDIR /app/sdk
 
-COPY sdk/package*.json ./
-RUN npm ci
-
+# Copy all SDK source first (SDK has prepare script that requires source)
 COPY sdk ./
-RUN npm run build
+RUN npm ci && npm run build
 
 # Build SDK preview frontend
 WORKDIR /app/sdk/tools/preview/frontend
-COPY sdk/tools/preview/frontend/package*.json ./
-RUN npm ci
-
 COPY sdk/tools/preview/frontend ./
-RUN npm run build
+RUN npm ci && npm run build
 
 # ============================================================================
 # Stage 4: Build Terminal Package
