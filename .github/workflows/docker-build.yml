@@ -1,0 +1,64 @@
+name: Docker Build and Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: amiexpress-web:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image starts
+        run: |
+          docker run -d --name test-bbs \
+            -e NODE_ENV=production \
+            -e DATABASE_DIR=/app/db \
+            -e BBS_DATA_DIR=/app/data/bbs \
+            -e JWT_SECRET=test-secret \
+            -e JWT_REFRESH_SECRET=test-refresh-secret \
+            -e SESSION_SECRET=test-session-secret \
+            -p 3001:3001 \
+            amiexpress-web:test
+
+          # Wait for server to start
+          sleep 10
+
+          # Check if server is running
+          docker ps | grep test-bbs
+
+          # Check server logs
+          docker logs test-bbs
+
+          # Health check
+          curl -f http://localhost:3001/ || exit 1
+
+          # Cleanup
+          docker stop test-bbs
+          docker rm test-bbs
+
+      - name: Report success
+        if: success()
+        run: echo "[OK] Docker build and test completed successfully"
+
+      - name: Report failure
+        if: failure()
+        run: echo "[ERROR] Docker build or test failed"

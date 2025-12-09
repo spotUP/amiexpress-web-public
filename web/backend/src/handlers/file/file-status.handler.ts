@@ -3,8 +3,14 @@
  * Port from express.e:24141-24250 (fileStatus function)
  *
  * Displays upload/download statistics per conference
+ *
+ * Clean Architecture:
+ * - Uses FileStatisticsUseCase for business logic
+ * - Dependency injection via tsyringe
+ * - Handler focuses on presentation/routing only
  */
 
+import { injectable, inject } from 'tsyringe';
 import { Socket } from 'socket.io';
 import { config } from '../../config';
 import { BBSSession } from '../../index';
@@ -15,18 +21,28 @@ import { db } from '../../database';
 import { checkConfAccess } from '../message/message-scan.handler';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { AnsiUtil } from '../../utils/ansi.util';
+import { DI_TOKENS } from '../../container';
+import { FileStatisticsUseCase } from '../../services/use-cases/file-statistics.use-case';
 
 /**
  * FS Command - File Status
  * Port from express.e:24872-24875 (internalCommandFS)
  * Port from express.e:24141-24250 (fileStatus)
  */
+@injectable()
 export class FileStatusHandler {
+  constructor(
+    @inject(DI_TOKENS.Database) private database: any,
+    private fileStatsUseCase: FileStatisticsUseCase
+  ) {
+    console.log('[FileStatusHandler] Initialized with DI');
+  }
+
   /**
    * Handle FS command - Display file statistics
    * express.e:24872-24875
    */
-  static async handleFileStatusCommand(
+  async handleFileStatusCommand(
     socket: Socket,
     session: BBSSession
   ): Promise<void> {
@@ -53,7 +69,7 @@ export class FileStatusHandler {
    * @param session - User session
    * @param currentOnly - If true, show only current conference (opt=1 in express.e)
    */
-  private static async displayFileStatus(
+  private async displayFileStatus(
     socket: Socket,
     session: BBSSession,
     currentOnly: boolean
@@ -62,7 +78,7 @@ export class FileStatusHandler {
     if (!user) return;
 
     // Get system configuration
-    const conferences = await db.getConferences();
+    const conferences = await this.database.getConferences();
     const totalConferences = conferences.length || 0;
     const currentConf = session.currentConf || 1;
 
@@ -99,7 +115,7 @@ export class FileStatusHandler {
         continue;
       }
 
-      const confStats = conferences.find(c => c.id === confNum);
+      const confStats = conferences.find((c: any) => c.id === confNum);
       const useConfStats = hasConfAccounting && !!confStats;
 
       // Format uploads
@@ -171,7 +187,7 @@ export class FileStatusHandler {
   /**
    * Format bytes for display
    */
-  private static formatBytes(bytes: number): string {
+  private formatBytes(bytes: number): string {
     if (bytes < 0) return '0';
     return String(bytes);
   }
@@ -179,7 +195,7 @@ export class FileStatusHandler {
   /**
    * Format kilobytes for display (bytes / 1024)
    */
-  private static formatKBytes(bytes: number): string {
+  private formatKBytes(bytes: number): string {
     if (bytes < 0) return '0';
     const kb = Math.floor(bytes / 1024);
     return String(kb);
@@ -189,7 +205,7 @@ export class FileStatusHandler {
    * Format BCD value for display (future enhancement)
    * Express.e uses formatBCD() for precise byte tracking
    */
-  private static formatBCD(bcdValue: bigint): string {
+  private formatBCD(bcdValue: bigint): string {
     // For now, just convert to string
     // TODO: Implement proper BCD formatting if needed
     return String(bcdValue);

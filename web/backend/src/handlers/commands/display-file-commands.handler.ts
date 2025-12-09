@@ -472,9 +472,11 @@ async function flagFiles(socket: any, session: BBSSession, pattern: string): Pro
  * Displays file upload/download statistics per conference.
  */
 export async function handleFileStatusCommand(socket: any, session: BBSSession): Promise<void> {
-  // Use the new FileStatusHandler
-  const { FileStatusHandler } = require('./file-status.handler');
-  await FileStatusHandler.handleFileStatusCommand(socket, session);
+  // Use FileStatusHandler via DI container
+  const { container } = await import('../../container');
+  const { FileStatusHandler } = await import('../file/file-status.handler');
+  const handler = container.resolve(FileStatusHandler);
+  await handler.handleFileStatusCommand(socket, session);
 }
 
 /**
