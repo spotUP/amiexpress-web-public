@@ -15,7 +15,7 @@ Baud N Name             Group / Location    On-Time  Actions  H:MM Up-K Dn-K
 [34m----------------------------------------------------------------------------
 [31m19.2 2[37m [32msante            [33mVasto               [34m22:35:45 [35m[------] [36m0:23 [0m   0    0
 [34m----------------------------------------------------------------------------
-[0m  In my system, high unemployment would be good. We wouldn't HAVE to work.  
+[0m             Fuck the Middle East, hang em all & Have a ball...             
 [0;4;33m                                                                      v2.00 [0m
 [44;4;33m Calls:    1 / Y'day:    4 | U:    0 /     0k | D:    0 /     0k | Hrs:   0 [0m
 [44;4;33m The Records - Calls:  275 | U:  286 / D775mb | D: 3745 / @402mb | Hrs:  30 [0m

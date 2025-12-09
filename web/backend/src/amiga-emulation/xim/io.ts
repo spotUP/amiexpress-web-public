@@ -248,7 +248,8 @@ export class XIMIOHandler {
       JSON.stringify(text)
     );
 
-    const bytesWritten = this.emitText(text, addNewline, true, true, msg);
+    // Disable autoPause - doors handle their own pagination
+    const bytesWritten = this.emitText(text, addNewline, true, false, msg);
 
     console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
     this.reply(msg, bytesWritten);
@@ -299,7 +300,9 @@ export class XIMIOHandler {
 
     console.log(`[XIMIOHandler] JH_SM: "${text}" (msg.data=${msg.data}, addNewline=${shouldAddNewline}, isOnlyAnsi=${isOnlyAnsiCodes}, endsWithColon=${endsWithColonAndAnsi})`);
 
-    this.emitText(text, shouldAddNewline, true, true, msg);
+    // Disable autoPause - doors handle their own pagination (e.g. AquaScan shows "More? (Y/n/ns)")
+    // autoPause was interfering with door pagination and causing output to be lost
+    this.emitText(text, shouldAddNewline, true, false, msg);
 
     this.reply(msg, 1);
   }
@@ -824,6 +827,7 @@ export class XIMIOHandler {
         const suffix = isLastSegment && !shouldAddLineBreak ? '' : '\r\n';
         const output = `${segment}${suffix}`;
 
+        // Emit output BEFORE checking pause
         this.socket.emit('ansi-output', output);
         bytesSent += output.length;
 
@@ -831,6 +835,7 @@ export class XIMIOHandler {
         if (shouldTrackLine) {
           this.state.lineCount += 1;
 
+          // Check pause AFTER emitting current line
           if (
             autoPause &&
             !this.state.nonStopText &&
