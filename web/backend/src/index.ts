@@ -1,3 +1,4 @@
+import 'reflect-metadata'; // Must be first import for tsyringe decorators
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';

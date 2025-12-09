@@ -1,87 +1,141 @@
 /**
- * Dependency Injection
- * Centralized dependency management for command handler
+ * Dependency Injection (DI Container Adapter)
+ *
+ * This module provides backward-compatible getters/setters that delegate to
+ * the tsyringe DI container. This allows gradual migration of handlers to
+ * constructor injection without breaking existing code.
+ *
+ * MIGRATION PATH:
+ * 1. Old code: Uses getDatabase(), getConfig(), etc. (works via container)
+ * 2. New code: Uses @inject() decorators + constructor injection
+ * 3. Future: Remove this file once all handlers use constructor injection
  */
 
 import { ConfigManager } from '../../config';
+import { container, DI_TOKENS } from '../../container';
 
-// Dependencies (injected)
-let db: any;
-let config: any;
-let conferences: any[] = [];
-let messageBases: any[] = [];
-let fileAreas: any[] = [];
-let processOlmMessageQueue: any;
-let checkSecurity: any;
-let setEnvStat: any;
-let getRecentCallerActivity: any;
-let doors: any[] = [];
+// ============================================================================
+// GETTERS - Delegate to DI container
+// ============================================================================
 
-// Constants (injected)
-let SCREEN_MENU: string = 'MENU';
+export function getDatabase(): any {
+  return container.resolve(DI_TOKENS.Database);
+}
 
-// Dependency injection setters
+export function getConfig(): any {
+  try {
+    return container.resolve(DI_TOKENS.Config);
+  } catch {
+    // Lazy-create fallback for early initialization
+    const config = new ConfigManager();
+    container.registerInstance(DI_TOKENS.Config, config);
+    return config;
+  }
+}
+
+export function getConferences(): any[] {
+  return container.resolve(DI_TOKENS.Conferences) as any[];
+}
+
+export function getMessageBases(): any[] {
+  return container.resolve(DI_TOKENS.MessageBases) as any[];
+}
+
+export function getFileAreas(): any[] {
+  return container.resolve(DI_TOKENS.FileAreas) as any[];
+}
+
+export function getDoors(): any[] {
+  return container.resolve(DI_TOKENS.Doors) as any[];
+}
+
+export function getProcessOlmMessageQueue() {
+  try {
+    return container.resolve(DI_TOKENS.ProcessOlmMessageQueue);
+  } catch {
+    return undefined;
+  }
+}
+
+export function getCheckSecurity() {
+  try {
+    return container.resolve(DI_TOKENS.CheckSecurity);
+  } catch {
+    return undefined;
+  }
+}
+
+export function getSetEnvStat() {
+  try {
+    return container.resolve(DI_TOKENS.SetEnvStat);
+  } catch {
+    return undefined;
+  }
+}
+
+export function getGetRecentCallerActivity() {
+  try {
+    return container.resolve(DI_TOKENS.GetRecentCallerActivity);
+  } catch {
+    return undefined;
+  }
+}
+
+export function getScreenMenu(): string {
+  try {
+    const constants = container.resolve(DI_TOKENS.Constants) as any;
+    return constants?.SCREEN_MENU || 'MENU';
+  } catch {
+    return 'MENU';
+  }
+}
+
+// ============================================================================
+// SETTERS - Update DI container (backward compatibility)
+// ============================================================================
+
 export function setDatabase(database: any) {
-  db = database;
+  container.registerInstance(DI_TOKENS.Database, database);
 }
 
 export function setConfig(cfg: any) {
-  config = cfg;
+  container.registerInstance(DI_TOKENS.Config, cfg);
 }
 
 export function setConferences(confs: any[]) {
-  conferences = confs;
+  container.registerInstance(DI_TOKENS.Conferences, confs);
 }
 
 export function setMessageBases(bases: any[]) {
-  messageBases = bases;
+  container.registerInstance(DI_TOKENS.MessageBases, bases);
 }
 
 export function setFileAreas(areas: any[]) {
-  fileAreas = areas;
-}
-
-export function setProcessOlmMessageQueue(fn: any) {
-  console.log('🔧 setProcessOlmMessageQueue called, fn type:', typeof fn);
-  processOlmMessageQueue = fn;
-  console.log('🔧 processOlmMessageQueue set, now type:', typeof processOlmMessageQueue);
-}
-
-export function setCheckSecurity(fn: any) {
-  checkSecurity = fn;
-}
-
-export function setSetEnvStat(fn: any) {
-  setEnvStat = fn;
-}
-
-export function setGetRecentCallerActivity(fn: any) {
-  getRecentCallerActivity = fn;
+  container.registerInstance(DI_TOKENS.FileAreas, areas);
 }
 
 export function setDoors(doorsList: any[]) {
-  doors = doorsList;
+  container.registerInstance(DI_TOKENS.Doors, doorsList);
+}
+
+export function setProcessOlmMessageQueue(fn: any) {
+  console.log('[DI] setProcessOlmMessageQueue called, fn type:', typeof fn);
+  container.registerInstance(DI_TOKENS.ProcessOlmMessageQueue, fn);
+  console.log('[DI] processOlmMessageQueue registered in container');
+}
+
+export function setCheckSecurity(fn: any) {
+  container.registerInstance(DI_TOKENS.CheckSecurity, fn);
+}
+
+export function setSetEnvStat(fn: any) {
+  container.registerInstance(DI_TOKENS.SetEnvStat, fn);
+}
+
+export function setGetRecentCallerActivity(fn: any) {
+  container.registerInstance(DI_TOKENS.GetRecentCallerActivity, fn);
 }
 
 export function setConstants(constants: any) {
-  SCREEN_MENU = constants.SCREEN_MENU;
+  container.registerInstance(DI_TOKENS.Constants, constants);
 }
-
-// Getters for internal use
-export function getDatabase() { return db; }
-export function getConfig() {
-  if (!config) {
-    // Lazy-create to avoid undefined access during early menu render
-    config = new ConfigManager();
-  }
-  return config;
-}
-export function getConferences() { return conferences; }
-export function getMessageBases() { return messageBases; }
-export function getFileAreas() { return fileAreas; }
-export function getProcessOlmMessageQueue() { return processOlmMessageQueue; }
-export function getCheckSecurity() { return checkSecurity; }
-export function getSetEnvStat() { return setEnvStat; }
-export function getGetRecentCallerActivity() { return getRecentCallerActivity; }
-export function getDoors() { return doors; }
-export function getScreenMenu() { return SCREEN_MENU; }

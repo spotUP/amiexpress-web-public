@@ -27,10 +27,12 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "pako": "^2.1.0",
+    "reflect-metadata": "^0.2.2",
     "socket.io": "^4.8.1",
     "ssh2": "^1.17.0",
     "tar-stream": "^3.1.7",
     "tsx": "^4.19.2",
+    "tsyringe": "^4.10.0",
     "typescript": "^5.9.3",
     "zmodem.js": "^0.1.10",
     "zod": "^3.23.8"

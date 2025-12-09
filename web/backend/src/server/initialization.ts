@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { db } from '../database';
 import { config } from '../config';
+import { initializeContainer } from '../container';
 import { loadConfConfig } from '../services/conf-config.service';
 import { conferenceFileManager } from '../services/ConferenceFileManager';
 import {
@@ -480,7 +481,22 @@ export async function initializeData() {
       updateReadPointer
     });
 
-    // Inject dependencies into command handler
+    // Initialize DI container (new Clean Architecture approach)
+    initializeContainer({
+      db,
+      config,
+      conferences,
+      messageBases,
+      fileAreas,
+      doors,
+      processOlmMessageQueue,
+      checkSecurity,
+      setEnvStat,
+      getRecentCallerActivity,
+      constants: { SCREEN_MENU }
+    });
+
+    // Inject dependencies into command handler (backward compatibility)
     setDatabaseForCommandHandler(db);
     setConfig(config);
     setConferencesForCommandHandler(conferences);

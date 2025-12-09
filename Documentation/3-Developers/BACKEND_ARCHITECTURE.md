@@ -183,7 +183,41 @@ Shared utility functions (55 files):
 
 ## Design Patterns
 
-### 1. Repository Pattern
+### 1. Dependency Injection (Clean Architecture)
+**Used In**: All layers
+**Container**: tsyringe
+
+Dependencies are managed via a centralized DI container:
+
+```typescript
+// Container initialization (server/initialization.ts)
+import { initializeContainer } from '../container';
+
+initializeContainer({
+  db,
+  config,
+  conferences,
+  messageBases,
+  // ... all dependencies
+});
+
+// Usage (backward compatible)
+import { getDatabase, getConfig } from './command-handler/dependency-injection';
+const db = getDatabase(); // Delegates to container
+
+// Usage (future pattern)
+@injectable()
+class CommandHandler {
+  constructor(
+    @inject(DI_TOKENS.Database) private db: any,
+    @inject(DI_TOKENS.Config) private config: any
+  ) {}
+}
+```
+
+**See**: [CLEAN_ARCHITECTURE.md](./CLEAN_ARCHITECTURE.md) for full details.
+
+### 2. Repository Pattern
 **Used In**: `database/`
 
 Separates data access logic from business logic. Each entity type has its own repository.
@@ -196,24 +230,18 @@ class UserRepository extends BaseRepository {
 }
 ```
 
-### 2. Dependency Injection
-**Used In**: `handlers/`, `services/`
+### 3. Service Layer Pattern
+**Used In**: `services/`
 
-Dependencies are injected at startup via setter functions:
+Complex business logic isolated from handlers and database.
 
-```typescript
-// In initialization.ts
-setDatabase(db);
-setConferences(conferences);
+**Benefits**:
+- Reusable across handlers
+- Framework-agnostic
+- Easier to test
+- Single responsibility
 
-// In handler
-let db: Database;
-export function setDatabase(database: Database) {
-  db = database;
-}
-```
-
-### 3. Feature-Based Organization
+### 4. Feature-Based Organization
 **Used In**: `handlers/`
 
 Handlers organized by BBS feature (messages, files, chat) rather than by technical layer.
@@ -222,16 +250,6 @@ Handlers organized by BBS feature (messages, files, chat) rather than by technic
 - Easy to find related code
 - Clear module boundaries
 - Supports team specialization
-
-### 4. Service Layer Pattern
-**Used In**: `services/`
-
-Complex business logic isolated from handlers and database.
-
-**Benefits**:
-- Reusable across handlers
-- Easier to test
-- Single responsibility
 
 ## Data Flow
 
@@ -278,6 +296,7 @@ Complex business logic isolated from handlers and database.
 - **Authentication**: JWT + bcrypt
 - **Emulation**: MOIRA (68000 CPU emulator)
 - **File Formats**: AmigaDOS, QWK/REP, AREXX
+- **DI Container**: tsyringe (Clean Architecture implementation)
 
 ## Code Organization Principles
 
@@ -331,11 +350,15 @@ Complex business logic isolated from handlers and database.
 
 ## Future Improvements
 
-1. **Complete Database Migration**: Finish replacing legacy `database.ts` with repositories
-2. **Split Core Handlers**: Further modularize command/door/screen handlers (requires express.e verification)
-3. **API Documentation**: Generate OpenAPI/Swagger docs
-4. **Performance Monitoring**: Add performance metrics
-5. **Error Handling**: Standardize error handling across layers
+1. **Complete DI Migration**: Convert all handlers to use constructor injection with `@injectable()`
+2. **Complete Database Migration**: Finish replacing legacy `database.ts` with repositories
+3. **Split Core Handlers**: Further modularize command/door/screen handlers (requires express.e verification)
+4. **Use Case Classes**: Create explicit use case services for complex operations
+5. **API Documentation**: Generate OpenAPI/Swagger docs
+6. **Performance Monitoring**: Add performance metrics
+7. **Error Handling**: Standardize error handling across layers
+
+**See [CLEAN_ARCHITECTURE.md](./CLEAN_ARCHITECTURE.md) for Clean Architecture implementation details.**
 
 ---
 
