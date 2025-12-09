@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # AmiExpress BBS - Single Node
+  bbs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: amiexpress-bbs
+    restart: unless-stopped
+
+    ports:
+      - "3001:3001"   # HTTP/WebSocket
+      - "2323:2323"   # Telnet
+      - "2222:2222"   # SSH
+      - "8080:8080"   # SDK Preview (optional)
+
+    volumes:
+      # Persistent data
+      - ./db:/app/db
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+      # BBS content (can be customized)
+      - ./Screens:/app/Screens
+      - ./Commands:/app/Commands
+      - ./Bulletins:/app/Bulletins
+      - ./Doors:/app/Doors
+      - ./Users:/app/Users
+
+      # Conference data
+      - ./Conf1:/app/Conf1
+      - ./Conf2:/app/Conf2
+      - ./Conf3:/app/Conf3
+      - ./Conf4:/app/Conf4
+      - ./Conf5:/app/Conf5
+      - ./Conf6:/app/Conf6
+      - ./Conf7:/app/Conf7
+      - ./Conf8:/app/Conf8
+      - ./Conf9:/app/Conf9
+      - ./Conf10:/app/Conf10
+      - ./Conf11:/app/Conf11
+      - ./Conf12:/app/Conf12
+      - ./Conf13:/app/Conf13
+
+      # Amiga ROMs (place Kickstart here)
+      - ./data/amiga-roms:/app/data/amiga-roms:ro
+
+    environment:
+      # Server config
+      - NODE_ENV=production
+      - PORT=3001
+      - BACKEND_PORT=3001
+
+      # Database
+      - DATABASE_DIR=/app/db
+      - DATABASE_FILE=amiexpress.db
+
+      # BBS config
+      - BBS_DATA_DIR=/app/data/bbs
+      - ROM_DIR=/app/data/amiga-roms
+      - NODE_ID=0
+
+      # Security (set these in .env file!)
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
+
+      # Optional: Enable debug logging
+      - DEBUG=${DEBUG:-false}
+      - XIM_DEBUG=${XIM_DEBUG:-0}
+
+    env_file:
+      - .env.local
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - bbs-network
+
+networks:
+  bbs-network:
+    driver: bridge

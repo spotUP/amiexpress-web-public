@@ -1,0 +1,89 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Build outputs
+dist
+build
+.next
+out
+
+# Development
+.git
+.gitignore
+.env.local
+.env.development
+.env.test
+*.log
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage
+.nyc_output
+*.test.ts
+*.spec.ts
+__tests__
+__mocks__
+
+# Documentation (build-time not needed)
+Documentation
+README.md
+*.md
+
+# Dev scripts
+dev/scripts
+.github
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# Database (will be in volume)
+db/*.db
+db/*.sqlite
+db/*.sqlite3
+
+# Logs (will be in volume)
+logs/*.log
+
+# Large binary files (will be in volume)
+data/amiga-roms/*
+!data/amiga-roms/.gitkeep
+
+# Door binaries (will be in volume)
+Doors/*
+!Doors/.gitkeep
+
+# User data (will be in volume)
+Users/*.db
+Users/*.dat
+
+# Node files (generated)
+Node0
+Node1
+Node2
+Node3
+Node4
+Node5
+
+# Batch files (generated)
+batch*
+
+# Development tools
+.eslintrc
+.prettierrc
+tsconfig.json
+jest.config.js

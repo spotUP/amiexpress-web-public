@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # AmiExpress BBS - Multi-Node Setup
+  # Scale with: docker-compose -f docker-compose.multi-node.yml up --scale bbs=4
+
+  bbs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+    ports:
+      - "3001-3010:3001"   # HTTP/WebSocket (10 node capacity)
+      - "2323-2332:2323"   # Telnet (10 nodes)
+      - "2222-2231:2222"   # SSH (10 nodes)
+
+    volumes:
+      # Shared persistent data
+      - ./db:/app/db
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+      # Shared BBS content
+      - ./Screens:/app/Screens
+      - ./Commands:/app/Commands
+      - ./Bulletins:/app/Bulletins
+      - ./Doors:/app/Doors
+      - ./Users:/app/Users
+
+      # Shared conferences
+      - ./Conf1:/app/Conf1
+      - ./Conf2:/app/Conf2
+      - ./Conf3:/app/Conf3
+      - ./Conf4:/app/Conf4
+      - ./Conf5:/app/Conf5
+      - ./Conf6:/app/Conf6
+      - ./Conf7:/app/Conf7
+      - ./Conf8:/app/Conf8
+      - ./Conf9:/app/Conf9
+      - ./Conf10:/app/Conf10
+      - ./Conf11:/app/Conf11
+      - ./Conf12:/app/Conf12
+      - ./Conf13:/app/Conf13
+
+      # Amiga ROMs (shared, read-only)
+      - ./data/amiga-roms:/app/data/amiga-roms:ro
+
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - BACKEND_PORT=3001
+      - DATABASE_DIR=/app/db
+      - BBS_DATA_DIR=/app/data/bbs
+      - ROM_DIR=/app/data/amiga-roms
+
+      # Multi-node coordination
+      - MULTI_NODE=true
+
+      # Security
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
+
+    env_file:
+      - .env.local
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - bbs-network
+
+  # Load Balancer (optional - for multi-node HTTP traffic)
+  nginx:
+    image: nginx:alpine
+    container_name: amiexpress-lb
+    restart: unless-stopped
+
+    ports:
+      - "80:80"     # HTTP
+      - "443:443"   # HTTPS (requires SSL cert)
+
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+
+    depends_on:
+      - bbs
+
+    networks:
+      - bbs-network
+
+networks:
+  bbs-network:
+    driver: bridge
