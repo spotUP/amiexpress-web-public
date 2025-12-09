@@ -104,7 +104,7 @@ WORKDIR /app
 # Copy backend production dependencies
 COPY --from=backend-builder /app/web/backend/package*.json ./web/backend/
 WORKDIR /app/web/backend
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --only=production --ignore-scripts && npm cache clean --force
 
 # Copy all built artifacts (frontend assets)
 WORKDIR /app
