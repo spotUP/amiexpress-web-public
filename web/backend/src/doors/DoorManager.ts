@@ -412,9 +412,11 @@ export class DoorManager {
   private showList(): void {
     this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
 
-    // Header
-    this.socket.emit('ansi-output', '\x1b[0;37;44m' + this.pad(' DOOR MANAGER ', 80) + '\x1b[0m\r\n');
-    this.socket.emit('ansi-output', '\r\n');
+    // Header - fixed at top (position 1,1)
+    this.socket.emit('ansi-output', '\x1b[1;1H\x1b[0;37;44m' + this.pad(' DOOR MANAGER ', 80) + '\x1b[0m');
+
+    // Move to line 3 for content (leave line 2 blank)
+    this.socket.emit('ansi-output', '\x1b[3;1H');
 
     const doors = this.applyFilter(this.state.filter || '');
 
@@ -432,9 +434,17 @@ export class DoorManager {
         const door = doors[i];
         const isSelected = i === this.state.selectedIndex;
 
-        // Format line
+        // Format line - use doorType if available, fallback to type
         const status = door.installed ? '\x1b[32m[*]\x1b[0m' : '\x1b[31m[ ]\x1b[0m';
-        const type = door.type === 'typescript' ? 'TS' : door.type === 'python' ? 'PY' : door.type === 'arexx' ? 'RX' : door.type === 'amiga' ? 'AMI' : 'ARC';
+        const doorType = (door as any).doorType || door.type;
+        const type = doorType === 'TS' ? 'TS' :
+                    doorType === 'PYTHON' ? 'PY' :
+                    doorType === 'AREXX' ? 'RX' :
+                    doorType === 'AMI' || doorType === 'amiga' ? 'AMI' :
+                    door.type === 'typescript' ? 'TS' :
+                    door.type === 'python' ? 'PY' :
+                    door.type === 'arexx' ? 'RX' :
+                    door.type === 'archive' ? 'ARC' : 'AMI';
         const hot = this.supportsHotReload(door) ? '\x1b[35mH\x1b[0m' : ' ';
         const name = door.name.substring(0, 24).padEnd(24);
         const size = this.formatSize(door.size);

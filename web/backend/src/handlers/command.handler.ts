@@ -130,6 +130,7 @@ import {
   handleWEditScreentypeInput,
   handleWEditProtocolInput,
   handleWEditTranslatorInput,
+  handleWEditModemSpeedInput,
   setInfoCommandsDependencies
 } from './commands/info-commands.handler';
 import {
@@ -621,6 +622,13 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     return;
   }
 
+  // Handle DOOR_SELECT state (arrow key navigation for DOORS command)
+  if (session.subState === LoggedOnSubState.DOOR_SELECT) {
+    const { handleDoorSelectInput } = await import('./door.handler');
+    handleDoorSelectInput(socket, session, data);
+    return;
+  }
+
   // If we are already logged off/awaiting and at logoff prompt, ignore stray input
   if (session.state === BBSState.AWAIT && session.subState === LoggedOnSubState.LOGOFF) {
     return;
@@ -965,6 +973,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           session.subState = LoggedOnSubState.DISPLAY_BULL;
           session.user = user;
           session.ansiMode = user.ansi;
+          // Apply modem emulation preference from user baud (0/undefined = full speed)
+          const userBaud = user.baud || 0;
+          session.modemBps = userBaud;
+          session.modemEmulationEnabled = userBaud > 0;
           // Install ANSI filter to strip codes for ANSI-disabled terminals
           if (!(socket as any)._ansiFilterInstalled) {
             const originalEmit = socket.emit.bind(socket);
@@ -2771,8 +2783,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       await handleWOptionSelectInput(socket, session, input);
     } else if (data === '\x7f') {
       if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+      socket.emit('ansi-output', '\b \b');
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
+      socket.emit('ansi-output', data);
     }
     return;
   }
@@ -2968,6 +2982,23 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_MODEM_SPEED) {
+    // Edit modem emulation speed (web extension)
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      session.inputBuffer = '';
+      await handleWEditModemSpeedInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+      socket.emit('ansi-output', '\b \b');
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      socket.emit('ansi-output', data);
     }
     return;
   }

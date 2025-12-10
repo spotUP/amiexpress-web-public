@@ -473,7 +473,7 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
 }
 
 /**
- * Display door games menu (DOORS command)
+ * Display door games menu (DOORS command) - doorman-style UI with arrow keys
  */
 export async function displayDoorMenu(socket: any, session: BBSSession, params: string) {
   // Get TypeScript doors for current user
@@ -506,7 +506,9 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
     conferenceId: null,
     isAmigaDoor: true,
     command: door.command,
-    doorInfo: door  // Keep original door info for execution
+    doorInfo: door,  // Keep original door info for execution
+    doorType: door.doorType || 'AMI',
+    size: door.size || 0
   }));
 
   // Combine both lists
@@ -545,10 +547,9 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
     }
   }
 
-  // No door specified, show menu
-  socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
-
+  // No door specified, show interactive arrow-key menu
   if (allDoors.length === 0) {
+    socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
     socket.emit('ansi-output', 'No doors are currently available.\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -556,23 +557,160 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
     return;
   }
 
-  socket.emit('ansi-output', 'Available doors:\r\n\r\n');
+  // Initialize door selection state
+  session.tempData = {
+    availableDoors: allDoors,
+    selectedIndex: 0,
+    scrollOffset: 0
+  };
 
-  allDoors.forEach((door, index) => {
-    socket.emit('ansi-output', `${index + 1}. ${door.name}\r\n`);
+  // Show door list
+  showDoorsList(socket, session);
 
-    // Display BBS command prominently
-    if (door.command) {
-      socket.emit('ansi-output', `   \x1b[0;36mCommand:\x1b[0m \x1b[33m${door.command}\x1b[0m\r\n`);
+  // Set state to handle arrow key input
+  session.subState = LoggedOnSubState.DOOR_SELECT;
+}
+
+/**
+ * Show doors list with current selection highlighted (doorman-style)
+ */
+function showDoorsList(socket: any, session: BBSSession): void {
+  const { availableDoors, selectedIndex, scrollOffset } = session.tempData;
+
+  // Clear screen and show header - fixed at top (position 1,1)
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+  socket.emit('ansi-output', '\x1b[1;1H\x1b[0;37;44m' + padString(' DOOR GAMES & UTILITIES ', 80) + '\x1b[0m');
+
+  // Move to line 3 for content (leave line 2 blank)
+  socket.emit('ansi-output', '\x1b[3;1H');
+
+  // Display doors (show up to 15 at a time)
+  const pageSize = 15;
+  const visibleDoors = availableDoors.slice(scrollOffset, scrollOffset + pageSize);
+
+  visibleDoors.forEach((door: any, index: number) => {
+    const globalIndex = scrollOffset + index;
+    const isSelected = globalIndex === selectedIndex;
+
+    // Get door type
+    const doorType = (door as any).doorType || door.type;
+    const type = doorType === 'TS' ? 'TS' :
+                doorType === 'PYTHON' ? 'PY' :
+                doorType === 'AREXX' ? 'RX' :
+                doorType === 'AMI' || doorType === 'amiga' ? 'AMI' :
+                door.type === 'typescript' ? 'TS' :
+                door.type === 'python' ? 'PY' :
+                door.type === 'arexx' ? 'RX' :
+                door.type === 'archive' ? 'ARC' : 'AMI';
+
+    // Format command (pad to 10 chars)
+    const command = door.command || door.id;
+    const commandDisplay = padString(command, 10);
+
+    // Format name (pad to 30 chars)
+    const name = padString(door.name, 30);
+
+    // Format size
+    const size = formatDoorSize(door.size || 0);
+
+    // Display door line (no checkbox, just type/command/name/size)
+    if (isSelected) {
+      // Selected: blue background
+      socket.emit('ansi-output', `\x1b[0;37;44m \x1b[33m[${type}]\x1b[0;37;44m ${commandDisplay} ${name} ${size} \x1b[0m\r\n`);
+    } else {
+      // Not selected: normal colors
+      socket.emit('ansi-output', ` \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m\r\n`);
     }
-
-    socket.emit('ansi-output', `   ${door.description}\r\n`);
-    socket.emit('ansi-output', `   Access Level: ${door.accessLevel}\r\n\r\n`);
   });
 
-  socket.emit('ansi-output', '\x1b[32mSelect door (1-\x1b[33m' + allDoors.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
-  session.subState = LoggedOnSubState.DOOR_SELECT;
-  session.tempData = { availableDoors: allDoors };
+  // Footer with instructions
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', '\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[33mArrows:\x1b[0m Navigate  \x1b[33mEnter:\x1b[0m Launch Door  \x1b[33mQ:\x1b[0m Quit\r\n');
+}
+
+/**
+ * Handle input for DOOR_SELECT state (arrow keys to navigate, Enter to launch, Q to quit)
+ */
+export function handleDoorSelectInput(socket: any, session: BBSSession, data: string): void {
+  const key = data.toLowerCase();
+  const { availableDoors, selectedIndex, scrollOffset } = session.tempData;
+
+  // Arrow Up
+  if (data === '\x1b[A' || data === '\x1b\x5b\x41') {
+    if (selectedIndex > 0) {
+      session.tempData.selectedIndex--;
+
+      // Adjust scroll offset
+      const pageSize = 15;
+      if (session.tempData.selectedIndex < scrollOffset) {
+        session.tempData.scrollOffset = Math.max(0, scrollOffset - pageSize);
+      }
+
+      showDoorsList(socket, session);
+    }
+    return;
+  }
+
+  // Arrow Down
+  if (data === '\x1b[B' || data === '\x1b\x5b\x42') {
+    if (selectedIndex < availableDoors.length - 1) {
+      session.tempData.selectedIndex++;
+
+      // Adjust scroll offset
+      const pageSize = 15;
+      if (session.tempData.selectedIndex >= scrollOffset + pageSize) {
+        session.tempData.scrollOffset = Math.min(
+          availableDoors.length - pageSize,
+          scrollOffset + pageSize
+        );
+      }
+
+      showDoorsList(socket, session);
+    }
+    return;
+  }
+
+  // Enter - Launch selected door
+  if (key === '\r' || key === '\n') {
+    const selectedDoor = availableDoors[selectedIndex];
+
+    // Check if it's an Amiga door
+    if (selectedDoor.isAmigaDoor && selectedDoor.doorInfo) {
+      console.log(`[DOOR Command] Launching Amiga door: ${selectedDoor.name}`);
+      launchAmigaDoor(socket, session, selectedDoor.doorInfo);
+    } else {
+      // TypeScript door
+      executeDoor(socket, session, selectedDoor);
+    }
+    return;
+  }
+
+  // Q - Quit back to menu
+  if (key === 'q') {
+    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+    session.tempData = {};
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+}
+
+/**
+ * Format door size for display
+ */
+function formatDoorSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+/**
+ * Pad string to specified length
+ */
+function padString(str: string, length: number): string {
+  if (str.length >= length) return str.substring(0, length);
+  return str + ' '.repeat(length - str.length);
 }
 
 /**
@@ -2124,12 +2262,25 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
  */
 async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
   try {
-    // Extract door ID from path
-    let doorId = door.id;
-
     console.log(`[loadDoorManifestForExecution] Loading manifest for door: ${door.name}, id: ${door.id}, path: ${door.path}`);
 
-    // Try to get door ID from path
+    // Get BBS root (use BBS_ROOT env var or default to project root)
+    const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+
+    // First try: Use door.path directly if provided (case-insensitive via amigafs)
+    if (door.path) {
+      const doorPathAbsolute = path.join(bbsRoot, door.path, 'package.json');
+      console.log(`[loadDoorManifestForExecution] Trying door.path: ${doorPathAbsolute}`);
+      if (amigafs.existsSync(doorPathAbsolute)) {
+        const content = amigafs.readFileSync(doorPathAbsolute, 'utf8').toString();
+        const manifest = JSON.parse(content);
+        console.log(`[loadDoorManifestForExecution] Found manifest via door.path, runtime: ${manifest.runtime || 'not specified'}`);
+        return manifest;
+      }
+    }
+
+    // Second try: Extract door ID from path and try lowercase 'doors' (legacy fallback)
+    let doorId = door.id;
     if (door.path) {
       const pathParts = door.path.split('/');
       // Look for sdk/doors/<doorId> pattern
@@ -2137,8 +2288,8 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
       if (examplesIndex >= 0 && pathParts[examplesIndex + 1]) {
         doorId = pathParts[examplesIndex + 1];
       }
-      // Look for doors/<doorId> pattern
-      const doorsIndex = pathParts.indexOf('doors');
+      // Look for doors/<doorId> pattern (case-insensitive)
+      const doorsIndex = pathParts.findIndex(p => p.toLowerCase() === 'doors');
       if (doorsIndex >= 0 && pathParts[doorsIndex + 1]) {
         doorId = pathParts[doorsIndex + 1];
       }
@@ -2146,20 +2297,17 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
 
     console.log(`[loadDoorManifestForExecution] Extracted doorId: ${doorId}`);
 
-    // Get BBS root (use BBS_ROOT env var or default to project root)
-    const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
-
-    // Prefer installed doors directory at BBS root
+    // Try lowercase doors directory at BBS root (legacy path, case-insensitive via amigafs)
     const doorsPath = path.join(bbsRoot, 'doors', doorId, 'package.json');
-    console.log(`[loadDoorManifestForExecution] Trying doors path: ${doorsPath}`);
-    if (fs.existsSync(doorsPath)) {
-      const content = fs.readFileSync(doorsPath, 'utf8');
+    console.log(`[loadDoorManifestForExecution] Trying legacy doors path: ${doorsPath}`);
+    if (amigafs.existsSync(doorsPath)) {
+      const content = amigafs.readFileSync(doorsPath, 'utf8').toString();
       const manifest = JSON.parse(content);
-      console.log(`[loadDoorManifestForExecution] Found doors manifest, runtime: ${manifest.runtime || 'not specified'}`);
+      console.log(`[loadDoorManifestForExecution] Found legacy doors manifest, runtime: ${manifest.runtime || 'not specified'}`);
       return manifest;
     }
 
-    console.log(`[loadDoorManifestForExecution] No manifest found for ${doorId}`);
+    console.log(`[loadDoorManifestForExecution] No manifest found for ${door.name} (id: ${door.id}, doorId: ${doorId})`);
     return null;
   } catch (error) {
     console.error(`[loadDoorManifestForExecution] Error loading manifest:`, error);
