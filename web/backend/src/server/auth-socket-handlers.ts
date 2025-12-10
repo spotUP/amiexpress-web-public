@@ -481,7 +481,9 @@ export function registerAuthHandlers(socket: Socket) {
           { retries: session.loginRetryCount },
           DebugSeverity.WARNING
         );
-        socket.emit('login-failed', 'Username cannot be empty');
+        // Don't emit login-failed for empty username - just show prompt again
+        // login-failed clears saved credentials which is annoying for typos
+        socket.emit('ansi-output', '\r\n\x1b[33mUsername cannot be empty\x1b[0m\r\nUsername: ');
         socket.emit('retry-login');
         return;
       }
@@ -514,7 +516,8 @@ export function registerAuthHandlers(socket: Socket) {
         { error: (error as Error).message },
         DebugSeverity.CRITICAL
       );
-      socket.emit('login-failed', 'Error checking username');
+      // Don't clear credentials for server errors - just retry
+      socket.emit('ansi-output', '\r\n\x1b[31mError checking username, please try again\x1b[0m\r\nUsername: ');
       socket.emit('retry-login');
     }
   });
@@ -557,8 +560,9 @@ export function registerAuthHandlers(socket: Socket) {
           return;
         }
 
-        // Retry login - send back to login screen
+        // Retry login - send back to login screen with username prompt
         console.log('User chose to retry login');
+        socket.emit('ansi-output', '\r\nUsername: ');
         socket.emit('retry-login');
       }
     } catch (error) {

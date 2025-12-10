@@ -602,8 +602,32 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   let srMatch;
   while ((srMatch = srRegex.exec(parsed)) !== null) {
     const maxCountRaw = srMatch[1];
-    const basePath = srMatch[2].trim();
+    let basePath = srMatch[2].trim();
     screenDebug('[MCI] Found ~SR_ random file request:', basePath);
+
+    // Resolve Amiga assign paths (WORK:, BBS:, etc.) to filesystem paths
+    // WORK: and BBS: both point to the BBS data directory
+    if (basePath.includes(':')) {
+      const { config } = require('../config');
+      const baseDir = config.getConfig().dataDir;
+      const colonIdx = basePath.indexOf(':');
+      const assign = basePath.substring(0, colonIdx).toUpperCase();
+      const subpath = basePath.substring(colonIdx + 1);
+
+      // WORK: and BBS: assigns point to BBS root, strip leading "bbs/" if present
+      if (assign === 'WORK' || assign === 'BBS') {
+        let resolvedSubpath = subpath;
+        // Strip leading "bbs/" since WORK:/BBS: already point to BBS root
+        if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
+          resolvedSubpath = resolvedSubpath.substring(4);
+        }
+        basePath = path.join(baseDir, resolvedSubpath);
+        screenDebug('[MCI] ~SR_ resolved WORK:/BBS: path to:', basePath);
+      } else if (assign === 'SCREENS') {
+        basePath = path.join(baseDir, 'Screens', subpath);
+        screenDebug('[MCI] ~SR_ resolved SCREENS: path to:', basePath);
+      }
+    }
 
     // Optional numeric prefix sets the upper bound (default 99 like express.e used)
     const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
