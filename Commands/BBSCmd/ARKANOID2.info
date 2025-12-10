@@ -1,0 +1,8 @@
+BBSCMD=ARKANOID2
+TYPE=TS
+RUNTIME=HYBRID
+LOCATION=Doors/arkanoid-audio
+DESCRIPTION=Arkanoid with Web Audio sounds and music
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

@@ -1,0 +1,31 @@
+{
+  "name": "arkanoid-audio",
+  "version": "2.0.0",
+  "description": "Arkanoid with Web Audio sounds and music - Hybrid Door",
+  "main": "server.ts",
+  "bbsCommand": "ARKANOID2",
+  "doorType": "TS",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./server.ts"
+  },
+  "accessLevel": 0,
+  "author": "AmiExpress-Web",
+  "keywords": ["bbs", "door", "game", "arkanoid", "breakout", "arcade", "audio", "hybrid"],
+  "scripts": {
+    "build": "tsc && npm run bundle:client",
+    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --external:fs --external:path --external:child_process --external:neo-blessed",
+    "start": "npx tsx server.ts"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "esbuild": "^0.19.0",
+    "typescript": "^5.0.0"
+  }
+}

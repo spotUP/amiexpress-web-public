@@ -110,7 +110,7 @@ const PADDLE_WIDTH_DEFAULT = 10;
 const PADDLE_WIDTH_SMALL = 6;
 const PADDLE_WIDTH_LARGE = 14;
 const PADDLE_Y = GAME_BOTTOM - 1;
-const PADDLE_SPEED = 3;
+const PADDLE_SPEED = 6; // Doubled from 3 for better responsiveness
 
 const BALL_SPEED_DEFAULT = 1;
 const BALL_SPEED_FAST = 1.5;
@@ -1257,8 +1257,32 @@ class ArkanoidGame {
   // Input Handling
   // =============================================================================
 
+  /**
+   * Translate raw terminal escape sequences to readable key names
+   */
+  private translateKey(key: string): string {
+    // ANSI escape sequences for arrow keys
+    const keyMap: Record<string, string> = {
+      '\x1b[A': 'arrowup',
+      '\x1b[B': 'arrowdown',
+      '\x1b[C': 'arrowright',
+      '\x1b[D': 'arrowleft',
+      '\x1bOA': 'arrowup',    // Application mode
+      '\x1bOB': 'arrowdown',
+      '\x1bOC': 'arrowright',
+      '\x1bOD': 'arrowleft',
+      '\r': 'enter',
+      '\n': 'enter',
+      '\x7f': 'backspace',
+      '\x08': 'backspace',
+      ' ': 'space',
+    };
+    return keyMap[key] || key.toLowerCase();
+  }
+
   private handleInput(key: string): void {
-    const k = key.toLowerCase();
+    const k = this.translateKey(key);
+    console.log('[Arkanoid] Key input:', JSON.stringify(key), '→', k, 'state:', this.data.state);
 
     switch (this.data.state) {
       case 'menu':
@@ -1356,6 +1380,7 @@ class ArkanoidGame {
   private handleMouseInput(event: { type: string; x: number; y: number; button?: number }): void {
     // Mouse events: mouse-hover, mouse-click, mouse-drag, mouse-up
     // x and y are 1-indexed terminal coordinates
+    console.log('[Arkanoid] Mouse event:', event.type, 'x:', event.x, 'y:', event.y, 'state:', this.data.state);
 
     if (this.data.state === 'playing') {
       // Map mouse X position to paddle position
@@ -1426,7 +1451,7 @@ class ArkanoidGame {
     this.socket.emit('ansi-output', '\x1b[32mThanks for playing ARKANOID!\x1b[0m\r\n');
 
     this.cleanup();
-    this.socket.emit('door:close');
+    this.socket.emit('door-exit');
   }
 
   private cleanup(): void {
