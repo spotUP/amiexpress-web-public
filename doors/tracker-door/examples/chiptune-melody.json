@@ -1,0 +1,116 @@
+{
+  "title": "Chiptune Melody",
+  "artist": "Demo Scene",
+  "comments": "A simple chiptune melody demonstrating basic tracker features",
+  "bpm": 140,
+  "ticksPerRow": 6,
+  "channels": 4,
+  "sequence": [0, 1, 0, 2],
+  "loopStart": 0,
+  "loopEnd": 3,
+  "patterns": [
+    {
+      "id": 0,
+      "name": "Pattern 00 - Intro",
+      "rows": 64,
+      "channels": 4,
+      "data": {
+        "0:0": { "note": "C-4", "instrument": 1, "volume": 200 },
+        "4:0": { "note": "E-4", "instrument": 1, "volume": 200 },
+        "8:0": { "note": "G-4", "instrument": 1, "volume": 200 },
+        "12:0": { "note": "C-5", "instrument": 1, "volume": 200 },
+        "16:0": { "note": "G-4", "instrument": 1, "volume": 200 },
+        "20:0": { "note": "E-4", "instrument": 1, "volume": 200 },
+        "24:0": { "note": "C-4", "instrument": 1, "volume": 200 },
+        "32:1": { "note": "C-3", "instrument": 2, "volume": 180 },
+        "40:1": { "note": "G-3", "instrument": 2, "volume": 180 },
+        "48:1": { "note": "C-3", "instrument": 2, "volume": 180 },
+        "56:1": { "note": "G-3", "instrument": 2, "volume": 180 },
+        "0:2": { "note": "C-5", "instrument": 3, "volume": 120 },
+        "8:2": { "note": "C-5", "instrument": 3, "volume": 120 },
+        "16:2": { "note": "C-5", "instrument": 3, "volume": 120 },
+        "24:2": { "note": "C-5", "instrument": 3, "volume": 120 },
+        "32:2": { "note": "C-5", "instrument": 3, "volume": 120 },
+        "40:2": { "note": "C-5", "instrument": 3, "volume": 120 },
+        "48:2": { "note": "C-5", "instrument": 3, "volume": 120 },
+        "56:2": { "note": "C-5", "instrument": 3, "volume": 120 }
+      }
+    },
+    {
+      "id": 1,
+      "name": "Pattern 01 - Verse",
+      "rows": 64,
+      "channels": 4,
+      "data": {
+        "0:0": { "note": "D-4", "instrument": 1, "volume": 200 },
+        "4:0": { "note": "F-4", "instrument": 1, "volume": 200 },
+        "8:0": { "note": "A-4", "instrument": 1, "volume": 200 },
+        "12:0": { "note": "D-5", "instrument": 1, "volume": 200 },
+        "16:0": { "note": "A-4", "instrument": 1, "volume": 200 },
+        "20:0": { "note": "F-4", "instrument": 1, "volume": 200 },
+        "24:0": { "note": "D-4", "instrument": 1, "volume": 200 },
+        "32:1": { "note": "D-3", "instrument": 2, "volume": 180 },
+        "40:1": { "note": "A-3", "instrument": 2, "volume": 180 },
+        "48:1": { "note": "D-3", "instrument": 2, "volume": 180 },
+        "56:1": { "note": "A-3", "instrument": 2, "volume": 180 }
+      }
+    },
+    {
+      "id": 2,
+      "name": "Pattern 02 - Break",
+      "rows": 64,
+      "channels": 4,
+      "data": {
+        "0:0": { "note": "E-4", "instrument": 1, "volume": 220 },
+        "8:0": { "note": "G-4", "instrument": 1, "volume": 220 },
+        "16:0": { "note": "B-4", "instrument": 1, "volume": 220 },
+        "24:0": { "note": "E-5", "instrument": 1, "volume": 220 },
+        "32:0": { "note": "D-5", "instrument": 1, "volume": 200 },
+        "40:0": { "note": "C-5", "instrument": 1, "volume": 180 },
+        "48:0": { "note": "B-4", "instrument": 1, "volume": 160 },
+        "56:0": { "note": "A-4", "instrument": 1, "volume": 140 },
+        "0:3": { "note": "C-2", "instrument": 6, "volume": 200 },
+        "16:3": { "note": "C-2", "instrument": 6, "volume": 200 },
+        "32:3": { "note": "C-2", "instrument": 6, "volume": 200 },
+        "48:3": { "note": "C-2", "instrument": 6, "volume": 200 }
+      }
+    }
+  ],
+  "instruments": [
+    {
+      "id": 1,
+      "name": "Square Lead",
+      "type": "synth",
+      "oscillator": { "type": "square", "detune": 0 },
+      "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.7, "release": 0.3 },
+      "effects": []
+    },
+    {
+      "id": 2,
+      "name": "Saw Bass",
+      "type": "synth",
+      "oscillator": { "type": "sawtooth", "detune": 0 },
+      "filter": { "type": "lowpass", "frequency": 800, "Q": 5 },
+      "envelope": { "attack": 0.01, "decay": 0.2, "sustain": 0.5, "release": 0.1 },
+      "effects": []
+    },
+    {
+      "id": 3,
+      "name": "Hihat",
+      "type": "synth",
+      "oscillator": { "type": "noise" },
+      "filter": { "type": "highpass", "frequency": 8000, "Q": 1 },
+      "envelope": { "attack": 0.001, "decay": 0.05, "sustain": 0.0, "release": 0.05 },
+      "effects": []
+    },
+    {
+      "id": 6,
+      "name": "Kick Drum",
+      "type": "synth",
+      "oscillator": { "type": "sine", "detune": 0 },
+      "filter": { "type": "lowpass", "frequency": 150, "Q": 1 },
+      "envelope": { "attack": 0.001, "decay": 0.1, "sustain": 0.0, "release": 0.1 },
+      "effects": []
+    }
+  ]
+}

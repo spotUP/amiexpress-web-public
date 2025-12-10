@@ -38,8 +38,32 @@ const upload = multer({ storage: multer.memoryStorage() });
 const PORT = process.env.PORT || 8080;
 const DEBUG_OUTPUT = process.env.DEBUG_OUTPUT === 'true' || false;
 
+// Door directories - prefer BBS doors/ over SDK examples/
+const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const BBS_DOORS_DIR = path.join(PROJECT_ROOT, 'doors');
+const SDK_EXAMPLES_DIR = path.join(__dirname, '../../examples');
+
+// Use BBS doors directory as primary source for TypeScript doors
+const DOORS_DIR = fs.existsSync(BBS_DOORS_DIR) ? BBS_DOORS_DIR : SDK_EXAMPLES_DIR;
+
+/**
+ * Resolve door path - checks BBS doors/ first, then SDK examples/
+ * @param {string} doorId - Door directory name
+ * @returns {string|null} Path to door directory or null if not found
+ */
+function resolveDoorPath(doorId) {
+  const bbsPath = path.join(BBS_DOORS_DIR, doorId);
+  if (fs.existsSync(bbsPath)) return bbsPath;
+
+  const sdkPath = path.join(SDK_EXAMPLES_DIR, doorId);
+  if (fs.existsSync(sdkPath)) return sdkPath;
+
+  return null;
+}
+
 // Log DEBUG_OUTPUT at startup
 console.log(`[DEBUG] DEBUG_OUTPUT: ${DEBUG_OUTPUT} (from env: ${process.env.DEBUG_OUTPUT})`);
+console.log(`[DEBUG] DOORS_DIR: ${DOORS_DIR}`);
 
 /**
  * Install door to BBS structure
@@ -165,10 +189,11 @@ function killOldServers() {
 killOldServers();
 
 /**
- * Compile all example games and send progress to connected clients
+ * Compile all TypeScript doors and send progress to connected clients
  */
 async function compileExamples() {
-  const examplesDir = path.join(__dirname, '../../examples');
+  // Use BBS doors directory for compiling TypeScript doors
+  const examplesDir = DOORS_DIR;
 
   // Broadcast to all clients
   const broadcast = (message, level = 'log') => {
@@ -310,39 +335,31 @@ app.get('/', (req, res) => {
   }
 });
 
-// API: List available doors
+// API: List available doors (from BBS doors/ directory)
 app.get('/api/doors', (req, res) => {
-  const examplesDir = path.join(__dirname, '../../examples');
+  // Only list TypeScript doors with package.json from BBS doors/ directory
   const doors = fs
-    .readdirSync(examplesDir)
+    .readdirSync(DOORS_DIR)
     .filter((name) => {
-      const stat = fs.statSync(path.join(examplesDir, name));
-      return stat.isDirectory();
+      const doorPath = path.join(DOORS_DIR, name);
+      const stat = fs.statSync(doorPath);
+      if (!stat.isDirectory()) return false;
+      // Only include doors with package.json (TypeScript doors)
+      return fs.existsSync(path.join(doorPath, 'package.json'));
     })
     .map((name) => {
-      const pkgPath = path.join(examplesDir, name, 'package.json');
-      const thumbnailPath = path.join(examplesDir, name, 'thumbnail.png');
+      const doorPath = path.join(DOORS_DIR, name);
+      const pkgPath = path.join(doorPath, 'package.json');
+      const thumbnailPath = path.join(doorPath, 'thumbnail.png');
       const hasScreenshot = fs.existsSync(thumbnailPath);
 
-      if (fs.existsSync(pkgPath)) {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-        return {
-          id: name,
-          name: pkg.name || name,
-          description: pkg.description || '',
-          version: pkg.version || '1.0.0',
-          author: pkg.author || 'Unknown',
-          favorite: false,
-          lastOpened: 0,
-          thumbnail: hasScreenshot ? `/api/doors/${name}/thumbnail` : undefined,
-        };
-      }
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       return {
         id: name,
-        name,
-        description: '',
-        version: '1.0.0',
-        author: 'Unknown',
+        name: pkg.name || name,
+        description: pkg.description || '',
+        version: pkg.version || '1.0.0',
+        author: pkg.author || 'Unknown',
         favorite: false,
         lastOpened: 0,
         thumbnail: hasScreenshot ? `/api/doors/${name}/thumbnail` : undefined,
@@ -356,7 +373,7 @@ app.get('/api/doors', (req, res) => {
 app.get('/api/doors/:doorId/metadata', (req, res) => {
   try {
     const { doorId } = req.params;
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -416,7 +433,7 @@ app.get('/api/doors/:doorId/metadata', (req, res) => {
 app.get('/api/doors/:doorId/files', (req, res) => {
   try {
     const { doorId } = req.params;
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -470,7 +487,11 @@ app.get('/api/doors/:doorId/files/*', (req, res) => {
   try {
     const { doorId } = req.params;
     const filePath = req.params[0]; // Everything after /files/
-    const fullPath = path.join(__dirname, '../../examples', doorId, filePath);
+    const doorPath = resolveDoorPath(doorId);
+    if (!doorPath) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+    const fullPath = path.join(doorPath, filePath);
 
     if (!fs.existsSync(fullPath)) {
       return res.status(404).json({ error: 'File not found' });
@@ -493,7 +514,11 @@ app.get('/api/doors/:doorId/files/*', (req, res) => {
 app.get('/api/doors/:doorId/thumbnail', (req, res) => {
   try {
     const { doorId } = req.params;
-    const thumbnailPath = path.join(__dirname, '../../examples', doorId, 'thumbnail.png');
+    const doorPath = resolveDoorPath(doorId);
+    if (!doorPath) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+    const thumbnailPath = path.join(doorPath, 'thumbnail.png');
 
     if (!fs.existsSync(thumbnailPath)) {
       return res.status(404).json({ error: 'Thumbnail not found' });
@@ -517,10 +542,13 @@ app.post('/api/doors/:doorId/files/*', (req, res) => {
       return res.status(400).json({ error: 'Content is required' });
     }
 
-    const fullPath = path.join(__dirname, '../../examples', doorId, filePath);
+    const doorPath = resolveDoorPath(doorId);
+    if (!doorPath) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+    const fullPath = path.join(doorPath, filePath);
 
     // Security check: ensure path is within door directory
-    const doorPath = path.join(__dirname, '../../examples', doorId);
     const resolvedPath = path.resolve(fullPath);
     if (!resolvedPath.startsWith(doorPath)) {
       return res.status(403).json({ error: 'Access denied' });
@@ -546,7 +574,7 @@ app.post('/api/doors/:doorId/files/*', (req, res) => {
 app.post('/api/doors/:doorId/build', (req, res) => {
   try {
     const { doorId } = req.params;
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -615,7 +643,7 @@ app.post('/api/ai-prompt', async (req, res) => {
       return res.status(400).json({ error: 'OpenRouter API key is required' });
     }
 
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
     }
@@ -783,7 +811,7 @@ app.get('/api/doors/:doorId/files', async (req, res) => {
     const { doorId } = req.params;
     const { includeSource = 'true', includeAssets = 'true', includeDocs = 'true' } = req.query;
 
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -877,7 +905,7 @@ app.post('/api/doors/:doorId/release', upload.array('extraFiles'), async (req, r
     const extraFiles = req.files || [];
     console.log(`[PACKAGE] Creating release with ${extraFiles.length} extra file(s)`);
 
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -1100,7 +1128,7 @@ app.get('/downloads/:filename', (req, res) => {
 app.get('/api/doors/:doorId/install-status', (req, res) => {
   try {
     const { doorId } = req.params;
-    const sdkDoorPath = path.join(__dirname, '../../examples', doorId);
+    const sdkDoorPath = resolveDoorPath(doorId);
 
     // BBS doors directory (web/backend/src/doors)
     const bbsDoorsPath = path.join(__dirname, '../../../web/backend/src/doors', doorId);
@@ -1124,7 +1152,7 @@ app.get('/api/doors/:doorId/install-status', (req, res) => {
 app.post('/api/doors/:doorId/install', async (req, res) => {
   try {
     const { doorId } = req.params;
-    const sdkDoorPath = path.join(__dirname, '../../examples', doorId);
+    const sdkDoorPath = resolveDoorPath(doorId);
     const bbsDoorsPath = path.join(__dirname, '../../../web/backend/src/doors', doorId);
 
     if (!fs.existsSync(sdkDoorPath)) {
@@ -1277,7 +1305,7 @@ app.delete('/api/doors/:doorId/install', (req, res) => {
 app.get('/api/doors/:doorId/nfo', (req, res) => {
   try {
     const { doorId } = req.params;
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -1348,7 +1376,7 @@ app.post('/api/doors/:doorId/nfo', (req, res) => {
       return res.status(400).json({ error: 'Content is required' });
     }
 
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -1377,7 +1405,7 @@ app.post('/api/doors/:doorId/nfo', (req, res) => {
 app.get('/api/doors/:doorId/file_id_diz', (req, res) => {
   try {
     const { doorId } = req.params;
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -1443,7 +1471,7 @@ app.post('/api/doors/:doorId/file_id_diz', (req, res) => {
       return res.status(400).json({ error: 'Content is required' });
     }
 
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -1476,7 +1504,7 @@ app.post('/api/doors/:doorId/file_id_diz/upload', (req, res) => {
       return res.status(400).json({ error: 'Content is required' });
     }
 
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       return res.status(404).json({ error: 'Door not found' });
@@ -1569,7 +1597,7 @@ Return ONLY valid TypeScript code with no explanations. The code should be compl
 
     // Create door ID (sanitized name)
     const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     // Create door directory
     if (fs.existsSync(doorPath)) {
@@ -2135,7 +2163,7 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
 
     // Create door ID
     const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (fs.existsSync(doorPath)) {
       return sendError(`A game with ID "${doorId}" already exists`);
@@ -2251,7 +2279,7 @@ app.post('/api/games/save', async (req, res) => {
     }
 
     const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (fs.existsSync(doorPath)) {
       return res.status(409).json({ error: `A game with ID "${doorId}" already exists` });
@@ -2472,9 +2500,8 @@ app.post('/api/doors/import', async (req, res) => {
     // Sanitize door ID (remove @ prefix, convert slashes to hyphens)
     doorId = doorId.replace(/^@[^/]+\//, '').replace(/\//g, '-').toLowerCase();
 
-    // Check if door already exists
-    const examplesDir = path.join(__dirname, '../../examples');
-    const targetDir = path.join(examplesDir, doorId);
+    // Check if door already exists - import to BBS doors directory
+    const targetDir = path.join(BBS_DOORS_DIR, doorId);
 
     if (fs.existsSync(targetDir)) {
       // Clean up temp files
@@ -2754,7 +2781,7 @@ function selectDoor(clientId, doorId) {
   if (!client) return;
 
   try {
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       client.ws.send(
@@ -2880,7 +2907,7 @@ function loadFileTree(clientId, doorId) {
   if (!client) return;
 
   try {
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     function buildTree(dir, baseDir = '') {
       const items = fs.readdirSync(dir);
@@ -2945,7 +2972,7 @@ function buildDoor(clientId, doorId) {
   if (!client) return;
 
   try {
-    const doorPath = path.join(__dirname, '../../examples', doorId);
+    const doorPath = resolveDoorPath(doorId);
 
     if (!fs.existsSync(doorPath)) {
       client.ws.send(
@@ -3229,7 +3256,17 @@ function loadFile(clientId, filePath) {
   if (!client || !client.currentDoor) return;
 
   try {
-    const fullPath = path.join(__dirname, '../../examples', client.currentDoor, filePath);
+    const doorPath = resolveDoorPath(client.currentDoor);
+    if (!doorPath) {
+      client.ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: `Door not found: ${client.currentDoor}`,
+        })
+      );
+      return;
+    }
+    const fullPath = path.join(doorPath, filePath);
 
     if (!fs.existsSync(fullPath)) {
       client.ws.send(
@@ -3271,10 +3308,19 @@ function saveFile(clientId, filePath, content) {
   if (!client || !client.currentDoor) return;
 
   try {
-    const fullPath = path.join(__dirname, '../../examples', client.currentDoor, filePath);
+    const doorPath = resolveDoorPath(client.currentDoor);
+    if (!doorPath) {
+      client.ws.send(
+        JSON.stringify({
+          type: 'error',
+          data: `Door not found: ${client.currentDoor}`,
+        })
+      );
+      return;
+    }
+    const fullPath = path.join(doorPath, filePath);
 
     // Security check
-    const doorPath = path.join(__dirname, '../../examples', client.currentDoor);
     const resolvedPath = path.resolve(fullPath);
     if (!resolvedPath.startsWith(doorPath)) {
       client.ws.send(
@@ -3558,7 +3604,7 @@ function startDoor(clientId, doorId) {
     client.doorProcess.kill();
   }
 
-  const doorPath = path.join(__dirname, '../../examples', doorId);
+  const doorPath = resolveDoorPath(doorId);
   debugLog(clientId, `📂 [START DOOR] Door path: ${doorPath}`);
   debugLog(clientId, `📂 [START DOOR] Door path exists: ${fs.existsSync(doorPath)}`);
 

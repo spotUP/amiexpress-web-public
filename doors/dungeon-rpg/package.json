@@ -1,0 +1,42 @@
+{
+  "name": "dungeon-rpg-complete",
+  "version": "1.0.0",
+  "description": "Comprehensive RPG example demonstrating all SDK features",
+  "main": "dist/index.js",
+  "author": "AmiExpress SDK Team",
+  "license": "MIT",
+  "category": "rpg",
+  "bbsCommand": "DUNGEON",
+  "scripts": {
+    "start": "npx tsx index.ts",
+    "dev": "npx tsx --watch index.ts",
+    "build": "tsc",
+    "preview": "cd ../.. && npm run preview",
+    "pack": "cd ../.. && npm run pack dungeon-rpg",
+    "validate": "cd ../.. && npm run validate ."
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "game",
+    "rpg",
+    "dungeon",
+    "crawler",
+    "complete"
+  ],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2",
+    "tsx": "^4.19.2"
+  },
+  "runtime": "hybrid",
+  "client": {
+    "entry": "index.ts"
+  },
+  "server": {
+    "entry": "server.ts"
+  }
+}

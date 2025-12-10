@@ -170,9 +170,15 @@ export async function runDoor(doorSession: any): Promise<void> {
   if (!config.enabled) {
     socket.emit('ansi-output', '\x1b[33mDiscord announcements are DISABLED\x1b[0m\r\n');
   } else if (!config.webhookUrl) {
-    socket.emit('ansi-output', '\x1b[31mNo webhook URL configured!\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\nSet DISCORD_WEBHOOK_URL environment variable or\r\n');
-    socket.emit('ansi-output', 'create doors/discord-announce/dannounce.cfg\r\n');
+    socket.emit('ansi-output', '\x1b[31mNo webhook URL configured!\x1b[0m\r\n\r\n');
+    socket.emit('ansi-output', '\x1b[33mConfiguration options:\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\n1. Set DISCORD_WEBHOOK_URL environment variable\r\n');
+    socket.emit('ansi-output', '   in .env.local\r\n');
+    socket.emit('ansi-output', '\r\n2. Or create doors/discord-announce/dannounce.cfg:\r\n');
+    socket.emit('ansi-output', '   WEBHOOKURL=https://discord.com/api/webhooks/...\r\n');
+    socket.emit('ansi-output', '   ENABLED=YES\r\n');
+    socket.emit('ansi-output', '   BOTNAME=/X Announce Bot\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[36mSee dannounce.cfg.example for template\x1b[0m\r\n');
   } else {
     socket.emit('ansi-output', '\x1b[32mSending test announcement...\x1b[0m\r\n\r\n');
 

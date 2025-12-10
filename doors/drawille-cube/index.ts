@@ -2,7 +2,6 @@
 /// <reference path="./types.d.ts" />
 const drawille = require('drawille');
 const DrawilleCanvas = typeof drawille === 'function' ? drawille : drawille.Canvas;
-const { runDoorWithSession } = require('@amiexpress/bbs-door-sdk/tools/runDoorSession');
 
 interface Point3D { x: number; y: number; z: number; }
 interface Point2D { x: number; y: number; }

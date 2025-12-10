@@ -1,0 +1,20 @@
+{
+  "name": "arkanoid",
+  "version": "1.0.0",
+  "description": "Classic Arkanoid/Breakout game for BBS terminals with ANSI graphics",
+  "main": "index.ts",
+  "bbsCommand": "ARKANOID",
+  "doorType": "TS",
+  "runtime": "server",
+  "doorPattern": "runDoor",
+  "accessLevel": 0,
+  "author": "AmiExpress-Web",
+  "keywords": ["bbs", "door", "game", "arkanoid", "breakout", "arcade"],
+  "scripts": {
+    "build": "tsc",
+    "start": "npx tsx index.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

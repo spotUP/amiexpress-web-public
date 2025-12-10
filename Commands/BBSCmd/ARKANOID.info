@@ -1,0 +1,7 @@
+BBSCMD=ARKANOID
+TYPE=TS
+LOCATION=doors/arkanoid
+DESCRIPTION=Classic Arkanoid/Breakout game with ANSI graphics
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
