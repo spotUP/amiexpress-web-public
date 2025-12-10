@@ -5,7 +5,7 @@
 ~f
 ~CC_gwall ~SP
 ~f
-~5SR_WORK:screens/flt/flt ~SP
+~5SR_BBS:screens/flt/flt ~SP
 ~f
 ~SS_BBS:screens/uprough.txt ~SP
 ~f
