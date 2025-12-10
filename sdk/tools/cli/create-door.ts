@@ -198,7 +198,7 @@ async function getDoorConfig(
     }
   ]);
 
-  return answers;
+  return answers as DoorConfig;
 }
 
 /**
