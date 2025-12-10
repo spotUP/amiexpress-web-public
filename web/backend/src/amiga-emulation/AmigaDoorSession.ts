@@ -293,6 +293,18 @@ export class AmigaDoorSession {
         sentInitialMessage: this.sharedState.sentInitialMessage,
       });
 
+      // CRITICAL: Re-register door message callback now that messageHandler exists
+      // The callback was initially set in setupComponentCallbacks() but at that time
+      // messageHandler was null. The callback closure captures 'this.messageHandler',
+      // which is now non-null, so it will work correctly.
+      this.sharedState.execLibrary.setDoorMessageCallback(
+        async (portAddr: number, msgAddr: number) => {
+          if (this.messageHandler) {
+            await this.messageHandler.handleDoorMessage(portAddr, msgAddr);
+          }
+        }
+      );
+
       // Optional watchpoints for debugging: set DOOR_WATCH_ADDRESSES as comma-separated hex
       const watchEnv = process.env.DOOR_WATCH_ADDRESSES;
       const watchOffEnv = process.env.DOOR_WATCH_OFFSETS;

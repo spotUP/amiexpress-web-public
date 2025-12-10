@@ -1700,6 +1700,22 @@ export class ExecLibrary {
   }
 
   /**
+   * Reset signal allocation for a fresh door execution context.
+   *
+   * Called before door execution begins to ensure the door has access to
+   * all signal bits. On real Amiga, each task has its own signal allocation,
+   * but our emulator uses a shared pool. This resets it for each door.
+   */
+  resetSignalsForDoor(): void {
+    console.log(
+      `[ExecLibrary] Resetting signals for door execution (was 0x${this.allocatedSignals.toString(
+        16
+      )})`
+    );
+    this.allocatedSignals = 0;
+  }
+
+  /**
    * SetSignal() - LVO -306 (0xFFFFFED2)
    *
    * Examine and/or modify the set of signals for the current task.
@@ -3279,7 +3295,14 @@ export class ExecLibrary {
     msgAddr: number,
     options?: { suppressDoorCallback?: boolean }
   ): void {
+    // DEBUG: Log incoming options to trace suppression issue
+    console.log(`[ExecLibrary] putMsg called with options:`, JSON.stringify(options));
+    if (options?.suppressDoorCallback) {
+      console.log(`[ExecLibrary] Stack trace for suppressDoorCallback=true:`);
+      console.log(new Error().stack);
+    }
     const suppressDoorCallback = options?.suppressDoorCallback ?? false;
+    console.log(`[ExecLibrary] suppressDoorCallback resolved: ${suppressDoorCallback}`);
 
     console.log(
       `[ExecLibrary] PutMsg(port=0x${portAddr.toString(

@@ -342,6 +342,18 @@ export class DosLibrary {
     );
     this.useNewFileSystem = true;
     this.currentDirectory = this.bbsDataPath;
+
+    // Allocate FileHandle structures in emulated memory for stdin/stdout
+    // This is CRITICAL - doors like Bulls read fields from the FileHandle structure!
+    // BPTRs 1 and 2 would point to addresses 4 and 8 (interrupt vectors) = garbage!
+    this.stdinBptr = this.allocateFileHandleStruct(0);
+    this.stdoutBptr = this.allocateFileHandleStruct(0);
+    console.log(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.toString(16)} stdout=0x${this.stdoutBptr.toString(16)}`);
+
+    // Update FileManager to use these BPTRs
+    this.fileManager.setStdinBptr(this.stdinBptr);
+    this.fileManager.setStdoutBptr(this.stdoutBptr);
+
     try {
       const assigns = this.pathManager.getAssigns();
       const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
@@ -1385,11 +1397,10 @@ export class DosLibrary {
    * the program was initiated. Never close the filehandle returned by Input!"
    */
   Input(): number {
-    // NEW: Use FileManager if enabled
-    if (this.useNewFileSystem && this.fileManager) {
-      const bptr = this.fileManager.getStdinBptr();
-      console.log(`[dos.library] Input (FileManager) returning BPTR ${bptr}`);
-      return bptr;
+    // NEW: Use allocated FileHandle structure with proper memory BPTR
+    if (this.useNewFileSystem && this.stdinBptr !== 0) {
+      console.log(`[dos.library] Input (FileManager) returning BPTR 0x${this.stdinBptr.toString(16)}`);
+      return this.stdinBptr;
     }
 
     // LEGACY: Old implementation
@@ -1408,11 +1419,10 @@ export class DosLibrary {
    * the program was initiated."
    */
   Output(): number {
-    // NEW: Use FileManager if enabled
-    if (this.useNewFileSystem && this.fileManager) {
-      const bptr = this.fileManager.getStdoutBptr();
-      console.log(`[dos.library] Output (FileManager) returning BPTR ${bptr}`);
-      return bptr;
+    // NEW: Use allocated FileHandle structure with proper memory BPTR
+    if (this.useNewFileSystem && this.stdoutBptr !== 0) {
+      console.log(`[dos.library] Output (FileManager) returning BPTR 0x${this.stdoutBptr.toString(16)}`);
+      return this.stdoutBptr;
     }
 
     // LEGACY: Old implementation
@@ -5878,4 +5888,59 @@ export class DosLibrary {
   }
 
   private tempMemoryAddr: number = 0x140000;
+
+  /**
+   * Allocate and write a FileHandle structure to emulated memory.
+   *
+   * FileHandleStruct (44 bytes total):
+   *   fh_Link:  4 bytes (APTR)  - offset 0
+   *   fh_Port:  4 bytes (APTR)  - offset 4
+   *   fh_Type:  4 bytes (APTR)  - offset 8
+   *   fh_Buf:   4 bytes (LONG)  - offset 12
+   *   fh_Pos:   4 bytes (LONG)  - offset 16
+   *   fh_End:   4 bytes (LONG)  - offset 20 (set to 1 for EOF hack per vamos)
+   *   fh_Funcs: 4 bytes (LONG)  - offset 24
+   *   fh_Func2: 4 bytes (LONG)  - offset 28
+   *   fh_Func3: 4 bytes (LONG)  - offset 32
+   *   fh_Args:  4 bytes (LONG)  - offset 36
+   *   fh_Arg2:  4 bytes (LONG)  - offset 40
+   *
+   * @param fsHandlerPort - Port address for fh_Type field
+   * @returns BPTR (memory address / 4)
+   */
+  allocateFileHandleStruct(fsHandlerPort: number = 0): number {
+    const FH_SIZE = 44;
+    const addr = this.allocateTemp(FH_SIZE);
+    const bptr = addr >> 2;
+
+    // Write FileHandle structure to memory
+    this.emulator.writeMemory32(addr + 0, 0);          // fh_Link
+    this.emulator.writeMemory32(addr + 4, 0);          // fh_Port
+    this.emulator.writeMemory32(addr + 8, fsHandlerPort); // fh_Type (FS handler port)
+    this.emulator.writeMemory32(addr + 12, 0);         // fh_Buf
+    this.emulator.writeMemory32(addr + 16, 0);         // fh_Pos
+    this.emulator.writeMemory32(addr + 20, 1);         // fh_End (set to 1 per vamos)
+    this.emulator.writeMemory32(addr + 24, 0);         // fh_Funcs
+    this.emulator.writeMemory32(addr + 28, 0);         // fh_Func2
+    this.emulator.writeMemory32(addr + 32, 0);         // fh_Func3
+    this.emulator.writeMemory32(addr + 36, bptr);      // fh_Args (use BPTR as identifier per vamos)
+    this.emulator.writeMemory32(addr + 40, 0);         // fh_Arg2
+
+    console.log(`[dos.library] Allocated FileHandle struct at 0x${addr.toString(16)} (BPTR 0x${bptr.toString(16)})`);
+    return bptr;
+  }
+
+  /** Stored BPTRs for stdin/stdout FileHandle structures */
+  private stdinBptr: number = 0;
+  private stdoutBptr: number = 0;
+
+  /** Get stdin BPTR (allocated FileHandle structure) */
+  getStdinBptr(): number {
+    return this.stdinBptr;
+  }
+
+  /** Get stdout BPTR (allocated FileHandle structure) */
+  getStdoutBptr(): number {
+    return this.stdoutBptr;
+  }
 }

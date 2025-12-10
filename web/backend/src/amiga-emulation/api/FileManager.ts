@@ -27,6 +27,9 @@ export class FileManager {
   /** Next available BPTR for allocation */
   private nextBptr: number = 3; // 1=stdin, 2=stdout already allocated
 
+  /** Current stdin BPTR (allows redirection) */
+  private stdinBptr: number = 1;
+
   /** Current stdout BPTR (allows redirection) */
   private stdoutBptr: number = 2;
 
@@ -201,9 +204,9 @@ export class FileManager {
     const specialDevice = this.pathManager.isSpecialDevice(amiPath);
     if (specialDevice.isSpecial) {
       if (specialDevice.type === 'console') {
-        // Return stdout BPTR for console output
-        console.log(`[FileManager] Console device, returning stdout BPTR=2`);
-        return 2;
+        // Return stdout BPTR for console output (use the actual allocated BPTR)
+        console.log(`[FileManager] Console device, returning stdout BPTR=0x${this.stdoutBptr.toString(16)}`);
+        return this.stdoutBptr;
       } else if (specialDevice.type === 'nil') {
         // Create NIL device handle
         const fh = new FileHandle(amiPath, '/dev/null', {
@@ -446,17 +449,53 @@ export class FileManager {
   }
 
   /**
-   * Get stdin BPTR (always 1)
+   * Get stdin BPTR (proper FileHandle structure address / 4)
    */
   getStdinBptr(): number {
-    return 1;
+    return this.stdinBptr;
   }
 
   /**
-   * Get stdout BPTR (always 2)
+   * Get stdout BPTR (proper FileHandle structure address / 4)
    */
   getStdoutBptr(): number {
     return this.stdoutBptr;
+  }
+
+  /**
+   * Set stdin BPTR (called by DosLibrary after allocating FileHandle struct)
+   * Also re-registers the stdin FileHandle under the new BPTR in the handles map.
+   */
+  setStdinBptr(bptr: number): void {
+    const oldBptr = this.stdinBptr;
+    const stdinHandle = this.handles.get(oldBptr);
+    if (stdinHandle) {
+      // Remove from old BPTR, add to new BPTR
+      this.handles.delete(oldBptr);
+      stdinHandle.bAddr = bptr;
+      this.handles.set(bptr, stdinHandle);
+      console.log(`[FileManager] stdin re-registered: BPTR 0x${oldBptr.toString(16)} -> 0x${bptr.toString(16)}`);
+    }
+    this.stdinBptr = bptr;
+    console.log(`[FileManager] stdin BPTR set to 0x${bptr.toString(16)} (addr 0x${(bptr << 2).toString(16)})`);
+  }
+
+  /**
+   * Set stdout BPTR (called by DosLibrary after allocating FileHandle struct)
+   * Also re-registers the stdout FileHandle under the new BPTR in the handles map.
+   */
+  setStdoutBptr(bptr: number): void {
+    const oldBptr = this.stdoutBptr;
+    const stdoutHandle = this.handles.get(oldBptr);
+    if (stdoutHandle) {
+      // Remove from old BPTR, add to new BPTR
+      this.handles.delete(oldBptr);
+      stdoutHandle.bAddr = bptr;
+      this.handles.set(bptr, stdoutHandle);
+      console.log(`[FileManager] stdout re-registered: BPTR 0x${oldBptr.toString(16)} -> 0x${bptr.toString(16)}`);
+    }
+    this.stdoutBptr = bptr;
+    console.log(`[FileManager] stdout BPTR set to 0x${bptr.toString(16)} (addr 0x${(bptr << 2).toString(16)})`);
   }
 
   /**

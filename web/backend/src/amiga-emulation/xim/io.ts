@@ -157,6 +157,8 @@ export class XIMIOHandler {
   /**
    * Handle line input request (JH_LI)
    * From E sources (express.e:3425)
+   *
+   * IMPORTANT: Pause emulator to wait for user input.
    */
   handleLineInput(msg: XIMMessage): void {
     console.log('[XIMIOHandler] Door requesting line input');
@@ -182,8 +184,9 @@ export class XIMIOHandler {
     this.lineInputMaxLen = maxLen;
 
     console.log(
-      `[XIMIOHandler] Waiting for user to type line (max ${maxLen} chars)`
+      `[XIMIOHandler] Waiting for user to type line (max ${maxLen} chars), pausing emulator`
     );
+    this.emulator.pause();
   }
 
   /**
@@ -232,7 +235,8 @@ export class XIMIOHandler {
     this.lineInputBuffer = '';
     this.lineInputMaxLen = DoorConstants.MESSAGE_STRING_CAPACITY;
 
-    console.log('[XIMIOHandler] Line input completed, waiting for next command');
+    console.log('[XIMIOHandler] Line input completed, resuming emulator');
+    this.emulator.resume();
   }
 
   /**
@@ -287,49 +291,22 @@ export class XIMIOHandler {
   /**
    * Handle JH_SM (Send Message)
    * From E sources (express.e:3406-3411)
+   *
+   * IMPORTANT: Doors control their own line endings by:
+   * 1. Setting msg.data=0 for text WITHOUT newline (e.g., partial line, prompt)
+   * 2. Setting msg.data=1 for text WITH newline (or sending empty string with data=1)
+   *
+   * Example: Bulls sends ASCII art as:
+   *   "line content" (data=0) + "_" (data=0) + "" (data=1) <- newline only at end
+   *
+   * We MUST trust msg.data - overriding it causes double newlines.
    */
   handleSendMessage(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
 
     // express.e:3406-3411: IF msg.data THEN aePuts('\b\n')
-    // Trust msg.data, but override for lines that are CLEARLY not prompts
-    const isOnlyAnsiCodes = /^\x1b\[[0-9;]*m$/.test(text);
-
-    // Default: trust msg.data
-    let shouldAddNewline = (msg.data !== 0) && !isOnlyAnsiCodes;
-
-    // Smart override: if msg.data=0 but this clearly ISN'T a prompt, add newline anyway
-    // This catches door bugs or compatibility issues without breaking real prompts
-    if (msg.data === 0 && !isOnlyAnsiCodes) {
-      const plainText = text.replace(/\x1b\[[0-9;]*m/g, '');
-      const trimmed = plainText.trim();
-
-      if (trimmed.length > 0) {
-        // Count trailing whitespace (file descriptions are padded to fixed width)
-        const trailingSpaces = plainText.length - plainText.trimEnd().length;
-
-        // Detect patterns that are DEFINITELY not prompts:
-        // 1. Excessive trailing whitespace (> 3 spaces) - file descriptions have padding
-        // 2. Starts with bullet/list markers (-, *, •, >, numbers)
-        // 3. Contains ASCII art box-drawing characters
-        // 4. Has repeated line-drawing chars (----, ====, ||||, ++++)
-        // 5. Very long line (> 50 chars) - prompts are short
-        // 6. Contains file listing patterns (size + date)
-        const hasPadding = trailingSpaces > 3;
-        const isBulletPoint = /^\s*[-*•>]\s/.test(plainText) || /^\s*\d+[.)]\s/.test(plainText);
-        const hasBoxChars = /[─│┌┐└┘├┤┬┴┼╔╗╚╝╠╣╦╩╬═║╒╓╘╙╛╜╕╖╞╟╡╢╤╥╧╨╪╫]/.test(trimmed);
-        const hasLineDrawing = /[-=|+]{4,}/.test(trimmed) || /[<>]{3,}/.test(trimmed);
-        const isLongLine = trimmed.length > 50;
-        const hasFilePattern = /\d{5,}\s+\d{1,2}-\d{1,2}-\d{2,4}/.test(trimmed);
-
-        const definitelyNotPrompt = hasPadding || isBulletPoint || hasBoxChars ||
-                                    hasLineDrawing || isLongLine || hasFilePattern;
-
-        if (definitelyNotPrompt) {
-          shouldAddNewline = true;
-        }
-      }
-    }
+    // Trust msg.data exactly - doors control their own line endings
+    const shouldAddNewline = msg.data !== 0;
 
     console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, addNewline=${shouldAddNewline})`);
 
@@ -343,6 +320,8 @@ export class XIMIOHandler {
   /**
    * Handle JH_PM (Prompt Message)
    * From E sources (express.e:3418-3424)
+   *
+   * IMPORTANT: Pause emulator to wait for user input.
    */
   handlePromptMessage(msg: XIMMessage): void {
     const prompt = this.getMessageString(msg);
@@ -363,17 +342,22 @@ export class XIMIOHandler {
     }
 
     console.log(
-      `[XIMIOHandler] JH_PM: Waiting for user input (max ${maxLength} chars)...`
+      `[XIMIOHandler] JH_PM: Waiting for user input (max ${maxLength} chars), pausing emulator`
     );
     this.waitingForLineInput = true;
     this.lineInputMessage = msg;
     this.lineInputBuffer = '';
     this.lineInputMaxLen = maxLength;
+    this.emulator.pause();
   }
 
   /**
    * Handle JH_HK (Hotkey)
    * From E sources (express.e:3436-3447)
+   *
+   * IMPORTANT: When no input is available, we must PAUSE the emulator
+   * to prevent the door from busy-looping on GetMsg. The emulator will
+   * resume when input arrives via queueInput() -> completeHotkey().
    */
   handleHotkey(msg: XIMMessage): void {
     const prompt = this.getMessageString(msg);
@@ -403,12 +387,17 @@ export class XIMIOHandler {
       return;
     }
 
+    // No input available - pause emulator and wait for user input
+    console.log('[XIMIOHandler] JH_HK: No input available, pausing emulator');
     this.waitingForHotkey = true;
     this.hotkeyMessage = msg;
+    this.emulator.pause();
   }
 
   /**
    * Complete a pending hotkey prompt
+   * Called when input arrives while waitingForHotkey is true.
+   * Sends the reply and resumes the emulator.
    */
   private completeHotkey(char: string): void {
     if (!this.hotkeyMessage) {
@@ -418,11 +407,17 @@ export class XIMIOHandler {
     const msg = this.hotkeyMessage;
     const keyChar = char.length > 0 ? char[0] : '';
 
+    console.log(`[XIMIOHandler] JH_HK: Completing with key '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)})`);
+
     this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
     this.reply(msg, this.state.carrierDropped ? -1 : 1, keyChar);
 
     this.waitingForHotkey = false;
     this.hotkeyMessage = null;
+
+    // Resume emulator execution now that we have input
+    console.log('[XIMIOHandler] JH_HK: Resuming emulator');
+    this.emulator.resume();
   }
 
   /**

@@ -39,6 +39,12 @@ export class DoorLoader {
    * Load door executable into emulator memory
    */
   async loadDoor(): Promise<void> {
+    // Reset signal allocation for fresh door execution context
+    // On real Amiga, each task has its own signal allocation. Our emulator
+    // uses a shared pool that gets exhausted during XIM port initialization.
+    // Reset it here so doors can allocate signals for their own MsgPorts.
+    this.execLibrary.resetSignalsForDoor();
+
     // Read door binary
     let binary: Buffer;
     try {
@@ -145,14 +151,19 @@ export class DoorLoader {
       // Default CLI: pass node number to both XIM and non-XIM doors (matches express.e tooling)
       customArgs = [nodeId.toString()];
     }
-    const argString = customArgs.join(" ").trim();
-    console.log(`[DoorLoader] Building CLI args for doorType=${doorType} from config.args=${JSON.stringify(this.config.args || [])} -> "${argString}"`);
+    const argStringBase = customArgs.join(" ").trim();
+    // AmigaDOS requires argument string to be terminated with newline (0x0A), NOT null
+    // This is critical - many doors check the argument length and parse differently
+    // vamos shows: args: '1' (2) - the newline is INCLUDED in the length
+    const argString = argStringBase + "\n";
+    console.log(`[DoorLoader] Building CLI args for doorType=${doorType} from config.args=${JSON.stringify(this.config.args || [])} -> "${argStringBase}" (len=${argString.length} with newline)`);
     const ARG_STRING_ADDR = 0x0f0100;
     const ARG_BSTR_ADDR = ARG_STRING_ADDR + 0x100;
 
     for (let i = 0; i < argString.length; i++) {
       this.emulator.writeMemory(ARG_STRING_ADDR + i, argString.charCodeAt(i));
     }
+    // Null-terminate after the newline for safety (some code may expect it)
     this.emulator.writeMemory(ARG_STRING_ADDR + argString.length, 0);
     // Build BSTR for Amiga E runtime (-32(a5) expects this)
     this.emulator.writeMemory(ARG_BSTR_ADDR, argString.length);
