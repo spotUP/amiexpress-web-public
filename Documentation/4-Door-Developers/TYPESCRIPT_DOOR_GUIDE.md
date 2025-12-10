@@ -12,7 +12,7 @@ AmiExpress-Web supports **three types of doors**:
 - **I/O**: ANSI escape codes via `socket.emit('ansi-output', ...)`
 - **Audio**: Terminal bell only (`\x07`)
 - **Best for**: Text games, utilities, ANSI-based interfaces
-- **Example**: Arkanoid, text adventure games, BBS utilities
+- **Example**: Text adventure games, BBS utilities, simple games
 
 ### 2. Frontend Doors (Client-Side)
 - **Runtime**: `client`
@@ -28,7 +28,7 @@ AmiExpress-Web supports **three types of doors**:
 - **I/O**: Backend logic with frontend rendering
 - **Audio**: Web Audio API for real sounds
 - **Best for**: Games needing both server logic and rich client audio/graphics
-- **Example**: Multiplayer games with audio, score tracking with sound effects
+- **Example**: Arkanoid (audio + highscores), multiplayer games with sound
 
 **IMPORTANT**: This guide covers **Backend Doors** (`runtime: "server"`). For frontend or hybrid doors, see [CLIENT_DOOR_DEVELOPMENT.md](CLIENT_DOOR_DEVELOPMENT.md).
 
@@ -713,6 +713,180 @@ If you get errors like `Could not find a declaration file for module 'X'`:
 1. Check if you have `"types": ["node"]` in tsconfig.json - this restricts TypeScript to ONLY look for `@types/node`
 2. **Solution**: Remove the entire `"types"` line from tsconfig.json
 3. TypeScript will then automatically find all `@types/*` packages in node_modules
+
+---
+
+## Hybrid Doors (Audio/Graphics + Server Logic)
+
+For doors that need **real audio** (Web Audio API, Tone.js) and **server persistence** (highscores, database), use a **hybrid door**.
+
+### What Makes a Door Hybrid?
+
+- **Client component** (`client.ts`): Runs in browser
+  - Full Web Audio API support (real sounds, music)
+  - GraphicsEngine, AudioEngine from SDK
+  - Handles rendering and input
+  - Makes RPC calls to server for persistence
+
+- **Server component** (`server.ts`): Runs in Node.js
+  - File system access for highscores
+  - Database operations
+  - Receives RPC calls from client
+
+### Example: Arkanoid Hybrid Door
+
+**Directory Structure:**
+```
+doors/arkanoid/
+  package.json      # runtime: "hybrid"
+  tsconfig.json     # ESNext module
+  index.ts          # Entry point + RPC exports
+  client.ts         # Browser game with audio
+  server.ts         # Highscore persistence
+  dist/             # Compiled output
+```
+
+**package.json (hybrid):**
+```json
+{
+  "name": "arkanoid",
+  "version": "2.0.0",
+  "description": "Classic Arkanoid with audio - Hybrid Door",
+  "main": "server.ts",
+  "bbsCommand": "ARKANOID",
+  "doorType": "TS",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./server.ts"
+  },
+  "accessLevel": 0
+}
+```
+
+**client.ts (browser):**
+```typescript
+import {
+  ClientDoor,
+  GraphicsEngine,
+  AudioEngine,
+  AnsiColor
+} from '@amiexpress/bbs-door-sdk/client';
+
+const door = new ClientDoor({
+  name: 'Arkanoid',
+  version: '2.0.0',
+  runtime: 'client',
+  hybrid: true,  // Enable RPC
+});
+
+door.onConnect(async (user) => {
+  const gfx = new GraphicsEngine({ width: 80, height: 24 });
+  const audio = new AudioEngine();
+
+  await audio.init();
+
+  // Play sounds
+  audio.playSound('hit');
+  audio.playSound('powerup');
+  audio.playSound('gameover');
+
+  // Generate background music
+  audio.generateMusic({
+    prompt: 'retro arcade',
+    tempo: 130,
+    instruments: ['square']
+  });
+
+  // RPC call to server
+  const result = await door.rpc('saveHighscore', {
+    name: user.username,
+    score: 50000,
+    level: 5
+  });
+});
+
+door.start();
+```
+
+**server.ts (Node.js):**
+```typescript
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface HighScore {
+  name: string;
+  score: number;
+  level: number;
+  date: string;
+}
+
+export function getHighscores(): { highscores: HighScore[] } {
+  const data = fs.readFileSync('./highscores.json', 'utf-8');
+  return { highscores: JSON.parse(data) };
+}
+
+export function saveHighscore(params: { name: string; score: number; level: number }) {
+  // Save to disk
+  return { success: true };
+}
+
+export const rpcHandlers = { getHighscores, saveHighscore };
+```
+
+### SDK Audio Features
+
+The SDK AudioEngine provides:
+
+**Pre-defined Sounds:**
+- `laser` - Laser/shoot sound
+- `explosion` - Explosion noise
+- `jump` - Jump/bounce sound
+- `coin` - Pickup/collect sound
+- `hit` - Impact sound
+- `powerup` - Power-up fanfare
+- `menu-beep` - Menu navigation beep
+- `gameover` - Game over descending notes
+
+**Custom Sounds:**
+```typescript
+audio.playCustomSound({
+  type: 'custom',
+  frequency: 440,
+  duration: 0.2,
+  envelope: 'pluck',
+  volume: 0.5
+});
+```
+
+**Background Music:**
+```typescript
+audio.generateMusic({
+  prompt: 'upbeat chiptune',
+  tempo: 140,
+  pattern: 'x-x-x-x-',
+  instruments: ['square', 'triangle']
+});
+```
+
+**Adaptive Music:**
+```typescript
+audio.setMusicState('combat', 0.9, 'crossfade');
+audio.setMusicState('explore', 0.3, 'fade');
+```
+
+### When to Use Each Door Type
+
+| Need | Door Type |
+|------|-----------|
+| Text-based game, terminal UI | Backend (`server`) |
+| Rich graphics, Canvas, WebGL | Frontend (`client`) |
+| Audio + score persistence | **Hybrid** |
+| Multiplayer with sounds | **Hybrid** |
+| Simple text utility | Backend (`server`) |
 
 ---
 
