@@ -263,8 +263,36 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
 /**
  * Helper: Display W command menu (express.e:25727-25773)
  */
+const MODEM_OPTIONS = [
+  { bps: 0, label: 'MAX (No Throttle)' },
+  { bps: 1200, label: '1200 bps' },
+  { bps: 2400, label: '2400 bps' },
+  { bps: 4800, label: '4800 bps' },
+  { bps: 7200, label: '7200 bps' },
+  { bps: 9600, label: '9600 bps' },
+  { bps: 12000, label: '12.0 kbps' },
+  { bps: 14400, label: '14.4 kbps' },
+  { bps: 14400, label: 'HST 14.4 kbps' },
+  { bps: 16800, label: '16.8 kbps' },
+  { bps: 16800, label: 'HST 16.8 kbps' },
+  { bps: 19200, label: '19.2 kbps' },
+  { bps: 21600, label: '21.6 kbps' },
+  { bps: 21600, label: 'HST 21.6 kbps' },
+  { bps: 24000, label: '24.0 kbps' },
+  { bps: 28800, label: '28.8 kbps' },
+  { bps: 33600, label: '33.6 kbps' },
+  { bps: 56000, label: '56 kbps' },
+];
+
 function _displayWCommandMenu(socket: any, session: BBSSession): void {
   const currentUser = session.user!;
+  const modemLabel = (() => {
+    const bps = session.modemBps || currentUser.baud || 0;
+    if (!bps || bps <= 0) return 'MAX (No Throttle)';
+    const found = MODEM_OPTIONS.find(opt => opt.bps === bps);
+    if (found) return found.label;
+    return `${bps} bps`;
+  })();
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('USER CONFIGURATION'));
@@ -391,7 +419,7 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   if (!checkSecurity(session.user, ACSPermission.XPR_SEND) && !checkSecurity(session.user, ACSPermission.XPR_RECEIVE)) {
     socket.emit('ansi-output', AnsiUtil.colorize('[ 11] [DISABLED]\r\n', 'red'));
   } else {
-    const { PROTOCOL_DISPLAY_NAMES } = require('../types');
+    const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
     const userProtocol = currentUser.protocol || 'zmodem';
     const protocolName = PROTOCOL_DISPLAY_NAMES[userProtocol] || userProtocol.toUpperCase();
     socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
@@ -467,6 +495,14 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize('NO', 'white'));
   socket.emit('ansi-output', '\r\n');
 
+  // Option 17: Modem Emulation Speed (web extension)
+  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
+  socket.emit('ansi-output', ' 17');
+  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
+  socket.emit('ansi-output', AnsiUtil.colorize('MODEM EMULATION SPEED.. ', 'magenta'));
+  socket.emit('ansi-output', AnsiUtil.colorize(modemLabel, 'yellow'));
+  socket.emit('ansi-output', '\r\n');
+
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', 'Which to change <CR>=QUIT ? ');
 }
@@ -487,6 +523,18 @@ export function handleWriteUserParamsCommand(socket: any, session: BBSSession): 
   console.log('[ENV] Stats');
 
   // Display menu and wait for option selection
+  session.cmdShortcuts = false;
+  if ((session as any).shortcuts && typeof (session as any).shortcuts.clear === 'function') {
+    (session as any).shortcuts.clear();
+  }
+  session.inputBuffer = '';
+  // Abort any lingering pagination/pause so W behaves like express.e lineInput
+  session.paginatedScreen = undefined;
+  session.menuPause = false;
+  session.lastScreenHadPause = false;
+  session.queuedScreenCommands = [];
+  session.pendingScreenCommand = undefined;
+  session.screenCommandResolver = null;
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
@@ -509,7 +557,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     session.inputBuffer = '';
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    const { displayMainMenu } = require('./command-handler/menu');
+    const { displayMainMenu } = require('../command-handler/menu');
     await displayMainMenu(socket, session, false);
     return;
   }
@@ -517,7 +565,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
   const option = parseInt(trimmed, 10);
 
   // Invalid option number
-  if (isNaN(option) || option < 0 || option > 16) {
+  if (isNaN(option) || option < 0 || option > 17) {
     _displayWCommandMenu(socket, session);
     return;
   }
@@ -675,6 +723,15 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     case 16: // Toggle Background File Check - express.e:26020-26028
       // Simplified for web version - just toggle a flag
       _displayWCommandMenu(socket, session);
+      break;
+
+    case 17: // Modem emulation speed (web extension)
+      socket.emit('ansi-output', '\r\nSelect Modem Speed:\r\n');
+      MODEM_OPTIONS.forEach((opt, idx) => {
+        socket.emit('ansi-output', `[${idx}] ${opt.label}\r\n`);
+      });
+      socket.emit('ansi-output', `Select (0-${MODEM_OPTIONS.length - 1}) or <CR>=Cancel: `);
+      session.subState = LoggedOnSubState.W_EDIT_MODEM_SPEED;
       break;
 
     default:
@@ -1011,7 +1068,7 @@ export async function handleWEditProtocolInput(socket: any, session: BBSSession,
   session.user.protocol = selectedProtocol;
   await db.updateUser(session.user.id, { protocol: selectedProtocol });
 
-  const { PROTOCOL_DISPLAY_NAMES } = require('../types');
+  const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
   const protocolName = PROTOCOL_DISPLAY_NAMES[selectedProtocol] || selectedProtocol.toUpperCase();
   socket.emit('ansi-output', `\r\nProtocol set to: ${protocolName}\r\n`);
 
@@ -1033,6 +1090,33 @@ export async function handleWEditTranslatorInput(socket: any, session: BBSSessio
   }
 
   // For web version, translator is always English, just acknowledge
+  _displayWCommandMenu(socket, session);
+  session.subState = LoggedOnSubState.W_OPTION_SELECT;
+}
+
+// Handle modem speed selection (web extension)
+export async function handleWEditModemSpeedInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const trimmed = input.trim();
+  if (trimmed === '') {
+    _displayWCommandMenu(socket, session);
+    session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    return;
+  }
+
+  const choice = parseInt(trimmed, 10);
+  if (isNaN(choice) || choice < 0 || choice >= MODEM_OPTIONS.length) {
+    socket.emit('ansi-output', `\r\nInvalid selection. Use 0-${MODEM_OPTIONS.length - 1}.\r\n`);
+    _displayWCommandMenu(socket, session);
+    session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    return;
+  }
+
+  const bps = MODEM_OPTIONS[choice].bps;
+  session.modemBps = bps;
+  session.modemEmulationEnabled = bps > 0;
+  await db.updateUser(session.user.id, { baud: bps });
+  session.user.baud = bps;
+
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }

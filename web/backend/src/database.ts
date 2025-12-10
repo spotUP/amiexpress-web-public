@@ -75,6 +75,7 @@ export class Database {
   private bulletinRepo?: BulletinRepository;
   private webhookRepo?: WebhookRepository;
   private configRepo?: ConfigRepository;
+  private operatorChatRepo?: any; // OperatorChatRepository
 
   constructor() {
     // SQLite database path
@@ -121,6 +122,10 @@ export class Database {
       this.bulletinRepo = new BulletinRepository(this.db);
       this.webhookRepo = new WebhookRepository(this.db);
       this.configRepo = new ConfigRepository(this.db);
+
+      // Lazy load operator chat repository to avoid circular dependency
+      const { OperatorChatRepository } = require('./database/operator-chat.repository');
+      this.operatorChatRepo = new OperatorChatRepository(this.db);
 
       console.log('✅ Connected to SQLite database');
     } catch (error) {
@@ -269,6 +274,11 @@ export class Database {
       if (!columnNames.includes('fontpreference')) {
         this.db.exec('ALTER TABLE users ADD COLUMN fontpreference TEXT DEFAULT \'mosoul\'');
         console.log('✓ Added fontpreference column');
+      }
+
+      if (!columnNames.includes('baud')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN baud INTEGER DEFAULT 0');
+        console.log('✓ Added baud column');
       }
 
       // Check and add missing columns to system_config table
@@ -548,6 +558,7 @@ export class Database {
           securityflags TEXT DEFAULT NULL,
           secoverride TEXT DEFAULT NULL,
           userflags INTEGER DEFAULT 0,
+          baud INTEGER DEFAULT 0,
           created INTEGER DEFAULT (strftime('%s', 'now')),
           updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
@@ -2416,6 +2427,16 @@ export class Database {
     `);
 
     return stmt.all(startDate, endDate);
+  }
+
+  /**
+   * Get operator chat repository
+   */
+  getOperatorChatRepository(): any {
+    if (!this.operatorChatRepo) {
+      throw new Error('Operator chat repository not initialized');
+    }
+    return this.operatorChatRepo;
   }
 }
 

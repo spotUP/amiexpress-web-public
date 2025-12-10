@@ -41,6 +41,7 @@ function fieldToColumn(field: string): string {
     topDownloadCPS: 'topdownloadcps',
     byteLimit: 'bytelimit',
     userFlags: 'userflags',
+    baud: 'baud',
   };
   return map[field] || field.toLowerCase();
 }
@@ -62,8 +63,8 @@ export class UserRepository extends BaseRepository<User> {
         lastlogin, firstlogin, calls, callstoday, newuser, expert, ansi,
         linesperscreen, computer, screentype, protocol, editor, zoomtype,
         availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
-        topuploadcps, topdownloadcps, bytelimit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        topuploadcps, topdownloadcps, bytelimit, baud
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id, safeUsername, userData.passwordHash, userData.realname,
       userData.location, userData.phone, userData.email, userData.secLevel,
@@ -77,7 +78,7 @@ export class UserRepository extends BaseRepository<User> {
       userData.screenType, userData.protocol, userData.editor, userData.zoomType,
       userData.availableForChat ? 1 : 0, userData.quietNode ? 1 : 0, userData.autoRejoin,
       userData.confAccess, userData.areaName, userData.uuCP ? 1 : 0, userData.topUploadCPS,
-      userData.topDownloadCPS, userData.byteLimit
+      userData.topDownloadCPS, userData.byteLimit, userData.baud ?? 0
     ]);
 
     // CRITICAL: Write to disk files for Amiga door compatibility
@@ -180,6 +181,7 @@ export class UserRepository extends BaseRepository<User> {
       confAccess: user.confaccess,
       areaName: user.areaname,
       uuCP: Boolean(user.uucp),
+      baud: safeNumber(user.baud, 0),
       topUploadCPS: safeNumber(user.topuploadcps, 0),
       topDownloadCPS: safeNumber(user.topdownloadcps, 0),
       byteLimit: safeNumber(user.bytelimit, 0),

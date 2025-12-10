@@ -9,6 +9,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import type { BBSSession } from '../index';
+import { LoggedOnSubState } from '../constants/bbs-states';
+// iconv-lite is used for CP437 decoding of classic ANSI screens
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const iconv = require('iconv-lite');
 import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import { sequentialFileManager, formatNumberedFilename } from '../services/SequentialFileManager';
@@ -38,7 +42,21 @@ function readScreenBuffer(filePath: string): Buffer {
 }
 
 function readScreenText(filePath: string): string {
-  return readScreenBuffer(filePath).toString('utf-8');
+  const buffer = readScreenBuffer(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+
+  // PETSCII .seq files stay UTF-8 so downstream PETSCII handling is preserved
+  if (ext === '.seq') {
+    return buffer.toString('utf-8');
+  }
+
+  try {
+    // ANSI art uses CP437 codepoints for box/texture glyphs; mosoul/Topaz renders those correctly
+    return iconv.decode(buffer, 'cp437');
+  } catch (error) {
+    console.warn('[SCREEN] CP437 decode failed, falling back to utf-8:', (error as Error).message);
+    return buffer.toString('utf-8');
+  }
 }
 
 // Screen/MCI debugging: always log unless explicitly disabled
@@ -62,6 +80,42 @@ const screenFlowLog = (screenName: string, ...args: any[]) => {
     console.log('[SCREEN FLOW]', ...args);
   }
 };
+
+// Modem emulation: classic speeds in bits per second
+const MODEM_SPEEDS = [
+  1200,
+  2400,
+  4800,
+  7200,
+  9600,
+  12000,
+  14400,
+  16800,
+  19200,
+  21600,
+  24000,
+  28800,
+  33600,
+  56000,
+];
+function resolveModemBps(session: BBSSession): number {
+  const preferred = session.modemBps || session.user?.baud || 0;
+  if (preferred <= 0) return 0; // 0/undefined = full speed
+  if (MODEM_SPEEDS.includes(preferred)) {
+    return preferred;
+  }
+  // Snap to closest classic speed
+  let closest = 56000;
+  let minDelta = Number.MAX_SAFE_INTEGER;
+  for (const s of MODEM_SPEEDS) {
+    const d = Math.abs(s - preferred);
+    if (d < minDelta) {
+      minDelta = d;
+      closest = s;
+    }
+  }
+  return closest;
+}
 
 interface Conference {
   id: number;
@@ -153,10 +207,14 @@ export async function parseMciCodes(
   bbsName: string = 'AmiExpress-Web',
   sysopName: string = 'Sysop',
   location: string = 'The Internet'
-): Promise<{ parsed: string; commands: string[]; hasPause: boolean }> {
+): Promise<{ parsed: string; commands: string[]; hasPause: boolean; slowmo?: number; slowmoCount?: number }> {
   let parsed = content;
   const commandsToExecute: string[] = [];
   let hasPause = false;
+  let slowmo = session?.slowmo || 0;
+  let slowmoCount = session?.slowmoCount || 0;
+  let slowmoApplied = slowmo;
+  let slowmoAppliedCount = slowmoCount;
 
   // Get user data safely
   const user = session.user || {};
@@ -706,11 +764,28 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // ~SMO - Screen Mode On / Slow Mode On (express.e:5726-5736)
   // Format: ~SMO<speed>| where speed is 1-5
   // Note: Slow mode is a display effect, not applicable to web
-  parsed = parsed.replace(/~SMO\d*\|/g, '');
+  parsed = parsed.replace(/~SMO(-?\d*)\|/gi, (_m: string, digits: string) => {
+    // express.e sets slowmo:=1, slowmoCount+=60*slowmo before reading value
+    slowmoCount += 60;
+    let speed = parseInt(digits, 10);
+    if (!speed || Number.isNaN(speed)) speed = 1;
+    // AmiExpress valid range 1-5; allow web extension -1..-3 for slower-than-1
+    if (speed > 5) speed = 1;
+    if (speed === 0) speed = 1;
+    if (speed < -3) speed = -3;
+    slowmo = speed;
+    slowmoApplied = slowmo;
+    slowmoAppliedCount = slowmoCount;
+    return '';
+  });
 
   // ~SMC - Screen Mode Clear / Slow Mode Clear (express.e:5737-5739)
   // Disables slow mode
-  parsed = parsed.replace(/~SMC\|/g, '');
+  parsed = parsed.replace(/~SMC\|/gi, () => {
+    slowmo = 0;
+    slowmoCount = 0;
+    return '';
+  });
 
   // Legacy % codes (for compatibility)
   parsed = parsed.replace(/%B/g, bbsName);
@@ -754,7 +829,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     session.lastScreenHadPause = hasPause;
   }
 
-  return { parsed, commands: commandsToExecute, hasPause };
+  return { parsed, commands: commandsToExecute, hasPause, slowmo: slowmoApplied, slowmoCount: slowmoAppliedCount };
 }
 
 /**
@@ -1257,6 +1332,12 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const result = await parseMciCodes(content, session);
     parsed = result.parsed;
     commands = result.commands;
+    if (result.slowmo !== undefined) {
+      session.slowmo = result.slowmo;
+    }
+    if (result.slowmoCount !== undefined) {
+      session.slowmoCount = result.slowmoCount;
+    }
 
     // Log MCI parsing results
     if (commands.length > 0) {
@@ -1286,12 +1367,70 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const lines = parsed.split(/\r\n|\n/);
     const pageSize = Math.max(1, pageHeight - 1); // leave room for prompt line
     const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+    const slowmoSpeed = session.slowmo || 0;
+    let slowmoCount = session.slowmoCount || 0;
 
-    const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
+    // Modem emulation (web extension): throttle like a real link when enabled
+    const modemBps = session.modemEmulationEnabled ? (session.modemBps || session.user?.baud || 0) : 0;
+    const modemActive = modemBps > 0;
+    // Approximate bytes/sec on the wire: 1 start + 8 data + 1 stop bits
+    const modemBytesPerSec = modemActive ? Math.max(1, Math.floor(modemBps / 10)) : 0;
+
+    const emitWithModem = async (payload: string) => {
+      if (!modemActive || modemBytesPerSec <= 0) {
+        socket.emit(eventName, payload);
+        return;
+      }
+      // Tokenize ANSI so we never split escape sequences
+      const tokens: string[] = [];
+      const ansiRegex = /\x1b\[[0-9;?]*[A-Za-z]/g;
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = ansiRegex.exec(payload)) !== null) {
+        if (match.index > lastIndex) {
+          tokens.push(payload.slice(lastIndex, match.index));
+        }
+        tokens.push(match[0]); // keep escape as a unit
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < payload.length) {
+        tokens.push(payload.slice(lastIndex));
+      }
+
+      const start = process.hrtime.bigint();
+      let sentBytes = 0;
+      const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+      for (const tok of tokens) {
+        const buf = Buffer.from(tok, 'utf-8');
+        const isEscape = tok.startsWith('\x1b');
+        if (isEscape) {
+          socket.emit(eventName, tok);
+          continue;
+        }
+        let offset = 0;
+        while (offset < buf.length) {
+          const now = process.hrtime.bigint();
+          const elapsedMs = Number(now - start) / 1_000_000;
+          const allowed = Math.max(0, Math.floor(modemBytesPerSec * (elapsedMs / 1000)) - sentBytes);
+          if (allowed <= 0) {
+            await sleep(2);
+            continue;
+          }
+          const toSend = Math.min(allowed, buf.length - offset, 256);
+          const chunk = buf.slice(offset, offset + toSend).toString('utf-8');
+          socket.emit(eventName, chunk);
+          offset += toSend;
+          sentBytes += toSend;
+        }
+      }
+    };
+
+    const emitPage = async (startIdx: number, endIdx: number, prompt: boolean) => {
       const chunk = lines.slice(startIdx, endIdx).join('\r\n');
       const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)?' : '';
       const prefix = shouldClear && startIdx === 0 ? '\x1b[2J\x1b[H' : '';
-      socket.emit(eventName, prefix + chunk + promptLine);
+      await emitWithModem(prefix + chunk + promptLine);
     };
 
     screenFlowLog(
@@ -1299,70 +1438,21 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       `Parsed ${screenName}: event=${eventName} commands=${commands.length} pause=${session.lastScreenHadPause ? 'Y' : 'N'} pages=${lines.length}`
     );
 
-    // Bulletin/logon flow screens should render as a single frame like express.e.
-    // Skip auto-pagination for flow screens; rely on explicit ~SP/pauses instead.
-    const allowPagination = !isFlowScreen;
-
-    if (allowPagination && !session.lastScreenHadPause && lines.length > pageHeight) {
-      session.paginatedScreen = {
-        lines,
-        nextIndex: pageSize,
-        pageSize,
-        eventName,
-        commands,
-      };
-      if (commands.length > 0) {
-        session.queuedScreenCommands = commands;
+    const executeScreenCommands = () => {
+      if (commands.length === 0) {
+        session.pendingScreenCommand = undefined;
+        session.screenCommandResolver = null;
+        return;
       }
-      emitPage(0, pageSize, true);
-      session.lastScreenHadPause = true;
-      return true;
-    }
 
-    // Double-buffered display: Build complete frame buffer before sending
-    // This prevents tearing and visible redraws by sending everything atomically
-    // express.e:6845 - Always reset colors after displaying a file with aePuts('[0m')
-    const frameBuffer =
-      (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
-      HIDE_CURSOR +      // Hide cursor
-      '\x1b[H' +         // Move cursor to home (1,1)
-      parsed +           // Screen content
-      '\x1b[0m' +        // Reset colors (express.e:6845) - prevents color bleed to prompts
-      SHOW_CURSOR;       // Show cursor
-
-    // Send entire frame in one atomic operation
-    // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
-    screenDebug(`[displayScreen] Emitting ${eventName} event`);
-    socket.emit(eventName, frameBuffer);
-
-    // If screen requested a pause (e.g., ~SP), set a minimal pagination state
-    // so a keypress is required before continuing, without printing the raw MCI
-    if (session.lastScreenHadPause) {
-      session.paginatedScreen = {
-        lines: [''], // no additional content, just hold for a key
-        nextIndex: 1,
-        pageSize: 1,
-        eventName,
-        commands,
-      };
-      // Queue commands for execution after pause is dismissed
-      if (commands.length > 0) {
+      if (!runCommands) {
         session.queuedScreenCommands = commands;
-        screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
+        session.pendingScreenCommand = undefined;
+        session.screenCommandResolver = null;
+        screenFlowLog(screenName, `Queued ${commands.length} screen command(s) for deferred execution`);
+        return;
       }
-      socket.emit(eventName, '\r\n(Pause)...Space To Resume: ');
-      return true;
-    }
 
-    // Execute any ~XC/~XI commands found in screen file (async, non-blocking)
-    if (commands.length > 0 && !runCommands) {
-      // Defer execution until caller triggers it (e.g., after a pause)
-      session.queuedScreenCommands = commands;
-      session.pendingScreenCommand = undefined;
-      session.screenCommandResolver = null;
-      screenFlowLog(screenName, `Queued ${commands.length} screen command(s) for deferred execution`);
-      return true;
-    } else if (commands.length > 0) {
       screenDebug(`[displayScreen] ==========================================`);
       screenDebug(`[displayScreen] EXECUTING ${commands.length} COMMANDS FROM SCREEN FILE: ${screenName}`);
       screenDebug(`[displayScreen] Commands:`, commands);
@@ -1374,8 +1464,6 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         session.screenCommandResolver = resolve;
       });
 
-      // Execute commands asynchronously after screen display (non-blocking)
-      // This matches original AmiExpress behavior - screen shows THEN commands run
       setImmediate(async () => {
         session.executingScreenCommand = true;
         try {
@@ -1384,7 +1472,6 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
             screenDebug(`[displayScreen] ------------------------------------------`);
             screenDebug(`[displayScreen] EXECUTING COMMAND ${i + 1}/${commands.length}:`, commandStr);
             screenDebug(`[displayScreen] Command type:`, commandStr.includes(':') ? 'DOOR PATH' : 'BBSCMD');
-            // Parse command string (e.g., "DOORS:who/NI ~N" with params)
             try {
               screenDebug(`[displayScreen] Calling handleCommand with:`, commandStr);
               const result = await handleCommand(socket, session, commandStr);
@@ -1415,11 +1502,156 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
           }
         }
       });
-    } else {
-      screenDebug(`[displayScreen] No commands to execute from screen file: ${screenName}`);
-      session.pendingScreenCommand = undefined;
-      session.screenCommandResolver = null;
+    };
+
+    const emitSlowmoFrame = async (text: string) => {
+      // Match express.e throughput for positive speeds: 60*speed bytes per 10ms => 6*speed bytes/ms.
+      // Web-only extension: negative speeds map to slower-than-SMO1 fixed scalars.
+      let bytesPerMs: number;
+      if (slowmoSpeed > 0) {
+        bytesPerMs = 6 * slowmoSpeed;
+      } else {
+        const scaleMap: Record<number, number> = {
+          [-1]: 4, // ~1.5 KB/s
+          [-2]: 8, // ~0.75 KB/s
+          [-3]: 12 // ~0.5 KB/s
+        };
+        const scale = scaleMap[slowmoSpeed] || 4;
+        bytesPerMs = 6 / scale;
+      }
+      // If modem emulation is active and its link is slower than this slowmo rate,
+      // cap to modem speed; if slowmo is already slower, leave it untouched.
+      if (modemActive && modemBytesPerSec > 0) {
+        const modemBytesPerMs = modemBytesPerSec / 1000;
+        if (modemBytesPerMs < bytesPerMs) {
+          bytesPerMs = modemBytesPerMs;
+        }
+      }
+
+      // Pad with a final newline so the last rendered line scrolls offscreen for a cleaner edge
+      const streamText = text + '\r\n';
+      const buffer = Buffer.from(
+        (shouldClear ? '\x1b[2J\x1b[H' : '') + HIDE_CURSOR + '\x1b[H' + streamText + '\x1b[0m' + SHOW_CURSOR,
+        'utf-8'
+      );
+      let offset = 0;
+      let carry = 0;
+      let last = Date.now();
+      const maxPerFrame = 128; // cap burst size to avoid chunky frames
+
+      const step = async (): Promise<void> => {
+        const now = Date.now();
+        const dt = Math.max(1, now - last);
+        last = now;
+        let budget = bytesPerMs * dt + carry;
+        let toSend = Math.floor(budget);
+        if (toSend < 1) toSend = 1;
+        carry = budget - toSend;
+        if (toSend > maxPerFrame) {
+          carry += toSend - maxPerFrame;
+          toSend = maxPerFrame;
+        }
+        if (offset + toSend > buffer.length) {
+          toSend = buffer.length - offset;
+          carry = 0;
+        }
+        const chunk = buffer.slice(offset, offset + toSend).toString('utf-8');
+        socket.emit(eventName, chunk);
+        offset += toSend;
+        if (offset < buffer.length) {
+          await new Promise(resolve => setTimeout(resolve, 16)); // ~60fps pacing
+          return step();
+        }
+      };
+
+      await step();
+      session.slowmoCount = 0;
+    };
+
+    // Bulletin/logon flow screens should render as a single frame like express.e.
+    // Skip auto-pagination for flow screens; rely on explicit ~SP/pauses instead.
+    const allowPagination = !isFlowScreen && slowmoSpeed === 0;
+
+    if (slowmoSpeed !== 0) {
+      await emitSlowmoFrame(parsed);
+
+      if (session.lastScreenHadPause) {
+        session.paginatedScreen = {
+          lines: [''], // no additional content, just hold for a key
+          nextIndex: 1,
+          pageSize: 1,
+          eventName,
+          commands,
+        };
+        if (commands.length > 0) {
+          session.queuedScreenCommands = commands;
+          screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
+        }
+        socket.emit(eventName, '\r\n(Pause)...Space To Resume: ');
+        return true;
+      }
+
+      executeScreenCommands();
+      session.slowmo = 0;
+      session.slowmoCount = 0;
+      return true;
     }
+
+  if (allowPagination && !session.lastScreenHadPause && lines.length > pageHeight) {
+    session.paginatedScreen = {
+      lines,
+      nextIndex: pageSize,
+      pageSize,
+      eventName,
+      commands,
+    };
+    if (commands.length > 0) {
+      session.queuedScreenCommands = commands;
+    }
+    await emitPage(0, pageSize, true);
+    session.lastScreenHadPause = true;
+    return true;
+  }
+
+    // Double-buffered display: Build complete frame buffer before sending
+    // This prevents tearing and visible redraws by sending everything atomically
+    // express.e:6845 - Always reset colors after displaying a file with aePuts('[0m')
+    const frameBuffer =
+      (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
+      HIDE_CURSOR +      // Hide cursor
+      '\x1b[H' +         // Move cursor to home (1,1)
+      parsed +           // Screen content
+      '\x1b[0m' +        // Reset colors (express.e:6845) - prevents color bleed to prompts
+      SHOW_CURSOR;       // Show cursor
+
+    // Send entire frame in one atomic operation
+    // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
+    screenDebug(`[displayScreen] Emitting ${eventName} event`);
+    await emitWithModem(frameBuffer);
+
+    // If screen requested a pause (e.g., ~SP), set a minimal pagination state
+    // so a keypress is required before continuing, without printing the raw MCI
+    if (session.lastScreenHadPause) {
+      session.paginatedScreen = {
+        lines: [''], // no additional content, just hold for a key
+        nextIndex: 1,
+        pageSize: 1,
+        eventName,
+        commands,
+      };
+      // Queue commands for execution after pause is dismissed
+      if (commands.length > 0) {
+        session.queuedScreenCommands = commands;
+        screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
+      }
+      socket.emit(eventName, '\r\n(Pause)...Space To Resume: ');
+      await emitWithModem(''); // ensure promise chain consistent
+      return true;
+    }
+
+    executeScreenCommands();
+    session.slowmo = 0;
+    session.slowmoCount = 0;
 
     return true;
   } else {
@@ -1674,3 +1906,4 @@ export function doPause(socket: any, session: BBSSession, onComplete?: () => voi
   };
   session.lastScreenHadPause = true;
 }
+// Web extension: negative ~SMO speeds (-1..-3) run slower than AmiExpress SMO1 while preserving positive speeds 1-5 semantics.
