@@ -906,11 +906,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         } else {
           const lower = key.toLowerCase();
           if (lower === 'c') {
-            term.write('C\r\n');
+            // Echo character only - backend sends the newline with next prompt
+            // express.e:6845 lineInput echoes char, then adds \b\n after
+            term.write('C');
             sendResponse('C');
             loginState.current = 'registering';
           } else if (lower === 'r') {
-            term.write('R\r\n');
+            // Echo character only - backend sends \r\nUsername: which provides newline
+            term.write('R');
             sendResponse('R');
             loginState.current = 'username';
             username.current = '';

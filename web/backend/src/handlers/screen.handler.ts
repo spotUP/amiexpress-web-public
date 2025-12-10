@@ -1319,11 +1319,13 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
 
     // Double-buffered display: Build complete frame buffer before sending
     // This prevents tearing and visible redraws by sending everything atomically
+    // express.e:6845 - Always reset colors after displaying a file with aePuts('[0m')
     const frameBuffer =
       (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
       HIDE_CURSOR +      // Hide cursor
       '\x1b[H' +         // Move cursor to home (1,1)
       parsed +           // Screen content
+      '\x1b[0m' +        // Reset colors (express.e:6845) - prevents color bleed to prompts
       SHOW_CURSOR;       // Show cursor
 
     // Send entire frame in one atomic operation
